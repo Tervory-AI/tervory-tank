@@ -1,0 +1,43 @@
+# The model roster LiteLLM exposes to Tank.
+# Tank's policy table refers to models by the `model_name` on the left.
+# Provider keys come from the environment (see .env.example); nothing secret lives here.
+# Prices checked 11 Oct 2026 against platform.claude.com; DeepSeek/OpenAI entries must be
+# confirmed on the provider's page before the policy table routes to them.
+
+model_list:
+  - model_name: haiku
+    litellm_params:
+      model: anthropic/claude-haiku-5-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      input_cost_per_token: 0.0000001
+      output_cost_per_token: 0.0000005
+
+  - model_name: sonnet
+    litellm_params:
+      model: anthropic/claude-sonnet-5-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      input_cost_per_token: 0.000002
+      output_cost_per_token: 0.00001
+
+  - model_name: opus
+    litellm_params:
+      model: anthropic/claude-opus-5-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      input_cost_per_token: 0.000004
+      output_cost_per_token: 0.00002
+
+  # Enable once DEEPSEEK_API_KEY is set and the price is confirmed on api-docs.deepseek.com.
+  # - model_name: deepseek-flash
+  #   litellm_params:
+  #     model: deepseek/deepseek-v4-flash
+  #     api_key: os.environ/DEEPSEEK_API_KEY
+
+litellm_settings:
+  drop_params: true
+  set_verbose: false
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
