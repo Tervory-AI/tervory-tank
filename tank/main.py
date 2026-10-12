@@ -803,8 +803,9 @@ async def base_batches(tenant_id: uuid.UUID) -> list[dict[str, Any]]:
                    count(*) FILTER (WHERE status='done' AND confidence BETWEEN 60 AND 79) AS aware,
                    count(*) FILTER (WHERE status='done' AND confidence BETWEEN 40 AND 59) AS review,
                    count(*) FILTER (WHERE status='done' AND confidence < 40) AS requeue,
-                   count(*) FILTER (WHERE status='done' AND profile ? 'website') AS with_site,
-                   count(*) FILTER (WHERE status='done' AND profile ? 'emails') AS with_email
+                   count(*) FILTER (WHERE status='done' AND coalesce(profile->'website'->>'value','') <> '') AS with_site,
+                   count(*) FILTER (WHERE status='done' AND jsonb_typeof(profile->'emails'->'value') = 'array'
+                                                        AND jsonb_array_length(profile->'emails'->'value') > 0) AS with_email
             FROM base.records WHERE tenant_id=$1
             GROUP BY batch ORDER BY started DESC LIMIT 200
             """, tenant_id,
