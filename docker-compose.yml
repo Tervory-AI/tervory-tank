@@ -63,7 +63,14 @@ services:
     # host belongs to the Coolify dashboard.
     expose:
       - "8000"
-    networks: [tervory_internal, tervory_public]
+    # Also joins Coolify's shared network so the Workspace (and later agents deployed
+    # as separate Coolify apps) reach it as http://tank:8000. "tank" is a network alias;
+    # the container's own name changes on every deploy.
+    networks:
+      tervory_internal:
+      tervory_public:
+      coolify:
+        aliases: [tank]
 
 volumes:
   pgdata:
@@ -74,3 +81,5 @@ networks:
   tervory_internal:
     internal: true
   tervory_public:
+  coolify:
+    external: true
