@@ -14,6 +14,7 @@ Endpoints
   POST /v1/skills/{id}/{ver}/retire      take a version out of service
   POST /v1/skills/{id}/run               run an approved skill (preview=true allows staging/candidate)
   POST /v1/base/run                      queue Base passes 1-7 (+ vertical engine) over a batch; split_by_state = one batch per state, smallest first
+  POST /v1/base/retry                    re-queue a batch's failed records
   GET  /v1/base/batches                  per-batch counts (status, tier, site/email coverage)
   GET  /v1/base/engines                  vertical engines available (e.g. ffl)
   GET  /v1/base/records?tenant_id=       enriched records, newest first
@@ -652,12 +653,17 @@ async def _enrich_one(rec_id: uuid.UUID, inp: dict[str, Any], engine_in: dict[st
             # 2c extract
             if (scr.get("text") or "") and len(scr["text"]) >= 40:
                 p, ctx = ctx_for("base.extract")
-                ex = await skala.run_skill(p, {"name": name, "text": scr["text"]}, ctx)
-                conf = int(ex.get("confidence") or 0)
-                for k in ("categories", "services", "description", "people"):
-                    if ex.get(k):
-                        profile[k] = {"value": ex[k], "source": "site:model", "confidence": conf}
-                passes["2c"] = {"skill": p.ref, "ms": ex.get("_ms"), "cost_usd": round(ctx.cost_usd, 6)}
+                try:
+                    ex = await skala.run_skill(p, {"name": name, "text": scr["text"]}, ctx)
+                except Exception as exc:  # noqa: BLE001 — a model-gateway blip must not fail the record
+                    ex = {}
+                    passes["2c"] = {"skill": p.ref, "skipped": f"model call failed: {str(exc)[:120]}"}
+                else:
+                    conf = int(ex.get("confidence") or 0)
+                    for k in ("categories", "services", "description", "people"):
+                        if ex.get(k):
+                            profile[k] = {"value": ex[k], "source": "site:model", "confidence": conf}
+                    passes["2c"] = {"skill": p.ref, "ms": ex.get("_ms"), "cost_usd": round(ctx.cost_usd, 6)}
 
         # 3 contacts
         p, ctx = ctx_for("base.contacts")
@@ -690,16 +696,21 @@ async def _enrich_one(rec_id: uuid.UUID, inp: dict[str, Any], engine_in: dict[st
 
         # 5 business data (one small-model call; skipped when the site gave nothing)
         p, ctx = ctx_for("base.business_data")
-        biz = await skala.run_skill(p, {"name": name, "state": state, "description": _val(profile, "description", ""),
-                                        "categories": _val(profile, "categories", []), "services": _val(profile, "services", []),
-                                        "people": _val(profile, "people", []), "socials_count": soc.get("count") or 0,
-                                        "pages": len(scr.get("pages") or []), "licence_type_label": eng_prof.get("licence_type_label")}, ctx)
-        if biz.get("confidence"):
-            for k in ("size_band", "revenue_band", "business_model", "naics", "naics_label"):
-                if biz.get(k):
-                    profile[k] = {"value": biz[k], "source": "model:estimate", "confidence": int(biz["confidence"])}
-        passes["5"] = {"skill": p.ref, "ms": biz.get("_ms"), "cost_usd": round(ctx.cost_usd, 6), "basis": biz.get("basis"),
-                       **({"raw": biz.get("raw")} if not biz.get("business_model") and biz.get("raw") else {})}
+        try:
+            biz = await skala.run_skill(p, {"name": name, "state": state, "description": _val(profile, "description", ""),
+                                            "categories": _val(profile, "categories", []), "services": _val(profile, "services", []),
+                                            "people": _val(profile, "people", []), "socials_count": soc.get("count") or 0,
+                                            "pages": len(scr.get("pages") or []), "licence_type_label": eng_prof.get("licence_type_label")}, ctx)
+        except Exception as exc:  # noqa: BLE001 — same rule: the record keeps its code-only layers
+            biz = {}
+            passes["5"] = {"skill": p.ref, "skipped": f"model call failed: {str(exc)[:120]}"}
+        else:
+            if biz.get("confidence"):
+                for k in ("size_band", "revenue_band", "business_model", "naics", "naics_label"):
+                    if biz.get(k):
+                        profile[k] = {"value": biz[k], "source": "model:estimate", "confidence": int(biz["confidence"])}
+            passes["5"] = {"skill": p.ref, "ms": biz.get("_ms"), "cost_usd": round(ctx.cost_usd, 6), "basis": biz.get("basis"),
+                           **({"raw": biz.get("raw")} if not biz.get("business_model") and biz.get("raw") else {})}
 
         # 7 verify and score
         p, ctx = ctx_for("base.verify")
@@ -862,6 +873,34 @@ async def base_run(body: BaseRun) -> dict[str, Any]:
     _base_wake.set()
     return {"task": tasks[0], "tasks": tasks, "labels": labels, "records": len(body.records), "batches": len(tasks),
             "skills": {k: v.ref for k, v in pkgs.items()}}
+
+
+class BaseRetry(BaseModel):
+    tenant_id: uuid.UUID
+    batch: str
+
+
+@app.post("/v1/base/retry", dependencies=[Depends(require_key)])
+async def base_retry(body: BaseRetry) -> dict[str, Any]:
+    """Put a batch's failed records back in the queue and re-open its task so the worker runs them."""
+    async with pool().acquire() as conn:
+        n = await conn.fetchval(
+            """
+            WITH r AS (UPDATE base.records SET status='queued', error=NULL, updated_at=now()
+                       WHERE tenant_id=$1 AND batch=$2 AND status='failed' RETURNING task_id)
+            SELECT count(*) FROM r
+            """, body.tenant_id, body.batch,
+        )
+        if n:
+            await conn.execute(
+                """
+                UPDATE tank.tasks SET status='queued', finished_at=NULL
+                WHERE id IN (SELECT DISTINCT task_id FROM base.records WHERE tenant_id=$1 AND batch=$2)
+                  AND task_type='base.enrich' AND status IN ('done','failed')
+                """, body.tenant_id, body.batch,
+            )
+    _base_wake.set()
+    return {"requeued": int(n or 0)}
 
 
 @app.get("/v1/base/batches", dependencies=[Depends(require_key)])

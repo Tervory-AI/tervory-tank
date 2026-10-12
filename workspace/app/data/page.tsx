@@ -155,6 +155,12 @@ export default function DataPage() {
           {current && current.done > 0 && (
             <a href={`/api/base/export?batch=${encodeURIComponent(selected)}`} style={{ fontSize: 14 }}>Export CSV</a>
           )}
+          {current && current.failed > 0 && (
+            <button type="button" style={{ padding: "6px 10px", fontSize: 13 }} onClick={async () => {
+              const r = await fetch("/api/base?action=retry", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ batch: selected }) });
+              if (r.ok) { await refreshBatches(); await refreshRecords(selected); }
+            }}>Retry {current.failed} failed</button>
+          )}
         </div>
       )}
 
