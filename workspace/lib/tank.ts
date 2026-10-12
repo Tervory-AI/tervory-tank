@@ -205,8 +205,17 @@ export function baseRun(
 export function baseEngines(): Promise<string[]> {
   return tank<string[]>("/v1/base/engines", { method: "GET" });
 }
-export function baseRecords(tenantId: string, taskId?: string, limit = 500): Promise<BaseRecord[]> {
-  const q = new URLSearchParams({ tenant_id: tenantId, limit: String(limit) });
-  if (taskId) q.set("task_id", taskId);
+export function baseRecords(tenantId: string, opts: { taskId?: string; batch?: string; limit?: number; offset?: number } = {}): Promise<BaseRecord[]> {
+  const q = new URLSearchParams({ tenant_id: tenantId, limit: String(opts.limit ?? 200), offset: String(opts.offset ?? 0) });
+  if (opts.taskId) q.set("task_id", opts.taskId);
+  if (opts.batch) q.set("batch", opts.batch);
   return tank<BaseRecord[]>(`/v1/base/records?${q}`, { method: "GET" });
+}
+
+export type BaseBatch = {
+  batch: string; started: string; total: number; done: number; failed: number; pending: number;
+  ready: number; aware: number; review: number; requeue: number; with_site: number; with_email: number;
+};
+export function baseBatches(tenantId: string): Promise<BaseBatch[]> {
+  return tank<BaseBatch[]>(`/v1/base/batches?tenant_id=${tenantId}`, { method: "GET" });
 }

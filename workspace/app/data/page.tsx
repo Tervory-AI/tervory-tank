@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 
 type Field = { value: unknown; source: string; confidence: number };
 type Rec = {
@@ -8,13 +8,17 @@ type Rec = {
   profile: Record<string, Field>; passes: Record<string, Record<string, unknown>>;
   confidence: number; status: "queued" | "running" | "done" | "failed"; error: string | null;
 };
+type Batch = {
+  batch: string; started: string; total: number; done: number; failed: number; pending: number;
+  ready: number; aware: number; review: number; requeue: number; with_site: number; with_email: number;
+};
 
 const SAMPLE = `name,address,city,state,zip,phone,website
 Example Domain,123 Main St,Boston,MA,02110,,example.com`;
 
 function v(f?: Field): string {
   if (!f || f.value == null || f.value === "") return "";
-  if (Array.isArray(f.value)) return f.value.map(String).join(", ");
+  if (Array.isArray(f.value)) return f.value.map((x) => (typeof x === "object" && x ? JSON.stringify(x) : String(x))).join(", ");
   if (typeof f.value === "object") {
     const vals = Object.values(f.value as Record<string, unknown>);
     return vals.every((x) => x == null || typeof x !== "object") ? vals.filter((x) => x != null && x !== "").map(String).join(", ") : JSON.stringify(f.value);
@@ -22,46 +26,75 @@ function v(f?: Field): string {
   return String(f.value);
 }
 
-// Base: paste a batch of records, run passes 1-2, watch the profiles fill in.
+const pct = (n: number, d: number) => (d ? `${Math.round((n / d) * 100)}%` : "0%");
+
+// Base: upload or paste a batch of records, run all seven passes, watch the profiles fill in, export the result.
 export default function DataPage() {
   const [batch, setBatch] = useState("");
   const [csv, setCsv] = useState(SAMPLE);
+  const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState(true);
   const [engine, setEngine] = useState("");
   const [engines, setEngines] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [selected, setSelected] = useState<string>("");
   const [records, setRecords] = useState<Rec[]>([]);
   const [open, setOpen] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  const refresh = useCallback(async () => {
-    const res = await fetch("/api/base", { cache: "no-store" });
+  const refreshBatches = useCallback(async () => {
+    const res = await fetch("/api/base?batches=1", { cache: "no-store" });
+    if (res.ok) {
+      const list = (await res.json()) as Batch[];
+      setBatches(list);
+      setSelected((s) => s || list[0]?.batch || "");
+    }
+  }, []);
+  const refreshRecords = useCallback(async (b: string) => {
+    if (!b) { setRecords([]); return; }
+    const res = await fetch(`/api/base?batch=${encodeURIComponent(b)}&limit=200`, { cache: "no-store" });
     if (res.ok) setRecords((await res.json()) as Rec[]);
   }, []);
-  useEffect(() => { refresh(); }, [refresh]);
+
+  useEffect(() => { refreshBatches(); }, [refreshBatches]);
+  useEffect(() => { refreshRecords(selected); }, [selected, refreshRecords]);
   useEffect(() => {
     fetch("/api/base?engines=1", { cache: "no-store" }).then(async (r) => { if (r.ok) setEngines((await r.json()) as string[]); }).catch(() => {});
   }, []);
+  const current = batches.find((b) => b.batch === selected);
   useEffect(() => {
-    if (!records.some((r) => r.status === "queued" || r.status === "running")) return;
-    const id = setInterval(refresh, 3000);
+    if (!current || current.pending === 0) return;
+    const id = setInterval(() => { refreshBatches(); refreshRecords(selected); }, 4000);
     return () => clearInterval(id);
-  }, [records, refresh]);
+  }, [current, selected, refreshBatches, refreshRecords]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/base", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ batch, csv, preview, engine: engine || null }),
-      });
+      let res: Response;
+      if (file) {
+        const fd = new FormData();
+        fd.set("batch", batch); fd.set("preview", String(preview)); fd.set("engine", engine); fd.set("file", file);
+        res = await fetch("/api/base", { method: "POST", body: fd });
+      } else {
+        res = await fetch("/api/base", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ batch, csv, preview, engine: engine || null }),
+        });
+      }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+      setSelected(batch);
       setBatch("");
-      await refresh();
+      setFile(null);
+      if (fileRef.current) fileRef.current.value = "";
+      await refreshBatches();
+      await refreshRecords(batch);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -69,24 +102,25 @@ export default function DataPage() {
     }
   }
 
-  const done = records.filter((r) => r.status === "done");
-  const withSite = done.filter((r) => v(r.profile.website)).length;
-  const withEmail = done.filter((r) => v(r.profile.emails)).length;
-  const ready = done.filter((r) => r.confidence >= 80).length;
-  const review = done.filter((r) => r.confidence < 60).length;
-
   return (
     <>
       <h1>Data</h1>
       <p style={{ color: "var(--muted)" }}>
-        Paste records as CSV (header row first: name, address, city, state, zip, phone, website — any you have). Base runs
+        Upload a CSV (or paste one; header row first: name, address, city, state, zip, phone, website — any you have). Base runs
         all seven passes: clean, match, find the site, scrape it, extract facts, contacts, socials, business data, the industry
         module, then verification and a 0–100 score. Pick an engine to feed it that industry&apos;s own list — the FFL engine
-        reads the ATF licensee export as-is.
+        reads the ATF licensee export as-is (comma or tab delimited). Up to 20,000 rows per batch.
       </p>
       <form onSubmit={submit} className="task-form">
-        <input value={batch} onChange={(e) => setBatch(e.target.value)} placeholder="Batch name, e.g. ATF sample 500" maxLength={120} disabled={busy} required />
-        <textarea value={csv} onChange={(e) => setCsv(e.target.value)} rows={8} disabled={busy} style={{ fontFamily: "ui-monospace, monospace", fontSize: 13 }} />
+        <input value={batch} onChange={(e) => setBatch(e.target.value)} placeholder="Batch name, e.g. ATF full list Oct 2026" maxLength={120} disabled={busy} required />
+        <div className="task-form-row">
+          <input ref={fileRef} type="file" accept=".csv,.txt,.tsv,text/csv,text/plain" disabled={busy}
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          <span style={{ color: "var(--muted)", fontSize: 13 }}>{file ? `${file.name} · ${(file.size / 1024).toFixed(0)} KB` : "or paste below"}</span>
+        </div>
+        {!file && (
+          <textarea value={csv} onChange={(e) => setCsv(e.target.value)} rows={6} disabled={busy} style={{ fontFamily: "ui-monospace, monospace", fontSize: 13 }} />
+        )}
         <div className="task-form-row">
           <select value={engine} onChange={(e) => setEngine(e.target.value)} disabled={busy} aria-label="Industry engine">
             <option value="">No engine (generic records)</option>
@@ -95,19 +129,32 @@ export default function DataPage() {
           <label style={{ color: "var(--muted)", fontSize: 13 }}>
             <input type="checkbox" checked={preview} onChange={(e) => setPreview(e.target.checked)} /> preview (allow unapproved skill versions)
           </label>
-          <button type="submit" disabled={busy || !batch.trim() || !csv.trim()}>{busy ? "Queueing…" : "Run Base"}</button>
+          <button type="submit" disabled={busy || !batch.trim() || (!file && !csv.trim())}>{busy ? "Uploading…" : "Run Base"}</button>
         </div>
         {error && <p className="err">{error}</p>}
       </form>
 
-      {records.length > 0 && (
+      {batches.length > 0 && (
+        <div className="task-form-row" style={{ marginBottom: 12 }}>
+          <select value={selected} onChange={(e) => setSelected(e.target.value)} aria-label="Batch">
+            {batches.map((b) => <option key={b.batch} value={b.batch}>{b.batch} · {b.total.toLocaleString()} records</option>)}
+          </select>
+          {current && current.done > 0 && (
+            <a href={`/api/base/export?batch=${encodeURIComponent(selected)}`} style={{ fontSize: 14 }}>Export CSV</a>
+          )}
+        </div>
+      )}
+
+      {current && (
         <div className="tiles">
-          <div className="tile"><b>{records.length}</b><span>records</span></div>
-          <div className="tile"><b>{done.length}</b><span>enriched</span></div>
-          <div className="tile"><b>{done.length ? Math.round((withSite / done.length) * 100) : 0}%</b><span>with a website</span></div>
-          <div className="tile"><b>{done.length ? Math.round((withEmail / done.length) * 100) : 0}%</b><span>with an email</span></div>
-          <div className="tile"><b>{ready}</b><span>ready (80+)</span></div>
-          <div className="tile"><b>{review}</b><span>need review (&lt;60)</span></div>
+          <div className="tile"><b>{current.total.toLocaleString()}</b><span>records</span></div>
+          <div className="tile"><b>{current.done.toLocaleString()}</b><span>enriched{current.pending ? ` · ${current.pending.toLocaleString()} to go` : ""}</span></div>
+          <div className="tile"><b>{pct(current.with_site, current.done)}</b><span>with a website</span></div>
+          <div className="tile"><b>{pct(current.with_email, current.done)}</b><span>with an email</span></div>
+          <div className="tile"><b>{current.ready.toLocaleString()}</b><span>ready (80+)</span></div>
+          <div className="tile"><b>{current.aware.toLocaleString()}</b><span>use with awareness (60–79)</span></div>
+          <div className="tile"><b>{(current.review + current.requeue).toLocaleString()}</b><span>need review (&lt;60)</span></div>
+          <div className="tile"><b>{current.failed.toLocaleString()}</b><span>failed</span></div>
         </div>
       )}
 
@@ -119,7 +166,7 @@ export default function DataPage() {
           {records.map((r) => (
             <Fragment key={r.id}>
               <tr onClick={() => setOpen(open === r.id ? null : r.id)} style={{ cursor: "pointer" }}>
-                <td>{v(r.profile.name) || String(r.raw.name ?? "")}</td>
+                <td>{v(r.profile.name) || String(r.raw.name ?? r.raw.business_name ?? r.raw.license_name ?? "")}</td>
                 <td>{v(r.profile.city)}{v(r.profile.state) ? `, ${v(r.profile.state)}` : ""}</td>
                 <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v(r.profile.website)}</td>
                 <td style={{ maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v(r.profile.emails)}</td>
@@ -137,19 +184,22 @@ export default function DataPage() {
                       <thead><tr><th>Field</th><th>Value</th><th>Source</th><th>Confidence</th></tr></thead>
                       <tbody>
                         {Object.entries(r.profile).map(([k, f]) => (
-                          <tr key={k}><td>{k}</td><td style={{ whiteSpace: "pre-wrap" }}>{v(f)}</td><td>{f.source}</td><td>{f.confidence}</td></tr>
+                          <tr key={k}><td>{k}</td><td style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{v(f)}</td><td>{f.source}</td><td>{f.confidence}</td></tr>
                         ))}
                       </tbody>
                     </table>
-                    <div className="meta">passes: {JSON.stringify(r.passes)}</div>
+                    <div className="meta" style={{ wordBreak: "break-all" }}>passes: {JSON.stringify(r.passes)}</div>
                   </td>
                 </tr>
               )}
             </Fragment>
           ))}
-          {records.length === 0 && <tr><td colSpan={9} style={{ color: "var(--muted)" }}>No records yet.</td></tr>}
+          {records.length === 0 && <tr><td colSpan={9} style={{ color: "var(--muted)" }}>No records in this batch yet.</td></tr>}
         </tbody>
       </table>
+      {current && current.total > records.length && (
+        <p style={{ color: "var(--muted)", fontSize: 13 }}>Showing the newest {records.length} of {current.total.toLocaleString()}. Export CSV for the full batch.</p>
+      )}
     </>
   );
 }

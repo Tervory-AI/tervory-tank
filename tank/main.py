@@ -14,6 +14,7 @@ Endpoints
   POST /v1/skills/{id}/{ver}/retire      take a version out of service
   POST /v1/skills/{id}/run               run an approved skill (preview=true allows staging/candidate)
   POST /v1/base/run                      Base passes 1-7 (+ vertical engine) over a batch of records (a task)
+  GET  /v1/base/batches                  per-batch counts (status, tier, site/email coverage)
   GET  /v1/base/engines                  vertical engines available (e.g. ffl)
   GET  /v1/base/records?tenant_id=       enriched records, newest first
   GET  /v1/policy                        the routing policy rows
@@ -533,7 +534,7 @@ class BaseRun(BaseModel):
     tenant_id: uuid.UUID
     created_by: str | None = None
     batch: str = Field(min_length=1, max_length=120)
-    records: list[dict[str, Any]] = Field(min_length=1, max_length=2000)
+    records: list[dict[str, Any]] = Field(min_length=1, max_length=20000)
     registry: list[dict[str, Any]] | None = None   # optional engine registry for pass 1b; defaults to the batch itself
     engine: str | None = None                       # vertical module, e.g. "ffl"
     preview: bool = False                           # allow unapproved skill versions (owner testing)
@@ -598,12 +599,17 @@ async def _enrich_one(rec_id: uuid.UUID, inp: dict[str, Any], engine_in: dict[st
         _merge(profile, norm.get("fields") or {})
         passes["1a"] = {"skill": p.ref, "ms": norm.get("_ms")}
 
-        # 1b resolve against the registry
+        # 1b resolve against the registry (and find duplicates inside the batch)
         p, ctx = ctx_for("base.resolve")
         res = await skala.run_skill(p, {"record": norm, "registry": registry}, ctx)
         if res.get("match"):
             profile["registry_match"] = {"value": res["match"].get("id"), "source": f"registry:{res['verdict']}", "confidence": int(res.get("score") or 0)}
         passes["1b"] = {"skill": p.ref, "ms": res.get("_ms"), "verdict": res.get("verdict"), "score": res.get("score")}
+        # A row that came from the engine's own list (the ATF export) is in the registry by definition.
+        if engine and engine_in and engine_in.get("licence_number"):
+            profile["registry_match"] = {"value": engine_in["licence_number"], "source": f"registry:{engine}", "confidence": 100}
+            if res.get("match"):
+                passes["1b"]["duplicate_of"] = res["match"].get("id")
 
         name = _val(profile, "name") or inp.get("name") or ""
         city = _val(profile, "city") or ""
@@ -733,7 +739,7 @@ async def _run_base_batch(task_id: uuid.UUID, body: BaseRun, rec_ids: list[uuid.
             f = n.get("fields") or {}
             registry.append({"id": str(rec_ids[i]), "name_key": f.get("name_key", {}).get("value", ""),
                              "city": str(f.get("city", {}).get("value", "")).lower(), "state": str(f.get("state", {}).get("value", "")).lower()})
-    sem = asyncio.Semaphore(max(1, min(body.concurrency, 8)))
+    sem = asyncio.Semaphore(max(1, min(body.concurrency, 12)))
 
     async def one(i: int) -> None:
         async with sem:
@@ -783,21 +789,45 @@ async def base_run(body: BaseRun) -> dict[str, Any]:
     return {"task": task_dict(task), "records": len(rec_ids), "skills": {k: v.ref for k, v in pkgs.items()}}
 
 
+@app.get("/v1/base/batches", dependencies=[Depends(require_key)])
+async def base_batches(tenant_id: uuid.UUID) -> list[dict[str, Any]]:
+    """One row per batch: counts by status and tier, so the Workspace never has to load 14,000 records to draw tiles."""
+    async with pool().acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT batch, min(created_at) AS started, count(*) AS total,
+                   count(*) FILTER (WHERE status='done') AS done,
+                   count(*) FILTER (WHERE status='failed') AS failed,
+                   count(*) FILTER (WHERE status IN ('queued','running')) AS pending,
+                   count(*) FILTER (WHERE status='done' AND confidence >= 80) AS ready,
+                   count(*) FILTER (WHERE status='done' AND confidence BETWEEN 60 AND 79) AS aware,
+                   count(*) FILTER (WHERE status='done' AND confidence BETWEEN 40 AND 59) AS review,
+                   count(*) FILTER (WHERE status='done' AND confidence < 40) AS requeue,
+                   count(*) FILTER (WHERE status='done' AND profile ? 'website') AS with_site,
+                   count(*) FILTER (WHERE status='done' AND profile ? 'emails') AS with_email
+            FROM base.records WHERE tenant_id=$1
+            GROUP BY batch ORDER BY started DESC LIMIT 200
+            """, tenant_id,
+        )
+    return [dict(r) for r in rows]
+
+
 @app.get("/v1/base/engines", dependencies=[Depends(require_key)])
 async def base_engines() -> list[str]:
     return known_engines()
 
 
 @app.get("/v1/base/records", dependencies=[Depends(require_key)])
-async def base_records(tenant_id: uuid.UUID, task_id: uuid.UUID | None = None, limit: int = 200) -> list[dict[str, Any]]:
-    limit = max(1, min(limit, 2000))
+async def base_records(tenant_id: uuid.UUID, task_id: uuid.UUID | None = None, batch: str | None = None,
+                       limit: int = 200, offset: int = 0) -> list[dict[str, Any]]:
+    limit = max(1, min(limit, 5000))
     async with pool().acquire() as conn:
         rows = await conn.fetch(
             """
             SELECT id, task_id, batch, raw, profile, passes, confidence, status, error, created_at, updated_at
-            FROM base.records WHERE tenant_id=$1 AND ($2::uuid IS NULL OR task_id=$2)
-            ORDER BY created_at DESC LIMIT $3
-            """, tenant_id, task_id, limit,
+            FROM base.records WHERE tenant_id=$1 AND ($2::uuid IS NULL OR task_id=$2) AND ($3::text IS NULL OR batch=$3)
+            ORDER BY created_at DESC LIMIT $4 OFFSET $5
+            """, tenant_id, task_id, batch, limit, max(0, offset),
         )
     out = []
     for r in rows:
