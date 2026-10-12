@@ -28,6 +28,7 @@ are later build-order steps and are not in this file yet.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -37,6 +38,7 @@ from typing import Any, Literal
 
 import asyncpg
 import httpx
+import redis.asyncio as aioredis
 from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
@@ -54,6 +56,9 @@ app = FastAPI(title="Tervory Tank", version="0.2.0")
 _pool: asyncpg.Pool | None = None
 _background: set[asyncio.Task[None]] = set()
 _http: httpx.AsyncClient | None = None
+_redis: aioredis.Redis | None = None
+REDIS_URL = os.environ.get("REDIS_URL", "redis://redis:6379/0")
+CACHE_TTL_S = int(os.environ.get("TANK_CACHE_TTL_S", str(7 * 24 * 3600)))
 _packages: dict[tuple[str, str], skala.SkillPackage] = {}
 SKILL_ENV = {k: v for k, v in {"BRAVE_API_KEY": os.environ.get("BRAVE_API_KEY", "")}.items() if v}
 
@@ -155,6 +160,13 @@ async def _startup() -> None:
         await conn.execute("UPDATE tank.tasks SET status='queued' WHERE status='running' AND task_type='base.enrich'")
     global _http, _packages
     _http = httpx.AsyncClient(headers={"User-Agent": "TervoryBase/0.1 (+https://tervory.com)"}, timeout=15)
+    global _redis
+    try:
+        _redis = aioredis.from_url(REDIS_URL, decode_responses=True, socket_connect_timeout=2)
+        await _redis.ping()
+    except Exception as exc:  # noqa: BLE001 — the cache is an optimisation; Tank runs without it
+        log.warning("redis unavailable, rung-4 cache off: %s", exc)
+        _redis = None
     _packages = skala.load_packages()
     await register_packages()
     t = asyncio.create_task(_base_worker())
@@ -164,6 +176,8 @@ async def _startup() -> None:
 
 @app.on_event("shutdown")
 async def _shutdown() -> None:
+    if _redis:
+        await _redis.aclose()
     if _http:
         await _http.aclose()
     if _pool:
@@ -238,13 +252,43 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
     messages = [m.model_dump() for m in req.messages]
     if policy["system_prompt"]:
         messages = [{"role": "system", "content": policy["system_prompt"]}, *messages]
+    max_tokens = min(req.max_tokens or policy["max_tokens_out"], policy["max_tokens_out"])
+
+    # ---- rung 4: the cache. Same task type, model and messages → the answer we already paid for.
+    # Scope comes from policy: 'tenant' keys include the tenant (answers never cross tenants);
+    # 'platform' is shared (only for task types whose answers hold nothing tenant-specific).
+    cache_key = None
+    if _redis is not None and policy.get("cache_scope") in ("tenant", "platform"):
+        scope = str(req.tenant_id) if policy["cache_scope"] == "tenant" else "platform"
+        digest = hashlib.sha256(json.dumps([req.task_type, model, max_tokens, messages], sort_keys=True).encode()).hexdigest()
+        cache_key = f"tank:cache:{scope}:{digest}"
+        try:
+            hit = await _redis.get(cache_key)
+        except Exception:  # noqa: BLE001
+            hit = None
+        if hit:
+            cached = json.loads(hit)
+            ledger_id = uuid.uuid4()
+            async with pool().acquire() as conn:
+                await conn.execute(
+                    """
+                    INSERT INTO tank.ledger
+                      (id, tenant_id, region, agent, skill, task_type, rung, model, priority,
+                       tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id)
+                    VALUES ($1,$2,$3,$4,$5,$6,4,$7,$8,0,0,0,0,true,'delivered',$9)
+                    """,
+                    ledger_id, req.tenant_id, req.region or DEFAULT_REGION, req.agent, req.skill,
+                    req.task_type, model, priority, task_id,
+                )
+            return RouteResponse(ledger_id=ledger_id, model=model, rung=4, content=cached["content"],
+                                 tokens_in=0, tokens_out=0, cost_usd=0.0, latency_ms=0)
 
     started = time.perf_counter()
     async with httpx.AsyncClient(timeout=120) as client:
         r = await client.post(
             f"{LITELLM_URL}/v1/chat/completions",
             headers={"Authorization": f"Bearer {LITELLM_MASTER_KEY}"},
-            json={"model": model, "messages": messages, "max_tokens": min(req.max_tokens or policy["max_tokens_out"], policy["max_tokens_out"])},
+            json={"model": model, "messages": messages, "max_tokens": max_tokens},
         )
     latency_ms = int((time.perf_counter() - started) * 1000)
 
@@ -275,6 +319,12 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
 
     if outcome == "failed":
         raise HTTPException(status_code=502, detail={"ledger_id": str(ledger_id), "upstream": data or r.text[:500]})
+
+    if cache_key and content:
+        try:
+            await _redis.set(cache_key, json.dumps({"content": content, "ledger_id": str(ledger_id)}), ex=CACHE_TTL_S)
+        except Exception:  # noqa: BLE001
+            pass
 
     return RouteResponse(
         ledger_id=ledger_id, model=model, rung=policy["rung"], content=content,

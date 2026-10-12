@@ -13,13 +13,20 @@ type EvalResult = {
   state: State; gate: "passed" | "failed"; details: { case: number; name: string | null; passed: boolean; why: string }[];
 };
 
-const RUNG = ["", "Frontier model", "Owned small model", "Code", "Cache"];
+const RUNG: Record<number, string> = { 1: "model", 2: "owned", 3: "code", 4: "cache" };
+const AGENT_LABEL: Record<string, string> = { tier0: "Tier 0", base: "Base", orchestrator: "Orchestrator" };
+
+function firstSentence(s: string): string {
+  const m = s.replace(/^Pass \d[a-z]?[,.]?\s*/i, "").match(/^(.*?[.!?])(\s|$)/);
+  return (m ? m[1] : s).slice(0, 110);
+}
 
 // Skala: every skill package, its lifecycle state, and the two human controls — run the evals, approve.
 export default function SkillsPage() {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, EvalResult>>({});
+  const [open, setOpen] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -30,9 +37,9 @@ export default function SkillsPage() {
   }, []);
   useEffect(() => { refresh(); }, [refresh]);
 
-  async function act(s: Skill, action: "evals" | "approve" | "retire") {
+  async function act(s: Skill, action: "evals" | "approve" | "retire", quiet = false) {
     const key = `${s.id}@${s.version}`;
-    setBusy(key);
+    if (!quiet) setBusy(key);
     setError(null);
     try {
       const res = await fetch("/api/skills", {
@@ -42,73 +49,102 @@ export default function SkillsPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
-      if (action === "evals") setResults((r) => ({ ...r, [key]: data as EvalResult }));
-      await refresh();
+      if (action === "evals") { setResults((r) => ({ ...r, [key]: data as EvalResult })); setOpen(key); }
+      if (!quiet) await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
-      setBusy(null);
+      if (!quiet) setBusy(null);
     }
   }
 
+  async function approveAll() {
+    setBusy("all");
+    for (const s of skills.filter((x) => x.state === "staging")) await act(s, "approve", true);
+    await refresh();
+    setBusy(null);
+  }
+
   const agents = Array.from(new Set(skills.map((s) => s.agent)));
+  const counts = { staging: skills.filter((s) => s.state === "staging").length, approved: skills.filter((s) => s.state === "approved").length,
+    candidate: skills.filter((s) => s.state === "candidate").length };
 
   return (
     <>
-      <h1>Skills</h1>
-      <p style={{ color: "var(--muted)" }}>
-        A skill is a versioned package in the repo. <b>Run evals</b> scores it against its golden cases; a pass moves it to
-        staging. <b>Approve</b> is your sign-off — only approved versions run for clients.
-      </p>
+      <div className="page-head">
+        <div>
+          <h1>Skills</h1>
+          <p className="sub">
+            {skills.length} packages · {counts.approved} approved · {counts.staging} staging · {counts.candidate} candidate.
+            Approve is your sign-off: only approved versions run for clients.
+          </p>
+        </div>
+        {counts.staging > 0 && (
+          <button type="button" disabled={busy !== null} onClick={approveAll}>
+            {busy === "all" ? "Approving…" : `Approve all ${counts.staging} staging`}
+          </button>
+        )}
+      </div>
       {error && <p className="err">{error}</p>}
+
       {agents.map((agent) => (
-        <section key={agent} style={{ marginTop: 24 }}>
-          <h2>{agent}</h2>
-          <table>
-            <thead>
-              <tr><th>Skill</th><th>Rung</th><th>State</th><th>Evals</th><th>Last score</th><th></th></tr>
-            </thead>
-            <tbody>
-              {skills.filter((s) => s.agent === agent).map((s) => {
-                const key = `${s.id}@${s.version}`;
-                const r = results[key];
-                const score = s.last_eval_score == null ? null : Number(s.last_eval_score);
-                return (
-                  <tr key={key} style={{ opacity: s.present ? 1 : 0.5 }}>
-                    <td>
-                      <b>{s.id}</b> <span style={{ color: "var(--muted)" }}>{s.version}</span>
-                      <div style={{ fontSize: 13, color: "var(--muted)" }}>{s.description}</div>
+        <section key={agent} className="group">
+          <h2 className="group-title">{AGENT_LABEL[agent] ?? agent}</h2>
+          <div className="rows">
+            {skills.filter((s) => s.agent === agent).map((s) => {
+              const key = `${s.id}@${s.version}`;
+              const r = results[key];
+              const score = s.last_eval_score == null ? null : Number(s.last_eval_score);
+              const threshold = Number(s.eval_threshold);
+              const isOpen = open === key;
+              return (
+                <div key={key} className={`row ${isOpen ? "open" : ""}`} style={{ opacity: s.present ? 1 : 0.5 }}>
+                  <button type="button" className="row-main" onClick={() => setOpen(isOpen ? null : key)} aria-expanded={isOpen}>
+                    <span className="row-name"><b>{s.id}</b> <span className="muted">{s.version}</span></span>
+                    <span className="row-desc">{firstSentence(s.description)}</span>
+                    <span className={`chip rung-${s.rung}`}>{RUNG[s.rung] ?? `rung ${s.rung}`}</span>
+                    <span className={`state ${s.state}`}>{s.state}</span>
+                    <span className="score" title={`${s.cases} cases · gate ≥${Math.round(threshold * 100)}%`}>
+                      <span className="bar"><span className="fill" style={{ width: `${score == null ? 0 : Math.round(score * 100)}%`, background: score != null && score >= threshold ? "var(--ok)" : "var(--warn)" }} /></span>
+                      <span className="muted">{score == null ? "—" : `${Math.round(score * 100)}%`}</span>
+                    </span>
+                  </button>
+                  <span className="row-actions">
+                    {s.state !== "retired" && (
+                      <button type="button" className="sm ghost" disabled={busy !== null} onClick={() => act(s, "evals")}>
+                        {busy === key ? "Running…" : "Run evals"}
+                      </button>
+                    )}
+                    {s.state === "staging" && (
+                      <button type="button" className="sm" disabled={busy !== null} onClick={() => act(s, "approve")}>Approve</button>
+                    )}
+                    {s.state === "approved" && (
+                      <button type="button" className="sm ghost" disabled={busy !== null} onClick={() => act(s, "retire")}>Retire</button>
+                    )}
+                  </span>
+                  {isOpen && (
+                    <div className="row-detail">
+                      <p>{s.description}</p>
+                      <p className="muted">
+                        {s.cases} golden cases · gate ≥{Math.round(threshold * 100)}%
+                        {s.last_eval_at ? ` · last run ${new Date(s.last_eval_at).toLocaleString()}` : ""}
+                        {s.approved_by ? " · approved" : ""}
+                        {s.task_type ? ` · policy ${s.task_type}` : ""}
+                      </p>
                       {r && (
-                        <div style={{ fontSize: 13, marginTop: 4 }}>
-                          {r.passed}/{r.total} passed · gate {r.gate} · ${r.cost_usd.toFixed(5)}
+                        <div className="eval">
+                          <b>{r.passed}/{r.total} passed</b> · gate {r.gate} · ${r.cost_usd.toFixed(5)}
                           {r.details.filter((d) => !d.passed).map((d) => (
                             <div key={d.case} className="err">✗ {d.name ?? `case ${d.case}`}: {d.why}</div>
                           ))}
                         </div>
                       )}
-                    </td>
-                    <td>{s.rung} · {RUNG[s.rung]}</td>
-                    <td><span className={`state ${s.state}`}>{s.state}</span></td>
-                    <td>{s.cases} cases · ≥{Math.round(Number(s.eval_threshold) * 100)}%</td>
-                    <td>{score == null ? "—" : `${Math.round(score * 100)}%`}</td>
-                    <td style={{ whiteSpace: "nowrap" }}>
-                      {s.state !== "retired" && (
-                        <button type="button" className="sm" disabled={busy !== null} onClick={() => act(s, "evals")}>
-                          {busy === key ? "Running…" : "Run evals"}
-                        </button>
-                      )}{" "}
-                      {s.state === "staging" && (
-                        <button type="button" className="sm" disabled={busy !== null} onClick={() => act(s, "approve")}>Approve</button>
-                      )}{" "}
-                      {s.state === "approved" && (
-                        <button type="button" className="sm ghost" disabled={busy !== null} onClick={() => act(s, "retire")}>Retire</button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </section>
       ))}
     </>
