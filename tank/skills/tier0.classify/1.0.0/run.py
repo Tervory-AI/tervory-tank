@@ -3,7 +3,22 @@
 import re
 
 LABELS = ("market_lab", "tier0", "base", "tiger", "radix", "tisan", "zenas")  # longest first so market_lab wins over base
-TEMPLATE = '{text}'
+
+# The model has to know what each name means. These are the Squad roles from the Build Pack.
+TEMPLATE = """Route this request to the one team member who should handle it.
+
+tier0      — quick questions, short drafts, summaries; anything answerable in a minute with no data work
+base       — data: build, clean, match, enrich or deduplicate lists and records; find websites, emails, phones
+tiger      — watch prices and competitors over time and send alerts; price monitoring
+market_lab — research a market: trends, supply and demand, forecasts, reports
+radix      — security: vulnerability scans, code and website security review, compliance checks
+tisan      — build or change websites, apps, automations, integrations, infrastructure
+zenas      — legal: contracts, NDAs, terms, compliance questions, trademarks
+
+Request:
+{text}
+
+Reply with the label only."""
 
 
 def _label(raw: str) -> str:
