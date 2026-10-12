@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { route, type ChatMessage } from "@/lib/tank";
+import { currentTenant } from "@/lib/tenant";
 
 export const runtime = "nodejs";
 
@@ -11,7 +12,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "messages required" }, { status: 400 });
   }
   try {
-    const result = await route("tier0.answer", messages.slice(-12));
+    const { tenantId } = await currentTenant();
+    const result = await route(tenantId, "tier0.answer", messages.slice(-12));
     return NextResponse.json(result);
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Tank unavailable" }, { status: 502 });

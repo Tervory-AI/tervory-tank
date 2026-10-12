@@ -3,6 +3,7 @@
 * { box-sizing: border-box; }
 body { margin: 0; font: 15px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--fg); background: var(--bg); }
 .top { display: flex; align-items: center; gap: 24px; padding: 12px 20px; border-bottom: 1px solid var(--line); }
+.who { margin-left: auto; display: flex; align-items: center; gap: 12px; }
 .brand { font-weight: 700; text-decoration: none; color: var(--fg); }
 nav { display: flex; gap: 16px; } nav a { color: var(--muted); text-decoration: none; } nav a:hover { color: var(--fg); }
 main { max-width: 820px; margin: 0 auto; padding: 24px 16px 120px; }

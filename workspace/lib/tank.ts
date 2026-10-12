@@ -17,12 +17,6 @@ export type RouteResult = {
   latency_ms: number;
 };
 
-export function tenantId(): string {
-  const id = process.env.WORKSPACE_TENANT_ID;
-  if (!id) throw new Error("WORKSPACE_TENANT_ID is not set");
-  return id;
-}
-
 async function tank<T>(path: string, init: RequestInit): Promise<T> {
   const res = await fetch(`${TANK_URL}${path}`, {
     ...init,
@@ -36,10 +30,10 @@ async function tank<T>(path: string, init: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-export function route(taskType: string, messages: ChatMessage[], agent = "tier0"): Promise<RouteResult> {
+export function route(tenantId: string, taskType: string, messages: ChatMessage[], agent = "tier0"): Promise<RouteResult> {
   return tank<RouteResult>("/v1/route", {
     method: "POST",
-    body: JSON.stringify({ tenant_id: tenantId(), agent, task_type: taskType, messages }),
+    body: JSON.stringify({ tenant_id: tenantId, agent, task_type: taskType, messages }),
   });
 }
 
@@ -53,6 +47,6 @@ export type LedgerSummary = {
   by_model: { model: string; rung: number; calls: number; tokens_in: number; tokens_out: number; cost_usd: number; delivered: number }[];
 };
 
-export function ledgerSummary(days = 30): Promise<LedgerSummary> {
-  return tank<LedgerSummary>(`/v1/ledger/summary?tenant_id=${tenantId()}&days=${days}`, { method: "GET" });
+export function ledgerSummary(tenantId: string, days = 30): Promise<LedgerSummary> {
+  return tank<LedgerSummary>(`/v1/ledger/summary?tenant_id=${tenantId}&days=${days}`, { method: "GET" });
 }

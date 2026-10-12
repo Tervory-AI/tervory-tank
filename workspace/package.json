@@ -11,7 +11,8 @@
   "dependencies": {
     "next": "15.5.4",
     "react": "19.1.1",
-    "react-dom": "19.1.1"
+    "react-dom": "19.1.1",
+    "@clerk/nextjs": "6.33.3"
   },
   "devDependencies": {
     "@types/node": "22.18.0",

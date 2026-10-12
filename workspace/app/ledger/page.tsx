@@ -1,4 +1,5 @@
 import { ledgerSummary } from "@/lib/tank";
+import { currentTenant } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
@@ -6,8 +7,11 @@ export const dynamic = "force-dynamic";
 export default async function LedgerPage() {
   let summary: Awaited<ReturnType<typeof ledgerSummary>> | null = null;
   let error: string | null = null;
+  let orgName = "";
   try {
-    summary = await ledgerSummary(30);
+    const tenant = await currentTenant();
+    orgName = tenant.orgName;
+    summary = await ledgerSummary(tenant.tenantId, 30);
   } catch (err) {
     error = err instanceof Error ? err.message : "Tank unavailable";
   }
@@ -29,7 +33,7 @@ export default async function LedgerPage() {
 
   return (
     <>
-      <h1>Ledger · last {summary.days} days</h1>
+      <h1>Ledger · {orgName} · last {summary.days} days</h1>
       <div className="tiles">
         <div className="tile"><b>{summary.calls}</b><span>model calls</span></div>
         <div className="tile"><b>{summary.delivered}</b><span>delivered</span></div>
