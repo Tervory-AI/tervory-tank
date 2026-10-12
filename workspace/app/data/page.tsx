@@ -35,6 +35,7 @@ export default function DataPage() {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState(true);
   const [engine, setEngine] = useState("");
+  const [splitByState, setSplitByState] = useState(true);
   const [engines, setEngines] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,22 +80,24 @@ export default function DataPage() {
       if (file) {
         const fd = new FormData();
         fd.set("batch", batch); fd.set("preview", String(preview)); fd.set("engine", engine); fd.set("file", file);
+        fd.set("split_by_state", String(splitByState));
         res = await fetch("/api/base", { method: "POST", body: fd });
       } else {
         res = await fetch("/api/base", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ batch, csv, preview, engine: engine || null }),
+          body: JSON.stringify({ batch, csv, preview, engine: engine || null, split_by_state: splitByState }),
         });
       }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
-      setSelected(batch);
+      const data2 = data as { labels?: string[] };
+      setSelected(data2.labels?.[0] ?? batch);
       setBatch("");
       setFile(null);
       if (fileRef.current) fileRef.current.value = "";
       await refreshBatches();
-      await refreshRecords(batch);
+      await refreshRecords(data2.labels?.[0] ?? batch);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -109,7 +112,9 @@ export default function DataPage() {
         Upload a CSV (or paste one; header row first: name, address, city, state, zip, phone, website — any you have). Base runs
         all seven passes: clean, match, find the site, scrape it, extract facts, contacts, socials, business data, the industry
         module, then verification and a 0–100 score. Pick an engine to feed it that industry&apos;s own list — the FFL engine
-        reads the ATF licensee export as-is (comma or tab delimited). Up to 20,000 rows per batch.
+        reads the ATF licensee export as-is (comma or tab delimited). Up to 100,000 rows per upload; with &quot;one batch per
+        state&quot; the upload is split by state and the states run one after another, smallest first, so finished states are
+        auditable while the big ones are still going. A restart resumes where it stopped.
       </p>
       <form onSubmit={submit} className="task-form">
         <input value={batch} onChange={(e) => setBatch(e.target.value)} placeholder="Batch name, e.g. ATF full list Oct 2026" maxLength={120} disabled={busy} required />
@@ -126,6 +131,9 @@ export default function DataPage() {
             <option value="">No engine (generic records)</option>
             {engines.map((e) => <option key={e} value={e}>{e.toUpperCase()} engine</option>)}
           </select>
+          <label style={{ color: "var(--muted)", fontSize: 13 }}>
+            <input type="checkbox" checked={splitByState} onChange={(e) => setSplitByState(e.target.checked)} /> one batch per state, smallest state first
+          </label>
           <label style={{ color: "var(--muted)", fontSize: 13 }}>
             <input type="checkbox" checked={preview} onChange={(e) => setPreview(e.target.checked)} /> preview (allow unapproved skill versions)
           </label>

@@ -13,7 +13,7 @@ Endpoints
   POST /v1/skills/{id}/{ver}/approve     human sign-off; previous approved version retires
   POST /v1/skills/{id}/{ver}/retire      take a version out of service
   POST /v1/skills/{id}/run               run an approved skill (preview=true allows staging/candidate)
-  POST /v1/base/run                      Base passes 1-7 (+ vertical engine) over a batch of records (a task)
+  POST /v1/base/run                      queue Base passes 1-7 (+ vertical engine) over a batch; split_by_state = one batch per state, smallest first
   GET  /v1/base/batches                  per-batch counts (status, tier, site/email coverage)
   GET  /v1/base/engines                  vertical engines available (e.g. ffl)
   GET  /v1/base/records?tenant_id=       enriched records, newest first
@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import time
 import uuid
@@ -39,6 +40,8 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
 import skala
+
+log = logging.getLogger("tank")
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 LITELLM_URL = os.environ.get("LITELLM_URL", "http://litellm:4000")
@@ -140,15 +143,22 @@ async def _startup() -> None:
         ddl = f.read()
     async with _pool.acquire() as conn:
         await conn.execute(ddl)
-        # Anything left 'running' from before a restart did not finish.
+        # A one-shot task (chat, draft) that was mid-flight when Tank restarted did not finish.
         await conn.execute(
             "UPDATE tank.tasks SET status='failed', error='Tank restarted mid-task', finished_at=now() "
-            "WHERE status IN ('queued','running')"
+            "WHERE status IN ('queued','running') AND task_type <> 'base.enrich'"
         )
+        # A Base batch is resumable: its records carry their own status. Put the batch and any
+        # half-done records back in the queue; the worker picks them up in order.
+        await conn.execute("UPDATE base.records SET status='queued', updated_at=now() WHERE status='running'")
+        await conn.execute("UPDATE tank.tasks SET status='queued' WHERE status='running' AND task_type='base.enrich'")
     global _http, _packages
     _http = httpx.AsyncClient(headers={"User-Agent": "TervoryBase/0.1 (+https://tervory.com)"}, timeout=15)
     _packages = skala.load_packages()
     await register_packages()
+    t = asyncio.create_task(_base_worker())
+    _background.add(t)
+    t.add_done_callback(_background.discard)
 
 
 @app.on_event("shutdown")
@@ -534,11 +544,12 @@ class BaseRun(BaseModel):
     tenant_id: uuid.UUID
     created_by: str | None = None
     batch: str = Field(min_length=1, max_length=120)
-    records: list[dict[str, Any]] = Field(min_length=1, max_length=20000)
+    records: list[dict[str, Any]] = Field(min_length=1, max_length=100000)
     registry: list[dict[str, Any]] | None = None   # optional engine registry for pass 1b; defaults to the batch itself
     engine: str | None = None                       # vertical module, e.g. "ffl"
     preview: bool = False                           # allow unapproved skill versions (owner testing)
-    concurrency: int = 4
+    concurrency: int = 8
+    split_by_state: bool = False                    # one batch per state, smallest state first
 
 
 def known_engines() -> list[str]:
@@ -712,42 +723,50 @@ async def _enrich_one(rec_id: uuid.UUID, inp: dict[str, Any], engine_in: dict[st
             )
 
 
-async def _run_base_batch(task_id: uuid.UUID, body: BaseRun, rec_ids: list[uuid.UUID], pkgs: dict[str, skala.SkillPackage]) -> None:
+async def _run_base_batch(task_id: uuid.UUID, cfg: dict[str, Any], pkgs: dict[str, skala.SkillPackage]) -> None:
+    """Run every still-queued record of one batch. Safe to call again after a restart:
+    finished records are skipped, so a batch never starts over."""
+    tenant_id = uuid.UUID(str(cfg["tenant_id"]))
+    engine = cfg.get("engine")
+    preview = bool(cfg.get("preview"))
     async with pool().acquire() as conn:
-        await conn.execute("UPDATE tank.tasks SET status='running', started_at=now() WHERE id=$1", task_id)
+        await conn.execute("UPDATE tank.tasks SET status='running', started_at=coalesce(started_at, now()) WHERE id=$1", task_id)
+        rows = await conn.fetch("SELECT id, raw, status FROM base.records WHERE task_id=$1 ORDER BY created_at", task_id)
+    rec_ids = [r["id"] for r in rows]
+    raws = [json.loads(r["raw"]) if isinstance(r["raw"], str) else r["raw"] for r in rows]
+    todo = [i for i, r in enumerate(rows) if r["status"] == "queued"]
 
     # Pass 0: the engine's intake maps each raw record into Base's generic fields.
     inputs: list[dict[str, Any]] = []
     engine_ins: list[dict[str, Any] | None] = []
-    if body.engine:
-        ing_pkg = pkgs[f"{body.engine}.ingest"]
-        for raw in body.records:
-            r = await skala.run_skill(ing_pkg, raw, make_ctx(ing_pkg, body.tenant_id, task_id, body.preview))
+    if engine:
+        ing_pkg = pkgs[f"{engine}.ingest"]
+        for raw in raws:
+            r = await skala.run_skill(ing_pkg, raw, make_ctx(ing_pkg, tenant_id, task_id, preview))
             inputs.append(r.get("record") or dict(raw))
             engine_ins.append(r.get("engine") or None)
     else:
-        inputs = [dict(r) for r in body.records]
+        inputs = [dict(r) for r in raws]
         engine_ins = [None] * len(inputs)
 
     # Registry for pass 1b: what the client supplied, else the batch itself (finds duplicates).
     norm_pkg = pkgs["base.normalize"]
-    registry = body.registry
+    registry = cfg.get("registry")
     if registry is None:
         registry = []
         for i, inp in enumerate(inputs):
-            n = await skala.run_skill(norm_pkg, inp, make_ctx(norm_pkg, body.tenant_id, task_id, body.preview))
+            n = await skala.run_skill(norm_pkg, inp, make_ctx(norm_pkg, tenant_id, task_id, preview))
             f = n.get("fields") or {}
             registry.append({"id": str(rec_ids[i]), "name_key": f.get("name_key", {}).get("value", ""),
                              "city": str(f.get("city", {}).get("value", "")).lower(), "state": str(f.get("state", {}).get("value", "")).lower()})
-    sem = asyncio.Semaphore(max(1, min(body.concurrency, 12)))
+    sem = asyncio.Semaphore(max(1, min(int(cfg.get("concurrency") or 8), 12)))
 
     async def one(i: int) -> None:
         async with sem:
-            # exclude the record itself from its own registry so it matches siblings, not itself
-            reg = [r for r in registry if r.get("id") != str(rec_ids[i])] if body.registry is None else registry
-            await _enrich_one(rec_ids[i], inputs[i], engine_ins[i], reg, pkgs, body.engine, body.tenant_id, task_id, body.preview)
+            reg = [r for r in registry if r.get("id") != str(rec_ids[i])] if cfg.get("registry") is None else registry
+            await _enrich_one(rec_ids[i], inputs[i], engine_ins[i], reg, pkgs, engine, tenant_id, task_id, preview)
 
-    await asyncio.gather(*(one(i) for i in range(len(rec_ids))))
+    await asyncio.gather(*(one(i) for i in todo))
     async with pool().acquire() as conn:
         done, failed, cost, ready = await conn.fetchrow(
             """
@@ -763,30 +782,86 @@ async def _run_base_batch(task_id: uuid.UUID, body: BaseRun, rec_ids: list[uuid.
         )
 
 
+_base_wake = asyncio.Event()
+
+
+async def _base_worker() -> None:
+    """One Base batch at a time, oldest queued first. A plan that split an upload by state
+    created its batches smallest-state-first, so that is the order they run."""
+    while True:
+        try:
+            async with pool().acquire() as conn:
+                row = await conn.fetchrow(
+                    "SELECT id, input FROM tank.tasks WHERE task_type='base.enrich' AND status='queued' ORDER BY created_at LIMIT 1"
+                )
+            if row is None:
+                _base_wake.clear()
+                try:
+                    await asyncio.wait_for(_base_wake.wait(), timeout=30)
+                except asyncio.TimeoutError:
+                    pass
+                continue
+            cfg = json.loads(row["input"]) if isinstance(row["input"], str) else dict(row["input"])
+            try:
+                pkgs = await _resolve_versions(bool(cfg.get("preview")), cfg.get("engine"))
+                await _run_base_batch(row["id"], cfg, pkgs)
+            except Exception as exc:  # noqa: BLE001 — one bad batch must not stop the queue
+                async with pool().acquire() as conn:
+                    await conn.execute("UPDATE tank.tasks SET status='failed', error=$2, finished_at=now() WHERE id=$1", row["id"], str(exc)[:1000])
+        except Exception as exc:  # noqa: BLE001 — e.g. the database blinked; back off and carry on
+            log.error("base worker: %s", exc)
+            await asyncio.sleep(5)
+
+
+async def _enqueue_batch(conn: asyncpg.Connection, body: BaseRun, label: str, records: list[dict[str, Any]], note: str) -> asyncpg.Record:
+    cfg = {"batch": label, "count": len(records), "preview": body.preview, "engine": body.engine,
+           "concurrency": body.concurrency, "registry": body.registry, "tenant_id": str(body.tenant_id)}
+    task = await conn.fetchrow(
+        f"""
+        INSERT INTO tank.tasks (tenant_id, created_by, agent, task_type, title, input)
+        VALUES ($1,$2,'base','base.enrich',$3,$4::jsonb) RETURNING {TASK_COLUMNS}
+        """,
+        body.tenant_id, body.created_by, f"Base passes 1-7{' + ' + body.engine + ' engine' if body.engine else ''}: {label} ({len(records)} records){note}",
+        json.dumps(cfg),
+    )
+    await conn.executemany(
+        "INSERT INTO base.records (tenant_id, task_id, batch, raw) VALUES ($1,$2,$3,$4::jsonb)",
+        [(body.tenant_id, task["id"], label, json.dumps(r)) for r in records],
+    )
+    return task
+
+
+async def _state_of(body: BaseRun, pkgs: dict[str, skala.SkillPackage], raw: dict[str, Any]) -> str:
+    if body.engine:
+        ing = pkgs[f"{body.engine}.ingest"]
+        r = await skala.run_skill(ing, raw, make_ctx(ing, body.tenant_id, None, body.preview))
+        raw = r.get("record") or raw
+    st = str(raw.get("state") or raw.get("premise_state") or "").strip().upper()
+    return st[:2] if st else "??"
+
+
 @app.post("/v1/base/run", dependencies=[Depends(require_key)], status_code=202)
 async def base_run(body: BaseRun) -> dict[str, Any]:
+    """Queue a batch (or, with split_by_state, one batch per state, smallest first).
+    Nothing runs inline here; the worker takes batches in order."""
     pkgs = await _resolve_versions(body.preview, body.engine)
-    label = f"Base passes 1-7{' + ' + body.engine + ' engine' if body.engine else ''}: {body.batch} ({len(body.records)} records)"
+    tasks: list[dict[str, Any]] = []
+    labels: list[str] = []
     async with pool().acquire() as conn:
-        task = await conn.fetchrow(
-            f"""
-            INSERT INTO tank.tasks (tenant_id, created_by, agent, task_type, title, input)
-            VALUES ($1,$2,'base','base.enrich',$3,$4::jsonb) RETURNING {TASK_COLUMNS}
-            """,
-            body.tenant_id, body.created_by, label,
-            json.dumps({"batch": body.batch, "count": len(body.records), "preview": body.preview, "engine": body.engine}),
-        )
-        rec_ids: list[uuid.UUID] = []
-        for raw in body.records:
-            rid = await conn.fetchval(
-                "INSERT INTO base.records (tenant_id, task_id, batch, raw) VALUES ($1,$2,$3,$4::jsonb) RETURNING id",
-                body.tenant_id, task["id"], body.batch, json.dumps(raw),
-            )
-            rec_ids.append(rid)
-    t = asyncio.create_task(_run_base_batch(task["id"], body, rec_ids, pkgs))
-    _background.add(t)
-    t.add_done_callback(_background.discard)
-    return {"task": task_dict(task), "records": len(rec_ids), "skills": {k: v.ref for k, v in pkgs.items()}}
+        if body.split_by_state:
+            groups: dict[str, list[dict[str, Any]]] = {}
+            for raw in body.records:
+                groups.setdefault(await _state_of(body, pkgs, raw), []).append(raw)
+            order = sorted(groups.items(), key=lambda kv: (len(kv[1]), kv[0]))
+            for n, (st, recs) in enumerate(order, 1):
+                task = await _enqueue_batch(conn, body, f"{body.batch} · {st}", recs, f" · {n}/{len(order)}")
+                tasks.append(task_dict(task)); labels.append(f"{body.batch} · {st}")
+        else:
+            task = await _enqueue_batch(conn, body, body.batch, body.records, "")
+            tasks.append(task_dict(task)); labels.append(body.batch)
+    _base_wake.set()
+    return {"task": tasks[0], "tasks": tasks, "labels": labels, "records": len(body.records), "batches": len(tasks),
+            "skills": {k: v.ref for k, v in pkgs.items()}}
 
 
 @app.get("/v1/base/batches", dependencies=[Depends(require_key)])

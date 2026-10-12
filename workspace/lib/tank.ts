@@ -195,11 +195,12 @@ export type BaseRecord = {
 };
 
 export function baseRun(
-  tenantId: string, createdBy: string, batch: string, records: Record<string, unknown>[], preview: boolean, engine?: string | null,
+  tenantId: string, createdBy: string, batch: string, records: Record<string, unknown>[], preview: boolean,
+  engine?: string | null, splitByState = false,
 ) {
-  return tank<{ task: Task; records: number; skills: Record<string, string> }>("/v1/base/run", {
+  return tank<{ task: Task; tasks: Task[]; records: number; batches: number; skills: Record<string, string> }>("/v1/base/run", {
     method: "POST",
-    body: JSON.stringify({ tenant_id: tenantId, created_by: createdBy, batch, records, preview, engine: engine || null }),
+    body: JSON.stringify({ tenant_id: tenantId, created_by: createdBy, batch, records, preview, engine: engine || null, split_by_state: splitByState }),
   });
 }
 export function baseEngines(): Promise<string[]> {

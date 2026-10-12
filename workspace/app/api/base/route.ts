@@ -23,17 +23,18 @@ export async function GET(req: Request) {
 // are understood directly, and an engine (e.g. "ffl") maps its own industry columns (the ATF list) into those.
 // Also accepts multipart/form-data with fields batch, preview, engine and a CSV file in "file" (up to 25 MB).
 export async function POST(req: Request) {
-  let body: { batch?: string; csv?: string; preview?: boolean; engine?: string | null } | null = null;
+  let body: { batch?: string; csv?: string; preview?: boolean; engine?: string | null; split_by_state?: boolean } | null = null;
   if ((req.headers.get("content-type") ?? "").includes("multipart/form-data")) {
     const form = await req.formData().catch(() => null);
     const file = form?.get("file");
     if (!form || !(file instanceof File)) return NextResponse.json({ error: "file required" }, { status: 400 });
-    if (file.size > 25 * 1024 * 1024) return NextResponse.json({ error: "file over 25 MB; split it" }, { status: 413 });
+    if (file.size > 80 * 1024 * 1024) return NextResponse.json({ error: "file over 80 MB; split it" }, { status: 413 });
     body = {
       batch: String(form.get("batch") ?? ""),
       csv: await file.text(),
       preview: String(form.get("preview") ?? "") === "true",
       engine: form.get("engine") ? String(form.get("engine")) : null,
+      split_by_state: String(form.get("split_by_state") ?? "") === "true",
     };
   } else {
     body = (await req.json().catch(() => null)) as typeof body;
@@ -43,11 +44,11 @@ export async function POST(req: Request) {
   if (!batch || !csv.trim()) return NextResponse.json({ error: "batch and csv required" }, { status: 400 });
   const records = parseCsv(csv);
   if (records.length === 0) return NextResponse.json({ error: "no rows found; first line must be a header" }, { status: 400 });
-  if (records.length > 20000) return NextResponse.json({ error: "max 20,000 rows per batch; split the file" }, { status: 400 });
+  if (records.length > 100000) return NextResponse.json({ error: "max 100,000 rows per upload; split the file" }, { status: 400 });
   try {
     const { tenantId, userId } = await currentTenant();
     const engine = typeof body?.engine === "string" && /^[a-z0-9_]{1,32}$/.test(body.engine) ? body.engine : null;
-    return NextResponse.json(await baseRun(tenantId, userId, batch.slice(0, 120), records, Boolean(body?.preview), engine), { status: 202 });
+    return NextResponse.json(await baseRun(tenantId, userId, batch.slice(0, 100), records, Boolean(body?.preview), engine, Boolean(body?.split_by_state)), { status: 202 });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Tank unavailable" }, { status: 502 });
   }
