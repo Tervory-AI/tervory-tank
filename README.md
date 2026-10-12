@@ -11,7 +11,8 @@ Build Pack v2, section "Tank — the centrepiece", is the spec this repo impleme
 | `docker-compose.yml` | The Phase 0/1 stack: PostgreSQL, Redis, Qdrant, LiteLLM, Tank API. Coolify deploys this file. |
 | `litellm/config.yaml` | The model roster LiteLLM exposes. Keys come from the environment, never from this file. |
 | `db/schema.sql` | The `tank` schema: `ledger`, `policy`, `evals`. Runs automatically on first start. |
-| `tank/` | The FastAPI service: `/v1/route` (the one endpoint agents call), `/v1/tasks` (the board), `/v1/ledger/{id}/feedback` (a person's verdict), `/v1/ledger/summary`, `/v1/policy`, `/health`. |
+| `tank/` | The FastAPI service: `/v1/route` (the one endpoint agents call), `/v1/tasks` (the board), `/v1/base/run` (Base passes 1–7 plus a vertical engine), `/v1/skills` (Skala), `/v1/ledger/{id}/feedback` (a person's verdict), `/v1/ledger/summary`, `/v1/policy`, `/health`. |
+| `tank/skills/` | Skala packages: `tier0.*`, `base.*` (passes 1–7) and vertical engines as `<engine>.ingest` + `<engine>.profile` (`ffl.*` first). Each has `skill.yaml`, `run.py`, `evals/cases.jsonl`, `CHANGELOG.md`. |
 | `workspace/` | The Next.js client product: Chat, the Tasks board, thumbs up/down on every answer, and the Ledger. Clerk organizations are tenants. Coolify attaches the public domain to this service. |
 | `.env.example` | Every variable the stack needs. Copy the names into Coolify's environment panel; put the values in Doppler. |
 

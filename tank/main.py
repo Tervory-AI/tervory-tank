@@ -13,7 +13,8 @@ Endpoints
   POST /v1/skills/{id}/{ver}/approve     human sign-off; previous approved version retires
   POST /v1/skills/{id}/{ver}/retire      take a version out of service
   POST /v1/skills/{id}/run               run an approved skill (preview=true allows staging/candidate)
-  POST /v1/base/run                      Base passes 1-2 over a batch of records (a task)
+  POST /v1/base/run                      Base passes 1-7 (+ vertical engine) over a batch of records (a task)
+  GET  /v1/base/engines                  vertical engines available (e.g. ffl)
   GET  /v1/base/records?tenant_id=       enriched records, newest first
   GET  /v1/policy                        the routing policy rows
   PUT  /v1/policy/{task_type}            change a policy row (no deploy needed)
@@ -518,9 +519,14 @@ async def run_one_skill(skill_id: str, body: SkillRun) -> dict[str, Any]:
     return out
 
 
-# ---------- Base: passes 1-2 over a batch ----------
+# ---------- Base: passes 1-7 over a batch ----------
 
-BASE_PASSES_12 = ["base.normalize", "base.resolve", "base.find_site", "base.scrape_site", "base.extract"]
+BASE_CORE = ["base.normalize", "base.resolve", "base.find_site", "base.scrape_site", "base.extract",
+             "base.contacts", "base.socials", "base.business_data", "base.verify"]
+# A vertical engine is two skills: <engine>.ingest (maps the industry's record into Base's generic
+# fields and keeps the industry fields aside) and <engine>.profile (pass 6). Another industry is
+# another pair of packages; the pipeline does not change.
+ENGINE_SKILLS = ("ingest", "profile")
 
 
 class BaseRun(BaseModel):
@@ -529,13 +535,23 @@ class BaseRun(BaseModel):
     batch: str = Field(min_length=1, max_length=120)
     records: list[dict[str, Any]] = Field(min_length=1, max_length=2000)
     registry: list[dict[str, Any]] | None = None   # optional engine registry for pass 1b; defaults to the batch itself
+    engine: str | None = None                       # vertical module, e.g. "ffl"
     preview: bool = False                           # allow unapproved skill versions (owner testing)
     concurrency: int = 4
 
 
-async def _resolve_versions(preview: bool) -> dict[str, skala.SkillPackage]:
+def known_engines() -> list[str]:
+    return sorted({i.split(".")[0] for (i, _v) in _packages if i.endswith(".ingest")})
+
+
+async def _resolve_versions(preview: bool, engine: str | None = None) -> dict[str, skala.SkillPackage]:
+    ids = list(BASE_CORE)
+    if engine:
+        if engine not in known_engines():
+            raise HTTPException(status_code=404, detail=f"no engine {engine!r}; known: {known_engines()}")
+        ids += [f"{engine}.{k}" for k in ENGINE_SKILLS]
     out: dict[str, skala.SkillPackage] = {}
-    for sid in BASE_PASSES_12:
+    for sid in ids:
         ver = await approved_version(sid)
         if ver is None:
             if not preview:
@@ -558,41 +574,53 @@ def _merge(profile: dict[str, Any], fields: dict[str, Any]) -> None:
             profile[k] = v
 
 
-async def _enrich_one(rec_id: uuid.UUID, raw: dict[str, Any], registry: list[dict[str, Any]],
-                      pkgs: dict[str, skala.SkillPackage], tenant_id: uuid.UUID, task_id: uuid.UUID, preview: bool) -> None:
+def _val(profile: dict[str, Any], k: str, default=None):
+    f = profile.get(k)
+    return (f.get("value") if isinstance(f, dict) else f) or default
+
+
+async def _enrich_one(rec_id: uuid.UUID, inp: dict[str, Any], engine_in: dict[str, Any] | None, registry: list[dict[str, Any]],
+                      pkgs: dict[str, skala.SkillPackage], engine: str | None,
+                      tenant_id: uuid.UUID, task_id: uuid.UUID, preview: bool) -> None:
     profile: dict[str, Any] = {}
     passes: dict[str, Any] = {}
+
+    def ctx_for(sid: str):
+        p = pkgs[sid]
+        return p, make_ctx(p, tenant_id, task_id, preview)
+
     async with pool().acquire() as conn:
         await conn.execute("UPDATE base.records SET status='running', updated_at=now() WHERE id=$1", rec_id)
     try:
         # 1a normalise
-        p = pkgs["base.normalize"]; ctx = make_ctx(p, tenant_id, task_id, preview)
-        norm = await skala.run_skill(p, raw, ctx)
+        p, ctx = ctx_for("base.normalize")
+        norm = await skala.run_skill(p, inp, ctx)
         _merge(profile, norm.get("fields") or {})
         passes["1a"] = {"skill": p.ref, "ms": norm.get("_ms")}
 
         # 1b resolve against the registry
-        p = pkgs["base.resolve"]; ctx = make_ctx(p, tenant_id, task_id, preview)
+        p, ctx = ctx_for("base.resolve")
         res = await skala.run_skill(p, {"record": norm, "registry": registry}, ctx)
         if res.get("match"):
             profile["registry_match"] = {"value": res["match"].get("id"), "source": f"registry:{res['verdict']}", "confidence": int(res.get("score") or 0)}
         passes["1b"] = {"skill": p.ref, "ms": res.get("_ms"), "verdict": res.get("verdict"), "score": res.get("score")}
 
-        name = (profile.get("name") or {}).get("value") or raw.get("name") or ""
-        city = (profile.get("city") or {}).get("value") or ""
-        state = (profile.get("state") or {}).get("value") or ""
+        name = _val(profile, "name") or inp.get("name") or ""
+        city = _val(profile, "city") or ""
+        state = _val(profile, "state") or ""
 
         # 2a website
-        p = pkgs["base.find_site"]; ctx = make_ctx(p, tenant_id, task_id, preview)
-        site = await skala.run_skill(p, {"name": name, "city": city, "state": state, "website": raw.get("website") or raw.get("url") or ""}, ctx)
+        p, ctx = ctx_for("base.find_site")
+        site = await skala.run_skill(p, {"name": name, "city": city, "state": state, "website": inp.get("website") or inp.get("url") or ""}, ctx)
         if site.get("website"):
             profile["website"] = site["website"]
         passes["2a"] = {"skill": p.ref, "ms": site.get("_ms"), "source": (site.get("website") or {}).get("source")}
 
-        url = (profile.get("website") or {}).get("value")
+        url = _val(profile, "website")
+        scr: dict[str, Any] = {}
         if url:
             # 2b scrape
-            p = pkgs["base.scrape_site"]; ctx = make_ctx(p, tenant_id, task_id, preview)
+            p, ctx = ctx_for("base.scrape_site")
             scr = await skala.run_skill(p, {"website": url}, ctx)
             src = "site"
             if scr.get("emails"):
@@ -606,7 +634,7 @@ async def _enrich_one(rec_id: uuid.UUID, raw: dict[str, Any], registry: list[dic
 
             # 2c extract
             if (scr.get("text") or "") and len(scr["text"]) >= 40:
-                p = pkgs["base.extract"]; ctx = make_ctx(p, tenant_id, task_id, preview)
+                p, ctx = ctx_for("base.extract")
                 ex = await skala.run_skill(p, {"name": name, "text": scr["text"]}, ctx)
                 conf = int(ex.get("confidence") or 0)
                 for k in ("categories", "services", "description", "people"):
@@ -614,10 +642,56 @@ async def _enrich_one(rec_id: uuid.UUID, raw: dict[str, Any], registry: list[dic
                         profile[k] = {"value": ex[k], "source": "site:model", "confidence": conf}
                 passes["2c"] = {"skill": p.ref, "ms": ex.get("_ms"), "cost_usd": round(ctx.cost_usd, 6)}
 
-        # provisional overall confidence (pass 7 will own this properly)
-        core = [profile.get(k, {}).get("confidence", 0) for k in ("name", "city", "state", "website")]
-        bonus = 10 if profile.get("emails") else 0
-        confidence = min(100, int(sum(core) / len(core)) + bonus)
+        # 3 contacts
+        p, ctx = ctx_for("base.contacts")
+        con = await skala.run_skill(p, {"website": url or "", "emails": _val(profile, "emails", []), "people": _val(profile, "people", [])}, ctx)
+        if con.get("confidence"):
+            profile["contacts"] = {"value": {k: con[k] for k in ("domain", "domain_accepts_mail", "generic_emails", "personal_emails", "email_pattern", "contacts", "decision_maker")},
+                                   "source": "site+pattern", "confidence": int(con["confidence"])}
+            if con.get("decision_maker"):
+                dm = con["decision_maker"]
+                profile["decision_maker"] = {"value": f"{dm['name']} ({dm['role']})" if dm.get("role") else dm["name"], "source": "site", "confidence": 80}
+        passes["3"] = {"skill": p.ref, "ms": con.get("_ms"), "pattern": con.get("email_pattern"), "people": len(con.get("contacts") or [])}
+
+        # 4 socials
+        p, ctx = ctx_for("base.socials")
+        soc = await skala.run_skill(p, {"socials": _val(profile, "socials", {})}, ctx)
+        if soc.get("count"):
+            profile["socials_profiles"] = {"value": {"profiles": soc["profiles"], "count": soc["count"], "presence": soc["presence"]}, "source": "site", "confidence": int(soc["confidence"])}
+        passes["4"] = {"skill": p.ref, "ms": soc.get("_ms"), "count": soc.get("count")}
+
+        # 6 vertical module runs before 5 so pass 5 can use the licence type as a signal
+        eng_prof: dict[str, Any] = {}
+        if engine and engine_in:
+            p, ctx = ctx_for(f"{engine}.profile")
+            eng_prof = await skala.run_skill(p, {"engine": engine_in, "profile": profile}, ctx)
+            for k in ("licence_number", "licence_type", "licence_type_label", "licence_expires", "days_to_expiry", "renewal_window", "lapsed", "segment", "inventory_signal"):
+                if eng_prof.get(k) not in (None, "", []):
+                    profile[f"{engine}_{k}"] = {"value": eng_prof[k], "source": f"engine:{engine}" if k.startswith("licence") or k in ("days_to_expiry", "renewal_window", "lapsed") else f"engine:{engine}:inferred",
+                                               "confidence": 95 if k.startswith("licence") or k in ("days_to_expiry", "renewal_window", "lapsed") else 60}
+            passes["6"] = {"skill": p.ref, "ms": eng_prof.get("_ms"), "segment": eng_prof.get("segment")}
+
+        # 5 business data (one small-model call; skipped when the site gave nothing)
+        p, ctx = ctx_for("base.business_data")
+        biz = await skala.run_skill(p, {"name": name, "state": state, "description": _val(profile, "description", ""),
+                                        "categories": _val(profile, "categories", []), "services": _val(profile, "services", []),
+                                        "people": _val(profile, "people", []), "socials_count": soc.get("count") or 0,
+                                        "pages": len(scr.get("pages") or []), "licence_type_label": eng_prof.get("licence_type_label")}, ctx)
+        if biz.get("confidence"):
+            for k in ("size_band", "revenue_band", "business_model", "naics", "naics_label"):
+                if biz.get(k):
+                    profile[k] = {"value": biz[k], "source": "model:estimate", "confidence": int(biz["confidence"])}
+        passes["5"] = {"skill": p.ref, "ms": biz.get("_ms"), "cost_usd": round(ctx.cost_usd, 6), "basis": biz.get("basis")}
+
+        # 7 verify and score
+        p, ctx = ctx_for("base.verify")
+        ver = await skala.run_skill(p, {"profile": profile, "raw": inp, "engine_profile": eng_prof}, ctx)
+        confidence = int(ver.get("confidence") or 0)
+        profile["tier"] = {"value": ver.get("tier"), "source": "verify", "confidence": confidence}
+        if ver.get("flags"):
+            profile["flags"] = {"value": ver["flags"], "source": "verify", "confidence": confidence}
+        passes["7"] = {"skill": p.ref, "ms": ver.get("_ms"), "layers": ver.get("layers"), "checks": ver.get("checks")}
+
         async with pool().acquire() as conn:
             await conn.execute(
                 "UPDATE base.records SET status='done', profile=$2::jsonb, passes=$3::jsonb, confidence=$4, updated_at=now() WHERE id=$1",
@@ -634,13 +708,27 @@ async def _enrich_one(rec_id: uuid.UUID, raw: dict[str, Any], registry: list[dic
 async def _run_base_batch(task_id: uuid.UUID, body: BaseRun, rec_ids: list[uuid.UUID], pkgs: dict[str, skala.SkillPackage]) -> None:
     async with pool().acquire() as conn:
         await conn.execute("UPDATE tank.tasks SET status='running', started_at=now() WHERE id=$1", task_id)
+
+    # Pass 0: the engine's intake maps each raw record into Base's generic fields.
+    inputs: list[dict[str, Any]] = []
+    engine_ins: list[dict[str, Any] | None] = []
+    if body.engine:
+        ing_pkg = pkgs[f"{body.engine}.ingest"]
+        for raw in body.records:
+            r = await skala.run_skill(ing_pkg, raw, make_ctx(ing_pkg, body.tenant_id, task_id, body.preview))
+            inputs.append(r.get("record") or dict(raw))
+            engine_ins.append(r.get("engine") or None)
+    else:
+        inputs = [dict(r) for r in body.records]
+        engine_ins = [None] * len(inputs)
+
     # Registry for pass 1b: what the client supplied, else the batch itself (finds duplicates).
     norm_pkg = pkgs["base.normalize"]
     registry = body.registry
     if registry is None:
         registry = []
-        for i, raw in enumerate(body.records):
-            n = await skala.run_skill(norm_pkg, raw, make_ctx(norm_pkg, body.tenant_id, task_id, body.preview))
+        for i, inp in enumerate(inputs):
+            n = await skala.run_skill(norm_pkg, inp, make_ctx(norm_pkg, body.tenant_id, task_id, body.preview))
             f = n.get("fields") or {}
             registry.append({"id": str(rec_ids[i]), "name_key": f.get("name_key", {}).get("value", ""),
                              "city": str(f.get("city", {}).get("value", "")).lower(), "state": str(f.get("state", {}).get("value", "")).lower()})
@@ -650,34 +738,36 @@ async def _run_base_batch(task_id: uuid.UUID, body: BaseRun, rec_ids: list[uuid.
         async with sem:
             # exclude the record itself from its own registry so it matches siblings, not itself
             reg = [r for r in registry if r.get("id") != str(rec_ids[i])] if body.registry is None else registry
-            await _enrich_one(rec_ids[i], body.records[i], reg, pkgs, body.tenant_id, task_id, body.preview)
+            await _enrich_one(rec_ids[i], inputs[i], engine_ins[i], reg, pkgs, body.engine, body.tenant_id, task_id, body.preview)
 
     await asyncio.gather(*(one(i) for i in range(len(rec_ids))))
     async with pool().acquire() as conn:
-        done, failed, cost = await conn.fetchrow(
+        done, failed, cost, ready = await conn.fetchrow(
             """
             SELECT count(*) FILTER (WHERE status='done'), count(*) FILTER (WHERE status='failed'),
-                   (SELECT coalesce(sum(cost_usd),0) FROM tank.ledger WHERE task_id=$1)
+                   (SELECT coalesce(sum(cost_usd),0) FROM tank.ledger WHERE task_id=$1),
+                   count(*) FILTER (WHERE status='done' AND confidence >= 80)
             FROM base.records WHERE task_id=$1
             """, task_id,
         )
         await conn.execute(
             "UPDATE tank.tasks SET status='done', result=$2, finished_at=now() WHERE id=$1",
-            task_id, f"{done} enriched, {failed} failed, model spend ${float(cost):.4f}",
+            task_id, f"{done} enriched ({ready} ready), {failed} failed, model spend ${float(cost):.4f}",
         )
 
 
 @app.post("/v1/base/run", dependencies=[Depends(require_key)], status_code=202)
 async def base_run(body: BaseRun) -> dict[str, Any]:
-    pkgs = await _resolve_versions(body.preview)
+    pkgs = await _resolve_versions(body.preview, body.engine)
+    label = f"Base passes 1-7{' + ' + body.engine + ' engine' if body.engine else ''}: {body.batch} ({len(body.records)} records)"
     async with pool().acquire() as conn:
         task = await conn.fetchrow(
             f"""
             INSERT INTO tank.tasks (tenant_id, created_by, agent, task_type, title, input)
             VALUES ($1,$2,'base','base.enrich',$3,$4::jsonb) RETURNING {TASK_COLUMNS}
             """,
-            body.tenant_id, body.created_by, f"Base passes 1-2: {body.batch} ({len(body.records)} records)",
-            json.dumps({"batch": body.batch, "count": len(body.records), "preview": body.preview}),
+            body.tenant_id, body.created_by, label,
+            json.dumps({"batch": body.batch, "count": len(body.records), "preview": body.preview, "engine": body.engine}),
         )
         rec_ids: list[uuid.UUID] = []
         for raw in body.records:
@@ -690,6 +780,11 @@ async def base_run(body: BaseRun) -> dict[str, Any]:
     _background.add(t)
     t.add_done_callback(_background.discard)
     return {"task": task_dict(task), "records": len(rec_ids), "skills": {k: v.ref for k, v in pkgs.items()}}
+
+
+@app.get("/v1/base/engines", dependencies=[Depends(require_key)])
+async def base_engines() -> list[str]:
+    return known_engines()
 
 
 @app.get("/v1/base/records", dependencies=[Depends(require_key)])

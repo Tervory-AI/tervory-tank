@@ -151,8 +151,10 @@ CREATE TABLE IF NOT EXISTS base.records (
 CREATE INDEX IF NOT EXISTS base_records_tenant ON base.records (tenant_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS base_records_task   ON base.records (task_id);
 
--- Policy row for the one model step in passes 1-2.
+-- Policy rows for the model steps in Base (pass 2c extract, pass 5 business data).
 INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_tokens_out, system_prompt) VALUES
   ('base.extract', 1, 'haiku', 'batch', 'tenant', 600,
-   'You extract structured facts from website text and reply with strict JSON only.')
+   'You extract structured facts from website text and reply with strict JSON only.'),
+  ('base.business_data', 1, 'haiku', 'batch', 'tenant', 300,
+   'You estimate the size and shape of a small business from sparse signals, conservatively, and reply with strict JSON only.')
 ON CONFLICT DO NOTHING;

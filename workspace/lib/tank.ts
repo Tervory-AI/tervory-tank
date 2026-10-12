@@ -194,11 +194,16 @@ export type BaseRecord = {
   created_at: string;
 };
 
-export function baseRun(tenantId: string, createdBy: string, batch: string, records: Record<string, unknown>[], preview: boolean) {
+export function baseRun(
+  tenantId: string, createdBy: string, batch: string, records: Record<string, unknown>[], preview: boolean, engine?: string | null,
+) {
   return tank<{ task: Task; records: number; skills: Record<string, string> }>("/v1/base/run", {
     method: "POST",
-    body: JSON.stringify({ tenant_id: tenantId, created_by: createdBy, batch, records, preview }),
+    body: JSON.stringify({ tenant_id: tenantId, created_by: createdBy, batch, records, preview, engine: engine || null }),
   });
+}
+export function baseEngines(): Promise<string[]> {
+  return tank<string[]>("/v1/base/engines", { method: "GET" });
 }
 export function baseRecords(tenantId: string, taskId?: string, limit = 500): Promise<BaseRecord[]> {
   const q = new URLSearchParams({ tenant_id: tenantId, limit: String(limit) });
