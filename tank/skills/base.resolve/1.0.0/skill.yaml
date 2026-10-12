@@ -11,7 +11,7 @@ input:
   required: [record, registry]
   properties:
     record: {type: object, description: output of base.normalize}
-    registry: {type: array, description: list of {id, name_key, city, state}}
+    registry: {type: array, description: "list of objects with id, name_key, city, state"}
 output:
   type: object
   properties: {verdict: {type: string}, match: {type: object}, score: {type: number}}

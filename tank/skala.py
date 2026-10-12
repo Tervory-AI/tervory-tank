@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import logging
 import os
 import time
 import uuid
@@ -79,8 +80,22 @@ def load_packages(root: Path = SKILLS_DIR) -> dict[tuple[str, str], SkillPackage
     if not root.exists():
         return found
     for yaml_path in sorted(root.glob("*/*/skill.yaml")):
-        meta = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
         pkg_dir = yaml_path.parent
+        try:
+            pkg = _parse_package(yaml_path, pkg_dir)
+        except Exception as exc:  # noqa: BLE001 — one broken package must never stop Tank
+            log.error("skala: skipping %s: %s", yaml_path, exc)
+            continue
+        found[(pkg.id, pkg.version)] = pkg
+    return found
+
+
+log = logging.getLogger("tank.skala")
+
+
+def _parse_package(yaml_path: Path, pkg_dir: Path) -> SkillPackage:
+    meta = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+    if True:
         pkg = SkillPackage(
             id=str(meta["id"]),
             version=str(meta["version"]),
@@ -95,9 +110,8 @@ def load_packages(root: Path = SKILLS_DIR) -> dict[tuple[str, str], SkillPackage
             cases=_load_cases(pkg_dir),
         )
         if pkg_dir.parent.name != pkg.id or pkg_dir.name != pkg.version:
-            raise ValueError(f"{yaml_path}: folder is {pkg_dir.parent.name}/{pkg_dir.name} but skill.yaml says {pkg.ref}")
-        found[(pkg.id, pkg.version)] = pkg
-    return found
+            raise ValueError(f"folder is {pkg_dir.parent.name}/{pkg_dir.name} but skill.yaml says {pkg.ref}")
+        return pkg
 
 
 def _import_run(pkg: SkillPackage) -> Callable[[dict[str, Any], "SkillContext"], Awaitable[dict[str, Any]]]:
