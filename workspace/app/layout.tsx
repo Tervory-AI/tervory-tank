@@ -18,6 +18,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <nav>
               <Link href="/">Chat</Link>
               <Link href="/tasks">Tasks</Link>
+              <Link href="/data">Data</Link>
+              <Link href="/skills">Skills</Link>
               <Link href="/ledger">Ledger</Link>
             </nav>
             <SignedIn>

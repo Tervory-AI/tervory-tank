@@ -95,3 +95,64 @@ INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_toke
   ('reason.brief',   1, 'sonnet', 'standard', 'none',     4096,
    'You write concise, well-structured analysis for a business owner. Lead with the conclusion.')
 ON CONFLICT DO NOTHING;
+
+-- ---------- Skala: the skills registry (Phase 1 = this table + the skills/ folder in Git) ----------
+CREATE TABLE IF NOT EXISTS tank.skills (
+    id              text NOT NULL,
+    version         text NOT NULL,
+    agent           text NOT NULL,
+    rung            smallint NOT NULL DEFAULT 1,
+    task_type       text,                     -- policy row the skill routes through (model skills only)
+    description     text NOT NULL DEFAULT '',
+    state           text NOT NULL DEFAULT 'candidate',  -- candidate | staging | approved | retired
+    eval_threshold  numeric(5,4) NOT NULL DEFAULT 0.95,
+    cases           integer NOT NULL DEFAULT 0,
+    last_eval_score numeric(5,4),
+    last_eval_at    timestamptz,
+    models_validated jsonb NOT NULL DEFAULT '[]'::jsonb,
+    approved_by     text,
+    approved_at     timestamptz,
+    present         boolean NOT NULL DEFAULT true,   -- false when the package has gone from disk
+    created_at      timestamptz NOT NULL DEFAULT now(),
+    updated_at      timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (id, version)
+);
+
+CREATE TABLE IF NOT EXISTS tank.skill_evals (
+    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    skill_id        text NOT NULL,
+    version         text NOT NULL,
+    score           numeric(5,4) NOT NULL,
+    passed          integer NOT NULL,
+    total           integer NOT NULL,
+    cost_usd        numeric(12,6) NOT NULL DEFAULT 0,
+    details         jsonb NOT NULL,
+    ran_by          text,
+    ran_at          timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS skill_evals_skill ON tank.skill_evals (skill_id, version, ran_at DESC);
+
+-- ---------- Base: enriched records ----------
+CREATE SCHEMA IF NOT EXISTS base;
+CREATE TABLE IF NOT EXISTS base.records (
+    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id       uuid NOT NULL,
+    task_id         uuid,                     -- the Tank task that ran the batch
+    batch           text,                     -- a label the client gave the upload
+    raw             jsonb NOT NULL,           -- the input record as received
+    profile         jsonb NOT NULL DEFAULT '{}'::jsonb,  -- field -> {value, source, confidence}
+    passes          jsonb NOT NULL DEFAULT '{}'::jsonb,  -- pass -> {skill, ms, note}
+    confidence      smallint NOT NULL DEFAULT 0,         -- 0-100 overall (pass 7 owns this later)
+    status          text NOT NULL DEFAULT 'queued',      -- queued | running | done | failed
+    error           text,
+    created_at      timestamptz NOT NULL DEFAULT now(),
+    updated_at      timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS base_records_tenant ON base.records (tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS base_records_task   ON base.records (task_id);
+
+-- Policy row for the one model step in passes 1-2.
+INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_tokens_out, system_prompt) VALUES
+  ('base.extract', 1, 'haiku', 'batch', 'tenant', 600,
+   'You extract structured facts from website text and reply with strict JSON only.')
+ON CONFLICT DO NOTHING;

@@ -54,6 +54,7 @@ services:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       TANK_API_KEY: ${TANK_API_KEY}
       TANK_REGION: ${TANK_REGION:-us-east}
+      BRAVE_API_KEY: ${BRAVE_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy

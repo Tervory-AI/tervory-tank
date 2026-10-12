@@ -2,7 +2,8 @@ FROM python:3.12-slim
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY main.py schema.sql ./
+COPY main.py skala.py schema.sql ./
+COPY skills ./skills
 RUN useradd -m tank && chown -R tank /app
 USER tank
 EXPOSE 8000

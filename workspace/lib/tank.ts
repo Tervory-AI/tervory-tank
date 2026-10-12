@@ -124,3 +124,84 @@ export type LedgerSummary = {
 export function ledgerSummary(tenantId: string, days = 30): Promise<LedgerSummary> {
   return tank<LedgerSummary>(`/v1/ledger/summary?tenant_id=${tenantId}&days=${days}`, { method: "GET" });
 }
+
+// ---- Skala: skills ----
+
+export type SkillState = "candidate" | "staging" | "approved" | "retired";
+export type Skill = {
+  id: string;
+  version: string;
+  agent: string;
+  rung: number;
+  task_type: string | null;
+  description: string;
+  state: SkillState;
+  eval_threshold: number | string;
+  cases: number;
+  last_eval_score: number | string | null;
+  last_eval_at: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  present: boolean;
+};
+
+export type EvalResult = {
+  skill: string;
+  passed: number;
+  total: number;
+  score: number;
+  threshold: number;
+  cost_usd: number;
+  state: SkillState;
+  gate: "passed" | "failed";
+  details: { case: number; name: string | null; passed: boolean; why: string }[];
+};
+
+export function listSkills(): Promise<Skill[]> {
+  return tank<Skill[]>("/v1/skills", { method: "GET" });
+}
+export function runSkillEvals(id: string, version: string, by: string): Promise<EvalResult> {
+  return tank<EvalResult>(`/v1/skills/${encodeURIComponent(id)}/${encodeURIComponent(version)}/evals`, {
+    method: "POST",
+    body: JSON.stringify({ by }),
+  });
+}
+export function approveSkill(id: string, version: string, by: string): Promise<{ ok: true }> {
+  return tank<{ ok: true }>(`/v1/skills/${encodeURIComponent(id)}/${encodeURIComponent(version)}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ by }),
+  });
+}
+export function retireSkill(id: string, version: string, by: string): Promise<{ ok: true }> {
+  return tank<{ ok: true }>(`/v1/skills/${encodeURIComponent(id)}/${encodeURIComponent(version)}/retire`, {
+    method: "POST",
+    body: JSON.stringify({ by }),
+  });
+}
+
+// ---- Base: records ----
+
+export type BaseRecord = {
+  id: string;
+  task_id: string | null;
+  batch: string | null;
+  raw: Record<string, unknown>;
+  profile: Record<string, { value: unknown; source: string; confidence: number }>;
+  passes: Record<string, Record<string, unknown>>;
+  confidence: number;
+  status: "queued" | "running" | "done" | "failed";
+  error: string | null;
+  created_at: string;
+};
+
+export function baseRun(tenantId: string, createdBy: string, batch: string, records: Record<string, unknown>[], preview: boolean) {
+  return tank<{ task: Task; records: number; skills: Record<string, string> }>("/v1/base/run", {
+    method: "POST",
+    body: JSON.stringify({ tenant_id: tenantId, created_by: createdBy, batch, records, preview }),
+  });
+}
+export function baseRecords(tenantId: string, taskId?: string, limit = 500): Promise<BaseRecord[]> {
+  const q = new URLSearchParams({ tenant_id: tenantId, limit: String(limit) });
+  if (taskId) q.set("task_id", taskId);
+  return tank<BaseRecord[]>(`/v1/base/records?${q}`, { method: "GET" });
+}
