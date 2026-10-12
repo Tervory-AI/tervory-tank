@@ -8,6 +8,12 @@ FROM node:22-slim AS build
 WORKDIR /app
 ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+# Sign-in and sign-up happen on our own domain, not Clerk's hosted accounts page.
+# These are route paths, not secrets, so they are fixed here.
+ENV NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in \
+    NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up \
+    NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL=/ \
+    NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=/
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
