@@ -16,8 +16,12 @@ def _host(url: str) -> str:
 
 
 def _final(url: str) -> str:
+    """Canonical form: no trailing slash when the path is just '/'. Match keys depend on it."""
     url = str(url)
-    return url[:-1] if url.endswith("/") and url.count("/") == 3 else url
+    parsed = urlparse(url)
+    if parsed.path in ("", "/") and not parsed.query and not parsed.fragment:
+        return url.rstrip("/")
+    return url
 
 
 async def _alive(ctx, url: str, must_mention: list[str] | None = None) -> str | None:
