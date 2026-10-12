@@ -15,6 +15,7 @@ Endpoints
   POST /v1/skills/{id}/run               run an approved skill (preview=true allows staging/candidate)
   POST /v1/base/run                      queue Base passes 1-7 (+ vertical engine) over a batch; split_by_state = one batch per state, smallest first
   POST /v1/base/retry                    re-queue a batch's failed records
+  POST /v1/base/rerun                    re-run a batch's flagged records (e.g. no_website) with current skills
   GET  /v1/base/batches                  per-batch counts (status, tier, site/email coverage)
   GET  /v1/base/engines                  vertical engines available (e.g. ffl)
   GET  /v1/base/records?tenant_id=       enriched records, newest first
@@ -62,7 +63,8 @@ _redis: aioredis.Redis | None = None
 REDIS_URL = os.environ.get("REDIS_URL", "redis://redis:6379/0")
 CACHE_TTL_S = int(os.environ.get("TANK_CACHE_TTL_S", str(7 * 24 * 3600)))
 _packages: dict[tuple[str, str], skala.SkillPackage] = {}
-SKILL_ENV = {k: v for k, v in {"BRAVE_API_KEY": os.environ.get("BRAVE_API_KEY", "")}.items() if v}
+SKILL_ENV = {k: v for k, v in {"BRAVE_API_KEY": os.environ.get("BRAVE_API_KEY", ""),
+                                "SEARXNG_URL": os.environ.get("SEARXNG_URL", "")}.items() if v}
 
 
 def pool() -> asyncpg.Pool:
@@ -1128,6 +1130,38 @@ async def base_retry(body: BaseRetry) -> dict[str, Any]:
                        WHERE tenant_id=$1 AND batch=$2 AND status='failed' RETURNING task_id)
             SELECT count(*) FROM r
             """, body.tenant_id, body.batch,
+        )
+        if n:
+            await conn.execute(
+                """
+                UPDATE tank.tasks SET status='queued', finished_at=NULL
+                WHERE id IN (SELECT DISTINCT task_id FROM base.records WHERE tenant_id=$1 AND batch=$2)
+                  AND task_type='base.enrich' AND status IN ('done','failed')
+                """, body.tenant_id, body.batch,
+            )
+    _base_wake.set()
+    return {"requeued": int(n or 0)}
+
+
+class BaseRerun(BaseModel):
+    tenant_id: uuid.UUID
+    batch: str
+    flag: str = "no_website"          # re-run records carrying this verify flag
+
+
+@app.post("/v1/base/rerun", dependencies=[Depends(require_key)])
+async def base_rerun(body: BaseRerun) -> dict[str, Any]:
+    """Send a batch's flagged records (default: the ones with no website) back through the passes
+    with the current skill versions, and re-open the batch so the worker picks it up in order."""
+    async with pool().acquire() as conn:
+        n = await conn.fetchval(
+            """
+            WITH r AS (UPDATE base.records SET status='queued', error=NULL, updated_at=now()
+                       WHERE tenant_id=$1 AND batch=$2 AND status='done'
+                         AND profile->'flags'->'value' ? $3
+                       RETURNING id)
+            SELECT count(*) FROM r
+            """, body.tenant_id, body.batch, body.flag,
         )
         if n:
             await conn.execute(

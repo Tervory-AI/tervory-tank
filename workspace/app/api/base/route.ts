@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { baseBatches, baseEngines, baseRecords, baseRetry, baseRun } from "@/lib/tank";
+import { baseBatches, baseEngines, baseRecords, baseRerun, baseRetry, baseRun } from "@/lib/tank";
 import { currentTenant } from "@/lib/tenant";
 
 export const runtime = "nodejs";
@@ -24,6 +24,16 @@ export async function GET(req: Request) {
 // Also accepts multipart/form-data with fields batch, preview, engine and a CSV file in "file" (up to 25 MB).
 export async function POST(req: Request) {
   const action = new URL(req.url).searchParams.get("action");
+  if (action === "rerun") {
+    const b = (await req.json().catch(() => null)) as { batch?: string; flag?: string } | null;
+    if (!b?.batch) return NextResponse.json({ error: "batch required" }, { status: 400 });
+    try {
+      const { tenantId } = await currentTenant();
+      return NextResponse.json(await baseRerun(tenantId, b.batch, b.flag || "no_website"));
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Tank unavailable" }, { status: 502 });
+    }
+  }
   if (action === "retry") {
     const b = (await req.json().catch(() => null)) as { batch?: string } | null;
     if (!b?.batch) return NextResponse.json({ error: "batch required" }, { status: 400 });

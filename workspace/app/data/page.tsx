@@ -155,6 +155,12 @@ export default function DataPage() {
           {current && current.done > 0 && (
             <a href={`/api/base/export?batch=${encodeURIComponent(selected)}`} style={{ fontSize: 14 }}>Export CSV</a>
           )}
+          {current && current.done > 0 && current.pending === 0 && current.with_site < current.done && (
+            <button type="button" className="sm ghost" onClick={async () => {
+              const r = await fetch("/api/base?action=rerun", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ batch: selected, flag: "no_website" }) });
+              if (r.ok) { await refreshBatches(); await refreshRecords(selected); }
+            }}>Re-run {(current.done - current.with_site).toLocaleString()} without a website</button>
+          )}
           {current && current.failed > 0 && (
             <button type="button" style={{ padding: "6px 10px", fontSize: 13 }} onClick={async () => {
               const r = await fetch("/api/base?action=retry", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ batch: selected }) });

@@ -44,6 +44,15 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
 
+  searxng:
+    build: ./searxng
+    restart: unless-stopped
+    environment:
+      SEARXNG_SECRET: ${SEARXNG_SECRET:-change-me-in-coolify}
+      SEARXNG_BASE_URL: http://searxng:8080/
+    expose:
+      - "8080"
+
   tank:
     build: ./tank
     restart: unless-stopped
@@ -54,6 +63,8 @@ services:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       TANK_API_KEY: ${TANK_API_KEY}
       TANK_REGION: ${TANK_REGION:-us-east}
+      SEARXNG_URL: http://searxng:8080
+      BRAVE_API_KEY: ${BRAVE_API_KEY:-}
       BRAVE_API_KEY: ${BRAVE_API_KEY:-}
     depends_on:
       postgres:
