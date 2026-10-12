@@ -46,6 +46,8 @@ services:
 
   tank:
     build: ./tank
+    # Fixed name so other Coolify apps reach it at http://tervory-tank:8000 on every deploy.
+    container_name: tervory-tank
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
