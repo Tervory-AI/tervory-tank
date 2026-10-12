@@ -15,28 +15,41 @@ def _host(url: str) -> str:
         return ""
 
 
-async def _alive(ctx, url: str) -> str | None:
-    """Return the final URL if the site answers 2xx/3xx, else None."""
+def _final(url: str) -> str:
+    url = str(url)
+    return url[:-1] if url.endswith("/") and url.count("/") == 3 else url
+
+
+async def _alive(ctx, url: str, must_mention: list[str] | None = None) -> str | None:
+    """Return the final URL if the site answers 2xx/3xx. With must_mention, the page body
+    has to contain one of those words, so a parked or unrelated domain does not count."""
     try:
-        r = await ctx.http.head(url, follow_redirects=True, timeout=8)
-        if r.status_code < 400:
-            return str(r.url)
+        if must_mention is None:
+            r = await ctx.http.head(url, follow_redirects=True, timeout=8)
+            if r.status_code < 400:
+                return _final(r.url)
         r = await ctx.http.get(url, follow_redirects=True, timeout=8)
-        if r.status_code < 400:
-            return str(r.url)
+        if r.status_code >= 400:
+            return None
+        if must_mention:
+            body = r.text[:200_000].lower()
+            if not any(w in body for w in must_mention):
+                return None
+        return _final(r.url)
     except Exception:  # noqa: BLE001
         return None
-    return None
+
+
+def _name_tokens(name: str) -> list[str]:
+    base = re.sub(r"[^a-z0-9 ]", "", name.lower())
+    return [t for t in base.split() if t not in {"the", "llc", "inc", "co", "corp", "company", "ltd"}]
 
 
 def _guesses(name: str) -> list[str]:
-    base = re.sub(r"[^a-z0-9 ]", "", name.lower())
-    toks = [t for t in base.split() if t not in {"the", "llc", "inc", "co", "corp", "company", "ltd"}]
+    toks = _name_tokens(name)
     if not toks:
         return []
-    joined = "".join(toks)
-    out = [joined, "-".join(toks), "".join(t[0] for t in toks) if len(toks) > 2 else ""]
-    return [f"https://{g}.com" for g in out if g]
+    return [f"https://{g}.com" for g in ("".join(toks), "-".join(toks))]
 
 
 async def _brave(ctx, q: str) -> list[str]:
@@ -78,9 +91,10 @@ async def run(payload: dict, ctx) -> dict:
         if final:
             return {"website": {"value": final, "source": "search:brave", "confidence": 75}}
 
-    # 3. Domain guesses from the name.
+    # 3. Domain guesses from the name; the page must mention the name to count.
+    mention = [t for t in _name_tokens(name) if len(t) >= 4][:3] or _name_tokens(name)[:1]
     for guess in _guesses(name):
-        final = await _alive(ctx, guess)
+        final = await _alive(ctx, guess, must_mention=mention)
         if final:
             return {"website": {"value": final, "source": "guess:domain", "confidence": 55}}
 
