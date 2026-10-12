@@ -1,3 +1,8 @@
+# Tervory platform — one stack, one deploy.
+# Coolify deploys this file. Everything shares the stack's own network, so services
+# reach each other by service name (http://tank:8000, postgres:5432). Only the
+# Workspace gets a public domain; Tank and the stores are never exposed.
+
 services:
   postgres:
     image: postgres:16
@@ -8,7 +13,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-tervory}
     volumes:
       - pgdata:/var/lib/postgresql/data
-    networks: [tervory_internal]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tervory}"]
       interval: 10s
@@ -21,7 +25,6 @@ services:
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redisdata:/data
-    networks: [tervory_internal]
 
   qdrant:
     image: qdrant/qdrant:latest
@@ -30,7 +33,6 @@ services:
       QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY}
     volumes:
       - qdrantdata:/qdrant/storage
-    networks: [tervory_internal]
 
   litellm:
     build: ./litellm
@@ -41,13 +43,9 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-    # On both networks: internal so Tank can reach it, public so it can reach the providers.
-    networks: [tervory_internal, tervory_public]
 
   tank:
     build: ./tank
-    # Fixed name so other Coolify apps reach it at http://tervory-tank:8000 on every deploy.
-    container_name: tervory-tank
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
@@ -55,33 +53,29 @@ services:
       LITELLM_URL: http://litellm:4000
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       TANK_API_KEY: ${TANK_API_KEY}
+      TANK_REGION: ${TANK_REGION:-us-east}
     depends_on:
       postgres:
         condition: service_healthy
       litellm:
         condition: service_started
-    # No host port: the Workspace reaches Tank at http://tank:8000 inside Docker,
-    # and Coolify's proxy fronts it if a domain is ever attached. Port 8000 on the
-    # host belongs to the Coolify dashboard.
     expose:
       - "8000"
-    # Also joins Coolify's shared network so the Workspace (and later agents deployed
-    # as separate Coolify apps) reach it as http://tank:8000. "tank" is a network alias;
-    # the container's own name changes on every deploy.
-    networks:
-      tervory_internal:
-      tervory_public:
-      coolify:
-        aliases: [tank]
+
+  workspace:
+    build: ./workspace
+    restart: unless-stopped
+    environment:
+      TANK_URL: http://tank:8000
+      TANK_API_KEY: ${TANK_API_KEY}
+      WORKSPACE_TENANT_ID: ${WORKSPACE_TENANT_ID}
+    depends_on:
+      - tank
+    # Coolify attaches the public domain to this service (port 3000).
+    expose:
+      - "3000"
 
 volumes:
   pgdata:
   redisdata:
   qdrantdata:
-
-networks:
-  tervory_internal:
-    internal: true
-  tervory_public:
-  coolify:
-    external: true

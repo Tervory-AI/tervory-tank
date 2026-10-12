@@ -1,0 +1,22 @@
+:root { color-scheme: light dark; --fg: #1a1a2e; --bg: #ffffff; --muted: #6b7280; --line: #e5e7eb; --accent: #2b6cb0; }
+@media (prefers-color-scheme: dark) { :root { --fg: #e7e9ee; --bg: #0f1117; --muted: #9aa3b2; --line: #262b36; --accent: #7fb0ff; } }
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--fg); background: var(--bg); }
+.top { display: flex; align-items: center; gap: 24px; padding: 12px 20px; border-bottom: 1px solid var(--line); }
+.brand { font-weight: 700; text-decoration: none; color: var(--fg); }
+nav { display: flex; gap: 16px; } nav a { color: var(--muted); text-decoration: none; } nav a:hover { color: var(--fg); }
+main { max-width: 820px; margin: 0 auto; padding: 24px 16px 120px; }
+.thread { display: flex; flex-direction: column; gap: 14px; }
+.msg { padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); white-space: pre-wrap; }
+.msg.user { align-self: flex-end; max-width: 85%; background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.msg.assistant { align-self: flex-start; max-width: 95%; }
+.meta { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.composer { position: fixed; left: 0; right: 0; bottom: 0; background: var(--bg); border-top: 1px solid var(--line); padding: 12px 16px; }
+.composer form { max-width: 820px; margin: 0 auto; display: flex; gap: 8px; }
+.composer textarea { flex: 1; resize: none; min-height: 48px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: transparent; color: var(--fg); font: inherit; }
+button { padding: 10px 16px; border-radius: 10px; border: 1px solid var(--accent); background: var(--accent); color: #fff; font: inherit; cursor: pointer; }
+button:disabled { opacity: .5; cursor: default; }
+table { width: 100%; border-collapse: collapse; margin-top: 16px; } th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); } th { color: var(--muted); font-weight: 600; font-size: 13px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-top: 8px; }
+.tile { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; } .tile b { display: block; font-size: 22px; } .tile span { color: var(--muted); font-size: 13px; }
+.err { color: #b91c1c; }

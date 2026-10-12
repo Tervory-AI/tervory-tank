@@ -1,6 +1,6 @@
-# Tervory Tank
+# Tervory platform
 
-Tank is the only path to any AI model in Tervory. Every call goes through it, every call is logged, and the routing policy lives in a table rather than in code.
+One repo, one Coolify deploy: Tank (the model gateway and ledger), the Workspace (the client product), and the shared stores. Tank is the only path to any AI model in Tervory. Every call goes through it, every call is logged, and the routing policy lives in a table rather than in code.
 
 Build Pack v2, section "Tank — the centrepiece", is the spec this repo implements.
 
@@ -12,6 +12,7 @@ Build Pack v2, section "Tank — the centrepiece", is the spec this repo impleme
 | `litellm/config.yaml` | The model roster LiteLLM exposes. Keys come from the environment, never from this file. |
 | `db/schema.sql` | The `tank` schema: `ledger`, `policy`, `evals`. Runs automatically on first start. |
 | `tank/` | The FastAPI service: `/v1/route` (the one endpoint agents call), `/v1/ledger/summary`, `/v1/policy`, `/health`. |
+| `workspace/` | The Next.js client product: chat through Tank's Tier 0 and the ledger view. Coolify attaches the public domain to this service. |
 | `.env.example` | Every variable the stack needs. Copy the names into Coolify's environment panel; put the values in Doppler. |
 
 ## How a call flows
