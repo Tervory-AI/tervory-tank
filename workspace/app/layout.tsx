@@ -17,6 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/" className="brand">Tervory</Link>
             <nav>
               <Link href="/">Chat</Link>
+              <Link href="/tasks">Tasks</Link>
               <Link href="/ledger">Ledger</Link>
             </nav>
             <SignedIn>

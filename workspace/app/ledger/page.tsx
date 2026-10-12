@@ -37,10 +37,18 @@ export default async function LedgerPage() {
       <div className="tiles">
         <div className="tile"><b>{summary.calls}</b><span>model calls</span></div>
         <div className="tile"><b>{summary.delivered}</b><span>delivered</span></div>
+        <div className="tile">
+          <b>{summary.accepted} / {summary.rejected}</b>
+          <span>accepted / rejected{summary.acceptance_rate != null ? ` · ${Math.round(summary.acceptance_rate * 100)}%` : ""}</span>
+        </div>
         <div className="tile"><b>${summary.cost_usd.toFixed(4)}</b><span>model spend</span></div>
         <div className="tile">
           <b>{summary.cost_per_delivered_usd == null ? "—" : `$${summary.cost_per_delivered_usd.toFixed(5)}`}</b>
           <span>per delivered answer</span>
+        </div>
+        <div className="tile">
+          <b>{summary.cost_per_accepted_usd == null ? "—" : `$${summary.cost_per_accepted_usd.toFixed(5)}`}</b>
+          <span>per accepted answer</span>
         </div>
       </div>
 
@@ -64,18 +72,18 @@ export default async function LedgerPage() {
       <h2 style={{ marginTop: 28 }}>By model</h2>
       <table>
         <thead>
-          <tr><th>Model</th><th>Rung</th><th>Calls</th><th>Tokens in</th><th>Tokens out</th><th>Cost</th></tr>
+          <tr><th>Model</th><th>Rung</th><th>Calls</th><th>Accepted</th><th>Rejected</th><th>Tokens in</th><th>Tokens out</th><th>Cost</th></tr>
         </thead>
         <tbody>
           {summary.by_model.map((m) => (
             <tr key={`${m.model}-${m.rung}`}>
-              <td>{m.model}</td><td>{m.rung}</td><td>{m.calls}</td>
+              <td>{m.model}</td><td>{m.rung}</td><td>{m.calls}</td><td>{m.accepted}</td><td>{m.rejected}</td>
               <td>{Number(m.tokens_in).toLocaleString()}</td><td>{Number(m.tokens_out).toLocaleString()}</td>
               <td>${Number(m.cost_usd).toFixed(5)}</td>
             </tr>
           ))}
           {summary.by_model.length === 0 && (
-            <tr><td colSpan={6} style={{ color: "var(--muted)" }}>No calls yet. Ask something in Chat.</td></tr>
+            <tr><td colSpan={8} style={{ color: "var(--muted)" }}>No calls yet. Ask something in Chat.</td></tr>
           )}
         </tbody>
       </table>

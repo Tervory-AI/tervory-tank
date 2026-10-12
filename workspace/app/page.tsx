@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { FeedbackButtons } from "./feedback-buttons";
 
 type Msg = {
   role: "user" | "assistant";
   content: string;
-  meta?: { model: string; rung: number; cost_usd: number; latency_ms: number };
+  meta?: { ledger_id: string; model: string; rung: number; cost_usd: number; latency_ms: number };
 };
 
 export default function ChatPage() {
@@ -36,7 +37,7 @@ export default function ChatPage() {
         {
           role: "assistant",
           content: data.content,
-          meta: { model: data.model, rung: data.rung, cost_usd: data.cost_usd, latency_ms: data.latency_ms },
+          meta: { ledger_id: data.ledger_id, model: data.model, rung: data.rung, cost_usd: data.cost_usd, latency_ms: data.latency_ms },
         },
       ]);
     } catch (err) {
@@ -60,6 +61,8 @@ export default function ChatPage() {
             {m.meta && (
               <div className="meta">
                 {m.meta.model} · rung {m.meta.rung} · ${m.meta.cost_usd.toFixed(5)} · {m.meta.latency_ms} ms
+                {" · "}
+                <FeedbackButtons ledgerId={m.meta.ledger_id} />
               </div>
             )}
           </div>

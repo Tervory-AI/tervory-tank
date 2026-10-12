@@ -27,15 +27,18 @@ export function uuidFrom(input: string): string {
 
 /** The current user's tenant. Creates a personal organization if they have none. */
 export async function currentTenant(): Promise<Tenant> {
-  const { userId, orgId, orgSlug } = await auth();
+  const { userId, orgId } = await auth();
   if (!userId) throw new Error("not signed in");
 
+  const client = await clerkClient();
+
   if (orgId) {
-    return { tenantId: uuidFrom(orgId), orgId, orgName: orgSlug ?? orgId, userId };
+    // The session carries the org id and slug; the display name needs one lookup.
+    const org = await client.organizations.getOrganization({ organizationId: orgId });
+    return { tenantId: uuidFrom(orgId), orgId, orgName: org.name, userId };
   }
 
   // No active organization: use the first one they belong to, or create a personal one.
-  const client = await clerkClient();
   const memberships = await client.users.getOrganizationMembershipList({ userId, limit: 1 });
   let org = memberships.data[0]?.organization;
   if (!org) {

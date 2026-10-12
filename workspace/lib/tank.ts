@@ -37,14 +37,88 @@ export function route(tenantId: string, taskType: string, messages: ChatMessage[
   });
 }
 
+// ---- tasks: the board ----
+
+export type TaskStatus = "queued" | "running" | "done" | "failed";
+
+export type Task = {
+  id: string;
+  tenant_id: string;
+  created_by: string | null;
+  agent: string;
+  task_type: string;
+  title: string;
+  status: TaskStatus;
+  result: string | null;
+  error: string | null;
+  ledger_id: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  // joined from the ledger row once the task has run
+  model?: string | null;
+  rung?: number | null;
+  cost_usd?: number | string | null;
+  latency_ms?: number | null;
+  feedback?: "accepted" | "rejected" | null;
+};
+
+export function createTask(
+  tenantId: string,
+  createdBy: string,
+  title: string,
+  taskType: string,
+  messages: ChatMessage[],
+): Promise<Task> {
+  return tank<Task>("/v1/tasks", {
+    method: "POST",
+    body: JSON.stringify({ tenant_id: tenantId, created_by: createdBy, title, task_type: taskType, messages }),
+  });
+}
+
+export function listTasks(tenantId: string, limit = 50): Promise<Task[]> {
+  return tank<Task[]>(`/v1/tasks?tenant_id=${tenantId}&limit=${limit}`, { method: "GET" });
+}
+
+// ---- feedback: the outcome column ----
+
+export function sendFeedback(
+  tenantId: string,
+  ledgerId: string,
+  feedback: "accepted" | "rejected",
+  by: string,
+  note?: string,
+): Promise<{ ok: true }> {
+  return tank<{ ok: true }>(`/v1/ledger/${ledgerId}/feedback`, {
+    method: "POST",
+    body: JSON.stringify({ tenant_id: tenantId, feedback, by, note: note ?? null }),
+  });
+}
+
+// ---- ledger ----
+
 export type LedgerSummary = {
   tenant_id: string;
   days: number;
   calls: number;
   delivered: number;
+  accepted: number;
+  rejected: number;
+  acceptance_rate: number | null;
   cost_usd: number;
   cost_per_delivered_usd: number | null;
-  by_model: { model: string; rung: number; calls: number; tokens_in: number; tokens_out: number; cost_usd: number; delivered: number }[];
+  cost_per_accepted_usd: number | null;
+  by_model: {
+    model: string;
+    rung: number;
+    calls: number;
+    tokens_in: number;
+    tokens_out: number;
+    cost_usd: number;
+    delivered: number;
+    accepted: number;
+    rejected: number;
+  }[];
 };
 
 export function ledgerSummary(tenantId: string, days = 30): Promise<LedgerSummary> {
