@@ -8,7 +8,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-tervory}
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./db/schema.sql:/docker-entrypoint-initdb.d/01_tank_schema.sql:ro
     networks: [tervory_internal]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tervory}"]
@@ -34,7 +33,7 @@ services:
     networks: [tervory_internal]
 
   litellm:
-    image: ghcr.io/berriai/litellm:main-latest
+    build: ./litellm
     restart: unless-stopped
     command: ["--config", "/app/config.yaml", "--port", "4000"]
     environment:
@@ -42,8 +41,6 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-    volumes:
-      - ./litellm/config.yaml:/app/config.yaml:ro
     # On both networks: internal so Tank can reach it, public so it can reach the providers.
     networks: [tervory_internal, tervory_public]
 

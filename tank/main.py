@@ -83,10 +83,20 @@ class PolicyRow(BaseModel):
 
 # ---------- lifecycle ----------
 
+SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema.sql")
+
+
 @app.on_event("startup")
 async def _startup() -> None:
+    """Open the pool, then apply the schema. Every statement in schema.sql is
+    idempotent (IF NOT EXISTS / ON CONFLICT DO NOTHING), so this is safe on
+    every start and means the database can never be missing Tank's tables."""
     global _pool
     _pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=5)
+    with open(SCHEMA_PATH, encoding="utf-8") as f:
+        ddl = f.read()
+    async with _pool.acquire() as conn:
+        await conn.execute(ddl)
 
 
 @app.on_event("shutdown")
