@@ -61,8 +61,11 @@ services:
         condition: service_healthy
       litellm:
         condition: service_started
-    ports:
-      - "8000:8000"
+    # No host port: the Workspace reaches Tank at http://tank:8000 inside Docker,
+    # and Coolify's proxy fronts it if a domain is ever attached. Port 8000 on the
+    # host belongs to the Coolify dashboard.
+    expose:
+      - "8000"
     networks: [tervory_internal, tervory_public]
 
 volumes:
