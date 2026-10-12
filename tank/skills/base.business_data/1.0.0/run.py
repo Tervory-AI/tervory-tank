@@ -13,7 +13,7 @@ SIZE_BANDS = ("solo", "2-10", "11-50", "51-200", "200+")
 REVENUE_BANDS = ("<$500k", "$500k-$2M", "$2M-$10M", "$10M+")
 MODELS = ("retail", "online retail", "wholesale", "manufacturer", "service", "mixed")
 
-PROMPT = """Estimate the size and shape of this business from the signals below. Reply with JSON only, exactly:
+PROMPT = """Estimate the size and shape of this business from the signals below. Reply with JSON only — start your reply with "{{" and write nothing before or after the object — exactly:
 {{"size_band": one of {sizes}, "revenue_band": one of {revs}, "business_model": one of {models}, "naics": "6-digit code", "naics_label": "short label", "basis": "one short sentence on what you used", "sure": true|false}}
 Be conservative: a single-location shop with no named staff is "solo" or "2-10". Set "sure" false when signals are thin.
 
@@ -29,13 +29,26 @@ Registry licence type: {licence}"""
 
 
 def _json(s: str) -> dict:
-    m = re.search(r"\{.*\}", s, re.S)
-    if not m:
+    """First JSON object in the reply. Tolerates code fences, prose before it, and a reply cut
+    off before the closing brace (the fields already emitted are kept)."""
+    start = s.find("{")
+    if start < 0:
         return {}
-    try:
-        return json.loads(m.group(0))
-    except json.JSONDecodeError:
-        return {}
+    body = s[start:]
+    end = body.rfind("}")
+    if end >= 0:
+        try:
+            return json.loads(body[: end + 1])
+        except json.JSONDecodeError:
+            pass
+    # Truncated: drop the dangling partial pair and close the object.
+    cut = body.rfind(",")
+    while cut > 0:
+        try:
+            return json.loads(body[:cut] + "}")
+        except json.JSONDecodeError:
+            cut = body.rfind(",", 0, cut)
+    return {}
 
 
 def _pick(v, allowed, default):
@@ -63,7 +76,7 @@ async def run(payload: dict, ctx) -> dict:
         people=", ".join(f"{p.get('name')} ({p.get('role')})" for p in people if isinstance(p, dict))[:200] or "none",
         socials=payload.get("socials_count") or 0, pages=payload.get("pages") or 0,
         licence=payload.get("licence_type_label") or "n/a",
-    )}], task_type="base.business_data", max_tokens=300)
+    )}], task_type="base.business_data", max_tokens=500)
     d = _json(raw)
     naics = re.sub(r"\D", "", str(d.get("naics") or ""))[:6]
     sure = bool(d.get("sure", False))

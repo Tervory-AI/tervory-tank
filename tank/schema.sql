@@ -155,6 +155,8 @@ CREATE INDEX IF NOT EXISTS base_records_task   ON base.records (task_id);
 INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_tokens_out, system_prompt) VALUES
   ('base.extract', 1, 'haiku', 'batch', 'tenant', 600,
    'You extract structured facts from website text and reply with strict JSON only.'),
-  ('base.business_data', 1, 'haiku', 'batch', 'tenant', 300,
+  ('base.business_data', 1, 'haiku', 'batch', 'tenant', 600,
    'You estimate the size and shape of a small business from sparse signals, conservatively, and reply with strict JSON only.')
-ON CONFLICT DO NOTHING;
+ON CONFLICT (task_type, COALESCE(tenant_id, '00000000-0000-0000-0000-000000000000'::uuid))
+DO UPDATE SET max_tokens_out = GREATEST(tank.policy.max_tokens_out, EXCLUDED.max_tokens_out);
+-- (the cap only ever goes up from the repo; an operator's higher setting is kept)

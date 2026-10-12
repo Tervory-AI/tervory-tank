@@ -681,7 +681,8 @@ async def _enrich_one(rec_id: uuid.UUID, inp: dict[str, Any], engine_in: dict[st
             for k in ("size_band", "revenue_band", "business_model", "naics", "naics_label"):
                 if biz.get(k):
                     profile[k] = {"value": biz[k], "source": "model:estimate", "confidence": int(biz["confidence"])}
-        passes["5"] = {"skill": p.ref, "ms": biz.get("_ms"), "cost_usd": round(ctx.cost_usd, 6), "basis": biz.get("basis")}
+        passes["5"] = {"skill": p.ref, "ms": biz.get("_ms"), "cost_usd": round(ctx.cost_usd, 6), "basis": biz.get("basis"),
+                       **({"raw": biz.get("raw")} if not biz.get("business_model") and biz.get("raw") else {})}
 
         # 7 verify and score
         p, ctx = ctx_for("base.verify")
