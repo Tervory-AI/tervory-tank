@@ -39,8 +39,11 @@ def _json(s: str) -> dict:
 
 
 def _pick(v, allowed, default):
-    v = str(v or "").strip()
-    return v if v in allowed else default
+    v = str(v or "").strip().lower().replace("–", "-").replace(" ", "")
+    for a in allowed:
+        if v == a.lower().replace(" ", ""):
+            return a
+    return default
 
 
 async def run(payload: dict, ctx) -> dict:
@@ -64,6 +67,10 @@ async def run(payload: dict, ctx) -> dict:
     d = _json(raw)
     naics = re.sub(r"\D", "", str(d.get("naics") or ""))[:6]
     sure = bool(d.get("sure", False))
+    if not d:
+        # Nothing parseable: say so loudly instead of returning a confident-looking empty estimate.
+        return {"size_band": None, "revenue_band": None, "business_model": None, "naics": None, "naics_label": None,
+                "basis": "model reply was not JSON", "raw": raw[:300], "confidence": 0}
     return {
         "size_band": _pick(d.get("size_band"), SIZE_BANDS, None),
         "revenue_band": _pick(d.get("revenue_band"), REVENUE_BANDS, None),
@@ -71,5 +78,6 @@ async def run(payload: dict, ctx) -> dict:
         "naics": naics if len(naics) == 6 else None,
         "naics_label": str(d.get("naics_label") or "")[:60] or None,
         "basis": str(d.get("basis") or "")[:200],
+        "raw": raw[:300],
         "confidence": 60 if sure else 40,
     }
