@@ -114,7 +114,19 @@ def _parse_package(yaml_path: Path, pkg_dir: Path) -> SkillPackage:
         return pkg
 
 
+_run_cache: dict[tuple[str, str], Callable[..., Awaitable[dict[str, Any]]]] = {}
+
+
 def _import_run(pkg: SkillPackage) -> Callable[[dict[str, Any], "SkillContext"], Awaitable[dict[str, Any]]]:
+    cached = _run_cache.get((pkg.id, pkg.version))
+    if cached is not None:
+        return cached
+    run = _import_run_uncached(pkg)
+    _run_cache[(pkg.id, pkg.version)] = run
+    return run
+
+
+def _import_run_uncached(pkg: SkillPackage) -> Callable[[dict[str, Any], "SkillContext"], Awaitable[dict[str, Any]]]:
     spec = importlib.util.spec_from_file_location(f"skill_{pkg.id}_{pkg.version}".replace(".", "_").replace("-", "_"), pkg.path / "run.py")
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)

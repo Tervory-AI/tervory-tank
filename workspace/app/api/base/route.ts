@@ -23,7 +23,7 @@ export async function GET(req: Request) {
 // are understood directly, and an engine (e.g. "ffl") maps its own industry columns (the ATF list) into those.
 // Also accepts multipart/form-data with fields batch, preview, engine and a CSV file in "file" (up to 25 MB).
 export async function POST(req: Request) {
-  let body: { batch?: string; csv?: string; preview?: boolean; engine?: string | null; split_by_state?: boolean } | null = null;
+  let body: { batch?: string; csv?: string; url?: string; preview?: boolean; engine?: string | null; split_by_state?: boolean } | null = null;
   if ((req.headers.get("content-type") ?? "").includes("multipart/form-data")) {
     const form = await req.formData().catch(() => null);
     const file = form?.get("file");
@@ -40,8 +40,14 @@ export async function POST(req: Request) {
     body = (await req.json().catch(() => null)) as typeof body;
   }
   const batch = body?.batch?.trim() ?? "";
-  const csv = body?.csv ?? "";
-  if (!batch || !csv.trim()) return NextResponse.json({ error: "batch and csv required" }, { status: 400 });
+  let csv = body?.csv ?? "";
+  if (!csv.trim() && body?.url) {
+    // Import from a link the server can reach (a Drive "anyone with the link" file, an S3/R2 URL, …).
+    const fetched = await fetchCsv(body.url);
+    if ("error" in fetched) return NextResponse.json({ error: fetched.error }, { status: 400 });
+    csv = fetched.text;
+  }
+  if (!batch || !csv.trim()) return NextResponse.json({ error: "batch and a CSV (file, pasted text or link) required" }, { status: 400 });
   const records = parseCsv(csv);
   if (records.length === 0) return NextResponse.json({ error: "no rows found; first line must be a header" }, { status: 400 });
   if (records.length > 100000) return NextResponse.json({ error: "max 100,000 rows per upload; split the file" }, { status: 400 });
@@ -81,4 +87,36 @@ function parseCsv(text: string): Record<string, string>[] {
   return rows
     .filter((r) => r.some((v) => v.trim()))
     .map((r) => Object.fromEntries(header.map((h, i) => [h, (r[i] ?? "").trim()])));
+}
+
+// Turn a Google Drive share link into its direct-download form; leave other URLs alone.
+function directUrl(url: string): string {
+  const m = url.match(/drive\.google\.com\/file\/d\/([\w-]+)/) ?? url.match(/[?&]id=([\w-]+)/);
+  if (m && /drive\.google\.com|docs\.google\.com/.test(url)) return `https://drive.google.com/uc?export=download&id=${m[1]}`;
+  return url;
+}
+
+async function fetchCsv(url: string): Promise<{ text: string } | { error: string }> {
+  let u: URL;
+  try { u = new URL(url); } catch { return { error: "not a valid link" }; }
+  if (u.protocol !== "https:") return { error: "link must be https" };
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 120_000);
+  try {
+    const res = await fetch(directUrl(url), { redirect: "follow", signal: ctrl.signal, headers: { "user-agent": "TervoryBase/0.1" } });
+    if (!res.ok) return { error: `link answered ${res.status}` };
+    const type = res.headers.get("content-type") ?? "";
+    if (type.includes("text/html")) {
+      return { error: "the link returned a web page, not a file — for Drive, share it as “Anyone with the link” first" };
+    }
+    const len = Number(res.headers.get("content-length") ?? 0);
+    if (len > 80 * 1024 * 1024) return { error: "file over 80 MB; split it" };
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (buf.length > 80 * 1024 * 1024) return { error: "file over 80 MB; split it" };
+    return { text: buf.toString("utf8") };
+  } catch (err) {
+    return { error: err instanceof Error && err.name === "AbortError" ? "download took over 2 minutes" : "could not download the link" };
+  } finally {
+    clearTimeout(timer);
+  }
 }

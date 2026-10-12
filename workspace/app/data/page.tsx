@@ -33,6 +33,7 @@ export default function DataPage() {
   const [batch, setBatch] = useState("");
   const [csv, setCsv] = useState(SAMPLE);
   const [file, setFile] = useState<File | null>(null);
+  const [link, setLink] = useState("");
   const [preview, setPreview] = useState(true);
   const [engine, setEngine] = useState("");
   const [splitByState, setSplitByState] = useState(true);
@@ -86,7 +87,7 @@ export default function DataPage() {
         res = await fetch("/api/base", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ batch, csv, preview, engine: engine || null, split_by_state: splitByState }),
+          body: JSON.stringify({ batch, csv: link.trim() ? "" : csv, url: link.trim() || undefined, preview, engine: engine || null, split_by_state: splitByState }),
         });
       }
       const data = await res.json();
@@ -95,6 +96,7 @@ export default function DataPage() {
       setSelected(data2.labels?.[0] ?? batch);
       setBatch("");
       setFile(null);
+      setLink("");
       if (fileRef.current) fileRef.current.value = "";
       await refreshBatches();
       await refreshRecords(data2.labels?.[0] ?? batch);
@@ -124,6 +126,9 @@ export default function DataPage() {
           <span style={{ color: "var(--muted)", fontSize: 13 }}>{file ? `${file.name} · ${(file.size / 1024).toFixed(0)} KB` : "or paste below"}</span>
         </div>
         {!file && (
+          <input value={link} onChange={(e) => setLink(e.target.value)} placeholder="…or a link to the file (Drive: share as “Anyone with the link”)" disabled={busy} />
+        )}
+        {!file && !link.trim() && (
           <textarea value={csv} onChange={(e) => setCsv(e.target.value)} rows={6} disabled={busy} style={{ fontFamily: "ui-monospace, monospace", fontSize: 13 }} />
         )}
         <div className="task-form-row">
@@ -137,7 +142,7 @@ export default function DataPage() {
           <label style={{ color: "var(--muted)", fontSize: 13 }}>
             <input type="checkbox" checked={preview} onChange={(e) => setPreview(e.target.checked)} /> preview (allow unapproved skill versions)
           </label>
-          <button type="submit" disabled={busy || !batch.trim() || (!file && !csv.trim())}>{busy ? "Uploading…" : "Run Base"}</button>
+          <button type="submit" disabled={busy || !batch.trim() || (!file && !link.trim() && !csv.trim())}>{busy ? "Importing… (a big file takes a couple of minutes)" : "Run Base"}</button>
         </div>
         {error && <p className="err">{error}</p>}
       </form>
