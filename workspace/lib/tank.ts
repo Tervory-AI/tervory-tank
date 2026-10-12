@@ -223,3 +223,30 @@ export function baseRetry(tenantId: string, batch: string): Promise<{ requeued: 
 export function baseBatches(tenantId: string): Promise<BaseBatch[]> {
   return tank<BaseBatch[]>(`/v1/base/batches?tenant_id=${tenantId}`, { method: "GET" });
 }
+
+// ---- Tank: the ladder (graduation) ----
+
+export type Ladder = {
+  task_type: string; rung: number; model: string; candidate_model: string | null; shadow_rate: number | string;
+  previous_model: string | null; eval_threshold: number | string; cache_scope: string; priority: string;
+  n: number; agreement: number | string | null; cand_cost: number | string | null; prim_cost: number | string | null;
+  calls_30d: number; cost_30d: number | string; cache_hits: number; eligible: boolean; saving_pct: number | null;
+};
+export function ladder(): Promise<Ladder[]> {
+  return tank<Ladder[]>("/v1/graduation", { method: "GET" });
+}
+export function setCandidate(taskType: string, candidateModel: string | null, shadowRate: number, by: string) {
+  return tank<{ ok: true }>(`/v1/graduation/${encodeURIComponent(taskType)}/candidate`, {
+    method: "PUT", body: JSON.stringify({ candidate_model: candidateModel, shadow_rate: shadowRate, by }),
+  });
+}
+export function promoteCandidate(taskType: string, by: string) {
+  return tank<{ ok: true; model: string }>(`/v1/graduation/${encodeURIComponent(taskType)}/promote`, { method: "POST", body: JSON.stringify({ by }) });
+}
+export function rollbackModel(taskType: string, by: string) {
+  return tank<{ ok: true; model: string }>(`/v1/graduation/${encodeURIComponent(taskType)}/rollback`, { method: "POST", body: JSON.stringify({ by }) });
+}
+export type EvalsSummary = { task_type: string; cases: number; accepted: number; rejected: number; manual: number };
+export function evalsSummary(): Promise<EvalsSummary[]> {
+  return tank<EvalsSummary[]>("/v1/evals/summary", { method: "GET" });
+}

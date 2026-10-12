@@ -48,9 +48,56 @@ CREATE TABLE IF NOT EXISTS tank.policy (
     eval_threshold  numeric(5,4) NOT NULL DEFAULT 0.97,
     updated_at      timestamptz NOT NULL DEFAULT now()
 );
+-- Graduation: a cheaper candidate runs in the shadow of the current model on a share of calls.
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS candidate_model text;
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS shadow_rate numeric(4,3) NOT NULL DEFAULT 0;   -- 0..1 of calls shadowed
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS previous_model text;
+
+-- One shadow comparison per sampled call. agreement 0..1: how close the candidate came to the primary.
+CREATE TABLE IF NOT EXISTS tank.shadow (
+    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    ledger_id       uuid NOT NULL,            -- the primary call
+    tenant_id       uuid NOT NULL,
+    task_type       text NOT NULL,
+    primary_model   text NOT NULL,
+    candidate_model text NOT NULL,
+    primary_content text NOT NULL,
+    candidate_content text,
+    candidate_cost_usd numeric(12,6) NOT NULL DEFAULT 0,
+    primary_cost_usd   numeric(12,6) NOT NULL DEFAULT 0,
+    agreement       numeric(5,4),             -- null until judged
+    method          text,                     -- json | judge | failed
+    created_at      timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS shadow_task ON tank.shadow (task_type, created_at DESC);
+
+-- Promotions and demotions, so the ladder has a history.
+CREATE TABLE IF NOT EXISTS tank.policy_log (
+    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    task_type       text NOT NULL,
+    action          text NOT NULL,            -- promote | candidate | rollback
+    from_model      text,
+    to_model        text,
+    by_user         text,
+    detail          jsonb,
+    created_at      timestamptz NOT NULL DEFAULT now()
+);
+
 -- One policy row per task type per tenant; a null tenant is the platform default.
 CREATE UNIQUE INDEX IF NOT EXISTS policy_task_tenant
     ON tank.policy (task_type, COALESCE(tenant_id, '00000000-0000-0000-0000-000000000000'::uuid));
+
+-- What was asked and what came back, one row per model call. This is the learning corpus:
+-- feedback turns rows here into golden cases; the graduation loop replays them against candidates.
+CREATE TABLE IF NOT EXISTS tank.transcripts (
+    ledger_id       uuid PRIMARY KEY,
+    tenant_id       uuid NOT NULL,
+    task_type       text NOT NULL,
+    messages        jsonb NOT NULL,           -- as sent (system prompt excluded; it lives in policy)
+    content         text NOT NULL,
+    created_at      timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS transcripts_task ON tank.transcripts (task_type, created_at DESC);
 
 -- Golden cases per task type for the eval harness (build order step 5).
 CREATE TABLE IF NOT EXISTS tank.evals (
@@ -62,6 +109,11 @@ CREATE TABLE IF NOT EXISTS tank.evals (
     source          text NOT NULL DEFAULT 'manual', -- manual | tester_feedback
     created_at      timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE tank.evals ADD COLUMN IF NOT EXISTS tenant_id uuid;          -- who the case came from (null = platform)
+ALTER TABLE tank.evals ADD COLUMN IF NOT EXISTS ledger_id uuid;          -- the call it was made from
+ALTER TABLE tank.evals ADD COLUMN IF NOT EXISTS verdict text NOT NULL DEFAULT 'accepted';  -- accepted | rejected
+ALTER TABLE tank.evals ADD COLUMN IF NOT EXISTS note text;
+CREATE UNIQUE INDEX IF NOT EXISTS evals_ledger ON tank.evals (ledger_id) WHERE ledger_id IS NOT NULL;
 
 -- A unit of work a person asked for. The board in the Workspace is a view of this table.
 -- Today a task is one model call; later a task fans out to an agent run of many calls,
@@ -95,6 +147,16 @@ INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_toke
   ('reason.brief',   1, 'sonnet', 'standard', 'none',     4096,
    'You write concise, well-structured analysis for a business owner. Lead with the conclusion.')
 ON CONFLICT DO NOTHING;
+
+-- The judge: scores whether two answers say the same thing. Platform-only, never billed to a client.
+INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_tokens_out, system_prompt) VALUES
+  ('tank.judge', 1, 'haiku', 'batch', 'none', 64,
+   'You compare two answers to the same request. Reply with one integer 0-100: how closely the second answer matches the first in conclusion and key facts. 100 = same conclusion and facts; 0 = contradicts or misses the point. Reply with the number only.')
+ON CONFLICT DO NOTHING;
+
+-- First graduation candidate: reason.brief from Sonnet to Haiku, every call shadowed until promoted.
+UPDATE tank.policy SET candidate_model = 'haiku', shadow_rate = 1.0
+WHERE task_type = 'reason.brief' AND tenant_id IS NULL AND model = 'sonnet' AND candidate_model IS NULL;
 
 -- ---------- Skala: the skills registry (Phase 1 = this table + the skills/ folder in Git) ----------
 CREATE TABLE IF NOT EXISTS tank.skills (

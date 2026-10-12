@@ -30,6 +30,8 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import random
+import re
 import logging
 import os
 import time
@@ -326,10 +328,196 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
         except Exception:  # noqa: BLE001
             pass
 
+    # Graduation: shadow the candidate on a share of calls; it never affects this answer.
+    if policy.get("candidate_model") and float(policy.get("shadow_rate") or 0) > random.random():
+        t = asyncio.create_task(_shadow(req, policy, messages, max_tokens, ledger_id, content, cost_usd))
+        _background.add(t)
+        t.add_done_callback(_background.discard)
+
+    # The learning corpus: what was asked, what came back (system prompt stays in policy).
+    async with pool().acquire() as conn:
+        await conn.execute(
+            "INSERT INTO tank.transcripts (ledger_id, tenant_id, task_type, messages, content) VALUES ($1,$2,$3,$4::jsonb,$5)",
+            ledger_id, req.tenant_id, req.task_type, json.dumps([m.model_dump() for m in req.messages]), content[:20000],
+        )
+
     return RouteResponse(
         ledger_id=ledger_id, model=model, rung=policy["rung"], content=content,
         tokens_in=tokens_in, tokens_out=tokens_out, cost_usd=cost_usd, latency_ms=latency_ms,
     )
+
+
+async def _llm(model: str, messages: list[dict[str, str]], max_tokens: int) -> tuple[str, float]:
+    async with httpx.AsyncClient(timeout=120) as client:
+        r = await client.post(
+            f"{LITELLM_URL}/v1/chat/completions",
+            headers={"Authorization": f"Bearer {LITELLM_MASTER_KEY}"},
+            json={"model": model, "messages": messages, "max_tokens": max_tokens},
+        )
+    if r.status_code != 200:
+        raise RuntimeError(f"{model}: {r.status_code} {r.text[:200]}")
+    data = r.json()
+    content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "") or ""
+    return content, float(r.headers.get("x-litellm-response-cost") or 0.0)
+
+
+def _json_obj(s: str) -> dict[str, Any] | None:
+    a, b = s.find("{"), s.rfind("}")
+    if a < 0 or b <= a:
+        return None
+    try:
+        v = json.loads(s[a:b + 1])
+        return v if isinstance(v, dict) else None
+    except json.JSONDecodeError:
+        return None
+
+
+def _norm(v: Any) -> str:
+    return " ".join(str(v).lower().split())
+
+
+async def _shadow(req: RouteRequest, policy: dict[str, Any], messages: list[dict[str, str]], max_tokens: int,
+                  ledger_id: uuid.UUID, primary: str, primary_cost: float) -> None:
+    """Run the candidate on the same input, score agreement with the primary, record both.
+    Spend lands on the platform tenant, never the client's."""
+    cand = policy["candidate_model"]
+    cand_content, cand_cost, agreement, method = None, 0.0, None, "failed"
+    try:
+        cand_content, cand_cost = await _llm(cand, messages, max_tokens)
+        pj, cj = _json_obj(primary), _json_obj(cand_content)
+        if pj is not None and cj is not None and pj:
+            keys = set(pj) | set(cj)
+            same = sum(1 for k in keys if _norm(pj.get(k)) == _norm(cj.get(k)))
+            agreement, method = same / len(keys), "json"
+        else:
+            jp = await load_policy("tank.judge", PLATFORM_TENANT)
+            jmsgs = [{"role": "system", "content": jp["system_prompt"]},
+                     {"role": "user", "content": f"REQUEST:\n{messages[-1]['content'][:3000]}\n\nFIRST ANSWER:\n{primary[:4000]}\n\nSECOND ANSWER:\n{cand_content[:4000]}"}]
+            verdict, jcost = await _llm(jp["model"], jmsgs, jp["max_tokens_out"])
+            cand_cost += jcost
+            m = re.search(r"\d{1,3}", verdict)
+            agreement, method = (min(100, int(m.group())) / 100 if m else None), "judge"
+    except Exception as exc:  # noqa: BLE001
+        log.warning("shadow %s→%s failed: %s", policy["model"], cand, exc)
+    async with pool().acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO tank.shadow (ledger_id, tenant_id, task_type, primary_model, candidate_model, primary_content,
+                                     candidate_content, candidate_cost_usd, primary_cost_usd, agreement, method)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+            """,
+            ledger_id, req.tenant_id, req.task_type, policy["model"], cand, primary[:20000],
+            (cand_content or "")[:20000], cand_cost, primary_cost, agreement, method,
+        )
+        # The candidate's spend is platform R&D: logged, visible, not on the client's bill.
+        await conn.execute(
+            """
+            INSERT INTO tank.ledger (tenant_id, region, agent, task_type, rung, model, priority, tokens_in, tokens_out,
+                                     cost_usd, latency_ms, cache_hit, outcome)
+            VALUES ($1,$2,'tank',$3,1,$4,'batch',0,0,$5,0,false,$6)
+            """,
+            PLATFORM_TENANT, DEFAULT_REGION, f"{req.task_type}#shadow", cand, cand_cost,
+            "delivered" if cand_content is not None else "failed",
+        )
+
+
+# ---------- graduation: the ladder ----------
+
+class CandidateBody(BaseModel):
+    candidate_model: str | None = None
+    shadow_rate: float = Field(default=1.0, ge=0, le=1)
+    by: str | None = None
+
+
+class PromoteBody(BaseModel):
+    by: str | None = None
+
+
+@app.get("/v1/graduation", dependencies=[Depends(require_key)])
+async def graduation() -> list[dict[str, Any]]:
+    """Every platform policy with its candidate and what the shadow runs say so far."""
+    async with pool().acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT p.task_type, p.rung, p.model, p.candidate_model, p.shadow_rate, p.previous_model, p.eval_threshold,
+                   p.cache_scope, p.priority,
+                   (SELECT count(*) FROM tank.shadow s WHERE s.task_type=p.task_type AND s.candidate_model=p.candidate_model AND s.agreement IS NOT NULL) AS n,
+                   (SELECT avg(agreement) FROM tank.shadow s WHERE s.task_type=p.task_type AND s.candidate_model=p.candidate_model) AS agreement,
+                   (SELECT avg(candidate_cost_usd) FROM tank.shadow s WHERE s.task_type=p.task_type AND s.candidate_model=p.candidate_model) AS cand_cost,
+                   (SELECT avg(primary_cost_usd) FROM tank.shadow s WHERE s.task_type=p.task_type AND s.candidate_model=p.candidate_model) AS prim_cost,
+                   (SELECT count(*) FROM tank.ledger l WHERE l.task_type=p.task_type AND l.ts > now() - interval '30 days') AS calls_30d,
+                   (SELECT coalesce(sum(cost_usd),0) FROM tank.ledger l WHERE l.task_type=p.task_type AND l.ts > now() - interval '30 days') AS cost_30d,
+                   (SELECT count(*) FROM tank.ledger l WHERE l.task_type=p.task_type AND l.cache_hit) AS cache_hits
+            FROM tank.policy p WHERE p.tenant_id IS NULL AND p.task_type <> 'tank.judge'
+            ORDER BY cost_30d DESC, p.task_type
+            """
+        )
+    out = []
+    for r in rows:
+        d = dict(r)
+        n = int(d["n"] or 0)
+        agr = float(d["agreement"]) if d["agreement"] is not None else None
+        thr = float(d["eval_threshold"] or 0.95)
+        d["eligible"] = bool(d["candidate_model"]) and n >= 30 and agr is not None and agr >= thr
+        d["saving_pct"] = (round((1 - float(d["cand_cost"]) / float(d["prim_cost"])) * 100) if d["prim_cost"] and float(d["prim_cost"]) > 0 and d["cand_cost"] is not None else None)
+        out.append(d)
+    return out
+
+
+@app.put("/v1/graduation/{task_type}/candidate", dependencies=[Depends(require_key)])
+async def set_candidate(task_type: str, body: CandidateBody) -> dict[str, Any]:
+    async with pool().acquire() as conn:
+        row = await conn.fetchrow("SELECT model FROM tank.policy WHERE task_type=$1 AND tenant_id IS NULL", task_type)
+        if row is None:
+            raise HTTPException(status_code=404, detail="no such platform policy")
+        if body.candidate_model and body.candidate_model == row["model"]:
+            raise HTTPException(status_code=400, detail="candidate must differ from the current model")
+        await conn.execute(
+            "UPDATE tank.policy SET candidate_model=$2, shadow_rate=$3, updated_at=now() WHERE task_type=$1 AND tenant_id IS NULL",
+            task_type, body.candidate_model, body.shadow_rate if body.candidate_model else 0,
+        )
+        await conn.execute(
+            "INSERT INTO tank.policy_log (task_type, action, from_model, to_model, by_user, detail) VALUES ($1,'candidate',$2,$3,$4,$5::jsonb)",
+            task_type, row["model"], body.candidate_model, body.by, json.dumps({"shadow_rate": body.shadow_rate}),
+        )
+    return {"ok": True}
+
+
+@app.post("/v1/graduation/{task_type}/promote", dependencies=[Depends(require_key)])
+async def promote(task_type: str, body: PromoteBody) -> dict[str, Any]:
+    """The human step: make the candidate the model. Previous model is kept for rollback."""
+    async with pool().acquire() as conn:
+        row = await conn.fetchrow("SELECT model, candidate_model FROM tank.policy WHERE task_type=$1 AND tenant_id IS NULL", task_type)
+        if row is None or not row["candidate_model"]:
+            raise HTTPException(status_code=400, detail="no candidate to promote")
+        await conn.execute(
+            """
+            UPDATE tank.policy SET previous_model=model, model=candidate_model, candidate_model=NULL, shadow_rate=0, updated_at=now()
+            WHERE task_type=$1 AND tenant_id IS NULL
+            """, task_type,
+        )
+        await conn.execute(
+            "INSERT INTO tank.policy_log (task_type, action, from_model, to_model, by_user) VALUES ($1,'promote',$2,$3,$4)",
+            task_type, row["model"], row["candidate_model"], body.by,
+        )
+    return {"ok": True, "model": row["candidate_model"], "previous_model": row["model"]}
+
+
+@app.post("/v1/graduation/{task_type}/rollback", dependencies=[Depends(require_key)])
+async def rollback(task_type: str, body: PromoteBody) -> dict[str, Any]:
+    async with pool().acquire() as conn:
+        row = await conn.fetchrow("SELECT model, previous_model FROM tank.policy WHERE task_type=$1 AND tenant_id IS NULL", task_type)
+        if row is None or not row["previous_model"]:
+            raise HTTPException(status_code=400, detail="nothing to roll back to")
+        await conn.execute(
+            "UPDATE tank.policy SET model=previous_model, previous_model=NULL, updated_at=now() WHERE task_type=$1 AND tenant_id IS NULL",
+            task_type,
+        )
+        await conn.execute(
+            "INSERT INTO tank.policy_log (task_type, action, from_model, to_model, by_user) VALUES ($1,'rollback',$2,$3,$4)",
+            task_type, row["model"], row["previous_model"], body.by,
+        )
+    return {"ok": True, "model": row["previous_model"]}
 
 
 @app.post("/v1/route", response_model=RouteResponse, dependencies=[Depends(require_key)])
@@ -1021,7 +1209,36 @@ async def ledger_feedback(ledger_id: uuid.UUID, body: Feedback) -> dict[str, Any
         )
     if updated is None:
         raise HTTPException(status_code=404, detail="no delivered call with that id for this tenant")
+    # A verdict on a real answer is a golden case: accepted → "this is right", rejected → "never this".
+    async with pool().acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO tank.evals (task_type, input, expected, tolerance, source, tenant_id, ledger_id, verdict, note)
+            SELECT t.task_type, t.messages, jsonb_build_object('text', t.content), 'semantic', 'tester_feedback',
+                   t.tenant_id, t.ledger_id, $2, $3
+            FROM tank.transcripts t WHERE t.ledger_id = $1
+            ON CONFLICT (ledger_id) WHERE ledger_id IS NOT NULL
+            DO UPDATE SET verdict = EXCLUDED.verdict, note = EXCLUDED.note
+            """,
+            ledger_id, body.feedback, body.note,
+        )
     return {"ok": True, "ledger_id": str(ledger_id), "feedback": body.feedback}
+
+
+@app.get("/v1/evals/summary", dependencies=[Depends(require_key)])
+async def evals_summary() -> list[dict[str, Any]]:
+    """Golden cases per task type, split by where they came from and the verdict."""
+    async with pool().acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT task_type, count(*) AS cases,
+                   count(*) FILTER (WHERE source='tester_feedback' AND verdict='accepted') AS accepted,
+                   count(*) FILTER (WHERE source='tester_feedback' AND verdict='rejected') AS rejected,
+                   count(*) FILTER (WHERE source='manual') AS manual
+            FROM tank.evals GROUP BY task_type ORDER BY task_type
+            """
+        )
+    return [dict(r) for r in rows]
 
 
 # ---------- the client's ledger view ----------
