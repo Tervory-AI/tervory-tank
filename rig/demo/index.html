@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tervory Rig demo</title>
+    <style>
+      body {
+        margin: 0;
+        background: #d9d3c5;
+      }
+      .toolbar {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+        padding: 12px 16px;
+        font: 14px/1.4 Inter, "Helvetica Neue", sans-serif;
+        color: #242722;
+      }
+      .toolbar button {
+        font: inherit;
+        padding: 6px 10px;
+      }
+      tervory-rig {
+        display: block;
+        min-height: 100vh;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="toolbar">
+      <span>Theme</span>
+      <button type="button" id="theme-custom-nation">Custom Nation</button>
+      <button type="button" id="theme-neutral">Neutral</button>
+    </div>
+    <tervory-rig api-base="mock" rig-key="pk_demo" theme="custom-nation"></tervory-rig>
+    <script type="module" src="/widget/src/index.ts"></script>
+    <script>
+      const el = document.querySelector("tervory-rig");
+      document.getElementById("theme-custom-nation").addEventListener("click", () => {
+        el.setAttribute("theme", "custom-nation");
+      });
+      document.getElementById("theme-neutral").addEventListener("click", () => {
+        el.setAttribute("theme", "neutral");
+      });
+    </script>
+  </body>
+</html>

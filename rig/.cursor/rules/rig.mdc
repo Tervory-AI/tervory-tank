@@ -1,0 +1,9 @@
+---
+description: Tervory Rig house rules
+alwaysApply: true
+---
+- Read AGENTS.md before any change. Never push to main; branch cursor/<id>-<slug>, open a PR, stop for review.
+- Public widget: no secrets, no rates, no costs. One indicative total only.
+- The widget never decides fitment; it renders what Rig's API returns (or the mock implementing docs/api.md).
+- Industry-neutral component; labels and categories come from data and theme.
+- Shadow DOM web component, TypeScript strict, Vite build, accessible, 390–1440 px.
