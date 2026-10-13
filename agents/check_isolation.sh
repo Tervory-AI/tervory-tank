@@ -1,13 +1,15 @@
 #!/bin/sh
 # Prove one agent box can reach Tank and Postgres, and nothing else.
-# Run on the server: agents/check_isolation.sh <agent-container>
+# This file stands alone. Paste it on the server and run:
+#   sh check_isolation.sh <agent-container>
 # Prints PASS or FAIL per check. Exits 1 if any check fails.
-# Read-only except a probe table in the agent's own schema, which it drops.
+# Read-only except a probe table in the agent's own schema, which it drops,
+# and one ping job posted to the box.
 # Never prints a password or a connection string.
 
 set -u
 
-container="${1:?usage: agents/check_isolation.sh <agent-container>}"
+container="${1:?usage: sh check_isolation.sh <agent-container>}"
 failed=0
 
 say() {
@@ -23,9 +25,36 @@ mark() {
   fi
 }
 
+has_part() {
+  _rest=$1
+  _want=$2
+  while [ -n "$_rest" ]; do
+    _part=${_rest%%[-_.]*}
+    if [ "$_part" = "$_want" ]; then
+      return 0
+    fi
+    case "$_rest" in
+      *[-_.]*) _rest=${_rest#*[-_.]} ;;
+      *) return 1 ;;
+    esac
+  done
+  return 1
+}
+
 if ! docker inspect "$container" >/dev/null 2>&1; then
   say "FAIL container $container is not on this docker host"
   exit 1
+fi
+
+self_name=$(docker inspect -f '{{.Name}}' "$container")
+self_name=${self_name#/}
+
+health=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container")
+say "health status: $health"
+if [ "$health" = "healthy" ]; then
+  mark 0 "container is healthy"
+else
+  mark 1 "container is healthy"
 fi
 
 # Single-label names. Docker DNS answers these; it does not ask the public internet.
@@ -74,6 +103,98 @@ s.close()
   mark 0 "postgres answers"
 else
   mark 1 "postgres answers"
+fi
+
+# Network membership. Printed in full so a human can see who shares a network.
+# The gateway (tervory-gw-*) may hold only this agent, tank, and postgres.
+say "--- docker inspect networks ---"
+docker inspect -f '{{range $name, $net := .NetworkSettings.Networks}}{{$name}}{{"\n"}}{{end}}' "$container"
+nets=$(docker inspect -f '{{range $name, $net := .NetworkSettings.Networks}}{{$name}} {{end}}' "$container")
+gateway_seen=0
+for net in $nets; do
+  say "network $net members:"
+  members=$(docker network inspect -f '{{range .Containers}}{{.Name}}{{"\n"}}{{end}}' "$net" 2>/dev/null || true)
+  if [ -z "$members" ]; then
+    say "(none)"
+  else
+    printf '%s\n' "$members"
+  fi
+  case "$net" in
+    *tervory-gw*)
+      gateway_seen=1
+      has_self=0
+      has_tank=0
+      has_pg=0
+      unexpected=""
+      for member in $members; do
+        short=${member#/}
+        if [ -z "$short" ]; then
+          continue
+        fi
+        if [ "$short" = "$self_name" ] || [ "$short" = "$container" ]; then
+          has_self=1
+          continue
+        fi
+        if has_part "$short" tank; then
+          has_tank=1
+          continue
+        fi
+        if has_part "$short" postgres; then
+          has_pg=1
+          continue
+        fi
+        unexpected="$unexpected $short"
+      done
+      if [ "$has_self" -eq 1 ] && [ "$has_tank" -eq 1 ] && [ "$has_pg" -eq 1 ] && [ -z "$unexpected" ]; then
+        mark 0 "gateway $net holds only this agent, tank, and postgres"
+      else
+        mark 1 "gateway $net holds only this agent, tank, and postgres"
+        if [ -n "$unexpected" ]; then
+          say "unexpected members:$unexpected"
+        fi
+      fi
+      ;;
+  esac
+done
+if [ "$gateway_seen" -eq 0 ]; then
+  mark 1 "gateway network tervory-gw is attached"
+else
+  mark 0 "gateway network tervory-gw is attached"
+fi
+
+# A ping job must reach done. The template handles kind "ping".
+if docker exec "$container" python -c 'import json, time, urllib.request
+body = json.dumps({
+    "tenant_id": "00000000-0000-0000-0000-000000000001",
+    "kind": "ping",
+    "input": {"proof": True},
+}).encode()
+req = urllib.request.Request(
+    "http://127.0.0.1:8000/jobs",
+    data=body,
+    headers={"Content-Type": "application/json"},
+)
+with urllib.request.urlopen(req, timeout=10) as resp:
+    job = json.load(resp)
+job_id = job["id"]
+tenant = job["tenant_id"]
+status = ""
+deadline = time.time() + 45
+while time.time() < deadline:
+    with urllib.request.urlopen(
+        "http://127.0.0.1:8000/jobs/%s?tenant_id=%s" % (job_id, tenant),
+        timeout=10,
+    ) as resp:
+        status = json.load(resp).get("status", "")
+    if status in ("done", "failed"):
+        break
+    time.sleep(1)
+if status != "done":
+    raise SystemExit(1)
+' >/dev/null 2>&1; then
+  mark 0 "ping job reaches done"
+else
+  mark 1 "ping job reaches done"
 fi
 
 # Database checks run inside the container so the password never reaches this script.

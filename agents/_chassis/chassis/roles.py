@@ -1,7 +1,7 @@
 """Database role for one agent. Idempotent. The password is never logged.
 
-Tank runs this at start from AGENT_DB_PASSWORD_<AGENT>. The role can use only
-schema agent_<name>. It is not a superuser and cannot read tank or base.
+The agent-roles service runs this from AGENT_DB_PASSWORD_<AGENT>. The role can
+use only schema agent_<name>. It is not a superuser and cannot read tank or base.
 """
 
 from __future__ import annotations
@@ -49,15 +49,65 @@ def passwords_from_env(env: Mapping[str, str]) -> list[tuple[str, str]]:
     return found
 
 
+def _tag(seed: str, secret: str) -> str:
+    tag = seed
+    while f"${tag}$" in secret:
+        tag += "x"
+    return tag
+
+
+def _ownership(name: str) -> str:
+    """Give the role every table and sequence already in its schema.
+
+    C6 created those objects as the superuser. ALTER ... OWNER TO the same role
+    on a later start is a no-op. Indexes follow the table.
+    """
+    return f"""
+DO $own$
+DECLARE
+  rel record;
+BEGIN
+  FOR rel IN
+    SELECT c.relname, c.relkind
+    FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = '{name}'
+      AND c.relkind IN ('r', 'p', 'S')
+  LOOP
+    IF rel.relkind = 'S' THEN
+      EXECUTE format('ALTER SEQUENCE %I.%I OWNER TO %I', '{name}', rel.relname, '{name}');
+    ELSE
+      EXECUTE format('ALTER TABLE %I.%I OWNER TO %I', '{name}', rel.relname, '{name}');
+    END IF;
+  END LOOP;
+END
+$own$;
+""".strip()
+
+
+def _guarded_revoke(schema: str, name: str) -> str:
+    """REVOKE is skipped when that schema does not exist yet. Tank may still be starting."""
+    tag = f"revoke{schema}"
+    return f"""
+DO ${tag}$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = '{schema}') THEN
+    EXECUTE 'REVOKE ALL ON SCHEMA {schema} FROM {name}';
+    EXECUTE 'REVOKE ALL ON ALL TABLES IN SCHEMA {schema} FROM {name}';
+  END IF;
+END
+${tag}$;
+""".strip()
+
+
 def statements_for(agent: str, password: str) -> list[str]:
     """SQL that creates or updates one agent role. Safe to run on every start."""
     if not password or not password.strip():
         raise ValueError("password is empty")
     name = role_name(agent)
-    literal = quote_literal(password.strip())
-    tag = "pw"
-    while f"${tag}$" in password:
-        tag += "x"
+    secret = password.strip()
+    literal = quote_literal(secret)
+    tag = _tag("pw", secret)
     return [
         f"CREATE SCHEMA IF NOT EXISTS {name}",
         f"""
@@ -72,11 +122,10 @@ END
 ${tag}$;
 """.strip(),
         f"GRANT USAGE, CREATE ON SCHEMA {name} TO {name}",
-        f"REVOKE ALL ON SCHEMA tank FROM {name}",
-        f"REVOKE ALL ON SCHEMA base FROM {name}",
+        _ownership(name),
+        _guarded_revoke("tank", name),
+        _guarded_revoke("base", name),
         f"REVOKE ALL ON SCHEMA public FROM {name}",
-        f"REVOKE ALL ON ALL TABLES IN SCHEMA tank FROM {name}",
-        f"REVOKE ALL ON ALL TABLES IN SCHEMA base FROM {name}",
         f"ALTER ROLE {name} SET search_path = {name}",
     ]
 

@@ -53,6 +53,11 @@ def test_role_sql_is_idempotent_and_not_a_superuser():
         assert f"REVOKE ALL ON SCHEMA {schema} FROM agent_template" in text
     assert "REVOKE ALL ON ALL TABLES IN SCHEMA tank FROM agent_template" in text
     assert "REVOKE ALL ON ALL TABLES IN SCHEMA base FROM agent_template" in text
+    assert "IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'tank')" in text
+    assert "IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'base')" in text
+    assert "ALTER SEQUENCE %I.%I OWNER TO %I" in text
+    assert "ALTER TABLE %I.%I OWNER TO %I" in text
+    assert "relkind IN ('r', 'p', 'S')" in text
     assert "ALTER ROLE agent_template SET search_path = agent_template" in text
     assert statements_for("template", _SAMPLE) == statements_for("template", _SAMPLE)
 

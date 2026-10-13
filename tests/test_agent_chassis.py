@@ -515,8 +515,26 @@ def test_agent_boxes_do_not_share_a_network():
         assert "default" in services[name]["networks"]
     for name in ("tiger", "workspace", "litellm", "redis", "qdrant", "searxng"):
         assert "tervory-gw-template" not in (services[name].get("networks") or [])
-    assert "AGENT_DB_PASSWORD_TEMPLATE" in services["tank"]["environment"]
-    assert services["tank"]["command"] == ["python", "/opt/agentchassis/provision_agent_roles.py"]
+    tank = services["tank"]
+    assert "command" not in tank
+    assert "volumes" not in tank
+    assert "AGENT_DB_PASSWORD_TEMPLATE" not in tank["environment"]
+    assert "agent-roles" not in (tank.get("depends_on") or {})
+    roles = services["agent-roles"]
+    assert roles["build"]["context"] == "./agents"
+    assert roles["build"]["dockerfile"] == "Dockerfile.roles"
+    assert roles["restart"] == "on-failure"
+    assert roles["networks"] == ["default"]
+    assert "tervory-gw-template" not in roles["networks"]
+    assert roles["depends_on"]["postgres"]["condition"] == "service_healthy"
+    assert "AGENT_DB_PASSWORD_TEMPLATE" in roles["environment"]
+    assert "POSTGRES_PASSWORD" in roles["environment"]["DATABASE_URL"]
+    image = (ROOT / "agents" / "Dockerfile.roles").read_text(encoding="utf-8")
+    assert "asyncpg==0.30.0" in image
+    assert "provision_agent_roles.py" in image
+    provision = (ROOT / "agents" / "_chassis" / "provision_agent_roles.py").read_text(encoding="utf-8")
+    assert "uvicorn" not in provision
+    assert "execvp" not in provision
 
     box_file = ROOT / "agents" / "_template" / "docker-compose.yml"
     template = yaml.safe_load(box_file.read_text(encoding="utf-8"))
@@ -539,3 +557,9 @@ def test_agent_boxes_do_not_share_a_network():
     for host in ("tank", "postgres", "workspace", "redis", "qdrant", "litellm", "searxng", "tiger"):
         assert host in text
     assert "PASS" in text and "FAIL" in text
+    assert ".State.Health.Status" in text
+    assert "ping job reaches done" in text
+    assert "NetworkSettings.Networks" in text
+    assert "docker network inspect" in text
+    assert "tervory-gw" in text
+    assert "source " not in text

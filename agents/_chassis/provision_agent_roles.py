@@ -1,8 +1,8 @@
-"""Create agent database roles, then start Tank.
+"""Create agent database roles, then exit.
 
-Mounted into the Tank container and used as its command. The password stays in
-the environment and is never written to a log. If no AGENT_DB_PASSWORD_* is
-set, Tank still starts.
+One-shot command for the agent-roles service. Tank does not run this, and Tank
+keeps serving if this fails. The password stays in the environment and is never
+written to a log. If no AGENT_DB_PASSWORD_* is set, this exits 0.
 """
 
 from __future__ import annotations
@@ -17,22 +17,15 @@ if _HERE not in sys.path:
 
 from chassis.roles import RoleProvisionError, apply_roles  # noqa: E402
 
-_SCHEMA = "/app/schema.sql"
-
 
 async def _provision() -> None:
     url = os.environ.get("DATABASE_URL", "")
     if not url:
-        return
+        raise RoleProvisionError("DATABASE_URL is not set")
     import asyncpg
 
     conn = await asyncpg.connect(url)
     try:
-        # schema.sql ships in the Tank image. Apply it first so REVOKE has a
-        # schema to hit. Tank applies the same file again on startup.
-        if os.path.isfile(_SCHEMA):
-            with open(_SCHEMA, encoding="utf-8") as handle:
-                await conn.execute(handle.read())
         await apply_roles(conn, os.environ)
     finally:
         await conn.close()
@@ -47,7 +40,6 @@ def main() -> None:
     except Exception as exc:  # noqa: BLE001 — do not print the driver error; it can echo the URL
         sys.stderr.write(f"agent role provisioning failed: {type(exc).__name__}\n")
         sys.exit(1)
-    os.execvp("uvicorn", ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"])
 
 
 if __name__ == "__main__":

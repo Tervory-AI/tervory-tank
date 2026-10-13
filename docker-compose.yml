@@ -85,7 +85,6 @@ services:
       TANK_API_KEY: ${TANK_API_KEY}
       TERVORY_ADMIN_USER_IDS: ${TERVORY_ADMIN_USER_IDS:-}
       TANK_KEY_TEMPLATE: ${TANK_KEY_TEMPLATE:-}
-      AGENT_DB_PASSWORD_TEMPLATE: ${AGENT_DB_PASSWORD_TEMPLATE:-}
       TANK_REGION: ${TANK_REGION:-us-east}
       SEARXNG_URL: http://searxng:8080
       TIGER_URL: http://tiger:3000
@@ -95,16 +94,27 @@ services:
         condition: service_healthy
       litellm:
         condition: service_started
-    # Creates agent roles from AGENT_DB_PASSWORD_* before Tank listens. The script
-    # then execs uvicorn. The password is not logged.
-    command: ["python", "/opt/agentchassis/provision_agent_roles.py"]
-    volumes:
-      - ./agents/_chassis:/opt/agentchassis:ro
     networks:
       - default
       - tervory-gw-template
     expose:
       - "8000"
+
+  # One shot. Creates agent_<name> roles, then exits. Tank does not wait on it
+  # and does not mount this code. restart on-failure retries a failed run only.
+  agent-roles:
+    build:
+      context: ./agents
+      dockerfile: Dockerfile.roles
+    restart: "on-failure"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
+      AGENT_DB_PASSWORD_TEMPLATE: ${AGENT_DB_PASSWORD_TEMPLATE:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - default
 
   workspace:
     build:
