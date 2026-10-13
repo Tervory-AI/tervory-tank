@@ -1,0 +1,11 @@
+---
+description: Tervory house rules for every task in this repo
+alwaysApply: true
+---
+Read AGENTS.md at the repo root before changing anything. The short version:
+- Never push to main (it deploys to production). Branch `cursor/<task-id>-<slug>`, open a PR, stop.
+- No secrets in code. New env vars: name only, in .env.example.
+- Every Tank query is scoped by tenant_id. The Workspace reaches models only via Tank, server-side, through workspace/lib/tank.ts.
+- Schema changes additive and idempotent only.
+- Only edit the files your task brief (docs/cursor/<task>.md) allows.
+- Use the official logo files in workspace/public/brand/; never redraw the logo.
