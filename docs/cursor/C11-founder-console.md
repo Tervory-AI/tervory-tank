@@ -18,14 +18,16 @@
 - `GET /v1/admin/counters` → lifetime and 30-day: calls, model spend, outcomes, booked revenue, margin %, **independence %** (share of calls at rungs 2–4: owned model, code, cache), cost per outcome.
 - `GET /v1/admin/series?days=90&group=agent|task_type|tenant` → per day: calls by rung, spend, outcomes, booked revenue, margin, independence %.
 - `GET /v1/admin/graduations?days=90` → each promote/rollback with task type, from-model, to-model, saving %.
+- `GET /v1/admin/focus?days=30` → **the paid-work focus list**: every task type that still uses a paid model (rung 1), ranked by spend, with: paid model, calls, spend, share of all paid spend, cache-hit rate, whether a shadow candidate is set, its agreement score and sample size (from `tank.shadow` / the graduation view), and a status: `no candidate` / `testing` / `ready to promote` / `promoted`.
 - `GET /v1/admin/price_book` and `PUT /v1/admin/price_book` (founder edits prices; every change is a new row, never an update in place).
 
 ## The page (`/admin`)
 - **Counter strip** (big numbers): independence %, margin %, booked revenue (30 days and lifetime), model spend, cost per outcome. Each with its change vs the previous 30 days.
 - **Main graph:** daily independence % (line) over stacked calls by rung, with a marker on every graduation event (hover shows the task and saving). Range 30 / 90 / 365 days.
 - **Economics graph:** daily booked revenue vs model spend, margin shaded between them.
+- **Focus list (top of the page, under the counters):** "Where our paid spend goes" — the `/focus` rows as a ranked bar list (spend per task type and model), each with its status chip and a one-line next step ("set a shadow candidate", "keep testing: 40 of 200 samples", "ready to promote"). This is the to-do list for moving work down the ladder.
 - **Tables:** by agent and by task type — calls, independence %, spend, outcomes, cost per outcome, margin; sortable. Click a task type → its own graph and its graduation history.
 - **Price book** editor.
 - Light and dark, brand tokens (navy #001840, red #E80008 sparingly, JetBrains Mono for numbers).
 
-**Done when:** tests prove a non-admin gets 404 on every admin endpoint; the rollup is idempotent (running it twice changes nothing); independence % and margin are computed correctly on a fixture ledger; the Base backfill produces one outcome per done record; PR with screenshots using real data, then stop for Claude's review.
+**Done when:** the focus list ranks a fixture ledger correctly and shows the right status for a task with no candidate, one testing and one eligible; tests prove a non-admin gets 404 on every admin endpoint; the rollup is idempotent (running it twice changes nothing); independence % and margin are computed correctly on a fixture ledger; the Base backfill produces one outcome per done record; PR with screenshots using real data, then stop for Claude's review.
