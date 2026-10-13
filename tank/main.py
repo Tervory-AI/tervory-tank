@@ -289,16 +289,41 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
                                  tokens_in=0, tokens_out=0, cost_usd=0.0, latency_ms=0)
 
     started = time.perf_counter()
-    async with httpx.AsyncClient(timeout=120) as client:
-        r = await client.post(
-            f"{LITELLM_URL}/v1/chat/completions",
-            headers={"Authorization": f"Bearer {LITELLM_MASTER_KEY}"},
-            json={"model": model, "messages": messages, "max_tokens": max_tokens},
-        )
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            r = await client.post(
+                f"{LITELLM_URL}/v1/chat/completions",
+                headers={"Authorization": f"Bearer {LITELLM_MASTER_KEY}"},
+                json={"model": model, "messages": messages, "max_tokens": max_tokens},
+            )
+    except httpx.HTTPError as exc:
+        # The gateway never answered. Still a call on the books, so the failure rate is honest.
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        ledger_id = uuid.uuid4()
+        err = f"no answer: {type(exc).__name__}: {str(exc)[:200]}"
+        async with pool().acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO tank.ledger
+                  (id, tenant_id, region, agent, skill, task_type, rung, model, priority,
+                   tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, error)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,0,0,$10,false,'failed',$11,$12)
+                """,
+                ledger_id, req.tenant_id, req.region or DEFAULT_REGION, req.agent, req.skill,
+                req.task_type, policy["rung"], model, priority, latency_ms, task_id, err,
+            )
+        raise HTTPException(status_code=502, detail={"ledger_id": str(ledger_id), "upstream": err}) from exc
     latency_ms = int((time.perf_counter() - started) * 1000)
 
     outcome = "delivered" if r.status_code == 200 else "failed"
-    data: dict[str, Any] = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+    try:
+        data: dict[str, Any] = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+    except ValueError:
+        data = {}
+    error = None
+    if outcome == "failed":
+        msg = ((data.get("error") or {}).get("message") if isinstance(data.get("error"), dict) else data.get("error")) or r.text
+        error = f"{r.status_code}: {' '.join(str(msg).split())[:300]}"
     usage = data.get("usage") or {}
     tokens_in = int(usage.get("prompt_tokens") or 0)
     tokens_out = int(usage.get("completion_tokens") or 0)
@@ -314,12 +339,12 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
             """
             INSERT INTO tank.ledger
               (id, tenant_id, region, agent, skill, task_type, rung, model, priority,
-               tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,$14,$15)
+               tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, error)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,$14,$15,$16)
             """,
             ledger_id, req.tenant_id, req.region or DEFAULT_REGION, req.agent, req.skill,
             req.task_type, policy["rung"], model, priority, tokens_in, tokens_out, cost_usd,
-            latency_ms, outcome, task_id,
+            latency_ms, outcome, task_id, error,
         )
 
     if outcome == "failed":
@@ -1319,6 +1344,23 @@ async def evals_summary() -> list[dict[str, Any]]:
 
 
 # ---------- the client's ledger view ----------
+
+@app.get("/v1/ledger/failures", dependencies=[Depends(require_key)])
+async def ledger_failures(tenant_id: uuid.UUID, days: int = 30) -> list[dict[str, Any]]:
+    """Failed calls grouped by day, task and reason (reason is recorded from 13 Oct 2026; older rows show none)."""
+    async with pool().acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT date_trunc('day', ts)::date AS day, task_type, coalesce(skill,'') AS skill,
+                   coalesce(split_part(error, ':', 1), 'not recorded') AS reason,
+                   count(*) AS calls, round(avg(latency_ms)) AS avg_ms, min(error) AS example
+            FROM tank.ledger
+            WHERE tenant_id=$1 AND outcome='failed' AND ts > now() - make_interval(days => $2)
+            GROUP BY 1,2,3,4 ORDER BY 1 DESC, calls DESC
+            """, tenant_id, days,
+        )
+    return [dict(r) for r in rows]
+
 
 @app.get("/v1/ledger/summary", dependencies=[Depends(require_key)])
 async def ledger_summary(tenant_id: uuid.UUID, days: int = 30) -> dict[str, Any]:

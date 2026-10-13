@@ -121,6 +121,11 @@ export type LedgerSummary = {
   }[];
 };
 
+export type LedgerFailure = { day: string; task_type: string; skill: string; reason: string; calls: number; avg_ms: number | string | null; example: string | null };
+export function ledgerFailures(tenantId: string, days = 30): Promise<LedgerFailure[]> {
+  return tank<LedgerFailure[]>(`/v1/ledger/failures?tenant_id=${tenantId}&days=${days}`, { method: "GET" });
+}
+
 export function ledgerSummary(tenantId: string, days = 30): Promise<LedgerSummary> {
   return tank<LedgerSummary>(`/v1/ledger/summary?tenant_id=${tenantId}&days=${days}`, { method: "GET" });
 }
