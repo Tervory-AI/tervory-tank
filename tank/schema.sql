@@ -325,3 +325,9 @@ CREATE TABLE IF NOT EXISTS tank.shadow_pair (
     cand_cost        numeric(14,6),
     PRIMARY KEY (task_type, primary_model, candidate_model)
 );
+
+-- Founder console rollup reads the ledger by time (ts >= window start) across every tenant.
+CREATE INDEX IF NOT EXISTS ledger_ts ON tank.ledger (ts);
+
+-- Two prices for the same outcome and effective date: the one saved last wins.
+ALTER TABLE tank.price_book ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();

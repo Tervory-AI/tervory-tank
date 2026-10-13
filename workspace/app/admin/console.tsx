@@ -232,7 +232,7 @@ export function FounderConsole({
 
       <section className="section">
         <h2>Price book</h2>
-        <p className="hint">Saving adds a new row. Older prices stay, so past booked revenue does not change.</p>
+        <p className="hint">Saving adds a new row and older prices stay. A price counts for outcomes from its effective date, past days included, after the next hourly refresh.</p>
         <div className="price-grid">
           <PriceForm action={savePrice} />
           <div className="table-wrap">
@@ -464,6 +464,7 @@ function compare(a: Total[keyof Total], b: Total[keyof Total]): number {
 
 function PriceForm({ action }: { action: Save }) {
   const [state, formAction] = useActionState(action, null);
+  const today = new Date().toISOString().slice(0, 10);
   return (
     <form className="price-form" action={formAction}>
       <label>Outcome type
@@ -480,6 +481,9 @@ function PriceForm({ action }: { action: Save }) {
       </label>
       <label>Currency
         <input name="currency" defaultValue="USD" maxLength={3} />
+      </label>
+      <label>Effective from (UTC)
+        <input name="effective_from" type="date" defaultValue={today} min="2020-01-01" suppressHydrationWarning />
       </label>
       <label>Note
         <input name="note" maxLength={500} />

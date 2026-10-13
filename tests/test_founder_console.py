@@ -386,6 +386,8 @@ def test_schema_additions_are_idempotent():
     assert "ADD COLUMN IF NOT EXISTS min_shadow_samples" in sql
     assert "ADD COLUMN IF NOT EXISTS max_reject_rate" in sql
     assert "CREATE INDEX IF NOT EXISTS ledger_feedback ON tank.ledger (feedback)" in sql
+    assert "CREATE INDEX IF NOT EXISTS ledger_ts ON tank.ledger (ts);" in sql
+    assert "ALTER TABLE tank.price_book ADD COLUMN IF NOT EXISTS created_at" in sql
     assert "CREATE TABLE IF NOT EXISTS tank.agent_keys" in sql
     assert "DROP " not in sql.upper()
     assert "RENAME " not in sql.upper()
@@ -447,3 +449,234 @@ def test_founder_is_not_hidden():
     client = TestClient(app, raise_server_exceptions=False)
     res = client.get("/v1/admin/counters", headers={"x-tank-key": "test", "x-tervory-admin": "user_founder"})
     assert res.status_code != 404
+
+
+# ---------- C11b: past booked revenue, price effective date, rollup retry ----------
+
+import asyncio  # noqa: E402
+from contextlib import asynccontextmanager  # noqa: E402
+
+PAST = date(2026, 9, 1)
+PAST_TS = datetime(2026, 9, 1, 12, tzinfo=timezone.utc)
+
+
+def _past_outcome(ledger_ids: list | None = None, ts: datetime = PAST_TS) -> dict:
+    return {
+        "ts": ts, "tenant_id": T, "agent": "base", "outcome_type": "base.record_enriched",
+        "quantity": 1, "ledger_ids": ledger_ids or [],
+    }
+
+
+def _price(effective_from: str, unit: float, created_at: str | None = None) -> dict:
+    return {
+        "outcome_type": "base.record_enriched", "tenant_id": None, "unit_price": unit,
+        "effective_from": effective_from, "effective_to": None, "created_at": created_at,
+    }
+
+
+def test_backdated_price_gives_past_outcomes_booked_revenue():
+    """Outcomes on 1 Sep, no price until a price backdated to 1 Aug is saved on 13 Oct."""
+    ledger = [_ledger_day(PAST), _ledger_day(date(2026, 10, 12)), _ledger_day(TODAY)]
+    outcomes = [_past_outcome(), _past_outcome()]
+    first = admin.roll_forward({}, ledger, admin.aggregate_outcomes(outcomes, [], {}), set())
+    outcome_key = (PAST, T, "base", "base.record_enriched", 0, "")
+    assert first[outcome_key]["outcomes"] == 2
+    assert first[outcome_key]["booked"] == 0
+    # 1 Sep is far outside the open window (12 Oct onwards) on the next run.
+    assert admin.watermark_replace_from({key[0] for key in first}) == date(2026, 10, 12)
+    prices = [_price("2026-08-01T00:00:00+00:00", 0.05)]
+    second = admin.roll_forward(first, ledger, admin.aggregate_outcomes(outcomes, prices, {}), set())
+    assert second[outcome_key]["outcomes"] == 2
+    assert second[outcome_key]["booked"] == 0.1
+    assert admin.roll_forward(second, ledger, admin.aggregate_outcomes(outcomes, prices, {}), set()) == second
+
+
+def test_rebuild_leaves_past_proven_calls_alone():
+    """The route became proven later. 1 Sep keeps proven_calls 0 while its booked revenue is rebuilt."""
+    call_key = (PAST, T, "tiger", "reason.brief", 1, "haiku")
+    today_key = (TODAY, T, "tiger", "reason.brief", 1, "haiku")
+    existing = {
+        call_key: _stored(3, 0),
+        (date(2026, 10, 12), T, "tiger", "reason.brief", 1, "haiku"): _stored(1, 0),
+    }
+    ledger = [_ledger_day(TODAY), _ledger_day(TODAY)]
+    grains = {"call-1": {**_ledger_day(PAST), "id": "call-1"}}
+    outcomes = admin.aggregate_outcomes(
+        [_past_outcome(["call-1"])], [_price("2026-01-01T00:00:00+00:00", 2)], grains,
+    )
+    merged = admin.roll_forward(existing, ledger, outcomes, {("reason.brief", "haiku", 1)})
+    assert merged[call_key]["calls"] == 3
+    assert merged[call_key]["cost"] == 3
+    assert merged[call_key]["proven_calls"] == 0
+    assert merged[call_key]["booked"] == 2
+    assert merged[today_key]["proven_calls"] == 2
+
+
+def test_outcome_today_on_an_old_call_still_counts():
+    """An outcome recorded today whose first ledger call is from 1 Sep counts on 1 Sep."""
+    call_key = (PAST, T, "tiger", "reason.brief", 1, "haiku")
+    existing = {call_key: _stored(1, 0), (date(2026, 10, 12), T, "tiger", "reason.brief", 1, "haiku"): _stored(1, 0)}
+    grains = {"call-1": {**_ledger_day(PAST), "id": "call-1"}}
+    today_ts = datetime(2026, 10, 13, 9, tzinfo=timezone.utc)
+    outcomes = admin.aggregate_outcomes(
+        [_past_outcome(["call-1"], ts=today_ts)], [_price("2026-01-01T00:00:00+00:00", 3)], grains,
+    )
+    merged = admin.roll_forward(existing, [], outcomes, set())
+    assert merged[call_key]["outcomes"] == 1
+    assert merged[call_key]["booked"] == 3
+    assert "bucket.day >=" not in admin.OUTCOME_UPSERT_ALL_SQL
+    assert "$1" not in admin.OUTCOME_UPSERT_ALL_SQL
+    assert not hasattr(admin, "OUTCOME_UPSERT_SINCE_SQL")
+
+
+class _FakeConn:
+    def __init__(self, max_day: date | None) -> None:
+        self.max_day = max_day
+        self.executed: list[str] = []
+
+    @asynccontextmanager
+    async def transaction(self):
+        yield
+
+    async def execute(self, sql: str, *args) -> str:
+        self.executed.append(sql)
+        return ""
+
+    async def executemany(self, sql: str, rows) -> None:
+        self.executed.append(sql)
+
+    async def fetchval(self, sql: str, *args):
+        return self.max_day
+
+    async def fetch(self, sql: str, *args) -> list:
+        return []
+
+
+def _rollup_sql(max_day: date | None) -> list[str]:
+    conn = _FakeConn(max_day)
+    asyncio.run(admin.refresh_econ(conn, TODAY))
+    return conn.executed
+
+
+def test_rollup_rebuilds_outcomes_for_every_day_in_the_locked_transaction():
+    for max_day in (date(2026, 10, 12), None):
+        executed = _rollup_sql(max_day)
+        assert executed[0] == "SELECT pg_advisory_xact_lock($1)"
+        tail = executed[-3:]
+        assert tail == [admin.OUTCOME_ZERO_SQL, admin.OUTCOME_UPSERT_ALL_SQL, admin.DROP_EMPTY_SQL]
+        calls = admin.LEDGER_CALLS_SINCE_SQL if max_day else admin.LEDGER_CALLS_ALL_SQL
+        assert executed.index(calls) < executed.index(admin.OUTCOME_ZERO_SQL)
+    windowed = _rollup_sql(date(2026, 10, 12))
+    assert admin.REPLACE_WINDOW_SQL in windowed
+    assert "WHERE day" not in admin.OUTCOME_ZERO_SQL
+    assert "calls = 0" in admin.DROP_EMPTY_SQL and "outcomes = 0" in admin.DROP_EMPTY_SQL
+
+
+def test_same_day_prices_the_last_saved_wins():
+    early = _price("2026-10-01T00:00:00+00:00", 1, "2026-10-01T08:00:00+00:00")
+    late = _price("2026-10-01T00:00:00+00:00", 4, "2026-10-01T09:00:00+00:00")
+    for rows in ([early, late], [late, early]):
+        assert admin.unit_price(rows, "base.record_enriched", T, "2026-10-02T00:00:00+00:00") == 4
+    assert "p.created_at DESC" in admin.OUTCOME_UPSERT_ALL_SQL
+
+
+def test_price_start_validates_the_effective_date():
+    assert admin.price_start(None, TODAY) is None
+    assert admin.price_start("", TODAY) is None
+    assert admin.price_start("2026-08-01", TODAY) == datetime(2026, 8, 1, tzinfo=timezone.utc)
+    assert admin.price_start("2026-08-01T06:30:00Z", TODAY) == datetime(2026, 8, 1, 6, 30, tzinfo=timezone.utc)
+    assert admin.price_start("2026-08-01T06:30:00", TODAY) == datetime(2026, 8, 1, 6, 30, tzinfo=timezone.utc)
+    assert admin.price_start("2027-10-13", TODAY) == datetime(2027, 10, 13, tzinfo=timezone.utc)
+    for bad in ("yesterday", "2026-13-01", "2026-02-30", "01/08/2026", "1999-12-31", "2027-10-15", "0026-10-01"):
+        try:
+            admin.price_start(bad, TODAY)
+        except ValueError as exc:
+            assert str(exc).startswith("Effective from")
+        else:
+            raise AssertionError(bad)
+
+
+class _FakePool:
+    def __init__(self) -> None:
+        self.args: tuple | None = None
+
+    @asynccontextmanager
+    async def acquire(self):
+        pool = self
+
+        class Conn:
+            async def fetchrow(self, sql: str, *args):
+                pool.args = args
+                return {
+                    "id": "11111111-1111-1111-1111-111111111111", "tenant_id": None, "outcome_type": args[1],
+                    "unit_price": args[2], "currency": args[3],
+                    "effective_from": args[4] or datetime(2026, 10, 13, tzinfo=timezone.utc),
+                    "effective_to": None, "note": args[5],
+                }
+
+        yield Conn()
+
+
+def test_put_price_book_checks_effective_from(monkeypatch):
+    fake = _FakePool()
+    monkeypatch.setattr(admin, "_pool", lambda: fake)
+    monkeypatch.setattr(admin, "utc_today", lambda: TODAY)
+
+    def put(**extra):
+        body = admin.PriceBody(outcome_type="base.record_enriched", unit_price=0.05, **extra)
+        return asyncio.run(admin.put_price_book(body))
+
+    saved = put(effective_from="2026-08-01")
+    assert fake.args[4] == datetime(2026, 8, 1, tzinfo=timezone.utc)
+    assert saved["effective_from"] == "2026-08-01T00:00:00+00:00"
+    put()
+    assert fake.args[4] is None
+    for bad in ("not a date", "1990-01-01", "2030-01-01"):
+        fake.args = None
+        try:
+            put(effective_from=bad)
+        except admin.HTTPException as exc:
+            assert exc.status_code == 400
+            assert "Effective from" in str(exc.detail)
+        else:
+            raise AssertionError(bad)
+        assert fake.args is None
+
+
+def test_rollup_retries_in_five_minutes_and_logs_a_safe_message(monkeypatch, caplog):
+    import logging
+
+    monkeypatch.setenv("TANK_API_KEY", "test-secret-key")
+    waits: list[float] = []
+
+    def boom():
+        raise RuntimeError("could not connect to postgresql://tank:hunter22@db:5432/tank with test-secret-key")
+
+    async def fake_sleep(seconds: float) -> None:
+        waits.append(seconds)
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(admin, "_pool", boom)
+    monkeypatch.setattr(admin.asyncio, "sleep", fake_sleep)
+    with caplog.at_level(logging.WARNING, logger="tank.admin"):
+        try:
+            asyncio.run(admin._rollup_loop())
+        except asyncio.CancelledError:
+            pass
+    assert waits == [admin.ROLLUP_RETRY_SECONDS] == [300]
+    text = caplog.text
+    assert "RuntimeError" in text and "could not connect" in text
+    assert "hunter22" not in text and "test-secret-key" not in text
+
+
+def test_safe_error_never_shows_query_detail():
+    class FakePgError(Exception):
+        sqlstate = "23505"
+        message = "duplicate key value violates unique constraint \"econ_daily_pkey\""
+        detail = "Key (day)=(2026-09-01) already exists."
+        query = "INSERT INTO tank.econ_daily VALUES ($1)"
+
+    shown = admin.safe_error(FakePgError("ignored"))
+    assert shown.startswith("FakePgError [23505]: duplicate key value")
+    assert "Key (day)" not in shown and "INSERT" not in shown
+    assert len(admin.safe_error(RuntimeError("x" * 1000))) < 340
