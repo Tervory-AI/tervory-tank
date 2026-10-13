@@ -24,6 +24,7 @@ Spec: Build Pack v2 (Claude Doc) and `README.md`.
 6. **Stay in your lane.** Each task brief lists the files you may change. Do not touch `run_route`, the queue worker, Skala's lifecycle or the cache in `tank/main.py` unless the brief says so. If the task needs it, say so in the PR instead.
 7. **Skills are versioned packages.** Never edit an approved skill version in place; copy to a new version folder (`1.0.0` → `1.1.0`), update its `CHANGELOG.md`, add eval cases.
 8. **Nothing installed on the founder's laptop.** Work as a cloud/background agent. The founder's laptop is a window only.
+9. **Core skills know no industry.** `base.*`, Tiger and Tank learn general skills (find a site, read a page, mine prices, track a series). Industry knowledge (vocabulary, field mappings, targets, scoring) lives only in an engine (`ffl.*` today). A new industry is a new engine plugged into the same core skills, never a fork of them. If a core skill needs industry words, the engine passes them in.
 
 ## Conventions
 - Plain English in the UI. No jargon, no hype words.
