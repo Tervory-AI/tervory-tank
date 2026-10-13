@@ -5,6 +5,7 @@
 **Files you may change:** `agents/market_lab/` (new), `tank/skills/market.*` (new skills, 1.0.0 with evals), `docker-compose.yml`, `.env.example` (names only).
 
 ## Feeds (core skills)
+The feed adapters and their history are built by C12 (`agents/market_lab/feeds/`); C9 imports that package and wraps it as skills. Do not rebuild adapters C12 already has.
 - `market.series_fetch@1.0.0`: fetch a time series from a source adapter. Adapters now: FRED (commodities, rates; env `FRED_API_KEY`, free), CSV/XLSX upload, and "ATF monthly FFL lists" (count licences per state/type per month from the monthly list files). Output `{series_id, points:[{date, value}], source, fetched_at}`.
 - `market.surge_detect@1.0.0` (pure code): flags moves against the series' own history (z-score over a rolling window, plus % change), returns events with size and date.
 - Tables in `agent_market_lab`: `series (id, tenant_id, source, ref, unit, engine)`, `points (series_id, date, value, fetched_at)`, `events (series_id, date, kind, size)`.
