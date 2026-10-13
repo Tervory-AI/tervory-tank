@@ -1575,3 +1575,5 @@ async def ledger_summary(tenant_id: uuid.UUID, days: int = 30) -> dict[str, Any]
         "cost_per_accepted_usd": round(cost / accepted, 6) if accepted else None,
         "by_model": [dict(r) for r in by_model],
     }
+
+app.include_router(__import__("admin").router)

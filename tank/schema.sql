@@ -230,3 +230,95 @@ CREATE TABLE IF NOT EXISTS tank.agent_keys (
     key_hash        text NOT NULL,
     created_at      timestamptz NOT NULL DEFAULT now()
 );
+
+-- Founder console. Booked revenue is outcomes × price book until billing exists.
+-- A null tenant_id on the price book is the default for every tenant.
+CREATE TABLE IF NOT EXISTS tank.price_book (
+    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id       uuid,
+    outcome_type    text NOT NULL,
+    unit_price      numeric(12,4) NOT NULL,
+    currency        text NOT NULL DEFAULT 'USD',
+    effective_from  timestamptz NOT NULL DEFAULT now(),
+    effective_to    timestamptz,
+    note            text
+);
+CREATE INDEX IF NOT EXISTS price_book_type_from ON tank.price_book (outcome_type, effective_from DESC);
+
+-- One row per billable outcome. ref is idempotent for backfills (one base.record_enriched per done record).
+CREATE TABLE IF NOT EXISTS tank.outcomes (
+    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    ts              timestamptz NOT NULL DEFAULT now(),
+    tenant_id       uuid NOT NULL,
+    agent           text NOT NULL,
+    outcome_type    text NOT NULL,
+    quantity        numeric(12,4) NOT NULL DEFAULT 1,
+    ref             text,
+    ledger_ids      uuid[] NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS outcomes_tenant_ts ON tank.outcomes (tenant_id, ts DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS outcomes_type_ref ON tank.outcomes (outcome_type, ref) WHERE ref IS NOT NULL;
+
+-- Nightly rollup. History stays here after the ledger is pruned.
+-- model is stored so a route can lose proven status later without the original calls.
+CREATE TABLE IF NOT EXISTS tank.econ_daily (
+    day             date NOT NULL,
+    tenant_id       uuid NOT NULL,
+    agent           text NOT NULL,
+    task_type       text NOT NULL,
+    rung            smallint NOT NULL,
+    model           text NOT NULL DEFAULT '',
+    calls           integer NOT NULL DEFAULT 0,
+    cost_usd        numeric(14,6) NOT NULL DEFAULT 0,
+    outcomes        numeric(14,4) NOT NULL DEFAULT 0,
+    booked_usd      numeric(14,4) NOT NULL DEFAULT 0,
+    cache_hits      integer NOT NULL DEFAULT 0,
+    proven_calls    integer NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, tenant_id, agent, task_type, rung, model)
+);
+
+-- Evidence that a route is proven for a task type. Recomputed from evals, shadow runs and client feedback.
+CREATE TABLE IF NOT EXISTS tank.route_evidence (
+    task_type           text NOT NULL,
+    model               text NOT NULL,
+    rung                smallint NOT NULL,
+    eval_score          numeric(5,4),
+    shadow_agreement    numeric(5,4),
+    shadow_n            integer NOT NULL DEFAULT 0,
+    acceptance_rate     numeric(5,4),
+    judged              integer NOT NULL DEFAULT 0,
+    rejected            integer NOT NULL DEFAULT 0,
+    proven              boolean NOT NULL DEFAULT false,
+    proven_at           timestamptz,
+    lost_at             timestamptz,
+    flag                text,
+    updated_at          timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (task_type, model, rung)
+);
+
+-- Policy bars for "proven". Defaults match the graduation view (30 samples, agreement at eval_threshold).
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS min_shadow_samples integer NOT NULL DEFAULT 30;
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS max_reject_rate numeric(5,4) NOT NULL DEFAULT 0.05;
+
+-- The hourly rollup counts recent client verdicts. This index keeps that off a full ledger scan.
+CREATE INDEX IF NOT EXISTS ledger_feedback ON tank.ledger (feedback);
+
+-- Serving-route fields the focus list reads. The rollup writes them; the page does not recompute them.
+ALTER TABLE tank.route_evidence ADD COLUMN IF NOT EXISTS candidate_model text;
+ALTER TABLE tank.route_evidence ADD COLUMN IF NOT EXISTS candidate_shadow_n integer NOT NULL DEFAULT 0;
+ALTER TABLE tank.route_evidence ADD COLUMN IF NOT EXISTS candidate_agreement numeric(5,4);
+ALTER TABLE tank.route_evidence ADD COLUMN IF NOT EXISTS min_shadow_samples integer NOT NULL DEFAULT 30;
+ALTER TABLE tank.route_evidence ADD COLUMN IF NOT EXISTS eval_threshold numeric(5,4);
+ALTER TABLE tank.route_evidence ADD COLUMN IF NOT EXISTS is_serving boolean NOT NULL DEFAULT false;
+
+-- Shadow pair costs, replaced by the hourly rollup. Graduations read this instead of scanning tank.shadow.
+CREATE TABLE IF NOT EXISTS tank.shadow_pair (
+    task_type        text NOT NULL,
+    primary_model    text NOT NULL,
+    candidate_model  text NOT NULL,
+    n                integer NOT NULL DEFAULT 0,
+    agreement        numeric(8,6),
+    prim_cost        numeric(14,6),
+    cand_cost        numeric(14,6),
+    PRIMARY KEY (task_type, primary_model, candidate_model)
+);
