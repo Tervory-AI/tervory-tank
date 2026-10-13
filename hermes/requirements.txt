@@ -1,0 +1,6 @@
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+pydantic==2.10.4
+qdrant-client==1.14.3
+# Local embeddings. No provider key. The model is downloaded when the image is built.
+fastembed==0.6.1
