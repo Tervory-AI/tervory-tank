@@ -22,22 +22,26 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument("--source", help="one source id")
     run_parser.add_argument("--backfill", action="store_true", help="read every saved vintage")
     run_parser.add_argument("--fixtures", help="directory of saved responses")
+    run_parser.add_argument("--live", action="store_true", help="fetch a real source; keys come from the environment")
     run_parser.add_argument("--db", help="sqlite path or sqlite:/// URL")
-    run_parser.add_argument("--engine", default="ffl")
+    run_parser.add_argument("--engine", required=True, help="engine name (required)")
 
-    status_parser = sub.add_parser("status", help="licence, last run, and row counts")
+    status_parser = sub.add_parser("status", help="licence, last success, rows, and error")
     status_parser.add_argument("--db")
-    status_parser.add_argument("--engine", default="ffl")
+    status_parser.add_argument("--engine", required=True, help="engine name (required)")
 
     args = parser.parse_args(argv)
     db = resolve_db(getattr(args, "db", None))
     if args.command == "run":
+        if args.live and args.fixtures:
+            raise SystemExit("pass either --live or --fixtures, not both")
         rows = run(
             db,
             engine=args.engine,
             source=args.source,
             backfill=args.backfill,
             fixtures=args.fixtures,
+            live=args.live,
         )
     else:
         rows = status(db, engine=args.engine)

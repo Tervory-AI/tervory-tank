@@ -8,6 +8,11 @@ from __future__ import annotations
 CHECKED = "2026-10-13"
 
 LISTING_URL = "https://www.atf.gov/firearms/listing-federal-firearms-licensees"
+LISTING_MONTH_PAGE = (
+    "https://www.atf.gov/firearms/listing-federal-firearms-licensees/complete"
+    "?field_ffl_date_value[value][year]={year}&ffl_date_month[value][month]={month}"
+)
+LISTING_START_YEAR = 2021
 CHECK_URL = "https://www.fbi.gov/file-repository/cjis/nics_firearm_checks_-_month_year_by_state.pdf"
 
 LISTING_LICENCE = (

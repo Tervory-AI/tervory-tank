@@ -1,0 +1,4 @@
+# Live month-by-state PDF tables. CI installs tank/requirements-dev.txt only.
+# This lane cannot edit tank/ or the workflow, so install this file too
+# before the PDF test: pip install -r agents/market_lab/feeds/requirements.txt
+pdfplumber==0.11.7
