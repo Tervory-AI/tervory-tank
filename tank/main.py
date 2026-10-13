@@ -657,6 +657,17 @@ async def approved_version(skill_id: str) -> str | None:
         )
 
 
+def _vkey(v: str) -> tuple[int, ...]:
+    return tuple(int(x) if x.isdigit() else 0 for x in v.split("."))
+
+
+async def staging_version(skill_id: str) -> str | None:
+    async with pool().acquire() as conn:
+        rows = await conn.fetch("SELECT version FROM tank.skills WHERE id=$1 AND state='staging' AND present", skill_id)
+    vs = [r["version"] for r in rows]
+    return max(vs, key=_vkey) if vs else None
+
+
 async def _model_for_skill(**kw: Any) -> dict[str, Any]:
     """What a skill's ctx.model() calls: the normal route, tagged with the skill."""
     req = RouteRequest(
@@ -807,11 +818,18 @@ async def _resolve_versions(preview: bool, engine: str | None = None) -> dict[st
     out: dict[str, skala.SkillPackage] = {}
     for sid in ids:
         ver = await approved_version(sid)
+        if preview:
+            # Owner testing: a newer version that has passed its own evals (staging) beats the
+            # approved one, so a fix can be measured on real data before it is signed off.
+            # Client runs (preview off) never see it.
+            staged = await staging_version(sid)
+            if staged and (ver is None or _vkey(staged) > _vkey(ver)):
+                ver = staged
         if ver is None:
             if not preview:
                 raise HTTPException(status_code=409, detail=f"{sid} has no approved version; approve it in Skills or run with preview")
             # preview: newest package on disk
-            cands = sorted((v for (i, v) in _packages if i == sid), reverse=True)
+            cands = sorted((v for (i, v) in _packages if i == sid), key=_vkey, reverse=True)
             if not cands:
                 raise HTTPException(status_code=404, detail=f"no package for {sid}")
             ver = cands[0]
