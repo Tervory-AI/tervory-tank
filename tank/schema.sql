@@ -225,6 +225,9 @@ DO UPDATE SET max_tokens_out = GREATEST(tank.policy.max_tokens_out, EXCLUDED.max
 -- (the cap only ever goes up from the repo; an operator's higher setting is kept)
 
 -- Per-agent Tank keys. The raw key stays in TANK_KEY_<AGENT>. This table stores SHA-256 hex only.
+-- Database roles are separate from this file. The agent-roles service creates login
+-- role agent_<name> from AGENT_DB_PASSWORD_<AGENT>, with USAGE and CREATE on schema
+-- agent_<name> only. The password is never stored here. See agents/_chassis/chassis/roles.py.
 CREATE TABLE IF NOT EXISTS tank.agent_keys (
     agent           text PRIMARY KEY,
     key_hash        text NOT NULL,

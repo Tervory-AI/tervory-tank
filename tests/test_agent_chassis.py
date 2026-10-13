@@ -501,24 +501,65 @@ def test_handler_timeout_cancels_a_stuck_job():
 
 
 def test_agent_boxes_do_not_share_a_network():
+    """The box is its own compose project. Only Tank and Postgres join its gateway."""
     compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
     services = compose["services"]
-    template = services["agent-template"]
-    assert template["networks"] == ["net_template"]
-    assert "health" in str(template.get("healthcheck", {}).get("test", ""))
-    assert template["mem_limit"] == "512m"
-    assert template["cpus"] in (0.5, "0.5")
-    assert "default" not in template["networks"]
-    for name in ("tank", "tiger", "postgres"):
-        assert "net_template" in services[name]["networks"]
+    assert "agent-template" not in services
+    networks = compose["networks"]
+    assert "net_template" not in networks
+    gateway = networks["tervory-gw-template"]
+    assert gateway["external"] is True
+    assert gateway["name"] == "tervory-gw-template"
+    for name in ("tank", "postgres"):
+        assert "tervory-gw-template" in services[name]["networks"]
         assert "default" in services[name]["networks"]
-    assert "net_template" not in (services["workspace"].get("networks") or [])
-    assert "net_template" not in (services["litellm"].get("networks") or [])
-    owners: dict[str, str] = {}
-    for name, service in services.items():
-        if not name.startswith("agent-"):
-            continue
-        for net in service.get("networks") or []:
-            assert net not in owners, f"{name} shares {net} with {owners[net]}"
-            owners[net] = name
-    assert owners["net_template"] == "agent-template"
+    for name in ("tiger", "workspace", "litellm", "redis", "qdrant", "searxng"):
+        assert "tervory-gw-template" not in (services[name].get("networks") or [])
+    tank = services["tank"]
+    assert "command" not in tank
+    assert "volumes" not in tank
+    assert "AGENT_DB_PASSWORD_TEMPLATE" not in tank["environment"]
+    assert "agent-roles" not in (tank.get("depends_on") or {})
+    roles = services["agent-roles"]
+    assert roles["build"]["context"] == "./agents"
+    assert roles["build"]["dockerfile"] == "Dockerfile.roles"
+    assert roles["restart"] == "on-failure"
+    assert roles["networks"] == ["default"]
+    assert "tervory-gw-template" not in roles["networks"]
+    assert roles["depends_on"]["postgres"]["condition"] == "service_healthy"
+    assert "AGENT_DB_PASSWORD_TEMPLATE" in roles["environment"]
+    assert "POSTGRES_PASSWORD" in roles["environment"]["DATABASE_URL"]
+    image = (ROOT / "agents" / "Dockerfile.roles").read_text(encoding="utf-8")
+    assert "asyncpg==0.30.0" in image
+    assert "provision_agent_roles.py" in image
+    provision = (ROOT / "agents" / "_chassis" / "provision_agent_roles.py").read_text(encoding="utf-8")
+    assert "uvicorn" not in provision
+    assert "execvp" not in provision
+
+    box_file = ROOT / "agents" / "_template" / "docker-compose.yml"
+    template = yaml.safe_load(box_file.read_text(encoding="utf-8"))
+    box = template["services"]["agent-template"]
+    assert template["networks"]["gw"]["external"] is True
+    assert template["networks"]["gw"]["name"] == "tervory-gw-template"
+    assert box["networks"] == ["gw"]
+    assert box["mem_limit"] == "512m"
+    assert box["cpus"] in (0.5, "0.5")
+    assert "health" in str(box["healthcheck"]["test"])
+    url = box["environment"]["DATABASE_URL"]
+    assert url.startswith("postgresql://agent_template:")
+    assert "POSTGRES_PASSWORD" not in box["environment"]
+    assert "POSTGRES_USER" not in box["environment"]
+
+    script = ROOT / "agents" / "check_isolation.sh"
+    text = script.read_text(encoding="utf-8")
+    assert text.startswith("#!")
+    assert os.access(script, os.X_OK)
+    for host in ("tank", "postgres", "workspace", "redis", "qdrant", "litellm", "searxng", "tiger"):
+        assert host in text
+    assert "PASS" in text and "FAIL" in text
+    assert ".State.Health.Status" in text
+    assert "ping job reaches done" in text
+    assert "NetworkSettings.Networks" in text
+    assert "docker network inspect" in text
+    assert "tervory-gw" in text
+    assert "source " not in text
