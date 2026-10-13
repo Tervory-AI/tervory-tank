@@ -18,7 +18,7 @@ from agents.zenas.pool.model import (
     SourceSpec,
     VersionHead,
 )
-from agents.zenas.pool.textutil import applies, citation_key, plan_version
+from agents.zenas.pool.textutil import VersionPlan, applies, citation_key, plan_version, version_id_for
 
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
@@ -33,8 +33,8 @@ WHERE d.jurisdiction = $1
         ($3::date IS NULL AND d.effective_to IS NULL)
         OR (
             $3::date IS NOT NULL
-            AND d.effective_from IS NOT NULL
-            AND d.effective_from <= $3::date
+            AND (d.effective_from IS NOT NULL OR d.known_from IS NOT NULL)
+            AND COALESCE(d.effective_from, d.known_from) <= $3::date
             AND (d.effective_to IS NULL OR d.effective_to > $3::date)
         )
   )
@@ -54,8 +54,8 @@ WHERE jurisdiction = $1
         ($3::date IS NULL AND effective_to IS NULL)
         OR (
             $3::date IS NOT NULL
-            AND effective_from IS NOT NULL
-            AND effective_from <= $3::date
+            AND (effective_from IS NOT NULL OR known_from IS NOT NULL)
+            AND COALESCE(effective_from, known_from) <= $3::date
             AND (effective_to IS NULL OR effective_to > $3::date)
         )
   )
@@ -81,13 +81,16 @@ WHERE jurisdiction = $1
             ($5::date IS NULL AND effective_to IS NULL)
             OR (
                 $5::date IS NOT NULL
-                AND effective_from IS NOT NULL
-                AND effective_from <= $5::date
+                AND (effective_from IS NOT NULL OR known_from IS NOT NULL)
+                AND COALESCE(effective_from, known_from) <= $5::date
                 AND (effective_to IS NULL OR effective_to > $5::date)
             )
         )
   )
-ORDER BY ordinal
+ORDER BY ts_rank(
+    to_tsvector('english', coalesce(heading, '') || ' ' || coalesce(text, '')),
+    plainto_tsquery('english', $3)
+) DESC, ordinal
 LIMIT $6
 """
 
@@ -223,19 +226,33 @@ class MemoryStore:
     async def upsert_version(self, doc: LegalDocument, chunks: list[Chunk], *, on: date) -> bool:
         source = _require_source(self.sources.get(doc.source_id), doc)
         del source
-        existing = [
-            VersionHead(item.version_id, item.content_hash, item.effective_from, item.effective_to)
+        if doc.known_from is None:
+            doc.known_from = on
+        same = [
+            item
             for item in self.docs.values()
             if item.id == doc.id and item.jurisdiction == doc.jurisdiction
+        ]
+        existing = [
+            VersionHead(
+                item.version_id,
+                item.content_hash,
+                item.effective_from,
+                item.effective_to,
+                item.known_from,
+            )
+            for item in same
         ]
         plan = plan_version(
             existing,
             content_hash=doc.content_hash,
             effective_from=doc.effective_from,
             on=on,
+            known_from=doc.known_from,
         )
         if plan.action == "skip":
             return False
+        _bind_version(doc, chunks, plan, {item.version_id for item in self.docs.values()})
         for version_id in plan.close_ids:
             old = self.docs[version_id]
             old.effective_to = plan.close_on
@@ -276,7 +293,7 @@ class MemoryStore:
             return False
         if kind and doc.kind != kind:
             return False
-        return applies(doc.effective_from, doc.effective_to, as_at)
+        return applies(doc.effective_from, doc.effective_to, as_at, doc.known_from)
 
     async def find_by_citation(
         self,
@@ -316,18 +333,19 @@ class MemoryStore:
         tokens = [tok for tok in query.lower().split() if len(tok) > 1]
         if not tokens:
             return []
-        found: list[Chunk] = []
-        for chunk in sorted(self.chunks.values(), key=lambda item: item.ordinal):
+        scored: list[tuple[int, Chunk]] = []
+        for chunk in self.chunks.values():
             if not self._open_chunk_ok(
                 chunk, jurisdiction=jurisdiction, as_at=as_at, level=level, kind=kind
             ):
                 continue
             hay = f"{chunk.heading} {chunk.text} {chunk.citation}".lower()
-            if all(tok in hay for tok in tokens):
-                found.append(chunk)
-            if len(found) >= limit:
-                break
-        return found
+            if not all(tok in hay for tok in tokens):
+                continue
+            score = sum(hay.count(tok) for tok in tokens)
+            scored.append((score, chunk))
+        scored.sort(key=lambda item: (-item[0], item[1].ordinal))
+        return [chunk for _, chunk in scored[:limit]]
 
     async def get_chunks(self, chunk_ids: list[str], *, jurisdiction: str) -> list[Chunk]:
         out: list[Chunk] = []
@@ -412,88 +430,104 @@ class PostgresStore:
     async def upsert_version(self, doc: LegalDocument, chunks: list[Chunk], *, on: date) -> bool:
         source = await self.get_source(doc.source_id)
         _require_source(source, doc)
-        rows = await self._conn.fetch(
-            """
-            SELECT version_id, content_hash, effective_from, effective_to
-            FROM zenas_pool.documents
-            WHERE document_id = $1 AND jurisdiction = $2
-            """,
-            doc.id,
-            doc.jurisdiction,
-        )
-        existing = [
-            VersionHead(r["version_id"], r["content_hash"], r["effective_from"], r["effective_to"])
-            for r in rows
-        ]
-        plan = plan_version(
-            existing,
-            content_hash=doc.content_hash,
-            effective_from=doc.effective_from,
-            on=on,
-        )
-        if plan.action == "skip":
-            return False
-        if plan.close_ids:
-            await self._conn.execute(
-                """
-                UPDATE zenas_pool.documents
-                SET effective_to = $1, status = 'superseded'
-                WHERE jurisdiction = $2 AND version_id = ANY($3::text[])
-                """,
-                plan.close_on,
-                doc.jurisdiction,
-                list(plan.close_ids),
-            )
+        if doc.known_from is None:
+            doc.known_from = on
         import json
 
-        await self._conn.execute(
-            """
-            INSERT INTO zenas_pool.documents (
-                version_id, document_id, source_id, jurisdiction, level, body, kind,
-                citation, citation_key, title, doc_date, effective_from, effective_to,
-                status, url, licence, text, content_hash, sections
-            ) VALUES (
-                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19::jsonb
+        async with self._conn.transaction():
+            rows = await self._conn.fetch(
+                """
+                SELECT version_id, content_hash, effective_from, effective_to, known_from
+                FROM zenas_pool.documents
+                WHERE document_id = $1 AND jurisdiction = $2
+                """,
+                doc.id,
+                doc.jurisdiction,
             )
-            """,
-            doc.version_id,
-            doc.id,
-            doc.source_id,
-            doc.jurisdiction,
-            doc.level,
-            doc.body,
-            doc.kind,
-            doc.citation,
-            citation_key(doc.citation),
-            doc.title,
-            doc.date,
-            doc.effective_from,
-            doc.effective_to,
-            doc.status,
-            doc.url,
-            doc.licence,
-            doc.text,
-            doc.content_hash,
-            json.dumps([section.to_dict() for section in doc.sections]),
-        )
-        for chunk in chunks:
+            existing = [
+                VersionHead(
+                    r["version_id"],
+                    r["content_hash"],
+                    r["effective_from"],
+                    r["effective_to"],
+                    r["known_from"],
+                )
+                for r in rows
+            ]
+            plan = plan_version(
+                existing,
+                content_hash=doc.content_hash,
+                effective_from=doc.effective_from,
+                on=on,
+                known_from=doc.known_from,
+            )
+            if plan.action == "skip":
+                return False
+            _bind_version(doc, chunks, plan, {row.version_id for row in existing})
+            if plan.close_ids:
+                await self._conn.execute(
+                    """
+                    UPDATE zenas_pool.documents
+                    SET effective_to = $1, status = 'superseded'
+                    WHERE jurisdiction = $2 AND version_id = ANY($3::text[])
+                    """,
+                    plan.close_on,
+                    doc.jurisdiction,
+                    list(plan.close_ids),
+                )
             await self._conn.execute(
+                """
+                INSERT INTO zenas_pool.documents (
+                    version_id, document_id, source_id, jurisdiction, level, body, kind,
+                    citation, citation_key, title, doc_date, effective_from, effective_to,
+                    known_from, status, url, licence, text, content_hash, sections
+                ) VALUES (
+                    $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb
+                )
+                """,
+                doc.version_id,
+                doc.id,
+                doc.source_id,
+                doc.jurisdiction,
+                doc.level,
+                doc.body,
+                doc.kind,
+                doc.citation,
+                citation_key(doc.citation),
+                doc.title,
+                doc.date,
+                doc.effective_from,
+                doc.effective_to,
+                doc.known_from,
+                doc.status,
+                doc.url,
+                doc.licence,
+                doc.text,
+                doc.content_hash,
+                json.dumps([section.to_dict() for section in doc.sections]),
+            )
+            await self._conn.executemany(
                 """
                 INSERT INTO zenas_pool.chunks (
                     chunk_id, version_id, document_id, jurisdiction, path, heading,
                     text, citation, citation_key, ordinal
                 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
                 """,
-                chunk.chunk_id,
-                chunk.version_id,
-                chunk.document_id,
-                chunk.jurisdiction,
-                chunk.path,
-                chunk.heading,
-                chunk.text,
-                chunk.citation,
-                chunk.citation_key,
-                chunk.ordinal,
+                [
+                    (
+                        chunk.chunk_id,
+                        chunk.version_id,
+                        chunk.document_id,
+                        chunk.jurisdiction,
+                        chunk.path,
+                        chunk.heading,
+                        chunk.text,
+                        chunk.citation,
+                        chunk.citation_key,
+                        chunk.ordinal,
+                    )
+                    for chunk in chunks
+                ],
             )
         return True
 
@@ -664,6 +698,33 @@ def _source_from_row(row) -> SourceSpec:
         notes=row["notes"],
         adapter="",
     )
+
+
+def _bind_version(
+    doc: LegalDocument,
+    chunks: list[Chunk],
+    plan: VersionPlan,
+    taken: set[str],
+) -> None:
+    """Apply a born-closed end date, and keep the version id unique."""
+    if plan.effective_to is not None:
+        doc.effective_to = plan.effective_to
+        if doc.status == "in_force":
+            doc.status = "superseded"
+    version_id = doc.version_id or version_id_for(
+        doc.id, doc.content_hash, doc.effective_from, doc.known_from
+    )
+    if version_id in taken:
+        base = version_id
+        suffix = 2
+        while f"{base}:{suffix}" in taken:
+            suffix += 1
+        version_id = f"{base}:{suffix}"
+    if version_id != doc.version_id:
+        doc.version_id = version_id
+        for chunk in chunks:
+            chunk.version_id = version_id
+            chunk.chunk_id = f"{version_id}:{chunk.ordinal}"
 
 
 def utcnow() -> datetime:

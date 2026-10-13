@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS zenas_pool.sources (
     recorded_at      timestamptz NOT NULL DEFAULT now()
 );
 
--- One row per version of an instrument. Same text is not inserted twice.
+-- One row per version of an instrument. The open wording is not inserted twice.
+-- The same wording may return later (A, then B, then A). That is a new row.
 CREATE TABLE IF NOT EXISTS zenas_pool.documents (
     version_id       text PRIMARY KEY,
     document_id      text NOT NULL,
@@ -33,8 +34,9 @@ CREATE TABLE IF NOT EXISTS zenas_pool.documents (
     citation_key     text NOT NULL,
     title            text NOT NULL,
     doc_date         date,
-    effective_from   date,
+    effective_from   date,                   -- official start, when the source states one
     effective_to     date,
+    known_from       date,                   -- first seen. Floor for as-at when effective_from is unknown.
     status           text NOT NULL,
     url              text NOT NULL DEFAULT '',
     licence          text NOT NULL,
@@ -45,7 +47,7 @@ CREATE TABLE IF NOT EXISTS zenas_pool.documents (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS documents_hash
-    ON zenas_pool.documents (document_id, content_hash);
+    ON zenas_pool.documents (document_id, content_hash, effective_from, known_from);
 
 CREATE INDEX IF NOT EXISTS documents_citation
     ON zenas_pool.documents (jurisdiction, citation_key);

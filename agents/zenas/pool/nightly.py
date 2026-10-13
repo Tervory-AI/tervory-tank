@@ -73,63 +73,109 @@ async def run_nightly(
     getter = http_get or urllib_get
 
     for source in sources_for_region(region):
-        reason = refusal_reason(source)
-        if reason:
-            await ingest_snapshot(store, source, [], on=day)
+        try:
+            await _update_source(
+                store,
+                source,
+                snapshots=snapshots,
+                on=day,
+                when=when,
+                live=live,
+                http_get=getter,
+                embedder=embedder,
+                index=index,
+            )
+        except Exception as exc:
+            await _record_source_error(store, source, exc, when)
+    return await pool_status(store, region=region)
+
+
+async def _update_source(
+    store: Store,
+    source,
+    *,
+    snapshots: dict[str, list[bytes]] | None,
+    on: date,
+    when: datetime,
+    live: bool,
+    http_get,
+    embedder: Embedder,
+    index: VectorIndex,
+) -> None:
+    reason = refusal_reason(source)
+    if reason:
+        await ingest_snapshot(store, source, [], on=on)
+        await store.record_run(
+            source.source_id,
+            status="skipped",
+            detail=reason,
+            documents=0,
+            when=when,
+        )
+        return
+    blobs: list[bytes] | None
+    if snapshots is not None:
+        blobs = list(snapshots.get(source.source_id, []))
+    elif live:
+        try:
+            blobs = await get_adapter(source).fetch(http_get)
+        except (FetchNotConfigured, LicenceError) as exc:
+            await store.record_source(source)
             await store.record_run(
                 source.source_id,
-                status="skipped",
-                detail=reason,
+                status="not_configured",
+                detail=str(exc),
                 documents=0,
                 when=when,
             )
-            continue
-        blobs: list[bytes] | None
-        if snapshots is not None:
-            blobs = list(snapshots.get(source.source_id, []))
-        elif live:
-            try:
-                blobs = await get_adapter(source).fetch(getter)
-            except (FetchNotConfigured, LicenceError) as exc:
-                await store.record_source(source)
-                await store.record_run(
-                    source.source_id,
-                    status="not_configured",
-                    detail=str(exc),
-                    documents=0,
-                    when=when,
-                )
-                continue
-        else:
-            blobs = []
-        if not blobs:
-            await store.record_source(source)
-            count = await store.instrument_count(source.source_id)
-            await store.record_run(
-                source.source_id,
-                status="no_snapshot",
-                detail="no saved text for this source",
-                documents=count,
-                when=when,
-            )
-            continue
-        inserted = await ingest_snapshot(
-            store,
-            source,
-            blobs,
-            on=day,
-            embedder=embedder,
-            index=index,
-        )
+            return
+    else:
+        blobs = []
+    if not blobs:
+        await store.record_source(source)
         count = await store.instrument_count(source.source_id)
         await store.record_run(
             source.source_id,
-            status="ok",
-            detail=f"inserted {inserted}",
+            status="no_snapshot",
+            detail="no saved text for this source",
             documents=count,
             when=when,
         )
-    return await pool_status(store, region=region)
+        return
+    inserted = await ingest_snapshot(
+        store,
+        source,
+        blobs,
+        on=on,
+        embedder=embedder,
+        index=index,
+    )
+    count = await store.instrument_count(source.source_id)
+    await store.record_run(
+        source.source_id,
+        status="ok",
+        detail=f"inserted {inserted}",
+        documents=count,
+        when=when,
+    )
+
+
+async def _record_source_error(store: Store, source, exc: Exception, when: datetime) -> None:
+    """One source failing does not stop the rest of the night."""
+    try:
+        await store.record_source(source)
+    except Exception:
+        return
+    try:
+        await store.record_run(
+            source.source_id,
+            status="error",
+            detail=str(exc),
+            documents=0,
+            when=when,
+        )
+    except Exception:
+        return
 
 
 def main() -> None:

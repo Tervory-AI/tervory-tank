@@ -37,8 +37,16 @@ def content_hash(text: str) -> str:
     return hashlib.sha256(folded.encode("utf-8")).hexdigest()
 
 
-def version_id_for(document_id: str, digest: str) -> str:
-    return f"{document_id}:{digest[:16]}"
+def version_id_for(
+    document_id: str,
+    digest: str,
+    effective_from: date | None = None,
+    known_from: date | None = None,
+) -> str:
+    """Identity includes the span, so wording A can become current again after B."""
+    start = effective_from.isoformat() if effective_from else "undated"
+    seen = known_from.isoformat() if known_from else "unseen"
+    return f"{document_id}:{digest[:16]}:{start}:{seen}"
 
 
 def document_id_for(source_id: str, citation: str) -> str:
@@ -50,6 +58,20 @@ class VersionPlan:
     action: str  # skip | insert
     close_ids: tuple[str, ...]
     close_on: date | None
+    # Set when this row is born already closed by a later version.
+    effective_to: date | None = None
+
+
+def _span_start(
+    effective_from: date | None,
+    known_from: date | None,
+    fallback: date,
+) -> date:
+    if effective_from is not None:
+        return effective_from
+    if known_from is not None:
+        return known_from
+    return fallback
 
 
 def plan_version(
@@ -58,35 +80,52 @@ def plan_version(
     content_hash: str,
     effective_from: date | None,
     on: date,
+    known_from: date | None = None,
 ) -> VersionPlan:
-    """Same hash is a no-op. A new hash closes older open versions.
+    """Skip only when the open version already has this text.
 
-    An open version is closed only when the new wording is known from a
-    date on or after that version's start. A later re-run of the same
-    text does not insert a second row.
+    A law may go A, then B, then back to A. The restored A is a new row.
+    A version that arrives late, with an earlier start than one already
+    stored, is born closed at the next version's start. It does not leave
+    two versions open.
     """
-    if any(row.content_hash == content_hash for row in existing):
+    open_rows = [row for row in existing if row.effective_to is None]
+    if any(row.content_hash == content_hash for row in open_rows):
         return VersionPlan("skip", (), None)
-    close_on = effective_from or on
+    new_start = _span_start(effective_from, known_from, on)
     close_ids: list[str] = []
-    for row in existing:
-        if row.effective_to is not None:
-            continue
-        if row.effective_from is not None and close_on < row.effective_from:
+    later: list[date] = []
+    for row in open_rows:
+        row_start = row.effective_from if row.effective_from is not None else row.known_from
+        if row_start is not None and new_start < row_start:
+            later.append(row_start)
             continue
         close_ids.append(row.version_id)
-    return VersionPlan("insert", tuple(close_ids), close_on if close_ids else None)
+    born_closed = min(later) if later else None
+    return VersionPlan(
+        "insert",
+        tuple(close_ids),
+        new_start if close_ids else None,
+        born_closed,
+    )
 
 
-def applies(effective_from: date | None, effective_to: date | None, as_at: date | None) -> bool:
+def applies(
+    effective_from: date | None,
+    effective_to: date | None,
+    as_at: date | None,
+    known_from: date | None = None,
+) -> bool:
     """`as_at` None means the open version. A dated query needs a known start.
 
-    Unknown effective_from is not treated as 'in force forever'. That would
-    present a current edition as the law on an earlier date.
+    The official effective date wins. When that date was never published,
+    the first-seen date is the floor, so a dated search can still find the
+    text from the day it was recorded.
     """
     if as_at is None:
         return effective_to is None
-    if effective_from is None or as_at < effective_from:
+    start = effective_from if effective_from is not None else known_from
+    if start is None or as_at < start:
         return False
     if effective_to is not None and as_at >= effective_to:
         return False

@@ -60,6 +60,8 @@ class LegalDocument:
     source_id: str
     version_id: str = ""
     content_hash: str = ""
+    # First day this text was seen. Separate from the official effective date.
+    known_from: date | None = None
 
 
 @dataclass
@@ -98,6 +100,7 @@ class VersionHead:
     content_hash: str
     effective_from: date | None
     effective_to: date | None
+    known_from: date | None = None
 
 
 @dataclass

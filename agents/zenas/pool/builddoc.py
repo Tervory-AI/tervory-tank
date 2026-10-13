@@ -43,6 +43,6 @@ def build_document(
         text=full,
         sections=sections,
         source_id=source.source_id,
-        version_id=version_id_for(doc_id, digest),
+        version_id=version_id_for(doc_id, digest, effective_from),
         content_hash=digest,
     )

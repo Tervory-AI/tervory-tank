@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 
 from agents.zenas.pool.adapters import get_adapter
 from agents.zenas.pool.chunk import chunk_document
@@ -10,6 +10,7 @@ from agents.zenas.pool.embed import Embedder, NoOpEmbedder, VectorIndex, NoOpVec
 from agents.zenas.pool.licence import LicenceError, may_store_text, refusal_reason
 from agents.zenas.pool.model import LegalDocument, SourceSpec
 from agents.zenas.pool.store import Store
+from agents.zenas.pool.textutil import version_id_for
 
 
 async def ingest_snapshot(
@@ -36,6 +37,13 @@ async def ingest_snapshot(
     for blob in blobs:
         for document in adapter.parse(blob, source):
             document.licence = source.licence
+            document.known_from = document.known_from or on
+            document.version_id = version_id_for(
+                document.id,
+                document.content_hash,
+                document.effective_from,
+                document.known_from,
+            )
             chunks = chunk_document(document)
             if await store.upsert_version(document, chunks, on=on):
                 inserted += 1

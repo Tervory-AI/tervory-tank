@@ -15,8 +15,10 @@ _REGION_JURISDICTION = {
 
 
 def current_region() -> str:
-    """TANK_REGION selects the deployment. Default matches the US stack."""
-    raw = os.environ.get("TANK_REGION", US_REGION).strip().lower()
+    """TANK_REGION selects the deployment. Unset is an error, not a US default."""
+    raw = os.environ.get("TANK_REGION", "").strip().lower()
+    if not raw:
+        raise ValueError(f"TANK_REGION must be {US_REGION} or {ZA_REGION}")
     if raw == "us":
         return US_REGION
     if raw not in (US_REGION, ZA_REGION):
