@@ -15,6 +15,7 @@ Start one by opening the issue and commenting `@cursor` (or paste the brief into
 | C8 | Tiger box: isolated browser sessions, price mining, watchlists, alerts | `tiger/`, `agents/tiger/`, `tank/skills/tiger.*`, compose | C6 (C7) |
 | C9 | Market Lab box: series feeds, surge detection, research, prediction ledger | `agents/market_lab/`, `tank/skills/market.*`, compose | C6 (C7) |
 | C10 | Boxes for Radix, Tisan, Zenas (isolated, memory, no skills yet) | `agents/radix|tisan|zenas/`, compose | C6, C7 |
+| C11 | Founder console: independence %, booked revenue, margin, graduations on the graph (founder-only) | `tank/admin.py`, `tank/schema.sql`, `workspace/app/admin/*`, `workspace/lib/admin.ts` | — |
 | Z1–Z6 | Zenas, the legal agent (US + SA, no criminal law): see `Z-zenas-plan.md` | `agents/zenas/`, `tank/skills/zenas.*`, Workspace Matters/Review pages | C6, C7, C10 |
 
 Claude keeps: Tank routing, the cache, shadow/graduation, the queue worker, `base.*`/`ffl.*` skills content, Coolify/infra, the FFL data run, and moving Base out of Tank into its own box (after C6). Claude reviews every PR before merge; nothing merges to `main` without that review.
