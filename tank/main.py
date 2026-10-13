@@ -64,7 +64,8 @@ REDIS_URL = os.environ.get("REDIS_URL", "redis://redis:6379/0")
 CACHE_TTL_S = int(os.environ.get("TANK_CACHE_TTL_S", str(7 * 24 * 3600)))
 _packages: dict[tuple[str, str], skala.SkillPackage] = {}
 SKILL_ENV = {k: v for k, v in {"BRAVE_API_KEY": os.environ.get("BRAVE_API_KEY", ""),
-                                "SEARXNG_URL": os.environ.get("SEARXNG_URL", "")}.items() if v}
+                                "SEARXNG_URL": os.environ.get("SEARXNG_URL", ""),
+                                "TIGER_URL": os.environ.get("TIGER_URL", "")}.items() if v}
 
 
 def pool() -> asyncpg.Pool:
@@ -872,7 +873,8 @@ async def _enrich_one(rec_id: uuid.UUID, inp: dict[str, Any], engine_in: dict[st
         site = await skala.run_skill(p, {"name": name, "city": city, "state": state, "website": inp.get("website") or inp.get("url") or ""}, ctx)
         if site.get("website"):
             profile["website"] = site["website"]
-        passes["2a"] = {"skill": p.ref, "ms": site.get("_ms"), "source": (site.get("website") or {}).get("source")}
+        passes["2a"] = {"skill": p.ref, "ms": site.get("_ms"), "source": (site.get("website") or {}).get("source"),
+                        **({"blocked_by_check": site["blocked_by_check"]} if site.get("blocked_by_check") else {})}
 
         url = _val(profile, "website")
         scr: dict[str, Any] = {}
@@ -888,7 +890,7 @@ async def _enrich_one(rec_id: uuid.UUID, inp: dict[str, Any], engine_in: dict[st
                 profile["phones"] = {"value": scr["phones"][:3], "source": src, "confidence": 80}
             if scr.get("socials"):
                 profile["socials"] = {"value": scr["socials"], "source": src, "confidence": 85}
-            passes["2b"] = {"skill": p.ref, "ms": scr.get("_ms"), "pages": len(scr.get("pages") or []), "error": scr.get("error")}
+            passes["2b"] = {"skill": p.ref, "ms": scr.get("_ms"), "pages": len(scr.get("pages") or []), "error": scr.get("error"), "via": scr.get("via")}
 
             # 2c extract
             if (scr.get("text") or "") and len(scr["text"]) >= 40:

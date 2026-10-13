@@ -53,6 +53,15 @@ services:
     expose:
       - "8080"
 
+  tiger:
+    build: ./tiger
+    restart: unless-stopped
+    shm_size: "1gb"            # Chromium needs shared memory
+    environment:
+      TIGER_MAX_PAGES: ${TIGER_MAX_PAGES:-4}
+    expose:
+      - "3000"
+
   tank:
     build: ./tank
     restart: unless-stopped
@@ -64,6 +73,7 @@ services:
       TANK_API_KEY: ${TANK_API_KEY}
       TANK_REGION: ${TANK_REGION:-us-east}
       SEARXNG_URL: http://searxng:8080
+      TIGER_URL: http://tiger:3000
       BRAVE_API_KEY: ${BRAVE_API_KEY:-}
     depends_on:
       postgres:
