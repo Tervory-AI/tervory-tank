@@ -10,5 +10,10 @@ Start one by opening the issue and commenting `@cursor` (or paste the brief into
 | C3 | Data page: filters, search, record drawer | `workspace/app/data/*`, `workspace/app/api/base/route.ts`, `workspace/lib/tank.ts`, `base_records` in `tank/main.py` | — |
 | C4 | Tests + CI on every PR | `tests/`, `.github/workflows/`, `tank/requirements-dev.txt` | — |
 | C5 | Ledger: daily spend by rung, by task type | `workspace/app/ledger/*`, `workspace/lib/tank.ts`, a new read-only endpoint in `tank/main.py` | — |
+| C6 | Agent chassis: own box, files, schedule, identity per Squad member | `agents/`, compose, `tank/schema.sql`, `require_key` + `run_one_skill` only | — |
+| C7 | Hermes: per-agent, per-client memory (Qdrant + local embeddings) | `hermes/`, compose, `agents/_chassis/` | C6 |
+| C8 | Tiger box: isolated browser sessions, price mining, watchlists, alerts | `tiger/`, `agents/tiger/`, `tank/skills/tiger.*`, compose | C6 (C7) |
+| C9 | Market Lab box: series feeds, surge detection, research, prediction ledger | `agents/market_lab/`, `tank/skills/market.*`, compose | C6 (C7) |
+| C10 | Boxes for Radix, Tisan, Zenas (isolated, memory, no skills yet) | `agents/radix|tisan|zenas/`, compose | C6, C7 |
 
-Claude keeps: Tank routing, the cache, shadow/graduation, the queue worker, skills content, Coolify/infra, the FFL data run.
+Claude keeps: Tank routing, the cache, shadow/graduation, the queue worker, `base.*`/`ffl.*` skills content, Coolify/infra, the FFL data run, and moving Base out of Tank into its own box (after C6). Claude reviews every PR before merge; nothing merges to `main` without that review.
