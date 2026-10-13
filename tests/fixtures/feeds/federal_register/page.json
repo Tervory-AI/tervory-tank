@@ -1,0 +1,19 @@
+{
+  "count": 2,
+  "results": [
+    {
+      "title": "Hazardous materials: miscellaneous amendments",
+      "publication_date": "2024-03-01",
+      "html_url": "https://www.federalregister.gov/documents/2024/03/01/example",
+      "abstract": "Amends shipping descriptions.",
+      "agencies": [{"slug": "pipeline-and-hazardous-materials-safety-administration"}]
+    },
+    {
+      "title": "Unrelated notice",
+      "publication_date": "2024-03-02",
+      "html_url": "https://www.federalregister.gov/documents/2024/03/02/other",
+      "abstract": "Not on the watch list.",
+      "agencies": [{"slug": "fish-and-wildlife-service"}]
+    }
+  ]
+}

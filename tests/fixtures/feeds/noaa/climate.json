@@ -1,0 +1,6 @@
+{
+  "results": [
+    {"date": "2024-01-01", "datatype": "TAVG", "value": "55.0", "state": "CA"},
+    {"date": "2024-01-01", "datatype": "PRCP", "value": "2.10", "state": "CA"}
+  ]
+}
