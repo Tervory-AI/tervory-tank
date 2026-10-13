@@ -172,7 +172,7 @@ export function loadFounder(userId: string, days: number): Promise<{
 
 export function savePrice(
   userId: string,
-  body: { outcome_type: string; unit_price: number; currency: string; note: string | null },
+  body: { outcome_type: string; unit_price: number; currency: string; note: string | null; effective_from: string | null },
 ): Promise<PriceRow> {
   return adminFetch<PriceRow>(userId, "/v1/admin/price_book", { method: "PUT", body: JSON.stringify(body) });
 }

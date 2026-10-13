@@ -13,6 +13,7 @@ import asyncio
 import hmac
 import logging
 import os
+import re
 import uuid
 from contextlib import asynccontextmanager, suppress
 from datetime import date, datetime, timedelta, timezone
@@ -278,8 +279,51 @@ def unit_price(rows: list[dict[str, Any]], outcome_type: str, tenant_id: Any, at
     pool = specific or [row for row in covering if row.get("tenant_id") is None]
     if not pool:
         return None
-    best = max(pool, key=lambda row: as_dt(row["effective_from"]))
+    best = max(pool, key=_price_order)
     return float(best["unit_price"])
+
+
+def _price_order(row: dict[str, Any]) -> tuple[datetime, datetime]:
+    """Latest effective date wins. Two rows from the same date: the one saved last wins."""
+    return as_dt(row["effective_from"]), as_dt(row.get("created_at") or "1970-01-01")
+
+
+EARLIEST_PRICE_DATE = date(2020, 1, 1)
+MAX_PRICE_DAYS_AHEAD = 366
+
+
+def price_start(value: Any, today: date) -> datetime | None:
+    """The moment a new price takes effect. None means now.
+
+    A bare date (YYYY-MM-DD) starts at 00:00 UTC that day. A time without a zone is UTC.
+    Raises ValueError with a plain message for anything that is not a sensible date.
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        moment = value
+    elif isinstance(value, date):
+        moment = datetime(value.year, value.month, value.day)
+    else:
+        text = str(value).strip()
+        if not text:
+            return None
+        try:
+            if len(text) == 10:
+                parsed = date.fromisoformat(text)
+                moment = datetime(parsed.year, parsed.month, parsed.day)
+            else:
+                moment = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            raise ValueError("Effective from must be a date like 2026-10-01.") from None
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    moment = moment.astimezone(timezone.utc)
+    if moment.date() < EARLIEST_PRICE_DATE:
+        raise ValueError(f"Effective from cannot be before {EARLIEST_PRICE_DATE.isoformat()}.")
+    if moment.date() > today + timedelta(days=MAX_PRICE_DAYS_AHEAD):
+        raise ValueError("Effective from cannot be more than a year ahead.")
+    return moment
 
 
 def append_price(existing: list[dict[str, Any]], new_row: dict[str, Any]) -> list[dict[str, Any]]:
@@ -407,27 +451,32 @@ def merge_econ(
 ) -> dict[Key, dict[str, Any]]:
     """Replace figures for the days being rolled up. Do not add them twice.
 
-    replace_from None means the updates are the full picture. Otherwise only
-    days on or after that date change. Older days keep the calls, the money,
-    and the proven_calls that were true then.
+    Calls, spend, cache hits and proven_calls: replace_from None means the
+    updates are the full picture. Otherwise only days on or after that date
+    change, and older days keep the calls and the proven_calls that were true then.
+
+    Outcomes and booked revenue are always the full picture, for every day,
+    so a backdated price reaches outcomes recorded before it existed.
     """
     keys = set(existing) | set(call_updates) | set(outcome_updates)
     merged: dict[Key, dict[str, Any]] = {}
     for key in keys:
         prev = existing.get(key)
         replace = replace_from is None or key[0] >= replace_from
-        if not replace:
-            if prev is not None:
-                merged[key] = _kept_row(prev)
-            continue
-        src = call_updates.get(key)
-        calls = int(src["calls"]) if src else 0
-        cost = float(src["cost"]) if src else 0.0
-        cache_hits = int(src["cache_hits"]) if src else 0
         outcome = outcome_updates.get(key)
         outcomes = float(outcome["outcomes"]) if outcome else 0.0
         booked = float(outcome["booked"]) if outcome else 0.0
-        proven_calls = calls if (key[3], key[5], key[4]) in proven_keys else 0
+        if not replace:
+            kept = _kept_row(prev) if prev is not None else {
+                "calls": 0, "cost": 0.0, "cache_hits": 0, "proven_calls": 0,
+            }
+            calls, cost, cache_hits, proven_calls = kept["calls"], kept["cost"], kept["cache_hits"], kept["proven_calls"]
+        else:
+            src = call_updates.get(key)
+            calls = int(src["calls"]) if src else 0
+            cost = float(src["cost"]) if src else 0.0
+            cache_hits = int(src["cache_hits"]) if src else 0
+            proven_calls = calls if (key[3], key[5], key[4]) in proven_keys else 0
         if calls == 0 and cost == 0 and cache_hits == 0 and outcomes == 0 and booked == 0:
             continue
         merged[key] = {
@@ -447,18 +496,19 @@ def roll_forward(
     outcome_updates: dict[Key, dict[str, float]],
     proven_keys: set[tuple[str, str, int]],
 ) -> dict[Key, dict[str, Any]]:
-    """One rollup over a fixture. The watermark is max(day) minus one day."""
+    """One rollup over a fixture. Calls use the watermark (max(day) minus one day).
+
+    outcome_updates is every outcome on every day, as the SQL rollup rebuilds them.
+    """
     replace_from = watermark_replace_from({key[0] for key in existing})
     if replace_from is None:
         calls = aggregate_calls(ledger_rows)
-        outcomes = outcome_updates
     else:
         calls = aggregate_calls([
             row for row in ledger_rows
             if as_day(row.get("day") or row["ts"]) >= replace_from
         ])
-        outcomes = {key: value for key, value in outcome_updates.items() if key[0] >= replace_from}
-    return merge_econ(existing, calls, outcomes, proven_keys, replace_from)
+    return merge_econ(existing, calls, outcome_updates, proven_keys, replace_from)
 
 
 def pack_metrics(calls: int, proven_calls: int, off_paid_calls: int, spend: float, outcomes: float, booked: float) -> dict[str, Any]:
@@ -758,6 +808,7 @@ def _econ_list(mapped: dict[Key, dict[str, Any]]) -> list[dict[str, Any]]:
 # SQL the hourly rollup runs. Reads never use these.
 WATERMARK_SQL = "SELECT max(day) FROM tank.econ_daily"
 ROLLUP_INTERVAL_SECONDS = 60 * 60
+ROLLUP_RETRY_SECONDS = 5 * 60
 _ROLLUP_LOCK = 81111
 
 BASE_BACKFILL_SQL = """
@@ -833,20 +884,15 @@ LEFT JOIN LATERAL (
       AND p.effective_from <= o.ts
       AND (p.effective_to IS NULL OR p.effective_to > o.ts)
       AND (p.tenant_id IS NULL OR p.tenant_id = o.tenant_id)
-    ORDER BY (p.tenant_id IS NOT NULL) DESC, p.effective_from DESC
+    ORDER BY (p.tenant_id IS NOT NULL) DESC, p.effective_from DESC, p.created_at DESC
     LIMIT 1
 ) price ON true
 """
 
-OUTCOME_UPSERT_SINCE_SQL = (
-    "INSERT INTO tank.econ_daily ("
-    "day, tenant_id, agent, task_type, rung, model, calls, cost_usd, outcomes, booked_usd, cache_hits, proven_calls"
-    ") SELECT day, tenant_id, agent, task_type, rung, model, 0, 0, outcomes, booked, 0, 0 FROM ("
-    + _OUTCOME_SELECT + " WHERE o.ts >= $1::timestamptz OR g.ts >= $1::timestamptz GROUP BY 1, 2, 3, 4, 5, 6) bucket "
-    "WHERE bucket.day >= (timezone('UTC', $1::timestamptz))::date "
-    "ON CONFLICT (day, tenant_id, agent, task_type, rung, model) DO UPDATE SET "
-    "outcomes = EXCLUDED.outcomes, booked_usd = EXCLUDED.booked_usd"
-)
+# Outcomes and booked revenue are rebuilt for every day on every run: zero them,
+# write them again from tank.outcomes and the price book, then drop rows left empty.
+# An outcome counts on the day of its first ledger call, however old that call is.
+OUTCOME_ZERO_SQL = "UPDATE tank.econ_daily SET outcomes = 0, booked_usd = 0 WHERE outcomes <> 0 OR booked_usd <> 0"
 
 OUTCOME_UPSERT_ALL_SQL = (
     "INSERT INTO tank.econ_daily ("
@@ -855,6 +901,11 @@ OUTCOME_UPSERT_ALL_SQL = (
     + _OUTCOME_SELECT + " GROUP BY 1, 2, 3, 4, 5, 6) bucket "
     "ON CONFLICT (day, tenant_id, agent, task_type, rung, model) DO UPDATE SET "
     "outcomes = EXCLUDED.outcomes, booked_usd = EXCLUDED.booked_usd"
+)
+
+DROP_EMPTY_SQL = (
+    "DELETE FROM tank.econ_daily "
+    "WHERE calls = 0 AND cost_usd = 0 AND cache_hits = 0 AND outcomes = 0 AND booked_usd = 0"
 )
 
 SHADOW_PAIR_SQL = """
@@ -919,7 +970,8 @@ def _with_serving(evidence: list[dict[str, Any]], policies: list[dict[str, Any]]
 
 
 async def refresh_econ(conn: asyncpg.Connection, today: date | None = None) -> None:
-    """Hourly rollup. Upserts the open window only. Older days keep what was true then."""
+    """Hourly rollup. Calls, spend and proven_calls: the open window only, so older
+    days keep what was true then. Outcomes and booked revenue: every day."""
     today = today or utc_today()
     now = datetime.now(timezone.utc)
     async with conn.transaction():
@@ -986,14 +1038,43 @@ async def refresh_econ(conn: asyncpg.Connection, today: date | None = None) -> N
         if replace_from is not None:
             await conn.execute(REPLACE_WINDOW_SQL, replace_from)
             await conn.execute(LEDGER_CALLS_SINCE_SQL, since)
-            await conn.execute(OUTCOME_UPSERT_SINCE_SQL, since)
         else:
             await conn.execute(LEDGER_CALLS_ALL_SQL)
-            await conn.execute(OUTCOME_UPSERT_ALL_SQL)
+        await conn.execute(OUTCOME_ZERO_SQL)
+        await conn.execute(OUTCOME_UPSERT_ALL_SQL)
+        await conn.execute(DROP_EMPTY_SQL)
+
+
+_URL_CREDENTIALS = re.compile(r"([a-zA-Z][a-zA-Z0-9+.-]*://)[^\s@]*@")
+_SECRET_ENV = ("DATABASE_URL", "TANK_API_KEY", "LITELLM_MASTER_KEY", "REDIS_URL")
+
+
+def safe_error(exc: BaseException, limit: int = 300) -> str:
+    """The error's type and primary message, for the log.
+
+    A database error gives its own message only: never the query, its parameters,
+    or the detail line (which can quote row values). Credentials in URLs and the
+    values of secret settings are masked.
+    """
+    message = getattr(exc, "message", None)
+    if not isinstance(message, str) or not message:
+        message = str(exc)
+    message = _URL_CREDENTIALS.sub(r"\1***@", message)
+    for name in _SECRET_ENV:
+        secret = os.environ.get(name, "")
+        if len(secret) >= 6:
+            message = message.replace(secret, "***")
+    message = " ".join(message.split())
+    if len(message) > limit:
+        message = message[: limit - 1] + "…"
+    code = getattr(exc, "sqlstate", None)
+    prefix = f"{type(exc).__name__} [{code}]" if isinstance(code, str) and code else type(exc).__name__
+    return f"{prefix}: {message}" if message else prefix
 
 
 async def _rollup_loop() -> None:
     while True:
+        wait = ROLLUP_INTERVAL_SECONDS
         try:
             pool = _pool()
             async with pool.acquire() as conn:
@@ -1001,8 +1082,9 @@ async def _rollup_loop() -> None:
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            log.warning("founder rollup failed: %s", type(exc).__name__)
-        await asyncio.sleep(ROLLUP_INTERVAL_SECONDS)
+            wait = ROLLUP_RETRY_SECONDS
+            log.warning("founder rollup failed, retrying in %d minutes: %s", wait // 60, safe_error(exc))
+        await asyncio.sleep(wait)
 
 
 def _public_route(row: dict[str, Any]) -> dict[str, Any]:
@@ -1041,7 +1123,8 @@ class PriceBody(BaseModel):
     currency: str = Field(default="USD", min_length=3, max_length=3)
     tenant_id: uuid.UUID | None = None
     note: str | None = Field(default=None, max_length=500)
-    effective_from: datetime | None = None
+    # A date (YYYY-MM-DD, from 00:00 UTC) or an ISO date-time. Empty means now. Checked by price_start.
+    effective_from: str | None = Field(default=None, max_length=40)
 
 
 @router.get("/counters")
@@ -1156,7 +1239,7 @@ async def get_price_book() -> list[dict[str, Any]]:
             """
             SELECT id, tenant_id, outcome_type, unit_price, currency, effective_from, effective_to, note
             FROM tank.price_book
-            ORDER BY outcome_type, effective_from DESC
+            ORDER BY outcome_type, effective_from DESC, created_at DESC
             """
         ))
     current = _current_price_ids(rows, datetime.now(timezone.utc))
@@ -1165,7 +1248,14 @@ async def get_price_book() -> list[dict[str, Any]]:
 
 @router.put("/price_book")
 async def put_price_book(body: PriceBody) -> dict[str, Any]:
-    """A price change is a new row. The previous row is left as it was."""
+    """A price change is a new row. The previous row is left as it was.
+
+    effective_from may be in the past: the next rollup rebuilds booked revenue for every day.
+    """
+    try:
+        starts = price_start(body.effective_from, utc_today())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
     async with _pool().acquire() as conn:
         row = await conn.fetchrow(
             """
@@ -1173,6 +1263,6 @@ async def put_price_book(body: PriceBody) -> dict[str, Any]:
             VALUES ($1, $2, $3, $4, COALESCE($5, now()), $6)
             RETURNING id, tenant_id, outcome_type, unit_price, currency, effective_from, effective_to, note
             """,
-            body.tenant_id, body.outcome_type.strip(), body.unit_price, body.currency.upper(), body.effective_from, body.note,
+            body.tenant_id, body.outcome_type.strip(), body.unit_price, body.currency.upper(), starts, body.note,
         )
     return _price_out(dict(row), {row["id"]})
