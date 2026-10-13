@@ -1,0 +1,10 @@
+[
+  {"page": 1, "pages": 1, "total": 4},
+  [
+    {"indicator": {"id": "PCOPPUSDM", "value": "Copper"}, "country": {"value": "World"}, "date": "2024M01", "value": 9000},
+    {"indicator": {"id": "PZINCUSDM", "value": "Zinc"}, "country": {"value": "World"}, "date": "2024M01", "value": 2500},
+    {"indicator": {"id": "PLEADUSDM", "value": "Lead"}, "country": {"value": "World"}, "date": "2024M01", "value": 2100},
+    {"indicator": {"id": "PCOTTINDUSDM", "value": "Cotton"}, "country": {"value": "World"}, "date": "2024M01", "value": 0.91},
+    {"indicator": {"id": "OTHER", "value": "Other"}, "country": {"value": "World"}, "date": "2024M01", "value": 1}
+  ]
+]

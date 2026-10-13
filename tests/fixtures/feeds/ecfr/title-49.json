@@ -1,0 +1,9 @@
+{
+  "title": "49",
+  "date": "2024-01-01",
+  "children": [
+    {"type": "part", "identifier": "172", "label_description": "Hazardous materials table"},
+    {"type": "part", "identifier": "173", "label_description": "Shippers general requirements"},
+    {"type": "part", "identifier": "1", "label_description": "Not on the list"}
+  ]
+}

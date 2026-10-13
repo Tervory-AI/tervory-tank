@@ -1,0 +1,14 @@
+{
+  "features": [
+    {
+      "properties": {
+        "id": "https://api.weather.gov/alerts/urn:example:1",
+        "event": "Tornado Warning",
+        "headline": "Tornado warning until evening",
+        "severity": "Extreme",
+        "sent": "2024-05-01T18:00:00+00:00",
+        "geocode": {"UGC": ["CAC037"]}
+      }
+    }
+  ]
+}

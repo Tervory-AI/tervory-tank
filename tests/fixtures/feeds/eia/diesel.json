@@ -1,0 +1,8 @@
+{
+  "response": {
+    "data": [
+      {"period": "2024-01-08", "value": "3.828", "duoarea": "NUS", "product": "EPD2D"},
+      {"period": "2024-01-15", "value": "3.860", "duoarea": "NUS", "product": "EPD2D"}
+    ]
+  }
+}
