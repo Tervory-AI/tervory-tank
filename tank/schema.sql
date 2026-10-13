@@ -223,3 +223,10 @@ INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_toke
 ON CONFLICT (task_type, COALESCE(tenant_id, '00000000-0000-0000-0000-000000000000'::uuid))
 DO UPDATE SET max_tokens_out = GREATEST(tank.policy.max_tokens_out, EXCLUDED.max_tokens_out);
 -- (the cap only ever goes up from the repo; an operator's higher setting is kept)
+
+-- Per-agent Tank keys. The raw key stays in TANK_KEY_<AGENT>. This table stores SHA-256 hex only.
+CREATE TABLE IF NOT EXISTS tank.agent_keys (
+    agent           text PRIMARY KEY,
+    key_hash        text NOT NULL,
+    created_at      timestamptz NOT NULL DEFAULT now()
+);
