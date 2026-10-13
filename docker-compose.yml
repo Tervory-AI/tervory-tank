@@ -1,8 +1,10 @@
 # Tervory platform — one stack, one deploy.
 # Coolify deploys this file. Stack services share one network and reach each other
-# by name (http://tank:8000, postgres:5432). Each agent box is on its own
-# net_<agent> instead; only Postgres, Tank, Tiger, and later Hermes join that
-# network. Only the Workspace gets a public domain; Tank and the stores are never exposed.
+# by name (http://tank:8000, postgres:5432). Agent boxes are not in this file.
+# Each box is its own Coolify resource (agents/<name>/docker-compose.yml) and
+# reaches Tank and Postgres only through an external network, tervory-gw-<agent>,
+# created once on the server. Nothing else joins that network. Only the Workspace
+# gets a public domain; Tank and the stores are never exposed.
 
 services:
   postgres:
@@ -21,7 +23,7 @@ services:
       retries: 10
     networks:
       - default
-      - net_template
+      - tervory-gw-template
 
   redis:
     image: redis:7
@@ -69,9 +71,6 @@ services:
     shm_size: "1gb"            # Chromium needs shared memory
     environment:
       TIGER_MAX_PAGES: ${TIGER_MAX_PAGES:-4}
-    networks:
-      - default
-      - net_template
     expose:
       - "3000"
 
@@ -86,6 +85,7 @@ services:
       TANK_API_KEY: ${TANK_API_KEY}
       TERVORY_ADMIN_USER_IDS: ${TERVORY_ADMIN_USER_IDS:-}
       TANK_KEY_TEMPLATE: ${TANK_KEY_TEMPLATE:-}
+      AGENT_DB_PASSWORD_TEMPLATE: ${AGENT_DB_PASSWORD_TEMPLATE:-}
       TANK_REGION: ${TANK_REGION:-us-east}
       SEARXNG_URL: http://searxng:8080
       TIGER_URL: http://tiger:3000
@@ -95,40 +95,14 @@ services:
         condition: service_healthy
       litellm:
         condition: service_started
+    # Creates agent roles from AGENT_DB_PASSWORD_* before Tank listens. The script
+    # then execs uvicorn. The password is not logged.
+    command: ["python", "/opt/agentchassis/provision_agent_roles.py"]
+    volumes:
+      - ./agents/_chassis:/opt/agentchassis:ro
     networks:
       - default
-      - net_template
-    expose:
-      - "8000"
-
-  # Proof box for the chassis. Its own network: it can reach Tank, Postgres, and
-  # Tiger (the browser), and nothing else on the stack. Hermes joins net_template
-  # when C7 adds that service. A later agent gets its own net_<agent>, never this one.
-  agent-template:
-    build:
-      context: ./agents
-      dockerfile: _template/Dockerfile
-    restart: unless-stopped
-    mem_limit: 512m
-    cpus: 0.5
-    environment:
-      AGENT_NAME: template
-      DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
-      TANK_URL: http://tank:8000
-      TANK_KEY: ${TANK_KEY_TEMPLATE:-}
-      DATA_DIR: /data
-    volumes:
-      - agent_template_data:/data
-    networks:
-      - net_template
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
+      - tervory-gw-template
     expose:
       - "8000"
 
@@ -154,8 +128,11 @@ volumes:
   pgdata:
   redisdata:
   qdrantdata:
-  agent_template_data:
 
+# Created once on the server before this stack is deployed:
+#   docker network create tervory-gw-template
+# A later agent gets tervory-gw-<agent>, joined here by tank and postgres only.
 networks:
-  net_template:
-    name: net_template
+  tervory-gw-template:
+    external: true
+    name: tervory-gw-template

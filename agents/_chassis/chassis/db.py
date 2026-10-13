@@ -18,7 +18,18 @@ def schema_for(agent: str) -> str:
 
 async def ensure_schema(conn: Any, agent: str) -> str:
     schema = schema_for(agent)
-    await conn.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    # Tank creates the schema. The agent's own role may not be allowed to, and
+    # CREATE SCHEMA IF NOT EXISTS is a no-op when it is already there.
+    try:
+        await conn.execute(f"CREATE SCHEMA IF NOT EXISTS {schema}")
+    except Exception:
+        present = None
+        try:
+            present = await conn.fetchval("SELECT 1 FROM pg_namespace WHERE nspname = $1", schema)
+        except Exception:
+            present = None
+        if present != 1:
+            raise
     await conn.execute(
         f"""
         CREATE TABLE IF NOT EXISTS {schema}.jobs (
