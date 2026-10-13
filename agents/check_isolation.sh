@@ -1,5 +1,5 @@
 #!/bin/sh
-# Prove one agent box can reach Tank and Postgres, and nothing else.
+# Prove one agent box can reach Tank, Postgres, and Hermes, and nothing else.
 # This file stands alone. Paste it on the server and run:
 #   sh check_isolation.sh <agent-container>
 # Prints PASS or FAIL per check. Exits 1 if any check fails.
@@ -67,7 +67,7 @@ except socket.gaierror:
 ' "$1" >/dev/null 2>&1
 }
 
-for host in tank postgres; do
+for host in tank postgres hermes; do
   if resolves "$host"; then
     mark 0 "$host resolves"
   else
@@ -75,7 +75,8 @@ for host in tank postgres; do
   fi
 done
 
-# tiger stays dark until C8. agent-other stands in for any second agent: it is not
+# tiger stays dark until C8. qdrant stays dark: the agent talks to Hermes, not
+# to the vector store. agent-other stands in for any second agent: it is not
 # on this network, so it has no name here.
 for host in workspace redis qdrant litellm searxng tiger agent-other; do
   if resolves "$host"; then
@@ -105,8 +106,19 @@ else
   mark 1 "postgres answers"
 fi
 
+if docker exec "$container" python -c 'import urllib.request, urllib.error
+try:
+    urllib.request.urlopen("http://hermes:8000/health", timeout=5).read()
+except urllib.error.HTTPError:
+    pass
+' >/dev/null 2>&1; then
+  mark 0 "hermes answers"
+else
+  mark 1 "hermes answers"
+fi
+
 # Network membership. Printed in full so a human can see who shares a network.
-# The gateway (tervory-gw-*) may hold only this agent, tank, and postgres.
+# The gateway (tervory-gw-*) may hold only this agent, tank, postgres, and hermes.
 say "--- docker inspect networks ---"
 docker inspect -f '{{range $name, $net := .NetworkSettings.Networks}}{{$name}}{{"\n"}}{{end}}' "$container"
 nets=$(docker inspect -f '{{range $name, $net := .NetworkSettings.Networks}}{{$name}} {{end}}' "$container")
@@ -143,12 +155,15 @@ for net in $nets; do
           has_pg=1
           continue
         fi
+        if has_part "$short" hermes; then
+          continue
+        fi
         unexpected="$unexpected $short"
       done
       if [ "$has_self" -eq 1 ] && [ "$has_tank" -eq 1 ] && [ "$has_pg" -eq 1 ] && [ -z "$unexpected" ]; then
-        mark 0 "gateway $net holds only this agent, tank, and postgres"
+        mark 0 "gateway $net holds only this agent, tank, postgres, and hermes"
       else
-        mark 1 "gateway $net holds only this agent, tank, and postgres"
+        mark 1 "gateway $net holds only this agent, tank, postgres, and hermes"
         if [ -n "$unexpected" ]; then
           say "unexpected members:$unexpected"
         fi
