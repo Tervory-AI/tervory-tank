@@ -221,6 +221,7 @@ export function baseRecords(tenantId: string, opts: { taskId?: string; batch?: s
 export type BaseBatch = {
   batch: string; started: string; total: number; done: number; failed: number; pending: number;
   ready: number; aware: number; review: number; requeue: number; with_site: number; with_email: number;
+  model_skipped?: number;
 };
 export function baseRetry(tenantId: string, batch: string): Promise<{ requeued: number }> {
   return tank<{ requeued: number }>("/v1/base/retry", { method: "POST", body: JSON.stringify({ tenant_id: tenantId, batch }) });

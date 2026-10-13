@@ -876,6 +876,32 @@ def _val(profile: dict[str, Any], k: str, default=None):
     return (f.get("value") if isinstance(f, dict) else f) or default
 
 
+class ModelAccountBlocked(Exception):
+    """The model provider refused the account itself (no credit, bad key, no permission).
+    Every record would fail the same way, so the queue pauses instead of skipping passes."""
+
+
+_ACCOUNT_ERRORS = ("credit balance", "authentication_error", "permission_error", "invalid x-api-key", "billing")
+_MODEL_PAUSE_S = 600
+_model_pause = {"until": 0.0, "reason": ""}
+
+
+def _is_account_error(exc: Exception) -> bool:
+    msg = str(getattr(exc, "detail", "") or exc).lower()
+    return any(k in msg for k in _ACCOUNT_ERRORS)
+
+
+def _pause_models(reason: str) -> None:
+    if time.time() >= _model_pause["until"]:
+        log.error("base worker: model account blocked, pausing %ss: %s", _MODEL_PAUSE_S, reason[:200])
+    _model_pause["until"] = time.time() + _MODEL_PAUSE_S
+    _model_pause["reason"] = reason[:300]
+
+
+def _models_paused() -> bool:
+    return time.time() < _model_pause["until"]
+
+
 async def _enrich_one(rec_id: uuid.UUID, inp: dict[str, Any], engine_in: dict[str, Any] | None, registry: list[dict[str, Any]],
                       pkgs: dict[str, skala.SkillPackage], engine: str | None,
                       tenant_id: uuid.UUID, task_id: uuid.UUID, preview: bool) -> None:
@@ -941,6 +967,8 @@ async def _enrich_one(rec_id: uuid.UUID, inp: dict[str, Any], engine_in: dict[st
                 try:
                     ex = await skala.run_skill(p, {"name": name, "text": scr["text"]}, ctx)
                 except Exception as exc:  # noqa: BLE001 — a model-gateway blip must not fail the record
+                    if _is_account_error(exc):
+                        raise ModelAccountBlocked(str(getattr(exc, "detail", "") or exc)) from exc
                     ex = {}
                     passes["2c"] = {"skill": p.ref, "skipped": f"model call failed: {str(exc)[:120]}"}
                 else:
@@ -987,6 +1015,8 @@ async def _enrich_one(rec_id: uuid.UUID, inp: dict[str, Any], engine_in: dict[st
                                             "people": _val(profile, "people", []), "socials_count": soc.get("count") or 0,
                                             "pages": len(scr.get("pages") or []), "licence_type_label": eng_prof.get("licence_type_label")}, ctx)
         except Exception as exc:  # noqa: BLE001 — same rule: the record keeps its code-only layers
+            if _is_account_error(exc):
+                raise ModelAccountBlocked(str(getattr(exc, "detail", "") or exc)) from exc
             biz = {}
             passes["5"] = {"skill": p.ref, "skipped": f"model call failed: {str(exc)[:120]}"}
         else:
@@ -1011,6 +1041,11 @@ async def _enrich_one(rec_id: uuid.UUID, inp: dict[str, Any], engine_in: dict[st
                 "UPDATE base.records SET status='done', profile=$2::jsonb, passes=$3::jsonb, confidence=$4, updated_at=now() WHERE id=$1",
                 rec_id, json.dumps(profile), json.dumps(passes), confidence,
             )
+    except ModelAccountBlocked as exc:
+        # Hold the record exactly as it was; it runs again once the account is fixed.
+        _pause_models(str(exc))
+        async with pool().acquire() as conn:
+            await conn.execute("UPDATE base.records SET status='queued', updated_at=now() WHERE id=$1", rec_id)
     except Exception as exc:  # noqa: BLE001
         async with pool().acquire() as conn:
             await conn.execute(
@@ -1059,11 +1094,20 @@ async def _run_base_batch(task_id: uuid.UUID, cfg: dict[str, Any], pkgs: dict[st
 
     async def one(i: int) -> None:
         async with sem:
+            if _models_paused():
+                return  # stays queued
             reg = [r for r in registry if r.get("id") != str(rec_ids[i])] if cfg.get("registry") is None else registry
             await _enrich_one(rec_ids[i], inputs[i], engine_ins[i], reg, pkgs, engine, tenant_id, task_id, preview)
 
     await asyncio.gather(*(one(i) for i in todo))
     async with pool().acquire() as conn:
+        waiting = await conn.fetchval("SELECT count(*) FROM base.records WHERE task_id=$1 AND status='queued'", task_id)
+        if waiting:
+            await conn.execute(
+                "UPDATE tank.tasks SET status='queued', error=$2 WHERE id=$1", task_id,
+                f"paused: {waiting} records waiting; the model provider refused the account ({_model_pause['reason'][:200]})",
+            )
+            return
         done, failed, cost, ready = await conn.fetchrow(
             """
             SELECT count(*) FILTER (WHERE status='done'), count(*) FILTER (WHERE status='failed'),
@@ -1073,7 +1117,7 @@ async def _run_base_batch(task_id: uuid.UUID, cfg: dict[str, Any], pkgs: dict[st
             """, task_id,
         )
         await conn.execute(
-            "UPDATE tank.tasks SET status='done', result=$2, finished_at=now() WHERE id=$1",
+            "UPDATE tank.tasks SET status='done', error=NULL, result=$2, finished_at=now() WHERE id=$1",
             task_id, f"{done} enriched ({ready} ready), {failed} failed, model spend ${float(cost):.4f}",
         )
 
@@ -1086,6 +1130,9 @@ async def _base_worker() -> None:
     created its batches smallest-state-first, so that is the order they run."""
     while True:
         try:
+            if _models_paused():
+                await asyncio.sleep(min(60.0, max(1.0, _model_pause["until"] - time.time())))
+                continue
             async with pool().acquire() as conn:
                 row = await conn.fetchrow(
                     "SELECT id, input FROM tank.tasks WHERE task_type='base.enrich' AND status='queued' ORDER BY created_at LIMIT 1"
@@ -1201,7 +1248,19 @@ async def base_rerun(body: BaseRerun) -> dict[str, Any]:
     """Send a batch's flagged records (default: the ones with no website) back through the passes
     with the current skill versions, and re-open the batch so the worker picks it up in order."""
     async with pool().acquire() as conn:
-        if body.skill:
+        if body.flag == "model_skipped":
+            # records where a model pass was skipped (e.g. the provider refused the account)
+            n = await conn.fetchval(
+                """
+                WITH r AS (UPDATE base.records SET status='queued', error=NULL, updated_at=now()
+                           WHERE tenant_id=$1 AND batch=$2 AND status='done'
+                             AND EXISTS (SELECT 1 FROM jsonb_each(passes) p
+                                         WHERE jsonb_typeof(p.value)='object' AND p.value ? 'skipped')
+                           RETURNING id)
+                SELECT count(*) FROM r
+                """, body.tenant_id, body.batch,
+            )
+        elif body.skill:
             n = await conn.fetchval(
                 """
                 WITH r AS (UPDATE base.records SET status='queued', error=NULL, updated_at=now()
@@ -1259,7 +1318,8 @@ async def base_batches(tenant_id: uuid.UUID) -> list[dict[str, Any]]:
                    count(*) FILTER (WHERE status='done' AND confidence < 40) AS requeue,
                    count(*) FILTER (WHERE status='done' AND coalesce(profile->'website'->>'value','') <> '') AS with_site,
                    count(*) FILTER (WHERE status='done' AND jsonb_typeof(profile->'emails'->'value') = 'array'
-                                                        AND jsonb_array_length(profile->'emails'->'value') > 0) AS with_email
+                                                        AND jsonb_array_length(profile->'emails'->'value') > 0) AS with_email,
+                   count(*) FILTER (WHERE status='done' AND (passes->'2c' ? 'skipped' OR passes->'5' ? 'skipped')) AS model_skipped
             FROM base.records WHERE tenant_id=$1
             GROUP BY batch ORDER BY started DESC LIMIT 200
             """, tenant_id,
