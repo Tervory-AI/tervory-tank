@@ -1,5 +1,9 @@
 # C7 — Hermes: memory for every Squad member
 
+> **Room setup:** follow `docs/cursor/ROOMS.md` exactly (proven in C6b). It overrides anything below about networks, compose or database access.
+
+**Hermes is a shared service, not an agent:** it lives in the MAIN docker-compose.yml (next to qdrant), on `default` plus every existing `tervory-gw-*` network (today: `tervory-gw-template`), and its README tells future agent tasks to add their corridor to Hermes. Auth: agent keys are the env-held `TANK_KEY_<AGENT>` values (hash compare, same as Tank's `require_key`), not a DB lookup. Update `agents/check_isolation.sh` so `hermes` is an allowed neighbour on the corridor (and still everything else is blocked). Lane: `hermes/` (new), main `docker-compose.yml` (add the hermes service only), `agents/_chassis/chassis/memory.py`, `agents/check_isolation.sh`, tests.
+
 **Goal:** each agent remembers what it learns, per client, and can recall it by meaning. Memory is private to one agent and one tenant. Depends on C6.
 
 **Files you may change:** `hermes/` (new service), `docker-compose.yml` (add the service), `agents/_chassis/` (fill in the memory client).

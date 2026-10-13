@@ -24,6 +24,7 @@ South African work runs on infrastructure in South Africa; US work runs in the U
 7. **Not legal advice to the public.** UI copy says Zenas prepares drafts and research for review by a licensed lawyer.
 
 ## Z1 — Zenas box, matters, scope gate
+- Room per `docs/cursor/ROOMS.md`: `agents/zenas/` own compose, corridor `tervory-gw-zenas`, login `agent_zenas`, key `TANK_KEY_ZENAS`; the knowledge pool package (`agents/zenas/pool/`, Z2) is imported, not rewritten.
 - `agents/zenas/` from the template. Tables in `agent_zenas`: `matters (id, tenant_id, jurisdiction us|za|both, area, title, parties jsonb, status, created_by)`, `documents (matter_id, kind, version, body, sources jsonb, state draft|in_review|released|rejected)`, `reviews (document_id, reviewer, jurisdiction, admission_no, decision, changes, ts)`.
 - Consent: table `consents (tenant_id, user_id, jurisdiction, wording_version, text_hash, ts, ip)`; matters for ZA tenants are refused until a current consent exists. Personal-identifier detection (`zenas.pii@1.0.0`, pure code with SA ID-number checksum and US SSN/passport patterns) runs on every upload; matches stored encrypted in `pii (matter_id, kind, ciphertext)` and replaced by placeholders in model prompts.
 - Skill `zenas.scope@1.0.0` (Tank, cheap model + rules): returns `{in_scope, area, jurisdiction, criminal: bool, needs_lawyer: bool, reason}`. Evals: at least 30 cases incl. 10 criminal ones that must be refused, 5 regulatory-with-criminal-penalty that must be in scope + flagged, and mixed US/SA cases.

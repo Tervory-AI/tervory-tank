@@ -1,5 +1,9 @@
 # C9 — Market Lab in its own box: feeds, opportunity and prediction layer
 
+> **Room setup:** follow `docs/cursor/ROOMS.md` exactly (proven in C6b). It overrides anything below about networks, compose or database access.
+
+**Lane update:** `agents/market_lab/` (own docker-compose.yml per ROOMS.md, corridor `tervory-gw-market_lab`, login `agent_market_lab`, key `TANK_KEY_MARKET_LAB`); imports the existing `agents/market_lab/feeds/` package without rewriting it (C12b may be changing feeds in parallel — coordinate only through its public functions). Main-compose changes: add `tervory-gw-market_lab` to tank, postgres, hermes; add `AGENT_DB_PASSWORD_MARKET_LAB` to agent-roles; `TANK_KEY_MARKET_LAB` to tank.
+
 **Goal:** Market Lab tracks series, researches why they move, and writes dated predictions it later scores. Industry-neutral core; each engine decides which series matter. Depends on C6 (C7 for memory).
 
 **Files you may change:** `agents/market_lab/` (new), `tank/skills/market.*` (new skills, 1.0.0 with evals), `docker-compose.yml`, `.env.example` (names only).
