@@ -1,0 +1,58 @@
+name: ci
+
+on:
+  pull_request:
+
+jobs:
+  tank:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            tank/requirements.txt
+            tank/requirements-dev.txt
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r tank/requirements.txt -r tank/requirements-dev.txt
+      - name: Lint
+        # F401 in base.socials/1.0.0/run.py is a pre-existing unused import.
+        # This lane cannot edit an approved skill in place.
+        run: ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"
+      - name: Secret scan and tests
+        run: pytest -q
+        env:
+          PYTHONPATH: tank
+
+  workspace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install
+        working-directory: workspace
+        # npm ci when a lockfile is committed. This lane cannot add one, so install
+        # from package.json until workspace/package-lock.json exists.
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-package-lock --no-audit --no-fund
+          fi
+      - name: Build
+        working-directory: workspace
+        run: npx next build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          # Clerk rejects pk_test_ZHVtbXk (it decodes to "dummy", and a publishable
+          # key must decode to "<host>$"). This dummy decodes to dummy.clerk.accounts.dev$.
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA==
+          CLERK_SECRET_KEY: sk_test_dummy
