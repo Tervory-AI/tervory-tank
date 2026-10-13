@@ -25,12 +25,13 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const action = new URL(req.url).searchParams.get("action");
   if (action === "rerun") {
-    const b = (await req.json().catch(() => null)) as { batch?: string; flag?: string; preview?: boolean } | null;
+    const b = (await req.json().catch(() => null)) as { batch?: string; flag?: string; preview?: boolean; skill?: string } | null;
     if (!b?.batch) return NextResponse.json({ error: "batch required" }, { status: 400 });
     try {
       const { tenantId } = await currentTenant();
       const preview = typeof b.preview === "boolean" ? b.preview : undefined;
-      return NextResponse.json(await baseRerun(tenantId, b.batch, b.flag || "no_website", preview));
+      const skill = typeof b.skill === "string" && /^[a-z0-9_.]+@[0-9.]+$/.test(b.skill) ? b.skill : undefined;
+      return NextResponse.json(await baseRerun(tenantId, b.batch, b.flag || "no_website", preview, skill));
     } catch (err) {
       return NextResponse.json({ error: err instanceof Error ? err.message : "Tank unavailable" }, { status: 502 });
     }

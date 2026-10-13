@@ -1168,6 +1168,7 @@ class BaseRerun(BaseModel):
     batch: str
     flag: str = "no_website"          # re-run records carrying this verify flag
     preview: bool | None = None       # owner testing: true runs the newest evaluated (staging) skills; None keeps the batch's setting
+    skill: str | None = None          # instead of a flag: re-run every record a given skill version produced, e.g. "base.find_site@1.2.0"
 
 
 @app.post("/v1/base/rerun", dependencies=[Depends(require_key)])
@@ -1175,15 +1176,27 @@ async def base_rerun(body: BaseRerun) -> dict[str, Any]:
     """Send a batch's flagged records (default: the ones with no website) back through the passes
     with the current skill versions, and re-open the batch so the worker picks it up in order."""
     async with pool().acquire() as conn:
-        n = await conn.fetchval(
-            """
-            WITH r AS (UPDATE base.records SET status='queued', error=NULL, updated_at=now()
-                       WHERE tenant_id=$1 AND batch=$2 AND status='done'
-                         AND profile->'flags'->'value' ? $3
-                       RETURNING id)
-            SELECT count(*) FROM r
-            """, body.tenant_id, body.batch, body.flag,
-        )
+        if body.skill:
+            n = await conn.fetchval(
+                """
+                WITH r AS (UPDATE base.records SET status='queued', error=NULL, updated_at=now()
+                           WHERE tenant_id=$1 AND batch=$2 AND status='done'
+                             AND EXISTS (SELECT 1 FROM jsonb_each(passes) p
+                                         WHERE jsonb_typeof(p.value)='object' AND p.value->>'skill' = $3)
+                           RETURNING id)
+                SELECT count(*) FROM r
+                """, body.tenant_id, body.batch, body.skill,
+            )
+        else:
+            n = await conn.fetchval(
+                """
+                WITH r AS (UPDATE base.records SET status='queued', error=NULL, updated_at=now()
+                           WHERE tenant_id=$1 AND batch=$2 AND status='done'
+                             AND profile->'flags'->'value' ? $3
+                           RETURNING id)
+                SELECT count(*) FROM r
+                """, body.tenant_id, body.batch, body.flag,
+            )
         if n:
             # Set the mode before re-opening the task, so the worker never picks it up with the old one.
             if body.preview is not None:
