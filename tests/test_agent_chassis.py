@@ -481,6 +481,40 @@ def test_template_has_a_ping_job_and_a_five_minute_heartbeat():
         )
         assert await mod.ping(ctx) == {"pong": True, "agent": "template"}
 
+        class FakeMemory:
+            def __init__(self) -> None:
+                self.calls: list[tuple] = []
+
+            async def remember(self, tenant_id, text, kind, source):
+                self.calls.append((tenant_id, text, kind, source))
+                return {"id": "m1", "seen": len(self.calls), "deduped": len(self.calls) > 1}
+
+        class DownMemory:
+            async def remember(self, *args, **kwargs):
+                raise RuntimeError("hermes unreachable")
+
+        fake = FakeMemory()
+        beat = JobContext(
+            agent="template",
+            tenant_id="00000000-0000-0000-0000-000000000001",
+            job_id="job",
+            kind="ping",
+            input={"heartbeat": True},
+            files=None,
+            tank=None,
+            memory=fake,
+            browser=None,
+        )
+        await mod.ping(beat)
+        second = await mod.ping(beat)
+        assert second["heartbeats_seen"] == 2
+        assert fake.calls[0][2] == "heartbeat"
+        assert fake.calls[0][1] == fake.calls[1][1]  # same text, so Hermes folds it
+
+        beat.memory = DownMemory()
+        down = await mod.ping(beat)
+        assert down["pong"] is True and down["memory"] == "unreachable"
+
     asyncio.run(check())
 
 
