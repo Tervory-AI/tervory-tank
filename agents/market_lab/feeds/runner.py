@@ -7,6 +7,8 @@ from pathlib import Path
 from feeds.adapters import ADAPTERS
 from feeds.catalog import sources
 from feeds.db import apply_schema, connect
+from feeds.fetch import fetch_source, watch_page
+from feeds.live import NeedsKey, PoliteClient
 from feeds.reader import FixtureReader
 from feeds.store import Store, utc_now
 
@@ -20,10 +22,12 @@ def fixture_roots(explicit: str | None) -> list[Path]:
 def run(
     db: str,
     *,
-    engine: str = "ffl",
+    engine: str,
     source: str | None = None,
     backfill: bool = False,
     fixtures: str | None = None,
+    live: bool = False,
+    client: PoliteClient | None = None,
 ) -> list[dict[str, object]]:
     specs = sources(engine)
     if source is not None:
@@ -35,6 +39,7 @@ def run(
     apply_schema(conn)
     store = Store(conn)
     reader = FixtureReader(fixture_roots(fixtures)) if fixtures else None
+    http = client if client is not None else (PoliteClient() if live else None)
     for spec in specs:
         started = utc_now()
         store.upsert_source(spec)
@@ -44,16 +49,27 @@ def run(
         try:
             if not spec.enabled:
                 error = "disabled"
+            elif live and not spec.allow_bulk:
+                if spec.config.get("watch") and http is not None:
+                    rows = watch_page(spec, http, store)
+                else:
+                    error = "blocked by terms"
             elif not spec.allow_bulk:
                 rows = 0
+            elif live and http is not None:
+                rows = fetch_source(spec, http, store, backfill=backfill)
             elif reader is None:
                 raise RuntimeError(
                     "refusing to open the network. Pass --fixtures for a saved "
-                    "backfill. URL builders are in feeds.live and are not called here."
+                    "backfill, or --live --source for one real source."
                 )
             else:
                 adapter = ADAPTERS[spec.adapter]
                 rows = adapter(spec, reader, store, backfill=backfill)
+        except NeedsKey as exc:
+            conn.rollback()
+            rows = 0
+            error = str(exc)
         except Exception as exc:
             conn.rollback()
             rows = 0
@@ -64,7 +80,7 @@ def run(
     return [row for row in report if source is None or row["id"] == source]
 
 
-def status(db: str, *, engine: str = "ffl") -> list[dict[str, object]]:
+def status(db: str, *, engine: str) -> list[dict[str, object]]:
     conn = connect(db)
     apply_schema(conn)
     store = Store(conn)
@@ -82,6 +98,8 @@ def format_status(rows: list[dict[str, object]]) -> str:
         lines.append(
             f"{row['id']}\t{row['mode']}\tcadence={row['cadence']}\t"
             f"points={row['points']}\tevents={row['events']}\t"
+            f"last_success={row.get('last_success') or ''}\t"
+            f"rows={'' if row.get('success_rows') is None else row['success_rows']}\t"
             f"last_rows={row['last_rows']}\tlast={row['last_finished'] or ''}\t"
             f"error={row['last_error'] or ''}"
         )

@@ -21,7 +21,7 @@ def _db(tmp_path: Path) -> str:
 
 def _run(tmp_path: Path) -> str:
     target = _db(tmp_path)
-    assert main(["run", "--backfill", "--fixtures", str(FIXTURES), "--db", target]) == 0
+    assert main(["run", "--backfill", "--fixtures", str(FIXTURES), "--db", target, "--engine", "ffl"]) == 0
     return target
 
 
@@ -99,7 +99,7 @@ def test_rerun_adds_nothing_and_keeps_revisions(tmp_path: Path) -> None:
     }
     assert population == {("acs-v1", "100"), ("acs-v2", "110")}
     conn.close()
-    assert main(["run", "--backfill", "--fixtures", str(FIXTURES), "--db", target]) == 0
+    assert main(["run", "--backfill", "--fixtures", str(FIXTURES), "--db", target, "--engine", "ffl"]) == 0
     conn = _connect(target)
     assert _count(conn, "SELECT COUNT(*) FROM points") == before
     assert _count(conn, "SELECT COUNT(*) FROM events") == 5
@@ -118,7 +118,7 @@ def test_rerun_adds_nothing_and_keeps_revisions(tmp_path: Path) -> None:
 
 def test_status_lists_licence_and_linked_sources_store_nothing(tmp_path: Path) -> None:
     target = _run(tmp_path)
-    assert main(["status", "--db", target]) == 0
+    assert main(["status", "--db", target, "--engine", "ffl"]) == 0
     conn = _connect(target)
     text = _dump(conn)
     assert "424242" not in text

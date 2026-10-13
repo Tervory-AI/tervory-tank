@@ -5,7 +5,9 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 from collections import defaultdict
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -53,50 +55,41 @@ def _crosswalk(reader: FixtureReader, relative: str | None) -> dict[tuple[str, s
 
 
 def run_listing_clean(source: SourceSpec, reader: FixtureReader, store: Store, *, backfill: bool) -> int:
-    """Month files in order. Counts by state, county (from ZIP), and type code."""
+    """Month files in order. One month is streamed, then only its id set is kept."""
     require_copy(source)
     columns = source.config["columns"]
     crosswalk = _crosswalk(reader, source.config.get("crosswalk"))
     files = list(source.config.get("files") or [])
     if not files:
         return 0
-    months: list[tuple[str, list[dict[str, str]]]] = []
-    for entry in files:
-        months.append((_revision_of(entry), _parse_table(reader.read_text(_path_of(entry)))))
-    start = 0 if backfill else max(len(months) - 1, 0)
+    start = 0 if backfill else max(len(files) - 1, 0)
     inserted = 0
     prior_by_state: dict[str, set[str]] | None = None
-    for index, (revision, rows) in enumerate(months):
+    marker = str(columns["id_fields"][0])
+    for index, entry in enumerate(files):
+        revision = _revision_of(entry)
         date = _month_date(revision)
-        current_by_state = _ids_by_state(rows, columns)
-        write = index >= start
-        if write:
-            inserted += _emit_listing(source, store, rows, columns, crosswalk, date, revision, current_by_state, prior_by_state)
-        prior_by_state = current_by_state
+        tally = tally_listing(
+            reader.iter_rows(_path_of(entry), header_marker=marker),
+            columns,
+            crosswalk,
+        )
+        if index >= start:
+            inserted += _emit_tally(source, store, tally, date, revision, prior_by_state)
+        prior_by_state = tally.ids_by_state
     return inserted
 
 
-def _ids_by_state(rows: list[dict[str, str]], columns: dict[str, Any]) -> dict[str, set[str]]:
-    found: dict[str, set[str]] = defaultdict(set)
-    for row in rows:
-        found[row[columns["state"]].strip()].add(_row_id(row, columns))
-    return found
-
-
-def _emit_listing(
-    source: SourceSpec,
-    store: Store,
-    rows: list[dict[str, str]],
+def tally_listing(
+    rows: Any,
     columns: dict[str, Any],
     crosswalk: dict[tuple[str, str], tuple[str, str]],
-    date: str,
-    revision: str,
-    current_by_state: dict[str, set[str]],
-    prior_by_state: dict[str, set[str]] | None,
-) -> int:
+) -> "ListingTally":
+    """One pass. The row iterator is not stored."""
     by_state: dict[str, int] = defaultdict(int)
     by_county: dict[tuple[str, str], int] = defaultdict(int)
     by_type: dict[str, int] = defaultdict(int)
+    ids_by_state: dict[str, set[str]] = defaultdict(set)
     for row in rows:
         state = row[columns["state"]].strip()
         zip_code = row[columns["zip"]].strip()[:5]
@@ -106,17 +99,43 @@ def _emit_listing(
         county = crosswalk.get((state, zip_code))
         key = ("unmatched", "unmatched") if county is None else county
         by_county[key] += 1
+        ids_by_state[state].add(_row_id(row, columns))
+    return ListingTally(by_state, by_county, by_type, ids_by_state)
+
+
+class ListingTally:
+    def __init__(
+        self,
+        by_state: dict[str, int],
+        by_county: dict[tuple[str, str], int],
+        by_type: dict[str, int],
+        ids_by_state: dict[str, set[str]],
+    ) -> None:
+        self.by_state = by_state
+        self.by_county = by_county
+        self.by_type = by_type
+        self.ids_by_state = ids_by_state
+
+
+def _emit_tally(
+    source: SourceSpec,
+    store: Store,
+    tally: ListingTally,
+    date: str,
+    revision: str,
+    prior_by_state: dict[str, set[str]] | None,
+) -> int:
     inserted = 0
-    for state, count in sorted(by_state.items()):
+    for state, count in sorted(tally.by_state.items()):
         inserted += _point(store, source, f"count:state:{state}", f"Active listings in {state}", "listings", "state", state, "monthly", date, count, revision)
-    for (fips, name), count in sorted(by_county.items()):
+    for (fips, name), count in sorted(tally.by_county.items()):
         inserted += _point(store, source, f"count:county:{fips}", f"Active listings in {name}", "listings", "county", fips, "monthly", date, count, revision)
-    for type_code, count in sorted(by_type.items()):
+    for type_code, count in sorted(tally.by_type.items()):
         inserted += _point(store, source, f"count:type:{type_code}", f"Active listings of type {type_code}", "listings", "national", "US", "monthly", date, count, revision)
     if prior_by_state is not None:
-        states = sorted(set(current_by_state) | set(prior_by_state))
+        states = sorted(set(tally.ids_by_state) | set(prior_by_state))
         for state in states:
-            now = current_by_state.get(state, set())
+            now = tally.ids_by_state.get(state, set())
             then = prior_by_state.get(state, set())
             inserted += _point(store, source, f"new:state:{state}", f"New listings in {state}", "listings", "state", state, "monthly", date, len(now - then), revision)
             inserted += _point(store, source, f"dropped:state:{state}", f"Dropped listings in {state}", "listings", "state", state, "monthly", date, len(then - now), revision)
@@ -155,10 +174,18 @@ def run_census_population(source: SourceSpec, reader: FixtureReader, store: Stor
     return inserted
 
 
-def _ingest_census_population(source: SourceSpec, store: Store, text: str, revision: str) -> int:
+def _ingest_census_population(
+    source: SourceSpec,
+    store: Store,
+    text: str,
+    revision: str,
+    *,
+    year: str | None = None,
+) -> int:
     table = json.loads(text)
     header = table[0]
     inserted = 0
+    date = f"{year or source.config.get('year', '2023')}-01-01"
     for raw in table[1:]:
         row = dict(zip(header, raw))
         name = row["NAME"]
@@ -171,59 +198,83 @@ def _ingest_census_population(source: SourceSpec, store: Store, text: str, revis
             geo = row["state"]
             level = "state"
             ref = f"population:state:{geo}"
-        date = f"{source.config.get('year', '2023')}-01-01"
         inserted += _point(store, source, ref, f"Population, {name}", "persons", level, geo, "annual", date, value, revision)
     return inserted
 
 
 def run_census_trade(source: SourceSpec, reader: FixtureReader, store: Store, *, backfill: bool) -> int:
     require_copy(source)
-    codes = {str(code) for code in source.config["codes"]}
     inserted = 0
     entries = list(source.config.get("files") or [])
     if not backfill and entries:
         entries = entries[-1:]
     for entry in entries:
         flow = entry["flow"] if isinstance(entry, dict) else source.config.get("flow", "import")
-        table = json.loads(reader.read_text(_path_of(entry)))
-        header = table[0]
-        value_column = "GEN_VAL_MO" if "GEN_VAL_MO" in header else "ALL_VAL_MO"
-        for raw in table[1:]:
-            row = dict(zip(header, raw))
-            code = str(row.get("I_COMMODITY") or row.get("E_COMMODITY") or "")
-            if code not in codes:
-                continue
-            partner = row["CTY_NAME"]
-            port = row["DIST_NAME"]
-            date = _month_date(row["time"])
-            ref = f"{flow}:{code}:{partner}:{port}"
-            title = f"{flow} {code} from {partner} via {port}" if flow == "import" else f"{flow} {code} to {partner} via {port}"
-            inserted += _point(store, source, ref, title, "dollars", "port", port, "monthly", date, row[value_column], _revision_of(entry))
+        inserted += ingest_census_trade(
+            source, store, json.loads(reader.read_text(_path_of(entry))), str(flow), _revision_of(entry),
+        )
+    return inserted
+
+
+def ingest_census_trade(
+    source: SourceSpec,
+    store: Store,
+    table: list[Any],
+    flow: str,
+    revision: str,
+) -> int:
+    codes = {str(code) for code in source.config["codes"]}
+    header = table[0]
+    value_column = "GEN_VAL_MO" if "GEN_VAL_MO" in header else "ALL_VAL_MO"
+    inserted = 0
+    for raw in table[1:]:
+        row = dict(zip(header, raw))
+        code = str(row.get("I_COMMODITY") or row.get("E_COMMODITY") or "")
+        if code not in codes:
+            continue
+        partner = row["CTY_NAME"]
+        port = row["DIST_NAME"]
+        date = _month_date(row["time"])
+        ref = f"{flow}:{code}:{partner}:{port}"
+        title = f"{flow} {code} from {partner} via {port}" if flow == "import" else f"{flow} {code} to {partner} via {port}"
+        inserted += _point(store, source, ref, title, "dollars", "port", port, "monthly", date, row[value_column], revision)
     return inserted
 
 
 def run_legiscan(source: SourceSpec, reader: FixtureReader, store: Store, *, backfill: bool) -> int:
     require_copy(source)
-    topics = [str(topic) for topic in source.config["topics"]]
     inserted = 0
     for entry in _files(source, backfill):
-        payload = json.loads(reader.read_text(_path_of(entry)))
-        result = payload.get("searchresult") or {}
-        for key, item in result.items():
-            if key == "summary" or not isinstance(item, dict):
-                continue
-            title = str(item.get("title") or "")
+        inserted += ingest_legiscan(source, store, json.loads(reader.read_text(_path_of(entry))))
+    return inserted
+
+
+def ingest_legiscan(source: SourceSpec, store: Store, payload: dict[str, Any]) -> int:
+    """getSearch rows use last_action and last_action_date.
+
+    Saved fixtures that predate those fields are still filtered by topic.
+    A live search already applied the topic, so those rows are kept.
+    """
+    topics = [str(topic) for topic in source.config.get("topics") or []]
+    inserted = 0
+    result = payload.get("searchresult") or {}
+    for key, item in result.items():
+        if key == "summary" or not isinstance(item, dict):
+            continue
+        title = str(item.get("title") or "")
+        real = "last_action" in item or "last_action_date" in item
+        if not real and topics:
             haystack = f"{title} {item.get('keywords') or ''}".lower()
-            if topics and not any(topic.lower() in haystack for topic in topics):
+            if not any(topic.lower() in haystack for topic in topics):
                 continue
-            status = str(item.get("status") or item.get("status_desc") or "status")
-            number = str(item.get("bill_number") or item.get("bill_id") or "bill")
-            state = str(item.get("state") or "US")
-            date = str(item.get("status_date") or item.get("last_action_date") or "1970-01-01")[:10]
-            url = str(item.get("url") or item.get("text_url") or source.url)
-            inserted += int(store.put_event(
-                source.id, "bill_status", state, date, f"{number} {status}", title, url,
-            ))
+        status = str(item.get("last_action") or item.get("status") or item.get("status_desc") or "status")
+        number = str(item.get("bill_number") or item.get("bill_id") or "bill")
+        state = str(item.get("state") or "US")
+        date = str(item.get("last_action_date") or item.get("status_date") or "1970-01-01")[:10]
+        url = str(item.get("url") or item.get("text_url") or source.url)
+        inserted += int(store.put_event(
+            source.id, "bill_status", state, date, f"{number} {status}", title, url,
+        ))
     return inserted
 
 
@@ -318,39 +369,140 @@ def run_noaa_alerts(source: SourceSpec, reader: FixtureReader, store: Store, *, 
     require_copy(source)
     inserted = 0
     for entry in _files(source, backfill):
-        payload = json.loads(reader.read_text(_path_of(entry)))
-        for feature in payload.get("features") or []:
-            props = feature.get("properties") or {}
-            geo = _alert_state(props)
-            sent = str(props.get("sent") or "")[:10]
-            headline = str(props.get("headline") or props.get("event") or "Alert")
-            url = str(props.get("id") or props.get("@id") or source.url)
-            body = str(props.get("event") or "")
+        inserted += ingest_alerts(source, store, json.loads(reader.read_text(_path_of(entry))))
+    return inserted
+
+
+def ingest_alerts(source: SourceSpec, store: Store, payload: dict[str, Any]) -> int:
+    inserted = 0
+    for feature in payload.get("features") or []:
+        props = feature.get("properties") or {}
+        states = alert_states(props)
+        sent = str(props.get("sent") or "")[:10]
+        headline = str(props.get("headline") or props.get("event") or "Alert")
+        url = str(props.get("id") or props.get("@id") or source.url)
+        body = str(props.get("event") or "")
+        for geo in states:
             inserted += int(store.put_event(source.id, "severe_weather", geo, sent, headline, body, url))
     return inserted
 
 
-def _alert_state(props: dict[str, Any]) -> str:
-    ugc = ((props.get("geocode") or {}).get("UGC")) or []
+def alert_states(props: dict[str, Any]) -> list[str]:
+    """Land zones become postal codes. Marine zones are ignored."""
+    found: list[str] = []
+    saw_zone = False
+    geocode = props.get("geocode") or {}
+    ugc = geocode.get("UGC") or []
+    if isinstance(ugc, str):
+        ugc = [ugc]
     if ugc:
-        return str(ugc[0])[:2]
-    return "US"
+        saw_zone = True
+    for code in ugc:
+        state = land_state(str(code))
+        if state is not None:
+            found.append(state)
+    zones = props.get("affectedZones") or []
+    if zones:
+        saw_zone = True
+    for zone_url in zones:
+        tail = str(zone_url).rstrip("/").rsplit("/", 1)[-1]
+        state = land_state(tail)
+        if state is not None:
+            found.append(state)
+    if not saw_zone:
+        return ["US"]
+    unique: list[str] = []
+    for state in found:
+        if state not in unique:
+            unique.append(state)
+    return unique
+
+
+def land_state(code: str) -> str | None:
+    from feeds.geo import US_POSTAL_SET
+
+    text = code.strip().upper()
+    if len(text) < 6 or text[2] not in {"C", "Z"} or not text[3:].isdigit():
+        return None
+    prefix = text[:2]
+    if prefix not in US_POSTAL_SET:
+        return None
+    return prefix
 
 
 def run_noaa_climate(source: SourceSpec, reader: FixtureReader, store: Store, *, backfill: bool) -> int:
     require_copy(source)
     inserted = 0
     for entry in _files(source, backfill):
-        payload = json.loads(reader.read_text(_path_of(entry)))
-        for row in payload.get("results") or []:
-            state = str(row["state"])
-            datatype = str(row["datatype"])
-            unit = "degrees F" if datatype == "TAVG" else "inches"
-            inserted += _point(
-                store, source, f"{datatype}:{state}", f"{datatype} in {state}", unit,
-                "state", state, "monthly", str(row["date"])[:10], row["value"], _revision_of(entry),
-            )
+        inserted += ingest_climate(
+            source,
+            store,
+            json.loads(reader.read_text(_path_of(entry))),
+            state=None,
+            revision=_revision_of(entry),
+        )
     return inserted
+
+
+def ingest_climate(
+    source: SourceSpec,
+    store: Store,
+    payload: dict[str, Any],
+    *,
+    state: str | None,
+    revision: str,
+) -> int:
+    results = [row for row in (payload.get("results") or []) if isinstance(row, dict)]
+    if any("station" in row for row in results):
+        return _ingest_gsom(source, store, results, state=state, revision=revision)
+    inserted = 0
+    for row in results:
+        row_state = str(row["state"])
+        datatype = str(row["datatype"])
+        unit = _climate_unit(datatype)
+        inserted += _point(
+            store, source, f"{datatype}:{row_state}", f"{datatype} in {row_state}", unit,
+            "state", row_state, "monthly", str(row["date"])[:10], row["value"], revision,
+        )
+    return inserted
+
+
+def _ingest_gsom(
+    source: SourceSpec,
+    store: Store,
+    results: list[dict[str, Any]],
+    *,
+    state: str | None,
+    revision: str,
+) -> int:
+    """Real GSOM rows are station observations. Average them to one state value."""
+    if not state:
+        raise RuntimeError("state is required for a GSOM climate response")
+    grouped: dict[tuple[str, str], list[Decimal]] = defaultdict(list)
+    for row in results:
+        if row.get("value") is None or row.get("value") == "":
+            continue
+        datatype = str(row.get("datatype") or "")
+        date = str(row.get("date") or "")[:10]
+        if not datatype or len(date) < 10:
+            continue
+        grouped[(datatype, date)].append(Decimal(str(row["value"])))
+    inserted = 0
+    for (datatype, date), values in sorted(grouped.items()):
+        average = sum(values, Decimal(0)) / Decimal(len(values))
+        inserted += _point(
+            store, source, f"{datatype}:{state}", f"{datatype} in {state}", _climate_unit(datatype),
+            "state", state, "monthly", date, average, revision,
+        )
+    return inserted
+
+
+def _climate_unit(datatype: str) -> str:
+    if datatype == "TAVG":
+        return "degrees F"
+    if datatype == "PRCP":
+        return "inches"
+    return "value"
 
 
 def run_port_csv(source: SourceSpec, reader: FixtureReader, store: Store, *, backfill: bool) -> int:
@@ -393,6 +545,110 @@ def run_month_index(source: SourceSpec, reader: FixtureReader, store: Store, *, 
                 str(source.config["unit"]), "national", "US", "monthly", date, row["value"], _revision_of(entry),
             )
     return inserted
+
+
+_MONTHS = {
+    "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
+    "july": 7, "august": 8, "september": 9, "october": 10, "november": 11, "december": 12,
+}
+_YEAR = re.compile(r"Year\s*(\d{4})", re.IGNORECASE)
+_SKIP_COLUMN = {"grandtotal", "totals", "total"}
+_SKIP_ROW = {"total", "totals", "grandtotal"}
+
+
+def parse_state_month_pdf(data: bytes) -> list[tuple[str, int, str, str]]:
+    """Published month-by-state tables. Returns year, month, postal code, value."""
+    import pdfplumber
+
+    from feeds.geo import STATE_BY_NAME, normalize_label
+
+    found: list[tuple[str, int, str, str]] = []
+    year: str | None = None
+    with pdfplumber.open(io.BytesIO(data)) as pdf:
+        for page in pdf.pages:
+            text = page.extract_text() or ""
+            years = _YEAR.findall(text)
+            if years:
+                year = years[0]
+            if year is None:
+                continue
+            for table in page.extract_tables() or []:
+                found.extend(_rows_from_state_month_table(table, year, STATE_BY_NAME, normalize_label))
+    return found
+
+
+def _rows_from_state_month_table(
+    table: list[list[Any]],
+    year: str,
+    names: dict[str, str],
+    normalize: Any,
+) -> list[tuple[str, int, str, str]]:
+    header_index = None
+    month_at: dict[int, int] = {}
+    state_at = 0
+    for index, row in enumerate(table):
+        labels = [normalize(str(cell or "")) for cell in row]
+        months = {position: _MONTHS[label] for position, label in enumerate(labels) if label in _MONTHS}
+        if months and any(label.startswith("state") for label in labels):
+            header_index = index
+            month_at = months
+            for position, label in enumerate(labels):
+                if label.startswith("state"):
+                    state_at = position
+                    break
+            break
+    if header_index is None:
+        return []
+    found: list[tuple[str, int, str, str]] = []
+    for row in table[header_index + 1 :]:
+        if state_at >= len(row):
+            continue
+        label = normalize(str(row[state_at] or ""))
+        if not label or label in _SKIP_ROW:
+            continue
+        postal = names.get(label)
+        if postal is None:
+            continue
+        for position, month in month_at.items():
+            if position >= len(row):
+                continue
+            header = normalize(str(table[header_index][position] or ""))
+            if header in _SKIP_COLUMN:
+                continue
+            value = _plain_number(row[position])
+            if value is None:
+                continue
+            found.append((year, month, postal, value))
+    return found
+
+
+def ingest_state_month_pdf(source: SourceSpec, store: Store, data: bytes) -> int:
+    require_copy(source)
+    kind = str(source.config.get("pdf_type") or "total")
+    title_template = str(source.config.get("pdf_title") or "{geo}")
+    unit = str(source.config.get("unit") or "count")
+    inserted = 0
+    for year, month, postal, value in parse_state_month_pdf(data):
+        date = f"{year}-{month:02d}-01"
+        title = title_template.format(geo=postal, type=kind)
+        inserted += _point(
+            store, source, f"{kind}:{postal}", title, unit,
+            "state", postal, "monthly", date, value, year,
+        )
+    return inserted
+
+
+def _plain_number(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip().replace(",", "").replace(" ", "")
+    if not text or text in {"-", "–", "—"}:
+        return None
+    try:
+        Decimal(text)
+    except Exception:
+        return None
+    return text
 
 
 def _point(

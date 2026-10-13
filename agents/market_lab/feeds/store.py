@@ -25,6 +25,15 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+def _revision_suffix(base: str, revision: str) -> int:
+    if revision == base:
+        return 1
+    tail = revision[len(base) + 1 :]
+    if tail.isdigit():
+        return int(tail)
+    return 0
+
+
 class Store:
     def __init__(self, conn: sqlite3.Connection) -> None:
         self.conn = conn
@@ -79,30 +88,39 @@ class Store:
         return series_id
 
     def put_point(self, series_id: str, date: str, value: object, revision: str) -> bool:
-        """Keep every vintage. Never update a stored number in place."""
+        """Keep every vintage. A return to an earlier value is a new vintage.
+
+        Re-running the latest vintage is a no-op. A→B→A under the same
+        revision base stores three rows.
+        """
         stored = canonical_number(value)
-        candidate = revision
-        while True:
-            row = self.conn.execute(
-                "SELECT value FROM points WHERE series_id = ? AND date = ? AND revision = ?",
-                (series_id, date, candidate),
-            ).fetchone()
-            if row is None:
-                self.conn.execute(
-                    """
-                    INSERT INTO points (series_id, date, value, fetched_at, revision)
-                    VALUES (?, ?, ?, ?, ?)
-                    """,
-                    (series_id, date, stored, utc_now(), candidate),
-                )
-                return True
-            if canonical_number(row["value"]) == stored:
-                return False
-            if "#" in candidate:
-                base, _, suffix = candidate.rpartition("#")
-                candidate = f"{base}#{int(suffix) + 1}"
-            else:
-                candidate = f"{revision}#2"
+        rows = self.conn.execute(
+            "SELECT revision, value FROM points WHERE series_id = ? AND date = ?",
+            (series_id, date),
+        ).fetchall()
+        matched = [
+            row
+            for row in rows
+            if row["revision"] == revision or str(row["revision"]).startswith(revision + "#")
+        ]
+        if not matched:
+            self._insert_point(series_id, date, stored, revision)
+            return True
+        latest = max(matched, key=lambda row: _revision_suffix(revision, str(row["revision"])))
+        if canonical_number(latest["value"]) == stored:
+            return False
+        suffix = max(_revision_suffix(revision, str(row["revision"])) for row in matched)
+        self._insert_point(series_id, date, stored, f"{revision}#{suffix + 1}")
+        return True
+
+    def _insert_point(self, series_id: str, date: str, stored: str, revision: str) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO points (series_id, date, value, fetched_at, revision)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (series_id, date, stored, utc_now(), revision),
+        )
 
     def put_event(
         self,
@@ -133,6 +151,20 @@ class Store:
             (str(uuid.uuid4()), source_id, kind, geo, date, title, body, url, utc_now()),
         )
         return True
+
+    def latest_event_body(self, source_id: str, kind: str) -> str | None:
+        row = self.conn.execute(
+            """
+            SELECT body FROM events
+            WHERE source_id = ? AND kind = ?
+            ORDER BY fetched_at DESC, rowid DESC
+            LIMIT 1
+            """,
+            (source_id, kind),
+        ).fetchone()
+        if row is None:
+            return None
+        return str(row["body"])
 
     def finish_run(self, source_id: str, started: str, rows: int, error: str | None) -> None:
         self.conn.execute(
@@ -171,6 +203,15 @@ class Store:
                 """,
                 (source["id"],),
             ).fetchone()
+            success = self.conn.execute(
+                """
+                SELECT finished, rows FROM fetch_runs
+                WHERE source_id = ? AND error IS NULL
+                ORDER BY finished DESC, rowid DESC
+                LIMIT 1
+                """,
+                (source["id"],),
+            ).fetchone()
             mode = "copy" if not str(source["licence"]).startswith("Linked only.") else "linked"
             rows.append(
                 {
@@ -189,6 +230,8 @@ class Store:
                     "last_finished": None if last is None else last["finished"],
                     "last_rows": None if last is None else last["rows"],
                     "last_error": None if last is None else last["error"],
+                    "last_success": None if success is None else success["finished"],
+                    "success_rows": None if success is None else success["rows"],
                 }
             )
         return rows

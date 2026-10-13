@@ -21,7 +21,7 @@ BANNED = re.compile(
 
 
 def test_link_only_source_cannot_copy() -> None:
-    fred = next(item for item in sources() if item.id == "fred_tsifrght")
+    fred = next(item for item in sources("ffl") if item.id == "fred_tsifrght")
     try:
         require_copy(fred)
     except LicenceBlocked:
@@ -52,7 +52,7 @@ def test_backfill_does_not_open_a_socket(tmp_path: Path, monkeypatch) -> None:
 
     target = "sqlite:///" + str(tmp_path / "feeds.sqlite")
     fixtures = str(ROOT / "tests" / "fixtures" / "feeds")
-    assert main(["run", "--backfill", "--fixtures", fixtures, "--db", target]) == 0
+    assert main(["run", "--backfill", "--fixtures", fixtures, "--db", target, "--engine", "ffl"]) == 0
 
 
 def test_runner_reads_only_the_fixture_directory() -> None:
@@ -87,6 +87,8 @@ def test_failed_source_keeps_no_partial_rows(tmp_path: Path) -> None:
             str(ROOT / "tests" / "fixtures" / "feeds"),
             "--db",
             "sqlite:///" + str(target),
+            "--engine",
+            "ffl",
         ]) == 0
     finally:
         adapters.ADAPTERS["eia"] = real
