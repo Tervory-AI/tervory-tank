@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import inspect
 import os
 import sys
 import uuid
@@ -14,6 +15,7 @@ from types import SimpleNamespace
 import pytest
 import yaml
 from fastapi import HTTPException
+from starlette.requests import Request
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tank"))
@@ -23,6 +25,14 @@ from chassis.cron import cron_matches, is_due  # noqa: E402
 from chassis.db import schema_for  # noqa: E402
 from chassis.files import UnsafePath, read_file, save_file  # noqa: E402
 from chassis.jobs import JobContext, decide_retry, decide_timeout  # noqa: E402
+from chassis.worker import (  # noqa: E402
+    _fail,
+    enqueue_due,
+    retry_backoff_s,
+    run_claimed,
+    run_with_timeout,
+    schedule_is_due,
+)
 
 os.environ.setdefault("DATABASE_URL", "postgresql://x:y@localhost/z")
 os.environ.setdefault("LITELLM_MASTER_KEY", "test")
@@ -120,6 +130,18 @@ def test_retry_requeues_until_max_attempts():
     assert decide_retry(attempts=3, max_attempts=3) == "failed"
 
 
+def test_retry_backoff_and_a_bad_cron_does_not_block_the_next_row():
+    assert retry_backoff_s(1) == 30
+    assert retry_backoff_s(2) == 60
+    assert retry_backoff_s(3) == 90
+    assert "retry_backoff_s" in inspect.getsource(_fail)
+    now = datetime(2026, 10, 13, 12, 5, tzinfo=timezone.utc)
+    assert schedule_is_due("not a cron", now, None) is False
+    assert schedule_is_due("*/5 * * * *", now, None) is True
+    assert "FOR UPDATE" in inspect.getsource(enqueue_due)
+    assert "run_with_timeout" in inspect.getsource(run_claimed)
+
+
 def test_schema_name_rejects_anything_that_is_not_an_agent_id():
     assert schema_for("template") == "agent_template"
     with pytest.raises(ValueError):
@@ -159,21 +181,162 @@ def test_save_file_rejects_a_symlink_that_leaves_the_tenant(tmp_path: Path):
     assert not (outside / "pwned.txt").exists()
 
 
+def _request(path: str) -> Request:
+    return Request({
+        "type": "http",
+        "asgi": {"version": "3.0", "spec_version": "2.3"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": path,
+        "raw_path": path.encode(),
+        "query_string": b"",
+        "headers": [],
+        "client": ("127.0.0.1", 1234),
+        "server": ("test", 80),
+    })
+
+
+class _CM:
+    def __init__(self, value: object) -> None:
+        self.value = value
+
+    async def __aenter__(self) -> object:
+        return self.value
+
+    async def __aexit__(self, *_exc: object) -> bool:
+        return False
+
+
+class _Conn:
+    def __init__(self) -> None:
+        self.calls: list[tuple[object, ...]] = []
+
+    async def execute(self, *args: object) -> None:
+        self.calls.append(args)
+
+    def transaction(self) -> _CM:
+        return _CM(self)
+
+
+class _Pool:
+    def __init__(self) -> None:
+        self.conn = _Conn()
+
+    def acquire(self) -> _CM:
+        return _CM(self.conn)
+
+
 # ---------- agent keys ----------
 
 def test_require_key_accepts_the_workspace_key_and_an_agent_key(monkeypatch: pytest.MonkeyPatch):
     _clear_agent_keys(monkeypatch)
     monkeypatch.setenv("TANK_KEY_TEMPLATE", "template-secret-value")
     monkeypatch.setenv("TANK_KEY_TIGER", "tiger-secret-value")
+    route = _request("/v1/route")
 
     async def check():
-        assert await TANK.require_key(TANK.TANK_API_KEY) is None
-        assert await TANK.require_key("template-secret-value") == "template"
-        assert await TANK.require_key("tiger-secret-value") == "tiger"
+        assert await TANK.require_key(route, TANK.TANK_API_KEY) is None
+        assert await TANK.require_key(route, "template-secret-value") == "template"
+        assert await TANK.require_key(route, "tiger-secret-value") == "tiger"
         with pytest.raises(HTTPException) as caught:
-            await TANK.require_key("not-a-key")
+            await TANK.require_key(route, "not-a-key")
         assert caught.value.status_code == 401
         assert "not-a-key" not in str(caught.value.detail)
+        with pytest.raises(HTTPException) as weird:
+            await TANK.require_key(route, "kéy")
+        assert weird.value.status_code == 401
+
+    asyncio.run(check())
+
+
+def test_agent_key_comes_from_env_and_the_table_is_written_once(monkeypatch: pytest.MonkeyPatch):
+    _clear_agent_keys(monkeypatch)
+    monkeypatch.setenv("TANK_KEY_TEMPLATE", "  template-secret-value  ")
+    monkeypatch.setattr(TANK, "_agent_keys_synced", False)
+    fake = _Pool()
+    monkeypatch.setattr(TANK, "_pool", object())
+    monkeypatch.setattr(TANK, "pool", lambda: fake)
+    route = _request("/v1/route")
+    source = inspect.getsource(TANK.require_key)
+    assert "SELECT agent FROM tank.agent_keys" not in source
+    assert "DELETE FROM tank.agent_keys" in source
+
+    async def check():
+        assert await TANK.require_key(route, "template-secret-value") == "template"
+        written = len(fake.conn.calls)
+        assert written >= 2
+        assert any("DELETE FROM tank.agent_keys" in str(call[0]) for call in fake.conn.calls)
+        assert all("template-secret-value" not in repr(call) for call in fake.conn.calls)
+        assert await TANK.require_key(route, "template-secret-value") == "template"
+        assert len(fake.conn.calls) == written
+        monkeypatch.delenv("TANK_KEY_TEMPLATE")
+        with pytest.raises(HTTPException) as caught:
+            await TANK.require_key(route, "template-secret-value")
+        assert caught.value.status_code == 401
+
+    asyncio.run(check())
+
+
+def test_blank_agent_key_is_ignored(monkeypatch: pytest.MonkeyPatch):
+    _clear_agent_keys(monkeypatch)
+    monkeypatch.setenv("TANK_KEY_TEMPLATE", "   ")
+
+    async def check():
+        with pytest.raises(HTTPException) as caught:
+            await TANK.require_key(_request("/v1/route"), "   ")
+        assert caught.value.status_code == 401
+
+    asyncio.run(check())
+
+
+def test_agent_key_is_limited_to_route_skill_run_and_health(monkeypatch: pytest.MonkeyPatch):
+    _clear_agent_keys(monkeypatch)
+    monkeypatch.setenv("TANK_KEY_TEMPLATE", "template-secret-value")
+    allowed = ("/health", "/v1/route", "/v1/skills/base.find_site/run")
+    blocked = (
+        "/v1/policy",
+        "/v1/graduation",
+        "/v1/skills/base.find_site/approve",
+        "/v1/skills/base.find_site/1.0.0/evals",
+        "/v1/base/run",
+        "/v1/tasks",
+        "/v1/ledger/summary",
+    )
+
+    async def check():
+        for path in allowed:
+            assert await TANK.require_key(_request(path), "template-secret-value") == "template"
+        for path in blocked:
+            with pytest.raises(HTTPException) as caught:
+                await TANK.require_key(_request(path), "template-secret-value")
+            assert caught.value.status_code == 403
+        assert await TANK.require_key(_request("/v1/policy"), TANK.TANK_API_KEY) is None
+
+    asyncio.run(check())
+
+
+def test_route_overwrites_agent_with_the_authenticated_caller(monkeypatch: pytest.MonkeyPatch):
+    seen: dict[str, str] = {}
+
+    async def fake_run_route(req, task_id=None):
+        seen["agent"] = req.agent
+        return "sent"
+
+    monkeypatch.setattr(TANK, "run_route", fake_run_route)
+    body = TANK.RouteRequest(
+        tenant_id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
+        agent="tier0",
+        messages=[TANK.Message(role="user", content="hello")],
+    )
+
+    async def check():
+        assert await TANK.route(body, "template") == "sent"
+        assert seen["agent"] == "template"
+        assert body.agent == "tier0"
+        other = body.model_copy(update={"agent": "tiger"})
+        assert await TANK.route(other, None) == "sent"
+        assert seen["agent"] == "tiger"
 
     asyncio.run(check())
 
@@ -321,11 +484,28 @@ def test_template_has_a_ping_job_and_a_five_minute_heartbeat():
     asyncio.run(check())
 
 
+def test_handler_timeout_cancels_a_stuck_job():
+    async def hang(_ctx):
+        await asyncio.sleep(5)
+        return {"ok": True}
+
+    async def quick(_ctx):
+        return {"pong": True}
+
+    async def check():
+        with pytest.raises(TimeoutError):
+            await run_with_timeout(hang, None, 0)  # type: ignore[arg-type]
+        assert await run_with_timeout(quick, None, 1) == {"pong": True}  # type: ignore[arg-type]
+
+    asyncio.run(check())
+
+
 def test_agent_boxes_do_not_share_a_network():
     compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
     services = compose["services"]
     template = services["agent-template"]
     assert template["networks"] == ["net_template"]
+    assert "health" in str(template.get("healthcheck", {}).get("test", ""))
     assert template["mem_limit"] == "512m"
     assert template["cpus"] in (0.5, "0.5")
     assert "default" not in template["networks"]

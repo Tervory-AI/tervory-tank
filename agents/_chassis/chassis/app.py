@@ -96,16 +96,15 @@ def create_app(
 
     @app.get("/health")
     async def health() -> dict[str, Any]:
-        db_ok = False
         pool = getattr(app.state, "pool", None)
-        if pool is not None:
-            try:
-                async with pool.acquire() as conn:
-                    await conn.fetchval("SELECT 1")
-                db_ok = True
-            except Exception:  # noqa: BLE001
-                db_ok = False
-        return {"ok": db_ok, "agent": agent}
+        if pool is None:
+            raise HTTPException(status_code=503, detail="database unreachable")
+        try:
+            async with pool.acquire() as conn:
+                await conn.fetchval("SELECT 1")
+        except Exception:  # noqa: BLE001 — do not include the database error in the response
+            raise HTTPException(status_code=503, detail="database unreachable") from None
+        return {"ok": True, "agent": agent}
 
     @app.post("/jobs", status_code=201)
     async def enqueue(body: JobIn) -> dict[str, Any]:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from datetime import datetime, timezone
@@ -15,10 +16,33 @@ from chassis.logs import log_line
 Handler = Callable[[JobContext], Awaitable[dict[str, Any]]]
 JOB_POLL_S = 2
 SCHEDULE_POLL_S = 15
+RETRY_BACKOFF_S = 30
 
 
 def _schema(agent: str) -> str:
     return schema_for(agent)
+
+
+def retry_backoff_s(attempts: int) -> int:
+    """Wait longer after each failed attempt: 30s, 60s, 90s, …"""
+    return RETRY_BACKOFF_S * max(attempts, 1)
+
+
+def schedule_is_due(expression: str, now: datetime, last_run: datetime | None, *, agent: str | None = None, tenant_id: str | None = None) -> bool:
+    """One bad cron expression is skipped. It does not stop the other rows."""
+    try:
+        return is_due(expression, now, last_run)
+    except (ValueError, TypeError):
+        if agent:
+            log_line(agent, "schedule skipped", tenant_id=tenant_id)
+        return False
+
+
+async def run_with_timeout(handler: Handler, ctx: JobContext, timeout_s: int) -> dict[str, Any]:
+    result = await asyncio.wait_for(handler(ctx), timeout=float(timeout_s))
+    if not isinstance(result, dict):
+        raise TypeError("job must return an object")
+    return result
 
 
 async def reclaim_timed_out(conn: Any, agent: str, now: datetime | None = None) -> None:
@@ -49,11 +73,13 @@ async def reclaim_timed_out(conn: Any, agent: str, now: datetime | None = None) 
             await conn.execute(
                 f"""
                 UPDATE {schema}.jobs
-                SET status = 'queued', started_at = NULL, error = 'timed out'
+                SET status = 'queued', started_at = NULL, error = 'timed out',
+                    run_at = now() + ($3::int * interval '1 second')
                 WHERE id = $1 AND tenant_id = $2 AND status = 'running'
                 """,
                 job_id,
                 tenant_id,
+                retry_backoff_s(int(row["attempts"])),
             )
         else:
             await conn.execute(
@@ -117,12 +143,14 @@ async def _fail(conn: Any, agent: str, job_id: uuid.UUID, tenant_id: uuid.UUID, 
         await conn.execute(
             f"""
             UPDATE {schema}.jobs
-            SET status = 'queued', error = $3, started_at = NULL
+            SET status = 'queued', error = $3, started_at = NULL,
+                run_at = now() + ($4::int * interval '1 second')
             WHERE id = $1 AND tenant_id = $2
             """,
             job_id,
             tenant_id,
             detail,
+            retry_backoff_s(attempts),
         )
     else:
         await conn.execute(
@@ -147,9 +175,7 @@ async def run_claimed(conn: Any, agent: str, job: Any, handlers: dict[str, Handl
     try:
         if handler is None:
             raise RuntimeError("unknown job kind")
-        result = await handler(ctx_for(job))
-        if not isinstance(result, dict):
-            raise TypeError("job must return an object")
+        result = await run_with_timeout(handler, ctx_for(job), int(job["timeout_s"]))
         await _finish(conn, agent, job_id, tenant_id, result)
         log_line(agent, "job done", tenant_id=str(tenant_id), job_id=str(job_id))
     except Exception as exc:  # noqa: BLE001 — record the failure; do not log secrets from the message
@@ -176,16 +202,20 @@ async def enqueue_due(conn: Any, agent: str, now: datetime | None = None) -> Non
         """
     )
     for row in rows:
-        if not is_due(str(row["cron"]), clock, row["last_run"]):
-            continue
         tenant_id = row["tenant_id"]
+        if not schedule_is_due(str(row["cron"]), clock, row["last_run"], agent=agent, tenant_id=str(tenant_id)):
+            continue
         async with conn.transaction():
             current = await conn.fetchrow(
-                f"SELECT last_run FROM {schema}.schedules WHERE id = $1 AND tenant_id = $2 AND enabled",
+                f"""
+                SELECT last_run FROM {schema}.schedules
+                WHERE id = $1 AND tenant_id = $2 AND enabled
+                FOR UPDATE SKIP LOCKED
+                """,
                 row["id"],
                 tenant_id,
             )
-            if current is None or not is_due(str(row["cron"]), clock, current["last_run"]):
+            if current is None or not schedule_is_due(str(row["cron"]), clock, current["last_run"], agent=agent, tenant_id=str(tenant_id)):
                 continue
             await conn.execute(
                 f"""
@@ -207,8 +237,6 @@ async def enqueue_due(conn: Any, agent: str, now: datetime | None = None) -> Non
 
 
 async def job_loop(pool: Any, agent: str, handlers: dict[str, Handler], ctx_for: Callable[[Any], JobContext]) -> None:
-    import asyncio
-
     while True:
         try:
             async with pool.acquire() as conn:
@@ -223,8 +251,6 @@ async def job_loop(pool: Any, agent: str, handlers: dict[str, Handler], ctx_for:
 
 
 async def schedule_loop(pool: Any, agent: str) -> None:
-    import asyncio
-
     while True:
         try:
             async with pool.acquire() as conn:
