@@ -309,12 +309,84 @@ def test_price_changes_append_a_row():
     assert admin.unit_price(both, "base.record_enriched", None, "2026-07-01T00:00:00+00:00") == 2
 
 
+def _ledger_day(day: date) -> dict:
+    return {
+        "ts": datetime(day.year, day.month, day.day, 12, tzinfo=timezone.utc),
+        "tenant_id": T,
+        "agent": "tiger",
+        "task_type": "reason.brief",
+        "rung": 1,
+        "model": "haiku",
+        "cost_usd": 1.0,
+        "cache_hit": False,
+    }
+
+
+def _stored(calls: int, proven: int) -> dict:
+    return {
+        "calls": calls, "cost": float(calls), "cache_hits": 0,
+        "outcomes": 0.0, "booked": 0.0, "proven_calls": proven,
+    }
+
+
+def test_gap_between_rollups_is_filled():
+    """Refresh on 3 Oct, next refresh on 10 Oct, and 4–8 Oct are present."""
+    early = [_ledger_day(date(2026, 10, d)) for d in (1, 2, 3)]
+    first = admin.roll_forward({}, early, {}, set())
+    assert date(2026, 10, 4) not in {key[0] for key in first}
+    later = early + [_ledger_day(date(2026, 10, d)) for d in range(4, 11)]
+    second = admin.roll_forward(first, later, {}, set())
+    assert admin.watermark_replace_from({key[0] for key in first}) == date(2026, 10, 2)
+    for day_num in range(4, 9):
+        key = (date(2026, 10, day_num), T, "tiger", "reason.brief", 1, "haiku")
+        assert second[key]["calls"] == 1
+    again = admin.roll_forward(second, later, {}, set())
+    assert again == second
+
+
+def test_route_proven_on_oct_10_leaves_oct_1_unproven():
+    oct1 = date(2026, 10, 1)
+    oct9 = date(2026, 10, 9)
+    oct10 = date(2026, 10, 10)
+
+    def key(day: date) -> tuple:
+        return (day, T, "tiger", "reason.brief", 1, "haiku")
+
+    existing = {key(oct1): _stored(3, 0), key(oct9): _stored(2, 0)}
+    ledger = [_ledger_day(oct9), _ledger_day(oct9), _ledger_day(oct10), _ledger_day(oct10), _ledger_day(oct10)]
+    merged = admin.roll_forward(existing, ledger, {}, {("reason.brief", "haiku", 1)})
+    assert merged[key(oct1)]["proven_calls"] == 0
+    assert merged[key(oct1)]["calls"] == 3
+    assert merged[key(oct10)]["calls"] == 3
+    assert merged[key(oct10)]["proven_calls"] == 3
+
+
+def test_reads_do_not_rebuild_and_rollup_sql_is_bounded():
+    import inspect
+
+    for name in ("counters", "series", "focus", "graduations", "get_price_book"):
+        assert "refresh_econ" not in inspect.getsource(getattr(admin, name))
+    assert "ts >= $1::timestamptz" in admin.LEDGER_CALLS_SINCE_SQL
+    assert "(timezone('UTC', ts))::date >=" not in admin.LEDGER_CALLS_SINCE_SQL
+    assert "INSERT" in admin.BASE_BACKFILL_SQL and "SELECT" in admin.BASE_BACKFILL_SQL
+    assert "ON CONFLICT" in admin.BASE_BACKFILL_SQL
+    assert admin.REPLACE_WINDOW_SQL == "DELETE FROM tank.econ_daily WHERE day >= $1"
+    assert "max(day)" in admin.WATERMARK_SQL
+    assert admin.ROLLUP_INTERVAL_SECONDS == 3600
+    assert "ts >= $1::timestamptz" in admin.FEEDBACK_SQL
+    assert admin.rejection_cutoff(date(2026, 10, 13)) == datetime(2026, 9, 13, tzinfo=timezone.utc)
+    main = (Path(__file__).resolve().parents[1] / "tank" / "main.py").read_text()
+    assert 'app.include_router(__import__("admin").router)' in main
+
+
 def test_schema_additions_are_idempotent():
     sql = (Path(__file__).resolve().parents[1] / "tank" / "schema.sql").read_text()
-    for name in ("tank.price_book", "tank.outcomes", "tank.econ_daily", "tank.route_evidence"):
+    for name in ("tank.price_book", "tank.outcomes", "tank.econ_daily", "tank.route_evidence", "tank.shadow_pair"):
         assert f"CREATE TABLE IF NOT EXISTS {name}" in sql
     assert "ADD COLUMN IF NOT EXISTS min_shadow_samples" in sql
     assert "ADD COLUMN IF NOT EXISTS max_reject_rate" in sql
+    assert "CREATE INDEX IF NOT EXISTS ledger_feedback ON tank.ledger (feedback)" in sql
+    assert "CREATE TABLE IF NOT EXISTS tank.agent_keys" in sql
     assert "DROP " not in sql.upper()
     assert "RENAME " not in sql.upper()
 

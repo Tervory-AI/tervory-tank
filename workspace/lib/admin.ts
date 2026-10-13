@@ -1,3 +1,5 @@
+import "server-only";
+
 // Founder console. Server-side only. Never import this from a client component.
 // The Workspace key stays here. Tank answers 404 unless the Clerk user id is listed.
 

@@ -1576,4 +1576,4 @@ async def ledger_summary(tenant_id: uuid.UUID, days: int = 30) -> dict[str, Any]
         "by_model": [dict(r) for r in by_model],
     }
 
-app.include_router((__import__("sys").path.append(__import__("os").path.dirname(__file__)) or __import__("admin")).router)
+app.include_router(__import__("admin").router)

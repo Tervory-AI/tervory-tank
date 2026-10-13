@@ -299,3 +299,26 @@ CREATE TABLE IF NOT EXISTS tank.route_evidence (
 -- Policy bars for "proven". Defaults match the graduation view (30 samples, agreement at eval_threshold).
 ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS min_shadow_samples integer NOT NULL DEFAULT 30;
 ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS max_reject_rate numeric(5,4) NOT NULL DEFAULT 0.05;
+
+-- The hourly rollup counts recent client verdicts. This index keeps that off a full ledger scan.
+CREATE INDEX IF NOT EXISTS ledger_feedback ON tank.ledger (feedback);
+
+-- Serving-route fields the focus list reads. The rollup writes them; the page does not recompute them.
+ALTER TABLE tank.route_evidence ADD COLUMN IF NOT EXISTS candidate_model text;
+ALTER TABLE tank.route_evidence ADD COLUMN IF NOT EXISTS candidate_shadow_n integer NOT NULL DEFAULT 0;
+ALTER TABLE tank.route_evidence ADD COLUMN IF NOT EXISTS candidate_agreement numeric(5,4);
+ALTER TABLE tank.route_evidence ADD COLUMN IF NOT EXISTS min_shadow_samples integer NOT NULL DEFAULT 30;
+ALTER TABLE tank.route_evidence ADD COLUMN IF NOT EXISTS eval_threshold numeric(5,4);
+ALTER TABLE tank.route_evidence ADD COLUMN IF NOT EXISTS is_serving boolean NOT NULL DEFAULT false;
+
+-- Shadow pair costs, replaced by the hourly rollup. Graduations read this instead of scanning tank.shadow.
+CREATE TABLE IF NOT EXISTS tank.shadow_pair (
+    task_type        text NOT NULL,
+    primary_model    text NOT NULL,
+    candidate_model  text NOT NULL,
+    n                integer NOT NULL DEFAULT 0,
+    agreement        numeric(8,6),
+    prim_cost        numeric(14,6),
+    cand_cost        numeric(14,6),
+    PRIMARY KEY (task_type, primary_model, candidate_model)
+);

@@ -9,15 +9,20 @@ rejecting it above the policy's ceiling.
 
 from __future__ import annotations
 
+import asyncio
 import hmac
+import logging
 import os
 import uuid
+from contextlib import asynccontextmanager, suppress
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import asyncpg
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
+
+log = logging.getLogger("tank.admin")
 
 # Rungs 2–4 are off a paid model (our model, code, cache). Rung 1 is a paid model.
 OFF_PAID_RUNGS = (2, 3, 4)
@@ -93,7 +98,24 @@ async def require_admin(
         raise HTTPException(status_code=404, detail="not found")
 
 
-router = APIRouter(prefix="/v1/admin", include_in_schema=False, dependencies=[Depends(require_admin)])
+@asynccontextmanager
+async def _admin_lifespan(_app: Any):
+    """Hourly rollup. Starts with Tank, after the pool is open. Page loads do not run it."""
+    task = asyncio.create_task(_rollup_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+
+
+router = APIRouter(
+    prefix="/v1/admin",
+    include_in_schema=False,
+    dependencies=[Depends(require_admin)],
+    lifespan=_admin_lifespan,
+)
 
 
 # ---------- proven ----------
@@ -348,6 +370,34 @@ def aggregate_outcomes(
     return out
 
 
+def watermark_replace_from(existing_days: list[date] | set[date]) -> date | None:
+    """Empty history means roll up every day. Otherwise start the day before the latest stored day.
+
+    A refresh on 3 Oct stores that day. The next refresh, even on 10 Oct, starts at 2 Oct,
+    so 4–8 Oct are written instead of skipped.
+    """
+    if not existing_days:
+        return None
+    return max(existing_days) - timedelta(days=1)
+
+
+def rejection_cutoff(today: date) -> datetime:
+    """Client rejections count over the last 30 days, not the life of the route."""
+    start = datetime(today.year, today.month, today.day, tzinfo=timezone.utc)
+    return start - timedelta(days=30)
+
+
+def _kept_row(prev: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "calls": int(prev["calls"]),
+        "cost": round(float(prev["cost"]), 6),
+        "cache_hits": int(prev["cache_hits"]),
+        "outcomes": round(float(prev.get("outcomes") or 0), 4),
+        "booked": round(float(prev.get("booked") or 0), 6),
+        "proven_calls": int(prev.get("proven_calls") or 0),
+    }
+
+
 def merge_econ(
     existing: dict[Key, dict[str, Any]],
     call_updates: dict[Key, dict[str, float]],
@@ -355,26 +405,25 @@ def merge_econ(
     proven_keys: set[tuple[str, str, int]],
     replace_from: date | None,
 ) -> dict[Key, dict[str, Any]]:
-    """Replace call figures for the days being rolled up. Do not add them twice.
+    """Replace figures for the days being rolled up. Do not add them twice.
 
-    replace_from None means call_updates is the full call picture. Otherwise
-    only days on or after that date are replaced, and older days stay so
-    pruning the ledger cannot erase them.
+    replace_from None means the updates are the full picture. Otherwise only
+    days on or after that date change. Older days keep the calls, the money,
+    and the proven_calls that were true then.
     """
     keys = set(existing) | set(call_updates) | set(outcome_updates)
     merged: dict[Key, dict[str, Any]] = {}
     for key in keys:
         prev = existing.get(key)
-        replace_calls = replace_from is None or key[0] >= replace_from
-        if replace_calls:
-            src = call_updates.get(key)
-            calls = int(src["calls"]) if src else 0
-            cost = float(src["cost"]) if src else 0.0
-            cache_hits = int(src["cache_hits"]) if src else 0
-        else:
-            calls = int(prev["calls"]) if prev else 0
-            cost = float(prev["cost"]) if prev else 0.0
-            cache_hits = int(prev["cache_hits"]) if prev else 0
+        replace = replace_from is None or key[0] >= replace_from
+        if not replace:
+            if prev is not None:
+                merged[key] = _kept_row(prev)
+            continue
+        src = call_updates.get(key)
+        calls = int(src["calls"]) if src else 0
+        cost = float(src["cost"]) if src else 0.0
+        cache_hits = int(src["cache_hits"]) if src else 0
         outcome = outcome_updates.get(key)
         outcomes = float(outcome["outcomes"]) if outcome else 0.0
         booked = float(outcome["booked"]) if outcome else 0.0
@@ -390,6 +439,26 @@ def merge_econ(
             "proven_calls": proven_calls,
         }
     return merged
+
+
+def roll_forward(
+    existing: dict[Key, dict[str, Any]],
+    ledger_rows: list[dict[str, Any]],
+    outcome_updates: dict[Key, dict[str, float]],
+    proven_keys: set[tuple[str, str, int]],
+) -> dict[Key, dict[str, Any]]:
+    """One rollup over a fixture. The watermark is max(day) minus one day."""
+    replace_from = watermark_replace_from({key[0] for key in existing})
+    if replace_from is None:
+        calls = aggregate_calls(ledger_rows)
+        outcomes = outcome_updates
+    else:
+        calls = aggregate_calls([
+            row for row in ledger_rows
+            if as_day(row.get("day") or row["ts"]) >= replace_from
+        ])
+        outcomes = {key: value for key, value in outcome_updates.items() if key[0] >= replace_from}
+    return merge_econ(existing, calls, outcomes, proven_keys, replace_from)
 
 
 def pack_metrics(calls: int, proven_calls: int, off_paid_calls: int, spend: float, outcomes: float, booked: float) -> dict[str, Any]:
@@ -686,42 +755,195 @@ def _econ_list(mapped: dict[Key, dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
+# SQL the hourly rollup runs. Reads never use these.
+WATERMARK_SQL = "SELECT max(day) FROM tank.econ_daily"
+ROLLUP_INTERVAL_SECONDS = 60 * 60
+_ROLLUP_LOCK = 81111
+
+BASE_BACKFILL_SQL = """
+INSERT INTO tank.outcomes (ts, tenant_id, agent, outcome_type, quantity, ref)
+SELECT updated_at, tenant_id, 'base', 'base.record_enriched', 1, id::text
+FROM base.records
+WHERE status = 'done'
+ON CONFLICT (outcome_type, ref) WHERE ref IS NOT NULL DO NOTHING
+"""
+
+FEEDBACK_SQL = """
+SELECT task_type, model,
+       count(*) FILTER (WHERE feedback = 'accepted')::int AS accepted,
+       count(*) FILTER (WHERE feedback = 'rejected')::int AS rejected
+FROM tank.ledger
+WHERE ts >= $1::timestamptz
+  AND feedback IN ('accepted', 'rejected')
+GROUP BY task_type, model
+"""
+
+REPLACE_WINDOW_SQL = "DELETE FROM tank.econ_daily WHERE day >= $1"
+
+_CALL_SELECT = """
+SELECT
+    (timezone('UTC', ts))::date AS day,
+    tenant_id,
+    CASE WHEN task_type LIKE '%#shadow' THEN 'tank' ELSE agent END AS agent,
+    task_type,
+    CASE WHEN task_type LIKE '%#shadow' THEN 1 ELSE rung END AS rung,
+    model,
+    count(*) FILTER (WHERE task_type NOT LIKE '%#shadow')::int AS calls,
+    coalesce(sum(cost_usd), 0) AS cost,
+    count(*) FILTER (WHERE cache_hit AND task_type NOT LIKE '%#shadow')::int AS cache_hits
+FROM tank.ledger
+"""
+
+LEDGER_CALLS_SINCE_SQL = (
+    "INSERT INTO tank.econ_daily ("
+    "day, tenant_id, agent, task_type, rung, model, calls, cost_usd, outcomes, booked_usd, cache_hits, proven_calls"
+    ") SELECT s.day, s.tenant_id, s.agent, s.task_type, s.rung, s.model, s.calls, s.cost, 0, 0, s.cache_hits, "
+    "CASE WHEN e.proven IS TRUE THEN s.calls ELSE 0 END "
+    "FROM (" + _CALL_SELECT + " WHERE ts >= $1::timestamptz GROUP BY 1, 2, 3, 4, 5, 6) s "
+    "LEFT JOIN tank.route_evidence e ON e.task_type = s.task_type AND e.model = s.model AND e.rung = s.rung AND e.proven "
+    "WHERE s.calls <> 0 OR s.cost <> 0 OR s.cache_hits <> 0"
+)
+
+LEDGER_CALLS_ALL_SQL = (
+    "INSERT INTO tank.econ_daily ("
+    "day, tenant_id, agent, task_type, rung, model, calls, cost_usd, outcomes, booked_usd, cache_hits, proven_calls"
+    ") SELECT s.day, s.tenant_id, s.agent, s.task_type, s.rung, s.model, s.calls, s.cost, 0, 0, s.cache_hits, "
+    "CASE WHEN e.proven IS TRUE THEN s.calls ELSE 0 END "
+    "FROM (" + _CALL_SELECT + " GROUP BY 1, 2, 3, 4, 5, 6) s "
+    "LEFT JOIN tank.route_evidence e ON e.task_type = s.task_type AND e.model = s.model AND e.rung = s.rung AND e.proven "
+    "WHERE s.calls <> 0 OR s.cost <> 0 OR s.cache_hits <> 0"
+)
+
+_OUTCOME_SELECT = """
+SELECT
+    COALESCE((timezone('UTC', g.ts))::date, (timezone('UTC', o.ts))::date) AS day,
+    COALESCE(g.tenant_id, o.tenant_id) AS tenant_id,
+    CASE WHEN g.id IS NOT NULL AND g.task_type NOT LIKE '%#shadow' THEN g.agent ELSE o.agent END AS agent,
+    CASE WHEN g.id IS NOT NULL AND g.task_type NOT LIKE '%#shadow' THEN g.task_type ELSE o.outcome_type END AS task_type,
+    CASE WHEN g.id IS NOT NULL AND g.task_type NOT LIKE '%#shadow' THEN g.rung ELSE 0 END AS rung,
+    CASE WHEN g.id IS NOT NULL AND g.task_type NOT LIKE '%#shadow' THEN g.model ELSE '' END AS model,
+    sum(o.quantity) AS outcomes,
+    sum(o.quantity * COALESCE(price.unit_price, 0)) AS booked
+FROM tank.outcomes o
+LEFT JOIN tank.ledger g ON g.id = o.ledger_ids[1]
+LEFT JOIN LATERAL (
+    SELECT p.unit_price
+    FROM tank.price_book p
+    WHERE p.outcome_type = o.outcome_type
+      AND p.effective_from <= o.ts
+      AND (p.effective_to IS NULL OR p.effective_to > o.ts)
+      AND (p.tenant_id IS NULL OR p.tenant_id = o.tenant_id)
+    ORDER BY (p.tenant_id IS NOT NULL) DESC, p.effective_from DESC
+    LIMIT 1
+) price ON true
+"""
+
+OUTCOME_UPSERT_SINCE_SQL = (
+    "INSERT INTO tank.econ_daily ("
+    "day, tenant_id, agent, task_type, rung, model, calls, cost_usd, outcomes, booked_usd, cache_hits, proven_calls"
+    ") SELECT day, tenant_id, agent, task_type, rung, model, 0, 0, outcomes, booked, 0, 0 FROM ("
+    + _OUTCOME_SELECT + " WHERE o.ts >= $1::timestamptz OR g.ts >= $1::timestamptz GROUP BY 1, 2, 3, 4, 5, 6) bucket "
+    "WHERE bucket.day >= (timezone('UTC', $1::timestamptz))::date "
+    "ON CONFLICT (day, tenant_id, agent, task_type, rung, model) DO UPDATE SET "
+    "outcomes = EXCLUDED.outcomes, booked_usd = EXCLUDED.booked_usd"
+)
+
+OUTCOME_UPSERT_ALL_SQL = (
+    "INSERT INTO tank.econ_daily ("
+    "day, tenant_id, agent, task_type, rung, model, calls, cost_usd, outcomes, booked_usd, cache_hits, proven_calls"
+    ") SELECT day, tenant_id, agent, task_type, rung, model, 0, 0, outcomes, booked, 0, 0 FROM ("
+    + _OUTCOME_SELECT + " GROUP BY 1, 2, 3, 4, 5, 6) bucket "
+    "ON CONFLICT (day, tenant_id, agent, task_type, rung, model) DO UPDATE SET "
+    "outcomes = EXCLUDED.outcomes, booked_usd = EXCLUDED.booked_usd"
+)
+
+SHADOW_PAIR_SQL = """
+INSERT INTO tank.shadow_pair (task_type, primary_model, candidate_model, n, agreement, prim_cost, cand_cost)
+SELECT task_type, primary_model, candidate_model,
+       count(*) FILTER (WHERE agreement IS NOT NULL)::int,
+       avg(agreement) FILTER (WHERE agreement IS NOT NULL),
+       avg(primary_cost_usd),
+       avg(candidate_cost_usd)
+FROM tank.shadow
+GROUP BY task_type, primary_model, candidate_model
+"""
+
+
+def _day_start(day: date) -> datetime:
+    return datetime(day.year, day.month, day.day, tzinfo=timezone.utc)
+
+
+async def _routes_for_evidence(conn: asyncpg.Connection, since: datetime | None) -> set[tuple[str, str, int]]:
+    if since is None:
+        rows = await conn.fetch(
+            """
+            SELECT DISTINCT task_type, model, rung
+            FROM tank.ledger
+            WHERE task_type NOT LIKE '%#shadow'
+            """
+        )
+    else:
+        rows = await conn.fetch(
+            """
+            SELECT DISTINCT task_type, model, rung
+            FROM tank.econ_daily
+            WHERE rung <> 0 AND task_type NOT LIKE '%#shadow'
+            UNION
+            SELECT DISTINCT task_type, model, rung
+            FROM tank.ledger
+            WHERE ts >= $1::timestamptz AND task_type NOT LIKE '%#shadow'
+            """,
+            since,
+        )
+    return {(str(row["task_type"]), str(row["model"]), int(row["rung"])) for row in rows}
+
+
+def _with_serving(evidence: list[dict[str, Any]], policies: list[dict[str, Any]], shadows: list[dict[str, Any]]) -> None:
+    by_policy = {str(row["task_type"]): row for row in policies}
+    by_shadow = shadow_for_model(shadows)
+    for row in evidence:
+        policy = by_policy.get(row["task_type"], {})
+        serving = str(policy.get("model") or "") == row["model"] and int(policy.get("rung") or 0) == int(row["rung"])
+        row["is_serving"] = serving
+        candidate = policy.get("candidate_model") if serving else None
+        row["candidate_model"] = candidate or None
+        if candidate:
+            sample, agreement = by_shadow.get((row["task_type"], str(candidate)), (0, None))
+            row["candidate_shadow_n"] = sample
+            row["candidate_agreement"] = agreement
+        else:
+            row["candidate_shadow_n"] = 0
+            row["candidate_agreement"] = None
+        row["min_shadow_samples"] = int(policy["min_shadow_samples"]) if policy.get("min_shadow_samples") is not None else DEFAULT_MIN_SHADOW
+        row["eval_threshold"] = float(policy["eval_threshold"]) if policy.get("eval_threshold") is not None else DEFAULT_AGREEMENT
+
+
 async def refresh_econ(conn: asyncpg.Connection, today: date | None = None) -> None:
-    """Idempotent rollup: backfill once, then replace yesterday and today."""
+    """Hourly rollup. Upserts the open window only. Older days keep what was true then."""
     today = today or utc_today()
     now = datetime.now(timezone.utc)
     async with conn.transaction():
-        await conn.execute("SELECT pg_advisory_xact_lock(81111)")
-        done = await conn.fetch("SELECT id, tenant_id, status, updated_at FROM base.records WHERE status = 'done'")
-        existing_refs = await conn.fetch("SELECT outcome_type, ref FROM tank.outcomes WHERE ref IS NOT NULL")
-        fresh_outcomes = base_outcome_rows(_records(done), {(row["outcome_type"], row["ref"]) for row in existing_refs})
-        if fresh_outcomes:
-            await conn.executemany(
-                """
-                INSERT INTO tank.outcomes (ts, tenant_id, agent, outcome_type, quantity, ref, ledger_ids)
-                VALUES ($1, $2, $3, $4, $5, $6, $7::uuid[])
-                ON CONFLICT (outcome_type, ref) WHERE ref IS NOT NULL DO NOTHING
-                """,
-                [
-                    (row["ts"], row["tenant_id"], row["agent"], row["outcome_type"], row["quantity"], row["ref"], [])
-                    for row in fresh_outcomes
-                ],
-            )
+        await conn.execute("SELECT pg_advisory_xact_lock($1)", _ROLLUP_LOCK)
+        await conn.execute(BASE_BACKFILL_SQL)
+        max_day = await conn.fetchval(WATERMARK_SQL)
+        replace_from = None if max_day is None else watermark_replace_from([as_day(max_day)])
+        since = None if replace_from is None else _day_start(replace_from)
         policies = _records(await conn.fetch(
             """
             SELECT task_type, rung, model, candidate_model, eval_threshold, min_shadow_samples, max_reject_rate
             FROM tank.policy WHERE tenant_id IS NULL
             """
         ))
+        await conn.execute("DELETE FROM tank.shadow_pair")
+        await conn.execute(SHADOW_PAIR_SQL)
         shadows = _records(await conn.fetch(
             """
-            SELECT task_type, primary_model, candidate_model,
-                   count(*) FILTER (WHERE agreement IS NOT NULL)::int AS n,
-                   avg(agreement) FILTER (WHERE agreement IS NOT NULL) AS agreement,
-                   avg(primary_cost_usd) AS prim_cost,
-                   avg(candidate_cost_usd) AS cand_cost
-            FROM tank.shadow
-            GROUP BY task_type, primary_model, candidate_model
+            SELECT task_type, candidate_model,
+                   sum(n)::int AS n,
+                   CASE WHEN sum(n) > 0 THEN sum(agreement * n) / sum(n) ELSE NULL END AS agreement
+            FROM tank.shadow_pair
+            WHERE candidate_model IS NOT NULL
+            GROUP BY task_type, candidate_model
             """
         ))
         skills = _records(await conn.fetch(
@@ -730,82 +952,57 @@ async def refresh_econ(conn: asyncpg.Connection, today: date | None = None) -> N
             FROM tank.skills WHERE task_type IS NOT NULL
             """
         ))
-        feedback = _records(await conn.fetch(
-            """
-            SELECT task_type, model,
-                   count(*) FILTER (WHERE feedback = 'accepted')::int AS accepted,
-                   count(*) FILTER (WHERE feedback = 'rejected')::int AS rejected
-            FROM tank.ledger
-            WHERE feedback IN ('accepted', 'rejected')
-            GROUP BY task_type, model
-            """
-        ))
-        previous_rows = _records(await conn.fetch("SELECT * FROM tank.route_evidence"))
+        feedback = _records(await conn.fetch(FEEDBACK_SQL, rejection_cutoff(today)))
+        previous_rows = _records(await conn.fetch("SELECT task_type, model, rung, proven_at, lost_at FROM tank.route_evidence"))
         previous = {(row["task_type"], row["model"], int(row["rung"])): row for row in previous_rows}
-        existing = _econ_map(_records(await conn.fetch("SELECT * FROM tank.econ_daily")))
-        since = None if not existing else today - timedelta(days=1)
-        ledger = _records(await conn.fetch(
-            """
-            SELECT ts, tenant_id, agent, task_type, rung, model, cost_usd, cache_hit
-            FROM tank.ledger
-            WHERE ($1::date IS NULL OR (timezone('UTC', ts))::date >= $1)
-            """,
-            since,
-        ))
-        call_map = aggregate_calls(ledger)
-        outcome_rows = _records(await conn.fetch(
-            "SELECT ts, tenant_id, agent, outcome_type, quantity, ref, ledger_ids FROM tank.outcomes"
-        ))
-        prices = _records(await conn.fetch(
-            "SELECT tenant_id, outcome_type, unit_price, effective_from, effective_to FROM tank.price_book"
-        ))
-        grain_ids = [row["ledger_ids"][0] for row in outcome_rows if row.get("ledger_ids")]
-        grains: dict[str, dict[str, Any]] = {}
-        if grain_ids:
-            grain_rows = _records(await conn.fetch(
-                "SELECT id, ts, tenant_id, agent, task_type, rung, model FROM tank.ledger WHERE id = ANY($1::uuid[])",
-                grain_ids,
-            ))
-            grains = {str(row["id"]): row for row in grain_rows}
-        routes = {(key[3], key[5], key[4]) for key in set(existing) | set(call_map) if key[4] != 0}
+        routes = await _routes_for_evidence(conn, since)
         evidence = build_route_evidence(
             policies=policies, skills=skills, shadows=shadows, feedback=feedback,
             routes=routes, previous=previous, now=now,
         )
-        proven_keys = {(row["task_type"], row["model"], int(row["rung"])) for row in evidence if row["proven"]}
-        outcome_map = aggregate_outcomes(outcome_rows, prices, grains)
-        merged = merge_econ(existing, call_map, outcome_map, proven_keys, since)
+        _with_serving(evidence, policies, shadows)
         await conn.execute("DELETE FROM tank.route_evidence")
         if evidence:
             await conn.executemany(
                 """
                 INSERT INTO tank.route_evidence (
                     task_type, model, rung, eval_score, shadow_agreement, shadow_n, acceptance_rate,
-                    judged, rejected, proven, proven_at, lost_at, flag, updated_at
-                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,now())
+                    judged, rejected, proven, proven_at, lost_at, flag,
+                    candidate_model, candidate_shadow_n, candidate_agreement, min_shadow_samples, eval_threshold, is_serving,
+                    updated_at
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,now())
                 """,
                 [
                     (
                         row["task_type"], row["model"], row["rung"], row["eval_score"], row["shadow_agreement"],
                         row["shadow_n"], row["acceptance_rate"], row["judged"], row["rejected"], row["proven"],
                         row["proven_at"], row["lost_at"], row["flag"],
+                        row["candidate_model"], row["candidate_shadow_n"], row["candidate_agreement"],
+                        row["min_shadow_samples"], row["eval_threshold"], row["is_serving"],
                     )
                     for row in evidence
                 ],
             )
-        await conn.execute("DELETE FROM tank.econ_daily")
-        if merged:
-            await conn.executemany(
-                """
-                INSERT INTO tank.econ_daily (
-                    day, tenant_id, agent, task_type, rung, model, calls, cost_usd, outcomes, booked_usd, cache_hits, proven_calls
-                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-                """,
-                [
-                    (key[0], uuid.UUID(key[1]), key[2], key[3], key[4], key[5], value["calls"], value["cost"], value["outcomes"], value["booked"], value["cache_hits"], value["proven_calls"])
-                    for key, value in merged.items()
-                ],
-            )
+        if replace_from is not None:
+            await conn.execute(REPLACE_WINDOW_SQL, replace_from)
+            await conn.execute(LEDGER_CALLS_SINCE_SQL, since)
+            await conn.execute(OUTCOME_UPSERT_SINCE_SQL, since)
+        else:
+            await conn.execute(LEDGER_CALLS_ALL_SQL)
+            await conn.execute(OUTCOME_UPSERT_ALL_SQL)
+
+
+async def _rollup_loop() -> None:
+    while True:
+        try:
+            pool = _pool()
+            async with pool.acquire() as conn:
+                await refresh_econ(conn)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            log.warning("founder rollup failed: %s", type(exc).__name__)
+        await asyncio.sleep(ROLLUP_INTERVAL_SECONDS)
 
 
 def _public_route(row: dict[str, Any]) -> dict[str, Any]:
@@ -850,7 +1047,6 @@ class PriceBody(BaseModel):
 @router.get("/counters")
 async def counters() -> dict[str, Any]:
     async with _pool().acquire() as conn:
-        await refresh_econ(conn)
         econ = _econ_list(_econ_map(_records(await conn.fetch("SELECT * FROM tank.econ_daily"))))
         routes = _records(await conn.fetch("SELECT * FROM tank.route_evidence ORDER BY task_type, rung, model"))
     report = counter_report(econ, utc_today())
@@ -863,9 +1059,12 @@ async def series(days: int = 90, group: str = "task_type") -> dict[str, Any]:
     if group not in ("agent", "task_type", "tenant"):
         raise HTTPException(status_code=400, detail="group must be agent, task_type, or tenant")
     days = max(1, min(days, 3650))
+    start, end = window_bounds(utc_today(), days)
     async with _pool().acquire() as conn:
-        await refresh_econ(conn)
-        econ = _econ_list(_econ_map(_records(await conn.fetch("SELECT * FROM tank.econ_daily"))))
+        econ = _econ_list(_econ_map(_records(await conn.fetch(
+            "SELECT * FROM tank.econ_daily WHERE day >= $1 AND day < $2",
+            start, end,
+        ))))
     return series_report(econ, utc_today(), days, group)
 
 
@@ -885,41 +1084,52 @@ async def graduations(days: int = 90) -> list[dict[str, Any]]:
         ))
         shadows = _records(await conn.fetch(
             """
-            SELECT task_type, primary_model, candidate_model,
-                   avg(primary_cost_usd) AS prim_cost, avg(candidate_cost_usd) AS cand_cost
-            FROM tank.shadow
-            GROUP BY task_type, primary_model, candidate_model
+            SELECT task_type, primary_model, candidate_model, prim_cost, cand_cost
+            FROM tank.shadow_pair
             """
         ))
     return graduation_rows(logs, shadows, utc_today(), days)
 
 
-@router.get("/focus")
-async def focus(days: int = 30) -> list[dict[str, Any]]:
-    days = max(1, min(days, 3650))
-    async with _pool().acquire() as conn:
-        await refresh_econ(conn)
-        policies = _records(await conn.fetch(
-            """
-            SELECT task_type, rung, model, candidate_model, eval_threshold, min_shadow_samples, max_reject_rate
-            FROM tank.policy WHERE tenant_id IS NULL
-            """
-        ))
-        shadows = _records(await conn.fetch(
-            """
-            SELECT task_type, candidate_model,
-                   count(*) FILTER (WHERE agreement IS NOT NULL)::int AS n,
-                   avg(agreement) FILTER (WHERE agreement IS NOT NULL) AS agreement
-            FROM tank.shadow
-            GROUP BY task_type, candidate_model
-            """
-        ))
-        evidence = _records(await conn.fetch("SELECT * FROM tank.route_evidence"))
-        econ = _econ_list(_econ_map(_records(await conn.fetch("SELECT * FROM tank.econ_daily"))))
+def _focus_inputs(evidence: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """The rollup already stored the serving route and its candidate. Reads do not scan shadow or policy."""
+    policies: list[dict[str, Any]] = []
+    shadows: list[dict[str, Any]] = []
     for row in evidence:
         row["eval_score"] = num(row["eval_score"]) if row["eval_score"] is not None else None
         row["acceptance_rate"] = num(row["acceptance_rate"]) if row["acceptance_rate"] is not None else None
         row["shadow_agreement"] = num(row["shadow_agreement"]) if row["shadow_agreement"] is not None else None
+        if not row.get("is_serving"):
+            continue
+        policies.append({
+            "task_type": row["task_type"],
+            "model": row["model"],
+            "rung": int(row["rung"]),
+            "candidate_model": row.get("candidate_model"),
+            "eval_threshold": num(row.get("eval_threshold"), DEFAULT_AGREEMENT),
+            "min_shadow_samples": int(row["min_shadow_samples"]) if row.get("min_shadow_samples") is not None else DEFAULT_MIN_SHADOW,
+        })
+        if row.get("candidate_model"):
+            shadows.append({
+                "task_type": row["task_type"],
+                "candidate_model": row["candidate_model"],
+                "n": int(row.get("candidate_shadow_n") or 0),
+                "agreement": num(row["candidate_agreement"]) if row.get("candidate_agreement") is not None else None,
+            })
+    return policies, shadows
+
+
+@router.get("/focus")
+async def focus(days: int = 30) -> list[dict[str, Any]]:
+    days = max(1, min(days, 3650))
+    start, end = window_bounds(utc_today(), days)
+    async with _pool().acquire() as conn:
+        evidence = _records(await conn.fetch("SELECT * FROM tank.route_evidence"))
+        econ = _econ_list(_econ_map(_records(await conn.fetch(
+            "SELECT * FROM tank.econ_daily WHERE day >= $1 AND day < $2",
+            start, end,
+        ))))
+    policies, shadows = _focus_inputs(evidence)
     return focus_list(policies, econ, shadows, evidence, utc_today(), days)
 
 
