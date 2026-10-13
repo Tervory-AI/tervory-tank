@@ -220,8 +220,10 @@ export type BaseBatch = {
 export function baseRetry(tenantId: string, batch: string): Promise<{ requeued: number }> {
   return tank<{ requeued: number }>("/v1/base/retry", { method: "POST", body: JSON.stringify({ tenant_id: tenantId, batch }) });
 }
-export function baseRerun(tenantId: string, batch: string, flag = "no_website"): Promise<{ requeued: number }> {
-  return tank<{ requeued: number }>("/v1/base/rerun", { method: "POST", body: JSON.stringify({ tenant_id: tenantId, batch, flag }) });
+export function baseRerun(tenantId: string, batch: string, flag = "no_website", preview?: boolean): Promise<{ requeued: number }> {
+  return tank<{ requeued: number }>("/v1/base/rerun", {
+    method: "POST", body: JSON.stringify({ tenant_id: tenantId, batch, flag, preview: preview ?? null }),
+  });
 }
 export function baseBatches(tenantId: string): Promise<BaseBatch[]> {
   return tank<BaseBatch[]>(`/v1/base/batches?tenant_id=${tenantId}`, { method: "GET" });

@@ -1167,6 +1167,7 @@ class BaseRerun(BaseModel):
     tenant_id: uuid.UUID
     batch: str
     flag: str = "no_website"          # re-run records carrying this verify flag
+    preview: bool | None = None       # owner testing: true runs the newest evaluated (staging) skills; None keeps the batch's setting
 
 
 @app.post("/v1/base/rerun", dependencies=[Depends(require_key)])
@@ -1184,6 +1185,15 @@ async def base_rerun(body: BaseRerun) -> dict[str, Any]:
             """, body.tenant_id, body.batch, body.flag,
         )
         if n:
+            # Set the mode before re-opening the task, so the worker never picks it up with the old one.
+            if body.preview is not None:
+                await conn.execute(
+                    """
+                    UPDATE tank.tasks SET input = jsonb_set(input, '{preview}', to_jsonb($3::boolean))
+                    WHERE id IN (SELECT DISTINCT task_id FROM base.records WHERE tenant_id=$1 AND batch=$2)
+                      AND task_type='base.enrich' AND tenant_id=$1
+                    """, body.tenant_id, body.batch, body.preview,
+                )
             await conn.execute(
                 """
                 UPDATE tank.tasks SET status='queued', finished_at=NULL
