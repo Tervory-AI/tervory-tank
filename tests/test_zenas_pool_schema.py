@@ -15,13 +15,21 @@ from agents.zenas.pool.store import (
 _ALLOWED = ("CREATE SCHEMA", "CREATE TABLE", "CREATE INDEX", "CREATE UNIQUE INDEX")
 
 
+def _allowed_statement(upper: str) -> bool:
+    if upper.startswith(_ALLOWED):
+        return True
+    # The only ALTER this schema may use: add a column on a table that already exists.
+    compact = " ".join(upper.split())
+    return compact.startswith("ALTER TABLE ") and " ADD COLUMN IF NOT EXISTS " in f" {compact} "
+
+
 def test_schema_is_additive():
     statements = schema_statements()
     assert statements
     for statement in statements:
         upper = statement.upper()
         assert "IF NOT EXISTS" in upper
-        assert upper.startswith(_ALLOWED)
+        assert _allowed_statement(upper)
         # last_update is a column name, not an UPDATE statement.
         folded = re.sub(r"\bLAST_UPDATE\b", "LAST_TS", upper)
         for banned in ("DROP ", "TRUNCATE", "RENAME ", "DELETE ", "UPDATE "):

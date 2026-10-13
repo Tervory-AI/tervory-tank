@@ -46,7 +46,13 @@ CREATE TABLE IF NOT EXISTS zenas_pool.documents (
     captured_at      timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS documents_hash
+-- A database that created this table before known_from existed still gains the column.
+ALTER TABLE zenas_pool.documents ADD COLUMN IF NOT EXISTS known_from date;
+
+-- New name so a database that already created documents_hash
+-- (document_id, content_hash) still gains the wider key.
+-- IF NOT EXISTS would not change the old index.
+CREATE UNIQUE INDEX IF NOT EXISTS documents_hash_span
     ON zenas_pool.documents (document_id, content_hash, effective_from, known_from);
 
 CREATE INDEX IF NOT EXISTS documents_citation

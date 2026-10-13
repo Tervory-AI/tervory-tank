@@ -82,15 +82,22 @@ def plan_version(
     on: date,
     known_from: date | None = None,
 ) -> VersionPlan:
-    """Skip only when the open version already has this text.
+    """Skip text we already store, including a closed copy of the same edition.
 
-    A law may go A, then B, then back to A. The restored A is a new row.
+    A law may go A, then B, then back to A. The restored A is a new row
+    because its official start date is new. Re-feeding a closed row with
+    the same text and the same official start does not insert another copy.
     A version that arrives late, with an earlier start than one already
     stored, is born closed at the next version's start. It does not leave
     two versions open.
     """
     open_rows = [row for row in existing if row.effective_to is None]
     if any(row.content_hash == content_hash for row in open_rows):
+        return VersionPlan("skip", (), None)
+    if effective_from is not None and any(
+        row.content_hash == content_hash and row.effective_from == effective_from
+        for row in existing
+    ):
         return VersionPlan("skip", (), None)
     new_start = _span_start(effective_from, known_from, on)
     close_ids: list[str] = []

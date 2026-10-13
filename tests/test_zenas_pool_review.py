@@ -285,9 +285,56 @@ async def _memory_rank():
     assert [chunk.ordinal for chunk in found] == [1, 0]
 
 
+def test_refeeding_a_closed_version_does_not_duplicate():
+    asyncio.run(_refeed_closed())
+
+
+async def _refeed_closed():
+    store = MemoryStore()
+    await store.record_source(_usc())
+    later = _wording("later wording", date(2024, 1, 1))
+    earlier = _wording("earlier wording", date(2020, 1, 1))
+    assert await store.upsert_version(later, chunk_document(later), on=date(2024, 1, 1))
+    assert await store.upsert_version(earlier, chunk_document(earlier), on=date(2020, 6, 1))
+    for seen in (date(2026, 1, 1), date(2026, 2, 1), date(2026, 3, 1)):
+        replay = _wording("earlier wording", date(2020, 1, 1))
+        replay.known_from = seen
+        replay.version_id = version_id_for(
+            replay.id, replay.content_hash, replay.effective_from, replay.known_from
+        )
+        assert not await store.upsert_version(replay, chunk_document(replay), on=seen)
+    early_rows = [doc for doc in store.docs.values() if doc.effective_from == date(2020, 1, 1)]
+    assert len(early_rows) == 1
+    assert await store.version_count() == 2
+
+    cycle = MemoryStore()
+    await cycle.record_source(_usc())
+    for wording, start in (
+        ("alpha wording", date(2020, 1, 1)),
+        ("beta wording", date(2022, 1, 1)),
+        ("alpha wording", date(2024, 1, 1)),
+    ):
+        doc = _wording(wording, start)
+        assert await cycle.upsert_version(doc, chunk_document(doc), on=start)
+    for wording, start, seen in (
+        ("alpha wording", date(2020, 1, 1), date(2026, 4, 1)),
+        ("beta wording", date(2022, 1, 1), date(2026, 4, 2)),
+        ("alpha wording", date(2024, 1, 1), date(2026, 4, 3)),
+    ):
+        replay = _wording(wording, start)
+        replay.known_from = seen
+        replay.version_id = version_id_for(
+            replay.id, replay.content_hash, replay.effective_from, replay.known_from
+        )
+        assert not await cycle.upsert_version(replay, chunk_document(replay), on=seen)
+    assert await cycle.version_count() == 3
+    assert sum(1 for doc in cycle.docs.values() if "beta wording" in doc.text) == 1
+
+
 def test_hash_index_includes_the_version_span():
     text = schema_sql()
-    start = text.index("CREATE UNIQUE INDEX IF NOT EXISTS documents_hash")
+    assert "ALTER TABLE zenas_pool.documents ADD COLUMN IF NOT EXISTS known_from date;" in text
+    start = text.index("CREATE UNIQUE INDEX IF NOT EXISTS documents_hash_span")
     statement = text[start : text.index(";", start)]
     assert "content_hash" in statement
     assert "effective_from" in statement
