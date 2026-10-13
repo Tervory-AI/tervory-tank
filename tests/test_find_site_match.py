@@ -54,3 +54,46 @@ def test_weak_name_needs_the_town():
 
 def test_ordinary_us_domain_allowed():
     assert not fs._skip("smithguns.us")
+
+
+# ---- 1.4.0: location proof ----
+_p14 = pathlib.Path(__file__).resolve().parents[1] / "tank/skills/base.find_site/1.4.0/run.py"
+_spec14 = importlib.util.spec_from_file_location("find_site_140", _p14)
+f4 = importlib.util.module_from_spec(_spec14)
+_spec14.loader.exec_module(f4)
+
+
+def P(title: str, body: str):
+    return f4.Page(f"<html><head><title>{title}</title></head><body>{body}</body></html>")
+
+
+def test_town_is_not_the_business():
+    who = f4.Who("Kauai Gun Company", "Lihue", "HI", "+18085551234", "96766", "4100 Rice St")
+    # Kauai is the island, not the town, so the name check alone would pass kauai.com;
+    # the location proof is what rejects it.
+    p = P("Kauai.com - Visit Kauai", "Kauai gun company hunting tours, call 808-245-3971")
+    assert f4._located(p, who) is None
+    assert f4.Who("Milford Pawn", "Milford", "DE").distinct == []   # the town is never the name
+
+
+def test_phone_on_page_is_proof():
+    who = f4.Who("Troutman Sporting Goods", "Dover", "DE", "(302) 555-0142", "19901", "12 Loockerman St")
+    p = P("Troutman Sporting Goods", "Troutman Sporting Goods - call (302) 555-0142")
+    assert f4._named("troutmansportinggoods.com", p, who)
+    assert f4._located(p, who) == "phone"
+    other = P("Troutman Pepper law firm", "Troutman Pepper attorneys 1-800-555-0000")
+    assert f4._located(other, who) is None
+
+
+def test_zip_and_street_proof():
+    who = f4.Who("Emmert Auction Associates", "Milford", "DE", "", "19963-1234", "100 N Walnut Street")
+    assert who.zip == "19963" and who.street_no == "100" and who.street_word == "walnut"
+    assert f4._located(P("x", "Find us at 100 Walnut St, Milford DE"), who) == "street"
+    assert f4._located(P("x", "Milford, DE 19963"), who) == "zip"
+
+
+def test_strong_name_guess_can_stand_alone():
+    assert f4.Who("Koffin Wurks LLC", "Honolulu", "HI").strong   # koffin + wurks ("works" is generic, "wurks" is not)
+    w = f4.Who("Dawson Global Defense Group LLC", "Kapolei", "HI")
+    assert w.distinct == ["dawson", "global"] and w.strong
+    assert not f4.Who("General Store", "Bear", "DE").strong

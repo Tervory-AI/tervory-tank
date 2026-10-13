@@ -939,10 +939,15 @@ async def _enrich_one(rec_id: uuid.UUID, inp: dict[str, Any], engine_in: dict[st
 
         # 2a website
         p, ctx = ctx_for("base.find_site")
-        site = await skala.run_skill(p, {"name": name, "city": city, "state": state, "website": inp.get("website") or inp.get("url") or ""}, ctx)
+        site = await skala.run_skill(p, {"name": name, "city": city, "state": state,
+                                         "phone": str(_val(profile, "phone") or inp.get("phone") or ""),
+                                         "zip": str(_val(profile, "zip") or inp.get("zip") or ""),
+                                         "address": str(_val(profile, "street") or inp.get("address") or ""),
+                                         "website": inp.get("website") or inp.get("url") or ""}, ctx)
         if site.get("website"):
             profile["website"] = site["website"]
         passes["2a"] = {"skill": p.ref, "ms": site.get("_ms"), "source": (site.get("website") or {}).get("source"),
+                        **({"evidence": site["evidence"]} if site.get("evidence") else {}),
                         **({"blocked_by_check": site["blocked_by_check"]} if site.get("blocked_by_check") else {})}
 
         url = _val(profile, "website")

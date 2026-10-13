@@ -171,6 +171,13 @@ export function runSkillEvals(id: string, version: string, by: string): Promise<
     body: JSON.stringify({ by }),
   });
 }
+// Owner testing: run one skill version on one input, without touching any records.
+export function trySkill(tenantId: string, id: string, version: string, input: Record<string, unknown>) {
+  return tank<Record<string, unknown>>(`/v1/skills/${encodeURIComponent(id)}/run`, {
+    method: "POST",
+    body: JSON.stringify({ tenant_id: tenantId, version, input, preview: true }),
+  });
+}
 export function approveSkill(id: string, version: string, by: string): Promise<{ ok: true }> {
   return tank<{ ok: true }>(`/v1/skills/${encodeURIComponent(id)}/${encodeURIComponent(version)}/approve`, {
     method: "POST",

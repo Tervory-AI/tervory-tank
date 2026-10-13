@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { approveSkill, listSkills, retireSkill, runSkillEvals } from "@/lib/tank";
+import { approveSkill, listSkills, retireSkill, runSkillEvals, trySkill } from "@/lib/tank";
 import { currentTenant } from "@/lib/tenant";
 
 export const runtime = "nodejs";
@@ -16,11 +16,15 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const body = (await req.json().catch(() => null)) as { id?: string; version?: string; action?: string } | null;
+  const body = (await req.json().catch(() => null)) as { id?: string; version?: string; action?: string; input?: Record<string, unknown> } | null;
   const { id, version, action } = body ?? {};
   if (!id || !version || !action) return NextResponse.json({ error: "id, version, action required" }, { status: 400 });
   try {
-    const { userId } = await currentTenant();
+    const { userId, tenantId } = await currentTenant();
+    if (action === "try") {
+      if (!body?.input || typeof body.input !== "object") return NextResponse.json({ error: "input required" }, { status: 400 });
+      return NextResponse.json(await trySkill(tenantId, id, version, body.input));
+    }
     if (action === "evals") return NextResponse.json(await runSkillEvals(id, version, userId));
     if (action === "approve") return NextResponse.json(await approveSkill(id, version, userId));
     if (action === "retire") return NextResponse.json(await retireSkill(id, version, userId));
