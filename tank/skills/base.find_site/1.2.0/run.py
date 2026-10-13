@@ -49,9 +49,11 @@ def _worth_tiger(exc: Exception | None, status: int | None, body: str | None) ->
     if status is not None and status in TIGER_STATUSES:
         return True
     if body is not None:
+        # A full page that simply does not name the business is an answer, not a reason to look harder.
+        # Only a thin page (or a JavaScript shell with little visible text) goes to the browser.
         low = body[:200_000].lower()
-        visible = re.sub(r"<[^>]+>", " ", low)
-        return len(" ".join(visible.split())) < 1500 or any(h in low for h in JS_SHELL_HINTS)
+        visible = len(" ".join(re.sub(r"<script.*?</script>|<style.*?</style>|<[^>]+>", " ", low, flags=re.S).split()))
+        return visible < 1500 or (visible < 4000 and any(h in low for h in JS_SHELL_HINTS))
     return False
 
 
@@ -66,7 +68,11 @@ async def _tiger(ctx, url: str) -> dict | None:
         return None
 
 
-async def _alive(ctx, url: str, must_mention: list[str] | None = None) -> tuple[str | None, str]:
+TIGER_BUDGET = 1       # browser loads across all search results for one record; each can take 10-25 seconds
+SEARCH_CANDIDATES = 6  # search results checked per engine
+
+
+async def _alive(ctx, url: str, must_mention: list[str] | None = None, budget: dict | None = None) -> tuple[str | None, str]:
     """(final URL or None, how). A plain fetch first; when it saw a live site it could not read,
     Tiger loads the page in a real browser and waits for it to settle. With must_mention, the
     page text has to name the business, so parked or unrelated domains never count."""
@@ -84,6 +90,10 @@ async def _alive(ctx, url: str, must_mention: list[str] | None = None) -> tuple[
         exc = e
     if not _worth_tiger(exc, status, body):
         return None, "none"
+    if budget is not None:
+        if budget.get("tiger", 0) <= 0:
+            return None, "none"
+        budget["tiger"] -= 1
     t = await _tiger(ctx, url)
     if not t or t.get("challenge"):
         return None, "challenge" if t and t.get("challenge") else "none"
@@ -166,38 +176,39 @@ async def run(payload: dict, ctx) -> dict:
 
     # 1. A website on the input record, if it actually answers.
     if hint and not any(h in _host(hint) for h in SKIP_HOSTS):
-        final, how = await _alive(ctx, hint if "://" in hint else f"https://{hint}")
+        final, how = await _alive(ctx, hint if "://" in hint else f"https://{hint}", budget={"tiger": 1})
         if final:
             return {"website": {"value": final, "source": "input:verified" + ("+tiger" if how == "tiger" else ""), "confidence": 85}}
 
     mention = _mention_tokens(name)
+    budget = {"tiger": TIGER_BUDGET}
     blocked: list[str] = []   # live sites that kept an interactive human check up; recorded, not forced
     query = f"{name} {city} {state}".strip()
 
     # 2. Tervory's own search. A result counts only if it is live and its page names the business.
     seen: set[str] = set()
-    for url in await _searx(ctx, query):
+    for url in (await _searx(ctx, query))[:SEARCH_CANDIDATES]:
         h = _host(url)
         if not h or h in seen or any(s in h for s in SKIP_HOSTS):
             continue
         seen.add(h)
-        final, how = await _alive(ctx, _root(url), must_mention=mention)
+        final, how = await _alive(ctx, _root(url), must_mention=mention, budget=budget)
         if final:
             return {"website": {"value": final, "source": "search:searxng" + ("+tiger" if how == "tiger" else ""), "confidence": 75}}
 
     # 3. Brave, when a key is present.
-    for url in await _brave(ctx, query):
+    for url in (await _brave(ctx, query))[:SEARCH_CANDIDATES]:
         h = _host(url)
         if not h or h in seen or any(s in h for s in SKIP_HOSTS):
             continue
         seen.add(h)
-        final, how = await _alive(ctx, url, must_mention=mention)
+        final, how = await _alive(ctx, url, must_mention=mention, budget=budget)
         if final:
             return {"website": {"value": final, "source": "search:brave" + ("+tiger" if how == "tiger" else ""), "confidence": 75}}
 
     # 4. Domain guesses from the name; the page must mention the name to count.
     for guess in _guesses(name):
-        final, how = await _alive(ctx, guess, must_mention=mention)
+        final, how = await _alive(ctx, guess, must_mention=mention, budget={"tiger": 1})
         if final:
             return {"website": {"value": final, "source": "guess:domain" + ("+tiger" if how == "tiger" else ""), "confidence": 55}}
         if how == "challenge":
