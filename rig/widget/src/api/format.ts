@@ -1,4 +1,4 @@
-import type { Price, Product, SetupPart } from "./types";
+import type { Price, Product } from "./types";
 
 export function formatPrice(price: Price): string {
   const digits = Number.isInteger(price.amount) ? 0 : 2;
@@ -18,19 +18,6 @@ export function formatPrice(price: Price): string {
   }
 }
 
-/** One indicative total from item prices the API already sent. */
-export function indicativeTotal(parts: SetupPart[], fallback: Price): Price {
-  if (parts.length === 0) return fallback;
-  const currency = parts[0].product.price.currency;
-  if (!parts.every((part) => part.product.price.currency === currency)) return fallback;
-  const amount = parts.reduce((sum, part) => sum + part.product.price.amount, 0);
-  return {
-    amount: Math.round(amount * 100) / 100,
-    currency,
-    indicative: true,
-  };
-}
-
 export function isSample(product: Product): boolean {
   return product.attributes.sample === true;
 }
@@ -47,9 +34,6 @@ export function matchNote(product: Product): string {
   return typeof product.attributes.match_note === "string" ? product.attributes.match_note : "";
 }
 
-export function whyLines(why: string): string[] {
-  return why
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
+export function whyLines(why: readonly string[]): string[] {
+  return why.map((line) => line.trim()).filter(Boolean);
 }

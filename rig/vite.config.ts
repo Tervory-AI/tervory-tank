@@ -10,5 +10,10 @@ export default defineConfig({
     },
     emptyOutDir: true,
     cssCodeSplit: false,
+    rollupOptions: {
+      output: {
+        chunkFileNames: "tervory-rig-[name].js",
+      },
+    },
   },
 });

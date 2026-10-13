@@ -30,15 +30,15 @@ export type SetupPart = {
 
 /**
  * `badge` is optional display text (for example "Most chosen").
- * The contract's required fields are tier, label, parts, total, and why.
- * `why` may use line breaks: fit line, then a short explanation, then a longer note.
+ * `why` is lines: fit checks, a short explanation, then a longer note.
+ * The required fields are tier, label, parts, total, and why.
  */
 export type Setup = {
   tier: string;
   label: string;
   parts: SetupPart[];
   total: Price;
-  why: string;
+  why: string[];
   badge?: string;
 };
 
@@ -46,8 +46,10 @@ export type SetupsResponse = {
   setups: Setup[];
 };
 
+/** `setup` is the setup that was sent, with `total` priced by the server. */
 export type SwapResponse = {
   options: Product[];
+  setup: Setup;
 };
 
 export type GraphBranch = {

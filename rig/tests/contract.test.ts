@@ -5,7 +5,7 @@ import { formatPrice } from "../widget/src/api/format";
 import { RigError } from "../widget/src/api/types";
 import type { Price, Product, Setup } from "../widget/src/api/types";
 import * as mock from "../widget/src/mock/index";
-import { customNation, neutral } from "../widget/src/theme/themes";
+import { customNation, neutral, resolveTheme } from "../widget/src/theme/themes";
 
 const PRODUCT_KEYS = ["attributes", "brand", "category", "id", "image", "name", "price"];
 const PRICE_KEYS = ["amount", "currency", "indicative"];
@@ -39,6 +39,7 @@ function assertSetup(setup: Setup): void {
   }
   expect(Object.keys(setup).every((key) => SETUP_KEYS.includes(key))).toBe(true);
   assertPrice(setup.total);
+  expect(Array.isArray(setup.why)).toBe(true);
   expect(setup.parts.length).toBeGreaterThan(0);
   for (const part of setup.parts) {
     expect(typeof part.role).toBe("string");
@@ -58,18 +59,20 @@ describe("price format", () => {
 });
 
 describe("mock contract", () => {
-  it("searches the sample catalogue", () => {
-    const found = mock.search("staccato", 12);
+  it("searches the sample catalogue", async () => {
+    const found = await mock.search("staccato", 12);
     expect(found.results.map((item) => item.id)).toEqual(["staccato-c2", "staccato-p", "staccato-xc"]);
     found.results.forEach((item) => assertProduct(item));
-    expect(mock.search("leupold").results.map((item) => item.name)).toEqual(["Leupold DeltaPoint Pro"]);
-    expect(mock.search("wilson combat edc x9s").results).toEqual([]);
-    expect(mock.search("staccato", 1).results).toHaveLength(1);
-    expect(mock.search("").results).toEqual([]);
+    expect((await mock.search("leupold")).results.map((item) => item.name)).toEqual(["Leupold DeltaPoint Pro"]);
+    expect((await mock.search("leupold")).results[0]?.attributes.footprint).toBe("DPP");
+    expect((await mock.search("aimpoint")).results[0]?.attributes.footprint).toBe("ACRO");
+    expect((await mock.search("wilson combat edc x9s")).results).toEqual([]);
+    expect((await mock.search("staccato", 1)).results).toHaveLength(1);
+    expect((await mock.search("")).results).toEqual([]);
   });
 
-  it("returns a product with categories that fit", () => {
-    const detail = mock.product("staccato-p");
+  it("returns a product with categories that fit", async () => {
+    const detail = await mock.product("staccato-p");
     assertProduct(detail, ["categories_that_fit"]);
     expect(detail.categories_that_fit).toEqual([
       { category: "Red dots", count: 18 },
@@ -80,15 +83,15 @@ describe("mock contract", () => {
     ]);
   });
 
-  it("returns the three Staccato P setups from the frame", () => {
-    const { setups } = mock.setups("staccato-p");
+  it("returns the three Staccato P setups from the frame", async () => {
+    const { setups } = await mock.setups("staccato-p");
     expect(setups.map((setup) => setup.tier)).toEqual(["essential", "duty", "competition"]);
     expect(setups.map((setup) => setup.label)).toEqual([
       "Everyday carry, best value",
       "Built to take a beating",
       "Fast, flat, match-ready",
     ]);
-    expect(setups.map((setup) => setup.total.amount)).toEqual([87700, 96800, 91400]);
+    expect(setups.map((setup) => setup.total.amount)).toEqual([87700, 96800, 89000]);
     expect(setups[1]?.badge).toBe("Most chosen");
     expect(setups[1]?.parts.map((part) => part.product.name)).toEqual([
       "Staccato P",
@@ -96,29 +99,39 @@ describe("mock contract", () => {
       "Safariland 7360RDS duty",
     ]);
     setups.forEach(assertSetup);
-    expect(setups[1]?.why.split("\n")[0]).toBe("✓ Fits the Staccato P optic cut · ✓ Holster cut for this dot");
+    expect(setups[1]?.why[0]).toBe("✓ Fits the Staccato P optic cut · ✓ Holster cut for this dot");
+    expect(setups[1]?.why.join(" ")).not.toMatch(/matching plate/i);
   });
 
-  it("swaps only parts that still fit", () => {
-    const duty = mock.setups("staccato-p").setups[1];
+  it("swaps only parts that still fit and returns the server total", async () => {
+    const duty = (await mock.setups("staccato-p")).setups[1];
     expect(duty).toBeDefined();
     if (!duty) return;
-    const dots = mock.swap(duty, "Red dot");
-    expect(dots.options.map((item) => item.name).sort()).toEqual([
-      "Aimpoint Acro P-2",
-      "Holosun 507C X2",
-      "Leupold DeltaPoint Pro",
-    ]);
+    const dots = await mock.swap(duty, "Red dot");
+    expect(dots.options.map((item) => item.name)).toEqual(["Holosun 507C X2"]);
+    expect(dots.options.map((item) => item.id)).not.toContain("leupold-deltapoint-pro");
+    expect(dots.options.map((item) => item.id)).not.toContain("aimpoint-acro-p2");
+    expect(dots.setup.total.amount).toBe(96800);
     dots.options.forEach((item) => assertProduct(item));
-    const holsters = mock.swap(duty, "Holster");
+    const holosun = dots.options[0];
+    expect(holosun).toBeDefined();
+    if (!holosun) return;
+    const next = {
+      ...duty,
+      parts: duty.parts.map((part) => (part.role === "Red dot" ? { role: part.role, product: holosun } : part)),
+    };
+    const priced = await mock.swap(next, "Red dot");
+    expect(priced.setup.total.amount).toBe(90200);
+    expect(priced.setup.parts.find((part) => part.role === "Red dot")?.product.id).toBe("holosun-507c");
+    const holsters = await mock.swap(duty, "Holster");
     expect(holsters.options.map((item) => item.id)).not.toContain("safariland-7360rds");
     expect(holsters.options.length).toBeGreaterThan(0);
-    expect(mock.swap(duty, "Pistol").options).toEqual([]);
-    expect(mock.swap(duty, "Missing").options).toEqual([]);
+    expect((await mock.swap(duty, "Pistol")).options).toEqual([]);
+    expect((await mock.swap(duty, "Missing")).options).toEqual([]);
   });
 
-  it("returns the explore graph", () => {
-    const graph = mock.graph("staccato-p");
+  it("returns the explore graph", async () => {
+    const graph = await mock.graph("staccato-p");
     assertProduct(graph.centre);
     expect(graph.centre.id).toBe("staccato-p");
     expect(graph.branches.map((branch) => [branch.category, branch.count])).toEqual([
@@ -129,13 +142,13 @@ describe("mock contract", () => {
       ["Optic plates", 6],
     ]);
     const dots = graph.branches[0];
-    expect(dots?.products).toHaveLength(4);
-    expect(dots && dots.count - dots.products.length).toBe(14);
+    expect(dots?.products).toHaveLength(2);
+    expect(dots && dots.count - dots.products.length).toBe(16);
     graph.branches.flatMap((branch) => branch.products).forEach((item) => assertProduct(item));
   });
 
-  it("answers only from catalogue data and cites products", () => {
-    const answer = mock.ask({
+  it("answers only from catalogue data and cites products", async () => {
+    const answer = await mock.ask({
       product_id: "staccato-p",
       question: "Will this fit a weapon light too?",
     });
@@ -143,30 +156,30 @@ describe("mock contract", () => {
     expect(answer.answer).toContain("Streamlight TLR-1 HL");
     expect(answer.cites).toContain("staccato-p");
     expect(answer.cites).toContain("streamlight-tlr1-hl");
-    expect(() => mock.ask({ product_id: "staccato-p", question: "  " })).toThrow(RigError);
+    await expect(mock.ask({ product_id: "staccato-p", question: "  " })).rejects.toThrow(RigError);
   });
 
-  it("accepts a link quote and a setup quote", () => {
-    const link = mock.linkQuote({ url: "https://example.com/item", note: "Please check this" });
+  it("accepts a link quote and a setup quote", async () => {
+    const link = await mock.linkQuote({ url: "https://example.com/item", note: "Please check this" });
     expect(link.request_id).toMatch(/^req_[0-9a-f]+$/);
-    const setup = mock.setups("staccato-p").setups[1];
-    const quoted = mock.quote({
+    const setup = (await mock.setups("staccato-p")).setups[1];
+    const quoted = await mock.quote({
       setup,
       contact: { name: "Ada", email: "ada@example.com" },
     });
     expect(quoted.request_id).toMatch(/^req_[0-9a-f]+$/);
-    const productQuote = mock.quote({
+    const productQuote = await mock.quote({
       product_id: "staccato-c2",
       contact: { name: "Ada", email: "ada@example.com" },
     });
     expect(productQuote.request_id).toMatch(/^req_/);
-    expect(() => mock.linkQuote({ url: "not a url", note: "" })).toThrow(RigError);
-    expect(() => mock.quote({ product_id: "staccato-p", contact: { name: "", email: "" } })).toThrow(RigError);
+    await expect(mock.linkQuote({ url: "not a url", note: "" })).rejects.toThrow(RigError);
+    await expect(mock.quote({ product_id: "staccato-p", contact: { name: "", email: "" } })).rejects.toThrow(RigError);
   });
 
-  it("returns the error shape", () => {
+  it("returns the error shape", async () => {
     try {
-      mock.product("missing");
+      await mock.product("missing");
       expect.unreachable();
     } catch (error) {
       expect(error).toBeInstanceOf(RigError);
@@ -215,7 +228,7 @@ describe("API client", () => {
     await client.search("a b", 5);
     await client.product("staccato-p");
     await client.setups("staccato-p");
-    const setup = mock.setups("staccato-p").setups[1] as Setup;
+    const setup = (await mock.setups("staccato-p")).setups[1] as Setup;
     await client.swap(setup, "Red dot");
     await client.graph("staccato-p");
     await client.ask({ product_id: "staccato-p", question: "Why?", setup });
@@ -272,9 +285,16 @@ describe("themes", () => {
     expect(neutral.radius).not.toBe(customNation.radius);
     expect(neutral.copy.title).not.toBe(customNation.copy.title);
     expect(neutral.copy.popular).not.toEqual(customNation.copy.popular);
+    expect(resolveTheme(null).id).toBe("neutral");
+    expect(resolveTheme("custom-nation").id).toBe("custom-nation");
     const element = readFileSync(new URL("../widget/src/element.ts", import.meta.url), "utf8");
     const render = readFileSync(new URL("../widget/src/ui/render.ts", import.meta.url), "utf8");
+    const client = readFileSync(new URL("../widget/src/api/client.ts", import.meta.url), "utf8");
     expect(element).not.toMatch(/staccato|holster|pistol|9mm/i);
+    expect(element).not.toMatch(/indicativeTotal/);
     expect(render).not.toMatch(/staccato|holster|pistol|9mm/i);
+    expect(client).not.toMatch(/from ["']\.\.\/mock/);
+    expect(new RigClient({ apiBase: "", key: "pk_demo" }).usesMock).toBe(false);
+    expect(new RigClient({ apiBase: "mock", key: "pk_demo" }).usesMock).toBe(true);
   });
 });

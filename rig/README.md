@@ -2,14 +2,16 @@
 
 The embeddable "find it and complete the setup" widget. Rig's brain lives in `Tervory-AI/tervory-tank` (`agents/rig/`). Start with `AGENTS.md`; tasks are in `docs/cursor/`.
 
-This repo is the shopper UI only. It holds no secrets. Until Rig's public API is live, set `api-base="mock"` and the widget runs on the sample catalogue in `widget/src/mock/catalogue.json`.
+This repo is the shopper UI only. It holds no secrets. With no `api-base`, the widget calls the live API on the page origin. Set `api-base="mock"` to use the sample catalogue in `widget/src/mock/catalogue.json`. The mock is loaded only in that case. A failed live call does not fall back to the mock.
+
+The default theme is neutral. Set `theme="custom-nation"` for the Custom Nation skin. `fonts="off"` skips loading the theme's font stylesheet.
 
 ```html
 <script src="https://example.com/tervory-rig.umd.js"></script>
 <tervory-rig api-base="mock" rig-key="pk_demo" theme="custom-nation"></tervory-rig>
 ```
 
-`theme` is `custom-nation`, `neutral`, or a JSON theme object. A script can also set the `themeData` property to a theme object.
+`theme` is `neutral`, `custom-nation`, or a JSON theme object. A script can also set the `themeData` property to a theme object.
 
 ## Scripts
 

@@ -12,7 +12,8 @@ import type {
   SwapResponse,
 } from "./types";
 import { RigError, type ApiErrorBody } from "./types";
-import * as mock from "../mock/index";
+
+type MockApi = typeof import("../mock/index");
 
 export type RigClientOptions = {
   apiBase: string;
@@ -24,6 +25,7 @@ export class RigClient {
   private readonly apiBase: string;
   private readonly key: string;
   private readonly fetchImpl: typeof fetch;
+  private mockModule: Promise<MockApi> | null = null;
 
   constructor(options: RigClientOptions) {
     this.apiBase = options.apiBase.replace(/\/$/, "");
@@ -35,40 +37,45 @@ export class RigClient {
     return this.apiBase === "mock";
   }
 
-  search(q: string, limit = 12): Promise<SearchResponse> {
-    if (this.usesMock) return Promise.resolve(mock.search(q, limit));
+  private loadMock(): Promise<MockApi> {
+    this.mockModule ??= import("../mock/index");
+    return this.mockModule;
+  }
+
+  async search(q: string, limit = 12): Promise<SearchResponse> {
+    if (this.usesMock) return (await this.loadMock()).search(q, limit);
     const params = new URLSearchParams({ q, limit: String(limit) });
     return this.request<SearchResponse>(`/v1/rig/search?${params.toString()}`);
   }
 
-  product(id: string): Promise<ProductDetail> {
-    if (this.usesMock) return Promise.resolve(mock.product(id));
+  async product(id: string): Promise<ProductDetail> {
+    if (this.usesMock) return (await this.loadMock()).product(id);
     return this.request<ProductDetail>(`/v1/rig/products/${encodeURIComponent(id)}`);
   }
 
-  setups(productId: string): Promise<SetupsResponse> {
-    if (this.usesMock) return Promise.resolve(mock.setups(productId));
+  async setups(productId: string): Promise<SetupsResponse> {
+    if (this.usesMock) return (await this.loadMock()).setups(productId);
     return this.request<SetupsResponse>("/v1/rig/setups", {
       method: "POST",
       body: JSON.stringify({ product_id: productId }),
     });
   }
 
-  swap(setup: Setup, role: string): Promise<SwapResponse> {
-    if (this.usesMock) return Promise.resolve(mock.swap(setup, role));
+  async swap(setup: Setup, role: string): Promise<SwapResponse> {
+    if (this.usesMock) return (await this.loadMock()).swap(setup, role);
     return this.request<SwapResponse>("/v1/rig/swap", {
       method: "POST",
       body: JSON.stringify({ setup: contractSetup(setup), role }),
     });
   }
 
-  graph(productId: string): Promise<GraphResponse> {
-    if (this.usesMock) return Promise.resolve(mock.graph(productId));
+  async graph(productId: string): Promise<GraphResponse> {
+    if (this.usesMock) return (await this.loadMock()).graph(productId);
     return this.request<GraphResponse>(`/v1/rig/graph/${encodeURIComponent(productId)}`);
   }
 
-  ask(body: AskRequest): Promise<AskResponse> {
-    if (this.usesMock) return Promise.resolve(mock.ask(body));
+  async ask(body: AskRequest): Promise<AskResponse> {
+    if (this.usesMock) return (await this.loadMock()).ask(body);
     return this.request<AskResponse>("/v1/rig/ask", {
       method: "POST",
       body: JSON.stringify({
@@ -79,16 +86,16 @@ export class RigClient {
     });
   }
 
-  linkQuote(body: LinkQuoteRequest): Promise<RequestAck> {
-    if (this.usesMock) return Promise.resolve(mock.linkQuote(body));
+  async linkQuote(body: LinkQuoteRequest): Promise<RequestAck> {
+    if (this.usesMock) return (await this.loadMock()).linkQuote(body);
     return this.request<RequestAck>("/v1/rig/link-quote", {
       method: "POST",
       body: JSON.stringify({ url: body.url, note: body.note }),
     });
   }
 
-  quote(body: QuoteRequest): Promise<RequestAck> {
-    if (this.usesMock) return Promise.resolve(mock.quote(body));
+  async quote(body: QuoteRequest): Promise<RequestAck> {
+    if (this.usesMock) return (await this.loadMock()).quote(body);
     const payload: QuoteRequest = {
       contact: body.contact,
       ...(body.setup ? { setup: contractSetup(body.setup) } : {}),

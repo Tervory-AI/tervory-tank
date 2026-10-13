@@ -22,7 +22,7 @@ type SetupTemplate = {
   tier: string;
   label: string;
   badge?: string;
-  why: string;
+  why: string[];
   parts: PartTemplate[];
 };
 
@@ -72,6 +72,25 @@ function opticOf(setup: Setup): Product | undefined {
   return setup.parts.find((part) => text(part.product.attributes.footprint) !== "")?.product;
 }
 
+function holsterOf(setup: Setup): Product | undefined {
+  return setup.parts.find((part) => {
+    const product = part.product;
+    return strings(product.attributes.fits_products).length > 0 && strings(product.attributes.fits_cuts).length > 0;
+  })?.product;
+}
+
+function reprice(setup: Setup): Setup {
+  const next: Setup = {
+    tier: setup.tier,
+    label: setup.label,
+    parts: setup.parts,
+    total: priceOf(setup.parts),
+    why: setup.why,
+  };
+  if (setup.badge) next.badge = setup.badge;
+  return next;
+}
+
 /**
  * Fitment uses only catalogue attributes:
  * fits_products (which hosts it mounts on) and fits_cuts (optic cut or footprint).
@@ -116,7 +135,7 @@ function haystack(product: Product): string {
   return bits.join(" ").toLowerCase();
 }
 
-export function search(q: string, limit = 12): SearchResponse {
+export async function search(q: string, limit = 12): Promise<SearchResponse> {
   const query = q.trim().toLowerCase();
   const cap = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 12;
   if (!query) return { results: [] };
@@ -130,7 +149,7 @@ export function search(q: string, limit = 12): SearchResponse {
   return { results };
 }
 
-export function product(id: string): ProductDetail {
+export async function product(id: string): Promise<ProductDetail> {
   const item = mustGet(id);
   const groups = catalogue.groups[id] ?? [];
   return {
@@ -139,30 +158,35 @@ export function product(id: string): ProductDetail {
   };
 }
 
-export function setups(productId: string): SetupsResponse {
+export async function setups(productId: string): Promise<SetupsResponse> {
   mustGet(productId);
   const templates = catalogue.setups[productId] ?? [];
   return { setups: templates.map(materialise) };
 }
 
-export function swap(setup: Setup, role: string): SwapResponse {
+export async function swap(setup: Setup, role: string): Promise<SwapResponse> {
   if (!setup?.parts?.length) {
     throw new RigError("invalid_setup", "A setup is required.", 400);
   }
-  const part = setup.parts.find((item) => item.role === role);
-  if (!part) return { options: [] };
-  const host = hostOf(setup);
-  const optic = opticOf(setup);
-  const options = catalogue.products.filter(
-    (candidate) =>
-      candidate.id !== part.product.id &&
-      candidate.category === part.product.category &&
-      fits(candidate, host, optic),
-  );
-  return { options };
+  const priced = reprice(setup);
+  const part = priced.parts.find((item) => item.role === role);
+  if (!part) return { options: [], setup: priced };
+  const host = hostOf(priced);
+  const optic = opticOf(priced);
+  const holster = holsterOf(priced);
+  const replacingOptic = text(part.product.attributes.footprint) !== "";
+  const options = catalogue.products.filter((candidate) => {
+    if (candidate.id === part.product.id || candidate.category !== part.product.category) return false;
+    if (replacingOptic) {
+      if (text(candidate.attributes.footprint) === "" || !fits(candidate, host)) return false;
+      return holster ? fits(holster, host, candidate) : true;
+    }
+    return fits(candidate, host, optic);
+  });
+  return { options, setup: priced };
 }
 
-export function graph(productId: string): GraphResponse {
+export async function graph(productId: string): Promise<GraphResponse> {
   const centre = mustGet(productId);
   const groups = catalogue.groups[productId] ?? [];
   return {
@@ -183,7 +207,7 @@ function branchMatches(question: string, category: string): boolean {
   return q.includes(singular);
 }
 
-export function ask(body: AskRequest): AskResponse {
+export async function ask(body: AskRequest): Promise<AskResponse> {
   const question = body.question?.trim() ?? "";
   if (!question) throw new RigError("invalid_question", "Enter a question.", 400);
   const centre = mustGet(body.product_id);
@@ -216,7 +240,7 @@ function requestId(seed: string): string {
   return `req_${(hash >>> 0).toString(16)}`;
 }
 
-export function linkQuote(body: LinkQuoteRequest): RequestAck {
+export async function linkQuote(body: LinkQuoteRequest): Promise<RequestAck> {
   const url = body.url?.trim() ?? "";
   if (!/^https?:\/\//i.test(url)) {
     throw new RigError("invalid_url", "Paste a link that starts with http:// or https://.", 400);
@@ -224,7 +248,7 @@ export function linkQuote(body: LinkQuoteRequest): RequestAck {
   return { request_id: requestId(`link:${url}:${body.note ?? ""}`) };
 }
 
-export function quote(body: QuoteRequest): RequestAck {
+export async function quote(body: QuoteRequest): Promise<RequestAck> {
   const name = body.contact?.name?.trim() ?? "";
   const email = body.contact?.email?.trim() ?? "";
   if (!name || !email || !email.includes("@")) {

@@ -33,6 +33,7 @@ export type Theme = {
   fonts: {
     heading: string;
     body: string;
+    href?: string;
   };
   radius: string;
   radiusGraph: string;
@@ -50,6 +51,7 @@ export type Theme = {
     missingTitle: string;
     missingBody: string;
     linkPlaceholder: string;
+    linkLabel: string;
     notePlaceholder: string;
     noteLabel: string;
     requestQuote: string;
@@ -62,11 +64,15 @@ export type Theme = {
     indicative: string;
     setupIndicative: string;
     swap: string;
+    noSwap: string;
     back: string;
     askPlaceholder: string;
     ask: string;
     whyLabel: string;
     partsFit: string;
+    partWord: string;
+    partsWord: string;
+    moreWord: string;
     fits: string;
     yourSetup: string;
     quoteTitle: string;
@@ -84,6 +90,10 @@ export type Theme = {
     forWord: string;
     mark: string;
     close: string;
+    sampleLabel: string;
+    notAlternative: string;
+    errorGeneric: string;
+    unavailable: string;
   };
 };
 
@@ -117,6 +127,7 @@ export const customNation: Theme = {
   fonts: {
     heading: '"Barlow Condensed", "Arial Narrow", sans-serif',
     body: 'Inter, "Helvetica Neue", sans-serif',
+    href: "https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600&family=Inter:wght@400;500;600&display=swap",
   },
   radius: "0px",
   radiusGraph: "8px",
@@ -139,6 +150,7 @@ export const customNation: Theme = {
     missingTitle: "Not in our feeds yet? We can still get it.",
     missingBody: "Paste the link to the product on any US store and we will quote it for you.",
     linkPlaceholder: "https://…",
+    linkLabel: "Link",
     notePlaceholder: "Anything we should know",
     noteLabel: "Note",
     requestQuote: "Request a quote",
@@ -151,11 +163,15 @@ export const customNation: Theme = {
     indicative: "Indicative",
     setupIndicative: "Setup, indicative",
     swap: "Swap",
+    noSwap: "No other part fits this role.",
     back: "Back",
     askPlaceholder: "Ask a question… “Will this fit a weapon light too?”",
     ask: "Ask",
     whyLabel: "Why this setup",
     partsFit: "all fit",
+    partWord: "part",
+    partsWord: "parts",
+    moreWord: "more",
     fits: "fits",
     yourSetup: "Your setup",
     quoteTitle: "Request a quote",
@@ -173,6 +189,10 @@ export const customNation: Theme = {
     forWord: "for",
     mark: "Rig · by Tervory",
     close: "Close",
+    sampleLabel: "SAMPLE DATA",
+    notAlternative: "That part is not an alternative that fits.",
+    errorGeneric: "Something went wrong.",
+    unavailable: "That setup is no longer available.",
   },
 };
 
@@ -206,6 +226,7 @@ export const neutral: Theme = {
   fonts: {
     heading: "Newsreader, Georgia, serif",
     body: '"Source Sans 3", "Helvetica Neue", sans-serif',
+    href: "https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,600&family=Source+Sans+3:wght@400;500;600&display=swap",
   },
   radius: "10px",
   radiusGraph: "16px",
@@ -227,6 +248,7 @@ export const neutral: Theme = {
     missingTitle: "Not in the catalogue yet? We can still quote it.",
     missingBody: "Paste a link to the product and a short note, and the shop will quote it.",
     linkPlaceholder: "https://…",
+    linkLabel: "Link",
     notePlaceholder: "A short note",
     noteLabel: "Note",
     requestQuote: "Request a quote",
@@ -239,11 +261,15 @@ export const neutral: Theme = {
     indicative: "Indicative",
     setupIndicative: "Setup, indicative",
     swap: "Swap",
+    noSwap: "No other part fits this role.",
     back: "Back",
     askPlaceholder: "Ask a question… “Does this work with the rest of the kit?”",
     ask: "Ask",
     whyLabel: "Why this setup",
     partsFit: "all fit",
+    partWord: "part",
+    partsWord: "parts",
+    moreWord: "more",
     fits: "fits",
     yourSetup: "Your setup",
     quoteTitle: "Request a quote",
@@ -261,12 +287,16 @@ export const neutral: Theme = {
     forWord: "for",
     mark: "Rig · by Tervory",
     close: "Close",
+    sampleLabel: "SAMPLE DATA",
+    notAlternative: "That part is not an alternative that fits.",
+    errorGeneric: "Something went wrong.",
+    unavailable: "That setup is no longer available.",
   },
 };
 
 export function resolveTheme(value: string | null): Theme {
-  if (!value || value === "custom-nation") return customNation;
-  if (value === "neutral") return neutral;
+  if (value === "custom-nation") return customNation;
+  if (!value || value === "neutral") return neutral;
   if (value.trim().startsWith("{")) {
     try {
       const parsed = JSON.parse(value) as Partial<Theme> & { id?: string };
@@ -285,8 +315,8 @@ export function resolveTheme(value: string | null): Theme {
         },
       };
     } catch {
-      return customNation;
+      return neutral;
     }
   }
-  return customNation;
+  return neutral;
 }

@@ -100,6 +100,10 @@ h1.title {
   outline: none;
 }
 .search input::placeholder { color: var(--rig-faint); }
+.search:focus-within {
+  outline: 2px solid var(--rig-accent);
+  outline-offset: 2px;
+}
 .btn {
   border-radius: var(--rig-radius);
   font-size: 13px;
@@ -366,6 +370,13 @@ h1.title {
   outline: none;
 }
 .field::placeholder, .link-url::placeholder { color: var(--rig-faint); }
+.field:focus,
+.field:focus-visible,
+.link-url:focus,
+.link-url:focus-visible {
+  outline: 2px solid var(--rig-accent);
+  outline-offset: 2px;
+}
 .link-row { gap: 10px; align-items: center; }
 .link-url { flex: 1; min-width: 0; }
 .note { display: flex; flex-direction: column; gap: 6px; }
@@ -431,6 +442,10 @@ h1.title {
   outline: none;
 }
 .explore-search input::placeholder { color: var(--rig-graph-muted); }
+.explore-search:focus-within {
+  outline: 2px solid var(--rig-accent);
+  outline-offset: 2px;
+}
 .explore-mark { color: var(--rig-graph-muted); font-size: 11px; font-weight: 500; white-space: nowrap; }
 .back {
   background: none;
@@ -514,7 +529,7 @@ h1.title {
   width: 30px;
   height: 30px;
   border-radius: 4px;
-  background: #fff;
+  background: var(--rig-card);
   flex: none;
 }
 .g-copy { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -601,6 +616,10 @@ h1.title {
   outline: none;
 }
 .ask input::placeholder { color: var(--rig-graph-muted); }
+.ask:focus-within {
+  outline: 2px solid var(--rig-accent);
+  outline-offset: 2px;
+}
 .ask-go {
   width: 36px;
   height: 36px;

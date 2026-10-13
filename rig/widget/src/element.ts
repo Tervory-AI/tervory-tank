@@ -1,27 +1,29 @@
 import { RigClient } from "./api/client";
-import { indicativeTotal, formatPrice } from "./api/format";
+import { formatPrice } from "./api/format";
 import { RigError } from "./api/types";
 import type { GraphResponse, Product, Setup } from "./api/types";
 import { resolveTheme, type Theme } from "./theme/themes";
 import { renderView, type QuoteView, type Screen, type View } from "./ui/render";
 import { styles } from "./ui/styles";
 
-const FONT_HREF =
-  "https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600&family=Inter:wght@400;500;600&family=Newsreader:opsz,wght@6..72,600&family=Source+Sans+3:wght@400;500;600&display=swap";
-
 type QuoteTarget = { kind: "product"; productId: string } | { kind: "setup"; tier: string };
+
+type FocusKey =
+  | { kind: "id"; id: string; start: number | null; end: number | null }
+  | { kind: "action"; action: string; id: string; tier: string; role: string; category: string; q: string };
 
 export class TervoryRig extends HTMLElement {
   static get observedAttributes(): string[] {
-    return ["api-base", "rig-key", "theme"];
+    return ["api-base", "rig-key", "theme", "fonts"];
   }
 
-  private client = new RigClient({ apiBase: "mock", key: "" });
+  private client = new RigClient({ apiBase: "", key: "" });
   private themeOverride: Theme | null = null;
   private root: HTMLElement | null = null;
   private searchTimer = 0;
   private loadGen = 0;
-  private focusAfter: string | null = null;
+  private pendingFocus: FocusKey | null = null;
+  private quoteOpener: FocusKey | null = null;
 
   private query = "";
   private screen: Screen = "home";
@@ -65,7 +67,6 @@ export class TervoryRig extends HTMLElement {
     shadow.addEventListener("submit", (event) => this.onSubmit(event));
     shadow.addEventListener("input", (event) => this.onInput(event));
     shadow.addEventListener("keydown", (event) => this.onKey(event));
-    ensureFonts();
     this.syncClient();
     this.applyTheme();
     this.render();
@@ -84,8 +85,9 @@ export class TervoryRig extends HTMLElement {
   }
 
   private syncClient(): void {
+    const apiBase = this.getAttribute("api-base");
     this.client = new RigClient({
-      apiBase: this.getAttribute("api-base") || "mock",
+      apiBase: apiBase === null ? "" : apiBase.trim(),
       key: this.getAttribute("rig-key") ?? "",
     });
   }
@@ -124,6 +126,7 @@ export class TervoryRig extends HTMLElement {
       "--rig-graph-glow": theme.graph.glow,
     };
     for (const [key, value] of Object.entries(vars)) this.style.setProperty(key, value);
+    if (this.getAttribute("fonts") !== "off" && theme.fonts.href) ensureThemeFonts(theme.fonts.href);
   }
 
   private view(): View {
@@ -157,36 +160,58 @@ export class TervoryRig extends HTMLElement {
     const previous = this.captureFocus();
     this.classList.toggle("is-explore", this.screen === "explore");
     this.root.innerHTML = renderView(this.view());
-    const prefer = this.focusAfter;
-    this.focusAfter = null;
-    this.restoreFocus(prefer ?? previous?.id ?? null, prefer ? null : previous);
+    const prefer = this.pendingFocus;
+    this.pendingFocus = null;
+    this.restoreFocus(prefer ?? previous);
   }
 
-  private captureFocus(): { id: string; start: number | null; end: number | null } | null {
+  private captureFocus(): FocusKey | null {
     const active = this.shadowRoot?.activeElement;
-    if (!(active instanceof HTMLElement) || !active.id) return null;
-    if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
-      return { id: active.id, start: active.selectionStart, end: active.selectionEnd };
+    if (!(active instanceof HTMLElement)) return null;
+    if (active.id && (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement)) {
+      return { kind: "id", id: active.id, start: active.selectionStart, end: active.selectionEnd };
     }
-    return { id: active.id, start: null, end: null };
+    const actionEl = active.closest("[data-action]");
+    if (actionEl instanceof HTMLElement && actionEl.dataset.action) {
+      return {
+        kind: "action",
+        action: actionEl.dataset.action,
+        id: actionEl.dataset.id ?? "",
+        tier: actionEl.dataset.tier ?? "",
+        role: actionEl.dataset.role ?? "",
+        category: actionEl.dataset.category ?? "",
+        q: actionEl.dataset.q ?? "",
+      };
+    }
+    if (active.id) return { kind: "id", id: active.id, start: null, end: null };
+    return null;
   }
 
-  private restoreFocus(
-    id: string | null,
-    previous: { id: string; start: number | null; end: number | null } | null,
-  ): void {
-    if (!id || !this.root) return;
-    const next = this.root.querySelector(`#${CSS.escape(id)}`);
-    if (!(next instanceof HTMLElement)) return;
-    next.focus();
-    if (
-      previous &&
-      previous.id === id &&
-      (next instanceof HTMLInputElement || next instanceof HTMLTextAreaElement) &&
-      previous.start !== null &&
-      previous.end !== null
-    ) {
-      next.setSelectionRange(previous.start, previous.end);
+  private restoreFocus(key: FocusKey | null): void {
+    if (!key || !this.root) return;
+    if (key.kind === "id") {
+      const next = this.root.querySelector(`#${CSS.escape(key.id)}`);
+      if (!(next instanceof HTMLElement)) return;
+      next.focus();
+      if (
+        (next instanceof HTMLInputElement || next instanceof HTMLTextAreaElement) &&
+        key.start !== null &&
+        key.end !== null
+      ) {
+        next.setSelectionRange(key.start, key.end);
+      }
+      return;
+    }
+    const nodes = this.root.querySelectorAll<HTMLElement>("[data-action]");
+    for (const el of nodes) {
+      if ((el.dataset.action ?? "") !== key.action) continue;
+      if ((el.dataset.id ?? "") !== key.id) continue;
+      if ((el.dataset.tier ?? "") !== key.tier) continue;
+      if ((el.dataset.role ?? "") !== key.role) continue;
+      if ((el.dataset.category ?? "") !== key.category) continue;
+      if ((el.dataset.q ?? "") !== key.q) continue;
+      el.focus();
+      return;
     }
   }
 
@@ -218,7 +243,7 @@ export class TervoryRig extends HTMLElement {
         void this.openSwap(tier, action.dataset.role ?? "");
         break;
       case "pick-swap":
-        this.pickSwap(tier, id);
+        void this.pickSwap(tier, id);
         break;
       case "tier":
         this.activeTier = tier;
@@ -235,9 +260,7 @@ export class TervoryRig extends HTMLElement {
         this.goBack();
         break;
       case "close-quote":
-        this.quote = null;
-        this.quoteTarget = null;
-        this.render();
+        this.closeQuote();
         break;
       default:
         break;
@@ -283,15 +306,43 @@ export class TervoryRig extends HTMLElement {
   }
 
   private onKey(event: Event): void {
-    if (!(event instanceof KeyboardEvent) || event.key !== "Escape") return;
+    if (!(event instanceof KeyboardEvent)) return;
+    if (event.key === "Tab" && this.quote) {
+      this.trapQuoteFocus(event);
+      return;
+    }
+    if (event.key !== "Escape") return;
     if (this.quote) {
-      this.quote = null;
-      this.quoteTarget = null;
-      this.render();
+      this.closeQuote();
     } else if (this.swap) {
       this.swap = null;
       this.render();
     }
+  }
+
+  private trapQuoteFocus(event: KeyboardEvent): void {
+    const dialog = this.root?.querySelector("[role='dialog']");
+    if (!(dialog instanceof HTMLElement)) return;
+    const items = [...dialog.querySelectorAll<HTMLElement>("button, input, textarea, select, a[href]")].filter(
+      (el) => !el.hasAttribute("disabled"),
+    );
+    if (items.length === 0) return;
+    const index = items.findIndex((el) => el === this.shadowRoot?.activeElement);
+    event.preventDefault();
+    if (index === -1) {
+      (event.shiftKey ? items[items.length - 1] : items[0])?.focus();
+      return;
+    }
+    const delta = event.shiftKey ? -1 : 1;
+    items[(index + delta + items.length) % items.length]?.focus();
+  }
+
+  private closeQuote(): void {
+    this.pendingFocus = this.quoteOpener;
+    this.quoteOpener = null;
+    this.quote = null;
+    this.quoteTarget = null;
+    this.render();
   }
 
   private scheduleSearch(): void {
@@ -337,7 +388,7 @@ export class TervoryRig extends HTMLElement {
       }
     } catch (error) {
       if (gen !== this.loadGen) return;
-      this.message = errorText(error);
+      this.message = this.errorText(error);
     }
     this.render();
   }
@@ -363,7 +414,7 @@ export class TervoryRig extends HTMLElement {
       this.message = null;
     } catch (error) {
       if (gen !== this.loadGen) return;
-      this.message = errorText(error);
+      this.message = this.errorText(error);
     }
     this.render();
   }
@@ -394,7 +445,7 @@ export class TervoryRig extends HTMLElement {
       this.message = null;
     } catch (error) {
       if (gen !== this.loadGen) return;
-      this.message = errorText(error);
+      this.message = this.errorText(error);
     }
     this.render();
   }
@@ -411,25 +462,45 @@ export class TervoryRig extends HTMLElement {
     this.render();
     try {
       const response = await this.client.swap(setup, role);
+      if (!response.setup?.total) {
+        this.message = this.currentTheme().copy.errorGeneric;
+        this.render();
+        return;
+      }
+      this.replaceSetup(response.setup);
       this.swap = { tier, role, options: response.options };
       this.message = null;
     } catch (error) {
-      this.message = errorText(error);
+      this.message = this.errorText(error);
     }
     this.render();
   }
 
-  private pickSwap(tier: string, id: string): void {
+  private async pickSwap(tier: string, id: string): Promise<void> {
     const setup = this.setups.find((item) => item.tier === tier);
+    const role = this.swap?.role ?? "";
     const option = this.swap?.options.find((item) => item.id === id);
-    if (!setup || !option || this.swap?.tier !== tier) return;
-    const part = setup.parts.find((item) => item.role === this.swap?.role);
-    if (!part) return;
-    part.product = option;
-    setup.total = indicativeTotal(setup.parts, setup.total);
-    if (!this.customizedTiers.includes(tier)) this.customizedTiers.push(tier);
+    if (!setup || !option || this.swap?.tier !== tier || !role) return;
+    const next = withPart(setup, role, option);
+    try {
+      const response = await this.client.swap(next, role);
+      if (!response.setup?.total) {
+        this.message = this.currentTheme().copy.errorGeneric;
+      } else {
+        this.replaceSetup(response.setup);
+        if (!this.customizedTiers.includes(tier)) this.customizedTiers.push(tier);
+        this.message = null;
+      }
+    } catch (error) {
+      this.message = this.errorText(error);
+    }
     this.swap = null;
     this.render();
+  }
+
+  private replaceSetup(setup: Setup): void {
+    const index = this.setups.findIndex((item) => item.tier === setup.tier);
+    if (index >= 0) this.setups[index] = setup;
   }
 
   private async pickGraph(id: string): Promise<void> {
@@ -443,16 +514,21 @@ export class TervoryRig extends HTMLElement {
       const response = await this.client.swap(setup, part.role);
       const choice = response.options.find((item) => item.id === product.id);
       if (!choice) {
-        this.message = "That part is not an alternative that fits.";
+        this.message = this.currentTheme().copy.notAlternative;
         this.render();
         return;
       }
-      part.product = choice;
-      setup.total = indicativeTotal(setup.parts, setup.total);
+      const priced = await this.client.swap(withPart(setup, part.role, choice), part.role);
+      if (!priced.setup?.total) {
+        this.message = this.currentTheme().copy.errorGeneric;
+        this.render();
+        return;
+      }
+      this.replaceSetup(priced.setup);
       if (!this.customizedTiers.includes(setup.tier)) this.customizedTiers.push(setup.tier);
       this.message = null;
     } catch (error) {
-      this.message = errorText(error);
+      this.message = this.errorText(error);
     }
     this.render();
   }
@@ -473,6 +549,7 @@ export class TervoryRig extends HTMLElement {
   private openQuoteProduct(id: string): void {
     const product = this.findProduct(id);
     if (!product) return;
+    this.quoteOpener = this.captureFocus();
     this.quoteTarget = { kind: "product", productId: id };
     this.quote = {
       kind: "product",
@@ -483,13 +560,14 @@ export class TervoryRig extends HTMLElement {
       error: null,
       requestId: null,
     };
-    this.focusAfter = "quote-name";
+    this.pendingFocus = { kind: "id", id: "quote-name", start: null, end: null };
     this.render();
   }
 
   private openQuoteSetup(tier: string): void {
     const setup = this.setups.find((item) => item.tier === tier);
     if (!setup) return;
+    this.quoteOpener = this.captureFocus();
     this.quoteTarget = { kind: "setup", tier };
     this.quote = {
       kind: "setup",
@@ -500,7 +578,7 @@ export class TervoryRig extends HTMLElement {
       error: null,
       requestId: null,
     };
-    this.focusAfter = "quote-name";
+    this.pendingFocus = { kind: "id", id: "quote-name", start: null, end: null };
     this.render();
   }
 
@@ -515,15 +593,24 @@ export class TervoryRig extends HTMLElement {
     try {
       const setup = target.kind === "setup" ? this.setups.find((item) => item.tier === target.tier) : undefined;
       if (target.kind === "setup" && !setup) {
-        throw new RigError("invalid_quote", "That setup is no longer available.", 400);
+        throw new RigError("invalid_quote", this.currentTheme().copy.unavailable, 400);
       }
       const response =
         target.kind === "product"
           ? await this.client.quote({ contact, product_id: target.productId })
           : await this.client.quote({ contact, setup });
       this.quote = { ...this.quote, requestId: response.request_id };
+      this.pendingFocus = {
+        kind: "action",
+        action: "close-quote",
+        id: "",
+        tier: "",
+        role: "",
+        category: "",
+        q: "",
+      };
     } catch (error) {
-      this.quote = { ...this.quote, error: errorText(error) };
+      this.quote = { ...this.quote, error: this.errorText(error) };
     }
     this.render();
   }
@@ -534,7 +621,7 @@ export class TervoryRig extends HTMLElement {
       const response = await this.client.linkQuote({ url: this.linkUrl, note: this.linkNote });
       this.linkRequestId = response.request_id;
     } catch (error) {
-      this.linkError = errorText(error);
+      this.linkError = this.errorText(error);
     }
     this.render();
   }
@@ -555,7 +642,7 @@ export class TervoryRig extends HTMLElement {
       this.askCites = this.citeLabel(response.cites);
       this.message = null;
     } catch (error) {
-      this.message = errorText(error);
+      this.message = this.errorText(error);
     }
     this.render();
   }
@@ -589,19 +676,34 @@ export class TervoryRig extends HTMLElement {
     const option = this.swap?.options.find((item) => item.id === id);
     return option ?? null;
   }
+
+  private errorText(error: unknown): string {
+    if (error instanceof RigError) return error.message;
+    if (error instanceof Error && error.message) return error.message;
+    return this.currentTheme().copy.errorGeneric;
+  }
 }
 
-function errorText(error: unknown): string {
-  if (error instanceof RigError) return error.message;
-  if (error instanceof Error) return error.message;
-  return "Something went wrong.";
+function withPart(setup: Setup, role: string, product: Product): Setup {
+  const next: Setup = {
+    tier: setup.tier,
+    label: setup.label,
+    parts: setup.parts.map((part) => (part.role === role ? { role, product } : part)),
+    total: setup.total,
+    why: setup.why,
+  };
+  if (setup.badge) next.badge = setup.badge;
+  return next;
 }
 
-function ensureFonts(): void {
-  if (document.querySelector('link[data-tervory-rig-fonts="true"]')) return;
+function ensureThemeFonts(href: string): void {
+  const links = document.querySelectorAll("link[data-tervory-rig-font]");
+  for (const link of links) {
+    if (link.getAttribute("data-tervory-rig-font") === href) return;
+  }
   const link = document.createElement("link");
   link.rel = "stylesheet";
-  link.href = FONT_HREF;
-  link.dataset.tervoryRigFonts = "true";
+  link.href = href;
+  link.setAttribute("data-tervory-rig-font", href);
   document.head.appendChild(link);
 }

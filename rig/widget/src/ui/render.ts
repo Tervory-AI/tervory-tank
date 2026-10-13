@@ -109,7 +109,7 @@ function results(view: View): string {
   const cards = view.results.map((product) => resultCard(view, product)).join("");
   return `<div class="meta-row">
       <strong>${view.results.length} ${esc(noun)} ${esc(copy.forWord)} “${esc(view.query)}”</strong>
-      ${sampleBadge()}
+      ${sampleBadge(copy.sampleLabel)}
     </div>
     <div class="cards">${cards}</div>`;
 }
@@ -122,7 +122,7 @@ function resultCard(view: View, product: Product): string {
     : `<button type="button" class="btn btn-ghost" data-action="complete" data-id="${esc(product.id)}">${esc(copy.complete)}</button>`;
   return `<article class="card${selected ? " selected" : ""}">
     ${photo(product, view, "photo-lg")}
-    <div class="brand-row"><p class="brand">${esc(product.brand)}</p>${isSample(product) ? sampleBadge() : ""}</div>
+    <div class="brand-row"><p class="brand">${esc(product.brand)}</p>${isSample(product) ? sampleBadge(copy.sampleLabel) : ""}</div>
     <h2 class="card-name">${esc(product.name)}</h2>
     <p class="summary">${esc(summaryOf(product))}</p>
     ${priceRow(copy.indicative, product.price, "")}
@@ -145,7 +145,7 @@ function missing(view: View): string {
     <p class="missing-copy">${esc(copy.missingBody)}</p>
     <form class="link-form">
       <div class="link-row">
-        <label class="sr" for="link-url">Link</label>
+        <label class="sr" for="link-url">${esc(copy.linkLabel)}</label>
         <input class="link-url" id="link-url" type="url" inputmode="url" placeholder="${esc(copy.linkPlaceholder)}" value="${esc(view.linkUrl)}">
         <button class="btn btn-accent" type="submit">${esc(copy.requestQuote)}</button>
       </div>
@@ -172,8 +172,9 @@ function setupScreen(view: View): string {
         ${note ? `<p class="chosen-note">${esc(note)}</p>` : ""}
       </div>
       <div class="chosen-side">
+        <button type="button" class="btn btn-ghost" data-action="quote-product" data-id="${esc(product.id)}">${esc(copy.quoteOnly)}</button>
         <button type="button" class="btn btn-ghost" data-action="explore" data-id="${esc(product.id)}">${esc(copy.explore)}</button>
-        ${isSample(product) ? sampleBadge() : ""}
+        ${isSample(product) ? sampleBadge(copy.sampleLabel) : ""}
       </div>
     </section>
     ${
@@ -200,7 +201,7 @@ function setupCard(view: View, setup: Setup, index: number): string {
       <span class="setup-no">${String(index + 1).padStart(2, "0")}</span>
       <h3 class="setup-name">${esc(setup.tier)}</h3>
       ${setup.badge ? `<span class="badge-hot">${esc(setup.badge)}</span>` : ""}
-      ${setup.parts.some((part) => isSample(part.product)) ? sampleBadge() : ""}
+      ${setup.parts.some((part) => isSample(part.product)) ? sampleBadge(copy.sampleLabel) : ""}
     </div>
     <p class="label">${esc(setup.label)}</p>
     ${parts}
@@ -215,15 +216,15 @@ function partRow(view: View, setup: Setup, part: SetupPart): string {
   const host = part.product.id === view.selectedId;
   const open = view.swap?.role === part.role && view.swap.tier === setup.tier;
   const options = open
-    ? `<div class="options" role="listbox" aria-label="${esc(copy.swap)} ${esc(part.role)}">${
+    ? `<div class="options">${
         view.swap?.options.length
           ? view.swap.options
               .map(
                 (option) =>
-                  `<button type="button" class="option" role="option" data-action="pick-swap" data-tier="${esc(setup.tier)}" data-id="${esc(option.id)}">${esc(option.name)}</button>`,
+                  `<button type="button" class="option" data-action="pick-swap" data-tier="${esc(setup.tier)}" data-id="${esc(option.id)}">${esc(option.name)}</button>`,
               )
               .join("")
-          : `<p class="fit-line">No other part fits this role.</p>`
+          : `<p class="fit-line">${esc(copy.noSwap)}</p>`
       }</div>`
     : "";
   return `<div class="part-block">
@@ -232,7 +233,7 @@ function partRow(view: View, setup: Setup, part: SetupPart): string {
       <div class="part-copy">
         <span class="role">${esc(part.role)}</span>
         <span class="part-name">${esc(part.product.name)}</span>
-        ${isSample(part.product) ? sampleBadge() : ""}
+        ${isSample(part.product) ? sampleBadge(copy.sampleLabel) : ""}
       </div>
       ${
         host
@@ -262,14 +263,14 @@ function explore(view: View): string {
                 <span class="swatch" aria-hidden="true"></span>
                 <span class="g-copy">
                   <span class="g-name">${esc(item.name)}</span>
-                  <span class="g-meta">${esc(formatPrice(item.price))} · ${esc(copy.fits)} ✓${isSample(item) ? " · SAMPLE DATA" : ""}</span>
+                  <span class="g-meta">${esc(formatPrice(item.price))} · ${esc(copy.fits)} ✓${isSample(item) ? ` · ${esc(copy.sampleLabel)}` : ""}</span>
                 </span>
               </button>`;
             })
             .join("")
         : "";
       const more = branch.count - branch.products.length;
-      const moreLine = expanded && more > 0 ? `<p class="more">+ ${more} more ${esc(branch.category.toLowerCase())}</p>` : "";
+      const moreLine = expanded && more > 0 ? `<p class="more">+ ${more} ${esc(copy.moreWord)} ${esc(branch.category.toLowerCase())}</p>` : "";
       return `<div class="branch-row">
         <button type="button" class="branch${on ? " on" : ""}" data-action="branch" data-category="${esc(branch.category)}" aria-expanded="${expanded ? "true" : "false"}">
           <span class="count">${branch.count}</span>
@@ -307,7 +308,7 @@ function explore(view: View): string {
       <div class="graph">${branchRows}</div>
       <div class="side">${panel(view, setup)}${askBox(view)}</div>
     </div>
-    ${sampleBadge("sample sample-float")}
+    ${sampleBadge(copy.sampleLabel, "sample sample-float")}
   </div></div>${quoteDialog(view)}`;
 }
 
@@ -325,7 +326,7 @@ function panel(view: View, setup: Setup | null): string {
       return `<button type="button" class="tier${on ? " on" : ""}" data-action="tier" data-tier="${esc(item.tier)}" aria-pressed="${on ? "true" : "false"}">${esc(labelOf(item))}</button>`;
     })
     .join("");
-  const noun = setup.parts.length === 1 ? "part" : "parts";
+  const noun = setup.parts.length === 1 ? copy.partWord : copy.partsWord;
   return `<aside class="panel">
     <p class="panel-kicker">${esc(copy.yourSetup)} · ${esc(setup.tier)}</p>
     <h2>${esc(names)}</h2>
@@ -403,8 +404,8 @@ function photo(product: Product, view: View, size: string): string {
   return `<div class="photo ${size}" aria-hidden="true">${inner}</div>`;
 }
 
-function sampleBadge(className = "sample"): string {
-  return `<span class="${className}">SAMPLE DATA</span>`;
+function sampleBadge(label: string, className = "sample"): string {
+  return `<span class="${className}">${esc(label)}</span>`;
 }
 
 function safeImage(src: string): string {

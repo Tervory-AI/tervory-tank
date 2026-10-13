@@ -6,7 +6,11 @@
       "brand": "Staccato 2011",
       "category": "Pistol",
       "image": "",
-      "price": { "amount": 68900, "currency": "ZAR", "indicative": true },
+      "price": {
+        "amount": 68900,
+        "currency": "ZAR",
+        "indicative": true
+      },
       "attributes": {
         "sample": true,
         "summary": "Compact · 9mm · optic-ready",
@@ -22,7 +26,11 @@
       "brand": "Staccato 2011",
       "category": "Pistol",
       "image": "",
-      "price": { "amount": 74900, "currency": "ZAR", "indicative": true },
+      "price": {
+        "amount": 74900,
+        "currency": "ZAR",
+        "indicative": true
+      },
       "attributes": {
         "sample": true,
         "summary": "Duty · 9mm · optic-ready",
@@ -38,7 +46,11 @@
       "brand": "Staccato 2011",
       "category": "Pistol",
       "image": "",
-      "price": { "amount": 119000, "currency": "ZAR", "indicative": true },
+      "price": {
+        "amount": 119000,
+        "currency": "ZAR",
+        "indicative": true
+      },
       "attributes": {
         "sample": true,
         "summary": "Competition · 9mm · comp",
@@ -54,12 +66,18 @@
       "brand": "Holosun",
       "category": "Red dot",
       "image": "",
-      "price": { "amount": 9900, "currency": "ZAR", "indicative": true },
+      "price": {
+        "amount": 9900,
+        "currency": "ZAR",
+        "indicative": true
+      },
       "attributes": {
         "sample": true,
         "summary": "RMR footprint",
         "footprint": "RMR",
-        "fits_cuts": ["RMR"]
+        "fits_cuts": [
+          "RMR"
+        ]
       }
     },
     {
@@ -68,12 +86,18 @@
       "brand": "Trijicon",
       "category": "Red dot",
       "image": "",
-      "price": { "amount": 16500, "currency": "ZAR", "indicative": true },
+      "price": {
+        "amount": 16500,
+        "currency": "ZAR",
+        "indicative": true
+      },
       "attributes": {
         "sample": true,
         "summary": "RMR footprint",
         "footprint": "RMR",
-        "fits_cuts": ["RMR"]
+        "fits_cuts": [
+          "RMR"
+        ]
       }
     },
     {
@@ -82,12 +106,18 @@
       "brand": "Leupold",
       "category": "Red dot",
       "image": "",
-      "price": { "amount": 12300, "currency": "ZAR", "indicative": true },
+      "price": {
+        "amount": 12300,
+        "currency": "ZAR",
+        "indicative": true
+      },
       "attributes": {
         "sample": true,
-        "summary": "RMR footprint",
-        "footprint": "RMR",
-        "fits_cuts": ["RMR"]
+        "summary": "DeltaPoint Pro footprint",
+        "footprint": "DPP",
+        "fits_cuts": [
+          "DPP"
+        ]
       }
     },
     {
@@ -96,12 +126,18 @@
       "brand": "Aimpoint",
       "category": "Red dot",
       "image": "",
-      "price": { "amount": 14800, "currency": "ZAR", "indicative": true },
+      "price": {
+        "amount": 14800,
+        "currency": "ZAR",
+        "indicative": true
+      },
       "attributes": {
         "sample": true,
-        "summary": "RMR footprint",
-        "footprint": "RMR",
-        "fits_cuts": ["RMR"]
+        "summary": "Acro footprint",
+        "footprint": "ACRO",
+        "fits_cuts": [
+          "ACRO"
+        ]
       }
     },
     {
@@ -110,12 +146,22 @@
       "brand": "Kydex",
       "category": "Holster",
       "image": "",
-      "price": { "amount": 2900, "currency": "ZAR", "indicative": true },
+      "price": {
+        "amount": 2900,
+        "currency": "ZAR",
+        "indicative": true
+      },
       "attributes": {
         "sample": true,
         "summary": "Outside the waistband, red-dot cut",
-        "fits_products": ["staccato-c2", "staccato-p", "staccato-xc"],
-        "fits_cuts": ["RMR"]
+        "fits_products": [
+          "staccato-c2",
+          "staccato-p",
+          "staccato-xc"
+        ],
+        "fits_cuts": [
+          "RMR"
+        ]
       }
     },
     {
@@ -124,12 +170,22 @@
       "brand": "Safariland",
       "category": "Holster",
       "image": "",
-      "price": { "amount": 5400, "currency": "ZAR", "indicative": true },
+      "price": {
+        "amount": 5400,
+        "currency": "ZAR",
+        "indicative": true
+      },
       "attributes": {
         "sample": true,
         "summary": "Duty holster, red-dot cut",
-        "fits_products": ["staccato-c2", "staccato-p", "staccato-xc"],
-        "fits_cuts": ["RMR"]
+        "fits_products": [
+          "staccato-c2",
+          "staccato-p",
+          "staccato-xc"
+        ],
+        "fits_cuts": [
+          "RMR"
+        ]
       }
     },
     {
@@ -138,12 +194,22 @@
       "brand": "Competition",
       "category": "Holster",
       "image": "",
-      "price": { "amount": 4200, "currency": "ZAR", "indicative": true },
+      "price": {
+        "amount": 4200,
+        "currency": "ZAR",
+        "indicative": true
+      },
       "attributes": {
         "sample": true,
         "summary": "Competition holster, red-dot cut",
-        "fits_products": ["staccato-c2", "staccato-p", "staccato-xc"],
-        "fits_cuts": ["RMR"]
+        "fits_products": [
+          "staccato-c2",
+          "staccato-p",
+          "staccato-xc"
+        ],
+        "fits_cuts": [
+          "RMR"
+        ]
       }
     },
     {
@@ -152,12 +218,22 @@
       "brand": "Tier 1",
       "category": "Holster",
       "image": "",
-      "price": { "amount": 3600, "currency": "ZAR", "indicative": true },
+      "price": {
+        "amount": 3600,
+        "currency": "ZAR",
+        "indicative": true
+      },
       "attributes": {
         "sample": true,
         "summary": "Inside the waistband, red-dot cut",
-        "fits_products": ["staccato-c2", "staccato-p", "staccato-xc"],
-        "fits_cuts": ["RMR"]
+        "fits_products": [
+          "staccato-c2",
+          "staccato-p",
+          "staccato-xc"
+        ],
+        "fits_cuts": [
+          "RMR"
+        ]
       }
     },
     {
@@ -166,11 +242,19 @@
       "brand": "Streamlight",
       "category": "Weapon light",
       "image": "",
-      "price": { "amount": 4200, "currency": "ZAR", "indicative": true },
+      "price": {
+        "amount": 4200,
+        "currency": "ZAR",
+        "indicative": true
+      },
       "attributes": {
         "sample": true,
         "summary": "Rail-mounted light",
-        "fits_products": ["staccato-c2", "staccato-p", "staccato-xc"]
+        "fits_products": [
+          "staccato-c2",
+          "staccato-p",
+          "staccato-xc"
+        ]
       }
     },
     {
@@ -179,11 +263,19 @@
       "brand": "SureFire",
       "category": "Weapon light",
       "image": "",
-      "price": { "amount": 6800, "currency": "ZAR", "indicative": true },
+      "price": {
+        "amount": 6800,
+        "currency": "ZAR",
+        "indicative": true
+      },
       "attributes": {
         "sample": true,
         "summary": "Rail-mounted light",
-        "fits_products": ["staccato-c2", "staccato-p", "staccato-xc"]
+        "fits_products": [
+          "staccato-c2",
+          "staccato-p",
+          "staccato-xc"
+        ]
       }
     },
     {
@@ -192,11 +284,18 @@
       "brand": "Modlite",
       "category": "Weapon light",
       "image": "",
-      "price": { "amount": 9100, "currency": "ZAR", "indicative": true },
+      "price": {
+        "amount": 9100,
+        "currency": "ZAR",
+        "indicative": true
+      },
       "attributes": {
         "sample": true,
         "summary": "Rail-mounted light",
-        "fits_products": ["staccato-p", "staccato-xc"]
+        "fits_products": [
+          "staccato-p",
+          "staccato-xc"
+        ]
       }
     },
     {
@@ -205,11 +304,19 @@
       "brand": "Factory",
       "category": "Magazine",
       "image": "",
-      "price": { "amount": 890, "currency": "ZAR", "indicative": true },
+      "price": {
+        "amount": 890,
+        "currency": "ZAR",
+        "indicative": true
+      },
       "attributes": {
         "sample": true,
         "summary": "17 rounds",
-        "fits_products": ["staccato-c2", "staccato-p", "staccato-xc"]
+        "fits_products": [
+          "staccato-c2",
+          "staccato-p",
+          "staccato-xc"
+        ]
       }
     },
     {
@@ -218,11 +325,18 @@
       "brand": "Factory",
       "category": "Magazine",
       "image": "",
-      "price": { "amount": 1100, "currency": "ZAR", "indicative": true },
+      "price": {
+        "amount": 1100,
+        "currency": "ZAR",
+        "indicative": true
+      },
       "attributes": {
         "sample": true,
         "summary": "20 rounds",
-        "fits_products": ["staccato-p", "staccato-xc"]
+        "fits_products": [
+          "staccato-p",
+          "staccato-xc"
+        ]
       }
     },
     {
@@ -231,12 +345,22 @@
       "brand": "CHPWS",
       "category": "Optic plate",
       "image": "",
-      "price": { "amount": 1200, "currency": "ZAR", "indicative": true },
+      "price": {
+        "amount": 1200,
+        "currency": "ZAR",
+        "indicative": true
+      },
       "attributes": {
         "sample": true,
         "summary": "RMR footprint plate",
-        "fits_products": ["staccato-c2", "staccato-p", "staccato-xc"],
-        "fits_cuts": ["RMR"]
+        "fits_products": [
+          "staccato-c2",
+          "staccato-p",
+          "staccato-xc"
+        ],
+        "fits_cuts": [
+          "RMR"
+        ]
       }
     },
     {
@@ -245,12 +369,21 @@
       "brand": "CHPWS",
       "category": "Optic plate",
       "image": "",
-      "price": { "amount": 1400, "currency": "ZAR", "indicative": true },
+      "price": {
+        "amount": 1400,
+        "currency": "ZAR",
+        "indicative": true
+      },
       "attributes": {
         "sample": true,
         "summary": "DeltaPoint footprint plate",
-        "fits_products": ["staccato-p", "staccato-xc"],
-        "fits_cuts": ["DPP"]
+        "fits_products": [
+          "staccato-p",
+          "staccato-xc"
+        ],
+        "fits_cuts": [
+          "DPP"
+        ]
       }
     }
   ],
@@ -259,32 +392,69 @@
       {
         "tier": "essential",
         "label": "Everyday carry, best value",
-        "why": "✓ Fits the Staccato C2 optic cut · ✓ Holster cut for this dot\nA value red dot and an outside-the-waistband holster, both made for the Staccato C2.",
+        "why": [
+          "✓ Fits the Staccato C2 optic cut · ✓ Holster cut for this dot",
+          "A value red dot and an outside-the-waistband holster, both made for the Staccato C2."
+        ],
         "parts": [
-          { "role": "Pistol", "product_id": "staccato-c2" },
-          { "role": "Red dot", "product_id": "holosun-507c" },
-          { "role": "Holster", "product_id": "kydex-owb" }
+          {
+            "role": "Pistol",
+            "product_id": "staccato-c2"
+          },
+          {
+            "role": "Red dot",
+            "product_id": "holosun-507c"
+          },
+          {
+            "role": "Holster",
+            "product_id": "kydex-owb"
+          }
         ]
       },
       {
         "tier": "duty",
         "label": "Built to take a beating",
         "badge": "Most chosen",
-        "why": "✓ Fits the Staccato C2 optic cut · ✓ Holster cut for this dot\nThe RMR mounts to the C2’s optic cut, and the duty holster is cut for the C2 with that dot fitted.\nMost chosen for duty carry: a tough red dot and a duty holster that fit this pistol.",
+        "why": [
+          "✓ Fits the Staccato C2 optic cut · ✓ Holster cut for this dot",
+          "The RMR mounts to the C2’s optic cut, and the duty holster is cut for the C2 with that dot fitted.",
+          "Most chosen for duty carry: a tough red dot and a duty holster that fit this pistol."
+        ],
         "parts": [
-          { "role": "Pistol", "product_id": "staccato-c2" },
-          { "role": "Red dot", "product_id": "trijicon-rmr-type-2" },
-          { "role": "Holster", "product_id": "safariland-7360rds" }
+          {
+            "role": "Pistol",
+            "product_id": "staccato-c2"
+          },
+          {
+            "role": "Red dot",
+            "product_id": "trijicon-rmr-type-2"
+          },
+          {
+            "role": "Holster",
+            "product_id": "safariland-7360rds"
+          }
         ]
       },
       {
         "tier": "competition",
         "label": "Fast, flat, match-ready",
-        "why": "✓ Fits the Staccato C2 optic cut · ✓ Holster cut for this dot\nA wide-window dot and a competition holster, both cut for the Staccato C2.",
+        "why": [
+          "✓ Fits the Staccato C2 optic cut · ✓ Holster cut for this dot",
+          "A red dot and a competition holster, both cut for the Staccato C2."
+        ],
         "parts": [
-          { "role": "Pistol", "product_id": "staccato-c2" },
-          { "role": "Red dot", "product_id": "leupold-deltapoint-pro" },
-          { "role": "Holster", "product_id": "competition-holster" }
+          {
+            "role": "Pistol",
+            "product_id": "staccato-c2"
+          },
+          {
+            "role": "Red dot",
+            "product_id": "holosun-507c"
+          },
+          {
+            "role": "Holster",
+            "product_id": "competition-holster"
+          }
         ]
       }
     ],
@@ -292,32 +462,71 @@
       {
         "tier": "essential",
         "label": "Everyday carry, best value",
-        "why": "✓ Fits the Staccato P optic cut · ✓ Holster cut for this dot\nA value red dot and an outside-the-waistband holster, both made for the Staccato P.\nEveryday carry, best value.",
+        "why": [
+          "✓ Fits the Staccato P optic cut · ✓ Holster cut for this dot",
+          "A value red dot and an outside-the-waistband holster, both made for the Staccato P.",
+          "Everyday carry, best value."
+        ],
         "parts": [
-          { "role": "Pistol", "product_id": "staccato-p" },
-          { "role": "Red dot", "product_id": "holosun-507c" },
-          { "role": "Holster", "product_id": "kydex-owb" }
+          {
+            "role": "Pistol",
+            "product_id": "staccato-p"
+          },
+          {
+            "role": "Red dot",
+            "product_id": "holosun-507c"
+          },
+          {
+            "role": "Holster",
+            "product_id": "kydex-owb"
+          }
         ]
       },
       {
         "tier": "duty",
         "label": "Built to take a beating",
         "badge": "Most chosen",
-        "why": "✓ Fits the Staccato P optic cut · ✓ Holster cut for this dot\nThe RMR mounts to the P’s optic cut with the matching plate, and the 7360RDS is cut for the P with that dot fitted.\nMost chosen for duty carry: the RMR is the toughest dot that fits the P, and a level-3 retention holster keeps it secure.",
+        "why": [
+          "✓ Fits the Staccato P optic cut · ✓ Holster cut for this dot",
+          "The RMR mounts to the P’s optic cut, and the 7360RDS is cut for the P with that dot fitted.",
+          "Most chosen for duty carry: the RMR is the toughest dot that fits the P, and a level-3 retention holster keeps it secure."
+        ],
         "parts": [
-          { "role": "Pistol", "product_id": "staccato-p" },
-          { "role": "Red dot", "product_id": "trijicon-rmr-type-2" },
-          { "role": "Holster", "product_id": "safariland-7360rds" }
+          {
+            "role": "Pistol",
+            "product_id": "staccato-p"
+          },
+          {
+            "role": "Red dot",
+            "product_id": "trijicon-rmr-type-2"
+          },
+          {
+            "role": "Holster",
+            "product_id": "safariland-7360rds"
+          }
         ]
       },
       {
         "tier": "competition",
         "label": "Fast, flat, match-ready",
-        "why": "✓ Fits the Staccato P optic cut · ✓ Holster cut for this dot\nA wide-window dot and a competition holster, both cut for the Staccato P.\nFast, flat, match-ready.",
+        "why": [
+          "✓ Fits the Staccato P optic cut · ✓ Holster cut for this dot",
+          "A red dot and a competition holster, both cut for the Staccato P.",
+          "Fast, flat, match-ready."
+        ],
         "parts": [
-          { "role": "Pistol", "product_id": "staccato-p" },
-          { "role": "Red dot", "product_id": "leupold-deltapoint-pro" },
-          { "role": "Holster", "product_id": "competition-holster" }
+          {
+            "role": "Pistol",
+            "product_id": "staccato-p"
+          },
+          {
+            "role": "Red dot",
+            "product_id": "holosun-507c"
+          },
+          {
+            "role": "Holster",
+            "product_id": "competition-holster"
+          }
         ]
       }
     ],
@@ -325,57 +534,204 @@
       {
         "tier": "essential",
         "label": "Everyday carry, best value",
-        "why": "✓ Fits the Staccato XC optic cut · ✓ Holster cut for this dot\nA value red dot and an outside-the-waistband holster, both made for the Staccato XC.",
+        "why": [
+          "✓ Fits the Staccato XC optic cut · ✓ Holster cut for this dot",
+          "A value red dot and an outside-the-waistband holster, both made for the Staccato XC."
+        ],
         "parts": [
-          { "role": "Pistol", "product_id": "staccato-xc" },
-          { "role": "Red dot", "product_id": "holosun-507c" },
-          { "role": "Holster", "product_id": "kydex-owb" }
+          {
+            "role": "Pistol",
+            "product_id": "staccato-xc"
+          },
+          {
+            "role": "Red dot",
+            "product_id": "holosun-507c"
+          },
+          {
+            "role": "Holster",
+            "product_id": "kydex-owb"
+          }
         ]
       },
       {
         "tier": "duty",
         "label": "Built to take a beating",
         "badge": "Most chosen",
-        "why": "✓ Fits the Staccato XC optic cut · ✓ Holster cut for this dot\nThe RMR mounts to the XC’s optic cut, and the duty holster is cut for the XC with that dot fitted.",
+        "why": [
+          "✓ Fits the Staccato XC optic cut · ✓ Holster cut for this dot",
+          "The RMR mounts to the XC’s optic cut, and the duty holster is cut for the XC with that dot fitted."
+        ],
         "parts": [
-          { "role": "Pistol", "product_id": "staccato-xc" },
-          { "role": "Red dot", "product_id": "trijicon-rmr-type-2" },
-          { "role": "Holster", "product_id": "safariland-7360rds" }
+          {
+            "role": "Pistol",
+            "product_id": "staccato-xc"
+          },
+          {
+            "role": "Red dot",
+            "product_id": "trijicon-rmr-type-2"
+          },
+          {
+            "role": "Holster",
+            "product_id": "safariland-7360rds"
+          }
         ]
       },
       {
         "tier": "competition",
         "label": "Fast, flat, match-ready",
-        "why": "✓ Fits the Staccato XC optic cut · ✓ Holster cut for this dot\nA wide-window dot and a competition holster, both cut for the Staccato XC.",
+        "why": [
+          "✓ Fits the Staccato XC optic cut · ✓ Holster cut for this dot",
+          "A red dot and a competition holster, both cut for the Staccato XC."
+        ],
         "parts": [
-          { "role": "Pistol", "product_id": "staccato-xc" },
-          { "role": "Red dot", "product_id": "leupold-deltapoint-pro" },
-          { "role": "Holster", "product_id": "competition-holster" }
+          {
+            "role": "Pistol",
+            "product_id": "staccato-xc"
+          },
+          {
+            "role": "Red dot",
+            "product_id": "holosun-507c"
+          },
+          {
+            "role": "Holster",
+            "product_id": "competition-holster"
+          }
         ]
       }
     ]
   },
   "groups": {
     "staccato-c2": [
-      { "category": "Red dots", "count": 8, "product_ids": ["holosun-507c", "trijicon-rmr-type-2", "leupold-deltapoint-pro", "aimpoint-acro-p2"] },
-      { "category": "Holsters", "count": 10, "product_ids": ["kydex-owb", "safariland-7360rds", "competition-holster", "tier1-iwb"] },
-      { "category": "Weapon lights", "count": 4, "product_ids": ["streamlight-tlr1-hl", "surefire-x300"] },
-      { "category": "Magazines", "count": 3, "product_ids": ["mag-17"] },
-      { "category": "Optic plates", "count": 2, "product_ids": ["rmr-plate"] }
+      {
+        "category": "Red dots",
+        "count": 8,
+        "product_ids": [
+          "holosun-507c",
+          "trijicon-rmr-type-2"
+        ]
+      },
+      {
+        "category": "Holsters",
+        "count": 10,
+        "product_ids": [
+          "kydex-owb",
+          "safariland-7360rds",
+          "competition-holster",
+          "tier1-iwb"
+        ]
+      },
+      {
+        "category": "Weapon lights",
+        "count": 4,
+        "product_ids": [
+          "streamlight-tlr1-hl",
+          "surefire-x300"
+        ]
+      },
+      {
+        "category": "Magazines",
+        "count": 3,
+        "product_ids": [
+          "mag-17"
+        ]
+      },
+      {
+        "category": "Optic plates",
+        "count": 2,
+        "product_ids": [
+          "rmr-plate"
+        ]
+      }
     ],
     "staccato-p": [
-      { "category": "Red dots", "count": 18, "product_ids": ["holosun-507c", "trijicon-rmr-type-2", "leupold-deltapoint-pro", "aimpoint-acro-p2"] },
-      { "category": "Holsters", "count": 24, "product_ids": ["safariland-7360rds", "kydex-owb", "competition-holster", "tier1-iwb"] },
-      { "category": "Weapon lights", "count": 12, "product_ids": ["streamlight-tlr1-hl", "surefire-x300", "modlite-plhv2"] },
-      { "category": "Magazines", "count": 9, "product_ids": ["mag-17", "mag-20"] },
-      { "category": "Optic plates", "count": 6, "product_ids": ["rmr-plate", "dpp-plate"] }
+      {
+        "category": "Red dots",
+        "count": 18,
+        "product_ids": [
+          "holosun-507c",
+          "trijicon-rmr-type-2"
+        ]
+      },
+      {
+        "category": "Holsters",
+        "count": 24,
+        "product_ids": [
+          "safariland-7360rds",
+          "kydex-owb",
+          "competition-holster",
+          "tier1-iwb"
+        ]
+      },
+      {
+        "category": "Weapon lights",
+        "count": 12,
+        "product_ids": [
+          "streamlight-tlr1-hl",
+          "surefire-x300",
+          "modlite-plhv2"
+        ]
+      },
+      {
+        "category": "Magazines",
+        "count": 9,
+        "product_ids": [
+          "mag-17",
+          "mag-20"
+        ]
+      },
+      {
+        "category": "Optic plates",
+        "count": 6,
+        "product_ids": [
+          "rmr-plate",
+          "dpp-plate"
+        ]
+      }
     ],
     "staccato-xc": [
-      { "category": "Red dots", "count": 11, "product_ids": ["holosun-507c", "trijicon-rmr-type-2", "leupold-deltapoint-pro", "aimpoint-acro-p2"] },
-      { "category": "Holsters", "count": 9, "product_ids": ["competition-holster", "kydex-owb", "safariland-7360rds", "tier1-iwb"] },
-      { "category": "Weapon lights", "count": 6, "product_ids": ["streamlight-tlr1-hl", "surefire-x300", "modlite-plhv2"] },
-      { "category": "Magazines", "count": 4, "product_ids": ["mag-17", "mag-20"] },
-      { "category": "Optic plates", "count": 3, "product_ids": ["rmr-plate", "dpp-plate"] }
+      {
+        "category": "Red dots",
+        "count": 11,
+        "product_ids": [
+          "holosun-507c",
+          "trijicon-rmr-type-2"
+        ]
+      },
+      {
+        "category": "Holsters",
+        "count": 9,
+        "product_ids": [
+          "competition-holster",
+          "kydex-owb",
+          "safariland-7360rds",
+          "tier1-iwb"
+        ]
+      },
+      {
+        "category": "Weapon lights",
+        "count": 6,
+        "product_ids": [
+          "streamlight-tlr1-hl",
+          "surefire-x300",
+          "modlite-plhv2"
+        ]
+      },
+      {
+        "category": "Magazines",
+        "count": 4,
+        "product_ids": [
+          "mag-17",
+          "mag-20"
+        ]
+      },
+      {
+        "category": "Optic plates",
+        "count": 3,
+        "product_ids": [
+          "rmr-plate",
+          "dpp-plate"
+        ]
+      }
     ]
   }
 }

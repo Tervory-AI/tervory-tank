@@ -54,7 +54,8 @@ test("main path at 1440 and 390", async ({ page }) => {
     await page.locator(".card", { hasText: "Staccato P" }).getByRole("button", { name: "Complete my setup" }).click();
     await expect(page.getByText("R 96 800")).toBeVisible();
     await expect(page.getByText("R 87 700")).toBeVisible();
-    await expect(page.getByText("R 91 400")).toBeVisible();
+    await expect(page.getByText("R 89 000")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Quote this only" })).toBeVisible();
     const text = await textOfWidget(page);
     expect(text).not.toMatch(/\bVAT\b|\bmargin\b|landed cost/i);
     const parts = await page.locator(".part").allTextContents();
@@ -66,7 +67,7 @@ test("main path at 1440 and 390", async ({ page }) => {
     if (width === 1440) {
       const featured = page.locator(".setup.featured");
       await featured.getByRole("button", { name: /Swap/ }).first().click();
-      await featured.getByRole("option", { name: "Holosun 507C X2" }).click();
+      await featured.getByRole("button", { name: "Holosun 507C X2" }).click();
       await expect(featured.getByText("R 90 200")).toBeVisible();
       await expect(featured.getByText("R 96 800")).toHaveCount(0);
       await shoot(page, "03-swap-1440");
@@ -149,8 +150,17 @@ test("search is keyboard reachable", async ({ page }) => {
   await page.keyboard.type("staccato");
   await page.keyboard.press("Enter");
   await expect(page.getByRole("heading", { name: "Staccato C2" })).toBeVisible();
-  const complete = page.locator(".card", { hasText: "Staccato C2" }).getByRole("button", { name: "Complete my setup" });
+  const complete = page.locator(".card", { hasText: "Staccato P" }).getByRole("button", { name: "Complete my setup" });
   await complete.focus();
   await page.keyboard.press("Enter");
   await expect(page.getByText(/Complete your setup/i)).toBeVisible();
+  const swap = page.locator(".setup.featured").getByRole("button", { name: /^Swap/ }).first();
+  await swap.focus();
+  await page.keyboard.press("Enter");
+  const option = page.locator(".setup.featured").getByRole("button", { name: "Holosun 507C X2" });
+  await expect(option).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect(option).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".setup.featured").getByText("R 90 200")).toBeVisible();
 });
