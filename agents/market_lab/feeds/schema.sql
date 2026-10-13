@@ -1,8 +1,12 @@
 -- Market Lab baseline feeds.
--- Additive and idempotent. Portable across SQLite (the runner) and PostgreSQL
--- (apply this file as-is when the Market Lab box imports the package).
+-- Additive and idempotent. Postgres applies this file as-is.
+-- SQLite ATTACHes the database file as market_lab, skips CREATE SCHEMA
+-- (SQLite has no schemas except ATTACH names), and rewrites index
+-- statements because it rejects a schema-qualified table in CREATE INDEX.
 
-CREATE TABLE IF NOT EXISTS feed_sources (
+CREATE SCHEMA IF NOT EXISTS market_lab;
+
+CREATE TABLE IF NOT EXISTS market_lab.feed_sources (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     kind TEXT NOT NULL,
@@ -13,7 +17,7 @@ CREATE TABLE IF NOT EXISTS feed_sources (
     enabled INTEGER NOT NULL DEFAULT 1
 );
 
-CREATE TABLE IF NOT EXISTS series (
+CREATE TABLE IF NOT EXISTS market_lab.series (
     id TEXT PRIMARY KEY,
     source_id TEXT NOT NULL,
     ref TEXT NOT NULL,
@@ -25,7 +29,7 @@ CREATE TABLE IF NOT EXISTS series (
     UNIQUE (source_id, ref)
 );
 
-CREATE TABLE IF NOT EXISTS points (
+CREATE TABLE IF NOT EXISTS market_lab.points (
     series_id TEXT NOT NULL,
     date TEXT NOT NULL,
     value NUMERIC NOT NULL,
@@ -34,7 +38,7 @@ CREATE TABLE IF NOT EXISTS points (
     PRIMARY KEY (series_id, date, revision)
 );
 
-CREATE TABLE IF NOT EXISTS events (
+CREATE TABLE IF NOT EXISTS market_lab.events (
     id TEXT PRIMARY KEY,
     source_id TEXT NOT NULL,
     kind TEXT NOT NULL,
@@ -46,7 +50,7 @@ CREATE TABLE IF NOT EXISTS events (
     fetched_at TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS fetch_runs (
+CREATE TABLE IF NOT EXISTS market_lab.fetch_runs (
     id TEXT PRIMARY KEY,
     source_id TEXT NOT NULL,
     started TEXT NOT NULL,
@@ -55,6 +59,6 @@ CREATE TABLE IF NOT EXISTS fetch_runs (
     error TEXT
 );
 
-CREATE INDEX IF NOT EXISTS points_series_idx ON points (series_id);
-CREATE INDEX IF NOT EXISTS events_source_idx ON events (source_id, date);
-CREATE INDEX IF NOT EXISTS fetch_runs_source_idx ON fetch_runs (source_id, started);
+CREATE INDEX IF NOT EXISTS points_series_idx ON market_lab.points (series_id);
+CREATE INDEX IF NOT EXISTS events_source_idx ON market_lab.events (source_id, date);
+CREATE INDEX IF NOT EXISTS fetch_runs_source_idx ON market_lab.fetch_runs (source_id, started);

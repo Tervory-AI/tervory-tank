@@ -72,6 +72,13 @@ def test_backfill_fills_points_and_events(tmp_path: Path) -> None:
     ).fetchone()["value"]
     assert str(texas_new) in {"1", "1.0"}
     assert str(california_dropped) in {"1", "1.0"}
+    california_new = conn.execute(
+        """
+        SELECT value FROM points p JOIN series s ON s.id = p.series_id
+        WHERE s.ref = 'new:state:CA' AND p.date = '2024-02-01'
+        """
+    ).fetchone()["value"]
+    assert str(california_new) in {"0", "0.0"}
     titles = [row["title"] for row in conn.execute("SELECT title FROM events WHERE source_id = 'ecfr'")]
     assert titles == ["49 CFR 172", "49 CFR 173"] or set(titles) == {"49 CFR 172", "49 CFR 173"}
 
@@ -141,8 +148,19 @@ def test_status_lists_licence_and_linked_sources_store_nothing(tmp_path: Path) -
 
 
 def test_schema_is_idempotent(tmp_path: Path) -> None:
-    conn = connect("sqlite:///" + str(tmp_path / "schema.sqlite"))
+    path = tmp_path / "schema.sqlite"
+    conn = connect("sqlite:///" + str(path))
     apply_schema(conn)
     apply_schema(conn)
-    tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    tables = {
+        row[0]
+        for row in conn.execute("SELECT name FROM market_lab.sqlite_master WHERE type = 'table'")
+    }
     assert {"feed_sources", "series", "points", "events", "fetch_runs"} <= tables
+    conn.close()
+    plain = sqlite3.connect(path)
+    stored = {row[0] for row in plain.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    assert {"feed_sources", "series", "points", "events", "fetch_runs"} <= stored
+    text = (ROOT / "agents" / "market_lab" / "feeds" / "schema.sql").read_text(encoding="utf-8")
+    assert "CREATE SCHEMA IF NOT EXISTS market_lab" in text
+    assert "market_lab.feed_sources" in text

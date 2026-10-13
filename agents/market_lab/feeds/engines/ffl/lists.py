@@ -100,7 +100,7 @@ SEASON_PAGES = [
 ]
 
 LISTING_COLUMNS = {
-    "id_fields": ["LIC_REGN", "LIC_DIST", "LIC_CNTY", "LIC_TYPE", "LIC_XPRDTE", "LIC_SEQN"],
+    "id_fields": ["LIC_REGN", "LIC_DIST", "LIC_CNTY", "LIC_TYPE", "LIC_SEQN"],
     "state": "PREMISE_STATE",
     "zip": "PREMISE_ZIP_CODE",
     "type": "LIC_TYPE",

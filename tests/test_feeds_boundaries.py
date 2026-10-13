@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -52,6 +53,49 @@ def test_backfill_does_not_open_a_socket(tmp_path: Path, monkeypatch) -> None:
     target = "sqlite:///" + str(tmp_path / "feeds.sqlite")
     fixtures = str(ROOT / "tests" / "fixtures" / "feeds")
     assert main(["run", "--backfill", "--fixtures", fixtures, "--db", target]) == 0
+
+
+def test_runner_reads_only_the_fixture_directory() -> None:
+    from feeds.runner import fixture_roots
+
+    roots = fixture_roots("/tmp/only-this")
+    assert [path.as_posix() for path in roots] == ["/tmp/only-this"]
+    packaged = ROOT / "agents" / "market_lab" / "feeds" / "engines" / "ffl" / "fixtures"
+    assert not packaged.exists()
+
+
+def test_failed_source_keeps_no_partial_rows(tmp_path: Path) -> None:
+    from feeds import adapters
+    from feeds.cli import main
+
+    real = adapters.ADAPTERS["eia"]
+
+    def boom(source, reader, store, *, backfill):
+        store.ensure_series(source.id, "bad", "bad", "x", "national", "US", "weekly")
+        store.put_point(f"{source.id}:bad", "2024-01-01", 1, "v1")
+        raise RuntimeError("boom")
+
+    adapters.ADAPTERS["eia"] = boom
+    target = tmp_path / "feeds.sqlite"
+    try:
+        assert main([
+            "run",
+            "--source",
+            "eia_diesel",
+            "--backfill",
+            "--fixtures",
+            str(ROOT / "tests" / "fixtures" / "feeds"),
+            "--db",
+            "sqlite:///" + str(target),
+        ]) == 0
+    finally:
+        adapters.ADAPTERS["eia"] = real
+    conn = sqlite3.connect(target)
+    assert conn.execute("SELECT COUNT(*) FROM points").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM series").fetchone()[0] == 0
+    error = conn.execute("SELECT error FROM fetch_runs").fetchone()[0]
+    assert "boom" in error
+    assert conn.execute("SELECT COUNT(*) FROM feed_sources").fetchone()[0] == 1
 
 
 def test_industry_words_stay_in_the_engine() -> None:

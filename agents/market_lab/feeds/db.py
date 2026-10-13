@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from pathlib import Path
 
 
 SCHEMA_PATH = Path(__file__).with_name("schema.sql")
+
+_INDEX = re.compile(
+    r"CREATE INDEX IF NOT EXISTS (\w+) ON market_lab\.(\w+) \((.+)\)\s*\Z",
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 def connect(target: str) -> sqlite3.Connection:
@@ -18,18 +24,45 @@ def connect(target: str) -> sqlite3.Connection:
         )
     if target.startswith("sqlite:///"):
         target = target[len("sqlite:///") :]
+    # The file is ATTACHed as market_lab so schema.sql can qualify every table.
+    # The main database stays empty; unqualified reads then find market_lab.
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
     if target == ":memory:":
-        conn = sqlite3.connect(":memory:")
+        conn.execute("ATTACH DATABASE ':memory:' AS market_lab")
     else:
         path = Path(target)
         if path.parent and str(path.parent) not in ("", "."):
             path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(path)
-    conn.row_factory = sqlite3.Row
+        conn.execute("ATTACH DATABASE ? AS market_lab", (str(path),))
     return conn
 
 
 def apply_schema(conn: sqlite3.Connection) -> None:
     script = SCHEMA_PATH.read_text(encoding="utf-8")
-    conn.executescript(script)
+    for statement in _statements(script):
+        rewritten = _for_sqlite(statement)
+        if rewritten is None:
+            continue
+        conn.execute(rewritten)
     conn.commit()
+
+
+def _statements(script: str) -> list[str]:
+    found: list[str] = []
+    for raw in script.split(";"):
+        lines = [line for line in raw.splitlines() if not line.strip().startswith("--")]
+        text = "\n".join(lines).strip()
+        if text:
+            found.append(text)
+    return found
+
+
+def _for_sqlite(statement: str) -> str | None:
+    if statement.upper().startswith("CREATE SCHEMA"):
+        return None
+    match = _INDEX.match(statement)
+    if match is None:
+        return statement
+    name, table, columns = match.groups()
+    return f"CREATE INDEX IF NOT EXISTS market_lab.{name} ON {table} ({columns.strip()})"

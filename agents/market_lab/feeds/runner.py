@@ -12,11 +12,9 @@ from feeds.store import Store, utc_now
 
 
 def fixture_roots(explicit: str | None) -> list[Path]:
-    roots: list[Path] = []
-    if explicit:
-        roots.append(Path(explicit))
-    roots.append(Path(__file__).resolve().parent / "engines" / "ffl" / "fixtures")
-    return roots
+    if not explicit:
+        return []
+    return [Path(explicit)]
 
 
 def run(
@@ -40,6 +38,7 @@ def run(
     for spec in specs:
         started = utc_now()
         store.upsert_source(spec)
+        conn.commit()
         rows = 0
         error: str | None = None
         try:
@@ -56,6 +55,7 @@ def run(
                 adapter = ADAPTERS[spec.adapter]
                 rows = adapter(spec, reader, store, backfill=backfill)
         except Exception as exc:
+            conn.rollback()
             rows = 0
             error = f"{type(exc).__name__}: {exc}"
         store.finish_run(spec.id, started, rows, error)
