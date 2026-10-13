@@ -2,6 +2,8 @@
 
 **What Zenas is:** a legal research and drafting agent for **commercial, trade, international shipping, contracts, corporate, IP/trademark, employment, property and regulatory compliance** work, in **two jurisdictions: the United States and South Africa**. **No criminal law.** Every client-facing output is reviewed and signed off by a licensed lawyer in that jurisdiction (the founder's US and SA panels) before the client sees it. Zenas drafts and researches; the lawyer advises.
 
+**Divisions (founder decision, 13 Oct 2026):** Zenas launches with the areas above only. Other areas (for example family law, CCMA dispute representation, consumer debt, personal injury) open later as **specialist divisions**, each one a new area added to the scope gate's allowed list with its own sources, evals and lawyer panel. Until a division opens, the scope gate returns `in_scope: false` with a polite "not offered yet" message, never a draft.
+
 Read `AGENTS.md` first. Rule 9 applies with one more layer: **core legal skills know no jurisdiction.** US and SA are engines (`agents/zenas/engines/us/`, `.../za/`) holding their sources, court rules, citation formats, clause variants and terminology. A third country later is a third engine.
 
 Depends on C6 (chassis) and C7 (Hermes).
@@ -27,7 +29,7 @@ South African work runs on infrastructure in South Africa; US work runs in the U
 - Room per `docs/cursor/ROOMS.md`: `agents/zenas/` own compose, corridor `tervory-gw-zenas`, login `agent_zenas`, key `TANK_KEY_ZENAS`; the knowledge pool package (`agents/zenas/pool/`, Z2) is imported, not rewritten.
 - `agents/zenas/` from the template. Tables in `agent_zenas`: `matters (id, tenant_id, jurisdiction us|za|both, area, title, parties jsonb, status, created_by)`, `documents (matter_id, kind, version, body, sources jsonb, state draft|in_review|released|rejected)`, `reviews (document_id, reviewer, jurisdiction, admission_no, decision, changes, ts)`.
 - Consent: table `consents (tenant_id, user_id, jurisdiction, wording_version, text_hash, ts, ip)`; matters for ZA tenants are refused until a current consent exists. Personal-identifier detection (`zenas.pii@1.0.0`, pure code with SA ID-number checksum and US SSN/passport patterns) runs on every upload; matches stored encrypted in `pii (matter_id, kind, ciphertext)` and replaced by placeholders in model prompts.
-- Skill `zenas.scope@1.0.0` (Tank, cheap model + rules): returns `{in_scope, area, jurisdiction, criminal: bool, needs_lawyer: bool, reason}`. Evals: at least 30 cases incl. 10 criminal ones that must be refused, 5 regulatory-with-criminal-penalty that must be in scope + flagged, and mixed US/SA cases.
+- Skill `zenas.scope@1.0.0` (Tank, cheap model + rules): returns `{in_scope, area, jurisdiction, criminal: bool, needs_lawyer: bool, reason}`. The allowed areas are a config list (the launch areas above), so a new division is a config change plus evals, not a code change. Evals: at least 35 cases incl. 10 criminal ones that must be refused, 5 regulatory-with-criminal-penalty that must be in scope + flagged, 5 not-yet-offered areas (family, CCMA representation, consumer debt) that must return "not offered yet", and mixed US/SA cases.
 - **Done when:** a criminal question can never reach any other Zenas skill (tested), and evals pass 100% on the criminal cases.
 
 ## Z2 — Knowledge pool: ingestion framework + United States
