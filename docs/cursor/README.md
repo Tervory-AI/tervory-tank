@@ -11,6 +11,7 @@ Start one by opening the issue and commenting `@cursor` (or paste the brief into
 | C4 | Tests + CI on every PR | `tests/`, `.github/workflows/`, `tank/requirements-dev.txt` | — |
 | C5 | Ledger: daily spend by rung, by task type | `workspace/app/ledger/*`, `workspace/lib/tank.ts`, a new read-only endpoint in `tank/main.py` | — |
 | C6 | Agent chassis: own box, files, schedule, identity per Squad member | `agents/`, compose, `tank/schema.sql`, `require_key` + `run_one_skill` only | — |
+| C6b | Real isolation under Coolify: each agent its own Coolify resource + private gateway network to Tank + own DB role | `agents/`, compose, `tank/schema.sql` | C6 (blocks C7–C10) |
 | C7 | Hermes: per-agent, per-client memory (Qdrant + local embeddings) | `hermes/`, compose, `agents/_chassis/` | C6 |
 | C8 | Tiger box: isolated browser sessions, price mining, watchlists, alerts | `tiger/`, `agents/tiger/`, `tank/skills/tiger.*`, compose | C6 (C7) |
 | C9 | Market Lab box: series feeds, surge detection, research, prediction ledger | `agents/market_lab/`, `tank/skills/market.*`, compose | C6 (C7) |
