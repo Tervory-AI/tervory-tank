@@ -1,7 +1,8 @@
 # Tervory platform — one stack, one deploy.
-# Coolify deploys this file. Everything shares the stack's own network, so services
-# reach each other by service name (http://tank:8000, postgres:5432). Only the
-# Workspace gets a public domain; Tank and the stores are never exposed.
+# Coolify deploys this file. Stack services share one network and reach each other
+# by name (http://tank:8000, postgres:5432). Each agent box is on its own
+# net_<agent> instead; only Postgres, Tank, Tiger, and later Hermes join that
+# network. Only the Workspace gets a public domain; Tank and the stores are never exposed.
 
 services:
   postgres:
@@ -18,6 +19,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    networks:
+      - default
+      - net_template
 
   redis:
     image: redis:7
@@ -65,6 +69,9 @@ services:
     shm_size: "1gb"            # Chromium needs shared memory
     environment:
       TIGER_MAX_PAGES: ${TIGER_MAX_PAGES:-4}
+    networks:
+      - default
+      - net_template
     expose:
       - "3000"
 
@@ -77,6 +84,7 @@ services:
       LITELLM_URL: http://litellm:4000
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       TANK_API_KEY: ${TANK_API_KEY}
+      TANK_KEY_TEMPLATE: ${TANK_KEY_TEMPLATE:-}
       TANK_REGION: ${TANK_REGION:-us-east}
       SEARXNG_URL: http://searxng:8080
       TIGER_URL: http://tiger:3000
@@ -86,6 +94,40 @@ services:
         condition: service_healthy
       litellm:
         condition: service_started
+    networks:
+      - default
+      - net_template
+    expose:
+      - "8000"
+
+  # Proof box for the chassis. Its own network: it can reach Tank, Postgres, and
+  # Tiger (the browser), and nothing else on the stack. Hermes joins net_template
+  # when C7 adds that service. A later agent gets its own net_<agent>, never this one.
+  agent-template:
+    build:
+      context: ./agents
+      dockerfile: _template/Dockerfile
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    environment:
+      AGENT_NAME: template
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
+      TANK_URL: http://tank:8000
+      TANK_KEY: ${TANK_KEY_TEMPLATE:-}
+      DATA_DIR: /data
+    volumes:
+      - agent_template_data:/data
+    networks:
+      - net_template
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     expose:
       - "8000"
 
@@ -110,3 +152,8 @@ volumes:
   pgdata:
   redisdata:
   qdrantdata:
+  agent_template_data:
+
+networks:
+  net_template:
+    name: net_template

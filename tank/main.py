@@ -42,7 +42,7 @@ from typing import Any, Literal
 import asyncpg
 import httpx
 import redis.asyncio as aioredis
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 import skala
@@ -75,9 +75,89 @@ def pool() -> asyncpg.Pool:
 
 # ---------- auth ----------
 
-async def require_key(x_tank_key: str = Header(default="")) -> None:
-    if x_tank_key != TANK_API_KEY:
+# SHA-256 digests of TANK_KEY_<AGENT>. Authentication reads this map, never the table.
+# The table is written once per process so a removed env var is deleted, then left alone.
+_agent_key_hashes: dict[str, bytes] = {}
+_agent_keys_synced = False
+
+
+async def require_key(request: Request, x_tank_key: str = Header(default="")) -> str | None:
+    """Accept the Workspace key, or one agent key from TANK_KEY_<AGENT>.
+
+    Returns None for the Workspace (TANK_API_KEY, unchanged) and the agent id
+    for an agent key. Agent keys are taken from the environment only, compared
+    as SHA-256 bytes. A removed TANK_KEY_* stops matching. The table is synced
+    once; it is never used to authenticate. The raw key is never logged.
+    An agent key may call /health, /v1/route, and /v1/skills/{id}/run only.
+    """
+    import hmac
+
+    global _agent_key_hashes, _agent_keys_synced
+
+    def same(left: bytes, right: bytes) -> bool:
+        if len(left) != len(right):
+            return False
+        return hmac.compare_digest(left, right)
+
+    found: dict[str, bytes] = {}
+    for env_name, env_val in os.environ.items():
+        if not env_name.startswith("TANK_KEY_"):
+            continue
+        value = env_val.strip()
+        if not value:
+            continue
+        agent = env_name[len("TANK_KEY_"):].lower()
+        if not agent or not all(ch.isalnum() or ch == "_" for ch in agent):
+            continue
+        found[agent] = hashlib.sha256(value.encode()).digest()
+    _agent_key_hashes = found
+
+    if not _agent_keys_synced and _pool is not None:
+        try:
+            async with pool().acquire() as conn:
+                async with conn.transaction():
+                    for agent_name, digest in _agent_key_hashes.items():
+                        await conn.execute(
+                            """
+                            INSERT INTO tank.agent_keys (agent, key_hash)
+                            VALUES ($1, $2)
+                            ON CONFLICT (agent) DO UPDATE SET key_hash = EXCLUDED.key_hash
+                            WHERE tank.agent_keys.key_hash IS DISTINCT FROM EXCLUDED.key_hash
+                            """,
+                            agent_name,
+                            digest.hex(),
+                        )
+                    await conn.execute(
+                        "DELETE FROM tank.agent_keys WHERE agent <> ALL($1::text[])",
+                        list(_agent_key_hashes),
+                    )
+            _agent_keys_synced = True
+        except Exception:  # noqa: BLE001 — never log the key, the hash, or the driver error
+            log.warning("agent key sync skipped")
+
+    presented = x_tank_key or ""
+    try:
+        presented_bytes = presented.encode()
+        workspace_bytes = TANK_API_KEY.encode()
+    except UnicodeError:
+        raise HTTPException(status_code=401, detail="missing or invalid X-Tank-Key") from None
+    if same(presented_bytes, workspace_bytes):
+        return None
+
+    matched: str | None = None
+    if presented_bytes:
+        presented_hash = hashlib.sha256(presented_bytes).digest()
+        for agent_name, digest in _agent_key_hashes.items():
+            if same(digest, presented_hash):
+                matched = agent_name
+                break
+    if matched is None:
         raise HTTPException(status_code=401, detail="missing or invalid X-Tank-Key")
+    path = request.url.path
+    skill_run = path.startswith("/v1/skills/") and path.endswith("/run") and path.count("/") == 4
+    if path not in {"/health", "/v1/route"} and not skill_run:
+        raise HTTPException(status_code=403, detail="This agent key cannot call that.")
+    return matched
 
 
 # ---------- models ----------
@@ -548,8 +628,10 @@ async def rollback(task_type: str, body: PromoteBody) -> dict[str, Any]:
     return {"ok": True, "model": row["previous_model"]}
 
 
-@app.post("/v1/route", response_model=RouteResponse, dependencies=[Depends(require_key)])
-async def route(req: RouteRequest) -> RouteResponse:
+@app.post("/v1/route", response_model=RouteResponse)
+async def route(req: RouteRequest, caller: str | None = Depends(require_key)) -> RouteResponse:
+    if caller:
+        req = req.model_copy(update={"agent": caller})
     return await run_route(req)
 
 
@@ -793,16 +875,36 @@ class SkillRun(BaseModel):
     preview: bool = False           # owner testing: allows candidate/staging; labelled in the ledger
 
 
-@app.post("/v1/skills/{skill_id}/run", dependencies=[Depends(require_key)])
-async def run_one_skill(skill_id: str, body: SkillRun) -> dict[str, Any]:
+@app.post("/v1/skills/{skill_id}/run")
+async def run_one_skill(
+    skill_id: str,
+    body: SkillRun,
+    caller: str | None = Depends(require_key),
+) -> dict[str, Any]:
     version = body.version or await approved_version(skill_id)
     if version is None:
         raise HTTPException(status_code=409, detail=f"{skill_id} has no approved version")
     pkg = get_package(skill_id, version)
+    if caller:
+        shared: list[str] = []
+        try:
+            import yaml
+            meta = yaml.safe_load((pkg.path / "skill.yaml").read_text(encoding="utf-8")) or {}
+            raw = meta.get("shared_with") or []
+            if isinstance(raw, str):
+                raw = [raw]
+            if isinstance(raw, list):
+                shared = [str(item) for item in raw]
+        except Exception:  # noqa: BLE001 — a skill we cannot read is not shared
+            shared = []
+        if caller != pkg.agent and caller not in shared:
+            raise HTTPException(status_code=403, detail="That skill belongs to another agent.")
     state = await skill_state(skill_id, version)
     if state != "approved" and not body.preview:
         raise HTTPException(status_code=409, detail=f"{pkg.ref} is {state!r}; only approved versions run for clients")
     ctx = make_ctx(pkg, body.tenant_id, preview=body.preview)
+    if caller:
+        ctx.agent = caller
     out = await skala.run_skill(pkg, body.input, ctx)
     out["_cost_usd"] = round(ctx.cost_usd, 6)
     return out
