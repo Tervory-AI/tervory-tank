@@ -6,6 +6,14 @@ Read `AGENTS.md` first. Rule 9 applies with one more layer: **core legal skills 
 
 Depends on C6 (chassis) and C7 (Hermes).
 
+## Two regions, no personal data crossing
+South African work runs on infrastructure in South Africa; US work runs in the US. Same code, same skills, deployed twice; the region is configuration (`TANK_REGION=za|us-east`), never a fork.
+- **Each region has its own** Postgres, Redis, Qdrant/Hermes, Tank, Zenas box, file storage and backups. A ZA tenant exists only in the ZA region; nothing replicates between regions.
+- **Model calls from ZA:** prompts with personal information go only to models running in South Africa (an open-weight model on our own SA server, or a provider's South African region where one offers the model). Prompts sent to providers outside SA carry placeholders, never the identifiers (see `zenas.pii`). Tank in the ZA region enforces this per tenant: a prompt still containing a detected identifier is refused for any non-SA provider.
+- **Every other vendor counts too:** sign-in (Clerk is US-hosted: ZA tenants need either consent wording that covers it or self-hosted sign-in in the ZA region), email, error tracking, logs and backups must stay in SA or carry no personal information.
+- **Public legal sources** (statutes, judgments, court rules) contain no client data; the ZA pool is built on the ZA server, the US pool on the US server.
+- Coolify may manage both servers from one dashboard (it stores deploy settings, not client data).
+
 ## Non-negotiables
 1. **Scope gate first.** Every request passes `zenas.scope` before any other skill. Criminal matters (defence, prosecution, police matters, bail, sentencing, criminal charges) are refused with a referral message and never researched. Regulatory work that *carries* criminal penalties (export controls, customs, sanctions, firearms import/export permits) is in scope as **compliance**, but always flagged "lawyer must review".
 2. **No uncited law.** Every statement of law in an output links to a document in the knowledge pool. `zenas.cite_check` runs on every output: a citation that does not resolve to a pool document, or a quote that does not match the source text word for word, blocks delivery.
