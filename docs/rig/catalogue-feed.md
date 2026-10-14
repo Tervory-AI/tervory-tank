@@ -20,6 +20,6 @@ One row per "this part fits that". Fill **either** `fits_sku` (one product) **or
 - Rows Rig suggests itself are held back until a person approves them. A shopper only ever sees approved fits.
 
 ## How it gets in
-- **Now:** send Claude the two sheets (or drop them in the shared Drive folder). Claude imports them through `POST /v1/rig/admin/import`. Rejected rows come back with the row number and the reason.
+- **Now:** send Claude the two sheets (attach them in chat or drop them in Drive). Claude checks them and adds them to Rig by pull request; you merge; Rig loads them on its next start. Rejected rows come back with the row number and the reason.
 - **Later, per brand:** a feed URL (Shopify, WooCommerce or a Google Merchant feed) pulled every night, so prices and stock stay current without anyone re-sending sheets.
 - **From R5 (3D):** one `.glb` (or the CAD/STEP file) per part, named by `sku`, plus permission to render it.

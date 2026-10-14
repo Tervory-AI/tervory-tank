@@ -9,7 +9,6 @@
 ## The room
 - Corridor `tervory-gw-rig`, login `agent_rig`, key `TANK_KEY_RIG`. Public domain `rig.tervory.com` (the only agent with one; Claude sets it in Coolify). `mem_limit 512m`.
 - Every request carries a retailer's **publishable key** in `X-Rig-Key` (`rk_pub_…`). Each key belongs to one tenant (retailer) and has an allowed-origins list; requests from other origins are refused (CORS + server check). Rate limit per key (default 60/min). Publishable keys are not secrets but are stored hashed.
-- Admin calls (catalogue import) use a separate **admin key** (`RIG_ADMIN_KEY`, env only, never in the widget).
 
 ## Tables (`agent_rig`, all tenant-scoped)
 - `products (tenant_id, id, sku, gtin, name, brand, category, price, currency, image_url, url, attributes jsonb, active, updated_at)`
@@ -20,7 +19,7 @@
 
 ## Feeding the data (the exact way: `docs/rig/catalogue-feed.md`)
 Three routes into the same tables, in this order of preference:
-1. **Spreadsheet import (start here, for the brands we already have).** Two CSV/XLSX files per brand: `products` and `fits`, columns exactly as `docs/rig/templates/products.csv` and `fits.csv` (they exist; the guide is `docs/rig/catalogue-feed.md`). `POST /v1/rig/admin/import` with `{tenant, kind: products|fits, file}`; validates every row, reports `{added, updated, rejected: [{row, reason}]}`; never half-imports a file. Idempotent by `(tenant, sku)`.
+1. **Spreadsheet import (start here, for the brands we already have).** Two CSV files per brand: `products` and `fits`, columns exactly as `docs/rig/templates/products.csv` and `fits.csv` (guide: `docs/rig/catalogue-feed.md`). They live in the repo at `agents/rig/catalogues/<tenant-slug>/products.csv` and `fits.csv` (Claude adds them by pull request; no keys involved). On start, Rig imports every catalogue folder: validates every row, upserts by `(tenant, sku)`, never half-imports a file, and logs `{added, updated, rejected: [{row, reason}]}`. Ship one fixture brand in `agents/rig/catalogues/example/` for tests. (An admin upload endpoint comes later, behind `RIG_ADMIN_KEY`.)
 2. **Feed URL.** Shopify `products.json`, WooCommerce REST, or a Google Merchant XML feed: register once, pulled nightly, mapped to the same columns. Map one per format; add others later.
 3. **Tiger.** For a brand with no feed, Tiger's price-mining watchlist supplies price/availability updates only (never fitment).
 
