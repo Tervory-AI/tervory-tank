@@ -32,7 +32,7 @@ https://coolify.tervory.com/project/dguxczrbmbqvezo3qib0twge/environment/0zjmt7s
 | **C13 / RX1 / TS1 / R3 skills** | Workspace → **Skills** (https://app.tervory.com/skills) → find the new version → **Approve**. |
 | **C13 + B3 both live** | Workspace → **Data** → the batch → **Re-run** with "model skipped". It costs $0 on the new code skills. |
 | **OPS4** | GitHub → Actions → **watchdog** → **Run workflow** once. It should pass. After that it runs every 10 minutes by itself. |
-| **C14, TG2, W1** | Nothing extra; check the new page in the app. |
+| **TG2, W1, T6** | Nothing extra; check the new page in the app. |
 
 ### Room setup (creates the room, makes its passwords unseen, deploys)
 GitHub → **Actions** → **coolify-ops** → **Run workflow**: https://github.com/Tervory-AI/tervory-tank/actions/workflows/coolify-ops.yml
@@ -53,4 +53,4 @@ r=base; c=$(docker ps --format '{{.Names}}' | grep -m1 "^agent-$r"); echo "nets:
 - **Something is down:** the watchdog (OPS4) opens a GitHub issue "Down: …" and emails you. Coolify → the app → **Logs** shows why.
 
 ## Order (no clashes)
-Wave 1 together: B3, C13, R3, RX1, TS1, OPS4. → Wave 2 after B3 merged: C14. → Wave 3 after C14 merged: TG2, W1.
+Wave 1 together: B3, C13, R3, RX1, TS1, OPS4. → Wave 2 after B3 merged: TG2, W1, T6.

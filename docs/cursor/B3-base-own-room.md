@@ -1,6 +1,6 @@
 # B-3 — Base in its own room (out of Tank)
 
-**Do this first** (founder, 14 Oct: no agent runs outside its own room). C14's pause-and-approve is built on top of the Base room afterwards.
+**Do this first** (founder, 14 Oct: no agent runs outside its own room).
 
 **Goal:** Base becomes a Squad member like the others: its own room, its own database login, its own memory. Tank goes back to being only the router and skills library. Same results, same API for the Workspace.
 

@@ -26,11 +26,11 @@ Tank does not wait for a person to pick a candidate. For each task type it **sea
 - **Then shadow the survivors live**, cheapest first, one at a time, on a share of real calls, until each has `min_shadow_samples` pairs.
 - **Result per task:** a ranked list (cheapest first) with agreement, per-field floors, cost per call and projected monthly saving. The cheapest candidate that clears every bar is **proposed**. The founder promotes it, or sets that task to auto-promote.
 - **Re-search automatically** when a new model is added to the roster, when a price changes, or monthly, so the task always sits on the cheapest option that does not hurt the work.
-- **Shadow spend is a paid rung:** a daily shadow budget per task (default $1/day, set in `tank.paid_routes` as `shadow.search`), paused for approval like every paid rung (C14). Code candidates cost nothing and are always allowed.
+- **Shadow spend has a daily budget per task** (default $1/day, an env setting) so testing never runs away. Code candidates cost nothing and are always tested.
 
 ## 2. Agreement without a model where possible
 - Structured outputs (JSON) are compared **field by field** in code: exact match for ids, numbers within a tolerance, sets by overlap (Jaccard). The result is a 0–1 agreement and a per-field breakdown stored in `tank.shadow` (`method = 'fields'`).
-- The model judge is used only for free text, and only when the judge rung is allowed (C14 ladder).
+- The model judge is used only for free text.
 
 ## 3. Promotion is evidence plus approval
 - A code candidate is **proven** when it has at least `min_shadow_samples` shadow pairs and agreement at or above `eval_threshold`, with no field below its own floor, and client rejects at or under `max_reject_rate`.
@@ -41,4 +41,4 @@ Tank does not wait for a person to pick a candidate. For each task type it **sea
 - The same shadow-and-prove loop works for a paid tool against our own skill (e.g. Brave results vs SearXNG + `base.find_site`): the paid route runs only where the ladder allows it, and the comparison is stored the same way. This is how Tervory learns from a paid tool and then stops paying for it.
 
 ## Done when
-CI green; a test runs the search over a mocked roster of four priced models and proposes the cheapest one that clears the bar (and not a cheaper one that fails it); a test shadows `base.extract@1.0.0` (model, mocked) against a code candidate on fixtures and reports field-level agreement; promotion is refused below the bar and accepted above it; after promotion, a call makes zero model calls (tested); the console shows the ladder for that task.
+CI green; a test runs the search over a mocked roster of four priced models and proposes the cheapest one that clears the bar (and not a cheaper one that fails it); a test shadows `base.extract@1.0.0` (model, mocked) against a code candidate on fixtures and reports field-level agreement; promotion does not happen below the bar and happens by itself above it; a quality drop rolls it back by itself; after promotion, a call makes zero model calls (tested); the console shows the ladder for that task.
