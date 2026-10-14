@@ -29,6 +29,7 @@ services:
       - tervory-gw-radix
       - tervory-gw-tisan
       - tervory-gw-zenas
+      - tervory-gw-base
 
   redis:
     image: redis:7
@@ -62,6 +63,7 @@ services:
       TANK_KEY_RADIX: ${TANK_KEY_RADIX:-}
       TANK_KEY_TISAN: ${TANK_KEY_TISAN:-}
       TANK_KEY_ZENAS: ${TANK_KEY_ZENAS:-}
+      TANK_KEY_BASE: ${TANK_KEY_BASE:-}
       HERMES_EMBED_MODEL: ${HERMES_EMBED_MODEL:-BAAI/bge-small-en-v1.5}
     depends_on:
       - qdrant
@@ -73,6 +75,7 @@ services:
       - tervory-gw-radix
       - tervory-gw-tisan
       - tervory-gw-zenas
+      - tervory-gw-base
     expose:
       - "8000"
     healthcheck:
@@ -104,6 +107,9 @@ services:
     environment:
       SEARXNG_SECRET: ${SEARXNG_SECRET:-change-me-in-coolify}
       SEARXNG_BASE_URL: http://searxng:8080/
+    networks:
+      - default
+      - tervory-gw-base
     expose:
       - "8080"
 
@@ -118,6 +124,7 @@ services:
     networks:
       - default
       - tervory-gw-tiger
+      - tervory-gw-base
     expose:
       - "3000"
 
@@ -137,7 +144,9 @@ services:
       TANK_KEY_RADIX: ${TANK_KEY_RADIX:-}
       TANK_KEY_TISAN: ${TANK_KEY_TISAN:-}
       TANK_KEY_ZENAS: ${TANK_KEY_ZENAS:-}
+      TANK_KEY_BASE: ${TANK_KEY_BASE:-}
       TANK_REGION: ${TANK_REGION:-us-east}
+      BASE_AGENT_URL: http://agent-base:8000
       SEARXNG_URL: http://searxng:8080
       TIGER_URL: http://tiger:3000
       BRAVE_API_KEY: ${BRAVE_API_KEY:-}
@@ -154,6 +163,7 @@ services:
       - tervory-gw-radix
       - tervory-gw-tisan
       - tervory-gw-zenas
+      - tervory-gw-base
     expose:
       - "8000"
 
@@ -174,6 +184,7 @@ services:
       AGENT_DB_PASSWORD_RADIX: ${AGENT_DB_PASSWORD_RADIX:-}
       AGENT_DB_PASSWORD_TISAN: ${AGENT_DB_PASSWORD_TISAN:-}
       AGENT_DB_PASSWORD_ZENAS: ${AGENT_DB_PASSWORD_ZENAS:-}
+      AGENT_DB_PASSWORD_BASE: ${AGENT_DB_PASSWORD_BASE:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -233,3 +244,7 @@ networks:
   tervory-gw-zenas:
     external: true
     name: tervory-gw-zenas
+  # Compose creates this corridor on deploy. Base's own compose attaches as external.
+  # Not internal: Base reads websites through Tiger's browser and SearXNG.
+  tervory-gw-base:
+    name: tervory-gw-base

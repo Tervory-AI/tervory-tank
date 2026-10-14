@@ -78,12 +78,17 @@ done
 # qdrant stays dark: the agent talks to Hermes, not to the vector store.
 # agent-other stands in for any second agent: it is not on this network.
 # Tiger's browser is a neighbour only on tervory-gw-tiger. Every other
-# corridor must still be unable to resolve tiger.
+# corridor must still be unable to resolve tiger, except Base: tervory-gw-base
+# may also reach tiger and searxng, and no other corridor may reach searxng.
 tiger_corridor=0
+base_corridor=0
 radix_corridor=0
 for net in $(docker inspect -f '{{range $name, $net := .NetworkSettings.Networks}}{{$name}} {{end}}' "$container"); do
   if [ "$net" = "tervory-gw-tiger" ]; then
     tiger_corridor=1
+  fi
+  if [ "$net" = "tervory-gw-base" ]; then
+    base_corridor=1
   fi
   if [ "$net" = "tervory-gw-radix" ]; then
     radix_corridor=1
@@ -95,6 +100,22 @@ for host in workspace redis qdrant litellm searxng tiger agent-other; do
       mark 0 "tiger resolves"
     else
       mark 1 "tiger resolves"
+    fi
+    continue
+  fi
+  if [ "$base_corridor" -eq 1 ] && [ "$host" = "tiger" ]; then
+    if resolves tiger; then
+      mark 0 "tiger resolves"
+    else
+      mark 1 "tiger resolves"
+    fi
+    continue
+  fi
+  if [ "$base_corridor" -eq 1 ] && [ "$host" = "searxng" ]; then
+    if resolves searxng; then
+      mark 0 "searxng resolves"
+    else
+      mark 1 "searxng resolves"
     fi
     continue
   fi
@@ -197,10 +218,18 @@ for net in $nets; do
         if [ "$net" = "tervory-gw-tiger" ] && has_part "$short" tiger; then
           continue
         fi
+        if [ "$net" = "tervory-gw-base" ] && has_part "$short" tiger; then
+          continue
+        fi
+        if [ "$net" = "tervory-gw-base" ] && has_part "$short" searxng; then
+          continue
+        fi
         unexpected="$unexpected $short"
       done
       if [ "$net" = "tervory-gw-tiger" ]; then
         label="gateway $net holds only this agent, tank, postgres, hermes, and tiger"
+      elif [ "$net" = "tervory-gw-base" ]; then
+        label="gateway $net holds only this agent, tank, postgres, hermes, tiger, and searxng"
       else
         label="gateway $net holds only this agent, tank, postgres, and hermes"
       fi
