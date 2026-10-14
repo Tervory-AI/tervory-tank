@@ -63,9 +63,29 @@ _redis: aioredis.Redis | None = None
 REDIS_URL = os.environ.get("REDIS_URL", "redis://redis:6379/0")
 CACHE_TTL_S = int(os.environ.get("TANK_CACHE_TTL_S", str(7 * 24 * 3600)))
 _packages: dict[tuple[str, str], skala.SkillPackage] = {}
-SKILL_ENV = {k: v for k, v in {"BRAVE_API_KEY": os.environ.get("BRAVE_API_KEY", ""),
-                                "SEARXNG_URL": os.environ.get("SEARXNG_URL", ""),
+SKILL_ENV = {k: v for k, v in {"SEARXNG_URL": os.environ.get("SEARXNG_URL", ""),
                                 "TIGER_URL": os.environ.get("TIGER_URL", "")}.items() if v}
+
+# Paid routes are their own step on the ladder: OFF unless the founder sets them to auto.
+# A skill only ever sees a paid key when its route is approved (tank.paid_routes, mode='auto').
+# Showing an agent an easier paid route it was not approved for is exactly what this prevents.
+PAID_ROUTE_KEYS = {"search.brave": ("BRAVE_API_KEY", os.environ.get("BRAVE_API_KEY", ""))}
+_paid_route_mode: dict[str, str] = {}
+
+
+def skill_env() -> dict[str, str]:
+    env = dict(SKILL_ENV)
+    for route, (name, value) in PAID_ROUTE_KEYS.items():
+        if value and _paid_route_mode.get(route) == "auto":
+            env[name] = value
+    return env
+
+
+async def load_paid_routes() -> None:
+    async with pool().acquire() as conn:
+        rows = await conn.fetch("SELECT route, mode FROM tank.paid_routes")
+    _paid_route_mode.clear()
+    _paid_route_mode.update({r["route"]: r["mode"] for r in rows})
 
 
 def pool() -> asyncpg.Pool:
@@ -252,6 +272,7 @@ async def _startup() -> None:
     except Exception as exc:  # noqa: BLE001 — the cache is an optimisation; Tank runs without it
         log.warning("redis unavailable, rung-4 cache off: %s", exc)
         _redis = None
+    await load_paid_routes()
     _packages = skala.load_packages()
     await register_packages()
     t = asyncio.create_task(_base_worker())
@@ -274,6 +295,40 @@ async def health() -> dict[str, Any]:
     async with pool().acquire() as conn:
         await conn.fetchval("SELECT 1")
     return {"ok": True, "region": DEFAULT_REGION}
+
+
+# ---------- paid routes (founder approval) ----------
+
+class PaidRouteMode(BaseModel):
+    mode: str            # off | auto
+    by: str              # who approved, recorded in policy_log
+
+
+@app.get("/v1/paid-routes", dependencies=[Depends(require_key)])
+async def list_paid_routes() -> list[dict[str, Any]]:
+    async with pool().acquire() as conn:
+        rows = await conn.fetch("SELECT route, mode, approved_by, approved_at, note FROM tank.paid_routes ORDER BY route")
+    return [dict(r) for r in rows]
+
+
+@app.put("/v1/paid-routes/{route}", dependencies=[Depends(require_key)])
+async def set_paid_route(route: str, body: PaidRouteMode, agent: str | None = Depends(require_key)) -> dict[str, Any]:
+    """Only the Workspace/founder key may change a paid route; agents never can."""
+    if agent is not None:
+        raise HTTPException(status_code=403, detail="agents cannot change paid routes")
+    if body.mode not in ("off", "auto"):
+        raise HTTPException(status_code=400, detail="mode must be off or auto")
+    async with pool().acquire() as conn:
+        row = await conn.fetchrow("SELECT mode FROM tank.paid_routes WHERE route=$1", route)
+        if row is None:
+            raise HTTPException(status_code=404, detail="no such paid route")
+        await conn.execute("UPDATE tank.paid_routes SET mode=$2, approved_by=$3, approved_at=now() WHERE route=$1",
+                           route, body.mode, body.by)
+        await conn.execute(
+            "INSERT INTO tank.policy_log (task_type, action, from_model, to_model, by_user, detail) "
+            "VALUES ($1, 'paid_route', $2, $3, $4, '{}'::jsonb)", route, row["mode"], body.mode, body.by)
+    await load_paid_routes()
+    return {"route": route, "mode": body.mode}
 
 
 # ---------- policy ----------
@@ -792,7 +847,7 @@ def make_ctx(pkg: skala.SkillPackage, tenant_id: uuid.UUID, task_id: uuid.UUID |
     assert _http is not None
     ref = pkg.ref + ("#preview" if preview else "")
     return skala.SkillContext(tenant_id=tenant_id, skill_ref=ref, agent=pkg.agent, task_id=task_id,
-                              _model=_model_for_skill, http=_http, env=dict(SKILL_ENV))
+                              _model=_model_for_skill, http=_http, env=skill_env())
 
 
 # Evals and previews run under the platform tenant so their model spend never lands on a client.

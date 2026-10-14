@@ -406,3 +406,17 @@ INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_toke
   ('zenas.scope', 1, 'flash-lite', 'urgent', 'tenant', 400,
    'You classify a request for Zenas. Reply with strict JSON only: {"area":"<id>","jurisdiction":"us|za|both"}. Use an allowed area id or "none". Do not give legal advice. Do not help with criminal law.')
 ON CONFLICT DO NOTHING;
+
+-- ---------- Paid routes: their own step on the ladder, OFF unless the founder approves ----------
+-- A skill sees a paid service (e.g. Brave search) only when its route is set to 'auto' here.
+-- Changed only through PUT /v1/paid-routes/{route} with the founder/Workspace key; every change is in policy_log.
+CREATE TABLE IF NOT EXISTS tank.paid_routes (
+    route        text PRIMARY KEY,
+    mode         text NOT NULL DEFAULT 'off' CHECK (mode IN ('off', 'auto')),
+    approved_by  text,
+    approved_at  timestamptz,
+    note         text NOT NULL DEFAULT ''
+);
+INSERT INTO tank.paid_routes (route, note) VALUES
+  ('search.brave', 'Brave web search as a fallback in base.find_site, after our own SearXNG. Paid per query beyond the free allowance.')
+ON CONFLICT DO NOTHING;

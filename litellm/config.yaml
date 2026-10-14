@@ -3,8 +3,7 @@
 # Provider keys come from the environment (see .env.example); nothing secret lives here.
 #
 # 14 Oct 2026: the funded providers (OpenAI, Google, xAI) carry the work over their APIs, never
-# OAuth sign-ins. Anthropic stays listed and returns when the founder tops up; any policy row
-# still pointing at an Anthropic name falls back to the funded models (see `fallbacks`).
+# OAuth sign-ins. Anthropic stays listed and returns when the founder tops up and approves the switch.
 # Prices are USD per token (per-million / 1e6), from each provider's pricing page on 14 Oct 2026:
 #   OpenAI GPT-6: platform.openai.com/docs/pricing; Gemini: ai.google.dev/pricing; xAI: docs.x.ai/developers/pricing.
 # China-hosted providers (DeepSeek, Moonshot/Kimi) are deliberately absent: they may be added for
@@ -115,21 +114,8 @@ litellm_settings:
   drop_params: true
   set_verbose: false
   num_retries: 1
-  # If a provider refuses (no credit, outage, unknown model), try the next one, cheapest first.
-  # Tank's ledger records the model that actually answered.
-  fallbacks:
-    - luna: ["flash-lite", "grok"]
-    - flash-lite: ["luna", "grok"]
-    - flash: ["luna", "grok"]
-    - sol: ["argon", "grok-top"]
-    - argon: ["sol", "grok-top"]
-    - astra: ["argon", "grok-top"]
-    - grok: ["luna", "flash-lite"]
-    - grok-top: ["sol", "argon"]
-    - grok-build: ["sol", "argon"]
-    - haiku: ["luna", "flash-lite", "grok"]
-    - sonnet: ["sol", "argon", "grok-top"]
-    - opus: ["astra", "argon", "grok-top"]
+  # No automatic fallbacks between providers. Switching a task to another provider is a step the
+  # founder approves (a policy change), never something a refused call does on its own.
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY

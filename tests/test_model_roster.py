@@ -24,12 +24,10 @@ def test_no_china_hosted_provider_in_the_roster() -> None:
         assert provider not in {"deepseek", "moonshot"}, m["model_name"]
 
 
-def test_fallbacks_name_roster_models_only() -> None:
-    for entry in CONFIG["litellm_settings"]["fallbacks"]:
-        for primary, chain in entry.items():
-            assert primary in NAMES
-            assert chain and all(name in NAMES for name in chain), primary
-            assert primary not in chain
+def test_no_automatic_provider_fallbacks() -> None:
+    """Switching provider is an approved step, never automatic."""
+    assert not CONFIG.get("litellm_settings", {}).get("fallbacks")
+    assert not CONFIG.get("router_settings", {}).get("fallbacks")
 
 
 def test_policy_seeds_and_the_switch_name_roster_models() -> None:
@@ -40,8 +38,13 @@ def test_policy_seeds_and_the_switch_name_roster_models() -> None:
     assert switched <= NAMES, switched - NAMES
 
 
-def test_anthropic_names_fall_back_to_funded_providers() -> None:
-    chains = {k: v for entry in CONFIG["litellm_settings"]["fallbacks"] for k, v in entry.items()}
-    providers = {m["model_name"]: m["litellm_params"]["model"].split("/", 1)[0] for m in CONFIG["model_list"]}
-    for name in ("haiku", "sonnet", "opus"):
-        assert all(providers[n] != "anthropic" for n in chains[name]), name
+def test_brave_key_reaches_skills_only_when_route_is_auto() -> None:
+    src = (ROOT / "tank" / "main.py").read_text(encoding="utf-8")
+    start = src.index("SKILL_ENV = {")
+    block = src[start:src.index("\n\n", start)]
+    assert "BRAVE_API_KEY" not in block, "Brave must not be in the always-on skill env"
+    assert '_paid_route_mode.get(route) == "auto"' in src
+    assert "env=skill_env()" in src
+    schema = SCHEMA
+    assert "CREATE TABLE IF NOT EXISTS tank.paid_routes" in schema
+    assert "DEFAULT 'off'" in schema
