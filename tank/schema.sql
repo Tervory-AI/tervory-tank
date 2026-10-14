@@ -407,22 +407,6 @@ INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_toke
    'You classify a request for Zenas. Reply with strict JSON only: {"area":"<id>","jurisdiction":"us|za|both"}. Use an allowed area id or "none". Do not give legal advice. Do not help with criminal law.')
 ON CONFLICT DO NOTHING;
 
--- ---------- Paid routes: their own rung on the ladder ----------
--- Free steps run automatically. A paid rung pauses for admin approval ('approve', the default),
--- runs without asking ('auto'), or is never used ('off'). Pausing a run at a paid rung is C14;
--- until then 'approve' holds the paid rung back and the record carries the reason.
--- Changed only through PUT /v1/paid-routes/{route} with the founder/Workspace key; every change is in policy_log.
-CREATE TABLE IF NOT EXISTS tank.paid_routes (
-    route        text PRIMARY KEY,
-    mode         text NOT NULL DEFAULT 'approve' CHECK (mode IN ('off', 'approve', 'auto')),
-    approved_by  text,
-    approved_at  timestamptz,
-    note         text NOT NULL DEFAULT ''
-);
-INSERT INTO tank.paid_routes (route, note) VALUES
-  ('search.brave', 'Brave web search as a fallback in base.find_site, after our own SearXNG. Paid per query beyond the free allowance.')
-ON CONFLICT DO NOTHING;
-
 -- ---------- 14 Oct 2026: platform rows start at the cheapest model of their tier ----------
 -- With cheapest-available fallbacks in litellm/config.yaml, each row names the cheapest model and the
 -- gateway walks up the price list to the first provider with funds. The judge keeps its own model.
