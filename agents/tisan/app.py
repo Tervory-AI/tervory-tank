@@ -58,9 +58,13 @@ async def scaffold(ctx: JobContext) -> dict:
     return await module.execute(ctx.input, str(ctx.tenant_id))
 
 
+# Ten minutes for a site build. Ping and every other agent stay on the chassis default.
+SCAFFOLD_TIMEOUT_S = 600
+
 app = create_app(
     agent=AGENT,
     handlers={"ping": ping, "scaffold": scaffold},
+    job_timeouts={"scaffold": SCAFFOLD_TIMEOUT_S},
     schedules=[
         {
             "tenant_id": HEARTBEAT_TENANT,

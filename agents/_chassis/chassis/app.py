@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from chassis.browser import BrowserClient
 from chassis.db import as_json, ensure_schedules, ensure_schema, schema_for
 from chassis.files import read_file, save_file
-from chassis.jobs import JobContext
+from chassis.jobs import JobContext, timeout_for
 from chassis.logs import log_line
 from chassis.memory import MemoryClient
 from chassis.tank import TankClient
@@ -48,9 +48,13 @@ def create_app(
     agent: str,
     handlers: dict[str, Any],
     schedules: list[dict[str, Any]] | None = None,
+    job_timeouts: dict[str, int] | None = None,
 ) -> FastAPI:
     schema_for(agent)  # reject a bad name before the process serves traffic
     planned = list(schedules or [])
+    # Checked up front so a bad limit fails at import, not on the first job.
+    timeouts = {kind: timeout_for(kind, job_timeouts) for kind in (job_timeouts or {})}
+    timeouts = {kind: seconds for kind, seconds in timeouts.items() if seconds is not None}
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -78,7 +82,7 @@ def create_app(
         log_line(agent, "chassis ready")
         tasks = [
             asyncio.create_task(job_loop(pool, agent, handlers, lambda job: _context(app, agent, job))),
-            asyncio.create_task(schedule_loop(pool, agent)),
+            asyncio.create_task(schedule_loop(pool, agent, timeouts)),
         ]
         try:
             yield
@@ -92,6 +96,7 @@ def create_app(
     app = FastAPI(title=f"Tervory agent {agent}", version="0.1.0", lifespan=lifespan)
     app.state.agent = agent
     app.state.handlers = handlers
+    app.state.job_timeouts = timeouts
     app.state.schedules = planned
 
     @app.get("/health")
@@ -112,18 +117,33 @@ def create_app(
         if run_at.tzinfo is None:
             run_at = run_at.replace(tzinfo=timezone.utc)
         schema = schema_for(agent)
+        timeout_s = timeout_for(body.kind, app.state.job_timeouts)
         async with app.state.pool.acquire() as conn:
-            row = await conn.fetchrow(
-                f"""
-                INSERT INTO {schema}.jobs (tenant_id, kind, input, status, run_at)
-                VALUES ($1, $2, $3::jsonb, 'queued', $4)
-                RETURNING id, tenant_id, kind, status
-                """,
-                body.tenant_id,
-                body.kind,
-                json.dumps(body.input),
-                run_at,
-            )
+            if timeout_s is None:
+                row = await conn.fetchrow(
+                    f"""
+                    INSERT INTO {schema}.jobs (tenant_id, kind, input, status, run_at)
+                    VALUES ($1, $2, $3::jsonb, 'queued', $4)
+                    RETURNING id, tenant_id, kind, status
+                    """,
+                    body.tenant_id,
+                    body.kind,
+                    json.dumps(body.input),
+                    run_at,
+                )
+            else:
+                row = await conn.fetchrow(
+                    f"""
+                    INSERT INTO {schema}.jobs (tenant_id, kind, input, status, run_at, timeout_s)
+                    VALUES ($1, $2, $3::jsonb, 'queued', $4, $5)
+                    RETURNING id, tenant_id, kind, status
+                    """,
+                    body.tenant_id,
+                    body.kind,
+                    json.dumps(body.input),
+                    run_at,
+                    timeout_s,
+                )
         log_line(agent, "job queued", tenant_id=str(body.tenant_id), job_id=str(row["id"]))
         return {
             "id": str(row["id"]),

@@ -80,7 +80,8 @@ def test_agent_compose_is_one_corridor_with_a_limit_and_a_healthcheck(
     assert box["networks"]["gw"]["name"] == corridor
     spec = box["services"][service]
     assert spec["networks"] == ["gw"]
-    assert spec["mem_limit"] == "256m"
+    # Founder, 14 Oct 2026: Tisan's room is 1g so a site build can finish. Radix stays 256m.
+    assert spec["mem_limit"] == ("1g" if folder == "tisan" else "256m")
     assert spec["cpus"] in (0.25, "0.25")
     assert "health" in str(spec["healthcheck"]["test"])
     env = spec["environment"]
@@ -139,6 +140,7 @@ def test_ping_schedules_are_the_template_heartbeat() -> None:
         handlers = set(module.app.state.handlers)
         if folder == "tisan":
             assert handlers == {"ping", "scaffold"}
+            assert module.app.state.job_timeouts == {"scaffold": 600}
         else:
             # RX1 adds scan on Radix. Allow it so this file does not put that room back to ping only.
             assert "ping" in handlers

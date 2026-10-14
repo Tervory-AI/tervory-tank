@@ -45,6 +45,19 @@ def decide_timeout(
     return "failed"
 
 
+def timeout_for(kind: str, timeouts: dict[str, int] | None) -> int | None:
+    """Seconds for this job kind, or None to keep the chassis default (120).
+
+    Only kinds an agent lists get a different limit. Other agents stay on the default.
+    """
+    if not timeouts or kind not in timeouts:
+        return None
+    value = timeouts[kind]
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1 or value > 86_400:
+        raise ValueError("job timeout is out of range")
+    return value
+
+
 def decide_retry(*, attempts: int, max_attempts: int) -> str:
     """After a failed attempt (attempts already counted), queue another or stop."""
     if attempts < max_attempts:

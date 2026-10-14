@@ -12,6 +12,8 @@ Login `agent_tisan`. Schema `agent_tisan`. Key `TANK_KEY_TISAN` on Tank and on H
 
 The image installs Node and fills an npm cache while it builds. A scaffold run uses that cache with `npm ci --offline`, so the check does not need the internet.
 
+The room has 1g of memory and 0.25 CPU. A scaffold job is allowed 10 minutes. Other jobs, and other agents, stay on the chassis default of 2 minutes.
+
 ## Project scaffold
 
 Skill `tisan.scaffold` (job kind `scaffold`). Input:

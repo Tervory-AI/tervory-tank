@@ -82,6 +82,20 @@ def test_template_has_the_pages_and_no_analytics() -> None:
     assert "htmlFor=" in contact
 
 
+def test_scaffold_job_is_ten_minutes_and_other_jobs_stay_on_the_default() -> None:
+    import sys
+
+    chassis = str(ROOT / "agents" / "_chassis")
+    if chassis not in sys.path:
+        sys.path.insert(0, chassis)
+    from chassis.jobs import timeout_for
+
+    assert timeout_for("scaffold", {"scaffold": 600}) == 600
+    assert timeout_for("ping", {"scaffold": 600}) is None
+    assert timeout_for("scaffold", None) is None
+    assert timeout_for("ping", {}) is None
+
+
 def test_room_image_caches_npm_for_offline_checks() -> None:
     text = (ROOT / "agents" / "tisan" / "Dockerfile").read_text(encoding="utf-8")
     assert "TISAN_NPM_OFFLINE=1" in text
