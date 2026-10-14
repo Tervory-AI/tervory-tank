@@ -12,7 +12,7 @@ Every Squad member (Tiger, Market Lab, Zenas, RIG, Tisan, Radix) gets exactly th
 
 ## Deploy order (Claude runs this; never merge before step 1)
 1. Server: `docker network create tervory-gw-<name>` (a main-compose deploy fails if the network is missing).
-2. Founder: one password per agent, pasted once into a Coolify **shared environment variable** `AGENT_DB_PASSWORD_<NAME>` (Project → Environment → Shared variables); both resources reference it as `{{environment.AGENT_DB_PASSWORD_<NAME>}}`. Same for `TANK_KEY_<NAME>`.
+2. Founder: one password per agent, pasted once into a Coolify **Project shared variable** `AGENT_DB_PASSWORD_<NAME>` (Project → Shared variables); both the main resource and the agent resource reference it as `{{project.AGENT_DB_PASSWORD_<NAME>}}`. Same for `TANK_KEY_<NAME>`. (Radix's corridor is created with `--internal`; see C10.)
 3. Merge the PR → main stack redeploys → `agent-roles` creates the login.
 4. Create the agent's Coolify resource (settings above), deploy.
 5. Run `check_isolation.sh`; only then does the agent take jobs.
