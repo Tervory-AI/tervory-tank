@@ -358,6 +358,55 @@ async def test_rate_limit_and_bad_sheet_and_feeds_and_price_watch(tmp_path: Path
     assert rule_matches({"length_mm": [400, 520]}, {"length_mm": 10}) is False
 
 
+def test_public_app_drops_jobs_and_docs() -> None:
+    import asyncio
+
+    import app as rig_app
+
+    paths = {getattr(route, "path", None) for route in rig_app.app.routes}
+    assert "/health" in paths
+    assert "/v1/rig/search" in paths
+    assert rig_app.app.openapi_url is None
+    assert rig_app.app.docs_url is None
+    for closed in ("/jobs", "/jobs/{job_id}", "/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json"):
+        assert closed not in paths
+
+    async def status(method: str, path: str) -> int:
+        sent: list[dict] = []
+
+        async def receive() -> dict:
+            return {"type": "http.request", "body": b"{}", "more_body": False}
+
+        async def send(message: dict) -> None:
+            sent.append(message)
+
+        await rig_app.app(
+            {
+                "type": "http",
+                "asgi": {"version": "3.0"},
+                "http_version": "1.1",
+                "method": method,
+                "scheme": "http",
+                "path": path,
+                "raw_path": path.encode(),
+                "query_string": b"",
+                "headers": [],
+                "client": ("127.0.0.1", 9),
+                "server": ("test", 80),
+            },
+            receive,
+            send,
+        )
+        return int(sent[0]["status"])
+
+    assert asyncio.run(status("POST", "/jobs")) == 404
+    assert asyncio.run(status("GET", "/jobs/11111111-1111-4111-8111-111111111111")) == 404
+    assert asyncio.run(status("GET", "/docs")) == 404
+    assert asyncio.run(status("GET", "/openapi.json")) == 404
+    assert asyncio.run(status("GET", "/redoc")) == 404
+    assert asyncio.run(status("GET", "/health")) == 503
+
+
 def test_room_compose_policy_and_skills_match() -> None:
     compose = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
     services = compose["services"]

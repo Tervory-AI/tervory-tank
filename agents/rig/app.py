@@ -72,6 +72,29 @@ app = create_app(
 )
 mount(app)
 
+# Chassis job intake and the generated docs are not part of the shopper API.
+# The worker and the scheduler still run inside this process.
+_CLOSED = {
+    "/jobs",
+    "/jobs/{job_id}",
+    "/docs",
+    "/docs/oauth2-redirect",
+    "/redoc",
+    "/openapi.json",
+}
+
+
+def _close_public_surface(application: FastAPI) -> None:
+    application.router.routes = [
+        route for route in application.router.routes if getattr(route, "path", None) not in _CLOSED
+    ]
+    application.openapi_url = None
+    application.docs_url = None
+    application.redoc_url = None
+
+
+_close_public_surface(app)
+
 _inner = app.router.lifespan_context
 
 
