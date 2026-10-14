@@ -48,12 +48,14 @@ jobs:
           test -n "$CURSOR_API_KEY" || { echo "::error::CURSOR_API_KEY secret is missing"; exit 1; }
           post() {
             curl -sS -o resp.json -w '%{http_code}' -X POST https://api.cursor.com/v0/agents \
-              "$@" -H "Content-Type: application/json" --data @body.json
+              -H "Content-Type: application/json" -H "Accept: application/json" "$@" --data-binary @body.json
           }
-          code=$(post -H "Authorization: Bearer $CURSOR_API_KEY")
-          if [ "$code" = 401 ] || [ "$code" = 403 ]; then
-            code=$(post -u "$CURSOR_API_KEY:")   # Cursor also accepts Basic auth (key as user, empty password)
-          fi
+          tried=""
+          code=$(post -H "Authorization: Bearer $CURSOR_API_KEY"); tried="bearer=$code"
+          case "$code" in 2*) ;; *)
+            code=$(post -u "$CURSOR_API_KEY:"); tried="$tried basic=$code" ;;
+          esac
+          echo "::notice title=Launch attempts::$tried body_bytes=$(wc -c < body.json)"
           # Annotations are readable through the API, so Claude can see the outcome without the log file.
           summary=$(jq -c '{id, name, status, branch: .target.branchName, url: .target.url, error: (.error // .message // null)}' resp.json 2>/dev/null || head -c 300 resp.json)
           case "$code" in
