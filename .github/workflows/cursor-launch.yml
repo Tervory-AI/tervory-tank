@@ -45,12 +45,21 @@ jobs:
         env:
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
         run: |
-          test -n "$CURSOR_API_KEY" || { echo "CURSOR_API_KEY secret is missing"; exit 1; }
-          code=$(curl -sS -o resp.json -w '%{http_code}' -X POST https://api.cursor.com/v0/agents \
-            -H "Authorization: Bearer $CURSOR_API_KEY" -H "Content-Type: application/json" --data @body.json)
-          echo "HTTP $code"
-          jq '{id, name, status, branch: .target.branchName, url: .target.url}' resp.json || cat resp.json
-          case "$code" in 2*) ;; *) exit 1 ;; esac
+          test -n "$CURSOR_API_KEY" || { echo "::error::CURSOR_API_KEY secret is missing"; exit 1; }
+          post() {
+            curl -sS -o resp.json -w '%{http_code}' -X POST https://api.cursor.com/v0/agents \
+              "$@" -H "Content-Type: application/json" --data @body.json
+          }
+          code=$(post -H "Authorization: Bearer $CURSOR_API_KEY")
+          if [ "$code" = 401 ] || [ "$code" = 403 ]; then
+            code=$(post -u "$CURSOR_API_KEY:")   # Cursor also accepts Basic auth (key as user, empty password)
+          fi
+          # Annotations are readable through the API, so Claude can see the outcome without the log file.
+          summary=$(jq -c '{id, name, status, branch: .target.branchName, url: .target.url, error: (.error // .message // null)}' resp.json 2>/dev/null || head -c 300 resp.json)
+          case "$code" in
+            2*) echo "::notice title=Cursor agent launched::HTTP $code $summary" ;;
+            *)  echo "::error title=Cursor launch failed::HTTP $code $summary"; exit 1 ;;
+          esac
 
   status:
     # Lists recent agents so Claude can see progress without the Cursor app.
@@ -63,5 +72,6 @@ jobs:
         env:
           CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
         run: |
-          curl -sS "https://api.cursor.com/v0/agents?limit=10" -H "Authorization: Bearer $CURSOR_API_KEY" \
-            | jq -r '.agents[]? | [.status, .name, (.target.branchName // ""), (.target.prUrl // "")] | @tsv'
+          list=$(curl -sS "https://api.cursor.com/v0/agents?limit=10" -H "Authorization: Bearer $CURSOR_API_KEY" \
+            | jq -c '[.agents[]? | {status, name, branch: (.target.branchName // ""), pr: (.target.prUrl // "")}]' 2>/dev/null || echo "list failed")
+          echo "::notice title=Recent Cursor agents::$list"
