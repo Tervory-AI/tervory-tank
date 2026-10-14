@@ -435,6 +435,7 @@ def test_hermes_joins_each_agent_corridor() -> None:
         "tervory-gw-tisan",
         "tervory-gw-zenas",
         "tervory-gw-base",
+        "tervory-gw-rig",
     }
     assert "ports" not in hermes
     env = hermes["environment"]
@@ -447,6 +448,7 @@ def test_hermes_joins_each_agent_corridor() -> None:
     assert "TANK_KEY_TISAN" in env
     assert "TANK_KEY_ZENAS" in env
     assert "TANK_KEY_BASE" in env
+    assert "TANK_KEY_RIG" in env
     assert "TANK_API_KEY" in env
     qdrant_nets = services["qdrant"].get("networks") or []
     assert "tervory-gw-template" not in qdrant_nets

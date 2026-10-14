@@ -1,0 +1,25 @@
+{
+  "tenant_id": "11111111-1111-4111-8111-111111111111",
+  "email": "buyer@example.com",
+  "webhook": "https://example.com/hooks/rig",
+  "keys": [
+    {
+      "key": "rk_pub_examplebrand",
+      "origins": ["https://rig.tervory.com", "http://127.0.0.1:5173"]
+    }
+  ],
+  "setup_templates": {
+    "rifle": {
+      "tiers": [
+        {
+          "tier": "ready",
+          "label": "Ready to use",
+          "roles": [
+            {"role": "optic", "category": "optic"},
+            {"role": "mount", "category": "mount"}
+          ]
+        }
+      ]
+    }
+  }
+}
