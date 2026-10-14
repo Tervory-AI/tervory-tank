@@ -28,6 +28,7 @@ services:
       - tervory-gw-market_lab
       - tervory-gw-radix
       - tervory-gw-tisan
+      - tervory-gw-zenas
 
   redis:
     image: redis:7
@@ -60,6 +61,7 @@ services:
       TANK_KEY_MARKET_LAB: ${TANK_KEY_MARKET_LAB:-}
       TANK_KEY_RADIX: ${TANK_KEY_RADIX:-}
       TANK_KEY_TISAN: ${TANK_KEY_TISAN:-}
+      TANK_KEY_ZENAS: ${TANK_KEY_ZENAS:-}
       HERMES_EMBED_MODEL: ${HERMES_EMBED_MODEL:-BAAI/bge-small-en-v1.5}
     depends_on:
       - qdrant
@@ -70,6 +72,7 @@ services:
       - tervory-gw-market_lab
       - tervory-gw-radix
       - tervory-gw-tisan
+      - tervory-gw-zenas
     expose:
       - "8000"
     healthcheck:
@@ -133,6 +136,7 @@ services:
       TANK_KEY_MARKET_LAB: ${TANK_KEY_MARKET_LAB:-}
       TANK_KEY_RADIX: ${TANK_KEY_RADIX:-}
       TANK_KEY_TISAN: ${TANK_KEY_TISAN:-}
+      TANK_KEY_ZENAS: ${TANK_KEY_ZENAS:-}
       TANK_REGION: ${TANK_REGION:-us-east}
       SEARXNG_URL: http://searxng:8080
       TIGER_URL: http://tiger:3000
@@ -149,6 +153,7 @@ services:
       - tervory-gw-market_lab
       - tervory-gw-radix
       - tervory-gw-tisan
+      - tervory-gw-zenas
     expose:
       - "8000"
 
@@ -168,6 +173,7 @@ services:
       AGENT_DB_PASSWORD_MARKET_LAB: ${AGENT_DB_PASSWORD_MARKET_LAB:-}
       AGENT_DB_PASSWORD_RADIX: ${AGENT_DB_PASSWORD_RADIX:-}
       AGENT_DB_PASSWORD_TISAN: ${AGENT_DB_PASSWORD_TISAN:-}
+      AGENT_DB_PASSWORD_ZENAS: ${AGENT_DB_PASSWORD_ZENAS:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -223,3 +229,7 @@ networks:
   tervory-gw-tisan:
     external: true
     name: tervory-gw-tisan
+  # Created once on the server: docker network create tervory-gw-zenas
+  tervory-gw-zenas:
+    external: true
+    name: tervory-gw-zenas
