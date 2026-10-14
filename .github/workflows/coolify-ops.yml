@@ -5,7 +5,7 @@
 #
 # Rules:
 # - The Coolify token lives only in the repo secret COOLIFY_TOKEN and is never printed.
-# - COOLIFY_URL (repo variable) must be https://, so the token never crosses the internet in clear text.
+# - COOLIFY_URL (repo variable, default https://coolify.tervory.com) must be https://, so the token never crosses the internet in clear text.
 # - env-refs only ever writes references of the form {{project.NAME}}, never a secret value.
 name: coolify-ops
 
@@ -36,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+      COOLIFY_URL: ${{ vars.COOLIFY_URL || 'https://coolify.tervory.com' }}
       COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
       OP: ${{ inputs.op }}
       APP: ${{ inputs.app }}
