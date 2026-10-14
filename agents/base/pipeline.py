@@ -1,0 +1,428 @@
+"""Base passes 1–7. Same steps the worker used inside Tank.
+
+Skills stay in Skala. This module only orders them and merges what they return.
+A skill call is a function the room supplies (the chassis, through Tank).
+"""
+
+from __future__ import annotations
+
+import asyncio
+from dataclasses import dataclass, field
+from typing import Any, Awaitable, Callable
+
+BASE_CORE = [
+    "base.normalize",
+    "base.resolve",
+    "base.find_site",
+    "base.scrape_site",
+    "base.extract",
+    "base.contacts",
+    "base.socials",
+    "base.business_data",
+    "base.verify",
+]
+# A vertical engine is two skills: <engine>.ingest and <engine>.profile.
+ENGINE_SKILLS = ("ingest", "profile")
+
+SkillCall = Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]]
+
+_ACCOUNT_ERRORS = ("credit balance", "authentication_error", "permission_error", "invalid x-api-key", "billing")
+
+
+class ModelAccountBlocked(Exception):
+    """The model provider refused the account. The record stays queued."""
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason[:300]
+        super().__init__(self.reason)
+
+
+@dataclass
+class Outcome:
+    status: str
+    profile: dict[str, Any] = field(default_factory=dict)
+    passes: dict[str, Any] = field(default_factory=dict)
+    confidence: int = 0
+    error: str | None = None
+    cost_usd: float = 0.0
+
+
+def skill_ids(engine: str | None) -> list[str]:
+    ids = list(BASE_CORE)
+    if engine:
+        ids += [f"{engine}.{name}" for name in ENGINE_SKILLS]
+    return ids
+
+
+def is_account_error(exc: Exception) -> bool:
+    msg = str(getattr(exc, "detail", "") or exc).lower()
+    return any(token in msg for token in _ACCOUNT_ERRORS)
+
+
+def merge(profile: dict[str, Any], fields: dict[str, Any]) -> None:
+    """Keep the higher-confidence value per field."""
+    for key, value in fields.items():
+        if not isinstance(value, dict):
+            continue
+        if key not in profile or int(value.get("confidence") or 0) >= int(profile[key].get("confidence") or 0):
+            profile[key] = value
+
+
+def val(profile: dict[str, Any], key: str, default: Any = None) -> Any:
+    field_value = profile.get(key)
+    return (field_value.get("value") if isinstance(field_value, dict) else field_value) or default
+
+
+def ref_of(skill_id: str, out: dict[str, Any]) -> str:
+    ref = out.get("_skill")
+    return ref if isinstance(ref, str) and ref else skill_id
+
+
+def cost_of(out: dict[str, Any]) -> float:
+    try:
+        return float(out.get("_cost_usd") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def result_line(done: int, ready: int, failed: int, cost: float) -> str:
+    return f"{done} enriched ({ready} ready), {failed} failed, model spend ${float(cost):.4f}"
+
+
+def order_states(groups: dict[str, list[dict[str, Any]]]) -> list[tuple[str, list[dict[str, Any]]]]:
+    """Smallest state first, then the state code. That is the order the batches run."""
+    return sorted(groups.items(), key=lambda item: (len(item[1]), item[0]))
+
+
+async def state_of(raw: dict[str, Any], engine: str | None, call: SkillCall) -> str:
+    record = raw
+    if engine:
+        ingested = await call(f"{engine}.ingest", raw)
+        record = ingested.get("record") or raw
+    state = str(record.get("state") or record.get("premise_state") or "").strip().upper()
+    return state[:2] if state else "??"
+
+
+async def prepare_batch(
+    raws: list[dict[str, Any]],
+    rec_ids: list[str],
+    engine: str | None,
+    registry: list[dict[str, Any]] | None,
+    call: SkillCall,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any] | None], list[dict[str, Any]], float]:
+    """Pass 0 and the registry for pass 1b. Returns inputs, engine rows, registry, cost."""
+    cost = 0.0
+    inputs: list[dict[str, Any]] = []
+    engine_rows: list[dict[str, Any] | None] = []
+    if engine:
+        for raw in raws:
+            ingested = await call(f"{engine}.ingest", raw)
+            cost += cost_of(ingested)
+            inputs.append(ingested.get("record") or dict(raw))
+            engine_rows.append(ingested.get("engine") or None)
+    else:
+        inputs = [dict(raw) for raw in raws]
+        engine_rows = [None] * len(inputs)
+
+    if registry is None:
+        built: list[dict[str, Any]] = []
+        for index, record in enumerate(inputs):
+            normalised = await call("base.normalize", record)
+            cost += cost_of(normalised)
+            fields = normalised.get("fields") or {}
+            built.append({
+                "id": str(rec_ids[index]),
+                "name_key": fields.get("name_key", {}).get("value", ""),
+                "city": str(fields.get("city", {}).get("value", "")).lower(),
+                "state": str(fields.get("state", {}).get("value", "")).lower(),
+            })
+        registry = built
+    return inputs, engine_rows, registry, cost
+
+
+async def enrich_one(
+    raw_input: dict[str, Any],
+    engine_in: dict[str, Any] | None,
+    registry: list[dict[str, Any]],
+    engine: str | None,
+    call: SkillCall,
+    refs: dict[str, str] | None = None,
+) -> Outcome:
+    """One record through passes 1a–7. A blocked model account leaves the record queued."""
+    profile: dict[str, Any] = {}
+    passes: dict[str, Any] = {}
+    cost = 0.0
+
+    def named(skill_id: str, out: dict[str, Any] | None = None) -> str:
+        if out is not None:
+            found = ref_of(skill_id, out)
+            if found != skill_id or not refs:
+                return found
+        if refs and refs.get(skill_id):
+            return refs[skill_id]
+        return skill_id
+
+    try:
+        norm = await call("base.normalize", raw_input)
+        cost += cost_of(norm)
+        merge(profile, norm.get("fields") or {})
+        passes["1a"] = {"skill": named("base.normalize", norm), "ms": norm.get("_ms")}
+
+        res = await call("base.resolve", {"record": norm, "registry": registry})
+        cost += cost_of(res)
+        if res.get("match"):
+            profile["registry_match"] = {
+                "value": res["match"].get("id"),
+                "source": f"registry:{res['verdict']}",
+                "confidence": int(res.get("score") or 0),
+            }
+        passes["1b"] = {
+            "skill": named("base.resolve", res),
+            "ms": res.get("_ms"),
+            "verdict": res.get("verdict"),
+            "score": res.get("score"),
+        }
+        if engine and engine_in and engine_in.get("licence_number"):
+            profile["registry_match"] = {
+                "value": engine_in["licence_number"],
+                "source": f"registry:{engine}",
+                "confidence": 100,
+            }
+            if res.get("match"):
+                passes["1b"]["duplicate_of"] = res["match"].get("id")
+
+        name = val(profile, "name") or raw_input.get("name") or ""
+        city = val(profile, "city") or ""
+        state = val(profile, "state") or ""
+
+        site = await call("base.find_site", {
+            "name": name,
+            "city": city,
+            "state": state,
+            "phone": str(val(profile, "phone") or raw_input.get("phone") or ""),
+            "zip": str(val(profile, "zip") or raw_input.get("zip") or ""),
+            "address": str(val(profile, "street") or raw_input.get("address") or ""),
+            "website": raw_input.get("website") or raw_input.get("url") or "",
+        })
+        cost += cost_of(site)
+        if site.get("website"):
+            profile["website"] = site["website"]
+        passes["2a"] = {
+            "skill": named("base.find_site", site),
+            "ms": site.get("_ms"),
+            "source": (site.get("website") or {}).get("source"),
+            **({"evidence": site["evidence"]} if site.get("evidence") else {}),
+            **({"blocked_by_check": site["blocked_by_check"]} if site.get("blocked_by_check") else {}),
+        }
+
+        url = val(profile, "website")
+        scr: dict[str, Any] = {}
+        if url:
+            scr = await call("base.scrape_site", {"website": url})
+            cost += cost_of(scr)
+            src = "site"
+            if scr.get("emails"):
+                profile["emails"] = {"value": scr["emails"][:5], "source": src, "confidence": 80}
+            if scr.get("phones"):
+                merge(profile, {"phone": {"value": scr["phones"][0], "source": src, "confidence": 80}})
+                profile["phones"] = {"value": scr["phones"][:3], "source": src, "confidence": 80}
+            if scr.get("socials"):
+                profile["socials"] = {"value": scr["socials"], "source": src, "confidence": 85}
+            passes["2b"] = {
+                "skill": named("base.scrape_site", scr),
+                "ms": scr.get("_ms"),
+                "pages": len(scr.get("pages") or []),
+                "error": scr.get("error"),
+                "via": scr.get("via"),
+            }
+            if (scr.get("text") or "") and len(scr["text"]) >= 40:
+                try:
+                    ex = await call("base.extract", {"name": name, "text": scr["text"]})
+                    cost += cost_of(ex)
+                except Exception as exc:  # noqa: BLE001 — a model-gateway blip must not fail the record
+                    if is_account_error(exc):
+                        raise ModelAccountBlocked(str(getattr(exc, "detail", "") or exc)) from exc
+                    passes["2c"] = {
+                        "skill": named("base.extract"),
+                        "skipped": f"model call failed: {str(exc)[:120]}",
+                    }
+                else:
+                    conf = int(ex.get("confidence") or 0)
+                    for key in ("categories", "services", "description", "people"):
+                        if ex.get(key):
+                            profile[key] = {"value": ex[key], "source": "site:model", "confidence": conf}
+                    passes["2c"] = {
+                        "skill": named("base.extract", ex),
+                        "ms": ex.get("_ms"),
+                        "cost_usd": round(float(ex.get("_cost_usd") or 0), 6),
+                    }
+
+        con = await call("base.contacts", {
+            "website": url or "",
+            "emails": val(profile, "emails", []),
+            "people": val(profile, "people", []),
+        })
+        cost += cost_of(con)
+        if con.get("confidence"):
+            profile["contacts"] = {
+                "value": {
+                    key: con[key]
+                    for key in (
+                        "domain",
+                        "domain_accepts_mail",
+                        "generic_emails",
+                        "personal_emails",
+                        "email_pattern",
+                        "contacts",
+                        "decision_maker",
+                    )
+                },
+                "source": "site+pattern",
+                "confidence": int(con["confidence"]),
+            }
+            if con.get("decision_maker"):
+                dm = con["decision_maker"]
+                profile["decision_maker"] = {
+                    "value": f"{dm['name']} ({dm['role']})" if dm.get("role") else dm["name"],
+                    "source": "site",
+                    "confidence": 80,
+                }
+        passes["3"] = {
+            "skill": named("base.contacts", con),
+            "ms": con.get("_ms"),
+            "pattern": con.get("email_pattern"),
+            "people": len(con.get("contacts") or []),
+        }
+
+        soc = await call("base.socials", {"socials": val(profile, "socials", {})})
+        cost += cost_of(soc)
+        if soc.get("count"):
+            profile["socials_profiles"] = {
+                "value": {"profiles": soc["profiles"], "count": soc["count"], "presence": soc["presence"]},
+                "source": "site",
+                "confidence": int(soc["confidence"]),
+            }
+        passes["4"] = {"skill": named("base.socials", soc), "ms": soc.get("_ms"), "count": soc.get("count")}
+
+        eng_prof: dict[str, Any] = {}
+        if engine and engine_in:
+            eng_prof = await call(f"{engine}.profile", {"engine": engine_in, "profile": profile})
+            cost += cost_of(eng_prof)
+            for key in (
+                "licence_number",
+                "licence_type",
+                "licence_type_label",
+                "licence_expires",
+                "days_to_expiry",
+                "renewal_window",
+                "lapsed",
+                "segment",
+                "inventory_signal",
+            ):
+                if eng_prof.get(key) not in (None, "", []):
+                    official = key.startswith("licence") or key in ("days_to_expiry", "renewal_window", "lapsed")
+                    profile[f"{engine}_{key}"] = {
+                        "value": eng_prof[key],
+                        "source": f"engine:{engine}" if official else f"engine:{engine}:inferred",
+                        "confidence": 95 if official else 60,
+                    }
+            passes["6"] = {
+                "skill": named(f"{engine}.profile", eng_prof),
+                "ms": eng_prof.get("_ms"),
+                "segment": eng_prof.get("segment"),
+            }
+
+        try:
+            biz = await call("base.business_data", {
+                "name": name,
+                "state": state,
+                "description": val(profile, "description", ""),
+                "categories": val(profile, "categories", []),
+                "services": val(profile, "services", []),
+                "people": val(profile, "people", []),
+                "socials_count": soc.get("count") or 0,
+                "pages": len(scr.get("pages") or []),
+                "licence_type_label": eng_prof.get("licence_type_label"),
+            })
+            cost += cost_of(biz)
+        except Exception as exc:  # noqa: BLE001 — the record keeps its code-only layers
+            if is_account_error(exc):
+                raise ModelAccountBlocked(str(getattr(exc, "detail", "") or exc)) from exc
+            passes["5"] = {
+                "skill": named("base.business_data"),
+                "skipped": f"model call failed: {str(exc)[:120]}",
+            }
+        else:
+            if biz.get("confidence"):
+                for key in ("size_band", "revenue_band", "business_model", "naics", "naics_label"):
+                    if biz.get(key):
+                        profile[key] = {"value": biz[key], "source": "model:estimate", "confidence": int(biz["confidence"])}
+            passes["5"] = {
+                "skill": named("base.business_data", biz),
+                "ms": biz.get("_ms"),
+                "cost_usd": round(float(biz.get("_cost_usd") or 0), 6),
+                "basis": biz.get("basis"),
+                **({"raw": biz.get("raw")} if not biz.get("business_model") and biz.get("raw") else {}),
+            }
+
+        ver = await call("base.verify", {"profile": profile, "raw": raw_input, "engine_profile": eng_prof})
+        cost += cost_of(ver)
+        confidence = int(ver.get("confidence") or 0)
+        profile["tier"] = {"value": ver.get("tier"), "source": "verify", "confidence": confidence}
+        if ver.get("flags"):
+            profile["flags"] = {"value": ver["flags"], "source": "verify", "confidence": confidence}
+        passes["7"] = {
+            "skill": named("base.verify", ver),
+            "ms": ver.get("_ms"),
+            "layers": ver.get("layers"),
+            "checks": ver.get("checks"),
+        }
+        return Outcome(status="done", profile=profile, passes=passes, confidence=confidence, cost_usd=cost)
+    except ModelAccountBlocked as exc:
+        return Outcome(status="queued", error=exc.reason, cost_usd=cost)
+    except Exception as exc:  # noqa: BLE001
+        return Outcome(
+            status="failed",
+            profile=profile,
+            passes=passes,
+            error=str(exc)[:1000],
+            cost_usd=cost,
+        )
+
+
+def concurrency_limit(value: int | None) -> int:
+    return max(1, min(int(value or 8), 12))
+
+
+async def enrich_queued(
+    indexes: list[int],
+    rec_ids: list[str],
+    inputs: list[dict[str, Any]],
+    engine_rows: list[dict[str, Any] | None],
+    registry: list[dict[str, Any]],
+    supplied_registry: bool,
+    engine: str | None,
+    call: SkillCall,
+    paused: Callable[[], bool],
+    limit: int,
+    refs: dict[str, str] | None = None,
+) -> list[tuple[int, Outcome | None]]:
+    """Run the still-queued indexes. A paused model leaves the record untouched (None)."""
+    sem = asyncio.Semaphore(limit)
+    results: list[tuple[int, Outcome | None]] = []
+
+    async def one(index: int) -> None:
+        async with sem:
+            if paused():
+                results.append((index, None))
+                return
+            if supplied_registry:
+                reg = registry
+            else:
+                reg = [row for row in registry if row.get("id") != str(rec_ids[index])]
+            outcome = await enrich_one(inputs[index], engine_rows[index], reg, engine, call, refs)
+            results.append((index, outcome))
+
+    await asyncio.gather(*(one(index) for index in indexes))
+    results.sort(key=lambda item: item[0])
+    return results
