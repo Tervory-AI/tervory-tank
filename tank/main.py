@@ -409,6 +409,9 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
     tokens_out = int(usage.get("completion_tokens") or 0)
     # LiteLLM reports the cost it computed from config.yaml prices in this header.
     cost_usd = float(r.headers.get("x-litellm-response-cost") or 0.0)
+    # When a provider refuses, LiteLLM falls back to the next roster model (litellm/config.yaml);
+    # the ledger records the model that actually answered, so spend is booked to the right provider.
+    answered = r.headers.get("x-litellm-model-group") or model
     content = ""
     if outcome == "delivered":
         content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "") or ""
@@ -423,7 +426,7 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,$14,$15,$16)
             """,
             ledger_id, req.tenant_id, req.region or DEFAULT_REGION, req.agent, req.skill,
-            req.task_type, policy["rung"], model, priority, tokens_in, tokens_out, cost_usd,
+            req.task_type, policy["rung"], answered, priority, tokens_in, tokens_out, cost_usd,
             latency_ms, outcome, task_id, error,
         )
 
@@ -450,7 +453,7 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
         )
 
     return RouteResponse(
-        ledger_id=ledger_id, model=model, rung=policy["rung"], content=content,
+        ledger_id=ledger_id, model=answered, rung=policy["rung"], content=content,
         tokens_in=tokens_in, tokens_out=tokens_out, cost_usd=cost_usd, latency_ms=latency_ms,
     )
 

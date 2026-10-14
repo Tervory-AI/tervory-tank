@@ -1,10 +1,92 @@
 # The model roster LiteLLM exposes to Tank.
 # Tank's policy table refers to models by the `model_name` on the left.
 # Provider keys come from the environment (see .env.example); nothing secret lives here.
-# Prices checked 11 Oct 2026 against platform.claude.com; DeepSeek/OpenAI entries must be
-# confirmed on the provider's page before the policy table routes to them.
+#
+# 14 Oct 2026: the funded providers (OpenAI, Google, xAI) carry the work over their APIs, never
+# OAuth sign-ins. Anthropic stays listed and returns when the founder tops up; any policy row
+# still pointing at an Anthropic name falls back to the funded models (see `fallbacks`).
+# Prices are USD per token (per-million / 1e6), from each provider's pricing page on 14 Oct 2026:
+#   OpenAI GPT-6: platform.openai.com/docs/pricing; Gemini: ai.google.dev/pricing; xAI: docs.x.ai/developers/pricing.
+# China-hosted providers (DeepSeek, Moonshot/Kimi) are deliberately absent: they may be added for
+# platform-only work later, never for legal tenants or South African personal data.
 
 model_list:
+  # ---------- OpenAI (API key, Responses/Chat) ----------
+  - model_name: luna            # cheap, fast workhorse: classify, extract, short drafts
+    litellm_params:
+      model: openai/gpt-6-luna
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      input_cost_per_token: 0.0000001
+      output_cost_per_token: 0.0000005
+
+  - model_name: sol             # analysis and longer writing
+    litellm_params:
+      model: openai/gpt-6-sol
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      input_cost_per_token: 0.000002
+      output_cost_per_token: 0.00001
+
+  - model_name: astra           # hardest reasoning only
+    litellm_params:
+      model: openai/gpt-6-astra
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      input_cost_per_token: 0.00001
+      output_cost_per_token: 0.00005
+
+  # ---------- Google Gemini (API key, paid tier: no training on our data) ----------
+  - model_name: flash-lite
+    litellm_params:
+      model: gemini/gemini-3.5-flash-lite
+      api_key: os.environ/GEMINI_API_KEY
+    model_info:
+      input_cost_per_token: 0.0000003
+      output_cost_per_token: 0.0000025
+
+  - model_name: flash
+    litellm_params:
+      model: gemini/gemini-3.8-flash
+      api_key: os.environ/GEMINI_API_KEY
+    model_info:
+      input_cost_per_token: 0.00000075     # introductory until 31 Dec 2026, then doubles
+      output_cost_per_token: 0.00000375
+
+  - model_name: argon
+    litellm_params:
+      model: gemini/gemini-4-argon
+      api_key: os.environ/GEMINI_API_KEY
+    model_info:
+      input_cost_per_token: 0.000002
+      output_cost_per_token: 0.00001
+
+  # ---------- xAI Grok (API key) ----------
+  - model_name: grok
+    litellm_params:
+      model: xai/grok-4.3
+      api_key: os.environ/XAI_API_KEY
+    model_info:
+      input_cost_per_token: 0.00000125
+      output_cost_per_token: 0.0000025
+
+  - model_name: grok-top
+    litellm_params:
+      model: xai/grok-4.7
+      api_key: os.environ/XAI_API_KEY
+    model_info:
+      input_cost_per_token: 0.000002
+      output_cost_per_token: 0.000006
+
+  - model_name: grok-build      # code work
+    litellm_params:
+      model: xai/grok-build-0.1
+      api_key: os.environ/XAI_API_KEY
+    model_info:
+      input_cost_per_token: 0.000001
+      output_cost_per_token: 0.000002
+
+  # ---------- Anthropic (returns after the top-up) ----------
   - model_name: haiku
     litellm_params:
       model: anthropic/claude-haiku-5-5
@@ -29,15 +111,25 @@ model_list:
       input_cost_per_token: 0.000004
       output_cost_per_token: 0.00002
 
-  # Enable once DEEPSEEK_API_KEY is set and the price is confirmed on api-docs.deepseek.com.
-  # - model_name: deepseek-flash
-  #   litellm_params:
-  #     model: deepseek/deepseek-v4-flash
-  #     api_key: os.environ/DEEPSEEK_API_KEY
-
 litellm_settings:
   drop_params: true
   set_verbose: false
+  num_retries: 1
+  # If a provider refuses (no credit, outage, unknown model), try the next one, cheapest first.
+  # Tank's ledger records the model that actually answered.
+  fallbacks:
+    - luna: ["flash-lite", "grok"]
+    - flash-lite: ["luna", "grok"]
+    - flash: ["luna", "grok"]
+    - sol: ["argon", "grok-top"]
+    - argon: ["sol", "grok-top"]
+    - astra: ["argon", "grok-top"]
+    - grok: ["luna", "flash-lite"]
+    - grok-top: ["sol", "argon"]
+    - grok-build: ["sol", "argon"]
+    - haiku: ["luna", "flash-lite", "grok"]
+    - sonnet: ["sol", "argon", "grok-top"]
+    - opus: ["astra", "argon", "grok-top"]
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY

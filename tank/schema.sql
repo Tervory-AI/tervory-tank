@@ -331,3 +331,43 @@ CREATE INDEX IF NOT EXISTS ledger_ts ON tank.ledger (ts);
 
 -- Two prices for the same outcome and effective date: the one saved last wins.
 ALTER TABLE tank.price_book ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now();
+
+-- Market Lab's research skill (C9) routes through this row; without it Tank answers 404 "no policy".
+INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_tokens_out, system_prompt) VALUES
+  ('market.research', 1, 'sol', 'standard', 'tenant', 2048,
+   'You answer market questions briefly. Every claim carries a source URL and a date from the material given; say "unknown" rather than guess.')
+ON CONFLICT DO NOTHING;
+
+-- ---------- 14 Oct 2026: work moves to the funded providers (OpenAI, Google, xAI) by API ----------
+-- One-time switch, recorded in policy_log so it never runs twice and never overrides a later
+-- operator choice (e.g. moving rows back to Anthropic after the top-up via PUT /v1/policy or rollback).
+-- previous_model keeps the Anthropic name, so POST .../rollback returns a row to it in one call.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM tank.policy_log WHERE action = 'switch' AND detail->>'id' = '2026-10-14-funded-providers') THEN
+    INSERT INTO tank.policy_log (task_type, action, from_model, to_model, by_user, detail)
+    SELECT task_type, 'switch', model,
+           CASE WHEN task_type = 'tank.judge' THEN 'flash-lite'
+                WHEN model = 'haiku' THEN 'luna' WHEN model = 'sonnet' THEN 'sol' ELSE 'astra' END,
+           'claude', '{"id": "2026-10-14-funded-providers"}'::jsonb
+    FROM tank.policy WHERE tenant_id IS NULL AND model IN ('haiku', 'sonnet', 'opus');
+
+    -- The judge sits on a different provider from the models it grades.
+    UPDATE tank.policy SET previous_model = model, model = 'flash-lite', updated_at = now()
+    WHERE tenant_id IS NULL AND task_type = 'tank.judge' AND model IN ('haiku', 'sonnet', 'opus');
+
+    UPDATE tank.policy SET previous_model = model,
+           model = CASE model WHEN 'haiku' THEN 'luna' WHEN 'sonnet' THEN 'sol' ELSE 'astra' END,
+           updated_at = now()
+    WHERE tenant_id IS NULL AND model IN ('haiku', 'sonnet', 'opus');
+
+    UPDATE tank.policy SET candidate_model =
+           CASE candidate_model WHEN 'haiku' THEN 'luna' WHEN 'sonnet' THEN 'sol' ELSE 'astra' END
+    WHERE tenant_id IS NULL AND candidate_model IN ('haiku', 'sonnet', 'opus');
+
+    -- Marker row, so the block is a no-op from now on even if no rows matched.
+    INSERT INTO tank.policy_log (task_type, action, by_user, detail)
+    VALUES ('*', 'switch', 'claude', '{"id": "2026-10-14-funded-providers", "marker": true}'::jsonb);
+  END IF;
+END
+$$;
