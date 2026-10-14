@@ -34,7 +34,7 @@ Tank does not wait for a person to pick a candidate. For each task type it **sea
 
 ## 3. Promotion is evidence plus approval
 - A code candidate is **proven** when it has at least `min_shadow_samples` shadow pairs and agreement at or above `eval_threshold`, with no field below its own floor, and client rejects at or under `max_reject_rate`.
-- Promotion follows the task's **approval policy** (C14): `ask` (an admin promotes), or `auto` (Tank promotes by itself when the evidence clears a **stricter auto bar**: at least 2× `min_shadow_samples`, agreement at least 0.02 above the threshold, every field above its floor). An auto-promoted task is watched: if client rejects or live agreement drop below the bar in the next 7 days, Tank **rolls back by itself** and notifies the admins. Manual promotion stays available (`POST /v1/graduation/{task_type}/promote`). After promotion the task's policy points to the skill, and **no model is called** for that task. `rollback` restores the model in one call. Both are logged in `policy_log`.
+- When a candidate is proven (at least `min_shadow_samples` pairs, agreement at or above the threshold, every field above its floor), Tank **promotes it by itself** and keeps watching: if client rejects or live agreement fall below the bar in the next 7 days, Tank **rolls back by itself** and notes it in the founder console. After promotion the task's policy points to the skill, and **no model is called** for that task. Manual `promote` / `rollback` stay available. Both are logged in `policy_log`.
 - The founder console shows each task's ladder: paid model → cheaper model → code, with samples, agreement, cost per call before and after, and the projected monthly saving.
 
 ## 4. Paid tools, same loop
