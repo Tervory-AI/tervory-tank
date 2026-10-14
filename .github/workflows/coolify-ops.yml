@@ -108,7 +108,7 @@ jobs:
 
             deploy)
               [ -n "$APP" ] || fail "deploy" "app is required"
-              code=$(api GET "/deploy?uuid=$APP&force=false")
+              code=$(api POST "/deploy?uuid=$APP&force=false")
               case "$code" in 2*) note "Deploy queued HTTP $code" "$(jq -c '.deployments // .' out.json | head -c 300)" ;;
                               *) fail "deploy HTTP $code" "$(head -c 300 out.json)" ;; esac
               ;;
