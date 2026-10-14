@@ -4,6 +4,18 @@
 
 **Lane:** this brief allows changes to the shadow/graduation code in `tank/main.py` (`_shadow`, `/v1/graduation/*`), `tank/schema.sql` (additive), `workspace/app/admin/*` (founder console graduation view), `workspace/lib/admin.ts`, and new tests. Not the router's model call, not the queue worker.
 
+## The ladder (rungs as stored in `tank.ledger.rung` / `tank.policy.rung`)
+| Rung | What answers | Cost per call | Status |
+| --- | --- | --- | --- |
+| 1 | A paid frontier model: the cheapest one with funds, picked live per call | paid | built (PR #41) |
+| 2 | An owned model: open-weight, running on our own server | server cost only | not built (T-7) |
+| 3 | Code: an approved skill with no model | zero | this brief |
+| 4 | Cache: the same question already answered (tenant- or platform-scoped) | zero, no call | built (exact match) |
+
+Every task starts where it must and moves **down** only on evidence plus approval. The cache sits in front of every rung. This brief adds:
+- **Rung 4, semantic cache (optional per task):** a near-identical question (embedding similarity from Hermes' local embedding model, no paid call, threshold ≥ 0.97, same tenant scope rules) is answered from the cache. It is proven by the same shadow loop before it is switched on for a task.
+- **Rung 3 promotion** (sections 1–3 below), and the search in 1b covers rungs 1 and 3 together. Rung 2 joins the search when T-7 adds owned models.
+
 ## 1. Candidates can be code
 - `tank.policy.candidate_model` may also hold `skill:<id>@<version>`, e.g. `skill:base.extract@2.0.0`. A code candidate must be an **approved** skill with no `task_type`, so it can never call a model.
 - On a shadowed call, Tank runs the code skill on the same input, in the background, after the primary has answered. The client only ever receives the primary's answer while shadowing.
