@@ -7,24 +7,26 @@
 # - The Coolify token lives only in the repo secret COOLIFY_TOKEN and is never printed.
 # - COOLIFY_URL (repo variable, default https://coolify.tervory.com) must be https://, so the token never crosses the internet in clear text.
 # - env-refs only ever writes references of the form {{project.NAME}}, never a secret value.
+# - room-setup generates a room's secrets inside this job (masked, never printed, never seen by anyone)
+#   and writes them straight into Coolify on the main app and the room. Existing values are never replaced.
 name: coolify-ops
 
 on:
   workflow_dispatch:
     inputs:
       op:
-        description: "status | env-refs | create-room | deploy"
+        description: "status | env-refs | create-room | deploy | room-setup"
         required: true
       app:
         description: "Application uuid (env-refs, deploy)"
         required: false
         default: ""
       names:
-        description: "env-refs: comma-separated variable names to point at {{project.NAME}}"
+        description: "env-refs: names to point at {{project.NAME}}. room-setup: extra room-only secrets to generate (e.g. RIG_ADMIN_KEY)"
         required: false
         default: ""
       room:
-        description: "create-room: agent folder name under agents/ (e.g. radix)"
+        description: "create-room / room-setup: agent folder name under agents/ (e.g. rig)"
         required: false
         default: ""
 
@@ -45,17 +47,23 @@ jobs:
       PROJECT_UUID: dguxczrbmbqvezo3qib0twge
       ENVIRONMENT_NAME: production
     steps:
+      - uses: actions/checkout@v4
       - name: Check inputs
         run: |
           case "$COOLIFY_URL" in https://*) ;; *) echo "::error::COOLIFY_URL must be an https:// address"; exit 1 ;; esac
           test -n "$COOLIFY_TOKEN" || { echo "::error::COOLIFY_TOKEN secret is missing"; exit 1; }
-          case "$OP" in status|env-refs|create-room|deploy) ;; *) echo "::error::unknown op $OP"; exit 1 ;; esac
+          case "$OP" in status|env-refs|create-room|deploy|room-setup) ;; *) echo "::error::unknown op $OP"; exit 1 ;; esac
           for v in "$APP" "$ROOM"; do
             case "$v" in *[!A-Za-z0-9_-]*) echo "::error::bad id: $v"; exit 1 ;; esac
           done
           case "$NAMES" in *[!A-Z0-9_,]*) echo "::error::names must be UPPER_CASE, comma-separated"; exit 1 ;; esac
 
+      - name: Room setup (one op, nothing by hand)
+        if: inputs.op == 'room-setup'
+        run: python3 .github/scripts/room_setup.py
+
       - name: Run
+        if: inputs.op != 'room-setup'
         run: |
           api() {  # method path [json-body-file]
             if [ -n "${3:-}" ]; then

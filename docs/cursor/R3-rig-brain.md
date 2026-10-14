@@ -4,7 +4,7 @@
 
 **Goal:** the widget (`Tervory-AI/tervory-rig`) stops using sample data and talks to a live Rig API, loaded with the catalogues of the brands we already work with, so we can test with real products before any retailer integrates. Depends on C6/C7 (live). Read `tervory-rig/AGENTS.md` and `tervory-rig/docs/api.md` first: the API contract there is fixed; build to it exactly.
 
-**Files you may change:** `agents/rig/` (new, from `agents/_template/`), `tank/skills/rig.*` (1.0.0 each, evals + CHANGELOG), `docker-compose.yml` (additive: corridor `tervory-gw-rig` on tank/postgres/hermes; `TANK_KEY_RIG` on tank **and** hermes; `AGENT_DB_PASSWORD_RIG` on agent-roles), `.env.example` (names only), `agents/README.md` (one row), new tests under `tests/`.
+**Files you may change:** `agents/rig/` (new, from `agents/_template/`), `tank/skills/rig.*` (1.0.0 each, evals + CHANGELOG), `docker-compose.yml` (additive: declare corridor `tervory-gw-rig` as a compose-managed network per ROOMS.md Deploy order step 1, and join it to tank/postgres/hermes; `TANK_KEY_RIG` on tank **and** hermes; `AGENT_DB_PASSWORD_RIG` on agent-roles), `.env.example` (names only), `agents/README.md` (one row), new tests under `tests/`.
 
 ## The room
 - Corridor `tervory-gw-rig`, login `agent_rig`, key `TANK_KEY_RIG`. Public domain `rig.tervory.com` (the only agent with one; Claude sets it in Coolify). `mem_limit 512m`.
