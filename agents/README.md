@@ -13,7 +13,7 @@ The chassis knows no industry. Vocabulary, field names, and scoring stay in an e
 - A scheduler over `agent_<name>.schedules`. Five-field cron, inside the process. No system cron.
 - Files under `/data/<tenant_id>/`. `..` is rejected.
 - A Tank client that sends only this box's key. No model keys in the box.
-- `remember` / `recall` / `forget` — empty until Hermes (C7).
+- `remember` / `recall` / `forget` — call Hermes (`http://hermes:8000`) with the agent's own key; memory is private to this agent and one tenant.
 - `render(url, session)` — empty until Tiger's browser pool (C8).
 
 Logs are JSON lines on stdout: agent, tenant_id, job id. Keys are never logged.
@@ -66,9 +66,9 @@ Do these in this order. The main stack will not start if the gateway network is 
 2. In the new `app.py`, set the default `AGENT_NAME`, add job handlers, and add any schedules. Handlers receive a `JobContext` and return a dict. Do not put industry words in this code.
 3. Copy `agents/_template/docker-compose.yml` beside the new app. Point the build at the new folder. Set `AGENT_NAME`, `TANK_KEY` from `TANK_KEY_<NAME>`, and `DATABASE_URL` with user `agent_<name>` and `AGENT_DB_PASSWORD_<NAME>`. Keep `mem_limit: 512m` and `cpus: 0.5`. The only network is external `tervory-gw-<name>`.
 4. On the server, once: `docker network create tervory-gw-<name>`.
-5. In the root `docker-compose.yml`, add that external network, and attach `tank` and `postgres` only. Do not attach Workspace, Redis, Qdrant, LiteLLM, SearXNG, Tiger, or `agent-roles`.
-6. Give Tank `TANK_KEY_<NAME>: ${TANK_KEY_<NAME>:-}`. Tank hashes it (SHA-256) into `tank.agent_keys`. Give `agent-roles` `AGENT_DB_PASSWORD_<NAME>: ${AGENT_DB_PASSWORD_<NAME>:-}` (hex, from `openssl rand -hex 24`). Neither value is written to a log.
+5. In the root `docker-compose.yml`, add that external network, and attach `tank`, `postgres` and `hermes` only. Do not attach Workspace, Redis, Qdrant, LiteLLM, SearXNG, Tiger, or `agent-roles`.
+6. Give Tank and Hermes `TANK_KEY_<NAME>: ${TANK_KEY_<NAME>:-}`. Tank hashes it (SHA-256) into `tank.agent_keys`. Give `agent-roles` `AGENT_DB_PASSWORD_<NAME>: ${AGENT_DB_PASSWORD_<NAME>:-}` (hex, from `openssl rand -hex 24`). Neither value is written to a log.
 7. Add both names to `.env.example` with a one-line comment. Put the real values in Coolify only. The agent resource gets its own password and its own Tank key, and no Postgres superuser password. Its Coolify base directory is `/agents/<name>` and its compose location is `/docker-compose.yml`. Connect to Predefined Network stays off.
 8. Open a PR. Do not push to `main`.
 
-The template's check is a `ping` job and a heartbeat every five minutes (`*/5 * * * *`) on the platform tenant. After deploy, `GET /health` on the template box is ok, and a ping job reaches `done`.
+The template's check is a `ping` job and a heartbeat every five minutes (`*/5 * * * *`) on the platform tenant. After deploy, `GET /health` on the template box is ok, a ping job reaches `done`, and each heartbeat is folded into one Hermes memory (kind `heartbeat`) whose `seen` count rises every five minutes.

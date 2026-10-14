@@ -6,6 +6,7 @@ not sent to an embedding API.
 
 from __future__ import annotations
 
+import os
 from typing import Protocol
 
 
@@ -24,7 +25,11 @@ class FastEmbedder:
             return
         from fastembed import TextEmbedding
 
-        model = TextEmbedding(model_name=self.model_name, cuda=False)
+        model = TextEmbedding(
+            model_name=self.model_name,
+            cache_dir=os.environ.get("FASTEMBED_CACHE_PATH") or None,
+            cuda=False,
+        )
         sample = next(iter(model.embed(["."])))
         self.dim = int(len(sample))
         self._model = model
