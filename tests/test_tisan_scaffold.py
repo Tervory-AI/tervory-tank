@@ -168,13 +168,25 @@ async def test_two_brands_write_different_tokens_for_their_own_tenants(tmp_path:
     assert "#001840" not in tsx
     assert "#E80008" not in tsx
     assert "alt={`${site.name} logo`}" in tsx
+    with tarfile.open(north["archive"], "r:gz") as tar:
+        contact_spec = tar.extractfile("e2e/contact.spec.ts")
+        assert contact_spec is not None
+        assert 'goto("/contact")' in contact_spec.read().decode("utf-8")
 
     with tarfile.open(harbour["archive"], "r:gz") as tar:
         notes = tar.extractfile("app/notes/page.tsx")
         assert notes is not None
         assert "Notes" in notes.read().decode("utf-8")
-        assert "app/contact/page.tsx" not in tar.getnames()
-        assert "app/privacy/page.tsx" not in tar.getnames()
+        names = tar.getnames()
+        assert "app/contact/page.tsx" not in names
+        assert "app/privacy/page.tsx" not in names
+        assert "e2e/contact.spec.ts" not in names
+        assert "e2e/home.spec.ts" in names
+        for name in names:
+            if name.startswith("e2e/"):
+                body = tar.extractfile(name)
+                assert body is not None
+                assert 'goto("/contact")' not in body.read().decode("utf-8")
         theme = tar.extractfile("tailwind.config.ts")
         assert theme is not None
         assert "--colour-shore" in theme.read().decode("utf-8")

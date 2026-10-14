@@ -39,7 +39,6 @@ ENV AGENT_NAME=tisan \
     TISAN_NPM_CACHE=/opt/npm-cache \
     TISAN_NPM_OFFLINE=1 \
     NEXT_TELEMETRY_DISABLED=1 \
-    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
-    NODE_OPTIONS=--max-old-space-size=192
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 EXPOSE 8000
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]

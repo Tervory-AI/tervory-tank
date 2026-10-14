@@ -289,6 +289,8 @@ def write_project(brief: dict[str, Any], dest: Path) -> None:
     if "contact" not in keep:
         shutil.rmtree(dest / "app" / "contact", ignore_errors=True)
         shutil.rmtree(dest / "app" / "api", ignore_errors=True)
+        # The contact spec opens /contact. A site without that page must not ship it.
+        (dest / "e2e" / "contact.spec.ts").unlink(missing_ok=True)
     for page in brief["pages"]:
         if page in _STANDARD_PAGES:
             continue
