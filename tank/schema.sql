@@ -406,3 +406,21 @@ INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_toke
   ('zenas.scope', 1, 'flash-lite', 'urgent', 'tenant', 400,
    'You classify a request for Zenas. Reply with strict JSON only: {"area":"<id>","jurisdiction":"us|za|both"}. Use an allowed area id or "none". Do not give legal advice. Do not help with criminal law.')
 ON CONFLICT DO NOTHING;
+
+-- ---------- 14 Oct 2026: platform rows start at the cheapest model of their tier ----------
+-- With cheapest-available fallbacks in litellm/config.yaml, each row names the cheapest model and the
+-- gateway walks up the price list to the first provider with funds. The judge keeps its own model.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM tank.policy_log WHERE action = 'switch' AND detail->>'id' = '2026-10-14-cheapest-available') THEN
+    INSERT INTO tank.policy_log (task_type, action, from_model, to_model, by_user, detail)
+    SELECT task_type, 'switch', model, CASE model WHEN 'flash-lite' THEN 'luna' ELSE 'grok-top' END,
+           'claude', '{"id": "2026-10-14-cheapest-available"}'::jsonb
+    FROM tank.policy WHERE tenant_id IS NULL AND task_type <> 'tank.judge' AND model IN ('flash-lite', 'argon');
+    UPDATE tank.policy SET model = CASE model WHEN 'flash-lite' THEN 'luna' ELSE 'grok-top' END, updated_at = now()
+    WHERE tenant_id IS NULL AND task_type <> 'tank.judge' AND model IN ('flash-lite', 'argon');
+    INSERT INTO tank.policy_log (task_type, action, by_user, detail)
+    VALUES ('*', 'switch', 'claude', '{"id": "2026-10-14-cheapest-available", "marker": true}'::jsonb);
+  END IF;
+END
+$$;

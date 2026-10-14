@@ -409,8 +409,8 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
     tokens_out = int(usage.get("completion_tokens") or 0)
     # LiteLLM reports the cost it computed from config.yaml prices in this header.
     cost_usd = float(r.headers.get("x-litellm-response-cost") or 0.0)
-    # When a provider refuses, LiteLLM falls back to the next roster model (litellm/config.yaml);
-    # the ledger records the model that actually answered, so spend is booked to the right provider.
+    # The gateway picks the cheapest model with funds (litellm/config.yaml); the ledger records the
+    # roster model that actually answered, so spend is booked to the right provider.
     answered = r.headers.get("x-litellm-model-group") or model
     content = ""
     if outcome == "delivered":

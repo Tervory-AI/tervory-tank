@@ -24,12 +24,20 @@ def test_no_china_hosted_provider_in_the_roster() -> None:
         assert provider not in {"deepseek", "moonshot"}, m["model_name"]
 
 
-def test_fallbacks_name_roster_models_only() -> None:
-    for entry in CONFIG["litellm_settings"]["fallbacks"]:
-        for primary, chain in entry.items():
-            assert primary in NAMES
-            assert chain and all(name in NAMES for name in chain), primary
-            assert primary not in chain
+def _price(name: str) -> float:
+    info = next(m["model_info"] for m in CONFIG["model_list"] if m["model_name"] == name)
+    return info["input_cost_per_token"] + info["output_cost_per_token"]
+
+
+def test_fallbacks_run_cheapest_available_first() -> None:
+    """Founder design: the cheapest funded model does the job; chains are sorted by price."""
+    chains = {k: v for entry in CONFIG["litellm_settings"]["fallbacks"] for k, v in entry.items()}
+    assert chains, "fallbacks are the cheapest-available mechanism"
+    for primary, chain in chains.items():
+        assert primary in NAMES and chain and all(n in NAMES for n in chain) and primary not in chain
+        prices = [_price(n) for n in chain]
+        assert prices == sorted(prices), f"{primary}: chain not cheapest-first"
+    assert CONFIG.get("router_settings", {}).get("cooldown_time"), "empty providers must be skipped"
 
 
 def test_policy_seeds_and_the_switch_name_roster_models() -> None:
@@ -38,10 +46,3 @@ def test_policy_seeds_and_the_switch_name_roster_models() -> None:
     assert seeded and switched
     assert seeded <= NAMES, seeded - NAMES
     assert switched <= NAMES, switched - NAMES
-
-
-def test_anthropic_names_fall_back_to_funded_providers() -> None:
-    chains = {k: v for entry in CONFIG["litellm_settings"]["fallbacks"] for k, v in entry.items()}
-    providers = {m["model_name"]: m["litellm_params"]["model"].split("/", 1)[0] for m in CONFIG["model_list"]}
-    for name in ("haiku", "sonnet", "opus"):
-        assert all(providers[n] != "anthropic" for n in chains[name]), name

@@ -26,6 +26,8 @@ Spec: Build Pack v2 (Claude Doc) and `README.md`.
 8. **Nothing installed on the founder's laptop.** Work as a cloud/background agent. The founder's laptop is a window only.
 9. **Core skills know no industry.** `base.*`, Tiger and Tank learn general skills (find a site, read a page, mine prices, track a series). Industry knowledge (vocabulary, field mappings, targets, scoring) lives only in an engine (`ffl.*` today). A new industry is a new engine plugged into the same core skills, never a fork of them. If a core skill needs industry words, the engine passes them in.
 
+10. **The ladder runs by itself; builders do not add cost.** At run time every step goes down the ladder automatically: free rungs first (code, cache, our own search and browser), then the cheapest available paid rung (any model with funds, Brave, a data vendor). No run waits for a person. At build time, a builder never adds a new paid service, key or provider, and never changes which paid routes a task uses, unless the brief says so; that is the founder's decision.
+
 ## Conventions
 - Plain English in the UI. No jargon, no hype words.
 - Brand: navy `#001840` (text, dark bands), red `#E80008` (the dot, one primary action, the accepted chip only), lines `#B8BFD0`, tint `#F4F6FB`. Headings Jost Light, body Inter, cost/meta lines JetBrains Mono. Logo files in `workspace/public/brand/` — use them as-is, never redraw the logo.

@@ -3,8 +3,7 @@
 # Provider keys come from the environment (see .env.example); nothing secret lives here.
 #
 # 14 Oct 2026: the funded providers (OpenAI, Google, xAI) carry the work over their APIs, never
-# OAuth sign-ins. Anthropic stays listed and returns when the founder tops up; any policy row
-# still pointing at an Anthropic name falls back to the funded models (see `fallbacks`).
+# OAuth sign-ins. A provider with no funds is skipped automatically; topping it up brings it back.
 # Prices are USD per token (per-million / 1e6), from each provider's pricing page on 14 Oct 2026:
 #   OpenAI GPT-6: platform.openai.com/docs/pricing; Gemini: ai.google.dev/pricing; xAI: docs.x.ai/developers/pricing.
 # China-hosted providers (DeepSeek, Moonshot/Kimi) are deliberately absent: they may be added for
@@ -114,22 +113,26 @@ model_list:
 litellm_settings:
   drop_params: true
   set_verbose: false
-  num_retries: 1
-  # If a provider refuses (no credit, outage, unknown model), try the next one, cheapest first.
-  # Tank's ledger records the model that actually answered.
+  num_retries: 0
+  # Cheapest AVAILABLE model, automatically (founder design): each chain runs cheapest first.
+  # A provider with no credit, no key or an outage fails fast and is cooled down, so the next
+  # cheapest funded provider does the job. Chains are sorted by price (input + output per token);
+  # tests/test_model_roster.py keeps them sorted. Every model here is approved for use; anything
+  # outside this roster (search APIs, data vendors) is a paid route that needs approval.
   fallbacks:
-    - luna: ["flash-lite", "grok"]
-    - flash-lite: ["luna", "grok"]
-    - flash: ["luna", "grok"]
-    - sol: ["argon", "grok-top"]
-    - argon: ["sol", "grok-top"]
-    - astra: ["argon", "grok-top"]
-    - grok: ["luna", "flash-lite"]
-    - grok-top: ["sol", "argon"]
-    - grok-build: ["sol", "argon"]
-    - haiku: ["luna", "flash-lite", "grok"]
-    - sonnet: ["sol", "argon", "grok-top"]
-    - opus: ["astra", "argon", "grok-top"]
+    - luna: ["haiku", "flash-lite", "grok", "flash"]
+    - haiku: ["luna", "flash-lite", "grok", "flash"]
+    - flash-lite: ["grok", "flash"]
+    - grok: ["flash"]
+    - grok-build: ["grok-top", "sol", "argon", "sonnet"]
+    - grok-top: ["sol", "argon", "sonnet"]
+    - sol: ["argon", "sonnet"]
+    - argon: ["sonnet"]
+    - opus: ["astra"]
+
+router_settings:
+  allowed_fails: 1          # one refusal (no credit / bad key) and that model is skipped...
+  cooldown_time: 300        # ...for five minutes, so empty providers do not slow every call
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
