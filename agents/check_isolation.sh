@@ -80,9 +80,13 @@ done
 # Tiger's browser is a neighbour only on tervory-gw-tiger. Every other
 # corridor must still be unable to resolve tiger.
 tiger_corridor=0
+radix_corridor=0
 for net in $(docker inspect -f '{{range $name, $net := .NetworkSettings.Networks}}{{$name}} {{end}}' "$container"); do
   if [ "$net" = "tervory-gw-tiger" ]; then
     tiger_corridor=1
+  fi
+  if [ "$net" = "tervory-gw-radix" ]; then
+    radix_corridor=1
   fi
 done
 for host in workspace redis qdrant litellm searxng tiger agent-other; do
@@ -130,6 +134,23 @@ except urllib.error.HTTPError:
   mark 0 "hermes answers"
 else
   mark 1 "hermes answers"
+fi
+
+# Radix's corridor is an internal network. A TCP connect to 1.1.1.1:443 must
+# fail. Every other corridor keeps the checks above and skips this one.
+if [ "$radix_corridor" -eq 1 ]; then
+  if docker exec "$container" python -c 'import socket
+try:
+    s = socket.create_connection(("1.1.1.1", 443), 5)
+except OSError:
+    raise SystemExit(1)
+else:
+    s.close()
+' >/dev/null 2>&1; then
+    mark 1 "internet is unreachable"
+  else
+    mark 0 "internet is unreachable"
+  fi
 fi
 
 # Network membership. Printed in full so a human can see who shares a network.
@@ -236,7 +257,7 @@ else
 fi
 
 # Database checks run inside the container so the password never reaches this script.
-docker exec -i "$container" python - <<'PY'
+if ! docker exec -i "$container" python - <<'PY'
 import asyncio
 import os
 import re
@@ -331,7 +352,7 @@ async def run() -> None:
 asyncio.run(run())
 raise SystemExit(1 if failed else 0)
 PY
-if [ "$?" -ne 0 ]; then
+then
   failed=1
 fi
 

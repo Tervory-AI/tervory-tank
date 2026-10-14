@@ -1,0 +1,45 @@
+# Radix, the security auditor. Deploy this file as its own Coolify resource.
+# Build context is agents/ (the parent of this file), because the chassis lives there.
+# The only network is the external gateway. Coolify's own network for this resource
+# contains just this service, so it cannot see the main stack.
+#
+# tervory-gw-radix is an internal network, created once on the server with:
+#   docker network create --internal tervory-gw-radix
+# Radix can reach Tank, Postgres, and Hermes, and nothing else. No internet.
+# RADIX_ALLOWED_HOSTS stays empty until an egress proxy enforces the same list.
+
+services:
+  agent-radix:
+    build:
+      context: ..
+      dockerfile: radix/Dockerfile
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.25
+    environment:
+      AGENT_NAME: radix
+      DATABASE_URL: postgresql://agent_radix:${AGENT_DB_PASSWORD_RADIX}@postgres:5432/${POSTGRES_DB:-tervory}
+      TANK_URL: http://tank:8000
+      TANK_KEY: ${TANK_KEY_RADIX:-}
+      HERMES_URL: http://hermes:8000
+      RADIX_ALLOWED_HOSTS: ${RADIX_ALLOWED_HOSTS:-}
+      DATA_DIR: /data
+    volumes:
+      - agent_radix_data:/data
+    networks:
+      - gw
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    expose:
+      - "8000"
+
+volumes:
+  agent_radix_data:
+
+networks:
+  gw:
+    external: true
+    name: tervory-gw-radix

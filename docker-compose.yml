@@ -26,6 +26,8 @@ services:
       - tervory-gw-template
       - tervory-gw-tiger
       - tervory-gw-market_lab
+      - tervory-gw-radix
+      - tervory-gw-tisan
 
   redis:
     image: redis:7
@@ -56,6 +58,8 @@ services:
       TANK_KEY_TEMPLATE: ${TANK_KEY_TEMPLATE:-}
       TANK_KEY_TIGER: ${TANK_KEY_TIGER:-}
       TANK_KEY_MARKET_LAB: ${TANK_KEY_MARKET_LAB:-}
+      TANK_KEY_RADIX: ${TANK_KEY_RADIX:-}
+      TANK_KEY_TISAN: ${TANK_KEY_TISAN:-}
       HERMES_EMBED_MODEL: ${HERMES_EMBED_MODEL:-BAAI/bge-small-en-v1.5}
     depends_on:
       - qdrant
@@ -64,6 +68,8 @@ services:
       - tervory-gw-template
       - tervory-gw-tiger
       - tervory-gw-market_lab
+      - tervory-gw-radix
+      - tervory-gw-tisan
     expose:
       - "8000"
     healthcheck:
@@ -125,6 +131,8 @@ services:
       TANK_KEY_TEMPLATE: ${TANK_KEY_TEMPLATE:-}
       TANK_KEY_TIGER: ${TANK_KEY_TIGER:-}
       TANK_KEY_MARKET_LAB: ${TANK_KEY_MARKET_LAB:-}
+      TANK_KEY_RADIX: ${TANK_KEY_RADIX:-}
+      TANK_KEY_TISAN: ${TANK_KEY_TISAN:-}
       TANK_REGION: ${TANK_REGION:-us-east}
       SEARXNG_URL: http://searxng:8080
       TIGER_URL: http://tiger:3000
@@ -139,6 +147,8 @@ services:
       - tervory-gw-template
       - tervory-gw-tiger
       - tervory-gw-market_lab
+      - tervory-gw-radix
+      - tervory-gw-tisan
     expose:
       - "8000"
 
@@ -156,6 +166,8 @@ services:
       AGENT_DB_PASSWORD_TEMPLATE: ${AGENT_DB_PASSWORD_TEMPLATE:-}
       AGENT_DB_PASSWORD_TIGER: ${AGENT_DB_PASSWORD_TIGER:-}
       AGENT_DB_PASSWORD_MARKET_LAB: ${AGENT_DB_PASSWORD_MARKET_LAB:-}
+      AGENT_DB_PASSWORD_RADIX: ${AGENT_DB_PASSWORD_RADIX:-}
+      AGENT_DB_PASSWORD_TISAN: ${AGENT_DB_PASSWORD_TISAN:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -201,3 +213,13 @@ networks:
   tervory-gw-market_lab:
     external: true
     name: tervory-gw-market_lab
+  # Internal network, no internet. Created once on the server:
+  #   docker network create --internal tervory-gw-radix
+  # Radix reaches Tank, Postgres, and Hermes, and nothing else.
+  tervory-gw-radix:
+    external: true
+    name: tervory-gw-radix
+  # Created once on the server: docker network create tervory-gw-tisan
+  tervory-gw-tisan:
+    external: true
+    name: tervory-gw-tisan

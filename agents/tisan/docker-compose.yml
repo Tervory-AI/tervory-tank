@@ -1,0 +1,40 @@
+# Tisan, the developer and designer. Deploy this file as its own Coolify resource.
+# Build context is agents/ (the parent of this file), because the chassis lives there.
+# The only network is the external gateway. Coolify's own network for this resource
+# contains just this service, so it cannot see the main stack.
+# Created once on the server: docker network create tervory-gw-tisan
+
+services:
+  agent-tisan:
+    build:
+      context: ..
+      dockerfile: tisan/Dockerfile
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.25
+    environment:
+      AGENT_NAME: tisan
+      DATABASE_URL: postgresql://agent_tisan:${AGENT_DB_PASSWORD_TISAN}@postgres:5432/${POSTGRES_DB:-tervory}
+      TANK_URL: http://tank:8000
+      TANK_KEY: ${TANK_KEY_TISAN:-}
+      HERMES_URL: http://hermes:8000
+      DATA_DIR: /data
+    volumes:
+      - agent_tisan_data:/data
+    networks:
+      - gw
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    expose:
+      - "8000"
+
+volumes:
+  agent_tisan_data:
+
+networks:
+  gw:
+    external: true
+    name: tervory-gw-tisan

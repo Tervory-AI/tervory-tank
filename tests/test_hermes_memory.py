@@ -431,6 +431,8 @@ def test_hermes_joins_each_agent_corridor() -> None:
         "tervory-gw-template",
         "tervory-gw-tiger",
         "tervory-gw-market_lab",
+        "tervory-gw-radix",
+        "tervory-gw-tisan",
     }
     assert "ports" not in hermes
     env = hermes["environment"]
