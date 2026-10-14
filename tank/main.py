@@ -66,9 +66,9 @@ _packages: dict[tuple[str, str], skala.SkillPackage] = {}
 SKILL_ENV = {k: v for k, v in {"SEARXNG_URL": os.environ.get("SEARXNG_URL", ""),
                                 "TIGER_URL": os.environ.get("TIGER_URL", "")}.items() if v}
 
-# Paid routes are their own step on the ladder: OFF unless the founder sets them to auto.
-# A skill only ever sees a paid key when its route is approved (tank.paid_routes, mode='auto').
-# Showing an agent an easier paid route it was not approved for is exactly what this prevents.
+# Paid routes are their own rung on the ladder (tank.paid_routes): free rungs run automatically;
+# a paid rung pauses for admin approval unless its mode is 'auto'. A skill only ever sees a paid
+# key when its rung may run, so an agent cannot take an easier paid route it was not approved for.
 PAID_ROUTE_KEYS = {"search.brave": ("BRAVE_API_KEY", os.environ.get("BRAVE_API_KEY", ""))}
 _paid_route_mode: dict[str, str] = {}
 
@@ -300,7 +300,7 @@ async def health() -> dict[str, Any]:
 # ---------- paid routes (founder approval) ----------
 
 class PaidRouteMode(BaseModel):
-    mode: str            # off | auto
+    mode: str            # off | approve | auto
     by: str              # who approved, recorded in policy_log
 
 
@@ -316,8 +316,8 @@ async def set_paid_route(route: str, body: PaidRouteMode, agent: str | None = De
     """Only the Workspace/founder key may change a paid route; agents never can."""
     if agent is not None:
         raise HTTPException(status_code=403, detail="agents cannot change paid routes")
-    if body.mode not in ("off", "auto"):
-        raise HTTPException(status_code=400, detail="mode must be off or auto")
+    if body.mode not in ("off", "approve", "auto"):
+        raise HTTPException(status_code=400, detail="mode must be off, approve or auto")
     async with pool().acquire() as conn:
         row = await conn.fetchrow("SELECT mode FROM tank.paid_routes WHERE route=$1", route)
         if row is None:

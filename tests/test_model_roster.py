@@ -57,4 +57,4 @@ def test_brave_key_reaches_skills_only_when_route_is_auto() -> None:
     assert "env=skill_env()" in src
     schema = SCHEMA
     assert "CREATE TABLE IF NOT EXISTS tank.paid_routes" in schema
-    assert "DEFAULT 'off'" in schema
+    assert "DEFAULT 'approve'" in schema
