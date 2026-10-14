@@ -39,7 +39,7 @@ jobs:
           file="docs/cursor/prompts/$TASK.md"
           test -f "$file" || { echo "no prompt at $file"; exit 1; }
           jq -n --rawfile text "$file" --arg repo "$REPO_URL" --arg ref "$REF" \
-            '{prompt: {text: $text}, source: {repository: $repo, ref: $ref}, target: {autoCreatePr: true}}' > body.json
+            '{prompt: {text: $text}, source: {repository: $repo, ref: $ref}}' > body.json
 
       - name: Launch the Cursor agent
         env:
