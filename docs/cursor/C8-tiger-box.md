@@ -8,7 +8,7 @@
 
 **Files you may change:** `tiger/` (the existing browser service), `agents/tiger/` (new agent from the template), `tank/skills/tiger.*` (new skills, version 1.0.0 each with evals and CHANGELOG), `docker-compose.yml` (additive), `.env.example` (names only), `agents/check_isolation.sh` (allow `tiger` on Tiger's corridor only), new tests under `tests/`.
 
-**Founder decision (13 Oct): no bot-evasion.** Tiger never solves CAPTCHAs, never uses CAPTCHA-solving services or proxy pools to dodge blocks, never disguises itself. If a site actively blocks or challenges it, Tiger records `blocked` for that URL and moves on.
+**No bot-evasion (same rule as the browser pool above; the founder may revisit it).** Tiger never solves CAPTCHAs, never uses CAPTCHA-solving services or proxy pools to dodge blocks, never disguises itself. If a site actively blocks or challenges it, Tiger records `blocked` for that URL and moves on.
 
 ## Browser pool (`tiger/`)
 - Keep `POST /render` working exactly as today (find_site and scrape_site use it).
