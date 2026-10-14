@@ -8,6 +8,14 @@
 - `tank.policy.candidate_model` may also hold `skill:<id>@<version>`, e.g. `skill:base.extract@2.0.0`. A code candidate must be an **approved** skill with no `task_type`, so it can never call a model.
 - On a shadowed call, Tank runs the code skill on the same input, in the background, after the primary has answered. The client only ever receives the primary's answer while shadowing.
 
+## 1b. Search every available model for the cheapest one that does the job
+Tank does not wait for a person to pick a candidate. For each task type it **searches the whole roster** (`litellm/config.yaml`, every model with funds, plus approved code skills) for the cheapest option whose results match the serving route:
+- **Screen offline first (cheap):** run the task's eval cases and a sample of its stored real inputs (learning corpus) against every roster model that is cheaper than the serving one, through providers' batch APIs where available. Drop any model below the bar. Code skills are screened the same way at zero cost.
+- **Then shadow the survivors live**, cheapest first, one at a time, on a share of real calls, until each has `min_shadow_samples` pairs.
+- **Result per task:** a ranked list (cheapest first) with agreement, per-field floors, cost per call and projected monthly saving. The cheapest candidate that clears every bar is **proposed**. The founder promotes it, or sets that task to auto-promote.
+- **Re-search automatically** when a new model is added to the roster, when a price changes, or monthly, so the task always sits on the cheapest option that does not hurt the work.
+- **Shadow spend is a paid rung:** a daily shadow budget per task (default $1/day, set in `tank.paid_routes` as `shadow.search`), paused for approval like every paid rung (C14). Code candidates cost nothing and are always allowed.
+
 ## 2. Agreement without a model where possible
 - Structured outputs (JSON) are compared **field by field** in code: exact match for ids, numbers within a tolerance, sets by overlap (Jaccard). The result is a 0–1 agreement and a per-field breakdown stored in `tank.shadow` (`method = 'fields'`).
 - The model judge is used only for free text, and only when the judge rung is allowed (C14 ladder).
@@ -21,4 +29,4 @@
 - The same shadow-and-prove loop works for a paid tool against our own skill (e.g. Brave results vs SearXNG + `base.find_site`): the paid route runs only where the ladder allows it, and the comparison is stored the same way. This is how Tervory learns from a paid tool and then stops paying for it.
 
 ## Done when
-CI green; a test shadows `base.extract@1.0.0` (model, mocked) against a code candidate on fixtures and reports field-level agreement; promotion is refused below the bar and accepted above it; after promotion, a call makes zero model calls (tested); the console shows the ladder for that task.
+CI green; a test runs the search over a mocked roster of four priced models and proposes the cheapest one that clears the bar (and not a cheaper one that fails it); a test shadows `base.extract@1.0.0` (model, mocked) against a code candidate on fixtures and reports field-level agreement; promotion is refused below the bar and accepted above it; after promotion, a call makes zero model calls (tested); the console shows the ladder for that task.
