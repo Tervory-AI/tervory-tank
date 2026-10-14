@@ -26,6 +26,13 @@ def _split_statements(sql: str) -> list[str]:
                 in_str = False
             i += 1
             continue
+        if sql.startswith("$$", i):
+            # Dollar-quoted body (a DO block): copy it whole; its semicolons are not statement ends.
+            end = sql.find("$$", i + 2)
+            end = n if end < 0 else end + 2
+            buf.append(sql[i:end])
+            i = end
+            continue
         if c == "'":
             in_str = True
             buf.append(c)
@@ -50,6 +57,9 @@ def _split_statements(sql: str) -> list[str]:
 
 
 def _idempotent(statement: str) -> bool:
+    if re.match(r"^DO\s+\$\$", statement, re.IGNORECASE):
+        # A one-time data change must guard itself, e.g. IF NOT EXISTS (marker in tank.policy_log).
+        return re.search(r"\bIF\s+NOT\s+EXISTS\b", statement, re.IGNORECASE) is not None
     head = re.match(r"^(CREATE|ALTER|INSERT|UPDATE)\b", statement, re.IGNORECASE)
     if head is None:
         return False
