@@ -136,7 +136,9 @@ def test_ping_schedules_are_the_template_heartbeat() -> None:
     for folder, agent in (("radix", "radix"), ("tisan", "tisan")):
         module = _load(f"{folder}_app", ROOT / "agents" / folder / "app.py")
         assert module.app.state.agent == agent
-        assert module.app.state.handlers.keys() == {"ping"}
+        # TS1 adds the scaffold job on Tisan. Radix is still ping only.
+        expected = {"ping", "scaffold"} if folder == "tisan" else {"ping"}
+        assert set(module.app.state.handlers) == expected
         assert module.app.state.schedules == [
             {
                 "tenant_id": "00000000-0000-0000-0000-000000000001",
