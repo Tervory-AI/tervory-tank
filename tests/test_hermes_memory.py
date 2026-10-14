@@ -422,7 +422,7 @@ def test_hermes_does_not_read_the_database() -> None:
     assert "DEDUPE_SCORE = 0.97" in service
 
 
-def test_hermes_service_is_on_the_template_corridor_only() -> None:
+def test_hermes_joins_each_agent_corridor() -> None:
     data = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
     services = data["services"]
     hermes = services["hermes"]
@@ -430,12 +430,15 @@ def test_hermes_service_is_on_the_template_corridor_only() -> None:
         "default",
         "tervory-gw-template",
         "tervory-gw-tiger",
+        "tervory-gw-market_lab",
     }
     assert "ports" not in hermes
     env = hermes["environment"]
     assert env["QDRANT_URL"] == "http://qdrant:6333"
     assert "DATABASE_URL" not in env
     assert "TANK_KEY_TEMPLATE" in env
+    assert "TANK_KEY_TIGER" in env
+    assert "TANK_KEY_MARKET_LAB" in env
     assert "TANK_API_KEY" in env
     qdrant_nets = services["qdrant"].get("networks") or []
     assert "tervory-gw-template" not in qdrant_nets

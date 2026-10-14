@@ -1,0 +1,40 @@
+# Market Lab. Deploy this file as its own Coolify resource.
+# Build context is agents/ (the parent of this file), because the chassis lives there.
+# The only network is the external gateway. Coolify's own network for this resource
+# contains just this service, so it cannot see the main stack.
+
+services:
+  agent-market-lab:
+    build:
+      context: ..
+      dockerfile: market_lab/Dockerfile
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    environment:
+      AGENT_NAME: market_lab
+      DATABASE_URL: postgresql://agent_market_lab:${AGENT_DB_PASSWORD_MARKET_LAB}@postgres:5432/${POSTGRES_DB:-tervory}
+      TANK_URL: http://tank:8000
+      TANK_KEY: ${TANK_KEY_MARKET_LAB:-}
+      HERMES_URL: http://hermes:8000
+      FRED_API_KEY: ${FRED_API_KEY:-}
+      DATA_DIR: /data
+    volumes:
+      - agent_market_lab_data:/data
+    networks:
+      - gw
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    expose:
+      - "8000"
+
+volumes:
+  agent_market_lab_data:
+
+networks:
+  gw:
+    external: true
+    name: tervory-gw-market_lab
