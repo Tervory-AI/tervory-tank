@@ -2,7 +2,7 @@
 
 > **Room setup:** follow `docs/cursor/ROOMS.md` exactly (proven in C6b). It overrides anything below about networks, compose or database access.
 
-**Lane update:** `agents/market_lab/` (own docker-compose.yml per ROOMS.md, corridor `tervory-gw-market_lab`, login `agent_market_lab`, key `TANK_KEY_MARKET_LAB`); imports the existing `agents/market_lab/feeds/` package without rewriting it (C12b may be changing feeds in parallel — coordinate only through its public functions). Main-compose changes: add `tervory-gw-market_lab` to tank, postgres, hermes; add `AGENT_DB_PASSWORD_MARKET_LAB` to agent-roles; `TANK_KEY_MARKET_LAB` to tank.
+**Lane update:** `agents/market_lab/` (own docker-compose.yml per ROOMS.md, corridor `tervory-gw-market_lab`, login `agent_market_lab`, key `TANK_KEY_MARKET_LAB`); imports the existing `agents/market_lab/feeds/` package without rewriting it (C12 and C12b are merged: live fetching works via `feeds run --live --source X --engine ffl`; call its public functions, do not edit `feeds/`). The Market Lab box installs `agents/market_lab/feeds/requirements.txt` (pdfplumber). Main-compose changes (additive only): add `tervory-gw-market_lab` to tank, postgres, hermes; add `AGENT_DB_PASSWORD_MARKET_LAB` to agent-roles; `TANK_KEY_MARKET_LAB` to tank **and to hermes** (ROOMS.md step 4b).
 
 **Goal:** Market Lab tracks series, researches why they move, and writes dated predictions it later scores. Industry-neutral core; each engine decides which series matter. Depends on C6 (C7 for memory).
 
@@ -10,7 +10,7 @@
 
 ## Feeds (core skills)
 The feed adapters and their history are built by C12 (`agents/market_lab/feeds/`); C9 imports that package and wraps it as skills. Do not rebuild adapters C12 already has.
-- `market.series_fetch@1.0.0`: fetch a time series from a source adapter. Adapters now: FRED (commodities, rates; env `FRED_API_KEY`, free), CSV/XLSX upload, and "ATF monthly FFL lists" (count licences per state/type per month from the monthly list files). Output `{series_id, points:[{date, value}], source, fetched_at}`.
+- `market.series_fetch@1.0.0`: fetch a time series from a source adapter. Adapters now: FRED (commodities, rates; env `FRED_API_KEY`, free — **read live only, never stored**: FRED's terms forbid a database copy, so FRED points are fetched on demand and only derived results and the link are kept), CSV/XLSX upload, and "ATF monthly FFL lists" (count licences per state/type per month from the monthly list files). Output `{series_id, points:[{date, value}], source, fetched_at}`.
 - `market.surge_detect@1.0.0` (pure code): flags moves against the series' own history (z-score over a rolling window, plus % change), returns events with size and date.
 - Tables in `agent_market_lab`: `series (id, tenant_id, source, ref, unit, engine)`, `points (series_id, date, value, fetched_at)`, `events (series_id, date, kind, size)`.
 

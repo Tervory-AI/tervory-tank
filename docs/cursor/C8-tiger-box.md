@@ -2,11 +2,13 @@
 
 > **Room setup:** follow `docs/cursor/ROOMS.md` exactly (proven in C6b). It overrides anything below about networks, compose or database access.
 
-**Lane update:** Tiger's browser stays a shared service in the MAIN stack (`tiger/`), joined to `tervory-gw-tiger` (and any future agent corridor that needs browsing). The Tiger agent is its own room: `agents/tiger/` with its own docker-compose.yml per ROOMS.md, corridor `tervory-gw-tiger`, login `agent_tiger`, key `TANK_KEY_TIGER`. Main-compose changes: add `tervory-gw-tiger` to tank, postgres, hermes, tiger; add `AGENT_DB_PASSWORD_TIGER` to agent-roles; add `TANK_KEY_TIGER` to tank.
+**Lane update:** Tiger's browser stays a shared service in the MAIN stack (`tiger/`), joined to `tervory-gw-tiger` (and any future agent corridor that needs browsing). The Tiger agent is its own room: `agents/tiger/` with its own docker-compose.yml per ROOMS.md, corridor `tervory-gw-tiger`, login `agent_tiger`, key `TANK_KEY_TIGER`. Main-compose changes (additive only): add `tervory-gw-tiger` to tank, postgres, hermes, tiger; add `AGENT_DB_PASSWORD_TIGER` to agent-roles; add `TANK_KEY_TIGER` to tank **and to hermes** (ROOMS.md step 4b — without it Hermes does not recognise Tiger). Add the agent to `agents/check_isolation.sh`'s expectations only if the brief needs a new neighbour: Tiger's room may also reach `tiger` (the browser), so allow `tiger` on the `tervory-gw-tiger` corridor and keep it hidden on every other corridor.
 
 **Goal:** Tiger becomes a full Squad member: it watches pages on a schedule and mines prices into a history, for any industry. Depends on C6 (C7 for memory). Core skills only: no product, brand or industry words in Tiger's code; the targets come from each tenant's watchlist.
 
-**Files you may change:** `tiger/` (the existing browser service), `agents/tiger/` (new agent from the template), `tank/skills/tiger.*` (new skills, version 1.0.0 each with evals and CHANGELOG), `docker-compose.yml`.
+**Files you may change:** `tiger/` (the existing browser service), `agents/tiger/` (new agent from the template), `tank/skills/tiger.*` (new skills, version 1.0.0 each with evals and CHANGELOG), `docker-compose.yml` (additive), `.env.example` (names only), `agents/check_isolation.sh` (allow `tiger` on Tiger's corridor only), new tests under `tests/`.
+
+**Founder decision (13 Oct): no bot-evasion.** Tiger never solves CAPTCHAs, never uses CAPTCHA-solving services or proxy pools to dodge blocks, never disguises itself. If a site actively blocks or challenges it, Tiger records `blocked` for that URL and moves on.
 
 ## Browser pool (`tiger/`)
 - Keep `POST /render` working exactly as today (find_site and scrape_site use it).
