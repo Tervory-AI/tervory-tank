@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import importlib.util
 import json
 import sys
@@ -26,7 +27,7 @@ from agents.zenas.core.matters import (  # noqa: E402
     upload_document,
 )
 from agents.zenas.core.scope_rules import classify  # noqa: E402
-from agents.zenas.core.seal import open_seal, seal  # noqa: E402
+from agents.zenas.core.seal import key_bytes, open_seal, seal  # noqa: E402
 from agents.zenas.core.store import (  # noqa: E402
     CURRENT_CONSENT,
     DOCUMENT_FOR_TENANT,
@@ -83,9 +84,11 @@ class _Model:
     def __init__(self, content: str) -> None:
         self.content = content
         self.calls = 0
+        self.messages: list[object] = []
 
-    async def model(self, *_args: object, **_kwargs: object) -> str:
+    async def model(self, messages: object, *_args: object, **_kwargs: object) -> str:
         self.calls += 1
+        self.messages.append(messages)
         return self.content
 
 
@@ -520,6 +523,11 @@ def test_skill_config_matches_the_box_copy_and_policy_row() -> None:
     assert "cache_scope: tenant" in meta
     dockerfile = (ROOT / "agents" / "zenas" / "Dockerfile").read_text(encoding="utf-8")
     assert "zenas/pool" in dockerfile
+    assert 'cryptography==50.0.2' in dockerfile
+    chassis = (ROOT / "agents" / "_chassis" / "requirements.txt").read_text(encoding="utf-8")
+    tank_req = (ROOT / "tank" / "requirements.txt").read_text(encoding="utf-8")
+    assert "cryptography" not in chassis
+    assert "cryptography" not in tank_req
     app = (ROOT / "agents" / "zenas" / "app.py").read_text(encoding="utf-8")
     assert "agents.zenas.pool" in app
     assert len(CATALOGUE) > 0
@@ -527,10 +535,21 @@ def test_skill_config_matches_the_box_copy_and_policy_row() -> None:
 
 def test_seal_round_trip() -> None:
     token = seal("219-09-9999", KEY)
+    again = seal("219-09-9999", KEY)
+    assert token != again
     assert "219-09-9999" not in token
     assert open_seal(token, KEY) == "219-09-9999"
+    assert open_seal(again, KEY) == "219-09-9999"
     with pytest.raises(ValueError):
         open_seal(token, bytes(range(1, 33)))
+    raw = bytearray(base64.b64decode(token))
+    raw[-1] ^= 0x01
+    with pytest.raises(ValueError):
+        open_seal(base64.b64encode(raw).decode("ascii"), KEY)
+    assert key_bytes(KEY.hex()) == KEY
+    assert key_bytes("not-hex") is None
+    assert key_bytes(KEY.hex()[:-2]) is None
+    assert key_bytes(KEY.hex() + "aa") is None
 
 
 @pytest.mark.asyncio
@@ -546,6 +565,20 @@ async def test_model_cannot_overrule_a_rule_and_can_name_an_allowed_area() -> No
     assert vague["in_scope"] is True
     assert vague["area"] == "contracts"
     assert vague["criminal"] is False
+
+
+@pytest.mark.asyncio
+async def test_scope_model_never_sees_an_identifier() -> None:
+    run = _load_run(SCOPE)
+    ctx = _Model('{"area":"contracts","jurisdiction":"za"}')
+    text = "Please look at this note. The ID is 8001015009087. Call +27 82 123 4567."
+    await run({"text": text}, ctx)
+    assert ctx.calls == 1
+    sent = json.dumps(ctx.messages)
+    assert "8001015009087" not in sent
+    assert "+27 82 123 4567" not in sent
+    assert "[SA_ID_1]" in sent
+    assert "[PHONE_1]" in sent
 
 
 def test_app_imports_the_pool_package() -> None:

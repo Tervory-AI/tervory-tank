@@ -1,23 +1,34 @@
-"""Encrypt one identifier before it is stored. The chassis image has no cipher
-library, so this is a keyed stream plus a MAC from the standard library."""
+"""Encrypt one identifier with AES-256-GCM before it is stored.
+
+ZENAS_PII_KEY is exactly 32 bytes, hex. Each seal uses a fresh 12-byte nonce.
+The stored value is base64(nonce + ciphertext). The ciphertext includes the
+GCM tag, so a flipped byte or a wrong key fails closed.
+"""
 
 from __future__ import annotations
 
 import base64
-import hashlib
-import hmac
 import os
 import secrets
+
+from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+_NONCE_LEN = 12
+_KEY_LEN = 32
 
 
 def key_bytes(value: str | None) -> bytes | None:
     if not value or not value.strip():
         return None
+    raw = value.strip()
+    if len(raw) != _KEY_LEN * 2:
+        return None
     try:
-        key = bytes.fromhex(value.strip())
+        key = bytes.fromhex(raw)
     except ValueError:
         return None
-    if len(key) < 32:
+    if len(key) != _KEY_LEN:
         return None
     return key
 
@@ -27,33 +38,26 @@ def key_from_env(env: dict[str, str] | None = None) -> bytes | None:
     return key_bytes(source.get("ZENAS_PII_KEY"))
 
 
-def _stream(key: bytes, nonce: bytes, size: int) -> bytes:
-    out = bytearray()
-    counter = 0
-    while len(out) < size:
-        block = hashlib.sha256(key + nonce + counter.to_bytes(4, "big")).digest()
-        out.extend(block)
-        counter += 1
-    return bytes(out[:size])
-
-
 def seal(plaintext: str, key: bytes) -> str:
-    if len(key) < 32:
-        raise ValueError("pii key is too short")
-    raw = plaintext.encode("utf-8")
-    nonce = secrets.token_bytes(16)
-    body = bytes(left ^ right for left, right in zip(raw, _stream(key, nonce, len(raw))))
-    mac = hmac.new(key, b"zenas.pii" + nonce + body, hashlib.sha256).digest()
-    return base64.b64encode(nonce + mac + body).decode("ascii")
+    if len(key) != _KEY_LEN:
+        raise ValueError("pii key must be 32 bytes")
+    nonce = secrets.token_bytes(_NONCE_LEN)
+    body = AESGCM(key).encrypt(nonce, plaintext.encode("utf-8"), None)
+    return base64.b64encode(nonce + body).decode("ascii")
 
 
 def open_seal(token: str, key: bytes) -> str:
-    blob = base64.b64decode(token)
-    if len(blob) < 48:
+    if len(key) != _KEY_LEN:
+        raise ValueError("pii key must be 32 bytes")
+    try:
+        blob = base64.b64decode(token, validate=True)
+    except Exception as exc:
+        raise ValueError("pii seal failed") from exc
+    if len(blob) <= _NONCE_LEN:
         raise ValueError("pii seal failed")
-    nonce, mac, body = blob[:16], blob[16:48], blob[48:]
-    expect = hmac.new(key, b"zenas.pii" + nonce + body, hashlib.sha256).digest()
-    if not hmac.compare_digest(mac, expect):
-        raise ValueError("pii seal failed")
-    raw = bytes(left ^ right for left, right in zip(body, _stream(key, nonce, len(body))))
+    nonce, body = blob[:_NONCE_LEN], blob[_NONCE_LEN:]
+    try:
+        raw = AESGCM(key).decrypt(nonce, body, None)
+    except InvalidTag as exc:
+        raise ValueError("pii seal failed") from exc
     return raw.decode("utf-8")
