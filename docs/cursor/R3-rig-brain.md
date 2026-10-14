@@ -31,7 +31,7 @@ Fitment is the valuable part. If a brand has no fitment data, the `fits` sheet c
 - `rig.explain@1.0.0` (model via Tank, task type `rig.explain`): writes the `why` lines from the fit rows it is given; it cannot add parts.
 - `rig.ask@1.0.0` (model via Tank, task type `rig.ask`): answers only from the catalogue and fit rows passed in, citing product ids; "I don't know" otherwise.
 - `rig.fit_suggest@1.0.0` (model via Tank): proposes fit rows from product attributes; output is always `source='suggested'`, unapproved.
-- Policy rows for the three model task types: Claude adds them to `tank/schema.sql` after merge. Tests mock Tank.
+- Policy rows for the three model task types (`rig.explain`, `rig.ask`, `rig.fit_suggest`): append them to `tank/schema.sql` (additive, `ON CONFLICT DO NOTHING`, model `luna`, cache_scope `tenant`). This brief allows that one change to `tank/schema.sql`. Tests mock Tank.
 
 ## API
 Implement every call in `tervory-rig/docs/api.md` with the exact shapes. `quote` and `link-quote` store the request and notify the retailer by email/webhook configured per tenant (stub the sender behind an interface; no real email in tests).
