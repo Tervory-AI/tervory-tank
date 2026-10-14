@@ -292,6 +292,10 @@ def test_schema_copies_records_once_and_leaves_the_old_table_read_only() -> None
     assert "CREATE TRIGGER base_records_readonly" in SCHEMA
     assert "IF NOT EXISTS (SELECT 1 FROM agent_base.migration_log WHERE event = 'base.records.copy')" in SCHEMA
     assert "FROM tank.tasks" in SCHEMA and "task_type = 'base.enrich'" in SCHEMA
+    assert "IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'agent_base')" in SCHEMA
+    assert "ALTER TABLE %I.%I OWNER TO %I" in SCHEMA
+    assert "ALTER SEQUENCE %I.%I OWNER TO %I" in SCHEMA
+    assert SCHEMA.index("CREATE TABLE IF NOT EXISTS agent_base.records") < SCHEMA.index("ALTER TABLE %I.%I OWNER TO %I")
 
 
 def test_room_is_wired_and_client_queries_are_tenant_scoped() -> None:

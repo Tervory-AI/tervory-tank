@@ -535,3 +535,31 @@ BEGIN
   END IF;
 END
 $$;
+
+-- Hand the tables to agent_base when that login already exists. agent-roles does this
+-- only for objects present when it runs, and it does not wait for Tank. If Tank creates
+-- the tables first, the role is not here yet and agent-roles takes them when it runs.
+-- ALTER OWNER TO the same role on a later start is a no-op. Indexes follow the table.
+DO $$
+DECLARE
+  rel record;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'agent_base') THEN
+    NULL;
+  ELSE
+    FOR rel IN
+      SELECT c.relname, c.relkind
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'agent_base'
+        AND c.relkind IN ('r', 'p', 'S')
+    LOOP
+      IF rel.relkind = 'S' THEN
+        EXECUTE format('ALTER SEQUENCE %I.%I OWNER TO %I', 'agent_base', rel.relname, 'agent_base');
+      ELSE
+        EXECUTE format('ALTER TABLE %I.%I OWNER TO %I', 'agent_base', rel.relname, 'agent_base');
+      END IF;
+    END LOOP;
+  END IF;
+END
+$$;
