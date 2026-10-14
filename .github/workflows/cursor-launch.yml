@@ -1,0 +1,67 @@
+# Starts a Cursor cloud agent on this repo from a saved prompt (docs/cursor/prompts/<task>.md),
+# so the founder no longer copies prompts into Cursor. Claude runs it with:
+#   gh workflow run cursor-launch.yml -f task=Z1
+# The Cursor key lives only in the repo secret CURSOR_API_KEY and is never printed.
+name: cursor-launch
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "Task id; the prompt is docs/cursor/prompts/<task>.md"
+        required: true
+      ref:
+        description: "Branch the agent starts from"
+        required: false
+        default: main
+
+permissions:
+  contents: read
+
+jobs:
+  launch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Build the request
+        env:
+          TASK: ${{ inputs.task }}
+          REF: ${{ inputs.ref }}
+          REPO_URL: https://github.com/${{ github.repository }}
+        run: |
+          case "$TASK" in
+            *[!A-Za-z0-9_-]*|"") echo "bad task id"; exit 1 ;;
+          esac
+          file="docs/cursor/prompts/$TASK.md"
+          test -f "$file" || { echo "no prompt at $file"; exit 1; }
+          jq -n --rawfile text "$file" --arg repo "$REPO_URL" --arg ref "$REF" \
+            '{prompt: {text: $text}, source: {repository: $repo, ref: $ref}, target: {autoCreatePr: true}}' > body.json
+
+      - name: Launch the Cursor agent
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+        run: |
+          test -n "$CURSOR_API_KEY" || { echo "CURSOR_API_KEY secret is missing"; exit 1; }
+          code=$(curl -sS -o resp.json -w '%{http_code}' -X POST https://api.cursor.com/v0/agents \
+            -H "Authorization: Bearer $CURSOR_API_KEY" -H "Content-Type: application/json" --data @body.json)
+          echo "HTTP $code"
+          jq '{id, name, status, branch: .target.branchName, url: .target.url}' resp.json || cat resp.json
+          case "$code" in 2*) ;; *) exit 1 ;; esac
+
+  status:
+    # Lists recent agents so Claude can see progress without the Cursor app.
+    needs: launch
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Recent Cursor agents
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+        run: |
+          curl -sS "https://api.cursor.com/v0/agents?limit=10" -H "Authorization: Bearer $CURSOR_API_KEY" \
+            | jq -r '.agents[]? | [.status, .name, (.target.branchName // ""), (.target.prUrl // "")] | @tsv'
