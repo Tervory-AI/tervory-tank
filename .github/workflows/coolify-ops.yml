@@ -1,0 +1,115 @@
+# Coolify operations Claude runs without clicking through the dashboard.
+#   gh api -X POST repos/Tervory-AI/tervory-tank/actions/workflows/coolify-ops.yml/dispatches \
+#     -f ref=main -f 'inputs[op]=status'
+# Every op is logged as an annotation (readable through the GitHub API).
+#
+# Rules:
+# - The Coolify token lives only in the repo secret COOLIFY_TOKEN and is never printed.
+# - COOLIFY_URL (repo variable) must be https://, so the token never crosses the internet in clear text.
+# - env-refs only ever writes references of the form {{project.NAME}}, never a secret value.
+name: coolify-ops
+
+on:
+  workflow_dispatch:
+    inputs:
+      op:
+        description: "status | env-refs | create-room | deploy"
+        required: true
+      app:
+        description: "Application uuid (env-refs, deploy)"
+        required: false
+        default: ""
+      names:
+        description: "env-refs: comma-separated variable names to point at {{project.NAME}}"
+        required: false
+        default: ""
+      room:
+        description: "create-room: agent folder name under agents/ (e.g. radix)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  op:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      COOLIFY_URL: ${{ vars.COOLIFY_URL }}
+      COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+      OP: ${{ inputs.op }}
+      APP: ${{ inputs.app }}
+      NAMES: ${{ inputs.names }}
+      ROOM: ${{ inputs.room }}
+      PROJECT_UUID: dguxczrbmbqvezo3qib0twge
+      ENVIRONMENT_NAME: production
+    steps:
+      - name: Check inputs
+        run: |
+          case "$COOLIFY_URL" in https://*) ;; *) echo "::error::COOLIFY_URL must be an https:// address"; exit 1 ;; esac
+          test -n "$COOLIFY_TOKEN" || { echo "::error::COOLIFY_TOKEN secret is missing"; exit 1; }
+          case "$OP" in status|env-refs|create-room|deploy) ;; *) echo "::error::unknown op $OP"; exit 1 ;; esac
+          for v in "$APP" "$ROOM"; do
+            case "$v" in *[!A-Za-z0-9_-]*) echo "::error::bad id: $v"; exit 1 ;; esac
+          done
+          case "$NAMES" in *[!A-Z0-9_,]*) echo "::error::names must be UPPER_CASE, comma-separated"; exit 1 ;; esac
+
+      - name: Run
+        run: |
+          api() {  # method path [json-body-file]
+            if [ -n "${3:-}" ]; then
+              curl -sS -o out.json -w '%{http_code}' -X "$1" "$COOLIFY_URL/api/v1$2" \
+                -H "Authorization: Bearer $COOLIFY_TOKEN" -H "Content-Type: application/json" --data-binary @"$3"
+            else
+              curl -sS -o out.json -w '%{http_code}' -X "$1" "$COOLIFY_URL/api/v1$2" \
+                -H "Authorization: Bearer $COOLIFY_TOKEN"
+            fi
+          }
+          note() { echo "::notice title=$1::$2"; }
+          fail() { echo "::error title=$1::$2"; exit 1; }
+
+          case "$OP" in
+            status)
+              code=$(api GET /applications)
+              [ "$code" = 200 ] || fail "applications HTTP $code" "$(head -c 300 out.json)"
+              note "Applications" "$(jq -c '[.[] | {name, uuid, status}]' out.json)"
+              code=$(api GET /servers);     note "Servers HTTP $code" "$(jq -c '[.[]? | {name, uuid}]' out.json 2>/dev/null)"
+              code=$(api GET /github-apps); note "GitHub apps HTTP $code" "$(jq -c '[.[]? | {name, uuid}]' out.json 2>/dev/null)"
+              ;;
+
+            env-refs)
+              [ -n "$APP" ] && [ -n "$NAMES" ] || fail "env-refs" "app and names are required"
+              # References only: the value is the literal text {{project.NAME}}, resolved by Coolify at deploy.
+              jq -n --arg names "$NAMES" '{data: ($names | split(",") | map(select(length > 0)) |
+                   map({key: ., value: ("{{project." + . + "}}"), is_preview: false}))}' > body.json
+              code=$(api PATCH "/applications/$APP/envs/bulk" body.json)
+              case "$code" in 2*) note "env-refs HTTP $code" "$NAMES now point at {{project.*}} on $APP" ;;
+                              *) fail "env-refs HTTP $code" "$(head -c 300 out.json)" ;; esac
+              ;;
+
+            create-room)
+              [ -n "$ROOM" ] || fail "create-room" "room is required"
+              code=$(api GET /servers);     server=$(jq -r '.[0].uuid' out.json)
+              code=$(api GET /github-apps); gh_app=$(jq -r '[.[] | select(.name == "tervory-git-hub")][0].uuid' out.json)
+              [ -n "$server" ] && [ "$server" != null ] || fail "create-room" "no server uuid"
+              [ -n "$gh_app" ] && [ "$gh_app" != null ] || fail "create-room" "GitHub app tervory-git-hub not found"
+              jq -n --arg p "$PROJECT_UUID" --arg e "$ENVIRONMENT_NAME" --arg s "$server" --arg g "$gh_app" --arg r "$ROOM" '{
+                  project_uuid: $p, environment_name: $e, server_uuid: $s, github_app_uuid: $g,
+                  git_repository: "Tervory-AI/tervory-tank", git_branch: "main",
+                  build_pack: "dockercompose", base_directory: ("/agents/" + $r),
+                  docker_compose_location: "/docker-compose.yml",
+                  name: ("agent-" + ($r | gsub("_"; "-"))), ports_exposes: "8000", instant_deploy: false
+                }' > body.json
+              code=$(api POST /applications/private-github-app body.json)
+              case "$code" in 2*) note "Room created HTTP $code" "$(jq -c '{uuid}' out.json)" ;;
+                              *) fail "create-room HTTP $code" "$(head -c 400 out.json)" ;; esac
+              ;;
+
+            deploy)
+              [ -n "$APP" ] || fail "deploy" "app is required"
+              code=$(api GET "/deploy?uuid=$APP&force=false")
+              case "$code" in 2*) note "Deploy queued HTTP $code" "$(jq -c '.deployments // .' out.json | head -c 300)" ;;
+                              *) fail "deploy HTTP $code" "$(head -c 300 out.json)" ;; esac
+              ;;
+          esac
