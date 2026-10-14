@@ -406,3 +406,28 @@ INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_toke
   ('zenas.scope', 1, 'flash-lite', 'urgent', 'tenant', 400,
    'You classify a request for Zenas. Reply with strict JSON only: {"area":"<id>","jurisdiction":"us|za|both"}. Use an allowed area id or "none". Do not give legal advice. Do not help with criminal law.')
 ON CONFLICT DO NOTHING;
+
+-- ---------- 14 Oct 2026: re-run Base records whose model passes were skipped ----------
+-- While Anthropic had no credit, records finished with their model passes (2c extract, 5 business data)
+-- marked "skipped". Gemini now carries the work, so send those records back through the passes once.
+-- Same rule as POST /v1/base/rerun with flag=model_skipped, for every tenant and batch. Logged; runs once.
+DO $$
+DECLARE n integer;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM tank.policy_log WHERE action = 'rerun' AND detail->>'id' = '2026-10-14-model-skipped') THEN
+    WITH r AS (
+      UPDATE base.records SET status = 'queued', error = NULL, updated_at = now()
+      WHERE status = 'done'
+        AND EXISTS (SELECT 1 FROM jsonb_each(passes) p WHERE jsonb_typeof(p.value) = 'object' AND p.value ? 'skipped')
+      RETURNING task_id)
+    SELECT count(*) INTO n FROM r;
+
+    UPDATE tank.tasks SET status = 'queued', finished_at = NULL
+    WHERE task_type = 'base.enrich' AND status IN ('done', 'failed')
+      AND id IN (SELECT DISTINCT task_id FROM base.records WHERE status = 'queued');
+
+    INSERT INTO tank.policy_log (task_type, action, by_user, detail)
+    VALUES ('base.enrich', 'rerun', 'claude', jsonb_build_object('id', '2026-10-14-model-skipped', 'records', n));
+  END IF;
+END
+$$;
