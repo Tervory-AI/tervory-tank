@@ -1,0 +1,41 @@
+# Base. Deploy this file as its own Coolify resource.
+# Build context is agents/ (the parent of this file), because the chassis lives there.
+# The only network is the external gateway. Coolify's own network for this resource
+# contains just this service, so it cannot see the main stack.
+
+services:
+  agent-base:
+    build:
+      context: ..
+      dockerfile: base/Dockerfile
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    environment:
+      AGENT_NAME: base
+      DATABASE_URL: postgresql://agent_base:${AGENT_DB_PASSWORD_BASE}@postgres:5432/${POSTGRES_DB:-tervory}
+      TANK_URL: http://tank:8000
+      TANK_KEY: ${TANK_KEY_BASE:-}
+      TIGER_URL: http://tiger:3000
+      SEARXNG_URL: http://searxng:8080
+      HERMES_URL: http://hermes:8000
+      DATA_DIR: /data
+    volumes:
+      - agent_base_data:/data
+    networks:
+      - gw
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    expose:
+      - "8000"
+
+volumes:
+  agent_base_data:
+
+networks:
+  gw:
+    external: true
+    name: tervory-gw-base

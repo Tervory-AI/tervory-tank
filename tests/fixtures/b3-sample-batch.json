@@ -1,0 +1,739 @@
+{
+  "records": [
+    {
+      "status": "done",
+      "profile": {
+        "name": {
+          "value": "Acme Guns",
+          "source": "input",
+          "confidence": 90
+        },
+        "name_key": {
+          "value": "acme guns",
+          "source": "input",
+          "confidence": 90
+        },
+        "city": {
+          "value": "Austin",
+          "source": "input",
+          "confidence": 90
+        },
+        "state": {
+          "value": "TX",
+          "source": "input",
+          "confidence": 95
+        },
+        "phone": {
+          "value": "512-555-0100",
+          "source": "site",
+          "confidence": 80
+        },
+        "street": {
+          "value": "1 Main St",
+          "source": "input",
+          "confidence": 80
+        },
+        "zip": {
+          "value": "78701",
+          "source": "input",
+          "confidence": 90
+        },
+        "registry_match": {
+          "value": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa2",
+          "source": "registry:duplicate",
+          "confidence": 92
+        },
+        "website": {
+          "value": "https://acme.example",
+          "source": "search",
+          "confidence": 70
+        },
+        "emails": {
+          "value": [
+            "a@acme.example"
+          ],
+          "source": "site",
+          "confidence": 80
+        },
+        "phones": {
+          "value": [
+            "512-555-0100"
+          ],
+          "source": "site",
+          "confidence": 80
+        },
+        "socials": {
+          "value": {
+            "facebook": "https://facebook.com/acme"
+          },
+          "source": "site",
+          "confidence": 85
+        },
+        "categories": {
+          "value": [
+            "retail"
+          ],
+          "source": "site:model",
+          "confidence": 80
+        },
+        "services": {
+          "value": [
+            "sales"
+          ],
+          "source": "site:model",
+          "confidence": 80
+        },
+        "description": {
+          "value": "A shop",
+          "source": "site:model",
+          "confidence": 80
+        },
+        "people": {
+          "value": [
+            {
+              "name": "Ada"
+            }
+          ],
+          "source": "site:model",
+          "confidence": 80
+        },
+        "contacts": {
+          "value": {
+            "domain": "acme.example",
+            "domain_accepts_mail": true,
+            "generic_emails": [
+              "a@acme.example"
+            ],
+            "personal_emails": [],
+            "email_pattern": "{first}@acme.example",
+            "contacts": [
+              {
+                "name": "Ada"
+              }
+            ],
+            "decision_maker": {
+              "name": "Ada",
+              "role": "owner"
+            }
+          },
+          "source": "site+pattern",
+          "confidence": 75
+        },
+        "decision_maker": {
+          "value": "Ada (owner)",
+          "source": "site",
+          "confidence": 80
+        },
+        "socials_profiles": {
+          "value": {
+            "profiles": [
+              {
+                "site": "facebook"
+              }
+            ],
+            "count": 1,
+            "presence": "thin"
+          },
+          "source": "site",
+          "confidence": 85
+        },
+        "size_band": {
+          "value": "1-5",
+          "source": "model:estimate",
+          "confidence": 60
+        },
+        "revenue_band": {
+          "value": "under 1m",
+          "source": "model:estimate",
+          "confidence": 60
+        },
+        "business_model": {
+          "value": "retail",
+          "source": "model:estimate",
+          "confidence": 60
+        },
+        "naics": {
+          "value": "451110",
+          "source": "model:estimate",
+          "confidence": 60
+        },
+        "naics_label": {
+          "value": "Sporting goods",
+          "source": "model:estimate",
+          "confidence": 60
+        },
+        "tier": {
+          "value": "ready",
+          "source": "verify",
+          "confidence": 82
+        },
+        "flags": {
+          "value": [
+            "thin_social"
+          ],
+          "source": "verify",
+          "confidence": 82
+        }
+      },
+      "passes": {
+        "1a": {
+          "skill": "base.normalize@1.0.0",
+          "ms": 3
+        },
+        "1b": {
+          "skill": "base.resolve@1.0.0",
+          "ms": 3,
+          "verdict": "duplicate",
+          "score": 92
+        },
+        "2a": {
+          "skill": "base.find_site@1.0.0",
+          "ms": 3,
+          "source": "search",
+          "evidence": "listed"
+        },
+        "2b": {
+          "skill": "base.scrape_site@1.0.0",
+          "ms": 3,
+          "pages": 1,
+          "error": null,
+          "via": "tiger"
+        },
+        "2c": {
+          "skill": "base.extract@1.0.0",
+          "ms": 3,
+          "cost_usd": 0.002
+        },
+        "3": {
+          "skill": "base.contacts@1.0.0",
+          "ms": 3,
+          "pattern": "{first}@acme.example",
+          "people": 1
+        },
+        "4": {
+          "skill": "base.socials@1.0.0",
+          "ms": 3,
+          "count": 1
+        },
+        "5": {
+          "skill": "base.business_data@1.0.0",
+          "ms": 3,
+          "cost_usd": 0.003,
+          "basis": "site"
+        },
+        "7": {
+          "skill": "base.verify@1.0.0",
+          "ms": 3,
+          "layers": [
+            "site"
+          ],
+          "checks": {
+            "name": true
+          }
+        }
+      },
+      "confidence": 82,
+      "error": null
+    },
+    {
+      "status": "done",
+      "profile": {
+        "name": {
+          "value": "Acme Guns",
+          "source": "input",
+          "confidence": 90
+        },
+        "name_key": {
+          "value": "acme guns",
+          "source": "input",
+          "confidence": 90
+        },
+        "city": {
+          "value": "Austin",
+          "source": "input",
+          "confidence": 90
+        },
+        "state": {
+          "value": "TX",
+          "source": "input",
+          "confidence": 95
+        },
+        "phone": {
+          "value": "512-555-0100",
+          "source": "site",
+          "confidence": 80
+        },
+        "street": {
+          "value": "2 Main St",
+          "source": "input",
+          "confidence": 80
+        },
+        "zip": {
+          "value": "78701",
+          "source": "input",
+          "confidence": 90
+        },
+        "registry_match": {
+          "value": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa1",
+          "source": "registry:duplicate",
+          "confidence": 92
+        },
+        "website": {
+          "value": "https://acme.example",
+          "source": "input",
+          "confidence": 100
+        },
+        "emails": {
+          "value": [
+            "a@acme.example"
+          ],
+          "source": "site",
+          "confidence": 80
+        },
+        "phones": {
+          "value": [
+            "512-555-0100"
+          ],
+          "source": "site",
+          "confidence": 80
+        },
+        "socials": {
+          "value": {
+            "facebook": "https://facebook.com/acme"
+          },
+          "source": "site",
+          "confidence": 85
+        },
+        "categories": {
+          "value": [
+            "retail"
+          ],
+          "source": "site:model",
+          "confidence": 80
+        },
+        "services": {
+          "value": [
+            "sales"
+          ],
+          "source": "site:model",
+          "confidence": 80
+        },
+        "description": {
+          "value": "A shop",
+          "source": "site:model",
+          "confidence": 80
+        },
+        "people": {
+          "value": [
+            {
+              "name": "Ada"
+            }
+          ],
+          "source": "site:model",
+          "confidence": 80
+        },
+        "contacts": {
+          "value": {
+            "domain": "acme.example",
+            "domain_accepts_mail": true,
+            "generic_emails": [
+              "a@acme.example"
+            ],
+            "personal_emails": [],
+            "email_pattern": "{first}@acme.example",
+            "contacts": [
+              {
+                "name": "Ada"
+              }
+            ],
+            "decision_maker": {
+              "name": "Ada",
+              "role": "owner"
+            }
+          },
+          "source": "site+pattern",
+          "confidence": 75
+        },
+        "decision_maker": {
+          "value": "Ada (owner)",
+          "source": "site",
+          "confidence": 80
+        },
+        "socials_profiles": {
+          "value": {
+            "profiles": [
+              {
+                "site": "facebook"
+              }
+            ],
+            "count": 1,
+            "presence": "thin"
+          },
+          "source": "site",
+          "confidence": 85
+        },
+        "size_band": {
+          "value": "1-5",
+          "source": "model:estimate",
+          "confidence": 60
+        },
+        "revenue_band": {
+          "value": "under 1m",
+          "source": "model:estimate",
+          "confidence": 60
+        },
+        "business_model": {
+          "value": "retail",
+          "source": "model:estimate",
+          "confidence": 60
+        },
+        "naics": {
+          "value": "451110",
+          "source": "model:estimate",
+          "confidence": 60
+        },
+        "naics_label": {
+          "value": "Sporting goods",
+          "source": "model:estimate",
+          "confidence": 60
+        },
+        "tier": {
+          "value": "ready",
+          "source": "verify",
+          "confidence": 82
+        },
+        "flags": {
+          "value": [
+            "thin_social"
+          ],
+          "source": "verify",
+          "confidence": 82
+        }
+      },
+      "passes": {
+        "1a": {
+          "skill": "base.normalize@1.0.0",
+          "ms": 3
+        },
+        "1b": {
+          "skill": "base.resolve@1.0.0",
+          "ms": 3,
+          "verdict": "duplicate",
+          "score": 92
+        },
+        "2a": {
+          "skill": "base.find_site@1.0.0",
+          "ms": 3,
+          "source": "input"
+        },
+        "2b": {
+          "skill": "base.scrape_site@1.0.0",
+          "ms": 3,
+          "pages": 1,
+          "error": null,
+          "via": "tiger"
+        },
+        "2c": {
+          "skill": "base.extract@1.0.0",
+          "ms": 3,
+          "cost_usd": 0.002
+        },
+        "3": {
+          "skill": "base.contacts@1.0.0",
+          "ms": 3,
+          "pattern": "{first}@acme.example",
+          "people": 1
+        },
+        "4": {
+          "skill": "base.socials@1.0.0",
+          "ms": 3,
+          "count": 1
+        },
+        "5": {
+          "skill": "base.business_data@1.0.0",
+          "ms": 3,
+          "cost_usd": 0.003,
+          "basis": "site"
+        },
+        "7": {
+          "skill": "base.verify@1.0.0",
+          "ms": 3,
+          "layers": [
+            "site"
+          ],
+          "checks": {
+            "name": true
+          }
+        }
+      },
+      "confidence": 82,
+      "error": null
+    }
+  ],
+  "result": "2 enriched (2 ready), 0 failed, model spend $0.0100",
+  "engine_record": {
+    "status": "done",
+    "profile": {
+      "name": {
+        "value": "Acme Guns",
+        "source": "input",
+        "confidence": 90
+      },
+      "name_key": {
+        "value": "acme guns",
+        "source": "input",
+        "confidence": 90
+      },
+      "city": {
+        "value": "Austin",
+        "source": "input",
+        "confidence": 90
+      },
+      "state": {
+        "value": "TX",
+        "source": "input",
+        "confidence": 95
+      },
+      "phone": {
+        "value": "512-555-0100",
+        "source": "site",
+        "confidence": 80
+      },
+      "street": {
+        "value": "1 Main St",
+        "source": "input",
+        "confidence": 80
+      },
+      "zip": {
+        "value": "78701",
+        "source": "input",
+        "confidence": 90
+      },
+      "registry_match": {
+        "value": "1-23-456-78-9A-12345",
+        "source": "registry:ffl",
+        "confidence": 100
+      },
+      "website": {
+        "value": "https://acme.example",
+        "source": "search",
+        "confidence": 70
+      },
+      "emails": {
+        "value": [
+          "a@acme.example"
+        ],
+        "source": "site",
+        "confidence": 80
+      },
+      "phones": {
+        "value": [
+          "512-555-0100"
+        ],
+        "source": "site",
+        "confidence": 80
+      },
+      "socials": {
+        "value": {
+          "facebook": "https://facebook.com/acme"
+        },
+        "source": "site",
+        "confidence": 85
+      },
+      "categories": {
+        "value": [
+          "retail"
+        ],
+        "source": "site:model",
+        "confidence": 80
+      },
+      "services": {
+        "value": [
+          "sales"
+        ],
+        "source": "site:model",
+        "confidence": 80
+      },
+      "description": {
+        "value": "A shop",
+        "source": "site:model",
+        "confidence": 80
+      },
+      "people": {
+        "value": [
+          {
+            "name": "Ada"
+          }
+        ],
+        "source": "site:model",
+        "confidence": 80
+      },
+      "contacts": {
+        "value": {
+          "domain": "acme.example",
+          "domain_accepts_mail": true,
+          "generic_emails": [
+            "a@acme.example"
+          ],
+          "personal_emails": [],
+          "email_pattern": "{first}@acme.example",
+          "contacts": [
+            {
+              "name": "Ada"
+            }
+          ],
+          "decision_maker": {
+            "name": "Ada",
+            "role": "owner"
+          }
+        },
+        "source": "site+pattern",
+        "confidence": 75
+      },
+      "decision_maker": {
+        "value": "Ada (owner)",
+        "source": "site",
+        "confidence": 80
+      },
+      "socials_profiles": {
+        "value": {
+          "profiles": [
+            {
+              "site": "facebook"
+            }
+          ],
+          "count": 1,
+          "presence": "thin"
+        },
+        "source": "site",
+        "confidence": 85
+      },
+      "ffl_licence_number": {
+        "value": "1-23-456-78-9A-12345",
+        "source": "engine:ffl",
+        "confidence": 95
+      },
+      "ffl_licence_type": {
+        "value": "01",
+        "source": "engine:ffl",
+        "confidence": 95
+      },
+      "ffl_licence_type_label": {
+        "value": "Dealer",
+        "source": "engine:ffl",
+        "confidence": 95
+      },
+      "ffl_lapsed": {
+        "value": false,
+        "source": "engine:ffl",
+        "confidence": 95
+      },
+      "ffl_segment": {
+        "value": "retail",
+        "source": "engine:ffl:inferred",
+        "confidence": 60
+      },
+      "size_band": {
+        "value": "1-5",
+        "source": "model:estimate",
+        "confidence": 60
+      },
+      "revenue_band": {
+        "value": "under 1m",
+        "source": "model:estimate",
+        "confidence": 60
+      },
+      "business_model": {
+        "value": "retail",
+        "source": "model:estimate",
+        "confidence": 60
+      },
+      "naics": {
+        "value": "451110",
+        "source": "model:estimate",
+        "confidence": 60
+      },
+      "naics_label": {
+        "value": "Sporting goods",
+        "source": "model:estimate",
+        "confidence": 60
+      },
+      "tier": {
+        "value": "ready",
+        "source": "verify",
+        "confidence": 82
+      },
+      "flags": {
+        "value": [
+          "thin_social"
+        ],
+        "source": "verify",
+        "confidence": 82
+      }
+    },
+    "passes": {
+      "1a": {
+        "skill": "base.normalize@1.0.0",
+        "ms": 3
+      },
+      "1b": {
+        "skill": "base.resolve@1.0.0",
+        "ms": 3,
+        "verdict": "new",
+        "score": 0
+      },
+      "2a": {
+        "skill": "base.find_site@1.0.0",
+        "ms": 3,
+        "source": "search",
+        "evidence": "listed"
+      },
+      "2b": {
+        "skill": "base.scrape_site@1.0.0",
+        "ms": 3,
+        "pages": 1,
+        "error": null,
+        "via": "tiger"
+      },
+      "2c": {
+        "skill": "base.extract@1.0.0",
+        "ms": 3,
+        "cost_usd": 0.002
+      },
+      "3": {
+        "skill": "base.contacts@1.0.0",
+        "ms": 3,
+        "pattern": "{first}@acme.example",
+        "people": 1
+      },
+      "4": {
+        "skill": "base.socials@1.0.0",
+        "ms": 3,
+        "count": 1
+      },
+      "6": {
+        "skill": "ffl.profile@1.0.0",
+        "ms": 3,
+        "segment": "retail"
+      },
+      "5": {
+        "skill": "base.business_data@1.0.0",
+        "ms": 3,
+        "cost_usd": 0.003,
+        "basis": "site"
+      },
+      "7": {
+        "skill": "base.verify@1.0.0",
+        "ms": 3,
+        "layers": [
+          "site"
+        ],
+        "checks": {
+          "name": true
+        }
+      }
+    },
+    "confidence": 82,
+    "error": null
+  }
+}

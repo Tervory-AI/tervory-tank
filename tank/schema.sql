@@ -424,3 +424,114 @@ BEGIN
   END IF;
 END
 $$;
+
+-- ---------- B3: Base records move to the Base room ----------
+-- One copy, then a log row. The old table stays in place. A trigger makes it
+-- read-only; Claude retires it later. Every column is kept.
+CREATE SCHEMA IF NOT EXISTS agent_base;
+CREATE TABLE IF NOT EXISTS agent_base.records (
+    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id       uuid NOT NULL,
+    task_id         uuid,
+    batch           text,
+    raw             jsonb NOT NULL,
+    profile         jsonb NOT NULL DEFAULT '{}'::jsonb,
+    passes          jsonb NOT NULL DEFAULT '{}'::jsonb,
+    confidence      smallint NOT NULL DEFAULT 0,
+    status          text NOT NULL DEFAULT 'queued',
+    error           text,
+    created_at      timestamptz NOT NULL DEFAULT now(),
+    updated_at      timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS agent_base_records_tenant ON agent_base.records (tenant_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS agent_base_records_task   ON agent_base.records (task_id);
+CREATE TABLE IF NOT EXISTS agent_base.tasks (
+    id              uuid PRIMARY KEY,
+    tenant_id       uuid NOT NULL,
+    created_by      text,
+    agent           text NOT NULL DEFAULT 'base',
+    task_type       text NOT NULL DEFAULT 'base.enrich',
+    title           text NOT NULL,
+    input           jsonb NOT NULL DEFAULT '{}'::jsonb,
+    status          text NOT NULL DEFAULT 'queued',
+    result          text,
+    error           text,
+    ledger_id       uuid,
+    created_at      timestamptz NOT NULL DEFAULT now(),
+    started_at      timestamptz,
+    finished_at     timestamptz
+);
+CREATE INDEX IF NOT EXISTS agent_base_tasks_queued ON agent_base.tasks (created_at)
+    WHERE status = 'queued' AND task_type = 'base.enrich';
+CREATE TABLE IF NOT EXISTS agent_base.migration_log (
+    id          bigserial PRIMARY KEY,
+    event       text NOT NULL,
+    copied      bigint NOT NULL,
+    ran_at      timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS agent_base_migration_event ON agent_base.migration_log (event);
+
+DO $$
+DECLARE
+  n bigint;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM agent_base.migration_log WHERE event = 'base.records.copy') THEN
+    INSERT INTO agent_base.records (
+        id, tenant_id, task_id, batch, raw, profile, passes, confidence, status, error, created_at, updated_at
+    )
+    SELECT id, tenant_id, task_id, batch, raw, profile, passes, confidence, status, error, created_at, updated_at
+    FROM base.records
+    ON CONFLICT (id) DO NOTHING;
+    GET DIAGNOSTICS n = ROW_COUNT;
+    INSERT INTO agent_base.migration_log (event, copied) VALUES ('base.records.copy', n)
+    ON CONFLICT (event) DO NOTHING;
+    RAISE NOTICE 'B3 copied % rows from base.records to agent_base.records', n;
+  END IF;
+END
+$$;
+
+DO $$
+DECLARE
+  n bigint;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM agent_base.migration_log WHERE event = 'base.tasks.copy') THEN
+    INSERT INTO agent_base.tasks (
+        id, tenant_id, created_by, agent, task_type, title, input, status, result, error, ledger_id,
+        created_at, started_at, finished_at
+    )
+    SELECT id, tenant_id, created_by, agent, task_type, title, input, status, result, error, ledger_id,
+           created_at, started_at, finished_at
+    FROM tank.tasks
+    WHERE task_type = 'base.enrich'
+    ON CONFLICT (id) DO NOTHING;
+    GET DIAGNOSTICS n = ROW_COUNT;
+    INSERT INTO agent_base.migration_log (event, copied) VALUES ('base.tasks.copy', n)
+    ON CONFLICT (event) DO NOTHING;
+    RAISE NOTICE 'B3 copied % base.enrich tasks to agent_base.tasks', n;
+  END IF;
+END
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_proc p
+    JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'base' AND p.proname = 'records_readonly'
+  ) THEN
+    EXECUTE $fn$
+      CREATE FUNCTION base.records_readonly() RETURNS trigger
+      LANGUAGE plpgsql AS $body$
+      BEGIN
+        RAISE EXCEPTION 'base.records is read-only; Base now writes agent_base.records';
+      END
+      $body$
+    $fn$;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'base_records_readonly') THEN
+    CREATE TRIGGER base_records_readonly
+      BEFORE INSERT OR UPDATE OR DELETE ON base.records
+      FOR EACH ROW EXECUTE FUNCTION base.records_readonly();
+  END IF;
+END
+$$;
