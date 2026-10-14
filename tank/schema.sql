@@ -371,3 +371,32 @@ BEGIN
   END IF;
 END
 $$;
+
+-- ---------- 14 Oct 2026 (later): Gemini carries the work until the OpenAI account is ready ----------
+-- Founder decision: "just use Gemini for now". One-time and logged, same pattern as the switch above.
+-- To move back to OpenAI later: PUT /v1/policy/<task_type> with model luna/sol, or a new logged block.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM tank.policy_log WHERE action = 'switch' AND detail->>'id' = '2026-10-14-gemini-only') THEN
+    INSERT INTO tank.policy_log (task_type, action, from_model, to_model, by_user, detail)
+    SELECT task_type, 'switch', model,
+           CASE WHEN task_type = 'tank.judge' THEN 'flash' WHEN model = 'luna' THEN 'flash-lite' ELSE 'argon' END,
+           'claude', '{"id": "2026-10-14-gemini-only"}'::jsonb
+    FROM tank.policy
+    WHERE tenant_id IS NULL AND (model IN ('luna', 'sol', 'astra') OR task_type = 'tank.judge');
+
+    UPDATE tank.policy SET model = CASE model WHEN 'luna' THEN 'flash-lite' ELSE 'argon' END, updated_at = now()
+    WHERE tenant_id IS NULL AND model IN ('luna', 'sol', 'astra') AND task_type <> 'tank.judge';
+
+    -- The judge stays a different model from the ones it grades.
+    UPDATE tank.policy SET model = 'flash', updated_at = now()
+    WHERE tenant_id IS NULL AND task_type = 'tank.judge';
+
+    UPDATE tank.policy SET candidate_model = 'flash-lite'
+    WHERE tenant_id IS NULL AND candidate_model = 'luna';
+
+    INSERT INTO tank.policy_log (task_type, action, by_user, detail)
+    VALUES ('*', 'switch', 'claude', '{"id": "2026-10-14-gemini-only", "marker": true}'::jsonb);
+  END IF;
+END
+$$;
