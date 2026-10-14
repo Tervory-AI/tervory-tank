@@ -136,7 +136,10 @@ def test_ping_schedules_are_the_template_heartbeat() -> None:
     for folder, agent in (("radix", "radix"), ("tisan", "tisan")):
         module = _load(f"{folder}_app", ROOT / "agents" / folder / "app.py")
         assert module.app.state.agent == agent
-        assert module.app.state.handlers.keys() == {"ping"}
+        if folder == "radix":
+            assert module.app.state.handlers.keys() == {"ping", "scan"}
+        else:
+            assert module.app.state.handlers.keys() == {"ping"}
         assert module.app.state.schedules == [
             {
                 "tenant_id": "00000000-0000-0000-0000-000000000001",
