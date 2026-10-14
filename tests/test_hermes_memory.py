@@ -426,9 +426,10 @@ def test_hermes_service_is_on_the_template_corridor_only() -> None:
     data = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
     services = data["services"]
     hermes = services["hermes"]
-    assert hermes["networks"] == ["default", "tervory-gw-template"] or set(hermes["networks"]) == {
+    assert set(hermes["networks"]) == {
         "default",
         "tervory-gw-template",
+        "tervory-gw-tiger",
     }
     assert "ports" not in hermes
     env = hermes["environment"]

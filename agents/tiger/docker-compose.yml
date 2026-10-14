@@ -1,0 +1,41 @@
+# Tiger. Deploy this file as its own Coolify resource.
+# Build context is agents/ (the parent of this file), because the chassis lives there.
+# The only network is the external gateway. Coolify's own network for this resource
+# contains just this service, so it cannot see the main stack.
+
+services:
+  agent-tiger:
+    build:
+      context: ..
+      dockerfile: tiger/Dockerfile
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    environment:
+      AGENT_NAME: tiger
+      DATABASE_URL: postgresql://agent_tiger:${AGENT_DB_PASSWORD_TIGER}@postgres:5432/${POSTGRES_DB:-tervory}
+      TANK_URL: http://tank:8000
+      TANK_KEY: ${TANK_KEY_TIGER:-}
+      TIGER_URL: http://tiger:3000
+      HERMES_URL: http://hermes:8000
+      DATA_DIR: /data
+      DOMAIN_INTERVAL_S: "10"
+    volumes:
+      - agent_tiger_data:/data
+    networks:
+      - gw
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    expose:
+      - "8000"
+
+volumes:
+  agent_tiger_data:
+
+networks:
+  gw:
+    external: true
+    name: tervory-gw-tiger

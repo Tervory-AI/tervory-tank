@@ -24,6 +24,7 @@ services:
     networks:
       - default
       - tervory-gw-template
+      - tervory-gw-tiger
 
   redis:
     image: redis:7
@@ -52,12 +53,14 @@ services:
       QDRANT_API_KEY: ${QDRANT_API_KEY}
       TANK_API_KEY: ${TANK_API_KEY}
       TANK_KEY_TEMPLATE: ${TANK_KEY_TEMPLATE:-}
+      TANK_KEY_TIGER: ${TANK_KEY_TIGER:-}
       HERMES_EMBED_MODEL: ${HERMES_EMBED_MODEL:-BAAI/bge-small-en-v1.5}
     depends_on:
       - qdrant
     networks:
       - default
       - tervory-gw-template
+      - tervory-gw-tiger
     expose:
       - "8000"
     healthcheck:
@@ -98,6 +101,11 @@ services:
     shm_size: "1gb"            # Chromium needs shared memory
     environment:
       TIGER_MAX_PAGES: ${TIGER_MAX_PAGES:-4}
+    volumes:
+      - tiger_data:/data
+    networks:
+      - default
+      - tervory-gw-tiger
     expose:
       - "3000"
 
@@ -112,6 +120,7 @@ services:
       TANK_API_KEY: ${TANK_API_KEY}
       TERVORY_ADMIN_USER_IDS: ${TERVORY_ADMIN_USER_IDS:-}
       TANK_KEY_TEMPLATE: ${TANK_KEY_TEMPLATE:-}
+      TANK_KEY_TIGER: ${TANK_KEY_TIGER:-}
       TANK_REGION: ${TANK_REGION:-us-east}
       SEARXNG_URL: http://searxng:8080
       TIGER_URL: http://tiger:3000
@@ -124,6 +133,7 @@ services:
     networks:
       - default
       - tervory-gw-template
+      - tervory-gw-tiger
     expose:
       - "8000"
 
@@ -139,6 +149,7 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
       AGENT_DB_PASSWORD_TEMPLATE: ${AGENT_DB_PASSWORD_TEMPLATE:-}
+      AGENT_DB_PASSWORD_TIGER: ${AGENT_DB_PASSWORD_TIGER:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -167,6 +178,7 @@ volumes:
   pgdata:
   redisdata:
   qdrantdata:
+  tiger_data:
 
 # Created once on the server before this stack is deployed:
 #   docker network create tervory-gw-template
@@ -175,3 +187,7 @@ networks:
   tervory-gw-template:
     external: true
     name: tervory-gw-template
+  # Created once on the server: docker network create tervory-gw-tiger
+  tervory-gw-tiger:
+    external: true
+    name: tervory-gw-tiger

@@ -75,10 +75,25 @@ for host in tank postgres hermes; do
   fi
 done
 
-# tiger stays dark until C8. qdrant stays dark: the agent talks to Hermes, not
-# to the vector store. agent-other stands in for any second agent: it is not
-# on this network, so it has no name here.
+# qdrant stays dark: the agent talks to Hermes, not to the vector store.
+# agent-other stands in for any second agent: it is not on this network.
+# Tiger's browser is a neighbour only on tervory-gw-tiger. Every other
+# corridor must still be unable to resolve tiger.
+tiger_corridor=0
+for net in $(docker inspect -f '{{range $name, $net := .NetworkSettings.Networks}}{{$name}} {{end}}' "$container"); do
+  if [ "$net" = "tervory-gw-tiger" ]; then
+    tiger_corridor=1
+  fi
+done
 for host in workspace redis qdrant litellm searxng tiger agent-other; do
+  if [ "$host" = "tiger" ] && [ "$tiger_corridor" -eq 1 ]; then
+    if resolves tiger; then
+      mark 0 "tiger resolves"
+    else
+      mark 1 "tiger resolves"
+    fi
+    continue
+  fi
   if resolves "$host"; then
     mark 1 "$host does not resolve"
   else
@@ -158,12 +173,20 @@ for net in $nets; do
         if has_part "$short" hermes; then
           continue
         fi
+        if [ "$net" = "tervory-gw-tiger" ] && has_part "$short" tiger; then
+          continue
+        fi
         unexpected="$unexpected $short"
       done
-      if [ "$has_self" -eq 1 ] && [ "$has_tank" -eq 1 ] && [ "$has_pg" -eq 1 ] && [ -z "$unexpected" ]; then
-        mark 0 "gateway $net holds only this agent, tank, postgres, and hermes"
+      if [ "$net" = "tervory-gw-tiger" ]; then
+        label="gateway $net holds only this agent, tank, postgres, hermes, and tiger"
       else
-        mark 1 "gateway $net holds only this agent, tank, postgres, and hermes"
+        label="gateway $net holds only this agent, tank, postgres, and hermes"
+      fi
+      if [ "$has_self" -eq 1 ] && [ "$has_tank" -eq 1 ] && [ "$has_pg" -eq 1 ] && [ -z "$unexpected" ]; then
+        mark 0 "$label"
+      else
+        mark 1 "$label"
         if [ -n "$unexpected" ]; then
           say "unexpected members:$unexpected"
         fi
