@@ -2,6 +2,8 @@
 
 Each Squad member (Tiger, Market Lab, Radix, Tisan, Zenas, later Base) runs in its own box. The box has its own computer, files, schedule, and Tank key. `_chassis/` is the shared library. `_template/` is a working agent you copy.
 
+Zenas: corridor `tervory-gw-zenas`, login `agent_zenas`, key `TANK_KEY_ZENAS` on Tank and Hermes. No criminal law.
+
 | Agent | Corridor | What it is |
 | --- | --- | --- |
 | Radix | `tervory-gw-radix` (internal, no internet) | Security auditor. No skills yet. `RADIX_ALLOWED_HOSTS` is empty. |
