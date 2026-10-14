@@ -26,7 +26,7 @@ Spec: Build Pack v2 (Claude Doc) and `README.md`.
 8. **Nothing installed on the founder's laptop.** Work as a cloud/background agent. The founder's laptop is a window only.
 9. **Core skills know no industry.** `base.*`, Tiger and Tank learn general skills (find a site, read a page, mine prices, track a series). Industry knowledge (vocabulary, field mappings, targets, scoring) lives only in an engine (`ffl.*` today). A new industry is a new engine plugged into the same core skills, never a fork of them. If a core skill needs industry words, the engine passes them in.
 
-10. **Every paid route is its own approved step.** A paid service (a search API, a model provider switch, a data vendor) is never a silent fallback inside a skill. It sits in `tank.paid_routes` (or a policy row) and stays **off** until the founder sets it to auto. Code must not hand a skill a paid key, or switch provider on a refusal, unless that route is approved. If a cheaper or free route fails, the step fails and says so; it does not escalate to a paid one on its own.
+10. **Models: cheapest available, automatically. Everything else paid: approval first.** Models in `litellm/config.yaml` are approved; the gateway uses the cheapest one that has funds and moves up the price list when a provider is empty. Any other paid route (a search API such as Brave, a data vendor, a new model provider) is never a silent fallback inside a skill: it sits in `tank.paid_routes` and stays **off** until the founder sets it to auto. If a free route fails and no approved route exists, the step fails and says so.
 
 ## Conventions
 - Plain English in the UI. No jargon, no hype words.

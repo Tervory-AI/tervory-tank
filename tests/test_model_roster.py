@@ -24,10 +24,20 @@ def test_no_china_hosted_provider_in_the_roster() -> None:
         assert provider not in {"deepseek", "moonshot"}, m["model_name"]
 
 
-def test_no_automatic_provider_fallbacks() -> None:
-    """Switching provider is an approved step, never automatic."""
-    assert not CONFIG.get("litellm_settings", {}).get("fallbacks")
-    assert not CONFIG.get("router_settings", {}).get("fallbacks")
+def _price(name: str) -> float:
+    info = next(m["model_info"] for m in CONFIG["model_list"] if m["model_name"] == name)
+    return info["input_cost_per_token"] + info["output_cost_per_token"]
+
+
+def test_fallbacks_run_cheapest_available_first() -> None:
+    """Founder design: the cheapest funded model does the job; chains are sorted by price."""
+    chains = {k: v for entry in CONFIG["litellm_settings"]["fallbacks"] for k, v in entry.items()}
+    assert chains, "fallbacks are the cheapest-available mechanism"
+    for primary, chain in chains.items():
+        assert primary in NAMES and chain and all(n in NAMES for n in chain) and primary not in chain
+        prices = [_price(n) for n in chain]
+        assert prices == sorted(prices), f"{primary}: chain not cheapest-first"
+    assert CONFIG.get("router_settings", {}).get("cooldown_time"), "empty providers must be skipped"
 
 
 def test_policy_seeds_and_the_switch_name_roster_models() -> None:
