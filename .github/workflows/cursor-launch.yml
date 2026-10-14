@@ -52,6 +52,7 @@ jobs:
           }
           tried=""
           code=$(post -H "Authorization: Bearer $CURSOR_API_KEY"); tried="bearer=$code"
+          case "$code" in 2*) ;; *) echo "::warning title=Bearer reply::$(head -c 400 resp.json)" ;; esac
           case "$code" in 2*) ;; *)
             code=$(post -u "$CURSOR_API_KEY:"); tried="$tried basic=$code" ;;
           esac
