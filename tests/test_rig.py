@@ -358,10 +358,22 @@ async def test_rate_limit_and_bad_sheet_and_feeds_and_price_watch(tmp_path: Path
     assert rule_matches({"length_mm": [400, 520]}, {"length_mm": 10}) is False
 
 
+def _load_rig_app():
+    """Load agents/rig/app.py by path. A bare `import app` can resolve to tiger/app.py."""
+    path = ROOT / "agents" / "rig" / "app.py"
+    spec = importlib.util.spec_from_file_location("rig_public_app", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["rig_public_app"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 def test_public_app_drops_jobs_and_docs() -> None:
     import asyncio
 
-    import app as rig_app
+    rig_app = _load_rig_app()
+    assert Path(rig_app.__file__).resolve() == (ROOT / "agents" / "rig" / "app.py").resolve()
 
     paths = {getattr(route, "path", None) for route in rig_app.app.routes}
     assert "/health" in paths
