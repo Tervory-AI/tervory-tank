@@ -2,7 +2,7 @@
 
 **Founder rule (14 Oct 2026):** every run is a ladder of steps. Free steps run automatically. When the next step is paid (Brave search, a model pass in a batch run, any data vendor), the run **pauses** at that step and waits for an admin to approve it, unless that rung is set to **auto**. Brave stays available as a rung. Nothing is removed; it waits for approval.
 
-**Lane:** this brief explicitly allows changes to the Base queue worker and the skill runner in `tank/main.py` (AGENTS.md rule 6), plus `tank/schema.sql` (additive), `tank/skills/base.find_site/1.5.0/` (new version), the Workspace page `workspace/app/approvals/*` with `workspace/lib/tank.ts`, and new tests.
+**Start after B-3 is merged** (Base then runs in its own room, `agents/base/`). **Lane:** this brief allows changes to the Base worker in `agents/base/`, the skill runner in `tank/main.py` (AGENTS.md rule 6), plus `tank/schema.sql` (additive), `tank/skills/base.find_site/1.5.0/` (new version), the Workspace page `workspace/app/approvals/*` with `workspace/lib/tank.ts`, and new tests.
 
 ## Rungs
 - `tank.paid_routes (route, mode off|approve|auto)` exists (PR #41). Routes now: `search.brave`, `model.base.extract`, `model.base.business_data`. Seed the two model routes as `approve`. Interactive chat in the Workspace (a person asked) is not a batch rung and is not paused.
