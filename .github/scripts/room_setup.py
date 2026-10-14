@@ -3,7 +3,7 @@
 1. Create the room's Coolify app (agents/<room>, docker compose, isolated) if it does not exist.
 2. For AGENT_DB_PASSWORD_<ROOM>, TANK_KEY_<ROOM> (+ any extra names): if the room has no value yet,
    generate one here (48 hex chars), mask it, and write it to the main app and the room. Never printed.
-   A value that already exists is left alone, so re-running is safe.
+   Done once per room (marker TERVORY_ROOM_SECRETS), so re-running never rotates them by accident.
 3. Deploy the main app (creates the login, joins Tank/Hermes to the corridor), wait, deploy the room.
 The corridor network is declared in the main docker-compose.yml (compose creates it), so no server command.
 """
@@ -78,18 +78,19 @@ else:
     note("Room exists", f"{app_name} {room['uuid']}")
 
 # 2. secrets
-def existing(uuid: str) -> dict[str, bool]:
-    code, envs = api("GET", f"/applications/{uuid}/envs")
-    if code != 200 or not isinstance(envs, list):
-        fail("envs", f"HTTP {code}")
-    return {e["key"]: bool((e.get("value") or "").strip()) for e in envs if not e.get("is_preview")}
-
-room_has = existing(room["uuid"])
+# The API may hide env values (tokens without "sensitive" read), so we cannot tell an empty slot from
+# a set one by its value. A marker variable on the room records that secrets were generated once.
+MARKER = "TERVORY_ROOM_SECRETS"
+code, envs = api("GET", f"/applications/{room['uuid']}/envs")
+if code != 200 or not isinstance(envs, list):
+    fail("envs", f"HTTP {code}")
+keys = {e.get("key") for e in envs}
 shared = [f"AGENT_DB_PASSWORD_{upper}", f"TANK_KEY_{upper}"]
+wanted = shared + [n for n in EXTRA if n not in keys]
+if MARKER in keys:
+    wanted = [n for n in EXTRA if n not in keys]
 made_names = []
-for name in shared + EXTRA:
-    if room_has.get(name):
-        continue
+for name in wanted:
     value = secrets.token_hex(24)
     print(f"::add-mask::{value}", flush=True)
     item = {"key": name, "value": value, "is_preview": False, "is_literal": True}
@@ -99,6 +100,9 @@ for name in shared + EXTRA:
         if code not in (200, 201):
             fail("secret", f"{name} on {uuid}: HTTP {code}")
     made_names.append(name)
+if MARKER not in keys:
+    api("PATCH", f"/applications/{room['uuid']}/envs/bulk",
+        {"data": [{"key": MARKER, "value": "generated", "is_preview": False, "is_literal": True}]})
 note("Secrets", ("generated and stored: " + ", ".join(made_names)) if made_names else "already set, left alone")
 
 # 3. deploy main, then the room
