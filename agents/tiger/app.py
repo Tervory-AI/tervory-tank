@@ -158,6 +158,11 @@ def _store() -> PgStore:
     return PgStore(app.state.pool, SCHEMA)
 
 
+def _watch_http(exc: BadWatch) -> HTTPException:
+    status = 400 if str(exc) == "url not allowed" else 422
+    return HTTPException(status_code=status, detail=str(exc))
+
+
 def _fields(body: WatchIn | WatchPatch, partial: bool) -> dict[str, Any]:
     try:
         fields: dict[str, Any] = {"tenant_id": str(body.tenant_id)}
@@ -179,7 +184,7 @@ def _fields(body: WatchIn | WatchPatch, partial: bool) -> dict[str, Any]:
             fields["threshold"] = check_threshold(0 if body.threshold is None else body.threshold)
         return fields
     except BadWatch as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise _watch_http(exc) from exc
 
 
 @app.post("/watchlist", status_code=201)
@@ -229,7 +234,7 @@ async def list_observations(tenant_id: UUID = Query(), url: str = Query()) -> di
     try:
         page = check_url(url)
     except BadWatch as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        raise _watch_http(exc) from exc
     rows = await _store().list_observations(str(tenant_id), page)
     return {"observations": rows}
 
@@ -241,6 +246,6 @@ async def list_alerts(tenant_id: UUID = Query(), url: str | None = Query(default
         try:
             page = check_url(url)
         except BadWatch as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+            raise _watch_http(exc) from exc
     rows = await _store().list_alerts(str(tenant_id), page)
     return {"alerts": rows}

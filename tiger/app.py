@@ -29,7 +29,7 @@ from playwright.async_api import Browser, async_playwright
 from pydantic import BaseModel, Field
 
 from ocr import ocr_png
-from pool import SessionKeyError, blocks_resource, idle_expired, session_file
+from pool import SessionKeyError, idle_expired, render_block, route_continues, session_file
 
 MAX_PAGES = int(os.environ.get("TIGER_MAX_PAGES", "4"))
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
@@ -122,10 +122,12 @@ async def _looks_like_challenge(page) -> bool:
 
 async def _route(target, screenshot: bool) -> None:
     async def handle(route) -> None:
-        if blocks_resource(route.request.resource_type, screenshot):
-            await route.abort()
-        else:
+        # Every hop: the navigation, a redirect, and each script or image.
+        request = route.request
+        if route_continues(request.url, request.resource_type, screenshot):
             await route.continue_()
+        else:
+            await route.abort()
 
     await target.route("**/*", handle)
 
@@ -259,6 +261,9 @@ async def _close_idle() -> None:
 
 @app.post("/render")
 async def render(req: RenderReq) -> dict[str, Any]:
+    blocked = render_block(req.url)
+    if blocked is not None:
+        return blocked
     assert _browser is not None
     started = time.perf_counter()
     async with _sem:

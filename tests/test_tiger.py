@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import ipaddress
+import socket
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -20,7 +22,18 @@ sys.path.insert(0, str(ROOT / "agents" / "_chassis"))
 sys.path.insert(0, str(ROOT / "agents" / "tiger"))
 sys.path.insert(0, str(ROOT / "tiger"))
 
-from pool import IDLE_S, SessionKeyError, blocks_resource, idle_expired, session_file  # noqa: E402
+import pool as pool_mod  # noqa: E402
+import watch as watch_mod  # noqa: E402
+from pool import (  # noqa: E402
+    IDLE_S,
+    SessionKeyError,
+    blocks_resource,
+    idle_expired,
+    is_public_url,
+    render_block,
+    route_continues,
+    session_file,
+)
 from watch import (  # noqa: E402
     SCHEMA,
     BadWatch,
@@ -47,6 +60,7 @@ def _load(name: str, path: Path):
     spec = importlib.util.spec_from_file_location(name, path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
     spec.loader.exec_module(module)
     return module
 
@@ -107,7 +121,8 @@ def test_browser_does_not_hide_or_solve_checks() -> None:
     text = (ROOT / "tiger" / "app.py").read_text(encoding="utf-8")
     assert "TervoryTiger" in text
     assert "does not click" in text
-    assert "blocks_resource" in text
+    assert "route_continues" in text
+    assert "render_block" in text
     assert "png_base64" in text
     assert "storage_state" in text
     assert "idle_expired" in text
@@ -235,6 +250,88 @@ def test_robots_and_schedule() -> None:
     assert watch_is_due("1h", NOW, NOW - timedelta(hours=2)) is True
     with pytest.raises(BadWatch):
         check_url("file:///tmp/x")
+
+
+# Names the fake resolver knows. Anything else is a lookup failure, never the network.
+_RESOLVED = {
+    "example.com": ["93.184.216.34"],
+    "public.example": ["10.0.0.1"],
+    "split.example": ["93.184.216.34", "10.0.0.1"],
+}
+
+_REFUSED = [
+    "http://tank:8000",
+    "http://litellm:4000/key/info",
+    "http://localhost",
+    "http://127.0.0.1",
+    "http://10.0.0.5",
+    "http://169.254.169.254",
+    "http://[::1]",
+    "http://[::ffff:10.0.0.1]",
+    "https://public.example/item",
+]
+
+
+def _fake_getaddrinfo(host, _port, *_args, **_kwargs):
+    key = host.lower().rstrip(".")
+    if key in _RESOLVED:
+        ips = _RESOLVED[key]
+    else:
+        try:
+            ipaddress.ip_address(key)
+        except ValueError as exc:
+            raise socket.gaierror(8, "not found") from exc
+        ips = [key]
+    rows = []
+    for ip in ips:
+        if ipaddress.ip_address(ip.split("%", 1)[0]).version == 4:
+            rows.append((socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, 0)))
+        else:
+            rows.append((socket.AF_INET6, socket.SOCK_STREAM, 17, "", (ip, 0, 0, 0)))
+    return rows
+
+
+def _patch_dns(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(pool_mod.socket, "getaddrinfo", _fake_getaddrinfo)
+    monkeypatch.setattr(watch_mod.socket, "getaddrinfo", _fake_getaddrinfo)
+
+
+@pytest.mark.parametrize("url", _REFUSED)
+def test_private_and_internal_urls_are_refused(monkeypatch: pytest.MonkeyPatch, url: str) -> None:
+    _patch_dns(monkeypatch)
+    assert is_public_url(url) is False
+    assert watch_mod.is_public_url(url) is False
+    assert render_block(url) == {"error": "url not allowed"}
+    assert route_continues(url, "document", False) is False
+    with pytest.raises(BadWatch, match="url not allowed"):
+        check_url(url)
+
+
+def test_public_url_is_allowed_and_a_split_answer_is_not(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_dns(monkeypatch)
+    assert is_public_url("https://example.com") is True
+    assert watch_mod.is_public_url("https://example.com/path") is True
+    assert check_url("  https://example.com/path  ") == "https://example.com/path"
+    assert render_block("https://example.com") is None
+    assert route_continues("https://example.com/app.js", "script", False) is True
+    assert route_continues("https://example.com/photo.jpg", "image", False) is False
+    assert route_continues("https://example.com/photo.jpg", "image", True) is True
+    assert is_public_url("https://split.example") is False
+    assert watch_mod.is_public_url("https://split.example") is False
+
+
+def test_bad_watch_url_is_http_400(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_dns(monkeypatch)
+    agent = _load("tiger_agent_app", ROOT / "agents" / "tiger" / "app.py")
+    body = agent.WatchIn(tenant_id=TENANT_A, url="http://127.0.0.1", every="1h")
+    with pytest.raises(agent.HTTPException) as caught:
+        agent._fields(body, partial=False)
+    assert caught.value.status_code == 400
+    assert caught.value.detail == "url not allowed"
+    other = agent.WatchIn(tenant_id=TENANT_A, url="https://example.com", every="nope")
+    with pytest.raises(agent.HTTPException) as schedule:
+        agent._fields(other, partial=False)
+    assert schedule.value.status_code == 422
 
 
 def test_two_tenants_get_separate_rows_and_a_price_change_alerts() -> None:
