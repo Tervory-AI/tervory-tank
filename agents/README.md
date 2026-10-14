@@ -2,6 +2,11 @@
 
 Each Squad member (Tiger, Market Lab, Radix, Tisan, Zenas, later Base) runs in its own box. The box has its own computer, files, schedule, and Tank key. `_chassis/` is the shared library. `_template/` is a working agent you copy.
 
+| Agent | Corridor | What it is |
+| --- | --- | --- |
+| Radix | `tervory-gw-radix` (internal, no internet) | Security auditor. No skills yet. `RADIX_ALLOWED_HOSTS` is empty. |
+| Tisan | `tervory-gw-tisan` | Developer and designer. No skills yet. |
+
 The chassis knows no industry. Vocabulary, field names, and scoring stay in an engine. The engine passes them in.
 
 ## What a box has
