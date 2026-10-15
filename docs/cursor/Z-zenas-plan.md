@@ -57,6 +57,8 @@ South African work runs on infrastructure in South Africa; US work runs in the U
 - **Done when:** same tests as Z2 for SA.
 
 ## Z4 — Research and reasoning skills (core, jurisdiction-free)
+> **14 Oct 2026: replaced by `docs/cursor/Z4-legal-ladder.md`** (law worked out once per law version as rule cards, facts applied cheaply, on the Tank ladder). The list below is kept for reference.
+
 - `zenas.retrieve@1.0.0`: hybrid search (exact citation + full text + meaning), filtered by jurisdiction, level, kind and "as at" date; returns passages with citations.
 - `zenas.cite_check@1.0.0` (pure code): every citation resolves; every quotation matches the source text; flags superseded versions.
 - `zenas.issue_spot@1.0.0`: facts in → issues, applicable law (retrieved, cited), open questions for the lawyer.
