@@ -10,7 +10,7 @@ from typing import Any, Awaitable, Callable
 
 from chassis.cron import is_due
 from chassis.db import as_json, schema_for
-from chassis.jobs import JobContext, decide_retry, decide_timeout
+from chassis.jobs import JobContext, decide_retry, decide_timeout, timeout_for
 from chassis.logs import log_line
 
 Handler = Callable[[JobContext], Awaitable[dict[str, Any]]]
@@ -191,7 +191,12 @@ async def run_claimed(conn: Any, agent: str, job: Any, handlers: dict[str, Handl
         log_line(agent, f"job {status}", tenant_id=str(tenant_id), job_id=str(job_id), level="error")
 
 
-async def enqueue_due(conn: Any, agent: str, now: datetime | None = None) -> None:
+async def enqueue_due(
+    conn: Any,
+    agent: str,
+    now: datetime | None = None,
+    job_timeouts: dict[str, int] | None = None,
+) -> None:
     schema = _schema(agent)
     clock = now or datetime.now(timezone.utc)
     rows = await conn.fetch(
@@ -217,15 +222,28 @@ async def enqueue_due(conn: Any, agent: str, now: datetime | None = None) -> Non
             )
             if current is None or not schedule_is_due(str(row["cron"]), clock, current["last_run"], agent=agent, tenant_id=str(tenant_id)):
                 continue
-            await conn.execute(
-                f"""
-                INSERT INTO {schema}.jobs (tenant_id, kind, input, status, run_at)
-                VALUES ($1, $2, $3::jsonb, 'queued', now())
-                """,
-                tenant_id,
-                row["kind"],
-                json.dumps(as_json(row["input"])),
-            )
+            timeout_s = timeout_for(str(row["kind"]), job_timeouts)
+            if timeout_s is None:
+                await conn.execute(
+                    f"""
+                    INSERT INTO {schema}.jobs (tenant_id, kind, input, status, run_at)
+                    VALUES ($1, $2, $3::jsonb, 'queued', now())
+                    """,
+                    tenant_id,
+                    row["kind"],
+                    json.dumps(as_json(row["input"])),
+                )
+            else:
+                await conn.execute(
+                    f"""
+                    INSERT INTO {schema}.jobs (tenant_id, kind, input, status, run_at, timeout_s)
+                    VALUES ($1, $2, $3::jsonb, 'queued', now(), $4)
+                    """,
+                    tenant_id,
+                    row["kind"],
+                    json.dumps(as_json(row["input"])),
+                    timeout_s,
+                )
             slot = clock.astimezone(timezone.utc).replace(second=0, microsecond=0)
             await conn.execute(
                 f"UPDATE {schema}.schedules SET last_run = $3 WHERE id = $1 AND tenant_id = $2",
@@ -250,11 +268,11 @@ async def job_loop(pool: Any, agent: str, handlers: dict[str, Handler], ctx_for:
         await asyncio.sleep(JOB_POLL_S)
 
 
-async def schedule_loop(pool: Any, agent: str) -> None:
+async def schedule_loop(pool: Any, agent: str, job_timeouts: dict[str, int] | None = None) -> None:
     while True:
         try:
             async with pool.acquire() as conn:
-                await enqueue_due(conn, agent)
+                await enqueue_due(conn, agent, job_timeouts=job_timeouts)
         except Exception:  # noqa: BLE001
             log_line(agent, "schedule tick failed", level="error")
         await asyncio.sleep(SCHEDULE_POLL_S)

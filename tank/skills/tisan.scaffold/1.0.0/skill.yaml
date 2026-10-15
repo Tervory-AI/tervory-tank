@@ -1,0 +1,29 @@
+id: tisan.scaffold
+version: 1.0.0
+agent: tisan
+rung: 3
+task_type: tisan.scaffold
+description: >
+  Build a ready-to-edit Next.js site from a short brief. Colours and fonts
+  become design tokens. The project is checked in Tisan's room before it is returned.
+input:
+  type: object
+  required: [name, slug, brand]
+  properties:
+    name: {type: string}
+    slug: {type: string}
+    pages: {type: array, items: {type: string}}
+    locale: {type: string}
+    brand:
+      type: object
+      properties:
+        colours: {type: object}
+        fonts: {type: object}
+        logo_url: {type: string}
+output:
+  type: object
+  properties:
+    files: {type: array}
+    token_set: {type: object}
+    checks: {type: array}
+eval_threshold: 1.0
