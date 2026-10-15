@@ -293,12 +293,12 @@ def test_blank_agent_key_is_ignored(monkeypatch: pytest.MonkeyPatch):
 def test_agent_key_is_limited_to_route_skill_run_and_health(monkeypatch: pytest.MonkeyPatch):
     _clear_agent_keys(monkeypatch)
     monkeypatch.setenv("TANK_KEY_TEMPLATE", "template-secret-value")
-    allowed = ("/health", "/v1/route", "/v1/skills/base.find_site/run")
+    allowed = ("/health", "/v1/route", "/v1/skala/base.find_site/run")
     blocked = (
         "/v1/policy",
         "/v1/graduation",
-        "/v1/skills/base.find_site/approve",
-        "/v1/skills/base.find_site/1.0.0/evals",
+        "/v1/skala/base.find_site/approve",
+        "/v1/skala/base.find_site/1.0.0/evals",
         "/v1/base/run",
         "/v1/tasks",
         "/v1/ledger/summary",

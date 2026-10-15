@@ -401,7 +401,7 @@ BEGIN
 END
 $$;
 
--- Zenas scope gate (Z1). From tank/skills/zenas.scope/1.0.0/policy.sql; model is Gemini Flash-Lite while Gemini carries the work.
+-- Zenas scope gate (Z1). Model is Gemini Flash-Lite while Gemini carries the work.
 INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_tokens_out, system_prompt) VALUES
   ('zenas.scope', 1, 'flash-lite', 'urgent', 'tenant', 400,
    'You classify a request for Zenas. Reply with strict JSON only: {"area":"<id>","jurisdiction":"us|za|both"}. Use an allowed area id or "none". Do not give legal advice. Do not help with criminal law.')
@@ -635,11 +635,11 @@ CREATE TABLE IF NOT EXISTS tank.search_state (
     proposed             text
 );
 
--- Zenas ladder (Z4). Rule cards use the top tier and are reused for the region.
+-- Zenas ladder (Z4). Rule cards use luna, the same model as the other late Zenas rows.
 -- Apply, compose, case facts, and plain language stay on the cheapest model.
 -- cache_scope region is the law layer. Apply stays inside the tenant.
 INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_tokens_out, system_prompt) VALUES
-  ('zenas.rule_card', 1, 'astra', 'standard', 'region', 1200,
+  ('zenas.rule_card', 1, 'luna', 'standard', 'region', 1200,
    'You build a rule card from the passages you are given. Reply with JSON only. Every element cites one passage. Do not add law that is not in the passages. Do not include client facts or personal identifiers.'),
   ('zenas.case_facts', 1, 'luna', 'batch', 'region', 800,
    'You read one judgment and reply with JSON only: fact features, element findings, and the outcome, as the court stated them. Do not add facts.'),
@@ -654,3 +654,28 @@ INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_toke
   ('zenas.review', 1, 'luna', 'standard', 'tenant', 400,
    'You name the risk of one difference: low, medium, or high. Do not add law or a replacement sentence. Reply with that one word.')
 ON CONFLICT DO NOTHING;
+
+-- zenas.rule_card was seeded as astra, which has no LiteLLM fallback. The other late
+-- Zenas rows use luna, and luna falls back in litellm/config.yaml. One-time, so a later
+-- choice is kept. Only a row that is still astra moves.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM tank.policy_log
+    WHERE action = 'switch' AND detail->>'id' = '2026-10-15-zenas-rule-card-fallback'
+  ) THEN
+    INSERT INTO tank.policy_log (task_type, action, from_model, to_model, by_user, detail)
+    SELECT task_type, 'switch', model, 'luna', 'tank',
+           '{"id": "2026-10-15-zenas-rule-card-fallback"}'::jsonb
+    FROM tank.policy
+    WHERE task_type = 'zenas.rule_card' AND tenant_id IS NULL AND model = 'astra';
+
+    UPDATE tank.policy
+    SET model = 'luna', updated_at = now()
+    WHERE task_type = 'zenas.rule_card' AND tenant_id IS NULL AND model = 'astra';
+
+    INSERT INTO tank.policy_log (task_type, action, by_user, detail)
+    VALUES ('*', 'switch', 'tank', '{"id": "2026-10-15-zenas-rule-card-fallback", "marker": true}'::jsonb);
+  END IF;
+END
+$$;

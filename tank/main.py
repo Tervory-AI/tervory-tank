@@ -8,11 +8,11 @@ Endpoints
   GET  /v1/tasks/{id}?tenant_id=         one task
   POST /v1/ledger/{id}/feedback          a person's verdict on an answer: accepted | rejected
   GET  /v1/ledger/summary                spend by model and rung for a tenant (the client's ledger view)
-  GET  /v1/skills                        Skala registry: every package and its state
-  POST /v1/skills/{id}/{ver}/evals       run a package's golden cases; candidate -> staging on pass
-  POST /v1/skills/{id}/{ver}/approve     human sign-off; previous approved version retires
-  POST /v1/skills/{id}/{ver}/retire      take a version out of service
-  POST /v1/skills/{id}/run               run an approved skill (preview=true allows staging/candidate)
+  GET  /v1/skala                        Skala registry: every package and its state
+  POST /v1/skala/{id}/{ver}/evals       run a package's golden cases; candidate -> staging on pass
+  POST /v1/skala/{id}/{ver}/approve     human sign-off; previous approved version retires
+  POST /v1/skala/{id}/{ver}/retire      take a version out of service
+  POST /v1/skala/{id}/run               run an approved skill (preview=true allows staging/candidate)
   POST /v1/base/run                      proxy to the Base room (passes 1-7; split_by_state = one batch per state, smallest first)
   POST /v1/base/retry                    proxy: re-queue a batch's failed records
   POST /v1/base/rerun                    proxy: re-run a batch's flagged records (e.g. no_website) with current skills
@@ -111,7 +111,7 @@ HOME_REQUIRED = "home region must be us-east or za"
 
 
 def call_home(home: str | None, box: str | None = None) -> str | None:
-    """Home used by /v1/route, /v1/tasks, /v1/skills/*/run and background tasks.
+    """Home used by /v1/route, /v1/tasks, /v1/skala/*/run and background tasks.
 
     A missing value is this server's TANK_REGION, so the live Workspace and
     agent rooms keep working. An empty string is not missing: it is returned
@@ -289,7 +289,7 @@ async def require_key(request: Request, x_tank_key: str = Header(default="")) ->
     for an agent key. Agent keys are taken from the environment only, compared
     as SHA-256 bytes. A removed TANK_KEY_* stops matching. The table is synced
     once; it is never used to authenticate. The raw key is never logged.
-    An agent key may call /health, /v1/route, and /v1/skills/{id}/run only.
+    An agent key may call /health, /v1/route, and /v1/skala/{id}/run only.
     """
     import hmac
 
@@ -342,7 +342,8 @@ async def require_key(request: Request, x_tank_key: str = Header(default="")) ->
         workspace_bytes = TANK_API_KEY.encode()
     except UnicodeError:
         raise HTTPException(status_code=401, detail="missing or invalid X-Tank-Key") from None
-    if same(presented_bytes, workspace_bytes):
+    # An empty key must not match an empty header. Whitespace is empty.
+    if TANK_API_KEY.strip() and presented.strip() and same(presented_bytes, workspace_bytes):
         return None
 
     homes_key = os.environ.get("TANK_HOMES_KEY", "").strip()
@@ -360,7 +361,7 @@ async def require_key(request: Request, x_tank_key: str = Header(default="")) ->
     if matched is None:
         raise HTTPException(status_code=401, detail="missing or invalid X-Tank-Key")
     path = request.url.path
-    skill_run = path.startswith("/v1/skills/") and path.endswith("/run") and path.count("/") == 4
+    skill_run = path.startswith("/v1/skala/") and path.endswith("/run") and path.count("/") == 4
     if path not in {"/health", "/v1/route"} and not skill_run:
         raise HTTPException(status_code=403, detail="This agent key cannot call that.")
     return matched
@@ -436,6 +437,8 @@ async def _startup() -> None:
     """Open the pool, then apply the schema. Every statement in schema.sql is
     idempotent (IF NOT EXISTS / ON CONFLICT DO NOTHING), so this is safe on
     every start and means the database can never be missing Tank's tables."""
+    if not os.environ.get("TANK_API_KEY", "").strip():
+        raise RuntimeError("TANK_API_KEY is empty")
     global _pool
     _pool = await asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=5)
     with open(SCHEMA_PATH, encoding="utf-8") as f:
@@ -499,16 +502,33 @@ async def load_policy(task_type: str, tenant_id: uuid.UUID) -> dict[str, Any]:
 
 
 @app.get("/v1/policy", dependencies=[Depends(require_key)])
-async def list_policy() -> list[dict[str, Any]]:
+async def list_policy(tenant_id: uuid.UUID) -> list[dict[str, Any]]:
+    """This tenant's rows, plus platform defaults. Not another tenant's prompt."""
     async with pool().acquire() as conn:
-        rows = await conn.fetch("SELECT * FROM tank.policy ORDER BY task_type, tenant_id NULLS FIRST")
-    return [dict(r) for r in rows]
+        rows = await conn.fetch(
+            """
+            SELECT * FROM tank.policy
+            WHERE tenant_id = $1 OR tenant_id IS NULL
+            ORDER BY task_type, tenant_id NULLS FIRST
+            """,
+            tenant_id,
+        )
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        owner = item.get("tenant_id")
+        if owner is not None and str(owner) != str(tenant_id):
+            continue
+        out.append(item)
+    return out
 
 
 @app.put("/v1/policy/{task_type}", dependencies=[Depends(require_key)])
 async def put_policy(task_type: str, body: PolicyRow) -> dict[str, Any]:
     if body.task_type != task_type:
         raise HTTPException(status_code=400, detail="task_type in path and body differ")
+    if graduate.router_cannot_serve(body.model):
+        raise HTTPException(status_code=400, detail=graduate.ROUTER_BLOCK)
     async with pool().acquire() as conn:
         await conn.execute(
             """
@@ -544,6 +564,9 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
 
     policy = await load_policy(req.task_type, req.tenant_id)
     model = policy["model"]
+    # skill: and cache: are not model names. Do not send them to LiteLLM.
+    if graduate.router_cannot_serve(model):
+        raise HTTPException(status_code=400, detail=graduate.ROUTER_BLOCK)
     priority = req.priority or policy["priority"]
 
     messages = [m.model_dump() for m in req.messages]
@@ -1127,36 +1150,75 @@ async def _check_code_candidate(conn: Any, candidate: str) -> str | None:
 
 
 @app.get("/v1/graduation", dependencies=[Depends(require_key)])
-async def graduation() -> list[dict[str, Any]]:
-    """Every platform policy with its ladder: paid model, cheaper model, code."""
-    await _move_all()
+async def graduation(
+    tenant_id: uuid.UUID | None = None,
+    x_tank_key: str = Header(default=""),
+    x_tervory_admin: str = Header(default=""),
+) -> list[dict[str, Any]]:
+    """Read the ladder. A page load does not promote or roll back.
+
+    Call counts, spend, shadow samples, agreement, and rank costs are this
+    tenant's when the request names one. The mix is returned only to a founder.
+    """
+    import admin as tank_admin
+
+    founder = tank_admin.founder_allowed(x_tank_key, x_tervory_admin)
+    # $2 is true only for the founder view with no tenant. A named tenant never mixes.
+    founder_mix = founder and tenant_id is None
     async with pool().acquire() as conn:
         rows = await conn.fetch(
             """
             SELECT p.task_type, p.rung, p.model, p.candidate_model, p.shadow_rate, p.previous_model, p.eval_threshold,
                    p.cache_scope, p.priority, p.min_shadow_samples, p.max_reject_rate, p.auto_promote,
                    p.semantic_cache, p.promoted_at,
-                   (SELECT count(*) FROM tank.shadow s WHERE s.task_type=p.task_type AND s.candidate_model=p.candidate_model AND s.agreement IS NOT NULL) AS n,
-                   (SELECT avg(agreement) FROM tank.shadow s WHERE s.task_type=p.task_type AND s.candidate_model=p.candidate_model) AS agreement,
-                   (SELECT avg(candidate_cost_usd) FROM tank.shadow s WHERE s.task_type=p.task_type AND s.candidate_model=p.candidate_model) AS cand_cost,
-                   (SELECT avg(primary_cost_usd) FROM tank.shadow s WHERE s.task_type=p.task_type AND s.candidate_model=p.candidate_model) AS prim_cost,
-                   (SELECT count(*) FROM tank.ledger l WHERE l.task_type=p.task_type AND l.ts > now() - interval '30 days') AS calls_30d,
-                   (SELECT coalesce(sum(cost_usd),0) FROM tank.ledger l WHERE l.task_type=p.task_type AND l.ts > now() - interval '30 days') AS cost_30d,
-                   (SELECT count(*) FROM tank.ledger l WHERE l.task_type=p.task_type AND l.cache_hit) AS cache_hits
+                   (SELECT count(*) FROM tank.shadow s
+                     WHERE s.task_type=p.task_type AND s.candidate_model=p.candidate_model AND s.agreement IS NOT NULL
+                       AND (($1::uuid IS NOT NULL AND s.tenant_id = $1) OR $2::bool)) AS n,
+                   (SELECT avg(agreement) FROM tank.shadow s
+                     WHERE s.task_type=p.task_type AND s.candidate_model=p.candidate_model
+                       AND (($1::uuid IS NOT NULL AND s.tenant_id = $1) OR $2::bool)) AS agreement,
+                   (SELECT avg(candidate_cost_usd) FROM tank.shadow s
+                     WHERE s.task_type=p.task_type AND s.candidate_model=p.candidate_model
+                       AND (($1::uuid IS NOT NULL AND s.tenant_id = $1) OR $2::bool)) AS cand_cost,
+                   (SELECT avg(primary_cost_usd) FROM tank.shadow s
+                     WHERE s.task_type=p.task_type AND s.candidate_model=p.candidate_model
+                       AND (($1::uuid IS NOT NULL AND s.tenant_id = $1) OR $2::bool)) AS prim_cost,
+                   (SELECT count(*) FROM tank.ledger l
+                     WHERE l.task_type=p.task_type AND l.ts > now() - interval '30 days'
+                       AND (($1::uuid IS NOT NULL AND l.tenant_id = $1) OR $2::bool)) AS calls_30d,
+                   (SELECT coalesce(sum(cost_usd),0) FROM tank.ledger l
+                     WHERE l.task_type=p.task_type AND l.ts > now() - interval '30 days'
+                       AND (($1::uuid IS NOT NULL AND l.tenant_id = $1) OR $2::bool)) AS cost_30d,
+                   (SELECT count(*) FROM tank.ledger l
+                     WHERE l.task_type=p.task_type AND l.cache_hit
+                       AND (($1::uuid IS NOT NULL AND l.tenant_id = $1) OR $2::bool)) AS cache_hits
             FROM tank.policy p WHERE p.tenant_id IS NULL AND p.task_type <> 'tank.judge'
             ORDER BY cost_30d DESC, p.task_type
+            """,
+            tenant_id,
+            founder_mix,
+        )
+        ranks = await conn.fetch(
+            """
+            SELECT * FROM tank.graduation_rank
+            WHERE task_type IN (SELECT task_type FROM tank.policy WHERE tenant_id IS NULL)
             """
         )
-        ranks = await conn.fetch("SELECT * FROM tank.graduation_rank")
         notes = await conn.fetch(
             """
             SELECT DISTINCT ON (task_type) task_type, action, from_model, to_model, detail, created_at
             FROM tank.policy_log
             WHERE action IN ('promote', 'rollback') AND created_at > now() - interval '14 days'
+              AND task_type IN (SELECT task_type FROM tank.policy WHERE tenant_id IS NULL)
             ORDER BY task_type, created_at DESC
             """
         )
-        states = await conn.fetch("SELECT * FROM tank.search_state")
+        states = await conn.fetch(
+            """
+            SELECT * FROM tank.search_state
+            WHERE task_type IN (SELECT task_type FROM tank.policy WHERE tenant_id IS NULL)
+            """
+        )
         code_quotes = await _code_quotes(conn)
     price_quotes = _price_quotes()
     roster_fp, price_fp = graduate.fingerprints([*price_quotes, *code_quotes])
@@ -1173,24 +1235,50 @@ async def graduation() -> list[dict[str, Any]]:
         agr = _num(d["agreement"])
         thr = float(d["eval_threshold"] or 0.95)
         minimum = int(d["min_shadow_samples"] or 30)
+        prim = _num(d["prim_cost"])
+        cand = _num(d["cand_cost"])
+        calls = int(d["calls_30d"] or 0)
+        ordinary = tenant_id is None and not founder
+        if ordinary:
+            # No tenant and not a founder: do not return totals mixed across tenants.
+            n = 0
+            agr = None
+            prim = None
+            cand = None
+            calls = 0
+            d["calls_30d"] = 0
+            d["cost_30d"] = None
+            d["cache_hits"] = 0
+            d["saving_pct"] = None
+        else:
+            d["saving_pct"] = (round((1 - cand / prim) * 100) if prim and prim > 0 and cand is not None else None)
         d["n"] = n
         d["agreement"] = agr
         d["eligible"] = bool(d["candidate_model"]) and n >= minimum and agr is not None and agr >= thr
-        prim = _num(d["prim_cost"])
-        cand = _num(d["cand_cost"])
         d["prim_cost"] = prim
         d["cand_cost"] = cand
-        d["saving_pct"] = (round((1 - cand / prim) * 100) if prim and prim > 0 and cand is not None else None)
-        calls = int(d["calls_30d"] or 0)
         task_ranks = by_rank.get(d["task_type"], [])
-        ranked_view = [{
-            "name": rank["candidate"],
-            "kind": rank["kind"],
-            "status": rank["status"],
-            "shadow_n": int(rank["shadow_n"] or 0),
-            "shadow_agreement": _num(rank["shadow_agreement"]),
-            "cost_per_call": _num(rank["cost_per_call"]) if rank["cost_per_call"] is not None else _num(rank["price_usd"]),
-        } for rank in task_ranks]
+        ranked_view = []
+        for rank in task_ranks:
+            if founder_mix:
+                cost = _num(rank["cost_per_call"]) if rank["cost_per_call"] is not None else _num(rank["price_usd"])
+                samples = int(rank["shadow_n"] or 0)
+                agree = _num(rank["shadow_agreement"])
+            else:
+                # Rank rows are stored for the platform. A tenant sees only the
+                # shadow totals the query already limited to that tenant.
+                same = d["candidate_model"] is not None and rank["candidate"] == d["candidate_model"]
+                cost = cand if same else None
+                samples = n if same else 0
+                agree = agr if same else None
+            ranked_view.append({
+                "name": rank["candidate"],
+                "kind": rank["kind"],
+                "status": rank["status"],
+                "shadow_n": samples,
+                "shadow_agreement": agree,
+                "cost_per_call": cost,
+            })
         steps = graduate.ladder_from_policy(
             model=d["model"],
             previous_model=d["previous_model"],
@@ -1254,6 +1342,8 @@ async def promote(task_type: str, body: PromoteBody) -> dict[str, Any]:
     if move.action != "promote":
         if move.reason == "no candidate":
             raise HTTPException(status_code=400, detail="no candidate to promote")
+        if move.reason == graduate.ROUTER_BLOCK:
+            raise HTTPException(status_code=400, detail=move.reason)
         raise HTTPException(status_code=409, detail=move.reason or "not proven")
     return {"ok": True, "model": move.policy["model"], "previous_model": move.policy["previous_model"]}
 
@@ -1267,6 +1357,8 @@ async def rollback(task_type: str, body: PromoteBody) -> dict[str, Any]:
         )
         if row is None or not row["previous_model"]:
             raise HTTPException(status_code=400, detail="nothing to roll back to")
+        if graduate.router_cannot_serve(row["previous_model"]):
+            raise HTTPException(status_code=400, detail=graduate.ROUTER_BLOCK)
         rung, semantic = _rung_for(row["previous_model"])
         await conn.execute(
             """
@@ -1645,7 +1737,7 @@ def make_ctx(pkg: skala.SkillPackage, tenant_id: uuid.UUID, task_id: uuid.UUID |
 PLATFORM_TENANT = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 
-@app.get("/v1/skills", dependencies=[Depends(require_key)])
+@app.get("/v1/skala", dependencies=[Depends(require_key)])
 async def list_skills() -> list[dict[str, Any]]:
     async with pool().acquire() as conn:
         rows = await conn.fetch("SELECT * FROM tank.skills ORDER BY agent, id, version")
@@ -1656,7 +1748,7 @@ class EvalRun(BaseModel):
     by: str | None = None
 
 
-@app.post("/v1/skills/{skill_id}/{version}/evals", dependencies=[Depends(require_key)])
+@app.post("/v1/skala/{skill_id}/{version}/evals", dependencies=[Depends(require_key)])
 async def run_skill_evals(skill_id: str, version: str, body: EvalRun | None = None) -> dict[str, Any]:
     pkg = get_package(skill_id, version)
     if not pkg.cases:
@@ -1691,7 +1783,7 @@ class Approval(BaseModel):
     by: str = Field(min_length=1)
 
 
-@app.post("/v1/skills/{skill_id}/{version}/approve", dependencies=[Depends(require_key)])
+@app.post("/v1/skala/{skill_id}/{version}/approve", dependencies=[Depends(require_key)])
 async def approve_skill(skill_id: str, version: str, body: Approval) -> dict[str, Any]:
     """Human sign-off. Only a version in staging (evals passed) can be approved."""
     get_package(skill_id, version)
@@ -1711,7 +1803,7 @@ async def approve_skill(skill_id: str, version: str, body: Approval) -> dict[str
     return {"ok": True, "skill": f"{skill_id}@{version}", "state": "approved"}
 
 
-@app.post("/v1/skills/{skill_id}/{version}/retire", dependencies=[Depends(require_key)])
+@app.post("/v1/skala/{skill_id}/{version}/retire", dependencies=[Depends(require_key)])
 async def retire_skill(skill_id: str, version: str, body: Approval) -> dict[str, Any]:
     async with pool().acquire() as conn:
         n = await conn.execute("UPDATE tank.skills SET state='retired', updated_at=now() WHERE id=$1 AND version=$2", skill_id, version)
@@ -1749,7 +1841,7 @@ class SkillRun(BaseModel):
     home_region: str | None = None
 
 
-@app.get("/v1/skills/{skill_id}/run", dependencies=[Depends(require_key)])
+@app.get("/v1/skala/{skill_id}/run", dependencies=[Depends(require_key)])
 async def describe_skill(skill_id: str, preview: bool = False) -> dict[str, Any]:
     """Which version Base should pin, and which engines exist. Does not run the skill."""
     version = await _pick_version(skill_id, preview)
@@ -1757,7 +1849,7 @@ async def describe_skill(skill_id: str, preview: bool = False) -> dict[str, Any]
     return {"skill": skill_id, "version": version, "ref": pkg.ref, "engines": known_engines()}
 
 
-@app.post("/v1/skills/{skill_id}/run")
+@app.post("/v1/skala/{skill_id}/run")
 async def run_one_skill(
     skill_id: str,
     body: SkillRun,
