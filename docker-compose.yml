@@ -206,6 +206,9 @@ services:
     environment:
       TANK_URL: http://tank:8000
       TANK_API_KEY: ${TANK_API_KEY}
+      # Founder-only: set a za tenant's home on the ZA Tank (tenant id + region code only).
+      TANK_URL_ZA: ${TANK_URL_ZA:-}
+      TANK_API_KEY_ZA: ${TANK_API_KEY_ZA:-}
       TERVORY_ADMIN_USER_IDS: ${TERVORY_ADMIN_USER_IDS:-}
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
