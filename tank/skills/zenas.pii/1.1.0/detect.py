@@ -108,7 +108,7 @@ def sa_id_ok(number: str) -> bool:
     return check == digits[12]
 
 
-def _spans(text: str) -> list[tuple[int, int, str, str]]:
+def _spans(text: str, *, parties: bool = True) -> list[tuple[int, int, str, str]]:
     found: list[tuple[int, int, str, str]] = []
     for match in _SA_ID.finditer(text):
         value = match.group(1)
@@ -136,10 +136,11 @@ def _spans(text: str) -> list[tuple[int, int, str, str]]:
         found.append((match.start(), match.end(), "case_no", match.group(0)))
     for match in _REGISTRATION.finditer(text):
         found.append((match.start(), match.end(), "registration", match.group(0)))
-    for match in _COMPANY.finditer(text):
-        found.append((match.start(), match.end(), "party", match.group(0)))
-    for match in _PERSON.finditer(text):
-        found.append((match.start(), match.end(), "party", match.group(0)))
+    if parties:
+        for match in _COMPANY.finditer(text):
+            found.append((match.start(), match.end(), "party", match.group(0)))
+        for match in _PERSON.finditer(text):
+            found.append((match.start(), match.end(), "party", match.group(0)))
     found.sort(key=lambda item: (item[0], -(item[1] - item[0])))
     kept: list[tuple[int, int, str, str]] = []
     cursor = -1
@@ -161,9 +162,9 @@ def _placeholder(kind: str, count: int) -> str:
     return f"[{_LABELS[kind]}_{count}]"
 
 
-def detect(text: str) -> dict[str, Any]:
+def detect(text: str, *, parties: bool = True) -> dict[str, Any]:
     body = text or ""
-    spans = _spans(body)
+    spans = _spans(body, parties=parties)
     counts: dict[str, int] = {}
     matches: list[dict[str, str]] = []
     pieces: list[str] = []
@@ -197,39 +198,63 @@ def party_names(parties: Any) -> list[str]:
     return names
 
 
-def _named_spans(text: str, names: list[str]) -> list[tuple[int, int]]:
-    found: list[tuple[int, int]] = []
-    for name in names:
-        if len(name) < 3:
+def regex_party_names(text: str) -> list[str]:
+    """Company suffixes and titled people. Plain names are not guessed."""
+    found: list[str] = []
+    for pattern in (_COMPANY, _PERSON):
+        found.extend(match.group(0) for match in pattern.finditer(text or ""))
+    return found
+
+
+def _replace_names(text: str, forms: list[str], placeholders: dict[str, str]) -> str:
+    spans: list[tuple[int, int, str]] = []
+    for name in forms:
+        label = placeholders.get(name.casefold())
+        if not label or len(name) < 3:
             continue
         for match in re.finditer(rf"(?<!\w){re.escape(name)}(?!\w)", text, re.IGNORECASE):
-            found.append((match.start(), match.end()))
-    found.sort(key=lambda item: (item[0], -(item[1] - item[0])))
-    kept: list[tuple[int, int]] = []
-    cursor = -1
-    for start, end in found:
-        if start < cursor:
+            spans.append((match.start(), match.end(), label))
+    spans.sort(key=lambda item: (item[0], -(item[1] - item[0])))
+    pieces: list[str] = []
+    cursor = 0
+    covered = -1
+    for start, end, label in spans:
+        if start < covered:
             continue
-        kept.append((start, end))
+        pieces.append(text[cursor:start])
+        pieces.append(label)
         cursor = end
-    return kept
+        covered = end
+    pieces.append(text[cursor:])
+    return "".join(pieces)
 
 
-def mask_client_text(text: str, parties: Any = None) -> dict[str, Any]:
-    """Replace personal details. A value that is still present is a failure."""
+def mask_client_text(
+    text: str,
+    parties: Any = None,
+    *,
+    forms: list[str] | None = None,
+    placeholders: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Replace personal details. A value that is still present is a failure.
+
+    When placeholders is set, each name keeps the letter assigned for the whole release.
+    """
     body = text or ""
-    names = party_names(parties)
+    names = list(forms) if forms is not None else party_names(parties)
+    assigned = placeholders
+    if assigned is None:
+        assigned = {}
+        for name in names:
+            key = name.casefold()
+            if len(name) < 3 or key in assigned:
+                continue
+            number = len(assigned) + 1
+            letter = chr(ord("A") + number - 1) if number <= 26 else str(number)
+            assigned[key] = f"[Party {letter}]"
     try:
-        spans = _named_spans(body, names)
-        pieces: list[str] = []
-        cursor = 0
-        for index, (start, end) in enumerate(spans):
-            letter = chr(ord("A") + index) if index < 26 else str(index + 1)
-            pieces.append(body[cursor:start])
-            pieces.append(f"[Party {letter}]")
-            cursor = end
-        pieces.append(body[cursor:])
-        found = detect("".join(pieces))
+        replaced = _replace_names(body, names, assigned)
+        found = detect(replaced, parties=placeholders is None)
         masked = str(found.get("text") or "")
         for match in found.get("matches") or []:
             value = str(match.get("value") or "")

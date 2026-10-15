@@ -261,3 +261,121 @@ async def test_released_client_work_is_masked_and_the_original_stays_private(
     assert document["body"] == BODY
     assert "masking failed" in caplog.text
     assert "Ada Nkosi" not in caplog.text
+
+
+async def _release(matters: MemoryStore, ladder: LadderMemory, matter: dict, document: dict, **kwargs: object) -> dict:
+    return await release_matter(
+        matters,
+        ladder,
+        tenant_id=TENANT_A,
+        home_region="us-east",
+        box_region="us-east",
+        matter_id=matter["id"],
+        document_id=document["id"],
+        reviewer="Ada Counsel",
+        admission_no="12345",
+        jurisdiction="us",
+        rule_card_ids=[],
+        features={},
+        element_findings=kwargs.get("element_findings") or [],
+        outcome="",
+        narrative=str(kwargs.get("narrative") or ""),
+        memo=str(kwargs.get("memo") or "A mutual NDA."),
+        lawyer_edits=str(kwargs.get("lawyer_edits") or ""),
+    )
+
+
+@pytest.mark.asyncio
+async def test_release_without_parties_is_not_shared() -> None:
+    matters = MemoryStore()
+    ladder = LadderMemory()
+    await matters.register_tenant(TENANT_A, "us-east")
+    await ladder.register_tenant(TENANT_A, "us-east")
+    matter = await matters.add_matter(
+        {
+            "tenant_id": TENANT_A,
+            "jurisdiction": "us",
+            "area": "contracts",
+            "title": "Mutual NDA",
+            "parties": [],
+            "status": "open",
+            "created_by": "ada",
+        }
+    )
+    document = await matters.add_document(
+        {
+            "matter_id": matter["id"],
+            "tenant_id": TENANT_A,
+            "kind": "memo",
+            "version": 1,
+            "body": "Ada Nkosi agrees a mutual NDA.",
+            "sources": [],
+            "state": "in_review",
+        }
+    )
+    released = await _release(matters, ladder, matter, document, narrative="Ada Nkosi agrees a mutual NDA.")
+    assert released["ok"] is True
+    assert released["shared"] is False
+    assert released["reason"] == "masking failed"
+    assert released["worked_matter_id"] is None
+    assert ladder.worked == []
+    assert document["body"] == "Ada Nkosi agrees a mutual NDA."
+
+
+@pytest.mark.asyncio
+async def test_recorded_names_keep_one_placeholder() -> None:
+    matters = MemoryStore()
+    ladder = LadderMemory()
+    await matters.register_tenant(TENANT_A, "us-east")
+    await ladder.register_tenant(TENANT_B, "us-east")
+    matter = await matters.add_matter(
+        {
+            "tenant_id": TENANT_A,
+            "jurisdiction": "us",
+            "area": "contracts",
+            "title": "Mutual NDA",
+            "parties": ["Northwind"],
+            "counterparties": ["Helios Trading"],
+            "status": "open",
+            "created_by": "ada",
+        }
+    )
+    body = "Northwind and Ada Nkosi agree a mutual NDA. Northwind keeps the writing for Helios Trading."
+    document = await matters.add_document(
+        {
+            "matter_id": matter["id"],
+            "tenant_id": TENANT_A,
+            "kind": "memo",
+            "version": 1,
+            "body": body,
+            "signatories": ["Ada Nkosi"],
+            "contacts": [{"name": "Sam Phelps"}],
+            "sources": [],
+            "state": "in_review",
+        }
+    )
+    narrative = "Northwind asks Sam Phelps to keep a mutual NDA."
+    reasoning = "Northwind recorded the promise in writing."
+    released = await _release(
+        matters,
+        ladder,
+        matter,
+        document,
+        narrative=narrative,
+        memo="A mutual NDA.",
+        lawyer_edits="Leave the writing duty with Northwind.",
+        element_findings=[{"element_id": "writing", "finding": "met", "reasoning": reasoning, "basis": []}],
+    )
+    assert released["shared"] is True
+    visible = await ladder.visible_worked(region="us-east", tenant_id=TENANT_B, sharing="region")
+    assert len(visible) == 1
+    shared = visible[0]
+    blob = json.dumps(shared)
+    for token in ("Northwind", "Ada Nkosi", "Helios Trading", "Sam Phelps"):
+        assert token not in blob
+    assert shared["fact_pattern"]["body"].count("[Party A]") == 2
+    assert "[Party A]" in shared["fact_pattern"]["narrative"]
+    assert "[Party A]" in shared["lawyer_edits"]
+    assert shared["element_findings"][0]["reasoning"] == "[Party A] recorded the promise in writing."
+    assert "[Party B]" in shared["fact_pattern"]["body"]
+    assert document["body"] == body

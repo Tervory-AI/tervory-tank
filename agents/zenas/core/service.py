@@ -926,6 +926,8 @@ async def release_matter(
     document = await matters.get_document(str(tenant_id), str(document_id))
     matter = await matters.get_matter(str(tenant_id), str(matter_id))
     shared = mask_share(
+        matter=matter,
+        document=document,
         parties=(matter or {}).get("parties"),
         body=str((document or {}).get("body") or ""),
         narrative=narrative,

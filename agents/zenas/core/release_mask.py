@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from agents.zenas.core.pii_detect import mask_client_text
+from agents.zenas.core.pii_detect import mask_client_text, regex_party_names
 
 log = logging.getLogger("zenas.material")
 
@@ -20,6 +20,27 @@ COURT_SOURCES = frozenset({"saflii", "courtlistener", "cap", "govza-gazette"})
 
 UNKNOWN = "material type is unknown"
 MASK_FAILED = "masking failed"
+
+# Fields that already name a person or a company. The body is not one of them.
+_NAME_KEYS = frozenset(
+    {
+        "parties",
+        "party",
+        "signatories",
+        "signatory",
+        "contacts",
+        "contact",
+        "counterparties",
+        "counterparty",
+        "name",
+        "legal_name",
+        "company",
+        "entity",
+        "person",
+        "organisation",
+        "organization",
+    }
+)
 
 
 def material_type_for_pool(source_id: str | None) -> str | None:
@@ -34,22 +55,92 @@ def log_withheld(reason: str) -> None:
     log.warning("not shared: %s", reason)
 
 
-def _walk(value: Any, parties: Any) -> Any:
+class _Names:
+    """One letter per distinct name, shared by every field in the release."""
+
+    def __init__(self) -> None:
+        self.labels: dict[str, str] = {}
+        self.forms: list[str] = []
+
+    def add(self, name: str) -> None:
+        text = (name or "").strip()
+        key = text.casefold()
+        if len(text) < 3 or key in self.labels:
+            return
+        number = len(self.labels) + 1
+        letter = chr(ord("A") + number - 1) if number <= 26 else str(number)
+        self.labels[key] = f"[Party {letter}]"
+        self.forms.append(text)
+
+    def extend(self, names: list[str]) -> None:
+        for name in names:
+            self.add(name)
+
+
+def _from_value(value: Any) -> list[str]:
     if isinstance(value, str):
-        masked = mask_client_text(value, parties)
+        text = value.strip()
+        return [text] if len(text) >= 3 else []
+    if isinstance(value, list):
+        found: list[str] = []
+        for item in value:
+            found.extend(_names_in(item) if isinstance(item, dict) else _from_value(item))
+        return found
+    if isinstance(value, dict):
+        return _names_in(value)
+    return []
+
+
+def _names_in(record: Any) -> list[str]:
+    if not isinstance(record, dict):
+        return []
+    found: list[str] = []
+    for key, value in record.items():
+        if key in _NAME_KEYS:
+            found.extend(_from_value(value))
+        elif isinstance(value, dict):
+            found.extend(_names_in(value))
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    found.extend(_names_in(item))
+    return found
+
+
+def _strings(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        found: list[str] = []
+        for item in value:
+            found.extend(_strings(item))
+        return found
+    if isinstance(value, dict):
+        found = []
+        for item in value.values():
+            found.extend(_strings(item))
+        return found
+    return []
+
+
+def _walk(value: Any, names: _Names) -> Any:
+    if isinstance(value, str):
+        masked = mask_client_text(value, forms=names.forms, placeholders=names.labels)
         if not masked["ok"]:
             raise ValueError(MASK_FAILED)
         return masked["text"]
     if isinstance(value, list):
-        return [_walk(item, parties) for item in value]
+        return [_walk(item, names) for item in value]
     if isinstance(value, dict):
-        return {key: _walk(item, parties) for key, item in value.items()}
+        return {key: _walk(item, names) for key, item in value.items()}
     return value
 
 
 def mask_share(
     *,
     parties: Any = None,
+    matter: Any = None,
+    document: Any = None,
     body: str = "",
     narrative: str = "",
     features: dict[str, Any] | None = None,
@@ -58,17 +149,30 @@ def mask_share(
     outcome: str = "",
     memo: str = "",
 ) -> dict[str, Any]:
-    """Mask the three things a shared client worked matter may keep."""
+    """Mask the three things a shared client worked matter may keep.
+
+    A matter with no recorded party names is not shared.
+    """
+    recorded = _from_value(parties if parties is not None else (matter or {}).get("parties"))
+    if not recorded:
+        return {"ok": False, "reason": MASK_FAILED}
+    names = _Names()
+    names.extend(recorded)
+    names.extend(_names_in(matter))
+    names.extend(_names_in(document))
+    payload = {
+        "body": body,
+        "narrative": narrative,
+        "features": features or {},
+        "findings": findings or [],
+        "lawyer_edits": lawyer_edits,
+        "outcome": outcome,
+        "memo": memo,
+    }
+    for text in _strings(payload):
+        names.extend(regex_party_names(text))
     try:
-        return {
-            "ok": True,
-            "body": _walk(body, parties),
-            "narrative": _walk(narrative, parties),
-            "features": _walk(features or {}, parties),
-            "findings": _walk(findings or [], parties),
-            "lawyer_edits": _walk(lawyer_edits, parties),
-            "outcome": _walk(outcome, parties),
-            "memo": _walk(memo, parties),
-        }
+        masked = {key: _walk(value, names) for key, value in payload.items()}
     except Exception:
         return {"ok": False, "reason": MASK_FAILED}
+    return {"ok": True, **masked}

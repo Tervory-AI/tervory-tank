@@ -292,7 +292,7 @@ async def test_released_matters_are_shared_inside_one_region(monkeypatch: pytest
             "jurisdiction": "us",
             "area": "contracts",
             "title": "Mutual NDA",
-            "parties": [],
+            "parties": ["Northwind"],
             "status": "open",
             "created_by": "ada",
         }
@@ -858,7 +858,7 @@ async def test_release_writes_a_training_pair_and_regions_do_not_cross() -> None
             "jurisdiction": "us",
             "area": "contracts",
             "title": "Mutual NDA",
-            "parties": [],
+            "parties": ["Northwind"],
             "status": "open",
             "created_by": "ada",
         }
