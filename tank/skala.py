@@ -210,14 +210,22 @@ async def run_evals(pkg: SkillPackage, make_ctx: Callable[[], SkillContext]) -> 
     cost = 0.0
     for i, case in enumerate(pkg.cases):
         ctx = make_ctx()
+        goal = case.get("expected", {})
         try:
             out = await run_skill(pkg, case["input"], ctx)
-            ok, why = score_case(case.get("expected", {}), out, case.get("tolerance", "exact"))
+            ok, why = score_case(goal, out, case.get("tolerance", "exact"))
         except Exception as exc:  # noqa: BLE001 — an exception is a failed case, recorded
             ok, why, out = False, f"error: {exc}", {}
         cost += ctx.cost_usd
         passed += int(ok)
-        details.append({"case": i, "name": case.get("name"), "passed": ok, "why": why})
+        details.append({
+            "case": i,
+            "name": case.get("name"),
+            "passed": ok,
+            "why": why,
+            "goal": goal,
+            "result": out,
+        })
     total = len(pkg.cases)
     return {
         "skill": pkg.ref,

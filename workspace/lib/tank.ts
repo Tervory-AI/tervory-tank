@@ -159,7 +159,7 @@ export type EvalResult = {
   cost_usd: number;
   state: SkillState;
   gate: "passed" | "failed";
-  details: { case: number; name: string | null; passed: boolean; why: string }[];
+  details: { case: number; name: string | null; passed: boolean; why: string; goal: unknown; result: unknown }[];
 };
 
 export function listSkills(): Promise<Skill[]> {
