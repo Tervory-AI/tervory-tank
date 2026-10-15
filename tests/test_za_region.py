@@ -55,7 +55,7 @@ def test_za_compose_is_a_tank_stack_with_its_own_stores() -> None:
     assert "tervory-gw-zenas" in data["services"]["hermes"]["networks"]
     assert data["services"]["tank"]["environment"]["ZENAS_AGENT_URL"] == "http://agent-zenas:8000"
     assert "/app/config.za.yaml" in data["services"]["litellm"]["command"]
-    assert "za-api.tervory.com" in COMPOSE
+    assert "za.tervory.com" in COMPOSE
     for service in data["services"].values():
         assert "ports" not in service
 
@@ -93,7 +93,7 @@ def test_za_compose_names_no_us_host_and_does_not_replicate() -> None:
     assert "us-east" not in lowered
     assert "boston" not in lowered
     assert "app.tervory.com" not in lowered
-    assert "api.tervory.com" not in COMPOSE.replace("za-api.tervory.com", "")
+    assert "api.tervory.com" not in COMPOSE
     assert "replicaof" not in lowered
     assert "wal_level" not in lowered
     assert "primary_conninfo" not in lowered

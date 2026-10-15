@@ -1,5 +1,5 @@
 # Tervory in South Africa. One stack, one server, no link to the United States.
-# Coolify deploys this file on the SA server and attaches za-api.tervory.com to tank
+# Coolify deploys this file on the SA server and attaches za.tervory.com to tank
 # (port 8000). Every other service stays internal.
 # Own Postgres, Redis, Qdrant, Hermes, Tank, LiteLLM, files and backups.
 # The Zenas room deploys separately: agents/zenas/docker-compose.za.yml.
@@ -112,7 +112,7 @@ services:
     networks:
       - default
       - tervory-gw-zenas
-    # Coolify attaches za-api.tervory.com to this service only.
+    # Coolify attaches za.tervory.com to this service only.
     expose:
       - "8000"
 
