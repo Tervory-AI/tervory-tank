@@ -48,3 +48,13 @@ export async function currentTenant(): Promise<Tenant> {
   }
   return { tenantId: uuidFrom(org.id), orgId: org.id, orgName: org.name, userId };
 }
+
+/** The active Clerk organization, or null when the user has not chosen one.
+ *  Does not create an organization. Onboarding uses this so a new client can create or join. */
+export async function activeTenant(): Promise<Tenant | null> {
+  const { userId, orgId } = await auth();
+  if (!userId || !orgId) return null;
+  const client = await clerkClient();
+  const org = await client.organizations.getOrganization({ organizationId: orgId });
+  return { tenantId: uuidFrom(orgId), orgId, orgName: org.name, userId };
+}
