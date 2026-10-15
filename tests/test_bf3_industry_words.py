@@ -29,8 +29,14 @@ CORE = (
 # Words that belong in the engine list, not in the core packages.
 BANNED = re.compile(
     r"firearms?|ammunit|ammo|\bguns?\b|\barms\b|gunbroker|armslist|\batf\b|\bffl\b|"
-    r"\btactical\b|\barmory\b|\bshooting\b|\bhunting\b",
+    r"\btactical\b|\barmory\b|\bshooting\b|\bhunting\b|"
+    r"\bsporting\b|\bgoods\b|\boutdoors?\b|\bpawn\b|\bdefense\b|\bprecision\b|"
+    r"\bfishing\b|\bbait\b|\btackle\b|\bfarm\b|\branch\b|\bauction\b|\bjewelry\b|\bloans?\b",
     re.I,
+)
+REMAINDER = (
+    "sporting", "goods", "outdoors", "outdoor", "pawn", "defense", "precision",
+    "fishing", "bait", "tackle", "farm", "ranch", "auction", "jewelry", "loan", "loans",
 )
 
 
@@ -82,6 +88,8 @@ def test_engine_file_holds_the_lists_the_call_site_forwards() -> None:
     assert loaded["generic_words"] == terms["generic_words"]
     assert loaded["blocked_hosts"] == terms["blocked_hosts"]
     assert loaded["generic_locals"] == terms["generic_locals"]
+    missing = [word for word in REMAINDER if word not in terms["generic_words"]]
+    assert missing == []
     assert engine_terms(None) == {"generic_words": [], "blocked_hosts": [], "generic_locals": []}
     assert engine_terms("nope") == {"generic_words": [], "blocked_hosts": [], "generic_locals": []}
 
@@ -103,6 +111,12 @@ async def test_a_bakery_is_not_scored_with_the_trade_list() -> None:
     )
     assert "arms" not in trade_name["name_words"]
     assert trade_name["name_words"] == ["harbor", "bakery"]
+
+    shop = "Harbor " + " ".join(word.capitalize() for word in REMAINDER)
+    kept = await find.run({"name": shop, "city": "Portland", "state": "OR"}, ctx)
+    assert kept["name_words"] == ["harbor", *REMAINDER]
+    dropped = await find.run({"name": shop, "city": "Portland", "state": "OR", "generic_words": list(REMAINDER)}, ctx)
+    assert dropped["name_words"] == ["harbor"]
 
     host = terms["blocked_hosts"][0]
     open_hint = await find.run({"name": "Harbor Arms Bakery", "website": f"https://{host}/item"}, ctx)

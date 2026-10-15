@@ -104,11 +104,10 @@ SEARCH_CANDIDATES = 6  # search results checked per engine
 
 # Legal endings and ordinary business words. A caller passes any further words.
 NEUTRAL_GENERIC = {"the", "llc", "inc", "co", "corp", "corporation", "company", "ltd", "and", "of",
-                   "sporting", "goods", "outdoors", "outdoor", "supply", "supplies",
-                   "sports", "shop", "store", "trading", "post", "pawn", "enterprises", "services", "group", "usa", "america",
-                   "general", "center", "centre", "sales", "international", "industries", "associates", "son", "sons", "brothers",
-                   "custom", "precision", "defense", "security", "fishing", "bait", "tackle", "hardware",
-                   "farm", "ranch", "auction", "jewelry", "loan", "loans", "exchange", "solutions", "products", "manufacturing", "works"}
+                   "supply", "supplies", "sports", "shop", "store", "trading", "post", "enterprises", "services",
+                   "group", "usa", "america", "general", "center", "centre", "sales", "international", "industries",
+                   "associates", "son", "sons", "brothers", "custom", "security", "hardware", "exchange", "solutions",
+                   "products", "manufacturing", "works"}
 
 
 def _extra_words(value: object) -> set[str]:
@@ -125,6 +124,8 @@ def _extra_words(value: object) -> set[str]:
 
 def _ignore(payload: dict) -> set[str]:
     return set(NEUTRAL_GENERIC) | _extra_words(payload.get("generic_words"))
+
+
 STATE_NAMES = {
     "al": "alabama", "ak": "alaska", "az": "arizona", "ar": "arkansas", "ca": "california", "co": "colorado", "ct": "connecticut",
     "de": "delaware", "fl": "florida", "ga": "georgia", "hi": "hawaii", "id": "idaho", "il": "illinois", "in": "indiana", "ia": "iowa",
