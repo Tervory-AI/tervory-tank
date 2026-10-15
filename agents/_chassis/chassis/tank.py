@@ -30,7 +30,7 @@ class TankClient:
 
     async def run_skill(self, tenant_id: str, skill_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         return await self._post(
-            f"/v1/skills/{skill_id}/run",
+            f"/v1/skala/{skill_id}/run",
             {"tenant_id": str(tenant_id), "input": payload},
         )
 
