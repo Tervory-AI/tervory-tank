@@ -19,9 +19,9 @@
 ## 3. South African law sources (`catalogue.py`, region `za`)
 Add catalogue entries (terms checked and recorded, as the US ones are) for the Z3 first wave, with fixtures only in this task; live loading is Z3b:
 - Legislation: Companies Act 71 of 2008, Consumer Protection Act 68 of 2008, POPIA (Act 4 of 2013), Customs and Excise Act 91 of 1964, International Trade Administration Act 71 of 2002, ECTA (Act 25 of 2002), LRA and BCEA, Trade Marks Act 194 of 1993; Conventional Arms Control Act and Firearms Control Act as regulatory compliance only.
-- Case law: SAFLII (SCA, Constitutional Court, High Court commercial), within its terms.
+- Case law: SAFLII (SCA, Constitutional Court, High Court commercial).
 - Court rules: Uniform Rules of Court, Magistrates' Courts Rules.
-- Record for each: licence, terms URL, whether bulk use is allowed. If the terms are unknown or forbid bulk copy, mark `bulk_use="link_only"`: linked, never copied.
+- Record for each: licence and terms URL, as information only. Data use is the founder's decision; do not block a source on your own reading of its terms. Keyed sources (e.g. Laws.Africa) read their key from the environment by name and are skipped cleanly until it is set.
 
 ## Done when
 CI green; `docker compose -f docker-compose.za.yml config` is valid; a `za` Tank refuses a prompt with an SA ID number for a non-SA provider (tested); a `us-east` tenant is refused by the `za` Tank (tested); `za` catalogue entries load from fixtures and appear in pool status.
