@@ -293,7 +293,7 @@ class _DescribeHttp:
         self.tank = tank
 
     async def get(self, url: str, params: dict | None = None, headers: dict | None = None, timeout: float | None = None):
-        skill_id = url.split("/v1/skills/", 1)[1].removesuffix("/run")
+        skill_id = url.split("/v1/skala/", 1)[1].removesuffix("/run")
         preview = str((params or {}).get("preview", "")).lower() == "true"
         try:
             data = await self.tank.describe_skill(skill_id, preview)

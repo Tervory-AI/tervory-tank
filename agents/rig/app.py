@@ -16,6 +16,7 @@ from chassis.logs import log_line
 from fastapi import FastAPI
 
 from rigbox.api import mount
+from rigbox.page_route import mount_page
 from rigbox.service import Service, WebhookHandoff
 from rigbox.store import PgStore
 
@@ -94,6 +95,7 @@ def _close_public_surface(application: FastAPI) -> None:
 
 
 _close_public_surface(app)
+mount_page(app)
 
 _inner = app.router.lifespan_context
 

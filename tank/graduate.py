@@ -382,10 +382,12 @@ def _wants_auto(policy: dict[str, Any]) -> bool:
 
 
 def router_cannot_serve(candidate: str | None) -> bool:
-    """run_route still posts policy.model to LiteLLM. A skill or the semantic cache is not a model name."""
-    if not candidate:
+    """run_route posts policy.model to LiteLLM. A skill or a cache name is not a model name."""
+    if candidate is None:
         return False
-    name = str(candidate)
+    name = str(candidate).strip()
+    if not name:
+        return False
     return is_skill(name) or is_semantic_cache(name) or name.startswith("cache:")
 
 
@@ -421,6 +423,8 @@ def rollback_if_dropped(policy: dict[str, Any], evidence: Evidence, now: datetim
         reasons.append("live agreement is below the bar")
     if not reasons:
         return Move("hold", _copied(policy), None)
+    if router_cannot_serve(str(policy.get("previous_model") or "")):
+        return Move("hold", _copied(policy), ROUTER_BLOCK)
     reason = "; ".join(reasons)
     return Move("rollback", _rolled_back(policy, reason), reason)
 

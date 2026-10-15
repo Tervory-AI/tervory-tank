@@ -151,7 +151,7 @@ class SkillClient:
 
     async def describe(self, skill_id: str, preview: bool) -> dict[str, Any]:
         response = await self._http.get(
-            f"{self._base}/v1/skills/{skill_id}/run",
+            f"{self._base}/v1/skala/{skill_id}/run",
             params={"preview": str(preview).lower()},
             headers=self._headers(),
             timeout=30,
@@ -183,7 +183,7 @@ class SkillClient:
     def bind(self, versions: dict[str, str], preview: bool, tenant_id: str) -> SkillCall:
         async def call(skill_id: str, payload: dict[str, Any]) -> dict[str, Any]:
             response = await self._http.post(
-                f"{self._base}/v1/skills/{skill_id}/run",
+                f"{self._base}/v1/skala/{skill_id}/run",
                 json={
                     "tenant_id": tenant_id,
                     "input": payload,
