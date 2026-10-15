@@ -44,9 +44,10 @@ def _request(path: str) -> Request:
 
 
 class _Conn:
-    def __init__(self, row: dict | None = None, rows: list | None = None) -> None:
+    def __init__(self, row: dict | None = None, rows: list | None = None, ranks: list | None = None) -> None:
         self.row = row
         self.rows = rows
+        self.ranks = ranks or []
         self.queries: list[tuple[str, tuple]] = []
         self.executes: list[tuple] = []
 
@@ -60,6 +61,8 @@ class _Conn:
         self.queries.append((sql, args))
         if "FROM tank.policy p" in sql or "tenant_id = $1 OR tenant_id IS NULL" in sql:
             return list(self.rows or [])
+        if "FROM tank.graduation_rank" in sql:
+            return list(self.ranks)
         return []
 
     async def execute(self, *args: object) -> str:
@@ -114,6 +117,38 @@ def _policy_row(**overrides: object) -> dict:
     }
     row.update(overrides)
     return row
+
+
+def _rank_rows() -> list[dict]:
+    return [
+        {
+            "task_type": "tier0.answer",
+            "candidate": "haiku",
+            "kind": "model",
+            "status": "shadow",
+            "shadow_n": 88,
+            "shadow_agreement": 0.91,
+            "cost_per_call": 0.02,
+            "price_usd": 0.004,
+        },
+        {
+            "task_type": "tier0.answer",
+            "candidate": "sol",
+            "kind": "model",
+            "status": "shadow",
+            "shadow_n": 77,
+            "shadow_agreement": 0.5,
+            "cost_per_call": 0.03,
+            "price_usd": 0.01,
+        },
+    ]
+
+
+def _ladder_numbers(row: dict) -> list:
+    found: list = []
+    for step in row["ladder"]["steps"]:
+        found.extend([step["samples"], step["agreement"], step["cost_per_call"]])
+    return found
 
 
 def _move_policy(candidate: str) -> dict:
@@ -320,7 +355,7 @@ async def test_graduation_read_does_not_move_a_model(monkeypatch: pytest.MonkeyP
     async def explode() -> None:
         raise AssertionError("page load moved a model")
 
-    conn = _Conn(rows=[_policy_row()])
+    conn = _Conn(rows=[_policy_row()], ranks=_rank_rows())
     monkeypatch.setattr(main, "_move_all", explode)
     monkeypatch.setattr(main, "pool", lambda: _Pool(conn))
     rows = await main.graduation()
@@ -328,37 +363,55 @@ async def test_graduation_read_does_not_move_a_model(monkeypatch: pytest.MonkeyP
     assert rows[0]["calls_30d"] == 0
     assert rows[0]["cost_30d"] is None
     assert rows[0]["cache_hits"] == 0
-    assert rows[0]["n"] == 40
-    assert rows[0]["eligible"] is True
+    assert rows[0]["n"] == 0
+    assert rows[0]["agreement"] is None
+    assert rows[0]["eligible"] is False
+    numbers = _ladder_numbers(rows[0])
+    assert 88 not in numbers
+    assert 77 not in numbers
+    assert 0.91 not in numbers
+    assert 0.02 not in numbers
     sql, args = conn.queries[0]
-    assert "l.tenant_id = $1" in sql
+    assert "($1::uuid IS NOT NULL AND s.tenant_id = $1) OR $2::bool" in sql
+    assert "($1::uuid IS NULL OR s.tenant_id = $1)" not in sql
     assert args == (None, False)
     assert all("UPDATE" not in query[0] for query in conn.queries)
 
 
 @pytest.mark.asyncio
 async def test_graduation_totals_for_one_tenant_are_not_mixed(monkeypatch: pytest.MonkeyPatch) -> None:
-    conn = _Conn(rows=[_policy_row()])
+    conn = _Conn(rows=[_policy_row()], ranks=_rank_rows())
     monkeypatch.setattr(main, "pool", lambda: _Pool(conn))
     rows = await main.graduation(tenant_id=TENANT)
     sql, args = conn.queries[0]
-    assert "s.tenant_id = $1" in sql
+    assert "($1::uuid IS NOT NULL AND s.tenant_id = $1) OR $2::bool" in sql
     assert "l.tenant_id = $1" in sql
     assert args == (TENANT, False)
-    assert "theirs" not in str(rows)
     assert rows[0]["calls_30d"] == 100
+    assert rows[0]["n"] == 40
+    assert rows[0]["agreement"] == 0.99
+    assert rows[0]["eligible"] is True
+    numbers = _ladder_numbers(rows[0])
+    assert 88 not in numbers
+    assert 77 not in numbers
+    assert 0.91 not in numbers
+    assert 0.02 not in numbers
+    assert 40 in numbers
 
 
 @pytest.mark.asyncio
 async def test_a_founder_still_receives_platform_totals(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TANK_API_KEY", "test")
     monkeypatch.setenv("TERVORY_ADMIN_USER_IDS", "user_founder")
-    conn = _Conn(rows=[_policy_row()])
+    conn = _Conn(rows=[_policy_row()], ranks=_rank_rows())
     monkeypatch.setattr(main, "pool", lambda: _Pool(conn))
     rows = await main.graduation(x_tank_key="test", x_tervory_admin="user_founder")
     assert rows[0]["calls_30d"] == 100
     assert rows[0]["cost_30d"] == 12.5
     assert rows[0]["cache_hits"] == 7
+    assert rows[0]["n"] == 40
+    assert rows[0]["eligible"] is True
+    assert 88 in _ladder_numbers(rows[0])
     _sql, args = conn.queries[0]
     assert args == (None, True)
 
