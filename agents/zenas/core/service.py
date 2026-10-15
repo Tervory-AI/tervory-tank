@@ -1009,7 +1009,11 @@ async def review_queue(
         return refused
     tags = _review_tags(jurisdiction)
     documents = await matters.list_open_documents(str(tenant_id))
-    worked = await ladder.visible_worked(region=_box(box_region), tenant_id=tenant_id, sharing="region")
+    worked = await ladder.visible_worked(
+        region=_box(box_region),
+        tenant_id=tenant_id,
+        sharing=sharing_mode(None),
+    )
     items: list[dict[str, Any]] = []
     for document in documents:
         matter = await matters.get_matter(str(tenant_id), str(document.get("matter_id") or ""))

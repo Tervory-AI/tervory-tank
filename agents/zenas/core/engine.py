@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 import re
 from datetime import date
 from pathlib import Path
@@ -80,9 +81,15 @@ def region_refusal(home: str | None, box: str | None) -> str | None:
 
 
 def sharing_mode(explicit: str | None = None) -> str:
-    raw = (explicit or "").strip().lower()
-    if raw in ("region", "tenant"):
-        return raw
+    """region shares released matters inside one region. tenant keeps them private.
+
+    An explicit region or tenant wins. Otherwise the value is ZENAS_MATTER_SHARING.
+    Unset or anything else stays on the founder default, region.
+    """
+    raw = explicit if explicit not in (None, "") else os.environ.get("ZENAS_MATTER_SHARING", "")
+    value = str(raw or "").strip().lower()
+    if value in ("region", "tenant"):
+        return value
     return "region"
 
 

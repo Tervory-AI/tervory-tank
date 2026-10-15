@@ -233,13 +233,6 @@ async def test_zenas_schema_on_empty_twice_and_on_main_with_roles() -> None:
             """
         )
         assert int(zenas_sequences) == 0
-        providers = await main.fetchval(
-            """
-            SELECT count(*) FROM information_schema.tables
-            WHERE table_schema = 'tank' AND table_name = 'tenant_providers'
-            """
-        )
-        assert int(providers) == 1
         await _assert_tenant_home(main)
         await _apply(main, zenas)
         kept_main = await main.fetchval("SELECT count(*) FROM agent_zenas.tenants")

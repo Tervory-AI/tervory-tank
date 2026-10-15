@@ -18,6 +18,7 @@ from agents.zenas.core.engine import (  # noqa: E402
     IDENTIFIER_REFUSED,
     prepare_prompt,
     region_refusal,
+    sharing_mode,
 )
 from agents.zenas.core.ladder_store import LadderMemory  # noqa: E402
 from agents.zenas.core.matters import region_refusal as matters_region_refusal  # noqa: E402
@@ -260,6 +261,217 @@ async def test_review_queue_shape_stays_in_the_home_region() -> None:
     )
     assert wrong["ok"] is False
     assert wrong["reason"] == "home region does not match the tenant record"
+
+
+@pytest.mark.asyncio
+async def test_released_matters_are_shared_inside_one_region(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Released worked matters are shared in the home region. Drafts are not, and the other region never sees them."""
+    monkeypatch.delenv("ZENAS_MATTER_SHARING", raising=False)
+    assert sharing_mode() == "region"
+    assert sharing_mode("tenant") == "tenant"
+    monkeypatch.setenv("ZENAS_MATTER_SHARING", "tenant")
+    assert sharing_mode() == "tenant"
+    monkeypatch.setenv("ZENAS_MATTER_SHARING", "elsewhere")
+    assert sharing_mode() == "region"
+    monkeypatch.delenv("ZENAS_MATTER_SHARING", raising=False)
+
+    tenant_c = "00000000-0000-0000-0000-0000000000c3"
+    draft_body = "DRAFT-ONLY-NEVER-SHARED"
+    pending_body = "IN-REVIEW-NOT-RELEASED"
+    unreleased_narrative = "UNRELEASED-WORKED-NOT-SHARED"
+    matters = MemoryStore()
+    ladder = LadderMemory()
+    for store in (matters, ladder):
+        await store.register_tenant(TENANT_A, "us-east")
+        await store.register_tenant(TENANT_B, "us-east")
+        await store.register_tenant(tenant_c, "za")
+    matter = await matters.add_matter(
+        {
+            "tenant_id": TENANT_A,
+            "jurisdiction": "us",
+            "area": "contracts",
+            "title": "Mutual NDA",
+            "parties": [],
+            "status": "open",
+            "created_by": "ada",
+        }
+    )
+    draft = await matters.add_document(
+        {
+            "matter_id": matter["id"],
+            "tenant_id": TENANT_A,
+            "kind": "memo",
+            "version": 1,
+            "body": draft_body,
+            "sources": [],
+            "state": "draft",
+        }
+    )
+    pending = await matters.add_document(
+        {
+            "matter_id": matter["id"],
+            "tenant_id": TENANT_A,
+            "kind": "memo",
+            "version": 2,
+            "body": pending_body,
+            "sources": [],
+            "state": "in_review",
+        }
+    )
+    ready = await matters.add_document(
+        {
+            "matter_id": matter["id"],
+            "tenant_id": TENANT_A,
+            "kind": "memo",
+            "version": 3,
+            "body": "The mutual NDA was in writing.",
+            "sources": [],
+            "state": "in_review",
+        }
+    )
+    released = await release_matter(
+        matters,
+        ladder,
+        tenant_id=TENANT_A,
+        home_region="us-east",
+        box_region="us-east",
+        matter_id=matter["id"],
+        document_id=ready["id"],
+        reviewer="Ada Counsel",
+        admission_no="12345",
+        jurisdiction="us",
+        rule_card_ids=[],
+        features={"form": "written"},
+        narrative="The mutual NDA was in writing.",
+        element_findings=[{"element_id": "written", "finding": "met", "basis": ["form"]}],
+        outcome="enforceable",
+        memo="Issue: mutual NDA. The promise is in writing under Delaware law in the United States.",
+    )
+    assert released["ok"] is True
+    unreleased = await ladder.add_worked(
+        {
+            "region": "us-east",
+            "tenant_id": TENANT_A,
+            "source": "draft",
+            "jurisdiction": "us",
+            "fact_pattern": {"narrative": unreleased_narrative, "features": {"form": "written"}},
+            "element_findings": [{"element_id": "written", "finding": "met", "basis": ["form"]}],
+            "outcome": "not released",
+        }
+    )
+    b_matter = await matters.add_matter(
+        {
+            "tenant_id": TENANT_B,
+            "jurisdiction": "us",
+            "area": "contracts",
+            "title": "Another mutual NDA",
+            "parties": [],
+            "status": "open",
+            "created_by": "bea",
+        }
+    )
+    await matters.add_document(
+        {
+            "matter_id": b_matter["id"],
+            "tenant_id": TENANT_B,
+            "kind": "memo",
+            "version": 1,
+            "body": "The mutual NDA was in writing.",
+            "sources": [],
+            "state": "in_review",
+        }
+    )
+
+    matched = await match_matters(
+        ladder,
+        tenant_id=TENANT_B,
+        home_region="us-east",
+        box_region="us-east",
+        jurisdiction="us",
+        rule_card_ids=[],
+        features={"form": "written"},
+        narrative="The mutual NDA was in writing.",
+        question=QUESTION,
+    )
+    assert matched["ok"] is True
+    seen = {item["worked_matter_id"] for item in matched["matches"]}
+    assert released["worked_matter_id"] in seen
+    assert unreleased["id"] not in seen
+    blob = json.dumps(matched)
+    assert draft_body not in blob
+    assert pending_body not in blob
+    assert unreleased_narrative not in blob
+
+    queued = await review_queue(
+        matters,
+        ladder,
+        tenant_id=TENANT_B,
+        home_region="us-east",
+        box_region="us-east",
+    )
+    assert queued["ok"] is True
+    document_ids = {item["document"]["id"] for item in queued["items"]}
+    assert draft["id"] not in document_ids
+    assert pending["id"] not in document_ids
+    assert ready["id"] not in document_ids
+    match_ids = {item["id"] for row in queued["items"] for item in row["matches"]}
+    assert released["worked_matter_id"] in match_ids
+    assert unreleased["id"] not in match_ids
+    queued_blob = json.dumps(queued)
+    assert draft_body not in queued_blob
+    assert pending_body not in queued_blob
+    assert unreleased_narrative not in queued_blob
+
+    abroad = await match_matters(
+        ladder,
+        tenant_id=tenant_c,
+        home_region="za",
+        box_region="za",
+        jurisdiction="za",
+        rule_card_ids=[],
+        features={"form": "written"},
+        narrative="The mutual NDA was in writing.",
+        question="Is a mutual NDA enforceable under South African law?",
+    )
+    assert abroad["ok"] is True
+    assert released["worked_matter_id"] not in {item["worked_matter_id"] for item in abroad["matches"]}
+    assert draft_body not in json.dumps(abroad)
+    assert unreleased_narrative not in json.dumps(abroad)
+    za_queue = await review_queue(
+        matters,
+        ladder,
+        tenant_id=tenant_c,
+        home_region="za",
+        box_region="za",
+    )
+    assert za_queue["ok"] is True
+    assert za_queue["items"] == []
+    assert released["worked_matter_id"] not in json.dumps(
+        await ladder.visible_worked(region="za", tenant_id=tenant_c, sharing=sharing_mode())
+    )
+
+    monkeypatch.setenv("ZENAS_MATTER_SHARING", "tenant")
+    private = await match_matters(
+        ladder,
+        tenant_id=TENANT_B,
+        home_region="us-east",
+        box_region="us-east",
+        jurisdiction="us",
+        rule_card_ids=[],
+        features={"form": "written"},
+        narrative="The mutual NDA was in writing.",
+        question=QUESTION,
+    )
+    assert released["worked_matter_id"] not in {item["worked_matter_id"] for item in private["matches"]}
+    private_queue = await review_queue(
+        matters,
+        ladder,
+        tenant_id=TENANT_B,
+        home_region="us-east",
+        box_region="us-east",
+    )
+    private_ids = {item["id"] for row in private_queue["items"] for item in row["matches"]}
+    assert released["worked_matter_id"] not in private_ids
 
 
 def test_engine_copies_match_and_regions_match_the_box() -> None:

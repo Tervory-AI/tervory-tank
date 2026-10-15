@@ -164,11 +164,12 @@ class LadderMemory:
         for row in self.worked:
             if row["region"] != box:
                 continue
-            if row.get("source") == "case":
+            source = str(row.get("source") or "")
+            owner = str(row.get("tenant_id") or "")
+            if source == "case" or owner == str(tenant_id):
                 visible.append(row)
                 continue
-            owner = str(row.get("tenant_id") or "")
-            if owner == str(tenant_id) or sharing == "region":
+            if sharing == "region" and source == "released":
                 visible.append(row)
         return visible
 
@@ -409,14 +410,17 @@ class PgLadder:
 
     async def visible_worked(self, *, region: str, tenant_id: str, sharing: str) -> list[dict[str, Any]]:
         if sharing == "region":
-            sql = "SELECT * FROM agent_zenas.worked_matters WHERE region = $1"
-            args: tuple[Any, ...] = (_region(region),)
+            sql = """
+            SELECT * FROM agent_zenas.worked_matters
+            WHERE region = $1
+              AND (source = 'case' OR tenant_id = $2 OR source = 'released')
+            """.strip()
         else:
             sql = """
             SELECT * FROM agent_zenas.worked_matters
             WHERE region = $1 AND (source = 'case' OR tenant_id = $2)
             """.strip()
-            args = (_region(region), _as_uuid(tenant_id))
+        args: tuple[Any, ...] = (_region(region), _as_uuid(tenant_id))
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(sql, *args)
         return [_row_worked(dict(row)) for row in rows]
