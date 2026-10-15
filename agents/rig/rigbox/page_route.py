@@ -1,0 +1,45 @@
+"""Shopper search page served at GET /. Calls this host's /v1/rig. Never logs the key."""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse, HTMLResponse
+
+_PAGE = Path(__file__).resolve().parent / "page"
+_ASSETS = {
+    "search.js": "text/javascript",
+    "search.css": "text/css",
+    "tervory-logo-on-white.png": "image/png",
+}
+
+
+def example_key() -> str:
+    """Publishable example key. Empty when the catalogue file is missing."""
+    publish = Path(__file__).resolve().parents[1] / "catalogues" / "example" / "publish.json"
+    try:
+        data = json.loads(publish.read_text(encoding="utf-8"))
+    except OSError:
+        return ""
+    keys = data.get("keys") or []
+    if not keys or not isinstance(keys[0], dict):
+        return ""
+    return str(keys[0].get("key") or "")
+
+
+def mount_page(application: FastAPI) -> None:
+    @application.get("/", include_in_schema=False)
+    async def search_page() -> HTMLResponse:
+        html = (_PAGE / "index.html").read_text(encoding="utf-8")
+        html = html.replace("__RIG_PUBLISHABLE_KEY__", json.dumps(example_key()))
+        return HTMLResponse(html)
+
+    @application.get("/page/{name}", include_in_schema=False)
+    async def search_asset(name: str) -> FileResponse:
+        media = _ASSETS.get(name)
+        path = (_PAGE / name).resolve()
+        if media is None or path.parent != _PAGE.resolve() or not path.is_file():
+            raise HTTPException(status_code=404, detail="Not found")
+        return FileResponse(path, media_type=media)
