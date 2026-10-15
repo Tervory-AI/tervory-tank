@@ -25,7 +25,7 @@ export async function requireReviewer(): Promise<Reviewer> {
   return { userId, name, admissionNo, jurisdictions };
 }
 
-/** Skills and Tank. Same Clerk user list as the admin page (`TERVORY_ADMIN_USER_IDS`). */
+/** Skala and Tank. Same Clerk user list as the admin page (`TERVORY_ADMIN_USER_IDS`). */
 export async function rejectUnlessFounder(): Promise<FounderDenial | null> {
   const { userId } = await auth();
   return founderDenial(userId, process.env["TERVORY_ADMIN_USER_IDS"]);

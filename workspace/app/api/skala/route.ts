@@ -5,7 +5,7 @@ import { currentTenant } from "@/lib/tenant";
 
 export const runtime = "nodejs";
 
-// Skills rejects everyone except a founder. Hiding the link is not the fix.
+// Skala rejects everyone except a founder. Hiding the link is not the fix.
 async function deny(): Promise<NextResponse | null> {
   const denied = await rejectUnlessFounder();
   if (!denied) return null;

@@ -24,7 +24,7 @@ def _handler(source: str, name: str) -> str:
     return source[start:] if nxt < 0 else source[start:start + len(marker) + nxt]
 
 
-SKILLS = _text(APP / "api" / "skills" / "route.ts")
+SKILLS = _text(APP / "api" / "skala" / "route.ts")
 TANK = _text(APP / "api" / "tank" / "route.ts")
 ACCESS = _text(APP / "review" / "access.ts")
 LAYOUT = _text(APP / "layout.tsx")
@@ -68,15 +68,22 @@ def test_rejection_is_not_found():
         assert "error: denied.error" in source
 
 
-def test_header_uses_the_plan_words_and_the_same_address():
-    assert 'label: "Skills"' in NAV
-    assert 'href: "/skills"' in NAV
+def test_page_address_is_skala_and_skills_is_gone():
+    assert 'label: "Skala"' in NAV
+    assert 'href: "/skala"' in NAV
+    assert "/skills" not in NAV
     assert 'href: "/tank"' in NAV
-    assert "Skala" not in NAV
-    assert "redirect(" not in NAV
-    page = _text(APP / "skills" / "page.tsx")
-    assert "<h1>Skills</h1>" in page
-    assert "/api/skills" in page
+    assert not (APP / "skills").exists()
+    assert not (APP / "api" / "skills").exists()
+    page = _text(APP / "skala" / "page.tsx")
+    assert "<h1>Skala</h1>" in page
+    assert "/api/skala" in page
+    assert "/skills" not in page
+    config = _text(ROOT / "workspace" / "next.config.ts")
+    middleware = _text(ROOT / "workspace" / "middleware.ts")
+    assert "redirect" not in config
+    assert "redirect" not in middleware
+    assert "/skills" not in middleware
 
 
 def test_product_header_skips_sign_in_sign_up_and_onboarding():

@@ -21,12 +21,13 @@ test("a blank list and a missing user are rejected", () => {
   assert.equal(isListedFounder("user_nope", "user_founder"), false);
 });
 
-test("the product header keeps Chat, Tasks, Data, Skills, Ledger, and Tank", () => {
+test("the product header says Skala and the address is /skala", () => {
   const customer = headerLinks(false).map((link) => link.label);
   const founder = headerLinks(true).map((link) => link.label);
   assert.deepEqual(customer, ["Chat", "Tasks", "Data", "Ledger"]);
-  assert.deepEqual(founder, ["Chat", "Tasks", "Data", "Skills", "Ledger", "Tank"]);
-  assert.equal(headerLinks(true).find((link) => link.label === "Skills")?.href, "/skills");
+  assert.deepEqual(founder, ["Chat", "Tasks", "Data", "Skala", "Ledger", "Tank"]);
+  assert.equal(headerLinks(true).find((link) => link.label === "Skala")?.href, "/skala");
+  assert.equal(headerLinks(true).some((link) => link.href === "/skills"), false);
   assert.equal(headerLinks(true).find((link) => link.label === "Tank")?.href, "/tank");
 });
 
@@ -34,7 +35,7 @@ test("sign-in, sign-up, and onboarding use their own shell", () => {
   for (const path of ["/sign-in", "/sign-in/", "/sign-in/factor-one", "/sign-up", "/sign-up/verify", "/onboarding", "/onboarding/"]) {
     assert.equal(usesOwnShell(path), true, path);
   }
-  for (const path of ["/", "/tasks", "/data", "/skills", "/ledger", "/tank", "/admin", "/review"]) {
+  for (const path of ["/", "/tasks", "/data", "/skala", "/ledger", "/tank", "/admin", "/review"]) {
     assert.equal(usesOwnShell(path), false, path);
   }
 });
