@@ -27,3 +27,15 @@ The founder does nothing for a new room except merge. Public rooms (Rig) also ne
 - Shared services (Tank, Postgres, Hermes, Tiger's browser) live in the MAIN stack and join every agent's corridor. Agents never live in the main stack.
 - Hex passwords only (`openssl rand -hex 24`), never logged.
 - Main-compose changes are additive: add networks/env lines; do not change existing services otherwise.
+
+## Regions
+
+South African clients and South African law stay in South Africa. United States clients stay in the United States. Same code, deployed twice. The region is `TANK_REGION`: `za` or `us-east`. It is not a fork.
+
+`docker-compose.za.yml` is the whole South Africa stack: its own Postgres, Redis, Qdrant, Hermes, LiteLLM, Tank, Zenas room, file volume and backup volume. Nothing in that file names a US host. There is no replication and no network shared with Boston. Coolify may list both servers; it keeps deploy settings, not client data.
+
+Tank is the only public service, at `za-api.tervory.com`. The corridor `tervory-gw-zenas` is created by that compose file. The Zenas service joins only that corridor. Tank, Postgres and Hermes join it as well. The agent uses the `agent_zenas` login, not the Postgres superuser.
+
+A Tank refuses a tenant whose home is the other region and does not store that tenant's text. In `za`, a prompt that still contains a personal identifier is refused for every provider that is not running in South Africa. No such model is active yet. `za-local` is a commented slot in `litellm/config.za.yaml`.
+
+The pool-loader service is not in this file. It is added on the ZA box only, and it uses this stack's database.

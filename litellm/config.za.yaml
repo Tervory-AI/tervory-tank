@@ -1,0 +1,155 @@
+# Model roster for the South Africa Tank (docker-compose.za.yml).
+# Same funded providers as litellm/config.yaml. No China-hosted providers.
+# No api_base points at a United States host. Provider keys come from the environment.
+#
+# A prompt that still contains a personal identifier may go only to a model with
+# hosted_in: za. None is active yet, so Tank refuses those prompts until one is.
+#
+# 14 Oct 2026: the funded providers (OpenAI, Google, xAI) carry the work over their APIs, never
+# OAuth sign-ins. A provider with no funds is skipped automatically; topping it up brings it back.
+# Prices are USD per token (per-million / 1e6), from each provider's pricing page on 14 Oct 2026:
+#   OpenAI GPT-6: platform.openai.com/docs/pricing; Gemini: ai.google.dev/pricing; xAI: docs.x.ai/developers/pricing.
+# China-hosted providers (DeepSeek, Moonshot/Kimi) are deliberately absent.
+
+model_list:
+  # ---------- OpenAI (API key, Responses/Chat) ----------
+  - model_name: luna            # cheap, fast workhorse: classify, extract, short drafts
+    litellm_params:
+      model: openai/gpt-6-luna
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      input_cost_per_token: 0.0000001
+      output_cost_per_token: 0.0000005
+
+  - model_name: sol             # analysis and longer writing
+    litellm_params:
+      model: openai/gpt-6-sol
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      input_cost_per_token: 0.000002
+      output_cost_per_token: 0.00001
+
+  - model_name: astra           # hardest reasoning only
+    litellm_params:
+      model: openai/gpt-6-astra
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      input_cost_per_token: 0.00001
+      output_cost_per_token: 0.00005
+
+  # ---------- Google Gemini (API key, paid tier: no training on our data) ----------
+  - model_name: flash-lite
+    litellm_params:
+      model: gemini/gemini-3.5-flash-lite
+      api_key: os.environ/GEMINI_API_KEY
+    model_info:
+      input_cost_per_token: 0.0000003
+      output_cost_per_token: 0.0000025
+
+  - model_name: flash
+    litellm_params:
+      model: gemini/gemini-3.8-flash
+      api_key: os.environ/GEMINI_API_KEY
+    model_info:
+      input_cost_per_token: 0.00000075     # introductory until 31 Dec 2026, then doubles
+      output_cost_per_token: 0.00000375
+
+  - model_name: argon
+    litellm_params:
+      model: gemini/gemini-4-argon
+      api_key: os.environ/GEMINI_API_KEY
+    model_info:
+      input_cost_per_token: 0.000002
+      output_cost_per_token: 0.00001
+
+  # ---------- xAI Grok (API key) ----------
+  - model_name: grok
+    litellm_params:
+      model: xai/grok-4.3
+      api_key: os.environ/XAI_API_KEY
+    model_info:
+      input_cost_per_token: 0.00000125
+      output_cost_per_token: 0.0000025
+
+  - model_name: grok-top
+    litellm_params:
+      model: xai/grok-4.7
+      api_key: os.environ/XAI_API_KEY
+    model_info:
+      input_cost_per_token: 0.000002
+      output_cost_per_token: 0.000006
+
+  - model_name: grok-build      # code work
+    litellm_params:
+      model: xai/grok-build-0.1
+      api_key: os.environ/XAI_API_KEY
+    model_info:
+      input_cost_per_token: 0.000001
+      output_cost_per_token: 0.000002
+
+  # ---------- Anthropic (returns after the top-up) ----------
+  - model_name: haiku
+    litellm_params:
+      model: anthropic/claude-haiku-5-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      input_cost_per_token: 0.0000001
+      output_cost_per_token: 0.0000005
+
+  - model_name: sonnet
+    litellm_params:
+      model: anthropic/claude-sonnet-5-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      input_cost_per_token: 0.000002
+      output_cost_per_token: 0.00001
+
+  - model_name: opus
+    litellm_params:
+      model: anthropic/claude-opus-5-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      input_cost_per_token: 0.000004
+      output_cost_per_token: 0.00002
+
+  # ---------- South African hosted model (not configured) ----------
+  # Uncomment after the research in docs/cursor/prompts/RESEARCH-ZENAS.md.
+  # hosted_in: za is what Tank treats as running in South Africa.
+  # Point api_base at a model on this server, never at a US host.
+  # Then set ZA_HOSTED_MODELS=za-local on the ZA Tank.
+  # - model_name: za-local
+  #   litellm_params:
+  #     model: openai/za-local
+  #     api_base: http://za-local:8000/v1
+  #     api_key: os.environ/ZA_LOCAL_API_KEY
+  #   model_info:
+  #     hosted_in: za
+  #     input_cost_per_token: 0.0000001
+  #     output_cost_per_token: 0.0000005
+
+litellm_settings:
+  drop_params: true
+  set_verbose: false
+  num_retries: 0
+  # Cheapest AVAILABLE model, automatically (founder design): each chain runs cheapest first.
+  # A provider with no credit, no key or an outage fails fast and is cooled down, so the next
+  # cheapest funded provider does the job. Chains are sorted by price (input + output per token);
+  # tests/test_model_roster.py keeps them sorted. Every model here is approved for use; anything
+  # outside this roster (search APIs, data vendors) is a paid route that needs approval.
+  fallbacks:
+    - luna: ["haiku", "flash-lite", "grok", "flash"]
+    - haiku: ["luna", "flash-lite", "grok", "flash"]
+    - flash-lite: ["grok", "flash"]
+    - grok: ["flash"]
+    - grok-build: ["grok-top", "sol", "argon", "sonnet"]
+    - grok-top: ["sol", "argon", "sonnet"]
+    - sol: ["argon", "sonnet"]
+    - argon: ["sonnet"]
+    - opus: ["astra"]
+
+router_settings:
+  allowed_fails: 1          # one refusal (no credit / bad key) and that model is skipped...
+  cooldown_time: 300        # ...for five minutes, so empty providers do not slow every call
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY

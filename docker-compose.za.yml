@@ -1,0 +1,181 @@
+# Tervory in South Africa. One stack, one server, no link to the United States.
+# Coolify deploys this file on the SA server and attaches za-api.tervory.com to tank
+# (port 8000). Every other service stays internal.
+# Own Postgres, Redis, Qdrant, Hermes, Tank, LiteLLM, Zenas room, files and backups.
+# No replication. No shared network with the other region. Do not add a US hostname here.
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      TANK_REGION: za
+      POSTGRES_USER: ${POSTGRES_USER:-tervory}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-tervory}
+    volumes:
+      - za_pgdata:/var/lib/postgresql/data
+      - za_backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tervory}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - default
+      - tervory-gw-zenas
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    environment:
+      TANK_REGION: za
+    volumes:
+      - za_redisdata:/data
+    networks:
+      - default
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    environment:
+      TANK_REGION: za
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY}
+    volumes:
+      - za_qdrantdata:/qdrant/storage
+    networks:
+      - default
+
+  hermes:
+    build: ./hermes
+    restart: unless-stopped
+    environment:
+      TANK_REGION: za
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_API_KEY: ${QDRANT_API_KEY}
+      TANK_API_KEY: ${TANK_API_KEY}
+      TANK_KEY_ZENAS: ${TANK_KEY_ZENAS:-}
+      HERMES_EMBED_MODEL: ${HERMES_EMBED_MODEL:-BAAI/bge-small-en-v1.5}
+    depends_on:
+      - qdrant
+    networks:
+      - default
+      - tervory-gw-zenas
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  litellm:
+    build: ./litellm
+    restart: unless-stopped
+    command: ["--config", "/app/config.za.yaml", "--port", "4000"]
+    environment:
+      TANK_REGION: za
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      XAI_API_KEY: ${XAI_API_KEY:-}
+    volumes:
+      - ./litellm/config.za.yaml:/app/config.za.yaml:ro
+    networks:
+      - default
+
+  tank:
+    build: ./tank
+    restart: unless-stopped
+    environment:
+      TANK_REGION: za
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
+      REDIS_URL: redis://redis:6379/0
+      LITELLM_URL: http://litellm:4000
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
+      TANK_API_KEY: ${TANK_API_KEY}
+      TERVORY_ADMIN_USER_IDS: ${TERVORY_ADMIN_USER_IDS:-}
+      TANK_KEY_ZENAS: ${TANK_KEY_ZENAS:-}
+      ZA_HOSTED_MODELS: ${ZA_HOSTED_MODELS:-}
+      TANK_PROVIDER_ALLOW: ${TANK_PROVIDER_ALLOW:-}
+      ZENAS_AGENT_URL: http://agent-zenas:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      litellm:
+        condition: service_started
+    networks:
+      - default
+      - tervory-gw-zenas
+    # Coolify attaches za-api.tervory.com to this service only.
+    expose:
+      - "8000"
+
+  agent-roles:
+    build:
+      context: ./agents
+      dockerfile: Dockerfile.roles
+    restart: "on-failure"
+    exclude_from_hc: true
+    environment:
+      TANK_REGION: za
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
+      AGENT_DB_PASSWORD_ZENAS: ${AGENT_DB_PASSWORD_ZENAS:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - default
+
+  agent-zenas:
+    build:
+      context: ./agents
+      dockerfile: zenas/Dockerfile
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    environment:
+      TANK_REGION: za
+      AGENT_NAME: zenas
+      DATABASE_URL: postgresql://agent_zenas:${AGENT_DB_PASSWORD_ZENAS}@postgres:5432/${POSTGRES_DB:-tervory}
+      TANK_URL: http://tank:8000
+      TANK_KEY: ${TANK_KEY_ZENAS:-}
+      HERMES_URL: http://hermes:8000
+      ZENAS_PII_KEY: ${ZENAS_PII_KEY:-}
+      DATA_DIR: /data
+    volumes:
+      - za_agent_data:/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - tervory-gw-zenas
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    expose:
+      - "8000"
+
+  # Thread A — pool-loader
+  # Do not define that service in this file. Thread A (the library) adds it.
+  # It runs only on this ZA box, sets TANK_REGION to za, and uses the postgres
+  # service above. It must not name a US host or join a US network.
+
+volumes:
+  # Local to this server. Do not replicate these to the United States.
+  za_pgdata:
+  za_redisdata:
+  za_qdrantdata:
+  za_agent_data:
+  za_backups:
+
+networks:
+  default:
+    name: tervory-za
+  tervory-gw-zenas:
+    name: tervory-gw-zenas
