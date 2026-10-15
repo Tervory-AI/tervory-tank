@@ -208,10 +208,11 @@ def test_code_candidate_must_be_approved_and_model_free() -> None:
 
 
 def test_promotion_holds_below_the_bar() -> None:
-    policy = _policy()
+    policy = _policy(candidate_model="flash-lite")
     too_few = graduate.apply(policy, _evidence(samples=10), NOW)
     assert too_few.action == "hold"
     assert too_few.reason == "too few shadow samples"
+    assert too_few.policy["model"] == "luna"
     low = graduate.apply(policy, _evidence(agreement=0.90), NOW)
     assert low.action == "hold"
     assert low.reason == "agreement is below the bar"
@@ -223,32 +224,54 @@ def test_promotion_holds_below_the_bar() -> None:
     assert rejected.reason == "client rejections are above the bar"
     waiting = graduate.promote_if_proven(policy, _evidence(), NOW, automatic=True)
     assert waiting.action == "promote"
+    assert waiting.policy["model"] == "flash-lite"
     manual = graduate.promote_if_proven({**policy, "auto_promote": False}, _evidence(samples=5), NOW, automatic=False)
     assert manual.action == "hold"
+    assert manual.policy["model"] == "luna"
 
 
 def test_promotion_happens_by_itself_above_the_bar() -> None:
-    move = graduate.apply(_policy(), _evidence(), NOW)
+    policy = _policy(candidate_model="flash-lite")
+    move = graduate.apply(policy, _evidence(), NOW)
     assert move.action == "promote"
-    assert move.policy["model"] == "skill:base.extract@2.0.0"
+    assert move.policy["model"] == "flash-lite"
     assert move.policy["previous_model"] == "luna"
     assert move.policy["candidate_model"] is None
-    assert move.policy["rung"] == 3
+    assert move.policy["rung"] == 1
     assert move.policy["shadow_rate"] == 0
     assert move.policy["semantic_cache"] is False
-    held = graduate.apply({**_policy(), "auto_promote": False}, _evidence(), NOW)
+    held = graduate.apply({**policy, "auto_promote": False}, _evidence(), NOW)
     assert held.action == "hold"
     assert held.reason == "proven, waiting for a person"
-    clicked = graduate.promote_if_proven({**_policy(), "auto_promote": False}, _evidence(), NOW, automatic=False)
+    assert held.policy["model"] == "luna"
+    clicked = graduate.promote_if_proven({**policy, "auto_promote": False}, _evidence(), NOW, automatic=False)
     assert clicked.action == "promote"
+    assert clicked.policy["model"] == "flash-lite"
+
+
+def test_code_and_semantic_cache_stay_out_of_the_model() -> None:
+    proven = _evidence()
+    for automatic in (True, False):
+        skill = graduate.promote_if_proven(_policy(), proven, NOW, automatic=automatic)
+        assert skill.action == "hold"
+        assert skill.reason == graduate.ROUTER_BLOCK
+        assert skill.policy["model"] == "luna"
+        assert skill.policy["candidate_model"] == "skill:base.extract@2.0.0"
+        cache = graduate.promote_if_proven(_policy(candidate_model="cache:semantic"), proven, NOW, automatic=automatic)
+        assert cache.action == "hold"
+        assert cache.reason == graduate.ROUTER_BLOCK
+        assert cache.policy["model"] == "luna"
+        assert cache.policy["semantic_cache"] is False
+    auto = graduate.apply(_policy(), proven, NOW)
+    assert auto.action == "hold" and auto.policy["model"] == "luna"
 
 
 def test_quality_drop_rolls_back_by_itself() -> None:
     promoted = _policy(
-        model="skill:base.extract@2.0.0",
+        model="flash-lite",
         candidate_model=None,
         previous_model="luna",
-        rung=3,
+        rung=1,
         promoted_at=NOW - timedelta(days=2),
     )
     slipped = graduate.apply(promoted, graduate.Evidence(live_agreement=0.40, rejected=0, judged=0), NOW)
@@ -283,12 +306,17 @@ def test_semantic_cache_respects_threshold_and_tenant_scope() -> None:
     policy = _policy(candidate_model="cache:semantic", semantic_cache=False)
     held = graduate.apply(policy, _evidence(samples=3, agreement=0.99), NOW)
     assert held.action == "hold"
+    assert held.policy["model"] == "luna"
     assert held.policy["semantic_cache"] is False
     moved = graduate.apply(policy, _evidence(), NOW)
-    assert moved.action == "promote"
-    assert moved.policy["model"] == "cache:semantic"
-    assert moved.policy["rung"] == 4
-    assert moved.policy["semantic_cache"] is True
+    assert moved.action == "hold"
+    assert moved.reason == graduate.ROUTER_BLOCK
+    assert moved.policy["model"] == "luna"
+    assert moved.policy["rung"] == 1
+    assert moved.policy["semantic_cache"] is False
+    manual = graduate.promote_if_proven(policy, _evidence(), NOW, automatic=False)
+    assert manual.action == "hold"
+    assert manual.policy["model"] == "luna"
 
 
 def test_shadow_budget_stops_paid_calls_and_never_stops_code() -> None:
@@ -426,40 +454,16 @@ async def test_shadows_extract_model_against_code_and_reports_fields() -> None:
 
 
 @pytest.mark.asyncio
-async def test_promoted_code_call_makes_zero_model_calls() -> None:
+async def test_a_refused_skill_stays_off_the_model_name() -> None:
+    """Promotion must not put a skill where run_route would send it to LiteLLM."""
     move = graduate.apply(_policy(), _evidence(), NOW)
-    assert move.action == "promote"
-    calls = 0
-
-    async def llm(_model: str, _payload: dict) -> tuple[str, float]:
-        nonlocal calls
-        calls += 1
-        return "should not run", 0.2
-
-    run_code = _load_run(EXTRACT / "2.0.0")
-
-    async def run(model: str, payload: dict) -> dict:
-        assert model == "skill:base.extract@2.0.0"
-        return await run_code(payload, Boom())
-
-    result = await graduate.answer(
-        str(move.policy["model"]),
-        {
-            "name": "Ridgeview Firearms",
-            "text": (
-                "Welcome to Ridgeview Firearms. We stock handguns, rifles and ammunition, "
-                "and offer gunsmithing. Owner Mark Ridge is a certified instructor."
-            ),
-        },
-        llm=llm,
-        run_code=run,
-    )
-    assert calls == 0
-    assert result.model_calls == 0
-    assert result.cost_usd == 0.0
-    assert result.rung == 3
-    body = json.loads(result.content)
-    assert body["categories"]
+    assert move.action == "hold"
+    assert move.policy["model"] == "luna"
+    assert not str(move.policy["model"]).startswith("skill:")
+    assert move.policy["model"] != "cache:semantic"
+    manual = graduate.promote_if_proven(_policy(), _evidence(), NOW, automatic=False)
+    assert manual.action == "hold"
+    assert manual.policy["model"] == "luna"
 
 
 @pytest.mark.asyncio

@@ -338,6 +338,8 @@ def _copied(policy: dict[str, Any]) -> dict[str, Any]:
 def _promoted(policy: dict[str, Any], now: datetime) -> dict[str, Any]:
     updated = _copied(policy)
     candidate = str(policy.get("candidate_model") or "")
+    if router_cannot_serve(candidate):
+        raise ValueError(ROUTER_BLOCK)
     updated["previous_model"] = policy.get("model")
     updated["model"] = candidate
     updated["candidate_model"] = None
@@ -379,9 +381,23 @@ def _wants_auto(policy: dict[str, Any]) -> bool:
     return bool(value)
 
 
+def router_cannot_serve(candidate: str | None) -> bool:
+    """run_route still posts policy.model to LiteLLM. A skill or the semantic cache is not a model name."""
+    if not candidate:
+        return False
+    name = str(candidate)
+    return is_skill(name) or is_semantic_cache(name) or name.startswith("cache:")
+
+
+ROUTER_BLOCK = "the router cannot serve this name with no LiteLLM call yet"
+
+
 def promote_if_proven(policy: dict[str, Any], evidence: Evidence, now: datetime, *, automatic: bool) -> Move:
     if not policy.get("candidate_model"):
         return Move("hold", _copied(policy), "no candidate")
+    candidate = str(policy.get("candidate_model") or "")
+    if router_cannot_serve(candidate):
+        return Move("hold", _copied(policy), ROUTER_BLOCK)
     ok, reason = proven_reason(policy, evidence)
     if not ok:
         return Move("hold", _copied(policy), reason)
