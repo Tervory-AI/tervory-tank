@@ -1686,4 +1686,168 @@ async def ledger_summary(tenant_id: uuid.UUID, days: int = 30) -> dict[str, Any]
         "by_model": [dict(r) for r in by_model],
     }
 
+
+# ---------- Tiger: the room owns the watches; Tank only proxies ----------
+# The Workspace is not on Tiger's corridor. These routes forward to the Tiger
+# agent and stamp the caller's tenant_id on the way. Rows for any other tenant
+# are dropped before the response leaves Tank.
+
+TIGER_AGENT_URL = "http://agent-tiger:8000"
+_TIGER_LIST_KEYS = ("watches", "observations", "alerts")
+
+
+def _tiger_tenant(request: Request, body: dict[str, Any] | None = None) -> uuid.UUID:
+    """The tenant this call is for. Query and body must name the same one."""
+    named = [value.strip() for key, value in request.query_params.multi_items() if key == "tenant_id" and value.strip()]
+    if body is not None and body.get("tenant_id") not in (None, ""):
+        named.append(str(body["tenant_id"]).strip())
+    if not named:
+        raise HTTPException(status_code=400, detail="tenant_id is required")
+    parsed: list[uuid.UUID] = []
+    for item in named:
+        try:
+            parsed.append(uuid.UUID(item))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="tenant_id is not a valid id") from None
+    if any(item != parsed[0] for item in parsed):
+        raise HTTPException(status_code=403, detail="tenant mismatch")
+    return parsed[0]
+
+
+def _same_tenant(value: Any, tenant_id: uuid.UUID) -> bool:
+    try:
+        return uuid.UUID(str(value)) == tenant_id
+    except (ValueError, TypeError, AttributeError):
+        return False
+
+
+def _tiger_keep(payload: Any, tenant_id: uuid.UUID) -> Any | None:
+    """Keep rows for this tenant only. A row with no tenant_id is dropped."""
+
+    def own(row: Any) -> bool:
+        return isinstance(row, dict) and "tenant_id" in row and _same_tenant(row.get("tenant_id"), tenant_id)
+
+    if isinstance(payload, list):
+        return [row for row in payload if own(row)]
+    if not isinstance(payload, dict):
+        return payload
+    if any(isinstance(payload.get(key), list) for key in _TIGER_LIST_KEYS):
+        scoped = dict(payload)
+        for key in _TIGER_LIST_KEYS:
+            rows = payload.get(key)
+            if isinstance(rows, list):
+                scoped[key] = [row for row in rows if own(row)]
+        if "tenant_id" in scoped and not _same_tenant(scoped.get("tenant_id"), tenant_id):
+            scoped.pop("tenant_id")
+        return scoped
+    if "tenant_id" in payload and not _same_tenant(payload.get("tenant_id"), tenant_id):
+        return None
+    return payload
+
+
+def _tiger_response(resp: Any, tenant_id: uuid.UUID) -> Response:
+    raw = resp.content or b""
+    if resp.status_code == 204 or not raw:
+        return Response(status_code=resp.status_code)
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return Response(content=raw, status_code=resp.status_code, media_type=resp.headers.get("content-type"))
+    scoped = _tiger_keep(payload, tenant_id)
+    if scoped is None:
+        return Response(
+            content=json.dumps({"detail": "no such watch"}).encode(),
+            status_code=404,
+            media_type="application/json",
+        )
+    return Response(content=json.dumps(scoped).encode(), status_code=resp.status_code, media_type="application/json")
+
+
+async def _tiger_body(request: Request) -> dict[str, Any]:
+    raw = await request.body()
+    if not raw:
+        return {}
+    try:
+        body = json.loads(raw)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="body must be json") from None
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="body must be an object")
+    return body
+
+
+async def _tiger_call(method: str, path: str, params: list[tuple[str, str]], content: bytes | None) -> Any:
+    if _http is None:
+        raise HTTPException(status_code=503, detail="Tiger is unreachable")
+    headers = {"content-type": "application/json"} if content else {}
+    try:
+        return await _http.request(
+            method,
+            TIGER_AGENT_URL.rstrip("/") + path,
+            content=content,
+            params=params,
+            headers=headers,
+            timeout=30,
+        )
+    except httpx.HTTPError:
+        raise HTTPException(status_code=503, detail="Tiger is unreachable") from None
+
+
+def _tiger_query(request: Request, name: str) -> str | None:
+    values = [value for key, value in request.query_params.multi_items() if key == name]
+    if not values:
+        return None
+    if any(value != values[0] for value in values):
+        raise HTTPException(status_code=400, detail=f"{name} mismatch")
+    return values[0]
+
+
+@app.get("/v1/tiger/watchlist", dependencies=[Depends(require_key)])
+async def tiger_list_watches(request: Request) -> Response:
+    tenant_id = _tiger_tenant(request)
+    resp = await _tiger_call("GET", "/watchlist", [("tenant_id", str(tenant_id))], None)
+    return _tiger_response(resp, tenant_id)
+
+
+@app.post("/v1/tiger/watchlist", dependencies=[Depends(require_key)])
+async def tiger_create_watch(request: Request) -> Response:
+    body = await _tiger_body(request)
+    tenant_id = _tiger_tenant(request, body)
+    forwarded: dict[str, Any] = {"tenant_id": str(tenant_id)}
+    for key in ("url", "label", "engine", "every", "enabled", "threshold"):
+        if key in body:
+            forwarded[key] = body[key]
+    resp = await _tiger_call("POST", "/watchlist", [], json.dumps(forwarded).encode())
+    return _tiger_response(resp, tenant_id)
+
+
+@app.delete("/v1/tiger/watchlist/{watch_id}", dependencies=[Depends(require_key)])
+async def tiger_delete_watch(watch_id: uuid.UUID, request: Request) -> Response:
+    body = await _tiger_body(request)
+    tenant_id = _tiger_tenant(request, body)
+    resp = await _tiger_call("DELETE", f"/watchlist/{watch_id}", [("tenant_id", str(tenant_id))], None)
+    return _tiger_response(resp, tenant_id)
+
+
+@app.get("/v1/tiger/observations", dependencies=[Depends(require_key)])
+async def tiger_observations(request: Request) -> Response:
+    tenant_id = _tiger_tenant(request)
+    url = (_tiger_query(request, "url") or "").strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="url is required")
+    resp = await _tiger_call("GET", "/observations", [("tenant_id", str(tenant_id)), ("url", url)], None)
+    return _tiger_response(resp, tenant_id)
+
+
+@app.get("/v1/tiger/alerts", dependencies=[Depends(require_key)])
+async def tiger_alerts(request: Request) -> Response:
+    tenant_id = _tiger_tenant(request)
+    params = [("tenant_id", str(tenant_id))]
+    url = _tiger_query(request, "url")
+    if url:
+        params.append(("url", url.strip()))
+    resp = await _tiger_call("GET", "/alerts", params, None)
+    return _tiger_response(resp, tenant_id)
+
+
 app.include_router(__import__("admin").router)
