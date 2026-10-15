@@ -42,7 +42,10 @@ jobs:
         run: pytest -q
         env:
           PYTHONPATH: tank
+          # One Postgres service. The pool schema test and the ladder schema test
+          # both connect here. The ladder test creates its own databases from this URL.
           POOL_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pooltest
+          ZENAS_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pooltest
 
   workspace:
     runs-on: ubuntu-latest

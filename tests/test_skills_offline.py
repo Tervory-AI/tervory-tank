@@ -66,7 +66,11 @@ def _load_run(pkg: skala.SkillPackage):
 
 def test_every_skill_package_has_required_files() -> None:
     missing: list[str] = []
-    packages = [path for path in SKILLS.glob("*/*") if path.is_dir()]
+    packages = [
+        path
+        for path in SKILLS.glob("*/*")
+        if path.is_dir() and path.name != "__pycache__" and not path.name.startswith(".")
+    ]
     assert packages, "no skill packages under tank/skills"
     for package in sorted(packages):
         for rel in _REQUIRED:

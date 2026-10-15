@@ -166,6 +166,13 @@ class MemoryStore:
         self.pii.append(saved)
         return saved
 
+    async def set_document_state(self, tenant_id: str, document_id: str, state: str) -> dict[str, Any] | None:
+        document = await self.get_document(tenant_id, document_id)
+        if document is None:
+            return None
+        document["state"] = state
+        return document
+
 
 class PgStore:
     def __init__(self, pool: Any) -> None:
@@ -307,6 +314,15 @@ class PgStore:
         saved["tenant_id"] = str(row["tenant_id"])
         saved["matter_id"] = str(row["matter_id"])
         return saved
+
+    async def set_document_state(self, tenant_id: str, document_id: str, state: str) -> dict[str, Any] | None:
+        sql = """
+        UPDATE agent_zenas.documents SET state = $3
+        WHERE tenant_id = $1 AND id = $2
+        """.strip()
+        async with self.pool.acquire() as conn:
+            await conn.execute(sql, _as_uuid(tenant_id), _as_uuid(document_id), state)
+        return await self.get_document(tenant_id, document_id)
 
 
 def _public_matter(row: Any) -> dict[str, Any]:
