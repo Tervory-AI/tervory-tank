@@ -25,6 +25,7 @@ from agents.zenas.core.engine import (
     parse_json_object,
     pii_detect,
     prepare_prompt,
+    home_cross_check,
     question_key,
     rank_worked,
     region_refusal,
@@ -72,6 +73,19 @@ def _refuse(reason: str, **extra: Any) -> dict[str, Any]:
 
 def _box(box_region: str) -> str:
     return normalize_box(box_region)
+
+
+async def _use_home(store: Any, *, tenant_id: str, home_region: str, box_region: str) -> tuple[str, dict[str, Any] | None]:
+    """The tenant record holds the home region. The request only confirms it."""
+    row = await store.get_tenant(str(tenant_id))
+    stored = None if row is None else str(row.get("home_region") or "")
+    problem = home_cross_check(stored or None, home_region)
+    if problem:
+        return "", _refuse(problem)
+    refusal = region_refusal(stored, box_region)
+    if refusal:
+        return "", _refuse(refusal)
+    return stored, None
 
 
 async def _gate(tank: Any, *, tenant_id: str, text: str, jurisdiction: str | None) -> dict[str, Any]:
@@ -172,9 +186,9 @@ async def retrieve(
     corpus: list[dict[str, Any]] | None = None,
     pool: Any = None,
 ) -> dict[str, Any]:
-    refusal = region_refusal(home_region, box_region)
-    if refusal:
-        return _refuse(refusal)
+    _home, refused = await _use_home(ladder, tenant_id=tenant_id, home_region=home_region, box_region=box_region)
+    if refused:
+        return refused
     gate = await _gate(tank, tenant_id=tenant_id, text=query or citation, jurisdiction=jurisdiction)
     if gate["stopped"]:
         reason = str((gate.get("scope") or {}).get("reason") or "Not in scope.")
@@ -250,6 +264,7 @@ async def _passages_from_pool(
 
 
 async def check_citations(
+    ladder: Any,
     *,
     tenant_id: str,
     home_region: str,
@@ -259,10 +274,9 @@ async def check_citations(
     tank: Any = None,
     jurisdiction: str | None = None,
 ) -> dict[str, Any]:
-    del tenant_id
-    refusal = region_refusal(home_region, box_region)
-    if refusal:
-        return _refuse(refusal)
+    _home, refused = await _use_home(ladder, tenant_id=tenant_id, home_region=home_region, box_region=box_region)
+    if refused:
+        return refused
     text = " ".join(str(item.get("quote") or "") for item in statements)
     gate = await _gate(tank, tenant_id="", text=text, jurisdiction=jurisdiction)
     if gate["stopped"]:
@@ -287,9 +301,9 @@ async def build_rule_card(
     client_facts: str = "",
     provider: str = "luna",
 ) -> dict[str, Any]:
-    refusal = region_refusal(home_region, box_region)
-    if refusal:
-        return _refuse(refusal)
+    _home, refused = await _use_home(ladder, tenant_id=tenant_id, home_region=home_region, box_region=box_region)
+    if refused:
+        return refused
     gate = await _gate(tank, tenant_id=tenant_id, text=question, jurisdiction=jurisdiction)
     if gate["stopped"]:
         reason = str((gate.get("scope") or {}).get("reason") or "Not in scope.")
@@ -383,9 +397,9 @@ async def approve_rule_card(
     changes: str = "",
 ) -> dict[str, Any]:
     del jurisdiction
-    refusal = region_refusal(home_region, box_region)
-    if refusal:
-        return _refuse(refusal)
+    _home, refused = await _use_home(ladder, tenant_id=tenant_id, home_region=home_region, box_region=box_region)
+    if refused:
+        return refused
     if not reviewer or not admission_no:
         return _refuse("approval needs a reviewer and an admission number")
     card = await ladder.get_rule_card(card_id, region=_box(box_region), tenant_id=tenant_id)
@@ -444,9 +458,9 @@ async def read_rule_card(
     box_region: str,
     card_id: str,
 ) -> dict[str, Any]:
-    refusal = region_refusal(home_region, box_region)
-    if refusal:
-        return _refuse(refusal)
+    _home, refused = await _use_home(ladder, tenant_id=tenant_id, home_region=home_region, box_region=box_region)
+    if refused:
+        return refused
     card = await ladder.get_rule_card(card_id, region=_box(box_region), tenant_id=tenant_id)
     if card is None:
         return _refuse("no such rule card")
@@ -470,9 +484,9 @@ async def extract_case_facts(
     provider: str = "luna",
     tank: Any = None,
 ) -> dict[str, Any]:
-    refusal = region_refusal(home_region, box_region)
-    if refusal:
-        return _refuse(refusal)
+    _home, refused = await _use_home(ladder, tenant_id=tenant_id, home_region=home_region, box_region=box_region)
+    if refused:
+        return refused
     kind = ruled(judgment)
     if kind == "criminal":
         return _refuse(REFUSED, scope=classify(judgment, jurisdiction if jurisdiction in ("us", "za", "both") else None))
@@ -579,9 +593,9 @@ async def match_matters(
     sharing: str | None = None,
     tank: Any = None,
 ) -> dict[str, Any]:
-    refusal = region_refusal(home_region, box_region)
-    if refusal:
-        return _refuse(refusal)
+    _home, refused = await _use_home(ladder, tenant_id=tenant_id, home_region=home_region, box_region=box_region)
+    if refused:
+        return refused
     gate = await _gate(
         tank,
         tenant_id=tenant_id,
@@ -630,9 +644,9 @@ async def apply_law(
     provider: str = "luna",
     tank: Any = None,
 ) -> dict[str, Any]:
-    refusal = region_refusal(home_region, box_region)
-    if refusal:
-        return _refuse(refusal)
+    _home, refused = await _use_home(ladder, tenant_id=tenant_id, home_region=home_region, box_region=box_region)
+    if refused:
+        return refused
     card_for_gate = await ladder.get_rule_card(card_id, region=_box(box_region), tenant_id=tenant_id)
     gate_text = question or (str(card_for_gate.get("question") or "") if card_for_gate else "") or narrative
     gate_law = card_for_gate.get("jurisdiction") if card_for_gate else None
@@ -805,6 +819,7 @@ async def write_memo(
 
 
 async def plain_language(
+    ladder: Any,
     *,
     tenant_id: str,
     home_region: str,
@@ -816,9 +831,9 @@ async def plain_language(
     tank: Any = None,
     jurisdiction: str | None = None,
 ) -> dict[str, Any]:
-    refusal = region_refusal(home_region, box_region)
-    if refusal:
-        return _refuse(refusal)
+    _home, refused = await _use_home(ladder, tenant_id=tenant_id, home_region=home_region, box_region=box_region)
+    if refused:
+        return refused
     gate = await _gate(tank, tenant_id=tenant_id, text=text, jurisdiction=jurisdiction)
     if gate["stopped"]:
         reason = str((gate.get("scope") or {}).get("reason") or "Not in scope.")
@@ -867,9 +882,9 @@ async def release_matter(
     area: str = "",
     tank: Any = None,
 ) -> dict[str, Any]:
-    refusal = region_refusal(home_region, box_region)
-    if refusal:
-        return _refuse(refusal)
+    _home, refused = await _use_home(matters, tenant_id=tenant_id, home_region=home_region, box_region=box_region)
+    if refused:
+        return refused
     gate = await _gate(tank, tenant_id=tenant_id, text=memo or narrative, jurisdiction=jurisdiction)
     if gate["stopped"]:
         reason = str((gate.get("scope") or {}).get("reason") or "Not in scope.")
@@ -933,9 +948,9 @@ async def remember_for_tenant(
     text: str,
     kind: str,
 ) -> dict[str, Any]:
-    refusal = region_refusal(home_region, box_region)
-    if refusal:
-        return _refuse(refusal, stored=False)
+    _home, refused = await _use_home(ladder, tenant_id=tenant_id, home_region=home_region, box_region=box_region)
+    if refused:
+        return {**refused, "stored": False}
     found = pii_detect(text or "")
     masked = str(found.get("text") or "")
     for match in found.get("matches") or []:
@@ -946,6 +961,93 @@ async def remember_for_tenant(
     if memory is not None:
         await memory.remember(str(tenant_id), masked, kind)
     return {"ok": True, "stored": True, "body": masked}
+
+
+def _review_tags(raw: str | None) -> list[str]:
+    return [part.strip() for part in (raw or "").split(",") if part.strip()]
+
+
+def _tag_allows(tags: list[str], jurisdiction: str) -> bool:
+    if not tags:
+        return True
+    if jurisdiction == "both":
+        return any(tag in ("us", "za", "both") for tag in tags)
+    return jurisdiction in tags or "both" in tags
+
+
+def _review_match(worked: dict[str, Any], tenant_id: str) -> dict[str, Any]:
+    source = str(worked.get("source") or "")
+    owner = worked.get("tenant_id")
+    public = source == "case" or str(owner or "") == str(tenant_id)
+    findings: list[dict[str, str]] = []
+    if public:
+        for part in worked.get("element_findings") or []:
+            element = str(part.get("element_id") or part.get("element") or "")
+            findings.append(
+                {"element_id": element, "element": element, "finding": str(part.get("finding") or "")}
+            )
+    return {
+        "id": str(worked.get("id") or ""),
+        "outcome": str(worked.get("outcome") or "") if public else "",
+        "jurisdiction": str(worked.get("jurisdiction") or ""),
+        "element_findings": findings,
+    }
+
+
+async def review_queue(
+    matters: Any,
+    ladder: Any,
+    *,
+    tenant_id: str,
+    home_region: str,
+    box_region: str,
+    jurisdiction: str | None = None,
+) -> dict[str, Any]:
+    """Drafts and in-review documents for this tenant, in this region only."""
+    _home, refused = await _use_home(matters, tenant_id=tenant_id, home_region=home_region, box_region=box_region)
+    if refused:
+        return refused
+    tags = _review_tags(jurisdiction)
+    documents = await matters.list_open_documents(str(tenant_id))
+    worked = await ladder.visible_worked(region=_box(box_region), tenant_id=tenant_id, sharing="region")
+    items: list[dict[str, Any]] = []
+    for document in documents:
+        matter = await matters.get_matter(str(tenant_id), str(document.get("matter_id") or ""))
+        if matter is None:
+            continue
+        law = str(matter.get("jurisdiction") or "")
+        if not _tag_allows(tags, law):
+            continue
+        sources = document.get("sources") or []
+        if isinstance(sources, str):
+            sources = json.loads(sources)
+        ranked = rank_worked(
+            worked,
+            rule_card_ids=[],
+            features={},
+            narrative=str(document.get("body") or ""),
+        )
+        items.append(
+            {
+                "document": {
+                    "id": str(document.get("id") or ""),
+                    "matter_id": str(document.get("matter_id") or ""),
+                    "body": document.get("body") or "",
+                    "state": document.get("state") or "",
+                    "kind": document.get("kind") or "",
+                    "version": document.get("version"),
+                    "sources": sources,
+                },
+                "matter": {
+                    "id": str(matter.get("id") or ""),
+                    "title": matter.get("title") or "",
+                    "jurisdiction": law,
+                    "area": matter.get("area") or "",
+                },
+                "matches": [_review_match(item["worked"], tenant_id) for item in ranked[:5]],
+            }
+        )
+    return {"ok": True, "items": items}
 
 
 async def copy_across_regions(*_args: Any, **_kwargs: Any) -> dict[str, Any]:
@@ -960,9 +1062,9 @@ async def ladder_metrics(
     home_region: str,
     box_region: str,
 ) -> dict[str, Any]:
-    refusal = region_refusal(home_region, box_region)
-    if refusal:
-        return _refuse(refusal)
+    _home, refused = await _use_home(ladder, tenant_id=tenant_id, home_region=home_region, box_region=box_region)
+    if refused:
+        return refused
     box = _box(box_region)
     runs = await ladder.list_runs(region=box, tenant_id=tenant_id)
     cards = await ladder.list_cards(region=box)

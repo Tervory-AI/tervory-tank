@@ -33,6 +33,7 @@ from agents.zenas.core.service import (  # noqa: E402
     release_matter,
     remember_for_tenant,
     retrieve,
+    review_queue,
     write_memo,
 )
 from agents.zenas.core.store import MemoryStore  # noqa: E402
@@ -128,6 +129,139 @@ def _cases(package: Path) -> list[dict]:
     return rows
 
 
+@pytest.mark.asyncio
+async def test_request_home_region_only_cross_checks_the_tenant_record() -> None:
+    ladder = LadderMemory()
+    missing = await build_rule_card(
+        ladder,
+        None,
+        Model("{}", fail=True),
+        tenant_id=TENANT_A,
+        home_region="us-east",
+        box_region="us-east",
+        jurisdiction="us",
+        question=QUESTION,
+        passages=[PASSAGE],
+    )
+    assert missing["ok"] is False
+    assert missing["reason"] == "home region is not on the tenant record"
+    assert ladder.rule_cards == []
+
+    await ladder.register_tenant(TENANT_A, "us-east")
+    claimed = await build_rule_card(
+        ladder,
+        None,
+        Model("{}", fail=True),
+        tenant_id=TENANT_A,
+        home_region="za",
+        box_region="us-east",
+        jurisdiction="us",
+        question=QUESTION,
+        passages=[PASSAGE],
+    )
+    assert claimed["ok"] is False
+    assert claimed["reason"] == "home region does not match the tenant record"
+    assert ladder.rule_cards == []
+
+    za_box = LadderMemory()
+    await za_box.register_tenant(TENANT_A, "za")
+    abroad = await build_rule_card(
+        za_box,
+        None,
+        Model("{}", fail=True),
+        tenant_id=TENANT_A,
+        home_region="za",
+        box_region="us-east",
+        jurisdiction="za",
+        question=QUESTION,
+        passages=[PASSAGE],
+    )
+    assert abroad["ok"] is False
+    assert abroad["reason"] == "needs the South Africa region"
+    assert za_box.rule_cards == []
+
+
+@pytest.mark.asyncio
+async def test_review_queue_shape_stays_in_the_home_region() -> None:
+    matters = MemoryStore()
+    ladder = LadderMemory()
+    await matters.register_tenant(TENANT_A, "us-east")
+    matter = await matters.add_matter(
+        {
+            "tenant_id": TENANT_A,
+            "jurisdiction": "us",
+            "area": "contracts",
+            "title": "Mutual NDA",
+            "parties": [],
+            "status": "open",
+            "created_by": "ada",
+        }
+    )
+    document = await matters.add_document(
+        {
+            "matter_id": matter["id"],
+            "tenant_id": TENANT_A,
+            "kind": "memo",
+            "version": 1,
+            "body": "A written confidentiality promise is enforceable.",
+            "sources": [{"citation": "8 Del. C. § 101", "quote": "A written confidentiality promise is enforceable."}],
+            "state": "in_review",
+        }
+    )
+    await ladder.add_worked(
+        {
+            "region": "us-east",
+            "tenant_id": None,
+            "source": "case",
+            "jurisdiction": "us",
+            "fact_pattern": {"narrative": "A written confidentiality promise is enforceable.", "features": {}},
+            "element_findings": [{"element_id": "written", "finding": "met"}],
+            "outcome": "enforceable",
+        }
+    )
+    await ladder.add_worked(
+        {
+            "region": "za",
+            "tenant_id": TENANT_A,
+            "source": "released",
+            "jurisdiction": "za",
+            "fact_pattern": {"narrative": SECRET, "features": {}},
+            "element_findings": [{"element_id": "party", "finding": "met"}],
+            "outcome": SECRET,
+        }
+    )
+    queued = await review_queue(
+        matters,
+        ladder,
+        tenant_id=TENANT_A,
+        home_region="us-east",
+        box_region="us-east",
+        jurisdiction="us",
+    )
+    assert queued["ok"] is True
+    assert len(queued["items"]) == 1
+    item = queued["items"][0]
+    assert item["document"]["id"] == document["id"]
+    assert item["document"]["state"] == "in_review"
+    assert item["document"]["sources"][0]["citation"] == "8 Del. C. § 101"
+    assert item["matter"]["title"] == "Mutual NDA"
+    assert item["matter"]["jurisdiction"] == "us"
+    assert item["matches"]
+    assert item["matches"][0]["outcome"] == "enforceable"
+    assert item["matches"][0]["element_findings"][0]["element"] == "written"
+    assert SECRET not in json.dumps(queued)
+    wrong = await review_queue(
+        matters,
+        ladder,
+        tenant_id=TENANT_A,
+        home_region="za",
+        box_region="us-east",
+        jurisdiction="us",
+    )
+    assert wrong["ok"] is False
+    assert wrong["reason"] == "home region does not match the tenant record"
+
+
 def test_engine_copies_match_and_regions_match_the_box() -> None:
     core = (ROOT / "agents" / "zenas" / "core" / "engine.py").read_bytes()
     shared = (ROOT / "tank" / "skills" / "zenas.shared" / "engine.py").read_bytes()
@@ -180,6 +314,8 @@ async def test_skill_evals() -> None:
 @pytest.mark.asyncio
 async def test_second_client_reuses_the_approved_card_for_free() -> None:
     ladder = LadderMemory()
+    await ladder.register_tenant(TENANT_A, "us-east")
+    await ladder.register_tenant(TENANT_B, "us-east")
     model = Model(json.dumps(CARD_JSON))
     first = await build_rule_card(
         ladder,
@@ -235,6 +371,8 @@ async def test_second_client_reuses_the_approved_card_for_free() -> None:
 @pytest.mark.asyncio
 async def test_fake_citation_is_never_approved_and_a_change_marks_the_card_stale() -> None:
     ladder = LadderMemory()
+    await ladder.register_tenant(TENANT_A, "us-east")
+    await ladder.register_tenant(TENANT_B, "us-east")
     fake = {
         "elements": [
             {
@@ -313,6 +451,8 @@ async def test_fake_citation_is_never_approved_and_a_change_marks_the_card_stale
 @pytest.mark.asyncio
 async def test_code_decides_a_table_and_a_case_is_reused() -> None:
     ladder = LadderMemory()
+    await ladder.register_tenant(TENANT_A, "us-east")
+    await ladder.register_tenant(TENANT_B, "us-east")
     card = await ladder.add_rule_card(
         {
             "region": "us-east",
@@ -495,6 +635,8 @@ async def test_code_decides_a_table_and_a_case_is_reused() -> None:
 async def test_release_writes_a_training_pair_and_regions_do_not_cross() -> None:
     matters = MemoryStore()
     ladder = LadderMemory()
+    await matters.register_tenant(TENANT_A, "us-east")
+    await ladder.register_tenant(TENANT_A, "us-east")
     matter = await matters.add_matter(
         {
             "tenant_id": TENANT_A,
@@ -566,7 +708,7 @@ async def test_release_writes_a_training_pair_and_regions_do_not_cross() -> None
         memo="A mutual NDA under South African law.",
     )
     assert blocked["ok"] is False
-    assert blocked["reason"] == "needs the South Africa region"
+    assert blocked["reason"] == "home region does not match the tenant record"
     assert all(row["region"] == "us-east" for row in ladder.worked)
     assert all(row["region"] == "us-east" for row in ladder.pairs)
     copied = await copy_across_regions(ladder, row_id=released["worked_matter_id"], to_region="za")
@@ -623,6 +765,7 @@ async def test_client_rows_stay_in_the_home_region() -> None:
     stay in the tenant's home region. Public law can be read from either box.
     """
     ladder = LadderMemory()
+    await ladder.register_tenant(TENANT_A, "za")
     client = "CLIENT-FACT-STAYS-IN-ZA"
     card = await ladder.add_rule_card(
         {
@@ -701,6 +844,7 @@ async def test_client_rows_stay_in_the_home_region() -> None:
 @pytest.mark.asyncio
 async def test_public_law_is_readable_and_criminal_requests_store_nothing() -> None:
     ladder = LadderMemory()
+    await ladder.register_tenant(TENANT_A, "us-east")
     corpus = [
         {
             "doc_id": "za-act",
@@ -754,6 +898,7 @@ async def test_public_law_is_readable_and_criminal_requests_store_nothing() -> N
 @pytest.mark.asyncio
 async def test_za_model_call_masks_before_a_non_sa_provider() -> None:
     ladder = LadderMemory()
+    await ladder.register_tenant(TENANT_A, "za")
     question = f"{QUESTION} ID {SA_ID}."
     model = Model(json.dumps(CARD_JSON))
     result = await build_rule_card(
@@ -791,6 +936,8 @@ async def test_za_model_call_masks_before_a_non_sa_provider() -> None:
 @pytest.mark.asyncio
 async def test_metrics_count_reuse_code_and_cards() -> None:
     ladder = LadderMemory()
+    await ladder.register_tenant(TENANT_A, "us-east")
+    await ladder.register_tenant(TENANT_B, "us-east")
     model = Model(json.dumps(CARD_JSON))
     built = await build_rule_card(
         ladder,
@@ -871,6 +1018,8 @@ def test_ladder_routes_are_registered() -> None:
         "/ladder/plain",
         "/matters/{matter_id}/release",
         "/ladder/metrics",
+        "/tenants",
+        "/review",
     ):
         assert expected in paths
 

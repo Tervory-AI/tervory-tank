@@ -50,6 +50,22 @@ def normalize_box(value: str | None) -> str:
     return raw
 
 
+MISSING_HOME = "home region is not on the tenant record"
+MISMATCH_HOME = "home region does not match the tenant record"
+
+
+def home_cross_check(stored: str | None, claimed: str | None) -> str | None:
+    """The tenant record holds the home region. The request value only confirms it."""
+    if stored is None or not str(stored).strip():
+        return MISSING_HOME
+    home = normalize_home(stored)
+    if home not in ("us-east", "za"):
+        return "home region must be us-east or za"
+    if normalize_home(claimed) != home:
+        return MISMATCH_HOME
+    return None
+
+
 def region_refusal(home: str | None, box: str | None) -> str | None:
     """A box only keeps a tenant's rows when that tenant's home is this region."""
     home_region = normalize_home(home)

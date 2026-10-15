@@ -33,6 +33,7 @@ from agents.zenas.core.matters import (  # noqa: E402
     open_matter,
     record_consent,
     record_review,
+    region_refusal,
     upload_document,
 )
 from agents.zenas.core.seal import key_from_env  # noqa: E402
@@ -49,6 +50,7 @@ from agents.zenas.core.service import (  # noqa: E402
     read_rule_card,
     release_matter,
     retrieve,
+    review_queue,
     write_memo,
 )
 from agents.zenas.core.store import PgStore  # noqa: E402
@@ -432,8 +434,8 @@ async def post_retrieve(body: RetrieveIn) -> dict[str, Any]:
 
 @app.post("/ladder/cite-check")
 async def post_cite_check(body: CiteIn) -> dict[str, Any]:
-    await _ready()
     result = await check_citations(
+        await _ready(),
         tenant_id=str(body.tenant_id),
         home_region=body.home_region,
         box_region=_box_region(),
@@ -594,8 +596,8 @@ async def post_compose(body: ApplyIn) -> dict[str, Any]:
 
 @app.post("/ladder/plain")
 async def post_plain(body: PlainIn) -> dict[str, Any]:
-    await _ready()
     result = await plain_language(
+        await _ready(),
         tenant_id=str(body.tenant_id),
         home_region=body.home_region,
         box_region=_box_region(),
@@ -633,6 +635,39 @@ async def post_release(matter_id: UUID, body: ReleaseIn) -> dict[str, Any]:
         as_at=body.as_at,
         area=body.area,
         tank=app.state.tank,
+    )
+    _fail(result)
+    return result
+
+
+class TenantIn(BaseModel):
+    tenant_id: UUID
+    home_region: str
+
+
+@app.post("/tenants", status_code=201)
+async def post_tenant(body: TenantIn) -> dict[str, Any]:
+    """Record this tenant's home region on this box. The request cannot change it later."""
+    refusal = region_refusal(body.home_region, _box_region())
+    if refusal:
+        raise HTTPException(status_code=403, detail=refusal)
+    store = _store()
+    await store.apply_schema()
+    result = await store.register_tenant(str(body.tenant_id), body.home_region)
+    if not result.get("ok"):
+        _fail(result)
+    return result
+
+
+@app.get("/review")
+async def get_review(tenant_id: UUID, home_region: str, jurisdiction: str = "") -> dict[str, Any]:
+    result = await review_queue(
+        _store(),
+        await _ready(),
+        tenant_id=str(tenant_id),
+        home_region=home_region,
+        box_region=_box_region(),
+        jurisdiction=jurisdiction or None,
     )
     _fail(result)
     return result

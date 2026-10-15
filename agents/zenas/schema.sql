@@ -4,6 +4,15 @@
 
 CREATE SCHEMA IF NOT EXISTS agent_zenas;
 
+-- One row per tenant. home_region is the source of truth for where that tenant's
+-- rows live. A home_region on a request is only a cross-check against this column.
+-- No default: an insert must name za or us-east.
+CREATE TABLE IF NOT EXISTS agent_zenas.tenants (
+    tenant_id    uuid PRIMARY KEY,
+    home_region  text NOT NULL,
+    CONSTRAINT tenants_home_region_chk CHECK (home_region IN ('za', 'us-east'))
+);
+
 CREATE TABLE IF NOT EXISTS agent_zenas.matters (
     id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id     uuid NOT NULL,

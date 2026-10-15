@@ -10,7 +10,7 @@ import json
 import uuid
 from typing import Any
 
-from agents.zenas.core.engine import embed_text, normalize_box, question_key
+from agents.zenas.core.engine import embed_text, normalize_box, normalize_home, question_key
 
 
 def _id() -> str:
@@ -52,6 +52,25 @@ class LadderMemory:
         self.pairs: list[dict[str, Any]] = []
         self.runs: list[dict[str, Any]] = []
         self.notes: list[dict[str, Any]] = []
+        self.tenants: list[dict[str, Any]] = []
+
+    async def get_tenant(self, tenant_id: str) -> dict[str, Any] | None:
+        for row in self.tenants:
+            if row["tenant_id"] == str(tenant_id):
+                return dict(row)
+        return None
+
+    async def register_tenant(self, tenant_id: str, home_region: str) -> dict[str, Any]:
+        home = normalize_home(home_region)
+        if home not in ("us-east", "za"):
+            return {"ok": False, "reason": "home region must be us-east or za"}
+        existing = await self.get_tenant(tenant_id)
+        if existing is not None:
+            if existing["home_region"] != home:
+                return {"ok": False, "reason": "home region is already set"}
+            return {"ok": True, "tenant_id": str(tenant_id), "home_region": home, "created": False}
+        self.tenants.append({"tenant_id": str(tenant_id), "home_region": home})
+        return {"ok": True, "tenant_id": str(tenant_id), "home_region": home, "created": True}
 
     async def add_rule_card(self, row: dict[str, Any]) -> dict[str, Any]:
         saved = dict(row)
@@ -517,6 +536,32 @@ class PgLadder:
         saved = dict(row)
         saved["id"] = note_id
         return saved
+
+    async def get_tenant(self, tenant_id: str) -> dict[str, Any] | None:
+        sql = "SELECT tenant_id, home_region FROM agent_zenas.tenants WHERE tenant_id = $1"
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(sql, _as_uuid(tenant_id))
+        if row is None:
+            return None
+        return {"tenant_id": str(row["tenant_id"]), "home_region": str(row["home_region"])}
+
+    async def register_tenant(self, tenant_id: str, home_region: str) -> dict[str, Any]:
+        home = normalize_home(home_region)
+        if home not in ("us-east", "za"):
+            return {"ok": False, "reason": "home region must be us-east or za"}
+        existing = await self.get_tenant(tenant_id)
+        if existing is not None:
+            if existing["home_region"] != home:
+                return {"ok": False, "reason": "home region is already set", "home_region": existing["home_region"]}
+            return {"ok": True, "tenant_id": str(tenant_id), "home_region": home, "created": False}
+        sql = """
+        INSERT INTO agent_zenas.tenants (tenant_id, home_region)
+        VALUES ($1, $2)
+        ON CONFLICT (tenant_id) DO NOTHING
+        """.strip()
+        async with self.pool.acquire() as conn:
+            await conn.execute(sql, _as_uuid(tenant_id), home)
+        return {"ok": True, "tenant_id": str(tenant_id), "home_region": home, "created": True}
 
 
 def _row_worked(row: dict[str, Any]) -> dict[str, Any]:

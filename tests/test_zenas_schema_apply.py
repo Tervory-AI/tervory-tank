@@ -109,6 +109,59 @@ async def _apply_roles(conn, agent: str) -> None:
 
 
 @pytest.mark.asyncio
+async def _assert_tenant_home(conn) -> None:
+    meta = await conn.fetchrow(
+        """
+        SELECT is_nullable, column_default
+        FROM information_schema.columns
+        WHERE table_schema = 'agent_zenas'
+          AND table_name = 'tenants'
+          AND column_name = 'home_region'
+        """
+    )
+    assert meta is not None
+    assert meta["is_nullable"] == "NO"
+    assert meta["column_default"] is None
+    rule = await conn.fetchval(
+        """
+        SELECT pg_get_constraintdef(oid)
+        FROM pg_constraint
+        WHERE conname = 'tenants_home_region_chk'
+        """
+    )
+    assert rule is not None
+    assert "'za'" in rule and "'us-east'" in rule
+    import uuid
+
+    asyncpg = pytest.importorskip("asyncpg")
+    kept = uuid.uuid4()
+    await conn.execute(
+        "INSERT INTO agent_zenas.tenants (tenant_id, home_region) VALUES ($1, 'us-east')",
+        kept,
+    )
+    with pytest.raises(asyncpg.NotNullViolationError):
+        await conn.execute("INSERT INTO agent_zenas.tenants (tenant_id) VALUES ($1)", uuid.uuid4())
+    with pytest.raises(asyncpg.CheckViolationError):
+        await conn.execute(
+            "INSERT INTO agent_zenas.tenants (tenant_id, home_region) VALUES ($1, 'eu')",
+            uuid.uuid4(),
+        )
+    await conn.execute(
+        "INSERT INTO agent_zenas.tenants (tenant_id, home_region) VALUES ($1, 'za')",
+        uuid.uuid4(),
+    )
+
+
+def test_home_region_column_has_no_default() -> None:
+    column = [
+        line
+        for line in ZENAS.read_text(encoding="utf-8").splitlines()
+        if line.strip().startswith("home_region")
+    ]
+    assert column == ["    home_region  text NOT NULL,"]
+
+
+@pytest.mark.asyncio
 async def test_zenas_schema_on_empty_twice_and_on_main_with_roles() -> None:
     text = ZENAS.read_text(encoding="utf-8").lower()
     assert "alter sequence" not in text
@@ -141,6 +194,10 @@ async def test_zenas_schema_on_empty_twice_and_on_main_with_roles() -> None:
             """
         )
         assert int(sequences) == 0
+        await _assert_tenant_home(empty)
+        await _apply(empty, zenas)
+        kept = await empty.fetchval("SELECT count(*) FROM agent_zenas.tenants")
+        assert int(kept) == 2
 
         main = await _fresh(admin, "zenas_schema_main")
         await _apply(main, _statements(TANK))
@@ -183,6 +240,10 @@ async def test_zenas_schema_on_empty_twice_and_on_main_with_roles() -> None:
             """
         )
         assert int(providers) == 1
+        await _assert_tenant_home(main)
+        await _apply(main, zenas)
+        kept_main = await main.fetchval("SELECT count(*) FROM agent_zenas.tenants")
+        assert int(kept_main) == 2
     finally:
         if empty is not None:
             await empty.close()
