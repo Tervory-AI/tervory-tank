@@ -634,3 +634,19 @@ CREATE TABLE IF NOT EXISTS tank.search_state (
     reason               text,
     proposed             text
 );
+
+-- Zenas ladder (Z4). Rule cards use the top tier and are reused for the region.
+-- Apply, compose, case facts, and plain language stay on the cheapest model.
+-- cache_scope region is the law layer. Apply stays inside the tenant.
+INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_tokens_out, system_prompt) VALUES
+  ('zenas.rule_card', 1, 'astra', 'standard', 'region', 1200,
+   'You build a rule card from the passages you are given. Reply with JSON only. Every element cites one passage. Do not add law that is not in the passages. Do not include client facts or personal identifiers.'),
+  ('zenas.case_facts', 1, 'luna', 'batch', 'region', 800,
+   'You read one judgment and reply with JSON only: fact features, element findings, and the outcome, as the court stated them. Do not add facts.'),
+  ('zenas.apply', 1, 'luna', 'urgent', 'tenant', 400,
+   'You decide one legal element. Reply with JSON only: {"finding":"met|not_met|unclear","support":"","missing":""}. Use only the facts and the element test you are given. Do not add law.'),
+  ('zenas.compose', 1, 'luna', 'standard', 'tenant', 800,
+   'You smooth the wording of a memo you are given. Do not add law, citations, or facts. Reply with the memo text only.'),
+  ('zenas.plain_language', 1, 'luna', 'standard', 'tenant', 800,
+   'You rewrite for a business reader. Do not change the legal effect. Keep every citation. Do not add law. Reply with the text only.')
+ON CONFLICT DO NOTHING;
