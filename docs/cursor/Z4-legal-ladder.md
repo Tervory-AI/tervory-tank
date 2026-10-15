@@ -15,9 +15,12 @@
 - A lawyer approves the card once (review queue). After that, **every client question on that law reuses it at no model cost** (ladder rung 4, cache), until the law changes.
 
 ### 2. Matter matching: pair the request with work already done
-- Every finished, lawyer-released matter is stored as a **worked matter**: `{id, region, jurisdiction, area, rule_card_ids, fact_pattern (structured features + embedding), element_findings[] (per element: finding, the facts it rested on, the reasoning), outcome, lawyer_edits, as_at}`. Personal identifiers are replaced by placeholders (`zenas.pii`) before it is stored.
+- **Worked matters come from two places:**
+  - **Decided cases (public record).** Every judgment in the pool (US and SA) is a worked matter: the facts as the court found them, the law applied element by element, the outcome. Judgments are stored and used as published (SAFLII and the US courts already redact where needed); no extra redaction or privacy step applies to them.
+  - **Our own released matters.** Every lawyer-released Zenas matter: `{id, region, jurisdiction, area, rule_card_ids, fact_pattern (structured features + embedding), element_findings[] (per element: finding, the facts it rested on, the reasoning), outcome, lawyer_edits, as_at}`.
+- `zenas.case_facts@1.0.0` (cheapest model once per judgment, then cached forever, since a judgment never changes): reads a judgment and stores its fact pattern and element findings in the same shape as our own matters, linked to the rule cards it applies. Run in batches as the library loads.
 - `zenas.match@1.0.0` (code): for a new request, finds the closest worked matters by rule card + structured fact features first, then meaning (embeddings), and returns them ranked with a per-element **fact difference**: which facts are the same as a worked matter's and which differ.
-- Sharing scope is a founder setting, `ZENAS_MATTER_SHARING=region|tenant` (default `region`: worked matters from every client in the same region are matched, identifiers removed). Never across regions.
+- Our own matters: sharing scope is a founder setting, `ZENAS_MATTER_SHARING=region|tenant` (default `region`). Decided cases are public and matched for everyone.
 
 ### 3. Facts layer: applying the card (per matter)
 - `zenas.apply@1.0.0`: takes the client's facts, a rule card and the matches, and decides, element by element: met / not met / unclear, with the fact that supports it and what is missing. Output is structured, never free prose.
@@ -29,7 +32,8 @@
 - Only elements whose facts differ from every close worked matter go to code or a model.
 
 ### 5. Building our own model on the worked matters
-- Every released matter is saved as a training pair: request (identifiers removed) → the lawyer-approved element findings and memo, with the lawyer's edits. Stored in `agent_zenas.training_pairs`, per region.
+- Every decided case is a training pair: facts → element findings → outcome, as published.
+- Every released matter is a training pair too: request → the lawyer-approved element findings and memo, with the lawyer's edits. Stored in `agent_zenas.training_pairs`.
 - These pairs are the training set for our own legal model (T7, ladder rung 2) and the golden cases T6 uses to test cheaper routes.
 
 ### 4. Writing layer
@@ -41,13 +45,13 @@
 - Any card that relied on a changed source is marked **stale**: it stops being served, is rebuilt by `zenas.rule_card`, and goes back to a lawyer. Matters keep their "as at" date, so an old answer can always be reproduced as it was.
 
 ## Skills (all 1.0.0, evals with each)
-`zenas.retrieve` (code: citation + full text + meaning, filtered by jurisdiction and as-at date), `zenas.cite_check` (code), `zenas.rule_card` (model), `zenas.match` (code), `zenas.apply` (code first, model per element), `zenas.compose` (code + cheap model), `zenas.plain_language` (cheap model). Every request still passes `zenas.scope` first. Policy rows: `zenas.rule_card` top tier; `zenas.apply` and `zenas.compose` cheapest available; cache_scope `region` for rule cards, `tenant` for apply.
+`zenas.retrieve` (code: citation + full text + meaning, filtered by jurisdiction and as-at date), `zenas.cite_check` (code), `zenas.rule_card` (model), `zenas.case_facts` (cheapest model, once per judgment), `zenas.match` (code), `zenas.apply` (code first, model per element), `zenas.compose` (code + cheap model), `zenas.plain_language` (cheap model). Every request still passes `zenas.scope` first. Policy rows: `zenas.rule_card` top tier; `zenas.apply` and `zenas.compose` cheapest available; cache_scope `region` for rule cards, `tenant` for apply.
 
 ## Measured (founder console)
 Per legal question: first-answer cost, cost per later matter, share of elements reused from worked matters, share decided by code, worked matters and training pairs collected, cards stale vs approved, lawyer edits per card. This is the evidence for the invention record.
 
 ## Done when
-CI green on fixtures; a second client asking the same legal question reuses the approved card with $0 model cost on the law layer (tested); a new matter with mostly the same facts as a worked matter reuses those elements' findings at $0 and sends only the differing elements on (tested); a released matter produces a training pair with no identifiers (tested); a statute version change marks the cards that relied on it stale (tested); a card with a planted fake citation is never approved (tested); apply runs as pure code for a fixture card with a decision table; nothing from one tenant's facts appears in a rule card or another tenant's results (tested).
+CI green on fixtures; a second client asking the same legal question reuses the approved card with $0 model cost on the law layer (tested); a new matter with mostly the same facts as a worked matter reuses those elements' findings at $0 and sends only the differing elements on (tested); a fixture judgment becomes a worked matter and is matched for a new request (tested); a released matter produces a training pair (tested); a statute version change marks the cards that relied on it stale (tested); a card with a planted fake citation is never approved (tested); apply runs as pure code for a fixture card with a decision table; nothing from one tenant's facts appears in a rule card or another tenant's results (tested).
 
 ## From the founder
 Lawyer accounts to approve rule cards; the 20 test questions per country (these become the first rule cards).

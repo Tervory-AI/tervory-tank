@@ -6,7 +6,7 @@ Find the best open source and paid options for Zenas, the US + South Africa lega
 2. Reasoning and research quality: legal-tuned embedding models and rerankers, citation extractors and citators (good-law checks), retrieval methods for statutes and cases, legal reasoning benchmarks (for example LegalBench) and public legal Q&A sets we can use as tests.
 3. Models: which models do legal reasoning best per dollar today; which providers offer models hosted in South Africa (a provider's SA region), and which open-weight models we could run on our own SA server for prompts that contain personal information (state the server size each needs).
 4. Drafting and review: open clause libraries and contract datasets (with licences), redline (.docx tracked changes) libraries, court-deadline calculators.
-5. Compliance: POPIA cross-border processing requirements for using US model providers; anything that limits storing judgments.
+5. Compliance: POPIA cross-border processing requirements for sending our clients' own matter data to US model providers. (Judgments are public record and out of scope here.)
 
 Rules: no China-hosted services; client personal data from SA stays in SA. Do not sign up for anything yourself; list the keys instead.
 

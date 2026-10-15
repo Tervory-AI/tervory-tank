@@ -23,6 +23,8 @@ Add catalogue entries (terms checked and recorded, as the US ones are) for the Z
 - Court rules: Uniform Rules of Court, Magistrates' Courts Rules.
 - Record for each: licence and terms URL, as information only. Data use is the founder's decision; do not block a source on your own reading of its terms. Keyed sources (e.g. Laws.Africa) read their key from the environment by name and are skipped cleanly until it is set.
 
+- **Judgments are public record.** Store them as published (the courts and SAFLII already redact where needed); no redaction or privacy step runs on case law.
+
 ## Done when
 CI green; `docker compose -f docker-compose.za.yml config` is valid; a `za` Tank refuses a prompt with an SA ID number for a non-SA provider (tested); a `us-east` tenant is refused by the `za` Tank (tested); `za` catalogue entries load from fixtures and appear in pool status.
 

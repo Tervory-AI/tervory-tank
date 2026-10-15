@@ -24,6 +24,8 @@
 - **Keys:** any source that offers an API key is used with it. Read each key from the environment by name (`COURTLISTENER_API_TOKEN`, `GOVINFO_API_KEY`, and any other the source needs), list every name in `.env.example`, and skip a keyed source cleanly when its key is not set yet. Never put a key in a URL, log or test.
 - **Data use is the founder's decision.** Record each source's terms in the catalogue as information; do not block or limit a source on your own reading of its terms. Change `licence.py` so it no longer refuses on terms: the only switch is a per-source `enabled` flag in the catalogue (default on). Everything loaded may be used to teach Tervory's own model.
 
+- **Judgments are public record.** Store them as published (the courts and SAFLII already redact where needed); no redaction or privacy step runs on case law.
+
 ## Done when
 CI green on fixtures; pool status shows document counts per source with last update dates; 20 test citations (statute, regulation and case) resolve by citation and by meaning; no criminal opinion is stored (tested); a second run adds nothing new; a planted fake citation does not resolve.
 
