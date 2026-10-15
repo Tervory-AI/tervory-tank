@@ -70,6 +70,10 @@ def test_founder_sets_a_home_once_with_no_default() -> None:
     assert "chosenHome" in route
     assert "homeRegion()" not in route
     assert "home_region: home" in route
+    assert "The home region was not set." in route
+    assert "statedReason" not in route
+    assert "err.message" not in route
+    assert ".message" not in route
     homes = (ROOT / "workspace" / "app" / "admin" / "homes" / "homes.css").read_text(encoding="utf-8")
     assert ".zenas-homes button.save" in homes
     admin = (ROOT / "workspace" / "app" / "admin" / "admin.css").read_text(encoding="utf-8")

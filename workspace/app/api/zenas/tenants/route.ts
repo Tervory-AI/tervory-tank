@@ -2,10 +2,12 @@ import { auth } from "@clerk/nextjs/server";
 import { notFound } from "next/navigation";
 import { NextResponse } from "next/server";
 import { isFounder } from "@/lib/admin";
-import { chosenHome, statedReason } from "../rules";
+import { chosenHome } from "../rules";
 import { zenas } from "../tank";
 
 export const runtime = "nodejs";
+
+const NOT_SET = "The home region was not set.";
 
 export async function POST(req: Request) {
   const { userId } = await auth();
@@ -23,14 +25,12 @@ export async function POST(req: Request) {
     });
     const payload = await res.json().catch(() => null);
     if (!res.ok || (payload && typeof payload === "object" && (payload as { ok?: unknown }).ok === false)) {
-      const reason = statedReason(payload) ?? "The home region was not set.";
       const status = res.status === 403 ? 403 : res.ok ? 422 : 502;
-      return NextResponse.json({ error: reason }, { status });
+      return NextResponse.json({ error: NOT_SET }, { status });
     }
     const created = Boolean(payload && typeof payload === "object" && (payload as { created?: unknown }).created === true);
     return NextResponse.json({ ok: true, created, home_region: home, tenant_id: tenantId }, { status: 201 });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "The home region was not set.";
-    return NextResponse.json({ error: message }, { status: 502 });
+  } catch {
+    return NextResponse.json({ error: NOT_SET }, { status: 502 });
   }
 }
