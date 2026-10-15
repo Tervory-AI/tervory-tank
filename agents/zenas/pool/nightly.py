@@ -15,6 +15,7 @@ from agents.zenas.pool.config import current_region
 from agents.zenas.pool.embed import Embedder, NoOpEmbedder, NoOpVectorIndex, VectorIndex
 from agents.zenas.pool.ingest import ingest_snapshot
 from agents.zenas.pool.licence import FetchNotConfigured, LicenceError, refusal_reason
+from agents.zenas.pool.region import RegionError, assert_source_region
 from agents.zenas.pool.status import pool_status
 from agents.zenas.pool.store import Store
 
@@ -74,6 +75,7 @@ async def run_nightly(
 
     for source in sources_for_region(region):
         try:
+            assert_source_region(source, region)
             await _update_source(
                 store,
                 source,
@@ -84,7 +86,10 @@ async def run_nightly(
                 http_get=getter,
                 embedder=embedder,
                 index=index,
+                region=region,
             )
+        except RegionError:
+            continue
         except Exception as exc:
             await _record_source_error(store, source, exc, when)
     return await pool_status(store, region=region)
@@ -101,10 +106,12 @@ async def _update_source(
     http_get,
     embedder: Embedder,
     index: VectorIndex,
+    region: str,
 ) -> None:
+    assert_source_region(source, region)
     reason = refusal_reason(source)
     if reason:
-        await ingest_snapshot(store, source, [], on=on)
+        await ingest_snapshot(store, source, [], on=on, region=region)
         await store.record_run(
             source.source_id,
             status="skipped",
@@ -149,6 +156,7 @@ async def _update_source(
         on=on,
         embedder=embedder,
         index=index,
+        region=region,
     )
     count = await store.instrument_count(source.source_id)
     await store.record_run(
