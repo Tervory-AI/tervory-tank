@@ -37,7 +37,7 @@ export function Shell({
   if (usesOwnShell(pathname)) return <main>{children}</main>;
 
   return (
-    <>
+    <div className="product">
       <header className="top">
         <Link href="/" className="brand">Tervory</Link>
         <nav>
@@ -53,6 +53,6 @@ export function Shell({
         </SignedIn>
       </header>
       <main>{children}</main>
-    </>
+    </div>
   );
 }

@@ -1,7 +1,12 @@
 :root { color-scheme: light dark; --fg: #1a1a2e; --bg: #ffffff; --muted: #6b7280; --line: #e5e7eb; --accent: #2b6cb0; }
 @media (prefers-color-scheme: dark) { :root { --fg: #e7e9ee; --bg: #0f1117; --muted: #9aa3b2; --line: #262b36; --accent: #7fb0ff; } }
 * { box-sizing: border-box; }
-body { margin: 0; font: 15px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; color: var(--fg); background: var(--bg); }
+body { margin: 0; font-family: var(--font-inter), Inter, sans-serif; font-size: 15px; font-weight: 400; line-height: 1.5; color: var(--fg); background: var(--bg); }
+.product { font-family: var(--font-inter), Inter, sans-serif; font-size: 17px; font-weight: 400; line-height: 1.5; }
+.product h1, .product h2, .product h3 { font-family: var(--font-jost), Jost, sans-serif; font-weight: 300; }
+.product .top nav { font-family: var(--font-inter), Inter, sans-serif; font-size: 15px; font-weight: 500; }
+.product .meta, .product .tile b { font-family: var(--font-mono), "JetBrains Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+.product .tile b { font-weight: 500; }
 .top { display: flex; align-items: center; gap: 24px; padding: 12px 20px; border-bottom: 1px solid var(--line); }
 .who { margin-left: auto; display: flex; align-items: center; gap: 12px; }
 .brand { font-weight: 700; text-decoration: none; color: var(--fg); }
