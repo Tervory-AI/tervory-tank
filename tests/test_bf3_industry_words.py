@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import re
 import sys
+import uuid
 from pathlib import Path
 
 import pytest
@@ -191,3 +193,151 @@ async def test_the_call_site_passes_engine_lists_only_for_that_engine() -> None:
     assert "generic_words" not in seen["base.find_site"]
     assert "blocked_hosts" not in seen["base.find_site"]
     assert "generic_words" not in seen["base.contacts"]
+
+
+CANDIDATES = {
+    ("base.find_site", "1.5.0"),
+    ("base.contacts", "1.1.0"),
+    ("ffl.profile", "1.1.0"),
+}
+
+
+def _tank():
+    os.environ.setdefault("DATABASE_URL", "postgresql://x:y@localhost/z")
+    os.environ.setdefault("LITELLM_MASTER_KEY", "test")
+    os.environ.setdefault("TANK_API_KEY", "test")
+    name = "bf3_tank_main"
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.spec_from_file_location(name, ROOT / "tank" / "main.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+class _SkillRows:
+    """The rows Skala would hold. approved_version and skill_state read them for real."""
+
+    def __init__(self, rows: list[dict]) -> None:
+        self.rows = rows
+
+    def acquire(self):
+        return self
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_args: object) -> bool:
+        return False
+
+    async def fetchval(self, sql: str, *args: object):
+        if "state='approved'" in sql:
+            chosen = [
+                row for row in self.rows
+                if row["id"] == args[0] and row["state"] == "approved" and row["present"]
+            ]
+            chosen.sort(key=lambda row: row["approved_at"], reverse=True)
+            return chosen[0]["version"] if chosen else None
+        if sql.startswith("SELECT state FROM tank.skills"):
+            for row in self.rows:
+                if row["id"] == args[0] and row["version"] == args[1]:
+                    return row["state"]
+            return None
+        raise AssertionError(sql)
+
+    async def fetch(self, sql: str, *args: object):
+        if "state='staging'" in sql:
+            return [
+                {"version": row["version"]}
+                for row in self.rows
+                if row["id"] == args[0] and row["state"] == "staging" and row["present"]
+            ]
+        raise AssertionError(sql)
+
+
+def _registry(tank) -> list[dict]:
+    packages = tank.skala.load_packages(SKILLS)
+    by_id: dict[str, list[str]] = {}
+    for skill_id, version in packages:
+        by_id.setdefault(skill_id, []).append(version)
+    rows: list[dict] = []
+    for skill_id, versions in by_id.items():
+        eligible = [version for version in versions if (skill_id, version) not in CANDIDATES]
+        approved = max(eligible, key=tank._vkey) if eligible else None
+        for version in versions:
+            if (skill_id, version) in CANDIDATES:
+                state = "candidate"
+            elif version == approved:
+                state = "approved"
+            else:
+                state = "retired"
+            rows.append({
+                "id": skill_id,
+                "version": version,
+                "state": state,
+                "present": True,
+                "approved_at": version if state == "approved" else "",
+            })
+    return rows
+
+
+class _DescribeHttp:
+    def __init__(self, tank) -> None:
+        self.tank = tank
+
+    async def get(self, url: str, params: dict | None = None, headers: dict | None = None, timeout: float | None = None):
+        skill_id = url.split("/v1/skills/", 1)[1].removesuffix("/run")
+        preview = str((params or {}).get("preview", "")).lower() == "true"
+        try:
+            data = await self.tank.describe_skill(skill_id, preview)
+            status = 200
+        except self.tank.HTTPException as exc:
+            data = {"detail": exc.detail}
+            status = exc.status_code
+        return _Response(status, data)
+
+
+class _Response:
+    def __init__(self, status_code: int, data: dict) -> None:
+        self.status_code = status_code
+        self._data = data
+
+    def json(self) -> dict:
+        return self._data
+
+
+@pytest.mark.asyncio
+async def test_the_agent_is_pinned_to_approved_versions_and_a_candidate_run_is_rejected() -> None:
+    """Calls the real _pick_version. Candidates stay off the pin until the Skills page approves them."""
+    from room import SkillClient
+
+    tank = _tank()
+    packages = tank.skala.load_packages(SKILLS)
+    tank._packages = packages
+    rows = _SkillRows(_registry(tank))
+    tank.pool = lambda: rows
+
+    assert await tank._pick_version("base.find_site", False) == "1.4.0"
+    assert await tank._pick_version("base.contacts", False) == "1.0.0"
+    assert await tank._pick_version("ffl.profile", False) == "1.0.0"
+
+    client = SkillClient(_DescribeHttp(tank), "http://tank", "test-key")
+    versions, refs = await client.pin(False, "ffl")
+    assert versions["base.find_site"] == "1.4.0"
+    assert versions["base.contacts"] == "1.0.0"
+    assert versions["ffl.profile"] == "1.0.0"
+    assert refs["base.find_site"] == "base.find_site@1.4.0"
+    assert refs["base.contacts"] == "base.contacts@1.0.0"
+    assert refs["ffl.profile"] == "ffl.profile@1.0.0"
+    assert versions["base.find_site"] != "1.5.0"
+    assert versions["base.contacts"] != "1.1.0"
+
+    tenant = uuid.UUID("00000000-0000-0000-0000-000000000001")
+    for skill_id, version in (("base.find_site", "1.5.0"), ("base.contacts", "1.1.0"), ("ffl.profile", "1.1.0")):
+        body = tank.SkillRun(tenant_id=tenant, input={"name": "Example"}, version=version, preview=False)
+        with pytest.raises(tank.HTTPException) as caught:
+            await tank._run_one_skill(skill_id, body, None)
+        assert caught.value.status_code == 409
+        assert "candidate" in str(caught.value.detail)
