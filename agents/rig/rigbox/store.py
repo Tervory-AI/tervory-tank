@@ -65,6 +65,76 @@ def schema_statements() -> list[str]:
     return [part.strip() for part in schema_sql().split(";") if part.strip()]
 
 
+def _classified_sql(statement: str) -> str:
+    """SQL used to classify a statement.
+
+    ``schema_statements`` splits on semicolons, so leading ``--`` comments and
+    the blank lines under them stay attached to the next statement. Postgres
+    still runs that statement; classification has to look past the comment.
+    """
+    kept: list[str] = []
+    started = False
+    for line in statement.splitlines():
+        stripped = line.strip()
+        if not started and (not stripped or stripped.startswith("--")):
+            continue
+        started = True
+        kept.append(line)
+    return "\n".join(kept).strip()
+
+
+def _created_schema_name(sql: str) -> str | None:
+    """Name from ``CREATE SCHEMA [IF NOT EXISTS] name``, or None."""
+    tokens = sql.split()
+    if len(tokens) < 3 or tokens[0].upper() != "CREATE" or tokens[1].upper() != "SCHEMA":
+        return None
+    index = 2
+    if (
+        index + 2 < len(tokens)
+        and tokens[index].upper() == "IF"
+        and tokens[index + 1].upper() == "NOT"
+        and tokens[index + 2].upper() == "EXISTS"
+    ):
+        index += 3
+    if index >= len(tokens):
+        return None
+    token = tokens[index].rstrip(";")
+    if len(token) >= 2 and token[0] == '"' and token[-1] == '"':
+        return token[1:-1]
+    name: list[str] = []
+    for char in token:
+        if char.isalnum() or char == "_":
+            name.append(char)
+        else:
+            break
+    if not name:
+        return None
+    return "".join(name).lower()
+
+
+def _optional_schema_statement(sql: str) -> bool:
+    """Extension and trigram-index failures are optional on this role."""
+    tokens = sql.split()
+    if len(tokens) >= 2 and tokens[0].upper() == "CREATE" and tokens[1].upper() == "EXTENSION":
+        return True
+    return "GIN_TRGM_OPS" in sql.upper()
+
+
+def _role_cannot_create_schema(exc: BaseException) -> bool:
+    """True when Postgres refused because this role may not create schemas.
+
+    ``CREATE SCHEMA IF NOT EXISTS`` still checks that privilege when the schema
+    is already there. The provisioner creates ``agent_rig``; the agent role
+    does not have it. The live error is
+    ``InsufficientPrivilegeError: permission denied for database tervory``.
+    """
+    if any(cls.__name__ == "InsufficientPrivilegeError" for cls in type(exc).mro()):
+        return True
+    if getattr(exc, "sqlstate", None) == "42501":
+        return True
+    return "permission denied" in str(exc).lower()
+
+
 def _uuid(value: str) -> UUID:
     return value if isinstance(value, UUID) else UUID(str(value))
 
@@ -219,20 +289,32 @@ class PgStore:
         self.pool = pool
 
     async def apply_schema(self) -> None:
+        """Apply ``schema.sql``. The agent role is not allowed to create schemas.
+
+        A ``CREATE SCHEMA`` for ``agent_rig`` that fails for that reason is
+        ignored only when the schema is already there. Any other failure,
+        including the same privilege error when the schema is missing, stops
+        startup. ``CREATE EXTENSION`` and trigram indexes stay optional.
+        Statements are classified after leading blank lines and ``--`` comments
+        are removed, because those comments ride along on the first statement.
+        """
         async with self.pool.acquire() as conn:
             for statement in schema_statements():
-                optional = statement.upper().startswith("CREATE EXTENSION") or "GIN_TRGM_OPS" in statement.upper()
+                sql = _classified_sql(statement)
+                if not sql:
+                    continue
                 try:
                     await conn.execute(statement)
-                except Exception:
-                    if not optional:
-                        if statement.upper().startswith("CREATE SCHEMA"):
-                            present = await conn.fetchval(
-                                "SELECT 1 FROM pg_namespace WHERE nspname = 'agent_rig'"
-                            )
-                            if present == 1:
-                                continue
-                        raise
+                except Exception as exc:
+                    if _optional_schema_statement(sql):
+                        continue
+                    if _created_schema_name(sql) == "agent_rig" and _role_cannot_create_schema(exc):
+                        present = await conn.fetchval(
+                            "SELECT 1 FROM pg_namespace WHERE nspname = 'agent_rig'"
+                        )
+                        if present == 1:
+                            continue
+                    raise
 
     async def product_exists(self, tenant_id: str, sku: str) -> bool:
         async with self.pool.acquire() as conn:
