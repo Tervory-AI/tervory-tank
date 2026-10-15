@@ -99,6 +99,15 @@
 .tvy-admin .form-error { color: var(--fg); font-size: 13px; margin: 0; }
 .tvy-admin .load-error { margin: 24px; }
 .tvy-admin .empty { color: var(--muted); margin: 0; }
+.tvy-admin button.save {
+  background: var(--red);
+  border: 1px solid var(--red);
+  color: #fff;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font: inherit;
+  cursor: pointer;
+}
 @media (max-width: 980px) {
   .tvy-admin .counters { grid-template-columns: repeat(2, 1fr); }
   .tvy-admin .tables, .tvy-admin .price-grid { grid-template-columns: 1fr; }

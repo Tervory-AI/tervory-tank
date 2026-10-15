@@ -39,6 +39,7 @@ import os
 import time
 import uuid
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 import asyncpg
 import httpx
@@ -1201,6 +1202,117 @@ async def base_proxy(path: str, request: Request) -> Response:
     except httpx.HTTPError:
         raise HTTPException(status_code=503, detail="Base room is unreachable") from None
     return Response(content=resp.content, status_code=resp.status_code, media_type=resp.headers.get("content-type"))
+
+
+# ---------- Zenas: the room on this server only ----------
+
+_LOCAL_ZENAS_HOSTS = frozenset({"agent-zenas", "localhost", "127.0.0.1"})
+_ZENAS_PATH = re.compile(
+    r"^(consents|matters|pool|pool/status|pool/load|health|review|rule-cards|worked|matches|training-pairs|drafts)$"
+    r"|^(matters|documents|rule-cards|worked)/[0-9a-fA-F-]{36}$"
+    r"|^matters/[0-9a-fA-F-]{36}/documents$"
+    r"|^documents/[0-9a-fA-F-]{36}/reviews$"
+)
+
+
+def zenas_upstream(path: str) -> str:
+    """URL of a Zenas route on this server. Any other host is refused."""
+    cleaned = (path or "").strip().strip("/")
+    if not _ZENAS_PATH.fullmatch(cleaned):
+        raise HTTPException(status_code=404, detail="no such zenas route")
+    raw = os.environ.get("ZENAS_AGENT_URL", "http://agent-zenas:8000").strip()
+    parsed = urlparse(raw)
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme not in {"http", "https"} or host not in _LOCAL_ZENAS_HOSTS or parsed.username:
+        raise HTTPException(status_code=403, detail="Zenas stays in this region")
+    return raw.rstrip("/") + "/" + cleaned
+
+
+def public_feed(value: Any) -> Any:
+    """Drop key material from a pool status payload. key_name and key_set stay."""
+    if isinstance(value, list):
+        return [public_feed(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    kept: dict[str, Any] = {}
+    for key, item in value.items():
+        lowered = str(key).lower()
+        if lowered not in {"key_name", "key_set"} and "key" in lowered:
+            continue
+        if any(part in lowered for part in ("secret", "password", "token")):
+            continue
+        kept[key] = public_feed(item)
+    return kept
+
+
+def annotate_key_set(payload: Any) -> Any:
+    """Say whether a named key is set. Never copy the value."""
+    if not isinstance(payload, dict):
+        return payload
+    sources = payload.get("sources")
+    if not isinstance(sources, list):
+        return payload
+    for row in sources:
+        if not isinstance(row, dict):
+            continue
+        name = row.get("key_name")
+        if not isinstance(name, str) or not re.fullmatch(r"[A-Z][A-Z0-9_]{0,80}", name):
+            row["key_name"] = "none"
+            continue
+        row["key_set"] = bool(os.environ.get(name, "").strip())
+    return payload
+
+
+def _request_home(raw: bytes, query_home: str | None) -> str | None:
+    if raw:
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, dict) and parsed.get("home_region"):
+            return str(parsed["home_region"])
+    return query_home or None
+
+
+@app.api_route("/v1/zenas/{path:path}", methods=["GET", "POST"], dependencies=[Depends(require_key)])
+async def zenas_proxy(path: str, request: Request) -> Response:
+    """Forward /v1/zenas/* to the Zenas room on this server only.
+
+    A tenant whose home is the other region is refused before the room is called,
+    and nothing is stored here. The room URL is not taken from the request.
+    """
+    target = zenas_upstream(path)
+    raw = await request.body()
+    foreign = home_region_refusal(_request_home(raw, request.query_params.get("home_region")), box_region())
+    if foreign:
+        raise HTTPException(status_code=403, detail=foreign)
+    if _http is None:
+        raise HTTPException(status_code=503, detail="Zenas room is unreachable")
+    headers: dict[str, str] = {}
+    content_type = request.headers.get("content-type")
+    if content_type:
+        headers["content-type"] = content_type
+    try:
+        resp = await _http.request(
+            request.method,
+            target,
+            content=raw if raw else None,
+            params=list(request.query_params.multi_items()),
+            headers=headers,
+            timeout=60,
+        )
+    except httpx.HTTPError:
+        raise HTTPException(status_code=503, detail="Zenas room is unreachable") from None
+    content = resp.content
+    media = resp.headers.get("content-type")
+    if path.strip("/") in {"pool", "pool/status"} and media and "json" in media:
+        try:
+            data = json.loads(content)
+        except json.JSONDecodeError:
+            data = None
+        if isinstance(data, (dict, list)):
+            content = json.dumps(annotate_key_set(public_feed(data))).encode()
+    return Response(content=content, status_code=resp.status_code, media_type=media)
 
 
 # ---------- feedback: the outcome column ----------
