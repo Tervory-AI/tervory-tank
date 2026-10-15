@@ -576,3 +576,13 @@ BEGIN
   END IF;
 END
 $$;
+
+-- Rig model tasks (R3). Luna is the cheap tier; cache stays inside the tenant.
+INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_tokens_out, system_prompt) VALUES
+  ('rig.explain', 1, 'luna', 'standard', 'tenant', 400,
+   'You write short reasons these parts fit. Reply with JSON {"why":[string]}. Do not add or remove parts.'),
+  ('rig.ask', 1, 'luna', 'standard', 'tenant', 400,
+   'Answer only from the catalogue you are given. Reply with JSON {"answer":string,"cites":[string]}. If it is not in the catalogue, answer "I don''t know".'),
+  ('rig.fit_suggest', 1, 'luna', 'standard', 'tenant', 800,
+   'Propose fit rows from the attributes you are given. Reply with JSON {"fits":[object]}. Use only the product ids you are given.')
+ON CONFLICT DO NOTHING;
