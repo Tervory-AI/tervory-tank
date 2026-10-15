@@ -37,7 +37,7 @@ services:
       - default
 
   qdrant:
-    image: qdrant/qdrant:latest
+    image: qdrant/qdrant:v1.19.2
     restart: unless-stopped
     environment:
       TANK_REGION: za
@@ -101,6 +101,7 @@ services:
       TANK_KEY_ZENAS: ${TANK_KEY_ZENAS:-}
       ZA_HOSTED_MODELS: ${ZA_HOSTED_MODELS:-}
       TANK_PROVIDER_ALLOW: ${TANK_PROVIDER_ALLOW:-}
+      ZENAS_MATTER_SHARING: ${ZENAS_MATTER_SHARING:-region}
       ZENAS_AGENT_URL: http://agent-zenas:8000
     depends_on:
       postgres:
@@ -145,6 +146,7 @@ services:
       TANK_KEY: ${TANK_KEY_ZENAS:-}
       HERMES_URL: http://hermes:8000
       ZENAS_PII_KEY: ${ZENAS_PII_KEY:-}
+      ZENAS_MATTER_SHARING: ${ZENAS_MATTER_SHARING:-region}
       DATA_DIR: /data
     volumes:
       - za_agent_data:/data
