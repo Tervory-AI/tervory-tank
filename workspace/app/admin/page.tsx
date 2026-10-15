@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { notFound } from "next/navigation";
 import { isFounder, loadFounder } from "@/lib/admin";
-import { savePrice } from "./actions";
+import { savePrice, setAutoPromote } from "./actions";
 import { FounderConsole } from "./console";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const days = params.days === "30" ? 30 : params.days === "365" ? 365 : 90;
   try {
     const data = await loadFounder(userId, days);
-    return <FounderConsole days={days} savePrice={savePrice} {...data} />;
+    return <FounderConsole days={days} savePrice={savePrice} setAutoPromote={setAutoPromote} {...data} />;
   } catch (err) {
     const message = err instanceof Error ? err.message : "The console could not load.";
     return <p className="load-error">{message}</p>;

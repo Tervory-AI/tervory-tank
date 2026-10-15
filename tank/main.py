@@ -38,6 +38,8 @@ import logging
 import os
 import time
 import uuid
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
 
@@ -48,6 +50,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+import graduate
 import skala
 
 log = logging.getLogger("tank")
@@ -660,67 +663,148 @@ async def _llm(model: str, messages: list[dict[str, str]], max_tokens: int) -> t
     return content, float(r.headers.get("x-litellm-response-cost") or 0.0)
 
 
-def _json_obj(s: str) -> dict[str, Any] | None:
-    a, b = s.find("{"), s.rfind("}")
-    if a < 0 or b <= a:
-        return None
+def _shadow_budget() -> float:
+    raw = os.environ.get("TANK_SHADOW_BUDGET_USD", "1")
     try:
-        v = json.loads(s[a:b + 1])
-        return v if isinstance(v, dict) else None
-    except json.JSONDecodeError:
-        return None
+        value = float(raw)
+    except ValueError:
+        return 1.0
+    return value if value >= 0 else 1.0
 
 
-def _norm(v: Any) -> str:
-    return " ".join(str(v).lower().split())
+def _roster_path() -> Path:
+    env = os.environ.get("LITELLM_CONFIG")
+    if env:
+        return Path(env)
+    return Path(__file__).resolve().parent.parent / "litellm" / "config.yaml"
+
+
+def _price_quotes() -> list[graduate.Quote]:
+    path = _roster_path()
+    if not path.is_file():
+        return []
+    return graduate.load_price_roster(path)
+
+
+async def _shadow_budget_open(task_type: str) -> bool:
+    async with pool().acquire() as conn:
+        spent = await conn.fetchval(
+            "SELECT coalesce(spent_usd, 0) FROM tank.shadow_spend WHERE task_type=$1 AND day=CURRENT_DATE",
+            task_type,
+        )
+    return graduate.budget_open(float(spent or 0), _shadow_budget(), code=False)
+
+
+async def _add_spend(conn: Any, task_type: str, amount: float) -> None:
+    if amount <= 0:
+        return
+    await conn.execute(
+        """
+        INSERT INTO tank.shadow_spend (task_type, day, spent_usd)
+        VALUES ($1, CURRENT_DATE, $2)
+        ON CONFLICT (task_type, day) DO UPDATE
+          SET spent_usd = tank.shadow_spend.spent_usd + EXCLUDED.spent_usd
+        """,
+        task_type, amount,
+    )
+
+
+async def _run_code_candidate(req: RouteRequest, cand: str, messages: list[dict[str, str]]) -> tuple[str, float]:
+    """Run an approved model-free skill on the same input. A model call here is a failure."""
+    parsed = graduate.parse_skill(cand)
+    if parsed is None:
+        raise RuntimeError("a code candidate looks like skill:id@version")
+    skill_id, version = parsed
+    pkg = get_package(skill_id, version)
+    state = await skill_state(skill_id, version)
+    problem = graduate.code_candidate_problem(cand, state=state, task_type=pkg.task_type, on_disk=True)
+    if problem:
+        raise RuntimeError(problem)
+    if _http is None:
+        raise RuntimeError("skill runner is not ready")
+
+    async def _forbid(**_kwargs: Any) -> dict[str, Any]:
+        raise RuntimeError("code candidate called a model")
+
+    ctx = skala.SkillContext(
+        tenant_id=req.tenant_id, skill_ref=pkg.ref, agent=pkg.agent, task_id=None,
+        _model=_forbid, http=_http, env=dict(SKILL_ENV),
+    )
+    out = await skala.run_skill(pkg, graduate.skill_payload(messages), ctx)
+    if ctx.calls:
+        raise RuntimeError("code candidate called a model")
+    return json.dumps(out), 0.0
 
 
 async def _shadow(req: RouteRequest, policy: dict[str, Any], messages: list[dict[str, str]], max_tokens: int,
                   ledger_id: uuid.UUID, primary: str, primary_cost: float) -> None:
     """Run the candidate on the same input, score agreement with the primary, record both.
-    Spend lands on the platform tenant, never the client's."""
+    The client already has the primary answer. Spend lands on the platform tenant.
+    Code skills cost nothing and are not subject to the daily shadow budget."""
     cand = policy["candidate_model"]
-    cand_content, cand_cost, agreement, method = None, 0.0, None, "failed"
+    if graduate.is_semantic_cache(cand):
+        # Proved by graduate.semantic_lookup (local vectors, no paid call) before it is switched on.
+        return
+    if graduate.is_tool(cand):
+        log.warning("shadow %s skipped %s: a paid tool is not started from here", req.task_type, cand)
+        return
+    code = graduate.is_skill(cand)
+    if not code and not await _shadow_budget_open(req.task_type):
+        log.warning("shadow %s skipped %s: daily budget spent", req.task_type, cand)
+        return
+    cand_content, cand_cost, agreement, method, fields = None, 0.0, None, "failed", {}
     try:
-        cand_content, cand_cost = await _llm(cand, messages, max_tokens)
-        pj, cj = _json_obj(primary), _json_obj(cand_content)
-        if pj is not None and cj is not None and pj:
-            keys = set(pj) | set(cj)
-            same = sum(1 for k in keys if _norm(pj.get(k)) == _norm(cj.get(k)))
-            agreement, method = same / len(keys), "json"
+        if code:
+            cand_content, cand_cost = await _run_code_candidate(req, cand, messages)
+        else:
+            cand_content, cand_cost = await _llm(cand, messages, max_tokens)
+        compared = graduate.compare(primary, cand_content, tolerance=float(policy.get("number_tolerance") or 0.01))
+        if compared.method == "fields":
+            agreement, method, fields = compared.agreement, "fields", compared.fields
         else:
             jp = await load_policy("tank.judge", PLATFORM_TENANT)
             jmsgs = [{"role": "system", "content": jp["system_prompt"]},
                      {"role": "user", "content": f"REQUEST:\n{messages[-1]['content'][:3000]}\n\nFIRST ANSWER:\n{primary[:4000]}\n\nSECOND ANSWER:\n{cand_content[:4000]}"}]
             verdict, jcost = await _llm(jp["model"], jmsgs, jp["max_tokens_out"])
             cand_cost += jcost
-            m = re.search(r"\d{1,3}", verdict)
-            agreement, method = (min(100, int(m.group())) / 100 if m else None), "judge"
+            found = re.search(r"\d{1,3}", verdict)
+            agreement, method = (min(100, int(found.group())) / 100 if found else None), "judge"
     except Exception as exc:  # noqa: BLE001
         log.warning("shadow %s→%s failed: %s", policy["model"], cand, exc)
     async with pool().acquire() as conn:
         await conn.execute(
             """
             INSERT INTO tank.shadow (ledger_id, tenant_id, task_type, primary_model, candidate_model, primary_content,
-                                     candidate_content, candidate_cost_usd, primary_cost_usd, agreement, method)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+                                     candidate_content, candidate_cost_usd, primary_cost_usd, agreement, method, fields)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb)
             """,
             ledger_id, req.tenant_id, req.task_type, policy["model"], cand, primary[:20000],
-            (cand_content or "")[:20000], cand_cost, primary_cost, agreement, method,
+            (cand_content or "")[:20000], cand_cost, primary_cost, agreement, method, json.dumps(fields),
         )
         # The candidate's spend is platform R&D: logged, visible, not on the client's bill.
         await conn.execute(
             """
             INSERT INTO tank.ledger (tenant_id, region, agent, task_type, rung, model, priority, tokens_in, tokens_out,
                                      cost_usd, latency_ms, cache_hit, outcome)
-            VALUES ($1,$2,'tank',$3,1,$4,'batch',0,0,$5,0,false,$6)
+            VALUES ($1,$2,'tank',$3,$4,$5,'batch',0,0,$6,0,false,$7)
             """,
-            PLATFORM_TENANT, DEFAULT_REGION, f"{req.task_type}#shadow", cand, cand_cost,
+            PLATFORM_TENANT, DEFAULT_REGION, f"{req.task_type}#shadow", 3 if code else 1, cand, cand_cost,
             "delivered" if cand_content is not None else "failed",
         )
+        await _add_spend(conn, req.task_type, cand_cost)
+    await _move_task(req.task_type)
 
 
 # ---------- graduation: the ladder ----------
+
+_POLICY_MOVE = """
+    SELECT task_type, model, candidate_model, previous_model, rung, eval_threshold,
+           min_shadow_samples, max_reject_rate, auto_promote, field_floors,
+           semantic_cache, promoted_at, number_tolerance, shadow_rate
+    FROM tank.policy
+    WHERE task_type=$1 AND tenant_id IS NULL
+"""
+
 
 class CandidateBody(BaseModel):
     candidate_model: str | None = None
@@ -732,14 +816,294 @@ class PromoteBody(BaseModel):
     by: str | None = None
 
 
+class SearchBody(BaseModel):
+    by: str | None = None
+    force: bool = False
+
+
+class AutoBody(BaseModel):
+    auto_promote: bool
+    by: str | None = None
+
+
+def _num(value: Any) -> float | None:
+    if value is None:
+        return None
+    return float(value)
+
+
+def _rung_for(name: str | None) -> tuple[int, bool]:
+    text = str(name or "")
+    if text.startswith("skill:"):
+        return 3, False
+    if text.startswith("cache:"):
+        return 4, True
+    return 1, False
+
+
+async def _load_evidence(conn: Any, policy: dict[str, Any]) -> graduate.Evidence:
+    task_type = policy["task_type"]
+    candidate = policy.get("candidate_model")
+    if candidate:
+        rows = await conn.fetch(
+            """
+            SELECT agreement, fields FROM tank.shadow
+            WHERE task_type=$1 AND candidate_model=$2 AND agreement IS NOT NULL
+            """,
+            task_type, candidate,
+        )
+        agreements = [float(row["agreement"]) for row in rows if row["agreement"] is not None]
+        feedback = await conn.fetchrow(
+            """
+            SELECT count(*) FILTER (WHERE feedback='rejected') AS rejected,
+                   count(*) FILTER (WHERE feedback IS NOT NULL) AS judged
+            FROM tank.ledger
+            WHERE task_type=$1 AND ts > now() - interval '30 days'
+            """,
+            task_type,
+        )
+        return graduate.Evidence(
+            samples=len(agreements),
+            agreement=(sum(agreements) / len(agreements)) if agreements else None,
+            fields=graduate.average_fields([dict(row) for row in rows]),
+            rejected=int(feedback["rejected"] or 0),
+            judged=int(feedback["judged"] or 0),
+        )
+    promoted_at = policy.get("promoted_at")
+    if promoted_at is None:
+        return graduate.Evidence()
+    feedback = await conn.fetchrow(
+        """
+        SELECT count(*) FILTER (WHERE feedback='rejected') AS rejected,
+               count(*) FILTER (WHERE feedback IS NOT NULL) AS judged
+        FROM tank.ledger
+        WHERE task_type=$1 AND ts >= $2
+        """,
+        task_type, promoted_at,
+    )
+    live = await conn.fetchval(
+        """
+        SELECT avg(agreement) FROM tank.shadow
+        WHERE task_type=$1 AND created_at >= $2 AND primary_model=$3 AND agreement IS NOT NULL
+        """,
+        task_type, promoted_at, policy["model"],
+    )
+    return graduate.Evidence(
+        rejected=int(feedback["rejected"] or 0),
+        judged=int(feedback["judged"] or 0),
+        live_agreement=float(live) if live is not None else None,
+    )
+
+
+async def _apply_move(conn: Any, move: graduate.Move, before: dict[str, Any], by: str) -> None:
+    task_type = before["task_type"]
+    if move.action == "promote":
+        updated = await conn.execute(
+            """
+            UPDATE tank.policy
+            SET previous_model=model, model=$2, candidate_model=NULL, shadow_rate=0,
+                rung=$3, semantic_cache=$4, promoted_at=now(), updated_at=now()
+            WHERE task_type=$1 AND tenant_id IS NULL AND candidate_model IS NOT NULL
+            """,
+            task_type, move.policy["model"], int(move.policy["rung"]), bool(move.policy.get("semantic_cache")),
+        )
+        if str(updated).endswith(" 0"):
+            return
+        await conn.execute(
+            """
+            INSERT INTO tank.policy_log (task_type, action, from_model, to_model, by_user, detail)
+            VALUES ($1,'promote',$2,$3,$4,$5::jsonb)
+            """,
+            task_type, before["model"], move.policy["model"], by,
+            json.dumps({"automatic": by == "tank"}),
+        )
+        return
+    if move.action != "rollback":
+        return
+    updated = await conn.execute(
+        """
+        UPDATE tank.policy
+        SET model=previous_model, previous_model=NULL, promoted_at=NULL, semantic_cache=$2,
+            rung=$3, shadow_rate=0, updated_at=now()
+        WHERE task_type=$1 AND tenant_id IS NULL AND previous_model IS NOT NULL AND promoted_at IS NOT NULL
+        """,
+        task_type, bool(move.policy.get("semantic_cache")), int(move.policy["rung"]),
+    )
+    if str(updated).endswith(" 0"):
+        return
+    await conn.execute(
+        """
+        INSERT INTO tank.policy_log (task_type, action, from_model, to_model, by_user, detail)
+        VALUES ($1,'rollback',$2,$3,$4,$5::jsonb)
+        """,
+        task_type, before["model"], move.policy["model"], by,
+        json.dumps({"automatic": True, "reason": move.reason}),
+    )
+
+
+async def _move_task(task_type: str, *, by: str = "tank", automatic: bool = True) -> graduate.Move | None:
+    """Promote a proven candidate, or roll back a promotion that slipped in its first 7 days."""
+    async with pool().acquire() as conn:
+        async with conn.transaction():
+            row = await conn.fetchrow(_POLICY_MOVE + " FOR UPDATE", task_type)
+            if row is None:
+                return None
+            policy = dict(row)
+            evidence = await _load_evidence(conn, policy)
+            now = datetime.now(timezone.utc)
+            if automatic:
+                move = graduate.apply(policy, evidence, now)
+            else:
+                move = graduate.promote_if_proven(policy, evidence, now, automatic=False)
+            if move.action != "hold":
+                await _apply_move(conn, move, policy, by)
+            return move
+
+
+async def _move_all() -> None:
+    async with pool().acquire() as conn:
+        names = await conn.fetch(
+            "SELECT task_type FROM tank.policy WHERE tenant_id IS NULL AND task_type <> 'tank.judge'"
+        )
+    for row in names:
+        try:
+            await _move_task(row["task_type"])
+        except Exception as exc:  # noqa: BLE001 — one task must not blank the ladder
+            log.warning("graduation watch %s skipped: %s", row["task_type"], exc)
+
+
+def _note(row: Any) -> str | None:
+    detail = row["detail"] or {}
+    if isinstance(detail, str):
+        try:
+            detail = json.loads(detail)
+        except json.JSONDecodeError:
+            detail = {}
+    if not isinstance(detail, dict):
+        detail = {}
+    if row["action"] == "rollback":
+        why = detail.get("reason") or "quality dropped"
+        return f"Rolled back to {row['to_model']}: {why}."
+    if detail.get("automatic"):
+        return f"Promoted to {row['to_model']} on the samples."
+    return None
+
+
+async def _code_quotes(conn: Any) -> list[graduate.Quote]:
+    rows = await conn.fetch(
+        """
+        SELECT id, version FROM tank.skills
+        WHERE state='approved' AND present AND task_type IS NULL
+        """
+    )
+    quotes: list[graduate.Quote] = []
+    for row in rows:
+        ref = f"skill:{row['id']}@{row['version']}"
+        try:
+            pkg = get_package(row["id"], row["version"])
+        except HTTPException:
+            continue
+        if graduate.code_candidate_problem(ref, state="approved", task_type=pkg.task_type, on_disk=True):
+            continue
+        quotes.append(graduate.Quote(ref, 0.0, funds=True, kind="code"))
+    return quotes
+
+
+async def _screen_cases(conn: Any, task_type: str) -> list[tuple[Any, list[dict[str, str]], dict[str, Any]]]:
+    evals = await conn.fetch(
+        "SELECT input, expected FROM tank.evals WHERE task_type=$1 ORDER BY created_at DESC LIMIT 12",
+        task_type,
+    )
+    transcripts = await conn.fetch(
+        "SELECT messages, content FROM tank.transcripts WHERE task_type=$1 ORDER BY created_at DESC LIMIT 8",
+        task_type,
+    )
+    cases: list[tuple[Any, list[dict[str, str]], dict[str, Any]]] = []
+    for row in evals:
+        payload = row["input"]
+        expected = row["expected"]
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        if isinstance(expected, str):
+            try:
+                expected = json.loads(expected)
+            except json.JSONDecodeError:
+                pass
+        body = payload if isinstance(payload, dict) else {"text": str(payload)}
+        messages = [{"role": "user", "content": json.dumps(body) if isinstance(payload, dict) else str(payload)}]
+        cases.append((expected, messages, body))
+    for row in transcripts:
+        messages = row["messages"]
+        if isinstance(messages, str):
+            messages = json.loads(messages)
+        if not isinstance(messages, list):
+            continue
+        clean = [{"role": str(m.get("role") or "user"), "content": str(m.get("content") or "")} for m in messages if isinstance(m, dict)]
+        cases.append((row["content"], clean, graduate.skill_payload(clean)))
+    return cases
+
+
+async def _screen_skill(pkg: skala.SkillPackage, cases: list[tuple[Any, list[dict[str, str]], dict[str, Any]]], tolerance: float) -> float | None:
+    if not cases or _http is None:
+        return None
+
+    async def _forbid(**_kwargs: Any) -> dict[str, Any]:
+        raise RuntimeError("code candidate called a model")
+
+    ctx = skala.SkillContext(
+        tenant_id=PLATFORM_TENANT, skill_ref=pkg.ref, agent=pkg.agent, task_id=None,
+        _model=_forbid, http=_http, env={},
+    )
+    scores: list[float] = []
+    for expected, _messages, payload in cases:
+        try:
+            out = await skala.run_skill(pkg, payload, ctx)
+            scores.append(graduate.score_pair(expected, out, tolerance=tolerance))
+        except Exception:  # noqa: BLE001 — a broken case drops that sample, not the search
+            scores.append(0.0)
+    if ctx.calls:
+        return 0.0
+    return sum(scores) / len(scores) if scores else None
+
+
+async def _screen_model(name: str, task_type: str, cases: list[tuple[Any, list[dict[str, str]], dict[str, Any]]], tolerance: float, max_tokens: int) -> float | None:
+    scores: list[float] = []
+    for expected, messages, _payload in cases:
+        if not await _shadow_budget_open(task_type):
+            break
+        content, cost = await _llm(name, messages, max_tokens)
+        async with pool().acquire() as conn:
+            await _add_spend(conn, task_type, cost)
+        scores.append(graduate.score_pair(expected, content, tolerance=tolerance))
+    return sum(scores) / len(scores) if scores else None
+
+
+async def _check_code_candidate(conn: Any, candidate: str) -> str | None:
+    parsed = graduate.parse_skill(candidate)
+    if parsed is None:
+        return graduate.code_candidate_problem(candidate, state=None, task_type=None, on_disk=False)
+    skill_id, version = parsed
+    try:
+        pkg = get_package(skill_id, version)
+        on_disk = True
+        task_type = pkg.task_type
+    except HTTPException:
+        on_disk = False
+        task_type = None
+    state = await conn.fetchval("SELECT state FROM tank.skills WHERE id=$1 AND version=$2", skill_id, version)
+    return graduate.code_candidate_problem(candidate, state=state, task_type=task_type, on_disk=on_disk)
+
+
 @app.get("/v1/graduation", dependencies=[Depends(require_key)])
 async def graduation() -> list[dict[str, Any]]:
-    """Every platform policy with its candidate and what the shadow runs say so far."""
+    """Every platform policy with its ladder: paid model, cheaper model, code."""
+    await _move_all()
     async with pool().acquire() as conn:
         rows = await conn.fetch(
             """
             SELECT p.task_type, p.rung, p.model, p.candidate_model, p.shadow_rate, p.previous_model, p.eval_threshold,
-                   p.cache_scope, p.priority,
+                   p.cache_scope, p.priority, p.min_shadow_samples, p.max_reject_rate, p.auto_promote,
+                   p.semantic_cache, p.promoted_at,
                    (SELECT count(*) FROM tank.shadow s WHERE s.task_type=p.task_type AND s.candidate_model=p.candidate_model AND s.agreement IS NOT NULL) AS n,
                    (SELECT avg(agreement) FROM tank.shadow s WHERE s.task_type=p.task_type AND s.candidate_model=p.candidate_model) AS agreement,
                    (SELECT avg(candidate_cost_usd) FROM tank.shadow s WHERE s.task_type=p.task_type AND s.candidate_model=p.candidate_model) AS cand_cost,
@@ -751,14 +1115,77 @@ async def graduation() -> list[dict[str, Any]]:
             ORDER BY cost_30d DESC, p.task_type
             """
         )
+        ranks = await conn.fetch("SELECT * FROM tank.graduation_rank")
+        notes = await conn.fetch(
+            """
+            SELECT DISTINCT ON (task_type) task_type, action, from_model, to_model, detail, created_at
+            FROM tank.policy_log
+            WHERE action IN ('promote', 'rollback') AND created_at > now() - interval '14 days'
+            ORDER BY task_type, created_at DESC
+            """
+        )
+        states = await conn.fetch("SELECT * FROM tank.search_state")
+        code_quotes = await _code_quotes(conn)
+    price_quotes = _price_quotes()
+    roster_fp, price_fp = graduate.fingerprints([*price_quotes, *code_quotes])
+    by_rank: dict[str, list[Any]] = {}
+    for rank in ranks:
+        by_rank.setdefault(rank["task_type"], []).append(rank)
+    by_note = {row["task_type"]: _note(row) for row in notes}
+    by_state = {row["task_type"]: row for row in states}
+    now = datetime.now(timezone.utc)
     out = []
     for r in rows:
         d = dict(r)
         n = int(d["n"] or 0)
-        agr = float(d["agreement"]) if d["agreement"] is not None else None
+        agr = _num(d["agreement"])
         thr = float(d["eval_threshold"] or 0.95)
-        d["eligible"] = bool(d["candidate_model"]) and n >= 30 and agr is not None and agr >= thr
-        d["saving_pct"] = (round((1 - float(d["cand_cost"]) / float(d["prim_cost"])) * 100) if d["prim_cost"] and float(d["prim_cost"]) > 0 and d["cand_cost"] is not None else None)
+        minimum = int(d["min_shadow_samples"] or 30)
+        d["n"] = n
+        d["agreement"] = agr
+        d["eligible"] = bool(d["candidate_model"]) and n >= minimum and agr is not None and agr >= thr
+        prim = _num(d["prim_cost"])
+        cand = _num(d["cand_cost"])
+        d["prim_cost"] = prim
+        d["cand_cost"] = cand
+        d["saving_pct"] = (round((1 - cand / prim) * 100) if prim and prim > 0 and cand is not None else None)
+        calls = int(d["calls_30d"] or 0)
+        task_ranks = by_rank.get(d["task_type"], [])
+        ranked_view = [{
+            "name": rank["candidate"],
+            "kind": rank["kind"],
+            "status": rank["status"],
+            "shadow_n": int(rank["shadow_n"] or 0),
+            "shadow_agreement": _num(rank["shadow_agreement"]),
+            "cost_per_call": _num(rank["cost_per_call"]) if rank["cost_per_call"] is not None else _num(rank["price_usd"]),
+        } for rank in task_ranks]
+        steps = graduate.ladder_from_policy(
+            model=d["model"],
+            previous_model=d["previous_model"],
+            candidate_model=d["candidate_model"],
+            calls_30d=calls,
+            prim_cost=prim,
+            cand_cost=0.0 if graduate.is_skill(d["candidate_model"]) else cand,
+            shadow_n=n,
+            shadow_agreement=agr,
+            ranked=ranked_view,
+        )
+        state = by_state.get(d["task_type"])
+        due = graduate.research_reason(
+            state["searched_at"] if state else None,
+            now,
+            roster_fp,
+            price_fp,
+            state["roster_fingerprint"] if state else None,
+            state["price_fingerprint"] if state else None,
+        )
+        d["ladder"] = {
+            "steps": steps,
+            "proposed": (state["proposed"] if state else None),
+            "note": by_note.get(d["task_type"]),
+            "research_due": due,
+            "auto_promote": bool(d["auto_promote"]) if d["auto_promote"] is not None else True,
+        }
         out.append(d)
     return out
 
@@ -771,6 +1198,10 @@ async def set_candidate(task_type: str, body: CandidateBody) -> dict[str, Any]:
             raise HTTPException(status_code=404, detail="no such platform policy")
         if body.candidate_model and body.candidate_model == row["model"]:
             raise HTTPException(status_code=400, detail="candidate must differ from the current model")
+        if graduate.is_skill(body.candidate_model):
+            problem = await _check_code_candidate(conn, str(body.candidate_model))
+            if problem:
+                raise HTTPException(status_code=400, detail=problem)
         await conn.execute(
             "UPDATE tank.policy SET candidate_model=$2, shadow_rate=$3, updated_at=now() WHERE task_type=$1 AND tenant_id IS NULL",
             task_type, body.candidate_model, body.shadow_rate if body.candidate_model else 0,
@@ -784,39 +1215,211 @@ async def set_candidate(task_type: str, body: CandidateBody) -> dict[str, Any]:
 
 @app.post("/v1/graduation/{task_type}/promote", dependencies=[Depends(require_key)])
 async def promote(task_type: str, body: PromoteBody) -> dict[str, Any]:
-    """The human step: make the candidate the model. Previous model is kept for rollback."""
-    async with pool().acquire() as conn:
-        row = await conn.fetchrow("SELECT model, candidate_model FROM tank.policy WHERE task_type=$1 AND tenant_id IS NULL", task_type)
-        if row is None or not row["candidate_model"]:
+    """Promote only when the shadow bar is cleared. The previous model stays for rollback."""
+    move = await _move_task(task_type, by=body.by or "founder", automatic=False)
+    if move is None:
+        raise HTTPException(status_code=404, detail="no such platform policy")
+    if move.action != "promote":
+        if move.reason == "no candidate":
             raise HTTPException(status_code=400, detail="no candidate to promote")
-        await conn.execute(
-            """
-            UPDATE tank.policy SET previous_model=model, model=candidate_model, candidate_model=NULL, shadow_rate=0, updated_at=now()
-            WHERE task_type=$1 AND tenant_id IS NULL
-            """, task_type,
-        )
-        await conn.execute(
-            "INSERT INTO tank.policy_log (task_type, action, from_model, to_model, by_user) VALUES ($1,'promote',$2,$3,$4)",
-            task_type, row["model"], row["candidate_model"], body.by,
-        )
-    return {"ok": True, "model": row["candidate_model"], "previous_model": row["model"]}
+        raise HTTPException(status_code=409, detail=move.reason or "not proven")
+    return {"ok": True, "model": move.policy["model"], "previous_model": move.policy["previous_model"]}
 
 
 @app.post("/v1/graduation/{task_type}/rollback", dependencies=[Depends(require_key)])
 async def rollback(task_type: str, body: PromoteBody) -> dict[str, Any]:
     async with pool().acquire() as conn:
-        row = await conn.fetchrow("SELECT model, previous_model FROM tank.policy WHERE task_type=$1 AND tenant_id IS NULL", task_type)
-        if row is None or not row["previous_model"]:
-            raise HTTPException(status_code=400, detail="nothing to roll back to")
-        await conn.execute(
-            "UPDATE tank.policy SET model=previous_model, previous_model=NULL, updated_at=now() WHERE task_type=$1 AND tenant_id IS NULL",
+        row = await conn.fetchrow(
+            "SELECT model, previous_model FROM tank.policy WHERE task_type=$1 AND tenant_id IS NULL",
             task_type,
         )
+        if row is None or not row["previous_model"]:
+            raise HTTPException(status_code=400, detail="nothing to roll back to")
+        rung, semantic = _rung_for(row["previous_model"])
         await conn.execute(
-            "INSERT INTO tank.policy_log (task_type, action, from_model, to_model, by_user) VALUES ($1,'rollback',$2,$3,$4)",
-            task_type, row["model"], row["previous_model"], body.by,
+            """
+            UPDATE tank.policy
+            SET model=previous_model, previous_model=NULL, promoted_at=NULL, semantic_cache=$2,
+                rung=$3, shadow_rate=0, updated_at=now()
+            WHERE task_type=$1 AND tenant_id IS NULL
+            """,
+            task_type, semantic, rung,
+        )
+        await conn.execute(
+            "INSERT INTO tank.policy_log (task_type, action, from_model, to_model, by_user, detail) VALUES ($1,'rollback',$2,$3,$4,$5::jsonb)",
+            task_type, row["model"], row["previous_model"], body.by, json.dumps({"automatic": False}),
         )
     return {"ok": True, "model": row["previous_model"]}
+
+
+@app.put("/v1/graduation/{task_type}/auto", dependencies=[Depends(require_key)])
+async def set_auto_promote(task_type: str, body: AutoBody) -> dict[str, Any]:
+    async with pool().acquire() as conn:
+        updated = await conn.execute(
+            "UPDATE tank.policy SET auto_promote=$2, updated_at=now() WHERE task_type=$1 AND tenant_id IS NULL",
+            task_type, body.auto_promote,
+        )
+        if str(updated).endswith(" 0"):
+            raise HTTPException(status_code=404, detail="no such platform policy")
+        await conn.execute(
+            "INSERT INTO tank.policy_log (task_type, action, by_user, detail) VALUES ($1,'auto',$2,$3::jsonb)",
+            task_type, body.by, json.dumps({"auto_promote": body.auto_promote}),
+        )
+    return {"ok": True, "auto_promote": body.auto_promote}
+
+
+@app.post("/v1/graduation/{task_type}/search", dependencies=[Depends(require_key)])
+async def search_task(task_type: str, body: SearchBody | None = None) -> dict[str, Any]:
+    """Screen cheaper roster models and approved code skills. Shadow the cheapest survivor next."""
+    body = body or SearchBody()
+    async with pool().acquire() as conn:
+        policy = await conn.fetchrow(_POLICY_MOVE, task_type)
+        if policy is None:
+            raise HTTPException(status_code=404, detail="no such platform policy")
+        code_quotes = await _code_quotes(conn)
+        price_quotes = _price_quotes()
+        roster = [*price_quotes, *code_quotes]
+        roster_fp, price_fp = graduate.fingerprints(roster)
+        state = await conn.fetchrow("SELECT * FROM tank.search_state WHERE task_type=$1", task_type)
+        due = graduate.research_reason(
+            state["searched_at"] if state else None,
+            datetime.now(timezone.utc),
+            roster_fp,
+            price_fp,
+            state["roster_fingerprint"] if state else None,
+            state["price_fingerprint"] if state else None,
+        )
+        if due is None and not body.force:
+            return {"ok": True, "skipped": True, "proposed": state["proposed"] if state else None, "research_due": None}
+        cases = await _screen_cases(conn, task_type)
+        tolerance = float(policy["number_tolerance"] or 0.01)
+        max_tokens = int(await conn.fetchval(
+            "SELECT max_tokens_out FROM tank.policy WHERE task_type=$1 AND tenant_id IS NULL", task_type,
+        ) or 512)
+        shadow_rows = await conn.fetch(
+            """
+            SELECT candidate_model, count(*) AS n, avg(agreement) AS agreement
+            FROM tank.shadow
+            WHERE task_type=$1 AND agreement IS NOT NULL
+            GROUP BY candidate_model
+            """,
+            task_type,
+        )
+        field_rows = await conn.fetch(
+            """
+            SELECT candidate_model, fields FROM tank.shadow
+            WHERE task_type=$1 AND agreement IS NOT NULL
+            ORDER BY created_at DESC LIMIT 400
+            """,
+            task_type,
+        )
+        spend = await conn.fetchrow(
+            """
+            SELECT count(*) AS calls,
+                   avg(cost_usd) FILTER (WHERE cache_hit = false AND cost_usd > 0) AS cost
+            FROM tank.ledger
+            WHERE task_type=$1 AND ts > now() - interval '30 days' AND outcome='delivered'
+            """,
+            task_type,
+        )
+    screens: dict[str, float] = {}
+    serving = str(policy["model"])
+    serving_price = next((quote.price for quote in roster if quote.name == serving), None)
+    cheaper = [
+        quote for quote in roster
+        if quote.name != serving and (quote.kind == "code" or (serving_price is None or quote.price < serving_price))
+    ]
+    cheaper.sort(key=lambda quote: (quote.price, quote.name))
+    for quote in cheaper:
+        if quote.kind == "code":
+            parsed = graduate.parse_skill(quote.name)
+            if parsed is None:
+                continue
+            try:
+                pkg = get_package(parsed[0], parsed[1])
+            except HTTPException:
+                continue
+            score = await _screen_skill(pkg, cases, tolerance)
+        else:
+            if not cases:
+                continue
+            try:
+                score = await _screen_model(quote.name, task_type, cases, tolerance, max_tokens)
+            except Exception as exc:  # noqa: BLE001 — one model failing the screen is a miss, not a crash
+                log.warning("screen %s/%s failed: %s", task_type, quote.name, exc)
+                score = 0.0
+        if score is not None:
+            screens[quote.name] = score
+    shadows = {
+        row["candidate_model"]: (int(row["n"]), _num(row["agreement"]))
+        for row in shadow_rows
+    }
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in field_rows:
+        grouped.setdefault(row["candidate_model"], []).append(dict(row))
+    field_map = {name: graduate.average_fields(rows) for name, rows in grouped.items()}
+    floors = policy["field_floors"] if isinstance(policy["field_floors"], dict) else {}
+    result = graduate.search(
+        serving=serving,
+        roster=roster,
+        screens=screens,
+        shadows=shadows,
+        field_scores_by_name=field_map,
+        calls_30d=int(spend["calls"] or 0),
+        serving_cost=_num(spend["cost"]),
+        threshold=float(policy["eval_threshold"] or 0.97),
+        min_samples=int(policy["min_shadow_samples"] or 30),
+        floors={str(key): float(value) for key, value in floors.items()},
+    )
+    async with pool().acquire() as conn:
+        async with conn.transaction():
+            await conn.execute("DELETE FROM tank.graduation_rank WHERE task_type=$1", task_type)
+            for row in result.ranked:
+                await conn.execute(
+                    """
+                    INSERT INTO tank.graduation_rank
+                      (task_type, candidate, kind, price_usd, screen_agreement, shadow_n, shadow_agreement,
+                       cost_per_call, monthly_saving_usd, status)
+                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+                    """,
+                    task_type, row.name, row.kind, row.price, row.screen_agreement, row.shadow_n,
+                    row.shadow_agreement, row.cost_per_call, row.monthly_saving_usd, row.status,
+                )
+            await conn.execute(
+                """
+                INSERT INTO tank.search_state
+                  (task_type, roster_fingerprint, price_fingerprint, searched_at, reason, proposed)
+                VALUES ($1,$2,$3,now(),$4,$5)
+                ON CONFLICT (task_type) DO UPDATE SET
+                  roster_fingerprint=EXCLUDED.roster_fingerprint,
+                  price_fingerprint=EXCLUDED.price_fingerprint,
+                  searched_at=now(),
+                  reason=EXCLUDED.reason,
+                  proposed=EXCLUDED.proposed
+                """,
+                task_type, roster_fp, price_fp, due or "search", result.proposed,
+            )
+            current = policy["candidate_model"]
+            dropped = {row.name for row in result.ranked if row.status == "dropped"}
+            if result.next_shadow and (current is None or current in dropped):
+                await conn.execute(
+                    """
+                    UPDATE tank.policy SET candidate_model=$2, shadow_rate=1, updated_at=now()
+                    WHERE task_type=$1 AND tenant_id IS NULL
+                    """,
+                    task_type, result.next_shadow,
+                )
+                await conn.execute(
+                    """
+                    INSERT INTO tank.policy_log (task_type, action, from_model, to_model, by_user, detail)
+                    VALUES ($1,'candidate',$2,$3,$4,$5::jsonb)
+                    """,
+                    task_type, serving, result.next_shadow, body.by or "tank",
+                    json.dumps({"shadow_rate": 1, "search": True}),
+                )
+    if result.proposed:
+        await _move_task(task_type)
+    return {"ok": True, "skipped": False, "research_due": due, **result.as_dict()}
 
 
 @app.post("/v1/route", response_model=RouteResponse)

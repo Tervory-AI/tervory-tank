@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@clerk/nextjs/server";
-import { isFounder, savePrice as putPrice } from "@/lib/admin";
+import { isFounder, saveAutoPromote, savePrice as putPrice } from "@/lib/admin";
 
 export type SaveResult = { ok: true } | { ok: false; error: string };
 
@@ -32,6 +32,16 @@ export async function savePrice(_prev: SaveResult | null, formData: FormData): P
   }
   revalidatePath("/admin");
   return { ok: true };
+}
+
+export async function setAutoPromote(formData: FormData): Promise<void> {
+  const { userId } = await auth();
+  if (!isFounder(userId) || !userId) return;
+  const taskType = String(formData.get("task_type") ?? "").trim();
+  const auto = String(formData.get("auto_promote") ?? "") === "true";
+  if (!taskType) return;
+  await saveAutoPromote(userId, taskType, auto);
+  revalidatePath("/admin");
 }
 
 function isIsoDate(value: string): boolean {

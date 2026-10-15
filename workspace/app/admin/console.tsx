@@ -4,10 +4,19 @@ import Link from "next/link";
 import { useActionState, useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
 import type { ReactNode } from "react";
-import type { Counters, FocusRow, Graduation, Point, PriceRow, Total } from "@/lib/admin";
+import type { Counters, FocusRow, Graduation, LadderTask, Point, PriceRow, Total } from "@/lib/admin";
 import type { SaveResult } from "./actions";
 
 type Save = (state: SaveResult | null, formData: FormData) => Promise<SaveResult>;
+type AutoSave = (formData: FormData) => Promise<void>;
+
+function dueText(reason: string | null): string | null {
+  if (reason === "never searched") return "Not searched yet.";
+  if (reason === "roster changed") return "A model was added. Search again.";
+  if (reason === "price changed") return "A price changed. Search again.";
+  if (reason === "monthly") return "Monthly search is due.";
+  return reason;
+}
 
 type Day = {
   day: string;
@@ -68,7 +77,7 @@ function rate(part: number, whole: number): number | null {
 }
 
 export function FounderConsole({
-  days, counters, taskSeries, agentSeries, focus, graduations, prices, savePrice, initialTask = null,
+  days, counters, taskSeries, agentSeries, focus, graduations, prices, ladders, savePrice, setAutoPromote, initialTask = null,
 }: {
   days: number;
   counters: Counters;
@@ -77,7 +86,9 @@ export function FounderConsole({
   focus: FocusRow[];
   graduations: Graduation[];
   prices: PriceRow[];
+  ladders: LadderTask[];
   savePrice: Save;
+  setAutoPromote: AutoSave;
   initialTask?: string | null;
 }) {
   const [task, setTask] = useState<string | null>(initialTask);
@@ -85,6 +96,7 @@ export function FounderConsole({
   const daily = useMemo(() => byDay(taskSeries.points), [taskSeries.points]);
   const taskDaily = useMemo(() => byDay(taskSeries.points.filter((point) => point.key === task)), [taskSeries.points, task]);
   const taskGrads = graduations.filter((row) => row.task_type === task);
+  const shownLadders = task ? ladders.filter((row) => row.task_type === task) : ladders;
   const maxSpend = Math.max(1, ...focus.map((row) => row.spend_usd));
   const lost = counters.routes.filter((row) => row.flag);
 
@@ -152,6 +164,45 @@ export function FounderConsole({
             ))}
           </div>
         )}
+      </section>
+
+      <section className="section">
+        <h2>Ladder</h2>
+        <p className="hint">Paid model, then a cheaper model, then code. Samples, agreement, cost per call, and the monthly saving sit on each step.</p>
+        {shownLadders.length === 0 ? <p className="empty">No ladder for this task yet.</p> : shownLadders.map((row) => (
+          <div className="ladder-block" key={row.task_type}>
+            <div className="ladder-meta">
+              <h3>{row.task_type}</h3>
+              <form action={setAutoPromote}>
+                <input type="hidden" name="task_type" value={row.task_type} />
+                <input type="hidden" name="auto_promote" value={row.auto_promote ? "false" : "true"} />
+                <button className="quiet" type="submit">{row.auto_promote ? "Wait for a person" : "Promote by itself"}</button>
+              </form>
+            </div>
+            {row.note && <p className="flag">{row.note}</p>}
+            {row.proposed && <p className="evidence">Proposed: {row.proposed}</p>}
+            {dueText(row.research_due) && <p className="evidence">{dueText(row.research_due)}</p>}
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Step</th><th>What answers</th><th>Samples</th><th>Agreement</th><th>Cost per call</th><th>Monthly saving</th></tr>
+                </thead>
+                <tbody>
+                  {row.steps.map((step) => (
+                    <tr key={`${row.task_type}-${step.label}`}>
+                      <td>{step.label}{step.current ? " · now" : ""}</td>
+                      <td>{step.name ?? "None yet"}</td>
+                      <td className="num">{step.samples}</td>
+                      <td className="num">{step.agreement == null ? "—" : pct(step.agreement * 100)}</td>
+                      <td className="num">{money(step.cost_per_call)}</td>
+                      <td className="num">{step.monthly_saving_usd == null ? "—" : money(step.monthly_saving_usd)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
       </section>
 
       <section className="section">
