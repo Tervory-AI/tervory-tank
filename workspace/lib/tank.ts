@@ -270,3 +270,90 @@ export type EvalsSummary = { task_type: string; cases: number; accepted: number;
 export function evalsSummary(): Promise<EvalsSummary[]> {
   return tank<EvalsSummary[]>("/v1/evals/summary", { method: "GET" });
 }
+
+// ---- Tiger: watches, prices, alerts (server-side; Tank proxies to the Tiger room) ----
+
+export type TigerWatch = {
+  id: string;
+  tenant_id: string;
+  url: string;
+  label: string;
+  engine: string;
+  every: string;
+  enabled: boolean;
+  threshold: number | string;
+};
+
+export type TigerObservation = {
+  id: string;
+  tenant_id: string;
+  url: string;
+  ts: string;
+  price: string | number | null;
+  currency: string | null;
+  availability: string | null;
+  method: string | null;
+  evidence: string | null;
+};
+
+export type TigerAlert = {
+  id: string;
+  tenant_id: string;
+  url: string;
+  ts: string;
+  kind: string;
+  before: string | null;
+  after: string | null;
+};
+
+async function tigerCall<T>(path: string, init: RequestInit): Promise<T> {
+  const res = await fetch(`${TANK_URL}${path}`, {
+    ...init,
+    headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY, ...(init.headers ?? {}) },
+    cache: "no-store",
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`Tank ${path} ${res.status}: ${text.slice(0, 300)}`);
+  }
+  if (!text) return null as T;
+  return JSON.parse(text) as T;
+}
+
+export function listTigerWatches(tenantId: string): Promise<{ watches: TigerWatch[] }> {
+  return tigerCall<{ watches: TigerWatch[] }>(`/v1/tiger/watchlist?tenant_id=${encodeURIComponent(tenantId)}`, { method: "GET" });
+}
+
+export function createTigerWatch(
+  tenantId: string,
+  input: { url: string; label: string; every: string; threshold: number },
+): Promise<TigerWatch> {
+  return tigerCall<TigerWatch>("/v1/tiger/watchlist", {
+    method: "POST",
+    body: JSON.stringify({
+      tenant_id: tenantId,
+      url: input.url,
+      label: input.label,
+      every: input.every,
+      threshold: input.threshold,
+      enabled: true,
+      engine: "",
+    }),
+  });
+}
+
+export function deleteTigerWatch(tenantId: string, watchId: string): Promise<null> {
+  const q = new URLSearchParams({ tenant_id: tenantId });
+  return tigerCall<null>(`/v1/tiger/watchlist/${encodeURIComponent(watchId)}?${q}`, { method: "DELETE" });
+}
+
+export function listTigerObservations(tenantId: string, url: string): Promise<{ observations: TigerObservation[] }> {
+  const q = new URLSearchParams({ tenant_id: tenantId, url });
+  return tigerCall<{ observations: TigerObservation[] }>(`/v1/tiger/observations?${q}`, { method: "GET" });
+}
+
+export function listTigerAlerts(tenantId: string, url?: string): Promise<{ alerts: TigerAlert[] }> {
+  const q = new URLSearchParams({ tenant_id: tenantId });
+  if (url) q.set("url", url);
+  return tigerCall<{ alerts: TigerAlert[] }>(`/v1/tiger/alerts?${q}`, { method: "GET" });
+}
