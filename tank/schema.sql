@@ -586,3 +586,51 @@ INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_toke
   ('rig.fit_suggest', 1, 'luna', 'standard', 'tenant', 800,
    'Propose fit rows from the attributes you are given. Reply with JSON {"fits":[object]}. Use only the product ids you are given.')
 ON CONFLICT DO NOTHING;
+
+-- T6: graduate a task onto a code skill, and prove a semantic cache the same way.
+-- field breakdown from a shadow comparison (method = 'fields'). Empty object until scored.
+ALTER TABLE tank.shadow ADD COLUMN IF NOT EXISTS fields jsonb NOT NULL DEFAULT '{}'::jsonb;
+-- Promote by itself once the bar is cleared. The founder can turn this off per task.
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS auto_promote boolean NOT NULL DEFAULT true;
+-- Per-field floors. Missing keys use the task's eval_threshold.
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS field_floors jsonb NOT NULL DEFAULT '{}'::jsonb;
+-- Rung 4 semantic cache, off until the shadow loop proves it.
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS semantic_cache boolean NOT NULL DEFAULT false;
+-- When the current model was promoted. Rollback watches the next 7 days.
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS promoted_at timestamptz;
+-- Numbers in a field comparison match inside this relative tolerance.
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS number_tolerance numeric(8,6) NOT NULL DEFAULT 0.01;
+
+-- Ranked search: cheapest candidate first, for one task type.
+CREATE TABLE IF NOT EXISTS tank.graduation_rank (
+    task_type           text NOT NULL,
+    candidate           text NOT NULL,
+    kind                text NOT NULL DEFAULT 'model',
+    price_usd           numeric(14,8) NOT NULL DEFAULT 0,
+    screen_agreement    numeric(8,6),
+    shadow_n            integer NOT NULL DEFAULT 0,
+    shadow_agreement    numeric(8,6),
+    cost_per_call       numeric(14,6),
+    monthly_saving_usd  numeric(14,4),
+    status              text NOT NULL DEFAULT 'unscreened',
+    updated_at          timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (task_type, candidate)
+);
+
+-- Paid shadow and search spend for the daily cap. Code skills add nothing.
+CREATE TABLE IF NOT EXISTS tank.shadow_spend (
+    task_type   text NOT NULL,
+    day         date NOT NULL,
+    spent_usd   numeric(14,6) NOT NULL DEFAULT 0,
+    PRIMARY KEY (task_type, day)
+);
+
+-- When this task was last searched, and why. A roster or price change starts another search.
+CREATE TABLE IF NOT EXISTS tank.search_state (
+    task_type            text PRIMARY KEY,
+    roster_fingerprint   text,
+    price_fingerprint    text,
+    searched_at          timestamptz,
+    reason               text,
+    proposed             text
+);

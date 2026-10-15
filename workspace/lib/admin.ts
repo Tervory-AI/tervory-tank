@@ -110,6 +110,72 @@ export type Graduation = {
   saving_pct: number | null;
 };
 
+export type LadderStep = {
+  label: string;
+  name: string | null;
+  samples: number;
+  agreement: number | null;
+  cost_per_call: number | null;
+  monthly_saving_usd: number | null;
+  current: boolean;
+};
+
+export type LadderTask = {
+  task_type: string;
+  model: string;
+  rung: number;
+  candidate_model: string | null;
+  proposed: string | null;
+  note: string | null;
+  research_due: string | null;
+  auto_promote: boolean;
+  steps: LadderStep[];
+};
+
+type GraduationListRow = {
+  task_type: string;
+  model: string;
+  rung: number;
+  candidate_model: string | null;
+  ladder?: {
+    steps?: Array<Partial<LadderStep> & { label?: string }>;
+    proposed?: string | null;
+    note?: string | null;
+    research_due?: string | null;
+    auto_promote?: boolean;
+  };
+};
+
+function asNumber(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function asLadder(row: GraduationListRow): LadderTask {
+  const ladder = row.ladder;
+  const steps = (ladder?.steps ?? []).map((step) => ({
+    label: String(step.label ?? ""),
+    name: step.name == null ? null : String(step.name),
+    samples: asNumber(step.samples) ?? 0,
+    agreement: asNumber(step.agreement),
+    cost_per_call: asNumber(step.cost_per_call),
+    monthly_saving_usd: asNumber(step.monthly_saving_usd),
+    current: Boolean(step.current),
+  }));
+  return {
+    task_type: row.task_type,
+    model: row.model,
+    rung: row.rung,
+    candidate_model: row.candidate_model,
+    proposed: ladder?.proposed ?? null,
+    note: ladder?.note ?? null,
+    research_due: ladder?.research_due ?? null,
+    auto_promote: ladder?.auto_promote !== false,
+    steps,
+  };
+}
+
 export type PriceRow = {
   id: string;
   tenant_id: string | null;
@@ -157,6 +223,7 @@ export function loadFounder(userId: string, days: number): Promise<{
   focus: FocusRow[];
   graduations: Graduation[];
   prices: PriceRow[];
+  ladders: LadderTask[];
 }> {
   return Promise.all([
     adminFetch<Counters>(userId, "/v1/admin/counters"),
@@ -165,8 +232,10 @@ export function loadFounder(userId: string, days: number): Promise<{
     adminFetch<FocusRow[]>(userId, `/v1/admin/focus?days=${days}`),
     adminFetch<Graduation[]>(userId, `/v1/admin/graduations?days=${days}`),
     adminFetch<PriceRow[]>(userId, "/v1/admin/price_book"),
-  ]).then(([counters, taskSeries, agentSeries, focus, graduations, prices]) => ({
+    adminFetch<GraduationListRow[]>(userId, "/v1/graduation"),
+  ]).then(([counters, taskSeries, agentSeries, focus, graduations, prices, ladderRows]) => ({
     counters, taskSeries, agentSeries, focus, graduations, prices,
+    ladders: ladderRows.map(asLadder),
   }));
 }
 
@@ -175,4 +244,11 @@ export function savePrice(
   body: { outcome_type: string; unit_price: number; currency: string; note: string | null; effective_from: string | null },
 ): Promise<PriceRow> {
   return adminFetch<PriceRow>(userId, "/v1/admin/price_book", { method: "PUT", body: JSON.stringify(body) });
+}
+
+export function saveAutoPromote(userId: string, taskType: string, auto: boolean): Promise<{ ok: boolean; auto_promote: boolean }> {
+  return adminFetch(userId, `/v1/graduation/${encodeURIComponent(taskType)}/auto`, {
+    method: "PUT",
+    body: JSON.stringify({ auto_promote: auto, by: userId }),
+  });
 }
