@@ -27,7 +27,7 @@ export function FeedBoard({ region, sources, note }: { region: string; sources: 
   }
 
   return (
-    <section className="section">
+    <section className="section zenas-feeds">
       <h2>Zenas feeds</h2>
       <p className="hint">Sources on this server ({region || "this region"}). A key is shown by name only.</p>
       {note && <p className="empty">{note}</p>}

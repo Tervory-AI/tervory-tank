@@ -1264,28 +1264,36 @@ def annotate_key_set(payload: Any) -> Any:
 
 
 def _request_home(raw: bytes, query_home: str | None) -> str | None:
+    """The home on this request. An explicit empty value stays empty.
+
+    TODO(Thread C): cross-check this against the tenant record's home.
+    That column is yours; do not add it here. Do not fill a missing value in.
+    """
     if raw:
         try:
             parsed = json.loads(raw)
         except json.JSONDecodeError:
             parsed = None
-        if isinstance(parsed, dict) and parsed.get("home_region"):
-            return str(parsed["home_region"])
-    return query_home or None
+        if isinstance(parsed, dict) and "home_region" in parsed:
+            value = parsed.get("home_region")
+            if value is None:
+                return ""
+            return str(value)
+    return query_home
 
 
 @app.api_route("/v1/zenas/{path:path}", methods=["GET", "POST"], dependencies=[Depends(require_key)])
 async def zenas_proxy(path: str, request: Request) -> Response:
     """Forward /v1/zenas/* to the Zenas room on this server only.
 
-    A tenant whose home is the other region is refused before the room is called,
-    and nothing is stored here. The room URL is not taken from the request.
+    A missing, empty, unknown or foreign home is refused before the room is
+    called, and nothing is stored here. The room URL is not taken from the request.
     """
-    target = zenas_upstream(path)
     raw = await request.body()
     foreign = home_region_refusal(_request_home(raw, request.query_params.get("home_region")), box_region())
     if foreign:
         raise HTTPException(status_code=403, detail=foreign)
+    target = zenas_upstream(path)
     if _http is None:
         raise HTTPException(status_code=503, detail="Zenas room is unreachable")
     headers: dict[str, str] = {}

@@ -138,6 +138,44 @@ async def test_proxy_forwards_only_inside_the_region_and_strips_keys(
     assert payload["sources"][0]["key_set"] is True
 
 
+class _Explode:
+    def acquire(self) -> None:
+        raise AssertionError("this region must not touch the database")
+
+
+class _Provider:
+    def __init__(self, *_args: object, **_kwargs: object) -> None:
+        raise AssertionError("provider was called")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("box", ["us-east", "za"])
+@pytest.mark.parametrize("mode", ["missing", "empty-body", "empty-query", "unknown", "blank-body-with-local-query"])
+async def test_proxy_refuses_a_bad_home_before_any_call(monkeypatch: pytest.MonkeyPatch, box: str, mode: str) -> None:
+    monkeypatch.setenv("TANK_REGION", box)
+    monkeypatch.setenv("ZENAS_AGENT_URL", "http://agent-zenas:8000")
+    monkeypatch.setattr(main, "pool", lambda: _Explode())
+    monkeypatch.setattr(main.httpx, "AsyncClient", _Provider)
+    room = _Room(b"{}")
+    monkeypatch.setattr(main, "_http", room)
+    body = b""
+    query = b""
+    if mode == "empty-body":
+        body = b'{"home_region":""}'
+    elif mode == "empty-query":
+        query = b"home_region="
+    elif mode == "unknown":
+        body = b'{"home_region":"eu"}'
+    elif mode == "blank-body-with-local-query":
+        body = json.dumps({"home_region": "", "title": "NDA"}).encode()
+        query = f"home_region={box}".encode()
+    with pytest.raises(HTTPException) as caught:
+        await main.zenas_proxy("matters", _request("POST", "/v1/zenas/matters", body, query))
+    assert caught.value.status_code == 403
+    assert caught.value.detail == main.HOME_REQUIRED
+    assert room.calls == []
+
+
 @pytest.mark.asyncio
 async def test_a_foreign_room_url_is_not_called(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TANK_REGION", "za")
@@ -145,6 +183,7 @@ async def test_a_foreign_room_url_is_not_called(monkeypatch: pytest.MonkeyPatch)
     room = _Room(b"{}")
     monkeypatch.setattr(main, "_http", room)
     with pytest.raises(HTTPException) as caught:
-        await main.zenas_proxy("health", _request("GET", "/v1/zenas/health"))
+        await main.zenas_proxy("health", _request("GET", "/v1/zenas/health", query=b"home_region=za"))
     assert caught.value.status_code == 403
+    assert caught.value.detail == "Zenas stays in this region"
     assert room.calls == []

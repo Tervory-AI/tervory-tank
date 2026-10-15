@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { currentTenant } from "@/lib/tenant";
 import { requireReviewer } from "@/app/review/access";
 import { reviewerMay } from "../../../rules";
-import { zenas } from "../../../tank";
+import { homeRegion, zenas } from "../../../tank";
 
 export const runtime = "nodejs";
 
@@ -26,6 +26,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
       method: "POST",
       body: JSON.stringify({
         tenant_id: tenantId,
+        home_region: homeRegion(),
         reviewer: reviewer.name,
         jurisdiction,
         admission_no: reviewer.admissionNo,

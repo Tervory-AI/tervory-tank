@@ -30,3 +30,19 @@ def test_review_requires_the_reviewer_role_and_admission_number() -> None:
     assert "reviewerMay" in sign
     matters = (ROOT / "workspace" / "app" / "api" / "zenas" / "rules.ts").read_text(encoding="utf-8")
     assert 'doc.state !== "released"' in matters
+
+
+def test_zenas_routes_send_home_and_the_feed_button_stays_in_feeds() -> None:
+    api = ROOT / "workspace" / "app" / "api" / "zenas"
+    tank = (api / "tank.ts").read_text(encoding="utf-8")
+    assert "params.set(\"home_region\", home)" in tank
+    reviews = (api / "documents" / "[id]" / "reviews" / "route.ts").read_text(encoding="utf-8")
+    assert "home_region: homeRegion()" in reviews
+    for path in api.rglob("*.ts"):
+        text = path.read_text(encoding="utf-8")
+        if "zenas(" in text:
+            assert "home_region" in text or path.name == "tank.ts"
+    admin = (ROOT / "workspace" / "app" / "admin" / "admin.css").read_text(encoding="utf-8")
+    assert ".tvy-admin button.save" not in admin
+    feeds = (ROOT / "workspace" / "app" / "admin" / "feeds" / "feeds.css").read_text(encoding="utf-8")
+    assert ".zenas-feeds button.save" in feeds

@@ -5,6 +5,7 @@ import { isFounder } from "@/lib/admin";
 import { presentFeeds, type FeedRow } from "@/app/api/zenas/rules";
 import { homeRegion, zenas } from "@/app/api/zenas/tank";
 import { FeedBoard } from "./board";
+import "./feeds.css";
 
 export const dynamic = "force-dynamic";
 
