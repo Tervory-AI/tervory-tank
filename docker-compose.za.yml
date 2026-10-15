@@ -83,8 +83,6 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       XAI_API_KEY: ${XAI_API_KEY:-}
-    volumes:
-      - ./litellm/config.za.yaml:/app/config.za.yaml:ro
     networks:
       - default
 
