@@ -9,7 +9,7 @@
 ## 1. The ZA stack (`docker-compose.za.yml`)
 - Only what Zenas needs: `postgres`, `redis`, `qdrant`, `hermes`, `litellm`, `tank`, `agent-roles`, `agent-zenas`. No Base, Tiger, Market Lab, RIG or Workspace in this region yet.
 - Same images and build contexts as the main compose; every service gets `TANK_REGION=za`. Own volumes; own corridor `tervory-gw-zenas` (compose-managed). Same room rules as ROOMS.md.
-- Public endpoint: Tank only, at `za-api.tervory.com` (Claude sets the domain in Coolify). Everything else internal.
+- Public endpoint: Tank only, at `za.tervory.com` (Claude sets the domain in Coolify). Everything else internal.
 
 ## 2. Models from South Africa (`litellm/config.za.yaml`, Tank region checks)
 - Tank in `za` keeps a per-tenant provider allow-list. A prompt that still contains a detected personal identifier (`zenas.pii`) is **refused** for any provider not running in South Africa. Today no SA-hosted model is configured, so in `za` every prompt to a model must be placeholder-masked first; pure-code steps are unaffected.
@@ -32,5 +32,5 @@ CI green; `docker compose -f docker-compose.za.yml config` is valid; a `za` Tank
 1. Tell Claude the SA server's IP and its size (RAM, disk).
 2. Coolify → **Servers** → **Add** the SA server (Claude gives the one command that lets Coolify reach it).
 3. Same firewall as Boston on the SA server: only 22, 80, 443.
-4. Cloudflare DNS: `za-api` → the SA server IP.
+4. Cloudflare DNS: `za` → the SA server IP (DNS-only).
 5. Claude creates the ZA app in Coolify from `docker-compose.za.yml` and runs room setup for `zenas` there.
