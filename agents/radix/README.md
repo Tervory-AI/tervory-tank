@@ -1,6 +1,6 @@
 # Radix
 
-Radix is the security auditor. It looks at code that is handed to it and reports what it finds. It has no skills yet. The first day a skill is approved, this room is already running.
+Radix is the security auditor. It looks at code that is handed to it and reports what it finds. It does not clone a repository and it does not use the internet while it scans.
 
 ## Room
 
@@ -10,19 +10,33 @@ The only corridor is `tervory-gw-radix`. It is an **internal** network, created 
 
 Login `agent_radix`. Schema `agent_radix`. Key `TANK_KEY_RADIX` on Tank and on Hermes. `RADIX_ALLOWED_HOSTS` is empty.
 
-`agents/radix/net.py` is the only way Radix code makes an HTTP call outside Tank and Hermes. It refuses any host that is not on `RADIX_ALLOWED_HOSTS`. An empty list refuses every host. When the first scanning skill needs the internet, Claude adds an egress proxy that enforces the same list. Until then the list stays empty.
+`agents/radix/net.py` is the only way Radix code makes an HTTP call outside Tank and Hermes. It refuses any host that is not on `RADIX_ALLOWED_HOSTS`. An empty list refuses every host. A scan does not call `net.py`.
 
-## First three skills
+## Scan job
 
-These run on code handed to Radix. None of them need the internet.
+`POST /jobs` with `kind` `scan`. The input is `{tenant_id, source, ref}`.
 
-1. `scan.secrets` (Gitleaks)
-2. `scan.dependencies` (npm audit and pip audit)
-3. `scan.static_analysis` (Semgrep)
+- `tenant_id` must be the same tenant as the job. Findings are stored only for that tenant.
+- `source` is the repo, sent by the caller. It may be base64 (optionally prefixed with `b64:`) of a `.tar.gz`, a zip, or a git bundle, or `file:<name>` for a file already stored under `/data/<tenant_id>/`. A web address is refused.
+- `ref` is a label, such as a branch or commit. Radix does not fetch it.
+
+The image bakes in Gitleaks 8.28.0, Semgrep 1.181.0, and pip-audit 2.10.1. Semgrep rules are the file `scanlib/semgrep.yml`. Advisory data is the OSV JSON under `scanlib/osv`, copied to `/opt/osv` at build. pip-audit and npm audit call a live service, so the dependency scan reads that OSV directory and does not run those clients.
+
+## What a scan returns
+
+A plain-English summary, and one row per finding in `agent_radix.findings`: `tenant_id`, `scan_id`, `tool`, `severity`, `file`, `line`, `rule`, `fix`. Severity `critical` means the build must not deploy. Tisan reads that later.
+
+The secret text is not a column. It is masked out of the summary, the rows, and the log line.
+
+## The three skills
+
+1. `scan.secrets` — Gitleaks. Reports type, file, line, and rule.
+2. `scan.dependencies` — npm and Python packages against the baked OSV data. Reports package, version, advisory id, severity, and the fixed version.
+3. `scan.static` — Semgrep with the vendored rules. Looks for SQL built by string formatting.
 
 ## What Radix never does
 
-- Scan a target the tenant has not registered and proven it owns (DNS TXT or a file token). That check is Radix's first skill.
+- Scan a target the tenant has not registered and proven it owns (DNS TXT or a file token). That check is a later skill.
 - Run exploits, or anything beyond detection.
 - Store a secret it finds. It records the type, the file, and the line. Never the value.
 - Reach another Squad member's corridor.
