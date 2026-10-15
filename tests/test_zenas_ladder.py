@@ -214,6 +214,7 @@ async def test_review_queue_shape_stays_in_the_home_region() -> None:
             "region": "us-east",
             "tenant_id": None,
             "source": "case",
+            "material_type": "public_record",
             "jurisdiction": "us",
             "fact_pattern": {"narrative": "A written confidentiality promise is enforceable.", "features": {}},
             "element_findings": [{"element_id": "written", "finding": "met"}],
@@ -726,6 +727,7 @@ async def test_code_decides_a_table_and_a_case_is_reused() -> None:
         jurisdiction="us",
         pool_doc_id="case-1",
         citation="Example v. Buyer",
+        source_id="courtlistener",
         judgment=judgment,
         rule_card_ids=[card["id"]],
     )
@@ -740,6 +742,7 @@ async def test_code_decides_a_table_and_a_case_is_reused() -> None:
         box_region="us-east",
         jurisdiction="us",
         pool_doc_id="case-1",
+        source_id="courtlistener",
         judgment=judgment,
     )
     assert again["cached"] is True

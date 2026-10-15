@@ -38,6 +38,31 @@ _DOB = re.compile(
     r"(\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4})\b",
     re.IGNORECASE,
 )
+_EMAIL = re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b")
+_AMOUNT = re.compile(
+    r"(?:[$]|R|USD|ZAR)\s?\d{1,3}(?:[, \u00a0]\d{3})*(?:\.\d{2})?"
+    r"|\b\d{1,3}(?:,\d{3})+(?:\.\d{2})?\b"
+)
+_DEAL_DATE = re.compile(
+    r"\b\d{4}-\d{2}-\d{2}\b"
+    r"|\b\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b"
+    r"|\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}\b",
+    re.IGNORECASE,
+)
+_CASE_NO = re.compile(
+    r"\b(?:case|docket)\s+(?:no\.?|number)\s*[:#]?\s*[A-Z0-9][A-Z0-9./-]{2,}\b"
+    r"|\b\d{1,6}/\d{4}\b",
+    re.IGNORECASE,
+)
+_REGISTRATION = re.compile(
+    r"\b(?:registration|reg\.?|company)\s+(?:number|no\.?)\s*[:#]?\s*[A-Z0-9][A-Z0-9/-]{2,}\b",
+    re.IGNORECASE,
+)
+_COMPANY = re.compile(
+    r"\b[A-Z][A-Za-z0-9&'.-]*(?:\s+[A-Z][A-Za-z0-9&'.-]*){0,5}\s+\((?:Pty|Proprietary)\)\s+Ltd\b"
+    r"|\b[A-Z][A-Za-z0-9&'.-]*(?:\s+[A-Z][A-Za-z0-9&'.-]*){0,5}\s+(?:Inc\.|LLC|Ltd\.|Limited|Corp\.|Corporation)\b"
+)
+_PERSON = re.compile(r"\b(?:Mr|Mrs|Ms|Dr|Prof)\.?\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\b")
 
 _LABELS = {
     "sa_id": "SA_ID",
@@ -47,6 +72,20 @@ _LABELS = {
     "address": "ADDRESS",
     "bank": "BANK",
     "dob": "DOB",
+    "email": "Email",
+    "amount": "Amount",
+    "deal_date": "Date",
+    "case_no": "Case",
+    "registration": "Registration",
+    "party": "Party",
+}
+
+_STABLE = {
+    "amount": "[Amount]",
+    "email": "[Email]",
+    "deal_date": "[Date]",
+    "case_no": "[Case]",
+    "registration": "[Registration]",
 }
 
 
@@ -87,6 +126,20 @@ def _spans(text: str) -> list[tuple[int, int, str, str]]:
         found.append((match.start(), match.end(), "phone", match.group(0)))
     for match in _ADDRESS.finditer(text):
         found.append((match.start(), match.end(), "address", match.group(0)))
+    for match in _EMAIL.finditer(text):
+        found.append((match.start(), match.end(), "email", match.group(0)))
+    for match in _AMOUNT.finditer(text):
+        found.append((match.start(), match.end(), "amount", match.group(0)))
+    for match in _DEAL_DATE.finditer(text):
+        found.append((match.start(), match.end(), "deal_date", match.group(0)))
+    for match in _CASE_NO.finditer(text):
+        found.append((match.start(), match.end(), "case_no", match.group(0)))
+    for match in _REGISTRATION.finditer(text):
+        found.append((match.start(), match.end(), "registration", match.group(0)))
+    for match in _COMPANY.finditer(text):
+        found.append((match.start(), match.end(), "party", match.group(0)))
+    for match in _PERSON.finditer(text):
+        found.append((match.start(), match.end(), "party", match.group(0)))
     found.sort(key=lambda item: (item[0], -(item[1] - item[0])))
     kept: list[tuple[int, int, str, str]] = []
     cursor = -1
@@ -98,6 +151,16 @@ def _spans(text: str) -> list[tuple[int, int, str, str]]:
     return kept
 
 
+def _placeholder(kind: str, count: int) -> str:
+    if kind == "party":
+        letter = chr(ord("A") + count - 1) if count <= 26 else str(count)
+        return f"[Party {letter}]"
+    stable = _STABLE.get(kind)
+    if stable:
+        return stable
+    return f"[{_LABELS[kind]}_{count}]"
+
+
 def detect(text: str) -> dict[str, Any]:
     body = text or ""
     spans = _spans(body)
@@ -107,13 +170,81 @@ def detect(text: str) -> dict[str, Any]:
     cursor = 0
     for start, end, kind, value in spans:
         counts[kind] = counts.get(kind, 0) + 1
-        placeholder = f"[{_LABELS[kind]}_{counts[kind]}]"
+        placeholder = _placeholder(kind, counts[kind])
         pieces.append(body[cursor:start])
         pieces.append(placeholder)
         cursor = end
         matches.append({"kind": kind, "placeholder": placeholder, "value": value})
     pieces.append(body[cursor:])
     return {"text": "".join(pieces), "matches": matches}
+
+
+def still_personal(text: str) -> bool:
+    """True when a personal pattern is still present. Placeholders do not count."""
+    return bool(_spans(text or ""))
+
+
+def party_names(parties: Any) -> list[str]:
+    names: list[str] = []
+    for item in parties or []:
+        if isinstance(item, str) and item.strip():
+            names.append(item.strip())
+        elif isinstance(item, dict):
+            for key in ("name", "legal_name", "company"):
+                value = str(item.get(key) or "").strip()
+                if value:
+                    names.append(value)
+    return names
+
+
+def _named_spans(text: str, names: list[str]) -> list[tuple[int, int]]:
+    found: list[tuple[int, int]] = []
+    for name in names:
+        if len(name) < 3:
+            continue
+        for match in re.finditer(rf"(?<!\w){re.escape(name)}(?!\w)", text, re.IGNORECASE):
+            found.append((match.start(), match.end()))
+    found.sort(key=lambda item: (item[0], -(item[1] - item[0])))
+    kept: list[tuple[int, int]] = []
+    cursor = -1
+    for start, end in found:
+        if start < cursor:
+            continue
+        kept.append((start, end))
+        cursor = end
+    return kept
+
+
+def mask_client_text(text: str, parties: Any = None) -> dict[str, Any]:
+    """Replace personal details. A value that is still present is a failure."""
+    body = text or ""
+    names = party_names(parties)
+    try:
+        spans = _named_spans(body, names)
+        pieces: list[str] = []
+        cursor = 0
+        for index, (start, end) in enumerate(spans):
+            letter = chr(ord("A") + index) if index < 26 else str(index + 1)
+            pieces.append(body[cursor:start])
+            pieces.append(f"[Party {letter}]")
+            cursor = end
+        pieces.append(body[cursor:])
+        found = detect("".join(pieces))
+        masked = str(found.get("text") or "")
+        for match in found.get("matches") or []:
+            value = str(match.get("value") or "")
+            if value and value in masked:
+                return {"ok": False, "text": "", "reason": "masking failed"}
+        masked = re.sub(r"\[ADDRESS_\d+\]", "[Address]", masked)
+        masked = re.sub(r"\[PHONE_\d+\]", "[Phone]", masked)
+        if still_personal(masked):
+            return {"ok": False, "text": "", "reason": "masking failed"}
+        for name in names:
+            if len(name) >= 3 and re.search(rf"(?<!\w){re.escape(name)}(?!\w)", masked, re.IGNORECASE):
+                return {"ok": False, "text": "", "reason": "masking failed"}
+        return {"ok": True, "text": masked, "reason": ""}
+    except Exception:
+        return {"ok": False, "text": "", "reason": "masking failed"}
 
 
 def public_view(result: dict[str, Any]) -> dict[str, Any]:
