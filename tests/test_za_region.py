@@ -96,8 +96,11 @@ def test_home_region_refusal_both_ways() -> None:
     assert main.home_region_refusal("us-east", "za") == main.US_HOME_MESSAGE
     assert main.home_region_refusal("us", "us-east") is None
     assert main.home_region_refusal("za", "za") is None
-    assert main.home_region_refusal(None, "us-east") is None
-    assert main.home_region_refusal("eu", "za") == "home region must be us-east or za"
+    assert main.normalize_home(None) == ""
+    assert main.normalize_home("") == ""
+    for box in ("us-east", "za"):
+        for home in (None, "", "   ", "eu"):
+            assert main.home_region_refusal(home, box) == main.HOME_REQUIRED
 
 
 def test_za_refuses_an_identifier_for_a_non_sa_provider(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -215,3 +218,61 @@ async def test_task_and_skill_refuse_a_foreign_home_before_a_write(monkeypatch: 
     with pytest.raises(HTTPException) as caught:
         await main.run_one_skill("zenas.pii", skill, caller=None)
     assert caught.value.detail == main.ZA_HOME_MESSAGE
+
+
+class _Provider:
+    """Raised if a model client is constructed."""
+
+    def __init__(self, *_args: object, **_kwargs: object) -> None:
+        raise AssertionError("provider was called")
+
+
+class _Transport:
+    """Raised if Redis or an already-open HTTP client is used."""
+
+    async def request(self, *_args: object, **_kwargs: object) -> None:
+        raise AssertionError("http was called")
+
+    async def get(self, *_args: object, **_kwargs: object) -> None:
+        raise AssertionError("http was called")
+
+    async def post(self, *_args: object, **_kwargs: object) -> None:
+        raise AssertionError("http was called")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("box", ["us-east", "za"])
+@pytest.mark.parametrize("home", [None, "", "eu"])
+@pytest.mark.parametrize("kind", ["route", "task", "skill"])
+async def test_missing_empty_or_unknown_home_makes_no_call(
+    monkeypatch: pytest.MonkeyPatch, box: str, home: str | None, kind: str,
+) -> None:
+    monkeypatch.setenv("TANK_REGION", box)
+    monkeypatch.setattr(main, "pool", lambda: _Explode())
+    monkeypatch.setattr(main, "_http", _Transport())
+    monkeypatch.setattr(main, "_redis", _Transport())
+    monkeypatch.setattr(main.httpx, "AsyncClient", _Provider)
+    tenant = uuid.uuid4()
+    if kind == "route":
+        call = main.run_route(main.RouteRequest(
+            tenant_id=tenant,
+            home_region=home,
+            messages=[main.Message(role="user", content="Hello")],
+        ))
+    elif kind == "task":
+        call = main.create_task(main.TaskCreate(
+            tenant_id=tenant,
+            title="A matter",
+            home_region=home,
+            messages=[main.Message(role="user", content="Hello")],
+        ))
+    else:
+        call = main.run_one_skill(
+            "zenas.pii",
+            main.SkillRun(tenant_id=tenant, input={"text": "Hello"}, home_region=home),
+            caller=None,
+        )
+    with pytest.raises(HTTPException) as caught:
+        await call
+    assert caught.value.status_code == 403
+    assert caught.value.detail == main.HOME_REQUIRED

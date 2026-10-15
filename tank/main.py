@@ -103,18 +103,25 @@ def box_region() -> str:
     return normalize_box(os.environ.get("TANK_REGION", DEFAULT_REGION))
 
 
-def home_region_refusal(home: str | None, box: str | None = None) -> str | None:
-    """Refuse a tenant whose home is the other region.
+HOME_REQUIRED = "home region must be us-east or za"
 
-    An omitted home is not a refusal: older callers do not send one.
-    The caller must not write a ledger row, task, transcript or cache entry.
+
+def home_region_refusal(home: str | None, box: str | None = None) -> str | None:
+    """Refuse unless this request names this box as its home.
+
+    A missing, empty or unknown home is refused. It is never treated as us-east.
+    The caller must not write a ledger row, task, transcript or cache entry,
+    and must not call a provider or another room.
+
+    TODO(Thread C): the authoritative home region will live on the tenant
+    record. That column is yours; do not add it here. The value on this
+    request is only a cross-check against that column. Read it once the
+    column exists, and keep refusing when the two disagree or either is missing.
     """
     home_region = normalize_home(home)
-    if not home_region:
-        return None
-    here = normalize_box(box) if box is not None else box_region()
     if home_region not in (US_REGION, ZA_REGION):
-        return "home region must be us-east or za"
+        return HOME_REQUIRED
+    here = normalize_box(box) if box is not None else box_region()
     if home_region == here:
         return None
     if home_region == ZA_REGION:

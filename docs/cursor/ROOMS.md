@@ -36,6 +36,6 @@ South African clients and South African law stay in South Africa. United States 
 
 Tank is the only public service, at `za-api.tervory.com`. The corridor `tervory-gw-zenas` is created by that compose file. The Zenas service joins only that corridor. Tank, Postgres and Hermes join it as well. The agent uses the `agent_zenas` login, not the Postgres superuser.
 
-A Tank refuses a tenant whose home is the other region and does not store that tenant's text. In `za`, a prompt that still contains a personal identifier is refused for every provider that is not running in South Africa. No such model is active yet. `za-local` is a commented slot in `litellm/config.za.yaml`.
+A Tank refuses a request whose home is missing, empty, unknown, or the other region, and it stores nothing for that request. A missing home is never treated as `us-east`. The home on the request is a cross-check. The authoritative home will be a column on the tenant record, owned by the matters work, and is not added here. In `za`, a prompt that still contains a personal identifier is refused for every provider that is not running in South Africa. No such model is active yet. `za-local` is a commented slot in `litellm/config.za.yaml`.
 
 The pool-loader service is not in this file. It is added on the ZA box only, and it uses this stack's database.

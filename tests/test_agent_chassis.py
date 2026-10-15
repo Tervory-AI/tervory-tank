@@ -355,10 +355,13 @@ def _package(tmp_path: Path, agent: str, shared: list[str] | None = None):
 
 
 def _body():
+    # The gate under test is the agent check. The home must still be this box,
+    # or Tank refuses before that check and never calls the skill.
     return TANK.SkillRun(
         tenant_id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
         input={"n": 1},
         version="1.0.0",
+        home_region="us-east",
     )
 
 
