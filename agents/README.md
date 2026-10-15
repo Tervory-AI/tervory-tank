@@ -8,6 +8,7 @@ Zenas: corridor `tervory-gw-zenas`, login `agent_zenas`, key `TANK_KEY_ZENAS` on
 | --- | --- | --- |
 | Radix | `tervory-gw-radix` (internal, no internet) | Security auditor. No skills yet. `RADIX_ALLOWED_HOSTS` is empty. |
 | Tisan | `tervory-gw-tisan` | Developer and designer. No skills yet. |
+| Rig | `tervory-gw-rig` | Shopper search, fitment, and quote handoff. Public API at rig.tervory.com. |
 
 The chassis knows no industry. Vocabulary, field names, and scoring stay in an engine. The engine passes them in.
 

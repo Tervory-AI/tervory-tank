@@ -1,0 +1,176 @@
+"""Public routes from the widget contract. Errors are {error: {code, message}}."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from fastapi import APIRouter, FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, Field
+
+from rigbox.service import RigError
+
+router = APIRouter(prefix="/v1/rig")
+
+_CORS_HEADERS = "Content-Type, X-Rig-Key, Accept"
+_CORS_METHODS = "GET, POST, OPTIONS"
+
+
+class SetupIn(BaseModel):
+    product_id: str = Field(min_length=1)
+
+
+class SwapIn(BaseModel):
+    setup: dict[str, Any]
+    role: str = ""
+
+
+class AskIn(BaseModel):
+    product_id: str = Field(min_length=1)
+    question: str = ""
+    setup: dict[str, Any] | None = None
+
+
+class LinkIn(BaseModel):
+    url: str = ""
+    note: str = ""
+
+
+class QuoteIn(BaseModel):
+    setup: dict[str, Any] | None = None
+    product_id: str | None = None
+    contact: dict[str, Any] = Field(default_factory=dict)
+
+
+def mount(app: FastAPI) -> None:
+    app.include_router(router)
+    app.add_exception_handler(RigError, _on_rig_error)
+    app.add_exception_handler(RequestValidationError, _on_invalid)
+
+
+def _service(request: Request) -> Any:
+    service = getattr(request.app.state, "rig", None)
+    if service is None:
+        raise RigError("unavailable", "Rig is not ready.", 503)
+    return service
+
+
+def _origin(request: Request) -> str:
+    return request.headers.get("origin") or ""
+
+
+def _cors(response: Response, origin: str, allowed: bool) -> Response:
+    if origin and allowed:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Vary"] = "Origin"
+    response.headers["Access-Control-Allow-Headers"] = _CORS_HEADERS
+    response.headers["Access-Control-Allow-Methods"] = _CORS_METHODS
+    return response
+
+
+async def _auth(request: Request) -> dict[str, Any]:
+    if request.method == "OPTIONS":
+        return {}
+    raw = request.headers.get("x-rig-key") or ""
+    row = await _service(request).authenticate(raw)
+    origin = _origin(request)
+    if origin and origin not in (row.get("origins") or []):
+        raise RigError("origin", "This shop is not allowed to use that key.", 403)
+    request.state.rig_origin = origin
+    request.state.rig_origin_ok = bool(origin)
+    request.state.tenant_id = row["tenant_id"]
+    return row
+
+
+def _tenant(request: Request) -> str:
+    return str(request.state.tenant_id)
+
+
+async def _on_rig_error(request: Request, exc: RigError) -> JSONResponse:
+    response = JSONResponse(status_code=exc.status, content={"error": {"code": exc.code, "message": exc.message}})
+    origin = _origin(request)
+    return _cors(response, origin, bool(getattr(request.state, "rig_origin_ok", False) and origin))
+
+
+async def _on_invalid(request: Request, exc: RequestValidationError) -> JSONResponse:
+    if not request.url.path.startswith("/v1/rig"):
+        raise exc
+    response = JSONResponse(
+        status_code=422,
+        content={"error": {"code": "invalid", "message": "The request is not valid."}},
+    )
+    origin = _origin(request)
+    return _cors(response, origin, bool(getattr(request.state, "rig_origin_ok", False) and origin))
+
+
+@router.options("")
+@router.options("/{rest:path}")
+async def preflight(request: Request, rest: str = "") -> Response:
+    del rest
+    response = Response(status_code=204)
+    return _cors(response, _origin(request), True)
+
+
+@router.get("/search")
+async def search(request: Request, q: str = "", limit: int = 12) -> Response:
+    await _auth(request)
+    body = await _service(request).search(_tenant(request), q, limit)
+    return _ok(request, body)
+
+
+@router.get("/products/{product_id}")
+async def product(request: Request, product_id: str) -> Response:
+    await _auth(request)
+    body = await _service(request).product(_tenant(request), product_id)
+    return _ok(request, body)
+
+
+@router.post("/setups")
+async def setups(request: Request, payload: SetupIn) -> Response:
+    await _auth(request)
+    body = await _service(request).setups(_tenant(request), payload.product_id)
+    return _ok(request, body)
+
+
+@router.post("/swap")
+async def swap(request: Request, payload: SwapIn) -> Response:
+    await _auth(request)
+    body = await _service(request).swap(_tenant(request), payload.setup, payload.role)
+    return _ok(request, body)
+
+
+@router.get("/graph/{product_id}")
+async def graph(request: Request, product_id: str) -> Response:
+    await _auth(request)
+    body = await _service(request).graph(_tenant(request), product_id)
+    return _ok(request, body)
+
+
+@router.post("/ask")
+async def ask(request: Request, payload: AskIn) -> Response:
+    await _auth(request)
+    body = await _service(request).ask(_tenant(request), payload.product_id, payload.question, payload.setup)
+    return _ok(request, body)
+
+
+@router.post("/link-quote")
+async def link_quote(request: Request, payload: LinkIn) -> Response:
+    await _auth(request)
+    body = await _service(request).link_quote(_tenant(request), payload.url, payload.note)
+    return _ok(request, body)
+
+
+@router.post("/quote")
+async def quote(request: Request, payload: QuoteIn) -> Response:
+    await _auth(request)
+    body = await _service(request).quote(
+        _tenant(request),
+        {"setup": payload.setup, "product_id": payload.product_id, "contact": payload.contact},
+    )
+    return _ok(request, body)
+
+
+def _ok(request: Request, body: dict[str, Any]) -> JSONResponse:
+    response = JSONResponse(body)
+    return _cors(response, _origin(request), bool(getattr(request.state, "rig_origin_ok", False)))

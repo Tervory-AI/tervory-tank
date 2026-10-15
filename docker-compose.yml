@@ -30,6 +30,7 @@ services:
       - tervory-gw-tisan
       - tervory-gw-zenas
       - tervory-gw-base
+      - tervory-gw-rig
 
   redis:
     image: redis:7
@@ -64,6 +65,7 @@ services:
       TANK_KEY_TISAN: ${TANK_KEY_TISAN:-}
       TANK_KEY_ZENAS: ${TANK_KEY_ZENAS:-}
       TANK_KEY_BASE: ${TANK_KEY_BASE:-}
+      TANK_KEY_RIG: ${TANK_KEY_RIG:-}
       HERMES_EMBED_MODEL: ${HERMES_EMBED_MODEL:-BAAI/bge-small-en-v1.5}
     depends_on:
       - qdrant
@@ -76,6 +78,7 @@ services:
       - tervory-gw-tisan
       - tervory-gw-zenas
       - tervory-gw-base
+      - tervory-gw-rig
     expose:
       - "8000"
     healthcheck:
@@ -145,6 +148,7 @@ services:
       TANK_KEY_TISAN: ${TANK_KEY_TISAN:-}
       TANK_KEY_ZENAS: ${TANK_KEY_ZENAS:-}
       TANK_KEY_BASE: ${TANK_KEY_BASE:-}
+      TANK_KEY_RIG: ${TANK_KEY_RIG:-}
       TANK_REGION: ${TANK_REGION:-us-east}
       BASE_AGENT_URL: http://agent-base:8000
       SEARXNG_URL: http://searxng:8080
@@ -164,6 +168,7 @@ services:
       - tervory-gw-tisan
       - tervory-gw-zenas
       - tervory-gw-base
+      - tervory-gw-rig
     expose:
       - "8000"
 
@@ -185,6 +190,7 @@ services:
       AGENT_DB_PASSWORD_TISAN: ${AGENT_DB_PASSWORD_TISAN:-}
       AGENT_DB_PASSWORD_ZENAS: ${AGENT_DB_PASSWORD_ZENAS:-}
       AGENT_DB_PASSWORD_BASE: ${AGENT_DB_PASSWORD_BASE:-}
+      AGENT_DB_PASSWORD_RIG: ${AGENT_DB_PASSWORD_RIG:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -248,3 +254,6 @@ networks:
   # Not internal: Base reads websites through Tiger's browser and SearXNG.
   tervory-gw-base:
     name: tervory-gw-base
+  # Created by this stack on deploy (ROOMS.md). The Rig resource joins it as external.
+  tervory-gw-rig:
+    name: tervory-gw-rig

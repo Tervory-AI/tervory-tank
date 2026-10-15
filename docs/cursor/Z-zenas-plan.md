@@ -21,7 +21,7 @@ South African work runs on infrastructure in South Africa; US work runs in the U
 2. **No uncited law.** Every statement of law in an output links to a document in the knowledge pool. `zenas.cite_check` runs on every output: a citation that does not resolve to a pool document, or a quote that does not match the source text word for word, blocks delivery.
 3. **Lawyer sign-off before delivery.** Outputs go to a review queue; only a reviewer with the matching jurisdiction tag can release them. The release records who, when, their bar/admission number and what they changed.
 4. **Client matters are confidential.** Matter data lives per tenant (own schema rows + Hermes memory per tenant). Legal tenants may only route to providers on their allowed list (no China-hosted providers; providers that do not train on API data). No matter text in logs.
-5. **Licences respected.** Every source in the pool records its licence and terms. A source whose terms are unknown or forbid bulk use is not ingested; it can be linked, not copied. Copyrighted model texts (e.g. the UCC official text and comments, ICC Incoterms) are referenced, never stored in full; the enacted statute text is used instead.
+5. **Sources recorded; the founder decides on data (14 Oct 2026).** Every source in the pool records its licence and terms as information. Builders do not block, limit or link-only a source on their own reading of its terms. Any source with an API key is used with that key. Everything loaded may be used to teach Tervory's own model.
 6. **Consent and personal information (South Africa, POPIA).** A ZA tenant cannot open a matter until its user has given recorded consent: what is processed, why (only the work requested), that data is processed outside South Africa (US servers and model providers) and under which safeguards. Store each consent with the exact wording version, user, timestamp and IP; a change of wording requires fresh consent. Personal identifiers found in matter documents (ID and passport numbers, full home addresses, bank details, phone numbers, dates of birth) are detected on upload, stored encrypted, used only for that matter, masked in model prompts unless the task needs them, and never written to Hermes memory, golden cases, the ledger or logs. Deleting a matter or a tenant deletes them. The same controls apply to US tenants.
 7. **Not legal advice to the public.** UI copy says Zenas prepares drafts and research for review by a licensed lawyer.
 
@@ -57,6 +57,8 @@ South African work runs on infrastructure in South Africa; US work runs in the U
 - **Done when:** same tests as Z2 for SA.
 
 ## Z4 — Research and reasoning skills (core, jurisdiction-free)
+> **14 Oct 2026: replaced by `docs/cursor/Z4-legal-ladder.md`** (law worked out once per law version as rule cards, facts applied cheaply, on the Tank ladder). The list below is kept for reference.
+
 - `zenas.retrieve@1.0.0`: hybrid search (exact citation + full text + meaning), filtered by jurisdiction, level, kind and "as at" date; returns passages with citations.
 - `zenas.cite_check@1.0.0` (pure code): every citation resolves; every quotation matches the source text; flags superseded versions.
 - `zenas.issue_spot@1.0.0`: facts in → issues, applicable law (retrieved, cited), open questions for the lawyer.

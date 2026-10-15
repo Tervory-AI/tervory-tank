@@ -1,0 +1,5 @@
+Repo Tervory-AI/tervory-tank. Read AGENTS.md, docs/cursor/Z-zenas-plan.md (Z2), then docs/cursor/Z2b-us-law-bulk.md and do all of it.
+
+Extend agents/zenas/pool to load the US library at scale, from bulk files and from APIs with our keys (key names in .env.example, skipped cleanly until set): whole US Code titles (USLM XML), whole CFR parts (eCFR), HTSUS, FRCP/FRE/FRAP, CourtListener (bulk + API with COURTLISTENER_API_TOKEN) and Caselaw Access Project opinions for the named courts (criminal dropped before storage), and the named state statutes. Record each source's terms as information only; data use is the founder's decision and everything may be used to teach our own model. Citations extracted with eyecite into a citation graph. A resumable, idempotent one-shot pool-loader with a disk cap and low priority. Tests on fixtures only.
+
+Stay inside the brief's "Files you may change". No model calls. Keys only as named in the brief. No secrets in code or logs. One branch, one PR, never push to main. Do not merge: the founder merges after review (docs/RUNBOOK.md). Open the PR when CI is green and write "ready for review".

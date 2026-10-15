@@ -1,15 +1,24 @@
-"""Radix: the security auditor. A ping job and a five-minute heartbeat.
+"""Radix: the security auditor. A ping job, a five-minute heartbeat, and code scans.
 
-No skills yet. Outbound HTTP other than Tank and Hermes goes through net.py.
+Scans run on a tarball or git bundle the caller hands over. Outbound HTTP other
+than Tank and Hermes goes through net.py. A scan does not use it.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import sys
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 from chassis.app import create_app
 from chassis.jobs import JobContext
+from chassis.logs import log_line
+from scanlib.orchestrate import scan_job
 
 AGENT = os.environ.get("AGENT_NAME", "radix")
 # Platform tenant. The heartbeat is the box checking itself, not a client's work.
@@ -37,9 +46,16 @@ async def ping(ctx: JobContext) -> dict:
     return result
 
 
+async def scan(ctx: JobContext) -> dict:
+    result = await scan_job(ctx)
+    # Counts only. The finding text can carry a file path, never a secret value.
+    log_line(AGENT, "scan finished", tenant_id=str(ctx.tenant_id), job_id=str(ctx.job_id))
+    return result
+
+
 app = create_app(
     agent=AGENT,
-    handlers={"ping": ping},
+    handlers={"ping": ping, "scan": scan},
     schedules=[
         {
             "tenant_id": HEARTBEAT_TENANT,

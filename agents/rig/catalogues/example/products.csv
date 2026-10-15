@@ -1,0 +1,4 @@
+sku,gtin,name,brand,category,price,currency,image_url,product_url,family,active,attributes
+EXAMPLE-RIFLE-01,,Example Rifle 308 20in,ExampleBrand,rifle,24999.00,ZAR,https://example.com/img/rifle.jpg,https://example.com/rifle,EXAMPLE-PLATFORM,yes,"{""calibre"": "".308 Win"", ""thread"": ""5/8x24"", ""rail"": ""picatinny"", ""barrel_mm"": 508}"
+EXAMPLE-SCOPE-01,,Example Scope 4-16x44,ExampleOptics,optic,8999.00,ZAR,https://example.com/img/scope.jpg,https://example.com/scope,,yes,"{""tube_mm"": 30}"
+EXAMPLE-RINGS-30,,Example 30mm Rings Picatinny,ExampleOptics,mount,1299.00,ZAR,https://example.com/img/rings.jpg,https://example.com/rings,,yes,"{""tube_mm"": 30, ""base"": ""picatinny""}"

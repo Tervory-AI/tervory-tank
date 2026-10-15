@@ -540,6 +540,8 @@ $$;
 -- only for objects present when it runs, and it does not wait for Tank. If Tank creates
 -- the tables first, the role is not here yet and agent-roles takes them when it runs.
 -- ALTER OWNER TO the same role on a later start is a no-op. Indexes follow the table.
+-- Tables go first. A serial or identity sequence is linked to its column, and changing
+-- the table owner already moves that sequence. ALTER SEQUENCE on the link fails startup.
 DO $$
 DECLARE
   rel record;
@@ -548,18 +550,39 @@ BEGIN
     NULL;
   ELSE
     FOR rel IN
-      SELECT c.relname, c.relkind
+      SELECT c.oid, c.relname, c.relkind
       FROM pg_class c
       JOIN pg_namespace n ON n.oid = c.relnamespace
       WHERE n.nspname = 'agent_base'
         AND c.relkind IN ('r', 'p', 'S')
+      ORDER BY CASE WHEN c.relkind = 'S' THEN 1 ELSE 0 END, c.relname
     LOOP
-      IF rel.relkind = 'S' THEN
-        EXECUTE format('ALTER SEQUENCE %I.%I OWNER TO %I', 'agent_base', rel.relname, 'agent_base');
-      ELSE
+      IF rel.relkind <> 'S' THEN
         EXECUTE format('ALTER TABLE %I.%I OWNER TO %I', 'agent_base', rel.relname, 'agent_base');
+      ELSIF EXISTS (
+        SELECT 1
+        FROM pg_depend d
+        WHERE d.classid = 'pg_class'::regclass
+          AND d.objid = rel.oid
+          AND d.refclassid = 'pg_class'::regclass
+          AND d.refobjsubid > 0
+          AND d.deptype IN ('a', 'i')
+      ) THEN
+        NULL;
+      ELSE
+        EXECUTE format('ALTER SEQUENCE %I.%I OWNER TO %I', 'agent_base', rel.relname, 'agent_base');
       END IF;
     END LOOP;
   END IF;
 END
 $$;
+
+-- Rig model tasks (R3). Luna is the cheap tier; cache stays inside the tenant.
+INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_tokens_out, system_prompt) VALUES
+  ('rig.explain', 1, 'luna', 'standard', 'tenant', 400,
+   'You write short reasons these parts fit. Reply with JSON {"why":[string]}. Do not add or remove parts.'),
+  ('rig.ask', 1, 'luna', 'standard', 'tenant', 400,
+   'Answer only from the catalogue you are given. Reply with JSON {"answer":string,"cites":[string]}. If it is not in the catalogue, answer "I don''t know".'),
+  ('rig.fit_suggest', 1, 'luna', 'standard', 'tenant', 800,
+   'Propose fit rows from the attributes you are given. Reply with JSON {"fits":[object]}. Use only the product ids you are given.')
+ON CONFLICT DO NOTHING;

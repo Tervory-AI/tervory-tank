@@ -1,0 +1,40 @@
+# Rig. Deploy this file as its own Coolify resource.
+# Build context is agents/ (the parent of this file), because the chassis lives there.
+# The only network is the external gateway. Coolify attaches https://rig.tervory.com.
+# The corridor is created by the main stack. This resource joins it by name.
+
+services:
+  agent-rig:
+    build:
+      context: ..
+      dockerfile: rig/Dockerfile
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    environment:
+      AGENT_NAME: rig
+      DATABASE_URL: postgresql://agent_rig:${AGENT_DB_PASSWORD_RIG}@postgres:5432/${POSTGRES_DB:-tervory}
+      TANK_URL: http://tank:8000
+      TANK_KEY: ${TANK_KEY_RIG:-}
+      HERMES_URL: http://hermes:8000
+      DATA_DIR: /data
+      CATALOGUE_DIR: /app/catalogues
+    volumes:
+      - agent_rig_data:/data
+    networks:
+      - gw
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    expose:
+      - "8000"
+
+volumes:
+  agent_rig_data:
+
+networks:
+  gw:
+    external: true
+    name: tervory-gw-rig
