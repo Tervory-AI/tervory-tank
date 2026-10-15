@@ -19,11 +19,15 @@ from pipeline import engine_terms, enrich_one  # noqa: E402
 
 SKILLS = ROOT / "tank" / "skills"
 FIND = SKILLS / "base.find_site" / "1.5.0" / "run.py"
+FIND_16 = SKILLS / "base.find_site" / "1.6.0" / "run.py"
 CONTACTS = SKILLS / "base.contacts" / "1.1.0" / "run.py"
 SITE = SKILLS / "ffl.profile" / "1.1.0" / "data" / "site.json"
 CORE = (
     FIND,
     SKILLS / "base.find_site" / "1.5.0" / "skill.yaml",
+    FIND_16,
+    SKILLS / "base.find_site" / "1.6.0" / "skill.yaml",
+    SKILLS / "base.find_site" / "1.6.0" / "CHANGELOG.md",
     CONTACTS,
     SKILLS / "base.contacts" / "1.1.0" / "skill.yaml",
     ROOT / "agents" / "base" / "pipeline.py",
@@ -197,6 +201,7 @@ async def test_the_call_site_passes_engine_lists_only_for_that_engine() -> None:
 
 CANDIDATES = {
     ("base.find_site", "1.5.0"),
+    ("base.find_site", "1.6.0"),
     ("base.contacts", "1.1.0"),
     ("ffl.profile", "1.1.0"),
 }
@@ -332,10 +337,16 @@ async def test_the_agent_is_pinned_to_approved_versions_and_a_candidate_run_is_r
     assert refs["base.contacts"] == "base.contacts@1.0.0"
     assert refs["ffl.profile"] == "ffl.profile@1.0.0"
     assert versions["base.find_site"] != "1.5.0"
+    assert versions["base.find_site"] != "1.6.0"
     assert versions["base.contacts"] != "1.1.0"
 
     tenant = uuid.UUID("00000000-0000-0000-0000-000000000001")
-    for skill_id, version in (("base.find_site", "1.5.0"), ("base.contacts", "1.1.0"), ("ffl.profile", "1.1.0")):
+    for skill_id, version in (
+        ("base.find_site", "1.5.0"),
+        ("base.find_site", "1.6.0"),
+        ("base.contacts", "1.1.0"),
+        ("ffl.profile", "1.1.0"),
+    ):
         body = tank.SkillRun(tenant_id=tenant, input={"name": "Example"}, version=version, preview=False)
         with pytest.raises(tank.HTTPException) as caught:
             await tank._run_one_skill(skill_id, body, None)
