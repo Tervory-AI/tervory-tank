@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { FeedbackButtons } from "./feedback-buttons";
 
 type Msg = {
@@ -10,10 +11,32 @@ type Msg = {
 };
 
 export default function ChatPage() {
+  const router = useRouter();
+  const [gate, setGate] = useState<"check" | "show">("check");
   const [thread, setThread] = useState<Msg[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    fetch("/onboarding/status", { cache: "no-store" })
+      .then(async (res) => {
+        if (!res.ok) return { needs: false };
+        return (await res.json()) as { needs?: boolean };
+      })
+      .then((data) => {
+        if (!live) return;
+        if (data.needs) router.replace("/onboarding");
+        else setGate("show");
+      })
+      .catch(() => {
+        if (live) setGate("show");
+      });
+    return () => {
+      live = false;
+    };
+  }, [router]);
 
   async function send(e: React.FormEvent) {
     e.preventDefault();
@@ -46,6 +69,8 @@ export default function ChatPage() {
       setBusy(false);
     }
   }
+
+  if (gate !== "show") return <p className="meta">Loading…</p>;
 
   return (
     <>
