@@ -38,9 +38,13 @@ def test_za_compose_is_a_zenas_stack_with_its_own_stores() -> None:
     data = _parsed()
     assert set(data["services"]) == {
         "postgres", "redis", "qdrant", "hermes", "litellm", "tank", "agent-roles", "agent-zenas",
+        "pool-loader",
     }
-    assert "pool-loader" not in data["services"]
-    assert "Thread A — pool-loader" in COMPOSE
+    loader = data["services"]["pool-loader"]
+    assert loader["environment"]["TANK_REGION"] == "za"
+    assert loader["networks"] == ["default"]
+    assert loader["volumes"] == ["za_agent_data:/data"]
+    assert "ports" not in loader
     for name, service in data["services"].items():
         assert service["environment"]["TANK_REGION"] == "za", name
     assert data["networks"]["default"]["name"] == "tervory-za"
