@@ -255,6 +255,33 @@ _agent_key_hashes: dict[str, bytes] = {}
 _agent_keys_synced = False
 
 
+HOMES_PRINCIPAL = "founder-homes"
+_HOMES_DENIED = "This homes key can only set a za tenant's home."
+
+
+async def _homes_key_scope(request: Request) -> None:
+    """TANK_HOMES_KEY (ZA Tank only) may call POST /v1/zenas/tenants with home za, nothing else.
+
+    The Boston Workspace holds this key to set ZA tenant homes. It never holds
+    the ZA TANK_API_KEY. Anything else with this key is refused before a route runs.
+    """
+    if box_region() != "za":
+        raise HTTPException(status_code=403, detail=_HOMES_DENIED)
+    if request.method != "POST" or request.url.path.rstrip("/") != "/v1/zenas/tenants":
+        raise HTTPException(status_code=403, detail=_HOMES_DENIED)
+    query_home = request.query_params.get("home_region")
+    if query_home is not None and query_home != "za":
+        raise HTTPException(status_code=403, detail=_HOMES_DENIED)
+    try:
+        parsed = json.loads(await request.body() or b"null")
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        parsed = None
+    if not isinstance(parsed, dict) or parsed.get("home_region") != "za":
+        raise HTTPException(status_code=403, detail=_HOMES_DENIED)
+    if set(parsed) - {"tenant_id", "home_region"}:
+        raise HTTPException(status_code=403, detail=_HOMES_DENIED)
+
+
 async def require_key(request: Request, x_tank_key: str = Header(default="")) -> str | None:
     """Accept the Workspace key, or one agent key from TANK_KEY_<AGENT>.
 
@@ -317,6 +344,11 @@ async def require_key(request: Request, x_tank_key: str = Header(default="")) ->
         raise HTTPException(status_code=401, detail="missing or invalid X-Tank-Key") from None
     if same(presented_bytes, workspace_bytes):
         return None
+
+    homes_key = os.environ.get("TANK_HOMES_KEY", "").strip()
+    if homes_key and presented_bytes and same(presented_bytes, homes_key.encode()):
+        await _homes_key_scope(request)
+        return HOMES_PRINCIPAL
 
     matched: str | None = None
     if presented_bytes:
