@@ -2,7 +2,7 @@
 
 import asyncio
 import sys
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -122,15 +122,105 @@ def test_status_for_one_region_omits_the_other():
 
 
 async def _status():
-    store = MemoryStore()
-    await store.record_source(_us_source())
-    await store.record_source(_za_source())
-    us = await pool_status(store, region="us-east")
-    za = await pool_status(store, region="za")
+    us_store = MemoryStore(home_region="us-east")
+    za_store = MemoryStore(home_region="za")
+    await us_store.record_source(_us_source())
+    await za_store.record_source(_za_source())
+    with pytest.raises(RegionError):
+        await us_store.record_source(_za_source())
+    us = await pool_status(us_store, region="us-east")
+    za = await pool_status(za_store, region="za")
     assert {row["source_id"] for row in us["sources"]} == {"frcp"}
     assert {row["source_id"] for row in za["sources"]} == {"za-fixture"}
     assert us["region"] == "us-east"
     assert za["region"] == "za"
+
+
+def test_a_missing_empty_or_unknown_region_is_refused_before_fetch_or_write():
+    for region in (None, "", "eu", "us"):
+        asyncio.run(_bad_region(region))
+
+
+async def _bad_region(region):
+    seen: list[str] = []
+
+    async def get(url, headers):
+        seen.append(url)
+        return b"MUST-NOT-BE-FETCHED"
+
+    store = MemoryStore()
+    with pytest.raises(RegionError):
+        await load_wave(
+            store,
+            region=region,
+            only=[_us_source()],
+            live=True,
+            http_get=get,
+            on=ON,
+            snapshots={"frcp": [b"MUST-NOT-BE-STORED"]},
+        )
+    assert seen == []
+    assert store.home_region in (None, "")
+    assert await store.get_source("frcp") is None
+    assert await store.version_count() == 0
+    assert "MUST-NOT" not in await store.all_text()
+
+
+def test_a_source_with_a_missing_or_unknown_region_is_refused():
+    asyncio.run(_bad_source_region())
+
+
+async def _bad_source_region():
+    from dataclasses import replace
+
+    from agents.zenas.pool.region import assert_source_region
+
+    seen: list[str] = []
+
+    async def get(url, headers):
+        seen.append(url)
+        return b"MUST-NOT-BE-FETCHED"
+
+    for source_region in (None, "", "eu"):
+        source = replace(_us_source(), region=source_region)
+        with pytest.raises(RegionError):
+            assert_source_region(source, "us-east")
+        store = MemoryStore()
+        with pytest.raises(RegionError):
+            await load_wave(
+                store,
+                region="us-east",
+                only=[source],
+                live=True,
+                http_get=get,
+                on=ON,
+                snapshots={"frcp": [b"MUST-NOT-BE-STORED"]},
+            )
+        assert seen == []
+        assert await store.get_source("frcp") is None
+        assert await store.version_count() == 0
+
+
+def test_an_unbound_store_refuses_writes():
+    asyncio.run(_unbound_writes())
+
+
+async def _unbound_writes():
+    for home in (None, "", "eu"):
+        store = MemoryStore(home_region=home)
+        with pytest.raises(RegionError):
+            await store.record_source(_us_source())
+        with pytest.raises(RegionError):
+            await store.record_run(
+                "frcp",
+                status="ok",
+                detail="no",
+                documents=1,
+                when=datetime.now(timezone.utc),
+            )
+        assert await store.get_source("frcp") is None
+        assert store.runs == {}
+        assert await store.version_count() == 0
 
 
 def test_snapshot_directories_do_not_overlap():

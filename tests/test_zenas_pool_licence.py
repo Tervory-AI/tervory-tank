@@ -65,7 +65,7 @@ def test_unknown_terms_are_not_recorded():
     assert may_store_text(source) is True
 
     async def _record():
-        store = MemoryStore()
+        store = MemoryStore(home_region="us-east")
         with pytest.raises(LicenceError):
             await store.record_source(source)
         assert await store.get_source("example-unknown") is None
@@ -78,7 +78,7 @@ def test_disabled_source_is_recorded_and_its_bytes_are_dropped():
 
 
 async def _disabled():
-    store = MemoryStore()
+    store = MemoryStore(home_region="us-east")
     source = replace(
         next(item for item in CATALOGUE if item.source_id == "uncitral-cisg"),
         enabled=False,

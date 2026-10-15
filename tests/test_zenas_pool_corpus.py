@@ -5,12 +5,15 @@ import sys
 from datetime import date
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from agents.zenas.pool.catalogue import sources_for_region
 from agents.zenas.pool.config import jurisdiction_for
 from agents.zenas.pool.embed import NoOpEmbedder, NoOpVectorIndex
 from agents.zenas.pool.nightly import packaged_snapshots, run_nightly
+from agents.zenas.pool.region import RegionError
 from agents.zenas.pool.search import search_meaning
 from agents.zenas.pool.store import MemoryStore
 
@@ -93,7 +96,8 @@ async def _us_wave():
 
     found = await store.search_text("bill of lading", jurisdiction="us", as_at=None)
     assert found
-    assert not await store.search_text("bill of lading", jurisdiction="za", as_at=None)
+    with pytest.raises(RegionError):
+        await store.search_text("bill of lading", jurisdiction="za", as_at=None)
 
     meaning = await search_meaning(
         store, NoOpEmbedder(), NoOpVectorIndex(), "carrier liability", jurisdiction="us"

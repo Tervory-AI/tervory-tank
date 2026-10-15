@@ -47,7 +47,7 @@ services:
       - load
     environment:
       DATABASE_URL: postgresql://agent_zenas:${AGENT_DB_PASSWORD_ZENAS}@postgres:5432/${POSTGRES_DB:-tervory}
-      TANK_REGION: ${TANK_REGION:-us-east}
+      TANK_REGION: us-east
       COURTLISTENER_API_TOKEN: ${COURTLISTENER_API_TOKEN:-}
       GOVINFO_API_KEY: ${GOVINFO_API_KEY:-}
       NY_OPENLEG_API_KEY: ${NY_OPENLEG_API_KEY:-}

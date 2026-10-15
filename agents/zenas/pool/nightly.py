@@ -15,7 +15,7 @@ from agents.zenas.pool.config import current_region
 from agents.zenas.pool.embed import Embedder, NoOpEmbedder, NoOpVectorIndex, VectorIndex
 from agents.zenas.pool.ingest import ingest_snapshot
 from agents.zenas.pool.licence import FetchNotConfigured, LicenceError, refusal_reason
-from agents.zenas.pool.region import RegionError, assert_source_region
+from agents.zenas.pool.region import RegionError, assert_source_region, bind_store
 from agents.zenas.pool.status import pool_status
 from agents.zenas.pool.store import Store
 
@@ -67,6 +67,7 @@ async def run_nightly(
     and linked, and any bytes handed in for them are not parsed.
     """
     region = region or current_region()
+    bind_store(store, region)
     day = on or date.today()
     when = datetime.now(timezone.utc)
     embedder = embedder or NoOpEmbedder()

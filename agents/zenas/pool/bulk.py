@@ -19,7 +19,7 @@ from agents.zenas.pool.ingest import ingest_snapshot
 from agents.zenas.pool.licence import FetchNotConfigured, LicenceError, refusal_reason
 from agents.zenas.pool.model import SourceSpec
 from agents.zenas.pool.nightly import urllib_get
-from agents.zenas.pool.region import RegionError, assert_source_region
+from agents.zenas.pool.region import RegionError, assert_source_region, bind_store
 from agents.zenas.pool.status import pool_status
 from agents.zenas.pool.store import Store, key_is_set
 
@@ -35,20 +35,10 @@ def disk_cap_bytes(cap: int | None = None) -> int:
     return int(raw)
 
 
-def bind_store(store: Store, region: str) -> None:
-    """A store used by the loader reads and writes one region only."""
-    current = getattr(store, "home_region", None)
-    if current is None:
-        store.home_region = region  # type: ignore[attr-defined]
-        return
-    if current != region:
-        raise RegionError(f"store is bound to {current}, not {region}")
-
-
 async def load_wave(
     store: Store,
     *,
-    region: str,
+    region: str | None,
     snapshots: dict[str, list[bytes]] | None = None,
     on: date | None = None,
     live: bool = False,

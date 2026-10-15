@@ -185,8 +185,10 @@ def key_is_set(name: str) -> bool:
 
 
 def _guard_home(home_region: str | None, *, region: str | None = None, jurisdiction: str | None = None) -> None:
-    if not home_region:
-        return
+    """A store with no known home region stores nothing and reads nothing."""
+    if home_region not in {"us-east", "za"}:
+        shown = home_region if home_region else "missing"
+        raise RegionError(f"this box's region is {shown}, so it stores nothing")
     if region is not None and region != home_region:
         raise RegionError(f"this box is {home_region} and does not write {region}")
     if jurisdiction is not None and jurisdiction != jurisdiction_for(home_region):
@@ -344,6 +346,7 @@ class MemoryStore:
         return True
 
     async def record_link(self, source_id: str, url: str, reason: str) -> None:
+        _guard_home(self.home_region)
         if source_id not in self.sources:
             raise LicenceError("record the source before recording a link")
         self.links[source_id] = (url, reason)
@@ -357,6 +360,7 @@ class MemoryStore:
         documents: int,
         when: datetime,
     ) -> None:
+        _guard_home(self.home_region)
         self.runs[source_id] = RunRecord(source_id, when, status, documents, detail)
 
     def _versions(self) -> list[LegalDocument]:
@@ -462,6 +466,7 @@ class MemoryStore:
         return "\n".join(doc.text for doc in docs)
 
     async def record_cites(self, from_version: str, rows: list[tuple[str, str, bool]]) -> None:
+        _guard_home(self.home_region)
         for citation_text, to_document, resolved in rows:
             self.cites[(from_version, citation_text)] = (to_document, resolved)
 
@@ -480,6 +485,8 @@ class MemoryStore:
     async def set_checkpoint(self, source_id: str, cursor: str, bytes_stored: int) -> None:
         if source_id in self.sources:
             _guard_home(self.home_region, region=self.sources[source_id].region)
+        else:
+            _guard_home(self.home_region)
         self.checkpoints[source_id] = (cursor, bytes_stored)
 
     async def stored_bytes(self) -> int:
@@ -638,6 +645,7 @@ class PostgresStore:
         return True
 
     async def record_link(self, source_id: str, url: str, reason: str) -> None:
+        _guard_home(self.home_region)
         if await self.get_source(source_id) is None:
             raise LicenceError("record the source before recording a link")
         await self._conn.execute(
@@ -660,6 +668,7 @@ class PostgresStore:
         documents: int,
         when: datetime,
     ) -> None:
+        _guard_home(self.home_region)
         await self._conn.execute(
             """
             INSERT INTO zenas_pool.updates (source_id, last_update, last_status, documents, detail)
@@ -803,6 +812,7 @@ class PostgresStore:
         return "\n".join(row["text"] for row in rows)
 
     async def record_cites(self, from_version: str, rows: list[tuple[str, str, bool]]) -> None:
+        _guard_home(self.home_region)
         for citation_text, to_document, resolved in rows:
             await self._conn.execute(
                 """
@@ -838,6 +848,7 @@ class PostgresStore:
         return row["cursor"] if row else ""
 
     async def set_checkpoint(self, source_id: str, cursor: str, bytes_stored: int) -> None:
+        _guard_home(self.home_region)
         await self._conn.execute(
             """
             INSERT INTO zenas_pool.checkpoints (source_id, cursor, bytes_stored)
