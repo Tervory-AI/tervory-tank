@@ -106,12 +106,23 @@ def box_region() -> str:
 HOME_REQUIRED = "home region must be us-east or za"
 
 
-def home_region_refusal(home: str | None, box: str | None = None) -> str | None:
-    """Refuse unless this request names this box as its home.
+def call_home(home: str | None, box: str | None = None) -> str | None:
+    """Home used by /v1/route, /v1/tasks, /v1/skills/*/run and background tasks.
 
-    A missing, empty or unknown home is refused. It is never treated as us-east.
-    The caller must not write a ledger row, task, transcript or cache entry,
-    and must not call a provider or another room.
+    A missing value is this server's TANK_REGION, so the live Workspace and
+    agent rooms keep working. An empty string is not missing: it is returned
+    unchanged and then refused. /v1/zenas/* does not call this.
+    """
+    if home is None:
+        return normalize_box(box) if box is not None else box_region()
+    return home
+
+
+def home_region_refusal(home: str | None, box: str | None = None) -> str | None:
+    """Refuse an empty, unknown, or other-region home before any write or call.
+
+    None is refused here too. Callers that may omit the field pass call_home()
+    first. The Zenas proxy calls this directly, so a missing home stays refused.
 
     TODO(Thread C): the authoritative home region will live on the tenant
     record. That column is yours; do not add it here. The value on this
@@ -486,9 +497,9 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
     """Pick the model from policy, call it through LiteLLM, write the ledger row.
     Used directly by /v1/route and in the background by tasks."""
     box = box_region()
-    foreign = home_region_refusal(req.home_region, box)
+    foreign = home_region_refusal(call_home(req.home_region, box), box)
     if foreign:
-        # The other region's text is not written: no ledger, task, transcript or cache.
+        # Empty, unknown, or the other region's text is not written.
         raise HTTPException(status_code=403, detail=foreign)
     client_text = "\n".join(m.content for m in req.messages)
     early = model_call_refusal(client_text, None, box=box, tenant_id=str(req.tenant_id))
@@ -852,7 +863,8 @@ async def _run_task(task_id: uuid.UUID, req: RouteRequest) -> None:
 @app.post("/v1/tasks", dependencies=[Depends(require_key)], status_code=202)
 async def create_task(body: TaskCreate) -> dict[str, Any]:
     box = box_region()
-    foreign = home_region_refusal(body.home_region, box)
+    home = call_home(body.home_region, box)
+    foreign = home_region_refusal(home, box)
     if foreign:
         raise HTTPException(status_code=403, detail=foreign)
     text = "\n".join(m.content for m in body.messages)
@@ -873,7 +885,7 @@ async def create_task(body: TaskCreate) -> dict[str, Any]:
         )
     req = RouteRequest(
         tenant_id=body.tenant_id, agent=body.agent, task_type=body.task_type,
-        home_region=body.home_region, messages=body.messages,
+        home_region=home, messages=body.messages,
     )
     t = asyncio.create_task(_run_task(row["id"], req))
     _background.add(t)
@@ -980,6 +992,10 @@ def make_ctx(pkg: skala.SkillPackage, tenant_id: uuid.UUID, task_id: uuid.UUID |
     assert _http is not None
     ref = pkg.ref + ("#preview" if preview else "")
     chosen = _skill_home.get() if home_region is None else home_region
+    if chosen is None:
+        # Evals and previews run as this server. A skill run sets the context
+        # var to call_home() before it builds a context.
+        chosen = box_region()
 
     async def _model(**kw: Any) -> dict[str, Any]:
         kw["home_region"] = chosen
@@ -1009,7 +1025,10 @@ async def run_skill_evals(skill_id: str, version: str, body: EvalRun | None = No
     pkg = get_package(skill_id, version)
     if not pkg.cases:
         raise HTTPException(status_code=400, detail="package has no eval cases; a skill without evals cannot leave candidate")
-    result = await skala.run_evals(pkg, lambda: make_ctx(pkg, PLATFORM_TENANT, preview=True))
+    here = box_region()
+    result = await skala.run_evals(
+        pkg, lambda: make_ctx(pkg, PLATFORM_TENANT, preview=True, home_region=here),
+    )
     passed_gate = result["score"] >= pkg.eval_threshold
     async with pool().acquire() as conn:
         await conn.execute(
@@ -1108,10 +1127,12 @@ async def run_one_skill(
     body: SkillRun,
     caller: str | None = Depends(require_key),
 ) -> dict[str, Any]:
-    foreign = home_region_refusal(body.home_region, box_region())
+    box = box_region()
+    home = call_home(body.home_region, box)
+    foreign = home_region_refusal(home, box)
     if foreign:
         raise HTTPException(status_code=403, detail=foreign)
-    token = _skill_home.set(body.home_region)
+    token = _skill_home.set(home)
     try:
         return await _run_one_skill(skill_id, body, caller)
     finally:

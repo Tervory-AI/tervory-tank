@@ -6,6 +6,7 @@ is refused for every provider that is not running in South Africa.
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import uuid
@@ -151,6 +152,8 @@ class _Explode:
 async def test_us_east_stores_nothing_for_a_za_home_tenant(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TANK_REGION", "us-east")
     monkeypatch.setattr(main, "pool", lambda: _Explode())
+    monkeypatch.setattr(main, "_http", _Transport())
+    monkeypatch.setattr(main.httpx, "AsyncClient", _Provider)
     req = main.RouteRequest(
         tenant_id=uuid.uuid4(),
         home_region="za",
@@ -167,6 +170,8 @@ async def test_us_east_stores_nothing_for_a_za_home_tenant(monkeypatch: pytest.M
 async def test_za_stores_nothing_for_a_us_home_tenant(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TANK_REGION", "za")
     monkeypatch.setattr(main, "pool", lambda: _Explode())
+    monkeypatch.setattr(main, "_http", _Transport())
+    monkeypatch.setattr(main.httpx, "AsyncClient", _Provider)
     req = main.RouteRequest(
         tenant_id=uuid.uuid4(),
         home_region="us-east",
@@ -242,9 +247,9 @@ class _Transport:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("box", ["us-east", "za"])
-@pytest.mark.parametrize("home", [None, "", "eu"])
+@pytest.mark.parametrize("home", ["", "eu"])
 @pytest.mark.parametrize("kind", ["route", "task", "skill"])
-async def test_missing_empty_or_unknown_home_makes_no_call(
+async def test_empty_or_unknown_home_makes_no_call(
     monkeypatch: pytest.MonkeyPatch, box: str, home: str | None, kind: str,
 ) -> None:
     monkeypatch.setenv("TANK_REGION", box)
@@ -276,3 +281,144 @@ async def test_missing_empty_or_unknown_home_makes_no_call(
         await call
     assert caught.value.status_code == 403
     assert caught.value.detail == main.HOME_REQUIRED
+
+
+class _Conn:
+    async def fetchrow(self, *_args: object, **_kwargs: object) -> dict[str, object]:
+        return {
+            "id": uuid.uuid4(),
+            "model": "luna",
+            "priority": "standard",
+            "rung": 1,
+            "max_tokens_out": 32,
+            "system_prompt": None,
+            "cache_scope": "none",
+        }
+
+    async def fetchval(self, *_args: object, **_kwargs: object) -> str:
+        return "candidate"
+
+    async def execute(self, *_args: object, **_kwargs: object) -> str:
+        return "INSERT 0 1"
+
+    async def __aenter__(self) -> "_Conn":
+        return self
+
+    async def __aexit__(self, *_exc: object) -> bool:
+        return False
+
+
+class _Pool:
+    def acquire(self) -> _Conn:
+        return _Conn()
+
+
+class _Answer:
+    status_code = 200
+    headers = {"content-type": "application/json", "x-litellm-response-cost": "0"}
+    text = "Value added tax."
+
+    def json(self) -> dict[str, object]:
+        return {"choices": [{"message": {"content": self.text}}], "usage": {}}
+
+
+class _Gateway:
+    def __init__(self, *_args: object, **_kwargs: object) -> None:
+        pass
+
+    async def __aenter__(self) -> "_Gateway":
+        return self
+
+    async def __aexit__(self, *_exc: object) -> bool:
+        return False
+
+    async def post(self, *_args: object, **_kwargs: object) -> _Answer:
+        return _Answer()
+
+
+@pytest.mark.asyncio
+async def test_a_request_with_no_home_is_accepted_on_us_east(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TANK_REGION", "us-east")
+    monkeypatch.setattr(main, "pool", lambda: _Pool())
+    monkeypatch.setattr(main, "_redis", None)
+    monkeypatch.setattr(main.httpx, "AsyncClient", _Gateway)
+    seen: dict[str, str | None] = {}
+
+    async def remember_task(_task_id: uuid.UUID, req: main.RouteRequest) -> None:
+        seen["task_home"] = req.home_region
+
+    async def remember_skill(_skill_id: str, _body: main.SkillRun, _caller: str | None) -> dict[str, bool]:
+        seen["skill_home"] = main._skill_home.get()
+        return {"ok": True}
+
+    monkeypatch.setattr(main, "_run_task", remember_task)
+    monkeypatch.setattr(main, "_run_one_skill", remember_skill)
+    tenant = uuid.uuid4()
+    response = await main.run_route(main.RouteRequest(
+        tenant_id=tenant,
+        messages=[main.Message(role="user", content="What does VAT stand for?")],
+    ))
+    assert response.content == "Value added tax."
+    await main.create_task(main.TaskCreate(
+        tenant_id=tenant,
+        title="A question",
+        messages=[main.Message(role="user", content="Hello")],
+    ))
+    await asyncio.gather(*list(main._background))
+    await main.run_one_skill(
+        "tier0.answer",
+        main.SkillRun(tenant_id=tenant, input={"text": "Hello"}),
+        caller=None,
+    )
+    assert seen["task_home"] == "us-east"
+    assert seen["skill_home"] == "us-east"
+
+
+@pytest.mark.asyncio
+async def test_evals_pass_for_a_skill_that_calls_a_model(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TANK_REGION", "us-east")
+    folder = tmp_path / "demo.echo" / "1.0.0"
+    (folder / "evals").mkdir(parents=True)
+    (folder / "run.py").write_text(
+        "async def run(payload, ctx):\n"
+        "    text = await ctx.model([{'role': 'user', 'content': payload['text']}], task_type='tier0.answer')\n"
+        "    return {'text': text}\n",
+        encoding="utf-8",
+    )
+    (folder / "evals" / "cases.jsonl").write_text(
+        '{"input": {"text": "What does VAT stand for?"}, "expected": {"text": "value added tax"}, "tolerance": "contains"}\n',
+        encoding="utf-8",
+    )
+    pkg = main.skala.SkillPackage(
+        id="demo.echo",
+        version="1.0.0",
+        agent="tier0",
+        rung=1,
+        task_type="tier0.answer",
+        description="",
+        input_schema={},
+        output_schema={},
+        eval_threshold=1.0,
+        path=folder,
+        cases=main.skala._load_cases(folder),
+    )
+    monkeypatch.setattr(main, "get_package", lambda _skill_id, _version: pkg)
+    monkeypatch.setattr(main, "pool", lambda: _Pool())
+    monkeypatch.setattr(main, "_redis", None)
+    monkeypatch.setattr(main, "_http", object())
+    monkeypatch.setattr(main.httpx, "AsyncClient", _Gateway)
+    homes: list[str | None] = []
+    real = main.run_route
+
+    async def watch(req: main.RouteRequest, task_id: uuid.UUID | None = None) -> main.RouteResponse:
+        homes.append(req.home_region)
+        return await real(req, task_id)
+
+    monkeypatch.setattr(main, "run_route", watch)
+    result = await main.run_skill_evals("demo.echo", "1.0.0", None)
+    assert result["passed"] == 1
+    assert result["total"] == 1
+    assert result["gate"] == "passed"
+    preview = main.make_ctx(pkg, uuid.uuid4(), preview=True)
+    await preview.model([{"role": "user", "content": "hi"}], task_type="tier0.answer")
+    assert homes == ["us-east", "us-east"]
