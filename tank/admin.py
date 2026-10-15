@@ -814,7 +814,7 @@ _ROLLUP_LOCK = 81111
 BASE_BACKFILL_SQL = """
 INSERT INTO tank.outcomes (ts, tenant_id, agent, outcome_type, quantity, ref)
 SELECT updated_at, tenant_id, 'base', 'base.record_enriched', 1, id::text
-FROM base.records
+FROM agent_base.records
 WHERE status = 'done'
 ON CONFLICT (outcome_type, ref) WHERE ref IS NOT NULL DO NOTHING
 """

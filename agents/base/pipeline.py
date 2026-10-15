@@ -85,6 +85,27 @@ def cost_of(out: dict[str, Any]) -> float:
         return 0.0
 
 
+def answer_from_code(ref: str, out: dict[str, Any]) -> bool:
+    """Code wrote the answer when the skill is 2.x, or when no model cost was attached.
+
+    Tank stamps `_cost_usd` on every skill, including a code skill whose cost is 0.
+    A 2.x ref is the code version. A 1.x answer with no `_cost_usd` is the same.
+    """
+    version = ref.rsplit("@", 1)[-1] if "@" in ref else ""
+    if version.startswith("2."):
+        return True
+    return "_cost_usd" not in out or out.get("_cost_usd") is None
+
+
+def page_html(scraped: dict[str, Any]) -> str:
+    html = scraped.get("html")
+    return html if isinstance(html, str) else ""
+
+
+def engine_id(engine: str | None) -> str:
+    return engine if isinstance(engine, str) else ""
+
+
 def result_line(done: int, ready: int, failed: int, cost: float) -> str:
     return f"{done} enriched ({ready} ready), {failed} failed, model spend ${float(cost):.4f}"
 
@@ -237,7 +258,12 @@ async def enrich_one(
             }
             if (scr.get("text") or "") and len(scr["text"]) >= 40:
                 try:
-                    ex = await call("base.extract", {"name": name, "text": scr["text"]})
+                    ex = await call("base.extract", {
+                        "name": name,
+                        "text": scr["text"],
+                        "html": page_html(scr),
+                        "engine": engine_id(engine),
+                    })
                     cost += cost_of(ex)
                 except Exception as exc:  # noqa: BLE001 — a model-gateway blip must not fail the record
                     if is_account_error(exc):
@@ -248,9 +274,10 @@ async def enrich_one(
                     }
                 else:
                     conf = int(ex.get("confidence") or 0)
+                    source = "site:code" if answer_from_code(named("base.extract", ex), ex) else "site:model"
                     for key in ("categories", "services", "description", "people"):
                         if ex.get(key):
-                            profile[key] = {"value": ex[key], "source": "site:model", "confidence": conf}
+                            profile[key] = {"value": ex[key], "source": source, "confidence": conf}
                     passes["2c"] = {
                         "skill": named("base.extract", ex),
                         "ms": ex.get("_ms"),
@@ -343,6 +370,8 @@ async def enrich_one(
                 "socials_count": soc.get("count") or 0,
                 "pages": len(scr.get("pages") or []),
                 "licence_type_label": eng_prof.get("licence_type_label"),
+                "html": page_html(scr),
+                "engine": engine_id(engine),
             })
             cost += cost_of(biz)
         except Exception as exc:  # noqa: BLE001 — the record keeps its code-only layers
@@ -354,9 +383,10 @@ async def enrich_one(
             }
         else:
             if biz.get("confidence"):
+                source = "site:code" if answer_from_code(named("base.business_data", biz), biz) else "model:estimate"
                 for key in ("size_band", "revenue_band", "business_model", "naics", "naics_label"):
                     if biz.get(key):
-                        profile[key] = {"value": biz[key], "source": "model:estimate", "confidence": int(biz["confidence"])}
+                        profile[key] = {"value": biz[key], "source": source, "confidence": int(biz["confidence"])}
             passes["5"] = {
                 "skill": named("base.business_data", biz),
                 "ms": biz.get("_ms"),
