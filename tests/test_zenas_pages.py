@@ -46,3 +46,33 @@ def test_zenas_routes_send_home_and_the_feed_button_stays_in_feeds() -> None:
     assert ".tvy-admin button.save" not in admin
     feeds = (ROOT / "workspace" / "app" / "admin" / "feeds" / "feeds.css").read_text(encoding="utf-8")
     assert ".zenas-feeds button.save" in feeds
+    load = (api / "feeds" / "load" / "route.ts").read_text(encoding="utf-8")
+    assert "pool/sources/" in load and "/load" in load
+    assert "pool/load" not in load
+
+
+def test_review_names_the_sign_off_and_a_region_refusal() -> None:
+    desk = (ROOT / "workspace" / "app" / "review" / "desk.tsx").read_text(encoding="utf-8")
+    assert "Released to client" in desk
+    assert "Sent back" in desk
+    page = (ROOT / "workspace" / "app" / "review" / "page.tsx").read_text(encoding="utf-8")
+    assert "reviewRefusal" in page
+    route = (ROOT / "workspace" / "app" / "api" / "zenas" / "review" / "route.ts").read_text(encoding="utf-8")
+    assert "reviewRefusal" in route
+
+
+def test_founder_sets_a_home_once_with_no_default() -> None:
+    board = (ROOT / "workspace" / "app" / "admin" / "homes" / "board.tsx").read_text(encoding="utf-8")
+    assert 'value="za"' in board and 'value="us-east"' in board
+    assert "defaultChecked" not in board
+    assert "checked=" not in board
+    route = (ROOT / "workspace" / "app" / "api" / "zenas" / "tenants" / "route.ts").read_text(encoding="utf-8")
+    assert "chosenHome" in route
+    assert "homeRegion()" not in route
+    assert "home_region: home" in route
+    homes = (ROOT / "workspace" / "app" / "admin" / "homes" / "homes.css").read_text(encoding="utf-8")
+    assert ".zenas-homes button.save" in homes
+    admin = (ROOT / "workspace" / "app" / "admin" / "admin.css").read_text(encoding="utf-8")
+    assert ".zenas-homes" not in admin
+    console = (ROOT / "workspace" / "app" / "admin" / "console.tsx").read_text(encoding="utf-8")
+    assert 'href="/admin/homes"' in console

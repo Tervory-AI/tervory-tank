@@ -1,4 +1,4 @@
-import { presentFeeds, presentMatters, presentReview, releasedOnly, reviewerMay } from "../workspace/app/api/zenas/rules.ts";
+import { chosenHome, presentFeeds, presentMatters, presentReview, releasedOnly, reviewRefusal, reviewerMay } from "../workspace/app/api/zenas/rules.ts";
 
 const rawDocs = [
   { id: "1", state: "draft", body: "hidden draft", kind: "draft", version: 1 },
@@ -60,5 +60,33 @@ if (feeds.sources[0].key_name !== "LAWS_AFRICA_API_TOKEN" || feeds.sources[0].ke
   throw new Error("key name and whether it is set must remain");
 }
 if (!feeds.sources[0].errors[0].includes("reported an error")) throw new Error("secret-looking errors must be replaced");
+
+const mismatch = reviewRefusal(403, { detail: "home region does not match the tenant record" });
+if (mismatch !== "home region does not match the tenant record") {
+  throw new Error("a wrong-region refusal must show the room's reason");
+}
+const missing = reviewRefusal(403, { detail: "home region is not on the tenant record" });
+if (missing !== "home region is not on the tenant record") {
+  throw new Error("a missing home on the tenant record must be shown");
+}
+const otherBox = reviewRefusal(403, { detail: "needs the South Africa region" });
+if (otherBox !== "needs the South Africa region") {
+  throw new Error("the other box's refusal must be shown");
+}
+if (reviewRefusal(502, { detail: "home region does not match the tenant record" }) !== "The review queue could not be loaded.") {
+  throw new Error("only a refusal shows the room's reason");
+}
+if (reviewRefusal(404, { detail: "missing" }) !== "The review queue is not on this server yet.") {
+  throw new Error("a missing route stays the not-yet message");
+}
+if (reviewRefusal(403, { detail: "token sk-live-secret" }) !== "The review queue could not be loaded.") {
+  throw new Error("a refusal must not show a secret");
+}
+if (chosenHome("za") !== "za" || chosenHome("us-east") !== "us-east") {
+  throw new Error("za and us-east are the only homes");
+}
+if (chosenHome("") !== null || chosenHome("us") !== null || chosenHome(undefined) !== null) {
+  throw new Error("a blank or unknown home must not become a default");
+}
 
 console.log("ok");

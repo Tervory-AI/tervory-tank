@@ -93,6 +93,33 @@ export function reviewerMay(tags: string[], jurisdiction: string): boolean {
   return tags.includes(jurisdiction);
 }
 
+const REVIEW_MISSING = "The review queue is not on this server yet.";
+const REVIEW_GENERIC = "The review queue could not be loaded.";
+
+/** A short reason from a refusal body. Secrets and long dumps stay hidden. */
+export function statedReason(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") return null;
+  const row = payload as Record<string, unknown>;
+  const raw = row.detail ?? row.reason;
+  if (typeof raw !== "string") return null;
+  const text = raw.trim();
+  if (!text || text.length > 240 || /[\r\n]/.test(text)) return null;
+  if (/token|secret|password|api[_-]?key|bearer|sk-/i.test(text)) return null;
+  return text;
+}
+
+/** 404 stays the not-yet message. A 403 shows the room's reason. Anything else stays generic. */
+export function reviewRefusal(status: number, payload: unknown): string {
+  if (status === 404) return REVIEW_MISSING;
+  if (status === 403) return statedReason(payload) ?? REVIEW_GENERIC;
+  return REVIEW_GENERIC;
+}
+
+/** za or us-east, chosen by the founder. Anything else, including a blank, is no choice. */
+export function chosenHome(value: unknown): "za" | "us-east" | null {
+  return value === "za" || value === "us-east" ? value : null;
+}
+
 function cleanError(value: unknown): string | null {
   const text = String(value ?? "").trim();
   if (!text) return null;

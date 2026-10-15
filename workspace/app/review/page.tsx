@@ -1,5 +1,5 @@
 import { currentTenant } from "@/lib/tenant";
-import { presentReview, type ReviewItem } from "@/app/api/zenas/rules";
+import { presentReview, reviewRefusal, type ReviewItem } from "@/app/api/zenas/rules";
 import { homeRegion, zenas } from "@/app/api/zenas/tank";
 import { requireReviewer } from "./access";
 import { ReviewDesk } from "./desk";
@@ -18,8 +18,7 @@ export default async function ReviewPage() {
       { method: "GET" },
     );
     if (res.ok) items = presentReview(await res.json(), reviewer.jurisdictions);
-    else if (res.status === 404) note = "The review queue is not on this server yet.";
-    else note = "The review queue could not be loaded.";
+    else note = reviewRefusal(res.status, await res.json().catch(() => null));
   } catch {
     note = "The review queue could not be loaded.";
   }

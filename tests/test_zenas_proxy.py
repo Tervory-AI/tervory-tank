@@ -71,8 +71,16 @@ def test_upstream_is_only_the_local_room(monkeypatch: pytest.MonkeyPatch) -> Non
         main.zenas_upstream("pool/status")
     assert caught.value.status_code == 403
     monkeypatch.setenv("ZENAS_AGENT_URL", "http://agent-zenas:8000")
+    assert main.zenas_upstream("tenants") == "http://agent-zenas:8000/tenants"
+    assert main.zenas_upstream("pool/sources/companies-act/load").endswith("/pool/sources/companies-act/load")
     with pytest.raises(HTTPException) as caught:
         main.zenas_upstream("../postgres")
+    assert caught.value.status_code == 404
+    with pytest.raises(HTTPException) as caught:
+        main.zenas_upstream("pool/load")
+    assert caught.value.status_code == 404
+    with pytest.raises(HTTPException) as caught:
+        main.zenas_upstream("pool/sources/not a source/load")
     assert caught.value.status_code == 404
 
 
@@ -136,6 +144,47 @@ async def test_proxy_forwards_only_inside_the_region_and_strips_keys(
     assert SECRET.encode() not in response.body
     payload = json.loads(response.body)
     assert payload["sources"][0]["key_set"] is True
+
+
+@pytest.mark.asyncio
+async def test_proxy_forwards_tenants_only_for_this_regions_home(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TANK_REGION", "us-east")
+    monkeypatch.setenv("ZENAS_AGENT_URL", "http://agent-zenas:8000")
+    room = _Room(b'{"ok": true, "created": true, "home_region": "us-east"}')
+    monkeypatch.setattr(main, "_http", room)
+    body = json.dumps(
+        {"tenant_id": "11111111-1111-1111-1111-111111111111", "home_region": "us-east"}
+    ).encode()
+    response = await main.zenas_proxy("tenants", _request("POST", "/v1/zenas/tenants", body))
+    assert response.status_code == 200
+    assert room.calls == ["http://agent-zenas:8000/tenants"]
+    room.calls.clear()
+    foreign = json.dumps(
+        {"tenant_id": "11111111-1111-1111-1111-111111111111", "home_region": "za"}
+    ).encode()
+    with pytest.raises(HTTPException) as caught:
+        await main.zenas_proxy("tenants", _request("POST", "/v1/zenas/tenants", foreign))
+    assert caught.value.status_code == 403
+    assert caught.value.detail == main.ZA_HOME_MESSAGE
+    assert room.calls == []
+
+
+@pytest.mark.asyncio
+async def test_a_source_load_is_forwarded_and_its_key_is_stripped(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TANK_REGION", "za")
+    monkeypatch.setenv("ZENAS_AGENT_URL", "http://agent-zenas:8000")
+    room = _Room(
+        json.dumps(
+            {"ok": True, "source": {"source_id": "companies-act", "key_name": "LAWS_AFRICA_API_TOKEN", "api_key": SECRET}}
+        ).encode()
+    )
+    monkeypatch.setattr(main, "_http", room)
+    response = await main.zenas_proxy(
+        "pool/sources/companies-act/load",
+        _request("POST", "/v1/zenas/pool/sources/companies-act/load", body=b'{"home_region":"za"}'),
+    )
+    assert room.calls == ["http://agent-zenas:8000/pool/sources/companies-act/load"]
+    assert SECRET.encode() not in response.body
 
 
 class _Explode:

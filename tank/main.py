@@ -1208,10 +1208,11 @@ async def base_proxy(path: str, request: Request) -> Response:
 
 _LOCAL_ZENAS_HOSTS = frozenset({"agent-zenas", "localhost", "127.0.0.1"})
 _ZENAS_PATH = re.compile(
-    r"^(consents|matters|pool|pool/status|pool/load|health|review|rule-cards|worked|matches|training-pairs|drafts)$"
+    r"^(consents|matters|pool|pool/status|health|review|rule-cards|worked|matches|training-pairs|drafts|tenants)$"
     r"|^(matters|documents|rule-cards|worked)/[0-9a-fA-F-]{36}$"
     r"|^matters/[0-9a-fA-F-]{36}/documents$"
     r"|^documents/[0-9a-fA-F-]{36}/reviews$"
+    r"|^pool/sources/[A-Za-z0-9._-]{1,80}/load$"
 )
 
 
@@ -1243,6 +1244,11 @@ def public_feed(value: Any) -> Any:
             continue
         kept[key] = public_feed(item)
     return kept
+
+
+def _pool_report(path: str) -> bool:
+    """Pool status and a single-source load both return source rows. Strip keys from either."""
+    return path in {"pool", "pool/status"} or (path.startswith("pool/sources/") and path.endswith("/load"))
 
 
 def annotate_key_set(payload: Any) -> Any:
@@ -1313,7 +1319,8 @@ async def zenas_proxy(path: str, request: Request) -> Response:
         raise HTTPException(status_code=503, detail="Zenas room is unreachable") from None
     content = resp.content
     media = resp.headers.get("content-type")
-    if path.strip("/") in {"pool", "pool/status"} and media and "json" in media:
+    cleaned = path.strip().strip("/")
+    if _pool_report(cleaned) and media and "json" in media:
         try:
             data = json.loads(content)
         except json.JSONDecodeError:

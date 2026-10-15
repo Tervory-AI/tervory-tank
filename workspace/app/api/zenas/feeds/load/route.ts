@@ -15,9 +15,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Name the source to load." }, { status: 400 });
   }
   try {
-    const res = await zenas("pool/load", {
+    const res = await zenas(`pool/sources/${source}/load`, {
       method: "POST",
-      body: JSON.stringify({ source, home_region: homeRegion() }),
+      body: JSON.stringify({ home_region: homeRegion() }),
     });
     if (res.status === 404) {
       return NextResponse.json({ error: "Loading is not available on this server yet." }, { status: 404 });

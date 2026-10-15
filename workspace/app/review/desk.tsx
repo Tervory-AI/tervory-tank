@@ -7,6 +7,7 @@ import type { ReviewItem } from "@/app/api/zenas/rules";
 export function ReviewDesk({ items, note, reviewer }: { items: ReviewItem[]; note: string; reviewer: string }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   async function sign(event: React.FormEvent<HTMLFormElement>, item: ReviewItem) {
@@ -15,6 +16,7 @@ export function ReviewDesk({ items, note, reviewer }: { items: ReviewItem[]; not
     const decision = form.get("decision") === "rejected" ? "rejected" : "approved";
     setBusy(true);
     setError(null);
+    setConfirm(null);
     const res = await fetch(`/api/zenas/documents/${item.documentId}/reviews`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -30,6 +32,7 @@ export function ReviewDesk({ items, note, reviewer }: { items: ReviewItem[]; not
       setError(typeof data.error === "string" ? data.error : "The sign-off was not recorded.");
       return;
     }
+    setConfirm(decision === "approved" ? "Released to client" : "Sent back");
     router.refresh();
   }
 
@@ -37,6 +40,7 @@ export function ReviewDesk({ items, note, reviewer }: { items: ReviewItem[]; not
     <>
       <p className="meta">Signed in as {reviewer}</p>
       {note && <p className="note">{note}</p>}
+      {confirm && <p className="confirm">{confirm}</p>}
       {error && <p className="error">{error}</p>}
       {items.length === 0 && <p className="note">Nothing is waiting in your jurisdictions.</p>}
       {items.map((item) => (
