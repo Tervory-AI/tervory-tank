@@ -1,12 +1,20 @@
 import { NextResponse } from "next/server";
 import { approveSkill, listSkills, retireSkill, runSkillEvals, trySkill } from "@/lib/tank";
+import { rejectUnlessFounder } from "@/app/review/access";
 import { currentTenant } from "@/lib/tenant";
 
 export const runtime = "nodejs";
 
-// The Skala registry is platform-wide (skills are Tervory's, not a tenant's), but
-// only a signed-in user may see it, and every action is recorded under their user id.
+// Skills rejects everyone except a founder. Hiding the link is not the fix.
+async function deny(): Promise<NextResponse | null> {
+  const denied = await rejectUnlessFounder();
+  if (!denied) return null;
+  return NextResponse.json({ error: denied.error }, { status: denied.status });
+}
+
 export async function GET() {
+  const denied = await deny();
+  if (denied) return denied;
   try {
     await currentTenant();
     return NextResponse.json(await listSkills());
@@ -16,6 +24,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const denied = await deny();
+  if (denied) return denied;
   const body = (await req.json().catch(() => null)) as { id?: string; version?: string; action?: string; input?: Record<string, unknown> } | null;
   const { id, version, action } = body ?? {};
   if (!id || !version || !action) return NextResponse.json({ error: "id, version, action required" }, { status: 400 });

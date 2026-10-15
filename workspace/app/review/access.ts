@@ -1,5 +1,6 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { notFound } from "next/navigation";
+import { founderDenial, type FounderDenial } from "./founder";
 
 export type Reviewer = {
   userId: string;
@@ -22,4 +23,10 @@ export async function requireReviewer(): Promise<Reviewer> {
   if (!admissionNo || jurisdictions.length === 0) notFound();
   const name = [user.firstName, user.lastName].filter(Boolean).join(" ") || "Reviewer";
   return { userId, name, admissionNo, jurisdictions };
+}
+
+/** Skills and Tank. Same Clerk user list as the admin page (`TERVORY_ADMIN_USER_IDS`). */
+export async function rejectUnlessFounder(): Promise<FounderDenial | null> {
+  const { userId } = await auth();
+  return founderDenial(userId, process.env["TERVORY_ADMIN_USER_IDS"]);
 }
