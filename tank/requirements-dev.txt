@@ -4,3 +4,6 @@ ruff==0.11.12
 # Zenas seal tests import AES-GCM. The running box installs this from
 # agents/zenas/Dockerfile. Tank's image does not.
 cryptography==50.0.2
+# Zenas pool tests extract citations with eyecite. The pool-loader image
+# installs the same pin from agents/zenas/requirements.txt.
+eyecite==2.7.8
