@@ -5,10 +5,13 @@ from __future__ import annotations
 import csv
 import io
 import json
-import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid5
+
+from rigbox.feeds import map_google_merchant as _map_google_merchant
+from rigbox.feeds import map_shopify as _map_shopify
+from rigbox.feeds import map_woocommerce as _map_woocommerce
 
 _NAMESPACE = UUID("11111111-1111-4111-8111-111111111111")
 _REQUIRED = ("sku", "name", "brand", "category", "price", "currency", "image_url", "active")
@@ -65,115 +68,15 @@ def read_publish(text: str) -> dict[str, Any]:
 
 
 def map_shopify(body: Any, currency: str) -> dict[str, Any]:
-    products = body.get("products") if isinstance(body, dict) else None
-    if not isinstance(products, list):
-        return {"rows": [], "rejected": [{"row": 0, "reason": "shopify feed has no products list"}]}
-    rows: list[dict[str, Any]] = []
-    rejected: list[dict[str, Any]] = []
-    for index, item in enumerate(products, start=1):
-        if not isinstance(item, dict):
-            rejected.append({"row": index, "reason": "product is not an object"})
-            continue
-        variants = item.get("variants") if isinstance(item.get("variants"), list) else []
-        variant = next((entry for entry in variants if isinstance(entry, dict) and entry.get("sku")), None)
-        images = item.get("images") if isinstance(item.get("images"), list) else []
-        image = ""
-        if images and isinstance(images[0], dict):
-            image = str(images[0].get("src") or "")
-        sku = str(variant.get("sku") or "") if variant else ""
-        price = str(variant.get("price") or "") if variant else ""
-        row, reason = _feed_row(
-            sku=sku,
-            name=str(item.get("title") or ""),
-            brand=str(item.get("vendor") or ""),
-            category=str(item.get("product_type") or ""),
-            price=price,
-            currency=currency,
-            image_url=image,
-            url=str(item.get("handle") or ""),
-            gtin=str(variant.get("barcode") or "") if variant else "",
-            active=str(item.get("status") or "active").lower() in {"active", "publish", "yes"},
-        )
-        if reason:
-            rejected.append({"row": index, "reason": reason})
-        else:
-            rows.append(row)
-    return {"rows": rows, "rejected": rejected}
+    return _map_shopify(body, currency)
 
 
 def map_woocommerce(body: Any, currency: str) -> dict[str, Any]:
-    items = body if isinstance(body, list) else None
-    if items is None and isinstance(body, dict):
-        items = body.get("products") if isinstance(body.get("products"), list) else None
-    if not isinstance(items, list):
-        return {"rows": [], "rejected": [{"row": 0, "reason": "woocommerce feed has no products list"}]}
-    rows: list[dict[str, Any]] = []
-    rejected: list[dict[str, Any]] = []
-    for index, item in enumerate(items, start=1):
-        if not isinstance(item, dict):
-            rejected.append({"row": index, "reason": "product is not an object"})
-            continue
-        images = item.get("images") if isinstance(item.get("images"), list) else []
-        image = str(images[0].get("src") or "") if images and isinstance(images[0], dict) else ""
-        categories = item.get("categories") if isinstance(item.get("categories"), list) else []
-        category = ""
-        if categories and isinstance(categories[0], dict):
-            category = str(categories[0].get("name") or "")
-        brand = ""
-        brands = item.get("brands") if isinstance(item.get("brands"), list) else []
-        if brands and isinstance(brands[0], dict):
-            brand = str(brands[0].get("name") or "")
-        status = str(item.get("status") or "publish").lower()
-        row, reason = _feed_row(
-            sku=str(item.get("sku") or ""),
-            name=str(item.get("name") or ""),
-            brand=brand,
-            category=category,
-            price=str(item.get("price") or item.get("regular_price") or ""),
-            currency=currency,
-            image_url=image,
-            url=str(item.get("permalink") or ""),
-            gtin=str(item.get("global_unique_id") or item.get("gtin") or ""),
-            active=status in {"publish", "active", "yes"},
-        )
-        if reason:
-            rejected.append({"row": index, "reason": reason})
-        else:
-            rows.append(row)
-    return {"rows": rows, "rejected": rejected}
+    return _map_woocommerce(body, currency)
 
 
 def map_google_merchant(text: str) -> dict[str, Any]:
-    try:
-        root = ET.fromstring(text)
-    except ET.ParseError:
-        return {"rows": [], "rejected": [{"row": 0, "reason": "merchant feed is not XML"}]}
-    items = [element for element in root.iter() if _local(element.tag) == "item"]
-    rows: list[dict[str, Any]] = []
-    rejected: list[dict[str, Any]] = []
-    for index, item in enumerate(items, start=1):
-        fields = {_local(child.tag): (child.text or "").strip() for child in list(item)}
-        amount, currency = _split_price(fields.get("price") or "")
-        available = (fields.get("availability") or "in stock").lower()
-        row, reason = _feed_row(
-            sku=fields.get("id") or "",
-            name=fields.get("title") or "",
-            brand=fields.get("brand") or "",
-            category=fields.get("product_type") or fields.get("google_product_category") or "",
-            price=amount,
-            currency=currency,
-            image_url=fields.get("image_link") or "",
-            url=fields.get("link") or "",
-            gtin=fields.get("gtin") or "",
-            active=available.startswith("in"),
-        )
-        if reason:
-            rejected.append({"row": index, "reason": reason})
-        else:
-            rows.append(row)
-    if not items:
-        rejected.append({"row": 0, "reason": "merchant feed has no items"})
-    return {"rows": rows, "rejected": rejected}
+    return _map_google_merchant(text)
 
 
 def price_patch(update: dict[str, Any]) -> dict[str, Any]:
@@ -326,46 +229,3 @@ def _active_value(value: Any) -> bool:
     if text in {"no", "false", "0", "inactive"}:
         return False
     raise ValueError("active must be yes or no")
-
-
-def _feed_row(**fields: Any) -> tuple[dict[str, Any] | None, str]:
-    try:
-        if not fields["sku"] or not fields["name"] or not fields["brand"] or not fields["category"]:
-            raise ValueError("missing sku, name, brand, or category")
-        if not fields["image_url"]:
-            raise ValueError("missing image_url")
-        price = _money_text(fields["price"])
-        if not fields["currency"]:
-            raise ValueError("missing currency")
-    except ValueError as exc:
-        return None, str(exc)
-    return (
-        {
-            "sku": fields["sku"],
-            "gtin": fields.get("gtin") or None,
-            "name": fields["name"],
-            "brand": fields["brand"],
-            "category": fields["category"],
-            "price": price,
-            "currency": str(fields["currency"]).upper(),
-            "image_url": fields["image_url"],
-            "url": fields.get("url") or "",
-            "family": "",
-            "active": bool(fields["active"]),
-            "attributes": {},
-        },
-        "",
-    )
-
-
-def _split_price(value: str) -> tuple[str, str]:
-    parts = value.split()
-    if len(parts) >= 2:
-        return parts[0], parts[1]
-    return value, ""
-
-
-def _local(tag: str) -> str:
-    if "}" in tag:
-        return tag.rsplit("}", 1)[1]
-    return tag
