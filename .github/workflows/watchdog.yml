@@ -1,0 +1,44 @@
+# Uptime check. Every 10 minutes once this file is on main, plus a manual run.
+#   gh api -X POST repos/Tervory-AI/tervory-tank/actions/workflows/watchdog.yml/dispatches \
+#     -f ref=main
+# On failure it opens one GitHub issue per thing, titled "Down: <thing>", label incident.
+# A later green check comments "recovered" and closes that issue. It never opens a second one.
+#
+# Rules:
+# - COOLIFY_TOKEN is read from the repo secret and is never printed.
+# - Logs are status codes and names only. Response bodies are not printed.
+# - force_fail is a drill. Leave it empty for a real run.
+name: watchdog
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+    inputs:
+      force_fail:
+        description: "Leave empty. A check name here fails that one check on purpose."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: watchdog
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      COOLIFY_URL: ${{ vars.COOLIFY_URL || 'https://coolify.tervory.com' }}
+      COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+      FORCE_FAIL: ${{ github.event_name == 'workflow_dispatch' && inputs.force_fail || '' }}
+      GITHUB_TOKEN: ${{ github.token }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check
+        run: python3 .github/scripts/watchdog.py
