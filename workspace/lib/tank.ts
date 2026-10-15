@@ -163,29 +163,29 @@ export type EvalResult = {
 };
 
 export function listSkills(): Promise<Skill[]> {
-  return tank<Skill[]>("/v1/skills", { method: "GET" });
+  return tank<Skill[]>("/v1/skala", { method: "GET" });
 }
 export function runSkillEvals(id: string, version: string, by: string): Promise<EvalResult> {
-  return tank<EvalResult>(`/v1/skills/${encodeURIComponent(id)}/${encodeURIComponent(version)}/evals`, {
+  return tank<EvalResult>(`/v1/skala/${encodeURIComponent(id)}/${encodeURIComponent(version)}/evals`, {
     method: "POST",
     body: JSON.stringify({ by }),
   });
 }
 // Owner testing: run one skill version on one input, without touching any records.
 export function trySkill(tenantId: string, id: string, version: string, input: Record<string, unknown>) {
-  return tank<Record<string, unknown>>(`/v1/skills/${encodeURIComponent(id)}/run`, {
+  return tank<Record<string, unknown>>(`/v1/skala/${encodeURIComponent(id)}/run`, {
     method: "POST",
     body: JSON.stringify({ tenant_id: tenantId, version, input, preview: true }),
   });
 }
 export function approveSkill(id: string, version: string, by: string): Promise<{ ok: true }> {
-  return tank<{ ok: true }>(`/v1/skills/${encodeURIComponent(id)}/${encodeURIComponent(version)}/approve`, {
+  return tank<{ ok: true }>(`/v1/skala/${encodeURIComponent(id)}/${encodeURIComponent(version)}/approve`, {
     method: "POST",
     body: JSON.stringify({ by }),
   });
 }
 export function retireSkill(id: string, version: string, by: string): Promise<{ ok: true }> {
-  return tank<{ ok: true }>(`/v1/skills/${encodeURIComponent(id)}/${encodeURIComponent(version)}/retire`, {
+  return tank<{ ok: true }>(`/v1/skala/${encodeURIComponent(id)}/${encodeURIComponent(version)}/retire`, {
     method: "POST",
     body: JSON.stringify({ by }),
   });

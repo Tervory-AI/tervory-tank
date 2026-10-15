@@ -84,6 +84,9 @@ def test_page_address_is_skala_and_skills_is_gone():
     assert "redirect" not in config
     assert "redirect" not in middleware
     assert "/skills" not in middleware
+    client = _text(ROOT / "workspace" / "lib" / "tank.ts")
+    assert "/v1/skala" in client
+    assert "/v1/skills" not in client
 
 
 def test_product_header_skips_sign_in_sign_up_and_onboarding():
