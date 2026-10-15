@@ -104,6 +104,8 @@ export function FounderConsole({
               <Link key={span} href={`/admin?days=${span}`} className={span === days ? "on" : ""}>{span} days</Link>
             ))}
           </nav>
+          <Link className="back" href="/admin/feeds">Zenas feeds</Link>
+          <Link className="back" href="/admin/homes">Home region</Link>
           <Link className="back" href="/">Back to the workspace</Link>
         </div>
       </header>
