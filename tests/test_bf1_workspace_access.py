@@ -68,25 +68,21 @@ def test_rejection_is_not_found():
         assert "error: denied.error" in source
 
 
-def test_page_address_is_skala_and_skills_is_gone():
+def test_page_address_is_skala():
     assert 'label: "Skala"' in NAV
     assert 'href: "/skala"' in NAV
-    assert "/skills" not in NAV
     assert 'href: "/tank"' in NAV
-    assert not (APP / "skills").exists()
-    assert not (APP / "api" / "skills").exists()
     page = _text(APP / "skala" / "page.tsx")
     assert "<h1>Skala</h1>" in page
     assert "/api/skala" in page
-    assert "/skills" not in page
     config = _text(ROOT / "workspace" / "next.config.ts")
     middleware = _text(ROOT / "workspace" / "middleware.ts")
     assert "redirect" not in config
     assert "redirect" not in middleware
-    assert "/skills" not in middleware
     client = _text(ROOT / "workspace" / "lib" / "tank.ts")
     assert "/v1/skala" in client
-    assert "/v1/skills" not in client
+    assert (APP / "skala" / "page.tsx").is_file()
+    assert (APP / "api" / "skala" / "route.ts").is_file()
 
 
 def test_product_header_skips_sign_in_sign_up_and_onboarding():

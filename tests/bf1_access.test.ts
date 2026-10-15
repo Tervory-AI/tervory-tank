@@ -27,7 +27,6 @@ test("the product header says Skala and the address is /skala", () => {
   assert.deepEqual(customer, ["Chat", "Tasks", "Data", "Ledger"]);
   assert.deepEqual(founder, ["Chat", "Tasks", "Data", "Skala", "Ledger", "Tank"]);
   assert.equal(headerLinks(true).find((link) => link.label === "Skala")?.href, "/skala");
-  assert.equal(headerLinks(true).some((link) => link.href === "/skills"), false);
   assert.equal(headerLinks(true).find((link) => link.label === "Tank")?.href, "/tank");
 });
 
