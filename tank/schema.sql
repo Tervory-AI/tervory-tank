@@ -602,3 +602,12 @@ INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_toke
   ('zenas.plain_language', 1, 'luna', 'standard', 'tenant', 800,
    'You rewrite for a business reader. Do not change the legal effect. Keep every citation. Do not add law. Reply with the text only.')
 ON CONFLICT DO NOTHING;
+
+-- Model names a tenant may use. No prompts, no client facts. Thread B (#50) asked for this table.
+-- Tank does not read it yet. The live list is still TANK_PROVIDER_ALLOW.
+CREATE TABLE IF NOT EXISTS tank.tenant_providers (
+    tenant_id   uuid NOT NULL,
+    model_name  text NOT NULL,
+    hosted_in   text NOT NULL,
+    PRIMARY KEY (tenant_id, model_name)
+);
