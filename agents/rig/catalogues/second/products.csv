@@ -1,0 +1,3 @@
+sku,gtin,name,brand,category,price,currency,image_url,product_url,family,active,attributes
+SECOND-LAMP-01,,Second Desk Lamp,SecondBrand,light,42.00,USD,https://second.example/img/lamp.jpg,https://second.example/lamp,SECOND-DESK,yes,
+SECOND-SHADE-01,,Second Lamp Shade,SecondBrand,shade,8.00,USD,https://second.example/img/shade.jpg,https://second.example/shade,,yes,

@@ -1,0 +1,11 @@
+{
+  "tenant_id": "22222222-2222-4222-8222-222222222222",
+  "email": "second@example.com",
+  "webhook": "https://second.example/hooks/rig",
+  "keys": [
+    {
+      "key": "rk_pub_secondtenant",
+      "origins": ["https://second.example"]
+    }
+  ]
+}
