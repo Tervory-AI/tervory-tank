@@ -7,7 +7,10 @@ A skill call is a function the room supplies (the chassis, through Tank).
 from __future__ import annotations
 
 import asyncio
+import json
+import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 BASE_CORE = [
@@ -104,6 +107,47 @@ def page_html(scraped: dict[str, Any]) -> str:
 
 def engine_id(engine: str | None) -> str:
     return engine if isinstance(engine, str) else ""
+
+
+_ENGINE_ID = re.compile(r"[a-z][a-z0-9_]{0,31}")
+_SKILLS = Path(__file__).resolve().parents[2] / "tank" / "skills"
+
+
+def _string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in value:
+        text = " ".join(str(item).lower().split())
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        out.append(text)
+    return out
+
+
+def engine_terms(engine: str | None) -> dict[str, list[str]]:
+    """Words and hosts an engine asks the core skills to apply. Empty when there is no engine."""
+    empty = {"generic_words": [], "blocked_hosts": [], "generic_locals": []}
+    if not isinstance(engine, str) or _ENGINE_ID.fullmatch(engine) is None:
+        return empty
+    root = _SKILLS / f"{engine}.profile"
+    if not root.is_dir():
+        return empty
+    pack: dict[str, Any] = {}
+    for path in sorted(root.glob("*/data/*.json")):
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(loaded, dict):
+            pack.update(loaded)
+    return {
+        "generic_words": _string_list(pack.get("generic_words")),
+        "blocked_hosts": _string_list(pack.get("blocked_hosts")),
+        "generic_locals": _string_list(pack.get("generic_locals")),
+    }
 
 
 def result_line(done: int, ready: int, failed: int, cost: float) -> str:
@@ -215,8 +259,9 @@ async def enrich_one(
         name = val(profile, "name") or raw_input.get("name") or ""
         city = val(profile, "city") or ""
         state = val(profile, "state") or ""
+        terms = engine_terms(engine)
 
-        site = await call("base.find_site", {
+        site_in: dict[str, Any] = {
             "name": name,
             "city": city,
             "state": state,
@@ -224,7 +269,12 @@ async def enrich_one(
             "zip": str(val(profile, "zip") or raw_input.get("zip") or ""),
             "address": str(val(profile, "street") or raw_input.get("address") or ""),
             "website": raw_input.get("website") or raw_input.get("url") or "",
-        })
+        }
+        if terms["generic_words"]:
+            site_in["generic_words"] = terms["generic_words"]
+        if terms["blocked_hosts"]:
+            site_in["blocked_hosts"] = terms["blocked_hosts"]
+        site = await call("base.find_site", site_in)
         cost += cost_of(site)
         if site.get("website"):
             profile["website"] = site["website"]
@@ -284,11 +334,14 @@ async def enrich_one(
                         "cost_usd": round(float(ex.get("_cost_usd") or 0), 6),
                     }
 
-        con = await call("base.contacts", {
+        con_in: dict[str, Any] = {
             "website": url or "",
             "emails": val(profile, "emails", []),
             "people": val(profile, "people", []),
-        })
+        }
+        if terms["generic_locals"]:
+            con_in["generic_words"] = terms["generic_locals"]
+        con = await call("base.contacts", con_in)
         cost += cost_of(con)
         if con.get("confidence"):
             profile["contacts"] = {
