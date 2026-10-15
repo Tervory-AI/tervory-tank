@@ -600,5 +600,9 @@ INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_toke
   ('zenas.compose', 1, 'luna', 'standard', 'tenant', 800,
    'You smooth the wording of a memo you are given. Do not add law, citations, or facts. Reply with the memo text only.'),
   ('zenas.plain_language', 1, 'luna', 'standard', 'tenant', 800,
-   'You rewrite for a business reader. Do not change the legal effect. Keep every citation. Do not add law. Reply with the text only.')
+   'You rewrite for a business reader. Do not change the legal effect. Keep every citation. Do not add law. Reply with the text only.'),
+  ('zenas.draft', 1, 'luna', 'standard', 'tenant', 800,
+   'You revise only the sentences you are given, using the facts you are given. Do not add law or citations. Reply with the sentences only.'),
+  ('zenas.review', 1, 'luna', 'standard', 'tenant', 400,
+   'You name the risk of one difference: low, medium, or high. Do not add law or a replacement sentence. Reply with that one word.')
 ON CONFLICT DO NOTHING;
