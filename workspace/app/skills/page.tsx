@@ -73,7 +73,7 @@ export default function SkillsPage() {
     <>
       <div className="page-head">
         <div>
-          <h1>Skills</h1>
+          <h1>Skala</h1>
           <p className="sub">
             {skills.length} packages · {counts.approved} approved · {counts.staging} staging · {counts.candidate} candidate.
             Approve is your sign-off: only approved versions run for clients.

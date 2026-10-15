@@ -21,11 +21,11 @@ test("a blank list and a missing user are rejected", () => {
   assert.equal(isListedFounder("user_nope", "user_founder"), false);
 });
 
-test("product links hide Skills and Tank from a customer", () => {
+test("product links hide Skala and Tank from a customer", () => {
   const customer = headerLinks(false).map((link) => link.label);
   const founder = headerLinks(true).map((link) => link.label);
   assert.deepEqual(customer, ["Chat", "Tasks", "Data", "Ledger"]);
-  assert.deepEqual(founder, ["Chat", "Tasks", "Data", "Skills", "Ledger", "Tank"]);
+  assert.deepEqual(founder, ["Chat", "Tasks", "Data", "Skala", "Ledger", "Tank"]);
 });
 
 test("sign-in, sign-up, and onboarding use their own shell", () => {

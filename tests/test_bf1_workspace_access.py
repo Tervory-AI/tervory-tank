@@ -68,6 +68,14 @@ def test_rejection_is_not_found():
         assert "error: denied.error" in source
 
 
+def test_registry_label_is_skala():
+    page = _text(APP / "skills" / "page.tsx")
+    assert "<h1>Skala</h1>" in page
+    assert 'label: "Skala"' in NAV
+    assert 'href: "/skills"' in NAV
+    assert "/api/skills" in page
+
+
 def test_product_header_skips_sign_in_sign_up_and_onboarding():
     assert "OrganizationSwitcher" not in LAYOUT
     body = SHELL.split("export function Shell", 1)[1]

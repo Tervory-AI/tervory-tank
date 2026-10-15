@@ -1,13 +1,13 @@
 export type NavLink = { href: string; label: string };
 
-/** Product header links. Skills and Tank stay for a founder only. */
+/** Product header links. Skala and Tank stay for a founder only. */
 export function headerLinks(founder: boolean): NavLink[] {
   const links: NavLink[] = [
     { href: "/", label: "Chat" },
     { href: "/tasks", label: "Tasks" },
     { href: "/data", label: "Data" },
   ];
-  if (founder) links.push({ href: "/skills", label: "Skills" });
+  if (founder) links.push({ href: "/skills", label: "Skala" });
   links.push({ href: "/ledger", label: "Ledger" });
   if (founder) links.push({ href: "/tank", label: "Tank" });
   return links;
