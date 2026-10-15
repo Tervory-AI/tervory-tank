@@ -34,27 +34,22 @@ def _parsed() -> dict:
     return yaml.safe_load(COMPOSE)
 
 
-def test_za_compose_is_a_zenas_stack_with_its_own_stores() -> None:
+ROOM_COMPOSE = (ROOT / "agents" / "zenas" / "docker-compose.za.yml").read_text(encoding="utf-8")
+MODEL_KEY = re.compile(r"(ANTHROPIC|OPENAI|GEMINI|XAI|DEEPSEEK|MISTRAL|MOONSHOT|OPENROUTER|PERPLEXITY)_API_KEY")
+
+
+def test_za_compose_is_a_tank_stack_with_its_own_stores() -> None:
     data = _parsed()
     assert set(data["services"]) == {
-        "postgres", "redis", "qdrant", "hermes", "litellm", "tank", "agent-roles", "agent-zenas",
-        "pool-loader",
+        "postgres", "redis", "qdrant", "hermes", "litellm", "tank", "agent-roles",
     }
-    loader = data["services"]["pool-loader"]
-    assert loader["environment"]["TANK_REGION"] == "za"
-    assert loader["networks"] == ["default"]
-    assert loader["volumes"] == ["za_agent_data:/data"]
-    assert "ports" not in loader
     for name, service in data["services"].items():
         assert service["environment"]["TANK_REGION"] == "za", name
     assert data["networks"]["default"]["name"] == "tervory-za"
     assert data["networks"]["tervory-gw-zenas"]["name"] == "tervory-gw-zenas"
     assert "external" not in data["networks"]["default"]
     assert "external" not in data["networks"]["tervory-gw-zenas"]
-    assert set(data["volumes"]) == {
-        "za_pgdata", "za_redisdata", "za_qdrantdata", "za_agent_data", "za_backups",
-    }
-    assert data["services"]["agent-zenas"]["networks"] == ["tervory-gw-zenas"]
+    assert set(data["volumes"]) == {"za_pgdata", "za_redisdata", "za_qdrantdata", "za_backups"}
     assert "tervory-gw-zenas" in data["services"]["postgres"]["networks"]
     assert "tervory-gw-zenas" in data["services"]["tank"]["networks"]
     assert "tervory-gw-zenas" in data["services"]["hermes"]["networks"]
@@ -63,6 +58,34 @@ def test_za_compose_is_a_zenas_stack_with_its_own_stores() -> None:
     assert "za-api.tervory.com" in COMPOSE
     for service in data["services"].values():
         assert "ports" not in service
+
+
+def test_model_keys_reach_only_litellm_in_za() -> None:
+    for name, service in _parsed()["services"].items():
+        keys = [k for k in service["environment"] if MODEL_KEY.search(k)]
+        assert not keys or name == "litellm", (name, keys)
+    assert not MODEL_KEY.search(ROOM_COMPOSE)
+
+
+def test_za_zenas_room_is_its_own_resource_on_the_corridor() -> None:
+    room = yaml.safe_load(ROOM_COMPOSE)
+    assert set(room["services"]) == {"agent-zenas", "pool-loader"}
+    assert room["networks"]["gw"] == {"external": True, "name": "tervory-gw-zenas"}
+    for name, service in room["services"].items():
+        assert service["environment"]["TANK_REGION"] == "za", name
+        assert service["networks"] == ["gw"], name
+        assert "ports" not in service, name
+        assert "env_file" not in service, name
+        for banned in ("POSTGRES_PASSWORD", "POSTGRES_USER", "LITELLM_MASTER_KEY", "TANK_API_KEY", "QDRANT_API_KEY"):
+            assert banned not in service["environment"], (name, banned)
+    agent = room["services"]["agent-zenas"]["environment"]
+    assert agent["TANK_KEY"] == "${TANK_KEY:-}"
+    assert agent["DATABASE_URL"].startswith("postgresql://agent_zenas:")
+    loader = room["services"]["pool-loader"]
+    assert loader["volumes"] == ["za_agent_data:/data"]
+    assert "load" in loader["profiles"]
+    lowered = ROOM_COMPOSE.lower()
+    assert "us-east" not in lowered and "boston" not in lowered
 
 
 def test_za_compose_names_no_us_host_and_does_not_replicate() -> None:
@@ -426,3 +449,5 @@ async def test_evals_pass_for_a_skill_that_calls_a_model(tmp_path, monkeypatch: 
     preview = main.make_ctx(pkg, uuid.uuid4(), preview=True)
     await preview.model([{"role": "user", "content": "hi"}], task_type="tier0.answer")
     assert homes == ["us-east", "us-east"]
+
+
