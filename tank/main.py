@@ -2027,6 +2027,28 @@ def _request_home(raw: bytes, query_home: str | None) -> str | None:
     return query_home
 
 
+ZENAS_TIMEOUT = 60.0
+ZENAS_LOAD_TIMEOUT_DEFAULT = 900.0
+
+
+def zenas_timeout(path: str) -> float:
+    """Seconds Tank waits for the Zenas room.
+
+    A source load (pool/sources/{id}/load) can run for minutes (the
+    Constitutional Court waits between calls), so it gets ZENAS_LOAD_TIMEOUT
+    (default 900). Every other call keeps 60 seconds.
+    """
+    parts = path.strip().strip("/").split("/")
+    if len(parts) == 4 and parts[0] == "pool" and parts[1] == "sources" and parts[3] == "load":
+        raw = os.environ.get("ZENAS_LOAD_TIMEOUT", "").strip()
+        try:
+            value = float(raw) if raw else ZENAS_LOAD_TIMEOUT_DEFAULT
+        except ValueError:
+            value = ZENAS_LOAD_TIMEOUT_DEFAULT
+        return value if value > 0 else ZENAS_LOAD_TIMEOUT_DEFAULT
+    return ZENAS_TIMEOUT
+
+
 @app.api_route("/v1/zenas/{path:path}", methods=["GET", "POST"], dependencies=[Depends(require_key)])
 async def zenas_proxy(path: str, request: Request) -> Response:
     """Forward /v1/zenas/* to the Zenas room on this server only.
@@ -2053,7 +2075,7 @@ async def zenas_proxy(path: str, request: Request) -> Response:
             content=raw if raw else None,
             params=list(request.query_params.multi_items()),
             headers=headers,
-            timeout=60,
+            timeout=zenas_timeout(path),
         )
     except httpx.HTTPError:
         raise HTTPException(status_code=503, detail="Zenas room is unreachable") from None
