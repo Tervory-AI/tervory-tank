@@ -161,10 +161,29 @@ services:
     expose:
       - "8000"
 
-  # Thread A — pool-loader
-  # Do not define that service in this file. Thread A (the library) adds it.
-  # It runs only on this ZA box, sets TANK_REGION to za, and uses the postgres
-  # service above. It must not name a US host or join a US network.
+  # pool-loader. This box only. It does not join a network from the other region.
+  pool-loader:
+    build:
+      context: ./agents
+      dockerfile: zenas/pool/Dockerfile
+    restart: "no"
+    mem_limit: 2g
+    cpus: 0.25
+    profiles:
+      - load
+    environment:
+      TANK_REGION: za
+      DATABASE_URL: postgresql://agent_zenas:${AGENT_DB_PASSWORD_ZENAS}@postgres:5432/${POSTGRES_DB:-tervory}
+      LAWS_AFRICA_API_TOKEN: ${LAWS_AFRICA_API_TOKEN:-}
+      POOL_DISK_CAP_BYTES: ${POOL_DISK_CAP_BYTES:-}
+      SAFLII_MIN_INTERVAL: ${SAFLII_MIN_INTERVAL:-1}
+      POOL_LOAD: ${POOL_LOAD:-}
+      DATA_DIR: /data
+    volumes:
+      - za_agent_data:/data
+    networks:
+      - default
+    entrypoint: ["nice", "-n", "19", "python", "-m", "agents.zenas.pool.bulk"]
 
 volumes:
   # Local to this server. Do not replicate these to the United States.
