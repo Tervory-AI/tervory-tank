@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 import json
 import re
@@ -20,7 +21,7 @@ sys.path.insert(0, str(ROOT / "agents" / "_chassis"))
 from rigbox.catalogue import map_google_merchant, map_shopify, map_woocommerce  # noqa: E402
 from rigbox.logic import has_breakdown, rule_matches  # noqa: E402
 from rigbox.service import RecordingHandoff, Service  # noqa: E402
-from rigbox.store import MemoryStore, _SEARCH, schema_statements  # noqa: E402
+from rigbox.store import MemoryStore, PgStore, _SEARCH, schema_statements  # noqa: E402
 from rigbox.api import mount  # noqa: E402
 
 EXAMPLE = ROOT / "agents" / "rig" / "catalogues" / "example"
@@ -498,3 +499,98 @@ def test_model_skill_cases_do_not_call_the_model() -> None:
     asyncio.run(run_cases("rig.ask"))
     asyncio.run(run_cases("rig.explain"))
     asyncio.run(run_cases("rig.fit_suggest"))
+
+
+class InsufficientPrivilegeError(Exception):
+    """Stand-in for asyncpg.exceptions.InsufficientPrivilegeError. No database."""
+
+
+class _SchemaConn:
+    def __init__(self, *, present: bool, error: BaseException | None) -> None:
+        self.present = present
+        self.error = error
+        self.executed: list[str] = []
+        self.lookups: list[str] = []
+
+    async def execute(self, statement: str) -> None:
+        self.executed.append(statement)
+        if self.error is not None:
+            raise self.error
+
+    async def fetchval(self, query: str) -> int | None:
+        self.lookups.append(query)
+        return 1 if self.present else None
+
+
+class _SchemaPool:
+    def __init__(self, conn: _SchemaConn) -> None:
+        self.conn = conn
+
+    def acquire(self) -> "_SchemaAcquire":
+        return _SchemaAcquire(self.conn)
+
+
+class _SchemaAcquire:
+    def __init__(self, conn: _SchemaConn) -> None:
+        self.conn = conn
+
+    async def __aenter__(self) -> _SchemaConn:
+        return self.conn
+
+    async def __aexit__(self, *_exc: object) -> None:
+        return None
+
+
+def _denied() -> InsufficientPrivilegeError:
+    return InsufficientPrivilegeError("permission denied for database tervory")
+
+
+def _apply(
+    statements: list[str],
+    *,
+    present: bool,
+    error: BaseException | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> _SchemaConn:
+    import rigbox.store as store
+
+    monkeypatch.setattr(store, "schema_statements", lambda: list(statements))
+    conn = _SchemaConn(present=present, error=error)
+    asyncio.run(PgStore(_SchemaPool(conn)).apply_schema())
+    return conn
+
+
+def test_commented_create_schema_is_not_fatal_when_agent_rig_exists(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A leading ``--`` comment must not hide CREATE SCHEMA from the applicator."""
+    statement = "-- Rig's room.\n\nCREATE SCHEMA IF NOT EXISTS agent_rig"
+    real = schema_statements()[0]
+    assert real.lstrip().startswith("--")
+    assert "CREATE SCHEMA IF NOT EXISTS agent_rig" in real
+
+    for text in (statement, real):
+        kept = _apply([text], present=True, error=_denied(), monkeypatch=monkeypatch)
+        assert kept.executed == [text]
+        assert kept.lookups == ["SELECT 1 FROM pg_namespace WHERE nspname = 'agent_rig'"]
+        with pytest.raises(InsufficientPrivilegeError):
+            _apply([text], present=False, error=_denied(), monkeypatch=monkeypatch)
+
+    with pytest.raises(RuntimeError):
+        _apply([statement], present=True, error=RuntimeError("syntax error"), monkeypatch=monkeypatch)
+    other = "-- not this room\nCREATE SCHEMA IF NOT EXISTS other_box"
+    with pytest.raises(InsufficientPrivilegeError):
+        _apply([other], present=True, error=_denied(), monkeypatch=monkeypatch)
+
+
+def test_commented_extension_and_trigram_failures_stay_optional(monkeypatch: pytest.MonkeyPatch) -> None:
+    failure = RuntimeError("pg_trgm is not available")
+    optional = [
+        "-- trigram type\n\nCREATE EXTENSION IF NOT EXISTS pg_trgm",
+        "-- name search\nCREATE INDEX IF NOT EXISTS products_name_trgm ON agent_rig.products USING gin (name gin_trgm_ops)",
+    ]
+    applied = _apply(optional, present=True, error=failure, monkeypatch=monkeypatch)
+    assert applied.executed == optional
+    assert applied.lookups == []
+
+    commented_table = "-- mentions gin_trgm_ops but is not that index\nCREATE TABLE agent_rig.products (sku text)"
+    with pytest.raises(RuntimeError):
+        _apply([commented_table], present=True, error=failure, monkeypatch=monkeypatch)
