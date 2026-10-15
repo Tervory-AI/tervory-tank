@@ -12,5 +12,9 @@ export const metadata: Metadata = {
 };
 
 export default function OnboardingLayout({ children }: { children: React.ReactNode }) {
-  return <div className={`${body.variable} ${heading.variable} ${mono.variable} onboard`}>{children}</div>;
+  return (
+    <div className={`${body.variable} ${heading.variable} ${mono.variable} onboard`} style={{ minHeight: "100vh" }}>
+      {children}
+    </div>
+  );
 }

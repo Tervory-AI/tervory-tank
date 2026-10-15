@@ -1,11 +1,20 @@
 import { NextResponse } from "next/server";
 import { evalsSummary, ladder, promoteCandidate, rollbackModel, setCandidate } from "@/lib/tank";
+import { rejectUnlessFounder } from "@/app/review/access";
 import { currentTenant } from "@/lib/tenant";
 
 export const runtime = "nodejs";
 
-// The ladder is platform-wide (Tervory's routing policy), visible to signed-in users; actions carry the user id.
+// Tank rejects everyone except a founder. A model moves only on a founder's click.
+async function deny(): Promise<NextResponse | null> {
+  const denied = await rejectUnlessFounder();
+  if (!denied) return null;
+  return NextResponse.json({ error: denied.error }, { status: denied.status });
+}
+
 export async function GET() {
+  const denied = await deny();
+  if (denied) return denied;
   try {
     await currentTenant();
     const [rows, evals] = await Promise.all([ladder(), evalsSummary()]);
@@ -16,6 +25,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const denied = await deny();
+  if (denied) return denied;
   const body = (await req.json().catch(() => null)) as { task_type?: string; action?: string; candidate_model?: string | null; shadow_rate?: number } | null;
   if (!body?.task_type || !body.action) return NextResponse.json({ error: "task_type and action required" }, { status: 400 });
   try {

@@ -30,7 +30,7 @@ export default function SkillsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    const res = await fetch("/api/skills", { cache: "no-store" });
+    const res = await fetch("/api/skala", { cache: "no-store" });
     const data = await res.json();
     if (res.ok) setSkills(data as Skill[]);
     else setError(data.error ?? `HTTP ${res.status}`);
@@ -42,7 +42,7 @@ export default function SkillsPage() {
     if (!quiet) setBusy(key);
     setError(null);
     try {
-      const res = await fetch("/api/skills", {
+      const res = await fetch("/api/skala", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ id: s.id, version: s.version, action }),
@@ -73,7 +73,7 @@ export default function SkillsPage() {
     <>
       <div className="page-head">
         <div>
-          <h1>Skills</h1>
+          <h1>Skala</h1>
           <p className="sub">
             {skills.length} packages · {counts.approved} approved · {counts.staging} staging · {counts.candidate} candidate.
             Approve is your sign-off: only approved versions run for clients.
