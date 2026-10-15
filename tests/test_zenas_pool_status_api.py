@@ -1,5 +1,6 @@
 """Feeds switchboard: status for this box, and a load of one source."""
 
+import asyncio
 import json
 import sys
 from pathlib import Path
@@ -12,20 +13,47 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from agents.zenas.pool.api import create_app
 from agents.zenas.pool.catalogue import sources_for_region
 from agents.zenas.pool.nightly import packaged_snapshots
+from agents.zenas.pool.region import RegionError
 from agents.zenas.pool.store import MemoryStore
 
 MARKER = "marker-" + ("b" * 16)
 
 
-def _client(region: str, *, snapshots=None, http_get=None, live=None) -> TestClient:
+def _open(region: str, *, snapshots=None, http_get=None, live=None):
+    store = MemoryStore()
     app = create_app(
-        MemoryStore(),
+        store,
         region=region,
         snapshots=snapshots,
         http_get=http_get,
         live=live,
     )
-    return TestClient(app)
+    return TestClient(app), store
+
+
+def _client(region: str, *, snapshots=None, http_get=None, live=None) -> TestClient:
+    client, _store = _open(region, snapshots=snapshots, http_get=http_get, live=live)
+    return client
+
+
+def _nothing_stored(store: MemoryStore) -> None:
+    assert store.sources == {}
+    assert store.docs == {}
+    assert store.chunks == {}
+    assert store.links == {}
+    assert store.runs == {}
+    assert store.cites == {}
+    assert store.checkpoints == {}
+    assert asyncio.run(store.version_count()) == 0
+
+
+@pytest.mark.parametrize("region", [None, "", "eu"])
+def test_create_app_refuses_a_missing_or_unknown_region(region):
+    store = MemoryStore()
+    with pytest.raises(RegionError):
+        create_app(store, region=region)
+    assert store.home_region in (None, "")
+    _nothing_stored(store)
 
 
 def test_status_lists_this_region_and_never_the_key(monkeypatch: pytest.MonkeyPatch):
@@ -81,36 +109,43 @@ def test_load_one_za_source_from_a_snapshot():
     assert popia["documents"] == 0
 
 
-def test_load_refuses_a_source_from_the_other_region():
+def test_a_us_source_on_a_za_app_is_refused_with_no_fetch_and_no_write():
     seen: list[str] = []
 
     async def get(url, headers):
         seen.append(url)
         return b"US-TEXT"
 
-    client = _client("za", http_get=get, live=True)
+    client, store = _open("za", http_get=get, live=True)
     response = client.post("/pool/sources/courtlistener/load")
     assert response.status_code == 409
     assert "courtlistener" in response.json()["detail"]
     assert seen == []
+    _nothing_stored(store)
+    assert asyncio.run(store.get_source("courtlistener")) is None
     status = client.get("/pool/status").json()
+    assert status["region"] == "za"
+    assert status["sources"]
     assert all(row["region"] == "za" for row in status["sources"])
     assert "courtlistener" not in {row["source_id"] for row in status["sources"]}
 
 
-def test_us_box_refuses_a_za_source():
+def test_a_za_source_on_a_us_app_is_refused_with_no_fetch_and_no_write():
     seen: list[str] = []
 
     async def get(url, headers):
         seen.append(url)
         return b"ZA-TEXT"
 
-    client = _client("us-east", http_get=get, live=True)
+    client, store = _open("us-east", http_get=get, live=True)
     response = client.post("/pool/sources/saflii/load")
     assert response.status_code == 409
     assert seen == []
+    _nothing_stored(store)
+    assert asyncio.run(store.get_source("saflii")) is None
     listed = client.get("/pool/status").json()
     assert listed["region"] == "us-east"
+    assert listed["sources"]
     assert "saflii" not in {row["source_id"] for row in listed["sources"]}
     assert "courtlistener" in {row["source_id"] for row in listed["sources"]}
 
