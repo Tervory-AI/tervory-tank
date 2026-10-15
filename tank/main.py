@@ -1851,6 +1851,18 @@ _ZENAS_PATH = re.compile(
 )
 
 
+def zenas_box_region() -> str:
+    """Region for /v1/zenas/*. Unset or unknown is refused. There is no us-east default.
+
+    Other Tank routes still use box_region(), which follows the Boston compose
+    default. Zenas does not.
+    """
+    raw = os.environ.get("TANK_REGION", "").strip().lower()
+    if raw not in (US_REGION, ZA_REGION):
+        raise HTTPException(status_code=409, detail="TANK_REGION must be us-east or za")
+    return raw
+
+
 def zenas_upstream(path: str) -> str:
     """URL of a Zenas route on this server. Any other host is refused."""
     cleaned = (path or "").strip().strip("/")
@@ -1931,7 +1943,8 @@ async def zenas_proxy(path: str, request: Request) -> Response:
     called, and nothing is stored here. The room URL is not taken from the request.
     """
     raw = await request.body()
-    foreign = home_region_refusal(_request_home(raw, request.query_params.get("home_region")), box_region())
+    box = zenas_box_region()
+    foreign = home_region_refusal(_request_home(raw, request.query_params.get("home_region")), box)
     if foreign:
         raise HTTPException(status_code=403, detail=foreign)
     target = zenas_upstream(path)
