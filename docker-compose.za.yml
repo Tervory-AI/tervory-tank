@@ -97,7 +97,7 @@ services:
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       TANK_API_KEY: ${TANK_API_KEY}
       TERVORY_ADMIN_USER_IDS: ${TERVORY_ADMIN_USER_IDS:-}
-      # Homes-only key: POST /v1/zenas/tenants with home za, nothing else (the Boston Workspace holds it).
+      # Homes-only key: POST /v1/zenas/tenants with home za, nothing else (the US Workspace holds it).
       TANK_HOMES_KEY: ${TANK_HOMES_KEY:-}
       TANK_KEY_ZENAS: ${TANK_KEY_ZENAS:-}
       ZA_HOSTED_MODELS: ${ZA_HOSTED_MODELS:-}
