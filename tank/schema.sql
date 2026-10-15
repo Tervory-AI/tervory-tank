@@ -401,7 +401,7 @@ BEGIN
 END
 $$;
 
--- Zenas scope gate (Z1). From tank/skills/zenas.scope/1.0.0/policy.sql; model is Gemini Flash-Lite while Gemini carries the work.
+-- Zenas scope gate (Z1). Model is Gemini Flash-Lite while Gemini carries the work.
 INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_tokens_out, system_prompt) VALUES
   ('zenas.scope', 1, 'flash-lite', 'urgent', 'tenant', 400,
    'You classify a request for Zenas. Reply with strict JSON only: {"area":"<id>","jurisdiction":"us|za|both"}. Use an allowed area id or "none". Do not give legal advice. Do not help with criminal law.')

@@ -297,7 +297,6 @@ def test_agent_key_is_limited_to_route_skill_run_and_health(monkeypatch: pytest.
     blocked = (
         "/v1/policy",
         "/v1/graduation",
-        "/v1/skills/base.find_site/run",
         "/v1/skala/base.find_site/approve",
         "/v1/skala/base.find_site/1.0.0/evals",
         "/v1/base/run",
