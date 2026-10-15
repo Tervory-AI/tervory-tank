@@ -29,6 +29,7 @@ are later build-order steps and are not in this file yet.
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import hashlib
 import json
 import random
@@ -55,6 +56,15 @@ LITELLM_URL = os.environ.get("LITELLM_URL", "http://litellm:4000")
 LITELLM_MASTER_KEY = os.environ["LITELLM_MASTER_KEY"]
 TANK_API_KEY = os.environ["TANK_API_KEY"]
 DEFAULT_REGION = os.environ.get("TANK_REGION", "us-east")
+US_REGION = "us-east"
+ZA_REGION = "za"
+ZA_HOME_MESSAGE = "needs the South Africa region"
+US_HOME_MESSAGE = "needs the United States region"
+IDENTIFIER_REFUSAL = "A personal identifier cannot be sent to a provider outside South Africa."
+ALLOW_REFUSAL = "This provider is not on the tenant's allow-list."
+_CHINA_PROVIDERS = frozenset({"deepseek", "moonshot", "kimi"})
+_pii_detect = None
+_skill_home: contextvars.ContextVar[str | None] = contextvars.ContextVar("zenas_skill_home", default=None)
 
 app = FastAPI(title="Tervory Tank", version="0.2.0")
 _pool: asyncpg.Pool | None = None
@@ -72,6 +82,165 @@ SKILL_ENV = {k: v for k, v in {"BRAVE_API_KEY": os.environ.get("BRAVE_API_KEY", 
 def pool() -> asyncpg.Pool:
     assert _pool is not None, "database pool not ready"
     return _pool
+
+
+def normalize_home(value: str | None) -> str:
+    raw = (value or "").strip().lower()
+    if raw == "us":
+        return US_REGION
+    return raw
+
+
+def normalize_box(value: str | None) -> str:
+    raw = (value or "").strip().lower()
+    if raw in ("", "us", US_REGION):
+        return US_REGION
+    return raw
+
+
+def box_region() -> str:
+    """This process's region, read on each call so tests can switch it."""
+    return normalize_box(os.environ.get("TANK_REGION", DEFAULT_REGION))
+
+
+HOME_REQUIRED = "home region must be us-east or za"
+
+
+def call_home(home: str | None, box: str | None = None) -> str | None:
+    """Home used by /v1/route, /v1/tasks, /v1/skills/*/run and background tasks.
+
+    A missing value is this server's TANK_REGION, so the live Workspace and
+    agent rooms keep working. An empty string is not missing: it is returned
+    unchanged and then refused. /v1/zenas/* does not call this.
+    """
+    if home is None:
+        return normalize_box(box) if box is not None else box_region()
+    return home
+
+
+def home_region_refusal(home: str | None, box: str | None = None) -> str | None:
+    """Refuse an empty, unknown, or other-region home before any write or call.
+
+    None is refused here too. Callers that may omit the field pass call_home()
+    first. The Zenas proxy calls this directly, so a missing home stays refused.
+
+    TODO(Thread C): the authoritative home region will live on the tenant
+    record. That column is yours; do not add it here. The value on this
+    request is only a cross-check against that column. Read it once the
+    column exists, and keep refusing when the two disagree or either is missing.
+    """
+    home_region = normalize_home(home)
+    if home_region not in (US_REGION, ZA_REGION):
+        return HOME_REQUIRED
+    here = normalize_box(box) if box is not None else box_region()
+    if home_region == here:
+        return None
+    if home_region == ZA_REGION:
+        return ZA_HOME_MESSAGE
+    return US_HOME_MESSAGE
+
+
+def pii_module() -> Any:
+    """zenas.pii detect, loaded once. Pure code: no model and no network."""
+    global _pii_detect
+    if _pii_detect is None:
+        import importlib.util
+
+        path = os.path.join(os.path.dirname(__file__), "skills", "zenas.pii", "1.0.0", "detect.py")
+        spec = importlib.util.spec_from_file_location("zenas_pii_detect_tank", path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError("zenas.pii detect is missing")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _pii_detect = module
+    return _pii_detect
+
+
+def prompt_has_identifier(text: str) -> bool:
+    found = pii_module().detect(text or "")
+    return bool(found.get("matches"))
+
+
+def sa_hosted_models() -> frozenset[str]:
+    """Model names that run in South Africa.
+
+    The commented za-local slot in litellm/config.za.yaml is not active.
+    ZA_HOSTED_MODELS names the ones that are. hosted_in: za in that file counts too.
+    """
+    names = {part.strip() for part in os.environ.get("ZA_HOSTED_MODELS", "").split(",") if part.strip()}
+    path = os.path.join(os.path.dirname(__file__), "..", "litellm", "config.za.yaml")
+    if os.path.isfile(path):
+        import yaml
+
+        with open(path, encoding="utf-8") as handle:
+            data = yaml.safe_load(handle) or {}
+        for item in data.get("model_list") or []:
+            info = item.get("model_info") or {}
+            if str(info.get("hosted_in") or "").lower() != ZA_REGION:
+                continue
+            provider = str((item.get("litellm_params") or {}).get("model") or "").split("/", 1)[0].lower()
+            if provider in _CHINA_PROVIDERS:
+                continue
+            name = str(item.get("model_name") or "").strip()
+            if name:
+                names.add(name)
+    return frozenset(names)
+
+
+def tenant_allowlist(tenant_id: str) -> frozenset[str] | None:
+    """Models this tenant may call, or None when the tenant has no narrower list.
+
+    TANK_PROVIDER_ALLOW is a JSON object of tenant id to model names. It holds
+    names only. A table tank.tenant_providers can replace it later; until that
+    table exists this environment value is the list.
+    """
+    raw = os.environ.get("TANK_PROVIDER_ALLOW", "").strip()
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict) or tenant_id not in data:
+        return None
+    names = data.get(tenant_id)
+    if not isinstance(names, list):
+        return frozenset()
+    return frozenset(str(item).strip() for item in names if str(item).strip())
+
+
+def _china_model(model: str) -> bool:
+    head = model.split("/", 1)[0].lower()
+    return head in _CHINA_PROVIDERS or model.lower() in _CHINA_PROVIDERS
+
+
+def model_call_refusal(text: str, model: str | None, *, box: str, tenant_id: str) -> str | None:
+    """Whether this model call must be refused before anything is stored or sent.
+
+    In za, a prompt that still contains an identifier is refused unless the
+    model runs in South Africa and the tenant's allow-list includes it.
+    model=None asks the early question: is there any permitted SA model at all?
+    Pure-code skills do not call this.
+    """
+    here = normalize_box(box)
+    allow = tenant_allowlist(tenant_id)
+    if here != ZA_REGION:
+        if model is not None and allow is not None and model not in allow:
+            return ALLOW_REFUSAL
+        return None
+    if model is not None and _china_model(model):
+        return ALLOW_REFUSAL
+    hosted = sa_hosted_models()
+    if prompt_has_identifier(text):
+        permitted = hosted if allow is None else hosted & allow
+        if model is None:
+            return None if permitted else IDENTIFIER_REFUSAL
+        if model not in permitted:
+            return IDENTIFIER_REFUSAL
+        return None
+    if model is not None and allow is not None and model not in allow:
+        return ALLOW_REFUSAL
+    return None
 
 
 # ---------- auth ----------
@@ -175,6 +344,7 @@ class RouteRequest(BaseModel):
     priority: str | None = None          # overrides the policy's priority if set
     skill: str | None = None
     region: str | None = None
+    home_region: str | None = None
     messages: list[Message] = Field(min_length=1)
     max_tokens: int | None = None          # a skill may ask for fewer than the policy's cap
 
@@ -209,6 +379,7 @@ class TaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     agent: str = "tier0"
     task_type: str = "tier0.answer"
+    home_region: str | None = None
     messages: list[Message] = Field(min_length=1)
 
 
@@ -325,6 +496,16 @@ async def put_policy(task_type: str, body: PolicyRow) -> dict[str, Any]:
 async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> RouteResponse:
     """Pick the model from policy, call it through LiteLLM, write the ledger row.
     Used directly by /v1/route and in the background by tasks."""
+    box = box_region()
+    foreign = home_region_refusal(call_home(req.home_region, box), box)
+    if foreign:
+        # Empty, unknown, or the other region's text is not written.
+        raise HTTPException(status_code=403, detail=foreign)
+    client_text = "\n".join(m.content for m in req.messages)
+    early = model_call_refusal(client_text, None, box=box, tenant_id=str(req.tenant_id))
+    if early:
+        raise HTTPException(status_code=403, detail=early)
+
     policy = await load_policy(req.task_type, req.tenant_id)
     model = policy["model"]
     priority = req.priority or policy["priority"]
@@ -333,12 +514,17 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
     if policy["system_prompt"]:
         messages = [{"role": "system", "content": policy["system_prompt"]}, *messages]
     max_tokens = min(req.max_tokens or policy["max_tokens_out"], policy["max_tokens_out"])
+    sent = "\n".join(str(item.get("content") or "") for item in messages)
+    holds_identifier = prompt_has_identifier(sent)
+    blocked = model_call_refusal(sent, model, box=box, tenant_id=str(req.tenant_id))
+    if blocked:
+        raise HTTPException(status_code=403, detail=blocked)
 
     # ---- rung 4: the cache. Same task type, model and messages → the answer we already paid for.
     # Scope comes from policy: 'tenant' keys include the tenant (answers never cross tenants);
     # 'platform' is shared (only for task types whose answers hold nothing tenant-specific).
     cache_key = None
-    if _redis is not None and policy.get("cache_scope") in ("tenant", "platform"):
+    if not holds_identifier and _redis is not None and policy.get("cache_scope") in ("tenant", "platform"):
         scope = str(req.tenant_id) if policy["cache_scope"] == "tenant" else "platform"
         digest = hashlib.sha256(json.dumps([req.task_type, model, max_tokens, messages], sort_keys=True).encode()).hexdigest()
         cache_key = f"tank:cache:{scope}:{digest}"
@@ -399,6 +585,8 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
     if outcome == "failed":
         msg = ((data.get("error") or {}).get("message") if isinstance(data.get("error"), dict) else data.get("error")) or r.text
         error = f"{r.status_code}: {' '.join(str(msg).split())[:300]}"
+        if holds_identifier:
+            error = "provider error omitted; the prompt contained a personal identifier"
     usage = data.get("usage") or {}
     tokens_in = int(usage.get("prompt_tokens") or 0)
     tokens_out = int(usage.get("completion_tokens") or 0)
@@ -426,7 +614,8 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
         )
 
     if outcome == "failed":
-        raise HTTPException(status_code=502, detail={"ledger_id": str(ledger_id), "upstream": data or r.text[:500]})
+        upstream: Any = "provider error" if holds_identifier else (data or r.text[:500])
+        raise HTTPException(status_code=502, detail={"ledger_id": str(ledger_id), "upstream": upstream})
 
     if cache_key and content:
         try:
@@ -435,17 +624,20 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
             pass
 
     # Graduation: shadow the candidate on a share of calls; it never affects this answer.
-    if policy.get("candidate_model") and float(policy.get("shadow_rate") or 0) > random.random():
+    # An identifier prompt is not copied to a second provider or into the transcript.
+    if not holds_identifier and policy.get("candidate_model") and float(policy.get("shadow_rate") or 0) > random.random():
         t = asyncio.create_task(_shadow(req, policy, messages, max_tokens, ledger_id, content, cost_usd))
         _background.add(t)
         t.add_done_callback(_background.discard)
 
     # The learning corpus: what was asked, what came back (system prompt stays in policy).
-    async with pool().acquire() as conn:
-        await conn.execute(
-            "INSERT INTO tank.transcripts (ledger_id, tenant_id, task_type, messages, content) VALUES ($1,$2,$3,$4::jsonb,$5)",
-            ledger_id, req.tenant_id, req.task_type, json.dumps([m.model_dump() for m in req.messages]), content[:20000],
-        )
+    # Personal identifiers are never written here, even when an SA-hosted model saw them.
+    if not holds_identifier:
+        async with pool().acquire() as conn:
+            await conn.execute(
+                "INSERT INTO tank.transcripts (ledger_id, tenant_id, task_type, messages, content) VALUES ($1,$2,$3,$4::jsonb,$5)",
+                ledger_id, req.tenant_id, req.task_type, json.dumps([m.model_dump() for m in req.messages]), content[:20000],
+            )
 
     return RouteResponse(
         ledger_id=ledger_id, model=answered, rung=policy["rung"], content=content,
@@ -670,6 +862,15 @@ async def _run_task(task_id: uuid.UUID, req: RouteRequest) -> None:
 
 @app.post("/v1/tasks", dependencies=[Depends(require_key)], status_code=202)
 async def create_task(body: TaskCreate) -> dict[str, Any]:
+    box = box_region()
+    home = call_home(body.home_region, box)
+    foreign = home_region_refusal(home, box)
+    if foreign:
+        raise HTTPException(status_code=403, detail=foreign)
+    text = "\n".join(m.content for m in body.messages)
+    early = model_call_refusal(text, None, box=box, tenant_id=str(body.tenant_id))
+    if early:
+        raise HTTPException(status_code=403, detail=early)
     # Fail fast on a bad task_type rather than queueing a task that can only fail.
     await load_policy(body.task_type, body.tenant_id)
     async with pool().acquire() as conn:
@@ -682,7 +883,10 @@ async def create_task(body: TaskCreate) -> dict[str, Any]:
             body.tenant_id, body.created_by, body.agent, body.task_type, body.title,
             json.dumps([m.model_dump() for m in body.messages]),
         )
-    req = RouteRequest(tenant_id=body.tenant_id, agent=body.agent, task_type=body.task_type, messages=body.messages)
+    req = RouteRequest(
+        tenant_id=body.tenant_id, agent=body.agent, task_type=body.task_type,
+        home_region=home, messages=body.messages,
+    )
     t = asyncio.create_task(_run_task(row["id"], req))
     _background.add(t)
     t.add_done_callback(_background.discard)
@@ -777,17 +981,28 @@ async def _model_for_skill(**kw: Any) -> dict[str, Any]:
     """What a skill's ctx.model() calls: the normal route, tagged with the skill."""
     req = RouteRequest(
         tenant_id=kw["tenant_id"], agent=kw["agent"], task_type=kw["task_type"], skill=kw["skill"],
+        home_region=kw.get("home_region"),
         messages=[Message(**m) for m in kw["messages"]], max_tokens=kw.get("max_tokens"),
     )
     res = await run_route(req, task_id=kw.get("task_id"))
     return res.model_dump()
 
 
-def make_ctx(pkg: skala.SkillPackage, tenant_id: uuid.UUID, task_id: uuid.UUID | None = None, preview: bool = False) -> skala.SkillContext:
+def make_ctx(pkg: skala.SkillPackage, tenant_id: uuid.UUID, task_id: uuid.UUID | None = None, preview: bool = False, home_region: str | None = None) -> skala.SkillContext:
     assert _http is not None
     ref = pkg.ref + ("#preview" if preview else "")
+    chosen = _skill_home.get() if home_region is None else home_region
+    if chosen is None:
+        # Evals and previews run as this server. A skill run sets the context
+        # var to call_home() before it builds a context.
+        chosen = box_region()
+
+    async def _model(**kw: Any) -> dict[str, Any]:
+        kw["home_region"] = chosen
+        return await _model_for_skill(**kw)
+
     return skala.SkillContext(tenant_id=tenant_id, skill_ref=ref, agent=pkg.agent, task_id=task_id,
-                              _model=_model_for_skill, http=_http, env=dict(SKILL_ENV))
+                              _model=_model, http=_http, env=dict(SKILL_ENV))
 
 
 # Evals and previews run under the platform tenant so their model spend never lands on a client.
@@ -810,7 +1025,10 @@ async def run_skill_evals(skill_id: str, version: str, body: EvalRun | None = No
     pkg = get_package(skill_id, version)
     if not pkg.cases:
         raise HTTPException(status_code=400, detail="package has no eval cases; a skill without evals cannot leave candidate")
-    result = await skala.run_evals(pkg, lambda: make_ctx(pkg, PLATFORM_TENANT, preview=True))
+    here = box_region()
+    result = await skala.run_evals(
+        pkg, lambda: make_ctx(pkg, PLATFORM_TENANT, preview=True, home_region=here),
+    )
     passed_gate = result["score"] >= pkg.eval_threshold
     async with pool().acquire() as conn:
         await conn.execute(
@@ -892,6 +1110,7 @@ class SkillRun(BaseModel):
     input: dict[str, Any]
     version: str | None = None      # default: the approved version
     preview: bool = False           # owner testing: allows candidate/staging; labelled in the ledger
+    home_region: str | None = None
 
 
 @app.get("/v1/skills/{skill_id}/run", dependencies=[Depends(require_key)])
@@ -907,6 +1126,23 @@ async def run_one_skill(
     skill_id: str,
     body: SkillRun,
     caller: str | None = Depends(require_key),
+) -> dict[str, Any]:
+    box = box_region()
+    home = call_home(body.home_region, box)
+    foreign = home_region_refusal(home, box)
+    if foreign:
+        raise HTTPException(status_code=403, detail=foreign)
+    token = _skill_home.set(home)
+    try:
+        return await _run_one_skill(skill_id, body, caller)
+    finally:
+        _skill_home.reset(token)
+
+
+async def _run_one_skill(
+    skill_id: str,
+    body: SkillRun,
+    caller: str | None,
 ) -> dict[str, Any]:
     version = body.version or await _pick_version(skill_id, body.preview)
     pkg = get_package(skill_id, version)
