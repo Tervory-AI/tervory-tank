@@ -12,6 +12,10 @@ from typing import Any, Mapping
 _AGENT = re.compile(r"^[a-z][a-z0-9_]{0,40}$")
 _PREFIX = "AGENT_DB_PASSWORD_"
 
+# Extra schemas an agent owns besides agent_<name>. Shared public law for one
+# region, not tenant data. Created here because the agent role cannot create schemas.
+EXTRA_SCHEMAS: dict[str, tuple[str, ...]] = {"zenas": ("zenas_pool",)}
+
 _ROLE_OPTIONS = (
     "LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS"
 )
@@ -85,6 +89,17 @@ $own$;
 """.strip()
 
 
+def _extra_schemas(agent: str, name: str) -> list[str]:
+    out: list[str] = []
+    for schema in EXTRA_SCHEMAS.get(agent, ()):
+        out += [
+            f"CREATE SCHEMA IF NOT EXISTS {schema} AUTHORIZATION {name}",
+            f"ALTER SCHEMA {schema} OWNER TO {name}",
+            f"GRANT USAGE, CREATE ON SCHEMA {schema} TO {name}",
+        ]
+    return out
+
+
 def _guarded_revoke(schema: str, name: str) -> str:
     """REVOKE is skipped when that schema does not exist yet. Tank may still be starting."""
     tag = f"revoke{schema}"
@@ -123,6 +138,7 @@ ${tag}$;
 """.strip(),
         f"GRANT USAGE, CREATE ON SCHEMA {name} TO {name}",
         _ownership(name),
+        *_extra_schemas(agent, name),
         _guarded_revoke("tank", name),
         _guarded_revoke("base", name),
         f"REVOKE ALL ON SCHEMA public FROM {name}",
