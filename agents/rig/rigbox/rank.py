@@ -7,10 +7,12 @@ change when it is at least four characters. A piece of a longer word does not
 count. A model code that is one edit from a real code, or a short prefix of
 one, can surface that row only as a closest match. It is never an exact hit.
 A digit in a model name, including a single digit joined to or following
-a model word, has to sit on that same row. The only other missing-model
-candidate is the token directly after a known brand, and only when that
-token is not a common English word and not a catalogue word or its typo.
-Words before the brand, and ordinary words after it, are not model codes.
+a model word, has to sit on that same row. The token directly after a
+known brand is exact only when it is in that catalogue's names, categories,
+or attributes, or in the bundled shopping glossary. Any other word there,
+including an ordinary English word or a short code, is a missing model.
+Tokens that do not follow a brand still use the English frequency list:
+they are not model codes unless they carry a digit the catalogue lacks.
 A word that is already a category outranks a shared name, so that part comes
 ahead of the product it attaches to. Typos use character trigrams, including
 the text with spaces and dashes removed.
@@ -83,8 +85,9 @@ _RELATIONS = (
 )
 _COMPACT = re.compile(r"[^a-z0-9]+")
 _WORD = re.compile(r"[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*")
-# Frequency list bundled with the agent. Search does not download it.
+# Frequency list and shopping glossary. Search does not download either.
 _ENGLISH_PATH = Path(__file__).resolve().parents[1] / "english-20k.txt"
+_SHOPPING_PATH = Path(__file__).resolve().parents[1] / "shopping.txt"
 # Relation words are not model codes. "go" would otherwise look like a short code.
 _SKIP = frozenset(
     {
@@ -124,6 +127,7 @@ def _load_english(path: Path) -> frozenset[str]:
 
 
 _ENGLISH = _load_english(_ENGLISH_PATH)
+_SHOPPING = _load_english(_SHOPPING_PATH)
 
 
 def _common_english(token: str) -> bool:
@@ -131,6 +135,13 @@ def _common_english(token: str) -> bool:
     if token in _ENGLISH or token in _FILLER:
         return True
     return len(token) >= 5 and token.endswith("s") and token[:-1] in _ENGLISH
+
+
+def _shopping_word(token: str) -> bool:
+    """A curated descriptor: price, colour, material, carry, size, use, or noun."""
+    if token in _SHOPPING or token in _FILLER:
+        return True
+    return _covered(token, _SHOPPING)
 
 
 def search(payload: dict[str, Any]) -> dict[str, Any]:
@@ -247,17 +258,25 @@ def _one_edit(left: str, right: str) -> bool:
     return edits == 1
 
 
-def _catalogue_tokens(rows: list[dict[str, Any]]) -> set[str]:
-    found: set[str] = set()
-    for row in rows:
-        found.update(_tokens(_text(row)))
-    return found
-
-
 def _brand_tokens(rows: list[dict[str, Any]]) -> set[str]:
     found: set[str] = set()
     for row in rows:
         found.update(_tokens(str(row.get("brand") or "")))
+    return found
+
+
+def _listed_tokens(rows: list[dict[str, Any]]) -> set[str]:
+    """Names, categories, attributes, and the brand's own words."""
+    found: set[str] = set()
+    for row in rows:
+        found.update(_tokens(str(row.get("name") or "")))
+        found.update(_tokens(str(row.get("category") or "")))
+        found.update(_tokens(str(row.get("brand") or "")))
+        attributes = row.get("attributes") or {}
+        if isinstance(attributes, dict):
+            for key, value in attributes.items():
+                found.update(_tokens(str(key)))
+                found.update(_tokens(str(value)))
     return found
 
 
@@ -287,24 +306,27 @@ def _model_parts(parts: list[str]) -> list[str]:
     return kept
 
 
-def _fuzzy_word(token: str, vocab: set[str]) -> bool:
-    """A misspelling of a catalogue word, not a different model code."""
-    if len(token) < 3 or not token.isalpha():
+def _after_brand(flat: list[tuple[str, str]], index: int, brands: set[str]) -> bool:
+    """True when this token is the next content word after a brand token."""
+    if index <= 0 or flat[index][1] in _FILLER:
         return False
-    return any(item.isalpha() and _similarity(token, item) >= _FUZZY for item in vocab)
+    previous = index - 1
+    while previous >= 0 and flat[previous][1] in _FILLER:
+        previous -= 1
+    return previous >= 0 and _covered(flat[previous][1], brands)
 
 
 def _unmatched_models(query: str, rows: list[dict[str, Any]]) -> list[str]:
     """Model codes that no single row carries exactly.
 
-    A token is a missing model only in two cases. It contains a digit that
-    is not on the same row as the rest of that code. Or it is the token
-    directly after a known brand, and it is not a common English word, not
-    a catalogue word, and not a typo of one. Anything before the brand, and
-    any ordinary word, is not a model code.
+    A digit that is not on the same row as the rest of its code is missing.
+    The word directly after a brand is exact only when the catalogue lists
+    it, or the shopping glossary does. English words and short codes there
+    are missing models. A word that does not follow a brand is not a model
+    code; the frequency list is what marks ordinary English in that position.
     """
-    vocab = _catalogue_tokens(rows)
     brands = _brand_tokens(rows)
+    listed = _listed_tokens(rows)
     parsed = [(word, _tokens(word)) for word in _WORD.findall(query)]
     missing: list[str] = []
     seen: set[str] = set()
@@ -334,14 +356,15 @@ def _unmatched_models(query: str, rows: list[dict[str, Any]]) -> list[str]:
     for word, parts in parsed:
         for part in parts:
             flat.append((word, part))
-    for index in range(1, len(flat)):
-        previous = flat[index - 1][1]
-        surface, token = flat[index]
-        if not _covered(previous, brands):
+    for index, (surface, token) in enumerate(flat):
+        if any(char.isdigit() for char in token):
             continue
-        if any(char.isdigit() for char in token) or _common_english(token) or len(token) < 2:
-            continue
-        if _covered(token, vocab) or _fuzzy_word(token, vocab):
+        if not _after_brand(flat, index, brands):
+            # Away from the brand, the frequency list marks ordinary English.
+            # Those words, and any other non-digit token here, are not models.
+            if _common_english(token) or not any(char.isdigit() for char in token):
+                continue
+        if _covered(token, listed) or _shopping_word(token):
             continue
         add(surface)
     return missing
