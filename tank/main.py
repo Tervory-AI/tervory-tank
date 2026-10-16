@@ -474,11 +474,16 @@ async def _shutdown() -> None:
         await _pool.close()
 
 
+def tank_sha() -> str:
+    """Git SHA baked into the image. Empty until a build sets TANK_GIT_SHA."""
+    return os.environ.get("TANK_GIT_SHA", "").strip() or "unknown"
+
+
 @app.get("/health")
 async def health() -> dict[str, Any]:
     async with pool().acquire() as conn:
         await conn.fetchval("SELECT 1")
-    return {"ok": True, "region": DEFAULT_REGION}
+    return {"ok": True, "region": DEFAULT_REGION, "sha": tank_sha()}
 
 
 # ---------- policy ----------

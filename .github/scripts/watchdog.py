@@ -15,8 +15,9 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 
-# The main Coolify app has no health check, so it reports running:unknown.
-# That uuid is the production app in docs/RUNBOOK.md.
+# Boston's stack has no health check on the running deploy, so it reports
+# running:unknown. That uuid is the production app in docs/RUNBOOK.md.
+# After the compose health checks are deployed, this exception can go.
 MAIN_APP = "xnmc0jkz8j9i5jh1jwanbsfv"
 
 # The site root returns 404 to a signed-out caller (Clerk protects it).
@@ -234,7 +235,9 @@ def coolify_results() -> list[Result]:
     if not payload:
         return [Result("Coolify", "down", "HTTP 200 no applications")]
 
-    results: list[Result] = []
+    # A later green call must be able to close "Down: Coolify". Per-app rows
+    # use another name, so recovery never matched that issue.
+    results: list[Result] = [Result("Coolify", "ok", "HTTP 200")]
     for item in payload:
         if not isinstance(item, dict):
             results.append(Result("Coolify", "down", "unreadable application"))

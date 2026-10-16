@@ -38,14 +38,27 @@ services:
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   qdrant:
-    image: qdrant/qdrant:latest
+    # Same pin as the South Africa stack. :latest made the two regions drift.
+    image: qdrant/qdrant:v1.19.2
     restart: unless-stopped
     environment:
       QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY}
     volumes:
       - qdrantdata:/qdrant/storage
+    healthcheck:
+      # The image has bash and no HTTP client. An open port is the check it ships with.
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   # Shared memory. On the main network so it can reach Qdrant, and on every
   # agent corridor. Today that is tervory-gw-template. A later agent task adds
@@ -103,6 +116,13 @@ services:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       MOONSHOT_API_KEY: ${MOONSHOT_API_KEY:-}
       PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}
+    healthcheck:
+      # Port only. The image is Python; this does not send the master key.
+      test: ["CMD", "python", "-c", "import socket; s=socket.create_connection(('127.0.0.1',4000),3); s.close()"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   searxng:
     build: ./searxng
@@ -115,6 +135,12 @@ services:
       - tervory-gw-base
     expose:
       - "8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   tiger:
     build: ./tiger
@@ -130,9 +156,20 @@ services:
       - tervory-gw-base
     expose:
       - "3000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   tank:
-    build: ./tank
+    build:
+      context: ./tank
+      args:
+        # Coolify sets SOURCE_COMMIT at image build. GIT_SHA overrides it for a local build.
+        SOURCE_COMMIT: ${SOURCE_COMMIT:-}
+        GIT_SHA: ${GIT_SHA:-}
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
@@ -171,6 +208,12 @@ services:
       - tervory-gw-rig
     expose:
       - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   # One shot. Creates agent_<name> roles, then exits. Tank does not wait on it
   # and does not mount this code. restart on-failure retries a failed run only.
@@ -217,6 +260,12 @@ services:
     # Coolify attaches the public domain to this service (port 3000).
     expose:
       - "3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
 
 volumes:
   pgdata:

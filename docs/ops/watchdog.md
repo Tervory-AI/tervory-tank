@@ -9,7 +9,7 @@ The schedule starts after this workflow is on `main`. Until then, run it by hand
 - `https://app.tervory.com/api/health` must return HTTP 200. The site root returns 404 to a signed-out visitor because sign-in is required, so the check uses the public health probe.
 - `https://coolify.tervory.com/api/health` must return HTTP 200.
 - `https://rig.tervory.com/health` and `https://tervory.com` are checked once they are live.
-- Every Coolify application, through `GET /api/v1/applications`. The token is the repo secret `COOLIFY_TOKEN`. An application must be `running:healthy`. The main app (the one in the runbook) reporting `running:unknown` is fine.
+- Every Coolify application, through `GET /api/v1/applications`. The token is the repo secret `COOLIFY_TOKEN`. An application must be `running:healthy`. The Boston stack (the one in the runbook) reporting `running:unknown` is still allowed until its health checks are deployed. A failed connection to the Coolify API opens `Down: Coolify`. A later successful call closes that issue, even when one application is still down.
 - The certificate on each live domain. A warning is logged at 14 days left. An incident is opened at 7 days left.
 
 ## Not live yet
