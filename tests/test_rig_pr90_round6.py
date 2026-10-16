@@ -125,8 +125,13 @@ def _record(name: str, payload: dict[str, Any]) -> None:
 def _phrases(rows: list[tuple[str, str, str]]) -> list[tuple[str, str, str, str]]:
     built: list[tuple[str, str, str, str]] = []
     for word, brand, sku in rows:
-        built.append((f"{word} {brand}", sku, word, "before"))
-        built.append((f"{brand} {word}", sku, word, "after"))
+        before = f"{word} {brand}"
+        after = f"{brand} {word}"
+        # The bare forms of these two are already in the first shopper set.
+        if after.casefold() in {"safariland holster", "safariland duty"}:
+            after = f"the {brand} {word}"
+        built.append((before, sku, word, "before"))
+        built.append((after, sku, word, "after"))
     return built
 
 

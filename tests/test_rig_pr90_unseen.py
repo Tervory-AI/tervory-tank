@@ -616,8 +616,8 @@ def test_fifteen_unseen_near_miss_codes(shop: dict[str, Any]) -> None:
     if any(item["kind"] == "search" for item in wrong):
         bug = (
             bug
-            + " agents/rig/rigbox/rank.py:459-504 _unmatched_models left a near-miss "
-            "exact_match true."
+            + " agents/rig/rigbox/rank.py:342 _common_english leaves a model name that is "
+            "also an English word exact_match true."
         ).strip()
     payload = {"queries": len(FIFTEEN), "wrong": len(wrong), "examples": wrong, "bug": bug}
     _record("fifteen", payload)
