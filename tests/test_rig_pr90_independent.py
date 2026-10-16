@@ -573,7 +573,7 @@ def test_gate_4_one_retailer_never_sees_another() -> None:
             if needle and needle in text:
                 crossings.append(f"{label} contains {needle}")
 
-    cn_only = ["Staccato C2", "Custom Nation", "Cheely compact grip"]
+    cn_only = ["Staccato C2", "Tervory", "Cheely compact grip"]
     ex_only = ["Example Rifle 308 20in", "ExampleOptics", "EXAMPLE-RIFLE-01"]
     se_only = ["Second Desk Lamp", "SecondBrand"]
 
@@ -799,14 +799,14 @@ def test_bundle_and_compare_math() -> None:
         if Decimal(str(rifle["total"]["amount"])) != rifle_sum or rifle["total"]["amount"] != 35297:
             problems.append(f"example rifle total {rifle['total']['amount']} sheet {rifle_sum}")
         compared = await service.compare(CN_TENANT, EXPECTED_BUNDLE["STI-C2-9"] + ["SL-TLR1", "TEN8-REAR"])
-        if compared["retailer"] != "Custom Nation":
+        if compared["retailer"] != "Tervory":
             problems.append(f"retailer label {compared['retailer']}")
         by_id = {line["id"]: line for line in compared["lines"]}
         for sku in EXPECTED_BUNDLE["STI-C2-9"] + ["SL-TLR1", "TEN8-REAR"]:
             line = by_id[sku]
             if Decimal(str(line["price"]["amount"])) != prices[sku]:
                 problems.append(f"{sku} own price {line['price']['amount']} != {prices[sku]}")
-            expect = _expected_market(sku, "ZAR", "Custom Nation")
+            expect = _expected_market(sku, "ZAR", "Tervory")
             got = None if line["market"] is None else Decimal(str(line["market"]["amount"]))
             if expect is None:
                 if line["market"] is not None:
@@ -814,7 +814,7 @@ def test_bundle_and_compare_math() -> None:
             elif got != expect:
                 problems.append(f"{sku} market {got} != {expect}")
         rows = await original(CN_TENANT, ["TRIJ-RMR-T2"])
-        rows.append({"sku": "TRIJ-RMR-T2", "source": "CUSTOM NATION", "price": "1.00", "currency": "ZAR", "seen_at": ""})
+        rows.append({"sku": "TRIJ-RMR-T2", "source": "TERVORY", "price": "1.00", "currency": "ZAR", "seen_at": ""})
         rows.append({"sku": "TRIJ-RMR-T2", "source": "Demo Shop C", "price": "1.00", "currency": "USD", "seen_at": ""})
         await service.store.replace_market(CN_TENANT, rows)
         again = await service.compare(CN_TENANT, ["TRIJ-RMR-T2"])
@@ -882,11 +882,14 @@ def test_diff_secrets_feeds_and_admin_key() -> None:
     rendered = shop.text + "\n" + admin.text + "\n" + client.get("/page/admin.js").text + "\n" + client.get("/page/search.js").text
     if "RIG_ADMIN_KEY" in rendered or ADMIN_CN in rendered or "review-admin" in rendered:
         admin_leaks.append("rendered page contains an admin key")
-    if _key(CN) in shop.text:
-        admin_leaks.append("shopper page embeds the Custom Nation key")
+    demo_key = _key(CN)
     example_key = _key(EXAMPLE)
-    if example_key not in shop.text:
-        admin_leaks.append("shopper page did not embed the example publishable key")
+    if example_key in shop.text:
+        admin_leaks.append("shopper page embeds the example catalogue key")
+    if demo_key not in shop.text:
+        admin_leaks.append("shopper page did not embed the demo catalogue key")
+    if "Custom Nation" in shop.text:
+        admin_leaks.append("shopper page shows Custom Nation")
     feeds = asyncio.run(_feeds(service))
     if any(feeds.values()):
         feed_urls.append(f"loaded feeds {feeds}")
@@ -897,6 +900,7 @@ def test_diff_secrets_feeds_and_admin_key() -> None:
         "distributor_hits": distributor_hits,
         "feed_urls": feed_urls,
         "admin_leaks": admin_leaks,
+        "shopper_page_embeds_demo_catalogue_key": demo_key in shop.text,
         "shopper_page_embeds_example_publishable_key": example_key in shop.text,
     }
     _record("static", payload)
@@ -989,7 +993,6 @@ def test_browser_search_accessories_compare_admin() -> None:
             page = browser.new_page(viewport={"width": 1280, "height": 900})
             page.goto(LOCAL_ORIGIN + "/", wait_until="domcontentloaded")
             shots.append(_shot(page, "pr90-01-search.png"))
-            page.evaluate("window.RIG_KEY = 'rk_pub_customnation'")
             page.fill("#q", "staccato c2")
             page.click("form.search button")
             page.wait_for_selector("text=Staccato C2")
@@ -1023,11 +1026,13 @@ def test_browser_search_accessories_compare_admin() -> None:
             page.click("#compare")
             page.wait_for_selector("text=Market average")
             compare = page.locator("#compare-lines").inner_text().replace("\xa0", " ").replace("\u202f", " ")
-            if "Custom Nation price" not in compare:
+            if "Custom Nation" in compare:
+                notes.append("compare shows Custom Nation")
+            if "Tervory price" not in compare:
                 notes.append("retailer label missing")
             if "Market average: 59 000 ZAR" not in compare:
                 notes.append(f"C2 market line missing in {compare[:400]!r}")
-            if "Custom Nation price: 58 999 ZAR" not in compare:
+            if "Tervory price: 58 999 ZAR" not in compare:
                 notes.append("C2 own price missing")
             shots.append(_shot(page, "pr90-05-compare.png"))
             lights = page.locator("#bundle-parts li", has_text="SureFire")
@@ -1054,7 +1059,7 @@ def test_browser_search_accessories_compare_admin() -> None:
             compare_swapped = page.locator("#compare-lines").inner_text().replace("\xa0", " ").replace("\u202f", " ")
             if "Market average: not available" not in compare_swapped:
                 notes.append(f"Streamlight has no market rows, got {compare_swapped[:500]!r}")
-            if "Custom Nation price: 2 799 ZAR" not in compare_swapped:
+            if "Tervory price: 2 799 ZAR" not in compare_swapped:
                 notes.append("Streamlight own price missing")
             shots.append(_shot(page, "pr90-05b-no-market.png"))
             page.goto(LOCAL_ORIGIN + "/admin", wait_until="domcontentloaded")
@@ -1071,7 +1076,6 @@ def test_browser_search_accessories_compare_admin() -> None:
             page.wait_for_selector("text=Rejected")
             shots.append(_shot(page, "pr90-07-admin-decided.png"))
             page.goto(LOCAL_ORIGIN + "/", wait_until="domcontentloaded")
-            page.evaluate("window.RIG_KEY = 'rk_pub_customnation'")
             page.fill("#q", "staccato c2")
             page.click("form.search button")
             page.wait_for_selector("text=Staccato C2")

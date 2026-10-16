@@ -105,6 +105,12 @@ def test_rig_startup_loads_catalogues_on_postgres(tmp_path: Path) -> None:
             health = client.get("/health")
             assert health.status_code == 200
             assert health.json()["ok"] is True
+            home = client.get("/")
+            assert home.status_code == 200
+            assert "rk_pub_customnation" in home.text
+            assert "rk_pub_examplebrand" not in home.text
+            assert "Custom Nation" not in home.text
+            assert 'alt="Tervory"' in home.text
             custom = _search(client, "rk_pub_customnation", "https://rig.tervory.com", "Staccato C2")
             assert custom["exact_match"] is True
             compact = next(item for item in custom["results"] if item["id"] == "STI-C2-9")

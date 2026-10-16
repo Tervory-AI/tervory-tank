@@ -17,9 +17,13 @@ _ASSETS = {
 }
 
 
-def example_key() -> str:
-    """Publishable example key. Empty when the catalogue file is missing."""
-    publish = Path(__file__).resolve().parents[1] / "catalogues" / "example" / "publish.json"
+def house_key() -> str:
+    """Publishable key for the catalogue on the Tervory page.
+
+    The sheet lives in catalogues/customnation. The page keeps the Tervory
+    skin. The example catalogue stays a separate tenant and is not this page.
+    """
+    publish = Path(__file__).resolve().parents[1] / "catalogues" / "customnation" / "publish.json"
     try:
         data = json.loads(publish.read_text(encoding="utf-8"))
     except OSError:
@@ -32,7 +36,7 @@ def example_key() -> str:
 
 def _shopper_html() -> HTMLResponse:
     html = (_PAGE / "index.html").read_text(encoding="utf-8")
-    html = html.replace("__RIG_PUBLISHABLE_KEY__", json.dumps(example_key()))
+    html = html.replace("__RIG_PUBLISHABLE_KEY__", json.dumps(house_key()))
     return HTMLResponse(html)
 
 

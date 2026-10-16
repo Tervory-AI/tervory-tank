@@ -61,7 +61,7 @@ async def test_staccato_accessories_stay_in_the_closed_catalogue() -> None:
             assert _host(url) in ALLOWED_HOSTS
     publish = json.loads((CN / "publish.json").read_text(encoding="utf-8"))
     assert "feed" not in publish
-    assert publish["name"] == "Custom Nation"
+    assert publish["name"] == "Tervory"
     assert "Example" not in (CN / "products.csv").read_text(encoding="utf-8")
 
     store = MemoryStore()
@@ -163,7 +163,7 @@ async def test_staccato_accessories_stay_in_the_closed_catalogue() -> None:
     )
     assert both.status_code == 200
     body = both.json()
-    assert body["retailer"] == "Custom Nation"
+    assert body["retailer"] == "Tervory"
     by_id = {line["id"]: line for line in body["lines"]}
     assert by_id["TRIJ-RMR-T2"]["price"]["amount"] == 9999
     assert by_id["TRIJ-RMR-T2"]["market"]["amount"] == 10000
