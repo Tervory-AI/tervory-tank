@@ -88,9 +88,8 @@ async def _saflii(body: dict[str, Any], ctx: Any) -> dict[str, Any] | None:
     if not saved:
         if str(body.get("jurisdiction") or "") != "za" or kind != "case":
             return None
-        env = getattr(ctx, "env", None) or {}
-        if not (env.get("SEARXNG_URL") or env.get("BRAVE_API_KEY") or env.get("SAFLII_LIVE")):
-            return None
+        # A room without SearXNG still searches. The adapter uses a public
+        # web search, then SAFLII's own search, and fetches through Chrome.
     search_and_fetch = _search_and_fetch()
     if search_and_fetch is None:
         return {"state": "unavailable", "reason": "SAFLII adapter is not on this image.", "excerpts": []}

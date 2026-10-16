@@ -382,9 +382,10 @@ def _za_sources() -> tuple[SourceSpec, ...]:
                 "Page routes for the Supreme Court of Appeal, the Constitutional Court, "
                 "and the High Court divisions. Commercial and civil judgments are stored "
                 "as published. Criminal matters are dropped. No redaction step runs on a "
-                "judgment. The founder authorised a live load on 16 Oct 2026. Fetches use "
-                "ZenasResearch/1.0 and at most one request a second. A Cloudflare "
-                "'Just a moment' response is recorded as blocked and is not stored."
+                "judgment. The founder authorised a live load on 16 Oct 2026. A live "
+                "fetch opens real Chrome so the Cloudflare check can finish, then reuses "
+                "that browser's cookies. At most one request a second. A 'Just a moment' "
+                "page, or a 403 after that check, is recorded as blocked and is not stored."
             ),
             adapter="saflii",
         )

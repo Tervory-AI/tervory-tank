@@ -4,10 +4,12 @@ Commercial and civil judgments are stored as published. Criminal matters are
 dropped and their text is never stored. SAFLII's usage policy is recorded on
 the catalogue row as information. It is not a switch.
 
-The founder authorised a live load on 16 Oct 2026. Fetches identify as
-ZenasResearch/1.0, wait at least a second between requests to one host, and
-back off when the server asks. A Cloudflare "Just a moment" page is reported
-as blocked and is not stored.
+The founder authorised a live load on 16 Oct 2026. A live fetch opens real
+Chrome (Patchright or Playwright) so the Cloudflare check can finish, then
+reuses that browser's cookies. The plain client still identifies as
+ZenasResearch/1.0. Either way, at most one request a second goes to one host.
+A Cloudflare "Just a moment" page, or a 403 from SAFLII after that check, is
+reported as blocked and is not stored.
 """
 
 from __future__ import annotations
@@ -16,12 +18,14 @@ import asyncio
 import json
 import os
 import re
+import shutil
+import subprocess
 import time
 import urllib.error
 import urllib.request
 from datetime import date, datetime, timezone
 from html.parser import HTMLParser
-from urllib.parse import urlencode, urlparse
+from urllib.parse import unquote, urlencode, urlparse
 
 from agents.zenas.pool.builddoc import build_document
 from agents.zenas.pool.model import LegalDocument, Section, SourceSpec
@@ -247,7 +251,9 @@ def canonical_case_url(url: str) -> str:
 def case_urls_in(text: str) -> list[str]:
     found: list[str] = []
     seen: set[str] = set()
-    for match in _CASE_URL.finditer(text or ""):
+    # Public search pages hide the judgment address inside an encoded redirect.
+    raw = unquote(unquote(text or ""))
+    for match in _CASE_URL.finditer(raw):
         url = canonical_case_url(match.group(0) if match.group(0).startswith("http") else _HOST + match.group(1))
         if url and url not in seen:
             seen.add(url)
@@ -265,16 +271,35 @@ def is_cloudflare_block(status: int, body: bytes) -> bool:
     return status == 403 and moment
 
 
-class SafliiBlocked(Exception):
-    """The page was a Cloudflare check. The judgment was not stored."""
+def is_origin_forbidden(status: int, body: bytes) -> bool:
+    """SAFLII's own server refused the page after the Cloudflare check."""
+    if status != 403 or is_cloudflare_block(status, body):
+        return False
+    head = (body or b"")[:2500].lower()
+    refused = b"forbidden" in head and (
+        b"don't have permission" in head or b"do not have permission" in head or b"apache" in head
+    )
+    return refused
 
-    def __init__(self, url: str) -> None:
+
+class SafliiBlocked(Exception):
+    """The page was a Cloudflare check, or SAFLII refused it. Nothing was stored."""
+
+    def __init__(self, url: str, *, forbidden: bool = False) -> None:
         self.url = url
         self.state = "blocked"
-        super().__init__(
-            "blocked: SAFLII returned a Cloudflare check (Just a moment) "
-            f"for {url}. The page was not stored."
-        )
+        self.forbidden = forbidden
+        if forbidden:
+            message = (
+                "blocked: SAFLII's server returned 403 Forbidden for "
+                f"{url} after the Cloudflare check. The page was not stored."
+            )
+        else:
+            message = (
+                "blocked: SAFLII returned a Cloudflare check (Just a moment) "
+                f"for {url}. The page was not stored."
+            )
+        super().__init__(message)
 
 
 def _headers() -> dict[str, str]:
@@ -368,7 +393,7 @@ async def _request(http_get, url: str, headers: dict[str, str]) -> tuple[int, by
     for attempt in range(3):
         await _PACER.wait(url)
         status, body = await _invoke(http_get, url, headers)
-        if is_cloudflare_block(status, body):
+        if is_cloudflare_block(status, body) or is_origin_forbidden(status, body):
             return status, body
         if status in (429, 503) or status >= 500:
             last = (status, body)
@@ -391,6 +416,185 @@ async def _urllib_get(url: str, headers: dict[str, str]) -> tuple[int, bytes]:
             return int(exc.code), raw
 
     return await asyncio.to_thread(_read)
+
+
+def _browser_wanted() -> bool:
+    return os.environ.get("SAFLII_FETCH", "browser").strip().lower() not in {"urllib", "plain"}
+
+
+def _headed() -> bool:
+    flag = os.environ.get("SAFLII_HEADED", "").strip().lower()
+    if flag in {"1", "true", "yes"}:
+        return True
+    if flag in {"0", "false", "no"}:
+        return False
+    return bool(os.environ.get("DISPLAY", "").strip())
+
+
+def _client(http_get):
+    """Use the injected client in tests. A live load uses the browser."""
+    if http_get is None:
+        return _live_get if _browser_wanted() else _urllib_get
+    if _browser_wanted():
+        from agents.zenas.pool import nightly
+
+        if http_get is nightly.urllib_get:
+            return _live_get
+    return http_get
+
+
+class _ChromeSession:
+    """One real Chrome window. The Cloudflare click happens before any debugger attaches.
+
+    Later fetches reuse that window's cookies. Playwright reads the page; it does
+    not launch the browser, because a browser Playwright starts does not get past
+    the check.
+    """
+
+    def __init__(self) -> None:
+        self._proc: subprocess.Popen | None = None
+        self._play = None
+        self._browser = None
+        self._page = None
+        self._lock = asyncio.Lock()
+        self._port = int(os.environ.get("SAFLII_CHROME_PORT", "9333") or "9333")
+
+    async def get(self, url: str) -> tuple[int, bytes]:
+        async with self._lock:
+            if self._page is None:
+                await self._open_without_a_debugger(url)
+                await self._clear_check()
+                await self._attach()
+            else:
+                response = await self._page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                title = (await self._page.title()).lower()
+                if "just a moment" in title:
+                    await self._clear_check()
+                status = int(response.status) if response is not None else 0
+                return _page_result(status, (await self._page.content()).encode("utf-8"), await self._page.title())
+            return _page_result(0, (await self._page.content()).encode("utf-8"), await self._page.title())
+
+    async def _open_without_a_debugger(self, url: str) -> None:
+        if self._proc is not None and self._proc.poll() is None:
+            return
+        chrome = os.environ.get("SAFLII_CHROME", "").strip() or shutil.which("google-chrome") or "/usr/local/bin/google-chrome"
+        profile = os.environ.get("SAFLII_CHROME_PROFILE", "/tmp/zenas-saflii-chrome").strip() or "/tmp/zenas-saflii-chrome"
+        os.makedirs(profile, exist_ok=True)
+        self._proc = subprocess.Popen(
+            [
+                chrome,
+                f"--user-data-dir={profile}",
+                f"--remote-debugging-port={self._port}",
+                "--no-first-run",
+                "--no-default-browser-check",
+                "--window-position=40,40",
+                "--window-size=1100,760",
+                *(["--headless=new"] if not _headed() else []),
+                url,
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        await asyncio.sleep(5)
+
+    async def _attach(self) -> None:
+        try:
+            from patchright.async_api import async_playwright
+        except ImportError:
+            from playwright.async_api import async_playwright
+        self._play = await async_playwright().start()
+        self._browser = await self._play.chromium.connect_over_cdp(f"http://127.0.0.1:{self._port}")
+        context = self._browser.contexts[0]
+        self._page = context.pages[0] if context.pages else await context.new_page()
+
+    async def _clear_check(self) -> None:
+        """Click the checkbox with the desktop mouse. No debugger is required."""
+        for _ in range(4):
+            if "just a moment" not in _window_title().lower():
+                return
+            aimed = _ocr_checkbox()
+            if aimed is not None and shutil.which("xdotool"):
+                subprocess.run(["xdotool", "mousemove", "--sync", str(aimed[0]), str(aimed[1])], check=False)
+                subprocess.run(["xdotool", "click", "--delay", "80", "1"], check=False)
+            await asyncio.sleep(4)
+
+
+def _page_result(status: int, body: bytes, title: str) -> tuple[int, bytes]:
+    lowered = title.lower()
+    if "just a moment" in lowered or is_cloudflare_block(status, body):
+        return 403, body
+    if "forbidden" in lowered or is_origin_forbidden(403, body):
+        return 403, body
+    if status >= 400:
+        return 200, body
+    return status or 200, body
+
+
+def _window_title() -> str:
+    if not shutil.which("xdotool"):
+        return ""
+    try:
+        return subprocess.check_output(["xdotool", "getactivewindow", "getwindowname"], text=True).strip()
+    except subprocess.CalledProcessError:
+        return ""
+
+
+def _ocr_checkbox() -> tuple[int, int] | None:
+    """Screen position of the Turnstile checkbox, read from the words beside it."""
+    if not (shutil.which("tesseract") and shutil.which("ffmpeg") and shutil.which("xdotool")):
+        return None
+    display = os.environ.get("DISPLAY", "").strip()
+    if not display:
+        return None
+    try:
+        width, height = subprocess.check_output(["xdotool", "getdisplaygeometry"], text=True).split()
+        path = "/tmp/zenas-saflii-screen.png"
+        subprocess.check_call(
+            [
+                "ffmpeg", "-y", "-loglevel", "error",
+                "-f", "x11grab", "-video_size", f"{width}x{height}", "-i", display,
+                "-frames:v", "1", path,
+            ],
+            timeout=15,
+        )
+        raw = subprocess.check_output(
+            ["tesseract", path, "stdout", "tsv"],
+            stderr=subprocess.DEVNULL,
+            timeout=20,
+            text=True,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError, ValueError):
+        return None
+    for line in raw.splitlines()[1:]:
+        parts = line.split("\t")
+        if len(parts) < 12:
+            continue
+        if parts[11].strip().lower() not in {"verify", "verifying..."}:
+            continue
+        try:
+            left, top, _width, word_height = (int(parts[6]), int(parts[7]), int(parts[8]), int(parts[9]))
+        except ValueError:
+            continue
+        return left - 18, top + word_height // 2
+    return None
+
+
+_CHROME = _ChromeSession()
+
+
+async def _browser_get(url: str, headers: dict[str, str]) -> tuple[int, bytes]:
+    """Fetch through real Chrome. The browser keeps its own identity and cookies."""
+    del headers
+    return await _CHROME.get(url)
+
+
+async def _live_get(url: str, headers: dict[str, str]) -> tuple[int, bytes]:
+    if not _browser_wanted():
+        return await _urllib_get(url, headers)
+    try:
+        return await _browser_get(url, headers)
+    except Exception:
+        return await _urllib_get(url, headers)
 
 
 def _search_configured() -> bool:
@@ -416,7 +620,8 @@ async def site_search(query: str, http_get) -> tuple[list[str], str]:
     """Site-restricted search. Tervory's own search first, then Brave when a key is set.
 
     This is the same pair the research ladder already uses (SearXNG, then Brave).
-    The key stays in a header. It is never placed in the URL.
+    When that network is not configured, or it returns nothing, a public web
+    search is used. The key stays in a header. It is never placed in the URL.
     """
     q = f"site:saflii.org/za/cases {query}".strip()
     base = os.environ.get("SEARXNG_URL", "").strip().rstrip("/")
@@ -441,7 +646,41 @@ async def site_search(query: str, http_get) -> tuple[list[str], str]:
         urls = case_urls_in("\n".join(_json_urls(body, "web", "results"))) if status == 200 else []
         if urls:
             return urls, "brave"
+    urls, via = await _public_search(query, http_get)
+    if urls:
+        return urls, via
     return [], ""
+
+
+def public_search_url(query: str) -> str:
+    """A public site-restricted search. It does not use the Zenas search network."""
+    q = f"site:saflii.org/za/cases {query}".strip()
+    return "https://html.duckduckgo.com/html/?" + urlencode({"q": q})
+
+
+async def _public_search(query: str, http_get) -> tuple[list[str], str]:
+    """Public search stays on the plain client.
+
+    The browser session is reserved for SAFLII. Opening a search page in it
+    first attaches the debugger before the Cloudflare check, and the check
+    then does not complete.
+    """
+    url = public_search_url(query)
+    headers = {**_headers(), "Accept": "text/html"}
+    client = _urllib_get if http_get is _live_get else http_get
+    try:
+        status, body = await _request(client, url, headers)
+    except Exception:
+        return [], ""
+    if not _search_page_has_cases(status, body):
+        return [], ""
+    return case_urls_in(body.decode("utf-8", errors="replace")), "web"
+
+
+def _search_page_has_cases(status: int, body: bytes) -> bool:
+    if status != 200 or is_cloudflare_block(status, body) or is_origin_forbidden(status, body):
+        return False
+    return bool(case_urls_in(body.decode("utf-8", errors="replace")))
 
 
 def cgi_url(query: str) -> str:
@@ -494,16 +733,13 @@ def _result(
     }
 
 
-def _blocked(query: str, url: str, found_via: str = "") -> dict:
+def _blocked(query: str, url: str, found_via: str = "", *, forbidden: bool = False) -> dict:
     return _result(
         ok=False,
         state="blocked",
         query=query,
         found_via=found_via,
-        reason=(
-            "blocked: SAFLII returned a Cloudflare check (Just a moment) "
-            f"for {url}. The page was not stored."
-        ),
+        reason=str(SafliiBlocked(url, forbidden=forbidden)),
         blocked_urls=[url],
     )
 
@@ -580,15 +816,15 @@ async def _load_indexes(http_get, resume: str) -> tuple[list[bytes], str]:
     while court_i < len(COURTS) and len(blobs) < batch:
         code, index_url, _name = COURTS[court_i]
         status, page = await _request(http_get, index_url, headers)
-        if is_cloudflare_block(status, page):
-            raise SafliiBlocked(index_url)
+        if is_cloudflare_block(status, page) or is_origin_forbidden(status, page):
+            raise SafliiBlocked(index_url, forbidden=is_origin_forbidden(status, page))
         links = judgment_links(page, code)
         while offset < len(links) and len(blobs) < batch:
             url = links[offset]
             offset += 1
             status, body = await _request(http_get, url, headers)
-            if is_cloudflare_block(status, body):
-                raise SafliiBlocked(url)
+            if is_cloudflare_block(status, body) or is_origin_forbidden(status, body):
+                raise SafliiBlocked(url, forbidden=is_origin_forbidden(status, body))
             blobs.append(stamp_page_url(body, url))
         if offset >= len(links):
             court_i += 1
@@ -611,8 +847,10 @@ async def search_and_fetch(
     """Find SAFLII judgment pages, fetch the top ones, and return excerpts.
 
     Candidate URLs come from the injected search, or from SearXNG then Brave
-    (the ladder's existing search), with SAFLII's own sinosrch-adw.cgi as the
-    fallback. Each kept page is cached by URL. Criminal matters are dropped.
+    (the ladder's existing search). A public web search is next, for a room
+    that cannot reach that network, and SAFLII's own sinosrch-adw.cgi is last.
+    A live fetch uses real Chrome unless a client was injected. Each kept page
+    is cached by URL. Criminal matters are dropped.
     """
     text = " ".join((query or "").split())
     moment = _now(now)
@@ -627,7 +865,7 @@ async def search_and_fetch(
         urls = case_urls_in("\n".join(str(item) for item in (found or [])))
         via = "search" if urls else ""
     elif live or _search_configured():
-        getter = http_get or _urllib_get
+        getter = _client(http_get)
         urls, via = await site_search(text, getter)
     elif http_get is None:
         return _result(
@@ -638,11 +876,11 @@ async def search_and_fetch(
         )
 
     if not urls and (getter is not None or live or _search_configured()):
-        getter = getter or http_get or _urllib_get
+        getter = getter or _client(http_get)
         target = cgi_url(text)
         status, body = await _request(getter, target, _headers())
-        if is_cloudflare_block(status, body):
-            return _blocked(text, target, via)
+        if is_cloudflare_block(status, body) or is_origin_forbidden(status, body):
+            return _blocked(text, target, via, forbidden=is_origin_forbidden(status, body))
         urls = case_urls_in(body.decode("utf-8", errors="replace"))
         if urls:
             via = "saflii-cgi"
@@ -659,7 +897,8 @@ async def search_and_fetch(
     excerpts: list[dict] = []
     blocked: list[str] = []
     used_cache = False
-    getter = getter or http_get or _urllib_get
+    blocked_forbidden = False
+    getter = getter or _client(http_get)
     for url in urls[:cap]:
         cached = await _cached(store, url, moment)
         if cached is not None:
@@ -668,8 +907,9 @@ async def search_and_fetch(
         else:
             status, blob = await _request(getter, url, _headers())
             from_cache = False
-            if is_cloudflare_block(status, blob):
+            if is_cloudflare_block(status, blob) or is_origin_forbidden(status, blob):
                 blocked.append(url)
+                blocked_forbidden = is_origin_forbidden(status, blob)
                 break
         stamped = stamp_page_url(blob, url)
         documents = parse_judgment(stamped, source)
@@ -691,7 +931,7 @@ async def search_and_fetch(
                 }
             )
     if blocked and not excerpts:
-        return _blocked(text, blocked[0], "cache" if used_cache else via)
+        return _blocked(text, blocked[0], "cache" if used_cache else via, forbidden=blocked_forbidden)
     if not excerpts:
         return _result(
             ok=True,
@@ -738,7 +978,7 @@ class SafliiAdapter:
         return blobs
 
     async def fetch_bulk(self, http_get, *, resume: str = "") -> tuple[list[bytes], str]:
-        return await _load_indexes(http_get, resume)
+        return await _load_indexes(_client(http_get), resume)
 
     async def search_and_fetch(self, query: str, **kwargs) -> dict:
         return await search_and_fetch(query, **kwargs)

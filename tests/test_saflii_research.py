@@ -19,13 +19,17 @@ if str(ROOT) not in sys.path:
 
 from agents.zenas.core.ladder_store import LadderMemory  # noqa: E402
 from agents.zenas.core.service import retrieve  # noqa: E402
+from agents.zenas.pool.adapters import za_saflii  # noqa: E402
 from agents.zenas.pool.adapters.za_saflii import (  # noqa: E402
     USER_AGENT,
     HostPacer,
     SafliiAdapter,
     SafliiBlocked,
     canonical_case_url,
+    case_urls_in,
     is_cloudflare_block,
+    is_origin_forbidden,
+    public_search_url,
     search_and_fetch,
 )
 from agents.zenas.pool.bulk import load_wave  # noqa: E402
@@ -43,6 +47,7 @@ WHEN = datetime(2026, 10, 16, tzinfo=timezone.utc)
 def _quiet(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SAFLII_MIN_INTERVAL", "0")
     monkeypatch.setenv("SAFLII_BACKOFF_SECONDS", "0")
+    monkeypatch.setenv("SAFLII_FETCH", "urllib")
     monkeypatch.delenv("SEARXNG_URL", raising=False)
     monkeypatch.delenv("BRAVE_API_KEY", raising=False)
 
@@ -463,3 +468,115 @@ async def _research(monkeypatch: pytest.MonkeyPatch):
     assert us["passages"][0]["citation"] == "8 Del. C. § 101"
     assert "saflii_state" not in us
     assert called["n"] == 0
+
+
+def test_an_encoded_search_link_is_a_judgment_url():
+    encoded = "uddg=https%3A%2F%2Fwww.saflii.org%2Fza%2Fcases%2FZASCA%2F2023%2F12.html"
+    assert case_urls_in(encoded) == [CIVIL_URL]
+
+
+def test_public_web_search_is_used_when_the_room_has_no_search_network(monkeypatch: pytest.MonkeyPatch):
+    _quiet(monkeypatch)
+    asyncio.run(_web_search())
+
+
+async def _web_search():
+    seen: list[str] = []
+    page = (FIXTURES / "duckduckgo-results.html").read_bytes()
+
+    async def http_get(url, headers):
+        del headers
+        seen.append(url)
+        if "duckduckgo.com" in url:
+            assert "site%3Asaflii.org%2Fza%2Fcases" in url or "site:saflii.org/za/cases" in url
+            return page
+        if "sinosrch-adw.cgi" in url:
+            raise AssertionError("the cgi fallback ran after web search found a judgment")
+        if url == CIVIL_URL:
+            return _civil()
+        return b"<html></html>"
+
+    found = await search_and_fetch("bill of lading", http_get=http_get, live=True, now=WHEN)
+    assert found["found_via"] == "web"
+    assert found["state"] == "ok"
+    assert found["excerpts"][0]["citation"] == "[2023] ZASCA 12"
+    assert found["excerpts"][0]["url"] == CIVIL_URL
+    assert any(url == public_search_url("bill of lading") for url in seen)
+
+
+def test_an_empty_searx_result_falls_through_to_web_search(monkeypatch: pytest.MonkeyPatch):
+    _quiet(monkeypatch)
+    monkeypatch.setenv("SEARXNG_URL", "http://search.test")
+    asyncio.run(_searx_empty_then_web())
+
+
+async def _searx_empty_then_web():
+    page = (FIXTURES / "duckduckgo-results.html").read_bytes()
+
+    async def http_get(url, headers):
+        del headers
+        if url.startswith("http://search.test/"):
+            return b'{"results":[]}'
+        if "duckduckgo.com" in url:
+            return page
+        if url == CIVIL_URL:
+            return _civil()
+        return b"<html></html>"
+
+    found = await search_and_fetch("bill of lading", http_get=http_get, live=True, now=WHEN)
+    assert found["found_via"] == "web"
+    assert found["excerpts"][0]["citation"] == "[2023] ZASCA 12"
+
+
+def test_origin_403_is_blocked_and_not_stored(monkeypatch: pytest.MonkeyPatch):
+    _quiet(monkeypatch)
+    asyncio.run(_forbidden())
+
+
+async def _forbidden():
+    body = (
+        b"<html><head><title>403 Forbidden</title></head><body><h1>Forbidden</h1>"
+        b"<p>You don't have permission to access this resource.</p>"
+        b"<address>Apache/2.4.52 (Ubuntu)</address></body></html>"
+    )
+
+    async def search(_query: str) -> list[str]:
+        return [CIVIL_URL]
+
+    async def http_get(url, headers):
+        del url, headers
+        return 403, body
+
+    assert is_origin_forbidden(403, body)
+    assert not is_cloudflare_block(403, body)
+    store = MemoryStore(home_region="za")
+    found = await search_and_fetch("bill of lading", search=search, http_get=http_get, store=store, now=WHEN)
+    assert found["state"] == "blocked"
+    assert "403 Forbidden" in found["reason"]
+    assert "Just a moment" not in found["reason"]
+    assert found["excerpts"] == []
+    assert await store.get_page_cache(CIVIL_URL, now=WHEN) is None
+
+
+def test_the_stock_loader_uses_the_browser(monkeypatch: pytest.MonkeyPatch):
+    _quiet(monkeypatch)
+    monkeypatch.setenv("SAFLII_FETCH", "browser")
+    asyncio.run(_stock_browser(monkeypatch))
+
+
+async def _stock_browser(monkeypatch: pytest.MonkeyPatch):
+    seen: list[str] = []
+
+    async def browser(url, headers):
+        del headers
+        seen.append(url)
+        return 403, _cloud()
+
+    monkeypatch.setattr(za_saflii, "_browser_get", browser)
+    from agents.zenas.pool.nightly import urllib_get
+
+    with pytest.raises(SafliiBlocked) as caught:
+        await SafliiAdapter().fetch_bulk(urllib_get, resume="")
+    assert seen
+    assert seen[0].endswith("/recent.html")
+    assert "Just a moment" in str(caught.value)
