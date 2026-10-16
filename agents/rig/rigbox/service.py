@@ -177,7 +177,13 @@ class Service:
                 "products": await self.store.products(tenant_id),
             }
         )
-        return {"results": ranked["results"]}
+        results = ranked["results"]
+        if not results:
+            return {"results": []}
+        body: dict[str, Any] = {"results": results, "exact_match": bool(ranked.get("exact_match", True))}
+        if body["exact_match"] is False:
+            body["message"] = str(ranked.get("message") or "No exact match for that model.")
+        return body
 
     async def product(self, tenant_id: str, product_id: str) -> dict[str, Any]:
         detail = product_detail(await self._bundle(tenant_id, product_id))

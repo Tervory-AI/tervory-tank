@@ -4,9 +4,11 @@ The words before a relation (for, fits, pairs with, goes on, compatible with,
 to go with, and the same kind of phrase) are the part the shopper wants. A
 word counts as a whole token, or as the same token with a small spelling
 change when it is at least four characters. A piece of a longer word does not
-count. A word that is already a category outranks a shared name, so that part
-comes ahead of the product it attaches to. Typos use character trigrams,
-including the text with spaces and dashes removed.
+count. A model code that is one edit from a real code, or a short prefix of
+one, can surface that row only as a closest match. It is never an exact hit.
+A word that is already a category outranks a shared name, so that part comes
+ahead of the product it attaches to. Typos use character trigrams, including
+the text with spaces and dashes removed.
 """
 
 from __future__ import annotations
@@ -74,10 +76,32 @@ _RELATIONS = (
     "for",
 )
 _COMPACT = re.compile(r"[^a-z0-9]+")
+_WORD = re.compile(r"[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*")
+# Relation words are not model codes. "go" would otherwise look like a short code.
+_SKIP = frozenset(
+    {
+        "go",
+        "goes",
+        "going",
+        "pair",
+        "pairs",
+        "paired",
+        "fit",
+        "fits",
+        "fitting",
+        "compatible",
+        "suit",
+        "suits",
+        "mount",
+        "replace",
+        "use",
+        "using",
+    }
+)
 # A trigram-only match below this is a different product, not a typo.
 _TYPO = 0.45
-# A single token this close to a catalogue token is the same word misspelled
-# or a short model code. Below this, "sig" is not "sight".
+# A single token this close to a catalogue token is the same word misspelled.
+# Below this, "sig" is not "sight". A different model code is handled apart from this.
 _FUZZY = 0.6
 _CATEGORY = 4.0
 
@@ -102,7 +126,16 @@ def search(payload: dict[str, Any]) -> dict[str, Any]:
     ranked.sort(key=lambda item: (-item[0], item[1]))
     chosen = [row for _, _, row in ranked[:limit]]
     results = [public_product(row) for row in chosen]
-    return {"results": results, "ids": [item["id"] for item in results]}
+    body: dict[str, Any] = {"results": results, "ids": [item["id"] for item in results]}
+    if not results:
+        return body
+    missing = _unmatched_models(query, _catalogue_tokens(rows))
+    if missing:
+        body["exact_match"] = False
+        body["message"] = _no_exact(missing)
+    else:
+        body["exact_match"] = True
+    return body
 
 
 def _intent(query: str) -> tuple[str, str]:
@@ -147,10 +180,76 @@ def _same_word(left: str, right: str) -> bool:
 def _token_hit(needle: str, have: set[str]) -> bool:
     if any(_same_word(needle, item) for item in have):
         return True
+    if any(_code_close(needle, item) for item in have):
+        return True
     # Three-letter pieces stay exact, so a fragment cannot pose as a longer word.
     if len(needle) < 4:
         return False
     return any(len(item) >= 4 and _similarity(needle, item) >= _FUZZY for item in have)
+
+
+def _code_close(left: str, right: str) -> bool:
+    """One edit between two model codes. A different code is not the same model."""
+    if left == right or len(left) < 4 or len(right) < 4:
+        return False
+    if not any(char.isdigit() for char in left) or not any(char.isdigit() for char in right):
+        return False
+    return _one_edit(left, right)
+
+
+def _one_edit(left: str, right: str) -> bool:
+    if abs(len(left) - len(right)) > 1:
+        return False
+    if len(left) > len(right):
+        left, right = right, left
+    i = 0
+    j = 0
+    edits = 0
+    while i < len(left) and j < len(right):
+        if left[i] == right[j]:
+            i += 1
+            j += 1
+            continue
+        edits += 1
+        if edits > 1:
+            return False
+        if len(left) == len(right):
+            i += 1
+        j += 1
+    edits += (len(right) - j) + (len(left) - i)
+    return edits == 1
+
+
+def _catalogue_tokens(rows: list[dict[str, Any]]) -> set[str]:
+    found: set[str] = set()
+    for row in rows:
+        found.update(_tokens(_text(row)))
+    return found
+
+
+def _covered(token: str, have: set[str]) -> bool:
+    return any(_same_word(token, item) for item in have)
+
+
+def _model_shaped(token: str) -> bool:
+    if any(char.isdigit() for char in token):
+        return True
+    return token.isalpha() and 2 <= len(token) <= 3
+
+
+def _unmatched_models(query: str, have: set[str]) -> list[str]:
+    missing: list[str] = []
+    for word in _WORD.findall(query):
+        parts = [part for part in _tokens(word) if len(part) >= 2 and part not in _FILLER and part not in _SKIP]
+        if any(_model_shaped(part) and not _covered(part, have) for part in parts):
+            missing.append(word)
+    return missing
+
+
+def _no_exact(words: list[str]) -> str:
+    if len(words) == 1:
+        return f"No exact match for {words[0]}."
+    return "No exact match for " + ", ".join(words) + "."
 
 
 def _match(text: str, row: dict[str, Any]) -> float:
