@@ -74,7 +74,15 @@ async function run(q) {
     status.textContent = "Nothing matched that search.";
     return;
   }
-  status.textContent = items.length === 1 ? "1 product" : items.length + " products";
+  if (body.exact_match === false) {
+    status.textContent = body.message || "No exact match for that model.";
+    const label = document.createElement("li");
+    label.className = "closest";
+    label.textContent = "Closest matches";
+    results.append(label);
+  } else {
+    status.textContent = items.length === 1 ? "1 product" : items.length + " products";
+  }
   for (const item of items) results.append(card(item));
 }
 
