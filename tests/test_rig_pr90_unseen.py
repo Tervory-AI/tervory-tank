@@ -1,7 +1,8 @@
 """Third shopper set for the PR 90 retest. The builder had not seen these strings.
 
-100 searches, 40 adversarial questions, and a near-miss check on the 4+ character
-fuzzy match. Stand-in catalogues only. This file does not change Rig.
+100 searches, 40 adversarial questions, the earlier near-miss codes, and a later
+batch of unseen near-miss and ordinary-word queries. Stand-in catalogues only.
+This file does not change Rig.
 """
 
 from __future__ import annotations
@@ -338,6 +339,28 @@ FIFTEEN: list[tuple[str, str, str]] = [
     ("507COMP", "507COMP", "How much is a 507COMP?"),
 ]
 
+# Fifteen queries written after f34c419. Eight near-miss codes, seven ordinary words.
+# None of these strings were in the earlier sets or in the builder's closest-match tests.
+FRESH_NEAR: list[tuple[str, str, str]] = [
+    ("X300W", "X300W", "How much is an X300W?"),
+    ("Holosun 510C", "510C", "How much is the Holosun 510C?"),
+    ("Staccato C4", "C4", "How much is a Staccato C4?"),
+    ("Cheely E3", "E3", "How much is the Cheely E3?"),
+    ("Streamlight TLR-8", "TLR-8", "How much is a TLR-8?"),
+    ("RMR Type 1", "Type 1", "How much is the RMR Type 1?"),
+    ("Tenicor Certum", "Certum", "How much is the Tenicor Certum?"),
+    ("Safariland 6360", "6360", "How much is the Safariland 6360?"),
+]
+FRESH_ORDINARY: list[tuple[str, str, str]] = [
+    ("cheap staccato c2", "cheap", "STI-C2-9"),
+    ("spare holosun 507c", "spare", "HOL-507C-X2"),
+    ("top staccato p", "top", "STI-P-9"),
+    ("kit atlas flat", "kit", "ATLAS-FLAT"),
+    ("daily tenicor velo", "daily", "TENICOR-VELO"),
+    ("quick streamlight tlr-1", "quick", "SL-TLR1"),
+    ("bag staccato c2", "bag", "STI-C2-9"),
+]
+
 _BANNED = ("phantom", "99999", "glock", "ignoring", "override", "invent a price")
 
 
@@ -413,6 +436,17 @@ def test_third_set_is_unseen() -> None:
     prior.update(_BUILDER)
     overlap = sorted((set(texts) | set(asked)) & prior)
     assert overlap == [], overlap
+    fresh_near = {text.casefold() for text, _code, question in FRESH_NEAR}
+    fresh_near.update(question.casefold() for _text, _code, question in FRESH_NEAR)
+    fresh_ordinary = {text.casefold() for text, _word, _sku in FRESH_ORDINARY}
+    already = prior | {text.casefold() for text, _code in NEAR_MISS}
+    already.update(text.casefold() for text, _code, question in FIFTEEN)
+    already.update(question.casefold() for _text, _code, question in FIFTEEN)
+    already.update(texts)
+    already.update(asked)
+    reused = sorted((fresh_near | fresh_ordinary) & already)
+    assert reused == [], reused
+    assert len(FRESH_NEAR) + len(FRESH_ORDINARY) == 15
 
 
 def test_unseen_gate_2_search(shop: dict[str, Any]) -> None:
@@ -576,15 +610,14 @@ def test_fifteen_unseen_near_miss_codes(shop: dict[str, Any]) -> None:
     bug = ""
     if any(item["kind"] == "ask" for item in wrong):
         bug = (
-            "agents/rig/rigbox/claims.py:206 _subject drops a one-character token, so "
-            "'TLR-7' and 'Type 3' quote the TLR-1 and the RMR Type 2."
+            "agents/rig/rigbox/claims.py:205-212 _subject still lets Ask describe a row "
+            "that does not carry the missing model digit or name."
         )
     if any(item["kind"] == "search" for item in wrong):
         bug = (
             bug
-            + " agents/rig/rigbox/rank.py:234-245 _model_shaped ignores a one-digit code and "
-            "an alphabetic model longer than three letters, so TLR-7, RMR Type 3, and "
-            "Tenicor Malus stay exact_match true."
+            + " agents/rig/rigbox/rank.py:459-504 _unmatched_models left a near-miss "
+            "exact_match true."
         ).strip()
     payload = {"queries": len(FIFTEEN), "wrong": len(wrong), "examples": wrong, "bug": bug}
     _record("fifteen", payload)
@@ -618,14 +651,77 @@ def test_ordinary_words_are_not_false_near_misses(shop: dict[str, Any]) -> None:
         "flagged": len(flagged),
         "examples": flagged,
         "bug": (
-            "agents/rig/rigbox/rank.py:234-237 _model_shaped treats every 2 or 3 letter word "
-            "as a model code."
+            "agents/rig/rigbox/rank.py:496-503 an ordinary word next to a brand is treated "
+            "as an unknown model name."
             if flagged
             else ""
         ),
     }
     _record("ordinary_words", payload)
     assert flagged == [], payload
+
+
+def test_fresh_near_miss_and_ordinary_words(shop: dict[str, Any]) -> None:
+    """Codes the builder has not seen stay closest matches. Ordinary words stay exact."""
+    assert len(FRESH_NEAR) == 8
+    assert len(FRESH_ORDINARY) == 7
+    client: TestClient = shop["client"]
+    service = asyncio.run(old._loaded(Injector(), rate_limit=5000))
+    wrong: list[dict[str, Any]] = []
+
+    async def walk() -> None:
+        for _text, _code, question in FRESH_NEAR:
+            answer = await service.ask(CN, "STI-C2-9", question)
+            said = str(answer.get("answer") or "")
+            if said != "I don't know" or answer.get("cites"):
+                wrong.append({"kind": "ask", "q": question, "answer": said, "cites": answer.get("cites")})
+
+    asyncio.run(walk())
+    for text, code, _question in FRESH_NEAR:
+        response = client.get("/v1/rig/search", params={"q": text, "limit": 3}, headers=_headers(shop))
+        assert response.status_code == 200, (text, response.status_code)
+        body = response.json()
+        problem = _closest_problem(body, code)
+        if problem:
+            wrong.append(
+                {
+                    "kind": "search",
+                    "q": text,
+                    "problem": problem,
+                    "exact_match": body.get("exact_match"),
+                    "message": body.get("message"),
+                    "ids": old._ids(body),
+                }
+            )
+    for text, word, sku in FRESH_ORDINARY:
+        response = client.get("/v1/rig/search", params={"q": text, "limit": 3}, headers=_headers(shop))
+        assert response.status_code == 200, (text, response.status_code)
+        body = response.json()
+        ids = old._ids(body)
+        message = str(body.get("message") or "")
+        if body.get("exact_match") is not True or word.lower() in message.lower() or sku not in ids[:3]:
+            wrong.append(
+                {
+                    "kind": "ordinary",
+                    "q": text,
+                    "word": word,
+                    "exact_match": body.get("exact_match"),
+                    "message": body.get("message"),
+                    "ids": ids,
+                }
+            )
+    bug = ""
+    if any(item["kind"] == "ask" for item in wrong):
+        bug = "agents/rig/rigbox/claims.py:185-202 Ask described a near-miss as a catalogue row."
+    if any(item["kind"] == "search" for item in wrong):
+        bug = (bug + " agents/rig/rigbox/rank.py:459-504 a near-miss stayed exact.").strip()
+    if any(item["kind"] == "ordinary" for item in wrong):
+        bug = (
+            bug + " agents/rig/rigbox/rank.py:496-503 an ordinary word was labelled a missing model."
+        ).strip()
+    payload = {"queries": 15, "wrong": len(wrong), "examples": wrong, "bug": bug}
+    _record("fresh_near_ordinary", payload)
+    assert wrong == [], payload
 
 
 def test_browser_labels_closest_matches() -> None:
@@ -682,6 +778,14 @@ def test_browser_labels_closest_matches() -> None:
             tlr = look("TLR-7", "pr90-near-tlr7.png")
             if "No exact match" not in tlr or "Closest matches" not in tlr:
                 notes.append(f"TLR-7 shown as exact: {tlr[:240]!r}")
+            fresh_near = look("X300W", "pr90-near-x300w.png")
+            if "No exact match for X300W." not in fresh_near or "Closest matches" not in fresh_near:
+                notes.append(f"X300W label missing in {fresh_near[:240]!r}")
+            cheap = look("cheap staccato c2", "pr90-ordinary-cheap.png")
+            if "No exact match" in cheap or "Closest matches" in cheap:
+                notes.append(f"ordinary word flagged: {cheap[:240]!r}")
+            if "Staccato C2" not in cheap:
+                notes.append("cheap staccato c2 did not show the C2")
             browser.close()
     finally:
         server.should_exit = True
