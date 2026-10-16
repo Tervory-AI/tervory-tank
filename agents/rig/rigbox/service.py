@@ -25,7 +25,7 @@ from rigbox.catalogue import (
 )
 from rigbox.claims import answerable
 from rigbox.claims import grounded_answer
-from rigbox.ground import ask_prompt
+from rigbox.claims import select_prompt
 from rigbox.ground import explain as ground_explain
 from rigbox.ground import explain_prompt
 from rigbox.ground import fit_suggest
@@ -239,11 +239,15 @@ class Service:
             raise RigError("invalid", "Ask a question about this catalogue.", 422)
         if product_detail(await self._bundle(tenant_id, product_id)) is None:
             raise RigError("not_found", "No such product.", 404)
-        products = [public_product(row) for row in await self._active(tenant_id)]
+        products = []
+        for row in await self._active(tenant_id):
+            item = public_product(row)
+            item["family"] = str(row.get("family") or "")
+            products.append(item)
         fits = await self._approved_fits(tenant_id)
         payload = {"question": question, "products": products, "fits": fits, "product_id": product_id, "setup": setup}
-        # Every subject word has to be on a catalogue row. One real cite cannot
-        # keep a name, price, or claim that those rows do not state.
+        # Subject words must be whole tokens on a row. The model only names rows.
+        # The sentence is built from that row, or from one approved fit.
         if not answerable(question, products, fits):
             return {"answer": "I don't know", "cites": []}
         if self.models is None:
@@ -251,7 +255,7 @@ class Service:
         text = await self.models.complete(
             tenant_id,
             "rig.ask",
-            [{"role": "user", "content": ask_prompt(payload)}],
+            [{"role": "user", "content": select_prompt(payload)}],
         )
         return grounded_answer(payload, text)
 
