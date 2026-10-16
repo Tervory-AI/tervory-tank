@@ -21,6 +21,7 @@ from rigbox.service import RecordingHandoff, Service, hash_key  # noqa: E402
 from rigbox.store import MemoryStore  # noqa: E402
 
 EXAMPLE = ROOT / "agents" / "rig" / "catalogues" / "example"
+DEMO = ROOT / "agents" / "rig" / "catalogues" / "customnation"
 PAGE = ROOT / "agents" / "rig" / "rigbox" / "page"
 ORIGIN = "https://rig.tervory.com"
 PRODUCT = "Example Rifle 308 20in"
@@ -34,6 +35,10 @@ class Models:
 
 def _publish() -> dict:
     return json.loads((EXAMPLE / "publish.json").read_text(encoding="utf-8"))
+
+
+def _demo_publish() -> dict:
+    return json.loads((DEMO / "publish.json").read_text(encoding="utf-8"))
 
 
 def _load_rig_app():
@@ -115,7 +120,9 @@ def test_rig_app_serves_a_search_page() -> None:
     assert 'type="search"' in html
     assert 'role="search"' in html
     assert "__RIG_PUBLISHABLE_KEY__" not in html
-    assert json.dumps(_publish()["keys"][0]["key"]) in html
+    assert json.dumps(_demo_publish()["keys"][0]["key"]) in html
+    assert _publish()["keys"][0]["key"] not in html
+    assert "Custom Nation" not in html
     assert 'src="/page/search.js"' in html
     assert 'src="/page/tervory-logo-on-white.png"' in html
     assert "api-base" not in html
@@ -123,11 +130,13 @@ def test_rig_app_serves_a_search_page() -> None:
 
 
 @pytest.mark.asyncio
-async def test_search_on_the_page_returns_the_example_product() -> None:
+async def test_search_on_the_page_uses_the_demo_catalogue() -> None:
     store = MemoryStore()
     service = Service(store, Models(), RecordingHandoff())
-    report = await service.load_folder(EXAMPLE)
-    assert report["keys"] == 1
+    demo = await service.load_folder(DEMO)
+    example = await service.load_folder(EXAMPLE)
+    assert demo["keys"] == 1
+    assert example["keys"] == 1
     app = FastAPI()
     app.state.rig = service
     mount(app)
@@ -135,16 +144,28 @@ async def test_search_on_the_page_returns_the_example_product() -> None:
     client = TestClient(app)
     page = client.get("/")
     assert page.status_code == 200
-    key = _publish()["keys"][0]["key"]
-    assert json.dumps(key) in page.text
+    demo_key = _demo_publish()["keys"][0]["key"]
+    example_key = _publish()["keys"][0]["key"]
+    assert json.dumps(demo_key) in page.text
+    assert example_key not in page.text
+    assert "Custom Nation" not in page.text
+    assert 'alt="Tervory"' in page.text
     found = client.get(
         "/v1/rig/search",
-        params={"q": "Rifle", "limit": 12},
-        headers={"X-Rig-Key": key, "Origin": ORIGIN},
+        params={"q": "Staccato", "limit": 12},
+        headers={"X-Rig-Key": demo_key, "Origin": ORIGIN},
     )
     assert found.status_code == 200
     names = [item["name"] for item in found.json()["results"]]
-    assert names == [PRODUCT]
+    assert names[0] == "Staccato C2"
+    assert all("Example" not in name for name in names)
+    other = client.get(
+        "/v1/rig/search",
+        params={"q": "Rifle", "limit": 12},
+        headers={"X-Rig-Key": example_key, "Origin": ORIGIN},
+    )
+    assert other.status_code == 200
+    assert [item["name"] for item in other.json()["results"]] == [PRODUCT]
     script = client.get("/page/search.js")
     assert script.status_code == 200
     assert 'fetch("/v1/rig/search?' in script.text
@@ -280,7 +301,9 @@ async def test_shopper_and_dealer_pages_and_only_approved_fits_show() -> None:
     assert "Compare prices" in home.text
     assert "See compatible accessories" in product_page.text
     assert "Market average" not in home.text
-    assert json.dumps(key) in home.text
+    assert json.dumps(_demo_publish()["keys"][0]["key"]) in home.text
+    assert key not in home.text
+    assert "Custom Nation" not in home.text
     assert "Nothing waiting for review" in dealer.text
     assert "Suggest new fits" in dealer.text
     assert "rk_pub_" not in dealer.text
