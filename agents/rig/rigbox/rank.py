@@ -144,6 +144,47 @@ def _shopping_word(token: str) -> bool:
     return _covered(token, _SHOPPING)
 
 
+_BATTERY = re.compile(r"^[a-z]{2,3}\d{2,4}[a-z]?$")
+
+
+def _battery(token: str) -> bool:
+    """A cell code such as cr123, cr123a, cr2032, or cr2. Not a model code."""
+    return _BATTERY.fullmatch(token) is not None
+
+
+def _catalogue_tokens(rows: list[dict[str, Any]]) -> set[str]:
+    found: set[str] = set()
+    for row in rows:
+        found.update(_tokens(_text(row)))
+    return found
+
+
+def _join_spaced_codes(query: str, rows: list[dict[str, Any]]) -> str:
+    """Read ``c 2`` as the catalogue code ``c2`` when that code is stocked.
+
+    A short run of letters and the digits after it are one code only when
+    the joined form is already a token on a row. ``Type 2`` stays two words,
+    because ``type2`` is not a catalogue token.
+    """
+    vocab = _catalogue_tokens(rows)
+    words = _WORD.findall(query)
+    if len(words) < 2 or not vocab:
+        return query
+    joined: list[str] = []
+    index = 0
+    while index < len(words):
+        letters = _tokens(words[index])
+        if index + 1 < len(words) and len(letters) == 1 and letters[0].isalpha() and len(letters[0]) <= 3:
+            digits = _tokens(words[index + 1])
+            if len(digits) == 1 and digits[0].isdigit() and letters[0] + digits[0] in vocab:
+                joined.append(words[index] + words[index + 1])
+                index += 2
+                continue
+        joined.append(words[index])
+        index += 1
+    return " ".join(joined)
+
+
 def search(payload: dict[str, Any]) -> dict[str, Any]:
     query = str(payload.get("q") or "").strip()
     limit = _limit(payload.get("limit"))
@@ -154,6 +195,7 @@ def search(payload: dict[str, Any]) -> dict[str, Any]:
     rows = [row for row in rows if _active(row)]
     if not query:
         return {"results": [], "ids": []}
+    query = _join_spaced_codes(query, rows)
     sought, host = _intent(query)
     ranked: list[tuple[float, str, dict[str, Any]]] = []
     for row in rows:
@@ -344,6 +386,8 @@ def _unmatched_models(query: str, rows: list[dict[str, Any]]) -> list[str]:
             continue
         needed = _model_parts(parts)
         if needed and not _row_has_all(needed, rows):
+            if all(_battery(part) for part in needed):
+                continue
             add(word)
     for index, (word, parts) in enumerate(parsed):
         if index == 0 or not (len(parts) == 1 and parts[0].isdigit()):
@@ -365,6 +409,9 @@ def _unmatched_models(query: str, rows: list[dict[str, Any]]) -> list[str]:
             if _common_english(token) or not any(char.isdigit() for char in token):
                 continue
         if _covered(token, listed) or _shopping_word(token):
+            continue
+        # "c 4" is one phrase. The digit loop already owns the letter in front of it.
+        if index + 1 < len(flat) and flat[index + 1][1].isdigit():
             continue
         add(surface)
     return missing
