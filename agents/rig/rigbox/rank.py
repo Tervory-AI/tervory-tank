@@ -7,9 +7,10 @@ change when it is at least four characters. A piece of a longer word does not
 count. A model code that is one edit from a real code, or a short prefix of
 one, can surface that row only as a closest match. It is never an exact hit.
 A digit in a model name, including a single digit joined to or following
-a model word, has to sit on that same row. An ordinary word is not a model
-code. A misspelling of a catalogue word is that word. An unknown name next
-to a known brand is a closest match.
+a model word, has to sit on that same row. The only other missing-model
+candidate is the token directly after a known brand, and only when that
+token is not a common English word and not a catalogue word or its typo.
+Words before the brand, and ordinary words after it, are not model codes.
 A word that is already a category outranks a shared name, so that part comes
 ahead of the product it attaches to. Typos use character trigrams, including
 the text with spaces and dashes removed.
@@ -18,6 +19,7 @@ the text with spaces and dashes removed.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Any
 
 from rigbox.logic import _active, _haystack, _limit, _similarity, _sku, _tokens, public_product
@@ -81,187 +83,8 @@ _RELATIONS = (
 )
 _COMPACT = re.compile(r"[^a-z0-9]+")
 _WORD = re.compile(r"[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*")
-# Ordinary words. A short English word is not a model code.
-_COMMON = frozenset(
-    {
-        "buy",
-        "gun",
-        "oh",
-        "set",
-        "up",
-        "rig",
-        "iwb",
-        "typ",
-        "new",
-        "old",
-        "big",
-        "low",
-        "hot",
-        "own",
-        "out",
-        "our",
-        "too",
-        "now",
-        "how",
-        "who",
-        "why",
-        "all",
-        "any",
-        "not",
-        "but",
-        "you",
-        "was",
-        "has",
-        "had",
-        "did",
-        "get",
-        "got",
-        "let",
-        "may",
-        "say",
-        "see",
-        "one",
-        "two",
-        "three",
-        "four",
-        "five",
-        "six",
-        "seven",
-        "eight",
-        "nine",
-        "ten",
-        "eleven",
-        "twelve",
-        "thirteen",
-        "fourteen",
-        "fifteen",
-        "sixteen",
-        "seventeen",
-        "eighteen",
-        "nineteen",
-        "twenty",
-        "thirty",
-        "forty",
-        "fifty",
-        "hundred",
-        "thousand",
-        "zero",
-        "its",
-        "off",
-        "yes",
-        "yet",
-        "nor",
-        "via",
-        "ask",
-        "try",
-        "put",
-        "full",
-        "size",
-        "carry",
-        "race",
-        "model",
-        "ultra",
-        "best",
-        "good",
-        "free",
-        "next",
-        "last",
-        "more",
-        "most",
-        "some",
-        "such",
-        "than",
-        "then",
-        "them",
-        "they",
-        "also",
-        "very",
-        "just",
-        "only",
-        "into",
-        "over",
-        "here",
-        "back",
-        "down",
-        "same",
-        "both",
-        "each",
-        "few",
-        "many",
-        "much",
-        "like",
-        "want",
-        "make",
-        "made",
-        "looking",
-        "called",
-        "please",
-        "show",
-        "find",
-        "need",
-        "about",
-        "your",
-        "have",
-        "will",
-        "from",
-        "shoe",
-        "post",
-        "round",
-        "hold",
-        "front",
-        "rear",
-        "left",
-        "side",
-        "high",
-        "long",
-        "wide",
-        "open",
-        "real",
-        "true",
-        "able",
-        "away",
-        "come",
-        "came",
-        "keep",
-        "know",
-        "take",
-        "tell",
-        "well",
-        "work",
-        "year",
-        "name",
-        "item",
-        "list",
-        "listed",
-        "catalogue",
-        "catalog",
-        "price",
-        "cost",
-        "brand",
-        "appendix",
-        "aluminum",
-        "module",
-        "weapon",
-        "circle",
-        "adjustable",
-        "competition",
-        "precision",
-        "performance",
-        "replacement",
-        "reading",
-        "table",
-        "fabric",
-        "desk",
-        "level",
-        "retention",
-        "fiber",
-        "duty",
-        "flat",
-        "faced",
-        "shaped",
-        "holding",
-    }
-)
+# Frequency list bundled with the agent. Search does not download it.
+_ENGLISH_PATH = Path(__file__).resolve().parents[1] / "english-20k.txt"
 # Relation words are not model codes. "go" would otherwise look like a short code.
 _SKIP = frozenset(
     {
@@ -289,6 +112,25 @@ _TYPO = 0.45
 # Below this, "sig" is not "sight". A different model code is handled apart from this.
 _FUZZY = 0.6
 _CATEGORY = 4.0
+
+
+def _load_english(path: Path) -> frozenset[str]:
+    found: set[str] = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        word = line.split("#", 1)[0].strip().lower()
+        if word.isalpha():
+            found.add(word)
+    return frozenset(found)
+
+
+_ENGLISH = _load_english(_ENGLISH_PATH)
+
+
+def _common_english(token: str) -> bool:
+    """True when the bundled frequency list contains this word or its plural."""
+    if token in _ENGLISH or token in _FILLER:
+        return True
+    return len(token) >= 5 and token.endswith("s") and token[:-1] in _ENGLISH
 
 
 def search(payload: dict[str, Any]) -> dict[str, Any]:
@@ -423,10 +265,6 @@ def _covered(token: str, have: set[str]) -> bool:
     return any(_same_word(token, item) for item in have)
 
 
-def _ordinary(token: str) -> bool:
-    return token in _FILLER or token in _SKIP or token in _COMMON
-
-
 def _row_has_all(parts: list[str], rows: list[dict[str, Any]]) -> bool:
     if not parts:
         return True
@@ -442,7 +280,7 @@ def _model_parts(parts: list[str]) -> list[str]:
     for part in parts:
         if any(char.isdigit() for char in part):
             kept.append(part)
-        elif _ordinary(part) or len(part) < 2:
+        elif part in _FILLER or part in _SKIP or len(part) < 2:
             continue
         else:
             kept.append(part)
@@ -459,16 +297,15 @@ def _fuzzy_word(token: str, vocab: set[str]) -> bool:
 def _unmatched_models(query: str, rows: list[dict[str, Any]]) -> list[str]:
     """Model codes that no single row carries exactly.
 
-    A digit, including a single digit joined to a model word, has to be on
-    that same row. An ordinary short word is not a model. A typo of a real
-    catalogue word is that word. An unknown name next to a known brand is not
-    an exact hit.
+    A token is a missing model only in two cases. It contains a digit that
+    is not on the same row as the rest of that code. Or it is the token
+    directly after a known brand, and it is not a common English word, not
+    a catalogue word, and not a typo of one. Anything before the brand, and
+    any ordinary word, is not a model code.
     """
     vocab = _catalogue_tokens(rows)
     brands = _brand_tokens(rows)
     parsed = [(word, _tokens(word)) for word in _WORD.findall(query)]
-    query_tokens = [part for _, parts in parsed for part in parts]
-    has_brand = any(_covered(token, brands) for token in query_tokens)
     missing: list[str] = []
     seen: set[str] = set()
 
@@ -493,14 +330,20 @@ def _unmatched_models(query: str, rows: list[dict[str, Any]]) -> list[str]:
         needed = _model_parts(prev_parts) + parts
         if not _row_has_all(needed, rows):
             add(f"{prev_word} {word}")
-    if has_brand:
-        for word, parts in parsed:
-            for part in parts:
-                if any(char.isdigit() for char in part) or _ordinary(part):
-                    continue
-                if len(part) < 2 or _covered(part, vocab) or _fuzzy_word(part, vocab):
-                    continue
-                add(word)
+    flat: list[tuple[str, str]] = []
+    for word, parts in parsed:
+        for part in parts:
+            flat.append((word, part))
+    for index in range(1, len(flat)):
+        previous = flat[index - 1][1]
+        surface, token = flat[index]
+        if not _covered(previous, brands):
+            continue
+        if any(char.isdigit() for char in token) or _common_english(token) or len(token) < 2:
+            continue
+        if _covered(token, vocab) or _fuzzy_word(token, vocab):
+            continue
+        add(surface)
     return missing
 
 
