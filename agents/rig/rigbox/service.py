@@ -222,9 +222,11 @@ class Service:
         cached = await self.store.get_answer(tenant_id, "graph", product_id, version)
         if cached is not None:
             return cached
-        built = build_graph(await self._bundle(tenant_id, product_id))
+        bundle = await self._bundle(tenant_id, product_id)
+        built = build_graph(bundle)
         if built is None:
             raise RigError("not_found", "No such product.", 404)
+        await self._annotate_graph(tenant_id, bundle, built)
         await self.store.put_answer(tenant_id, "graph", product_id, version, built)
         return built
 
@@ -308,15 +310,28 @@ class Service:
         return await self.store.reject_fit(tenant_id, part_sku, fits_sku, fits_family)
 
     async def suggested_fits(self, tenant_id: str) -> dict[str, Any]:
+        names = {
+            str(row.get("sku") or row.get("id") or ""): str(row.get("name") or "")
+            for row in await self.store.products(tenant_id)
+        }
         rows: list[dict[str, Any]] = []
         for row in await self.store.fits(tenant_id):
             if str(row.get("source") or "") != "suggested" or row.get("approved"):
                 continue
+            part_sku = str(row.get("part_sku") or "")
+            fits_sku = row.get("fits_sku") or None
+            fits_family = row.get("fits_family") or None
+            if fits_sku:
+                fits_with = names.get(str(fits_sku)) or str(fits_sku)
+            else:
+                fits_with = str(fits_family or "")
             rows.append(
                 {
-                    "part_sku": str(row.get("part_sku") or ""),
-                    "fits_sku": row.get("fits_sku") or None,
-                    "fits_family": row.get("fits_family") or None,
+                    "part_sku": part_sku,
+                    "part_name": names.get(part_sku) or part_sku,
+                    "fits_sku": fits_sku,
+                    "fits_family": fits_family,
+                    "fits_with": fits_with,
                     "confidence": _confidence(row.get("confidence")),
                     "note": str(row.get("note") or ""),
                     "rule": row.get("rule") if isinstance(row.get("rule"), dict) else {},
@@ -508,6 +523,24 @@ class Service:
         await self.store.put_fit_why(tenant_id, fit_id, digest, why)
         return why
 
+    async def _annotate_graph(self, tenant_id: str, bundle: dict[str, Any], built: dict[str, Any]) -> None:
+        """Add the role name and one why-line to each approved fit on the graph."""
+        product_id = str(bundle.get("product_id") or "")
+        centre = _centre(bundle.get("products") or [], product_id)
+        pool = fitting_parts(centre, bundle.get("products") or [], bundle.get("fits") or [])
+        by_sku = {str(part.get("sku") or part.get("id") or ""): (part, fit) for part, fit in pool}
+        roles = _roles_for(bundle.get("templates"), str(centre.get("category") or ""))
+        for branch in built.get("branches") or []:
+            category = str(branch.get("category") or "")
+            branch["role"] = roles.get(category, category)
+            for product in branch.get("products") or []:
+                pair = by_sku.get(str(product.get("id") or ""))
+                if pair is None:
+                    product["why"] = ""
+                    continue
+                lines = await self._fit_why(tenant_id, centre, pair[0], pair[1])
+                product["why"] = " · ".join(line for line in lines if line)
+
     async def _apply_publish(self, tenant_id: str, slug: str, publish: dict[str, Any], report: dict[str, Any]) -> None:
         keys = publish.get("keys") if isinstance(publish.get("keys"), list) else []
         parsed: list[tuple[str, list[str]]] = []
@@ -564,6 +597,31 @@ class Service:
             return {"request_id": quote_id}
         await self.store.mark_sent(tenant_id, quote_id)
         return {"request_id": quote_id}
+
+
+def _roles_for(templates: Any, category: str) -> dict[str, str]:
+    raw: Any = None
+    if isinstance(templates, dict):
+        raw = templates.get(category)
+    if isinstance(raw, dict) and "roles" in raw and "tiers" not in raw:
+        raw = raw.get("roles")
+    tiers: list[Any] = []
+    if isinstance(raw, dict) and isinstance(raw.get("tiers"), list):
+        tiers = list(raw["tiers"])
+    elif isinstance(raw, list):
+        tiers = list(raw)
+    found: dict[str, str] = {}
+    for tier in tiers:
+        if not isinstance(tier, dict):
+            continue
+        for role in tier.get("roles") or []:
+            if not isinstance(role, dict):
+                continue
+            name = str(role.get("role") or role.get("category") or "")
+            cat = str(role.get("category") or name)
+            if cat and cat not in found:
+                found[cat] = name or cat
+    return found
 
 
 def _centre(products: list[dict[str, Any]], product_id: str) -> dict[str, Any]:

@@ -14,18 +14,37 @@
   </head>
   <body>
     <header class="band">
-      <img src="/page/tervory-logo-on-white.png" alt="Tervory" />
+      <a href="/"><img src="/page/tervory-logo-on-white.png" alt="Tervory" /></a>
     </header>
-    <main>
-      <h1>Find a product</h1>
-      <p class="lead">Search this catalogue. Each price is indicative.</p>
-      <form class="search" role="search">
-        <label for="q">Search</label>
-        <input id="q" name="q" type="search" autocomplete="off" enterkeyhint="search" placeholder="Search by name" />
-        <button type="submit">Search</button>
-      </form>
-      <p id="status" class="status" role="status"></p>
-      <ul id="results" class="results"></ul>
+    <main id="main">
+      <section id="search">
+        <h1>Find a product</h1>
+        <p class="lead">Search this catalogue. Each price is indicative.</p>
+        <form class="search" role="search">
+          <label for="q">Search</label>
+          <input id="q" name="q" type="search" autocomplete="off" enterkeyhint="search" placeholder="Search by name" />
+          <button type="submit">Search</button>
+        </form>
+        <p id="status" class="status" role="status"></p>
+        <ul id="results" class="results"></ul>
+      </section>
+      <section id="product" hidden>
+        <button type="button" id="back" class="text">Back</button>
+        <p id="product-name" class="product-name"></p>
+        <div class="product-layout">
+          <div class="upgrades">
+            <h1>Compatible Upgrades</h1>
+            <p id="product-status" class="status" role="status"></p>
+            <div id="groups"></div>
+          </div>
+          <aside class="bundle" aria-label="Bundle">
+            <h2>Bundle</h2>
+            <ul id="bundle-parts" class="bundle-parts"></ul>
+            <p id="bundle-total" class="total"></p>
+            <p class="hint">Indicative</p>
+          </aside>
+        </div>
+      </section>
     </main>
     <script>
       window.RIG_KEY = __RIG_PUBLISHABLE_KEY__;
