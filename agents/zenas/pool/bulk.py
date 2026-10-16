@@ -198,6 +198,9 @@ async def load_source(
         if resume.startswith("snap:"):
             resume = ""
         blobs, next_cursor = await _live_blobs(adapter, http_get, resume)
+        remember = getattr(adapter, "remember_pages", None)
+        if remember is not None and blobs:
+            await remember(store, blobs)
     except (FetchNotConfigured, LicenceError) as exc:
         await store.record_source(source)
         await store.record_run(

@@ -1,0 +1,28 @@
+id: zenas.retrieve
+version: 1.1.0
+agent: zenas
+rung: 3
+description: >
+  Find passages in the legal pool by citation, by the words in the text, and
+  by meaning. Filter by jurisdiction and as-at date. For a South African case,
+  also read SAFLII judgment pages found by the ladder's own search (SearXNG,
+  then Brave) with SAFLII's search as the fallback. Public law only. Code only.
+input:
+  type: object
+  properties:
+    query: {type: string}
+    citation: {type: string}
+    jurisdiction: {type: string}
+    as_at: {type: string}
+    kind: {type: string}
+    corpus: {type: array}
+    saflii_hits: {type: array}
+    saflii_pages: {type: object}
+    saflii_cgi: {type: string}
+output:
+  type: object
+  properties:
+    count: {type: integer}
+    citations: {type: array}
+    saflii_state: {type: string}
+eval_threshold: 1.0

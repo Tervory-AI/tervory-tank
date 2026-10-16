@@ -207,17 +207,88 @@ async def retrieve(
             level=level,
             kind=kind,
         )
-    else:
-        passages = await _passages_from_pool(
-            pool,
-            query=query,
-            citation=citation,
-            jurisdiction=jurisdiction,
-            as_at=as_at,
-            level=level,
-            kind=kind,
+        return {"ok": True, "passages": passages}
+    passages = await _passages_from_pool(
+        pool,
+        query=query,
+        citation=citation,
+        jurisdiction=jurisdiction,
+        as_at=as_at,
+        level=level,
+        kind=kind,
+    )
+    saflii = await _saflii_for_research(
+        pool,
+        jurisdiction=jurisdiction,
+        kind=kind,
+        query=query,
+        citation=citation,
+        already=passages,
+    )
+    if saflii is None:
+        return {"ok": True, "passages": passages}
+    passages = _merge_excerpts(passages, saflii.get("excerpts") or [])
+    return {
+        "ok": True,
+        "passages": passages,
+        "saflii_state": saflii.get("state") or "",
+        "saflii_reason": saflii.get("reason") or "",
+    }
+
+
+def _wants_saflii(jurisdiction: str, kind: str | None, query: str, citation: str) -> bool:
+    """ZA case research looks at SAFLII. A named non-case kind stays in the pool."""
+    if jurisdiction != "za":
+        return False
+    if kind not in (None, "", "case"):
+        return False
+    return bool((query or "").strip() or (citation or "").strip())
+
+
+async def _saflii_for_research(
+    pool: Any,
+    *,
+    jurisdiction: str,
+    kind: str | None,
+    query: str,
+    citation: str,
+    already: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    if not _wants_saflii(jurisdiction, kind, query, citation):
+        return None
+    # The pool already answered a question that was not specifically about a case.
+    if already and kind != "case":
+        return None
+    from agents.zenas.pool.adapters.za_saflii import search_and_fetch
+
+    return await search_and_fetch(query or citation, store=pool, live=True)
+
+
+def _merge_excerpts(passages: list[dict[str, Any]], excerpts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged = list(passages)
+    seen = {str(item.get("citation") or "") for item in passages}
+    for item in excerpts:
+        citation = str(item.get("citation") or "")
+        if citation and citation in seen:
+            continue
+        if citation:
+            seen.add(citation)
+        merged.append(
+            {
+                "doc_id": str(item.get("doc_id") or ""),
+                "version_id": str(item.get("version_id") or ""),
+                "citation": citation,
+                "heading": str(item.get("title") or item.get("heading") or ""),
+                "text": str(item.get("excerpt") or item.get("text") or ""),
+                "path": "",
+                "jurisdiction": "za",
+                "kind": "case",
+                "level": "national",
+                "status": "published",
+                "url": str(item.get("url") or ""),
+            }
         )
-    return {"ok": True, "passages": passages}
+    return merged
 
 
 async def _passages_from_pool(

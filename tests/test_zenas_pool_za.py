@@ -189,22 +189,36 @@ async def _laws_africa_missing():
     assert "LAWS_AFRICA_API_TOKEN is not set" in row["detail"]
 
 
-def test_saflii_live_load_is_deferred():
-    asyncio.run(_saflii_deferred())
+def test_saflii_live_load_stores_civil_judgments(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("SAFLII_MIN_INTERVAL", "0")
+    monkeypatch.setenv("ZA_CASE_MAX_DOCS", "2")
+    asyncio.run(_saflii_live())
 
 
-async def _saflii_deferred():
-    seen: list[str] = []
+async def _saflii_live():
+    civil = (ROOT / "agents/zenas/pool/fixtures/za/saflii/2023-zasca-12.html").read_bytes()
+    criminal = (ROOT / "agents/zenas/pool/fixtures/za/saflii/2023-zasca-99-criminal.html").read_bytes()
+    index = (ROOT / "tests/fixtures/saflii/zasca-recent.html").read_bytes()
+    agents: list[str] = []
 
     async def get(url, headers):
-        seen.append(url)
+        agents.append(headers.get("User-Agent", ""))
+        if url.endswith("/ZASCA/recent.html"):
+            return index
+        if url.endswith("/2023/12.html"):
+            return civil
+        if url.endswith("/2023/99.html"):
+            return criminal
         return b"<html></html>"
 
     store = MemoryStore()
     report = await load_wave(store, region="za", only=[_source("saflii")], live=True, http_get=get, on=ON)
-    assert seen == []
     row = report["sources"][0]
-    assert row["last_status"] == "not_configured"
-    assert row["documents"] == 0
-    assert "deferred" in row["detail"].lower()
-    assert await store.all_text() == ""
+    assert row["last_status"] == "ok"
+    assert row["documents"] == 1
+    assert agents
+    assert set(agents) == {"ZenasResearch/1.0"}
+    text = await store.all_text()
+    assert "bill of lading" in text.lower()
+    assert "Dlamini" not in text
+    assert "criminal appeal" not in text.lower()

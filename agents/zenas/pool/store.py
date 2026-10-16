@@ -302,6 +302,8 @@ class MemoryStore:
         self.runs: dict[str, RunRecord] = {}
         self.cites: dict[tuple[str, str], tuple[str, bool]] = {}
         self.checkpoints: dict[str, tuple[str, int]] = {}
+        # url -> (body, fetched_at, ttl_seconds). Public SAFLII HTML only, on the ZA box.
+        self.page_cache: dict[str, tuple[str, datetime, int]] = {}
 
     async def record_source(self, source: SourceSpec) -> None:
         _guard_home(self.home_region, region=source.region)
@@ -504,6 +506,35 @@ class MemoryStore:
             jurisdiction = jurisdiction_for(self.home_region)
             docs = [doc for doc in docs if doc.jurisdiction == jurisdiction]
         return sum(len(doc.text.encode("utf-8")) for doc in docs)
+
+    async def get_page_cache(self, url: str, *, now: datetime | None = None) -> str | None:
+        _guard_home(self.home_region, region="za")
+        row = self.page_cache.get(url)
+        if row is None:
+            return None
+        body, fetched_at, ttl = row
+        moment = now or datetime.now(timezone.utc)
+        if fetched_at.tzinfo is None:
+            fetched_at = fetched_at.replace(tzinfo=timezone.utc)
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=timezone.utc)
+        if (moment - fetched_at).total_seconds() > ttl:
+            return None
+        return body
+
+    async def put_page_cache(
+        self,
+        url: str,
+        body: str,
+        *,
+        ttl_seconds: int,
+        fetched_at: datetime | None = None,
+    ) -> None:
+        _guard_home(self.home_region, region="za")
+        moment = fetched_at or datetime.now(timezone.utc)
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=timezone.utc)
+        self.page_cache[url] = (body, moment, ttl_seconds)
 
 
 class PostgresStore:
@@ -900,6 +931,45 @@ class PostgresStore:
             jurisdiction,
         )
         return int(row["n"])
+
+    async def get_page_cache(self, url: str, *, now: datetime | None = None) -> str | None:
+        _guard_home(self.home_region, region="za")
+        row = await self._conn.fetchrow(
+            """
+            SELECT body FROM zenas_pool.page_cache
+            WHERE url = $1
+              AND fetched_at + (ttl_seconds * interval '1 second') > COALESCE($2::timestamptz, now())
+            """,
+            url,
+            now,
+        )
+        if row is None:
+            return None
+        return str(row["body"])
+
+    async def put_page_cache(
+        self,
+        url: str,
+        body: str,
+        *,
+        ttl_seconds: int,
+        fetched_at: datetime | None = None,
+    ) -> None:
+        _guard_home(self.home_region, region="za")
+        await self._conn.execute(
+            """
+            INSERT INTO zenas_pool.page_cache (url, source_id, body, fetched_at, ttl_seconds)
+            VALUES ($1, 'saflii', $2, COALESCE($3::timestamptz, now()), $4)
+            ON CONFLICT (url) DO UPDATE SET
+                body = EXCLUDED.body,
+                fetched_at = EXCLUDED.fetched_at,
+                ttl_seconds = EXCLUDED.ttl_seconds
+            """,
+            url,
+            body,
+            fetched_at,
+            ttl_seconds,
+        )
 
 
 def _source_from_row(row) -> SourceSpec:

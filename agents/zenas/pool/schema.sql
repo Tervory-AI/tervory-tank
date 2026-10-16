@@ -130,6 +130,16 @@ CREATE TABLE IF NOT EXISTS zenas_pool.cites (
 CREATE INDEX IF NOT EXISTS cites_to_document
     ON zenas_pool.cites (to_document);
 
+-- Raw judgment HTML, keyed by URL. A judgment does not change, so the copy lasts a year.
+-- Criminal pages are not written here. A Cloudflare check is not written here.
+CREATE TABLE IF NOT EXISTS zenas_pool.page_cache (
+    url            text PRIMARY KEY,
+    source_id      text NOT NULL DEFAULT 'saflii',
+    body           text NOT NULL,
+    fetched_at     timestamptz NOT NULL DEFAULT now(),
+    ttl_seconds    integer NOT NULL
+);
+
 -- How far a resumable load got. A second run continues from cursor.
 CREATE TABLE IF NOT EXISTS zenas_pool.checkpoints (
     source_id        text PRIMARY KEY,
