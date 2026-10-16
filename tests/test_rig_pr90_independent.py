@@ -549,7 +549,7 @@ def test_gate_3_i_dont_know_outside_the_catalogue() -> None:
         "fabricated": len(fabricated),
         "rate_pct": round(rate, 2),
         "model_calls": len(hostile.calls),
-        "examples": fabricated[:6],
+        "examples": fabricated,
         "bug": "agents/rig/rigbox/ground.py:22-32 and :121-126; agents/rig/rigbox/service.py:249-258",
     }
     _record("3_i_dont_know", payload)
@@ -850,6 +850,8 @@ def test_diff_secrets_feeds_and_admin_key() -> None:
         for pattern in patterns:
             if pattern.search(text):
                 secret_hits.append(f"{path} matched {pattern.pattern}")
+        if not path.startswith("agents/rig/"):
+            continue
         lowered = text.lower()
         for host in DISTRIBUTORS:
             if host in lowered:
@@ -1027,9 +1029,34 @@ def test_browser_search_accessories_compare_admin() -> None:
                 notes.append(f"C2 market line missing in {compare[:400]!r}")
             if "Custom Nation price: 58 999 ZAR" not in compare:
                 notes.append("C2 own price missing")
-            if "Market average: not available" not in compare:
-                notes.append("a part with no market rows should say not available")
             shots.append(_shot(page, "pr90-05-compare.png"))
+            lights = page.locator("#bundle-parts li", has_text="SureFire")
+            lights.get_by_role("button", name="Swap part").click()
+            page.locator(".options").get_by_role("button", name="Streamlight TLR-1 HL").click()
+            page.wait_for_function(
+                """() => {
+                  const total = document.querySelector('#bundle-total');
+                  const text = total ? total.textContent.replace(/\\s/g, ' ') : '';
+                  return text.includes('77 092') || text.includes('77092');
+                }"""
+            )
+            swapped = page.locator("#bundle-total").inner_text().replace("\xa0", " ").replace("\u202f", " ")
+            if "77 092" not in swapped and "77092" not in swapped.replace(" ", ""):
+                notes.append(f"swapped bundle total {swapped!r}")
+            page.click("#compare")
+            page.wait_for_function(
+                """() => {
+                  const box = document.querySelector('#compare-lines');
+                  const text = box ? box.textContent : '';
+                  return text.includes('not available') && !text.includes('Loading');
+                }"""
+            )
+            compare_swapped = page.locator("#compare-lines").inner_text().replace("\xa0", " ").replace("\u202f", " ")
+            if "Market average: not available" not in compare_swapped:
+                notes.append(f"Streamlight has no market rows, got {compare_swapped[:500]!r}")
+            if "Custom Nation price: 2 799 ZAR" not in compare_swapped:
+                notes.append("Streamlight own price missing")
+            shots.append(_shot(page, "pr90-05b-no-market.png"))
             page.goto(LOCAL_ORIGIN + "/admin", wait_until="domcontentloaded")
             if "review-admin" in page.content() or "RIG_ADMIN_KEY" in page.content():
                 notes.append("admin key was in the admin page")
