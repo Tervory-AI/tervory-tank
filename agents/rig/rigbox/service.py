@@ -23,12 +23,12 @@ from rigbox.catalogue import (
     map_woocommerce,
     price_patch,
 )
-from rigbox.ground import ask as ground_ask
+from rigbox.claims import answerable
+from rigbox.claims import grounded_answer
 from rigbox.ground import ask_prompt
 from rigbox.ground import explain as ground_explain
 from rigbox.ground import explain_prompt
 from rigbox.ground import fit_suggest
-from rigbox.ground import in_catalogue
 from rigbox.ground import suggest_prompt
 from rigbox.logic import _why as code_why
 from rigbox.logic import approved
@@ -39,8 +39,8 @@ from rigbox.logic import options_for
 from rigbox.logic import product_detail
 from rigbox.logic import public_product
 from rigbox.logic import reprice
-from rigbox.logic import search as rank
 from rigbox.logic import setups as build_setups
+from rigbox.rank import search as rank_room
 from rigbox.store import _fit_key
 
 _KEY = re.compile(r"^rk_pub_[A-Za-z0-9][A-Za-z0-9_-]{0,80}$")
@@ -169,11 +169,7 @@ class Service:
         text = (query or "").strip()
         if not text:
             return {"results": []}
-        finder = getattr(self.store, "search_rows", None)
-        if finder is not None:
-            rows = await finder(tenant_id, text, _limit(limit))
-            return {"results": [public_product(row) for row in rows]}
-        ranked = rank(
+        ranked = rank_room(
             {
                 "tenant_id": tenant_id,
                 "q": text,
@@ -246,7 +242,9 @@ class Service:
         products = [public_product(row) for row in await self._active(tenant_id)]
         fits = await self._approved_fits(tenant_id)
         payload = {"question": question, "products": products, "fits": fits, "product_id": product_id, "setup": setup}
-        if not in_catalogue(question, products, fits):
+        # Every subject word has to be on a catalogue row. One real cite cannot
+        # keep a name, price, or claim that those rows do not state.
+        if not answerable(question, products, fits):
             return {"answer": "I don't know", "cites": []}
         if self.models is None:
             return {"answer": "I don't know", "cites": []}
@@ -255,7 +253,7 @@ class Service:
             "rig.ask",
             [{"role": "user", "content": ask_prompt(payload)}],
         )
-        return ground_ask(payload, text)
+        return grounded_answer(payload, text)
 
     async def link_quote(self, tenant_id: str, url: str, note: str) -> dict[str, str]:
         parsed = urlparse(str(url or "").strip())
@@ -776,12 +774,4 @@ def _contact(contact: dict[str, Any]) -> dict[str, str]:
     if phone:
         out["phone"] = phone
     return out
-
-
-def _limit(value: int | None) -> int:
-    try:
-        number = int(value if value is not None else 12)
-    except (TypeError, ValueError):
-        number = 12
-    return max(1, min(number, 50))
 
