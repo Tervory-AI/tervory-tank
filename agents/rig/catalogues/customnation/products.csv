@@ -1,9 +1,9 @@
 sku,gtin,name,brand,category,price,currency,image_url,product_url,family,active,attributes
 STI-P-9,,Staccato P,Staccato,Pistols,64999.00,ZAR,https://assets.local/sti-p-9.jpg,,STACCATO-2011,yes,{}
-STI-C2-9,,Staccato C2,Staccato,Pistols,58999.00,ZAR,https://assets.local/sti-c2-9.jpg,,STACCATO-2011,yes,{}
+STI-C2-9,,Staccato C2,Staccato,Pistols,58999.00,ZAR,https://assets.local/sti-c2-9.jpg,,STACCATO-2011,yes,"{""size"": ""compact""}"
 STI-XC-9,,Staccato XC,Staccato,Pistols,89999.00,ZAR,https://assets.local/sti-xc-9.jpg,,STACCATO-2011,yes,{}
-TRIJ-RMR-T2,,Trijicon RMR Type 2,Trijicon,Optics,9999.00,ZAR,https://assets.local/rmr-t2.jpg,,,yes,{}
-HOL-507C-X2,,Holosun 507C X2,Holosun,Optics,5499.00,ZAR,https://assets.local/507c.jpg,,,yes,{}
+TRIJ-RMR-T2,,Trijicon RMR Type 2,Trijicon,Optics,9999.00,ZAR,https://assets.local/rmr-t2.jpg,,,yes,"{""kind"": ""red dot""}"
+HOL-507C-X2,,Holosun 507C X2,Holosun,Optics,5499.00,ZAR,https://assets.local/507c.jpg,,,yes,"{""kind"": ""red dot""}"
 DAW-FO-FRONT,,Dawson fiber front sight,Dawson Precision,Aftermarket sights,899.00,ZAR,https://assets.local/dawson-front.jpg,,,yes,{}
 TEN8-REAR,,10-8 rear sight,10-8 Performance,Aftermarket sights,1299.00,ZAR,https://assets.local/ten8-rear.jpg,,,yes,{}
 CHEELY-E2,,Cheely E2 grip,Cheely,Grips,3499.00,ZAR,https://assets.local/cheely-e2.jpg,,,yes,{}
