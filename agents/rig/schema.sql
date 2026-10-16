@@ -1,6 +1,11 @@
 -- Rig's room. Additive and idempotent. Applied by the agent on start.
 -- Shoppers only see rows with approved = true. Imported rows are approved.
 -- Suggested rows stay hidden until approve_fit sets approved.
+-- Rejected rows have source 'rejected' and approved = false, so shoppers never see them.
+-- answers stores one graph or setup per product, keyed by a hash of the catalogue.
+-- fit_why stores why-text for one fit, keyed by a hash of its rule and note.
+-- Import, a feed pull, a price watch, approve, and reject clear answers for that tenant.
+-- fit_why is kept so a known fit is not sent to a model again.
 
 CREATE SCHEMA IF NOT EXISTS agent_rig;
 
@@ -102,4 +107,21 @@ CREATE TABLE IF NOT EXISTS agent_rig.feeds (
     url        text NOT NULL,
     currency   text NOT NULL DEFAULT '',
     PRIMARY KEY (tenant_id, url)
+);
+
+CREATE TABLE IF NOT EXISTS agent_rig.answers (
+    tenant_id   uuid NOT NULL,
+    kind        text NOT NULL,
+    product_id  text NOT NULL,
+    version     text NOT NULL,
+    body        jsonb NOT NULL,
+    PRIMARY KEY (tenant_id, kind, product_id)
+);
+
+CREATE TABLE IF NOT EXISTS agent_rig.fit_why (
+    tenant_id   uuid NOT NULL,
+    fit_id      text NOT NULL,
+    rule_hash   text NOT NULL,
+    why         jsonb NOT NULL,
+    PRIMARY KEY (tenant_id, fit_id, rule_hash)
 );

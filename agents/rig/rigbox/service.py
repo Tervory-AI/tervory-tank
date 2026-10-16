@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
+import json
+import os
 import re
 import time
 from pathlib import Path
@@ -26,7 +29,9 @@ from rigbox.ground import explain_prompt
 from rigbox.ground import fit_suggest
 from rigbox.ground import in_catalogue
 from rigbox.ground import suggest_prompt
+from rigbox.logic import _why as code_why
 from rigbox.logic import approved
+from rigbox.logic import fitting_parts
 from rigbox.logic import graph as build_graph
 from rigbox.logic import options_for
 from rigbox.logic import product_detail
@@ -138,6 +143,26 @@ class Service:
             raise RigError("unauthorized", "That key is not valid.", 401)
         return row
 
+    async def authenticate_admin(self, raw_key: str) -> dict[str, Any]:
+        """An admin key from the keys table. No login. A publishable key is refused."""
+        presented = raw_key or ""
+        digest = hash_key(presented)
+        if not self.limiter.allow(digest):
+            raise RigError("rate_limit", "Too many requests. Try again in a minute.", 429)
+        if not presented:
+            raise RigError("unauthorized", "That key is not valid.", 401)
+        row = await self.store.key(digest)
+        if row is not None:
+            if row.get("kind") != "admin":
+                raise RigError("forbidden", "That key cannot manage fits.", 403)
+            return row
+        env_key = os.environ.get("RIG_ADMIN_KEY") or ""
+        if env_key and hmac.compare_digest(presented, env_key):
+            tenants = await self.store.tenant_ids()
+            if len(tenants) == 1:
+                return {"tenant_id": tenants[0], "kind": "admin", "origins": []}
+        raise RigError("unauthorized", "That key is not valid.", 401)
+
     async def search(self, tenant_id: str, query: str, limit: int | None) -> dict[str, Any]:
         text = (query or "").strip()
         if not text:
@@ -163,13 +188,22 @@ class Service:
         return detail
 
     async def setups(self, tenant_id: str, product_id: str) -> dict[str, Any]:
+        version = await self._catalogue_version(tenant_id)
+        cached = await self.store.get_answer(tenant_id, "setups", product_id, version)
+        if cached is not None:
+            return cached
         bundle = await self._bundle(tenant_id, product_id)
         if product_detail(bundle) is None:
             raise RigError("not_found", "No such product.", 404)
         built = build_setups(bundle)
+        centre = _centre(bundle["products"], product_id)
         for setup in built["setups"]:
-            setup["why"] = await self._explain(tenant_id, setup)
-        return {"setups": built["setups"]}
+            setup["why"] = await self._compose_why(
+                tenant_id, centre, setup, bundle["products"], bundle["fits"]
+            )
+        body = {"setups": built["setups"]}
+        await self.store.put_answer(tenant_id, "setups", product_id, version, body)
+        return body
 
     async def swap(self, tenant_id: str, setup: dict[str, Any], role: str) -> dict[str, Any]:
         products = await self._active(tenant_id)
@@ -184,9 +218,14 @@ class Service:
         }
 
     async def graph(self, tenant_id: str, product_id: str) -> dict[str, Any]:
+        version = await self._catalogue_version(tenant_id)
+        cached = await self.store.get_answer(tenant_id, "graph", product_id, version)
+        if cached is not None:
+            return cached
         built = build_graph(await self._bundle(tenant_id, product_id))
         if built is None:
             raise RigError("not_found", "No such product.", 404)
+        await self.store.put_answer(tenant_id, "graph", product_id, version, built)
         return built
 
     async def ask(
@@ -264,6 +303,27 @@ class Service:
 
     async def approve(self, tenant_id: str, part_sku: str, fits_sku: str | None, fits_family: str | None) -> bool:
         return await self.store.approve_fit(tenant_id, part_sku, fits_sku, fits_family)
+
+    async def reject(self, tenant_id: str, part_sku: str, fits_sku: str | None, fits_family: str | None) -> bool:
+        return await self.store.reject_fit(tenant_id, part_sku, fits_sku, fits_family)
+
+    async def suggested_fits(self, tenant_id: str) -> dict[str, Any]:
+        rows: list[dict[str, Any]] = []
+        for row in await self.store.fits(tenant_id):
+            if str(row.get("source") or "") != "suggested" or row.get("approved"):
+                continue
+            rows.append(
+                {
+                    "part_sku": str(row.get("part_sku") or ""),
+                    "fits_sku": row.get("fits_sku") or None,
+                    "fits_family": row.get("fits_family") or None,
+                    "confidence": _confidence(row.get("confidence")),
+                    "note": str(row.get("note") or ""),
+                    "rule": row.get("rule") if isinstance(row.get("rule"), dict) else {},
+                }
+            )
+        rows.sort(key=lambda item: (item["part_sku"], item["fits_sku"] or "", item["fits_family"] or ""))
+        return {"fits": rows}
 
     async def apply_watch(self, tenant_id: str, sku: str, update: dict[str, Any]) -> bool:
         patch = price_patch(update)
@@ -366,15 +426,73 @@ class Service:
         return [row for row in await self.store.products(tenant_id) if row.get("active", True)]
 
     async def _approved_fits(self, tenant_id: str) -> list[dict[str, Any]]:
-        return [row for row in await self.store.fits(tenant_id) if approved(row)]
+        kept: list[dict[str, Any]] = []
+        for row in await self.store.fits(tenant_id):
+            if str(row.get("source") or "") == "rejected":
+                continue
+            if approved(row):
+                kept.append(row)
+        return kept
 
-    async def _explain(self, tenant_id: str, setup: dict[str, Any]) -> list[str]:
-        fallback = list(setup.get("why") or [])
+    async def _catalogue_version(self, tenant_id: str) -> str:
+        products = [_version_product(row) for row in await self.store.products(tenant_id)]
+        fits = [_version_fit(row) for row in await self._approved_fits(tenant_id)]
+        fits.sort(key=lambda row: (row["part_sku"], row["fits_sku"], row["fits_family"]))
+        payload = {
+            "products": products,
+            "fits": fits,
+            "templates": await self.store.templates_for(tenant_id),
+        }
+        raw = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":"))
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    async def _compose_why(
+        self,
+        tenant_id: str,
+        centre: dict[str, Any],
+        setup: dict[str, Any],
+        products: list[dict[str, Any]],
+        fits: list[dict[str, Any]],
+    ) -> list[str]:
+        pool = fitting_parts(centre, products, fits)
+        by_sku = {str(part.get("sku") or part.get("id") or ""): (part, fit) for part, fit in pool}
+        header = f"Fits {centre.get('name')}"
+        lines = [header]
+        for slot in (setup.get("parts") or [])[1:]:
+            sku = str((slot.get("product") or {}).get("id") or "")
+            pair = by_sku.get(sku)
+            if pair is None:
+                continue
+            for line in await self._fit_why(tenant_id, centre, pair[0], pair[1]):
+                if line not in lines:
+                    lines.append(line)
+        return lines
+
+    async def _fit_why(
+        self,
+        tenant_id: str,
+        centre: dict[str, Any],
+        part: dict[str, Any],
+        fit: dict[str, Any],
+    ) -> list[str]:
+        fit_id = _fit_identity(fit)
+        digest = _rule_note_hash(fit)
+        stored = await self.store.get_fit_why(tenant_id, fit_id, digest)
+        if stored is not None:
+            return stored
+        header = f"Fits {centre.get('name')}"
+        specific = [line for line in code_why(centre, [(part, fit)]) if line != header]
+        if specific:
+            await self.store.put_fit_why(tenant_id, fit_id, digest, specific)
+            return specific
         if self.models is None:
-            return fallback
+            return []
         material = [
-            {"role": part["role"], "id": part["product"]["id"], "name": part["product"]["name"]}
-            for part in setup.get("parts") or []
+            {
+                "role": str(part.get("category") or ""),
+                "id": str(part.get("sku") or part.get("id") or ""),
+                "name": str(part.get("name") or ""),
+            }
         ]
         try:
             text = await self.models.complete(
@@ -382,10 +500,13 @@ class Service:
                 "rig.explain",
                 [{"role": "user", "content": explain_prompt({"material": material})}],
             )
-        except Exception:  # noqa: BLE001 — a model outage keeps the rule lines
-            return fallback
-        why = ground_explain({"fallback_why": fallback}, text)["why"]
-        return why or fallback
+        except Exception:  # noqa: BLE001 — a model outage keeps the plain Fits line
+            return []
+        why = [line for line in ground_explain({"fallback_why": []}, text)["why"] if line != header]
+        if not why:
+            return []
+        await self.store.put_fit_why(tenant_id, fit_id, digest, why)
+        return why
 
     async def _apply_publish(self, tenant_id: str, slug: str, publish: dict[str, Any], report: dict[str, Any]) -> None:
         keys = publish.get("keys") if isinstance(publish.get("keys"), list) else []
@@ -443,6 +564,74 @@ class Service:
             return {"request_id": quote_id}
         await self.store.mark_sent(tenant_id, quote_id)
         return {"request_id": quote_id}
+
+
+def _centre(products: list[dict[str, Any]], product_id: str) -> dict[str, Any]:
+    for row in products:
+        if str(row.get("sku") or row.get("id") or "") == product_id:
+            return row
+    return {}
+
+
+def _version_product(row: dict[str, Any]) -> dict[str, Any]:
+    attributes = row.get("attributes") if isinstance(row.get("attributes"), dict) else {}
+    price = row.get("price")
+    if isinstance(price, dict):
+        price = price.get("amount")
+    return {
+        "sku": str(row.get("sku") or row.get("id") or ""),
+        "name": str(row.get("name") or ""),
+        "brand": str(row.get("brand") or ""),
+        "category": str(row.get("category") or ""),
+        "price": str(price),
+        "currency": str(row.get("currency") or ""),
+        "family": str(row.get("family") or ""),
+        "image": str(row.get("image_url") or row.get("image") or ""),
+        "active": bool(row.get("active", True)),
+        "attributes": attributes,
+    }
+
+
+def _version_fit(row: dict[str, Any]) -> dict[str, Any]:
+    rule = row.get("rule") if isinstance(row.get("rule"), dict) else {}
+    return {
+        "part_sku": str(row.get("part_sku") or ""),
+        "fits_sku": str(row.get("fits_sku") or ""),
+        "fits_family": str(row.get("fits_family") or ""),
+        "rule": rule,
+        "note": str(row.get("note") or ""),
+        "source": str(row.get("source") or ""),
+    }
+
+
+def _fit_identity(fit: dict[str, Any]) -> str:
+    return "\x1f".join(
+        [
+            str(fit.get("part_sku") or ""),
+            str(fit.get("fits_sku") or ""),
+            str(fit.get("fits_family") or ""),
+        ]
+    )
+
+
+def _rule_note_hash(fit: dict[str, Any]) -> str:
+    rule = fit.get("rule") if isinstance(fit.get("rule"), dict) else {}
+    payload = json.dumps(
+        {"rule": rule, "note": str(fit.get("note") or "")},
+        sort_keys=True,
+        default=str,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _confidence(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _contact(contact: dict[str, Any]) -> dict[str, str]:
