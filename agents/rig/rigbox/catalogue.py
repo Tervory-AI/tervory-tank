@@ -31,6 +31,20 @@ def parse_fits_csv(text: str) -> dict[str, Any]:
     return _parse_table(text, _fit_row)
 
 
+def parse_market_csv(text: str) -> dict[str, Any]:
+    """Other sellers' prices. Not catalogue rows, and not used by search."""
+    parsed = _parse_table(text, _market_row)
+    if parsed["rejected"]:
+        return parsed
+    seen: set[tuple[str, str]] = set()
+    for row in parsed["rows"]:
+        key = (row["sku"], row["source"])
+        if key in seen:
+            return {"rows": [], "rejected": [{"row": row["row"], "reason": "sku and source are repeated"}]}
+        seen.add(key)
+    return parsed
+
+
 def check_fit_refs(rows: list[dict[str, Any]], skus: set[str], families: set[str]) -> list[dict[str, Any]]:
     rejected: list[dict[str, Any]] = []
     for row in rows:
@@ -115,6 +129,8 @@ def load_folder(folder: Path) -> dict[str, Any]:
         "rows": [],
         "rejected": [],
     }
+    market_path = folder / "market.csv"
+    market = parse_market_csv(market_path.read_text(encoding="utf-8")) if market_path.is_file() else None
     return {
         "slug": folder.name,
         "tenant_id": tenant_id,
@@ -122,6 +138,7 @@ def load_folder(folder: Path) -> dict[str, Any]:
         "publish_error": publish_error,
         "products": products,
         "fits": fits,
+        "market": market,
     }
 
 
@@ -204,6 +221,24 @@ def _fit_row(raw: dict[str, str | None], index: int) -> dict[str, Any]:
         "source": "import",
         "approved": True,
         "confidence": 1,
+    }
+
+
+def _market_row(raw: dict[str, str | None], index: int) -> dict[str, Any]:
+    values = {key: (value or "").strip() for key, value in raw.items() if key}
+    missing = [name for name in ("sku", "source", "price", "currency") if not values.get(name)]
+    if missing:
+        raise ValueError("missing " + ", ".join(missing))
+    currency = values["currency"].upper()
+    if len(currency) != 3 or not currency.isalpha():
+        raise ValueError("currency must be a three-letter code")
+    return {
+        "row": index,
+        "sku": values["sku"],
+        "source": values["source"],
+        "price": _money_text(values["price"]),
+        "currency": currency,
+        "seen_at": values.get("seen_at") or "",
     }
 
 

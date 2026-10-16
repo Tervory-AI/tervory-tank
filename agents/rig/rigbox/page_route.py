@@ -1,4 +1,4 @@
-"""Shopper search page served at GET /. Calls this host's /v1/rig. Never logs the key."""
+"""Shopper and dealer pages. Calls this host's /v1/rig. Never logs a key."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ _PAGE = Path(__file__).resolve().parent / "page"
 _ASSETS = {
     "search.js": "text/javascript",
     "search.css": "text/css",
+    "admin.js": "text/javascript",
     "tervory-logo-on-white.png": "image/png",
 }
 
@@ -29,12 +30,25 @@ def example_key() -> str:
     return str(keys[0].get("key") or "")
 
 
+def _shopper_html() -> HTMLResponse:
+    html = (_PAGE / "index.html").read_text(encoding="utf-8")
+    html = html.replace("__RIG_PUBLISHABLE_KEY__", json.dumps(example_key()))
+    return HTMLResponse(html)
+
+
 def mount_page(application: FastAPI) -> None:
     @application.get("/", include_in_schema=False)
     async def search_page() -> HTMLResponse:
-        html = (_PAGE / "index.html").read_text(encoding="utf-8")
-        html = html.replace("__RIG_PUBLISHABLE_KEY__", json.dumps(example_key()))
-        return HTMLResponse(html)
+        return _shopper_html()
+
+    @application.get("/product/{product_id}", include_in_schema=False)
+    async def product_page(product_id: str) -> HTMLResponse:
+        del product_id
+        return _shopper_html()
+
+    @application.get("/admin", include_in_schema=False)
+    async def admin_page() -> HTMLResponse:
+        return HTMLResponse((_PAGE / "admin.html").read_text(encoding="utf-8"))
 
     @application.get("/page/{name}", include_in_schema=False)
     async def search_asset(name: str) -> FileResponse:

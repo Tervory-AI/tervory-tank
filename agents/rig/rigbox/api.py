@@ -43,6 +43,16 @@ class QuoteIn(BaseModel):
     contact: dict[str, Any] = Field(default_factory=dict)
 
 
+class CompareIn(BaseModel):
+    product_ids: list[str] = Field(min_length=1)
+
+
+class FitDecision(BaseModel):
+    part_sku: str = Field(min_length=1)
+    fits_sku: str | None = None
+    fits_family: str | None = None
+
+
 def mount(app: FastAPI) -> None:
     app.include_router(router)
     app.add_exception_handler(RigError, _on_rig_error)
@@ -85,6 +95,23 @@ async def _auth(request: Request) -> dict[str, Any]:
 
 def _tenant(request: Request) -> str:
     return str(request.state.tenant_id)
+
+
+async def _admin(request: Request) -> dict[str, Any]:
+    raw = request.headers.get("x-rig-key") or ""
+    row = await _service(request).authenticate_admin(raw)
+    request.state.tenant_id = row["tenant_id"]
+    request.state.rig_origin_ok = False
+    return row
+
+
+def _one_target(payload: FitDecision) -> tuple[str, str | None, str | None]:
+    part = payload.part_sku.strip()
+    sku = (payload.fits_sku or "").strip()
+    family = (payload.fits_family or "").strip()
+    if not part or bool(sku) == bool(family):
+        raise RigError("invalid", "Name the part and either the product or the family it fits.", 422)
+    return part, (sku or None), (family or None)
 
 
 async def _on_rig_error(request: Request, exc: RigError) -> JSONResponse:
@@ -147,6 +174,13 @@ async def graph(request: Request, product_id: str) -> Response:
     return _ok(request, body)
 
 
+@router.post("/compare")
+async def compare(request: Request, payload: CompareIn) -> Response:
+    await _auth(request)
+    body = await _service(request).compare(_tenant(request), payload.product_ids)
+    return _ok(request, body)
+
+
 @router.post("/ask")
 async def ask(request: Request, payload: AskIn) -> Response:
     await _auth(request)
@@ -168,6 +202,42 @@ async def quote(request: Request, payload: QuoteIn) -> Response:
         _tenant(request),
         {"setup": payload.setup, "product_id": payload.product_id, "contact": payload.contact},
     )
+    return _ok(request, body)
+
+
+@router.get("/admin/fits")
+async def admin_fits(request: Request, status: str = "suggested") -> Response:
+    await _admin(request)
+    if status != "suggested":
+        raise RigError("invalid", "Ask for suggested fits.", 422)
+    body = await _service(request).suggested_fits(_tenant(request))
+    return _ok(request, body)
+
+
+@router.post("/admin/fits/approve")
+async def admin_approve(request: Request, payload: FitDecision) -> Response:
+    await _admin(request)
+    part, sku, family = _one_target(payload)
+    ok = await _service(request).approve(_tenant(request), part, sku, family)
+    if not ok:
+        raise RigError("not_found", "No such fit.", 404)
+    return _ok(request, {"approved": True})
+
+
+@router.post("/admin/fits/reject")
+async def admin_reject(request: Request, payload: FitDecision) -> Response:
+    await _admin(request)
+    part, sku, family = _one_target(payload)
+    ok = await _service(request).reject(_tenant(request), part, sku, family)
+    if not ok:
+        raise RigError("not_found", "No such fit.", 404)
+    return _ok(request, {"rejected": True})
+
+
+@router.post("/admin/fits/suggest")
+async def admin_suggest(request: Request) -> Response:
+    await _admin(request)
+    body = await _service(request).suggest(_tenant(request))
     return _ok(request, body)
 
 

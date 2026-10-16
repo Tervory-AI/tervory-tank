@@ -16,6 +16,7 @@ services:
       DATABASE_URL: postgresql://agent_rig:${AGENT_DB_PASSWORD_RIG}@postgres:5432/${POSTGRES_DB:-tervory}
       TANK_URL: http://tank:8000
       TANK_KEY: ${TANK_KEY_RIG:-}
+      RIG_ADMIN_KEY: ${RIG_ADMIN_KEY:-}
       HERMES_URL: http://hermes:8000
       DATA_DIR: /data
       CATALOGUE_DIR: /app/catalogues

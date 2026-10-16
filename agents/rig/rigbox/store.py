@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 from typing import Any
@@ -163,6 +164,13 @@ class MemoryStore:
         self.quotes: list[dict[str, Any]] = []
         self.retailers: dict[str, dict[str, Any]] = {}
         self.feeds: dict[tuple[str, str], dict[str, Any]] = {}
+        self.answers: dict[tuple[str, str, str], tuple[str, dict[str, Any]]] = {}
+        self.fit_why: dict[tuple[str, str, str], list[str]] = {}
+        self.market: dict[tuple[str, str, str], dict[str, Any]] = {}
+
+    def _drop_answers(self, tenant_id: str) -> None:
+        tenant = str(tenant_id)
+        self.answers = {key: value for key, value in self.answers.items() if key[0] != tenant}
 
     async def product_exists(self, tenant_id: str, sku: str) -> bool:
         return (str(tenant_id), sku) in self._products
@@ -171,6 +179,7 @@ class MemoryStore:
         key = (str(tenant_id), str(row["sku"]))
         action = "updated" if key in self._products else "added"
         self._products[key] = {**row, "tenant_id": str(tenant_id), "sku": str(row["sku"])}
+        self._drop_answers(tenant_id)
         return action
 
     async def products(self, tenant_id: str) -> list[dict[str, Any]]:
@@ -185,6 +194,7 @@ class MemoryStore:
             "fits_sku": fits_sku or None,
             "fits_family": fits_family or None,
         }
+        self._drop_answers(tenant_id)
 
     async def fits(self, tenant_id: str) -> list[dict[str, Any]]:
         return [row for key, row in self._fits.items() if key[0] == str(tenant_id)]
@@ -194,6 +204,7 @@ class MemoryStore:
 
     async def set_template(self, tenant_id: str, category: str, roles: Any) -> None:
         self.templates[(str(tenant_id), category)] = roles
+        self._drop_answers(tenant_id)
 
     async def templates_for(self, tenant_id: str) -> dict[str, Any]:
         return {category: roles for (tenant, category), roles in self.templates.items() if tenant == str(tenant_id)}
@@ -209,12 +220,43 @@ class MemoryStore:
         row = self.keys.get(key_hash)
         return dict(row) if row else None
 
-    async def put_retailer(self, tenant_id: str, slug: str, email: str | None, webhook: str | None) -> None:
-        self.retailers[str(tenant_id)] = {"slug": slug, "email": email, "webhook": webhook}
+    async def put_retailer(
+        self,
+        tenant_id: str,
+        slug: str,
+        email: str | None,
+        webhook: str | None,
+        name: str = "",
+    ) -> None:
+        self.retailers[str(tenant_id)] = {"slug": slug, "email": email, "webhook": webhook, "name": name}
 
     async def retailer(self, tenant_id: str) -> dict[str, Any] | None:
         row = self.retailers.get(str(tenant_id))
         return dict(row) if row else None
+
+    async def replace_market(self, tenant_id: str, rows: list[dict[str, Any]]) -> None:
+        tenant = str(tenant_id)
+        self.market = {key: value for key, value in self.market.items() if key[0] != tenant}
+        for row in rows:
+            sku = str(row.get("sku") or "")
+            source = str(row.get("source") or "")
+            self.market[(tenant, sku, source)] = {
+                "sku": sku,
+                "source": source,
+                "price": row.get("price"),
+                "currency": str(row.get("currency") or ""),
+                "seen_at": str(row.get("seen_at") or ""),
+            }
+        self._drop_answers(tenant)
+
+    async def market_for(self, tenant_id: str, skus: list[str]) -> list[dict[str, Any]]:
+        wanted = {str(sku) for sku in skus}
+        tenant = str(tenant_id)
+        return [
+            dict(row)
+            for (owner, sku, _source), row in self.market.items()
+            if owner == tenant and sku in wanted
+        ]
 
     async def put_feed(self, tenant_id: str, fmt: str, url: str, currency: str) -> None:
         self.feeds[(str(tenant_id), url)] = {"format": fmt, "url": url, "currency": currency}
@@ -245,7 +287,20 @@ class MemoryStore:
         row = self._fits.get(key)
         if row is None:
             return False
+        if row.get("source") == "rejected":
+            row["source"] = "suggested"
         row["approved"] = True
+        self._drop_answers(tenant_id)
+        return True
+
+    async def reject_fit(self, tenant_id: str, part_sku: str, fits_sku: str | None, fits_family: str | None) -> bool:
+        key = (str(tenant_id), part_sku, fits_sku or "", fits_family or "")
+        row = self._fits.get(key)
+        if row is None:
+            return False
+        row["approved"] = False
+        row["source"] = "rejected"
+        self._drop_answers(tenant_id)
         return True
 
     async def update_price(self, tenant_id: str, sku: str, patch: dict[str, Any]) -> bool:
@@ -258,7 +313,26 @@ class MemoryStore:
             row["currency"] = patch["currency"]
         if "active" in patch:
             row["active"] = patch["active"]
+        self._drop_answers(tenant_id)
         return True
+
+    async def get_answer(self, tenant_id: str, kind: str, product_id: str, version: str) -> dict[str, Any] | None:
+        found = self.answers.get((str(tenant_id), kind, product_id))
+        if found is None or found[0] != version:
+            return None
+        return copy.deepcopy(found[1])
+
+    async def put_answer(self, tenant_id: str, kind: str, product_id: str, version: str, body: dict[str, Any]) -> None:
+        self.answers[(str(tenant_id), kind, product_id)] = (version, copy.deepcopy(body))
+
+    async def get_fit_why(self, tenant_id: str, fit_id: str, rule_hash: str) -> list[str] | None:
+        found = self.fit_why.get((str(tenant_id), fit_id, rule_hash))
+        if found is None:
+            return None
+        return list(found)
+
+    async def put_fit_why(self, tenant_id: str, fit_id: str, rule_hash: str, why: list[str]) -> None:
+        self.fit_why[(str(tenant_id), fit_id, rule_hash)] = [str(line) for line in why]
 
 
 def _record_product(row: Any) -> dict[str, Any]:
@@ -362,6 +436,7 @@ class PgStore:
                 _json(row.get("attributes") or {}),
                 bool(row.get("active", True)),
             )
+        await self._drop_answers(tenant_id)
         return "updated" if existed else "added"
 
     async def products(self, tenant_id: str) -> list[dict[str, Any]]:
@@ -403,6 +478,7 @@ class PgStore:
                 bool(row.get("approved")),
                 str(row.get("note") or ""),
             )
+        await self._drop_answers(tenant_id)
 
     async def fits(self, tenant_id: str) -> list[dict[str, Any]]:
         async with self.pool.acquire() as conn:
@@ -458,6 +534,7 @@ class PgStore:
                 category,
                 _json(roles),
             )
+        await self._drop_answers(tenant_id)
 
     async def templates_for(self, tenant_id: str) -> dict[str, Any]:
         async with self.pool.acquire() as conn:
@@ -500,29 +577,103 @@ class PgStore:
             return None
         return {"tenant_id": str(row["tenant_id"]), "kind": row["kind"], "origins": list(row["origins"] or [])}
 
-    async def put_retailer(self, tenant_id: str, slug: str, email: str | None, webhook: str | None) -> None:
+    async def put_retailer(
+        self,
+        tenant_id: str,
+        slug: str,
+        email: str | None,
+        webhook: str | None,
+        name: str = "",
+    ) -> None:
         async with self.pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO agent_rig.retailers (tenant_id, slug, email, webhook)
-                VALUES ($1, $2, $3, $4)
-                ON CONFLICT (tenant_id) DO UPDATE SET slug = EXCLUDED.slug, email = EXCLUDED.email, webhook = EXCLUDED.webhook
+                INSERT INTO agent_rig.retailers (tenant_id, slug, email, webhook, name)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (tenant_id) DO UPDATE SET
+                    slug = EXCLUDED.slug,
+                    email = EXCLUDED.email,
+                    webhook = EXCLUDED.webhook,
+                    name = EXCLUDED.name
                 """,
                 _uuid(tenant_id),
                 slug,
                 email,
                 webhook,
+                name,
             )
 
     async def retailer(self, tenant_id: str) -> dict[str, Any] | None:
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT slug, email, webhook FROM agent_rig.retailers WHERE tenant_id = $1",
+                "SELECT slug, email, webhook, name FROM agent_rig.retailers WHERE tenant_id = $1",
                 _uuid(tenant_id),
             )
         if row is None:
             return None
-        return {"slug": row["slug"], "email": row["email"], "webhook": row["webhook"]}
+        return {"slug": row["slug"], "email": row["email"], "webhook": row["webhook"], "name": row["name"] or ""}
+
+    async def replace_market(self, tenant_id: str, rows: list[dict[str, Any]]) -> None:
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute(
+                    "DELETE FROM agent_rig.market_prices WHERE tenant_id = $1",
+                    _uuid(tenant_id),
+                )
+                for row in rows:
+                    seen = str(row.get("seen_at") or "").strip()
+                    if seen:
+                        await conn.execute(
+                            """
+                            INSERT INTO agent_rig.market_prices
+                                (tenant_id, sku, source, price, currency, seen_at)
+                            VALUES ($1, $2, $3, $4, $5, $6::timestamptz)
+                            """,
+                            _uuid(tenant_id),
+                            str(row.get("sku") or ""),
+                            str(row.get("source") or ""),
+                            row.get("price"),
+                            str(row.get("currency") or ""),
+                            seen,
+                        )
+                    else:
+                        await conn.execute(
+                            """
+                            INSERT INTO agent_rig.market_prices
+                                (tenant_id, sku, source, price, currency)
+                            VALUES ($1, $2, $3, $4, $5)
+                            """,
+                            _uuid(tenant_id),
+                            str(row.get("sku") or ""),
+                            str(row.get("source") or ""),
+                            row.get("price"),
+                            str(row.get("currency") or ""),
+                        )
+        await self._drop_answers(tenant_id)
+
+    async def market_for(self, tenant_id: str, skus: list[str]) -> list[dict[str, Any]]:
+        if not skus:
+            return []
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT sku, source, price, currency, seen_at
+                FROM agent_rig.market_prices
+                WHERE tenant_id = $1 AND sku = ANY($2::text[])
+                """,
+                _uuid(tenant_id),
+                [str(sku) for sku in skus],
+            )
+        return [
+            {
+                "sku": row["sku"],
+                "source": row["source"],
+                "price": row["price"],
+                "currency": row["currency"],
+                "seen_at": row["seen_at"].isoformat() if row["seen_at"] is not None else "",
+            }
+            for row in rows
+        ]
 
     async def put_feed(self, tenant_id: str, fmt: str, url: str, currency: str) -> None:
         async with self.pool.acquire() as conn:
@@ -593,7 +744,9 @@ class PgStore:
         async with self.pool.acquire() as conn:
             result = await conn.execute(
                 """
-                UPDATE agent_rig.fits SET approved = true
+                UPDATE agent_rig.fits SET
+                    approved = true,
+                    source = CASE WHEN source = 'rejected' THEN 'suggested' ELSE source END
                 WHERE tenant_id = $1 AND part_sku = $2 AND fits_sku = $3 AND fits_family = $4
                 """,
                 _uuid(tenant_id),
@@ -601,7 +754,27 @@ class PgStore:
                 fits_sku or "",
                 fits_family or "",
             )
-        return result.endswith("1")
+        changed = str(result).endswith("1")
+        if changed:
+            await self._drop_answers(tenant_id)
+        return changed
+
+    async def reject_fit(self, tenant_id: str, part_sku: str, fits_sku: str | None, fits_family: str | None) -> bool:
+        async with self.pool.acquire() as conn:
+            result = await conn.execute(
+                """
+                UPDATE agent_rig.fits SET approved = false, source = 'rejected'
+                WHERE tenant_id = $1 AND part_sku = $2 AND fits_sku = $3 AND fits_family = $4
+                """,
+                _uuid(tenant_id),
+                part_sku,
+                fits_sku or "",
+                fits_family or "",
+            )
+        changed = str(result).endswith("1")
+        if changed:
+            await self._drop_answers(tenant_id)
+        return changed
 
     async def update_price(self, tenant_id: str, sku: str, patch: dict[str, Any]) -> bool:
         async with self.pool.acquire() as conn:
@@ -620,7 +793,80 @@ class PgStore:
                 patch.get("currency"),
                 patch.get("active"),
             )
-        return result.endswith("1")
+        changed = str(result).endswith("1")
+        if changed:
+            await self._drop_answers(tenant_id)
+        return changed
+
+    async def _drop_answers(self, tenant_id: str) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute("DELETE FROM agent_rig.answers WHERE tenant_id = $1", _uuid(tenant_id))
+
+    async def get_answer(self, tenant_id: str, kind: str, product_id: str, version: str) -> dict[str, Any] | None:
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT version, body FROM agent_rig.answers
+                WHERE tenant_id = $1 AND kind = $2 AND product_id = $3
+                """,
+                _uuid(tenant_id),
+                kind,
+                product_id,
+            )
+        if row is None or row["version"] != version:
+            return None
+        body = row["body"]
+        if isinstance(body, str):
+            body = json.loads(body)
+        return copy.deepcopy(body)
+
+    async def put_answer(self, tenant_id: str, kind: str, product_id: str, version: str, body: dict[str, Any]) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO agent_rig.answers (tenant_id, kind, product_id, version, body)
+                VALUES ($1, $2, $3, $4, $5::jsonb)
+                ON CONFLICT (tenant_id, kind, product_id) DO UPDATE
+                SET version = EXCLUDED.version, body = EXCLUDED.body
+                """,
+                _uuid(tenant_id),
+                kind,
+                product_id,
+                version,
+                _json(body),
+            )
+
+    async def get_fit_why(self, tenant_id: str, fit_id: str, rule_hash: str) -> list[str] | None:
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT why FROM agent_rig.fit_why
+                WHERE tenant_id = $1 AND fit_id = $2 AND rule_hash = $3
+                """,
+                _uuid(tenant_id),
+                fit_id,
+                rule_hash,
+            )
+        if row is None:
+            return None
+        why = row["why"]
+        if isinstance(why, str):
+            why = json.loads(why)
+        return [str(line) for line in why]
+
+    async def put_fit_why(self, tenant_id: str, fit_id: str, rule_hash: str, why: list[str]) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO agent_rig.fit_why (tenant_id, fit_id, rule_hash, why)
+                VALUES ($1, $2, $3, $4::jsonb)
+                ON CONFLICT (tenant_id, fit_id, rule_hash) DO UPDATE SET why = EXCLUDED.why
+                """,
+                _uuid(tenant_id),
+                fit_id,
+                rule_hash,
+                _json(list(why)),
+            )
 
 
 def as_public_results(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:

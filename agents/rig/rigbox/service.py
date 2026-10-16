@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
+import json
+import os
 import re
 import time
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -19,21 +23,24 @@ from rigbox.catalogue import (
     map_woocommerce,
     price_patch,
 )
-from rigbox.ground import ask as ground_ask
-from rigbox.ground import ask_prompt
+from rigbox.claims import answerable
+from rigbox.claims import grounded_answer
+from rigbox.claims import select_prompt
 from rigbox.ground import explain as ground_explain
 from rigbox.ground import explain_prompt
 from rigbox.ground import fit_suggest
-from rigbox.ground import in_catalogue
 from rigbox.ground import suggest_prompt
+from rigbox.logic import _why as code_why
 from rigbox.logic import approved
+from rigbox.logic import money
+from rigbox.logic import fitting_parts
 from rigbox.logic import graph as build_graph
 from rigbox.logic import options_for
 from rigbox.logic import product_detail
 from rigbox.logic import public_product
 from rigbox.logic import reprice
-from rigbox.logic import search as rank
 from rigbox.logic import setups as build_setups
+from rigbox.rank import search as rank_room
 from rigbox.store import _fit_key
 
 _KEY = re.compile(r"^rk_pub_[A-Za-z0-9][A-Za-z0-9_-]{0,80}$")
@@ -138,15 +145,31 @@ class Service:
             raise RigError("unauthorized", "That key is not valid.", 401)
         return row
 
+    async def authenticate_admin(self, raw_key: str) -> dict[str, Any]:
+        """An admin key from the keys table. No login. A publishable key is refused."""
+        presented = raw_key or ""
+        digest = hash_key(presented)
+        if not self.limiter.allow(digest):
+            raise RigError("rate_limit", "Too many requests. Try again in a minute.", 429)
+        if not presented:
+            raise RigError("unauthorized", "That key is not valid.", 401)
+        row = await self.store.key(digest)
+        if row is not None:
+            if row.get("kind") != "admin":
+                raise RigError("forbidden", "That key cannot manage fits.", 403)
+            return row
+        env_key = os.environ.get("RIG_ADMIN_KEY") or ""
+        if env_key and hmac.compare_digest(presented, env_key):
+            tenants = await self.store.tenant_ids()
+            if len(tenants) == 1:
+                return {"tenant_id": tenants[0], "kind": "admin", "origins": []}
+        raise RigError("unauthorized", "That key is not valid.", 401)
+
     async def search(self, tenant_id: str, query: str, limit: int | None) -> dict[str, Any]:
         text = (query or "").strip()
         if not text:
             return {"results": []}
-        finder = getattr(self.store, "search_rows", None)
-        if finder is not None:
-            rows = await finder(tenant_id, text, _limit(limit))
-            return {"results": [public_product(row) for row in rows]}
-        ranked = rank(
+        ranked = rank_room(
             {
                 "tenant_id": tenant_id,
                 "q": text,
@@ -154,7 +177,13 @@ class Service:
                 "products": await self.store.products(tenant_id),
             }
         )
-        return {"results": ranked["results"]}
+        results = ranked["results"]
+        if not results:
+            return {"results": []}
+        body: dict[str, Any] = {"results": results, "exact_match": bool(ranked.get("exact_match", True))}
+        if body["exact_match"] is False:
+            body["message"] = str(ranked.get("message") or "No exact match for that model.")
+        return body
 
     async def product(self, tenant_id: str, product_id: str) -> dict[str, Any]:
         detail = product_detail(await self._bundle(tenant_id, product_id))
@@ -163,13 +192,22 @@ class Service:
         return detail
 
     async def setups(self, tenant_id: str, product_id: str) -> dict[str, Any]:
+        version = await self._catalogue_version(tenant_id)
+        cached = await self.store.get_answer(tenant_id, "setups", product_id, version)
+        if cached is not None:
+            return cached
         bundle = await self._bundle(tenant_id, product_id)
         if product_detail(bundle) is None:
             raise RigError("not_found", "No such product.", 404)
         built = build_setups(bundle)
+        centre = _centre(bundle["products"], product_id)
         for setup in built["setups"]:
-            setup["why"] = await self._explain(tenant_id, setup)
-        return {"setups": built["setups"]}
+            setup["why"] = await self._compose_why(
+                tenant_id, centre, setup, bundle["products"], bundle["fits"]
+            )
+        body = {"setups": built["setups"]}
+        await self.store.put_answer(tenant_id, "setups", product_id, version, body)
+        return body
 
     async def swap(self, tenant_id: str, setup: dict[str, Any], role: str) -> dict[str, Any]:
         products = await self._active(tenant_id)
@@ -184,9 +222,16 @@ class Service:
         }
 
     async def graph(self, tenant_id: str, product_id: str) -> dict[str, Any]:
-        built = build_graph(await self._bundle(tenant_id, product_id))
+        version = await self._catalogue_version(tenant_id)
+        cached = await self.store.get_answer(tenant_id, "graph", product_id, version)
+        if cached is not None:
+            return cached
+        bundle = await self._bundle(tenant_id, product_id)
+        built = build_graph(bundle)
         if built is None:
             raise RigError("not_found", "No such product.", 404)
+        await self._annotate_graph(tenant_id, bundle, built)
+        await self.store.put_answer(tenant_id, "graph", product_id, version, built)
         return built
 
     async def ask(
@@ -200,19 +245,25 @@ class Service:
             raise RigError("invalid", "Ask a question about this catalogue.", 422)
         if product_detail(await self._bundle(tenant_id, product_id)) is None:
             raise RigError("not_found", "No such product.", 404)
-        products = [public_product(row) for row in await self._active(tenant_id)]
+        products = []
+        for row in await self._active(tenant_id):
+            item = public_product(row)
+            item["family"] = str(row.get("family") or "")
+            products.append(item)
         fits = await self._approved_fits(tenant_id)
         payload = {"question": question, "products": products, "fits": fits, "product_id": product_id, "setup": setup}
-        if not in_catalogue(question, products, fits):
+        # Subject words must be whole tokens on a row. The model only names rows.
+        # The sentence is built from that row, or from one approved fit.
+        if not answerable(question, products, fits):
             return {"answer": "I don't know", "cites": []}
         if self.models is None:
             return {"answer": "I don't know", "cites": []}
         text = await self.models.complete(
             tenant_id,
             "rig.ask",
-            [{"role": "user", "content": ask_prompt(payload)}],
+            [{"role": "user", "content": select_prompt(payload)}],
         )
-        return ground_ask(payload, text)
+        return grounded_answer(payload, text)
 
     async def link_quote(self, tenant_id: str, url: str, note: str) -> dict[str, str]:
         parsed = urlparse(str(url or "").strip())
@@ -239,6 +290,47 @@ class Service:
             raise RigError("invalid", "A setup or a product is required.", 422)
         return await self._store_quote(tenant_id, payload, contact)
 
+    async def compare(self, tenant_id: str, product_ids: list[str]) -> dict[str, Any]:
+        """Other sellers' prices for a selection the shopper already made.
+
+        Search and the accessory list do not call this. No figure is invented:
+        a sku with no rows comes back without a market price.
+        """
+        wanted = [str(sku) for sku in product_ids if str(sku).strip()]
+        if not wanted:
+            raise RigError("invalid", "Choose a product first.", 422)
+        products = {str(row.get("sku") or row.get("id") or ""): row for row in await self._active(tenant_id)}
+        chosen: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for sku in wanted:
+            row = products.get(sku)
+            if row is None or sku in seen:
+                continue
+            seen.add(sku)
+            chosen.append(row)
+        if not chosen:
+            raise RigError("not_found", "No such product.", 404)
+        retailer = await self.store.retailer(tenant_id) or {}
+        retailer_name = str(retailer.get("name") or "")
+        observations = await self.store.market_for(tenant_id, [str(row.get("sku") or "") for row in chosen])
+        by_sku: dict[str, list[dict[str, Any]]] = {}
+        for row in observations:
+            if retailer_name and str(row.get("source") or "").casefold() == retailer_name.casefold():
+                continue
+            by_sku.setdefault(str(row.get("sku") or ""), []).append(row)
+        lines: list[dict[str, Any]] = []
+        for row in chosen:
+            public = public_product(row)
+            lines.append(
+                {
+                    "id": public["id"],
+                    "name": public["name"],
+                    "price": public["price"],
+                    "market": _market_average(by_sku.get(public["id"], []), str(public["price"].get("currency") or "")),
+                }
+            )
+        return {"retailer": retailer_name, "lines": lines}
+
     async def suggest(self, tenant_id: str) -> dict[str, Any]:
         if self.models is None:
             return {"fits": []}
@@ -264,6 +356,40 @@ class Service:
 
     async def approve(self, tenant_id: str, part_sku: str, fits_sku: str | None, fits_family: str | None) -> bool:
         return await self.store.approve_fit(tenant_id, part_sku, fits_sku, fits_family)
+
+    async def reject(self, tenant_id: str, part_sku: str, fits_sku: str | None, fits_family: str | None) -> bool:
+        return await self.store.reject_fit(tenant_id, part_sku, fits_sku, fits_family)
+
+    async def suggested_fits(self, tenant_id: str) -> dict[str, Any]:
+        names = {
+            str(row.get("sku") or row.get("id") or ""): str(row.get("name") or "")
+            for row in await self.store.products(tenant_id)
+        }
+        rows: list[dict[str, Any]] = []
+        for row in await self.store.fits(tenant_id):
+            if str(row.get("source") or "") != "suggested" or row.get("approved"):
+                continue
+            part_sku = str(row.get("part_sku") or "")
+            fits_sku = row.get("fits_sku") or None
+            fits_family = row.get("fits_family") or None
+            if fits_sku:
+                fits_with = names.get(str(fits_sku)) or str(fits_sku)
+            else:
+                fits_with = str(fits_family or "")
+            rows.append(
+                {
+                    "part_sku": part_sku,
+                    "part_name": names.get(part_sku) or part_sku,
+                    "fits_sku": fits_sku,
+                    "fits_family": fits_family,
+                    "fits_with": fits_with,
+                    "confidence": _confidence(row.get("confidence")),
+                    "note": str(row.get("note") or ""),
+                    "rule": row.get("rule") if isinstance(row.get("rule"), dict) else {},
+                }
+            )
+        rows.sort(key=lambda item: (item["part_sku"], item["fits_sku"] or "", item["fits_family"] or ""))
+        return {"fits": rows}
 
     async def apply_watch(self, tenant_id: str, sku: str, update: dict[str, Any]) -> bool:
         patch = price_patch(update)
@@ -302,6 +428,7 @@ class Service:
             report["products"] = {"added": added, "updated": updated, "rejected": []}
             for family, members in families_from(await self.store.products(tenant)).items():
                 await self.store.set_family(tenant, family, members)
+            report["market"] = await self._import_market(tenant, loaded.get("market"))
         if not loaded["publish_error"]:
             await self._apply_publish(tenant, loaded["slug"], loaded["publish"], report)
         fits = loaded["fits"]
@@ -366,15 +493,73 @@ class Service:
         return [row for row in await self.store.products(tenant_id) if row.get("active", True)]
 
     async def _approved_fits(self, tenant_id: str) -> list[dict[str, Any]]:
-        return [row for row in await self.store.fits(tenant_id) if approved(row)]
+        kept: list[dict[str, Any]] = []
+        for row in await self.store.fits(tenant_id):
+            if str(row.get("source") or "") == "rejected":
+                continue
+            if approved(row):
+                kept.append(row)
+        return kept
 
-    async def _explain(self, tenant_id: str, setup: dict[str, Any]) -> list[str]:
-        fallback = list(setup.get("why") or [])
+    async def _catalogue_version(self, tenant_id: str) -> str:
+        products = [_version_product(row) for row in await self.store.products(tenant_id)]
+        fits = [_version_fit(row) for row in await self._approved_fits(tenant_id)]
+        fits.sort(key=lambda row: (row["part_sku"], row["fits_sku"], row["fits_family"]))
+        payload = {
+            "products": products,
+            "fits": fits,
+            "templates": await self.store.templates_for(tenant_id),
+        }
+        raw = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":"))
+        return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    async def _compose_why(
+        self,
+        tenant_id: str,
+        centre: dict[str, Any],
+        setup: dict[str, Any],
+        products: list[dict[str, Any]],
+        fits: list[dict[str, Any]],
+    ) -> list[str]:
+        pool = fitting_parts(centre, products, fits)
+        by_sku = {str(part.get("sku") or part.get("id") or ""): (part, fit) for part, fit in pool}
+        header = f"Fits {centre.get('name')}"
+        lines = [header]
+        for slot in (setup.get("parts") or [])[1:]:
+            sku = str((slot.get("product") or {}).get("id") or "")
+            pair = by_sku.get(sku)
+            if pair is None:
+                continue
+            for line in await self._fit_why(tenant_id, centre, pair[0], pair[1]):
+                if line not in lines:
+                    lines.append(line)
+        return lines
+
+    async def _fit_why(
+        self,
+        tenant_id: str,
+        centre: dict[str, Any],
+        part: dict[str, Any],
+        fit: dict[str, Any],
+    ) -> list[str]:
+        fit_id = _fit_identity(fit)
+        digest = _rule_note_hash(fit)
+        stored = await self.store.get_fit_why(tenant_id, fit_id, digest)
+        if stored is not None:
+            return stored
+        header = f"Fits {centre.get('name')}"
+        specific = [line for line in code_why(centre, [(part, fit)]) if line != header]
+        if specific:
+            await self.store.put_fit_why(tenant_id, fit_id, digest, specific)
+            return specific
         if self.models is None:
-            return fallback
+            return []
         material = [
-            {"role": part["role"], "id": part["product"]["id"], "name": part["product"]["name"]}
-            for part in setup.get("parts") or []
+            {
+                "role": str(part.get("category") or ""),
+                "id": str(part.get("sku") or part.get("id") or ""),
+                "name": str(part.get("name") or ""),
+            }
         ]
         try:
             text = await self.models.complete(
@@ -382,10 +567,31 @@ class Service:
                 "rig.explain",
                 [{"role": "user", "content": explain_prompt({"material": material})}],
             )
-        except Exception:  # noqa: BLE001 — a model outage keeps the rule lines
-            return fallback
-        why = ground_explain({"fallback_why": fallback}, text)["why"]
-        return why or fallback
+        except Exception:  # noqa: BLE001 — a model outage keeps the plain Fits line
+            return []
+        why = [line for line in ground_explain({"fallback_why": []}, text)["why"] if line != header]
+        if not why:
+            return []
+        await self.store.put_fit_why(tenant_id, fit_id, digest, why)
+        return why
+
+    async def _annotate_graph(self, tenant_id: str, bundle: dict[str, Any], built: dict[str, Any]) -> None:
+        """Add the role name and one why-line to each approved fit on the graph."""
+        product_id = str(bundle.get("product_id") or "")
+        centre = _centre(bundle.get("products") or [], product_id)
+        pool = fitting_parts(centre, bundle.get("products") or [], bundle.get("fits") or [])
+        by_sku = {str(part.get("sku") or part.get("id") or ""): (part, fit) for part, fit in pool}
+        roles = _roles_for(bundle.get("templates"), str(centre.get("category") or ""))
+        for branch in built.get("branches") or []:
+            category = str(branch.get("category") or "")
+            branch["role"] = roles.get(category, category)
+            for product in branch.get("products") or []:
+                pair = by_sku.get(str(product.get("id") or ""))
+                if pair is None:
+                    product["why"] = ""
+                    continue
+                lines = await self._fit_why(tenant_id, centre, pair[0], pair[1])
+                product["why"] = " · ".join(line for line in lines if line)
 
     async def _apply_publish(self, tenant_id: str, slug: str, publish: dict[str, Any], report: dict[str, Any]) -> None:
         keys = publish.get("keys") if isinstance(publish.get("keys"), list) else []
@@ -414,6 +620,7 @@ class Service:
             slug,
             str(email) if email else None,
             str(webhook) if webhook else None,
+            str(publish.get("name") or ""),
         )
         templates = publish.get("setup_templates")
         if isinstance(templates, dict):
@@ -427,6 +634,21 @@ class Service:
                 str(feed["url"]),
                 str(feed.get("currency") or ""),
             )
+
+    async def _import_market(self, tenant_id: str, market: dict[str, Any] | None) -> dict[str, Any]:
+        if market is None:
+            return {"rows": 0, "rejected": []}
+        if market.get("rejected"):
+            return {"rows": 0, "rejected": list(market["rejected"])}
+        known = {str(row.get("sku") or "") for row in await self.store.products(tenant_id)}
+        unknown = [row for row in market.get("rows") or [] if str(row.get("sku") or "") not in known]
+        if unknown:
+            return {
+                "rows": 0,
+                "rejected": [{"row": row.get("row") or 0, "reason": "sku is not in this catalogue"} for row in unknown],
+            }
+        await self.store.replace_market(tenant_id, list(market.get("rows") or []))
+        return {"rows": len(market.get("rows") or []), "rejected": []}
 
     async def _store_quote(self, tenant_id: str, payload: dict[str, Any], contact: dict[str, Any]) -> dict[str, str]:
         quote_id = "req_" + uuid4().hex
@@ -445,6 +667,112 @@ class Service:
         return {"request_id": quote_id}
 
 
+def _market_average(rows: list[dict[str, Any]], currency: str) -> dict[str, Any] | None:
+    code = currency.upper()
+    amounts: list[Decimal] = []
+    for row in rows:
+        if str(row.get("currency") or "").upper() != code or not code:
+            continue
+        amounts.append(Decimal(str(row.get("price"))))
+    if not amounts:
+        return None
+    mean = sum(amounts, Decimal("0")) / Decimal(len(amounts))
+    return {"amount": money(mean), "currency": code, "indicative": True}
+
+
+def _roles_for(templates: Any, category: str) -> dict[str, str]:
+    raw: Any = None
+    if isinstance(templates, dict):
+        raw = templates.get(category)
+    if isinstance(raw, dict) and "roles" in raw and "tiers" not in raw:
+        raw = raw.get("roles")
+    tiers: list[Any] = []
+    if isinstance(raw, dict) and isinstance(raw.get("tiers"), list):
+        tiers = list(raw["tiers"])
+    elif isinstance(raw, list):
+        tiers = list(raw)
+    found: dict[str, str] = {}
+    for tier in tiers:
+        if not isinstance(tier, dict):
+            continue
+        for role in tier.get("roles") or []:
+            if not isinstance(role, dict):
+                continue
+            name = str(role.get("role") or role.get("category") or "")
+            cat = str(role.get("category") or name)
+            if cat and cat not in found:
+                found[cat] = name or cat
+    return found
+
+
+def _centre(products: list[dict[str, Any]], product_id: str) -> dict[str, Any]:
+    for row in products:
+        if str(row.get("sku") or row.get("id") or "") == product_id:
+            return row
+    return {}
+
+
+def _version_product(row: dict[str, Any]) -> dict[str, Any]:
+    attributes = row.get("attributes") if isinstance(row.get("attributes"), dict) else {}
+    price = row.get("price")
+    if isinstance(price, dict):
+        price = price.get("amount")
+    return {
+        "sku": str(row.get("sku") or row.get("id") or ""),
+        "name": str(row.get("name") or ""),
+        "brand": str(row.get("brand") or ""),
+        "category": str(row.get("category") or ""),
+        "price": str(price),
+        "currency": str(row.get("currency") or ""),
+        "family": str(row.get("family") or ""),
+        "image": str(row.get("image_url") or row.get("image") or ""),
+        "active": bool(row.get("active", True)),
+        "attributes": attributes,
+    }
+
+
+def _version_fit(row: dict[str, Any]) -> dict[str, Any]:
+    rule = row.get("rule") if isinstance(row.get("rule"), dict) else {}
+    return {
+        "part_sku": str(row.get("part_sku") or ""),
+        "fits_sku": str(row.get("fits_sku") or ""),
+        "fits_family": str(row.get("fits_family") or ""),
+        "rule": rule,
+        "note": str(row.get("note") or ""),
+        "source": str(row.get("source") or ""),
+    }
+
+
+def _fit_identity(fit: dict[str, Any]) -> str:
+    return "\x1f".join(
+        [
+            str(fit.get("part_sku") or ""),
+            str(fit.get("fits_sku") or ""),
+            str(fit.get("fits_family") or ""),
+        ]
+    )
+
+
+def _rule_note_hash(fit: dict[str, Any]) -> str:
+    rule = fit.get("rule") if isinstance(fit.get("rule"), dict) else {}
+    payload = json.dumps(
+        {"rule": rule, "note": str(fit.get("note") or "")},
+        sort_keys=True,
+        default=str,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _confidence(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _contact(contact: dict[str, Any]) -> dict[str, str]:
     name = str(contact.get("name") or "").strip()
     email = str(contact.get("email") or "").strip()
@@ -456,12 +784,4 @@ def _contact(contact: dict[str, Any]) -> dict[str, str]:
     if phone:
         out["phone"] = phone
     return out
-
-
-def _limit(value: int | None) -> int:
-    try:
-        number = int(value if value is not None else 12)
-    except (TypeError, ValueError):
-        number = 12
-    return max(1, min(number, 50))
 

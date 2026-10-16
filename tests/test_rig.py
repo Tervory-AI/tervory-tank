@@ -114,8 +114,13 @@ async def test_import_search_setups_and_a_single_total() -> None:
         "EXAMPLE-RINGS-30",
     ]
     assert "extra" not in json.dumps(setup["parts"])
-    assert setup["why"] == ["Checked against the catalogue."]
-    assert "rig.explain" in models.calls
+    assert setup["why"] == [
+        "Fits Example Rifle 308 20in",
+        "Scope listed for this rifle",
+        "rail is picatinny",
+        "Picatinny rings fit every rifle on this platform",
+    ]
+    assert "rig.explain" not in models.calls
     assert has_breakdown(built) is False
     graph = await service.graph(TENANT, "EXAMPLE-RIFLE-01")
     assert "categories_that_fit" not in graph["centre"]

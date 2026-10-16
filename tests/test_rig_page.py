@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT / "agents" / "_chassis"))
 
 from rigbox.api import mount  # noqa: E402
 from rigbox.page_route import mount_page  # noqa: E402
-from rigbox.service import RecordingHandoff, Service  # noqa: E402
+from rigbox.service import RecordingHandoff, Service, hash_key  # noqa: E402
 from rigbox.store import MemoryStore  # noqa: E402
 
 EXAMPLE = ROOT / "agents" / "rig" / "catalogues" / "example"
@@ -151,3 +151,185 @@ async def test_search_on_the_page_returns_the_example_product() -> None:
     logo = client.get("/page/tervory-logo-on-white.png")
     assert logo.status_code == 200
     assert logo.content == (PAGE / "tervory-logo-on-white.png").read_bytes()
+
+
+TENANT = "11111111-1111-4111-8111-111111111111"
+ADMIN = "rk_adm_examplebrand"
+RIFLE = "EXAMPLE-RIFLE-01"
+WIDGET = "SOFT-WIDGET"
+WIDGET_NAME = "Soft Widget"
+NOTE = "Listed for this product"
+
+
+def _page_text(name: str) -> str:
+    return (PAGE / name).read_text(encoding="utf-8")
+
+
+def _widget(graph: dict) -> dict:
+    for branch in graph.get("branches") or []:
+        for product in branch.get("products") or []:
+            if product.get("id") == WIDGET:
+                return {"role": branch.get("role"), "product": product}
+    return {}
+
+
+@pytest.mark.asyncio
+async def test_shopper_and_dealer_pages_and_only_approved_fits_show() -> None:
+    for name in ("index.html", "admin.html", "search.js", "admin.js", "search.css"):
+        text = _page_text(name)
+        assert "Ask dealer" not in text
+        assert "In bundle" not in text
+        assert "Example" not in text
+    css = _page_text("search.css")
+    for token in ("--ink:", "--action:", "--line:", "--tint:", "--font:", "--heading:", "--mono:"):
+        assert token in css
+    assert "minmax(0, 1fr) 320px" in css
+    assert "attr(data-label)" in css
+    shopper_js = _page_text("search.js")
+    fit_card = shopper_js.split("function fitCard", 1)[1].split("function renderBundle", 1)[0]
+    assert "priceLine(product.price)" in fit_card
+    assert "Market average" not in fit_card
+    assert '"/v1/rig/compare"' not in shopper_js.split("async function comparePrices", 1)[0]
+    assert shopper_js.count('"/v1/rig/compare"') == 1
+    assert "Market average: not available" in shopper_js
+    assert "Swap part" in shopper_js
+    assert "Why it fits" in shopper_js
+    admin_js = _page_text("admin.js")
+    assert admin_js.count('"/v1/rig/admin/fits/suggest"') == 1
+    before_suggest, _, _after = admin_js.partition("async function suggestFits")
+    assert '"/v1/rig/admin/fits/suggest"' not in before_suggest
+    calls = [
+        line.strip()
+        for line in admin_js.splitlines()
+        if "suggestFits()" in line and not line.strip().startswith("async function")
+    ]
+    assert calls == ["void suggestFits();"]
+    assert "sessionStorage" in admin_js
+
+    store = MemoryStore()
+    models = Models()
+    models.calls = []
+
+    async def complete(tenant_id: str, task_type: str, messages: list[dict[str, str]]) -> str:
+        models.calls.append(task_type)
+        return ""
+
+    models.complete = complete
+    service = Service(store, models, RecordingHandoff())
+    report = await service.load_folder(EXAMPLE)
+    assert report["keys"] == 1
+    await store.put_key(TENANT, hash_key(ADMIN), "admin", [])
+    await store.upsert_product(
+        TENANT,
+        {
+            "sku": WIDGET,
+            "name": WIDGET_NAME,
+            "brand": "Soft",
+            "category": "widget",
+            "price": "100.00",
+            "currency": "ZAR",
+            "image_url": "",
+            "active": True,
+            "attributes": {},
+            "family": "",
+        },
+    )
+    await store.upsert_fit(
+        TENANT,
+        {
+            "part_sku": WIDGET,
+            "fits_sku": RIFLE,
+            "fits_family": None,
+            "rule": {},
+            "source": "suggested",
+            "approved": False,
+            "note": NOTE,
+            "confidence": 0.4,
+        },
+    )
+    await store.set_template(
+        TENANT,
+        "rifle",
+        {
+            "tiers": [
+                {
+                    "tier": "ready",
+                    "label": "Ready to use",
+                    "roles": [
+                        {"role": "optic", "category": "optic"},
+                        {"role": "mount", "category": "mount"},
+                        {"role": "carry", "category": "widget"},
+                    ],
+                }
+            ]
+        },
+    )
+    app = FastAPI()
+    app.state.rig = service
+    mount(app)
+    mount_page(app)
+    client = TestClient(app)
+    key = _publish()["keys"][0]["key"]
+    shopper = {"X-Rig-Key": key, "Origin": ORIGIN}
+
+    home = client.get("/")
+    product_page = client.get(f"/product/{RIFLE}")
+    dealer = client.get("/admin")
+    assert home.status_code == product_page.status_code == dealer.status_code == 200
+    assert "See compatible accessories" in home.text
+    assert "Compare prices" in home.text
+    assert "See compatible accessories" in product_page.text
+    assert "Market average" not in home.text
+    assert json.dumps(key) in home.text
+    assert "Nothing waiting for review" in dealer.text
+    assert "Suggest new fits" in dealer.text
+    assert "rk_pub_" not in dealer.text
+    assert "__RIG" not in dealer.text
+    assert 'src="/page/tervory-logo-on-white.png"' in dealer.text
+    assert "Swap part" in client.get("/page/search.js").text
+    assert client.get("/page/admin.js").status_code == 200
+    assert models.calls == []
+
+    hidden = client.get(f"/v1/rig/graph/{RIFLE}", headers=shopper)
+    assert hidden.status_code == 200
+    assert WIDGET_NAME not in hidden.text
+    assert _widget(hidden.json()) == {}
+    waiting = client.get("/v1/rig/admin/fits", params={"status": "suggested"}, headers={"X-Rig-Key": ADMIN})
+    assert waiting.status_code == 200
+    row = waiting.json()["fits"][0]
+    assert row["part_name"] == WIDGET_NAME
+    assert row["part_sku"] == WIDGET
+    assert row["fits_with"] == hidden.json()["centre"]["name"]
+    assert row["note"] == NOTE
+
+    approved = client.post(
+        "/v1/rig/admin/fits/approve",
+        headers={"X-Rig-Key": ADMIN},
+        json={"part_sku": WIDGET, "fits_sku": RIFLE},
+    )
+    assert approved.status_code == 200
+    shown = client.get(f"/v1/rig/graph/{RIFLE}", headers=shopper)
+    found = _widget(shown.json())
+    assert found["role"] == "carry"
+    assert found["product"]["name"] == WIDGET_NAME
+    assert found["product"]["why"] == NOTE
+    built = client.post("/v1/rig/setups", headers=shopper, json={"product_id": RIFLE})
+    assert built.status_code == 200
+    setup = built.json()["setups"][0]
+    assert WIDGET in [part["product"]["id"] for part in setup["parts"]]
+    assert setup["total"]["amount"] == 35297 + 100
+    assert "discount" not in built.text
+    assert client.get("/v1/rig/admin/fits", headers={"X-Rig-Key": ADMIN}).json() == {"fits": []}
+
+    rejected = client.post(
+        "/v1/rig/admin/fits/reject",
+        headers={"X-Rig-Key": ADMIN},
+        json={"part_sku": WIDGET, "fits_sku": RIFLE},
+    )
+    assert rejected.status_code == 200
+    after = client.get(f"/v1/rig/graph/{RIFLE}", headers=shopper)
+    after_setups = client.post("/v1/rig/setups", headers=shopper, json={"product_id": RIFLE})
+    assert WIDGET_NAME not in after.text
+    assert WIDGET not in after_setups.text
+    assert after_setups.json()["setups"][0]["total"]["amount"] == 35297
+    assert models.calls == []

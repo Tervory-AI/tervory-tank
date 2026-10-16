@@ -1,6 +1,16 @@
 -- Rig's room. Additive and idempotent. Applied by the agent on start.
 -- Shoppers only see rows with approved = true. Imported rows are approved.
 -- Suggested rows stay hidden until approve_fit sets approved.
+-- Rejected rows have source 'rejected' and approved = false, so shoppers never see them.
+-- answers stores one graph or setup per product, keyed by a hash of the catalogue.
+-- fit_why stores why-text for one fit, keyed by a hash of its rule and note.
+-- Import, a feed pull, a price watch, approve, and reject clear answers for that tenant.
+-- fit_why is kept so a known fit is not sent to a model again.
+-- market_prices is not the catalogue. Search does not read it.
+-- Each row is one other seller's price for a sku this retailer already stocks.
+-- The sheet is a separate import. A later price reader is the intended feed.
+-- When a sku has no rows, the shopper is told the figure is not available.
+-- retailers.name is the label on that retailer's own price.
 
 CREATE SCHEMA IF NOT EXISTS agent_rig;
 
@@ -93,8 +103,11 @@ CREATE TABLE IF NOT EXISTS agent_rig.retailers (
     tenant_id  uuid PRIMARY KEY,
     slug       text NOT NULL,
     email      text,
-    webhook    text
+    webhook    text,
+    name       text NOT NULL DEFAULT ''
 );
+
+ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS name text NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS agent_rig.feeds (
     tenant_id  uuid NOT NULL,
@@ -103,3 +116,32 @@ CREATE TABLE IF NOT EXISTS agent_rig.feeds (
     currency   text NOT NULL DEFAULT '',
     PRIMARY KEY (tenant_id, url)
 );
+
+CREATE TABLE IF NOT EXISTS agent_rig.answers (
+    tenant_id   uuid NOT NULL,
+    kind        text NOT NULL,
+    product_id  text NOT NULL,
+    version     text NOT NULL,
+    body        jsonb NOT NULL,
+    PRIMARY KEY (tenant_id, kind, product_id)
+);
+
+CREATE TABLE IF NOT EXISTS agent_rig.fit_why (
+    tenant_id   uuid NOT NULL,
+    fit_id      text NOT NULL,
+    rule_hash   text NOT NULL,
+    why         jsonb NOT NULL,
+    PRIMARY KEY (tenant_id, fit_id, rule_hash)
+);
+
+CREATE TABLE IF NOT EXISTS agent_rig.market_prices (
+    tenant_id  uuid NOT NULL,
+    sku        text NOT NULL,
+    source     text NOT NULL,
+    price      numeric NOT NULL,
+    currency   text NOT NULL,
+    seen_at    timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, sku, source)
+);
+
+CREATE INDEX IF NOT EXISTS market_prices_tenant_sku ON agent_rig.market_prices (tenant_id, sku);
