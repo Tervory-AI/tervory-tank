@@ -34,6 +34,11 @@ services:
       TANK_REGION: za
     volumes:
       - za_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     networks:
       - default
 
@@ -45,6 +50,13 @@ services:
       QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY}
     volumes:
       - za_qdrantdata:/qdrant/storage
+    healthcheck:
+      # The image has bash and no HTTP client. An open port is the check it ships with.
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     networks:
       - default
 
@@ -83,11 +95,23 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       XAI_API_KEY: ${XAI_API_KEY:-}
+    healthcheck:
+      # Port only. The image is Python; this does not send the master key.
+      test: ["CMD", "python", "-c", "import socket; s=socket.create_connection(('127.0.0.1',4000),3); s.close()"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
     networks:
       - default
 
   tank:
-    build: ./tank
+    build:
+      context: ./tank
+      args:
+        # Coolify sets SOURCE_COMMIT at image build. GIT_SHA overrides it for a local build.
+        SOURCE_COMMIT: ${SOURCE_COMMIT:-}
+        GIT_SHA: ${GIT_SHA:-}
     restart: unless-stopped
     environment:
       TANK_REGION: za
@@ -115,6 +139,12 @@ services:
     # Coolify attaches za.tervory.com to this service only.
     expose:
       - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   agent-roles:
     build:
