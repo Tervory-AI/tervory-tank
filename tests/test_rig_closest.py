@@ -7,6 +7,7 @@ comes back with exact_match false and the words "Closest matches".
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -115,6 +116,107 @@ async def test_a_real_model_and_a_relation_stay_exact() -> None:
 
     assert await service.search(CN, "sig", 12) == {"results": []}
     assert await service.search(CN, "Glock 19", 12) == {"results": []}
+    real_light = await service.search(CN, "TLR-1", 12)
+    assert real_light["exact_match"] is True
+    assert _ids(real_light)[0] == "SL-TLR1"
+    real_sight = await service.search(CN, "RMR Type 2", 12)
+    assert real_sight["exact_match"] is True
+    assert _ids(real_sight)[0] == "TRIJ-RMR-T2"
+
+
+@pytest.mark.asyncio
+async def test_a_single_digit_in_a_model_code_must_be_on_that_row() -> None:
+    service = await _service()
+    light = await service.search(CN, "TLR-7", 12)
+    assert light["exact_match"] is False
+    assert light["message"] == "No exact match for TLR-7."
+    assert "SL-TLR1" in _ids(light)
+    assert all("TLR-7" not in name for name in _names(light))
+
+    named = await service.search(CN, "streamlight TLR-7", 12)
+    assert named["exact_match"] is False
+    assert "TLR-7" in named["message"]
+    assert _ids(named)[0] == "SL-TLR1"
+
+    sight = await service.search(CN, "RMR Type 3", 12)
+    assert sight["exact_match"] is False
+    assert sight["message"] == "No exact match for Type 3."
+    assert _ids(sight)[0] == "TRIJ-RMR-T2"
+    assert all("Type 3" not in name for name in _names(sight))
+
+    spaced = await service.search(CN, "TLR 7", 12)
+    assert spaced["exact_match"] is False
+    assert spaced["message"] == "No exact match for TLR 7."
+    assert _ids(spaced)[0] == "SL-TLR1"
+
+    shorter = await service.search(CN, "Holosun 507", 12)
+    assert shorter["exact_match"] is False
+    assert "507" in shorter["message"]
+    assert _ids(shorter)[0] == "HOL-507C-X2"
+    assert all(name != "Holosun 507" for name in _names(shorter))
+
+
+@pytest.mark.asyncio
+async def test_ordinary_words_are_not_model_codes_and_an_unknown_name_is() -> None:
+    service = await _service()
+    for text in (
+        "buy staccato",
+        "staccato gun",
+        "oh staccato",
+        "set holosun",
+        "staccato up",
+        "rig holosun",
+        "iwb tenicor",
+        "holosun typ",
+        "streamlight hll",
+    ):
+        found = await service.search(CN, text, 12)
+        assert found["results"], text
+        assert found["exact_match"] is True, text
+        assert "message" not in found
+    unknown = await service.search(CN, "Tenicor Malus", 12)
+    assert unknown["exact_match"] is False
+    assert unknown["message"] == "No exact match for Malus."
+    assert "TENICOR-VELO" in _ids(unknown)
+    assert all("Malus" not in name for name in _names(unknown))
+
+
+class _Liar:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    async def complete(self, tenant_id: str, task_type: str, messages: list[dict[str, str]]) -> str:
+        del tenant_id, messages
+        self.calls.append(task_type)
+        return json.dumps(
+            {
+                "answer": "The missing code is the same product.",
+                "cites": ["SL-TLR1", "TRIJ-RMR-T2", "made-up"],
+            }
+        )
+
+
+@pytest.mark.asyncio
+async def test_ask_refuses_a_model_digit_the_row_does_not_have() -> None:
+    models = _Liar()
+    service = Service(MemoryStore(), models)
+    report = await service.load_folder(CATALOGUES / "customnation")
+    assert report["products"]["rejected"] == []
+    for question in ("Is TLR-7 listed?", "Is the RMR Type 3 listed?"):
+        before = len(models.calls)
+        answer = await service.ask(CN, "STI-C2-9", question)
+        assert answer == {"answer": "I don't know", "cites": []}, question
+        assert len(models.calls) == before
+    light = await service.ask(CN, "STI-C2-9", "Is TLR-1 listed?")
+    assert "SL-TLR1" in light["cites"]
+    assert "Streamlight" in light["answer"]
+    assert "TLR-1" in light["answer"]
+    assert "missing code" not in light["answer"]
+    sight = await service.ask(CN, "STI-C2-9", "Is the RMR Type 2 listed?")
+    assert sight["cites"] == ["TRIJ-RMR-T2"]
+    assert "Trijicon" in sight["answer"]
+    assert "Type 2" in sight["answer"]
+    assert "Type 3" not in sight["answer"]
 
 
 @pytest.mark.asyncio

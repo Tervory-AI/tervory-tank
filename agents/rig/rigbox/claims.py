@@ -203,7 +203,14 @@ def grounded_answer(payload: dict[str, Any], model_text: str) -> dict[str, Any]:
 
 
 def _subject(text: str) -> list[str]:
-    return [token for token in _TOKEN.findall(text.lower()) if len(token) >= 2 and token not in _GLUE]
+    """Subject words. A single digit stays, because it can be the model (TLR-7, Type 3)."""
+    found: list[str] = []
+    for token in _TOKEN.findall(text.lower()):
+        if token in _GLUE:
+            continue
+        if len(token) >= 2 or token.isdigit():
+            found.append(token)
+    return found
 
 
 def _same_word(left: str, right: str) -> bool:

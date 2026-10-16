@@ -99,8 +99,15 @@ async def test_a_key_never_returns_another_tenants_catalogue() -> None:
 
     foreign_lamp_by_sku = client.get("/v1/rig/search", params={"q": SECOND_PRODUCT}, headers=example)
     assert foreign_lamp_by_sku.status_code == 200
-    assert SECOND_PRODUCT not in _ids(foreign_lamp_by_sku.json())
-    assert "SECOND-" not in foreign_lamp_by_sku.text
+    foreign_body = foreign_lamp_by_sku.json()
+    assert SECOND_PRODUCT not in _ids(foreign_body)
+    assert all(not str(item["id"]).startswith("SECOND-") for item in foreign_body["results"])
+    # The caller typed this sku. Quoting it in "no exact match" is not the other catalogue.
+    echoed = str(foreign_body.get("message") or "")
+    assert SECOND_PRODUCT not in echoed or echoed == f"No exact match for {SECOND_PRODUCT}."
+    rendered = foreign_lamp_by_sku.text.replace(echoed, "")
+    assert "SECOND-" not in rendered
+    assert "Second Desk Lamp" not in foreign_lamp_by_sku.text
 
     hidden_lamp = client.get(f"/v1/rig/products/{SECOND_PRODUCT}", headers=example)
     assert hidden_lamp.status_code == 404
