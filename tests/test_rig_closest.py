@@ -157,28 +157,109 @@ async def test_a_single_digit_in_a_model_code_must_be_on_that_row() -> None:
 
 
 @pytest.mark.asyncio
-async def test_ordinary_words_are_not_model_codes_and_an_unknown_name_is() -> None:
+async def test_ordinary_shopping_words_never_flag_and_an_unknown_name_after_a_brand_does() -> None:
+    listed = [
+        line.split("#", 1)[0].strip().lower()
+        for line in (ROOT / "agents" / "rig" / "english-20k.txt").read_text(encoding="utf-8").splitlines()
+    ]
+    listed = [word for word in listed if word]
+    assert len(listed) == 20000
+    shopping = (
+        "cheap",
+        "spare",
+        "top",
+        "kit",
+        "daily",
+        "quick",
+        "bag",
+        "buy",
+        "gun",
+        "oh",
+        "set",
+        "up",
+        "rig",
+        "extra",
+        "basic",
+        "black",
+        "small",
+        "best",
+        "new",
+        "used",
+        "local",
+        "premium",
+        "budget",
+        "simple",
+        "clean",
+        "soft",
+        "original",
+        "replacement",
+        "compact",
+        "carry",
+        "home",
+        "travel",
+        "nylon",
+        "leather",
+        "light",
+        "heavy",
+        "open",
+        "free",
+        "good",
+        "great",
+        "little",
+        "strong",
+        "classic",
+        "modern",
+        "mini",
+        "easy",
+        "fast",
+        "quiet",
+        "short",
+        "long",
+        "round",
+        "flat",
+        "holder",
+        "cover",
+        "case",
+        "pack",
+        "box",
+        "pair",
+    )
+    assert all(word in listed for word in shopping)
+    assert "malus" not in listed
+    assert "certum" not in listed
     service = await _service()
-    for text in (
-        "buy staccato",
-        "staccato gun",
-        "oh staccato",
-        "set holosun",
-        "staccato up",
-        "rig holosun",
-        "iwb tenicor",
-        "holosun typ",
-        "streamlight hll",
-    ):
+    for word in shopping:
+        for text in (f"{word} tenicor", f"tenicor {word}", f"{word} staccato", f"holosun {word}"):
+            found = await service.search(CN, text, 12)
+            assert found["results"], text
+            assert found["exact_match"] is True, text
+            assert "message" not in found
+    # A word that is not English still does not flag when it sits before the brand.
+    for text in ("zqxv tenicor", "blorpt holosun", "iwb tenicor", "qqqq staccato"):
         found = await service.search(CN, text, 12)
         assert found["results"], text
         assert found["exact_match"] is True, text
         assert "message" not in found
-    unknown = await service.search(CN, "Tenicor Malus", 12)
-    assert unknown["exact_match"] is False
-    assert unknown["message"] == "No exact match for Malus."
-    assert "TENICOR-VELO" in _ids(unknown)
-    assert all("Malus" not in name for name in _names(unknown))
+    # The same unknown token directly after the brand is the missing model.
+    # An ordinary word between them is not, and it does not pull the later token in.
+    between = await service.search(CN, "tenicor cheap zqxv", 12)
+    assert between["exact_match"] is True
+    assert "message" not in between
+    typo = await service.search(CN, "streamlight hll", 12)
+    assert typo["exact_match"] is True
+    assert "message" not in typo
+    assert _ids(typo)[0] == "SL-TLR1"
+    for text, phrase, sku in (
+        ("Tenicor Malus", "Malus", "TENICOR-VELO"),
+        ("Tenicor Certum", "Certum", "TENICOR-VELO"),
+        ("X300W", "X300W", "SF-X300U"),
+        ("Staccato C4", "C4", "STI-C2-9"),
+    ):
+        found = await service.search(CN, text, 12)
+        assert found["exact_match"] is False, text
+        assert found["message"] == f"No exact match for {phrase}.", text
+        assert sku in _ids(found)
+        assert all(phrase not in name for name in _names(found))
 
 
 class _Liar:
