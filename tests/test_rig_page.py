@@ -187,7 +187,11 @@ async def test_shopper_and_dealer_pages_and_only_approved_fits_show() -> None:
     assert "attr(data-label)" in css
     shopper_js = _page_text("search.js")
     fit_card = shopper_js.split("function fitCard", 1)[1].split("function renderBundle", 1)[0]
-    assert "price" not in fit_card
+    assert "priceLine(product.price)" in fit_card
+    assert "Market average" not in fit_card
+    assert '"/v1/rig/compare"' not in shopper_js.split("async function comparePrices", 1)[0]
+    assert shopper_js.count('"/v1/rig/compare"') == 1
+    assert "Market average: not available" in shopper_js
     assert "Swap part" in shopper_js
     assert "Why it fits" in shopper_js
     admin_js = _page_text("admin.js")
@@ -272,8 +276,10 @@ async def test_shopper_and_dealer_pages_and_only_approved_fits_show() -> None:
     product_page = client.get(f"/product/{RIFLE}")
     dealer = client.get("/admin")
     assert home.status_code == product_page.status_code == dealer.status_code == 200
-    assert "Compatible Upgrades" in home.text
-    assert "Compatible Upgrades" in product_page.text
+    assert "See compatible accessories" in home.text
+    assert "Compare prices" in home.text
+    assert "See compatible accessories" in product_page.text
+    assert "Market average" not in home.text
     assert json.dumps(key) in home.text
     assert "Nothing waiting for review" in dealer.text
     assert "Suggest new fits" in dealer.text

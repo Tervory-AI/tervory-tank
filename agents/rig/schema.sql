@@ -6,6 +6,11 @@
 -- fit_why stores why-text for one fit, keyed by a hash of its rule and note.
 -- Import, a feed pull, a price watch, approve, and reject clear answers for that tenant.
 -- fit_why is kept so a known fit is not sent to a model again.
+-- market_prices is not the catalogue. Search does not read it.
+-- Each row is one other seller's price for a sku this retailer already stocks.
+-- The sheet is a separate import. A later price reader is the intended feed.
+-- When a sku has no rows, the shopper is told the figure is not available.
+-- retailers.name is the label on that retailer's own price.
 
 CREATE SCHEMA IF NOT EXISTS agent_rig;
 
@@ -98,8 +103,11 @@ CREATE TABLE IF NOT EXISTS agent_rig.retailers (
     tenant_id  uuid PRIMARY KEY,
     slug       text NOT NULL,
     email      text,
-    webhook    text
+    webhook    text,
+    name       text NOT NULL DEFAULT ''
 );
+
+ALTER TABLE agent_rig.retailers ADD COLUMN IF NOT EXISTS name text NOT NULL DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS agent_rig.feeds (
     tenant_id  uuid NOT NULL,
@@ -125,3 +133,15 @@ CREATE TABLE IF NOT EXISTS agent_rig.fit_why (
     why         jsonb NOT NULL,
     PRIMARY KEY (tenant_id, fit_id, rule_hash)
 );
+
+CREATE TABLE IF NOT EXISTS agent_rig.market_prices (
+    tenant_id  uuid NOT NULL,
+    sku        text NOT NULL,
+    source     text NOT NULL,
+    price      numeric NOT NULL,
+    currency   text NOT NULL,
+    seen_at    timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, sku, source)
+);
+
+CREATE INDEX IF NOT EXISTS market_prices_tenant_sku ON agent_rig.market_prices (tenant_id, sku);

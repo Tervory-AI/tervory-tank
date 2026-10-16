@@ -1,0 +1,19 @@
+sku,gtin,name,brand,category,price,currency,image_url,product_url,family,active,attributes
+STI-P-9,,Staccato P,Staccato,Pistols,64999.00,ZAR,https://assets.local/sti-p-9.jpg,,STACCATO-2011,yes,{}
+STI-C2-9,,Staccato C2,Staccato,Pistols,58999.00,ZAR,https://assets.local/sti-c2-9.jpg,,STACCATO-2011,yes,{}
+STI-XC-9,,Staccato XC,Staccato,Pistols,89999.00,ZAR,https://assets.local/sti-xc-9.jpg,,STACCATO-2011,yes,{}
+TRIJ-RMR-T2,,Trijicon RMR Type 2,Trijicon,Optics,9999.00,ZAR,https://assets.local/rmr-t2.jpg,,,yes,{}
+HOL-507C-X2,,Holosun 507C X2,Holosun,Optics,5499.00,ZAR,https://assets.local/507c.jpg,,,yes,{}
+DAW-FO-FRONT,,Dawson fiber front sight,Dawson Precision,Aftermarket sights,899.00,ZAR,https://assets.local/dawson-front.jpg,,,yes,{}
+TEN8-REAR,,10-8 rear sight,10-8 Performance,Aftermarket sights,1299.00,ZAR,https://assets.local/ten8-rear.jpg,,,yes,{}
+CHEELY-E2,,Cheely E2 grip,Cheely,Grips,3499.00,ZAR,https://assets.local/cheely-e2.jpg,,,yes,{}
+CHEELY-C2,,Cheely compact grip,Cheely,Grips,3299.00,ZAR,https://assets.local/cheely-c2.jpg,,,yes,{}
+ATLAS-FLAT,,Atlas flat trigger,Atlas,Triggers,2199.00,ZAR,https://assets.local/atlas-flat.jpg,,,yes,{}
+REDD-TRIGGER,,Red Dirt trigger,Red Dirt,Triggers,1899.00,ZAR,https://assets.local/red-dirt.jpg,,,yes,{}
+SAF-ALS-FULL,,Safariland ALS duty holster,Safariland,Holsters,2499.00,ZAR,https://assets.local/saf-als.jpg,,,yes,{}
+TENICOR-VELO,,Tenicor Velo holster,Tenicor,Holsters,2199.00,ZAR,https://assets.local/tenicor.jpg,,,yes,{}
+MAG-17,,2011 magazine 17 round,Check-Mate,Magazines,1299.00,ZAR,https://assets.local/mag-17.jpg,,,yes,{}
+MAG-20,,2011 magazine 20 round,Check-Mate,Magazines,1499.00,ZAR,https://assets.local/mag-20.jpg,,,yes,{}
+MAG-16,,2011 magazine 16 round,Check-Mate,Magazines,1199.00,ZAR,https://assets.local/mag-16.jpg,,,yes,{}
+SF-X300U,,SureFire X300U,SureFire,Lights,4999.00,ZAR,https://assets.local/x300.jpg,,,yes,{}
+SL-TLR1,,Streamlight TLR-1 HL,Streamlight,Lights,2799.00,ZAR,https://assets.local/tlr1.jpg,,,yes,{}

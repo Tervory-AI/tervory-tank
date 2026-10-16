@@ -31,17 +31,20 @@
       <section id="product" hidden>
         <button type="button" id="back" class="text">Back</button>
         <p id="product-name" class="product-name"></p>
+        <p id="product-price" class="price"></p>
+        <button type="button" id="show-accessories" class="prompt">See compatible accessories</button>
         <div class="product-layout">
           <div class="upgrades">
-            <h1>Compatible Upgrades</h1>
             <p id="product-status" class="status" role="status"></p>
-            <div id="groups"></div>
+            <div id="groups" hidden></div>
           </div>
-          <aside class="bundle" aria-label="Bundle">
-            <h2>Bundle</h2>
+          <aside class="bundle" aria-label="Your selection">
+            <h2>Your selection</h2>
             <ul id="bundle-parts" class="bundle-parts"></ul>
             <p id="bundle-total" class="total"></p>
             <p class="hint">Indicative</p>
+            <button type="button" id="compare" class="secondary">Compare prices</button>
+            <div id="compare-lines" hidden></div>
           </aside>
         </div>
       </section>

@@ -8,6 +8,7 @@ import json
 import os
 import re
 import time
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -31,6 +32,7 @@ from rigbox.ground import in_catalogue
 from rigbox.ground import suggest_prompt
 from rigbox.logic import _why as code_why
 from rigbox.logic import approved
+from rigbox.logic import money
 from rigbox.logic import fitting_parts
 from rigbox.logic import graph as build_graph
 from rigbox.logic import options_for
@@ -280,6 +282,47 @@ class Service:
             raise RigError("invalid", "A setup or a product is required.", 422)
         return await self._store_quote(tenant_id, payload, contact)
 
+    async def compare(self, tenant_id: str, product_ids: list[str]) -> dict[str, Any]:
+        """Other sellers' prices for a selection the shopper already made.
+
+        Search and the accessory list do not call this. No figure is invented:
+        a sku with no rows comes back without a market price.
+        """
+        wanted = [str(sku) for sku in product_ids if str(sku).strip()]
+        if not wanted:
+            raise RigError("invalid", "Choose a product first.", 422)
+        products = {str(row.get("sku") or row.get("id") or ""): row for row in await self._active(tenant_id)}
+        chosen: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for sku in wanted:
+            row = products.get(sku)
+            if row is None or sku in seen:
+                continue
+            seen.add(sku)
+            chosen.append(row)
+        if not chosen:
+            raise RigError("not_found", "No such product.", 404)
+        retailer = await self.store.retailer(tenant_id) or {}
+        retailer_name = str(retailer.get("name") or "")
+        observations = await self.store.market_for(tenant_id, [str(row.get("sku") or "") for row in chosen])
+        by_sku: dict[str, list[dict[str, Any]]] = {}
+        for row in observations:
+            if retailer_name and str(row.get("source") or "").casefold() == retailer_name.casefold():
+                continue
+            by_sku.setdefault(str(row.get("sku") or ""), []).append(row)
+        lines: list[dict[str, Any]] = []
+        for row in chosen:
+            public = public_product(row)
+            lines.append(
+                {
+                    "id": public["id"],
+                    "name": public["name"],
+                    "price": public["price"],
+                    "market": _market_average(by_sku.get(public["id"], []), str(public["price"].get("currency") or "")),
+                }
+            )
+        return {"retailer": retailer_name, "lines": lines}
+
     async def suggest(self, tenant_id: str) -> dict[str, Any]:
         if self.models is None:
             return {"fits": []}
@@ -377,6 +420,7 @@ class Service:
             report["products"] = {"added": added, "updated": updated, "rejected": []}
             for family, members in families_from(await self.store.products(tenant)).items():
                 await self.store.set_family(tenant, family, members)
+            report["market"] = await self._import_market(tenant, loaded.get("market"))
         if not loaded["publish_error"]:
             await self._apply_publish(tenant, loaded["slug"], loaded["publish"], report)
         fits = loaded["fits"]
@@ -568,6 +612,7 @@ class Service:
             slug,
             str(email) if email else None,
             str(webhook) if webhook else None,
+            str(publish.get("name") or ""),
         )
         templates = publish.get("setup_templates")
         if isinstance(templates, dict):
@@ -581,6 +626,21 @@ class Service:
                 str(feed["url"]),
                 str(feed.get("currency") or ""),
             )
+
+    async def _import_market(self, tenant_id: str, market: dict[str, Any] | None) -> dict[str, Any]:
+        if market is None:
+            return {"rows": 0, "rejected": []}
+        if market.get("rejected"):
+            return {"rows": 0, "rejected": list(market["rejected"])}
+        known = {str(row.get("sku") or "") for row in await self.store.products(tenant_id)}
+        unknown = [row for row in market.get("rows") or [] if str(row.get("sku") or "") not in known]
+        if unknown:
+            return {
+                "rows": 0,
+                "rejected": [{"row": row.get("row") or 0, "reason": "sku is not in this catalogue"} for row in unknown],
+            }
+        await self.store.replace_market(tenant_id, list(market.get("rows") or []))
+        return {"rows": len(market.get("rows") or []), "rejected": []}
 
     async def _store_quote(self, tenant_id: str, payload: dict[str, Any], contact: dict[str, Any]) -> dict[str, str]:
         quote_id = "req_" + uuid4().hex
@@ -597,6 +657,19 @@ class Service:
             return {"request_id": quote_id}
         await self.store.mark_sent(tenant_id, quote_id)
         return {"request_id": quote_id}
+
+
+def _market_average(rows: list[dict[str, Any]], currency: str) -> dict[str, Any] | None:
+    code = currency.upper()
+    amounts: list[Decimal] = []
+    for row in rows:
+        if str(row.get("currency") or "").upper() != code or not code:
+            continue
+        amounts.append(Decimal(str(row.get("price"))))
+    if not amounts:
+        return None
+    mean = sum(amounts, Decimal("0")) / Decimal(len(amounts))
+    return {"amount": money(mean), "currency": code, "indicative": True}
 
 
 def _roles_for(templates: Any, category: str) -> dict[str, str]:

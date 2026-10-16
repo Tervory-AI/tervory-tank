@@ -1,0 +1,12 @@
+{
+  "tenant_id": "33333333-3333-4333-8333-333333333333",
+  "name": "Custom Nation",
+  "email": "buyer@example.com",
+  "catalogue": "Stand-in distributor SKU sheet on disk. No feed URL. Prices are demo figures in ZAR, not a live quote.",
+  "keys": [
+    {
+      "key": "rk_pub_customnation",
+      "origins": ["https://rig.tervory.com", "http://127.0.0.1:5173"]
+    }
+  ]
+}

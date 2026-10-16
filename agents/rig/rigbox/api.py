@@ -43,6 +43,10 @@ class QuoteIn(BaseModel):
     contact: dict[str, Any] = Field(default_factory=dict)
 
 
+class CompareIn(BaseModel):
+    product_ids: list[str] = Field(min_length=1)
+
+
 class FitDecision(BaseModel):
     part_sku: str = Field(min_length=1)
     fits_sku: str | None = None
@@ -167,6 +171,13 @@ async def swap(request: Request, payload: SwapIn) -> Response:
 async def graph(request: Request, product_id: str) -> Response:
     await _auth(request)
     body = await _service(request).graph(_tenant(request), product_id)
+    return _ok(request, body)
+
+
+@router.post("/compare")
+async def compare(request: Request, payload: CompareIn) -> Response:
+    await _auth(request)
+    body = await _service(request).compare(_tenant(request), payload.product_ids)
     return _ok(request, body)
 
 

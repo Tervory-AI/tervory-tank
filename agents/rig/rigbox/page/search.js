@@ -6,10 +6,13 @@ const searchView = document.querySelector("#search");
 const productView = document.querySelector("#product");
 const main = document.querySelector("#main");
 const productName = document.querySelector("#product-name");
+const productPrice = document.querySelector("#product-price");
 const productStatus = document.querySelector("#product-status");
+const showAccessories = document.querySelector("#show-accessories");
 const groups = document.querySelector("#groups");
 const bundleParts = document.querySelector("#bundle-parts");
 const bundleTotal = document.querySelector("#bundle-total");
+const compareLines = document.querySelector("#compare-lines");
 
 let currentSetup = null;
 let currentGraph = null;
@@ -22,6 +25,15 @@ form.addEventListener("submit", (event) => {
 document.querySelector("#back").addEventListener("click", () => {
   showSearch();
   history.pushState({}, "", "/");
+});
+
+showAccessories.addEventListener("click", () => {
+  groups.hidden = false;
+  if (currentGraph) renderGroups(currentGraph, currentSetup);
+});
+
+document.querySelector("#compare").addEventListener("click", () => {
+  void comparePrices();
 });
 
 window.addEventListener("popstate", () => {
@@ -94,10 +106,14 @@ async function openProduct(id, push) {
   productView.hidden = false;
   main.classList.add("wide");
   productName.textContent = "";
+  productPrice.textContent = "";
   productStatus.textContent = "Loading…";
+  groups.hidden = true;
   groups.replaceChildren();
   bundleParts.replaceChildren();
   bundleTotal.textContent = "";
+  compareLines.hidden = true;
+  compareLines.replaceChildren();
   currentSetup = null;
   let graphResponse;
   let setupResponse;
@@ -121,8 +137,8 @@ async function openProduct(id, push) {
   const setups = await setupResponse.json();
   currentSetup = Array.isArray(setups.setups) ? setups.setups[0] : null;
   productName.textContent = (currentGraph.centre && currentGraph.centre.name) || "";
+  productPrice.textContent = priceLine(currentGraph.centre && currentGraph.centre.price);
   productStatus.textContent = "";
-  renderGroups(currentGraph, currentSetup);
   renderBundle(currentSetup);
 }
 
@@ -155,7 +171,10 @@ function fitCard(product, chosen) {
   item.className = chosen ? "fit chosen" : "fit";
   const name = document.createElement("h3");
   name.textContent = product.name || "";
-  item.append(name);
+  const price = document.createElement("p");
+  price.className = "price";
+  price.textContent = priceLine(product.price);
+  item.append(name, price);
   if (product.why) {
     const why = document.createElement("p");
     why.className = "why";
@@ -183,7 +202,10 @@ function renderBundle(setup) {
     const name = document.createElement("p");
     name.className = "part-name";
     name.textContent = (part.product && part.product.name) || "";
-    item.append(role, name);
+    const price = document.createElement("p");
+    price.className = "price";
+    price.textContent = priceLine(part.product && part.product.price);
+    item.append(role, name, price);
     if (index > 0 && part.role !== centreRole) {
       const swap = document.createElement("button");
       swap.type = "button";
@@ -263,6 +285,51 @@ async function choosePart(role, option) {
   currentSetup = body.setup || next;
   renderBundle(currentSetup);
   if (currentGraph) renderGroups(currentGraph, currentSetup);
+}
+
+async function comparePrices() {
+  if (!currentSetup) return;
+  const ids = (currentSetup.parts || []).map((part) => part.product && part.product.id).filter(Boolean);
+  if (!ids.length) return;
+  compareLines.hidden = false;
+  compareLines.textContent = "Loading…";
+  let response;
+  try {
+    response = await rigFetch("/v1/rig/compare", {
+      method: "POST",
+      body: JSON.stringify({ product_ids: ids }),
+    });
+  } catch {
+    compareLines.textContent = "Prices did not load. Try again.";
+    return;
+  }
+  if (!response.ok) {
+    compareLines.textContent = "Prices did not load. Try again.";
+    return;
+  }
+  renderCompare(await response.json());
+}
+
+function renderCompare(body) {
+  compareLines.replaceChildren();
+  const label = body.retailer ? body.retailer + " price" : "Price";
+  for (const line of body.lines || []) {
+    const item = document.createElement("article");
+    item.className = "compare-line";
+    const name = document.createElement("h3");
+    name.textContent = line.name || "";
+    const market = document.createElement("p");
+    market.className = "market";
+    market.textContent =
+      line.market && line.market.amount != null
+        ? "Market average: " + priceLine(line.market)
+        : "Market average: not available";
+    const own = document.createElement("p");
+    own.className = "own";
+    own.textContent = label + ": " + priceLine(line.price);
+    item.append(name, market, own);
+    compareLines.append(item);
+  }
 }
 
 function showSearch() {

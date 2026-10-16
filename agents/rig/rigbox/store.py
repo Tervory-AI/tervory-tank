@@ -166,6 +166,7 @@ class MemoryStore:
         self.feeds: dict[tuple[str, str], dict[str, Any]] = {}
         self.answers: dict[tuple[str, str, str], tuple[str, dict[str, Any]]] = {}
         self.fit_why: dict[tuple[str, str, str], list[str]] = {}
+        self.market: dict[tuple[str, str, str], dict[str, Any]] = {}
 
     def _drop_answers(self, tenant_id: str) -> None:
         tenant = str(tenant_id)
@@ -219,12 +220,43 @@ class MemoryStore:
         row = self.keys.get(key_hash)
         return dict(row) if row else None
 
-    async def put_retailer(self, tenant_id: str, slug: str, email: str | None, webhook: str | None) -> None:
-        self.retailers[str(tenant_id)] = {"slug": slug, "email": email, "webhook": webhook}
+    async def put_retailer(
+        self,
+        tenant_id: str,
+        slug: str,
+        email: str | None,
+        webhook: str | None,
+        name: str = "",
+    ) -> None:
+        self.retailers[str(tenant_id)] = {"slug": slug, "email": email, "webhook": webhook, "name": name}
 
     async def retailer(self, tenant_id: str) -> dict[str, Any] | None:
         row = self.retailers.get(str(tenant_id))
         return dict(row) if row else None
+
+    async def replace_market(self, tenant_id: str, rows: list[dict[str, Any]]) -> None:
+        tenant = str(tenant_id)
+        self.market = {key: value for key, value in self.market.items() if key[0] != tenant}
+        for row in rows:
+            sku = str(row.get("sku") or "")
+            source = str(row.get("source") or "")
+            self.market[(tenant, sku, source)] = {
+                "sku": sku,
+                "source": source,
+                "price": row.get("price"),
+                "currency": str(row.get("currency") or ""),
+                "seen_at": str(row.get("seen_at") or ""),
+            }
+        self._drop_answers(tenant)
+
+    async def market_for(self, tenant_id: str, skus: list[str]) -> list[dict[str, Any]]:
+        wanted = {str(sku) for sku in skus}
+        tenant = str(tenant_id)
+        return [
+            dict(row)
+            for (owner, sku, _source), row in self.market.items()
+            if owner == tenant and sku in wanted
+        ]
 
     async def put_feed(self, tenant_id: str, fmt: str, url: str, currency: str) -> None:
         self.feeds[(str(tenant_id), url)] = {"format": fmt, "url": url, "currency": currency}
@@ -545,29 +577,103 @@ class PgStore:
             return None
         return {"tenant_id": str(row["tenant_id"]), "kind": row["kind"], "origins": list(row["origins"] or [])}
 
-    async def put_retailer(self, tenant_id: str, slug: str, email: str | None, webhook: str | None) -> None:
+    async def put_retailer(
+        self,
+        tenant_id: str,
+        slug: str,
+        email: str | None,
+        webhook: str | None,
+        name: str = "",
+    ) -> None:
         async with self.pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO agent_rig.retailers (tenant_id, slug, email, webhook)
-                VALUES ($1, $2, $3, $4)
-                ON CONFLICT (tenant_id) DO UPDATE SET slug = EXCLUDED.slug, email = EXCLUDED.email, webhook = EXCLUDED.webhook
+                INSERT INTO agent_rig.retailers (tenant_id, slug, email, webhook, name)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (tenant_id) DO UPDATE SET
+                    slug = EXCLUDED.slug,
+                    email = EXCLUDED.email,
+                    webhook = EXCLUDED.webhook,
+                    name = EXCLUDED.name
                 """,
                 _uuid(tenant_id),
                 slug,
                 email,
                 webhook,
+                name,
             )
 
     async def retailer(self, tenant_id: str) -> dict[str, Any] | None:
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT slug, email, webhook FROM agent_rig.retailers WHERE tenant_id = $1",
+                "SELECT slug, email, webhook, name FROM agent_rig.retailers WHERE tenant_id = $1",
                 _uuid(tenant_id),
             )
         if row is None:
             return None
-        return {"slug": row["slug"], "email": row["email"], "webhook": row["webhook"]}
+        return {"slug": row["slug"], "email": row["email"], "webhook": row["webhook"], "name": row["name"] or ""}
+
+    async def replace_market(self, tenant_id: str, rows: list[dict[str, Any]]) -> None:
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute(
+                    "DELETE FROM agent_rig.market_prices WHERE tenant_id = $1",
+                    _uuid(tenant_id),
+                )
+                for row in rows:
+                    seen = str(row.get("seen_at") or "").strip()
+                    if seen:
+                        await conn.execute(
+                            """
+                            INSERT INTO agent_rig.market_prices
+                                (tenant_id, sku, source, price, currency, seen_at)
+                            VALUES ($1, $2, $3, $4, $5, $6::timestamptz)
+                            """,
+                            _uuid(tenant_id),
+                            str(row.get("sku") or ""),
+                            str(row.get("source") or ""),
+                            row.get("price"),
+                            str(row.get("currency") or ""),
+                            seen,
+                        )
+                    else:
+                        await conn.execute(
+                            """
+                            INSERT INTO agent_rig.market_prices
+                                (tenant_id, sku, source, price, currency)
+                            VALUES ($1, $2, $3, $4, $5)
+                            """,
+                            _uuid(tenant_id),
+                            str(row.get("sku") or ""),
+                            str(row.get("source") or ""),
+                            row.get("price"),
+                            str(row.get("currency") or ""),
+                        )
+        await self._drop_answers(tenant_id)
+
+    async def market_for(self, tenant_id: str, skus: list[str]) -> list[dict[str, Any]]:
+        if not skus:
+            return []
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT sku, source, price, currency, seen_at
+                FROM agent_rig.market_prices
+                WHERE tenant_id = $1 AND sku = ANY($2::text[])
+                """,
+                _uuid(tenant_id),
+                [str(sku) for sku in skus],
+            )
+        return [
+            {
+                "sku": row["sku"],
+                "source": row["source"],
+                "price": row["price"],
+                "currency": row["currency"],
+                "seen_at": row["seen_at"].isoformat() if row["seen_at"] is not None else "",
+            }
+            for row in rows
+        ]
 
     async def put_feed(self, tenant_id: str, fmt: str, url: str, currency: str) -> None:
         async with self.pool.acquire() as conn:
