@@ -156,15 +156,19 @@ async def test_a_single_digit_in_a_model_code_must_be_on_that_row() -> None:
     assert all(name != "Holosun 507" for name in _names(shorter))
 
 
+def _word_file(name: str) -> list[str]:
+    lines = (ROOT / "agents" / "rig" / name).read_text(encoding="utf-8").splitlines()
+    return [line.split("#", 1)[0].strip().lower() for line in lines if line.strip() and not line.startswith("#")]
+
+
 @pytest.mark.asyncio
-async def test_ordinary_shopping_words_never_flag_and_an_unknown_name_after_a_brand_does() -> None:
-    listed = [
-        line.split("#", 1)[0].strip().lower()
-        for line in (ROOT / "agents" / "rig" / "english-20k.txt").read_text(encoding="utf-8").splitlines()
-    ]
-    listed = [word for word in listed if word]
-    assert len(listed) == 20000
-    shopping = (
+async def test_the_word_after_a_brand_is_exact_only_from_the_catalogue_or_the_glossary() -> None:
+    english = _word_file("english-20k.txt")
+    glossary = _word_file("shopping.txt")
+    assert len(english) == 20000
+    assert len(glossary) >= 300
+    assert len(glossary) == len(set(glossary))
+    descriptors = (
         "cheap",
         "spare",
         "top",
@@ -174,9 +178,7 @@ async def test_ordinary_shopping_words_never_flag_and_an_unknown_name_after_a_br
         "bag",
         "buy",
         "gun",
-        "oh",
         "set",
-        "up",
         "rig",
         "extra",
         "basic",
@@ -185,73 +187,96 @@ async def test_ordinary_shopping_words_never_flag_and_an_unknown_name_after_a_br
         "best",
         "new",
         "used",
-        "local",
         "premium",
         "budget",
-        "simple",
-        "clean",
-        "soft",
-        "original",
-        "replacement",
-        "compact",
-        "carry",
-        "home",
-        "travel",
         "nylon",
         "leather",
-        "light",
-        "heavy",
-        "open",
-        "free",
-        "good",
-        "great",
-        "little",
-        "strong",
-        "classic",
-        "modern",
-        "mini",
-        "easy",
-        "fast",
-        "quiet",
-        "short",
-        "long",
-        "round",
-        "flat",
-        "holder",
-        "cover",
+        "kydex",
+        "iwb",
+        "owb",
+        "aiwb",
+        "fde",
+        "odg",
+        "tan",
+        "holster",
         "case",
-        "pack",
-        "box",
-        "pair",
+        "mount",
+        "carry",
+        "compact",
+        "fiber",
     )
-    assert all(word in listed for word in shopping)
-    assert "malus" not in listed
-    assert "certum" not in listed
+    assert all(word in glossary for word in descriptors)
+    # English words and short codes are not descriptors, even when the frequency list knows them.
+    for word in ("scout", "turbo", "ice", "cs", "hd", "eps", "oh", "up", "malus", "certum"):
+        assert word not in glossary
+        assert word in english or word in {"malus", "certum"}
     service = await _service()
-    for word in shopping:
-        for text in (f"{word} tenicor", f"tenicor {word}", f"{word} staccato", f"holosun {word}"):
+    for word in descriptors:
+        for text in (f"{word} tenicor", f"tenicor {word}", f"holosun {word}"):
             found = await service.search(CN, text, 12)
             assert found["results"], text
             assert found["exact_match"] is True, text
             assert "message" not in found
-    # A word that is not English still does not flag when it sits before the brand.
-    for text in ("zqxv tenicor", "blorpt holosun", "iwb tenicor", "qqqq staccato"):
+    # Before the brand, the frequency list still applies: these are not model codes.
+    for text in (
+        "scout staccato",
+        "turbo holosun",
+        "ice dawson",
+        "cs staccato",
+        "hd staccato",
+        "eps holosun",
+        "oh staccato",
+        "up holosun",
+        "zqxv tenicor",
+        "iwb tenicor",
+    ):
         found = await service.search(CN, text, 12)
         assert found["results"], text
         assert found["exact_match"] is True, text
         assert "message" not in found
-    # The same unknown token directly after the brand is the missing model.
-    # An ordinary word between them is not, and it does not pull the later token in.
     between = await service.search(CN, "tenicor cheap zqxv", 12)
     assert between["exact_match"] is True
     assert "message" not in between
-    typo = await service.search(CN, "streamlight hll", 12)
-    assert typo["exact_match"] is True
-    assert "message" not in typo
-    assert _ids(typo)[0] == "SL-TLR1"
     for text, phrase, sku in (
+        ("Tenicor iwb", "iwb", "TENICOR-VELO"),
+        ("Safariland fde", "fde", "SAF-ALS-FULL"),
+        ("Holosun odg", "odg", "HOL-507C-X2"),
+    ):
+        found = await service.search(CN, text, 12)
+        assert found["exact_match"] is True, text
+        assert "message" not in found
+        assert _ids(found)[0] == sku
+    stocked = (
+        ("Staccato P", "STI-P-9"),
+        ("Staccato XC", "STI-XC-9"),
+        ("Safariland ALS", "SAF-ALS-FULL"),
+        ("Streamlight HL", "SL-TLR1"),
+        ("Atlas flat", "ATLAS-FLAT"),
+        ("Cheely compact", "CHEELY-C2"),
+        ("Dawson fiber", "DAW-FO-FRONT"),
+        ("RMR Type 2", "TRIJ-RMR-T2"),
+    )
+    for text, sku in stocked:
+        found = await service.search(CN, text, 12)
+        assert found["exact_match"] is True, text
+        assert "message" not in found
+        assert sku in _ids(found)
+        assert _ids(found)[0] == sku
+    for text, phrase, sku in (
+        ("Staccato CS", "CS", "STI-C2-9"),
+        ("Staccato HD", "HD", "STI-C2-9"),
+        ("Holosun EPS", "EPS", "HOL-507C-X2"),
+        ("SureFire Scout", "Scout", "SF-X300U"),
+        ("Streamlight Turbo", "Turbo", "SL-TLR1"),
+        ("Dawson ICE", "ICE", "DAW-FO-FRONT"),
         ("Tenicor Malus", "Malus", "TENICOR-VELO"),
         ("Tenicor Certum", "Certum", "TENICOR-VELO"),
+        ("Atlas Nemesis", "Nemesis", "ATLAS-FLAT"),
+        ("Cheely Mangonel", "Mangonel", "CHEELY-C2"),
+        ("Holosun AEMS", "AEMS", "HOL-507C-X2"),
+        ("SureFire Vampire", "Vampire", "SF-X300U"),
+        ("Tenicor Sagax", "Sagax", "TENICOR-VELO"),
+        ("streamlight hll", "hll", "SL-TLR1"),
         ("X300W", "X300W", "SF-X300U"),
         ("Staccato C4", "C4", "STI-C2-9"),
     ):
