@@ -13,9 +13,9 @@ export function headerLinks(founder: boolean): NavLink[] {
   return links;
 }
 
-const OWN_SHELL = ["/sign-in", "/sign-up", "/onboarding"];
+const OWN_SHELL = ["/sign-in", "/sign-up", "/onboarding", "/radix"];
 
-/** Sign-in, sign-up, and onboarding do not use the product header. */
+/** These routes provide their own shell instead of the product header. */
 export function usesOwnShell(pathname: string): boolean {
   const path = pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
   return OWN_SHELL.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
