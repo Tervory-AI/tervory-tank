@@ -69,15 +69,21 @@ export function createTask(
   title: string,
   taskType: string,
   messages: ChatMessage[],
+  agent = "tier0",
 ): Promise<Task> {
   return tank<Task>("/v1/tasks", {
     method: "POST",
-    body: JSON.stringify({ tenant_id: tenantId, created_by: createdBy, title, task_type: taskType, messages }),
+    body: JSON.stringify({ tenant_id: tenantId, created_by: createdBy, title, task_type: taskType, messages, agent }),
   });
 }
 
 export function listTasks(tenantId: string, limit = 50): Promise<Task[]> {
   return tank<Task[]>(`/v1/tasks?tenant_id=${tenantId}&limit=${limit}`, { method: "GET" });
+}
+
+export function getTask(tenantId: string, taskId: string): Promise<Task> {
+  const query = new URLSearchParams({ tenant_id: tenantId });
+  return tank<Task>(`/v1/tasks/${encodeURIComponent(taskId)}?${query}`, { method: "GET" });
 }
 
 // ---- feedback: the outcome column ----

@@ -38,7 +38,7 @@ export const exampleFindings = [
   },
 ] as const;
 
-export const sourceSections = [
+export const pluginSections = [
   {
     id: "keys", label: "API keys",
     description: "No API keys are needed for offline code checks.",

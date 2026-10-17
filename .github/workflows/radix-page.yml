@@ -4,6 +4,7 @@ on:
     paths:
       - "workspace/app/radix/**"
       - "workspace/app/product-nav.ts"
+      - "workspace/lib/tank.ts"
       - ".github/workflows/radix-page.yml"
 permissions:
   contents: read

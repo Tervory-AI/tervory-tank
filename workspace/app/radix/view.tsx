@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { headerLinks } from "../product-nav";
-import { checks, exampleFindings, exampleReport, sourceSections } from "./content";
+import { checks, exampleFindings, exampleReport, pluginSections } from "./content";
+import { RadixDesk } from "./conversation";
 
 type Section = "Overview" | "Findings" | "Reports";
 const sections: Section[] = ["Overview", "Findings", "Reports"];
@@ -28,22 +29,22 @@ function Logo() {
   return <img src="/brand/tervory-logo-reversed.png" width={186} height={34} alt="Tervory" className="rx-logo" />;
 }
 
-function Sources() {
+function Plugins() {
   const [selected, setSelected] = useState(0);
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
   function onTabKey(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     let next = index;
-    if (event.key === "ArrowRight") next = (index + 1) % sourceSections.length;
-    else if (event.key === "ArrowLeft") next = (index + sourceSections.length - 1) % sourceSections.length;
+    if (event.key === "ArrowRight") next = (index + 1) % pluginSections.length;
+    else if (event.key === "ArrowLeft") next = (index + pluginSections.length - 1) % pluginSections.length;
     else if (event.key === "Home") next = 0;
-    else if (event.key === "End") next = sourceSections.length - 1;
+    else if (event.key === "End") next = pluginSections.length - 1;
     else return;
     event.preventDefault();
     setSelected(next);
     tabs.current[next]?.focus();
   }
   function content(index: number) {
-    const item = sourceSections[index];
+    const item = pluginSections[index];
     return <>
       <p>{item.description}</p>
       <div className="rx-card">
@@ -57,24 +58,24 @@ function Sources() {
     </>;
   }
   return <>
-    <div className="rx-source-desktop">
-      <div className="rx-source-tabs" role="tablist" aria-label="Source types">
-        {sourceSections.map((item, index) => <button key={item.id} type="button"
+    <div className="rx-plugin-desktop">
+      <div className="rx-plugin-tabs" role="tablist" aria-label="Plugin types">
+        {pluginSections.map((item, index) => <button key={item.id} type="button"
           ref={(node) => { tabs.current[index] = node; }}
           id={"rx-tab-" + item.id} role="tab" aria-selected={selected === index}
-          aria-controls={"rx-source-" + item.id} tabIndex={selected === index ? 0 : -1}
+          aria-controls={"rx-plugin-" + item.id} tabIndex={selected === index ? 0 : -1}
           onClick={() => setSelected(index)} onKeyDown={(event) => onTabKey(event, index)}>
           {item.label}
         </button>)}
       </div>
-      {sourceSections.map((item, index) => <section key={item.id} role="tabpanel"
-        id={"rx-source-" + item.id} aria-labelledby={"rx-tab-" + item.id}
+      {pluginSections.map((item, index) => <section key={item.id} role="tabpanel"
+        id={"rx-plugin-" + item.id} aria-labelledby={"rx-tab-" + item.id}
         hidden={selected !== index} tabIndex={0}>
-        <h3 className="rx-source-heading">{item.label}</h3>{content(index)}
+        <h3 className="rx-plugin-heading">{item.label}</h3>{content(index)}
       </section>)}
     </div>
-    <div className="rx-source-mobile">
-      {sourceSections.map((item, index) => <details key={item.id} open={index === 0}>
+    <div className="rx-plugin-mobile">
+      {pluginSections.map((item, index) => <details key={item.id} open={index === 0}>
         <summary>{item.label}</summary>{content(index)}
       </details>)}
     </div>
@@ -86,11 +87,11 @@ export function RadixPage({ founder }: { founder: boolean }) {
   const [example, setExample] = useState(false);
   const [severity, setSeverity] = useState("All");
   const [query, setQuery] = useState("");
-  const sources = useRef<HTMLDialogElement>(null);
+  const plugins = useRef<HTMLDialogElement>(null);
   const menu = useRef<HTMLDialogElement>(null);
   const body = useRef<HTMLDivElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
-  const sourcesTrigger = useRef<HTMLButtonElement | null>(null);
+  const pluginsTrigger = useRef<HTMLButtonElement | null>(null);
   const menuTrigger = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -109,11 +110,11 @@ export function RadixPage({ founder }: { founder: boolean }) {
     body.current?.scrollTo({ top: 0 });
     requestAnimationFrame(() => heading.current?.focus());
   }
-  function openSources(trigger: HTMLButtonElement) {
+  function openPlugins(trigger: HTMLButtonElement) {
     const fromMenu = Boolean(menu.current?.open);
     menu.current?.close();
-    sourcesTrigger.current = fromMenu ? menuTrigger.current : trigger;
-    sources.current?.showModal();
+    pluginsTrigger.current = fromMenu ? menuTrigger.current : trigger;
+    plugins.current?.showModal();
   }
   function navigation() {
     return <>
@@ -126,7 +127,7 @@ export function RadixPage({ founder }: { founder: boolean }) {
         <nav aria-label="Radix">
           {sections.map((item) => <button key={item} type="button" aria-current={section === item ? "page" : undefined}
             onClick={() => navigate(item)}>{item}</button>)}
-          <button type="button" onClick={(event) => openSources(event.currentTarget)} aria-haspopup="dialog">Sources</button>
+          <button type="button" onClick={(event) => openPlugins(event.currentTarget)} aria-haspopup="dialog">Plugins</button>
         </nav>
       </div>
       <nav className="rx-bottom" aria-label="Workspace">
@@ -159,10 +160,12 @@ export function RadixPage({ founder }: { founder: boolean }) {
             : example ? "Example only. These findings are made up to show the review flow."
             : "Review the checks made on code supplied to Radix."}</p>
         </div>
-        {example ? <a className="rx-primary" download="radix-example-report.md"
+        {example ? <a className="rx-secondary" download="radix-example-report.md"
           href={"data:text/markdown;charset=utf-8," + encodeURIComponent(exampleReport())}>Download example report</a>
-          : <button className="rx-primary" type="button" onClick={() => navigate("Reports", true)}>View example report</button>}
+          : <button className="rx-secondary" type="button" onClick={() => navigate("Reports", true)}>View example report</button>}
       </header>
+
+      <RadixDesk />
 
       <section className="rx-card rx-seal" aria-label="Outbound access">
         <h2>Outbound scans are off</h2>
@@ -210,14 +213,14 @@ export function RadixPage({ founder }: { founder: boolean }) {
       </>}
       <footer className="rx-footnote">Code checks use supplied files. No website is scanned from this page.</footer>
     </div>
-    <dialog ref={sources} className="rx-sources-dialog" aria-labelledby="rx-sources-title" onKeyDown={keepDialogFocus}
-      onClose={() => sourcesTrigger.current?.focus()}>
+    <dialog ref={plugins} className="rx-plugins-dialog" aria-labelledby="rx-plugins-title" onKeyDown={keepDialogFocus}
+      onClose={() => pluginsTrigger.current?.focus()}>
       <div className="rx-modal-header">
-        <div><h2 id="rx-sources-title">Sources</h2><p>The files and connections Radix can use.</p></div>
-        <button type="button" className="rx-text-button" onClick={() => sources.current?.close()}>Close</button>
+        <div><h2 id="rx-plugins-title">Plugins</h2><p>The files and connections Radix can use.</p></div>
+        <button type="button" className="rx-text-button" onClick={() => plugins.current?.close()}>Close</button>
       </div>
-      <Sources />
-      <button type="button" className="rx-primary" onClick={() => sources.current?.close()}>Done</button>
+      <Plugins />
+      <button type="button" className="rx-primary" onClick={() => plugins.current?.close()}>Done</button>
     </dialog>
   </div>;
 }
