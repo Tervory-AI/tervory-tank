@@ -36,10 +36,11 @@ The tenant is the job's `tenant_id`. Brand colours and fonts become CSS variable
 
 Before it returns, the room runs `npm ci`, `npm run lint`, `npm run build`, and `npm test`. The project is stored at `/data/builds/<tenant>/<slug>/<n>.tar.gz` with a manifest: `files`, `token_set`, and `checks`.
 
+The generated project also carries a GitHub Actions gate. That gate runs ESLint, `tsc`, the unit tests, the production build, Playwright at 390px, 768px, and 1440px (including axe-core), and Lighthouse CI. Performance, accessibility, best practices, and SEO must each score 90 or above. Those browser checks run in GitHub Actions. The room does not launch a browser.
+
 ## Later skills
 
 1. The Figma token reader (the style contract).
-2. The Playwright test runner.
 
 ## What Tisan never does
 
