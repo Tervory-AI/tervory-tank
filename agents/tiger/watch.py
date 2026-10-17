@@ -22,13 +22,15 @@ from urllib.parse import urlparse
 
 import asyncpg
 
+from change_alert import price_moved, stock_token
 from chassis.cron import is_due
 from chassis.db import schema_for
+from page_guard import layout_from_evidence, learn_layout, read_page
 
 SCHEMA = schema_for("tiger")
 ROBOTS_TOKEN = "tervorytiger"
 _INTERVAL = re.compile(r"^(\d+)(s|m|h|d)$")
-_SKIP_METHODS = {"blocked", "robots", "error", "none"}
+_SKIP_METHODS = {"blocked", "robots", "error", "none", "unread"}
 
 SQL_LIST_WATCHES = """
 SELECT id, tenant_id, url, label, engine, every, enabled, threshold
@@ -324,18 +326,6 @@ def _rules_for(groups: list[tuple[list[str], list[tuple[str, str]]]], token: str
     return None
 
 
-def price_moved(before: Any, after: Any, threshold: Any) -> bool:
-    if before is None or after is None:
-        return False
-    old = Decimal(str(before))
-    new = Decimal(str(after))
-    if old == new:
-        return False
-    if old == 0:
-        return True
-    return abs(new - old) / abs(old) > Decimal(str(threshold))
-
-
 def alerts_for(previous: dict | None, current: dict, threshold: Any) -> list[dict[str, str]]:
     if not _comparable(previous) or not _comparable(current):
         return []
@@ -347,8 +337,8 @@ def alerts_for(previous: dict | None, current: dict, threshold: Any) -> list[dic
             "before": str(previous.get("price")),
             "after": str(current.get("price")),
         })
-    before_stock = previous.get("availability")
-    after_stock = current.get("availability")
+    before_stock = stock_token(previous.get("availability"))
+    after_stock = stock_token(current.get("availability"))
     if before_stock and after_stock and before_stock != after_stock:
         found.append({"kind": "stock", "before": str(before_stock), "after": str(after_stock)})
     return found
@@ -436,8 +426,13 @@ def _obs(
     }
 
 
-def _evidence(method: str | None, price: str | None, saved: str | None) -> str:
-    return json.dumps({"method": method, "price": price, "file": saved}, default=str)[:2000]
+def _evidence(method: str | None, price: str | None, saved: str | None, layout: dict | None = None) -> str:
+    payload: dict[str, Any] = {"method": method, "price": price, "file": saved}
+    if layout and layout.get("primary"):
+        payload["layout"] = {"primary": layout.get("primary")}
+        if layout.get("dom"):
+            payload["layout"]["dom"] = layout["dom"]
+    return json.dumps(payload, default=str)[:2000]
 
 
 async def ensure_tables(conn: Any, schema: str = SCHEMA) -> None:
@@ -884,25 +879,45 @@ async def run_check(
 
     extracted = await extract(html, url)
     items = list(extracted.get("items") or [])
-    chosen = next((item for item in items if item.get("price")), None)
-    method = extracted.get("method")
+    previous_row = await store.latest_observation(tenant_id, url)
+    stored = layout_from_evidence(previous_row.get("evidence") if previous_row else None)
+    if stored is None or stored.get("primary") == "ocr":
+        signature = learn_layout(html, extracted)
+        if not signature.get("primary"):
+            signature = stored
+    else:
+        signature = stored
+    decision = read_page(html, signature, extracted)
     png = page.get("png_base64")
-    if chosen is None and png:
-        read = await ocr(png, url)
-        priced = [item for item in (read.get("items") or []) if item.get("price")]
-        if priced:
-            chosen = priced[0]
-            method = "ocr"
-    if chosen is None and items:
-        chosen = items[0]
-        method = chosen.get("method") or method
-    price = chosen.get("price") if chosen else None
+    layout = decision.get("layout") or signature
+    chosen = None
+    if decision["status"] == "read":
+        method = decision.get("method") or extracted.get("method")
+        price = decision.get("price")
+        chosen = next((item for item in items if item.get("price") == price), None)
+    else:
+        method = None
+        price = None
+        # A screenshot is only a fallback before a layout is known. It is not a guess
+        # after the known layout has gone.
+        if stored is None and png:
+            read = await ocr(png, url)
+            priced = [item for item in (read.get("items") or []) if item.get("price")]
+            if priced:
+                chosen = priced[0]
+                method = "ocr"
+                price = chosen.get("price")
+                layout = {"primary": "ocr"}
+    if method is None:
+        method = "unread"
+        price = None
+        chosen = None
     currency = chosen.get("currency") if chosen else None
     availability = chosen.get("availability") if chosen else None
-    method = method or "none"
     saved_file = _save_png(files, str(tenant_id), png if isinstance(png, str) else None, clock())
     current = await store.add_observation(_obs(
-        tenant_id, url, clock(), price, currency, availability, method, _evidence(method, price, saved_file),
+        tenant_id, url, clock(), price, currency, availability, method,
+        _evidence(method, price, saved_file, layout),
     ))
     previous = await store.previous_observation(tenant_id, url, current["id"])
     found = alerts_for(previous, current, watch.get("threshold") or 0)
@@ -917,7 +932,7 @@ async def run_check(
             "after": alert["after"],
         }))
     return {
-        "status": "observed",
+        "status": "can't read" if method == "unread" else "observed",
         "url": url,
         "method": method,
         "price": price,
