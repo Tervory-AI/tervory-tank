@@ -43,23 +43,63 @@ _AVAIL_FIELD_REV = re.compile(
 )
 
 
-def stock_token(value: Any) -> str | None:
-    """A known stock phrase, including the same phrase in different words."""
+# Longer phrases first, so "out of stock" is not read as "in stock".
+_PHRASE = (
+    ("OutOfStock", re.compile(
+        r"(?:schema\.org[/\\]+outofstock|\bout[\s\-]*of[\s\-]*stock\b|\bsold[\s\-]*out\b|\boutofstock\b)",
+        re.I,
+    )),
+    ("LimitedAvailability", re.compile(
+        r"(?:schema\.org[/\\]+limitedavailability|\blimited[\s\-]*availability\b|\blimitedavailability\b)",
+        re.I,
+    )),
+    ("PreOrder", re.compile(
+        r"(?:schema\.org[/\\]+preorder|\bpre[\s\-]*order\b|\bpreorder\b)",
+        re.I,
+    )),
+    ("Discontinued", re.compile(
+        r"(?:schema\.org[/\\]+discontinued|\bdiscontinued\b)",
+        re.I,
+    )),
+    ("InStock", re.compile(
+        r"(?:schema\.org[/\\]+instock|\bin[\s\-]*stock\b|\binstock\b)",
+        re.I,
+    )),
+)
+
+
+def phrases_in(value: Any) -> list[str]:
+    """Known stock phrases used in this wording, including a phrase with extra words."""
     if value is None:
-        return None
+        return []
     text = str(value).strip()
     if not text or text == CANT_READ:
-        return None
+        return []
+    found: list[str] = []
+    for token, pattern in _PHRASE:
+        if pattern.search(text):
+            found.append(token)
+    if found:
+        return found
     tail = text.rstrip("/").split("/")[-1]
     key = re.sub(r"[\s_\-]+", "", tail).lower()
-    return _STOCK.get(key)
+    token = _STOCK.get(key)
+    return [token] if token else []
+
+
+def stock_token(value: Any) -> str | None:
+    """A known stock phrase, including the same phrase with extra words."""
+    found = phrases_in(value)
+    if len(found) == 1:
+        return found[0]
+    return None
 
 
 def stock_reading(value: Any) -> str | None:
     """A known stock phrase, nothing when stock was not stated, or "can't read".
 
-    Stock is recorded only for a known phrase, including the same phrase in
-    different words. Any other wording is "can't read" and is not an alert.
+    A known phrase is recorded even when extra words sit around it. Wording
+    with no known phrase is "can't read" and is not an alert.
     """
     if value is None:
         return None
@@ -68,10 +108,7 @@ def stock_reading(value: Any) -> str | None:
         return None
     if text == CANT_READ:
         return CANT_READ
-    token = stock_token(text)
-    if token:
-        return token
-    return CANT_READ
+    return stock_token(text) or CANT_READ
 
 
 # Stock lines only. A wrapper div whose class says "instock" is not a stock phrase.
@@ -103,21 +140,32 @@ def stock_statements(html: str) -> list[str]:
 
 
 def record_stock(statements: list[str]) -> str | None:
-    """Record a token only when every stock line is the same known phrase."""
+    """Record the known phrase. One looser line does not veto it.
+
+    Extra words around a known phrase still count. Wording with no known
+    phrase is "can't read" only when the page has no known phrase at all.
+    Two different known phrases are "can't read" and do not alert.
+    """
     if not statements:
         return None
     tokens: list[str] = []
+    other = False
     for text in statements:
-        reading = stock_reading(text)
-        if reading == CANT_READ:
-            return CANT_READ
-        if reading:
-            tokens.append(reading)
-    if not tokens:
-        return None
-    if len(set(tokens)) == 1:
+        found = phrases_in(text)
+        if not found:
+            if str(text).strip():
+                other = True
+            continue
+        for token in found:
+            if token not in tokens:
+                tokens.append(token)
+    if len(tokens) == 1:
         return tokens[0]
-    return CANT_READ
+    if len(tokens) > 1:
+        return CANT_READ
+    if other:
+        return CANT_READ
+    return None
 
 
 def stated_availability(html: str) -> str | None:

@@ -18,9 +18,9 @@ Columns: case id, what changed, expected outcome, actual outcome, verified.
 | ca-after-unknown-s00 | change-alerts | heldout | synthetic | First week is $10, in stock. | no alert, stock InStock, price 10.00 | no alert, observed, stock InStock, price 10.00 | no |
 | ca-after-unknown-s01 | change-alerts | heldout | synthetic | Ships today cannot be read as stock. No alarm. | no alert, stock can't read, price 10.00 | no alert, observed, stock can't read, price 10.00 | no |
 | ca-after-unknown-s02 | change-alerts | heldout | synthetic | Stock is now out. The last stock we could read was in stock. | alert stock, stock OutOfStock, price 10.00 | alert stock, observed, stock OutOfStock, price 10.00 | no |
-| ca-attic-live-s00 | change-alerts | heldout | saved-page | The saved page shows £51.77. | no alert, price 51.77 | no alert, observed, stock can't read, price 51.77 | no |
-| ca-attic-live-s01 | change-alerts | heldout | saved-page | The same page still shows £51.77. | no alert, price 51.77 | no alert, observed, stock can't read, price 51.77 | no |
-| ca-attic-live-s02 | change-alerts | heldout | saved-page | The book's price now says £46.50. | alert price, price 46.50 | alert price, observed, stock can't read, price 46.50 | no |
+| ca-attic-live-s00 | change-alerts | heldout | saved-page | The saved page shows £51.77. | no alert, price 51.77 | no alert, observed, stock InStock, price 51.77 | no |
+| ca-attic-live-s01 | change-alerts | heldout | saved-page | The same page still shows £51.77. | no alert, price 51.77 | no alert, observed, stock InStock, price 51.77 | no |
+| ca-attic-live-s02 | change-alerts | heldout | saved-page | The book's price now says £46.50. | alert price, price 46.50 | alert price, observed, stock InStock, price 46.50 | no |
 | ca-big-drop-s00 | change-alerts | heldout | synthetic | First week is $200. | no alert, price 200.00 | no alert, observed, stock InStock, price 200.00 | no |
 | ca-big-drop-s01 | change-alerts | heldout | synthetic | The price is still $200. | no alert, price 200.00 | no alert, observed, stock InStock, price 200.00 | no |
 | ca-big-drop-s02 | change-alerts | heldout | synthetic | The price dropped from $200 to $50. | alert price, price 50.00 | alert price, observed, stock InStock, price 50.00 | no |
@@ -35,10 +35,10 @@ Columns: case id, what changed, expected outcome, actual outcome, verified.
 | ca-bulb-s01 | change-alerts | build | synthetic | Bulbs stay $8. | no alert, price 8.00 | no alert, observed, stock InStock, price 8.00 | no |
 | ca-bulb-s02 | change-alerts | build | synthetic | Bulbs stay $8. | no alert, price 8.00 | no alert, observed, stock InStock, price 8.00 | no |
 | ca-bulb-s03 | change-alerts | build | synthetic | Bulbs stay $8. | no alert, price 8.00 | no alert, observed, stock InStock, price 8.00 | no |
-| ca-bulbasaur-live-s00 | change-alerts | build | saved-page | The saved page shows 63.00. | no alert, price 63.00 | no alert, observed, stock can't read, price 63.00 | no |
-| ca-bulbasaur-live-s01 | change-alerts | build | saved-page | The page still shows 63.00. | no alert, price 63.00 | no alert, observed, stock can't read, price 63.00 | no |
-| ca-bulbasaur-live-s02 | change-alerts | build | saved-page | The page still shows 63.00. | no alert, price 63.00 | no alert, observed, stock can't read, price 63.00 | no |
-| ca-bulbasaur-live-s03 | change-alerts | build | saved-page | The product price now says 54.00. | alert price, price 54.00 | alert price, observed, stock can't read, price 54.00 | no |
+| ca-bulbasaur-live-s00 | change-alerts | build | saved-page | The saved page shows 63.00. | no alert, price 63.00 | no alert, observed, stock InStock, price 63.00 | no |
+| ca-bulbasaur-live-s01 | change-alerts | build | saved-page | The page still shows 63.00. | no alert, price 63.00 | no alert, observed, stock InStock, price 63.00 | no |
+| ca-bulbasaur-live-s02 | change-alerts | build | saved-page | The page still shows 63.00. | no alert, price 63.00 | no alert, observed, stock InStock, price 63.00 | no |
+| ca-bulbasaur-live-s03 | change-alerts | build | saved-page | The product price now says 54.00. | alert price, price 54.00 | alert price, observed, stock InStock, price 54.00 | no |
 | ca-cent-s00 | change-alerts | heldout | synthetic | First week is $10.00. | no alert, price 10.00 | no alert, observed, stock InStock, price 10.00 | no |
 | ca-cent-s01 | change-alerts | heldout | synthetic | The price is still $10.00. | no alert, price 10.00 | no alert, observed, stock InStock, price 10.00 | no |
 | ca-cent-s02 | change-alerts | heldout | synthetic | The price moved from $10.00 to $10.01. | alert price, price 10.01 | alert price, observed, stock InStock, price 10.01 | no |
@@ -140,9 +140,9 @@ Columns: case id, what changed, expected outcome, actual outcome, verified.
 | ca-soap-s03 | change-alerts | build | synthetic | Soap stays $4.25. | no alert, price 4.25 | no alert, observed, stock InStock, price 4.25 | no |
 | ca-soap-s04 | change-alerts | build | synthetic | Soap stays $4.25. | no alert, price 4.25 | no alert, observed, stock InStock, price 4.25 | no |
 | ca-soap-s05 | change-alerts | build | synthetic | Soap stays $4.25. | no alert, price 4.25 | no alert, observed, stock InStock, price 4.25 | no |
-| ca-soumission-live-s00 | change-alerts | build | saved-page | The saved page shows £50.10. | no alert, price 50.10 | no alert, observed, stock can't read, price 50.10 | no |
-| ca-soumission-live-s01 | change-alerts | build | saved-page | The same page still shows £50.10. | no alert, price 50.10 | no alert, observed, stock can't read, price 50.10 | no |
-| ca-soumission-live-s02 | change-alerts | build | saved-page | The book's price now says £44.00. | alert price, price 44.00 | alert price, observed, stock can't read, price 44.00 | no |
+| ca-soumission-live-s00 | change-alerts | build | saved-page | The saved page shows £50.10. | no alert, price 50.10 | no alert, observed, stock InStock, price 50.10 | no |
+| ca-soumission-live-s01 | change-alerts | build | saved-page | The same page still shows £50.10. | no alert, price 50.10 | no alert, observed, stock InStock, price 50.10 | no |
+| ca-soumission-live-s02 | change-alerts | build | saved-page | The book's price now says £44.00. | alert price, price 44.00 | alert price, observed, stock InStock, price 44.00 | no |
 | ca-stock-s00 | change-alerts | heldout | synthetic | First week is $15.25, in stock. | no alert, stock InStock, price 15.25 | no alert, observed, stock InStock, price 15.25 | no |
 | ca-stock-s01 | change-alerts | heldout | synthetic | The price stays $15.25 and stock goes out. | alert stock, stock OutOfStock, price 15.25 | alert stock, observed, stock OutOfStock, price 15.25 | no |
 | ca-stock-s02 | change-alerts | heldout | synthetic | The price stays $15.25 and stock comes back. | alert stock, stock InStock, price 15.25 | alert stock, observed, stock InStock, price 15.25 | no |
@@ -151,8 +151,8 @@ Columns: case id, what changed, expected outcome, actual outcome, verified.
 | ca-stock-words-s02 | change-alerts | heldout | synthetic | The words 'in stock' are the same phrase. | no alert, stock InStock, price 10.00 | no alert, observed, stock InStock, price 10.00 | no |
 | ca-stock-words-s03 | change-alerts | heldout | synthetic | Ships today is not a known stock phrase. Stock is can't read. The price stays $10. | no alert, stock can't read, price 10.00 | no alert, observed, stock can't read, price 10.00 | no |
 | ca-stock-words-s04 | change-alerts | heldout | synthetic | Available now is not a known stock phrase. Stock is can't read. No alarm. | no alert, stock can't read, price 10.00 | no alert, observed, stock can't read, price 10.00 | no |
-| ca-stock-words-s05 | change-alerts | heldout | synthetic | In stock (22 available) is not the known phrase. Stock is can't read. No alarm. | no alert, stock can't read, price 10.00 | no alert, observed, stock can't read, price 10.00 | no |
-| ca-stock-words-s06 | change-alerts | heldout | synthetic | 45 in stock is not the known phrase. Stock is can't read. No alarm. | no alert, stock can't read, price 10.00 | no alert, observed, stock can't read, price 10.00 | no |
+| ca-stock-words-s05 | change-alerts | heldout | synthetic | In stock (22 available) uses the known phrase in stock. Record in stock. No alarm. | no alert, stock InStock, price 10.00 | no alert, observed, stock InStock, price 10.00 | no |
+| ca-stock-words-s06 | change-alerts | heldout | synthetic | 45 in stock uses the known phrase in stock. Record in stock. No alarm. | no alert, stock InStock, price 10.00 | no alert, observed, stock InStock, price 10.00 | no |
 | ca-strip-decoy-s00 | change-alerts | heldout | synthetic | First week is $10. | no alert, price 10.00 | no alert, observed, stock InStock, price 10.00 | no |
 | ca-strip-decoy-s01 | change-alerts | heldout | synthetic | The price is still $10. | no alert, price 10.00 | no alert, observed, stock InStock, price 10.00 | no |
 | ca-strip-decoy-s02 | change-alerts | heldout | synthetic | The price block is gone. The page still says $1.11. That is not a price. | no alert, can't read, price None | no alert, can't read, stock None, price None | no |
@@ -219,8 +219,8 @@ Columns: case id, what changed, expected outcome, actual outcome, verified.
 | ct-stock-words-s02 | change-alerts | trap | synthetic | The words 'in stock' are the same phrase. | no alert, stock InStock, price 10.00 | no alert, observed, stock InStock, price 10.00 | no |
 | ct-stock-words-s03 | change-alerts | trap | synthetic | Ships today is not a known stock phrase. Stock is can't read. The price stays $10. | no alert, stock can't read, price 10.00 | no alert, observed, stock can't read, price 10.00 | no |
 | ct-stock-words-s04 | change-alerts | trap | synthetic | Available now is not a known stock phrase. Stock is can't read. No alarm. | no alert, stock can't read, price 10.00 | no alert, observed, stock can't read, price 10.00 | no |
-| ct-stock-words-s05 | change-alerts | trap | synthetic | In stock (22 available) is not the known phrase. Stock is can't read. No alarm. | no alert, stock can't read, price 10.00 | no alert, observed, stock can't read, price 10.00 | no |
-| ct-stock-words-s06 | change-alerts | trap | synthetic | 45 in stock is not the known phrase. Stock is can't read. No alarm. | no alert, stock can't read, price 10.00 | no alert, observed, stock can't read, price 10.00 | no |
+| ct-stock-words-s05 | change-alerts | trap | synthetic | In stock (22 available) uses the known phrase in stock. Record in stock. No alarm. | no alert, stock InStock, price 10.00 | no alert, observed, stock InStock, price 10.00 | no |
+| ct-stock-words-s06 | change-alerts | trap | synthetic | 45 in stock uses the known phrase in stock. Record in stock. No alarm. | no alert, stock InStock, price 10.00 | no alert, observed, stock InStock, price 10.00 | no |
 | ct-strip-decoy-s00 | change-alerts | trap | synthetic | First week is $10. | no alert, price 10.00 | no alert, observed, stock InStock, price 10.00 | no |
 | ct-strip-decoy-s01 | change-alerts | trap | synthetic | The price is still $10. | no alert, price 10.00 | no alert, observed, stock InStock, price 10.00 | no |
 | ct-strip-decoy-s02 | change-alerts | trap | synthetic | The price block is gone. The page still says $1.11. That is not a price. | no alert, can't read, price None | no alert, can't read, stock None, price None | no |

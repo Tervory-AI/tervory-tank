@@ -368,7 +368,7 @@ def _known_stock(value: Any) -> str | None:
 
 
 def _stock_for(method: str | None, raw: Any, html: str) -> str | None:
-    """Record a known stock phrase. Any other wording is "can't read"."""
+    """Record a known stock phrase, even with extra words. Other wording is "can't read"."""
     if method == "unread":
         return None
     recorded = record_stock(stock_statements(html))

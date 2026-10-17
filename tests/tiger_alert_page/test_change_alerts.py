@@ -54,8 +54,8 @@ def _alert_kinds(row: dict) -> list[str]:
     return [alert["kind"] for alert in row["alerts"]]
 
 
-def test_other_stock_wording_is_cant_read() -> None:
-    """Stock is recorded only for a known phrase. Any other wording is can't read and does not alert."""
+def test_known_phrase_with_extra_words_is_in_stock() -> None:
+    """A known phrase with extra words is in stock. One looser line does not veto it."""
     attic = (
         ROOT / "tests" / "tiger_alert_page" / "fixtures" / "live"
         / "books-toscrape-com--a-light-in-the-attic.html"
@@ -67,13 +67,25 @@ def test_other_stock_wording_is_cant_read() -> None:
         '"availability":"https://schema.org/InStock"}}'
         "</script>"
     )
+    loose = (
+        "<p class=\"stock in-stock\">Ships today</p>"
+        "<script type=\"application/ld+json\">"
+        '{"@type":"Product","offers":{"@type":"Offer","price":"10.00","priceCurrency":"USD",'
+        '"availability":"https://schema.org/InStock"}}'
+        "</script>"
+    )
+    ships = (
+        "<p class=\"stock in-stock\">Ships today</p>" + _product_html_price("10.00")
+    )
     plain = "<p class=\"instock availability\">In stock</p>" + _product_html_price("10.00")
 
     async def check() -> None:
         store = MemoryStore()
-        await _raw(store, "https://stock.test/attic", attic, "51.77", "can't read", [])
-        await _raw(store, "https://stock.test/attic", attic, "51.77", "can't read", [])
-        await _raw(store, "https://stock.test/counted", counted, "63.00", "can't read", [])
+        await _raw(store, "https://stock.test/attic", attic, "51.77", "InStock", [])
+        await _raw(store, "https://stock.test/attic", attic, "51.77", "InStock", [])
+        await _raw(store, "https://stock.test/counted", counted, "63.00", "InStock", [])
+        await _raw(store, "https://stock.test/loose", loose, "10.00", "InStock", [])
+        await _raw(store, "https://stock.test/ships", ships, "10.00", "can't read", [])
         await _raw(store, "https://stock.test/plain", plain, "10.00", "InStock", [])
 
     asyncio.run(check())
