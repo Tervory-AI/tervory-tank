@@ -41,6 +41,10 @@ _SALE_PHRASE = re.compile(
     r"Sale Price\s*(?P<sym>US\$|[$€£]|USD|EUR|GBP|CAD|AUD)?\s*(?P<amount>\d[\d.,]*)",
     re.I,
 )
+_LIST_PHRASE = re.compile(
+    r"List Price\s*(?:US\$|[$€£]|USD|EUR|GBP|CAD|AUD)?\s*(?P<amount>\d[\d.,]*)",
+    re.I,
+)
 _SALE = re.compile(r"\b(sale|special|current-price|price-now)\b|<ins\b", re.I)
 _AMOUNT_THEN = re.compile(
     r"(?P<amount>\d{1,3}(?:[.\s\u00a0]\d{3})*(?:[.,]\d{2})|\d+[.,]\d{2})"
@@ -231,6 +235,26 @@ def _buy_box_items(html: str, page_url: str) -> list[dict]:
     return [v1._item(name, None, None, price, "USD", None, page_url or None, "element")]
 
 
+def _sale_and_higher(html: str) -> bool:
+    """A sale amount and a higher amount for the same buyer on one product.
+
+    A member price is not this case. The higher figure there is the non-member
+    price, and the visible member amount still stands.
+    """
+    sale_match = _SALE_PHRASE.search(html)
+    listed = _LIST_PHRASE.search(html)
+    if sale_match is None or listed is None:
+        return False
+    sale = v1.canonical_price(sale_match.group("amount"))
+    other = v1.canonical_price(listed.group("amount"))
+    if sale is None or other is None:
+        return False
+    try:
+        return Decimal(other) > Decimal(sale)
+    except InvalidOperation:
+        return False
+
+
 def _sale_phrase_item(html: str, page_url: str, name: str | None) -> dict | None:
     match = _SALE_PHRASE.search(html)
     if match is None:
@@ -306,6 +330,8 @@ def _pattern_items(html: str, page_url: str) -> list[dict]:
 
 def extract(html: str, page_url: str = "") -> dict[str, Any]:
     """First method that can point at a price wins. Otherwise a product with no price."""
+    if _sale_and_higher(html):
+        return {"items": [], "method": None, "confidence": 0}
     unpriced: tuple[list[dict], str] | None = None
     deferred: tuple[list[dict], str] | None = None
     finders = (

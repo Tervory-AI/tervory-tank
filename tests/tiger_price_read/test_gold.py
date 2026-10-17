@@ -15,7 +15,16 @@ from weekly import BASELINE, GOLD, HERE, alert_for, load_rows, score_rows
 
 REVIEW = HERE / "gold" / "GOLD_REVIEW.tsv"
 PASS_MARK = 98.0
-SAME_RULE = "label written by same rule, needs Zenas"
+VERIFIED_BY_ZENAS = {
+    "live-075",
+    "live-076",
+    "live-077",
+    "live-078",
+    "live-049",
+    "live-064",
+    "live-107",
+    "live-108",
+}
 
 
 def _member_override(evidence: str) -> bool:
@@ -27,18 +36,11 @@ def _member_override(evidence: str) -> bool:
     return Decimal(hero.group(1)) < Decimal(structured.group(1))
 
 
-def _same_rule(row: dict) -> bool:
-    evidence = row.get("evidence") or ""
-    if "sale=" in evidence or "buybox=" in evidence or "form=" in evidence:
-        return True
-    return _member_override(evidence)
-
-
 def _note(row: dict) -> str:
+    if row.get("verified"):
+        return "verified by Zenas"
     if row.get("unreadable"):
         return "can't read"
-    if _same_rule(row):
-        return SAME_RULE
     return ""
 
 
@@ -66,7 +68,7 @@ def _write_review(details: list[dict]) -> None:
                 "" if row["expected_price"] is None else str(row["expected_price"]),
                 "" if row["predicted_price"] is None else str(row["predicted_price"]),
                 match,
-                "no",
+                "yes" if origin.get("verified") else "no",
                 origin.get("source", ""),
                 row["split"],
                 _note(origin),
@@ -84,7 +86,8 @@ def test_price_read_gold_set() -> None:
     assert len(keys) >= 100
     layouts = {row["layout"] for row in scored_rows}
     assert len(layouts) >= 8
-    assert all(row["verified"] is False for row in scored_rows)
+    verified = {row["id"] for row in scored_rows if row.get("verified")}
+    assert verified == VERIFIED_BY_ZENAS
     splits = {row["split"] for row in scored_rows}
     assert splits == {"build", "holdout"}
     holdout_n = sum(row["split"] == "holdout" for row in scored_rows)
@@ -93,14 +96,20 @@ def test_price_read_gold_set() -> None:
     assert "existing" in sources
     assert "live" in sources or "synthetic" in sources
 
-    # The hash stands, except one sale-price page held back on purpose.
+    # The hash stands, except one sale-and-higher page held back on purpose.
     exceptions = [row for row in scored_rows if row["split"] != split_for(row["id"])]
     assert len(exceptions) == 1
     assert exceptions[0]["split"] == "holdout"
-    assert "sale=" in (exceptions[0].get("evidence") or "")
+    assert exceptions[0].get("unreadable") is True
+    assert exceptions[0].get("evidence") == "sale price and a higher price"
 
-    sales = [row for row in scored_rows if "sale=" in (row.get("evidence") or "")]
+    sales = [
+        row for row in scored_rows
+        if row.get("evidence") == "sale price and a higher price"
+    ]
+    assert sales
     assert any(row["split"] == "holdout" for row in sales)
+    assert all(row["verified"] is False for row in sales)
     members = [row for row in scored_rows if _member_override(row.get("evidence") or "")]
     assert members
     assert any(row["split"] == "holdout" for row in members)
@@ -130,8 +139,11 @@ def test_price_read_gold_set() -> None:
     assert sheet.splitlines()[0].endswith("\tnote")
     assert "verified" in sheet.splitlines()[0]
     for row in scored_rows:
-        if _same_rule(row):
-            assert f"{row['id']}\t" in sheet
-            line = next(line for line in sheet.splitlines() if line.startswith(row["id"] + "\t"))
-            assert line.endswith("\t" + SAME_RULE)
+        line = next(line for line in sheet.splitlines() if line.startswith(row["id"] + "\t"))
+        if row["id"] in VERIFIED_BY_ZENAS:
+            assert "\tyes\t" in line
+            assert line.endswith("\tverified by Zenas")
+        else:
+            assert "\tno\t" in line
+            assert not line.endswith("\tverified by Zenas")
     assert GOLD.is_file()

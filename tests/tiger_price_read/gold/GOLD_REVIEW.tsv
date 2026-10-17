@@ -48,11 +48,11 @@ live-041	nike	215.00	215.00	yes	no	live	build
 live-042	nike	185.00	185.00	yes	no	live	build	
 live-043	nike	135.00	135.00	yes	no	live	holdout	
 live-044	nike	130.00	130.00	yes	no	live	build	
-live-045	ulta	49.40	49.40	yes	no	live	holdout	label written by same rule, needs Zenas
-live-046	ulta	13.29	13.29	yes	no	live	build	label written by same rule, needs Zenas
-live-047	ulta	34.20	34.20	yes	no	live	build	label written by same rule, needs Zenas
-live-048	ulta	37.05	37.05	yes	no	live	build	label written by same rule, needs Zenas
-live-049	amazon	17.48	17.48	yes	no	live	build	label written by same rule, needs Zenas
+live-045	ulta			yes	no	live	holdout	can't read
+live-046	ulta			yes	no	live	build	can't read
+live-047	ulta			yes	no	live	build	can't read
+live-048	ulta			yes	no	live	build	can't read
+live-049	amazon	17.48	17.48	yes	yes	live	build	verified by Zenas
 live-050	amazon			yes	no	live	build	can't read
 live-051	amazon			yes	no	live	build	can't read
 live-052	amazon			yes	no	live	build	can't read
@@ -65,16 +65,16 @@ live-059	marksandspencer	24.00	24.00	yes	no	live	holdout
 live-060	marksandspencer	24.00	24.00	yes	no	live	holdout	
 live-061	marksandspencer	20.00	20.00	yes	no	live	holdout	
 live-063	samsclub	17.78	17.78	yes	no	live	build	
-live-064	samsclub	16.98	16.98	yes	no	live	build	label written by same rule, needs Zenas
+live-064	samsclub	16.98	16.98	yes	yes	live	build	verified by Zenas
 live-065	samsclub	33.98	33.98	yes	no	live	build	
 live-071	wickes	21.50	21.50	yes	no	live	build	
 live-072	wickes	13.50	13.50	yes	no	live	build	
 live-073	wickes	16.50	16.50	yes	no	live	holdout	
 live-074	wickes	13.50	13.50	yes	no	live	holdout	
-live-075	outdoorvoices	88.00	88.00	yes	no	live	holdout	label written by same rule, needs Zenas
-live-076	outdoorvoices	78.00	78.00	yes	no	live	holdout	label written by same rule, needs Zenas
-live-077	outdoorvoices	88.00	88.00	yes	no	live	build	label written by same rule, needs Zenas
-live-078	outdoorvoices	58.00	58.00	yes	no	live	build	label written by same rule, needs Zenas
+live-075	outdoorvoices	88.00	88.00	yes	yes	live	holdout	verified by Zenas
+live-076	outdoorvoices	78.00	78.00	yes	yes	live	holdout	verified by Zenas
+live-077	outdoorvoices	88.00	88.00	yes	yes	live	build	verified by Zenas
+live-078	outdoorvoices	58.00	58.00	yes	yes	live	build	verified by Zenas
 live-079	solidus	9.99	9.99	yes	no	live	build	
 live-080	books-toscrape	54.23	54.23	yes	no	live	holdout	
 live-081	books-toscrape	22.65	22.65	yes	no	live	build	
@@ -102,8 +102,8 @@ live-103	shopify-glossier	28.00	28.00	yes	no	live	build
 live-104	shopify-glossier	28.00	28.00	yes	no	live	build	
 live-105	shopify-glossier	23.00	23.00	yes	no	live	build	
 live-106	shopify-glossier	32.00	32.00	yes	no	live	build	
-live-107	samsclub	16.98	16.98	yes	no	live	holdout	label written by same rule, needs Zenas
-live-108	samsclub	39.98	39.98	yes	no	live	build	label written by same rule, needs Zenas
+live-107	samsclub	16.98	16.98	yes	yes	live	holdout	verified by Zenas
+live-108	samsclub	39.98	39.98	yes	yes	live	build	verified by Zenas
 live-109	samsclub	24.98	24.98	yes	no	live	build	
 live-111	woocommerce-storefront	159.00	159.00	yes	no	live	build	
 live-112	magento-luma	38.00	38.00	yes	no	live	holdout	

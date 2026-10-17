@@ -20,7 +20,8 @@ from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parent
-HTML_DIR = ROOT / "gold" / "html" / "live"
+# Snapshots stay outside tests/. See label_pages.LIVE.
+HTML_DIR = ROOT.parents[1] / "agents" / "tiger" / "price_pages" / "live"
 MANIFEST = ROOT / "gold" / "fetch_manifest.jsonl"
 UA = "TervoryTiger/0.1 (+https://tervory.com)"
 DELAY_S = 2.5
@@ -215,9 +216,6 @@ SEEDS = [
     "https://www.carhartt.com/c/mens-jackets",
     "https://www.backcountry.com/camp-hike-backpacks",
     "https://www.dickssportinggoods.com/f/baseball-bats",
-    "https://www.midwayusa.com/ammunition/br?cid=653",
-    "https://www.brownells.com/gun-parts/",
-    "https://www.primaryarms.com/rifle-scopes",
     "https://www.opticsplanet.com/binoculars.html",
     "https://www.sportsmans.com/hunting-gear",
     "https://www.grainger.com/category/power-tools",

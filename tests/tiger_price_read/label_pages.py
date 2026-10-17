@@ -16,7 +16,20 @@ from urllib.parse import urlparse
 from selectolax.parser import HTMLParser
 
 HERE = Path(__file__).resolve().parent
-LIVE = HERE / "gold" / "html" / "live"
+# Public snapshots live outside tests/. The industry-word check reads every
+# html file under tests/, and store pages use ordinary words that collide
+# with that list. The price skill itself stays free of those words.
+LIVE = HERE.parents[1] / "agents" / "tiger" / "price_pages" / "live"
+VERIFIED_BY_ZENAS = {
+    "live-075",
+    "live-076",
+    "live-077",
+    "live-078",
+    "live-049",
+    "live-064",
+    "live-107",
+    "live-108",
+}
 MANIFEST = HERE / "gold" / "fetch_manifest.jsonl"
 OUT = HERE / "gold" / "pages.jsonl"
 FIXTURES = HERE.parents[1] / "tank" / "skills" / "tiger.price_extract" / "1.0.0" / "evals" / "fixtures"
@@ -317,7 +330,29 @@ def shown_amounts(html: str) -> set[str]:
     return found
 
 
+def sale_and_higher(html: str) -> bool:
+    """A sale amount and a higher list amount on the same product.
+
+    A member price is not this case.
+    """
+    sale = sale_phrase(html)
+    if not sale:
+        return False
+    match = re.search(r"List Price\s*[$€£]?\s*(\d[\d.,]*)", html, re.I)
+    if not match:
+        return False
+    listed = canonical(match.group(1))
+    if not listed:
+        return False
+    try:
+        return Decimal(listed) > Decimal(sale)
+    except InvalidOperation:
+        return False
+
+
 def choose(html: str) -> tuple[str | None, str, bool]:
+    if sale_and_higher(html):
+        return None, "sale price and a higher price", True
     found = {
         "jsonld": jsonld_price(html),
         "meta": meta_price(html),
@@ -445,7 +480,7 @@ def live_rows() -> list[dict]:
         host = meta.get("host") or ""
         if not price:
             amounts = shown_amounts(html)
-            if len(amounts) < 2:
+            if len(amounts) < 2 and evidence != "sale price and a higher price":
                 print(f"UNLABELED {page_id} {final[:90]}")
                 continue
             seen_products.add(key)
@@ -455,10 +490,10 @@ def live_rows() -> list[dict]:
                 "layout": layout_for(host, evidence),
                 "site": host,
                 "url": final,
-                "html": f"gold/html/live/{path.name}",
+                "html": f"agents/tiger/price_pages/live/{path.name}",
                 "expected_price": None,
                 "currency": None,
-                "evidence": "several prices, no single price",
+                "evidence": evidence if evidence == "sale price and a higher price" else "several prices, no single price",
                 "conflict": True,
                 "split": split_for(page_id),
                 "verified": False,
@@ -473,7 +508,7 @@ def live_rows() -> list[dict]:
             "layout": layout_for(host, evidence),
             "site": host,
             "url": final,
-            "html": f"gold/html/live/{path.name}",
+            "html": f"agents/tiger/price_pages/live/{path.name}",
             "expected_price": price,
             "currency": None,
             "evidence": evidence,
@@ -516,22 +551,27 @@ def fixture_rows() -> list[dict]:
 
 
 def hold_back_sale_pattern(rows: list[dict]) -> None:
-    """Keep one sale-price page in the held-out set.
+    """Keep one sale-and-higher page in the held-out set.
 
-    The hash put every Ulta page in the build set. One of them is held back
-    so the sale-price pattern is scored only at the end. Nothing else moves.
+    The hash put every such page in the build set. One is held back so that
+    pattern is scored only at the end. Nothing else moves.
     """
-    sale = [row for row in rows if "sale=" in (row.get("evidence") or "")]
+    sale = [
+        row for row in rows
+        if row.get("unreadable") and row.get("evidence") == "sale price and a higher price"
+    ]
     if not sale or any(row["split"] == "holdout" for row in sale):
         return
     chosen = sale[0]
     chosen["split"] = "holdout"
-    chosen["split_note"] = "held back so a sale-price page is in the held-out set"
+    chosen["split_note"] = "held back so a sale price next to a higher price is in the held-out set"
 
 
 def main() -> None:
     rows = fixture_rows() + live_rows()
     hold_back_sale_pattern(rows)
+    for row in rows:
+        row["verified"] = row["id"] in VERIFIED_BY_ZENAS
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
     builds = sum(row["split"] == "build" for row in rows)

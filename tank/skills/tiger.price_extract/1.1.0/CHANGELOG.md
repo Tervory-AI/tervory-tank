@@ -6,6 +6,7 @@
 - Text that tells a reader to ignore instructions is not treated as a price.
 - A member-tier price shown in the hero (the "Now" amount) wins over a higher non-member price in the same offer.
 - A price on another product (a recommendation or a product card) is not this product's price. When the product itself shows two amounts and neither is a sale price, no price is returned.
+- A sale price and a higher price for the same buyer on one product is not a price. A member price is separate: the visible member amount stands, and the higher figure is the non-member price.
 - Still no network and no model. 1.0.0 is unchanged.
 
 ## 1.0.0
