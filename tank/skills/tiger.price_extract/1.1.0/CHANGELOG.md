@@ -1,0 +1,11 @@
+# tiger.price_extract
+
+## 1.1.0
+- Same ladder as 1.0.0, plus a price element it can point at: a sale mark, an item price, or the product's shown price. Tried before the loose amount next to the title.
+- HTML-escaped JSON-LD is read. An amount may follow its currency sign (`12,50 €`).
+- Text that tells a reader to ignore instructions is not treated as a price.
+- A member-tier price shown in the hero (the "Now" amount) wins over a higher non-member price in the same offer.
+- Still no network and no model. 1.0.0 is unchanged.
+
+## 1.0.0
+- First version. Reads saved HTML only. JSON-LD Product, Offer, and AggregateOffer, then microdata, then Open Graph product meta, then a currency amount next to the title. A sale price wins over a list price. No price is returned unless the page shows it.
