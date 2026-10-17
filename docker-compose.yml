@@ -124,9 +124,12 @@ services:
       retries: 10
       start_period: 20s
 
-  # Tor client for SearXNG. SOCKS stays on the stack network. No host port.
+  # Ferry. SearXNG sends engine requests here. Ferry leaves through Tor.
+  # SOCKS stays on the stack network. No host port.
   # A forward proxy on this same server is not here: the engines would still see Boston.
-  tor:
+  # The image tag is lowercase because Docker rejects a capital letter in a repository name.
+  Ferry:
+    image: ferry
     build: ./tor
     restart: unless-stopped
     networks:
@@ -147,7 +150,7 @@ services:
       SEARXNG_SECRET: ${SEARXNG_SECRET:-change-me-in-coolify}
       SEARXNG_BASE_URL: http://searxng:8080/
     depends_on:
-      tor:
+      Ferry:
         condition: service_healthy
     networks:
       - default

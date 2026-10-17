@@ -1,4 +1,4 @@
-# Tor client beside SearXNG. Internal only. Not a relay.
+# Ferry leaves through this Tor client. Internal only. Not a relay.
 # curl is the health check: the same Tor Project check SearXNG runs before it serves.
 FROM alpine:3.22
 RUN apk add --no-cache tor curl \
