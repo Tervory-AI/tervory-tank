@@ -202,6 +202,7 @@ async def test_the_call_site_passes_engine_lists_only_for_that_engine() -> None:
 CANDIDATES = {
     ("base.find_site", "1.5.0"),
     ("base.find_site", "1.6.0"),
+    ("base.find_site", "1.7.0"),
     ("base.contacts", "1.1.0"),
     ("ffl.profile", "1.1.0"),
 }
@@ -338,12 +339,14 @@ async def test_the_agent_is_pinned_to_approved_versions_and_a_candidate_run_is_r
     assert refs["ffl.profile"] == "ffl.profile@1.0.0"
     assert versions["base.find_site"] != "1.5.0"
     assert versions["base.find_site"] != "1.6.0"
+    assert versions["base.find_site"] != "1.7.0"
     assert versions["base.contacts"] != "1.1.0"
 
     tenant = uuid.UUID("00000000-0000-0000-0000-000000000001")
     for skill_id, version in (
         ("base.find_site", "1.5.0"),
         ("base.find_site", "1.6.0"),
+        ("base.find_site", "1.7.0"),
         ("base.contacts", "1.1.0"),
         ("ffl.profile", "1.1.0"),
     ):
