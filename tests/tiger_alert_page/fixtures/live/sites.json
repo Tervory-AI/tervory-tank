@@ -1,0 +1,66 @@
+{
+  "user_agent": "TervoryTiger/0.1 (+https://tervory.com)",
+  "delay_seconds": 5,
+  "note": "Public pages only. One request at a time per site. No login, no proxy, no CAPTCHA solving.",
+  "used": [
+    {
+      "site": "books.toscrape.com",
+      "kind": "live-snapshot",
+      "outcome": "read",
+      "detail": "robots.txt returned 404, so the file was treated as missing and the product pages were read. Three catalogue pages: A Light in the Attic £51.77, Tipping the Velvet £53.74, Soumission £50.10."
+    },
+    {
+      "site": "webscraper.io",
+      "kind": "live-snapshot",
+      "outcome": "read",
+      "detail": "Public test shop. Product pages showed $24.99 and $57.99 in microdata."
+    },
+    {
+      "site": "scrapeme.live",
+      "kind": "live-snapshot",
+      "outcome": "read",
+      "detail": "Public demo shop. Bulbasaur product JSON-LD price 63.00. A demo nonce in the page script was redacted before the file was saved."
+    },
+    {
+      "site": "automationexercise.com",
+      "kind": "live-snapshot",
+      "outcome": "read",
+      "detail": "Public demo shop. Blue Top shows Rs. 500 in the product block, with no structured price."
+    },
+    {
+      "site": "www.adafruit.com",
+      "kind": "live-snapshot",
+      "outcome": "read",
+      "detail": "Public product page. Raspberry Pi 4, JSON-LD price 120.00 USD."
+    }
+  ],
+  "blocked": [
+    {
+      "site": "www.walmart.com",
+      "outcome": "blocked",
+      "detail": "Page title was Robot or human? PerimeterX captcha markers were in the HTML. Not used."
+    },
+    {
+      "site": "www.bestbuy.com",
+      "outcome": "blocked",
+      "detail": "The request timed out. Not used."
+    },
+    {
+      "site": "www.homedepot.com",
+      "outcome": "blocked",
+      "detail": "HTTP 403. Not used."
+    }
+  ],
+  "not_used": [
+    {
+      "site": "www.amazon.com",
+      "outcome": "not used",
+      "detail": "A page came back, but the saved body was cut off before a product price and it contained a session id. The file was deleted and not used as a case."
+    },
+    {
+      "site": "www.target.com",
+      "outcome": "not used",
+      "detail": "HTML arrived with a product title. The price was not in the markup, and a captcha script was present. The file was not kept as a known page."
+    }
+  ]
+}

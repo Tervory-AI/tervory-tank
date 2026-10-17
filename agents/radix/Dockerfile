@@ -38,6 +38,9 @@ RUN apt-get update \
 COPY _chassis/chassis /app/chassis
 COPY radix/app.py /app/app.py
 COPY radix/net.py /app/net.py
+COPY radix/live.py /app/live.py
+COPY radix/egress.py /app/egress.py
+COPY radix/egress-policy.json /app/egress-policy.json
 COPY radix/scanlib /app/scanlib
 COPY radix/scanlib/osv/ /opt/osv/
 RUN chown -R agent:agent /app /opt/osv

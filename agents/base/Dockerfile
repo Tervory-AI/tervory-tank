@@ -1,17 +1,24 @@
 FROM python:3.12-slim
 WORKDIR /app
-COPY _chassis/requirements.txt .
+COPY agents/_chassis/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
     && useradd --create-home --uid 1000 agent \
     && mkdir -p /data \
     && chown agent:agent /data
-COPY _chassis/chassis /app/chassis
-COPY base/app.py /app/app.py
-COPY base/pipeline.py /app/pipeline.py
-COPY base/room.py /app/room.py
+COPY agents/_chassis/chassis /app/chassis
+COPY agents/base/app.py /app/app.py
+COPY agents/base/pipeline.py /app/pipeline.py
+COPY agents/base/room.py /app/room.py
+# Engine data files only (word lists, tables). Skill code stays in Skala.
+# Every version's data is in the image; at runtime Base reads only the approved version's folder.
+COPY tank/skills /tmp/skills
+RUN mkdir -p /app/skills && cd /tmp/skills \
+    && find . -path './*.profile/*/data/*.json' -exec cp --parents {} /app/skills/ \; \
+    && rm -rf /tmp/skills
 USER agent
 ENV AGENT_NAME=base \
     DATA_DIR=/data \
+    SKILLS_DIR=/app/skills \
     PYTHONUNBUFFERED=1
 EXPOSE 8000
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]

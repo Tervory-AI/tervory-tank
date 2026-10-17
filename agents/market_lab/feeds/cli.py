@@ -22,7 +22,11 @@ def main(argv: list[str] | None = None) -> int:
     run_parser.add_argument("--source", help="one source id")
     run_parser.add_argument("--backfill", action="store_true", help="read every saved vintage")
     run_parser.add_argument("--fixtures", help="directory of saved responses")
-    run_parser.add_argument("--live", action="store_true", help="fetch a real source; keys come from the environment")
+    run_parser.add_argument(
+        "--live",
+        action="store_true",
+        help="fetch real sources whose keys are set; a missing key stays off",
+    )
     run_parser.add_argument("--db", help="sqlite path or sqlite:/// URL")
     run_parser.add_argument("--engine", required=True, help="engine name (required)")
 

@@ -90,7 +90,7 @@ def test_engine_file_holds_the_lists_the_call_site_forwards() -> None:
     assert terms["generic_words"]
     assert terms["blocked_hosts"]
     assert terms["generic_locals"]
-    loaded = engine_terms("ffl")
+    loaded = engine_terms("ffl", "1.1.0")
     assert loaded["generic_words"] == terms["generic_words"]
     assert loaded["blocked_hosts"] == terms["blocked_hosts"]
     assert loaded["generic_locals"] == terms["generic_locals"]
@@ -184,7 +184,7 @@ async def test_the_call_site_passes_engine_lists_only_for_that_engine() -> None:
         return {"confidence": 0}
 
     raw = {"name": "Harbor Arms Bakery"}
-    armed = await enrich_one(raw, None, [], "ffl", call)
+    armed = await enrich_one(raw, None, [], "ffl", call, None, "1.1.0")
     assert armed.status == "done", armed.error
     terms = _terms()
     assert seen["base.find_site"]["generic_words"] == terms["generic_words"]
@@ -202,6 +202,7 @@ async def test_the_call_site_passes_engine_lists_only_for_that_engine() -> None:
 CANDIDATES = {
     ("base.find_site", "1.5.0"),
     ("base.find_site", "1.6.0"),
+    ("base.find_site", "1.7.0"),
     ("base.contacts", "1.1.0"),
     ("ffl.profile", "1.1.0"),
 }
@@ -338,12 +339,14 @@ async def test_the_agent_is_pinned_to_approved_versions_and_a_candidate_run_is_r
     assert refs["ffl.profile"] == "ffl.profile@1.0.0"
     assert versions["base.find_site"] != "1.5.0"
     assert versions["base.find_site"] != "1.6.0"
+    assert versions["base.find_site"] != "1.7.0"
     assert versions["base.contacts"] != "1.1.0"
 
     tenant = uuid.UUID("00000000-0000-0000-0000-000000000001")
     for skill_id, version in (
         ("base.find_site", "1.5.0"),
         ("base.find_site", "1.6.0"),
+        ("base.find_site", "1.7.0"),
         ("base.contacts", "1.1.0"),
         ("ffl.profile", "1.1.0"),
     ):

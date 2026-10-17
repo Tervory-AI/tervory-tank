@@ -8,6 +8,9 @@ RUN pip install --no-cache-dir -r requirements.txt \
 COPY _chassis/chassis /app/chassis
 COPY tiger/app.py /app/app.py
 COPY tiger/watch.py /app/watch.py
+COPY tiger/change_alert.py /app/change_alert.py
+COPY tiger/page_guard.py /app/page_guard.py
+COPY tiger/feedback.py /app/feedback.py
 USER agent
 ENV AGENT_NAME=tiger \
     DATA_DIR=/data \

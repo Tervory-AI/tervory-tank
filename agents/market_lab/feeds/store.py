@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
+from feeds.keys import key_is_set
 from feeds.models import SourceSpec
 
 
@@ -42,8 +43,9 @@ class Store:
         self.conn.execute(
             """
             INSERT INTO feed_sources (
-                id, name, kind, url, licence, terms_checked_at, cadence, enabled
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                id, name, kind, url, licence, terms_checked_at, cadence, enabled,
+                key_name, key_required
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 name = excluded.name,
                 kind = excluded.kind,
@@ -51,7 +53,9 @@ class Store:
                 licence = excluded.licence,
                 terms_checked_at = excluded.terms_checked_at,
                 cadence = excluded.cadence,
-                enabled = excluded.enabled
+                enabled = excluded.enabled,
+                key_name = excluded.key_name,
+                key_required = excluded.key_required
             """,
             (
                 source.id,
@@ -62,6 +66,8 @@ class Store:
                 source.terms_checked_at,
                 source.cadence,
                 1 if source.enabled else 0,
+                source.key_name,
+                1 if source.key_required else 0,
             ),
         )
 
@@ -213,6 +219,11 @@ class Store:
                 (source["id"],),
             ).fetchone()
             mode = "copy" if not str(source["licence"]).startswith("Linked only.") else "linked"
+            key_name = str(source["key_name"] or "")
+            required = bool(source["key_required"])
+            present = key_is_set(key_name) if required else True
+            missing = required and not present
+            enabled = 0 if missing or not source["enabled"] else 1
             rows.append(
                 {
                     "id": source["id"],
@@ -222,7 +233,12 @@ class Store:
                     "licence": source["licence"],
                     "terms_checked_at": source["terms_checked_at"],
                     "cadence": source["cadence"],
-                    "enabled": source["enabled"],
+                    "enabled": enabled,
+                    "key_name": key_name,
+                    "key_required": required,
+                    "key_set": present,
+                    "state": "off" if enabled == 0 else "on",
+                    "note": f"needs key {key_name}" if missing else "",
                     "mode": mode,
                     "points": points,
                     "events": events,

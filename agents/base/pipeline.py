@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -110,7 +111,22 @@ def engine_id(engine: str | None) -> str:
 
 
 _ENGINE_ID = re.compile(r"[a-z][a-z0-9_]{0,31}")
-_SKILLS = Path(__file__).resolve().parents[2] / "tank" / "skills"
+_VERSION = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
+
+
+def _skills_root() -> Path:
+    """Engine data files. SKILLS_DIR in the room image; the repo's tank/skills in tests."""
+    configured = os.environ.get("SKILLS_DIR")
+    if configured:
+        return Path(configured)
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / "tank" / "skills"
+        if candidate.is_dir():
+            return candidate
+    return Path("/nonexistent-skills")
+
+
+_SKILLS = _skills_root()
 
 
 def _string_list(value: Any) -> list[str]:
@@ -127,16 +143,22 @@ def _string_list(value: Any) -> list[str]:
     return out
 
 
-def engine_terms(engine: str | None) -> dict[str, list[str]]:
-    """Words and hosts an engine asks the core skills to apply. Empty when there is no engine."""
+def engine_terms(engine: str | None, version: str | None = None) -> dict[str, list[str]]:
+    """Words and hosts an engine asks the core skills to apply.
+
+    Read only from the data folder of `version`, the engine profile version Skala has approved
+    (the worker asks Tank, without preview). No version, or no words in it: empty. Never another version.
+    """
     empty = {"generic_words": [], "blocked_hosts": [], "generic_locals": []}
     if not isinstance(engine, str) or _ENGINE_ID.fullmatch(engine) is None:
         return empty
-    root = _SKILLS / f"{engine}.profile"
+    if not isinstance(version, str) or _VERSION.fullmatch(version) is None:
+        return empty
+    root = _SKILLS / f"{engine}.profile" / version / "data"
     if not root.is_dir():
         return empty
     pack: dict[str, Any] = {}
-    for path in sorted(root.glob("*/data/*.json")):
+    for path in sorted(root.glob("*.json")):
         try:
             loaded = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -212,8 +234,12 @@ async def enrich_one(
     engine: str | None,
     call: SkillCall,
     refs: dict[str, str] | None = None,
+    engine_version: str | None = None,
 ) -> Outcome:
-    """One record through passes 1a–7. A blocked model account leaves the record queued."""
+    """One record through passes 1a–7. A blocked model account leaves the record queued.
+
+    engine_version is the approved engine profile version; its data folder supplies the word lists.
+    """
     profile: dict[str, Any] = {}
     passes: dict[str, Any] = {}
     cost = 0.0
@@ -259,7 +285,7 @@ async def enrich_one(
         name = val(profile, "name") or raw_input.get("name") or ""
         city = val(profile, "city") or ""
         state = val(profile, "state") or ""
-        terms = engine_terms(engine)
+        terms = engine_terms(engine, engine_version)
 
         site_in: dict[str, Any] = {
             "name": name,
@@ -489,6 +515,7 @@ async def enrich_queued(
     paused: Callable[[], bool],
     limit: int,
     refs: dict[str, str] | None = None,
+    engine_version: str | None = None,
 ) -> list[tuple[int, Outcome | None]]:
     """Run the still-queued indexes. A paused model leaves the record untouched (None)."""
     sem = asyncio.Semaphore(limit)
@@ -503,7 +530,7 @@ async def enrich_queued(
                 reg = registry
             else:
                 reg = [row for row in registry if row.get("id") != str(rec_ids[index])]
-            outcome = await enrich_one(inputs[index], engine_rows[index], reg, engine, call, refs)
+            outcome = await enrich_one(inputs[index], engine_rows[index], reg, engine, call, refs, engine_version)
             results.append((index, outcome))
 
     await asyncio.gather(*(one(index) for index in indexes))

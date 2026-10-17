@@ -1,13 +1,14 @@
 # Base. Deploy this file as its own Coolify resource.
-# Build context is agents/ (the parent of this file), because the chassis lives there.
+# Build context is the repo root, because the chassis (agents/_chassis) and the engine data files
+# (tank/skills/*.profile/*/data) both live outside this folder.
 # The only network is the external gateway. Coolify's own network for this resource
 # contains just this service, so it cannot see the main stack.
 
 services:
   agent-base:
     build:
-      context: ..
-      dockerfile: base/Dockerfile
+      context: ../..
+      dockerfile: agents/base/Dockerfile
     restart: unless-stopped
     mem_limit: 512m
     cpus: 0.5

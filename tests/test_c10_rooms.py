@@ -67,7 +67,6 @@ def test_main_compose_joins_both_corridors_and_both_keys() -> None:
 @pytest.mark.parametrize(
     ("folder", "service", "corridor", "role", "key"),
     [
-        ("radix", "agent-radix", "tervory-gw-radix", "agent_radix", "TANK_KEY_RADIX"),
         ("tisan", "agent-tisan", "tervory-gw-tisan", "agent_tisan", "TANK_KEY_TISAN"),
     ],
 )
@@ -94,6 +93,43 @@ def test_agent_compose_is_one_corridor_with_a_limit_and_a_healthcheck(
     assert "POSTGRES_USER" not in raw
     assert "POSTGRES_PASSWORD" not in raw
     readme = (ROOT / "agents" / folder / "README.md").read_text(encoding="utf-8")
+    assert len(readme.splitlines()) > 8
+
+
+def test_radix_reaches_one_host_only_through_the_proxy() -> None:
+    raw = (ROOT / "agents" / "radix" / "docker-compose.yml").read_text(encoding="utf-8")
+    box = yaml.safe_load(raw)
+    assert list(box["networks"]) == ["gw", "proxy-link", "egress"]
+    assert box["networks"]["gw"]["external"] is True
+    assert box["networks"]["gw"]["name"] == "tervory-gw-radix"
+    assert box["networks"]["proxy-link"]["internal"] is True
+    outward = [name for name, spec in box["networks"].items() if spec.get("internal") is False]
+    assert outward == ["egress"]
+
+    agent = box["services"]["agent-radix"]
+    proxy = box["services"]["egress-proxy"]
+    assert agent["networks"] == ["gw", "proxy-link"]
+    assert "egress" not in agent["networks"]
+    on_egress = [name for name, spec in box["services"].items() if "egress" in spec.get("networks", [])]
+    assert on_egress == ["egress-proxy"]
+    assert proxy["networks"] == ["proxy-link", "egress"]
+    assert "ports" not in agent
+    assert "ports" not in proxy
+
+    assert agent["mem_limit"] == "256m"
+    assert agent["cpus"] in (0.25, "0.25")
+    assert "health" in str(agent["healthcheck"]["test"])
+    env = agent["environment"]
+    assert env["DATABASE_URL"].startswith("postgresql://agent_radix:")
+    assert env["TANK_KEY"] == "${TANK_KEY_RADIX:-}"
+    assert env["HERMES_URL"] == "http://hermes:8000"
+    assert env["RADIX_ALLOWED_HOSTS"] == "lokd.co.za"
+    assert env["RADIX_EGRESS_PROXY"] == "http://egress-proxy:8080"
+    assert "POSTGRES_USER" not in env
+    assert "POSTGRES_PASSWORD" not in env
+    assert "POSTGRES_USER" not in raw
+    assert "POSTGRES_PASSWORD" not in raw
+    readme = (ROOT / "agents" / "radix" / "README.md").read_text(encoding="utf-8")
     assert len(readme.splitlines()) > 8
 
 
