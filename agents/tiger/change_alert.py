@@ -69,6 +69,8 @@ _RETAIN = {
     "keep", "keeps", "keeping", "kept",
     "hold", "holds", "holding", "held",
     "stay", "stays", "staying", "stayed",
+    "remain", "remains", "remaining", "remained",
+    "maintain", "maintains", "maintaining", "maintained",
 }
 # Closed class. Negation is allowed to pass through these. They are not the
 # demand verb.
@@ -124,6 +126,15 @@ def _negated(prefix: str) -> bool:
     return _NEG_TAIL.search(prefix) is not None
 
 
+# Words that may sit between the governing verb and the stock phrase, or between
+# "to" / a negator and that verb. A copula is not in this set: "is out of stock"
+# is a current state. An earlier adjective such as "repaired" or "listed" does
+# not change that.
+_BETWEEN = (_FUNCTION - _AUX - {"to"}) | {
+    "quite", "rather",
+}
+
+
 def _clause_words(prefix: str) -> list[str]:
     """Words before a stock phrase, in the same sentence."""
     clause = re.split(r"[.!;?]+", prefix)[-1]
@@ -132,6 +143,18 @@ def _clause_words(prefix: str) -> list[str]:
 
 def _negator_word(word: str) -> bool:
     return _WORD_NEG.search(word) is not None
+
+
+def _adverb(word: str) -> bool:
+    """A word that can sit in the gap without being the governing verb."""
+    if word in {"quite", "rather", "too", "very", "so", "just"}:
+        return True
+    return len(word) > 3 and word.endswith("ly")
+
+
+def _between(word: str) -> bool:
+    """An adverb, pronoun, or determiner that is not the governing verb."""
+    return word.isdigit() or word in _BETWEEN or _adverb(word)
 
 
 def _participle(word: str) -> bool:
@@ -144,22 +167,33 @@ def _participle(word: str) -> bool:
 
 
 def _demand_clause(prefix: str) -> bool:
-    """True when this sentence is about keeping, holding, or staying in stock."""
+    """True when the verb governing this stock phrase is demand or difficulty.
+
+    "Is" plus in stock or out of stock is the current state. An adverb may sit
+    between "to" or a negator and the verb, and between that verb and the phrase.
+    """
     words = _clause_words(prefix)
-    for index, word in enumerate(words):
-        if word.isdigit() or (len(word) > 3 and word.endswith("ly")):
-            continue
-        if word in _RETAIN or _participle(word):
-            return True
-        nxt = words[index + 1] if index + 1 < len(words) else ""
-        if not nxt or nxt.isdigit() or (len(nxt) > 3 and nxt.endswith("ly")):
-            continue
-        if nxt in _AUX or nxt in _FUNCTION or _negator_word(nxt):
-            continue
-        # "to remain" is an infinitive. "couldn't hold" scopes the negator to hold.
-        if word == "to" or _negator_word(word):
-            return True
-    return False
+    skipped_adverb = False
+    while words and _between(words[-1]):
+        if _adverb(words[-1]):
+            skipped_adverb = True
+        words.pop()
+    if not words:
+        return False
+    head = words[-1]
+    # A copula or a negator is the current state ("is out of stock", "not in stock").
+    if head in _AUX or _negator_word(head):
+        return False
+    # An adverb between the verb and the phrase still leaves that verb in charge.
+    if head in _RETAIN or _participle(head) or skipped_adverb:
+        return True
+    prior = words[:-1]
+    while prior and _between(prior[-1]):
+        prior.pop()
+    if not prior:
+        return False
+    marker = prior[-1]
+    return marker == "to" or _negator_word(marker)
 
 
 def _flip_stock(token: str) -> str | None:

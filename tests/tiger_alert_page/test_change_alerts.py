@@ -240,6 +240,14 @@ def test_demand_wording_is_not_a_current_outage() -> None:
         ("https://stock.test/separate", "https://schema.org/InStock", "InStock", []),
         ("https://stock.test/separate", "We could not keep it in stock. It is out of stock.", "OutOfStock", ["stock"]),
         ("https://stock.test/separate", "not out of stock", "InStock", ["stock"]),
+        ("https://stock.test/state", "https://schema.org/InStock", "InStock", []),
+        ("https://stock.test/state", "The repaired unit is out of stock", "OutOfStock", ["stock"]),
+        ("https://stock.test/state", "The listed item is in stock", "InStock", ["stock"]),
+        ("https://stock.test/state", "couldn't really maintain it in stock", "can't read", []),
+        ("https://stock.test/state", "to quickly remain in stock", "can't read", []),
+        ("https://stock.test/remain", "https://schema.org/InStock", "InStock", []),
+        ("https://stock.test/remain", "We tried to remain in stock. Sold out.", "OutOfStock", ["stock"]),
+        ("https://stock.test/remain", "sold out", "OutOfStock", []),
     ]
 
     async def check() -> None:
