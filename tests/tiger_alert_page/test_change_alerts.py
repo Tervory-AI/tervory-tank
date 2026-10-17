@@ -208,7 +208,7 @@ def test_negation_is_a_class_of_words() -> None:
 
 
 def test_demand_wording_is_not_a_current_outage() -> None:
-    """Difficulty keeping stock is unclear. A plain out-of-stock statement still is out."""
+    """Keeping, holding, or staying in stock is unclear. A plain outage still alerts."""
     both = (
         "<p class=\"stock\">Couldn't keep it in stock</p>"
         "<script type=\"application/ld+json\">"
@@ -228,6 +228,18 @@ def test_demand_wording_is_not_a_current_outage() -> None:
         ("https://stock.test/demand-plain", "Couldn't keep it in stock. Out of stock.", "OutOfStock", []),
         ("https://stock.test/demand-plain", "Couldn't keep it in stock. In stock.", "InStock", ["stock"]),
         ("https://stock.test/demand-only-in", "Couldn't keep it in stock. In stock.", "InStock", []),
+        ("https://stock.test/hold", "https://schema.org/InStock", "InStock", []),
+        ("https://stock.test/hold", "couldn't hold it in stock", "can't read", []),
+        ("https://stock.test/hold", "can't hold them in stock", "can't read", []),
+        ("https://stock.test/hold", "having trouble keeping this in stock", "can't read", []),
+        ("https://stock.test/hold", "a challenge to keep it in stock", "can't read", []),
+        ("https://stock.test/hold", "hard to stay in stock", "can't read", []),
+        ("https://stock.test/hold", "selling too fast to stay in stock", "can't read", []),
+        ("https://stock.test/hold", "could not carry it in stock", "can't read", []),
+        ("https://stock.test/hold", "out of stock", "OutOfStock", ["stock"]),
+        ("https://stock.test/separate", "https://schema.org/InStock", "InStock", []),
+        ("https://stock.test/separate", "We could not keep it in stock. It is out of stock.", "OutOfStock", ["stock"]),
+        ("https://stock.test/separate", "not out of stock", "InStock", ["stock"]),
     ]
 
     async def check() -> None:

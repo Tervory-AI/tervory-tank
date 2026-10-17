@@ -57,17 +57,42 @@ _NEGATOR = (
 )
 _GAP = r"(?:\s+[a-z0-9]+){0,4}"
 _NEG_TAIL = re.compile(_NEGATOR + _GAP + r"\s*$", re.I)
-# Demand or past difficulty keeping stock is not a current availability statement.
-# "Couldn't keep it in stock" often means it is selling fast. The wording has to
-# sit against that phrase. A later plain "out of stock" or "in stock" still counts.
-_DEMAND_BODY = (
-    r"\b(?:couldn" + _APOS + r"t|could\s+not|cannot|can" + _APOS + r"t|can\s+not|"
-    r"unable|hard|difficult|tough|impossible|struggl(?:e|ing|ed)|barely)\b"
-    r"(?:\s+[a-z0-9]+){0,6}\s+"
-    r"\b(?:keep(?:ing)?|kept)\b"
-)
-_DEMAND_KEEP = re.compile(_DEMAND_BODY, re.I)
-_DEMAND_TAIL = re.compile(_DEMAND_BODY + r"(?:\s+[a-z0-9]+){0,4}\s*$", re.I)
+# Keeping, holding, or staying in stock is about demand or past difficulty, not
+# a statement that the product is unavailable now. The signal is the verb in
+# that role, not a list of difficulty words. keep/hold/stay in any form counts,
+# and so does any other verb in the same spot: an infinitive ("to carry"), a
+# participle ("maintaining"), or the word a negator actually scopes to
+# ("couldn't remain"). Auxiliaries such as be/have/come are not that verb, so
+# negation still flips the stock phrase. A later plain "out of stock" or
+# "in stock" is a new sentence and still counts.
+_RETAIN = {
+    "keep", "keeps", "keeping", "kept",
+    "hold", "holds", "holding", "held",
+    "stay", "stays", "staying", "stayed",
+}
+# Closed class. Negation is allowed to pass through these. They are not the
+# demand verb.
+_AUX = {
+    "be", "been", "being", "am", "is", "are", "was", "were",
+    "have", "has", "had", "having",
+    "do", "does", "did", "doing",
+    "come", "comes", "coming", "came",
+    "get", "gets", "got", "getting",
+    "go", "goes", "going", "gone", "went",
+}
+_FUNCTION = _AUX | {
+    "i", "we", "you", "he", "she", "it", "they", "me", "us", "him", "her", "them",
+    "my", "our", "your", "his", "its", "their",
+    "a", "an", "the", "this", "that", "these", "those",
+    "any", "some", "all", "each", "every",
+    "of", "to", "for", "from", "in", "on", "at", "by", "with", "as", "and", "or", "but",
+    "still", "now", "just", "back", "again", "here", "there", "even", "yet", "once", "then",
+    "also", "only", "already", "longer", "left", "unit", "units", "more", "most", "very",
+    "too", "so", "one", "up",
+}
+_NOT_A_PARTICIPLE = _AUX | {"nothing", "something", "anything", "everything"}
+_WORD = re.compile(r"[A-Za-z0-9]+(?:['\u2019]t)?")
+_WORD_NEG = re.compile(r"(?:" + _NEGATOR + r")\Z", re.I)
 # "no stock" and "without stock" name stock without "in" or "out of".
 _NO_STOCK = re.compile(_NEGATOR + _GAP + r"\s+stock\b", re.I)
 _PHRASE = (
@@ -99,6 +124,44 @@ def _negated(prefix: str) -> bool:
     return _NEG_TAIL.search(prefix) is not None
 
 
+def _clause_words(prefix: str) -> list[str]:
+    """Words before a stock phrase, in the same sentence."""
+    clause = re.split(r"[.!;?]+", prefix)[-1]
+    return [word.lower().replace("\u2019", "'") for word in _WORD.findall(clause)]
+
+
+def _negator_word(word: str) -> bool:
+    return _WORD_NEG.search(word) is not None
+
+
+def _participle(word: str) -> bool:
+    """A verb form such as maintaining or carried. Not 'nothing' or 'been'."""
+    if word in _NOT_A_PARTICIPLE:
+        return False
+    if len(word) >= 6 and word.endswith("ing"):
+        return True
+    return len(word) >= 5 and word.endswith("ed")
+
+
+def _demand_clause(prefix: str) -> bool:
+    """True when this sentence is about keeping, holding, or staying in stock."""
+    words = _clause_words(prefix)
+    for index, word in enumerate(words):
+        if word.isdigit() or (len(word) > 3 and word.endswith("ly")):
+            continue
+        if word in _RETAIN or _participle(word):
+            return True
+        nxt = words[index + 1] if index + 1 < len(words) else ""
+        if not nxt or nxt.isdigit() or (len(nxt) > 3 and nxt.endswith("ly")):
+            continue
+        if nxt in _AUX or nxt in _FUNCTION or _negator_word(nxt):
+            continue
+        # "to remain" is an infinitive. "couldn't hold" scopes the negator to hold.
+        if word == "to" or _negator_word(word):
+            return True
+    return False
+
+
 def _flip_stock(token: str) -> str | None:
     """Negation swaps in stock and out of stock. Other phrases then cannot be told."""
     if token == "InStock":
@@ -116,9 +179,11 @@ def phrases_in(value: Any) -> list[str]:
     if not text or text == CANT_READ:
         return []
     found: list[str] = []
+    demand = False
     for token, pattern in _PHRASE:
         for match in pattern.finditer(text):
-            if _DEMAND_TAIL.search(text[:match.start()]):
+            if _demand_clause(text[:match.start()]):
+                demand = True
                 continue
             if _negated(text[:match.start()]):
                 flipped = _flip_stock(token)
@@ -129,7 +194,7 @@ def phrases_in(value: Any) -> list[str]:
                 found.append(token)
     if found:
         return found
-    if _DEMAND_KEEP.search(text):
+    if demand:
         return []
     if _NO_STOCK.search(text):
         return ["OutOfStock"]
