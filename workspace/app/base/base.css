@@ -259,7 +259,7 @@ body:has(.bcp) main {
   cursor: default;
 }
 
-/* While Sources is open, the page behind is dimmed and its red button steps back. */
+/* While Plugins is open, the page behind is dimmed and its red button steps back. */
 .bcp-dialog-open .bcp-intro button.bcp-primary {
   visibility: hidden;
 }
@@ -453,7 +453,7 @@ body:has(.bcp) main {
   font-size: 13px;
 }
 
-/* ---- Sources: white pop-up over the dimmed page ---- */
+/* ---- Plugins: white pop-up over the dimmed page ---- */
 
 .bcp-modal {
   position: fixed;
@@ -752,6 +752,212 @@ body:has(.bcp) main {
   font-size: 12px;
 }
 
+
+/* ---- Search records ---- */
+
+.bcp-search {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.bcp-search-bar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  background: #fff;
+  border: 1px solid #b8bfd0;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.bcp-search-bar .bcp-input {
+  flex: 1 1 auto;
+  border-color: transparent;
+  background: #f4f6fb;
+}
+
+.bcp button.bcp-secondary:disabled,
+.bcp button.bcp-send:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.bcp-hits-count {
+  margin: 0 0 10px;
+  color: #4a5570;
+  font-size: 13px;
+}
+
+.bcp-hits .bcp-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.bcp-hit {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  padding: 16px 24px;
+  border-top: 1px solid #b8bfd0;
+  align-items: start;
+}
+
+.bcp-hit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 14px;
+}
+
+.bcp-hit-label {
+  color: #4a5570;
+  font-size: 12px;
+}
+
+.bcp-hit-value {
+  overflow-wrap: anywhere;
+  font-weight: 500;
+}
+
+.bcp-hit-none {
+  color: #7e889e;
+}
+
+.bcp-hit-source {
+  color: #6b7590;
+  font-size: 12px;
+}
+
+/* ---- Ask Base: thread above, box and Send together below ---- */
+
+.bcp-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #fff;
+  border: 1px solid #b8bfd0;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.bcp-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 140px;
+  max-height: 460px;
+  overflow-y: auto;
+}
+
+.bcp-thread-empty {
+  margin: auto 0;
+  color: #4a5570;
+  font-size: 14px;
+  max-width: 620px;
+}
+
+.bcp-msg {
+  max-width: 78%;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid #b8bfd0;
+}
+
+.bcp-msg.you {
+  align-self: flex-end;
+  background: #f4f6fb;
+}
+
+.bcp-msg.base {
+  align-self: flex-start;
+  background: #fff;
+}
+
+.bcp-msg-who {
+  margin: 0 0 4px;
+  color: #4a5570;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.bcp-msg-text {
+  margin: 0;
+  font-size: 14px;
+  white-space: pre-wrap;
+}
+
+.bcp-msg-wait {
+  margin: 0;
+  color: #4a5570;
+  font-size: 13px;
+}
+
+.bcp-answer-sources {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #b8bfd0;
+}
+
+.bcp-answer-sources-title {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #4a5570;
+}
+
+.bcp-answer-sources ol {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bcp-answer-sources li > span {
+  display: block;
+}
+
+.bcp-answer-sources .bcp-row-title {
+  font-size: 13px;
+}
+
+.bcp-answer-sources .bcp-row-copy {
+  margin: 0;
+  font-size: 12px;
+}
+
+.bcp-composer {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  border-top: 1px solid #b8bfd0;
+  padding-top: 12px;
+}
+
+.bcp-composer textarea {
+  flex: 1 1 auto;
+  resize: vertical;
+  min-height: 46px;
+}
+
+.bcp button.bcp-send {
+  background: #001840;
+  color: #fff;
+  border-radius: 8px;
+  padding: 11px 22px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.bcp button.bcp-send:hover:not(:disabled) {
+  background: #0a2a5c;
+}
+
 @media (max-width: 1200px) and (min-width: 801px) {
   .bcp-stats {
     grid-template-columns: 1fr 1fr;
@@ -771,9 +977,24 @@ body:has(.bcp) main {
   }
 }
 
-/* ---- Narrow screens: top bar, panel slides in, Sources becomes a sheet ---- */
+/* ---- Narrow screens: top bar, panel slides in, Plugins becomes a sheet ---- */
 
 @media (max-width: 800px) {
+  .bcp-hit {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 14px 16px;
+  }
+  .bcp-search-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .bcp-msg {
+    max-width: 92%;
+  }
+  .bcp-chat {
+    padding: 14px;
+  }
   .bcp-top {
     display: flex;
     align-items: center;

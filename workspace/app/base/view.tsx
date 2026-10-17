@@ -4,12 +4,13 @@ import { useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { headerLinks } from "../product-nav";
 import { formatCount, type BatchRow, type PageModel } from "./model";
-import { SourcesDialog, type SourcesTab } from "./sources";
+import { AskBase, RecordSearch, type AskAction, type SearchAction } from "./ask";
+import { PluginsDialog, type PluginsTab } from "./plugins";
 
 export const WORKSPACE_HREF = "/";
 export const HELP_HREF = "https://tervory.com";
 
-const SECTIONS = ["overview", "batches", "skills"] as const;
+const SECTIONS = ["overview", "search", "ask", "batches", "skills"] as const;
 
 function RefreshButton({ hidden }: { hidden: boolean }) {
   const { pending } = useFormStatus();
@@ -45,14 +46,18 @@ export function BaseView({
   model,
   founder,
   refresh,
+  search,
+  ask,
 }: {
   model: PageModel;
   founder: boolean;
   refresh: () => Promise<void>;
+  search: SearchAction;
+  ask: AskAction;
 }) {
   const [active, setActive] = useState<string>("overview");
   const [menu, setMenu] = useState(false);
-  const [sources, setSources] = useState<SourcesTab | null>(null);
+  const [plugins, setPlugins] = useState<PluginsTab | null>(null);
   const standard = headerLinks(founder);
 
   useEffect(() => {
@@ -90,17 +95,19 @@ export function BaseView({
     scrollToSection(id);
   }
 
-  function openSources() {
+  function openPlugins() {
     setMenu(false);
-    setSources("keys");
+    setPlugins("keys");
   }
 
   const pageNav = [
     { id: "overview", label: "Overview", count: null as number | null },
+    { id: "search", label: "Search", count: null },
+    { id: "ask", label: "Ask Base", count: null },
     { id: "batches", label: "Batches", count: model.loadError ? null : model.batches.length },
     { id: "skills", label: "Skills", count: model.skillsError ? null : model.skills.length },
   ];
-  const dialogOpen = sources !== null;
+  const dialogOpen = plugins !== null;
 
   return (
     <div className={dialogOpen ? "bcp bcp-dialog-open" : "bcp"}>
@@ -158,9 +165,9 @@ export function BaseView({
             className={dialogOpen ? "bcp-link active" : "bcp-link"}
             aria-haspopup="dialog"
             aria-expanded={dialogOpen}
-            onClick={openSources}
+            onClick={openPlugins}
           >
-            <span>Sources</span>
+            <span>Plugins</span>
           </button>
         </nav>
 
@@ -224,6 +231,18 @@ export function BaseView({
               </div>
             </div>
           )}
+
+          <section id="search" className="bcp-section">
+            <h2>Search records</h2>
+            <p className="bcp-copy">Find any Base record by shop name, city, phone number, website or licence number.</p>
+            <RecordSearch search={search} />
+          </section>
+
+          <section id="ask" className="bcp-section">
+            <h2>Ask Base</h2>
+            <p className="bcp-copy">Type a request about your records. The answer shows above the box, with the records it used under Sources.</p>
+            <AskBase ask={ask} />
+          </section>
 
           <section id="batches" className="bcp-section">
             <h2>Batches</h2>
@@ -311,7 +330,7 @@ export function BaseView({
         </div>
       </div>
 
-      {sources ? <SourcesDialog tab={sources} onTab={setSources} onClose={() => setSources(null)} /> : null}
+      {plugins ? <PluginsDialog tab={plugins} onTab={setPlugins} onClose={() => setPlugins(null)} /> : null}
     </div>
   );
 }
