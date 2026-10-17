@@ -19,3 +19,6 @@ class SourceSpec:
     allow_bulk: bool
     adapter: str
     config: dict[str, Any] = field(default_factory=dict)
+    # Env var name only. The value stays in the environment and is never stored.
+    key_name: str = ""
+    key_required: bool = False

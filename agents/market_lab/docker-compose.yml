@@ -17,7 +17,12 @@ services:
       TANK_URL: http://tank:8000
       TANK_KEY: ${TANK_KEY_MARKET_LAB:-}
       HERMES_URL: http://hermes:8000
+      # Feed keys. Empty leaves that feed off. Values stay in Coolify. Never commit them.
       FRED_API_KEY: ${FRED_API_KEY:-}
+      CENSUS_API_KEY: ${CENSUS_API_KEY:-}
+      LEGISCAN_API_KEY: ${LEGISCAN_API_KEY:-}
+      EIA_API_KEY: ${EIA_API_KEY:-}
+      NOAA_TOKEN: ${NOAA_TOKEN:-}
       DATA_DIR: /data
     volumes:
       - agent_market_lab_data:/data
