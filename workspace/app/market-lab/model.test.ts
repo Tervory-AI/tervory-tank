@@ -4,6 +4,7 @@ import { emptyFlags } from "./catalog";
 import { formatDay, formatRefreshed } from "./format";
 import { readFlags, scrubSecrets } from "./load";
 import { buildPage, feedsToCall } from "./model";
+import { REFERENCE_LABEL, STUB_FILE, STUB_KEY, STUB_LINK, STUB_MCP, clientPluginState, groundQuestion, searchMarketLab } from "./plugins";
 import { exactNumber, parseAlerts, parseEia, parseFred, parseWorldBank } from "./parse";
 
 test("a missing key keeps the feed off, uncalled, and ignores a stored reading", () => {
@@ -162,6 +163,54 @@ test("dates do not shift with the timezone", () => {
   assert.equal(formatDay("2026-10-01"), "1 Oct 2026");
   assert.equal(formatRefreshed("not-a-date"), "Not refreshed yet");
   assert.equal(formatRefreshed("2026-10-17T12:40:00.000Z"), "17 Oct 2026, 5:40 AM PT");
+});
+
+test("off feeds follow the panel order, with FRED as one row", () => {
+  const page = buildPage(emptyFlags(), {}, {}, {});
+  assert.deepEqual(
+    page.off.map((row) => row.id),
+    ["fred", "census_population", "census_trade", "eia_diesel", "noaa_climate", "legiscan"],
+  );
+});
+
+test("search hits feeds and linked pages, and skips a question with no reading", () => {
+  const page = buildPage(
+    emptyFlags(),
+    { noaa_alerts: { headline: "12", detail: "active alerts", goodAt: "2026-10-03" } },
+    {},
+    {},
+  );
+  const weather = searchMarketLab(page, "weather alerts");
+  assert.equal(weather.onIds.includes("noaa_alerts"), true);
+  assert.equal(weather.offIds.includes("eia_diesel"), false);
+  const diesel = searchMarketLab(page, "on-highway");
+  assert.deepEqual(diesel.offIds, ["eia_diesel"]);
+  const seasons = searchMarketLab(page, "California");
+  assert.equal(seasons.linkIds.includes("season_ca"), true);
+  const grounded = groundQuestion(page, "severe weather");
+  assert.equal(grounded.sources.length, 1);
+  assert.equal(grounded.sources[0]?.name.includes("Severe-weather alerts"), true);
+  assert.equal(grounded.sources[0]?.date, "3 Oct 2026");
+  assert.equal(groundQuestion(page, "zzzz-no-such-feed").sources.length, 0);
+  assert.equal(REFERENCE_LABEL, "Sources");
+});
+
+test("plugin state sent to the browser is a set of booleans and never a saved secret", () => {
+  const flags = readFlags({ EIA_API_KEY: "abcd1234efgh" } as unknown as NodeJS.ProcessEnv);
+  const state = clientPluginState(flags);
+  assert.equal(state.title, "Plugins");
+  assert.equal(state.keys.find((row) => row.name === "EIA_API_KEY")?.connected, true);
+  assert.equal(state.keys.find((row) => row.name === "FRED_API_KEY")?.connected, false);
+  assert.equal(state.files.length, 0);
+  assert.equal(state.links.length, 0);
+  assert.equal(state.connections.length, 0);
+  const dumped = JSON.stringify(state);
+  assert.equal(dumped.includes("abcd1234efgh"), false);
+  assert.match(STUB_KEY, /Nothing was stored/);
+  assert.match(STUB_FILE, /Nothing was saved/);
+  assert.match(STUB_LINK, /Nothing was saved/);
+  assert.match(STUB_MCP, /Nothing was saved/);
+  assert.equal(STUB_KEY.includes("saved 17"), false);
 });
 
 test("key flags are booleans and secret text is stripped before it can leave the server", () => {

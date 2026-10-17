@@ -37,6 +37,7 @@ export type OnCard = {
   lines: PriceLine[];
   notices: Notice[];
   problem: string | null;
+  asOf: string | null;
 };
 
 export type OffRow = {
@@ -57,6 +58,7 @@ export type LinkGroupView = {
   id: string;
   title: string;
   cadence: string;
+  lead: string;
   pages: LinkPage[];
 };
 
@@ -92,7 +94,7 @@ const GRID_ORDER = [
   "legiscan",
 ];
 
-const OFF_COPY_ORDER = ["census_population", "census_trade", "noaa_climate", "legiscan", "eia_diesel"];
+const OFF_COPY_ORDER = ["census_population", "census_trade", "eia_diesel", "noaa_climate", "legiscan"];
 
 const byId = new Map(CATALOG.map((item) => [item.id, item]));
 
@@ -134,6 +136,12 @@ function problemFor(reading: FeedReading): string | null {
   return "The last check did not work. The source did not answer in time.";
 }
 
+function dated(reading: FeedReading | undefined): string | null {
+  const shown = shownReading(reading);
+  const raw = clean(shown.goodAt) || clean(shown.checkedAt);
+  return raw ? formatDay(raw) : null;
+}
+
 function cardFor(item: CatalogItem, reading: FeedReading | undefined): OnCard {
   const shown = shownReading(reading);
   return {
@@ -147,6 +155,7 @@ function cardFor(item: CatalogItem, reading: FeedReading | undefined): OnCard {
     lines: shown.lines ?? [],
     notices: shown.notices ?? [],
     problem: problemFor(shown),
+    asOf: dated(reading),
   };
 }
 
@@ -160,7 +169,9 @@ function fredCard(flags: KeyFlags, readings: Record<string, FeedReading>): OnCar
   if (!first || !isOn(first, flags)) return null;
   const lines: PriceLine[] = [];
   let problem: string | null = null;
+  let asOf: string | null = null;
   for (const item of series) {
+    if (!asOf) asOf = dated(readings[item.id]);
     const shown = shownReading(readings[item.id]);
     if (!problem && shown.failed) problem = problemFor(shown);
     if (shown.lines && shown.lines.length) {
@@ -181,6 +192,7 @@ function fredCard(flags: KeyFlags, readings: Record<string, FeedReading>): OnCar
     lines,
     notices: [],
     problem,
+    asOf,
   };
 }
 
@@ -238,6 +250,7 @@ export function buildPage(
     id: group.id,
     title: group.title,
     cadence: group.cadence,
+    lead: group.lead,
     pages: linked
       .filter((item) => item.group === group.id)
       .map((item) => ({

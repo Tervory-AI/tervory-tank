@@ -45,11 +45,11 @@ export const COMMODITIES: { code: string; label: string }[] = [
   { code: "PCOTTINDUSDM", label: "Cotton" },
 ];
 
-export const LINK_GROUPS: { id: LinkGroupId; title: string; cadence: string }[] = [
-  { id: "carrier", title: "Carrier rules", cadence: "Checked weekly" },
-  { id: "state", title: "State pages", cadence: "Checked weekly" },
-  { id: "season", title: "Hunting seasons", cadence: "Checked weekly" },
-  { id: "ports", title: "Other ports", cadence: "Linked monthly, not copied" },
+export const LINK_GROUPS: { id: LinkGroupId; title: string; cadence: string; lead: string }[] = [
+  { id: "carrier", title: "Carrier rules", cadence: "Checked weekly", lead: "What each carrier allows you to ship, and where." },
+  { id: "state", title: "State pages", cadence: "Checked weekly", lead: "One page per state with its own feeds and rules." },
+  { id: "season", title: "Hunting seasons", cadence: "Checked weekly", lead: "Season dates by state, so you can plan stock ahead." },
+  { id: "ports", title: "Other ports", cadence: "Linked monthly, not copied", lead: "Container volume at Long Beach, Savannah and more." },
 ];
 
 /** Wide cards, in this order, when the feed is on. */

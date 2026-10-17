@@ -60,10 +60,18 @@ def test_catalog_matches_feed_sources():
 
 def test_page_does_not_invent_numbers_or_store_keys():
     text = "\n".join(path.read_text(encoding="utf-8") for path in PAGE.rglob("*") if path.suffix in {".ts", ".tsx", ".css"})
-    assert "<input" not in text
     assert "Example" not in text
     assert "3.71" not in text
     assert "52418" not in text
+    assert "Integrations" not in text
+    assert "Plugins" in text
+    assert "Sources" in text
+    assert "Nothing was stored" in text
+    assert "Nothing was saved" in text
+    assert "•••• saved" not in text
+    assert "set in the environment" in text
+    assert 'type="password"' in text
+    assert "console." not in text
     readers = (PAGE / "load.ts").read_text(encoding="utf-8") + (PAGE / "page.tsx").read_text(encoding="utf-8")
     assert "writeFile" not in readers
     assert "INSERT" not in readers
@@ -76,3 +84,10 @@ def test_page_does_not_invent_numbers_or_store_keys():
     assert re.search(r"\.ml-main\s*\{[^}]*overflow-y:\s*auto", css)
     nav = (ROOT / "workspace" / "app" / "product-nav.ts").read_text(encoding="utf-8")
     assert '"/market-lab"' in nav
+    chat = (ROOT / "workspace" / "app" / "api" / "market-lab" / "chat" / "route.ts").read_text(encoding="utf-8")
+    assert "scrubSecrets" in chat
+    assert "route(" in chat
+    assert "console." not in chat
+    view = (PAGE / "view.tsx").read_text(encoding="utf-8")
+    assert "Help" not in view
+    assert "WORKSPACE_HREF" not in view
