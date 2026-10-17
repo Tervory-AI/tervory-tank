@@ -5,6 +5,15 @@ import type { RadixRecord, Reference } from "./request-service";
 
 type Message = { role: "user" | "assistant"; content: string; sources?: Reference[] };
 const endpoint = "/radix/requests";
+// Keep the request comfortably below the server limit even after long replies.
+function recentHistory(thread: Message[]) {
+  let remaining = 32000;
+  return thread.slice(-10).reverse().map(({ role, content }) => {
+    const text = content.slice(0, Math.min(12000, remaining));
+    remaining -= text.length;
+    return { role, content: text };
+  }).filter((message) => message.content.length > 0).reverse();
+}
 async function read(response: Response) {
   const data = await response.json();
   if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : "Radix could not complete that request.");
@@ -70,7 +79,7 @@ export function RadixDesk() {
     try {
       const data = await read(await fetch(endpoint, {
         method: "POST", headers: { "content-type": "application/json" }, signal: controller.signal,
-        body: JSON.stringify({ text, history: thread.slice(-10).map(({ role, content }) => ({ role, content: content.slice(0, 12000) })), referenceId: reference?.id }),
+        body: JSON.stringify({ text, history: recentHistory(thread), referenceId: reference?.id }),
       }));
       accepted = true;
       setThread((messages) => [...messages, { role: "user", content: text }]);
