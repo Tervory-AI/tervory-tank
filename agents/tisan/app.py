@@ -1,4 +1,4 @@
-"""Tisan: the developer and designer. A ping job, a five-minute heartbeat, and the project scaffold."""
+"""Tisan: the developer and designer. A ping job, a five-minute heartbeat, the project scaffold, and the Figma reader."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import importlib.util
 import logging
 import os
 from pathlib import Path
+from typing import Any
 
 from chassis.app import create_app
 from chassis.jobs import JobContext
@@ -16,21 +17,28 @@ HEARTBEAT_TENANT = "00000000-0000-0000-0000-000000000001"
 
 log = logging.getLogger("agent")
 _scaffold = None
+_figma = None
+
+
+def _load_beside(cache: dict[str, Any], key: str, filename: str) -> Any:
+    if key in cache:
+        return cache[key]
+    path = Path(__file__).resolve().parent / filename
+    spec = importlib.util.spec_from_file_location(key, path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"{filename} is missing")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    cache[key] = module
+    return module
 
 
 def _scaffold_module():
     """Load the scaffold from beside this file. The image copies both to /app."""
     global _scaffold
-    if _scaffold is not None:
-        return _scaffold
-    path = Path(__file__).resolve().parent / "scaffold.py"
-    spec = importlib.util.spec_from_file_location("tisan_scaffold", path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError("scaffold is missing")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    _scaffold = module
-    return module
+    if _scaffold is None:
+        _scaffold = {}
+    return _load_beside(_scaffold, "tisan_scaffold", "scaffold.py")
 
 
 async def ping(ctx: JobContext) -> dict:
@@ -58,12 +66,25 @@ async def scaffold(ctx: JobContext) -> dict:
     return await module.execute(ctx.input, str(ctx.tenant_id))
 
 
+async def figma(ctx: JobContext) -> dict:
+    """Read one Figma page for this job's tenant. FIGMA_TOKEN stays on the room."""
+    module = _load_beside(_figma_cache(), "tisan_figma", "figma.py")
+    return await module.execute(ctx.input, str(ctx.tenant_id))
+
+
+def _figma_cache() -> dict[str, Any]:
+    global _figma
+    if _figma is None:
+        _figma = {}
+    return _figma
+
+
 # Ten minutes for a site build. Ping and every other agent stay on the chassis default.
 SCAFFOLD_TIMEOUT_S = 600
 
 app = create_app(
     agent=AGENT,
-    handlers={"ping": ping, "scaffold": scaffold},
+    handlers={"ping": ping, "scaffold": scaffold, "figma": figma},
     job_timeouts={"scaffold": SCAFFOLD_TIMEOUT_S},
     schedules=[
         {
