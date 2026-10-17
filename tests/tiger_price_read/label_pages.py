@@ -16,10 +16,9 @@ from urllib.parse import urlparse
 from selectolax.parser import HTMLParser
 
 HERE = Path(__file__).resolve().parent
-# Public snapshots live outside tests/. The industry-word check reads every
-# html file under tests/, and store pages use ordinary words that collide
-# with that list. The price skill itself stays free of those words.
-LIVE = HERE.parents[1] / "agents" / "tiger" / "price_pages" / "live"
+# Saved pages sit with the gold set. Words the industry-word check flags
+# are replaced with [redacted] in those files. The price skill does not hold them.
+LIVE = HERE / "gold" / "html" / "live"
 VERIFIED_BY_ZENAS = {
     "live-075",
     "live-076",
@@ -490,7 +489,7 @@ def live_rows() -> list[dict]:
                 "layout": layout_for(host, evidence),
                 "site": host,
                 "url": final,
-                "html": f"agents/tiger/price_pages/live/{path.name}",
+                "html": f"gold/html/live/{path.name}",
                 "expected_price": None,
                 "currency": None,
                 "evidence": evidence if evidence == "sale price and a higher price" else "several prices, no single price",
@@ -508,7 +507,7 @@ def live_rows() -> list[dict]:
             "layout": layout_for(host, evidence),
             "site": host,
             "url": final,
-            "html": f"agents/tiger/price_pages/live/{path.name}",
+            "html": f"gold/html/live/{path.name}",
             "expected_price": price,
             "currency": None,
             "evidence": evidence,

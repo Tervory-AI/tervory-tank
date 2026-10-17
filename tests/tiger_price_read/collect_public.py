@@ -20,8 +20,7 @@ from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parent
-# Snapshots stay outside tests/. See label_pages.LIVE.
-HTML_DIR = ROOT.parents[1] / "agents" / "tiger" / "price_pages" / "live"
+HTML_DIR = ROOT / "gold" / "html" / "live"
 MANIFEST = ROOT / "gold" / "fetch_manifest.jsonl"
 UA = "TervoryTiger/0.1 (+https://tervory.com)"
 DELAY_S = 2.5
