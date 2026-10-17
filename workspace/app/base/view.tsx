@@ -1,0 +1,317 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useFormStatus } from "react-dom";
+import { headerLinks } from "../product-nav";
+import { formatCount, type BatchRow, type PageModel } from "./model";
+import { SourcesDialog, type SourcesTab } from "./sources";
+
+export const WORKSPACE_HREF = "/";
+export const HELP_HREF = "https://tervory.com";
+
+const SECTIONS = ["overview", "batches", "skills"] as const;
+
+function RefreshButton({ hidden }: { hidden: boolean }) {
+  const { pending } = useFormStatus();
+  return (
+    <button className="bcp-primary" type="submit" disabled={pending} aria-hidden={hidden || undefined} tabIndex={hidden ? -1 : undefined}>
+      {pending ? "Refreshing…" : "Refresh"}
+    </button>
+  );
+}
+
+function scrollToSection(id: string) {
+  const root = document.querySelector<HTMLElement>("[data-scroll-root]");
+  const target = document.getElementById(id);
+  if (!root || !target) return;
+  const top = target.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop;
+  root.scrollTo({ top, behavior: "smooth" });
+}
+
+function Status({ row }: { row: BatchRow }) {
+  return (
+    <span className={row.settled ? "bcp-pill on" : "bcp-pill"}>
+      <i aria-hidden="true" />
+      {row.status}
+    </span>
+  );
+}
+
+function skippedText(value: number | null): string {
+  return value === null ? "Not reported" : formatCount(value);
+}
+
+export function BaseView({
+  model,
+  founder,
+  refresh,
+}: {
+  model: PageModel;
+  founder: boolean;
+  refresh: () => Promise<void>;
+}) {
+  const [active, setActive] = useState<string>("overview");
+  const [menu, setMenu] = useState(false);
+  const [sources, setSources] = useState<SourcesTab | null>(null);
+  const standard = headerLinks(founder);
+
+  useEffect(() => {
+    const root = document.querySelector<HTMLElement>("[data-scroll-root]");
+    if (!root) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        const id = visible?.target.id;
+        if (id) setActive(id);
+      },
+      { root, rootMargin: "-20% 0px -55% 0px", threshold: [0.15, 0.4] },
+    );
+    for (const id of SECTIONS) {
+      const section = document.getElementById(id);
+      if (section) observer.observe(section);
+    }
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!menu) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setMenu(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menu]);
+
+  function go(id: string) {
+    setActive(id);
+    setMenu(false);
+    scrollToSection(id);
+  }
+
+  function openSources() {
+    setMenu(false);
+    setSources("keys");
+  }
+
+  const pageNav = [
+    { id: "overview", label: "Overview", count: null as number | null },
+    { id: "batches", label: "Batches", count: model.loadError ? null : model.batches.length },
+    { id: "skills", label: "Skills", count: model.skillsError ? null : model.skills.length },
+  ];
+  const dialogOpen = sources !== null;
+
+  return (
+    <div className={dialogOpen ? "bcp bcp-dialog-open" : "bcp"}>
+      <header className="bcp-top">
+        <img src="/brand/tervory-logo-reversed.png" alt="Tervory" width={186} height={34} />
+        <button type="button" className="bcp-menu" aria-expanded={menu} aria-controls="bcp-panel" onClick={() => setMenu(true)}>
+          <span className="bcp-burger" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </span>
+          Menu
+        </button>
+      </header>
+
+      {menu ? <button type="button" className="bcp-dim" aria-label="Close menu" onClick={() => setMenu(false)} /> : null}
+
+      <aside id="bcp-panel" className={menu ? "bcp-panel open" : "bcp-panel"} data-panel-anchor="fixed">
+        <div className="bcp-panel-top">
+          <img className="bcp-logo" src="/brand/tervory-logo-reversed.png" alt="Tervory" width={186} height={34} />
+          <button type="button" className="bcp-close" aria-label="Close" onClick={() => setMenu(false)}>
+            <span className="bcp-x" />
+          </button>
+        </div>
+
+        <nav aria-label="Tervory" className="bcp-standard">
+          {standard.map((link) => (
+            <a key={link.href} className="bcp-link" href={link.href}>
+              {link.label}
+            </a>
+          ))}
+        </nav>
+
+        <div className="bcp-rule" />
+
+        <p className="bcp-kicker">Base</p>
+        <nav aria-label="Base" className="bcp-own">
+          {pageNav.map((item) => (
+            <a
+              key={item.id}
+              className={!dialogOpen && active === item.id ? "bcp-link active" : "bcp-link"}
+              href={`#${item.id}`}
+              aria-current={!dialogOpen && active === item.id ? "true" : undefined}
+              onClick={(event) => {
+                event.preventDefault();
+                go(item.id);
+              }}
+            >
+              <span>{item.label}</span>
+              {item.count === null ? null : <span className="bcp-count">{item.count}</span>}
+            </a>
+          ))}
+          <button
+            type="button"
+            className={dialogOpen ? "bcp-link active" : "bcp-link"}
+            aria-haspopup="dialog"
+            aria-expanded={dialogOpen}
+            onClick={openSources}
+          >
+            <span>Sources</span>
+          </button>
+        </nav>
+
+        <div className="bcp-panel-bottom">
+          <div className="bcp-rule" />
+          <nav aria-label="Workspace">
+            <a className="bcp-link" href={WORKSPACE_HREF}>
+              Workspace
+            </a>
+            <a className="bcp-link" href={HELP_HREF} target="_blank" rel="noreferrer">
+              Help
+            </a>
+          </nav>
+          <div className="bcp-refreshed">
+            <p className="bcp-refreshed-label">Last refreshed</p>
+            <p className="bcp-time">{model.refreshedLabel}</p>
+          </div>
+        </div>
+      </aside>
+
+      <div className="bcp-main" data-scroll-root inert={dialogOpen || undefined}>
+        <div className="bcp-body">
+          <section id="overview" className="bcp-intro">
+            <div>
+              <p className="bcp-crumb">
+                <a href={WORKSPACE_HREF}>Workspace</a> / Base
+              </p>
+              <h1>Base</h1>
+              <p className="bcp-lead">
+                Base fills in business records: website, email, phone, size and a short description. Every field shows where it
+                came from and how sure Base is.
+              </p>
+            </div>
+            <form action={refresh}>
+              <RefreshButton hidden={dialogOpen} />
+            </form>
+          </section>
+
+          {model.loadError ? (
+            <div className="bcp-state">
+              <h3>Base could not load</h3>
+              <p>We could not read the batch counts. Nothing has changed. Try Refresh, or check back in a few minutes.</p>
+            </div>
+          ) : (
+            <div className="bcp-stats">
+              <div className="bcp-stat">
+                <b>{formatCount(model.totals.records)}</b>
+                <span>records in all batches</span>
+              </div>
+              <div className="bcp-stat">
+                <b>{formatCount(model.totals.withSite)}</b>
+                <span>with a website</span>
+              </div>
+              <div className="bcp-stat">
+                <b>{formatCount(model.totals.withEmail)}</b>
+                <span>with an email</span>
+              </div>
+              <div className="bcp-stat tint">
+                <b>{skippedText(model.totals.skipped)}</b>
+                <span>skipped steps waiting for a re-run</span>
+              </div>
+            </div>
+          )}
+
+          <section id="batches" className="bcp-section">
+            <h2>Batches</h2>
+            <p className="bcp-copy">
+              Each list you upload is a batch. Skipped steps are parts Base could not finish, such as a description or a size. They
+              wait for a re-run and cost nothing until then.
+            </p>
+            {model.loadError ? null : model.empty ? (
+              <div className="bcp-state">
+                <h3>No batches yet</h3>
+                <p>When a list is uploaded, its batch shows here with its counts.</p>
+              </div>
+            ) : (
+              <div className="bcp-table" role="table" aria-label="Batches">
+                <div className="bcp-tr bcp-th bcp-batch-cols" role="row">
+                  <span role="columnheader">Batch</span>
+                  <span role="columnheader">Records</span>
+                  <span role="columnheader">Finished</span>
+                  <span role="columnheader">With a website</span>
+                  <span role="columnheader">With an email</span>
+                  <span role="columnheader">Skipped steps</span>
+                  <span role="columnheader">Status</span>
+                </div>
+                {model.batches.map((row) => (
+                  <div key={row.name} className="bcp-tr bcp-batch-cols" role="row">
+                    <span role="cell" className="bcp-name">{row.name}</span>
+                    <span role="cell" data-label="Records">{formatCount(row.total)}</span>
+                    <span role="cell" data-label="Finished">{formatCount(row.finished)}</span>
+                    <span role="cell" data-label="With a website">{formatCount(row.withSite)}</span>
+                    <span role="cell" data-label="With an email">{formatCount(row.withEmail)}</span>
+                    <span role="cell" data-label="Skipped steps">{skippedText(row.skipped)}</span>
+                    <span role="cell" data-label="Status">
+                      <Status row={row} />
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section id="skills" className="bcp-section">
+            <h2>Skills</h2>
+            <p className="bcp-copy">
+              Base runs only approved skill versions. A new version waits in Skala until it is approved, and an approved version is
+              never edited in place.
+            </p>
+            {model.skillsError ? (
+              <div className="bcp-state">
+                <h3>Skills could not load</h3>
+                <p>We could not read the approved versions from Skala. Nothing has changed.</p>
+              </div>
+            ) : model.skills.length === 0 ? (
+              <div className="bcp-state">
+                <h3>No approved skills</h3>
+                <p>Base has no approved skill versions to run yet.</p>
+              </div>
+            ) : (
+              <div className="bcp-table" role="table" aria-label="Approved skills">
+                <div className="bcp-tr bcp-th bcp-skill-cols" role="row">
+                  <span role="columnheader">What it does</span>
+                  <span role="columnheader">Skill</span>
+                  <span role="columnheader">Version</span>
+                  <span role="columnheader">State</span>
+                  <span role="columnheader">Approved</span>
+                </div>
+                {model.skills.map((skill) => (
+                  <div key={`${skill.id}@${skill.version}`} className="bcp-tr bcp-skill-cols" role="row">
+                    <span role="cell" className="bcp-name">{skill.label}</span>
+                    <span role="cell" data-label="Skill" className="bcp-mono">{skill.id}</span>
+                    <span role="cell" data-label="Version">{skill.version}</span>
+                    <span role="cell" data-label="State">
+                      <span className="bcp-pill on">
+                        <i aria-hidden="true" />
+                        Approved
+                      </span>
+                    </span>
+                    <span role="cell" data-label="Approved">{skill.approvedOn ?? "—"}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <p className="bcp-footer">Base runs only approved skills. Keys are stored on the server, never in the app code.</p>
+        </div>
+      </div>
+
+      {sources ? <SourcesDialog tab={sources} onTab={setSources} onClose={() => setSources(null)} /> : null}
+    </div>
+  );
+}
