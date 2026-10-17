@@ -16,7 +16,6 @@ from tiger_alert_page.mutate import changed  # noqa: E402
 from tiger_alert_page.score import (  # noqa: E402
     COST_TARGET_USD,
     PAGE_MEAN_MS,
-    _learn_bases,
     _load_extract,
     _rows,
     score_pages,
@@ -28,11 +27,20 @@ TENANT = "11111111-1111-1111-1111-111111111111"
 
 def _reports():
     extract = _load_extract()
-    bases = _learn_bases(extract)
-    changed_pages = score_pages(_rows("page_changed.jsonl"), bases, extract)
-    controls = score_pages(_rows("page_controls.jsonl"), bases, extract)
-    traps = score_pages(_rows("page_traps.jsonl"), bases, extract)
+    changed_pages = score_pages(_rows("page_changed.jsonl"), extract)
+    controls = score_pages(_rows("page_controls.jsonl"), extract)
+    traps = score_pages(_rows("page_traps.jsonl"), extract)
     return changed_pages, controls, traps
+
+
+def test_page_holdout_includes_the_hard_edits() -> None:
+    rows = [row for row in _rows("page_changed.jsonl") if row["split"] == "heldout"]
+    kinds = {row["mutation"] for row in rows}
+    assert {"blank", "strip", "prompt"} <= kinds
+    assert kinds != {"foreign"}
+    visible = [row for row in rows if row.get("price_still_shown")]
+    assert visible
+    assert any(row["mutation"] == "blank" for row in visible)
 
 
 def test_changed_pages_never_guess() -> None:

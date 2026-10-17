@@ -1,35 +1,125 @@
-"""Replay price history. Pass: 95%+ of real changes, under 2% false alarms."""
+"""Watch a price history. Pass: 95%+ of real changes, under 2% false alarms."""
 
 from __future__ import annotations
 
+import asyncio
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "agents" / "_chassis"))
 sys.path.insert(0, str(ROOT / "agents" / "tiger"))
 sys.path.insert(0, str(ROOT / "tests"))
 
-import change_alert  # noqa: E402
 from tiger_alert_page.score import (  # noqa: E402
     ALERT_MEAN_MS,
     COST_TARGET_USD,
     _rows,
+    run_series,
     score_alerts,
 )
+from watch import DomainLimiter, MemoryStore, run_check  # noqa: E402
+
+TENANT = "11111111-1111-1111-1111-111111111111"
+
+
+def _point(price: str, availability: str) -> dict:
+    return {
+        "price": price,
+        "availability": availability,
+        "page": "jsonld",
+    }
 
 
 def test_hand_checked_boundaries() -> None:
-    history = [
-        {"price": "100.00", "availability": "InStock", "method": "jsonld"},
-        {"price": "100.004", "availability": "InStock", "method": "jsonld"},
-        {"price": "95.00", "availability": "InStock", "method": "jsonld"},
-        {"price": "94.99", "availability": "OutOfStock", "method": "jsonld"},
-        {"price": "80.00", "availability": "OutOfStock", "method": "jsonld"},
+    series = {
+        "id": "boundary",
+        "threshold": "0.05",
+        "points": [
+            _point("100.00", "https://schema.org/InStock"),
+            _point("100.004", "https://schema.org/InStock"),
+            _point("95.00", "https://schema.org/InStock"),
+            _point("94.99", "https://schema.org/OutOfStock"),
+            _point("80.00", "https://schema.org/OutOfStock"),
+        ],
+    }
+    got = asyncio.run(run_series(series))
+    assert [_alert_kinds(row) for row in got[:3]] == [[], [], []]
+    assert _alert_kinds(got[3]) == ["stock"]
+    assert _alert_kinds(got[4]) == ["price"]
+
+
+def _alert_kinds(row: dict) -> list[str]:
+    return [alert["kind"] for alert in row["alerts"]]
+
+
+def test_unknown_stock_wording_is_visible() -> None:
+    """Unknown stock words are can't read. The same phrase in other words is not an alert."""
+    pages = [
+        ("https://stock.test/same", "https://schema.org/InStock", "InStock", []),
+        ("https://stock.test/same", "in stock", "InStock", []),
+        ("https://stock.test/same", "https://schema.org/InStock", "InStock", []),
     ]
-    got = change_alert.replay(history, "0.05")
-    assert [row["alerts"] for row in got[:3]] == [[], [], []]
-    assert [row["kind"] for row in got[3]["alerts"]] == ["stock"]
-    assert [row["kind"] for row in got[4]["alerts"]] == ["price"]
+    unknown = [
+        ("https://stock.test/unknown", "https://schema.org/InStock", "InStock", []),
+        ("https://stock.test/unknown", "Ships today", "can't read", []),
+        ("https://stock.test/unknown", "https://schema.org/OutOfStock", "OutOfStock", ["stock"]),
+    ]
+
+    async def check() -> None:
+        store = MemoryStore()
+        for url, availability, stock, kinds in pages + unknown:
+            await _once(store, url, "10.00", availability, stock, kinds)
+
+    asyncio.run(check())
+
+
+async def _once(store: MemoryStore, url: str, price: str, availability: str, stock: str, kinds: list[str]) -> None:
+    from tiger_alert_page.score import _load_extract, _product_html
+
+    extract = _load_extract()
+    if await store.get_watch(TENANT, url) is None:
+        await store.create_watch({
+            "tenant_id": TENANT,
+            "url": url,
+            "label": "stock",
+            "engine": "core",
+            "every": "1h",
+            "enabled": True,
+            "threshold": "0",
+        })
+    html = _product_html(price, availability)
+    tick = {"n": len(store.observations)}
+
+    def clock() -> datetime:
+        tick["n"] += 1
+        return datetime(2026, 10, 16, tzinfo=timezone.utc) + timedelta(seconds=tick["n"])
+
+    async def render(page_url: str, session: str, agent: str, tenant: str) -> dict:
+        return {"ok": True, "challenge": False, "html": html, "png_base64": None}
+
+    async def extract_html(page: str, page_url: str) -> dict:
+        return extract.extract(page, page_url)
+
+    async def ocr(png: str, page_url: str) -> dict:
+        raise AssertionError("a known page is not guessed from a screenshot")
+
+    async def fetch_text(page_url: str) -> str:
+        return ""
+
+    watch = await store.get_watch(TENANT, url)
+    assert watch is not None
+    out = await run_check(
+        store, TENANT, watch, "tiger", render, extract_html, ocr, fetch_text, DomainLimiter(0), now=clock,
+    )
+    assert out["status"] == "observed"
+    assert out["price"] == price
+    assert out["stock"] == stock
+    assert out["observation"]["availability"] == stock
+    assert _alert_kinds(out) == kinds
+    if stock == "can't read":
+        assert "can't read" in str(out["observation"]["evidence"])
 
 
 def test_gold_change_alerts_meet_the_bar() -> None:
@@ -37,6 +127,7 @@ def test_gold_change_alerts_meet_the_bar() -> None:
     build = report["summary"]["build"]
     held = report["summary"]["heldout"]
     assert build["catch_n"] > 0 and build["quiet_n"] > 0
+    assert held["catch_n"] > 7
     assert build["catch_pct"] >= 95
     assert build["false_pct"] < 2
     assert held["catch_pct"] >= 95
@@ -44,6 +135,24 @@ def test_gold_change_alerts_meet_the_bar() -> None:
     assert report["cost_usd"] == COST_TARGET_USD
     assert report["mean_ms"] <= ALERT_MEAN_MS
     assert all(row["verified"] == "no" for row in report["rows"])
+    failed = [row["id"] for row in report["rows"] if not row["pass"]]
+    assert not failed
+
+
+def test_labels_are_written_and_the_score_uses_the_watch() -> None:
+    source = (ROOT / "tests" / "tiger_alert_page" / "build_gold.py").read_text(encoding="utf-8")
+    assert "def _moved" not in source
+    assert "def label_series" not in source
+    assert "def _norm" not in source
+    scorer = (ROOT / "tests" / "tiger_alert_page" / "score.py").read_text(encoding="utf-8")
+    assert "run_check" in scorer
+    assert "change_alert.replay" not in scorer
+    assert ".replay(" not in scorer
+    held = [row for row in _rows("change_alerts.jsonl") if row["split"] == "heldout"]
+    alerts = sum(1 for row in held for point in row["points"] if point["expect_alert"])
+    assert alerts > 7
+    hard = {row["id"] for row in held}
+    assert {"ca-cent", "ca-threshold", "ca-round-cents", "ca-stock-words", "ca-strip-decoy"} <= hard
 
 
 def test_alert_traps() -> None:

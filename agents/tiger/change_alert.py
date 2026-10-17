@@ -26,16 +26,66 @@ _STOCK = {
 }
 
 
+CANT_READ = "can't read"
+
+_AVAIL_JSON = re.compile(r'"availability"\s*:\s*"([^"]*)"', re.I)
+_AVAIL_FIELD = re.compile(
+    r"""<(?:meta|link)\b[^>]*?(?:itemprop|property|name)\s*=\s*['"]"""
+    r"""(?:availability|product:availability|og:availability)['"][^>]*?"""
+    r"""(?:content|href)\s*=\s*['"]([^'"]*)['"]""",
+    re.I,
+)
+_AVAIL_FIELD_REV = re.compile(
+    r"""<(?:meta|link)\b[^>]*?(?:content|href)\s*=\s*['"]([^'"]*)['"][^>]*?"""
+    r"""(?:itemprop|property|name)\s*=\s*['"]"""
+    r"""(?:availability|product:availability|og:availability)['"]""",
+    re.I,
+)
+
+
 def stock_token(value: Any) -> str | None:
-    """A known stock word, or nothing. Unknown wording is not a stock change."""
+    """A known stock phrase, including the same phrase in different words."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text or text == CANT_READ:
+        return None
+    tail = text.rstrip("/").split("/")[-1]
+    key = re.sub(r"[\s_\-]+", "", tail).lower()
+    return _STOCK.get(key)
+
+
+def stock_reading(value: Any) -> str | None:
+    """Known stock word, nothing when stock was not stated, or "can't read".
+
+    Unknown wording is not dropped. It is the same visible state as a price
+    that could not be read, and it is not a stock alert.
+    """
     if value is None:
         return None
     text = str(value).strip()
     if not text:
         return None
-    tail = text.rstrip("/").split("/")[-1]
-    key = re.sub(r"[\s_\-]+", "", tail).lower()
-    return _STOCK.get(key)
+    if text == CANT_READ:
+        return CANT_READ
+    token = stock_token(text)
+    if token:
+        return token
+    return CANT_READ
+
+
+def stated_availability(html: str) -> str | None:
+    """Availability words written in a stock field, before they are renamed."""
+    if not html:
+        return None
+    for pattern in (_AVAIL_JSON, _AVAIL_FIELD, _AVAIL_FIELD_REV):
+        match = pattern.search(html)
+        if match is None:
+            continue
+        text = match.group(1).strip()
+        if text:
+            return text
+    return None
 
 
 def normalize_price(value: Any) -> str | None:
@@ -99,7 +149,7 @@ def price_moved(before: Any, after: Any, threshold: Any) -> bool:
 
 
 def replay(history: list[dict[str, Any]] | None, threshold: Any = "0") -> list[dict[str, Any]]:
-    """One result per history step. Alerts compare with the last readable price."""
+    """Older helper. A watch check does not call this."""
     if not history:
         return []
     previous: dict[str, Any] | None = None

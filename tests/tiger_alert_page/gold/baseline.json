@@ -6,5 +6,5 @@
   "build_refusal": 100.0,
   "heldout_refusal": 100.0,
   "drop_points": 2,
-  "note": "Provisional. Gold answers are not person-checked."
+  "note": "Provisional. Gold answers are not person-checked. Scores come from watch.run_check."
 }

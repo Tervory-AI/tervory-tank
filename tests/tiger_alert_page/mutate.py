@@ -17,6 +17,13 @@ PLANTED_JSON = (
 )
 
 
+def price_still_on_page(html: str, price: str) -> bool:
+    """True when that amount is still written on the page, not inside a longer amount."""
+    if not price:
+        return False
+    return re.search(rf"(?<![\d.]){re.escape(price)}(?![\d])", html or "") is not None
+
+
 def changed(html: str, signature: dict, kind: str) -> str:
     if kind == "strip":
         return _decoy(_strip(html, signature))

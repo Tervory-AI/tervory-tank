@@ -39,7 +39,7 @@ def write_review(report: dict, path: Path) -> None:
         f"({alerts.get('build', {}).get('catch')}/{alerts.get('build', {}).get('catch_n')}), "
         f"false alarms {alerts.get('build', {}).get('false_pct')}% "
         f"({alerts.get('build', {}).get('false')}/{alerts.get('build', {}).get('quiet_n')}).",
-        "Change alerts, held-out 20%: caught "
+        "Change alerts, held out: caught "
         f"{alerts.get('heldout', {}).get('catch_pct')}% "
         f"({alerts.get('heldout', {}).get('catch')}/{alerts.get('heldout', {}).get('catch_n')}), "
         f"false alarms {alerts.get('heldout', {}).get('false_pct')}% "
@@ -48,7 +48,7 @@ def write_review(report: dict, path: Path) -> None:
         f"{changed.get('build', {}).get('ok_pct')}% can't read "
         f"({changed.get('build', {}).get('ok')}/{changed.get('build', {}).get('n')}), "
         f"guesses {changed.get('build', {}).get('guesses')}.",
-        "Changed pages, held-out 20%: "
+        "Changed pages, held out: "
         f"{changed.get('heldout', {}).get('ok_pct')}% can't read "
         f"({changed.get('heldout', {}).get('ok')}/{changed.get('heldout', {}).get('n')}), "
         f"guesses {changed.get('heldout', {}).get('guesses')}.",
