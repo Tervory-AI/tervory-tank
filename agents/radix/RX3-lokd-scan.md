@@ -1,7 +1,8 @@
 # First live check — lokd.co.za
 
-Checked on 17 October 2026 from a cloud worker, not from the Radix room.
+Checked on 17 October 2026 from a cloud worker, before the room proxy existed.
 One request: `GET https://lokd.co.za/` returned 200. Nothing else was opened.
+Later checks go through `egress-proxy` and do not dial the site directly.
 
 ## Result
 
@@ -38,8 +39,10 @@ used `lokd.co.za` as the TLS name.
 
 ## Why the room did not run this
 
-The Radix room is still sealed.
+This check ran on a cloud worker, before the room proxy existed. At that time the room could not run it:
 
-- Its corridor `tervory-gw-radix` is an internal Docker network, so the container has no route to this host.
-- `RADIX_ALLOWED_HOSTS` in `docker-compose.yml` is still empty. An application allowlist is not the egress proxy the plan requires, and a public network would open the whole internet.
-- The `scan` job still accepts only a handed-over archive. `live.py` is a command for a worker that can already reach this one host. It is not a job on the service.
+- Its corridor `tervory-gw-radix` is an internal Docker network, so the agent container has no direct route to this host.
+- `RADIX_ALLOWED_HOSTS` in `docker-compose.yml` was empty. A public network on the agent would have opened the whole internet.
+- The `scan` job still accepts only a handed-over archive. `live.py` is not a job on the service.
+
+The room compose now points the agent at `egress-proxy` for this one host. That compose was not started for this check, and this check was not repeated.

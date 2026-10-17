@@ -1,8 +1,8 @@
 """Radix's application-level HTTP guard.
 
-An empty RADIX_ALLOWED_HOSTS refuses every host. This is not an egress firewall:
-the room must remain sealed until a proxy enforces approved destinations and
-pins public DNS answers. Tank and Hermes use the chassis, not this client.
+An empty RADIX_ALLOWED_HOSTS refuses every host. A real request dials only the
+room proxy, and only for https://lokd.co.za/. There is no direct socket to the
+target and no environment proxy. Tank and Hermes use the chassis, not this client.
 """
 
 from __future__ import annotations
@@ -17,6 +17,9 @@ import httpx
 
 _LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
 _PORTS = {"http": 80, "https": 443}
+# Must match egress.ROOM_PROXY. Kept here so this module does not import the proxy.
+ROOM_PROXY = "http://egress-proxy:8080"
+DIAL_HOST = "lokd.co.za"
 
 
 class HostNotAllowed(PermissionError):
@@ -97,6 +100,14 @@ def host_from_url(url: str) -> str:
     return host
 
 
+def require_room_proxy() -> str:
+    """Fail closed unless the process is pointed at the room proxy and nothing else."""
+    raw = os.environ.get("RADIX_EGRESS_PROXY", "").strip()
+    if raw != ROOM_PROXY:
+        raise HostNotAllowed("")
+    return ROOM_PROXY
+
+
 def require_allowed(url: str, allow: frozenset[str] | None = None) -> str:
     """Return the exact host, or refuse before any DNS/network activity."""
     host = host_from_url(url)
@@ -111,7 +122,8 @@ class Client:
 
     Redirects are returned to the caller, never followed automatically. A
     subsequent request must pass this guard again. No environment proxy is used.
-    Network-level DNS and bypass protection remains the RX-2 proxy's job.
+    Without an injected test client, the only dial is to the room proxy, and
+    only for https://lokd.co.za/.
     """
 
     def __init__(
@@ -132,14 +144,19 @@ class Client:
         return client.send(request, auth=None, follow_redirects=False)
 
     def request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
-        require_allowed(url, self._allow)
+        host = require_allowed(url, self._allow)
         if kwargs.pop("follow_redirects", False) is not False:
             raise ValueError("Radix does not follow redirects automatically")
         # Auth handlers may issue extra requests; extensions may override SNI.
         if "auth" in kwargs or "extensions" in kwargs:
             raise ValueError("Radix does not accept auth handlers or transport extensions")
         if self._http is None:
-            with httpx.Client(timeout=30, trust_env=False, follow_redirects=False) as client:
+            if host != DIAL_HOST or not url.lower().startswith("https://"):
+                raise HostNotAllowed(host)
+            proxy = require_room_proxy()
+            with httpx.Client(
+                proxy=proxy, timeout=30, trust_env=False, follow_redirects=False
+            ) as client:
                 return self._request(client, method, url, **kwargs)
         return self._request(self._http, method, url, **kwargs)
 

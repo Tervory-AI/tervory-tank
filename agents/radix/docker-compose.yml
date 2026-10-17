@@ -1,14 +1,16 @@
 # Radix, the security auditor. Deploy this file as its own Coolify resource.
 # Build context is agents/ (the parent of this file), because the chassis lives there.
-# The only network is the external gateway. Coolify's own network for this resource
-# contains just this service, so it cannot see the main stack.
+# Coolify's own network for this resource contains just these services.
 #
 # tervory-gw-radix is an internal network, created once on the server with:
 #   docker network create --internal tervory-gw-radix
-# Radix can reach Tank, Postgres, and Hermes, and nothing else. No internet.
-# The only approved external name is lokd.co.za (HTTPS, port 443).
-# RADIX_ALLOWED_HOSTS stays empty here. This network is internal, and an
-# allowlist is not a substitute for the egress proxy.
+# The agent reaches Tank, Postgres, and Hermes on that corridor.
+# It has no route to the public internet. Direct sockets to a site fail.
+#
+# The only approved external name is lokd.co.za, HTTPS, port 443.
+# egress-proxy is the only service on the egress network. Its process refuses
+# every other destination. This is not general internet, and this file does
+# not deploy the room.
 
 services:
   agent-radix:
@@ -18,18 +20,23 @@ services:
     restart: unless-stopped
     mem_limit: 256m
     cpus: 0.25
+    cap_drop:
+      - NET_ADMIN
+      - NET_RAW
     environment:
       AGENT_NAME: radix
       DATABASE_URL: postgresql://agent_radix:${AGENT_DB_PASSWORD_RADIX}@postgres:5432/${POSTGRES_DB:-tervory}
       TANK_URL: http://tank:8000
       TANK_KEY: ${TANK_KEY_RADIX:-}
       HERMES_URL: http://hermes:8000
-      RADIX_ALLOWED_HOSTS: ${RADIX_ALLOWED_HOSTS:-}
+      RADIX_ALLOWED_HOSTS: lokd.co.za
+      RADIX_EGRESS_PROXY: http://egress-proxy:8080
       DATA_DIR: /data
     volumes:
       - agent_radix_data:/data
     networks:
       - gw
+      - proxy-link
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
       interval: 10s
@@ -38,6 +45,35 @@ services:
     expose:
       - "8000"
 
+  egress-proxy:
+    build:
+      context: ..
+      dockerfile: radix/Dockerfile
+    command: ["python", "egress.py"]
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.25
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      RADIX_EGRESS_POLICY: /app/egress-policy.json
+      PYTHONDONTWRITEBYTECODE: "1"
+    networks:
+      - proxy-link
+      - egress
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; c=chr(13)+chr(10); s=socket.create_connection(('127.0.0.1',8080),3); s.sendall(('GET /health HTTP/1.1'+c+'Host: egress-proxy'+c+c).encode()); d=s.recv(80); s.close(); raise SystemExit(0 if b'200' in d else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    expose:
+      - "8080"
+
 volumes:
   agent_radix_data:
 
@@ -45,3 +81,7 @@ networks:
   gw:
     external: true
     name: tervory-gw-radix
+  proxy-link:
+    internal: true
+  egress:
+    internal: false

@@ -160,12 +160,25 @@ def test_guard_disables_environment_proxies(monkeypatch):
     configuration = []
 
     def make_client(**kwargs):
-        configuration.append(kwargs)
+        configuration.append(dict(kwargs))
+        kwargs.pop("proxy", None)
         return original_client(
             **kwargs, transport=httpx.MockTransport(lambda request: httpx.Response(200))
         )
 
     monkeypatch.setenv("HTTPS_PROXY", "http://unapproved.example:8080")
+    monkeypatch.delenv("RADIX_EGRESS_PROXY", raising=False)
+    with pytest.raises(net.HostNotAllowed):
+        net.Client(allow=frozenset({"lokd.co.za"})).get("https://lokd.co.za/")
+    assert configuration == []
+
+    monkeypatch.setenv("RADIX_EGRESS_PROXY", net.ROOM_PROXY)
     monkeypatch.setattr(net.httpx, "Client", make_client)
-    assert net.Client(allow=ALLOW).get("https://stage.example/").status_code == 200
-    assert configuration == [{"timeout": 30, "trust_env": False, "follow_redirects": False}]
+    assert net.Client(allow=frozenset({"lokd.co.za"})).get("https://lokd.co.za/").status_code == 200
+    assert configuration == [{
+        "proxy": "http://egress-proxy:8080",
+        "timeout": 30,
+        "trust_env": False,
+        "follow_redirects": False,
+    }]
+    assert configuration[0]["proxy"] == "http://egress-proxy:8080"

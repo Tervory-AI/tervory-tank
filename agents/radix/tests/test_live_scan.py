@@ -143,24 +143,6 @@ def test_one_same_host_redirect_is_followed():
     assert "missing-frame-protection" not in {item["rule"] for item in result["findings"]}
 
 
-def test_private_dns_is_refused(monkeypatch):
-    def answers(*args, **kwargs):
-        return [
-            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("1.1.1.1", 443)),
-            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.1.1.1", 443)),
-        ]
-
-    monkeypatch.setattr(socket, "getaddrinfo", answers)
-    with pytest.raises(live.ScanRefused):
-        live.resolve_public("lokd.co.za")
-
-
-def test_non_public_addresses_are_rejected():
-    for address in ("127.0.0.1", "10.1.1.1", "169.254.169.254", "192.168.1.1", "::1", "0.0.0.0"):
-        assert live._routable(address) is False
-    assert live._routable("1.1.1.1") is True
-
-
 def test_certificate_notes_do_not_list_other_names():
     cert = {
         "subjectAltName": (("DNS", "lokd.co.za"), ("DNS", "www.lokd.co.za")),

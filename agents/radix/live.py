@@ -2,17 +2,14 @@
 
 The approved name is lokd.co.za, HTTPS on port 443. This does not crawl, does
 not follow a redirect to any other host, and does not send attack payloads.
-The Radix room stays sealed: its network is internal and this file is not a
-job. A worker with a path to that host can run `python live.py`.
+A real check dials the room proxy. It does not open a socket to the site.
 """
 
 from __future__ import annotations
 
-import ipaddress
 import json
 import os
 import re
-import socket
 import ssl
 import sys
 from datetime import datetime, timezone
@@ -21,6 +18,7 @@ from urllib.parse import urljoin, urlsplit
 
 import httpx
 
+import egress
 from net import Client, HostNotAllowed, allowed_hosts, require_allowed
 
 APPROVED_HOST = "lokd.co.za"
@@ -83,40 +81,6 @@ def approved_allow() -> frozenset[str]:
     return frozenset({APPROVED_HOST})
 
 
-def _routable(raw: str) -> bool:
-    try:
-        ip = ipaddress.ip_address(raw)
-    except ValueError:
-        return False
-    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
-        ip = ip.ipv4_mapped
-    blocked = (
-        ip.is_private,
-        ip.is_loopback,
-        ip.is_link_local,
-        ip.is_multicast,
-        ip.is_reserved,
-        ip.is_unspecified,
-    )
-    if any(blocked):
-        return False
-    if ip.version == 4:
-        networks = (
-            "0.0.0.0/8",
-            "100.64.0.0/10",
-            "192.0.0.0/24",
-            "192.0.2.0/24",
-            "198.51.100.0/24",
-            "203.0.113.0/24",
-            "240.0.0.0/4",
-        )
-        if any(ip in ipaddress.ip_network(item) for item in networks):
-            return False
-    elif not getattr(ip, "is_global", False):
-        return False
-    return True
-
-
 def assert_exact_environment() -> None:
     """A wider process allowlist must fail before any lookup."""
     raw = os.environ.get("RADIX_ALLOWED_HOSTS", "")
@@ -133,28 +97,6 @@ def home_url(url: str) -> str:
     if host != APPROVED_HOST:
         raise ScanRefused("host not approved")
     return HOME_URL
-
-
-def resolve_public(host: str) -> tuple[str, ...]:
-    """Fail closed when any answer is missing or not a public address.
-
-    The addresses are for the connection decision. They are not scan findings.
-    """
-    checked = require_allowed(f"https://{host}/", approved_allow())
-    if checked != APPROVED_HOST:
-        raise ScanRefused("host not approved")
-    try:
-        answers = socket.getaddrinfo(checked, 443, type=socket.SOCK_STREAM)
-    except OSError as exc:
-        raise ScanRefused("the approved host did not resolve") from exc
-    found: list[str] = []
-    for answer in answers:
-        address = str(answer[4][0])
-        if address not in found:
-            found.append(address)
-    if not found or any(not _routable(address) for address in found):
-        raise ScanRefused("DNS for the approved host was not all public addresses")
-    return tuple(found)
 
 
 def _finding(tool: str, severity: str, rule: str, fix: str, url: str) -> dict[str, Any]:
@@ -448,56 +390,19 @@ def tls_findings(cert: dict[str, Any] | None, protocol: str | None, url: str = H
     return findings
 
 
-def _handshake(address: str) -> tuple[dict[str, Any] | None, str | None]:
-    context = ssl.create_default_context()
-    with socket.create_connection((address, 443), timeout=15) as raw:
-        with context.wrap_socket(raw, server_hostname=APPROVED_HOST) as wrapped:
-            cert = wrapped.getpeercert()
-            return cert, wrapped.version()
+def summarize(findings: list[dict[str, Any]]) -> str:
+    count = len(findings)
+    high = sum(1 for item in findings if item.get("severity") == "high")
+    noun = "finding" if count == 1 else "findings"
+    if count == 0:
+        return "Checked https://lokd.co.za/. No header or certificate findings."
+    return (
+        f"Checked https://lokd.co.za/. {count} {noun}, {high} high. "
+        "This is a passive check of one host."
+    )
 
 
-def inspect_tls(addresses: tuple[str, ...]) -> dict[str, Any]:
-    """One TLS handshake to a public address of the approved host."""
-    require_allowed(HOME_URL, approved_allow())
-    if not addresses or any(not _routable(address) for address in addresses):
-        raise ScanRefused("refusing a non-public address")
-    cert: dict[str, Any] | None = None
-    protocol: str | None = None
-    verified = False
-    connected = False
-    for address in addresses:
-        try:
-            cert, protocol = _handshake(address)
-        except ssl.SSLCertVerificationError:
-            connected = True
-            break
-        except OSError:
-            continue
-        connected = True
-        verified = True
-        break
-    if not connected:
-        findings = [
-            _finding(
-                "scan.tls",
-                "high",
-                "tls-handshake",
-                "The TLS handshake to lokd.co.za did not complete.",
-                HOME_URL,
-            )
-        ]
-        return {"protocol": None, "not_after": "", "name_matches": False, "findings": findings}
-    if not verified:
-        findings = [
-            _finding(
-                "scan.tls",
-                "high",
-                "tls-certificate",
-                "The certificate did not verify for lokd.co.za.",
-                HOME_URL,
-            )
-        ]
-        return {"protocol": protocol, "not_after": "", "name_matches": False, "findings": findings}
+def _tls_summary(cert: dict[str, Any] | None, protocol: str | None) -> dict[str, Any]:
     ends = ""
     if cert and cert.get("notAfter"):
         ends = datetime.fromtimestamp(
@@ -512,47 +417,12 @@ def inspect_tls(addresses: tuple[str, ...]) -> dict[str, Any]:
     }
 
 
-def txt_present(host: str = APPROVED_HOST) -> bool | None:
-    """Whether any TXT record exists. The text is never returned."""
-    checked = require_allowed(f"https://{host}/", approved_allow())
-    try:
-        import subprocess
-
-        completed = subprocess.run(
-            ["dig", "+short", "TXT", checked],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    if completed.returncode != 0:
-        return None
-    return any(line.strip() for line in completed.stdout.splitlines())
-
-
-def summarize(findings: list[dict[str, Any]]) -> str:
-    count = len(findings)
-    high = sum(1 for item in findings if item.get("severity") == "high")
-    noun = "finding" if count == 1 else "findings"
-    if count == 0:
-        return "Checked https://lokd.co.za/. No header or certificate findings."
-    return (
-        f"Checked https://lokd.co.za/. {count} {noun}, {high} high. "
-        "This is a passive check of one host."
-    )
-
-
 def run(url: str = HOME_URL, *, http: httpx.Client | None = None) -> dict[str, Any]:
     assert_exact_environment()
-    addresses: tuple[str, ...] = ()
-    if http is None:
-        addresses = resolve_public(APPROVED_HOST)
     result = scan_http(url, http=http)
-    tls: dict[str, Any] | None = None
     if http is None:
-        tls = inspect_tls(addresses)
+        cert, protocol = egress.read_certificate()
+        tls = _tls_summary(cert, protocol)
         result["findings"] = [*result["findings"], *tls["findings"]]
         result["tls"] = {
             "protocol": tls["protocol"],
@@ -562,7 +432,7 @@ def run(url: str = HOME_URL, *, http: httpx.Client | None = None) -> dict[str, A
     else:
         result["tls"] = None
     result["summary"] = summarize(result["findings"])
-    result["txt_present"] = None if http is not None else txt_present()
+    result["txt_present"] = None
     return result
 
 
@@ -576,7 +446,7 @@ def main(argv: list[str] | None = None) -> int:
         url = HOME_URL
     try:
         result = run(url)
-    except (ScanRefused, HostNotAllowed) as exc:
+    except (ScanRefused, HostNotAllowed, egress.ProxyError, httpx.HTTPError) as exc:
         print(str(exc), file=sys.stderr)
         return 2
     print(json.dumps(result, indent=2, sort_keys=True))
