@@ -208,7 +208,7 @@ test("search hits feeds and linked pages, and skips a question with no reading",
 });
 
 test("plugin state sent to the browser is a set of booleans and never a saved secret", () => {
-  const flags = readFlags({ EIA_API_KEY: "abcd1234efgh" } as unknown as NodeJS.ProcessEnv);
+  const flags = readFlags({ EIA_API_KEY: "example-key" } as unknown as NodeJS.ProcessEnv);
   const state = clientPluginState(flags);
   assert.equal(state.title, "Plugins");
   assert.equal(state.keys.find((row) => row.name === "EIA_API_KEY")?.connected, true);
@@ -217,7 +217,7 @@ test("plugin state sent to the browser is a set of booleans and never a saved se
   assert.equal(state.links.length, 0);
   assert.equal(state.connections.length, 0);
   const dumped = JSON.stringify(state);
-  assert.equal(dumped.includes("abcd1234efgh"), false);
+  assert.equal(dumped.includes("example-key"), false);
   assert.match(STUB_KEY, /Nothing was stored/);
   assert.match(STUB_FILE, /Nothing was saved/);
   assert.match(STUB_LINK, /Nothing was saved/);
@@ -265,11 +265,11 @@ test("an off vault shows the plain sentence and drops any secret that arrived wi
 });
 
 test("key flags are booleans and secret text is stripped before it can leave the server", () => {
-  const flags = readFlags({ EIA_API_KEY: "abcd1234efgh" } as unknown as NodeJS.ProcessEnv);
+  const flags = readFlags({ EIA_API_KEY: "example-key" } as unknown as NodeJS.ProcessEnv);
   assert.equal(flags.EIA_API_KEY, true);
   assert.equal(flags.FRED_API_KEY, false);
-  assert.equal(JSON.stringify(flags).includes("abcd1234efgh"), false);
-  const clean = scrubSecrets({ headline: "value abcd1234efgh tail", note: "api_key=abcd1234efgh" }, ["abcd1234efgh"]);
-  assert.equal(clean.headline.includes("abcd1234efgh"), false);
-  assert.equal(clean.note.includes("abcd1234efgh"), false);
+  assert.equal(JSON.stringify(flags).includes("example-key"), false);
+  const clean = scrubSecrets({ headline: "value example-key tail", note: "api_key=example-key" }, ["example-key"]);
+  assert.equal(clean.headline.includes("example-key"), false);
+  assert.equal(clean.note.includes("example-key"), false);
 });
