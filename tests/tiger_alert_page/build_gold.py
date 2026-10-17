@@ -76,6 +76,7 @@ def _p(
     status: str | None = None,
     file: str | None = None,
     edits: list[list[str]] | None = None,
+    mark: str | None = None,
 ) -> dict:
     row: dict = {
         "price": show,
@@ -91,6 +92,8 @@ def _p(
         row["expect_stock"] = stock
     if status is not None:
         row["expect_status"] = status
+    if mark:
+        row["mark"] = mark
     if file:
         row["file"] = file
     if edits:
@@ -397,6 +400,7 @@ def alert_series() -> list[dict]:
             _p("10.00", "10.00", "Zero units in stock stays out. No alarm.", alert=False, availability="zero units in stock", stock="OutOfStock"),
             _p("10.00", "10.00", "Ships today cannot be read. No alarm.", alert=False, availability="Ships today", stock="can't read"),
             _p("10.00", "10.00", "Available now cannot be read. No alarm.", alert=False, availability="Available now", stock="can't read"),
+            _p("10.00", "10.00", "Couldn't keep it in stock describes demand, not a current outage. Can't read. No alarm. Decided by Zenas.", alert=False, availability="couldn't keep it in stock", stock="can't read", mark="decided by Zenas"),
         ], "synthetic"),
         _series("ca-after-unknown", "0", "Unknown stock is can't read. A later known out-of-stock still alerts.", [
             _p("10.00", "10.00", "First week is $10, in stock.", alert=False, stock="InStock"),

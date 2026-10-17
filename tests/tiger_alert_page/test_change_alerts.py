@@ -207,6 +207,38 @@ def test_negation_is_a_class_of_words() -> None:
     asyncio.run(check())
 
 
+def test_demand_wording_is_not_a_current_outage() -> None:
+    """Difficulty keeping stock is unclear. A plain out-of-stock statement still is out."""
+    both = (
+        "<p class=\"stock\">Couldn't keep it in stock</p>"
+        "<script type=\"application/ld+json\">"
+        '{"@type":"Product","offers":{"@type":"Offer","price":"10.00","priceCurrency":"USD",'
+        '"availability":"https://schema.org/OutOfStock"}}'
+        "</script>"
+    )
+    steps = [
+        ("https://stock.test/demand", "https://schema.org/InStock", "InStock", []),
+        ("https://stock.test/demand", "couldn't keep it in stock", "can't read", []),
+        ("https://stock.test/demand", "can't keep them in stock", "can't read", []),
+        ("https://stock.test/demand", "hard to keep in stock", "can't read", []),
+        ("https://stock.test/demand", "not out of stock", "InStock", []),
+        ("https://stock.test/demand", "out of stock", "OutOfStock", ["stock"]),
+        ("https://stock.test/demand", "isn't in stock", "OutOfStock", []),
+        ("https://stock.test/demand", "zero in stock", "OutOfStock", []),
+        ("https://stock.test/demand-plain", "Couldn't keep it in stock. Out of stock.", "OutOfStock", []),
+        ("https://stock.test/demand-plain", "Couldn't keep it in stock. In stock.", "InStock", ["stock"]),
+        ("https://stock.test/demand-only-in", "Couldn't keep it in stock. In stock.", "InStock", []),
+    ]
+
+    async def check() -> None:
+        store = MemoryStore()
+        for url, availability, stock, kinds in steps:
+            await _once(store, url, "10.00", availability, stock, kinds)
+        await _raw(store, "https://stock.test/both", both, "10.00", "OutOfStock", [])
+
+    asyncio.run(check())
+
+
 def test_unknown_stock_wording_is_visible() -> None:
     """Unknown stock words are can't read. The same phrase in other words is not an alert."""
     pages = [

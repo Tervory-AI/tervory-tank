@@ -69,7 +69,7 @@ def write_review(report: dict, path: Path) -> None:
                 what=what,
                 expected=row.get("expected") or "",
                 actual=row.get("actual") or "",
-                verified="no",
+                verified=row.get("mark") or "no",
             )
         )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")

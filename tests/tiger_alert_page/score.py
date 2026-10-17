@@ -259,6 +259,7 @@ async def _score_alerts(series: list[dict[str, Any]]) -> dict[str, Any]:
                 "expected": expected,
                 "actual": actual,
                 "verified": "no",
+                "mark": point.get("mark") or "no",
                 "pass": ok,
             })
     summary = {}

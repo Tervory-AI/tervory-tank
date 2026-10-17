@@ -57,6 +57,17 @@ _NEGATOR = (
 )
 _GAP = r"(?:\s+[a-z0-9]+){0,4}"
 _NEG_TAIL = re.compile(_NEGATOR + _GAP + r"\s*$", re.I)
+# Demand or past difficulty keeping stock is not a current availability statement.
+# "Couldn't keep it in stock" often means it is selling fast. The wording has to
+# sit against that phrase. A later plain "out of stock" or "in stock" still counts.
+_DEMAND_BODY = (
+    r"\b(?:couldn" + _APOS + r"t|could\s+not|cannot|can" + _APOS + r"t|can\s+not|"
+    r"unable|hard|difficult|tough|impossible|struggl(?:e|ing|ed)|barely)\b"
+    r"(?:\s+[a-z0-9]+){0,6}\s+"
+    r"\b(?:keep(?:ing)?|kept)\b"
+)
+_DEMAND_KEEP = re.compile(_DEMAND_BODY, re.I)
+_DEMAND_TAIL = re.compile(_DEMAND_BODY + r"(?:\s+[a-z0-9]+){0,4}\s*$", re.I)
 # "no stock" and "without stock" name stock without "in" or "out of".
 _NO_STOCK = re.compile(_NEGATOR + _GAP + r"\s+stock\b", re.I)
 _PHRASE = (
@@ -107,6 +118,8 @@ def phrases_in(value: Any) -> list[str]:
     found: list[str] = []
     for token, pattern in _PHRASE:
         for match in pattern.finditer(text):
+            if _DEMAND_TAIL.search(text[:match.start()]):
+                continue
             if _negated(text[:match.start()]):
                 flipped = _flip_stock(token)
                 if flipped and flipped not in found:
@@ -116,6 +129,8 @@ def phrases_in(value: Any) -> list[str]:
                 found.append(token)
     if found:
         return found
+    if _DEMAND_KEEP.search(text):
+        return []
     if _NO_STOCK.search(text):
         return ["OutOfStock"]
     tail = text.rstrip("/").split("/")[-1]

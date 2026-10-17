@@ -3,7 +3,7 @@
 Every gold answer is unverified until Zenas checks it. Scores are provisional.
 
 Change alerts, build set: caught 100.0% (16/16), false alarms 0.0% (0/68).
-Change alerts, held out: caught 100.0% (27/27), false alarms 0.0% (0/98).
+Change alerts, held out: caught 100.0% (27/27), false alarms 0.0% (0/99).
 Changed pages, build set: 100.0% can't read (68/68), guesses 0.
 Changed pages, held out: 100.0% can't read (32/32), guesses 0.
 
@@ -108,6 +108,7 @@ Columns: case id, what changed, expected outcome, actual outcome, verified.
 | ca-negation-kinds-s17 | change-alerts | heldout | synthetic | Zero units in stock stays out. No alarm. | no alert, stock OutOfStock, price 10.00 | no alert, observed, stock OutOfStock, price 10.00 | no |
 | ca-negation-kinds-s18 | change-alerts | heldout | synthetic | Ships today cannot be read. No alarm. | no alert, stock can't read, price 10.00 | no alert, observed, stock can't read, price 10.00 | no |
 | ca-negation-kinds-s19 | change-alerts | heldout | synthetic | Available now cannot be read. No alarm. | no alert, stock can't read, price 10.00 | no alert, observed, stock can't read, price 10.00 | no |
+| ca-negation-kinds-s20 | change-alerts | heldout | synthetic | Couldn't keep it in stock describes demand, not a current outage. Can't read. No alarm. Decided by Zenas. | no alert, stock can't read, price 10.00 | no alert, observed, stock can't read, price 10.00 | decided by Zenas |
 | ca-og-fixture-s00 | change-alerts | build | saved-page | The saved page shows $6.25. | no alert, price 6.25 | no alert, observed, stock InStock, price 6.25 | no |
 | ca-og-fixture-s01 | change-alerts | build | saved-page | The page still shows $6.25. | no alert, price 6.25 | no alert, observed, stock InStock, price 6.25 | no |
 | ca-og-fixture-s02 | change-alerts | build | saved-page | The Open Graph amount is now $7.10. | alert price, price 7.10 | alert price, observed, stock InStock, price 7.10 | no |

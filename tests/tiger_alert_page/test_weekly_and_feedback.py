@@ -21,6 +21,7 @@ def test_review_sheet_is_unverified() -> None:
     assert "unverified until Zenas checks it" in text
     assert "| yes |" not in text
     assert text.count("| no |") > 100
+    assert text.count("| decided by Zenas |") == 1
 
 
 def test_weekly_retest_is_quiet_and_alerts_on_a_drop() -> None:
