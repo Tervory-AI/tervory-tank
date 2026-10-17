@@ -129,6 +129,39 @@ def test_clear_out_of_stock_wording_is_out_of_stock() -> None:
     asyncio.run(check())
 
 
+def test_negation_before_a_stock_phrase() -> None:
+    """not, no, no longer, isn't, none, and 0 before a stock phrase flip it."""
+    longer = (
+        "<p class=\"stock\">no longer in stock</p>"
+        "<script type=\"application/ld+json\">"
+        '{"@type":"Product","offers":{"@type":"Offer","price":"10.00","priceCurrency":"USD",'
+        '"availability":"https://schema.org/InStock"}}'
+        "</script>"
+    )
+    back = "<p class=\"stock\">not out of stock</p>" + _product_html_price("10.00")
+    steps = [
+        ("https://stock.test/flip", "https://schema.org/InStock", "InStock", []),
+        ("https://stock.test/flip", "not out of stock", "InStock", []),
+        ("https://stock.test/flip", "no longer in stock", "OutOfStock", ["stock"]),
+        ("https://stock.test/flip", "not currently in stock", "OutOfStock", []),
+        ("https://stock.test/flip", "isn't in stock", "OutOfStock", []),
+        ("https://stock.test/flip", "none in stock", "OutOfStock", []),
+        ("https://stock.test/flip", "0 in stock", "OutOfStock", []),
+        ("https://stock.test/flip", "no stock", "OutOfStock", []),
+        ("https://stock.test/flip", "Ships today", "can't read", []),
+        ("https://stock.test/flip", "Available now", "can't read", []),
+    ]
+
+    async def check() -> None:
+        store = MemoryStore()
+        for url, availability, stock, kinds in steps:
+            await _once(store, url, "10.00", availability, stock, kinds)
+        await _raw(store, "https://stock.test/longer", longer, "10.00", "OutOfStock", [])
+        await _raw(store, "https://stock.test/back", back, "10.00", "InStock", [])
+
+    asyncio.run(check())
+
+
 def test_unknown_stock_wording_is_visible() -> None:
     """Unknown stock words are can't read. The same phrase in other words is not an alert."""
     pages = [

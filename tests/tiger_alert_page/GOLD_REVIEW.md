@@ -3,7 +3,7 @@
 Every gold answer is unverified until Zenas checks it. Scores are provisional.
 
 Change alerts, build set: caught 100.0% (16/16), false alarms 0.0% (0/68).
-Change alerts, held out: caught 100.0% (25/25), false alarms 0.0% (0/72).
+Change alerts, held out: caught 100.0% (26/26), false alarms 0.0% (0/79).
 Changed pages, build set: 100.0% can't read (68/68), guesses 0.
 Changed pages, held out: 100.0% can't read (32/32), guesses 0.
 
@@ -80,6 +80,14 @@ Columns: case id, what changed, expected outcome, actual outcome, verified.
 | ca-nail-s03 | change-alerts | build | synthetic | Nails dropped from $3.50 to $3.15. | alert price, price 3.15 | alert price, observed, stock InStock, price 3.15 | no |
 | ca-nail-s04 | change-alerts | build | synthetic | Nails stay $3.15. | no alert, price 3.15 | no alert, observed, stock InStock, price 3.15 | no |
 | ca-nail-s05 | change-alerts | build | synthetic | Nails stay $3.15. | no alert, price 3.15 | no alert, observed, stock InStock, price 3.15 | no |
+| ca-negation-s00 | change-alerts | heldout | synthetic | First week is $10, in stock. | no alert, stock InStock, price 10.00 | no alert, observed, stock InStock, price 10.00 | no |
+| ca-negation-s01 | change-alerts | heldout | synthetic | Not out of stock is in stock. No alarm. | no alert, stock InStock, price 10.00 | no alert, observed, stock InStock, price 10.00 | no |
+| ca-negation-s02 | change-alerts | heldout | synthetic | No longer in stock is out of stock. Alert. | alert stock, stock OutOfStock, price 10.00 | alert stock, observed, stock OutOfStock, price 10.00 | no |
+| ca-negation-s03 | change-alerts | heldout | synthetic | Not currently in stock stays out. No alarm. | no alert, stock OutOfStock, price 10.00 | no alert, observed, stock OutOfStock, price 10.00 | no |
+| ca-negation-s04 | change-alerts | heldout | synthetic | Isn't in stock stays out. No alarm. | no alert, stock OutOfStock, price 10.00 | no alert, observed, stock OutOfStock, price 10.00 | no |
+| ca-negation-s05 | change-alerts | heldout | synthetic | None in stock stays out. No alarm. | no alert, stock OutOfStock, price 10.00 | no alert, observed, stock OutOfStock, price 10.00 | no |
+| ca-negation-s06 | change-alerts | heldout | synthetic | 0 in stock stays out. No alarm. | no alert, stock OutOfStock, price 10.00 | no alert, observed, stock OutOfStock, price 10.00 | no |
+| ca-negation-s07 | change-alerts | heldout | synthetic | No stock stays out. No alarm. | no alert, stock OutOfStock, price 10.00 | no alert, observed, stock OutOfStock, price 10.00 | no |
 | ca-og-fixture-s00 | change-alerts | build | saved-page | The saved page shows $6.25. | no alert, price 6.25 | no alert, observed, stock InStock, price 6.25 | no |
 | ca-og-fixture-s01 | change-alerts | build | saved-page | The page still shows $6.25. | no alert, price 6.25 | no alert, observed, stock InStock, price 6.25 | no |
 | ca-og-fixture-s02 | change-alerts | build | saved-page | The Open Graph amount is now $7.10. | alert price, price 7.10 | alert price, observed, stock InStock, price 7.10 | no |

@@ -43,21 +43,25 @@ _AVAIL_FIELD_REV = re.compile(
 )
 
 
-# Clear out-of-stock wording, including a negation of "in stock".
-# Checked before "in stock", so "not in stock" is not read as in stock.
-_OUT = re.compile(
-    r"(?:"
-    r"schema\.org[/\\]+outofstock"
-    r"|\bnot[\s\-]+in[\s\-]*stock\b"
-    r"|\bout[\s\-]*of[\s\-]*stock\b"
-    r"|\bsold[\s\-]*out\b"
-    r"|\boutofstock\b"
-    r"|\bcurrently[\s\-]+unavailable\b"
-    r"|\bunavailable\b"
-    r")",
+# A negator before a stock phrase flips it. "not out of stock" is in stock.
+# "no", "not", "no longer", "isn't", "none", and "0" are the negators.
+_NEG_TAIL = re.compile(
+    r"(?:\bisn['\u2019]t\b|\bisnt\b|\bis\s+not\b|\bno\s+longer\b|\bnone\b|\bnot\b|\bno\b|\b0\b)"
+    r"(?:\s+[a-z0-9]+){0,3}\s*$",
+    re.I,
+)
+# "no stock" has no "in" or "out of" phrase, but the negator is clear.
+_NO_STOCK = re.compile(
+    r"(?:\bisn['\u2019]t\b|\bisnt\b|\bis\s+not\b|\bno\s+longer\b|\bnone\b|\bnot\b|\bno\b|\b0\b)"
+    r"(?:\s+[a-z0-9]+){0,3}\s+stock\b",
     re.I,
 )
 _PHRASE = (
+    ("OutOfStock", re.compile(
+        r"(?:schema\.org[/\\]+outofstock|\bout[\s\-]*of[\s\-]*stock\b|\bsold[\s\-]*out\b"
+        r"|\boutofstock\b|\bunavailable\b)",
+        re.I,
+    )),
     ("LimitedAvailability", re.compile(
         r"(?:schema\.org[/\\]+limitedavailability|\blimited[\s\-]*availability\b|\blimitedavailability\b)",
         re.I,
@@ -77,21 +81,40 @@ _PHRASE = (
 )
 
 
+def _negated(prefix: str) -> bool:
+    return _NEG_TAIL.search(prefix) is not None
+
+
+def _flip_stock(token: str) -> str | None:
+    """Negation swaps in stock and out of stock. Other phrases then cannot be told."""
+    if token == "InStock":
+        return "OutOfStock"
+    if token == "OutOfStock":
+        return "InStock"
+    return None
+
+
 def phrases_in(value: Any) -> list[str]:
-    """Known stock phrases in this wording. Negation wins over "in stock"."""
+    """Known stock phrases in this wording. A negator before the phrase wins."""
     if value is None:
         return []
     text = str(value).strip()
     if not text or text == CANT_READ:
         return []
-    if _OUT.search(text):
-        return ["OutOfStock"]
     found: list[str] = []
     for token, pattern in _PHRASE:
-        if pattern.search(text):
-            found.append(token)
+        for match in pattern.finditer(text):
+            if _negated(text[:match.start()]):
+                flipped = _flip_stock(token)
+                if flipped and flipped not in found:
+                    found.append(flipped)
+                continue
+            if token not in found:
+                found.append(token)
     if found:
         return found
+    if _NO_STOCK.search(text):
+        return ["OutOfStock"]
     tail = text.rstrip("/").split("/")[-1]
     key = re.sub(r"[\s_\-]+", "", tail).lower()
     token = _STOCK.get(key)
