@@ -302,6 +302,21 @@ main:has(.tiger) {
 }
 .tiger .table-foot.end { justify-content: flex-end; }
 
+.tiger .cards { display: none; }
+.tiger .cards li {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tiger .card-top { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+.tiger .cards strong { color: var(--ink); font-weight: 600; }
+.tiger .cards .price { margin: 0; font-family: var(--font-jost), Jost, sans-serif; font-weight: 300; font-size: 22px; color: var(--ink); }
+.tiger .cards p { margin: 0; color: var(--body); font-size: 14px; }
+
 .tiger .tag,
 .tiger .pill {
   display: inline-flex;
@@ -380,6 +395,10 @@ main:has(.tiger) {
 .tiger .sources-label { color: var(--muted) !important; font-size: 12px !important; font-weight: 500; margin-bottom: 4px !important; }
 
 .tiger .composer {
+  position: static;
+  left: auto;
+  right: auto;
+  bottom: auto;
   display: flex;
   gap: 12px;
   align-items: center;
@@ -523,7 +542,7 @@ main:has(.tiger) {
   border-bottom: 0;
   border-radius: 0;
 }
-.tiger .add .who { width: 250px; }
+.tiger .add .who { width: 250px; margin-left: 0; }
 .tiger .add label,
 .tiger .link-form label,
 .tiger .conn-form label,
@@ -609,7 +628,20 @@ main:has(.tiger) {
   .tiger .head h1 { font-size: 36px; }
   .tiger .head .primary,
   .tiger .head .line { width: 100%; }
-  .tiger .counts { flex-direction: column; }
+  .tiger .counts { gap: 8px; }
+  .tiger .count { padding: 12px 10px; }
+  .tiger .count b { font-size: 28px; }
+  .tiger .count strong { font-size: 12px; }
+  .tiger .count .fine { display: none; }
+  .tiger .overview-table { display: none; }
+  .tiger .cards {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
   .tiger .search .hint { display: none; }
   .tiger .popup { padding: 24px 16px; }
   .tiger .scrim { padding: 78px 12px 24px; }

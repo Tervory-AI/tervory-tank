@@ -182,7 +182,24 @@ function Overview({ data, onWatch, onAlerts }: { data: TigerData; onWatch: () =>
           {data.example ? <Tag /> : null}
         </div>
         <p className="intro">The price and stock Tiger read on each watched page, next to that product’s add-to-cart button.</p>
-        <div className="table-wrap">
+        <ul className="cards">
+          {data.products.map((row) => (
+            <li key={row.id}>
+              <div className="card-top">
+                <strong>{row.name}</strong>
+                <Pill status={row.status} />
+              </div>
+              {row.status === "Can't read" ? (
+                <p>Not read. Nothing was guessed.</p>
+              ) : (
+                <p className="price">{row.price} · {row.stock}</p>
+              )}
+              <p className="fine">{row.store}</p>
+              <p className="fine">Checked {row.checked}{data.example ? " · Example" : ""}</p>
+            </li>
+          ))}
+        </ul>
+        <div className="table-wrap overview-table">
           <table>
             <thead><tr><th>Product</th><th>Store</th><th>Price</th><th>Stock</th><th>Last checked</th><th>Status</th></tr></thead>
             <tbody>
@@ -210,7 +227,16 @@ function Overview({ data, onWatch, onAlerts }: { data: TigerData; onWatch: () =>
           {data.example ? <Tag /> : null}
         </div>
         <p className="intro">Only real changes. A page that can’t be read never sends an alert.</p>
-        <div className="table-wrap">
+        <ul className="cards">
+          {recent.map((row) => (
+            <li key={row.id}>
+              <p className="fine">{row.when}</p>
+              <strong>{row.product}</strong>
+              <p>{row.change}</p>
+            </li>
+          ))}
+        </ul>
+        <div className="table-wrap overview-table">
           <table>
             <thead><tr><th>When</th><th>Product</th><th>What changed</th></tr></thead>
             <tbody>
