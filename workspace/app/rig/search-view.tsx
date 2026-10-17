@@ -90,12 +90,17 @@ export function SearchView({ query, onQuery }: { query: string; onQuery: (value:
   }, []);
 
   function applyHits(q: string, hits: Hit[], exact: boolean, message?: string) {
-    const rows: Pistol[] = hits.map((hit) => ({
-      id: String(hit.id ?? ""),
-      name: String(hit.name ?? ""),
-      price: Number(hit.price?.amount ?? 0),
-      market: Number(hit.price?.amount ?? 0),
-    }));
+    const rows: Pistol[] = hits.map((hit) => {
+      const id = String(hit.id ?? "");
+      const known = PISTOLS.find((row) => row.id === id);
+      const amount = Number(hit.price?.amount ?? known?.price ?? 0);
+      return {
+        id,
+        name: String(hit.name ?? known?.name ?? ""),
+        price: Number.isFinite(amount) ? amount : 0,
+        market: known?.market ?? null,
+      };
+    });
     setPistols(rows);
     const noun = hits.every((hit) => hit.category === "Pistols")
       ? rows.length === 1

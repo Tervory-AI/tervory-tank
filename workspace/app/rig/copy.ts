@@ -26,7 +26,7 @@ export type Pistol = {
   id: string;
   name: string;
   price: number;
-  market: number;
+  market: number | null;
 };
 
 export const PISTOLS: Pistol[] = [
