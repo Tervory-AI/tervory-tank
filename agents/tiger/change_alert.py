@@ -43,12 +43,21 @@ _AVAIL_FIELD_REV = re.compile(
 )
 
 
-# Longer phrases first, so "out of stock" is not read as "in stock".
+# Clear out-of-stock wording, including a negation of "in stock".
+# Checked before "in stock", so "not in stock" is not read as in stock.
+_OUT = re.compile(
+    r"(?:"
+    r"schema\.org[/\\]+outofstock"
+    r"|\bnot[\s\-]+in[\s\-]*stock\b"
+    r"|\bout[\s\-]*of[\s\-]*stock\b"
+    r"|\bsold[\s\-]*out\b"
+    r"|\boutofstock\b"
+    r"|\bcurrently[\s\-]+unavailable\b"
+    r"|\bunavailable\b"
+    r")",
+    re.I,
+)
 _PHRASE = (
-    ("OutOfStock", re.compile(
-        r"(?:schema\.org[/\\]+outofstock|\bout[\s\-]*of[\s\-]*stock\b|\bsold[\s\-]*out\b|\boutofstock\b)",
-        re.I,
-    )),
     ("LimitedAvailability", re.compile(
         r"(?:schema\.org[/\\]+limitedavailability|\blimited[\s\-]*availability\b|\blimitedavailability\b)",
         re.I,
@@ -69,12 +78,14 @@ _PHRASE = (
 
 
 def phrases_in(value: Any) -> list[str]:
-    """Known stock phrases used in this wording, including a phrase with extra words."""
+    """Known stock phrases in this wording. Negation wins over "in stock"."""
     if value is None:
         return []
     text = str(value).strip()
     if not text or text == CANT_READ:
         return []
+    if _OUT.search(text):
+        return ["OutOfStock"]
     found: list[str] = []
     for token, pattern in _PHRASE:
         if pattern.search(text):
@@ -98,8 +109,9 @@ def stock_token(value: Any) -> str | None:
 def stock_reading(value: Any) -> str | None:
     """A known stock phrase, nothing when stock was not stated, or "can't read".
 
-    A known phrase is recorded even when extra words sit around it. Wording
-    with no known phrase is "can't read" and is not an alert.
+    Clear out-of-stock wording is out of stock. "Can't read" is only when
+    the stock cannot be told. A known in-stock phrase with extra words stays
+    in stock.
     """
     if value is None:
         return None
@@ -140,11 +152,11 @@ def stock_statements(html: str) -> list[str]:
 
 
 def record_stock(statements: list[str]) -> str | None:
-    """Record the known phrase. One looser line does not veto it.
+    """Record the stock the page states. Out of stock wins over in stock.
 
-    Extra words around a known phrase still count. Wording with no known
-    phrase is "can't read" only when the page has no known phrase at all.
-    Two different known phrases are "can't read" and do not alert.
+    "Not in stock" is out of stock, not in stock. One unclear line does not
+    veto a known phrase. "Can't read" is only when no clear stock phrase is
+    there, or two different phrases still disagree and neither is out of stock.
     """
     if not statements:
         return None
@@ -159,6 +171,8 @@ def record_stock(statements: list[str]) -> str | None:
         for token in found:
             if token not in tokens:
                 tokens.append(token)
+    if "OutOfStock" in tokens:
+        return "OutOfStock"
     if len(tokens) == 1:
         return tokens[0]
     if len(tokens) > 1:

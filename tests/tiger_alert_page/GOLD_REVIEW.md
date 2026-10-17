@@ -3,7 +3,7 @@
 Every gold answer is unverified until Zenas checks it. Scores are provisional.
 
 Change alerts, build set: caught 100.0% (16/16), false alarms 0.0% (0/68).
-Change alerts, held out: caught 100.0% (24/24), false alarms 0.0% (0/66).
+Change alerts, held out: caught 100.0% (25/25), false alarms 0.0% (0/72).
 Changed pages, build set: 100.0% can't read (68/68), guesses 0.
 Changed pages, held out: 100.0% can't read (32/32), guesses 0.
 
@@ -88,6 +88,13 @@ Columns: case id, what changed, expected outcome, actual outcome, verified.
 | ca-oil-s02 | change-alerts | build | synthetic | Oil stays $25. | no alert, price 25.00 | no alert, observed, stock InStock, price 25.00 | no |
 | ca-oil-s03 | change-alerts | build | synthetic | Oil stays $25. | no alert, price 25.00 | no alert, observed, stock InStock, price 25.00 | no |
 | ca-oil-s04 | change-alerts | build | synthetic | Oil stays $25. | no alert, price 25.00 | no alert, observed, stock InStock, price 25.00 | no |
+| ca-out-words-s00 | change-alerts | heldout | synthetic | First week is $10, in stock. | no alert, stock InStock, price 10.00 | no alert, observed, stock InStock, price 10.00 | no |
+| ca-out-words-s01 | change-alerts | heldout | synthetic | Not in stock is out of stock. The negation wins. Alert. | alert stock, stock OutOfStock, price 10.00 | alert stock, observed, stock OutOfStock, price 10.00 | no |
+| ca-out-words-s02 | change-alerts | heldout | synthetic | Out of stock stays out. No alarm. | no alert, stock OutOfStock, price 10.00 | no alert, observed, stock OutOfStock, price 10.00 | no |
+| ca-out-words-s03 | change-alerts | heldout | synthetic | Sold out stays out. No alarm. | no alert, stock OutOfStock, price 10.00 | no alert, observed, stock OutOfStock, price 10.00 | no |
+| ca-out-words-s04 | change-alerts | heldout | synthetic | Currently unavailable is out of stock. No alarm. | no alert, stock OutOfStock, price 10.00 | no alert, observed, stock OutOfStock, price 10.00 | no |
+| ca-out-words-s05 | change-alerts | heldout | synthetic | Ships today cannot be read. No alarm. | no alert, stock can't read, price 10.00 | no alert, observed, stock can't read, price 10.00 | no |
+| ca-out-words-s06 | change-alerts | heldout | synthetic | Available now cannot be read. No alarm. | no alert, stock can't read, price 10.00 | no alert, observed, stock can't read, price 10.00 | no |
 | ca-pan-s00 | change-alerts | build | synthetic | First week is $55. | no alert, price 55.00 | no alert, observed, stock InStock, price 55.00 | no |
 | ca-pan-s01 | change-alerts | build | synthetic | The pan stays $55. | no alert, price 55.00 | no alert, observed, stock InStock, price 55.00 | no |
 | ca-pan-s02 | change-alerts | build | synthetic | The pan stays $55. | no alert, price 55.00 | no alert, observed, stock InStock, price 55.00 | no |

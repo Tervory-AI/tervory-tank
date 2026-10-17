@@ -46,6 +46,7 @@ HOLDOUT_IDS = {
     "ca-blocked-then",
     "ca-missing-then",
     "ca-stock-words",
+    "ca-out-words",
     "ca-after-unknown",
     "ca-prompt-page",
     "ca-strip-decoy",
@@ -353,6 +354,15 @@ def alert_series() -> list[dict]:
             _p("10.00", "10.00", "Available now is not a known stock phrase. Stock is can't read. No alarm.", alert=False, availability="Available now", stock="can't read"),
             _p("10.00", "10.00", "In stock (22 available) uses the known phrase in stock. Record in stock. No alarm.", alert=False, availability="In stock (22 available)", stock="InStock"),
             _p("10.00", "10.00", "45 in stock uses the known phrase in stock. Record in stock. No alarm.", alert=False, availability="45 in stock", stock="InStock"),
+        ], "synthetic"),
+        _series("ca-out-words", "0", "Clear out-of-stock wording is out of stock. It alerts when stock changes. Unclear wording stays can't read.", [
+            _p("10.00", "10.00", "First week is $10, in stock.", alert=False, stock="InStock"),
+            _p("10.00", "10.00", "Not in stock is out of stock. The negation wins. Alert.", alert=True, kinds=("stock",), availability="not in stock", stock="OutOfStock"),
+            _p("10.00", "10.00", "Out of stock stays out. No alarm.", alert=False, availability="out of stock", stock="OutOfStock"),
+            _p("10.00", "10.00", "Sold out stays out. No alarm.", alert=False, availability="sold out", stock="OutOfStock"),
+            _p("10.00", "10.00", "Currently unavailable is out of stock. No alarm.", alert=False, availability="currently unavailable", stock="OutOfStock"),
+            _p("10.00", "10.00", "Ships today cannot be read. No alarm.", alert=False, availability="Ships today", stock="can't read"),
+            _p("10.00", "10.00", "Available now cannot be read. No alarm.", alert=False, availability="Available now", stock="can't read"),
         ], "synthetic"),
         _series("ca-after-unknown", "0", "Unknown stock is can't read. A later known out-of-stock still alerts.", [
             _p("10.00", "10.00", "First week is $10, in stock.", alert=False, stock="InStock"),
