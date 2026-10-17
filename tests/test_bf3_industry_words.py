@@ -90,7 +90,7 @@ def test_engine_file_holds_the_lists_the_call_site_forwards() -> None:
     assert terms["generic_words"]
     assert terms["blocked_hosts"]
     assert terms["generic_locals"]
-    loaded = engine_terms("ffl")
+    loaded = engine_terms("ffl", "1.1.0")
     assert loaded["generic_words"] == terms["generic_words"]
     assert loaded["blocked_hosts"] == terms["blocked_hosts"]
     assert loaded["generic_locals"] == terms["generic_locals"]
@@ -184,7 +184,7 @@ async def test_the_call_site_passes_engine_lists_only_for_that_engine() -> None:
         return {"confidence": 0}
 
     raw = {"name": "Harbor Arms Bakery"}
-    armed = await enrich_one(raw, None, [], "ffl", call)
+    armed = await enrich_one(raw, None, [], "ffl", call, None, "1.1.0")
     assert armed.status == "done", armed.error
     terms = _terms()
     assert seen["base.find_site"]["generic_words"] == terms["generic_words"]

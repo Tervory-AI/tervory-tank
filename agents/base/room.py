@@ -180,6 +180,17 @@ class SkillClient:
             refs[skill_id] = ref if isinstance(ref, str) and ref else f"{skill_id}@{version}"
         return versions, refs
 
+    async def approved(self, skill_id: str) -> str | None:
+        """The approved version only (never preview, never staging). None when Skala has none."""
+        try:
+            data = await self.describe(skill_id, False)
+        except SkillError as exc:
+            if exc.status in (404, 409):
+                return None
+            raise
+        version = data.get("version")
+        return version if isinstance(version, str) and version else None
+
     def bind(self, versions: dict[str, str], preview: bool, tenant_id: str) -> SkillCall:
         async def call(skill_id: str, payload: dict[str, Any]) -> dict[str, Any]:
             response = await self._http.post(
@@ -328,6 +339,7 @@ async def _run_batch(pool: Any, task_id: uuid.UUID, cfg: dict[str, Any], call: S
         models_paused,
         int(cfg.get("concurrency") or 8),
         cfg.get("refs") if isinstance(cfg.get("refs"), dict) else None,
+        cfg.get("engine_data_version") if isinstance(cfg.get("engine_data_version"), str) else None,
     )
     async with pool.acquire() as conn:
         for index, outcome in outcomes:
@@ -427,6 +439,10 @@ async def base_loop(pool: Any, skills: SkillClient) -> None:
             try:
                 versions, refs = await skills.pin(bool(cfg.get("preview")), cfg.get("engine"))
                 cfg["refs"] = refs
+                # Word lists come only from the approved engine profile, even on a preview batch.
+                cfg["engine_data_version"] = (
+                    await skills.approved(f"{cfg['engine']}.profile") if cfg.get("engine") else None
+                )
                 call = skills.bind(versions, bool(cfg.get("preview")), str(row["tenant_id"]))
                 await _run_batch(pool, row["id"], cfg, call)
             except Exception as exc:  # noqa: BLE001 — one bad batch must not stop the queue
