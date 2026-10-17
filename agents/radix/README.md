@@ -40,3 +40,19 @@ The secret text is not a column. It is masked out of the summary, the rows, and 
 - Run exploits, or anything beyond detection.
 - Store a secret it finds. It records the type, the file, and the line. Never the value.
 - Reach another Squad member's corridor.
+
+## RX-2 preparation
+
+[RX-2 controlled egress preparation](RX2-egress-plan.md) records the host approval
+gate, the prepared HTTP checks, and the network tests still required. No external
+host is approved by this change; the room remains sealed. RX-3 and RX-4 wait.
+
+The guard accepts exact ASCII DNS names and HTTP/HTTPS default ports only.
+It returns redirects without following them, refuses a different Host header,
+and ignores environment proxy settings. This application check is not a
+substitute for the approved egress proxy and network isolation.
+
+Guard tests run in GitHub Actions with the repository's existing `pytest -q`
+command. A cloud worker can run them directly with
+`pytest -q agents/radix/tests/test_egress_guard.py`; do not run builds on the
+founder's laptop.
