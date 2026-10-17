@@ -1,10 +1,13 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState, type DragEvent, type FormEvent } from "react";
 import { useFormStatus } from "react-dom";
 import { headerLinks } from "../product-nav";
 import { MARKET_LAB_LOGO_SRC } from "./catalog";
 import type { LinkGroupView, OnCard, PageModel } from "./model";
+import { formatDay } from "./format";
+import type { KeyFlags } from "./catalog";
 import {
   PLUGIN_TABS,
   POPUP_TITLE,
@@ -13,11 +16,27 @@ import {
   STUB_KEY,
   STUB_LINK,
   STUB_MCP,
+  VAULT_OFF_MESSAGE,
   type AnswerSource,
+  type ConnectionMeta,
+  type FileMeta,
+  type PluginPanel,
   type PluginTab,
-  clientPluginState,
+  type SecretMeta,
+  feedKeyCatalog,
+  formatBytes,
   searchMarketLab,
 } from "./plugins";
+import {
+  addLabConnection,
+  addLabLink,
+  removeLabConnection,
+  removeLabFile,
+  removeLabLink,
+  removeLabSecret,
+  saveLabKey,
+  uploadLabFiles,
+} from "./plugin-actions";
 
 const SECTIONS = [
   { id: "overview", label: "Overview" },
@@ -196,21 +215,25 @@ function ChatBox() {
 function PluginsDialog({
   open,
   tab,
-  flags,
+  plugins,
+  envKeys,
   onTab,
   onClose,
 }: {
   open: boolean;
   tab: PluginTab;
-  flags: ReturnType<typeof clientPluginState>;
+  plugins: PluginPanel;
+  envKeys: KeyFlags;
   onTab: (tab: PluginTab) => void;
   onClose: () => void;
 }) {
+  const router = useRouter();
   const titleId = useId();
   const fileRef = useRef<HTMLInputElement>(null);
   const [note, setNote] = useState("");
   const [cadence, setCadence] = useState<"Daily" | "Weekly">("Daily");
   const [signIn, setSignIn] = useState<"provider" | "token">("token");
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!open) setNote("");
@@ -218,37 +241,95 @@ function PluginsDialog({
 
   if (!open) return null;
 
-  function refuseKey(event: FormEvent<HTMLFormElement>) {
+  async function finish(result: { ok: boolean; message: string }) {
+    setNote(result.message);
+    if (result.ok) router.refresh();
+  }
+
+  async function onSaveKey(event: FormEvent<HTMLFormElement>, name: string, purpose: string) {
     event.preventDefault();
+    if (!plugins.enabled || busy) return;
     const form = event.currentTarget;
-    const field = form.querySelector<HTMLInputElement>("input[type=password]");
-    const value = field?.value.trim() ?? "";
+    const value = form.querySelector<HTMLInputElement>("input[type=password]")?.value ?? "";
     form.reset();
-    setNote(value ? STUB_KEY : "Add a key first. Nothing was stored.");
+    if (!value.trim()) {
+      setNote(STUB_KEY);
+      return;
+    }
+    setBusy(true);
+    try {
+      await finish(await saveLabKey(name, value, purpose));
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function refuseFile() {
-    const count = fileRef.current?.files?.length ?? 0;
+  async function onRemoveKey(name: string) {
+    if (!plugins.enabled || busy) return;
+    setBusy(true);
+    try {
+      await finish(await removeLabSecret(name));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onFiles(list: FileList | File[] | null) {
+    if (!plugins.enabled || busy) return;
+    const files = list ? Array.from(list) : [];
     if (fileRef.current) fileRef.current.value = "";
-    if (count > 0) setNote(STUB_FILE);
+    if (!files.length) {
+      setNote(STUB_FILE);
+      return;
+    }
+    const body = new FormData();
+    for (const file of files) body.append("file", file);
+    setBusy(true);
+    try {
+      await finish(await uploadLabFiles(body));
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function refuseLink(event: FormEvent<HTMLFormElement>) {
+  async function onAddLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!plugins.enabled || busy) return;
     const form = event.currentTarget;
     const url = form.querySelector<HTMLInputElement>("input[name=link]")?.value.trim() ?? "";
+    const label = form.querySelector<HTMLInputElement>("input[name=label]")?.value.trim() ?? "";
     form.reset();
     setCadence("Daily");
-    setNote(url ? STUB_LINK : "Add a link first. Nothing was saved.");
+    if (!url) {
+      setNote(STUB_LINK);
+      return;
+    }
+    setBusy(true);
+    try {
+      await finish(await addLabLink(url, label, cadence === "Daily" ? "daily" : "weekly"));
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function refuseConnection(event: FormEvent<HTMLFormElement>) {
+  async function onAddConnection(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!plugins.enabled || busy) return;
     const form = event.currentTarget;
     const name = form.querySelector<HTMLInputElement>("input[name=connection-name]")?.value.trim() ?? "";
     const url = form.querySelector<HTMLInputElement>("input[name=server]")?.value.trim() ?? "";
+    const token = form.querySelector<HTMLInputElement>("input[type=password]")?.value ?? "";
     form.reset();
-    setNote(name && url ? STUB_MCP : "Add a name and a server URL first. Nothing was saved.");
+    if (!name || !url) {
+      setNote(STUB_MCP);
+      return;
+    }
+    setBusy(true);
+    try {
+      await finish(await addLabConnection(name, url, signIn, token));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -288,71 +369,113 @@ function PluginsDialog({
           ))}
         </div>
         {note ? <p className="ml-stub">{note}</p> : null}
-        {tab === "API keys" ? (
+        {!plugins.enabled ? (
+          <p className="ml-lead">{plugins.message || VAULT_OFF_MESSAGE}</p>
+        ) : tab === "API keys" ? (
           <div className="ml-tab-body">
             <p className="ml-lead">Keys for public feeds and your suppliers. A key is write-only: once saved it is never shown again.</p>
             <div className="ml-plist">
-              {flags.keys.map((row) => (
-                <form className="ml-prow" key={row.name} onSubmit={refuseKey}>
-                  <div className="ml-prow-top">
-                    <h3>{row.title}</h3>
-                    <span className={row.connected ? "ml-chip" : "ml-chip ml-chip-off"}>
-                      <span className="ml-dot" aria-hidden="true" />
-                      {row.connected ? "Connected" : "Not set"}
-                    </span>
-                  </div>
-                  <p>{row.summary}</p>
-                  {row.connected ? (
-                    <p className="ml-secret">•••• set in the environment</p>
-                  ) : (
+              {feedKeyCatalog().map((row) => {
+                const saved = secretFor(plugins.secrets, row.name);
+                const fromEnv = Boolean(envKeys[row.name]);
+                const connected = Boolean(saved || fromEnv);
+                return (
+                  <form className="ml-prow" key={row.name} onSubmit={(event) => onSaveKey(event, row.name, row.summary)}>
+                    <div className="ml-prow-top">
+                      <h3>{row.title}</h3>
+                      <span className={connected ? "ml-chip" : "ml-chip ml-chip-off"}>
+                        <span className="ml-dot" aria-hidden="true" />
+                        {connected ? "Connected" : "Not set"}
+                      </span>
+                    </div>
+                    <p>{row.summary}</p>
+                    {saved ? <p className="ml-secret">{saved.mask} Saved {saved.savedAt ? formatDay(saved.savedAt) : ""}</p> : null}
+                    {fromEnv ? <p className="ml-secret">set in the environment</p> : null}
                     <div className="ml-keyline">
                       <label className="ml-sr" htmlFor={`key-${row.name}`}>
                         {row.title} key
                       </label>
-                      <input id={`key-${row.name}`} type="password" autoComplete="off" placeholder="Paste key" />
-                      <button className="ml-outline" type="submit">
-                        Save
+                      <input id={`key-${row.name}`} type="password" autoComplete="off" placeholder={saved ? "Replace key" : "Paste key"} disabled={busy} />
+                      <button className="ml-outline" type="submit" disabled={busy}>
+                        {saved ? "Replace" : "Save"}
                       </button>
+                      {saved ? (
+                        <button className="ml-text" type="button" disabled={busy} onClick={() => onRemoveKey(row.name)}>
+                          Remove
+                        </button>
+                      ) : null}
                     </div>
-                  )}
-                </form>
+                  </form>
+                );
+              })}
+              {plugins.secrets.filter((row) => !isFeedKey(row.name)).map((row) => (
+                <div className="ml-prow" key={row.name}>
+                  <div className="ml-prow-top">
+                    <h3>{row.name}</h3>
+                    <span className="ml-chip">
+                      <span className="ml-dot" aria-hidden="true" />
+                      Saved
+                    </span>
+                  </div>
+                  <p>{row.purpose}</p>
+                  <p className="ml-secret">{row.mask}{row.savedAt ? ` Saved ${formatDay(row.savedAt)}` : ""}</p>
+                  <button className="ml-text" type="button" disabled={busy} onClick={() => onRemoveKey(row.name)}>
+                    Remove
+                  </button>
+                </div>
               ))}
             </div>
-            <form className="ml-supplier" onSubmit={refuseKey}>
+            <form
+              className="ml-supplier"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const form = event.currentTarget;
+                const name = form.querySelector<HTMLInputElement>("input[name=supplier]")?.value.trim() ?? "";
+                const value = form.querySelector<HTMLInputElement>("input[type=password]")?.value ?? "";
+                form.reset();
+                if (!name || !value.trim()) {
+                  setNote(STUB_KEY);
+                  return;
+                }
+                setBusy(true);
+                void saveLabKey(name, value, "Supplier key")
+                  .then((result) => finish(result))
+                  .finally(() => setBusy(false));
+              }}
+            >
               <h3>Add a supplier key</h3>
               <p>For a supplier that gives you an API key.</p>
               <div className="ml-keyline">
                 <label>
                   Supplier name
-                  <input name="supplier" type="text" autoComplete="off" placeholder="Supplier name" />
+                  <input name="supplier" type="text" autoComplete="off" placeholder="Supplier name" disabled={busy} />
                 </label>
                 <label>
                   Key
-                  <input type="password" autoComplete="off" placeholder="Paste key (hidden once saved)" />
+                  <input type="password" autoComplete="off" placeholder="Paste key (hidden once saved)" disabled={busy} />
                 </label>
-                <button className="ml-primary" type="submit">
+                <button className="ml-primary" type="submit" disabled={busy}>
                   Save key
                 </button>
               </div>
             </form>
             <p className="ml-fine">Keys are stored on the server, never in the app code.</p>
           </div>
-        ) : null}
-        {tab === "Files" ? (
+        ) : tab === "Files" ? (
           <div className="ml-tab-body">
             <h3 className="ml-subhead">Files</h3>
-            <p className="ml-lead">Upload price lists, inventory, reports or rules. CSV files can be matched to the right columns.</p>
+            <p className="ml-lead">Upload price lists, inventory, reports or rules. CSV, XLSX, and PDF only.</p>
             <div
               className="ml-drop"
               onDragOver={(event: DragEvent) => event.preventDefault()}
               onDrop={(event: DragEvent) => {
                 event.preventDefault();
-                if (event.dataTransfer.files.length > 0) setNote(STUB_FILE);
+                void onFiles(event.dataTransfer.files);
               }}
             >
               <p className="ml-drop-title">Drag CSV, XLSX or PDF files here</p>
               <p className="ml-or">or</p>
-              <button className="ml-primary" type="button" onClick={() => fileRef.current?.click()}>
+              <button className="ml-primary" type="button" disabled={busy} onClick={() => fileRef.current?.click()}>
                 Choose files
               </button>
               <input
@@ -361,24 +484,31 @@ function PluginsDialog({
                 type="file"
                 accept=".csv,.xlsx,.pdf,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 multiple
-                onChange={refuseFile}
+                onChange={() => void onFiles(fileRef.current?.files ?? null)}
               />
             </div>
-            <p className="ml-fine">No files stored.</p>
+            {plugins.files.length ? (
+              <div className="ml-plist">
+                {plugins.files.map((file) => (
+                  <FileRow key={file.id} file={file} busy={busy} onRemove={() => void removeLabFile(file.id).then((result) => finish(result))} />
+                ))}
+              </div>
+            ) : (
+              <p className="ml-fine">No files stored.</p>
+            )}
           </div>
-        ) : null}
-        {tab === "Source links" ? (
+        ) : tab === "Source links" ? (
           <div className="ml-tab-body">
             <h3 className="ml-subhead">Source links</h3>
             <p className="ml-lead">Pages Market Lab checks for changes, such as rule pages, season dates or port stats.</p>
-            <form className="ml-linkform" onSubmit={refuseLink}>
+            <form className="ml-linkform" onSubmit={onAddLink}>
               <label>
                 Link
-                <input name="link" type="url" placeholder="Paste a link, e.g. https://…" />
+                <input name="link" type="url" placeholder="Paste a link, e.g. https://…" disabled={busy} />
               </label>
               <label>
                 Label (optional)
-                <input name="label" type="text" placeholder="e.g. Texas seasons" />
+                <input name="label" type="text" placeholder="e.g. Texas seasons" disabled={busy} />
               </label>
               <div>
                 <p className="ml-field-label">How often to check</p>
@@ -391,28 +521,53 @@ function PluginsDialog({
                   </button>
                 </div>
               </div>
-              <button className="ml-primary" type="submit">
+              <button className="ml-primary" type="submit" disabled={busy}>
                 Add link
               </button>
             </form>
-            <p className="ml-fine">No links stored.</p>
+            {plugins.links.length ? (
+              <div className="ml-plist">
+                {plugins.links.map((link) => (
+                  <div className="ml-prow" key={link.id}>
+                    <h3>{link.label}</h3>
+                    <p>{link.url}</p>
+                    <p className="ml-fine">
+                      {link.frequency === "daily" ? "Daily" : "Weekly"} · {link.status}
+                      {link.lastChecked ? ` · ${formatDay(link.lastChecked)}` : ""}
+                    </p>
+                    <button className="ml-text" type="button" disabled={busy} onClick={() => void removeLabLink(link.id).then((result) => finish(result))}>
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="ml-fine">No links stored.</p>
+            )}
           </div>
-        ) : null}
-        {tab === "MCP connections" ? (
+        ) : (
           <div className="ml-tab-body">
             <h3 className="ml-subhead">MCP connections</h3>
             <p className="ml-lead">Connections to outside tools and data servers that Market Lab can read from.</p>
-            <p className="ml-fine">No connections stored.</p>
-            <form className="ml-mcp" onSubmit={refuseConnection}>
+            {plugins.connections.length ? (
+              <div className="ml-plist">
+                {plugins.connections.map((item) => (
+                  <ConnectionRow key={item.id} item={item} busy={busy} onRemove={() => void removeLabConnection(item.id).then((result) => finish(result))} />
+                ))}
+              </div>
+            ) : (
+              <p className="ml-fine">No connections stored.</p>
+            )}
+            <form className="ml-mcp" onSubmit={onAddConnection}>
               <h3>Add connection</h3>
               <div className="ml-mcp-row">
                 <label>
                   Name
-                  <input name="connection-name" type="text" placeholder="e.g. Supplier catalogue" />
+                  <input name="connection-name" type="text" placeholder="e.g. Supplier catalogue" disabled={busy} />
                 </label>
                 <label>
                   Server URL
-                  <input name="server" type="url" placeholder="https://…" />
+                  <input name="server" type="url" placeholder="https://…" disabled={busy} />
                 </label>
               </div>
               <div className="ml-mcp-row">
@@ -430,17 +585,17 @@ function PluginsDialog({
                 {signIn === "token" ? (
                   <label>
                     Token
-                    <input type="password" autoComplete="off" placeholder="Paste token (hidden once saved)" />
+                    <input type="password" autoComplete="off" placeholder="Paste token (hidden once saved)" disabled={busy} />
                   </label>
                 ) : null}
-                <button className="ml-primary" type="submit">
+                <button className="ml-primary" type="submit" disabled={busy}>
                   Add connection
                 </button>
               </div>
               <p className="ml-fine">A saved token is shown only as dots, and is never shown again.</p>
             </form>
           </div>
-        ) : null}
+        )}
       </div>
     </div>
   );
@@ -448,11 +603,15 @@ function PluginsDialog({
 
 export function MarketLabView({
   model,
+  plugins,
+  envKeys,
   refresh,
   founder,
   workspaceName,
 }: {
   model: PageModel;
+  plugins: PluginPanel;
+  envKeys: KeyFlags;
   refresh: () => Promise<void>;
   founder: boolean;
   workspaceName: string | null;
@@ -464,13 +623,6 @@ export function MarketLabView({
   const [query, setQuery] = useState("");
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const searchId = useId();
-  const pluginState = clientPluginState({
-    CENSUS_API_KEY: censusOn(model),
-    LEGISCAN_API_KEY: keyedOn(model, "legiscan"),
-    EIA_API_KEY: keyedOn(model, "eia_diesel"),
-    NOAA_TOKEN: keyedOn(model, "noaa_climate"),
-    FRED_API_KEY: keyedOn(model, "fred"),
-  });
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -688,17 +840,58 @@ export function MarketLabView({
           </footer>
         </div>
       </div>
-      <PluginsDialog open={pluginsOpen} tab={tab} flags={pluginState} onTab={setTab} onClose={() => setPluginsOpen(false)} />
+      <PluginsDialog
+        open={pluginsOpen}
+        tab={tab}
+        plugins={plugins}
+        envKeys={envKeys}
+        onTab={setTab}
+        onClose={() => setPluginsOpen(false)}
+      />
     </div>
   );
 }
 
-function censusOn(model: PageModel): boolean {
-  return keyedOn(model, "census_population") || keyedOn(model, "census_trade");
+function secretFor(secrets: SecretMeta[], name: string): SecretMeta | undefined {
+  return secrets.find((row) => row.name === name);
 }
 
-function keyedOn(model: PageModel, id: string): boolean {
-  return [...model.featured, ...model.cards].some((card) => card.id === id);
+function isFeedKey(name: string): boolean {
+  return feedKeyCatalog().some((row) => row.name === name);
+}
+
+function FileRow({ file, busy, onRemove }: { file: FileMeta; busy: boolean; onRemove: () => void }) {
+  const count = file.rows != null ? `${file.rows} rows` : file.pages != null ? `${file.pages} pages` : "";
+  return (
+    <div className="ml-prow">
+      <h3>{file.name}</h3>
+      <p className="ml-fine">
+        {file.status} · {formatBytes(file.size)}
+        {count ? ` · ${count}` : ""}
+        {file.uploadedAt ? ` · ${formatDay(file.uploadedAt)}` : ""}
+      </p>
+      <button className="ml-text" type="button" disabled={busy} onClick={onRemove}>
+        Remove
+      </button>
+    </div>
+  );
+}
+
+function ConnectionRow({ item, busy, onRemove }: { item: ConnectionMeta; busy: boolean; onRemove: () => void }) {
+  return (
+    <div className="ml-prow">
+      <h3>{item.name}</h3>
+      <p>{item.serverUrl}</p>
+      <p className="ml-fine">
+        {item.authType === "token" ? "Token" : "Sign in with the provider"} · {item.status}
+        {item.hasToken ? " · ••••••••" : ""}
+        {item.lastUsed ? ` · ${formatDay(item.lastUsed)}` : ""}
+      </p>
+      <button className="ml-text" type="button" disabled={busy} onClick={onRemove}>
+        Remove
+      </button>
+    </div>
+  );
 }
 
 function GroupCard({ group, open, onToggle }: { group: LinkGroupView; open: boolean; onToggle: () => void }) {

@@ -357,3 +357,153 @@ export function listTigerAlerts(tenantId: string, url?: string): Promise<{ alert
   if (url) q.set("url", url);
   return tigerCall<{ alerts: TigerAlert[] }>(`/v1/tiger/alerts?${q}`, { method: "GET" });
 }
+
+// ---- Plugins vaults. Server-side only. The browser never receives a secret value. ----
+
+export const VAULT_OFF_MESSAGE = "This vault is off. Turn it on in Tank.";
+
+export type VaultPlugins = {
+  vault: string;
+  enabled: boolean;
+  message: string | null;
+  secrets: { name: string; purpose: string; mask: string; saved_at: string }[];
+  files: { id: string; name: string; type: string; size: number; rows: number | null; pages: number | null; uploaded_at: string; status: string }[];
+  links: { id: string; url: string; label: string; frequency: string; last_checked: string | null; status: string }[];
+  connections: { id: string; name: string; server_url: string; auth_type: string; status: string; last_used: string | null; has_token: boolean }[];
+};
+
+async function vaultFetch(path: string, userId: string, squad: string, init: RequestInit): Promise<Response> {
+  const headers = new Headers(init.headers);
+  headers.set("x-tank-key", TANK_API_KEY);
+  headers.set("x-tervory-user", userId);
+  headers.set("x-tervory-squad", squad);
+  if (typeof init.body === "string" && !headers.has("content-type")) headers.set("content-type", "application/json");
+  return fetch(`${TANK_URL}${path}`, { ...init, headers, cache: "no-store" });
+}
+
+async function vaultJson<T>(path: string, userId: string, squad: string, init: RequestInit): Promise<T> {
+  const res = await vaultFetch(path, userId, squad, init);
+  const text = await res.text();
+  if (!res.ok) throw new Error(`Tank ${path} ${res.status}: ${text.slice(0, 180)}`);
+  return (text ? JSON.parse(text) : {}) as T;
+}
+
+export function vaultPlugins(vault: string, squad: string, tenantId: string, userId: string): Promise<VaultPlugins> {
+  const q = new URLSearchParams({ tenant_id: tenantId });
+  return vaultJson<VaultPlugins>(`/v1/vaults/${encodeURIComponent(vault)}/plugins?${q}`, userId, squad, { method: "GET" });
+}
+
+export function saveVaultSecret(
+  vault: string,
+  squad: string,
+  tenantId: string,
+  userId: string,
+  name: string,
+  purpose: string,
+  value: string,
+): Promise<{ ok: boolean }> {
+  return vaultJson(`/v1/vaults/${encodeURIComponent(vault)}/secrets`, userId, squad, {
+    method: "POST",
+    body: JSON.stringify({ tenant_id: tenantId, name, purpose, value }),
+  });
+}
+
+export function removeVaultSecret(vault: string, squad: string, tenantId: string, userId: string, name: string): Promise<{ ok: boolean }> {
+  const q = new URLSearchParams({ tenant_id: tenantId, name });
+  return vaultJson(`/v1/vaults/${encodeURIComponent(vault)}/secrets?${q}`, userId, squad, { method: "DELETE" });
+}
+
+/** Server-only. Do not pass the result to a client component. */
+export async function resolveVaultSecret(
+  vault: string,
+  squad: string,
+  tenantId: string,
+  userId: string,
+  name: string,
+): Promise<string | null> {
+  const body = await vaultJson<{ found?: boolean; value?: string }>(
+    `/v1/vaults/${encodeURIComponent(vault)}/secrets/resolve`,
+    userId,
+    squad,
+    { method: "POST", body: JSON.stringify({ tenant_id: tenantId, name }) },
+  );
+  return body.found && typeof body.value === "string" ? body.value : null;
+}
+
+export async function uploadVaultFiles(
+  vault: string,
+  squad: string,
+  tenantId: string,
+  userId: string,
+  files: FormData,
+): Promise<{ ok: boolean }> {
+  const q = new URLSearchParams({ tenant_id: tenantId });
+  const res = await vaultFetch(`/v1/vaults/${encodeURIComponent(vault)}/files?${q}`, userId, squad, {
+    method: "POST",
+    body: files,
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`Tank /files ${res.status}: ${text.slice(0, 180)}`);
+  return { ok: true };
+}
+
+export function removeVaultFile(vault: string, squad: string, tenantId: string, userId: string, fileId: string): Promise<{ ok: boolean }> {
+  const q = new URLSearchParams({ tenant_id: tenantId });
+  return vaultJson(`/v1/vaults/${encodeURIComponent(vault)}/files/${encodeURIComponent(fileId)}?${q}`, userId, squad, {
+    method: "DELETE",
+  });
+}
+
+export function addVaultLink(
+  vault: string,
+  squad: string,
+  tenantId: string,
+  userId: string,
+  url: string,
+  label: string,
+  frequency: string,
+): Promise<{ ok: boolean }> {
+  return vaultJson(`/v1/vaults/${encodeURIComponent(vault)}/links`, userId, squad, {
+    method: "POST",
+    body: JSON.stringify({ tenant_id: tenantId, url, label, frequency }),
+  });
+}
+
+export function removeVaultLink(vault: string, squad: string, tenantId: string, userId: string, linkId: string): Promise<{ ok: boolean }> {
+  const q = new URLSearchParams({ tenant_id: tenantId });
+  return vaultJson(`/v1/vaults/${encodeURIComponent(vault)}/links/${encodeURIComponent(linkId)}?${q}`, userId, squad, {
+    method: "DELETE",
+  });
+}
+
+export function addVaultConnection(
+  vault: string,
+  squad: string,
+  tenantId: string,
+  userId: string,
+  name: string,
+  serverUrl: string,
+  authType: string,
+  token: string,
+): Promise<{ ok: boolean }> {
+  return vaultJson(`/v1/vaults/${encodeURIComponent(vault)}/connections`, userId, squad, {
+    method: "POST",
+    body: JSON.stringify({ tenant_id: tenantId, name, server_url: serverUrl, auth_type: authType, token }),
+  });
+}
+
+export function removeVaultConnection(
+  vault: string,
+  squad: string,
+  tenantId: string,
+  userId: string,
+  connectionId: string,
+): Promise<{ ok: boolean }> {
+  const q = new URLSearchParams({ tenant_id: tenantId });
+  return vaultJson(
+    `/v1/vaults/${encodeURIComponent(vault)}/connections/${encodeURIComponent(connectionId)}?${q}`,
+    userId,
+    squad,
+    { method: "DELETE" },
+  );
+}

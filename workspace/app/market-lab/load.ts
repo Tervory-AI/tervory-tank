@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 
-import { CATALOG, COMMODITIES, KEY_NAMES, emptyFlags, type KeyFlags } from "./catalog";
+import { CATALOG, COMMODITIES, KEY_NAMES, emptyFlags, type KeyFlags, type KeyName } from "./catalog";
+import { flagsWithVault } from "./plugins";
 import { formatDay, formatMonth } from "./format";
 import { buildPage, feedsToCall, type FeedReading, type LinkCheck, type PageModel } from "./model";
 import { parseAlerts, parseEcfr, parseEia, parseFred, parseRegister, parseWorldBank, type PriceLine } from "./parse";
@@ -296,9 +297,26 @@ function secretsFromEnv(): string[] {
   return found;
 }
 
-export async function loadMarketLab(): Promise<PageModel> {
-  const flags = readFlags();
+export async function loadMarketLab(options?: {
+  vault?: { enabled: boolean; names: readonly string[] };
+  resolveKey?: (name: KeyName) => Promise<string>;
+}): Promise<PageModel> {
+  const vault = options?.vault ?? { enabled: false, names: [] };
+  const flags = flagsWithVault(readFlags(), vault);
   const callable = new Set(feedsToCall(flags));
+  const held = secretsFromEnv();
+  const keyFor = async (name: KeyName): Promise<string> => {
+    const env = (process.env[name] ?? "").trim();
+    if (env) return env;
+    if (!vault.enabled || !vault.names.includes(name) || !options?.resolveKey) return "";
+    try {
+      const value = (await options.resolveKey(name)).trim();
+      if (value.length >= 8) held.push(value);
+      return value;
+    } catch {
+      return "";
+    }
+  };
   let readings: Record<string, FeedReading> = {};
   let links: Record<string, LinkCheck> = {};
   let sawRows = false;
@@ -412,8 +430,10 @@ export async function loadMarketLab(): Promise<PageModel> {
       );
     }
     if (callable.has("eia_diesel")) {
-      const key = (process.env.EIA_API_KEY ?? "").trim();
-      tasks.push(
+      const key = await keyFor("EIA_API_KEY");
+      if (!key) {
+        // A missing key must not call the feed. Env and an on vault are the only ways in.
+      } else tasks.push(
         getJson(eiaUrl(key)).then((result) => {
           if (!result.ok) {
             readings.eia_diesel = markFailed(readings.eia_diesel);
@@ -434,8 +454,10 @@ export async function loadMarketLab(): Promise<PageModel> {
       );
     }
     if (flags.FRED_API_KEY) {
-      const key = (process.env.FRED_API_KEY ?? "").trim();
-      for (const item of CATALOG) {
+      const key = await keyFor("FRED_API_KEY");
+      if (!key) {
+        // FRED stays unread. A vault that is off cannot supply this key.
+      } else for (const item of CATALOG) {
         if (item.kind !== "fred" || !item.fredSeries || !callable.has(item.id)) continue;
         const series = item.fredSeries;
         const id = item.id;
@@ -467,7 +489,7 @@ export async function loadMarketLab(): Promise<PageModel> {
     error: storeError,
     refreshedAt: liveRead || sawRows ? new Date().toISOString() : null,
   });
-  return scrubSecrets(page, secretsFromEnv());
+  return scrubSecrets(page, held);
 }
 
 export function scrubSecrets<T>(value: T, secrets: string[]): T {

@@ -462,6 +462,11 @@ async def _startup() -> None:
         _redis = None
     _packages = skala.load_packages()
     await register_packages()
+    # Plugins vaults. Squad vaults stay off until a founder switches one on.
+    # This does not call apply_lab_dev_fixture.
+    import vault as vault_mod
+
+    vault_mod.install_store(vault_mod.PostgresVaultStore(pool))
 
 
 @app.on_event("shutdown")
@@ -2378,3 +2383,4 @@ async def tiger_alerts(request: Request) -> Response:
 
 
 app.include_router(__import__("admin").router)
+app.include_router(__import__("vault").router)

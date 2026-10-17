@@ -4,7 +4,19 @@ import { emptyFlags } from "./catalog";
 import { formatDay, formatRefreshed } from "./format";
 import { readFlags, scrubSecrets } from "./load";
 import { buildPage, feedsToCall } from "./model";
-import { REFERENCE_LABEL, STUB_FILE, STUB_KEY, STUB_LINK, STUB_MCP, clientPluginState, groundQuestion, searchMarketLab } from "./plugins";
+import {
+  REFERENCE_LABEL,
+  STUB_FILE,
+  STUB_KEY,
+  STUB_LINK,
+  STUB_MCP,
+  VAULT_OFF_MESSAGE,
+  clientPluginState,
+  flagsWithVault,
+  groundQuestion,
+  mapVaultPayload,
+  searchMarketLab,
+} from "./plugins";
 import { exactNumber, parseAlerts, parseEia, parseFred, parseWorldBank } from "./parse";
 
 test("a missing key keeps the feed off, uncalled, and ignores a stored reading", () => {
@@ -211,6 +223,45 @@ test("plugin state sent to the browser is a set of booleans and never a saved se
   assert.match(STUB_LINK, /Nothing was saved/);
   assert.match(STUB_MCP, /Nothing was saved/);
   assert.equal(STUB_KEY.includes("saved 17"), false);
+});
+
+test("a vault key turns a feed on only while that vault is on", () => {
+  const flags = emptyFlags();
+  const off = flagsWithVault(flags, { enabled: false, names: ["FRED_API_KEY", "EIA_API_KEY"] });
+  assert.equal(off.FRED_API_KEY, false);
+  assert.equal(off.EIA_API_KEY, false);
+  assert.equal(feedsToCall(off).some((id) => id.startsWith("fred_")), false);
+  const on = flagsWithVault(flags, { enabled: true, names: ["FRED_API_KEY"] });
+  assert.equal(on.FRED_API_KEY, true);
+  assert.equal(on.EIA_API_KEY, false);
+  assert.equal(feedsToCall(on).filter((id) => id.startsWith("fred_")).length, 7);
+  const env = emptyFlags();
+  env.EIA_API_KEY = true;
+  const both = flagsWithVault(env, { enabled: false, names: [] });
+  assert.equal(both.EIA_API_KEY, true);
+});
+
+test("an off vault shows the plain sentence and drops any secret that arrived with it", () => {
+  const secret = "vault-secret-value-9f3a";
+  const panel = mapVaultPayload({
+    enabled: false,
+    message: VAULT_OFF_MESSAGE,
+    secrets: [{ name: "FRED_API_KEY", purpose: "FRED", mask: "••••••••", saved_at: "2026-10-17", value: secret }],
+    files: [{ id: "1", name: "secret.csv", content: secret }],
+  });
+  assert.equal(panel.enabled, false);
+  assert.equal(panel.message, VAULT_OFF_MESSAGE);
+  assert.equal(panel.secrets.length, 0);
+  assert.equal(panel.files.length, 0);
+  assert.equal(JSON.stringify(panel).includes(secret), false);
+  const open = mapVaultPayload({
+    enabled: true,
+    secrets: [{ name: "FRED_API_KEY", purpose: "FRED", mask: "••••••••", saved_at: "2026-10-17T00:00:00Z", value: secret }],
+    connections: [{ id: "c1", name: "Catalogue", server_url: "https://example.com", auth_type: "token", has_token: true, token: secret }],
+  });
+  assert.equal(open.secrets[0]?.mask, "••••••••");
+  assert.equal(open.connections[0]?.hasToken, true);
+  assert.equal(JSON.stringify(open).includes(secret), false);
 });
 
 test("key flags are booleans and secret text is stripped before it can leave the server", () => {

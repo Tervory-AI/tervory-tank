@@ -13,6 +13,19 @@ if str(_TANK) not in sys.path:
     sys.path.insert(0, str(_TANK))
 
 
+@pytest.fixture(autouse=True)
+def _lab_vault_gate_starts_off():
+    """A test that turns lab.vault on for the feed gate must not leak into the next test."""
+    yield
+    import sys
+
+    keys = sys.modules.get("feeds.keys")
+    if keys is None:
+        return
+    keys.configure_vault(enabled=False)
+    keys._held.clear()
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_configure(config: pytest.Config) -> None:
     # pytest-asyncio warns, and will later error, when this is unset. There is no

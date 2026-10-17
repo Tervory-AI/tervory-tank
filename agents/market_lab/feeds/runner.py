@@ -8,6 +8,7 @@ from pathlib import Path
 from feeds.adapters import ADAPTERS
 from feeds.catalog import sources
 from feeds.keys import bind_key, missing_key, redact
+from feeds.vault_client import refresh as refresh_vault
 from feeds.db import apply_schema, connect
 from feeds.fetch import fetch_source, watch_page
 from feeds.live import NeedsKey, PoliteClient
@@ -24,6 +25,7 @@ def fixture_roots(explicit: str | None) -> list[Path]:
 
 def scheduled(engine: str) -> list[str]:
     """Source ids a live pass will call. A missing key is left off this list."""
+    refresh_vault()
     ids: list[str] = []
     for item in sources(engine):
         spec = bind_key(item)
@@ -65,6 +67,7 @@ def run(
     live: bool = False,
     client: PoliteClient | None = None,
 ) -> list[dict[str, object]]:
+    refresh_vault()
     specs = [bind_key(item) for item in sources(engine)]
     if source is not None:
         specs = [item for item in specs if item.id == source]
@@ -119,6 +122,7 @@ def run(
 
 
 def status(db: str, *, engine: str) -> list[dict[str, object]]:
+    refresh_vault()
     conn = connect(db)
     apply_schema(conn)
     store = Store(conn)
