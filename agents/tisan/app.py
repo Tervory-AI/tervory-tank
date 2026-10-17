@@ -67,7 +67,7 @@ async def scaffold(ctx: JobContext) -> dict:
 
 
 async def figma(ctx: JobContext) -> dict:
-    """Read one Figma page for this job's tenant. FIGMA_TOKEN stays on the room."""
+    """Read the recorded Figma page for this job's tenant. No call leaves the room."""
     module = _load_beside(_figma_cache(), "tisan_figma", "figma.py")
     return await module.execute(ctx.input, str(ctx.tenant_id))
 

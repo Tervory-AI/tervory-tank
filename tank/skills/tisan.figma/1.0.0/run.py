@@ -35,10 +35,5 @@ async def run(payload: dict[str, Any], ctx: Any) -> dict[str, Any]:
         tenant = (payload or {}).get("tenant_id")
     if tenant is None:
         raise RuntimeError("tenant_id is required")
-    # A skill context carries its own env. An empty env stays on the fixture
-    # even if the process has a token, so evals do not call Figma.
-    env = getattr(ctx, "env", None)
-    token = str(env.get("FIGMA_TOKEN") or "") if isinstance(env, dict) else os.environ.get("FIGMA_TOKEN", "")
-    client = getattr(ctx, "http", None) if token.strip() else None
     module = _load()
-    return await module.execute(payload, str(tenant), client=client, token=token)
+    return await module.execute(payload, str(tenant))

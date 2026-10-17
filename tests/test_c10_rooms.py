@@ -174,12 +174,12 @@ def test_ping_schedules_are_the_template_heartbeat() -> None:
         module = _load(f"{folder}_app", ROOT / "agents" / folder / "app.py")
         assert module.app.state.agent == agent
         handlers = set(module.app.state.handlers)
-        # RX1 adds scan on Radix. TS1 adds scaffold on Tisan. Each room keeps
-        # ping, and neither assertion may strip the other room's job.
+        # RX1 adds scan on Radix. TS1 adds scaffold on Tisan. TS2 adds figma.
+        # Each room keeps ping, and neither assertion may strip the other room's job.
         if folder == "radix":
             assert handlers == {"ping", "scan"}
         else:
-            assert handlers == {"ping", "scaffold"}
+            assert handlers == {"ping", "scaffold", "figma"}
             # Founder, 14 Oct 2026: a site build is allowed 10 minutes.
             assert module.app.state.job_timeouts == {"scaffold": 600}
         assert module.app.state.schedules == [

@@ -345,122 +345,44 @@ def test_rest_payload_resolves_aliases_and_does_not_read_raw_fills() -> None:
     assert _component(reading, "Button")["used_in"] == ["Desktop / Nav"]
 
 
-class _Response:
-    def __init__(self, status: int, payload: dict) -> None:
-        self.status_code = status
-        self._payload = payload
-
-    def json(self) -> dict:
-        return self._payload
-
-
-class _Client:
-    def __init__(self, variables_status: int = 200, nodes_status: int = 200) -> None:
-        self.variables_status = variables_status
-        self.nodes_status = nodes_status
-        self.calls: list[tuple[str, dict, dict | None]] = []
-
-    async def get(self, url: str, headers: dict | None = None, params: dict | None = None) -> _Response:
-        self.calls.append((url, headers or {}, params))
-        if url.endswith("/variables/local"):
-            return _Response(self.variables_status, {"status": self.variables_status})
-        if self.nodes_status != 200:
-            return _Response(self.nodes_status, {"err": "no"})
-        return _Response(
-            200,
-            {
-                "name": "Example",
-                "nodes": {
-                    "0:1": {
-                        "document": {
-                            "id": "0:1",
-                            "name": "Landing",
-                            "type": "CANVAS",
-                            "children": [
-                                {
-                                    "id": "4:6",
-                                    "name": "Squad card",
-                                    "type": "COMPONENT",
-                                    "absoluteBoundingBox": {"width": 384, "height": 216},
-                                }
-                            ],
-                        }
-                    }
-                },
-            },
-        )
-
-
 @pytest.mark.asyncio
-async def test_live_read_sends_the_token_as_a_header_and_not_the_fixture(tmp_path: Path) -> None:
+async def test_the_room_reads_the_fixture_and_does_not_call_out(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     figma = _load()
-    client = _Client(variables_status=403)
-    reading = await figma.execute(
-        {"file_key": FILE_KEY, "node_id": "0:1"},
-        TENANT,
-        data_root=tmp_path,
-        client=client,
-        token="super-secret-token",
-    )
+    monkeypatch.setenv("FIGMA_TOKEN", "super-secret-token")
+    reading = await figma.execute({"node_id": "0-1"}, TENANT, data_root=tmp_path)
     dumped = json.dumps(reading)
     assert "super-secret-token" not in dumped
-    assert client.calls[0][1]["X-Figma-Token"] == "super-secret-token"
-    assert all("super-secret-token" not in call[0] for call in client.calls)
-    assert reading["source"] == "figma"
-    assert "#e80008" not in reading["css"]
-    assert _gaps(reading, "variables_unavailable")
-    assert _component(reading, "Squad card")["location"] == "components/ui/SquadCard.tsx"
-    stored = tmp_path / reading["stored"]
-    assert stored.is_file()
-    assert "super-secret-token" not in stored.read_text(encoding="utf-8")
-
-
-@pytest.mark.asyncio
-async def test_a_failed_live_read_does_not_fall_back_to_the_fixture(tmp_path: Path) -> None:
-    figma = _load()
-    client = _Client(nodes_status=500)
-    with pytest.raises(figma.FigmaError, match="500"):
-        await figma.execute(
-            {"file_key": FILE_KEY},
-            TENANT,
-            data_root=tmp_path,
-            client=client,
-            token="super-secret-token",
-        )
-    assert list(tmp_path.rglob("*.json")) == []
-
-
-@pytest.mark.asyncio
-async def test_without_a_token_only_the_recorded_file_is_readable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    figma = _load()
-    monkeypatch.delenv("FIGMA_TOKEN", raising=False)
-    reading = await figma.execute({"node_id": "0-1"}, TENANT, data_root=tmp_path, token="")
     assert reading["source"] == "fixture"
+    assert reading["tokens"]["colour"]["accent-default"] == "#e80008"
     assert reading["stored"] == f"readings/{TENANT}/{FILE_KEY}/0-1.json"
-    assert (tmp_path / reading["stored"]).is_file()
-    with pytest.raises(figma.FigmaError, match="FIGMA_TOKEN"):
-        await figma.execute({"file_key": "a" * 22}, TENANT, data_root=tmp_path, token="")
+    assert "super-secret-token" not in (tmp_path / reading["stored"]).read_text(encoding="utf-8")
+    with pytest.raises(figma.FigmaError, match="recorded Tervory page only"):
+        await figma.execute({"file_key": "a" * 22}, TENANT, data_root=tmp_path)
     with pytest.raises(figma.FigmaError):
-        await figma.execute({"file_key": "../secrets"}, TENANT, data_root=tmp_path, token="")
+        await figma.execute({"file_key": "../secrets"}, TENANT, data_root=tmp_path)
     with pytest.raises(figma.FigmaError):
-        await figma.execute({"node_id": "9:9"}, TENANT, data_root=tmp_path, token="")
+        await figma.execute({"node_id": "9:9"}, TENANT, data_root=tmp_path)
     with pytest.raises(figma.FigmaError):
-        await figma.execute({}, "../tenant", data_root=tmp_path, token="")
+        await figma.execute({}, "../tenant", data_root=tmp_path)
 
 
-def test_room_documents_the_token_and_copies_the_reader() -> None:
+def test_room_has_no_path_to_figma_and_copies_the_reader() -> None:
+    reader = FIGMA_PATH.read_text(encoding="utf-8")
+    assert "api.figma.com" not in reader
+    assert "httpx" not in reader
     docker = (ROOT / "agents" / "tisan" / "Dockerfile").read_text(encoding="utf-8")
     assert "COPY tisan/figma.py /app/figma.py" in docker
     assert "COPY tisan/fixtures /app/fixtures" in docker
     assert "TISAN_FIGMA_FIXTURE=/app/fixtures/tervory-landing.json" in docker
     compose = (ROOT / "agents" / "tisan" / "docker-compose.yml").read_text(encoding="utf-8")
-    assert "FIGMA_TOKEN: ${FIGMA_TOKEN:-}" in compose
+    assert "FIGMA_TOKEN" not in compose
+    assert "api.figma.com" not in compose
+    assert "name: tervory-gw-tisan" in compose
     example = (ROOT / ".env.example").read_text(encoding="utf-8")
-    assert "FIGMA_TOKEN=" in example
-    assert "X-Figma-Token" in example
+    assert any(line.strip() == "FIGMA_TOKEN=" for line in example.splitlines())
     readme = (ROOT / "agents" / "tisan" / "README.md").read_text(encoding="utf-8")
     assert "tisan.figma" in readme
-    assert "FIGMA_TOKEN" in readme
+    assert "does not call Figma" in readme
     app = (ROOT / "agents" / "tisan" / "app.py").read_text(encoding="utf-8")
     assert '"figma": figma' in app
     recorded = json.loads(FIXTURE.read_text(encoding="utf-8"))

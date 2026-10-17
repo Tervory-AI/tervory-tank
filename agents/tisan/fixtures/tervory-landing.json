@@ -4,7 +4,7 @@
   "recorded_at": "2026-10-17",
   "file_key": "ksi7ctRwEnN8wbip1yfuhL",
   "file_name": null,
-  "note": "Recorded from the Figma MCP on 17 Oct 2026 because FIGMA_TOKEN was not set. The MCP returned resolved variable values for the landing page and did not return collection names. Set FIGMA_TOKEN on the Tisan room to read this file live.",
+  "note": "Recorded from the Figma MCP on 17 Oct 2026. The room has no route to the public internet, so this fixture is the page the reader opens. The recording has resolved variable values and no collection names.",
   "page": {
     "id": "0:1",
     "name": "Landing — Desktop & Mobile"

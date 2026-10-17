@@ -49,7 +49,7 @@ Skill `tisan.figma` (job kind `figma`). It reads one page and returns named colo
 
 `file_key` defaults to the Tervory file. `node_id` defaults to page `0:1`, "Landing — Desktop & Mobile". `2:11` is the desktop frame and `6:45` is the mobile frame. The tenant is the job's `tenant_id`. The reading is stored at `/data/readings/<tenant>/<file_key>/<node>.json`.
 
-`FIGMA_TOKEN` is a Figma personal access token. The room sends it only as the `X-Figma-Token` header. Set it on the Tisan room. The name is in `.env.example`. When it is unset, this reader can only open the recorded fixture for that Tervory file (`agents/tisan/fixtures/tervory-landing.json`), captured from the Figma connection on 17 Oct 2026. The fixture has the resolved variable values. It does not have collection names. A different file key needs the token.
+The room's only network is `tervory-gw-tisan`. A live Figma call would need a route to the public internet, and this room does not get one. The reader uses the recorded fixture `agents/tisan/fixtures/tervory-landing.json`, captured from the Figma connection on 17 Oct 2026. It does not call Figma. The fixture has the resolved variable values and no collection names. `FIGMA_TOKEN` is a name in `.env.example` only. The room does not receive it.
 
 The recorded page has no spacing variables, no font family, weight, or line height, and the Button component has no hover, active, disabled, or error state. Those are gaps. The reader does not fill them in.
 

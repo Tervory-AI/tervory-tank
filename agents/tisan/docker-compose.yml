@@ -19,8 +19,6 @@ services:
       TANK_KEY: ${TANK_KEY_TISAN:-}
       HERMES_URL: http://hermes:8000
       DATA_DIR: /data
-      # Figma personal access token. Empty uses the recorded Tervory fixture. Never log the value.
-      FIGMA_TOKEN: ${FIGMA_TOKEN:-}
     volumes:
       - agent_tisan_data:/data
     networks:

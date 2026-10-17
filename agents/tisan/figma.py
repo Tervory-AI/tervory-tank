@@ -2,8 +2,10 @@
 
 Colour, type, and space values become CSS custom properties. A value that
 disagrees with itself is listed and left out. A state the component does not
-have is listed and not invented. With no FIGMA_TOKEN, the recorded fixture for
-the Tervory file is the only page this can read.
+have is listed and not invented.
+
+The room has no path to the public internet, so this reader does not call
+Figma. It reads the recorded fixture for the Tervory file and no other file.
 """
 
 from __future__ import annotations
@@ -16,7 +18,6 @@ from typing import Any
 
 TERVORY_FILE_KEY = "ksi7ctRwEnN8wbip1yfuhL"
 TERVORY_PAGE_ID = "0:1"
-FIGMA_API = "https://api.figma.com/v1"
 
 _FILE_KEY = re.compile(r"^[0-9A-Za-z]{22,128}$")
 _NODE_ID = re.compile(r"^\d+:\d+$")
@@ -985,65 +986,21 @@ def _store(reading: dict[str, Any], tenant: str, data_root: Path | None) -> str:
     return stored
 
 
-async def _read_json(client: Any, url: str, headers: dict[str, str], params: dict[str, str] | None = None) -> tuple[int, dict[str, Any] | None]:
-    response = await client.get(url, headers=headers, params=params)
-    status = int(getattr(response, "status_code", 0))
-    try:
-        data = response.json()
-    except Exception:
-        data = None
-    if isinstance(data, dict):
-        return status, data
-    return status, None
-
-
-async def fetch_live(client: Any, file_key: str, node_id: str, token: str) -> dict[str, Any]:
-    headers = {"X-Figma-Token": token}
-    status, nodes = await _read_json(
-        client,
-        f"{FIGMA_API}/files/{file_key}/nodes",
-        headers,
-        {"ids": node_id},
-    )
-    if status != 200 or nodes is None:
-        raise FigmaError(f"Figma returned {status} for the page")
-    var_status, variables = await _read_json(client, f"{FIGMA_API}/files/{file_key}/variables/local", headers)
-    if var_status == 200:
-        return normalise_rest(file_key, node_id, nodes, variables)
-    if var_status in {401, 403, 404}:
-        return normalise_rest(file_key, node_id, nodes, None)
-    raise FigmaError(f"Figma returned {var_status} for variables")
-
-
 async def execute(
     payload: dict[str, Any],
     tenant_id: str,
     *,
     data_root: Path | None = None,
-    client: Any = None,
-    token: str | None = None,
 ) -> dict[str, Any]:
-    """Read the page for this tenant. The token comes from the environment, never the job input."""
+    """Read the recorded page for this tenant. This does not call Figma."""
     if not isinstance(payload, dict):
         raise FigmaError("input must be an object")
     file_key = normalise_file_key(payload.get("file_key"))
     node_id = normalise_node_id(payload.get("node_id"))
     tenant = _tenant(str(tenant_id))
-    if token is None:
-        token = os.environ.get("FIGMA_TOKEN", "")
-    token = token.strip()
-    if token:
-        if client is None:
-            import httpx
-
-            async with httpx.AsyncClient(timeout=30) as owned:
-                source = await fetch_live(owned, file_key, node_id, token)
-        else:
-            source = await fetch_live(client, file_key, node_id, token)
-    else:
-        if file_key != TERVORY_FILE_KEY:
-            raise FigmaError("FIGMA_TOKEN is not set, and there is no recorded fixture for this file")
-        source = load_fixture(node_id)
+    if file_key != TERVORY_FILE_KEY:
+        raise FigmaError("this room reads the recorded Tervory page only")
+    source = load_fixture(node_id)
     reading = compile_reading(source)
     reading["stored"] = _store(reading, tenant, data_root)
     return reading
