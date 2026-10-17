@@ -124,12 +124,31 @@ services:
       retries: 10
       start_period: 20s
 
+  # Tor client for SearXNG. SOCKS stays on the stack network. No host port.
+  # A forward proxy on this same server is not here: the engines would still see Boston.
+  tor:
+    build: ./tor
+    restart: unless-stopped
+    networks:
+      - default
+    expose:
+      - "9050"
+    healthcheck:
+      test: ["CMD-SHELL", "set -o pipefail; curl -fsS --socks5-hostname 127.0.0.1:9050 --max-time 20 https://check.torproject.org/api/ip | grep -Eq '\"IsTor\"[[:space:]]*:[[:space:]]*true'"]
+      interval: 20s
+      timeout: 25s
+      retries: 15
+      start_period: 60s
+
   searxng:
     build: ./searxng
     restart: unless-stopped
     environment:
       SEARXNG_SECRET: ${SEARXNG_SECRET:-change-me-in-coolify}
       SEARXNG_BASE_URL: http://searxng:8080/
+    depends_on:
+      tor:
+        condition: service_healthy
     networks:
       - default
       - tervory-gw-base
@@ -140,7 +159,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 10
-      start_period: 20s
+      start_period: 45s
 
   tiger:
     build: ./tiger
