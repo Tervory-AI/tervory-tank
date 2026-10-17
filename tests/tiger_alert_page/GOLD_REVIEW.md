@@ -3,7 +3,7 @@
 Every gold answer is unverified until Zenas checks it. Scores are provisional.
 
 Change alerts, build set: caught 100.0% (16/16), false alarms 0.0% (0/68).
-Change alerts, held out: caught 100.0% (26/26), false alarms 0.0% (0/79).
+Change alerts, held out: caught 100.0% (27/27), false alarms 0.0% (0/98).
 Changed pages, build set: 100.0% can't read (68/68), guesses 0.
 Changed pages, held out: 100.0% can't read (32/32), guesses 0.
 
@@ -88,6 +88,26 @@ Columns: case id, what changed, expected outcome, actual outcome, verified.
 | ca-negation-s05 | change-alerts | heldout | synthetic | None in stock stays out. No alarm. | no alert, stock OutOfStock, price 10.00 | no alert, observed, stock OutOfStock, price 10.00 | no |
 | ca-negation-s06 | change-alerts | heldout | synthetic | 0 in stock stays out. No alarm. | no alert, stock OutOfStock, price 10.00 | no alert, observed, stock OutOfStock, price 10.00 | no |
 | ca-negation-s07 | change-alerts | heldout | synthetic | No stock stays out. No alarm. | no alert, stock OutOfStock, price 10.00 | no alert, observed, stock OutOfStock, price 10.00 | no |
+| ca-negation-kinds-s00 | change-alerts | heldout | synthetic | First week is $10, in stock. | no alert, stock InStock, price 10.00 | no alert, observed, stock InStock, price 10.00 | no |
+| ca-negation-kinds-s01 | change-alerts | heldout | synthetic | Isn't out of stock is in stock. No alarm. | no alert, stock InStock, price 10.00 | no alert, observed, stock InStock, price 10.00 | no |
+| ca-negation-kinds-s02 | change-alerts | heldout | synthetic | Not sold out is in stock. No alarm. | no alert, stock InStock, price 10.00 | no alert, observed, stock InStock, price 10.00 | no |
+| ca-negation-kinds-s03 | change-alerts | heldout | synthetic | Never been out of stock is in stock. No alarm. | no alert, stock InStock, price 10.00 | no alert, observed, stock InStock, price 10.00 | no |
+| ca-negation-kinds-s04 | change-alerts | heldout | synthetic | Hasn't been in stock is out of stock. Alert. | alert stock, stock OutOfStock, price 10.00 | alert stock, observed, stock OutOfStock, price 10.00 | no |
+| ca-negation-kinds-s05 | change-alerts | heldout | synthetic | Aren't in stock stays out. No alarm. | no alert, stock OutOfStock, price 10.00 | no alert, observed, stock OutOfStock, price 10.00 | no |
+| ca-negation-kinds-s06 | change-alerts | heldout | synthetic | Zero in stock stays out. No alarm. | no alert, stock OutOfStock, price 10.00 | no alert, observed, stock OutOfStock, price 10.00 | no |
+| ca-negation-kinds-s07 | change-alerts | heldout | synthetic | Hadn't been in stock stays out. No alarm. | no alert, stock OutOfStock, price 10.00 | no alert, observed, stock OutOfStock, price 10.00 | no |
+| ca-negation-kinds-s08 | change-alerts | heldout | synthetic | Wasn't in stock stays out. No alarm. | no alert, stock OutOfStock, price 10.00 | no alert, observed, stock OutOfStock, price 10.00 | no |
+| ca-negation-kinds-s09 | change-alerts | heldout | synthetic | Weren't in stock stays out. No alarm. | no alert, stock OutOfStock, price 10.00 | no alert, observed, stock OutOfStock, price 10.00 | no |
+| ca-negation-kinds-s10 | change-alerts | heldout | synthetic | Won't be in stock stays out. No alarm. | no alert, stock OutOfStock, price 10.00 | no alert, observed, stock OutOfStock, price 10.00 | no |
+| ca-negation-kinds-s11 | change-alerts | heldout | synthetic | Doesn't come in stock stays out. No alarm. | no alert, stock OutOfStock, price 10.00 | no alert, observed, stock OutOfStock, price 10.00 | no |
+| ca-negation-kinds-s12 | change-alerts | heldout | synthetic | Don't have it in stock stays out. No alarm. | no alert, stock OutOfStock, price 10.00 | no alert, observed, stock OutOfStock, price 10.00 | no |
+| ca-negation-kinds-s13 | change-alerts | heldout | synthetic | Never in stock stays out. No alarm. | no alert, stock OutOfStock, price 10.00 | no alert, observed, stock OutOfStock, price 10.00 | no |
+| ca-negation-kinds-s14 | change-alerts | heldout | synthetic | Nothing left in stock stays out. No alarm. | no alert, stock OutOfStock, price 10.00 | no alert, observed, stock OutOfStock, price 10.00 | no |
+| ca-negation-kinds-s15 | change-alerts | heldout | synthetic | Have not been in stock stays out. No alarm. | no alert, stock OutOfStock, price 10.00 | no alert, observed, stock OutOfStock, price 10.00 | no |
+| ca-negation-kinds-s16 | change-alerts | heldout | synthetic | Without stock stays out. No alarm. | no alert, stock OutOfStock, price 10.00 | no alert, observed, stock OutOfStock, price 10.00 | no |
+| ca-negation-kinds-s17 | change-alerts | heldout | synthetic | Zero units in stock stays out. No alarm. | no alert, stock OutOfStock, price 10.00 | no alert, observed, stock OutOfStock, price 10.00 | no |
+| ca-negation-kinds-s18 | change-alerts | heldout | synthetic | Ships today cannot be read. No alarm. | no alert, stock can't read, price 10.00 | no alert, observed, stock can't read, price 10.00 | no |
+| ca-negation-kinds-s19 | change-alerts | heldout | synthetic | Available now cannot be read. No alarm. | no alert, stock can't read, price 10.00 | no alert, observed, stock can't read, price 10.00 | no |
 | ca-og-fixture-s00 | change-alerts | build | saved-page | The saved page shows $6.25. | no alert, price 6.25 | no alert, observed, stock InStock, price 6.25 | no |
 | ca-og-fixture-s01 | change-alerts | build | saved-page | The page still shows $6.25. | no alert, price 6.25 | no alert, observed, stock InStock, price 6.25 | no |
 | ca-og-fixture-s02 | change-alerts | build | saved-page | The Open Graph amount is now $7.10. | alert price, price 7.10 | alert price, observed, stock InStock, price 7.10 | no |

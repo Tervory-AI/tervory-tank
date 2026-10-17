@@ -162,6 +162,51 @@ def test_negation_before_a_stock_phrase() -> None:
     asyncio.run(check())
 
 
+def test_negation_is_a_class_of_words() -> None:
+    """Any n't contraction, not/no/never/none/nothing/without, or zero flips a stock phrase."""
+    gone = (
+        "<p class=\"stock\">hasn't been in stock</p>"
+        "<script type=\"application/ld+json\">"
+        '{"@type":"Product","offers":{"@type":"Offer","price":"10.00","priceCurrency":"USD",'
+        '"availability":"https://schema.org/InStock"}}'
+        "</script>"
+    )
+    steps = [
+        ("https://stock.test/kinds", "https://schema.org/InStock", "InStock", []),
+        ("https://stock.test/kinds", "not out of stock", "InStock", []),
+        ("https://stock.test/kinds", "isn't out of stock", "InStock", []),
+        ("https://stock.test/kinds", "not sold out", "InStock", []),
+        ("https://stock.test/kinds", "never been out of stock", "InStock", []),
+        ("https://stock.test/kinds", "hasn't been in stock", "OutOfStock", ["stock"]),
+        ("https://stock.test/kinds", "aren't in stock", "OutOfStock", []),
+        ("https://stock.test/kinds", "zero in stock", "OutOfStock", []),
+        ("https://stock.test/kinds", "hadn't been in stock", "OutOfStock", []),
+        ("https://stock.test/kinds", "wasn't in stock", "OutOfStock", []),
+        ("https://stock.test/kinds", "weren't in stock", "OutOfStock", []),
+        ("https://stock.test/kinds", "won't be in stock", "OutOfStock", []),
+        ("https://stock.test/kinds", "doesn't come in stock", "OutOfStock", []),
+        ("https://stock.test/kinds", "don't have it in stock", "OutOfStock", []),
+        ("https://stock.test/kinds", "never in stock", "OutOfStock", []),
+        ("https://stock.test/kinds", "nothing left in stock", "OutOfStock", []),
+        ("https://stock.test/kinds", "have not been in stock", "OutOfStock", []),
+        ("https://stock.test/kinds", "without stock", "OutOfStock", []),
+        ("https://stock.test/kinds", "zero units in stock", "OutOfStock", []),
+        ("https://stock.test/kinds", "0 in stock", "OutOfStock", []),
+        ("https://stock.test/kinds", "In stock (22 available)", "InStock", ["stock"]),
+        ("https://stock.test/kinds", "45 in stock", "InStock", []),
+        ("https://stock.test/kinds", "Ships today", "can't read", []),
+        ("https://stock.test/kinds", "Available now", "can't read", []),
+    ]
+
+    async def check() -> None:
+        store = MemoryStore()
+        for url, availability, stock, kinds in steps:
+            await _once(store, url, "10.00", availability, stock, kinds)
+        await _raw(store, "https://stock.test/hasnt", gone, "10.00", "OutOfStock", [])
+
+    asyncio.run(check())
+
+
 def test_unknown_stock_wording_is_visible() -> None:
     """Unknown stock words are can't read. The same phrase in other words is not an alert."""
     pages = [

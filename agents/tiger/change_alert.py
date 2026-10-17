@@ -43,19 +43,22 @@ _AVAIL_FIELD_REV = re.compile(
 )
 
 
-# A negator before a stock phrase flips it. "not out of stock" is in stock.
-# "no", "not", "no longer", "isn't", "none", and "0" are the negators.
-_NEG_TAIL = re.compile(
-    r"(?:\bisn['\u2019]t\b|\bisnt\b|\bis\s+not\b|\bno\s+longer\b|\bnone\b|\bnot\b|\bno\b|\b0\b)"
-    r"(?:\s+[a-z0-9]+){0,3}\s*$",
-    re.I,
+# A negator within a few words before a stock phrase flips it.
+# This is a class of words, not a list of sentences. A contraction ending in
+# n't counts, as do not/no/never/none/nothing/without, the word zero, and 0.
+# "not out of stock" is one negation of an out-of-stock phrase, so it is in stock.
+_APOS = "['\u2019]"
+_NEGATOR = (
+    r"(?:"
+    r"\b[a-z]+n" + _APOS + r"t\b"
+    r"|\bwithout\b|\bnothing\b|\bnever\b|\bnone\b|\bnot\b|\bno\b"
+    r"|\bzero\b|\b0\b"
+    r")"
 )
-# "no stock" has no "in" or "out of" phrase, but the negator is clear.
-_NO_STOCK = re.compile(
-    r"(?:\bisn['\u2019]t\b|\bisnt\b|\bis\s+not\b|\bno\s+longer\b|\bnone\b|\bnot\b|\bno\b|\b0\b)"
-    r"(?:\s+[a-z0-9]+){0,3}\s+stock\b",
-    re.I,
-)
+_GAP = r"(?:\s+[a-z0-9]+){0,4}"
+_NEG_TAIL = re.compile(_NEGATOR + _GAP + r"\s*$", re.I)
+# "no stock" and "without stock" name stock without "in" or "out of".
+_NO_STOCK = re.compile(_NEGATOR + _GAP + r"\s+stock\b", re.I)
 _PHRASE = (
     ("OutOfStock", re.compile(
         r"(?:schema\.org[/\\]+outofstock|\bout[\s\-]*of[\s\-]*stock\b|\bsold[\s\-]*out\b"
