@@ -54,6 +54,39 @@ def _alert_kinds(row: dict) -> list[str]:
     return [alert["kind"] for alert in row["alerts"]]
 
 
+def test_other_stock_wording_is_cant_read() -> None:
+    """Stock is recorded only for a known phrase. Any other wording is can't read and does not alert."""
+    attic = (
+        ROOT / "tests" / "tiger_alert_page" / "fixtures" / "live"
+        / "books-toscrape-com--a-light-in-the-attic.html"
+    ).read_text(encoding="utf-8")
+    counted = (
+        "<p class=\"stock in-stock\">45 in stock</p>"
+        "<script type=\"application/ld+json\">"
+        '{"@type":"Product","offers":{"@type":"Offer","price":"63.00","priceCurrency":"GBP",'
+        '"availability":"https://schema.org/InStock"}}'
+        "</script>"
+    )
+    plain = "<p class=\"instock availability\">In stock</p>" + _product_html_price("10.00")
+
+    async def check() -> None:
+        store = MemoryStore()
+        await _raw(store, "https://stock.test/attic", attic, "51.77", "can't read", [])
+        await _raw(store, "https://stock.test/attic", attic, "51.77", "can't read", [])
+        await _raw(store, "https://stock.test/counted", counted, "63.00", "can't read", [])
+        await _raw(store, "https://stock.test/plain", plain, "10.00", "InStock", [])
+
+    asyncio.run(check())
+
+
+def _product_html_price(price: str) -> str:
+    return (
+        "<script type=\"application/ld+json\">"
+        '{"@type":"Product","offers":{"@type":"Offer","price":"' + price + '","priceCurrency":"USD"}}'
+        "</script>"
+    )
+
+
 def test_unknown_stock_wording_is_visible() -> None:
     """Unknown stock words are can't read. The same phrase in other words is not an alert."""
     pages = [
@@ -73,6 +106,52 @@ def test_unknown_stock_wording_is_visible() -> None:
             await _once(store, url, "10.00", availability, stock, kinds)
 
     asyncio.run(check())
+
+
+async def _raw(store: MemoryStore, url: str, html: str, price: str, stock: str, kinds: list[str]) -> None:
+    from tiger_alert_page.score import _load_extract
+
+    extract = _load_extract()
+    if await store.get_watch(TENANT, url) is None:
+        await store.create_watch({
+            "tenant_id": TENANT,
+            "url": url,
+            "label": "stock",
+            "engine": "core",
+            "every": "1h",
+            "enabled": True,
+            "threshold": "0",
+        })
+    tick = {"n": len(store.observations)}
+
+    def clock() -> datetime:
+        tick["n"] += 1
+        return datetime(2026, 10, 16, tzinfo=timezone.utc) + timedelta(seconds=tick["n"])
+
+    async def render(page_url: str, session: str, agent: str, tenant: str) -> dict:
+        return {"ok": True, "challenge": False, "html": html, "png_base64": None}
+
+    async def extract_html(page: str, page_url: str) -> dict:
+        return extract.extract(page, page_url)
+
+    async def ocr(png: str, page_url: str) -> dict:
+        raise AssertionError("a known page is not guessed from a screenshot")
+
+    async def fetch_text(page_url: str) -> str:
+        return ""
+
+    watch = await store.get_watch(TENANT, url)
+    assert watch is not None
+    out = await run_check(
+        store, TENANT, watch, "tiger", render, extract_html, ocr, fetch_text, DomainLimiter(0), now=clock,
+    )
+    assert out["status"] == "observed", out
+    assert out["price"] == price
+    assert out["stock"] == stock
+    assert out["observation"]["availability"] == stock
+    assert _alert_kinds(out) == kinds
+    if stock == "can't read":
+        assert "can't read" in str(out["observation"]["evidence"])
 
 
 async def _once(store: MemoryStore, url: str, price: str, availability: str, stock: str, kinds: list[str]) -> None:

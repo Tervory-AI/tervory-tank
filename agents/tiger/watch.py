@@ -22,7 +22,7 @@ from urllib.parse import urlparse
 
 import asyncpg
 
-from change_alert import price_moved, stated_availability, stock_reading
+from change_alert import price_moved, record_stock, stock_reading, stock_statements
 from chassis.cron import is_due
 from chassis.db import schema_for
 from page_guard import layout_from_evidence, learn_layout, read_page
@@ -368,13 +368,13 @@ def _known_stock(value: Any) -> str | None:
 
 
 def _stock_for(method: str | None, raw: Any, html: str) -> str | None:
-    """Stock to store. Unknown wording stays visible as "can't read"."""
+    """Record a known stock phrase. Any other wording is "can't read"."""
     if method == "unread":
         return None
-    reading = stock_reading(raw)
-    if reading is not None:
-        return reading
-    return stock_reading(stated_availability(html))
+    recorded = record_stock(stock_statements(html))
+    if recorded is not None:
+        return recorded
+    return stock_reading(raw)
 
 
 async def _last_known_stock(store: Any, tenant_id: str, url: str, current_id: str) -> str | None:

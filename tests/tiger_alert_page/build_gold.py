@@ -351,6 +351,8 @@ def alert_series() -> list[dict]:
             _p("10.00", "10.00", "The words 'in stock' are the same phrase.", alert=False, availability="in stock", stock="InStock"),
             _p("10.00", "10.00", "Ships today is not a known stock phrase. Stock is can't read. The price stays $10.", alert=False, availability="Ships today", stock="can't read"),
             _p("10.00", "10.00", "Available now is not a known stock phrase. Stock is can't read. No alarm.", alert=False, availability="Available now", stock="can't read"),
+            _p("10.00", "10.00", "In stock (22 available) is not the known phrase. Stock is can't read. No alarm.", alert=False, availability="In stock (22 available)", stock="can't read"),
+            _p("10.00", "10.00", "45 in stock is not the known phrase. Stock is can't read. No alarm.", alert=False, availability="45 in stock", stock="can't read"),
         ], "synthetic"),
         _series("ca-after-unknown", "0", "Unknown stock is can't read. A later known out-of-stock still alerts.", [
             _p("10.00", "10.00", "First week is $10, in stock.", alert=False, stock="InStock"),

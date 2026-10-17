@@ -56,10 +56,10 @@ def stock_token(value: Any) -> str | None:
 
 
 def stock_reading(value: Any) -> str | None:
-    """Known stock word, nothing when stock was not stated, or "can't read".
+    """A known stock phrase, nothing when stock was not stated, or "can't read".
 
-    Unknown wording is not dropped. It is the same visible state as a price
-    that could not be read, and it is not a stock alert.
+    Stock is recorded only for a known phrase, including the same phrase in
+    different words. Any other wording is "can't read" and is not an alert.
     """
     if value is None:
         return None
@@ -74,18 +74,56 @@ def stock_reading(value: Any) -> str | None:
     return CANT_READ
 
 
+# Stock lines only. A wrapper div whose class says "instock" is not a stock phrase.
+_STOCK_LINE = re.compile(
+    r"""<(?:p|span|a|li|dd|td|h2|h3)\b[^>]*"""
+    r"""(?:itemprop\s*=\s*['"]availability['"]|class\s*=\s*['"][^'"]*"""
+    r"""(?:availability|\bstock\b|in-stock|out-of-stock)[^'"]*['"])[^>]*>"""
+    r"""(.*?)</(?:p|span|a|li|dd|td|h2|h3)>""",
+    re.I | re.S,
+)
+_TAG = re.compile(r"<[^>]+>")
+
+
+def stock_statements(html: str) -> list[str]:
+    """Stock wording on the page, before it is renamed to a token."""
+    if not html:
+        return []
+    found: list[str] = []
+    for pattern in (_AVAIL_JSON, _AVAIL_FIELD, _AVAIL_FIELD_REV):
+        for match in pattern.finditer(html):
+            text = match.group(1).strip()
+            if text:
+                found.append(text)
+    for match in _STOCK_LINE.finditer(html):
+        text = " ".join(_TAG.sub(" ", match.group(1)).split())
+        if text and len(text) <= 80:
+            found.append(text)
+    return found
+
+
+def record_stock(statements: list[str]) -> str | None:
+    """Record a token only when every stock line is the same known phrase."""
+    if not statements:
+        return None
+    tokens: list[str] = []
+    for text in statements:
+        reading = stock_reading(text)
+        if reading == CANT_READ:
+            return CANT_READ
+        if reading:
+            tokens.append(reading)
+    if not tokens:
+        return None
+    if len(set(tokens)) == 1:
+        return tokens[0]
+    return CANT_READ
+
+
 def stated_availability(html: str) -> str | None:
     """Availability words written in a stock field, before they are renamed."""
-    if not html:
-        return None
-    for pattern in (_AVAIL_JSON, _AVAIL_FIELD, _AVAIL_FIELD_REV):
-        match = pattern.search(html)
-        if match is None:
-            continue
-        text = match.group(1).strip()
-        if text:
-            return text
-    return None
+    found = stock_statements(html)
+    return found[0] if found else None
 
 
 def normalize_price(value: Any) -> str | None:
