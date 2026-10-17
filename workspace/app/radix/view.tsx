@@ -174,7 +174,7 @@ export function RadixPage({ founder }: { founder: boolean }) {
       </section> : <>
         <div className="rx-example-banner"><span className="rx-badge">Example</span><p>3 made-up findings. This is not a scan of your code or approval to release it.</p></div>
         <div className="rx-filter">
-          <label>Severity<select value={severity} onChange={(event) => setSeverity(event.target.value)}>
+          <label>Severity<select aria-label="Severity" value={severity} onChange={(event) => setSeverity(event.target.value)}>
             {["All", "Critical", "High", "Medium"].map((value) => <option key={value}>{value}</option>)}
           </select></label>
           <label>Find a file or issue<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search example findings" /></label>
