@@ -208,7 +208,7 @@ def test_negation_is_a_class_of_words() -> None:
 
 
 def test_demand_wording_is_not_a_current_outage() -> None:
-    """Keeping, holding, or staying in stock is unclear. A plain outage still alerts."""
+    """Selling-fast lines are can't read. A positive keep or hold is in stock."""
     both = (
         "<p class=\"stock\">Couldn't keep it in stock</p>"
         "<script type=\"application/ld+json\">"
@@ -244,10 +244,29 @@ def test_demand_wording_is_not_a_current_outage() -> None:
         ("https://stock.test/state", "The repaired unit is out of stock", "OutOfStock", ["stock"]),
         ("https://stock.test/state", "The listed item is in stock", "InStock", ["stock"]),
         ("https://stock.test/state", "couldn't really maintain it in stock", "can't read", []),
-        ("https://stock.test/state", "to quickly remain in stock", "can't read", []),
+        ("https://stock.test/state", "to quickly remain in stock", "InStock", []),
         ("https://stock.test/remain", "https://schema.org/InStock", "InStock", []),
         ("https://stock.test/remain", "We tried to remain in stock. Sold out.", "OutOfStock", ["stock"]),
         ("https://stock.test/remain", "sold out", "OutOfStock", []),
+        ("https://stock.test/gap", "https://schema.org/InStock", "InStock", []),
+        ("https://stock.test/gap", "Couldn't keep it well in stock", "can't read", []),
+        ("https://stock.test/gap", "couldn't keep it often in stock", "can't read", []),
+        ("https://stock.test/gap", "Couldn't well carry it in stock", "can't read", []),
+        ("https://stock.test/gap", "This item is currently out of stock", "OutOfStock", ["stock"]),
+        ("https://stock.test/gap", "To remain well in stock", "InStock", ["stock"]),
+        ("https://stock.test/gap", "to well offer it in stock", "InStock", []),
+        ("https://stock.test/gap", "The repaired unit is out of stock", "OutOfStock", ["stock"]),
+        ("https://stock.test/gap", "The listed item is in stock", "InStock", ["stock"]),
+        ("https://stock.test/positive", "https://schema.org/OutOfStock", "OutOfStock", []),
+        ("https://stock.test/positive", "held in stock", "InStock", ["stock"]),
+        ("https://stock.test/positive", "we keep it in stock", "InStock", []),
+        ("https://stock.test/positive-quiet", "https://schema.org/InStock", "InStock", []),
+        ("https://stock.test/positive-quiet", "held in stock", "InStock", []),
+        ("https://stock.test/positive-quiet", "We keep it in stock", "InStock", []),
+        ("https://stock.test/counts", "only 4 left", "InStock", []),
+        ("https://stock.test/counts", "8 available", "InStock", []),
+        ("https://stock.test/counts", "only 0 left", "OutOfStock", ["stock"]),
+        ("https://stock.test/counts", "0 available", "OutOfStock", []),
     ]
 
     async def check() -> None:

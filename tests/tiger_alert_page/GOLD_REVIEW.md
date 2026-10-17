@@ -3,7 +3,7 @@
 Every gold answer is unverified until Zenas checks it. Scores are provisional.
 
 Change alerts, build set: caught 100.0% (16/16), false alarms 0.0% (0/68).
-Change alerts, held out: caught 100.0% (27/27), false alarms 0.0% (0/99).
+Change alerts, held out: caught 100.0% (27/27), false alarms 0.0% (0/101).
 Changed pages, build set: 100.0% can't read (68/68), guesses 0.
 Changed pages, held out: 100.0% can't read (32/32), guesses 0.
 
@@ -132,6 +132,8 @@ Columns: case id, what changed, expected outcome, actual outcome, verified.
 | ca-pattern-fixture-s01 | change-alerts | build | saved-page | The page still shows $4.50. | no alert, price 4.50 | no alert, observed, stock None, price 4.50 | no |
 | ca-pattern-fixture-s02 | change-alerts | build | saved-page | The page still shows $4.50. | no alert, price 4.50 | no alert, observed, stock None, price 4.50 | no |
 | ca-pattern-fixture-s03 | change-alerts | build | saved-page | The price line now says $5.25. | alert price, price 5.25 | alert price, observed, stock None, price 5.25 | no |
+| ca-positive-keep-s00 | change-alerts | heldout | synthetic | Held in stock is in stock. No alarm. Decided by Zenas. | no alert, stock InStock, price 10.00 | no alert, observed, stock InStock, price 10.00 | decided by Zenas |
+| ca-positive-keep-s01 | change-alerts | heldout | synthetic | We keep it in stock is in stock. No alarm. Decided by Zenas. | no alert, stock InStock, price 10.00 | no alert, observed, stock InStock, price 10.00 | decided by Zenas |
 | ca-preorder-s00 | change-alerts | heldout | synthetic | First week is $16, in stock. | no alert, stock InStock, price 16.00 | no alert, observed, stock InStock, price 16.00 | no |
 | ca-preorder-s01 | change-alerts | heldout | synthetic | The price stays $16 and stock is now preorder. | alert stock, stock PreOrder, price 16.00 | alert stock, observed, stock PreOrder, price 16.00 | no |
 | ca-promo-s00 | change-alerts | heldout | synthetic | First week is $30. | no alert, price 30.00 | no alert, observed, stock InStock, price 30.00 | no |

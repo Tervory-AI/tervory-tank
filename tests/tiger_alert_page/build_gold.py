@@ -49,6 +49,7 @@ HOLDOUT_IDS = {
     "ca-out-words",
     "ca-negation",
     "ca-negation-kinds",
+    "ca-positive-keep",
     "ca-after-unknown",
     "ca-prompt-page",
     "ca-strip-decoy",
@@ -401,6 +402,10 @@ def alert_series() -> list[dict]:
             _p("10.00", "10.00", "Ships today cannot be read. No alarm.", alert=False, availability="Ships today", stock="can't read"),
             _p("10.00", "10.00", "Available now cannot be read. No alarm.", alert=False, availability="Available now", stock="can't read"),
             _p("10.00", "10.00", "Couldn't keep it in stock describes demand, not a current outage. Can't read. No alarm. Decided by Zenas.", alert=False, availability="couldn't keep it in stock", stock="can't read", mark="decided by Zenas"),
+        ], "synthetic"),
+        _series("ca-positive-keep", "0", "A positive keep or hold is in stock. Decided by Zenas.", [
+            _p("10.00", "10.00", "Held in stock is in stock. No alarm. Decided by Zenas.", alert=False, availability="held in stock", stock="InStock", mark="decided by Zenas"),
+            _p("10.00", "10.00", "We keep it in stock is in stock. No alarm. Decided by Zenas.", alert=False, availability="we keep it in stock", stock="InStock", mark="decided by Zenas"),
         ], "synthetic"),
         _series("ca-after-unknown", "0", "Unknown stock is can't read. A later known out-of-stock still alerts.", [
             _p("10.00", "10.00", "First week is $10, in stock.", alert=False, stock="InStock"),

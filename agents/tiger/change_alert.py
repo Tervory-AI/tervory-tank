@@ -57,23 +57,8 @@ _NEGATOR = (
 )
 _GAP = r"(?:\s+[a-z0-9]+){0,4}"
 _NEG_TAIL = re.compile(_NEGATOR + _GAP + r"\s*$", re.I)
-# Keeping, holding, or staying in stock is about demand or past difficulty, not
-# a statement that the product is unavailable now. The signal is the verb in
-# that role, not a list of difficulty words. keep/hold/stay in any form counts,
-# and so does any other verb in the same spot: an infinitive ("to carry"), a
-# participle ("maintaining"), or the word a negator actually scopes to
-# ("couldn't remain"). Auxiliaries such as be/have/come are not that verb, so
-# negation still flips the stock phrase. A later plain "out of stock" or
-# "in stock" is a new sentence and still counts.
-_RETAIN = {
-    "keep", "keeps", "keeping", "kept",
-    "hold", "holds", "holding", "held",
-    "stay", "stays", "staying", "stayed",
-    "remain", "remains", "remaining", "remained",
-    "maintain", "maintains", "maintaining", "maintained",
-}
-# Closed class. Negation is allowed to pass through these. They are not the
-# demand verb.
+# "no stock" needs the negator's own gap to be short and closed. A longer
+# sentence such as "couldn't keep it in stock" is not this.
 _AUX = {
     "be", "been", "being", "am", "is", "are", "was", "were",
     "have", "has", "had", "having",
@@ -82,19 +67,38 @@ _AUX = {
     "get", "gets", "got", "getting",
     "go", "goes", "going", "gone", "went",
 }
-_FUNCTION = _AUX | {
-    "i", "we", "you", "he", "she", "it", "they", "me", "us", "him", "her", "them",
-    "my", "our", "your", "his", "its", "their",
-    "a", "an", "the", "this", "that", "these", "those",
-    "any", "some", "all", "each", "every",
-    "of", "to", "for", "from", "in", "on", "at", "by", "with", "as", "and", "or", "but",
-    "still", "now", "just", "back", "again", "here", "there", "even", "yet", "once", "then",
-    "also", "only", "already", "longer", "left", "unit", "units", "more", "most", "very",
-    "too", "so", "one", "up",
+_CLEAR_GAP = _AUX | {
+    "it", "its", "them", "this", "that", "these", "those",
+    "a", "an", "the", "any", "some",
+    "longer", "left", "unit", "units",
+    "currently", "now",
 }
-_NOT_A_PARTICIPLE = _AUX | {"nothing", "something", "anything", "everything"}
 _WORD = re.compile(r"[A-Za-z0-9]+(?:['\u2019]t)?")
 _WORD_NEG = re.compile(r"(?:" + _NEGATOR + r")\Z", re.I)
+_ONLY_LEFT = re.compile(r"\bonly\s+(\d+)\s+left\b", re.I)
+_N_AVAILABLE = re.compile(r"\b(\d+)\s+available\b", re.I)
+# Selling fast, or trouble keeping up. A positive "we keep it in stock" or
+# "held in stock" is a real in-stock statement, so the verb alone is not enough.
+_INABILITY = re.compile(
+    r"\b(?:couldn" + _APOS + r"t|can" + _APOS + r"t|cannot|could\s+not|can\s+not)\b",
+    re.I,
+)
+_MAINTAIN = re.compile(
+    r"\b(?:keeps|keeping|kept|keep|holds|holding|held|hold|"
+    r"stays|staying|stayed|stay|remains|remaining|remained|remain|"
+    r"maintains|maintaining|maintained|maintain|"
+    r"carries|carrying|carried|carry)\b",
+    re.I,
+)
+_TROUBLE = re.compile(
+    r"\b(?:trouble|hard|difficult|challenge|struggle|struggling)\b",
+    re.I,
+)
+_SELLING_PACE = re.compile(
+    r"\bsell(?:s|ing|ed)?\b(?:\s+[a-z]+){0,4}\s+fast\b(?:\s+[a-z]+){0,3}\s+"
+    r"to\s+(?:keep|hold|stay|remain|maintain|carry)\b",
+    re.I,
+)
 # "no stock" and "without stock" name stock without "in" or "out of".
 _NO_STOCK = re.compile(_NEGATOR + _GAP + r"\s+stock\b", re.I)
 _PHRASE = (
@@ -126,15 +130,6 @@ def _negated(prefix: str) -> bool:
     return _NEG_TAIL.search(prefix) is not None
 
 
-# Words that may sit between the governing verb and the stock phrase, or between
-# "to" / a negator and that verb. A copula is not in this set: "is out of stock"
-# is a current state. An earlier adjective such as "repaired" or "listed" does
-# not change that.
-_BETWEEN = (_FUNCTION - _AUX - {"to"}) | {
-    "quite", "rather",
-}
-
-
 def _clause_words(prefix: str) -> list[str]:
     """Words before a stock phrase, in the same sentence."""
     clause = re.split(r"[.!;?]+", prefix)[-1]
@@ -145,55 +140,54 @@ def _negator_word(word: str) -> bool:
     return _WORD_NEG.search(word) is not None
 
 
-def _adverb(word: str) -> bool:
-    """A word that can sit in the gap without being the governing verb."""
-    if word in {"quite", "rather", "too", "very", "so", "just"}:
+def _negated_status(words: list[str]) -> bool:
+    """A negator, then only the closed gap. Used for "no stock", not for phrases."""
+    index = None
+    for i, word in enumerate(words):
+        if _negator_word(word):
+            index = i
+    if index is None:
+        return False
+    return all(word in _CLEAR_GAP or word.isdigit() for word in words[index + 1:])
+
+
+def _selling_fast(prefix: str) -> bool:
+    """Demand or trouble keeping the item stocked. Not a positive keep or hold."""
+    clause = re.split(r"[.!;?]+", prefix)[-1]
+    if _SELLING_PACE.search(clause):
         return True
-    return len(word) > 3 and word.endswith("ly")
-
-
-def _between(word: str) -> bool:
-    """An adverb, pronoun, or determiner that is not the governing verb."""
-    return word.isdigit() or word in _BETWEEN or _adverb(word)
-
-
-def _participle(word: str) -> bool:
-    """A verb form such as maintaining or carried. Not 'nothing' or 'been'."""
-    if word in _NOT_A_PARTICIPLE:
+    if _MAINTAIN.search(clause) is None:
         return False
-    if len(word) >= 6 and word.endswith("ing"):
-        return True
-    return len(word) >= 5 and word.endswith("ed")
+    return _INABILITY.search(clause) is not None or _TROUBLE.search(clause) is not None
 
 
-def _demand_clause(prefix: str) -> bool:
-    """True when the verb governing this stock phrase is demand or difficulty.
+def _count_token(number: str) -> str:
+    return "OutOfStock" if int(number) == 0 else "InStock"
 
-    "Is" plus in stock or out of stock is the current state. An adverb may sit
-    between "to" or a negator and the verb, and between that verb and the phrase.
-    """
-    words = _clause_words(prefix)
-    skipped_adverb = False
-    while words and _between(words[-1]):
-        if _adverb(words[-1]):
-            skipped_adverb = True
-        words.pop()
-    if not words:
+
+def _count_phrases(text: str) -> list[str]:
+    """'only N left' and 'N available'. Zero is out of stock."""
+    found: list[str] = []
+    for pattern in (_ONLY_LEFT, _N_AVAILABLE):
+        for match in pattern.finditer(text):
+            token = _count_token(match.group(1))
+            if _negated_status(_clause_words(text[:match.start()])):
+                flipped = _flip_stock(token)
+                token = flipped or token
+            if token not in found:
+                found.append(token)
+    return found
+
+
+def _clear_bare_stock(text: str) -> bool:
+    """'no stock' and 'without stock'. Not 'couldn't keep it in stock'."""
+    match = _NO_STOCK.search(text)
+    if not match:
         return False
-    head = words[-1]
-    # A copula or a negator is the current state ("is out of stock", "not in stock").
-    if head in _AUX or _negator_word(head):
-        return False
-    # An adverb between the verb and the phrase still leaves that verb in charge.
-    if head in _RETAIN or _participle(head) or skipped_adverb:
-        return True
-    prior = words[:-1]
-    while prior and _between(prior[-1]):
-        prior.pop()
-    if not prior:
-        return False
-    marker = prior[-1]
-    return marker == "to" or _negator_word(marker)
+    words = _clause_words(match.group(0))
+    if words and words[-1] == "stock":
+        words = words[:-1]
+    return _negated_status(words)
 
 
 def _flip_stock(token: str) -> str | None:
@@ -206,31 +200,36 @@ def _flip_stock(token: str) -> str | None:
 
 
 def phrases_in(value: Any) -> list[str]:
-    """Known stock phrases in this wording. A negator before the phrase wins."""
+    """Known stock phrases in this wording. A negator before the phrase wins.
+
+    "Couldn't keep it in stock" and the same kind of selling-fast line are
+    not a stock phrase. "Held in stock" and "we keep it in stock" are.
+    """
     if value is None:
         return []
     text = str(value).strip()
     if not text or text == CANT_READ:
         return []
     found: list[str] = []
-    demand = False
     for token, pattern in _PHRASE:
         for match in pattern.finditer(text):
-            if _demand_clause(text[:match.start()]):
-                demand = True
+            prefix = text[:match.start()]
+            prose_in_stock = token == "InStock" and not re.search(r"schema\.org", match.group(0), re.I)
+            if prose_in_stock and _selling_fast(prefix):
                 continue
-            if _negated(text[:match.start()]):
+            if _negated(prefix):
                 flipped = _flip_stock(token)
                 if flipped and flipped not in found:
                     found.append(flipped)
                 continue
             if token not in found:
                 found.append(token)
+    for token in _count_phrases(text):
+        if token not in found:
+            found.append(token)
     if found:
         return found
-    if demand:
-        return []
-    if _NO_STOCK.search(text):
+    if _clear_bare_stock(text):
         return ["OutOfStock"]
     tail = text.rstrip("/").split("/")[-1]
     key = re.sub(r"[\s_\-]+", "", tail).lower()
@@ -249,9 +248,9 @@ def stock_token(value: Any) -> str | None:
 def stock_reading(value: Any) -> str | None:
     """A known stock phrase, nothing when stock was not stated, or "can't read".
 
-    Clear out-of-stock wording is out of stock. "Can't read" is only when
-    the stock cannot be told. A known in-stock phrase with extra words stays
-    in stock.
+    Clear out-of-stock wording is out of stock. A positive keep or hold is
+    in stock. Selling-fast wording, and any other wording with no known
+    phrase, is "can't read".
     """
     if value is None:
         return None
@@ -294,9 +293,10 @@ def stock_statements(html: str) -> list[str]:
 def record_stock(statements: list[str]) -> str | None:
     """Record the stock the page states. Out of stock wins over in stock.
 
-    "Not in stock" is out of stock, not in stock. One unclear line does not
-    veto a known phrase. "Can't read" is only when no clear stock phrase is
-    there, or two different phrases still disagree and neither is out of stock.
+    "Not in stock" is out of stock, not in stock. One selling-fast line does
+    not veto a known phrase. "Can't read" is when the only wording is not a
+    known phrase, or two different phrases still disagree and neither is out
+    of stock.
     """
     if not statements:
         return None
