@@ -44,8 +44,22 @@ The secret text is not a column. It is masked out of the summary, the rows, and 
 ## RX-2 preparation
 
 [RX-2 controlled egress preparation](RX2-egress-plan.md) records the host approval
-gate, the prepared HTTP checks, and the network tests still required. No external
-host is approved by this change; the room remains sealed. RX-3 and RX-4 wait.
+gate, the prepared HTTP checks, and the network tests still required. The only
+approved external name is `lokd.co.za` (HTTPS, port 443). The room remains
+sealed: this compose file still leaves `RADIX_ALLOWED_HOSTS` empty, and the
+corridor is an internal network. An application allowlist is not a substitute
+for the egress proxy.
+
+## First live check
+
+`live.py` is a passive header and certificate check of `https://lokd.co.za/`
+only. It does not follow a redirect to any other host, and it does not read or
+store a cookie value. Run it from a worker that can reach that host:
+
+`python live.py`
+
+The Radix room cannot run it. The room has no path to the public internet, and
+this check is not a job on the service.
 
 The guard accepts exact ASCII DNS names and HTTP/HTTPS default ports only.
 It returns redirects without following them, refuses a different Host header,

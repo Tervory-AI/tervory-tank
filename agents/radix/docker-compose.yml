@@ -6,7 +6,9 @@
 # tervory-gw-radix is an internal network, created once on the server with:
 #   docker network create --internal tervory-gw-radix
 # Radix can reach Tank, Postgres, and Hermes, and nothing else. No internet.
-# RADIX_ALLOWED_HOSTS stays empty until an egress proxy enforces the same list.
+# The only approved external name is lokd.co.za (HTTPS, port 443).
+# RADIX_ALLOWED_HOSTS stays empty here. This network is internal, and an
+# allowlist is not a substitute for the egress proxy.
 
 services:
   agent-radix:
