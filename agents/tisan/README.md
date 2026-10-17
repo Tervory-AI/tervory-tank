@@ -36,10 +36,26 @@ The tenant is the job's `tenant_id`. Brand colours and fonts become CSS variable
 
 Before it returns, the room runs `npm ci`, `npm run lint`, `npm run build`, and `npm test`. The project is stored at `/data/builds/<tenant>/<slug>/<n>.tar.gz` with a manifest: `files`, `token_set`, and `checks`.
 
+## Figma reader
+
+Skill `tisan.figma` (job kind `figma`). It reads one page and returns named colour, type, and spacing tokens as CSS custom properties, a Tailwind config that points at those properties, and a component manifest. A value that disagrees with itself is listed under `conflicts` and left out of the tokens. A state a component does not have is listed under `gaps` and is not invented.
+
+```json
+{
+  "file_key": "ksi7ctRwEnN8wbip1yfuhL",
+  "node_id": "0:1"
+}
+```
+
+`file_key` defaults to the Tervory file. `node_id` defaults to page `0:1`, "Landing — Desktop & Mobile". `2:11` is the desktop frame and `6:45` is the mobile frame. The tenant is the job's `tenant_id`. The reading is stored at `/data/readings/<tenant>/<file_key>/<node>.json`.
+
+The room's only network is `tervory-gw-tisan`. A live Figma call would need a route to the public internet, and this room does not get one. The reader uses the recorded fixture `agents/tisan/fixtures/tervory-landing.json`, captured from the Figma connection on 17 Oct 2026. It does not call Figma. The fixture has the resolved variable values and no collection names. `FIGMA_TOKEN` is a name in `.env.example` only. The room does not receive it.
+
+The recorded page has no spacing variables, no font family, weight, or line height, and the Button component has no hover, active, disabled, or error state. Those are gaps. The reader does not fill them in.
+
 ## Later skills
 
-1. The Figma token reader (the style contract).
-2. The Playwright test runner.
+1. The Playwright test runner.
 
 ## What Tisan never does
 

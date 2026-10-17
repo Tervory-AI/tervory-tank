@@ -8,6 +8,8 @@ RUN pip install --no-cache-dir -r requirements.txt \
 COPY _chassis/chassis /app/chassis
 COPY tisan/app.py /app/app.py
 COPY tisan/scaffold.py /app/scaffold.py
+COPY tisan/figma.py /app/figma.py
+COPY tisan/fixtures /app/fixtures
 COPY tisan/templates /app/templates
 # Node is for the scaffold checks. Dependencies are cached here so a run needs no network.
 RUN apt-get update \
@@ -36,6 +38,7 @@ ENV AGENT_NAME=tisan \
     DATA_DIR=/data \
     PYTHONUNBUFFERED=1 \
     TISAN_TEMPLATE=/app/templates/next-site \
+    TISAN_FIGMA_FIXTURE=/app/fixtures/tervory-landing.json \
     TISAN_NPM_CACHE=/opt/npm-cache \
     TISAN_NPM_OFFLINE=1 \
     NEXT_TELEMETRY_DISABLED=1 \
