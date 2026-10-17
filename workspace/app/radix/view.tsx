@@ -7,6 +7,23 @@ import { checks, exampleFindings, exampleReport, sourceSections } from "./conten
 type Section = "Overview" | "Findings" | "Reports";
 const sections: Section[] = ["Overview", "Findings", "Reports"];
 
+function keepDialogFocus(event: KeyboardEvent<HTMLDialogElement>) {
+  if (event.key !== "Tab") return;
+  const nodes = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(
+    'button, a[href], input, select, textarea, summary, [tabindex]:not([tabindex="-1"])',
+  )).filter((node) => node.tabIndex >= 0 && !node.matches(":disabled") && node.getClientRects().length > 0);
+  const first = nodes[0];
+  const last = nodes[nodes.length - 1];
+  if (!first) return;
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
 function Logo() {
   return <img src="/brand/tervory-logo-reversed.png" width={186} height={34} alt="Tervory" className="rx-logo" />;
 }
@@ -128,7 +145,7 @@ export function RadixPage({ founder }: { founder: boolean }) {
       <button ref={menuTrigger} type="button" aria-haspopup="dialog" onClick={() => menu.current?.showModal()}>Menu</button>
     </header>
     <aside className="rx-panel" data-panel-anchor="fixed">{navigation()}</aside>
-    <dialog className="rx-menu-dialog" ref={menu} aria-label="Navigation">
+    <dialog className="rx-menu-dialog" ref={menu} aria-label="Navigation" onKeyDown={keepDialogFocus}>
       <button className="rx-menu-close" type="button" onClick={() => menu.current?.close()}>Close menu</button>
       {navigation()}
     </dialog>
@@ -193,7 +210,7 @@ export function RadixPage({ founder }: { founder: boolean }) {
       </>}
       <footer className="rx-footnote">Code checks use supplied files. No website is scanned from this page.</footer>
     </div>
-    <dialog ref={sources} className="rx-sources-dialog" aria-labelledby="rx-sources-title"
+    <dialog ref={sources} className="rx-sources-dialog" aria-labelledby="rx-sources-title" onKeyDown={keepDialogFocus}
       onClose={() => sourcesTrigger.current?.focus()}>
       <div className="rx-modal-header">
         <div><h2 id="rx-sources-title">Sources</h2><p>The files and connections Radix can use.</p></div>
