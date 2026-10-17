@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import copy
 import json
+from datetime import date, datetime, timezone
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -141,7 +143,63 @@ def _uuid(value: str) -> UUID:
 
 
 def _json(value: Any) -> str:
+    """JSON text for a jsonb argument.
+
+    asyncpg's jsonb codec sends a string. A dict is rejected before Postgres
+    sees it. The string is the JSON object, encoded once.
+    """
     return json.dumps(value if value is not None else {})
+
+
+def _numeric(value: Any) -> Decimal | None:
+    """A numeric column. None stays NULL. Floats go through text so 10.10 stays 10.10."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        raise TypeError("numeric value is not a number")
+    if isinstance(value, Decimal):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return Decimal(text)
+    except InvalidOperation as exc:
+        raise ValueError("numeric value is not a number") from exc
+
+
+def _money(value: Any) -> Decimal:
+    number = _numeric(value)
+    if number is None:
+        raise ValueError("numeric value is missing")
+    return number
+
+
+def _timestamptz(value: Any) -> datetime:
+    """A timestamptz value. A date-only sheet cell is midnight UTC.
+
+    asyncpg will not accept ``'2026-03-01'`` for a timestamp argument. The
+    cast in SQL does not change that: the driver encodes the value first.
+    """
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+    if isinstance(value, date):
+        return datetime(value.year, value.month, value.day, tzinfo=timezone.utc)
+    text = str(value).strip()
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    parsed = datetime.fromisoformat(text)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _optional_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    return str(value)
 
 
 def _fit_key(row: dict[str, Any]) -> tuple[str, str, str]:
@@ -424,15 +482,15 @@ class PgStore:
                 """,
                 _uuid(tenant_id),
                 str(row["sku"]),
-                row.get("gtin"),
-                row["name"],
-                row["brand"],
-                row["category"],
-                row["price"],
-                row["currency"],
-                row.get("image_url"),
-                row.get("url") or "",
-                row.get("family") or "",
+                _optional_text(row.get("gtin")),
+                str(row["name"]),
+                str(row["brand"]),
+                str(row["category"]),
+                _money(row.get("price")),
+                str(row["currency"]),
+                _optional_text(row.get("image_url")),
+                str(row.get("url") or ""),
+                str(row.get("family") or ""),
                 _json(row.get("attributes") or {}),
                 bool(row.get("active", True)),
             )
@@ -474,7 +532,7 @@ class PgStore:
                 str(row.get("fits_family") or ""),
                 _json(row.get("rule") or {}),
                 str(row.get("source") or "import"),
-                row.get("confidence"),
+                _numeric(row.get("confidence")),
                 bool(row.get("approved")),
                 str(row.get("note") or ""),
             )
@@ -518,8 +576,8 @@ class PgStore:
                 ON CONFLICT (tenant_id, family) DO UPDATE SET member_skus = EXCLUDED.member_skus
                 """,
                 _uuid(tenant_id),
-                family,
-                members,
+                str(family),
+                [str(item) for item in members],
             )
 
     async def set_template(self, tenant_id: str, category: str, roles: Any) -> None:
@@ -531,7 +589,7 @@ class PgStore:
                 ON CONFLICT (tenant_id, category) DO UPDATE SET roles = EXCLUDED.roles
                 """,
                 _uuid(tenant_id),
-                category,
+                str(category),
                 _json(roles),
             )
         await self._drop_answers(tenant_id)
@@ -562,9 +620,9 @@ class PgStore:
                     origins = EXCLUDED.origins
                 """,
                 _uuid(tenant_id),
-                key_hash,
-                kind,
-                origins,
+                str(key_hash),
+                str(kind),
+                [str(item) for item in origins],
             )
 
     async def key(self, key_hash: str) -> dict[str, Any] | None:
@@ -597,10 +655,10 @@ class PgStore:
                     name = EXCLUDED.name
                 """,
                 _uuid(tenant_id),
-                slug,
-                email,
-                webhook,
-                name,
+                str(slug),
+                _optional_text(email),
+                _optional_text(webhook),
+                str(name or ""),
             )
 
     async def retailer(self, tenant_id: str) -> dict[str, Any] | None:
@@ -621,20 +679,21 @@ class PgStore:
                     _uuid(tenant_id),
                 )
                 for row in rows:
-                    seen = str(row.get("seen_at") or "").strip()
-                    if seen:
+                    seen = row.get("seen_at")
+                    price = _money(row.get("price"))
+                    if seen is not None and str(seen).strip():
                         await conn.execute(
                             """
                             INSERT INTO agent_rig.market_prices
                                 (tenant_id, sku, source, price, currency, seen_at)
-                            VALUES ($1, $2, $3, $4, $5, $6::timestamptz)
+                            VALUES ($1, $2, $3, $4, $5, $6)
                             """,
                             _uuid(tenant_id),
                             str(row.get("sku") or ""),
                             str(row.get("source") or ""),
-                            row.get("price"),
+                            price,
                             str(row.get("currency") or ""),
-                            seen,
+                            _timestamptz(seen),
                         )
                     else:
                         await conn.execute(
@@ -646,7 +705,7 @@ class PgStore:
                             _uuid(tenant_id),
                             str(row.get("sku") or ""),
                             str(row.get("source") or ""),
-                            row.get("price"),
+                            price,
                             str(row.get("currency") or ""),
                         )
         await self._drop_answers(tenant_id)
@@ -684,9 +743,9 @@ class PgStore:
                 ON CONFLICT (tenant_id, url) DO UPDATE SET format = EXCLUDED.format, currency = EXCLUDED.currency
                 """,
                 _uuid(tenant_id),
-                fmt,
-                url,
-                currency,
+                str(fmt),
+                str(url),
+                str(currency or ""),
             )
 
     async def feeds_for(self, tenant_id: str) -> list[dict[str, Any]]:
@@ -710,7 +769,7 @@ class PgStore:
                 VALUES ($1, $2, $3::jsonb, $4::jsonb)
                 """,
                 _uuid(tenant_id),
-                quote_id,
+                str(quote_id),
                 _json(payload),
                 _json(contact),
             )
@@ -750,9 +809,9 @@ class PgStore:
                 WHERE tenant_id = $1 AND part_sku = $2 AND fits_sku = $3 AND fits_family = $4
                 """,
                 _uuid(tenant_id),
-                part_sku,
-                fits_sku or "",
-                fits_family or "",
+                str(part_sku),
+                str(fits_sku or ""),
+                str(fits_family or ""),
             )
         changed = str(result).endswith("1")
         if changed:
@@ -767,9 +826,9 @@ class PgStore:
                 WHERE tenant_id = $1 AND part_sku = $2 AND fits_sku = $3 AND fits_family = $4
                 """,
                 _uuid(tenant_id),
-                part_sku,
-                fits_sku or "",
-                fits_family or "",
+                str(part_sku),
+                str(fits_sku or ""),
+                str(fits_family or ""),
             )
         changed = str(result).endswith("1")
         if changed:
@@ -788,10 +847,10 @@ class PgStore:
                 WHERE tenant_id = $1 AND sku = $2
                 """,
                 _uuid(tenant_id),
-                sku,
-                patch.get("price"),
-                patch.get("currency"),
-                patch.get("active"),
+                str(sku),
+                _numeric(patch.get("price")),
+                _optional_text(patch.get("currency")),
+                None if patch.get("active") is None else bool(patch.get("active")),
             )
         changed = str(result).endswith("1")
         if changed:

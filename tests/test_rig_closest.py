@@ -346,3 +346,58 @@ async def test_the_page_labels_closest_matches() -> None:
     exact = client.get("/v1/rig/search", params={"q": "Staccato C2"}, headers=headers)
     assert exact.json()["exact_match"] is True
     assert "Closest matches" not in exact.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("query", "sku"),
+    [
+        ("Holosun rds", "HOL-507C-X2"),
+        ("Safariland qd", "SAF-ALS-FULL"),
+        ("Tenicor mlok", "TENICOR-VELO"),
+        ("Holosun lh", "HOL-507C-X2"),
+        ("Holosun rh", "HOL-507C-X2"),
+        ("Holosun moa", "HOL-507C-X2"),
+        ("Holosun ir", "HOL-507C-X2"),
+        ("Streamlight led", "SL-TLR1"),
+        ("Holosun picatinny", "HOL-507C-X2"),
+        ("Safariland metal", "SAF-ALS-FULL"),
+        ("Tenicor primary", "TENICOR-VELO"),
+        ("Streamlight cr123", "SL-TLR1"),
+        ("SureFire cr123a", "SF-X300U"),
+        ("Holosun cr2032", "HOL-507C-X2"),
+    ],
+)
+async def test_shopping_descriptors_and_cell_codes_stay_exact(query: str, sku: str) -> None:
+    service = await _service()
+    found = await service.search(CN, query, 12)
+    assert found["exact_match"] is True, query
+    assert "message" not in found
+    assert _ids(found)[0] == sku
+
+
+@pytest.mark.asyncio
+async def test_spaced_codes_join_to_catalogue_codes() -> None:
+    service = await _service()
+    both = await service.search(CN, "c 2", 12)
+    assert both["exact_match"] is True
+    assert "STI-C2-9" in _ids(both)
+    branded = await service.search(CN, "Staccato c 2", 12)
+    assert branded["exact_match"] is True
+    assert _ids(branded)[0] == "STI-C2-9"
+    grip = await service.search(CN, "e 2", 12)
+    assert grip["exact_match"] is True
+    assert "CHEELY-E2" in _ids(grip)
+    cheely = await service.search(CN, "Cheely e 2", 12)
+    assert cheely["exact_match"] is True
+    assert _ids(cheely)[0] == "CHEELY-E2"
+    optic = await service.search(CN, "x 2", 12)
+    assert optic["exact_match"] is True
+    assert _ids(optic)[0] == "HOL-507C-X2"
+    light = await service.search(CN, "Streamlight TLR 1", 12)
+    assert light["exact_match"] is True
+    assert _ids(light)[0] == "SL-TLR1"
+    missing = await service.search(CN, "Staccato c 4", 12)
+    assert missing["exact_match"] is False
+    assert missing["message"] == "No exact match for c 4."
+    assert "STI-C2-9" in _ids(missing)
