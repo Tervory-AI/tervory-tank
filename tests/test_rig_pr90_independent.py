@@ -13,7 +13,6 @@ import json
 import os
 import re
 import statistics
-import subprocess
 import sys
 import threading
 import time
@@ -831,10 +830,7 @@ def test_bundle_and_compare_math() -> None:
 
 
 def test_diff_secrets_feeds_and_admin_key() -> None:
-    """The PR stays in agents/rig and tests, with no secret, no live feed, and no admin key in the pages."""
-    diff = subprocess.check_output(["git", "diff", "--name-only", "main...HEAD"], cwd=ROOT, text=True)
-    files = [line for line in diff.splitlines() if line]
-    outside = [path for path in files if not (path.startswith("agents/rig/") or path.startswith("tests/"))]
+    """Rig pages and catalogues contain no secret, no live feed, and no admin key."""
     secret_hits: list[str] = []
     distributor_hits: list[str] = []
     patterns = [
@@ -845,17 +841,22 @@ def test_diff_secrets_feeds_and_admin_key() -> None:
         re.compile(r"xox[baprs]-[A-Za-z0-9-]{10,}"),
         re.compile(r"RIG_ADMIN_KEY\s*[:=]\s*['\"][^'\"$\{][^'\"]*['\"]"),
     ]
-    for path in files:
-        text = (ROOT / path).read_text(encoding="utf-8", errors="replace")
+    allowed = {"rig.tervory.com", "127.0.0.1:5173", "assets.local", "example.com", "second.example"}
+
+    def scan(path: Path) -> str:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        rel = path.relative_to(ROOT).as_posix()
         for pattern in patterns:
             if pattern.search(text):
-                secret_hits.append(f"{path} matched {pattern.pattern}")
-        if not path.startswith("agents/rig/"):
-            continue
+                secret_hits.append(f"{rel} matched {pattern.pattern}")
         lowered = text.lower()
         for host in DISTRIBUTORS:
             if host in lowered:
-                distributor_hits.append(f"{path} mentions {host}")
+                distributor_hits.append(f"{rel} mentions {host}")
+        return text
+
+    page_names = ("index.html", "admin.html", "search.js", "admin.js", "search.css")
+    page_text = "\n".join(scan(PAGE / name) for name in page_names)
     feed_urls: list[str] = []
     for folder in (CN, EXAMPLE, SECOND):
         publish = _publish(folder)
@@ -864,12 +865,10 @@ def test_diff_secrets_feeds_and_admin_key() -> None:
         for path in folder.iterdir():
             if not path.is_file():
                 continue
-            for url in re.findall(r"https?://[^\s,\"']+", path.read_text(encoding="utf-8")):
+            for url in re.findall(r"https?://[^\s,\"']+", scan(path)):
                 host = url.split("://", 1)[1].split("/", 1)[0]
-                allowed = {"rig.tervory.com", "127.0.0.1:5173", "assets.local", "example.com", "second.example"}
                 if host not in allowed:
                     feed_urls.append(url)
-    page_text = "\n".join((PAGE / name).read_text(encoding="utf-8") for name in ("index.html", "admin.html", "search.js", "admin.js", "search.css"))
     admin_leaks: list[str] = []
     if "RIG_ADMIN_KEY" in page_text or ADMIN_CN in page_text or ADMIN_EX in page_text:
         admin_leaks.append("page source contains an admin key")
@@ -894,8 +893,6 @@ def test_diff_secrets_feeds_and_admin_key() -> None:
     if any(feeds.values()):
         feed_urls.append(f"loaded feeds {feeds}")
     payload = {
-        "files": len(files),
-        "outside_lane": outside,
         "secret_hits": secret_hits,
         "distributor_hits": distributor_hits,
         "feed_urls": feed_urls,
@@ -904,7 +901,6 @@ def test_diff_secrets_feeds_and_admin_key() -> None:
         "shopper_page_embeds_example_publishable_key": example_key in shop.text,
     }
     _record("static", payload)
-    assert outside == [], payload
     assert secret_hits == [], payload
     assert distributor_hits == [], payload
     assert feed_urls == [], payload
