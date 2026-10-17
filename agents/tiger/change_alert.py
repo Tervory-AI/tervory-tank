@@ -80,7 +80,7 @@ _N_AVAILABLE = re.compile(r"\b(\d+)\s+available\b", re.I)
 # Selling fast, or trouble keeping up. A positive "we keep it in stock" or
 # "held in stock" is a real in-stock statement, so the verb alone is not enough.
 _INABILITY = re.compile(
-    r"\b(?:couldn" + _APOS + r"t|can" + _APOS + r"t|cannot|could\s+not|can\s+not)\b",
+    r"\b(?:couldn" + _APOS + r"t|can" + _APOS + r"t|cannot|could\s+not|can\s+not|unable)\b",
     re.I,
 )
 _MAINTAIN = re.compile(
@@ -91,7 +91,12 @@ _MAINTAIN = re.compile(
     re.I,
 )
 _TROUBLE = re.compile(
-    r"\b(?:trouble|hard|difficult|challenge|struggle|struggling)\b",
+    r"\b(?:trouble|difficult|challenge|struggle|struggling|barely)\b",
+    re.I,
+)
+# "hard" only in "hard to keep" or "hard to stay". "hard cover" is not trouble.
+_HARD_TO = re.compile(
+    r"\bhard\s+to\s+(?:keep|hold|stay|remain|maintain|carry)\b",
     re.I,
 )
 _SELLING_PACE = re.compile(
@@ -154,7 +159,7 @@ def _negated_status(words: list[str]) -> bool:
 def _selling_fast(prefix: str) -> bool:
     """Demand or trouble keeping the item stocked. Not a positive keep or hold."""
     clause = re.split(r"[.!;?]+", prefix)[-1]
-    if _SELLING_PACE.search(clause):
+    if _SELLING_PACE.search(clause) or _HARD_TO.search(clause):
         return True
     if _MAINTAIN.search(clause) is None:
         return False
