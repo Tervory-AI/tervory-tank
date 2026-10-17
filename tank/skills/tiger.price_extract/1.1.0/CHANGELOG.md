@@ -5,6 +5,7 @@
 - HTML-escaped JSON-LD is read. An amount may follow its currency sign (`12,50 €`).
 - Text that tells a reader to ignore instructions is not treated as a price.
 - A member-tier price shown in the hero (the "Now" amount) wins over a higher non-member price in the same offer.
+- A price on another product (a recommendation or a product card) is not this product's price. When the product itself shows two amounts and neither is a sale price, no price is returned.
 - Still no network and no model. 1.0.0 is unchanged.
 
 ## 1.0.0

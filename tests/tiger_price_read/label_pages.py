@@ -11,6 +11,9 @@ import re
 from decimal import Decimal, InvalidOperation
 from html import unescape
 from pathlib import Path
+from urllib.parse import urlparse
+
+from selectolax.parser import HTMLParser
 
 HERE = Path(__file__).resolve().parent
 LIVE = HERE / "gold" / "html" / "live"
@@ -243,6 +246,77 @@ def member_hero(html: str) -> str | None:
     return hero
 
 
+# A recommendation or a product card is another product, not this one.
+_RELATED = re.compile(
+    r"ymal|you-may-also|related[-_ ]?product|product-card|recommendation|"
+    r"upsell|cross-?sell|also-like|similar-product",
+    re.I,
+)
+_PRICE_WIDGETS = (
+    "[itemprop='price']",
+    ".price",
+    ".product-price",
+    ".woocommerce-Price-amount",
+    "price-snippet",
+)
+
+
+def _in_related(node) -> bool:
+    current = node
+    steps = 0
+    while current is not None and steps < 10:
+        attrs = current.attributes or {}
+        blob = f"{current.tag} {attrs.get('class') or ''} {attrs.get('id') or ''}"
+        if _RELATED.search(blob):
+            return True
+        current = current.parent
+        steps += 1
+    return False
+
+
+def form_price(html: str) -> str | None:
+    """The product's own price when the product form shows exactly one amount.
+
+    Prices on other products on the same page are ignored. Two amounts left
+    on the product itself are not a single price.
+    """
+    tree = HTMLParser(html)
+    found: list[str] = []
+    seen: set[int] = set()
+    for selector in _PRICE_WIDGETS:
+        for node in tree.css(selector):
+            if node.mem_id in seen:
+                continue
+            seen.add(node.mem_id)
+            if _in_related(node):
+                continue
+            text = node.text(separator="", strip=True) if node.text else ""
+            if not text or len(text) > 40:
+                continue
+            match = _MONEY.search(text)
+            if not match:
+                continue
+            price = canonical(match.group("amount") or match.group("amount2"))
+            if price and price != "0.00":
+                found.append(price)
+    distinct = list(dict.fromkeys(found))
+    if len(distinct) == 1:
+        return distinct[0]
+    return None
+
+
+def shown_amounts(html: str) -> set[str]:
+    """Money amounts left in the page after scripts are removed."""
+    text = unescape(re.sub(r"<script\b[^>]*>.*?</script>", " ", html, flags=re.I | re.S))
+    text = re.sub(r"<[^>]+>", " ", text)
+    found: set[str] = set()
+    for match in _MONEY.finditer(text):
+        price = canonical(match.group("amount") or match.group("amount2"))
+        if price and price != "0.00":
+            found.add(price)
+    return found
+
+
 def choose(html: str) -> tuple[str | None, str, bool]:
     found = {
         "jsonld": jsonld_price(html),
@@ -255,6 +329,10 @@ def choose(html: str) -> tuple[str | None, str, bool]:
     }
     order = ("sale", "buybox", "jsonld", "meta", "itemprop", "visible")
     picked = next((found[name] for name in order if found[name]), None)
+    form = form_price(html)
+    if picked is None and form:
+        picked = form
+        found["form"] = form
     hero = found["hero"]
     if hero:
         try:
@@ -333,6 +411,13 @@ def layout_for(host: str, evidence: str) -> str:
     return name or "unknown"
 
 
+def product_key(url: str, page_id: str) -> str:
+    parsed = urlparse(url or "")
+    if not parsed.netloc:
+        return page_id
+    return parsed.netloc.lower() + parsed.path.rstrip("/").lower()
+
+
 def live_rows() -> list[dict]:
     urls = {}
     if MANIFEST.exists():
@@ -343,6 +428,7 @@ def live_rows() -> list[dict]:
             if row.get("kind") == "saved":
                 urls[row["id"]] = row
     rows = []
+    seen_products: set[str] = set()
     for path in sorted(LIVE.glob("*.html")):
         page_id = path.stem
         meta = urls.get(page_id, {})
@@ -352,16 +438,41 @@ def live_rows() -> list[dict]:
         if re.search(r"product-category|/collections/|/browse/|/search", final, re.I):
             print(f"SKIP listing {page_id} {final[:90]}")
             continue
-        if not price:
-            print(f"UNLABELED {page_id} {final[:90]}")
+        key = product_key(final, page_id)
+        if key in seen_products:
+            print(f"SKIP duplicate {page_id} {final[:90]}")
             continue
         host = meta.get("host") or ""
+        if not price:
+            amounts = shown_amounts(html)
+            if len(amounts) < 2:
+                print(f"UNLABELED {page_id} {final[:90]}")
+                continue
+            seen_products.add(key)
+            rows.append({
+                "id": page_id,
+                "source": "live",
+                "layout": layout_for(host, evidence),
+                "site": host,
+                "url": final,
+                "html": f"gold/html/live/{path.name}",
+                "expected_price": None,
+                "currency": None,
+                "evidence": "several prices, no single price",
+                "conflict": True,
+                "split": split_for(page_id),
+                "verified": False,
+                "unreadable": True,
+            })
+            print(f"CAN'T READ {page_id} amounts={len(amounts)} {final[:90]}")
+            continue
+        seen_products.add(key)
         rows.append({
             "id": page_id,
             "source": "live",
             "layout": layout_for(host, evidence),
             "site": host,
-            "url": meta.get("final") or meta.get("url") or "",
+            "url": final,
             "html": f"gold/html/live/{path.name}",
             "expected_price": price,
             "currency": None,
@@ -369,6 +480,7 @@ def live_rows() -> list[dict]:
             "conflict": conflict,
             "split": split_for(page_id),
             "verified": False,
+            "unreadable": False,
         })
         if conflict:
             print(f"CONFLICT {page_id} {evidence} -> {price}")
@@ -398,12 +510,28 @@ def fixture_rows() -> list[dict]:
             "conflict": False,
             "split": split_for(page_id),
             "verified": False,
+            "unreadable": False,
         })
     return rows
 
 
+def hold_back_sale_pattern(rows: list[dict]) -> None:
+    """Keep one sale-price page in the held-out set.
+
+    The hash put every Ulta page in the build set. One of them is held back
+    so the sale-price pattern is scored only at the end. Nothing else moves.
+    """
+    sale = [row for row in rows if "sale=" in (row.get("evidence") or "")]
+    if not sale or any(row["split"] == "holdout" for row in sale):
+        return
+    chosen = sale[0]
+    chosen["split"] = "holdout"
+    chosen["split_note"] = "held back so a sale-price page is in the held-out set"
+
+
 def main() -> None:
     rows = fixture_rows() + live_rows()
+    hold_back_sale_pattern(rows)
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
     builds = sum(row["split"] == "build" for row in rows)

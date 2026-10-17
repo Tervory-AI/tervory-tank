@@ -61,6 +61,12 @@ _WAS = re.compile(
     r"(?:US\$|[$€£]|USD|EUR|GBP|CAD|AUD)?\s?\d[\d.,\s]*",
     re.I,
 )
+# Another product on the same page. Not the product this page is selling.
+_RELATED = re.compile(
+    r"ymal|you-may-also|related[-_ ]?product|product-card|recommendation|"
+    r"upsell|cross-?sell|also-like|similar-product",
+    re.I,
+)
 
 
 def _load_html(payload: dict) -> str:
@@ -91,6 +97,18 @@ def _money_in(text: str) -> tuple[str, str | None] | None:
 def _blob(node: Any) -> str:
     attrs = node.attributes or {}
     return f"{node.tag} {attrs.get('class') or ''} {attrs.get('id') or ''}"
+
+
+def _related(node: Any) -> bool:
+    """True when this node sits in a block of other products."""
+    current = node
+    steps = 0
+    while current is not None and steps < 10:
+        if _RELATED.search(_blob(current)):
+            return True
+        current = current.parent
+        steps += 1
+    return False
 
 
 def _rejected(node: Any) -> bool:
@@ -248,14 +266,13 @@ def _element_items(html: str, page_url: str) -> list[dict]:
         ".current-price",
     )
     seen: set[int] = set()
-    best: tuple[int, dict] | None = None
-    order = 0
+    hits: list[tuple[bool, str, str | None]] = []
     for selector in selectors:
         for node in tree.css(selector):
             if node.mem_id in seen:
                 continue
             seen.add(node.mem_id)
-            if _rejected(node):
+            if _related(node) or _rejected(node):
                 continue
             found = _node_price(node)
             if found is None:
@@ -264,19 +281,19 @@ def _element_items(html: str, page_url: str) -> list[dict]:
             blob = _blob(node)
             parent_blob = _blob(node.parent) if node.parent is not None else ""
             sale = bool(_SALE.search(blob) or _SALE.search(parent_blob) or node.tag == "ins")
-            rank = 0 if sale else 1
-            order += 1
-            if best is not None and (rank, order) >= (best[0], 0):
-                # Keep the first sale, otherwise the first pointed price.
-                if best[0] <= rank:
-                    continue
-            item = v1._item(name, None, None, price, currency, None, page_url or None, "element")
-            best = (rank, item)
-            if rank == 0:
-                return [item]
-    if best is None:
-        return []
-    return [best[1]]
+            hits.append((sale, price, currency))
+    sales = [hit for hit in hits if hit[0]]
+    if sales:
+        _sale, price, currency = sales[0]
+        return [v1._item(name, None, None, price, currency, None, page_url or None, "element")]
+    distinct = {price for _sale, price, _currency in hits}
+    # Two amounts on this product, and no sale mark: do not pick one.
+    if len(distinct) > 1:
+        return [{"ambiguous": True}]
+    if len(distinct) == 1:
+        _sale, price, currency = hits[0]
+        return [v1._item(name, None, None, price, currency, None, page_url or None, "element")]
+    return []
 
 
 def _pattern_items(html: str, page_url: str) -> list[dict]:
@@ -301,6 +318,8 @@ def extract(html: str, page_url: str = "") -> dict[str, Any]:
     )
     for method, finder in finders:
         items = finder(html, page_url)
+        if any(item.get("ambiguous") for item in items):
+            return {"items": [], "method": None, "confidence": 0}
         if any(item.get("price") for item in items):
             # A wrapper with no price, then other offers, is not the price on the title.
             if items[0].get("price"):
