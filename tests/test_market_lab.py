@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import importlib.util
 import io
+import json
 import re
 import sys
 import zipfile
@@ -174,6 +175,116 @@ async def test_listing_counts_store_and_fred_does_not() -> None:
     assert second["listings_stored"] == 0
     assert len(ledger.points_for(TENANT)) == 4
     assert ledger.points_for(OTHER) == []
+
+
+@pytest.mark.asyncio
+async def test_fred_stays_off_when_the_key_is_missing(monkeypatch, capsys) -> None:
+    monkeypatch.delenv("FRED_API_KEY", raising=False)
+
+    class _Client:
+        def __init__(self, *_args, **_kwargs) -> None:
+            raise AssertionError("fred was called")
+
+    monkeypatch.setattr("httpx.AsyncClient", _Client)
+    ledger = MemoryLedger()
+    result = await perform_refresh(
+        tenant_id=TENANT,
+        engine="ffl",
+        ledger=ledger,
+        fixtures=str(FIXTURES),
+        live=True,
+        now=NOW,
+    )
+    assert result["fred_stored"] == 0
+    assert len(result["fred"]) == 4
+    assert {item["state"] for item in result["fred"]} == {"off"}
+    assert {item["note"] for item in result["fred"]} == {"needs key FRED_API_KEY"}
+    assert all(item["points"] == 0 and item["stored"] is False for item in result["fred"])
+    assert all("fred" not in item["series_id"] for item in ledger.points)
+    captured = capsys.readouterr()
+    assert "Traceback" not in captured.out
+    assert "Traceback" not in captured.err
+    blob = json.dumps(result)
+    assert "FRED_API_KEY" in blob
+    assert "api_key" not in blob
+
+
+@pytest.mark.asyncio
+async def test_fred_live_read_returns_source_numbers_and_stores_nothing(monkeypatch, capsys) -> None:
+    secret = "dummy-feed-key"
+    monkeypatch.setenv("FRED_API_KEY", secret)
+    body = {
+        "observations": [
+            {"date": "2024-01-01", "value": "3.5"},
+            {"date": "2024-02-01", "value": "."},
+            {"date": "2024-03-01", "value": "4.25"},
+        ]
+    }
+    seen: list[dict] = []
+
+    class _Response:
+        status_code = 200
+
+        def json(self) -> dict:
+            return body
+
+    class _Client:
+        def __init__(self, *_args, **_kwargs) -> None:
+            return None
+
+        async def __aenter__(self) -> "_Client":
+            return self
+
+        async def __aexit__(self, *_exc: object) -> bool:
+            return False
+
+        async def get(self, url: str, params: dict | None = None) -> _Response:
+            assert url == "https://api.stlouisfed.org/fred/series/observations"
+            assert params is not None
+            assert params["api_key"] == secret
+            assert params["file_type"] == "json"
+            seen.append(dict(params))
+            return _Response()
+
+    monkeypatch.setattr("httpx.AsyncClient", _Client)
+    ledger = MemoryLedger()
+    captured_points: list[dict] = []
+    original = ledger.save_points
+
+    def save_points(series_id, tenant_id, points, *, stored, source):
+        captured_points.append(
+            {"series_id": series_id, "points": points, "stored": stored, "source": source}
+        )
+        return original(series_id, tenant_id, points, stored=stored, source=source)
+
+    ledger.save_points = save_points  # type: ignore[method-assign]
+    result = await perform_refresh(
+        tenant_id=TENANT,
+        engine="ffl",
+        ledger=ledger,
+        fixtures=str(FIXTURES),
+        live=True,
+        now=NOW,
+    )
+    assert [item["series_id"] for item in seen] == ["PCOPPUSDM", "PZINCUSDM", "PLEADUSDM", "TSIFRGHT"]
+    fred_saves = [item for item in captured_points if item["source"] == "fred"]
+    assert len(fred_saves) == 4
+    assert all(item["stored"] is False for item in fred_saves)
+    assert fred_saves[0]["points"] == [
+        {"date": "2024-01-01", "value": 3.5},
+        {"date": "2024-03-01", "value": 4.25},
+    ]
+    assert result["fred_stored"] == 0
+    assert all(item["state"] == "on" and item["stored"] is False for item in result["fred"])
+    assert all(item["points"] == 2 for item in result["fred"])
+    assert all("fred" not in item["series_id"] for item in ledger.points)
+    blob = json.dumps(result)
+    assert secret not in blob
+    assert "3.5" not in blob
+    assert "4.25" not in blob
+    captured = capsys.readouterr()
+    assert secret not in captured.out
+    assert secret not in captured.err
 
 
 @pytest.mark.asyncio

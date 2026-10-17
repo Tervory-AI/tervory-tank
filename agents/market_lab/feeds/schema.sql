@@ -14,8 +14,14 @@ CREATE TABLE IF NOT EXISTS market_lab.feed_sources (
     licence TEXT NOT NULL,
     terms_checked_at TEXT NOT NULL,
     cadence TEXT NOT NULL,
-    enabled INTEGER NOT NULL DEFAULT 1
+    enabled INTEGER NOT NULL DEFAULT 1,
+    key_name TEXT NOT NULL DEFAULT '',
+    key_required INTEGER NOT NULL DEFAULT 0
 );
+
+-- Existing databases created before key_name. Additive and idempotent.
+ALTER TABLE market_lab.feed_sources ADD COLUMN IF NOT EXISTS key_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE market_lab.feed_sources ADD COLUMN IF NOT EXISTS key_required INTEGER NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS market_lab.series (
     id TEXT PRIMARY KEY,

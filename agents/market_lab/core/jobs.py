@@ -100,6 +100,8 @@ async def perform_refresh(
         if body is None and live:
             body = await _live_fred(str(cost["ref"]))
         if body is None:
+            if live:
+                fred_read.append(_fred_off(str(cost["ref"])))
             continue
         fetched = series_fetch(
             {
@@ -125,6 +127,8 @@ async def perform_refresh(
                 "points": len(fetched["points"]),
                 "stored": False,
                 "source": "fred",
+                "state": "on",
+                "note": "",
             }
         )
     return {
@@ -392,23 +396,45 @@ def _listing_states_live(engine: str, source_id: str, fetched_at: str) -> list[d
     ]
 
 
-async def _live_fred(series_id: str) -> dict[str, Any]:
+def _fred_off(ref: str) -> dict[str, Any]:
+    from feeds.keys import FRED_KEY
+
+    return {
+        "ref": ref,
+        "points": 0,
+        "stored": False,
+        "source": "fred",
+        "state": "off",
+        "note": f"needs key {FRED_KEY}",
+    }
+
+
+async def _live_fred(series_id: str) -> dict[str, Any] | None:
+    """Read one FRED series. Returns None when the key is missing.
+
+    The body is for the caller to turn into points. It is not written here.
+    A failure names the host only, never the key or the request URL.
+    """
+    from feeds.keys import FRED_KEY
+
+    key = os.environ.get(FRED_KEY, "").strip()
+    if not key:
+        return None
     import httpx
 
-    key = os.environ.get("FRED_API_KEY", "").strip()
-    if not key:
-        raise RuntimeError("FRED_API_KEY is not set")
     try:
         async with httpx.AsyncClient(timeout=30) as http:
             response = await http.get(
                 "https://api.stlouisfed.org/fred/series/observations",
                 params={"series_id": series_id, "api_key": key, "file_type": "json"},
             )
-    except httpx.HTTPError:
+        if response.status_code >= 400:
+            raise RuntimeError("fred read failed")
+        body = response.json()
+    except RuntimeError:
+        raise
+    except Exception:
         raise RuntimeError("fred read failed") from None
-    if response.status_code >= 400:
-        raise RuntimeError("fred read failed")
-    body = response.json()
     if not isinstance(body, dict):
         raise RuntimeError("fred read failed")
     return body
