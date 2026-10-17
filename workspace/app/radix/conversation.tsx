@@ -23,6 +23,8 @@ async function read(response: Response) {
 export function RadixDesk() {
   const [query, setQuery] = useState("");
   const [records, setRecords] = useState<RadixRecord[]>([]);
+  const [recordPage, setRecordPage] = useState(0);
+  const pageIndex = Math.min(recordPage, Math.max(0, Math.ceil(records.length / 5) - 1));
   const [limited, setLimited] = useState(false);
   const [loading, setLoading] = useState(true);
   const [recordError, setRecordError] = useState("");
@@ -118,15 +120,16 @@ export function RadixDesk() {
         <button type="button" className="rx-text-button" onClick={() => setRevision((value) => value + 1)}>Refresh records</button></div>
       <label className="rx-search-label" htmlFor="rx-record-query">Find a recent request by title, reply, or status.</label>
       <input id="rx-record-query" type="search" value={query} maxLength={200}
-        onChange={(event) => setQuery(event.target.value)} placeholder="Search recent Radix requests…" />
+        onChange={(event) => { setQuery(event.target.value); setRecordPage(0); }} placeholder="Search Radix requests…" />
       <div role="status" className="rx-record-status">
         {loading ? "Loading Radix records…" : recordError || (records.length ? records.length + " Radix records" : query ? "No matching Radix records." : "No recent Radix requests. Send one below to start.")}
       </div>
       {limited ? <p className="rx-record-limit">Results cover the latest 200 workspace requests and show Radix only. Older records are not included.</p> : null}
-      {!loading && !recordError && records.length > 0 ? <ul className="rx-record-list">{records.map((record) =>
+      {!loading && !recordError && records.length > 0 ? <ul className="rx-record-list">{records.slice(pageIndex * 5, pageIndex * 5 + 5).map((record) =>
         <li key={record.id}><button type="button" onClick={() => openRecord(record.id)}>
           <span>{record.title}</span><span className="rx-badge">{record.status}</span>
         </button></li>)}</ul> : null}
+      {!loading && !recordError && records.length > 5 ? <div className="rx-record-pages"><button type="button" className="rx-text-button" disabled={pageIndex === 0} onClick={() => setRecordPage(pageIndex - 1)}>Previous records</button><span>{pageIndex * 5 + 1}–{Math.min(pageIndex * 5 + 5, records.length)} of {records.length}</span><button type="button" className="rx-text-button" disabled={(pageIndex + 1) * 5 >= records.length} onClick={() => setRecordPage(pageIndex + 1)}>Next records</button></div> : null}
       {selected ? <article className="rx-selected-record">
         <div className="rx-finding-heading"><h3>{selected.title}</h3><button type="button" className="rx-text-button" onClick={() => setSelected(null)}>Close record</button></div>
         <p className="rx-meta">Radix · {selected.status}</p>

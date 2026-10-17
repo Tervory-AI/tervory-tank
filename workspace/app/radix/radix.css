@@ -151,3 +151,6 @@ body:has(.rx) main { width:100%; max-width:none; height:100dvh; margin:0; paddin
   .rx-send-row small { max-width:190px; font-size:12px; }
   .rx-message-user { margin-left:12px; }
 }
+
+.rx-record-pages { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:13px; margin-top:12px; }
+.rx-record-pages button:disabled { opacity:.45; cursor:default; }
