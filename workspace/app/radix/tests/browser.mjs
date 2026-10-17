@@ -53,11 +53,14 @@ try {
   assert.equal(await page.locator(".rx-panel").getByRole("link", { name: "Tank", exact: true }).count(), 1);
   assert.equal(await page.locator(".rx-logo").first().evaluate((img) => img.complete && img.naturalWidth > 0), true);
   await screenshot("desktop-overview");
+  await page.setViewportSize({ width: 1440, height: 800 });
   const panelBefore = await page.locator(".rx-panel").boundingBox();
   await page.locator("[data-scroll-root]").evaluate((node) => { node.scrollTop = node.scrollHeight; });
+  assert.ok(await page.locator("[data-scroll-root]").evaluate((node) => node.scrollTop > 0));
   assert.deepEqual(await page.locator(".rx-panel").boundingBox(), panelBefore);
   assert.equal(await page.evaluate(() => window.scrollY), 0);
   await noHorizontalOverflow();
+  await page.setViewportSize({ width: 1440, height: 1000 });
 
   // Interactions must not fetch targets, send keys, or create scans.
   page.on("request", (request) => {
@@ -84,7 +87,7 @@ try {
   const dialog = page.getByRole("dialog", { name: "Sources", exact: true });
   await dialog.waitFor();
   assert.equal(await dialog.locator('input[type="password"]').count(), 0);
-  assert.equal(await dialog.locator(".rx-source-desktop").getByLabel("Masked example; no credential stored").isVisible(), true);
+  assert.equal(await dialog.getByRole("tabpanel", { name: "API keys" }).getByLabel("Masked example; no credential stored").isVisible(), true);
   await dialog.getByRole("tab", { name: "API keys" }).focus();
   await page.keyboard.press("ArrowRight");
   assert.equal(await dialog.getByRole("tab", { name: "Files", selected: true }).count(), 1);
