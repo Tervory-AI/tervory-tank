@@ -162,10 +162,26 @@ def test_plugins_calls_go_through_tank_server_side():
 def test_left_panel_order():
     view = (PAGE / "view.tsx").read_text(encoding="utf-8")
     panel = view[view.index("<aside"):view.index("</aside>")]
-    order = ["bcp-logo", "bcp-account", "STANDARD_TOP", "pageNav.map", "<span>Plugins</span>", "STANDARD_BOTTOM"]
+    order = [
+        "bcp-logo",
+        "base-on-dark.png",
+        "bcp-account",
+        "STANDARD_TOP",
+        "pageNav.map",
+        "<span>Plugins</span>",
+        "tervory-logo-reversed.png",
+        "STANDARD_BOTTOM",
+    ]
     spots = [panel.index(mark) for mark in order]
     assert spots == sorted(spots), order
+    top = panel[: panel.index("bcp-account")]
+    assert 'src="/brand/base-on-dark.png"' in top
+    assert "tervory-logo-reversed.png" not in top
+    bottom = panel[panel.index("bcp-panel-bottom") :]
+    assert bottom.index("tervory-logo-reversed.png") < bottom.index("STANDARD_BOTTOM")
+    assert 'src="/brand/tervory-logo-reversed.png"' in bottom
     assert re.search(r'STANDARD_TOP = \[\s*\{ href: "[^"]+", label: "Dashboard" \},\s*\{ href: "[^"]+", label: "Projects" \},\s*\{ href: "[^"]+", label: "Chats" \}', view)
     assert re.search(r'STANDARD_BOTTOM = \[\s*\{ href: "[^"]+", label: "Settings" \},\s*\{ href: "[^"]+", label: "Support" \}', view)
-    assert "tervory-logo-reversed.png" in panel
+    logo = ROOT / "workspace" / "public" / "brand" / "base-on-dark.png"
+    assert logo.is_file()
     assert "Base logo" not in view and "base-logo" not in view

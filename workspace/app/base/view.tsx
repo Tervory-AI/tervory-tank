@@ -138,7 +138,7 @@ export function BaseView({
 
       <aside id="bcp-panel" className={menu ? "bcp-panel open" : "bcp-panel"} data-panel-anchor="fixed">
         <div className="bcp-panel-top">
-          <img className="bcp-logo" src="/brand/tervory-logo-reversed.png" alt="Tervory" width={186} height={34} />
+          <img className="bcp-logo" src="/brand/base-on-dark.png" alt="Base" width={168} height={43} />
           <button type="button" className="bcp-close" aria-label="Close" onClick={() => setMenu(false)}>
             <span className="bcp-x" />
           </button>
@@ -187,6 +187,7 @@ export function BaseView({
 
         <div className="bcp-panel-bottom">
           <div className="bcp-rule" />
+          <img className="bcp-foot-logo" src="/brand/tervory-logo-reversed.png" alt="Tervory" width={168} height={31} />
           <nav aria-label="Account">
             {STANDARD_BOTTOM.map((link) => (
               <a key={link.href} className="bcp-link" href={link.href}>

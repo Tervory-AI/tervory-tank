@@ -96,8 +96,19 @@ body:has(.bcp) main {
 }
 
 .bcp-logo {
-  width: 186px;
-  height: 34px;
+  width: 168px;
+  height: 43px;
+  max-width: 100%;
+  object-fit: contain;
+  object-position: left center;
+  display: block;
+  flex: 0 0 auto;
+}
+
+.bcp-foot-logo {
+  width: 168px;
+  height: 31px;
+  margin: 4px 26px 12px;
   object-fit: contain;
   object-position: left center;
   display: block;
