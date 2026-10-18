@@ -115,16 +115,25 @@ export default function HomePage() {
             </article>
           </div>
         </section>
+        <section className="section" id="research">
+          <div className="section-head">
+            <p className="eyebrow">Research</p>
+            <h2>Research underway.</h2>
+          </div>
+          <div className="research">
+            <p>Skills are tested before a specialist uses them.</p>
+            <p>A cheaper model has to agree before it takes over a task.</p>
+          </div>
+        </section>
         <section className="section" id="products">
           <div className="section-head">
             <p className="eyebrow">Products</p>
             <h2>Nine products. None of them is open yet.</h2>
           </div>
-          <div className="cards">
+          <div className="products">
             {products.map((product) => (
-              <article className="card" key={product.name}>
-                <img className="wordmark" src={product.mark} width={product.width} height={32} alt="" />
-                <h3>{product.name}</h3>
+              <article className="product" key={product.name}>
+                <img className="wordmark" src={product.mark} width={product.width} height={32} alt={product.name} />
                 <p>{product.body}</p>
               </article>
             ))}

@@ -35,6 +35,16 @@ if (!home.includes('action="/api/release-notice"')) {
 }
 if (!home.includes(">Send<")) throw new Error("Homepage is missing the send button");
 if (!home.includes("Nothing is open yet.")) throw new Error("Homepage does not say the work is still closed");
+if (home.includes('class="card"')) throw new Error("Products are still shown in cards");
+if (!home.includes("Skills are tested before a specialist uses them.")) {
+  throw new Error("Homepage is missing the research line about skills");
+}
+if (!home.includes("A cheaper model has to agree before it takes over a task.")) {
+  throw new Error("Homepage is missing the research line about a cheaper model");
+}
+for (const word of ["Brave", "Hawaii", "internal batch"]) {
+  if (home.includes(word)) throw new Error(`Homepage contains ${word}`);
+}
 for (const id of ['id="work"', 'id="products"']) {
   if (!home.includes(id)) throw new Error(`Homepage is missing ${id}`);
 }

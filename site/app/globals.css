@@ -281,13 +281,20 @@ h3 {
 }
 
 .steps,
-.cards {
+.products {
   display: grid;
   gap: 16px;
 }
 
-.step,
-.card {
+.steps {
+  gap: 16px;
+}
+
+.products {
+  gap: 40px 48px;
+}
+
+.step {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -299,12 +306,31 @@ h3 {
   background: var(--bg-page);
 }
 
+.product {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
 .step p,
-.card p {
+.product p,
+.research p {
   margin: 0;
   color: var(--text-secondary);
   font-size: 15px;
   line-height: 1.5;
+}
+
+.research {
+  display: grid;
+  gap: 12px;
+  max-width: 40em;
+}
+
+.research p {
+  font-size: 18px;
 }
 
 .step-no {
@@ -320,7 +346,6 @@ h3 {
   height: 32px;
   width: auto;
   max-width: 100%;
-  margin-bottom: 8px;
   object-fit: contain;
   object-position: left center;
 }
@@ -407,7 +432,7 @@ h3 {
   }
 
   .steps,
-  .cards {
+  .products {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
