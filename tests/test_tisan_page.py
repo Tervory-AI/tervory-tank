@@ -26,6 +26,13 @@ def test_panel_stays_fixed_and_only_the_body_scrolls():
     assert "panel-top" in source
     assert "panel-own" in source
     assert "panel-bottom" in source
+    panel = source.split('id="tisan-panel"', 1)[1].split("</aside>", 1)[0]
+    assert panel.index('src="/brand/tisan-on-dark.png"') < panel.index("Account name")
+    assert 'class="panel-mark"' in panel or 'className="panel-mark"' in panel
+    assert "logo-slot" not in panel
+    assert panel.index('src="/brand/tervory-logo-reversed.png"') < panel.index(">Settings<")
+    assert panel.index(">Settings<") < panel.index(">Support<")
+    assert panel.count('src="/brand/tervory-logo-reversed.png"') == 1
     assert "Account name" in source
     assert "Dashboard" in source
     assert "Projects" in source

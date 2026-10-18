@@ -125,8 +125,8 @@ export function Tisan({ plugins }: { plugins: PluginPanel }) {
       </header>
 
       <aside id="tisan-panel" className="panel" aria-label="Tisan">
+        <img className="panel-mark" src="/brand/tisan-on-dark.png" alt="Tisan" width={2806} height={701} />
         <div className="panel-top">
-          <img src="/brand/tervory-logo-reversed.png" alt="Tervory" />
           <p className="account"><span>Account name</span> <Tag /></p>
           <nav aria-label="Workspace">
             <button type="button" className="nav">Dashboard</button>
@@ -135,7 +135,6 @@ export function Tisan({ plugins }: { plugins: PluginPanel }) {
           </nav>
         </div>
         <div className="panel-own">
-          <div className="logo-slot">Tisan logo, coming later</div>
           <p className="agent">Tisan</p>
           <p className="role">Build agent</p>
           <nav aria-label="Tisan">
@@ -158,6 +157,7 @@ export function Tisan({ plugins }: { plugins: PluginPanel }) {
           </nav>
         </div>
         <div className="panel-bottom">
+          <img className="panel-sign" src="/brand/tervory-logo-reversed.png" alt="Tervory" />
           <button type="button" className={view === "settings" && dialog !== "plugins" ? "nav on" : "nav"} aria-current={view === "settings" && dialog !== "plugins" ? "page" : undefined} onClick={() => show("settings")}>Settings</button>
           <button type="button" className="nav">Support</button>
         </div>

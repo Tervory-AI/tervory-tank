@@ -138,11 +138,24 @@ main:has(.tisan) {
   box-sizing: border-box;
 }
 
-.panel-top img {
+.panel-mark {
   display: block;
-  height: 32px;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  height: 40px;
   width: auto;
-  margin: 0 8px 18px;
+  max-width: calc(100% - 16px);
+  margin: 0 8px 22px;
+}
+
+.panel-sign {
+  display: block;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  height: 28px;
+  width: auto;
+  max-width: calc(100% - 16px);
+  margin: 2px 8px 10px;
 }
 
 .panel-top nav,
@@ -162,7 +175,6 @@ main:has(.tisan) {
   overflow: hidden;
 }
 
-.logo-slot,
 .page-slot {
   display: flex;
   align-items: center;
@@ -828,7 +840,6 @@ main:has(.tisan) {
     z-index: 45;
     padding-top: 12px;
   }
-  .panel-top img { display: none; }
   .tisan.menu-open .panel { transform: none; overflow: auto; padding-bottom: 76px; }
   .tisan.menu-open .chat-bot { z-index: 46; }
   .body {
