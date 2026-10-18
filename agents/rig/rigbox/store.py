@@ -225,6 +225,7 @@ class MemoryStore:
         self.answers: dict[tuple[str, str, str], tuple[str, dict[str, Any]]] = {}
         self.fit_why: dict[tuple[str, str, str], list[str]] = {}
         self.market: dict[tuple[str, str, str], dict[str, Any]] = {}
+        self.searches: list[dict[str, Any]] = []
 
     def _drop_answers(self, tenant_id: str) -> None:
         tenant = str(tenant_id)
@@ -391,6 +392,34 @@ class MemoryStore:
 
     async def put_fit_why(self, tenant_id: str, fit_id: str, rule_hash: str, why: list[str]) -> None:
         self.fit_why[(str(tenant_id), fit_id, rule_hash)] = [str(line) for line in why]
+
+    async def add_search(self, tenant_id: str, version: str, row: dict[str, Any]) -> None:
+        self.searches.append(
+            {
+                "tenant_id": str(tenant_id),
+                "version": version,
+                "query": str(row.get("query") or ""),
+                "host": str(row.get("host") or ""),
+                "signature": str(row.get("signature") or ""),
+                "limit": int(row.get("limit") or 0),
+                "ids": [str(item) for item in row.get("ids") or []],
+                "exact_match": bool(row.get("exact_match", True)),
+                "message": row.get("message"),
+                "parts": copy.deepcopy(list(row.get("parts") or [])),
+            }
+        )
+
+    async def searches_for(self, tenant_id: str, version: str) -> list[dict[str, Any]]:
+        tenant = str(tenant_id)
+        return [
+            copy.deepcopy(row)
+            for row in self.searches
+            if row["tenant_id"] == tenant and row["version"] == version
+        ]
+
+    async def drop_searches(self, tenant_id: str) -> None:
+        tenant = str(tenant_id)
+        self.searches = [row for row in self.searches if row["tenant_id"] != tenant]
 
 
 def _record_product(row: Any) -> dict[str, Any]:
@@ -926,6 +955,67 @@ class PgStore:
                 rule_hash,
                 _json(list(why)),
             )
+
+    async def add_search(self, tenant_id: str, version: str, row: dict[str, Any]) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO agent_rig.searches (
+                    tenant_id, id, version, query, host, signature, result_limit,
+                    ids, exact_match, message, parts
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11::jsonb)
+                """,
+                _uuid(tenant_id),
+                str(row["id"]),
+                version,
+                str(row.get("query") or ""),
+                str(row.get("host") or ""),
+                str(row.get("signature") or ""),
+                int(row.get("limit") or 0),
+                _json([str(item) for item in row.get("ids") or []]),
+                bool(row.get("exact_match", True)),
+                row.get("message"),
+                _json(list(row.get("parts") or [])),
+            )
+
+    async def searches_for(self, tenant_id: str, version: str) -> list[dict[str, Any]]:
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT query, host, signature, result_limit, ids, exact_match, message, parts
+                FROM agent_rig.searches
+                WHERE tenant_id = $1 AND version = $2
+                ORDER BY created_at ASC, id ASC
+                """,
+                _uuid(tenant_id),
+                version,
+            )
+        found: list[dict[str, Any]] = []
+        for row in rows:
+            ids = row["ids"]
+            parts = row["parts"]
+            if isinstance(ids, str):
+                ids = json.loads(ids)
+            if isinstance(parts, str):
+                parts = json.loads(parts)
+            found.append(
+                {
+                    "query": row["query"],
+                    "host": row["host"],
+                    "signature": row["signature"],
+                    "limit": row["result_limit"],
+                    "ids": list(ids),
+                    "exact_match": row["exact_match"],
+                    "message": row["message"],
+                    "parts": parts,
+                }
+            )
+        return found
+
+    async def drop_searches(self, tenant_id: str) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute("DELETE FROM agent_rig.searches WHERE tenant_id = $1", _uuid(tenant_id))
 
 
 def as_public_results(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:

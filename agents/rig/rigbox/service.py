@@ -37,10 +37,17 @@ from rigbox.logic import fitting_parts
 from rigbox.logic import graph as build_graph
 from rigbox.logic import options_for
 from rigbox.logic import product_detail
+from rigbox.logic import _limit
 from rigbox.logic import public_product
 from rigbox.logic import reprice
 from rigbox.logic import setups as build_setups
 from rigbox.rank import search as rank_room
+from rigbox.recall import latest
+from rigbox.recall import part_hit
+from rigbox.recall import part_query
+from rigbox.recall import parts_of
+from rigbox.recall import signature
+from rigbox.recall import whole_hit
 from rigbox.store import _fit_key
 
 _KEY = re.compile(r"^rk_pub_[A-Za-z0-9][A-Za-z0-9_-]{0,80}$")
@@ -49,6 +56,83 @@ _MAPS = {
     "woocommerce": map_woocommerce,
     "google": map_google_merchant,
 }
+
+
+def _part_from_rank(piece: str, ranked: dict[str, Any], cap: int) -> dict[str, Any]:
+    ids = [str(item["id"]) for item in ranked.get("results") or []]
+    exact, message = _exact_and_message(ranked)
+    return {
+        "part": piece,
+        "ids": ids,
+        "exact_match": exact if ids else False,
+        "message": message,
+        "limit": cap,
+    }
+
+
+def _exact_and_message(ranked: dict[str, Any]) -> tuple[bool, str | None]:
+    results = ranked.get("results") or []
+    if not results:
+        return True, None
+    exact = bool(ranked.get("exact_match", True))
+    if exact:
+        return True, None
+    message = ranked.get("message")
+    if message:
+        return False, str(message)
+    return False, "No exact match for that model."
+
+
+def _merge_parts(part_rows: list[dict[str, Any]], cap: int) -> dict[str, Any]:
+    ids: list[str] = []
+    seen: set[str] = set()
+    exact = True
+    message: str | None = None
+    for row in part_rows:
+        row_ids = [str(item) for item in row.get("ids") or []]
+        if not row_ids or row.get("exact_match") is False:
+            exact = False
+            if message is None and row.get("message"):
+                message = str(row["message"])
+        for sku in row_ids:
+            if sku in seen:
+                continue
+            seen.add(sku)
+            ids.append(sku)
+            if len(ids) >= cap:
+                break
+        if len(ids) >= cap:
+            break
+    return {"results": [{"id": sku} for sku in ids], "exact_match": exact, "message": message}
+
+
+def _shopper_body(
+    ranked: dict[str, Any],
+    host: str,
+    part_rows: list[dict[str, Any]],
+    reused_flags: list[bool],
+) -> dict[str, Any]:
+    results = list(ranked.get("results") or [])
+    if not results:
+        return {"results": []}
+    exact, message = _exact_and_message(ranked)
+    body: dict[str, Any] = {"results": results, "exact_match": exact}
+    if message:
+        body["message"] = message
+    shown: list[dict[str, Any]] = []
+    for index, row in enumerate(part_rows):
+        shown.append(
+            {
+                "part": str(row.get("part") or ""),
+                "on": host,
+                "reused": reused_flags[index] if index < len(reused_flags) else False,
+                "rung": "code",
+                "cost": 0,
+                "ids": [str(item) for item in row.get("ids") or []],
+            }
+        )
+    body["parts"] = shown
+    return body
 
 
 class RigError(Exception):
@@ -169,21 +253,149 @@ class Service:
         text = (query or "").strip()
         if not text:
             return {"results": []}
-        ranked = rank_room(
-            {
-                "tenant_id": tenant_id,
-                "q": text,
-                "limit": limit,
-                "products": await self.store.products(tenant_id),
-            }
-        )
-        results = ranked["results"]
-        if not results:
+        host, pieces = parts_of(text)
+        if not pieces:
             return {"results": []}
-        body: dict[str, Any] = {"results": results, "exact_match": bool(ranked.get("exact_match", True))}
-        if body["exact_match"] is False:
-            body["message"] = str(ranked.get("message") or "No exact match for that model.")
-        return body
+        cap = _limit(limit)
+        version = await self._catalogue_version(tenant_id)
+        saved = await self.store.searches_for(tenant_id, version)
+        wholes, known = latest(saved)
+        whole = whole_hit(wholes, host, pieces, cap)
+        if whole is not None:
+            body = await self._body_from_saved(tenant_id, whole, pieces, host, cap)
+            if body is not None:
+                return body
+        products = await self.store.products(tenant_id)
+        reusable = False
+        for piece in pieces:
+            if part_hit(known, host, piece, cap) is not None:
+                reusable = True
+                break
+        if not reusable:
+            ranked = self._rank(tenant_id, products, text, cap)
+            part_rows = await self._parts_from_first(tenant_id, products, host, pieces, ranked, cap)
+            await self._keep_search(tenant_id, version, text, host, pieces, cap, ranked, part_rows)
+            return _shopper_body(ranked, host, part_rows, [False] * len(part_rows))
+        part_rows: list[dict[str, Any]] = []
+        reused_flags: list[bool] = []
+        for piece in pieces:
+            hit = part_hit(known, host, piece, cap)
+            taken = None if hit is None else await self._take(tenant_id, list(hit.get("ids") or [])[:cap])
+            if hit is None or taken is None:
+                ranked_part = self._rank(tenant_id, products, part_query(piece, host), cap)
+                part_rows.append(_part_from_rank(piece, ranked_part, cap))
+                reused_flags.append(False)
+                continue
+            part_rows.append(
+                {
+                    "part": piece,
+                    "ids": [str(item) for item in hit.get("ids") or []],
+                    "exact_match": bool(hit.get("exact_match", True)),
+                    "message": hit.get("message"),
+                    "limit": int(hit.get("limit") or cap),
+                }
+            )
+            reused_flags.append(True)
+        merged = _merge_parts(part_rows, cap)
+        ids = [str(item["id"]) for item in merged["results"]]
+        taken = await self._take(tenant_id, ids)
+        if taken is None:
+            ranked = self._rank(tenant_id, products, text, cap)
+            part_rows = await self._parts_from_first(tenant_id, products, host, pieces, ranked, cap)
+            await self._keep_search(tenant_id, version, text, host, pieces, cap, ranked, part_rows)
+            return _shopper_body(ranked, host, part_rows, [False] * len(part_rows))
+        public = {"results": taken, "exact_match": merged["exact_match"], "message": merged["message"]}
+        await self._keep_search(tenant_id, version, text, host, pieces, cap, public, part_rows)
+        return _shopper_body(public, host, part_rows, reused_flags)
+
+    def _rank(self, tenant_id: str, products: list[dict[str, Any]], text: str, cap: int) -> dict[str, Any]:
+        return rank_room({"tenant_id": tenant_id, "q": text, "limit": cap, "products": products})
+
+    async def _parts_from_first(
+        self,
+        tenant_id: str,
+        products: list[dict[str, Any]],
+        host: str,
+        pieces: list[str],
+        ranked: dict[str, Any],
+        cap: int,
+    ) -> list[dict[str, Any]]:
+        if len(pieces) == 1:
+            return [_part_from_rank(pieces[0], ranked, cap)]
+        rows: list[dict[str, Any]] = []
+        for piece in pieces:
+            rows.append(_part_from_rank(piece, self._rank(tenant_id, products, part_query(piece, host), cap), cap))
+        return rows
+
+    async def _keep_search(
+        self,
+        tenant_id: str,
+        version: str,
+        text: str,
+        host: str,
+        pieces: list[str],
+        cap: int,
+        ranked: dict[str, Any],
+        part_rows: list[dict[str, Any]],
+    ) -> None:
+        ids = [str(item["id"]) for item in ranked.get("results") or []]
+        exact, message = _exact_and_message(ranked)
+        await self.store.add_search(
+            tenant_id,
+            version,
+            {
+                "id": uuid4().hex,
+                "query": text,
+                "host": host,
+                "signature": signature(pieces),
+                "limit": cap,
+                "ids": ids,
+                "exact_match": exact if ids else True,
+                "message": message,
+                "parts": part_rows,
+            },
+        )
+
+    async def _body_from_saved(
+        self,
+        tenant_id: str,
+        whole: dict[str, Any],
+        pieces: list[str],
+        host: str,
+        cap: int,
+    ) -> dict[str, Any] | None:
+        ids = [str(item) for item in whole.get("ids") or []][:cap]
+        taken = await self._take(tenant_id, ids)
+        if taken is None:
+            return None
+        if not taken:
+            return {"results": []}
+        stored_parts = {str(part.get("part") or ""): part for part in whole.get("parts") or []}
+        part_rows = [stored_parts.get(piece) or {"part": piece, "ids": [], "limit": cap} for piece in pieces]
+        flags = [True] * len(pieces)
+        ranked = {
+            "results": taken,
+            "exact_match": bool(whole.get("exact_match", True)),
+            "message": whole.get("message"),
+        }
+        return _shopper_body(ranked, host, part_rows, flags)
+
+    async def _take(self, tenant_id: str, ids: list[str]) -> list[dict[str, Any]] | None:
+        if not ids:
+            return []
+        by_id: dict[str, dict[str, Any]] = {}
+        for row in await self.store.products(tenant_id):
+            if row.get("active", True) is False:
+                continue
+            public = public_product(row)
+            by_id[public["id"]] = public
+        found: list[dict[str, Any]] = []
+        for sku in ids:
+            item = by_id.get(sku)
+            if item is None:
+                return None
+            found.append(item)
+        return found
 
     async def product(self, tenant_id: str, product_id: str) -> dict[str, Any]:
         detail = product_detail(await self._bundle(tenant_id, product_id))

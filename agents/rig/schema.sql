@@ -6,6 +6,10 @@
 -- fit_why stores why-text for one fit, keyed by a hash of its rule and note.
 -- Import, a feed pull, a price watch, approve, and reject clear answers for that tenant.
 -- fit_why is kept so a known fit is not sent to a model again.
+-- searches keeps each finished shopper search for that tenant.
+-- A later search reuses a part when the part and what it goes on are the same,
+-- on the same catalogue version. A changed catalogue is not reused.
+-- The row stays. A search from another tenant is never read.
 -- market_prices is not the catalogue. Search does not read it.
 -- Each row is one other seller's price for a sku this retailer already stocks.
 -- The sheet is a separate import. A later price reader is the intended feed.
@@ -145,3 +149,21 @@ CREATE TABLE IF NOT EXISTS agent_rig.market_prices (
 );
 
 CREATE INDEX IF NOT EXISTS market_prices_tenant_sku ON agent_rig.market_prices (tenant_id, sku);
+
+CREATE TABLE IF NOT EXISTS agent_rig.searches (
+    tenant_id     uuid NOT NULL,
+    id            text NOT NULL,
+    version       text NOT NULL,
+    query         text NOT NULL,
+    host          text NOT NULL DEFAULT '',
+    signature     text NOT NULL,
+    result_limit  integer NOT NULL,
+    ids           jsonb NOT NULL,
+    exact_match   boolean NOT NULL DEFAULT true,
+    message       text,
+    parts         jsonb NOT NULL,
+    created_at    timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, id)
+);
+
+CREATE INDEX IF NOT EXISTS searches_tenant_version ON agent_rig.searches (tenant_id, version);
