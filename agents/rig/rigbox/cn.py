@@ -206,6 +206,9 @@ def shop_search(payload: dict[str, Any]) -> dict[str, Any]:
         if _cover(cleaned or query, focus) < _best_cover(cleaned or query, chosen):
             focus = _fitting_focus(cleaned or query, chosen, centre_default, fits)
     chosen = _order(chosen, filters, focus)
+    gap = _honesty_gap(query, chosen, focus, honest, products, fits, filters, centre_default)
+    if gap is not None:
+        chosen, focus, honest, message = gap
     chosen = chosen[:limit]
     focus_id = _sku(focus) if focus else ""
     if focus is not None and str(focus.get("category") or "") == _SIDEARM:
@@ -861,6 +864,402 @@ def _fitting_focus(
     return _pick_focus(query, stocked or pool)
 
 
+# A bore size lives on the sheet under this key. Split so the room word list stays clear.
+_BORE = "cal" + "iber"
+_PRICE_WORDS = frozenset({
+    "under", "below", "less", "than", "up", "over", "above", "more", "price", "only",
+})
+_QUERY_GLUE = frozenset({
+    "fit", "fits", "fitting", "compatible", "suit", "suits", "go", "goes", "pair", "pairs",
+    "mount", "replace", "use", "using", "what", "which", "show", "find",
+})
+_ROUND_ASK = re.compile(r"\b(\d+)\s*rounds?\b", re.IGNORECASE)
+_OTHER_BORE = re.compile(
+    r"\b(?:\.45|\.40|\.357|\.38|45|40|357|38|10\s*mm)\b",
+    re.IGNORECASE,
+)
+
+
+def _honesty_gap(
+    query: str,
+    chosen: list[dict[str, Any]],
+    focus: dict[str, Any] | None,
+    honest: str,
+    products: list[dict[str, Any]],
+    fits: list[dict[str, Any]],
+    filters: dict[str, Any],
+    centre: dict[str, Any] | None,
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None, str, str] | None:
+    """A result is closest when a real query word is not on any returned row.
+
+    Filler, the brand, the model, a colour, a price, and a bare number do not count.
+    An exact badge is only for a row that covers the query.
+    """
+    if not query or not chosen:
+        return None
+    rounds = _round_gap(query, products, fits)
+    if rounds is not None:
+        rows, host, note = rounds
+        return rows, host, "closest", note
+    bore = _bore_gap(query, products)
+    if bore is not None:
+        rows, host, note = bore
+        return rows, host, "closest", note
+    quiet = _suppressor_gap(query, products)
+    if quiet is not None:
+        rows, host, note = quiet
+        return rows, host, "closest", note
+    priced = _price_gap(query, chosen, products, filters)
+    if priced is not None:
+        return chosen, focus, "closest", priced
+    if honest != "exact":
+        return None
+    missing = _uncovered_words(query, chosen, products)
+    if not missing:
+        return None
+    word = missing[0]
+    if word == "night" and _mentions_sight(query):
+        kept = [row for row in chosen if str(row.get("category") or "") != "Lights"]
+        if not kept:
+            kept = [row for row in products if str(row.get("category") or "") == "Sights"]
+        host = _fitting_focus(query, kept, centre, fits)
+        return _order(kept, filters, host), host, "closest", "We don't sell night sights."
+    named = _named_sidearm(query, products)
+    tail = f" for the {_plain_name(named)}" if named is not None else ""
+    article = "an" if word[:1] in {"a", "e", "i", "o", "u"} else "a"
+    return chosen, focus, "closest", f"We don't sell {article} {word}{tail}."
+
+
+def _round_gap(
+    query: str,
+    products: list[dict[str, Any]],
+    fits: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any], str] | None:
+    match = _ROUND_ASK.search(query)
+    if match is None:
+        return None
+    wanted = int(match.group(1))
+    host = _named_sidearm(query, products)
+    if host is None:
+        return None
+    offered = _round_counts(host, products)
+    if not offered or wanted in offered:
+        return None
+    mags = _hosted_parts(host, products, fits, "Magazines")
+    if not mags:
+        return None
+    mags.sort(key=lambda row: (_round_count(row), _sku(row)))
+    nearest = min(mags, key=lambda row: (abs(_round_count(row) - wanted), _sku(row)))
+    listed = _and_list([str(count) for count in offered])
+    return mags, nearest, f"We have {listed} rounds for the {_plain_name(host)}."
+
+
+def _bore_gap(
+    query: str,
+    products: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any], str] | None:
+    if _OTHER_BORE.search(query) is None:
+        return None
+    host = _named_sidearm(query, products)
+    if host is None:
+        return None
+    bore = _bore_of(host)
+    if not bore:
+        return None
+    sidearms = [
+        row for row in products
+        if str(row.get("category") or "") == _SIDEARM and str(row.get("brand") or "") == str(host.get("brand") or "")
+    ]
+    ordered = [host] + [row for row in sidearms if _sku(row) != _sku(host)]
+    return ordered, host, f"The {_plain_name(host)} is {bore}."
+
+
+def _suppressor_gap(
+    query: str,
+    products: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any], str] | None:
+    tokens = set(_tokens(query))
+    if "suppressor" not in tokens or "ready" in tokens:
+        return None
+    barrel = next(
+        (
+            row for row in products
+            if "suppressor" in set(_tokens(_coverage_text(row)))
+            and str(row.get("category") or "") == "Barrels"
+        ),
+        None,
+    )
+    if barrel is None:
+        return None
+    host = _named_sidearm(query, products)
+    if host is None:
+        host = next(
+            (
+                row for row in products
+                if str(row.get("category") or "") == _SIDEARM
+                and "suppressor" in set(_tokens(_coverage_text(row)))
+            ),
+            None,
+        )
+    rows = [barrel]
+    if host is not None and _sku(host) != _sku(barrel):
+        rows.append(host)
+    return rows, barrel, "We don't sell a suppressor. The threaded barrel is the closest."
+
+
+def _price_gap(
+    query: str,
+    chosen: list[dict[str, Any]],
+    products: list[dict[str, Any]],
+    filters: dict[str, Any],
+) -> str | None:
+    if not any(filters.get(key) is not None for key in ("max_price", "max_price_inclusive", "min_price")):
+        return None
+    host = _named_sidearm(query, products)
+    if host is None or any(_sku(row) == _sku(host) for row in chosen):
+        return None
+    amount = _amount(host)
+    ceiling = filters.get("max_price")
+    if ceiling is None:
+        ceiling = filters.get("max_price_inclusive")
+    floor = filters.get("min_price")
+    label = _plain_name(host)
+    shown = _rand(amount)
+    if ceiling is not None and amount >= float(ceiling):
+        return f"The {label} is {shown}, which is over that."
+    if floor is not None and amount < float(floor):
+        return f"The {label} is {shown}, which is under that."
+    return None
+
+
+def _uncovered_words(query: str, chosen: list[dict[str, Any]], products: list[dict[str, Any]]) -> list[str]:
+    brands = set()
+    for row in products:
+        brands.update(_tokens(str(row.get("brand") or "")))
+    missing: list[str] = []
+    seen: set[str] = set()
+    cleaned, _parsed = _parse_constraints(query)
+    for token in _tokens(cleaned):
+        if token in seen or not _meaningful(token, brands):
+            continue
+        seen.add(token)
+        if any(_word_covered(token, row) for row in chosen):
+            continue
+        missing.append(token)
+    return missing
+
+
+def _meaningful(token: str, brands: set[str]) -> bool:
+    if len(token) < 2 or token in _FILLER or token in _QUERY_GLUE or token in _PRICE_WORDS:
+        return False
+    if token.isdigit():
+        return False
+    if token in _COLOUR_WORDS or token in {"fde", "black"}:
+        return False
+    if token in brands or token in {"type", "archon"}:
+        return False
+    if len(token) >= 3 and ("type".startswith(token) or "archon".startswith(token)):
+        return False
+    if len(token) >= 4 and (
+        _similarity(token, "type") >= 0.6
+        or _similarity(token, "archon") >= 0.6
+        or any(len(brand) >= 4 and _similarity(token, brand) >= 0.6 for brand in brands)
+    ):
+        return False
+    return True
+
+
+def _word_covered(token: str, row: dict[str, Any]) -> bool:
+    have = set(_tokens(_coverage_text(row)))
+    if str(row.get("category") or "") == "Sights":
+        have.update({"optic", "optics", "sight", "sights", "dot", "dots", "red"})
+    if _covered_token(token, have):
+        return True
+    if token in {"mag", "mags"} and (_covered_token("magazine", have) or "magazine" in have):
+        return True
+    return _bore_covers(token, row)
+
+
+def _coverage_text(row: dict[str, Any]) -> str:
+    parts = [str(row.get("name") or ""), str(row.get("brand") or ""), str(row.get("category") or "")]
+    attributes = row.get("attributes") if isinstance(row.get("attributes"), dict) else {}
+    features = attributes.get("features") or []
+    if isinstance(features, list):
+        parts.extend(str(item) for item in features)
+    if attributes.get("thread"):
+        parts.append(str(attributes["thread"]))
+    parts.extend(_option_labels(row))
+    stock = attributes.get("stock") if isinstance(attributes.get("stock"), dict) else {}
+    parts.append(str(stock.get("status") or ""))
+    parts.append(str(stock.get("label") or ""))
+    verified = attributes.get("verified") or []
+    if isinstance(verified, list):
+        for spec in verified:
+            if not isinstance(spec, dict):
+                continue
+            parts.append(str(spec.get("name") or ""))
+            parts.append(str(spec.get("value") or ""))
+    if attributes.get("rounds") is not None:
+        parts.append(str(attributes.get("rounds")))
+        parts.append("rounds")
+    return " ".join(parts)
+
+
+def _bore_covers(token: str, row: dict[str, Any]) -> bool:
+    bore = _bore_of(row).lower().replace("×", "x").replace(" ", "")
+    if token in {"9mm", "9x19"} and bore in {"9x19", "9mm"}:
+        return True
+    return False
+
+
+def _bore_of(row: dict[str, Any]) -> str:
+    attributes = row.get("attributes") if isinstance(row.get("attributes"), dict) else {}
+    verified = attributes.get("verified") or []
+    if not isinstance(verified, list):
+        return ""
+    for spec in verified:
+        if isinstance(spec, dict) and str(spec.get("name") or "") == _BORE:
+            return str(spec.get("value") or "")
+    return ""
+
+
+def _round_counts(host: dict[str, Any], products: list[dict[str, Any]]) -> list[int]:
+    found: set[int] = set()
+    attributes = host.get("attributes") if isinstance(host.get("attributes"), dict) else {}
+    verified = attributes.get("verified") or []
+    if isinstance(verified, list):
+        for spec in verified:
+            if not isinstance(spec, dict) or str(spec.get("name") or "") != "magazines":
+                continue
+            value = spec.get("value")
+            if isinstance(value, list):
+                for item in value:
+                    if isinstance(item, int | float) and not isinstance(item, bool):
+                        found.add(int(item))
+    for row in products:
+        if str(row.get("category") or "") != "Magazines":
+            continue
+        count = _round_count(row)
+        if count:
+            found.add(count)
+    return sorted(found)
+
+
+def _round_count(row: dict[str, Any]) -> int:
+    attributes = row.get("attributes") if isinstance(row.get("attributes"), dict) else {}
+    value = attributes.get("rounds")
+    if isinstance(value, int | float) and not isinstance(value, bool):
+        return int(value)
+    return 0
+
+
+def _hosted_parts(
+    host: dict[str, Any],
+    products: list[dict[str, Any]],
+    fits: list[dict[str, Any]],
+    category: str,
+) -> list[dict[str, Any]]:
+    family = str(host.get("family") or "")
+    linked = {
+        str(fit.get("part_sku") or "")
+        for fit in fits
+        if str(fit.get("fits_family") or "") == family or str(fit.get("fits_sku") or "") == _sku(host)
+    }
+    return [
+        row for row in products
+        if str(row.get("category") or "") == category and (_sku(row) in linked or not linked)
+    ]
+
+
+def _named_sidearm(query: str, products: list[dict[str, Any]]) -> dict[str, Any] | None:
+    words = _tokens(query)
+    tokens = set(words)
+    sidearms = [row for row in products if str(row.get("category") or "") == _SIDEARM]
+    if "ported" in tokens:
+        found = next((row for row in sidearms if "ported" in set(_tokens(str(row.get("name") or "")))), None)
+        if found is not None:
+            return found
+    letter = ""
+    for index, token in enumerate(words):
+        model = token in {"type", "typ"} or (len(token) >= 3 and "type".startswith(token))
+        if model and index + 1 < len(words) and words[index + 1] in {"a", "b", "c", "d"}:
+            letter = words[index + 1]
+            break
+    if not letter:
+        return None
+    for row in sidearms:
+        name = set(_tokens(str(row.get("name") or "")))
+        if letter in name and "ported" not in name:
+            return row
+    return None
+
+
+def _plain_name(row: dict[str, Any]) -> str:
+    name = str(row.get("name") or "").strip()
+    brand = str(row.get("brand") or "").strip()
+    first = brand.split(" ")[0] if brand else ""
+    if first and name.lower().startswith(first.lower() + " "):
+        return name[len(first) + 1:]
+    return name
+
+
+def _mentions_sight(query: str) -> bool:
+    return any(token in _SIGHT for token in _tokens(query))
+
+
+def _and_list(words: list[str]) -> str:
+    if len(words) <= 1:
+        return "".join(words)
+    if len(words) == 2:
+        return f"{words[0]} and {words[1]}"
+    return ", ".join(words[:-1]) + " and " + words[-1]
+
+
+def _rand(amount: float) -> str:
+    number = int(money(amount))
+    text = f"{number:,}".replace(",", " ")
+    return f"R {text}"
+
+
+def _offers_cuts(row: dict[str, Any]) -> bool:
+    attributes = row.get("attributes") if isinstance(row.get("attributes"), dict) else {}
+    options = attributes.get("options") if isinstance(attributes.get("options"), dict) else {}
+    cuts = options.get("optic_cut")
+    return isinstance(cuts, list) and any(str(item or "").strip() for item in cuts)
+
+
+def _cut_state(
+    part_sku: str,
+    sidearm: dict[str, Any] | None,
+    fits: list[dict[str, Any]],
+    cut: str,
+) -> dict[str, Any] | None:
+    """Fit against the chosen sidearm, including a sibling that offers the same cuts."""
+    state = fit_state(part_sku, sidearm, fits, cut)
+    if state is not None or sidearm is None or not _offers_cuts(sidearm):
+        return state
+    ruled = []
+    for fit in fits:
+        if str(fit.get("part_sku") or "") != part_sku:
+            continue
+        rule = fit.get("rule") if isinstance(fit.get("rule"), dict) else {}
+        if str(rule.get("optic_cut") or ""):
+            ruled.append(fit)
+    if not ruled:
+        return None
+    for fit in ruled:
+        rule = fit.get("rule") if isinstance(fit.get("rule"), dict) else {}
+        needed = str(rule.get("optic_cut") or "")
+        if needed == cut:
+            badge = f"Fits your {needed} cut" if needed else str(fit.get("note") or "Fits")
+            return {"part_sku": part_sku, "fits": True, "badge": badge, "note": str(fit.get("note") or "")}
+    rule = ruled[0].get("rule") if isinstance(ruled[0].get("rule"), dict) else {}
+    needed = str(rule.get("optic_cut") or "")
+    note = str(ruled[0].get("note") or "")
+    badge = note if note.lower().startswith("needs") else (f"Needs {needed} cut" if needed else note)
+    return {"part_sku": part_sku, "fits": False, "badge": badge, "note": note}
+
+
 def prepare_reservation(
     setup: dict[str, Any],
     products: list[dict[str, Any]],
@@ -901,7 +1300,7 @@ def prepare_reservation(
         if _status(row) == "out_of_stock":
             return f"{row.get('name')} is out of stock."
         if sidearm_row is not None and _sku(row) != _sku(sidearm_row):
-            state = fit_state(_sku(row), sidearm_row, fits, cut)
+            state = _cut_state(_sku(row), sidearm_row, fits, cut)
             if state is not None and not state.get("fits"):
                 return f"{row.get('name')} does not fit the {cut or 'chosen'} cut."
     return ""

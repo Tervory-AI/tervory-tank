@@ -28478,9 +28478,12 @@
       style: { stroke: "#7ee0d6", strokeWidth: 1.25 }
     };
   }
-  var CENTRE = { w: 240, h: 108 };
+  var CENTRE = { w: 200, h: 200 };
   var CAT = { w: 156, h: 58 };
-  var CARD = { w: 248, h: 84 };
+  var CARD = { w: 248, h: 88 };
+  var PITCH = 96;
+  var GROUP_GAP = 16;
+  var AFTER_CENTRE = 24;
   function centreNode(data, position) {
     return {
       id: "centre",
@@ -28516,13 +28519,48 @@
       draggable: false
     };
   }
+  function bandFor(count) {
+    const n = Math.max(count, 1);
+    return Math.max(CAT.h, (n - 1) * PITCH + CARD.h);
+  }
+  function splitColumns(groups, items) {
+    const cols = [[], []];
+    const weight = [0, 0];
+    groups.forEach((group) => {
+      const n = items.filter((item) => item.category === group.category).length;
+      const side = weight[0] <= weight[1] ? 0 : 1;
+      cols[side].push(group);
+      weight[side] += Math.max(n, 1);
+    });
+    return cols;
+  }
+  function placeColumn(groups, items, xCat, y0, nodes, edges, onOpen) {
+    let y = y0;
+    let previousCat = "";
+    groups.forEach((group) => {
+      const mine = items.filter((item) => item.category === group.category);
+      const id2 = "cat-" + group.category;
+      nodes.push(catNode(group, { x: xCat, y }));
+      if (!previousCat) edges.push(link("e-" + id2, "centre", id2, "b", "t"));
+      else edges.push(link("e-" + id2, previousCat, id2, "s-b", "t"));
+      let previous = id2;
+      mine.forEach((item, index2) => {
+        const itemId = "item-" + item.id;
+        nodes.push(cardNode(item, { x: xCat + CAT.w + 28, y: y + index2 * PITCH }, onOpen));
+        edges.push(previous === id2 ? link("e-" + itemId, id2, itemId, "s-r", "l") : link("e-" + itemId, previous, itemId, "s-b", "t"));
+        previous = itemId;
+      });
+      previousCat = id2;
+      y += bandFor(mine.length) + GROUP_GAP;
+    });
+    return y;
+  }
   function columns(model, narrow) {
     const nodes = [];
     const edges = [];
     const groups = model.groups || [];
     const items = model.items || [];
     const centreData = { label: model.centre || "Results", caption: model.caption || "" };
-    const pitch = CARD.h + 12;
     if (narrow) {
       let top = 0;
       nodes.push(centreNode(centreData, { x: 8, y: top }));
@@ -28538,32 +28576,21 @@
           nodes.push(cardNode(item, { x: 8, y: top }, model.onOpen));
           edges.push(link("e-" + itemId, previous, itemId, "s-b", "t"));
           previous = itemId;
-          top += pitch;
+          top += PITCH;
         });
         top += 12;
       });
       if (groups[0]) edges.push(link("e-cat-" + groups[0].category, "centre", "cat-" + groups[0].category, "b", "t"));
       return { nodes, edges };
     }
-    let cursor = 0;
-    const bands = groups.map((group) => {
-      const mine = items.filter((item) => item.category === group.category);
-      const band = Math.max(pitch, mine.length * pitch);
-      const row = { group, mine, top: cursor, band };
-      cursor += band + 20;
-      return row;
-    });
-    nodes.push(centreNode(centreData, { x: 0, y: Math.max(0, cursor / 2 - CENTRE.h / 2) }));
-    bands.forEach(({ group, mine, top, band }) => {
-      const id2 = "cat-" + group.category;
-      nodes.push(catNode(group, { x: 300, y: top + band / 2 - CAT.h / 2 }));
-      edges.push(link("e-" + id2, "centre", id2, "r", "l"));
-      mine.forEach((item, index2) => {
-        const itemId = "item-" + item.id;
-        nodes.push(cardNode(item, { x: 500, y: top + index2 * pitch }, model.onOpen));
-        edges.push(link("e-" + itemId, id2, itemId, "s-r", "l"));
-      });
-    });
+    const cols = splitColumns(groups, items);
+    const columnWidth = CAT.w + 28 + CARD.w;
+    const rightX = columnWidth + 36;
+    const block = rightX + columnWidth;
+    nodes.push(centreNode(centreData, { x: Math.max(0, (block - CENTRE.w) / 2), y: 0 }));
+    const y0 = CENTRE.h + AFTER_CENTRE;
+    placeColumn(cols[0], items, 0, y0, nodes, edges, model.onOpen);
+    placeColumn(cols[1], items, rightX, y0, nodes, edges, model.onOpen);
     return { nodes, edges };
   }
   function orbit(model, narrow) {
@@ -28591,7 +28618,7 @@
       });
       return { nodes, edges };
     }
-    const centre = { x: 250, y: 176 };
+    const centre = { x: 250, y: 200 };
     const mid = { x: centre.x + CENTRE.w / 2, y: centre.y + CENTRE.h / 2 };
     const clear = Math.hypot(CENTRE.w / 2, CENTRE.h / 2) + Math.hypot(CAT.w / 2, CAT.h / 2) + 28;
     const apart = (Math.max(CAT.w, CAT.h) + 24) / (2 * Math.sin(Math.PI / n));

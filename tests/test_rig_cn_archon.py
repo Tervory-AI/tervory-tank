@@ -187,6 +187,30 @@ GOLDEN = [
     ("light", "exact", ["ARCHON-LIGHT"], "ARCHON-LIGHT", True, ""),
     ("barrel", "exact", BARRELS, "ARCHON-TB-THREADED", True, ""),
     ("suppressor ready", "exact", ["ARCHON-TYPE-B", "ARCHON-TB-THREADED"], "ARCHON-TYPE-B", True, ""),
+    ("type b compensator", "closest", SPREAD, "ARCHON-TYPE-B", False, "We don't sell a compensator for the Type B."),
+    ("type b laser", "closest", SPREAD, "ARCHON-TYPE-B", False, "We don't sell a laser for the Type B."),
+    ("type b sling", "closest", SPREAD, "ARCHON-TYPE-B", False, "We don't sell a sling for the Type B."),
+    ("type b case", "closest", SPREAD, "ARCHON-TYPE-B", False, "We don't sell a case for the Type B."),
+    ("night sights", "closest", DOTS, "ARCHON-DOT-RMR", False, "We don't sell night sights."),
+    ("suppressor", "closest", ["ARCHON-TB-THREADED", "ARCHON-TYPE-B"], "ARCHON-TB-THREADED", False, "The threaded barrel is the closest."),
+    ("type b under 15000", "closest", [
+        "ARCHON-HOLSTER-TB",
+        "ARCHON-DOT-ACRO",
+        "ARCHON-DOT-RMR",
+        "ARCHON-DOT-RMS",
+        "ARCHON-LIGHT",
+        "ARCHON-MAG-12",
+        "ARCHON-MAG-15",
+        "ARCHON-MAG-18",
+        "ARCHON-RMR-SCREWS",
+        "ARCHON-TB-135",
+        "ARCHON-TB-THREADED",
+        "ARCHON-TRIGGER-PERF",
+    ], "ARCHON-HOLSTER-TB", False, "The Type B is R 24 990, which is over that."),
+    ("type b 17 round magazine", "closest", ["ARCHON-MAG-12", "ARCHON-MAG-15", "ARCHON-MAG-18"], "ARCHON-MAG-18", False, "We have 12, 15 and 18 rounds for the Type B."),
+    ("type b 45", "closest", PISTOLS, "ARCHON-TYPE-B", False, "The Type B is 9x19."),
+    ("type b 9mm", "exact", SPREAD, "ARCHON-TYPE-B", True, ""),
+    ("type b grip", "exact", SPREAD, "ARCHON-TYPE-B", True, ""),
     ("ported", "exact", ["ARCHON-TYPE-B-PORTED"], "ARCHON-TYPE-B-PORTED", True, ""),
     ("rmr mounting screw", "exact", ["ARCHON-RMR-SCREWS"], "ARCHON-RMR-SCREWS", True, ""),
     ("fde", "exact", PISTOLS, "ARCHON-TYPE-B", True, ""),
@@ -257,6 +281,10 @@ async def test_archon_golden_queries(query, honest, ids, focus, exact, message) 
         assert "TYPE-C" not in "".join(body["ids"])
         assert "TYPE-D" not in "".join(body["ids"])
         assert all("Glock" not in item["name"] for item in body["results"])
+        assert all("Exact match" not in (item.get("badges") or []) for item in body["results"])
+    elif focus:
+        focused = next(item for item in body["results"] if item["id"] == focus)
+        assert "Exact match" in focused["badges"]
 
 
 @pytest.mark.asyncio
@@ -635,6 +663,35 @@ async def test_letter_uses_the_retailer_name_and_readable_choices(monkeypatch: p
             {"product_id": "ARCHON-DOT-ACRO", "contact": {"name": "Ada Buyer", "email": "ada@example.com"}},
         )
     assert missing.value.status == 422  # type: ignore[attr-defined]
+    with pytest.raises(Exception) as type_a_cut:
+        await service.quote(
+            TENANT,
+            {
+                "setup": {
+                    "parts": [
+                        {"product": {"id": "ARCHON-TYPE-A"}, "choice": "RMS"},
+                        {"product": {"id": "ARCHON-DOT-RMR"}, "choice": ""},
+                    ]
+                },
+                "contact": {"name": "Ada Buyer", "email": "ada@example.com"},
+            },
+        )
+    assert type_a_cut.value.status == 422  # type: ignore[attr-defined]
+    assert "does not fit" in str(type_a_cut.value)
+    quoted = await service.quote(
+        TENANT,
+        {
+            "setup": {
+                "parts": [
+                    {"product": {"id": "ARCHON-TYPE-A"}, "choice": "RMR"},
+                    {"product": {"id": "ARCHON-DOT-RMR"}, "choice": ""},
+                    {"product": {"id": "ARCHON-MAG-15"}, "choice": ""},
+                ]
+            },
+            "contact": {"name": "Ada Buyer", "email": "ada@example.com"},
+        },
+    )
+    assert quoted["request_id"]
 
 
 @pytest.mark.asyncio

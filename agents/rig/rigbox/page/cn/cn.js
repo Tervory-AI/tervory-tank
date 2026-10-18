@@ -769,6 +769,34 @@
     ]);
   }
 
+  function visualHeight(groups, items, narrow) {
+    function count(group) {
+      return items.filter(function (item) { return item.category === group.category; }).length;
+    }
+    if (narrow) {
+      let height = 200 + 28;
+      groups.forEach(function (group) { height += 58 + 16 + count(group) * 96 + 12; });
+      return height;
+    }
+    const cols = [[], []];
+    const weight = [0, 0];
+    groups.forEach(function (group) {
+      const n = count(group);
+      const side = weight[0] <= weight[1] ? 0 : 1;
+      cols[side].push(group);
+      weight[side] += Math.max(n, 1);
+    });
+    function columnHeight(column) {
+      let height = 0;
+      column.forEach(function (group) {
+        const n = Math.max(count(group), 1);
+        height += Math.max(58, (n - 1) * 96 + 88) + 16;
+      });
+      return height;
+    }
+    return 200 + 24 + Math.max(columnHeight(cols[0]), columnHeight(cols[1])) + 12;
+  }
+
   function visualView(body, focus) {
     const items = (body.results || []).map(function (item) {
       const stock = stockOf(item.availability);
@@ -781,14 +809,7 @@
     });
     const groups = body.groups || [];
     const narrow = window.matchMedia("(max-width: 800px)").matches;
-    const pitch = 96;
-    let height = narrow ? 108 + 28 : 32;
-    groups.forEach(function (group) {
-      const n = items.filter(function (item) { return item.category === group.category; }).length;
-      if (narrow) height += 58 + 16 + n * pitch + 12;
-      else height += Math.max(pitch, n * pitch) + 20;
-    });
-    if (!narrow) height += 48;
+    const height = visualHeight(groups, items, narrow);
     return h("div", {
       class: "flow flow-wide",
       style: "height:" + height + "px",
@@ -873,19 +894,37 @@
       return fit.fits_family === family || fit.fits_sku === detail.id || fit.fits_sku === family;
     }).map(function (fit) { return map[fit.part_sku]; }).filter(Boolean);
     const fitChips = h("div", { class: "fit-chips" });
-    linked.forEach(function (part) {
-      const fit = fitFor(part.id, picks.optic_cut, detail.fits || [], family);
-      const partStock = stockOf(part.availability);
-      const fits = fit ? fit.fits : true;
-      fitChips.append(h("span", {
-        class: "chip tiny" + (fits ? " on" : ""),
-        text: (fit ? fit.badge : "Check fit") + " · " + partStock.label,
-      }));
-    });
+    if (detail.category === "Pistols") {
+      linked.forEach(function (part) {
+        const fit = fitFor(part.id, picks.optic_cut, detail.fits || [], family);
+        const partStock = stockOf(part.availability);
+        const fits = fit ? fit.fits : true;
+        fitChips.append(h("span", {
+          class: "chip tiny" + (fits ? " on" : ""),
+          text: part.name + " · " + (fit ? fit.badge : "Fits") + " · " + partStock.label,
+        }));
+      });
+    } else {
+      const seenFit = {};
+      (detail.fits || []).filter(function (fit) { return fit.part_sku === detail.id; }).forEach(function (fit) {
+        const cut = (fit.rule && fit.rule.optic_cut) || "";
+        rows.filter(function (row) {
+          return row.category === "Pistols" && (row.family === fit.fits_family || row.id === fit.fits_sku);
+        }).forEach(function (host) {
+          const key = host.id + ":" + cut;
+          if (seenFit[key]) return;
+          seenFit[key] = true;
+          fitChips.append(h("span", {
+            class: "chip tiny on",
+            text: "Fits " + host.name + (cut ? " with " + cut + " cut" : ""),
+          }));
+        });
+      });
+    }
     const stills = [
       ["/page/cn/media/type-b-render.jpg", "Type B render, muzzle left"],
-      ["/page/cn/media/type-b-photo.jpg", "Type B studio photo"],
-      ["/page/cn/media/grip.jpg", "Modular grip"],
+      ["/page/cn/media/type-b-photo.jpg", "Type B, live fire"],
+      ["/page/cn/media/grip.jpg", "Interchangeable grip textures"],
       ["/page/cn/media/trigger.jpg", "Flat face trigger"],
     ];
     const choices = [];
@@ -899,12 +938,13 @@
     }
     const cuts = optionValues(detail, "optic_cut");
     if (cuts.length) choices.push(radioGroup("Optic cut", "cut", cuts, picks.optic_cut, function (value) { picks.optic_cut = value; redraw(); }));
-    const options = choices.length || linked.length ? h("div", { class: "product-options" }, [
+    const hasFits = fitChips.childNodes.length > 0;
+    const options = choices.length || hasFits ? h("div", { class: "product-options" }, [
       choices.length ? h("h2", { text: "Choose your options" }) : null,
-    ].concat(choices).concat(linked.length ? [h("h2", { text: "Fits" }), fitChips] : [])) : null;
-    const peers = h("div", { class: "search-compare" }, [h("h2", { text: "Compare in this search" })]);
+    ].concat(choices).concat(hasFits ? [h("h2", { text: "Fits" }), fitChips] : [])) : null;
     const same = rows.filter(function (item) { return item.category === detail.category; });
-    same.forEach(function (item) {
+    const peers = same.length >= 2 ? h("div", { class: "search-compare" }, [h("h2", { text: "Compare in this search" })]) : null;
+    if (peers) same.forEach(function (item) {
       const peerStock = stockOf(item.availability);
       const delta = peerDelta(item, same);
       const mark = item.id === detail.id ? "This one" : delta > 0 ? "+" + rand(delta) : delta === 0 ? "Cheapest" : "";
@@ -934,7 +974,6 @@
       h("div", { class: "product" }, [
         h("div", { class: "product-media" }, [
           h("img", { class: "hero", src: detail.image, alt: coming ? "Photo coming" : detail.name }),
-          coming ? h("p", { class: "photo-coming", text: "Photo coming" }) : null,
           detail.id === "ARCHON-TYPE-B" ? h("div", { class: "stills" }, stills.map(function (still) {
             return h("figure", {}, [h("img", { src: still[0], alt: still[1] }), h("figcaption", { text: still[1] })]);
           })) : null,
@@ -996,7 +1035,7 @@
       const partStock = stockOf(line.product.availability);
       list.append(h("li", {}, [
         h("span", { text: line.product.name }),
-        h("span", { class: "meta", text: rand(line.product.price.amount) + " · " + (fit ? fit.badge : "Included") + " · " + partStock.label }),
+        h("span", { class: "meta", text: rand(line.product.price.amount) + " · " + (fit && fit.badge ? fit.badge : line.product.category === "Pistols" ? "Base" : "Added") + " · " + partStock.label }),
       ]));
     });
     const name = h("input", { name: "name", required: "true", autocomplete: "name", "aria-label": "Your name" });
@@ -1014,7 +1053,7 @@
           body: JSON.stringify({
             contact: { name: name.value.trim(), email: email.value.trim(), phone: phone.value.trim() },
             setup: {
-              label: "Your " + detail.name + " build",
+              label: detail.category === "Pistols" ? "Your " + detail.name + " build" : "Reserve " + detail.name,
               parts: lines.map(function (line) {
                 return { role: line.product.category, product: { id: line.product.id }, choice: line.choice || "" };
               }),
@@ -1040,34 +1079,40 @@
       }),
       status,
     ]);
+    const isSidearm = detail.category === "Pistols";
+    const isTypeB = detail.id === "ARCHON-TYPE-B";
+    const title = isSidearm ? "Your " + detail.name + " build" : "Reserve " + detail.name;
+    const heroSrc = isTypeB ? "/page/cn/media/type-b-render.jpg" : (isSidearm ? "/page/cn/media/photo-coming.svg" : (detail.image || "/page/cn/media/photo-coming.svg"));
+    const heroAlt = isTypeB ? "Type B render, muzzle left" : (String(heroSrc).indexOf("photo-coming") >= 0 ? "Photo coming" : detail.name);
     const frames = h("div", { class: "frame-strip" });
-    steps.forEach(function (step, index) {
+    if (isTypeB) steps.forEach(function (step, index) {
       frames.append(h("figure", {}, [
         h("img", { src: step[1], alt: step[2] }),
         h("figcaption", { text: (index + 1) + " " + step[2] }),
       ]));
     });
+    const stage = [
+      h("p", { class: "meta", text: "Results · " + detail.name + " · " + (isSidearm ? "Your build" : "Reserve") }),
+      h("h1", { text: title }),
+      h("img", { class: "hero-still", src: heroSrc, alt: heroAlt }),
+    ];
+    if (isTypeB) stage.push(frames);
     return h("article", { class: "build" }, [
-      h("div", { class: "build-stage" }, [
-        h("p", { class: "meta", text: "Results · " + detail.name + " · Your build" }),
-        h("h1", { text: "Your " + detail.name + " build" }),
-        h("img", { class: "hero-still", src: "/page/cn/media/still-up.jpg", alt: "Type B with optic and modular grip, Versatility video at about 41 seconds" }),
-        frames,
-      ]),
+      h("div", { class: "build-stage" }, stage),
       h("aside", { class: "side build-side" }, [
-        h("h2", { text: "Your build" }),
+        h("h2", { text: isSidearm ? "Your build" : "Reserve this part" }),
         h("p", { class: "gold", text: "Demo prices" }),
         list,
         h("p", { class: "meta", text: "Running total" }),
         h("p", { class: "total", text: rand(total) }),
-        dots.length ? optionCards("Red dot options", dotChoices, picks.dot, function (value) { redraw("dot", value); }) : null,
-        mags.length ? optionCards("Magazine", mags.map(choiceFor), picks.mag, function (value) { redraw("mag", value); }) : null,
-        triggers.length ? radioGroup("Trigger", "trigger", [{ code: "standard", label: "Standard, included · In stock" }].concat(triggers.map(function (row) {
+        h("p", { class: "note", text: CN.name + " confirms stock and paperwork before anything is final. Nothing is held or charged until they confirm." }),
+        form,
+        isSidearm && dots.length ? optionCards("Red dot options", dotChoices, picks.dot, function (value) { redraw("dot", value); }) : null,
+        isSidearm && mags.length ? optionCards("Magazine", mags.map(choiceFor), picks.mag, function (value) { redraw("mag", value); }) : null,
+        isSidearm && triggers.length ? radioGroup("Trigger", "trigger", [{ code: "standard", label: "Standard, included · In stock" }].concat(triggers.map(function (row) {
           const partStock = stockOf(row.availability);
           return { code: "performance", label: row.name + " · " + rand(row.price.amount) + " · Fits · " + partStock.label };
         })), picks.trigger, function (value) { redraw("trigger", value); }) : null,
-        h("p", { class: "note", text: CN.name + " confirms stock and paperwork before anything is final. Nothing is held or charged until they confirm." }),
-        form,
       ]),
     ]);
   }
