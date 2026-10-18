@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { AREAS, COURTS, DEADLINE_ROWS, MATTER_ROWS, REVIEW_ROWS, SEARCH_KINDS, hitsFor, type SearchKind } from "./frame";
+import { MOOT_LABEL } from "./moot";
+import { MootCourt } from "./moot-court";
 import { PluginsDialog } from "./plugins-dialog";
 import { PLUGIN_TABS, SEARCH_PLACEHOLDER, type PluginPanel, type PluginTab } from "./plugins";
 
@@ -99,6 +101,8 @@ export function ZenasView({ plugins, workspaceName }: { plugins: PluginPanel; wo
   const [messages, setMessages] = useState(0);
   const [attached, setAttached] = useState<string | null>(null);
   const [actionNote, setActionNote] = useState("");
+  const [section, setSection] = useState<"chats" | "moot">("chats");
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   const hits = hitsFor(kind, query);
   const showFrame = query.trim().length === 0;
@@ -126,6 +130,21 @@ export function ZenasView({ plugins, workspaceName }: { plugins: PluginPanel; wo
     setMenu(false);
     setSearchOpen(false);
     setPluginsOpen(true);
+  }
+
+  function showChats() {
+    setSection("chats");
+    setPluginsOpen(false);
+    setMenu(false);
+    bodyRef.current?.scrollTo(0, 0);
+  }
+
+  function showMoot() {
+    setSection("moot");
+    setPluginsOpen(false);
+    setSearchOpen(false);
+    setMenu(false);
+    bodyRef.current?.scrollTo(0, 0);
   }
 
   function closePlugins() {
@@ -185,7 +204,7 @@ export function ZenasView({ plugins, workspaceName }: { plugins: PluginPanel; wo
               {link.label}
             </Link>
           ))}
-          <button className={pluginsOpen ? "" : "active"} type="button" onClick={() => { setPluginsOpen(false); setMenu(false); }}>
+          <button className={!pluginsOpen && section === "chats" ? "active" : ""} type="button" onClick={showChats}>
             Chats
           </button>
         </nav>
@@ -197,6 +216,14 @@ export function ZenasView({ plugins, workspaceName }: { plugins: PluginPanel; wo
               {link.label}
             </Link>
           ))}
+          <button
+            className={!pluginsOpen && section === "moot" ? "active" : ""}
+            type="button"
+            aria-current={!pluginsOpen && section === "moot" ? "page" : undefined}
+            onClick={showMoot}
+          >
+            {MOOT_LABEL}
+          </button>
           <button className={pluginsOpen ? "active" : ""} type="button" onClick={openPlugins}>
             Plugins
           </button>
@@ -260,7 +287,10 @@ export function ZenasView({ plugins, workspaceName }: { plugins: PluginPanel; wo
         </nav>
         </div>
       </aside>
-      <div className={pluginsOpen ? "zn-body dimmed" : "zn-body"} data-scroll-root>
+      <div ref={bodyRef} className={pluginsOpen ? "zn-body dimmed" : "zn-body"} data-scroll-root>
+        {section === "moot" ? <MootCourt /> : null}
+        {section === "chats" ? (
+        <>
         <header className="zn-head">
           <div>
             <h1>Zenas</h1>
@@ -553,10 +583,14 @@ export function ZenasView({ plugins, workspaceName }: { plugins: PluginPanel; wo
             </article>
           </div>
         </section>
+        </>
+        ) : null}
       </div>
+      {section === "chats" ? (
       <button className="zn-bot" type="button" onClick={() => askRef.current?.focus()}>
         Chat bot, to be named
       </button>
+      ) : null}
       <PluginsDialog open={pluginsOpen} tab={tab} plugins={plugins} onTab={setTab} onClose={closePlugins} />
     </div>
   );

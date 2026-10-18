@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PAGE = ROOT / "workspace" / "app" / "zenas"
 
 
-def test_zenas_frame_rules() -> None:
+def _node_test(name: str) -> None:
     result = subprocess.run(
         [
             "node",
@@ -18,13 +18,40 @@ def test_zenas_frame_rules() -> None:
             "--import",
             str(ROOT / "tests" / "market_lab_register.mjs"),
             "--test",
-            str(PAGE / "frame.test.ts"),
+            str(PAGE / name),
         ],
         cwd=ROOT,
         capture_output=True,
         text=True,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_zenas_frame_rules() -> None:
+    _node_test("frame.test.ts")
+
+
+def test_moot_court_starts_empty() -> None:
+    _node_test("moot.test.ts")
+    view = (PAGE / "view.tsx").read_text(encoding="utf-8")
+    links = view.split("const PAGE_LINKS", 1)[1].split("] as const", 1)[0]
+    assert links.index("Matters") < links.index("/review")
+    middle = view.split('aria-label="Zenas"', 1)[1].split("</nav>", 1)[0]
+    assert middle.index("PAGE_LINKS") < middle.index("{MOOT_LABEL}") < middle.index("Plugins")
+    assert "showMoot" in middle
+    moot = (PAGE / "moot.ts").read_text(encoding="utf-8")
+    assert "There is no training problem yet." in moot
+    assert "Law students will use it later, for free." in moot
+    assert "return null" in moot
+    assert "criminal" not in moot.lower()
+    css = (PAGE / "zenas.css").read_text(encoding="utf-8")
+    panel = re.search(r"\.zn-panel\s*\{([^}]*)\}", css)
+    body = re.search(r"\.zn-body\s*\{([^}]*)\}", css)
+    assert panel is not None and body is not None
+    assert re.search(r"position:\s*fixed", panel.group(1))
+    assert re.search(r"overflow:\s*hidden", panel.group(1))
+    assert "overflow-y" not in panel.group(1)
+    assert re.search(r"overflow-y:\s*auto", body.group(1))
 
 
 def test_page_uses_zenas_vault_and_does_not_turn_it_on() -> None:

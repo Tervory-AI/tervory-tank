@@ -328,6 +328,28 @@ body:has(.zn) main {
   pointer-events: none;
 }
 
+.zn-moot {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 880px;
+}
+
+.zn-moot-ground {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.zn-moot .zn-card h2 {
+  margin-bottom: 10px;
+}
+
+.zn-moot .zn-card p {
+  margin: 0;
+  color: #3d4b6e;
+}
+
 .zn-head {
   display: flex;
   align-items: flex-start;
