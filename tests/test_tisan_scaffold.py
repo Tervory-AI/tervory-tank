@@ -60,13 +60,22 @@ def test_template_has_the_pages_and_no_analytics() -> None:
         "package-lock.json",
         ".github/workflows/ci.yml",
         "playwright.config.ts",
+        "lighthouserc.cjs",
+        "scripts/site-paths.cjs",
+        "e2e/a11y.spec.ts",
+        "e2e/pages.spec.ts",
+        "tests/gate.test.ts",
         "vitest.config.ts",
         "eslint.config.mjs",
     ):
         assert (TEMPLATE / rel).is_file(), rel
     package = json.loads((TEMPLATE / "package.json").read_text(encoding="utf-8"))
     assert package["scripts"]["test"] == "vitest run"
+    assert package["scripts"]["typecheck"] == "tsc --noEmit"
+    assert package["scripts"]["lhci"] == "lhci autorun"
     assert "playwright" in package["scripts"]["test:e2e"]
+    assert "@axe-core/playwright" in package["devDependencies"]
+    assert "@lhci/cli" in package["devDependencies"]
     assert (TEMPLATE / "tsconfig.json").read_text(encoding="utf-8").count('"strict": true') == 1
     banned = ("googletagmanager", "google-analytics", "gtag(", "plausible", "segment.com")
     for path in TEMPLATE.rglob("*"):
@@ -80,6 +89,31 @@ def test_template_has_the_pages_and_no_analytics() -> None:
     contact = (TEMPLATE / "app/contact/page.tsx").read_text(encoding="utf-8")
     assert 'action="/api/contact"' in contact
     assert "htmlFor=" in contact
+
+
+def test_site_gate_runs_in_github_actions() -> None:
+    commands = (
+        "npm run lint",
+        "npm run typecheck",
+        "npm test",
+        "npm run build",
+        "npm run test:e2e",
+        "npm run lhci",
+    )
+    template_ci = (TEMPLATE / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    repo_ci = (ROOT / ".github" / "workflows" / "tisan-site.yml").read_text(encoding="utf-8")
+    for command in commands:
+        assert command in template_ci
+        assert command in repo_ci
+    assert "agents/tisan/templates/next-site" in repo_ci
+    lighthouse = (TEMPLATE / "lighthouserc.cjs").read_text(encoding="utf-8")
+    for category in ("performance", "accessibility", "best-practices", "seo"):
+        assert f"categories:{category}" in lighthouse
+    assert "minScore: 0.9" in lighthouse
+    playwright = (TEMPLATE / "playwright.config.ts").read_text(encoding="utf-8")
+    for width in ("390", "768", "1440"):
+        assert f"width: {width}" in playwright
+    assert "@axe-core/playwright" in (TEMPLATE / "e2e" / "a11y.spec.ts").read_text(encoding="utf-8")
 
 
 def test_scaffold_job_is_ten_minutes_and_other_jobs_stay_on_the_default() -> None:

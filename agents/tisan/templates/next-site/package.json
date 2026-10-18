@@ -8,8 +8,10 @@
     "start": "next start",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "lhci": "lhci autorun"
   },
   "dependencies": {
     "next": "15.5.28",
@@ -17,7 +19,9 @@
     "react-dom": "19.1.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.11.0",
     "@eslint/eslintrc": "3.3.1",
+    "@lhci/cli": "0.15.1",
     "@playwright/test": "1.55.0",
     "@types/node": "22.18.0",
     "@types/react": "19.1.12",

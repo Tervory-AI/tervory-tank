@@ -3,4 +3,5 @@ node_modules
 out
 playwright-report
 test-results
+.lighthouseci
 tsconfig.tsbuildinfo
