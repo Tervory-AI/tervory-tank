@@ -490,11 +490,6 @@ body:has(.tk) main {
   font-size: 14px;
 }
 
-.tk-missing {
-  color: #6b7590;
-  font-size: 13px;
-}
-
 @media (max-width: 1100px) {
   .tk-body {
     padding: 40px 32px 48px;

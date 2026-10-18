@@ -54,7 +54,9 @@ def test_page_matches_the_panel_and_hides_keys():
     assert "Skills" not in view
     assert "pipelineTo(" in view
     assert "Pipeline to ${name}" in (PAGE / "squads.ts").read_text(encoding="utf-8")
-    assert "Key is missing" in view
+    assert "The key is held by LiteLLM." in (PAGE / "squads.ts").read_text(encoding="utf-8")
+    assert "MODEL_KEY_LINE" in view
+    assert "Key is missing" not in view
     assert "squad.logo" in view
     assert 'squad.id === "tank"' not in view
     assert "models.ts" not in text
@@ -95,7 +97,9 @@ def test_page_matches_the_panel_and_hides_keys():
     assert "process.env" not in page
     tank_client = (ROOT / "workspace" / "lib" / "tank.ts").read_text(encoding="utf-8")
     assert "/v1/models" in tank_client
-    assert "key_missing" in tank_client
+    assert "key_missing" not in tank_client
+    assert "keyMissing" not in tank_client
     main = (ROOT / "tank" / "main.py").read_text(encoding="utf-8")
     assert '@app.get("/v1/models"' in main
-    assert "return roster_key_status()" in main
+    assert "return roster_names()" in main
+    assert "key_missing" not in main.split("def roster_names", 1)[-1].split("def _shadow_budget_open", 1)[0]

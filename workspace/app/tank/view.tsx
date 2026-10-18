@@ -2,7 +2,7 @@
 
 import { useId, useState, type FormEvent } from "react";
 import { searchTank, VAULT_LINE } from "./records";
-import { modelsMatching, pipelineTo, SQUAD_LINE, squadsMatching, type ModelRow } from "./squads";
+import { MODEL_KEY_LINE, modelsMatching, pipelineTo, SQUAD_LINE, squadsMatching, type ModelRow } from "./squads";
 
 // Dashboard, Projects, Settings, and Support have no pages yet.
 // These point at the nearest existing workspace routes.
@@ -237,7 +237,7 @@ export function TankView({
           {!searching || shownModels.length || modelsUnavailable ? (
             <section className="tk-section" aria-label="Models">
               <h2>Models</h2>
-              <p className="tk-lead">Names only. Nothing here is a key.</p>
+              <p className="tk-lead">{MODEL_KEY_LINE}</p>
               {modelsUnavailable ? (
                 <p className="tk-none">Tank could not list models.</p>
               ) : shownModels.length ? (
@@ -245,7 +245,6 @@ export function TankView({
                   {shownModels.map((model) => (
                     <li key={model.name}>
                       <span className="tk-model-name">{model.name}</span>
-                      {model.keyMissing ? <span className="tk-missing">Key is missing</span> : null}
                     </li>
                   ))}
                 </ul>

@@ -21,15 +21,14 @@ export function pipelineTo(name: string): string {
   return `Pipeline to ${name}`;
 }
 
-export type ModelRow = { name: string; keyMissing: boolean };
+export type ModelRow = { name: string };
+
+export const MODEL_KEY_LINE = "The key is held by LiteLLM.";
 
 export function modelsMatching(query: string, rows: readonly ModelRow[]): ModelRow[] {
   const needle = query.trim().toLowerCase();
   if (!needle) return [...rows];
-  return rows.filter((row) => {
-    const blob = `${row.name}${row.keyMissing ? " key is missing" : ""}`.toLowerCase();
-    return blob.includes(needle);
-  });
+  return rows.filter((row) => row.name.toLowerCase().includes(needle));
 }
 
 export function squadsMatching(query: string, squads: readonly Squad[] = SQUADS): Squad[] {

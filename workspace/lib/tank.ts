@@ -30,7 +30,7 @@ async function tank<T>(path: string, init: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-export type RosterModel = { name: string; keyMissing: boolean };
+export type RosterModel = { name: string };
 
 export async function listRoster(): Promise<RosterModel[]> {
   const rows = await tank<unknown>("/v1/models", { method: "GET" });
@@ -41,7 +41,7 @@ export async function listRoster(): Promise<RosterModel[]> {
     const record = row as Record<string, unknown>;
     const name = typeof record.name === "string" ? record.name.trim() : "";
     if (!name) continue;
-    models.push({ name, keyMissing: record.key_missing === true });
+    models.push({ name });
   }
   return models;
 }
