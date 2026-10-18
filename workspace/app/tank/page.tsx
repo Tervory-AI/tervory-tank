@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
+import { listRoster } from "@/lib/tank";
 import { activeTenant } from "@/lib/tenant";
-import { modelRows } from "./models";
+import type { ModelRow } from "./squads";
 import { TankView } from "./view";
 import "./tank.css";
 
@@ -19,5 +20,12 @@ export default async function TankPage() {
   } catch {
     workspaceName = null;
   }
-  return <TankView workspaceName={workspaceName} models={modelRows(process.env)} />;
+  let models: ModelRow[] = [];
+  let modelsUnavailable = false;
+  try {
+    models = await listRoster();
+  } catch {
+    modelsUnavailable = true;
+  }
+  return <TankView workspaceName={workspaceName} models={models} modelsUnavailable={modelsUnavailable} />;
 }

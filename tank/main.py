@@ -751,6 +751,45 @@ def _price_quotes() -> list[graduate.Quote]:
     return graduate.load_price_roster(path)
 
 
+_ROSTER_ENV_KEY = re.compile(r"^os\.environ/([A-Z0-9_]+)$")
+
+
+def roster_key_status(path: Path | None = None, env: dict[str, str] | None = None) -> list[dict[str, Any]]:
+    """Names on the roster Tank already loads, and whether each key is empty.
+
+    A blank or missing environment value is key_missing. The list never includes
+    a key, an environment name, or a price.
+    """
+    source = _roster_path() if path is None else path
+    if not source.is_file():
+        return []
+    import yaml
+
+    data = yaml.safe_load(source.read_text(encoding="utf-8")) or {}
+    present = os.environ if env is None else env
+    rows: list[dict[str, Any]] = []
+    for item in data.get("model_list") or []:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("model_name") or "").strip()
+        if not name:
+            continue
+        raw = str((item.get("litellm_params") or {}).get("api_key") or "").strip()
+        match = _ROSTER_ENV_KEY.match(raw)
+        if match:
+            missing = not str(present.get(match.group(1)) or "").strip()
+        else:
+            missing = not raw
+        rows.append({"name": name, "key_missing": missing})
+    return rows
+
+
+@app.get("/v1/models", dependencies=[Depends(require_key)])
+async def list_models() -> list[dict[str, Any]]:
+    """The roster Tank already loads. Names, and whether the key is empty. No key values."""
+    return roster_key_status()
+
+
 async def _shadow_budget_open(task_type: str) -> bool:
     async with pool().acquire() as conn:
         spent = await conn.fetchval(

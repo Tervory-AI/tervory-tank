@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { groundAsk, hideKeys } from "./ask";
-import { modelRows, MODEL_ROSTER } from "./models";
 import { searchTank, TANK_RECORDS, VAULT_LINE } from "./records";
 import { pipelineTo, SQUADS, SQUAD_LINE } from "./squads";
 
@@ -29,25 +28,18 @@ test("the vault line names tank.vault and no key", () => {
   }
 });
 
-test("each agent has one box and a pipeline, and a missing key is only a flag", () => {
+test("each agent has one box, one logo, and a pipeline", () => {
   assert.deepEqual(
     SQUADS.map((squad) => squad.name),
     ["Base", "Tiger", "Market Lab", "Rig", "Tisan", "Radix", "Zenas", "Skala", "Tank"],
   );
+  assert.deepEqual(
+    SQUADS.map((squad) => squad.logo),
+    SQUADS.map((squad) => `/brand/${squad.id}-on-dark.png`),
+  );
+  assert.equal(new Set(SQUADS.map((squad) => squad.logo)).size, SQUADS.length);
   assert.equal(pipelineTo("Base"), "Pipeline to Base");
-  const secret = "sk-live_secretvalue";
-  const rows = modelRows({
-    OPENAI_API_KEY: secret,
-    GEMINI_API_KEY: " ",
-    XAI_API_KEY: "",
-  });
-  assert.equal(rows.length, MODEL_ROSTER.length);
-  assert.equal(JSON.stringify(rows).includes(secret), false);
-  assert.equal(JSON.stringify(rows).includes("OPENAI_API_KEY"), false);
-  assert.equal(rows.find((row) => row.name === "luna")?.keyMissing, false);
-  assert.equal(rows.find((row) => row.name === "haiku")?.keyMissing, true);
-  assert.equal(rows.find((row) => row.name === "flash")?.keyMissing, true);
-  assert.equal(rows.find((row) => row.name === "grok")?.keyMissing, true);
+  assert.equal(pipelineTo("Tank"), "Pipeline to Tank");
 });
 
 test("Ask Tank hides a key and refuses to pass one through", () => {

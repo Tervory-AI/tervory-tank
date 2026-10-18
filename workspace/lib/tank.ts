@@ -30,6 +30,22 @@ async function tank<T>(path: string, init: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
+export type RosterModel = { name: string; keyMissing: boolean };
+
+export async function listRoster(): Promise<RosterModel[]> {
+  const rows = await tank<unknown>("/v1/models", { method: "GET" });
+  if (!Array.isArray(rows)) return [];
+  const models: RosterModel[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const record = row as Record<string, unknown>;
+    const name = typeof record.name === "string" ? record.name.trim() : "";
+    if (!name) continue;
+    models.push({ name, keyMissing: record.key_missing === true });
+  }
+  return models;
+}
+
 export function route(tenantId: string, taskType: string, messages: ChatMessage[], agent = "tier0"): Promise<RouteResult> {
   return tank<RouteResult>("/v1/route", {
     method: "POST",

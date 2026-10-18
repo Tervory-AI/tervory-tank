@@ -99,7 +99,15 @@ function AskTank() {
   );
 }
 
-export function TankView({ workspaceName, models }: { workspaceName: string | null; models: ModelRow[] }) {
+export function TankView({
+  workspaceName,
+  models,
+  modelsUnavailable = false,
+}: {
+  workspaceName: string | null;
+  models: ModelRow[];
+  modelsUnavailable?: boolean;
+}) {
   const searchId = useId();
   const [menu, setMenu] = useState(false);
   const [query, setQuery] = useState("");
@@ -213,27 +221,37 @@ export function TankView({ workspaceName, models }: { workspaceName: string | nu
               <div className="tk-boxes">
                 {squads.map((squad) => (
                   <article className="tk-box" key={squad.id}>
-                    <h3>{squad.name}</h3>
-                    <p className="tk-pipe">{pipelineTo(squad.name)}</p>
-                    {squad.id === "tank" ? <p className="tk-pipe">tank.vault is on.</p> : null}
+                    <div className="tk-mark">
+                      <img src={squad.logo} alt="" />
+                    </div>
+                    <div className="tk-box-body">
+                      <h3>{squad.name}</h3>
+                      <p className="tk-pipe">{pipelineTo(squad.name)}</p>
+                    </div>
                   </article>
                 ))}
               </div>
               <p className="tk-vault">{SQUAD_LINE}</p>
             </section>
           ) : null}
-          {shownModels.length ? (
+          {!searching || shownModels.length || modelsUnavailable ? (
             <section className="tk-section" aria-label="Models">
               <h2>Models</h2>
               <p className="tk-lead">Names only. Nothing here is a key.</p>
-              <ul className="tk-models">
-                {shownModels.map((model) => (
-                  <li key={model.name}>
-                    <span className="tk-model-name">{model.name}</span>
-                    {model.keyMissing ? <span className="tk-missing">Key is missing</span> : null}
-                  </li>
-                ))}
-              </ul>
+              {modelsUnavailable ? (
+                <p className="tk-none">Tank could not list models.</p>
+              ) : shownModels.length ? (
+                <ul className="tk-models">
+                  {shownModels.map((model) => (
+                    <li key={model.name}>
+                      <span className="tk-model-name">{model.name}</span>
+                      {model.keyMissing ? <span className="tk-missing">Key is missing</span> : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="tk-none">No models on the roster.</p>
+              )}
             </section>
           ) : null}
         </div>

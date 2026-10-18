@@ -1,15 +1,15 @@
 // One box and one pipeline for each agent. No vault contents.
 
 export const SQUADS = [
-  { id: "base", name: "Base" },
-  { id: "tiger", name: "Tiger" },
-  { id: "market-lab", name: "Market Lab" },
-  { id: "rig", name: "Rig" },
-  { id: "tisan", name: "Tisan" },
-  { id: "radix", name: "Radix" },
-  { id: "zenas", name: "Zenas" },
-  { id: "skala", name: "Skala" },
-  { id: "tank", name: "Tank" },
+  { id: "base", name: "Base", logo: "/brand/base-on-dark.png" },
+  { id: "tiger", name: "Tiger", logo: "/brand/tiger-on-dark.png" },
+  { id: "market-lab", name: "Market Lab", logo: "/brand/market-lab-on-dark.png" },
+  { id: "rig", name: "Rig", logo: "/brand/rig-on-dark.png" },
+  { id: "tisan", name: "Tisan", logo: "/brand/tisan-on-dark.png" },
+  { id: "radix", name: "Radix", logo: "/brand/radix-on-dark.png" },
+  { id: "zenas", name: "Zenas", logo: "/brand/zenas-on-dark.png" },
+  { id: "skala", name: "Skala", logo: "/brand/skala-on-dark.png" },
+  { id: "tank", name: "Tank", logo: "/brand/tank-on-dark.png" },
 ] as const;
 
 export type Squad = (typeof SQUADS)[number];

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import subprocess
 from pathlib import Path
 
@@ -56,7 +55,11 @@ def test_page_matches_the_panel_and_hides_keys():
     assert "pipelineTo(" in view
     assert "Pipeline to ${name}" in (PAGE / "squads.ts").read_text(encoding="utf-8")
     assert "Key is missing" in view
-    assert 'from "./models"' not in view
+    assert "squad.logo" in view
+    assert 'squad.id === "tank"' not in view
+    assert "models.ts" not in text
+    assert "MODEL_ROSTER" not in text
+    assert "listRoster" in (PAGE / "page.tsx").read_text(encoding="utf-8")
     squads = (PAGE / "squads.ts").read_text(encoding="utf-8")
     for name in ("Base", "Tiger", "Market Lab", "Rig", "Tisan", "Radix", "Zenas", "Skala", "Tank"):
         assert f'name: "{name}"' in squads
@@ -70,6 +73,11 @@ def test_page_matches_the_panel_and_hides_keys():
     assert "data-scroll-root" in view
     assert "overflow: hidden" in css
     assert ".tk-main" in css and "overflow-y: auto" in css
+    assert ".tk-box" in css and "height: 188px" in css
+    assert ".tk-mark" in css and "#001840" in css
+    for squad_id in ("base", "tiger", "market-lab", "rig", "tisan", "radix", "zenas", "skala", "tank"):
+        logo = ROOT / "workspace" / "public" / "brand" / f"{squad_id}-on-dark.png"
+        assert logo.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
 
     assert 'from "@/lib/tank"' in chat
     assert "route(" in chat
@@ -81,21 +89,13 @@ def test_page_matches_the_panel_and_hides_keys():
     nav = NAV.read_text(encoding="utf-8")
     assert '"/tank"' not in nav.split("OWN_SHELL", 1)[-1]
 
-    config = (ROOT / "litellm" / "config.yaml").read_text(encoding="utf-8")
-    roster: list[tuple[str, str]] = []
-    pending: str | None = None
-    for line in config.splitlines():
-        if line.lstrip().startswith("#"):
-            continue
-        named = re.search(r"model_name:\s*([a-z0-9-]+)", line)
-        if named:
-            pending = named.group(1)
-        keyed = re.search(r"os\.environ/([A-Z0-9_]+)", line)
-        if keyed and pending:
-            roster.append((pending, keyed.group(1)))
-            pending = None
-    models = (PAGE / "models.ts").read_text(encoding="utf-8")
-    listed = re.findall(r'name: "([a-z0-9-]+)", env: "([A-Z0-9_]+)"', models)
-    assert listed == roster
-    assert "fetch(" not in models
-    assert "process.env" not in (PAGE / "view.tsx").read_text(encoding="utf-8")
+    assert not (PAGE / "models.ts").exists()
+    assert "process.env" not in view
+    page = (PAGE / "page.tsx").read_text(encoding="utf-8")
+    assert "process.env" not in page
+    tank_client = (ROOT / "workspace" / "lib" / "tank.ts").read_text(encoding="utf-8")
+    assert "/v1/models" in tank_client
+    assert "key_missing" in tank_client
+    main = (ROOT / "tank" / "main.py").read_text(encoding="utf-8")
+    assert '@app.get("/v1/models"' in main
+    assert "return roster_key_status()" in main
