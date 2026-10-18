@@ -1,0 +1,20 @@
+{
+  "tenant_id": "44444444-4444-4444-8444-444444444444",
+  "name": "Custom Nation",
+  "email": "sales@customnation.co.za",
+  "phone": "+27 68 637 3249",
+  "catalogue": "Archon demo catalogue for Custom Nation. Prices and stock are demo figures. Verified specs are marked from archonfirearms.com.",
+  "keys": [
+    {
+      "key": "rk_pub_archon",
+      "origins": [
+        "https://rig.tervory.com",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:8000",
+        "http://127.0.0.1:8765",
+        "http://localhost:8000",
+        "http://localhost:8765"
+      ]
+    }
+  ]
+}

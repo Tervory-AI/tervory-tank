@@ -134,7 +134,12 @@ async def _assert_imported(url: str) -> None:
     conn = await asyncpg.connect(url)
     try:
         products = await conn.fetchval("SELECT count(*) FROM agent_rig.products")
-        assert products == 18 + 3 + 2
+        # One row per catalogue sheet. A rejected row makes this smaller.
+        expected = 0
+        for sheet in CATALOGUES.glob("*/products.csv"):
+            expected += max(len(sheet.read_text(encoding="utf-8").splitlines()) - 1, 0)
+        assert products == expected
+        assert expected == 18 + 3 + 2 + 15
         seen = await conn.fetch("SELECT seen_at, price FROM agent_rig.market_prices")
         assert len(seen) == 32
         for row in seen:

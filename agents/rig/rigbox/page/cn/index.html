@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Custom Nation · Archon search</title>
+  <link rel="icon" href="/page/cn/cn-logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Jost:wght@300;400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/page/cn/cn.css">
+  <link rel="stylesheet" href="/page/cn/visual.css">
+</head>
+<body>
+  <a class="skip" href="#app">Skip to content</a>
+  <header class="top">
+    <a class="brand" href="/cn"><img src="/page/cn/cn-logo.png" alt="Custom Nation" width="120" height="58"></a>
+    <nav class="nav" aria-label="Shop">
+      <a href="/cn/results?q=pistol">Pistols</a>
+      <a href="/cn/results?q=optic">Optics</a>
+      <a href="/cn/results?q=part">Parts</a>
+      <button type="button" id="contact-us">Contact us</button>
+      <button type="button" id="client-login">Client login</button>
+    </nav>
+    <p class="demo-pill">Search demo · demo prices</p>
+  </header>
+  <main id="app" tabindex="-1"></main>
+  <div id="dialog" class="dialog" hidden></div>
+  <script>
+    window.CN = {
+      key: __CN_KEY__,
+      email: __CN_EMAIL__,
+      phone: __CN_PHONE__,
+      name: __CN_NAME__
+    };
+  </script>
+  <script src="/page/cn/visual.js"></script>
+  <script src="/page/cn/cn.js"></script>
+</body>
+</html>

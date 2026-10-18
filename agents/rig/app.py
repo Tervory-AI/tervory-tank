@@ -17,6 +17,7 @@ from fastapi import FastAPI
 
 from rigbox.api import mount
 from rigbox.page_route import mount_page
+from rigbox.reserve import SmtpMailer
 from rigbox.service import Service, WebhookHandoff
 from rigbox.store import PgStore
 
@@ -105,7 +106,7 @@ async def _lifespan(app: FastAPI):
     async with _inner(app):
         store = PgStore(app.state.pool)
         await store.apply_schema()
-        service = Service(store, _TankModels(app.state.tank), WebhookHandoff(app.state.http))
+        service = Service(store, _TankModels(app.state.tank), WebhookHandoff(app.state.http, SmtpMailer.from_env()))
         app.state.rig = service
         root = Path(os.environ.get("CATALOGUE_DIR", str(Path(__file__).resolve().parent / "catalogues")))
         if not root.is_dir():

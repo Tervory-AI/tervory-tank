@@ -1,0 +1,355 @@
+{
+  "_about": "Archon pistol parts and features, built only from Zenas's Drive folder (1F8aVotkOPfQgXyRH0U7_H6zWyrM8V543), fetched 2026-10-18. The folder had NO exploded-view PDF, so there are no part numbers here. Every entry is a feature or component that is seen or labelled in his videos or renders. Anything not directly seen is under 'inferred'.",
+  "source_pdf": null,
+  "part_numbers_available": false,
+  "models": [
+    {
+      "model": "Archon Type B",
+      "evidence": "Slide marked 'TYPE B' and Archon logo on render TypeB_OR_RMRcut_MG_FLR_PNG.png; file names TypeB_OR_RMRcut_MG_*.png.",
+      "variant_from_filename": {
+        "OR": "inferred: optics ready",
+        "RMRcut": "inferred: RMR optic cut",
+        "MG": "inferred: modular grip"
+      },
+      "inferred": false
+    }
+  ],
+  "parts": [
+    {
+      "id": "slide",
+      "name": "Slide",
+      "assembly": "slide",
+      "part_number": null,
+      "models": [
+        "Archon Type B"
+      ],
+      "seen": "'ARCHON FIREARMS' on the slide side in both videos; 'TYPE B' on the render.",
+      "media": [
+        [
+          "Control prechod_1.mp4",
+          66.0
+        ],
+        [
+          "VERSATILITY - RESIZE.mp4",
+          61.5
+        ],
+        [
+          "TypeB_OR_RMRcut_MG_FLR_PNG.png",
+          null
+        ]
+      ],
+      "inferred": false
+    },
+    {
+      "id": "slide_serrations",
+      "name": "Front and rear slide serrations",
+      "assembly": "slide",
+      "part_number": null,
+      "models": [
+        "Archon Type B"
+      ],
+      "seen": "Labelled in Control video",
+      "media": [
+        [
+          "Control prechod_1.mp4",
+          60.0
+        ],
+        [
+          "Control prechod_1.mp4",
+          66.0
+        ]
+      ],
+      "inferred": false
+    },
+    {
+      "id": "firing_pin_indicator",
+      "name": "Firing pin indicator",
+      "assembly": "slide",
+      "part_number": null,
+      "models": [
+        "Archon Type B"
+      ],
+      "seen": "Labelled in Control video, rear of slide",
+      "media": [
+        [
+          "Control prechod_1.mp4",
+          48.0
+        ],
+        [
+          "Control prechod_1.mp4",
+          66.0
+        ]
+      ],
+      "inferred": false
+    },
+    {
+      "id": "optic_mount",
+      "name": "Optics ready slide (red dot mounting)",
+      "assembly": "slide",
+      "part_number": null,
+      "models": [
+        "Archon Type B"
+      ],
+      "seen": "Labelled 'Optics ready'; a red dot is lowered onto the slide at about 0:13-0:16",
+      "media": [
+        [
+          "VERSATILITY - RESIZE.mp4",
+          15.5
+        ],
+        [
+          "VERSATILITY - RESIZE.mp4",
+          61.5
+        ]
+      ],
+      "inferred": false,
+      "note": "Which optic footprint (RMR, RMS, ACRO) is NOT shown in the video. 'RMR cut' comes only from the render file name (inferred)."
+    },
+    {
+      "id": "red_dot",
+      "name": "Red dot sight (as shown)",
+      "assembly": "optic",
+      "part_number": null,
+      "models": [
+        "Archon Type B"
+      ],
+      "seen": "Enclosed-style red dot shown mounted; letters 'AMS' visible on its side in the 1:01 frame (brand/model not confirmed).",
+      "media": [
+        [
+          "VERSATILITY - RESIZE.mp4",
+          15.5
+        ],
+        [
+          "VERSATILITY - RESIZE.mp4",
+          61.5
+        ]
+      ],
+      "inferred": false
+    },
+    {
+      "id": "barrel_threaded",
+      "name": "Threaded barrel",
+      "assembly": "barrel",
+      "part_number": null,
+      "models": [
+        "Archon Type B"
+      ],
+      "seen": "Labelled 'Suppressor ready'; the barrel changes from flush to threaded at about 0:04-0:07",
+      "media": [
+        [
+          "VERSATILITY - RESIZE.mp4",
+          6.5
+        ],
+        [
+          "VERSATILITY - RESIZE.mp4",
+          61.5
+        ]
+      ],
+      "inferred": false,
+      "note": "Thread pitch is not shown in the media."
+    },
+    {
+      "id": "barrel_standard",
+      "name": "Standard (flush) barrel",
+      "assembly": "barrel",
+      "part_number": null,
+      "models": [
+        "Archon Type B"
+      ],
+      "seen": "Flush muzzle at the start of Versatility video and through Control video",
+      "media": [
+        [
+          "VERSATILITY - RESIZE.mp4",
+          0.0
+        ],
+        [
+          "Control prechod_1.mp4",
+          1.0
+        ]
+      ],
+      "inferred": false
+    },
+    {
+      "id": "trigger_flat",
+      "name": "Flat face trigger",
+      "assembly": "frame / fire control",
+      "part_number": null,
+      "models": [
+        "Archon Type B"
+      ],
+      "seen": "Labelled in Control video",
+      "media": [
+        [
+          "Control prechod_1.mp4",
+          66.0
+        ]
+      ],
+      "inferred": false
+    },
+    {
+      "id": "mag_release",
+      "name": "Intuitive and reversible magazine release button",
+      "assembly": "frame",
+      "part_number": null,
+      "models": [
+        "Archon Type B"
+      ],
+      "seen": "Labelled in Control video close-up",
+      "media": [
+        [
+          "Control prechod_1.mp4",
+          15.0
+        ],
+        [
+          "Control prechod_1.mp4",
+          66.0
+        ]
+      ],
+      "inferred": false
+    },
+    {
+      "id": "beavertail",
+      "name": "Beaver tail",
+      "assembly": "frame / grip module",
+      "part_number": null,
+      "models": [
+        "Archon Type B"
+      ],
+      "seen": "Labelled in Control video",
+      "media": [
+        [
+          "Control prechod_1.mp4",
+          57.0
+        ],
+        [
+          "Control prechod_1.mp4",
+          66.0
+        ]
+      ],
+      "inferred": false
+    },
+    {
+      "id": "magwell_flared",
+      "name": "Flared magazine well",
+      "assembly": "frame / grip module",
+      "part_number": null,
+      "models": [
+        "Archon Type B"
+      ],
+      "seen": "Labelled in Control video, seen from below",
+      "media": [
+        [
+          "Control prechod_1.mp4",
+          30.0
+        ],
+        [
+          "Control prechod_1.mp4",
+          66.0
+        ]
+      ],
+      "inferred": false
+    },
+    {
+      "id": "grip_textures",
+      "name": "Interchangeable grip textures",
+      "assembly": "grip module",
+      "part_number": null,
+      "models": [
+        "Archon Type B"
+      ],
+      "seen": "Labelled; the grip surface changes texture at about 0:22-0:28",
+      "media": [
+        [
+          "VERSATILITY - RESIZE.mp4",
+          27.0
+        ],
+        [
+          "VERSATILITY - RESIZE.mp4",
+          61.5
+        ]
+      ],
+      "inferred": false
+    },
+    {
+      "id": "grip_modular",
+      "name": "Modular grip",
+      "assembly": "grip module",
+      "part_number": null,
+      "models": [
+        "Archon Type B"
+      ],
+      "seen": "Labelled; a grip/magazine section comes off and a longer one goes on at about 0:34-0:42",
+      "media": [
+        [
+          "VERSATILITY - RESIZE.mp4",
+          35.0
+        ],
+        [
+          "VERSATILITY - RESIZE.mp4",
+          41.5
+        ],
+        [
+          "VERSATILITY - RESIZE.mp4",
+          61.5
+        ]
+      ],
+      "inferred": false
+    },
+    {
+      "id": "magazine_large",
+      "name": "Large capacity magazine",
+      "assembly": "magazine",
+      "part_number": null,
+      "models": [
+        "Archon Type B"
+      ],
+      "seen": "Labelled 'Large capacity magazine'",
+      "media": [
+        [
+          "VERSATILITY - RESIZE.mp4",
+          41.5
+        ],
+        [
+          "VERSATILITY - RESIZE.mp4",
+          61.5
+        ]
+      ],
+      "inferred": false,
+      "note": "Round count is not shown in the media."
+    },
+    {
+      "id": "weapon_light",
+      "name": "Weapon light (as shown)",
+      "assembly": "accessory",
+      "part_number": null,
+      "models": [
+        "Archon (model not named)"
+      ],
+      "seen": "Three pistols in 1.png each carry a red dot and a weapon light; colours FDE, two-tone and black.",
+      "media": [
+        [
+          "1.png",
+          null
+        ]
+      ],
+      "inferred": false,
+      "note": "Light brand and the pistol model in this photo are not stated (inferred to be Archon from the folder)."
+    }
+  ],
+  "inferred": [
+    "The pistol in both videos is the Type B: the slide shape matches the TYPE B renders, but neither video names the model.",
+    "OR / RMRcut / MG meanings come from file names only.",
+    "Left or right side is not stated; views are described by which way the muzzle points."
+  ],
+  "not_in_media": [
+    "Exploded-view PDF",
+    "Part numbers",
+    "Field strip / disassembly",
+    "Top-down view",
+    "Full 360 orbit",
+    "Prices",
+    "SKUs",
+    "Thread pitch",
+    "Magazine round counts",
+    "Optic footprint confirmation"
+  ]
+}

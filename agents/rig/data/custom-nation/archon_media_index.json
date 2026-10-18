@@ -1,0 +1,230 @@
+{
+  "_about": "Where each view of the Archon pistol is in Zenas's media. Timestamps are seconds from the start, good to about \u00b11 s. 'inferred' true means the model name is not shown in that file.",
+  "items": [
+    {
+      "media_file": "Control prechod_1.mp4",
+      "product": "Archon Type B (inferred from match with TYPE B renders)",
+      "view": "side profile, muzzle right",
+      "timestamp_s": 1.0,
+      "frame_path": "media/frames/key/control_001.0s_side_muzzle_right.jpg",
+      "notes": "0:00-0:04, full pistol, flush barrel, no optic",
+      "inferred": true
+    },
+    {
+      "media_file": "Control prechod_1.mp4",
+      "product": "Archon Type B (inferred from match with TYPE B renders)",
+      "view": "close-up: magazine release",
+      "timestamp_s": 15.0,
+      "frame_path": "media/frames/key/control_015.0s_mag_release_closeup.jpg",
+      "notes": "callout: Intuitive and reversible magazine release button (about 0:13-0:19)",
+      "inferred": true
+    },
+    {
+      "media_file": "Control prechod_1.mp4",
+      "product": "Archon Type B (inferred from match with TYPE B renders)",
+      "view": "from below: magazine well",
+      "timestamp_s": 30.0,
+      "frame_path": "media/frames/key/control_030.0s_magwell_from_below.jpg",
+      "notes": "callout: Flared magazine well (about 0:27-0:35); magazine going in 0:22-0:40",
+      "inferred": true
+    },
+    {
+      "media_file": "Control prechod_1.mp4",
+      "product": "Archon Type B (inferred from match with TYPE B renders)",
+      "view": "rear three-quarter",
+      "timestamp_s": 45.0,
+      "frame_path": "media/frames/key/control_045.0s_rear_three_quarter.jpg",
+      "notes": "slide rear and rear sight, 0:42-0:50",
+      "inferred": true
+    },
+    {
+      "media_file": "Control prechod_1.mp4",
+      "product": "Archon Type B (inferred from match with TYPE B renders)",
+      "view": "rear three-quarter",
+      "timestamp_s": 48.0,
+      "frame_path": "media/frames/key/control_048.0s_firing_pin_indicator.jpg",
+      "notes": "callout: Firing pin indicator (about 0:46-0:50)",
+      "inferred": true
+    },
+    {
+      "media_file": "Control prechod_1.mp4",
+      "product": "Archon Type B (inferred from match with TYPE B renders)",
+      "view": "side profile, muzzle left",
+      "timestamp_s": 57.0,
+      "frame_path": "media/frames/key/control_057.0s_beavertail_side.jpg",
+      "notes": "callout: Beaver tail (about 0:55-0:58)",
+      "inferred": true
+    },
+    {
+      "media_file": "Control prechod_1.mp4",
+      "product": "Archon Type B (inferred from match with TYPE B renders)",
+      "view": "side profile, muzzle left, all callouts",
+      "timestamp_s": 66.0,
+      "frame_path": "media/frames/key/control_066.0s_side_all_callouts.jpg",
+      "notes": "serrations, firing pin indicator, beaver tail, flat face trigger, mag release, flared mag well (0:60-0:69)",
+      "inferred": true
+    },
+    {
+      "media_file": "VERSATILITY - RESIZE.mp4",
+      "product": "Archon Type B (inferred from match with TYPE B renders)",
+      "view": "front three-quarter, muzzle visible",
+      "timestamp_s": 0.0,
+      "frame_path": "media/frames/key/versatility_000.0s_front_three_quarter_muzzle.jpg",
+      "notes": "slow turn 0:00-0:04, flush barrel",
+      "inferred": true
+    },
+    {
+      "media_file": "VERSATILITY - RESIZE.mp4",
+      "product": "Archon Type B (inferred from match with TYPE B renders)",
+      "view": "front three-quarter",
+      "timestamp_s": 6.5,
+      "frame_path": "media/frames/key/versatility_006.5s_threaded_barrel_suppressor_ready.jpg",
+      "notes": "callout: Suppressor ready; threaded barrel appears 0:04-0:07",
+      "inferred": true
+    },
+    {
+      "media_file": "VERSATILITY - RESIZE.mp4",
+      "product": "Archon Type B (inferred from match with TYPE B renders)",
+      "view": "side, optic being lowered on",
+      "timestamp_s": 15.5,
+      "frame_path": "media/frames/key/versatility_015.5s_optic_mounting.jpg",
+      "notes": "callout: Optics ready (about 0:13-0:22)",
+      "inferred": true
+    },
+    {
+      "media_file": "VERSATILITY - RESIZE.mp4",
+      "product": "Archon Type B (inferred from match with TYPE B renders)",
+      "view": "side, muzzle left",
+      "timestamp_s": 27.0,
+      "frame_path": "media/frames/key/versatility_027.0s_grip_texture.jpg",
+      "notes": "callout: Interchangeable grip textures (about 0:24-0:30)",
+      "inferred": true
+    },
+    {
+      "media_file": "VERSATILITY - RESIZE.mp4",
+      "product": "Archon Type B (inferred from match with TYPE B renders)",
+      "view": "side, grip section coming off",
+      "timestamp_s": 35.0,
+      "frame_path": "media/frames/key/versatility_035.0s_magazine_change.jpg",
+      "notes": "grip/magazine section drops away 0:33-0:36",
+      "inferred": true
+    },
+    {
+      "media_file": "VERSATILITY - RESIZE.mp4",
+      "product": "Archon Type B (inferred from match with TYPE B renders)",
+      "view": "side, longer grip going on",
+      "timestamp_s": 41.5,
+      "frame_path": "media/frames/key/versatility_041.5s_modular_grip_large_magazine.jpg",
+      "notes": "callout: Modular grip (about 0:37-0:44)",
+      "inferred": true
+    },
+    {
+      "media_file": "VERSATILITY - RESIZE.mp4",
+      "product": "Archon Type B (inferred from match with TYPE B renders)",
+      "view": "side profile, muzzle left, all callouts",
+      "timestamp_s": 61.5,
+      "frame_path": "media/frames/key/versatility_061.5s_side_all_callouts.jpg",
+      "notes": "optics ready, suppressor ready, grip textures, modular grip, large capacity magazine (0:46-1:02)",
+      "inferred": true
+    },
+    {
+      "media_file": "TypeB_OR_RMRcut_MG_FLR_PNG.png",
+      "product": "Archon Type B",
+      "view": "three-quarter, muzzle right, transparent background",
+      "timestamp_s": null,
+      "frame_path": "media/TypeB_OR_RMRcut_MG_FLR_PNG.png",
+      "notes": "8192x5464 cut-out render; slide marked TYPE B",
+      "inferred": false
+    },
+    {
+      "media_file": "TypeB_OR_RMRcut_MG_FRL_PNG.png",
+      "product": "Archon Type B",
+      "view": "three-quarter, muzzle left, transparent background",
+      "timestamp_s": null,
+      "frame_path": "media/TypeB_OR_RMRcut_MG_FRL_PNG.png",
+      "notes": "8192x5464 cut-out render",
+      "inferred": false
+    },
+    {
+      "media_file": "TypeB_OR_RMRcut_MG_LR_PNG.png",
+      "product": "Archon Type B",
+      "view": "rear three-quarter side, muzzle right, transparent background",
+      "timestamp_s": null,
+      "frame_path": "media/TypeB_OR_RMRcut_MG_LR_PNG.png",
+      "notes": "8192x5464 cut-out render",
+      "inferred": false
+    },
+    {
+      "media_file": "Archon Type B-01596.jpg",
+      "product": "Archon Type B",
+      "view": "studio, side three-quarter on black",
+      "timestamp_s": null,
+      "frame_path": "media/Archon Type B-01596.jpg",
+      "notes": "6000x4000 photo, pistol small in frame",
+      "inferred": false
+    },
+    {
+      "media_file": "Archon Type B-01460.jpg",
+      "product": "Archon Type B",
+      "view": "lifestyle: pistol being fired, red dot mounted",
+      "timestamp_s": null,
+      "frame_path": "media/Archon Type B-01460.jpg",
+      "notes": "4000x6000 portrait photo, hand and smoke",
+      "inferred": false
+    },
+    {
+      "media_file": "1.png",
+      "product": "Archon (model not named)",
+      "view": "three pistols on a wall: FDE, two-tone, black, each with red dot and light",
+      "timestamp_s": null,
+      "frame_path": "media/1.png",
+      "notes": "2461x3740 lifestyle photo",
+      "inferred": true
+    },
+    {
+      "media_file": "2023-05-12_02-27-10.png",
+      "product": "Archon (model not named)",
+      "view": "close-up: slide, ejection port, serrations",
+      "timestamp_s": null,
+      "frame_path": "media/2023-05-12_02-27-10.png",
+      "notes": "2560x1440 on black",
+      "inferred": true
+    },
+    {
+      "media_file": "2023-05-12_02-27-38.png",
+      "product": "Archon (model not named)",
+      "view": "close-up: slide (near-duplicate of 02-27-10)",
+      "timestamp_s": null,
+      "frame_path": "media/2023-05-12_02-27-38.png",
+      "notes": "2560x1440 on black",
+      "inferred": true
+    },
+    {
+      "media_file": "2023-05-12_02-28-38.png",
+      "product": "Archon (model not named)",
+      "view": "close-up: frame, flat trigger, Archon logo",
+      "timestamp_s": null,
+      "frame_path": "media/2023-05-12_02-28-38.png",
+      "notes": "2560x1440 on black",
+      "inferred": true
+    },
+    {
+      "media_file": "ARCHON-firearms-trigger-release.png",
+      "product": "Archon (model not named)",
+      "view": "close-up: release lever on textured grip",
+      "timestamp_s": null,
+      "frame_path": "media/ARCHON-firearms-trigger-release.png",
+      "notes": "2560x1440",
+      "inferred": true
+    },
+    {
+      "media_file": "archon-firearms-modular-grip.png",
+      "product": "Archon (model not named)",
+      "view": "close-up: grip module rear",
+      "timestamp_s": null,
+      "frame_path": "media/archon-firearms-modular-grip.png",
+      "notes": "2560x1440",
+      "inferred": true
+    }
+  ]
+}

@@ -41,6 +41,7 @@ from rigbox.logic import public_product
 from rigbox.logic import reprice
 from rigbox.logic import setups as build_setups
 from rigbox.rank import search as rank_room
+from rigbox.reserve import reservation_letter
 from rigbox.store import _fit_key
 
 _KEY = re.compile(r"^rk_pub_[A-Za-z0-9][A-Za-z0-9_-]{0,80}$")
@@ -93,17 +94,30 @@ class RecordingHandoff:
         email: str | None,
         webhook: str | None,
         quote: dict[str, Any],
+        letter: dict[str, str] | None = None,
     ) -> None:
         self.sent.append(
-            {"tenant_id": tenant_id, "email": email, "webhook": webhook, "quote": quote}
+            {
+                "tenant_id": tenant_id,
+                "email": email,
+                "webhook": webhook,
+                "quote": quote,
+                "letter": letter,
+            }
         )
 
 
 class WebhookHandoff:
-    """Posts the quote to the retailer's webhook. Email stays on the stored quote."""
+    """Posts the quote to the shop webhook, or sends the letter to the shop email.
 
-    def __init__(self, http: Any) -> None:
+    Which one runs is the shop's publish settings. A webhook wins when it is
+    set. Email is used when there is no webhook. The mailer is injected so
+    tests never open a connection.
+    """
+
+    def __init__(self, http: Any, mailer: Any | None = None) -> None:
         self.http = http
+        self.mailer = mailer
 
     async def send(
         self,
@@ -112,11 +126,15 @@ class WebhookHandoff:
         email: str | None,
         webhook: str | None,
         quote: dict[str, Any],
+        letter: dict[str, str] | None = None,
     ) -> None:
-        del email
-        if not webhook or self.http is None:
+        if webhook and self.http is not None:
+            await self.http.post(webhook, json={"tenant_id": tenant_id, "quote": quote})
             return
-        await self.http.post(webhook, json={"tenant_id": tenant_id, "quote": quote})
+        if email:
+            if self.mailer is None or letter is None:
+                raise RuntimeError("mail is not configured")
+            await self.mailer.send(letter)
 
 
 class Service:
@@ -165,8 +183,26 @@ class Service:
                 return {"tenant_id": tenants[0], "kind": "admin", "origins": []}
         raise RigError("unauthorized", "That key is not valid.", 401)
 
-    async def search(self, tenant_id: str, query: str, limit: int | None) -> dict[str, Any]:
+    async def search(
+        self,
+        tenant_id: str,
+        query: str,
+        limit: int | None,
+        filters: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         text = (query or "").strip()
+        if await self._is_archon(tenant_id):
+            from rigbox.cn import shop_search
+
+            return shop_search(
+                {
+                    "q": text,
+                    "limit": limit,
+                    "products": await self.store.products(tenant_id),
+                    "fits": await self._approved_fits(tenant_id),
+                    "filters": filters or {},
+                }
+            )
         if not text:
             return {"results": []}
         ranked = rank_room(
@@ -189,6 +225,10 @@ class Service:
         detail = product_detail(await self._bundle(tenant_id, product_id))
         if detail is None:
             raise RigError("not_found", "No such product.", 404)
+        if await self._is_archon(tenant_id):
+            from rigbox.cn import present_detail
+
+            return present_detail(detail, await self._active(tenant_id), await self._approved_fits(tenant_id))
         return detail
 
     async def setups(self, tenant_id: str, product_id: str) -> dict[str, Any]:
@@ -200,6 +240,10 @@ class Service:
         if product_detail(bundle) is None:
             raise RigError("not_found", "No such product.", 404)
         built = build_setups(bundle)
+        if await self._is_archon(tenant_id):
+            from rigbox.cn import enrich_setups
+
+            built = enrich_setups(built, bundle["products"], bundle["fits"])
         centre = _centre(bundle["products"], product_id)
         for setup in built["setups"]:
             setup["why"] = await self._compose_why(
@@ -231,6 +275,10 @@ class Service:
         if built is None:
             raise RigError("not_found", "No such product.", 404)
         await self._annotate_graph(tenant_id, bundle, built)
+        if await self._is_archon(tenant_id):
+            from rigbox.cn import enrich_graph
+
+            built = enrich_graph(built, bundle["products"], bundle["fits"])
         await self.store.put_answer(tenant_id, "graph", product_id, version, built)
         return built
 
@@ -265,7 +313,7 @@ class Service:
         )
         return grounded_answer(payload, text)
 
-    async def link_quote(self, tenant_id: str, url: str, note: str) -> dict[str, str]:
+    async def link_quote(self, tenant_id: str, url: str, note: str) -> dict[str, Any]:
         parsed = urlparse(str(url or "").strip())
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             raise RigError("invalid", "That link is not a web address.", 422)
@@ -275,7 +323,7 @@ class Service:
             {},
         )
 
-    async def quote(self, tenant_id: str, body: dict[str, Any]) -> dict[str, str]:
+    async def quote(self, tenant_id: str, body: dict[str, Any]) -> dict[str, Any]:
         contact = _contact(body.get("contact") or {})
         if isinstance(body.get("setup"), dict):
             products = await self._active(tenant_id)
@@ -283,7 +331,8 @@ class Service:
                 priced = reprice(body["setup"], products)
             except KeyError:
                 raise RigError("invalid", "That setup is not in this catalogue.", 422) from None
-            payload: dict[str, Any] = {"kind": "setup", "setup": priced}
+            _restore_choices(priced, body["setup"])
+            payload = {"kind": "setup", "setup": priced}
         elif body.get("product_id"):
             payload = {"kind": "product", "product": await self.product(tenant_id, str(body["product_id"]))}
         else:
@@ -650,21 +699,27 @@ class Service:
         await self.store.replace_market(tenant_id, list(market.get("rows") or []))
         return {"rows": len(market.get("rows") or []), "rejected": []}
 
-    async def _store_quote(self, tenant_id: str, payload: dict[str, Any], contact: dict[str, Any]) -> dict[str, str]:
+    async def _store_quote(self, tenant_id: str, payload: dict[str, Any], contact: dict[str, Any]) -> dict[str, Any]:
         quote_id = "req_" + uuid4().hex
         await self.store.add_quote(tenant_id, quote_id, payload, contact)
         retailer = await self.store.retailer(tenant_id) or {}
+        letter = reservation_letter(quote_id, payload, contact, retailer)
         try:
             await self.handoff.send(
                 tenant_id=tenant_id,
                 email=retailer.get("email"),
                 webhook=retailer.get("webhook"),
                 quote={"id": quote_id, "payload": payload, "contact": contact},
+                letter=letter,
             )
         except Exception:  # noqa: BLE001 — the quote is stored even if the handoff fails
-            return {"request_id": quote_id}
+            return {"request_id": quote_id, "delivered": False}
         await self.store.mark_sent(tenant_id, quote_id)
-        return {"request_id": quote_id}
+        return {"request_id": quote_id, "delivered": True}
+
+    async def _is_archon(self, tenant_id: str) -> bool:
+        retailer = await self.store.retailer(tenant_id) or {}
+        return str(retailer.get("slug") or "") == "archon"
 
 
 def _market_average(rows: list[dict[str, Any]], currency: str) -> dict[str, Any] | None:
@@ -771,6 +826,21 @@ def _confidence(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _restore_choices(priced: dict[str, Any], original: dict[str, Any]) -> None:
+    choices: dict[str, str] = {}
+    for part in original.get("parts") or []:
+        product = part.get("product") if isinstance(part.get("product"), dict) else {}
+        sku = str(product.get("id") or "")
+        choice = " ".join(str(part.get("choice") or "").replace("\n", " ").replace("\r", " ").split())
+        if sku and choice:
+            choices[sku] = choice[:200]
+    for part in priced.get("parts") or []:
+        product = part.get("product") if isinstance(part.get("product"), dict) else {}
+        sku = str(product.get("id") or "")
+        if sku in choices:
+            part["choice"] = choices[sku]
 
 
 def _contact(contact: dict[str, Any]) -> dict[str, str]:

@@ -1,0 +1,11 @@
+part_sku,fits_sku,fits_family,rule,note
+ARCHON-DOT-RMR,,ARCHON-TYPE-B,"{""optic_cut"":""RMR""}",Fits your RMR cut
+ARCHON-DOT-RMS,,ARCHON-TYPE-B,"{""optic_cut"":""RMS""}",Needs RMS cut
+ARCHON-DOT-ACRO,,ARCHON-TYPE-B,"{""optic_cut"":""ACRO P2/C2""}",Needs ACRO cut
+ARCHON-TRIGGER-PERF,,ARCHON-TYPE-B,,Made for Type B
+ARCHON-MAG-12,,ARCHON-TYPE-B,,Fits Type B
+ARCHON-MAG-15,,ARCHON-TYPE-B,,Fits Type B
+ARCHON-MAG-18,,ARCHON-TYPE-B,,Fits Type B
+ARCHON-RMR-SCREWS,,ARCHON-TYPE-B,"{""optic_cut"":""RMR""}",Fits the RMR cut
+ARCHON-TB-THREADED,,ARCHON-TYPE-B,,"1/2-28 threaded barrel, suppressor ready"
+ARCHON-TB-135,,ARCHON-TYPE-B,,13.5x1 LH barrel option
