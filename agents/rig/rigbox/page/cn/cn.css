@@ -717,15 +717,13 @@ img.hero { border-radius: 20px; background: transparent; width: 100%; max-height
   .results-head { flex-direction: column; align-items: flex-start; }
   .results-title { font-size: 13px; }
   .filter-row {
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     justify-content: flex-start;
-    overflow-x: auto;
-    padding-bottom: 8px;
-    scrollbar-width: thin;
-    scrollbar-color: #8aa099 transparent;
+    overflow: visible;
+    max-width: 100%;
   }
-  .filter-row::-webkit-scrollbar { height: 6px; }
-  .filter-row::-webkit-scrollbar-thumb { background: #8aa099; border-radius: 999px; }
+  .filter-row .pill, .filter-row .pill-menu { max-width: 100%; }
+  .filter-row .pill { white-space: normal; height: auto; text-align: left; }
 }
 
 @media (max-width: 900px) {

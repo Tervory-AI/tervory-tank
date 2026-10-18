@@ -755,9 +755,10 @@
       h("h3", {}, [h("a", { class: "name-link", href: "/cn/product/" + encodeURIComponent(item.id), text: item.name })]),
       h("p", { class: "meta", text: item.brand || "" }),
     ]);
-    const onOrder = item.availability && item.availability.status === "on_order" && stock.lead;
+    const lead = stock.lead && stock.lead.toLowerCase() !== stock.label.toLowerCase() ? stock.lead : "";
+    const onOrder = item.availability && item.availability.status === "on_order" && lead;
     const avail = h("div", {}, [
-      h("p", { class: stock.tone, text: onOrder ? stock.label + " · " + stock.lead : stock.label }),
+      h("p", { class: stock.tone, text: onOrder ? stock.label + " · " + lead : stock.label }),
       h("p", { class: "meta", text: onOrder ? (stock.where || "") : stockDetail(stock) }),
       item.availability && item.availability.status === "out_of_stock" ? h("button", {
         type: "button",

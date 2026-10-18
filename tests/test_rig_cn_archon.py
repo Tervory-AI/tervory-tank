@@ -141,8 +141,8 @@ GOLDEN = [
     ("FDE type b", "exact", SPREAD, "ARCHON-TYPE-B", True, ""),
     ("fde type b", "exact", SPREAD, "ARCHON-TYPE-B", True, ""),
     ("Type B FDE", "exact", SPREAD, "ARCHON-TYPE-B", True, ""),
-    ("Type B and RMR", "exact", SPREAD, "ARCHON-TYPE-B", True, ""),
-    ("RMR and Type B", "exact", SPREAD, "ARCHON-TYPE-B", True, ""),
+    ("Type B and RMR", "exact", ["ARCHON-TYPE-B", "ARCHON-DOT-RMR"], "ARCHON-TYPE-B", True, ""),
+    ("RMR and Type B", "exact", ["ARCHON-TYPE-B", "ARCHON-DOT-RMR"], "ARCHON-TYPE-B", True, ""),
     ("threaded type b", "exact", BARRELS, "ARCHON-TB-THREADED", True, ""),
     ("Archon Type B 9mm", "exact", SPREAD, "ARCHON-TYPE-B", True, ""),
     ("optic for type b", "exact", DOTS, "ARCHON-DOT-RMR", True, ""),
@@ -308,6 +308,32 @@ GOLDEN = [
     ("cz shadow 2", "not_stocked", [], "", False, "We don't stock CZ."),
     ("type a magazine", "exact", MAGS, "ARCHON-MAG-15", True, ""),
     ("magazine for type a", "exact", MAGS, "ARCHON-MAG-15", True, ""),
+    ("between 20k and 30k", "exact", OVER_20, "", True, ""),
+    ("20k-30k", "exact", OVER_20, "", True, ""),
+    ("from 20k to 30k", "exact", OVER_20, "", True, ""),
+    ("between R 20 000 and R 30 000", "exact", OVER_20, "", True, ""),
+    ("R5000 to R10000", "exact", ["ARCHON-DOT-RMR", "ARCHON-DOT-RMS"], "", True, ""),
+    ("red dot between 5000 and 10000", "exact", ["ARCHON-DOT-RMR", "ARCHON-DOT-RMS"], "ARCHON-DOT-RMR", True, ""),
+    ("R1000 to R2000 magazine", "exact", MAGS, "ARCHON-MAG-15", True, ""),
+    ("typ b", "exact", SPREAD, "ARCHON-TYPE-B", True, ""),
+    ("archon typ b", "exact", SPREAD, "ARCHON-TYPE-B", True, ""),
+    ("tpye a", "exact", TYPE_A_PISTOLS, "ARCHON-TYPE-A", True, ""),
+    ("tyep b", "exact", SPREAD, "ARCHON-TYPE-B", True, ""),
+    ("type b with rmr", "exact", ["ARCHON-TYPE-B", "ARCHON-DOT-RMR"], "ARCHON-TYPE-B", True, ""),
+    ("type a with rmr", "exact", ["ARCHON-TYPE-A", "ARCHON-DOT-RMR"], "ARCHON-TYPE-A", True, ""),
+    ("type b and rmr", "exact", ["ARCHON-TYPE-B", "ARCHON-DOT-RMR"], "ARCHON-TYPE-B", True, ""),
+    ("type b with light", "exact", ["ARCHON-TYPE-B", "ARCHON-LIGHT"], "ARCHON-TYPE-B", True, ""),
+    ("type b with holster", "exact", ["ARCHON-TYPE-B", "ARCHON-HOLSTER-TB"], "ARCHON-TYPE-B", True, ""),
+    ("type b with rms", "exact", ["ARCHON-TYPE-B", "ARCHON-DOT-RMS"], "ARCHON-TYPE-B", True, ""),
+    ("how much for type b with rmr", "exact", ["ARCHON-TYPE-B", "ARCHON-DOT-RMR"], "ARCHON-TYPE-B", True, ""),
+    ("type a with light and 18 round mag", "exact", ["ARCHON-TYPE-A", "ARCHON-LIGHT", "ARCHON-MAG-18"], "ARCHON-TYPE-A", True, ""),
+    ("light for type a", "exact", ["ARCHON-LIGHT"], "ARCHON-LIGHT", True, ""),
+    ("18 rounder", "exact", ["ARCHON-MAG-18"], "ARCHON-MAG-18", True, ""),
+    ("spare 18 rounder", "exact", ["ARCHON-MAG-18"], "ARCHON-MAG-18", True, ""),
+    ("type b mags 3 pack", "exact", MAGS, "ARCHON-MAG-15", True, "not as a pack"),
+    ("any red dots in stock", "exact", ["ARCHON-DOT-RMR", "ARCHON-DOT-RMS"], "ARCHON-DOT-RMR", True, ""),
+    ("in stock", "exact", IN_STOCK_ALL, "", True, ""),
+    ("in stock?", "exact", IN_STOCK_ALL, "", True, ""),
 ]
 
 
@@ -406,6 +432,56 @@ async def test_type_a_parts_match_and_a_question_keeps_the_stock_line() -> None:
     assert "Ships with the Type A" in notes[("ARCHON-MAG-15", "ARCHON-TYPE-A")]
     assert "https://archonfirearms.com/product/type-a/" in notes[("ARCHON-MAG-12", "ARCHON-TYPE-A")]
     assert "Manual_US_2026.pdf" in notes[("ARCHON-LIGHT", "ARCHON-TYPE-A")]
+    assert "1913 Picatinny" in notes[("ARCHON-LIGHT", "ARCHON-TYPE-B")]
+    assert "https://archonfirearms.com/" in notes[("ARCHON-LIGHT", "ARCHON-TYPE-B")]
+
+
+@pytest.mark.asyncio
+async def test_ranges_builds_and_the_light_lists_type_b() -> None:
+    service = await _archon()
+    quiet = (
+        "between 20k and 30k",
+        "R5000 to R10000",
+        "red dot between 5000 and 10000",
+        "R1000 to R2000 magazine",
+        "20k-30k",
+        "any red dots in stock",
+        "in stock?",
+        "type a with light and 18 round mag",
+    )
+    for query in quiet:
+        body = await service.search(TENANT, query, 24)
+        assert body["ids"], query
+        text = str(body.get("message") or "")
+        assert "No exact match" not in text, query
+        assert "Nothing matches" not in text, query
+    built = await service.search(TENANT, "type a with light and 18 round mag", 24)
+    badges = {item["id"]: item["badges"] for item in built["results"]}
+    for sku in ("ARCHON-TYPE-A", "ARCHON-LIGHT", "ARCHON-MAG-18"):
+        assert "Exact match" in badges[sku]
+    paired = await service.search(TENANT, "type b with rmr", 24)
+    paired_badges = {item["id"]: item["badges"] for item in paired["results"]}
+    assert "Exact match" in paired_badges["ARCHON-TYPE-B"]
+    assert "Exact match" in paired_badges["ARCHON-DOT-RMR"]
+    assert "ARCHON-RMR-SCREWS" not in paired_badges
+    kept = await service.search(TENANT, "light for type a", 24)
+    assert kept["ids"] == ["ARCHON-LIGHT"]
+    dots = await service.search(TENANT, "what red dot fits the type b", 24)
+    assert dots["ids"] == DOTS
+    assert dots["focus_id"] == "ARCHON-DOT-RMR"
+    light = await service.product(TENANT, "ARCHON-LIGHT")
+    families = {row["fits_family"] for row in light["fits"] if row["part_sku"] == "ARCHON-LIGHT"}
+    assert "ARCHON-TYPE-B" in families
+    assert "ARCHON-TYPE-A" in families
+    pack = await service.search(TENANT, "type b mags 3 pack", 24)
+    assert pack["message"] == "We list these one at a time, not as a pack."
+    assert "ARCHON-DOT-ACRO" not in (await service.search(TENANT, "any red dots in stock", 24))["ids"]
+    script = (PAGE / "cn.js").read_text(encoding="utf-8")
+    assert "stock.lead.toLowerCase() !== stock.label.toLowerCase()" in script
+    css = (PAGE / "cn.css").read_text(encoding="utf-8")
+    narrow = css.split("@media (max-width: 800px)", 1)[1]
+    assert "flex-wrap: wrap" in narrow
+    assert "white-space: normal" in narrow
 
 
 # Words the shop may name after "We don't sell a/an". Anything else was a pasted query token.
@@ -479,7 +555,8 @@ async def test_prices_fits_and_the_out_of_stock_alternative() -> None:
     assert by_id["ARCHON-DOT-RMS"]["fit"]["badge"] == "Needs RMS cut"
     assert by_id["ARCHON-DOT-ACRO"]["fit"]["badge"] == "Needs ACRO cut"
     assert by_id["ARCHON-DOT-ACRO"]["alternative"]["id"] == "ARCHON-DOT-RMR"
-    assert by_id["ARCHON-LIGHT"]["fit"] is None
+    assert by_id["ARCHON-LIGHT"]["fit"]["badge"] == "1913 Picatinny"
+    assert "https://archonfirearms.com/" in by_id["ARCHON-LIGHT"]["fit"]["note"]
     assert by_id["ARCHON-HOLSTER-TB"]["fit"] is None
     assert by_id["ARCHON-TYPE-B"]["price"]["amount"] == 24990
     assert by_id["ARCHON-TYPE-B"]["availability"]["status"] == "in_stock"

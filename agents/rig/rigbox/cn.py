@@ -67,6 +67,7 @@ def shop_search(payload: dict[str, Any]) -> dict[str, Any]:
     shop = payload.get("shop") if isinstance(payload.get("shop"), dict) else {}
     centre_sku = str(shop.get("centre_sku") or "")
     asked = _normalize_shopper(raw, products)
+    pack_note = _pack_note(raw)
     query, loose, price_sort = _prepare_query(asked)
     if price_sort:
         filters["sort"] = price_sort
@@ -264,6 +265,8 @@ def shop_search(payload: dict[str, Any]) -> dict[str, Any]:
         body["message"] = stock_note
     elif honest == "closest":
         body["message"] = message or "No exact match."
+    elif pack_note:
+        body["message"] = pack_note
     return body
 
 
@@ -470,6 +473,7 @@ _PART_TAIL = {
     "magazine": "Magazines",
     "magazines": "Magazines",
     "mag": "Magazines",
+    "mags": "Magazines",
     "light": "Lights",
     "lights": "Lights",
     "barrel": "Barrels",
@@ -487,7 +491,7 @@ _PART_TAIL = {
 
 
 def _wanted_part(query: str) -> str:
-    """The part at the end of 'type b magazine'. 'Type B and RMR' stays a model query."""
+    """The part at the end of 'type b magazine'. A build joined by 'and' is split first."""
     if re.search(r"\band\b", query, re.IGNORECASE):
         return ""
     tokens = [token for token in _tokens(query) if token not in _FILLER and len(token) >= 2]
@@ -690,6 +694,12 @@ def _parse_constraints(query: str) -> tuple[str, dict[str, Any]]:
     if _IN.search(text):
         filters["in_stock"] = True
         text = _IN.sub(" ", text)
+    span = _RANGE.search(text)
+    if span and not any(filters.get(key) is not None for key in ("max_price", "max_price_inclusive", "min_price")):
+        low, high = sorted((int(span.group(1)), int(span.group(2))))
+        filters["min_price"] = low
+        filters["max_price_inclusive"] = high
+        text = text[: span.start()] + " " + text[span.end() :]
     match = _BOUND.search(text)
     if match:
         amount = int(re.sub(r"\s+", "", match.group(2)))
@@ -930,6 +940,7 @@ def _fitting_focus(
 _BORE = "cal" + "iber"
 _PRICE_WORDS = frozenset({
     "under", "below", "less", "than", "up", "over", "above", "more", "price", "only",
+    "between", "from", "to",
 })
 # Shopper words that rank or narrow a real product. They are not products.
 _MODIFIER_WORDS = frozenset({
@@ -950,9 +961,14 @@ _AMMUNITION = "am" + "munition"
 _CARRY_WORD = "holst" + "er"
 _QUERY_GLUE = frozenset({
     "fit", "fits", "fitting", "compatible", "suit", "suits", "go", "goes", "pair", "pairs",
-    "mount", "replace", "use", "using", "what", "which", "show", "find",
+    "mount", "replace", "use", "using", "what", "which", "show", "find", "any",
 })
 _ROUND_ASK = re.compile(r"\b(\d+)\s*rounds?\b", re.IGNORECASE)
+_PACK_ASK = re.compile(r"\b(\d+)\s+packs?\b", re.IGNORECASE)
+_RANGE = re.compile(
+    r"(?:\b(?:between|from)\s+)?(?:R\s*)?(\d{3,})\s*(?:and|to|-)\s*(?:R\s*)?(\d{3,})\b",
+    re.IGNORECASE,
+)
 _OTHER_BORE = re.compile(
     r"\b(?:\.45|\.40|\.357|\.38|45|40|357|38|10\s*mm)\b",
     re.IGNORECASE,
@@ -1007,6 +1023,18 @@ def _negative_for(part: dict[str, Any], host: dict[str, Any], fits: list[dict[st
     )
 
 
+def _transposed(left: str, right: str) -> bool:
+    """True when the only difference is two neighbouring letters swapping places."""
+    if len(left) != len(right) or len(left) < 2:
+        return False
+    for index in range(len(left) - 1):
+        if left[index] == right[index]:
+            continue
+        swapped = left[:index] + left[index + 1] + left[index] + left[index + 2 :]
+        return swapped == right
+    return False
+
+
 def _one_edit(left: str, right: str) -> bool:
     if abs(len(left) - len(right)) > 1:
         return False
@@ -1031,24 +1059,29 @@ def _one_edit(left: str, right: str) -> bool:
 
 
 def _correct_typos(query: str, products: list[dict[str, Any]]) -> str:
-    """One wrong letter in a model word is that word. Real words stay as typed."""
+    """One wrong or swapped letter in a model word is that word. Real words stay."""
     vocab: set[str] = set()
     for row in products:
         blob = f"{row.get('name') or ''} {row.get('brand') or ''} {row.get('category') or ''}"
         for token in _tokens(blob):
-            if len(token) >= 4:
+            if len(token) >= 3:
                 vocab.add(token)
+
+    def misspelled(token: str, item: str) -> bool:
+        if token == item or not (_one_edit(token, item) or _transposed(token, item)):
+            return False
+        # Three-letter pieces are exact in the ranker, so a short misspelling has to
+        # be repaired here. A longer one this close is already the same word.
+        if len(token) < 4:
+            return True
+        return _similarity(token, item) < _FUZZY
 
     def fix(match: re.Match[str]) -> str:
         word = match.group(0)
         token = word.lower()
-        if len(token) < 4 or token in vocab or _common_english(token) or _shopping_word(token):
+        if len(token) < 3 or token in vocab or _common_english(token) or _shopping_word(token):
             return word
-        # The ranker already accepts a misspelling this close. Correcting it
-        # would turn the neighbouring short word into a different model.
-        fixes = [
-            item for item in vocab if _one_edit(token, item) and _similarity(token, item) < _FUZZY
-        ]
+        fixes = [item for item in vocab if misspelled(token, item)]
         if len(fixes) == 1:
             return fixes[0]
         return word
@@ -1057,13 +1090,14 @@ def _correct_typos(query: str, products: list[dict[str, Any]]) -> str:
 
 
 def _expand_prices(query: str) -> str:
-    """Read R25k, 30k, R25,000 and R 25 000 as a rand amount before ranking."""
+    """Read R25k, 30k, R25,000, R 25 000 and R5000 as a rand amount before ranking."""
 
     def kilo(match: re.Match[str]) -> str:
         return f"{match.group(1)}R {int(float(match.group(2)) * 1000)}"
 
     text = _KILO.sub(kilo, query)
-    return _GROUPED_PRICE.sub(lambda match: "R " + re.sub(r"[\s,]", "", match.group(1)), text)
+    text = _GROUPED_PRICE.sub(lambda match: "R " + re.sub(r"[\s,]", "", match.group(1)), text)
+    return re.sub(r"(^|[^A-Za-z0-9])[rR](\d{3,})\b", r"\1R \2", text)
 
 
 def _is_question(query: str) -> bool:
@@ -1084,8 +1118,15 @@ def _normalize_shopper(query: str, products: list[dict[str, Any]]) -> str:
     text = _rewrite_fit_question(text)
     text = _Q_PREFIX.sub("", text)
     text = _expand_prices(text)
-    if question and not re.search(r"\bin stock only\b", text, re.IGNORECASE):
+    # "Do you have the Type A in stock?" still shows that model. Every other
+    # "in stock" is a filter, including "any red dots in stock".
+    show_anyway = question and bool(re.match(r"do you have\b", query.strip(), re.IGNORECASE))
+    if show_anyway and not re.search(r"\bin stock only\b", text, re.IGNORECASE):
         text = re.sub(r"\bin stock\b", " ", text, flags=re.IGNORECASE)
+    # These are catalogue words said another way. Honesty reads this same text.
+    text = re.sub(r"\b(\d+)\s*rounders?\b", r"\1 round magazine", text, flags=re.IGNORECASE)
+    text = _PACK_ASK.sub(" ", text)
+    text = re.sub(r"\bany\b", " ", text, flags=re.IGNORECASE)
     return " ".join(text.split())
 
 
@@ -1248,12 +1289,49 @@ def _length_answer(
     return _exact_body(found, found[0], products, fits, filters, limit)
 
 
-def _split_clauses(query: str) -> list[str]:
-    if "+" not in query and "," not in query:
+def _clause_names(clause: str, products: list[dict[str, Any]]) -> bool:
+    """True when this piece is a model, a category, or one catalogue item."""
+    tokens = set(_tokens(clause))
+    if not tokens:
+        return False
+    match = _ROUND_ASK.search(clause)
+    if match and tokens & {"mag", "mags", "magazine", "magazines", "round", "rounds"}:
+        wanted = int(match.group(1))
+        return any(
+            str(row.get("category") or "") == "Magazines" and _round_count(row) == wanted for row in products
+        )
+    if _category_only(clause) or _phrase_category(clause):
+        return True
+    if _named_sidearm(clause, products) is not None and not _wanted_part(clause):
+        return True
+    ranked = rank_search({"q": clause, "products": products, "limit": 12, "model_letters": True})
+    if not ranked.get("exact_match") or not ranked.get("ids"):
+        return False
+    by_sku = {_sku(row): row for row in products}
+    found = [by_sku[item] for item in ranked["ids"] if item in by_sku]
+    if not found:
+        return False
+    focus = _pick_focus(clause, found)
+    have = set(_tokens(f"{focus.get('name') or ''} {_sku(focus)}"))
+    content = [
+        token
+        for token in _tokens(clause)
+        if len(token) >= 3 and token not in _FILLER and token not in _QUERY_GLUE and not token.isdigit()
+    ]
+    return any(token in have or _covered_token(token, have) for token in content)
+
+
+def _split_clauses(query: str, products: list[dict[str, Any]]) -> list[str]:
+    forced = "+" in query or "," in query
+    if not forced and not re.search(r"\b(?:with|and)\b", query, re.IGNORECASE):
         return []
-    parts = re.split(r"\s*(?:\+|,|\band\b)\s*", query, flags=re.IGNORECASE)
+    parts = re.split(r"\s*(?:\+|,|\bwith\b|\band\b)\s*", query, flags=re.IGNORECASE)
     cleaned = [" ".join(part.split()) for part in parts if part.strip()]
-    return cleaned if len(cleaned) >= 2 else []
+    if len(cleaned) < 2:
+        return []
+    if not forced and not all(_clause_names(part, products) for part in cleaned):
+        return []
+    return cleaned
 
 
 def _clause_rows(
@@ -1296,7 +1374,7 @@ def _multi_answer(
     filters: dict[str, Any],
     limit: int,
 ) -> dict[str, Any] | None:
-    clauses = _split_clauses(query)
+    clauses = _split_clauses(query, products)
     if not clauses:
         return None
     rows: list[dict[str, Any]] = []
@@ -1377,6 +1455,13 @@ def _prepare_query(query: str) -> tuple[str, bool, str]:
 def _normalize_threads(query: str) -> str:
     text = re.sub(r"1\s*/\s*2\s*[x×]\s*28", "1/2-28", query, flags=re.IGNORECASE)
     return re.sub(r"13\s*\.\s*5\s*[x×]\s*1\b", "13.5x1", text, flags=re.IGNORECASE)
+
+
+def _pack_note(query: str) -> str:
+    """A numbered pack is not a catalogue item. The pieces are sold singly."""
+    if _PACK_ASK.search(query) is None:
+        return ""
+    return "We list these one at a time, not as a pack."
 
 
 def _part_for_model(text: str) -> str:
