@@ -40,7 +40,13 @@ class LinkIn(BaseModel):
 class QuoteIn(BaseModel):
     setup: dict[str, Any] | None = None
     product_id: str | None = None
+    build: dict[str, Any] | None = None
     contact: dict[str, Any] = Field(default_factory=dict)
+
+
+class BuildIn(BaseModel):
+    product_id: str = Field(min_length=1)
+    part_skus: list[str] = Field(default_factory=list)
 
 
 class CompareIn(BaseModel):
@@ -200,7 +206,39 @@ async def quote(request: Request, payload: QuoteIn) -> Response:
     await _auth(request)
     body = await _service(request).quote(
         _tenant(request),
-        {"setup": payload.setup, "product_id": payload.product_id, "contact": payload.contact},
+        {
+            "setup": payload.setup,
+            "product_id": payload.product_id,
+            "build": payload.build,
+            "contact": payload.contact,
+        },
+    )
+    return _ok(request, body)
+
+
+@router.get("/models")
+async def models(request: Request) -> Response:
+    await _auth(request)
+    body = await _service(request).model_index(_tenant(request))
+    return _ok(request, body)
+
+
+@router.get("/models/{sku}")
+async def model_file(request: Request, sku: str) -> Response:
+    await _auth(request)
+    data = await _service(request).model_bytes(_tenant(request), sku)
+    if data is None:
+        raise RigError("not_found", "No model file for that part.", 404)
+    response = Response(content=data, media_type="model/gltf-binary")
+    return _cors(response, _origin(request), bool(getattr(request.state, "rig_origin_ok", False)))
+
+
+@router.post("/build")
+async def build(request: Request, payload: BuildIn) -> Response:
+    await _auth(request)
+    body = await _service(request).scene(
+        _tenant(request),
+        {"product_id": payload.product_id, "part_skus": payload.part_skus},
     )
     return _ok(request, body)
 

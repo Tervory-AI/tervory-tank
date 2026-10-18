@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Build</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=JetBrains+Mono&family=Jost:wght@300&display=swap"
+    />
+    <link rel="stylesheet" href="/page/builder.css" />
+  </head>
+  <body>
+    <header class="band">
+      <a href="/"><img src="/page/tervory-logo-on-white.png" alt="Tervory" /></a>
+      <nav>
+        <a href="/">Find</a>
+        <span class="here"><i class="dot" aria-hidden="true"></i> Build</span>
+      </nav>
+    </header>
+    <main>
+      <h1>Build</h1>
+      <p class="lead">Choose a product, then the parts that fit it. Each price is indicative.</p>
+      <div class="layout">
+        <section class="panel" aria-label="Parts that fit">
+          <p class="eyebrow">Centre</p>
+          <label class="clip" for="centre">Product</label>
+          <select id="centre"></select>
+          <p id="centre-name" class="product-name"></p>
+          <p id="centre-meta" class="meta"></p>
+          <div class="split">
+            <p id="centre-price" class="price"></p>
+            <p id="centre-file" class="chip" hidden>Model file needed</p>
+          </div>
+          <h2>Parts that fit</h2>
+          <p id="fit-count" class="meta"></p>
+          <div id="groups"></div>
+        </section>
+        <section class="viewer" aria-label="Model">
+          <div class="stage" id="stage">
+            <canvas id="view"></canvas>
+            <div id="empty" class="empty">
+              <p class="stage-title">No model file yet</p>
+              <p id="empty-copy"></p>
+              <p id="sku-list" class="skus"></p>
+            </div>
+            <div class="floor" aria-hidden="true"></div>
+            <div class="controls">
+              <button type="button" id="turn">Turntable</button>
+              <button type="button" id="closeup">Close-up</button>
+              <button type="button" id="picture">Picture</button>
+            </div>
+          </div>
+          <p id="view-status" class="status" role="status">Size against the real product has not been checked.</p>
+        </section>
+        <aside class="panel quote" aria-label="This build">
+          <h2>This build</h2>
+          <ul id="lines"></ul>
+          <p id="quote-note" class="meta"></p>
+          <div class="rule"></div>
+          <p class="meta">Total</p>
+          <p id="total" class="total"></p>
+          <p class="hint">Indicative</p>
+          <form id="send">
+            <label for="who">Name</label>
+            <input id="who" name="name" autocomplete="name" />
+            <label for="email">Email</label>
+            <input id="email" name="email" type="email" autocomplete="email" />
+            <button type="submit" class="primary">Send this build</button>
+          </form>
+          <button type="button" id="share" class="secondary">Share a link</button>
+          <p id="send-status" class="status" role="status"></p>
+        </aside>
+      </div>
+    </main>
+    <script>
+      window.RIG_KEY = __RIG_PUBLISHABLE_KEY__;
+      window.RIG_BUILD = __RIG_BUILD__;
+    </script>
+    <script src="/page/builder.js"></script>
+  </body>
+</html>

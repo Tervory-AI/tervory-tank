@@ -8,11 +8,16 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 
+from rigbox.models import house_view, model_file
+
 _PAGE = Path(__file__).resolve().parent / "page"
+_HOUSE = Path(__file__).resolve().parents[1] / "catalogues" / "customnation"
 _ASSETS = {
     "search.js": "text/javascript",
     "search.css": "text/css",
     "admin.js": "text/javascript",
+    "builder.js": "text/javascript",
+    "builder.css": "text/css",
     "tervory-logo-on-white.png": "image/png",
 }
 
@@ -40,6 +45,18 @@ def _shopper_html() -> HTMLResponse:
     return HTMLResponse(html)
 
 
+def builder_document() -> str:
+    """The builder, with the sample catalogue and a model report for every sku."""
+    if _HOUSE.is_dir():
+        view = house_view(_HOUSE)
+    else:
+        view = {"measured": "not checked", "centres": [], "products": [], "fits": [], "assets": {}}
+    html = (_PAGE / "builder.html").read_text(encoding="utf-8")
+    html = html.replace("__RIG_PUBLISHABLE_KEY__", json.dumps(house_key()))
+    html = html.replace("__RIG_BUILD__", json.dumps(view, ensure_ascii=True))
+    return html
+
+
 def mount_page(application: FastAPI) -> None:
     @application.get("/", include_in_schema=False)
     async def search_page() -> HTMLResponse:
@@ -49,6 +66,22 @@ def mount_page(application: FastAPI) -> None:
     async def product_page(product_id: str) -> HTMLResponse:
         del product_id
         return _shopper_html()
+
+    @application.get("/build", include_in_schema=False)
+    async def build_page() -> HTMLResponse:
+        return HTMLResponse(builder_document())
+
+    @application.get("/build/{product_id}", include_in_schema=False)
+    async def build_product(product_id: str) -> HTMLResponse:
+        del product_id
+        return HTMLResponse(builder_document())
+
+    @application.get("/models/{sku}", include_in_schema=False)
+    async def house_model(sku: str) -> FileResponse:
+        path = model_file(_HOUSE, sku)
+        if path is None:
+            raise HTTPException(status_code=404, detail="No model file for that part.")
+        return FileResponse(path, media_type="model/gltf-binary")
 
     @application.get("/admin", include_in_schema=False)
     async def admin_page() -> HTMLResponse:

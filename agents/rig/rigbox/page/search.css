@@ -137,6 +137,10 @@ button.text {
   color: var(--ink);
 }
 
+a.build-link {
+  color: var(--ink);
+}
+
 button:disabled {
   opacity: 0.6;
   cursor: default;

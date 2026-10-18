@@ -14,6 +14,7 @@ from typing import Any
 from uuid import uuid4
 from urllib.parse import urlparse
 
+from rigbox.assemble import assemble
 from rigbox.catalogue import (
     check_fit_refs,
     families_from,
@@ -30,6 +31,7 @@ from rigbox.ground import explain as ground_explain
 from rigbox.ground import explain_prompt
 from rigbox.ground import fit_suggest
 from rigbox.ground import suggest_prompt
+from rigbox.models import folder_for_tenant, inspect_sku, model_file
 from rigbox.logic import _why as code_why
 from rigbox.logic import approved
 from rigbox.logic import money
@@ -127,11 +129,13 @@ class Service:
         handoff: Any | None = None,
         *,
         rate_limit: int = 60,
+        catalogue_root: Path | None = None,
     ) -> None:
         self.store = store
         self.models = models
         self.handoff = handoff or RecordingHandoff()
         self.limiter = RateLimiter(limit=rate_limit)
+        self.catalogue_root = Path(catalogue_root) if catalogue_root else None
 
     async def authenticate(self, raw_key: str) -> dict[str, Any]:
         presented = raw_key or ""
@@ -277,7 +281,10 @@ class Service:
 
     async def quote(self, tenant_id: str, body: dict[str, Any]) -> dict[str, str]:
         contact = _contact(body.get("contact") or {})
-        if isinstance(body.get("setup"), dict):
+        if isinstance(body.get("build"), dict):
+            scene = await self.scene(tenant_id, body["build"])
+            payload = {"kind": "build", "build": scene}
+        elif isinstance(body.get("setup"), dict):
             products = await self._active(tenant_id)
             try:
                 priced = reprice(body["setup"], products)
@@ -289,6 +296,71 @@ class Service:
         else:
             raise RigError("invalid", "A setup or a product is required.", 422)
         return await self._store_quote(tenant_id, payload, contact)
+
+    async def scene(self, tenant_id: str, body: dict[str, Any]) -> dict[str, Any]:
+        """The exact build: every chosen part, and whether its model file could be placed."""
+        product_id = str(body.get("product_id") or "").strip()
+        if not product_id:
+            raise RigError("invalid", "A product is required.", 422)
+        products = await self._active(tenant_id)
+        centre = next((row for row in products if str(row.get("sku") or row.get("id") or "") == product_id), None)
+        if centre is None:
+            raise RigError("not_found", "No such product.", 404)
+        pool = {
+            str(part.get("sku") or ""): part
+            for part, _fit in fitting_parts(centre, products, await self._approved_fits(tenant_id))
+        }
+        chosen: list[dict[str, Any]] = []
+        refused: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for raw in body.get("part_skus") or []:
+            sku = str(raw or "").strip()
+            if not sku or sku in seen:
+                continue
+            seen.add(sku)
+            part = pool.get(sku)
+            if part is None:
+                refused.append({"sku": sku, "reason": "That part is not listed as fitting this product."})
+                continue
+            chosen.append(part)
+        skus = [product_id, *[str(part.get("sku") or "") for part in chosen]]
+        built = assemble(centre, chosen, self._assets(tenant_id, skus))
+        built["refused"] = refused
+        return built
+
+    async def model_index(self, tenant_id: str) -> dict[str, Any]:
+        products = await self._active(tenant_id)
+        skus = [str(row.get("sku") or row.get("id") or "") for row in products]
+        assets = self._assets(tenant_id, [sku for sku in skus if sku])
+        return {"models": [assets[sku] for sku in skus if sku], "measured": "not checked"}
+
+    async def model_bytes(self, tenant_id: str, sku: str) -> bytes | None:
+        products = await self._active(tenant_id)
+        known = {str(row.get("sku") or row.get("id") or "") for row in products}
+        if sku not in known:
+            return None
+        folder = self._catalogue_folder(tenant_id)
+        if folder is None:
+            return None
+        path = model_file(folder, sku)
+        if path is None:
+            return None
+        return path.read_bytes()
+
+    def _assets(self, tenant_id: str, skus: list[str]) -> dict[str, dict[str, Any]]:
+        folder = self._catalogue_folder(tenant_id)
+        found: dict[str, dict[str, Any]] = {}
+        for sku in skus:
+            if folder is None:
+                found[sku] = inspect_sku(Path("/no/such/catalogue"), sku)
+            else:
+                found[sku] = inspect_sku(folder, sku)
+        return found
+
+    def _catalogue_folder(self, tenant_id: str) -> Path | None:
+        if self.catalogue_root is None:
+            return None
+        return folder_for_tenant(self.catalogue_root, tenant_id)
 
     async def compare(self, tenant_id: str, product_ids: list[str]) -> dict[str, Any]:
         """Other sellers' prices for a selection the shopper already made.

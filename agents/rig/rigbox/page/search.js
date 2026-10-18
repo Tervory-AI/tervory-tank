@@ -109,6 +109,8 @@ function card(item) {
 
 async function openProduct(id, push) {
   if (!id) return;
+  const buildLink = document.querySelector("#build-link");
+  if (buildLink) buildLink.href = "/build/" + encodeURIComponent(id);
   if (push) history.pushState({}, "", "/product/" + encodeURIComponent(id));
   searchView.hidden = true;
   productView.hidden = false;
