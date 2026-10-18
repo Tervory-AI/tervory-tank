@@ -1,52 +1,66 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type DragEvent, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import { PLUGIN_TABS, type PluginTab } from "./copy";
 import {
-  CONNECTIONS,
-  FILES,
-  KEYS,
-  LINKS,
-  MASK,
-  PLUGIN_TABS,
-  type KeyId,
-  type PluginTab,
-} from "./copy";
-
-type Supplier = { id: string; name: string };
-type ExtraFile = { name: string; type: string };
-type ExtraLink = { label: string; host: string };
-type ExtraConnection = { name: string; host: string; tokenSaved: boolean };
+  addTisanConnection,
+  addTisanLink,
+  removeTisanConnection,
+  removeTisanFile,
+  removeTisanLink,
+  removeTisanSecret,
+  saveTisanKey,
+  uploadTisanFiles,
+  type PluginResult,
+} from "./plugin-actions";
+import {
+  formatBytes,
+  savedDay,
+  TISAN_VAULT,
+  VAULT_OFF_MESSAGE,
+  type ConnectionMeta,
+  type FileMeta,
+  type LinkMeta,
+  type PluginPanel,
+  type SecretMeta,
+} from "./vault-model";
 
 function Tag() {
   return <span className="tag">Example</span>;
 }
 
-function kept(input: HTMLInputElement | null): boolean {
-  const typed = input?.value ?? "";
-  if (input) input.value = "";
-  return typed.trim().length > 0;
+function btn(primary: boolean): string {
+  return primary ? "primary" : "line";
 }
 
 function hostOf(raw: string): string {
-  const bare = raw.trim().split("?")[0] ?? "";
   try {
-    const withScheme = bare.includes("://") ? bare : `https://${bare}`;
+    const withScheme = raw.includes("://") ? raw : `https://${raw}`;
     return new URL(withScheme).host;
   } catch {
-    return bare.replace(/^https?:\/\//, "").split("/")[0] || bare;
+    return raw;
   }
 }
 
-function fileType(name: string): string {
-  const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  if (ext === "csv") return "CSV";
-  if (ext === "xlsx" || ext === "xls") return "XLSX";
-  if (ext === "pdf") return "PDF";
-  return ext ? ext.toUpperCase() : "File";
-}
-
-function btn(primary: boolean): string {
-  return primary ? "primary" : "line";
+function VaultOff({ message }: { message: string }) {
+  if (message !== VAULT_OFF_MESSAGE) {
+    return <p className="intro">{message}</p>;
+  }
+  return (
+    <div className="vault-off">
+      <h3>Plugins are off</h3>
+      <p>Tisan cannot read or save any plugin while its vault is off.</p>
+      <div className="vault-card">
+        <div className="vault-card-top">
+          <strong>{TISAN_VAULT}</strong>
+          <span className="pill quiet"><i />Off</span>
+        </div>
+        <p className="vault-line">{VAULT_OFF_MESSAGE}</p>
+        <p>API keys, files, source links and MCP connections are kept in this vault. Nothing can be added or used until it is on.</p>
+      </div>
+    </div>
+  );
 }
 
 export function Plugins({
@@ -54,488 +68,444 @@ export function Plugins({
   tab,
   setTab,
   desktopAction,
+  plugins,
 }: {
   onClose: () => void;
   tab: PluginTab;
   setTab: (tab: PluginTab) => void;
   desktopAction: string;
+  plugins: PluginPanel;
 }) {
-  const [saved, setSaved] = useState<Record<KeyId, boolean>>({
-    github: true,
-    packages: true,
-    coolify: false,
-    radix: false,
-    preview: false,
-  });
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [files, setFiles] = useState<ExtraFile[]>([]);
-  const [links, setLinks] = useState<ExtraLink[]>([]);
+  const router = useRouter();
+  const [note, setNote] = useState("");
   const [often, setOften] = useState<"Daily" | "Weekly">("Daily");
-  const [connections, setConnections] = useState<ExtraConnection[]>([]);
   const [signIn, setSignIn] = useState<"provider" | "token">("token");
-  const [open, setOpen] = useState({ keys: true, files: true, links: true, mcp: true });
+  const [busy, setBusy] = useState(false);
+  const enabled = plugins.enabled;
 
-  function saveRow(id: KeyId, form: HTMLFormElement) {
-    const field = form.querySelector<HTMLInputElement>("input[type=password]");
-    if (!kept(field)) return;
-    setSaved((current) => ({ ...current, [id]: true }));
+  async function finish(result: PluginResult) {
+    setNote(result.message);
+    if (result.ok) router.refresh();
   }
 
-  function saveTool(form: HTMLFormElement) {
-    const name = form.querySelector<HTMLInputElement>("input[name=tool]")?.value.trim() ?? "";
-    const field = form.querySelector<HTMLInputElement>("input[type=password]");
-    const wrote = kept(field);
+  async function onSaveKey(event: FormEvent<HTMLFormElement>, name: string, purpose: string) {
+    event.preventDefault();
+    if (!enabled || busy) return;
+    const form = event.currentTarget;
+    const value = form.querySelector<HTMLInputElement>("input[type=password]")?.value ?? "";
     form.reset();
-    if (!name || !wrote) return;
-    setSuppliers((current) => [...current, { id: `${current.length}-${name}`, name }]);
+    if (!name.trim() || !value.trim()) {
+      setNote("Add a key first. Nothing was stored.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await finish(await saveTisanKey(name, value, purpose));
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function addFiles(list: FileList | null) {
-    if (!list?.length) return;
-    const next = Array.from(list).map((file) => ({ name: file.name, type: fileType(file.name) }));
-    setFiles((current) => [...current, ...next]);
+  async function onFiles(list: FileList | null) {
+    if (!enabled || busy) return;
+    const files = list ? Array.from(list) : [];
+    if (!files.length) {
+      setNote("Choose a file first. Nothing was saved.");
+      return;
+    }
+    const body = new FormData();
+    for (const file of files) body.append("file", file);
+    setBusy(true);
+    try {
+      await finish(await uploadTisanFiles(body));
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function addLink(form: HTMLFormElement) {
-    const link = form.querySelector<HTMLInputElement>("input[name=link]")?.value.trim() ?? "";
+  async function onAddLink(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!enabled || busy) return;
+    const form = event.currentTarget;
+    const url = form.querySelector<HTMLInputElement>("input[name=link]")?.value.trim() ?? "";
     const label = form.querySelector<HTMLInputElement>("input[name=label]")?.value.trim() ?? "";
+    const frequency = often === "Daily" ? "daily" : "weekly";
     form.reset();
-    if (!link) return;
-    setLinks((current) => [...current, { label: label || hostOf(link), host: hostOf(link) }]);
+    setOften("Daily");
+    if (!url) {
+      setNote("Add a link first. Nothing was saved.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await finish(await addTisanLink(url, label, frequency));
+    } finally {
+      setBusy(false);
+    }
   }
 
-  function addConnection(form: HTMLFormElement) {
+  async function onAddConnection(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!enabled || busy) return;
+    const form = event.currentTarget;
     const name = form.querySelector<HTMLInputElement>("input[name=conn-name]")?.value.trim() ?? "";
     const server = form.querySelector<HTMLInputElement>("input[name=server]")?.value.trim() ?? "";
-    const field = form.querySelector<HTMLInputElement>("input[type=password]");
-    const wrote = signIn === "token" ? kept(field) : true;
-    if (signIn !== "token" && field) field.value = "";
+    const token = form.querySelector<HTMLInputElement>("input[type=password]")?.value ?? "";
+    const auth = signIn;
     form.reset();
-    if (!name || !server || !wrote) return;
-    setConnections((current) => [...current, { name, host: hostOf(server), tokenSaved: signIn === "token" }]);
+    if (!name || !server) {
+      setNote("Add a name and a server URL first. Nothing was saved.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await finish(await addTisanConnection(name, server, auth, token));
+    } finally {
+      setBusy(false);
+    }
   }
 
-  const connected = KEYS.filter((row) => row.saved).length;
-  const checking = FILES.filter((row) => row.status !== "Processed").length;
-  const changed = LINKS.filter((row) => row.status === "Changed").length;
-  const live = CONNECTIONS.filter((row) => row.status === "Connected").length;
-
-
-  // Save key is the red button on the keys tab, and the only red button on the phone sheet.
-  const saveKeyClass = (compact: boolean) => (compact || desktopAction === "save-key" ? "primary" : "line");
+  const off = <VaultOff message={plugins.message || VAULT_OFF_MESSAGE} />;
 
   return (
     <div className="scrim" role="presentation">
       <div className="popup" role="dialog" aria-modal="true" aria-labelledby="plugins-title">
-        <div className="popup-head">
-          <div>
-            <h2 id="plugins-title">Plugins</h2>
-            <p className="sub">Everything Tisan reads from. Add a key, upload a file, or paste a link.</p>
-          </div>
-          <button type="button" className="text" onClick={onClose}>Close</button>
-        </div>
+        <PopupHead onClose={onClose} titleId="plugins-title" />
         <div className="tabs" role="tablist">
           {PLUGIN_TABS.map((item) => (
-            <button key={item.id} type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? "on" : ""} onClick={() => setTab(item.id)}>
+            <button key={item.id} type="button" role="tab" aria-selected={tab === item.id} className={tab === item.id ? "on" : ""} onClick={() => { setNote(""); setTab(item.id); }}>
               {item.label}
             </button>
           ))}
         </div>
-
-        {tab === "keys" ? (
-          <div className="part">
-            <div className="part-title"><h3>API keys</h3><Tag /></div>
-            <p className="intro">Keys for tools Tisan may use. A key is write-only: once saved it is never shown again.</p>
-            <div className="list">
-              {KEYS.map((row) => (
-                <form key={row.id} className="key-row" onSubmit={(event) => { event.preventDefault(); saveRow(row.id, event.currentTarget); }}>
-                  <div>
-                    <h4>{row.name}</h4>
-                    <p>{row.detail}</p>
-                    <span className="env-label">{row.env}</span>
-                  </div>
-                  {saved[row.id] ? <span className="pill solid"><i />Connected</span> : <span className="pill quiet"><i />Not set</span>}
-                  {saved[row.id] ? <div className="mask">{MASK}</div> : <input type="password" aria-label={`${row.name} key`} placeholder="Paste key" autoComplete="off" />}
-                  {saved[row.id] ? (
-                    <div className="row-actions">
-                      <button type="button" className="text" onClick={() => setSaved((current) => ({ ...current, [row.id]: false }))}>Replace</button>
-                      <button type="button" className="text" onClick={() => setSaved((current) => ({ ...current, [row.id]: false }))}>Remove</button>
-                    </div>
-                  ) : (
-                    <button type="submit" className="line">Save</button>
-                  )}
-                </form>
-              ))}
-              {suppliers.map((row) => (
-                <div className="key-row" key={row.id}>
-                  <div>
-                    <h4>{row.name}</h4>
-                    <p>Tool key · Example</p>
-                  </div>
-                  <span className="pill solid"><i />Connected</span>
-                  <div className="mask">{MASK}</div>
-                  <button type="button" className="text" onClick={() => setSuppliers((current) => current.filter((item) => item.id !== row.id))}>Remove</button>
-                </div>
-              ))}
-              <form className="add" onSubmit={(event) => { event.preventDefault(); saveTool(event.currentTarget); }}>
-                <div className="who">
-                  <h4>Add a tool key</h4>
-                  <p>For a host or tool that gives you a key.</p>
-                </div>
-                <label>
-                  Tool name
-                  <input name="tool" type="text" placeholder="e.g. Font host" autoComplete="off" />
-                </label>
-                <label>
-                  Key
-                  <input type="password" aria-label="Tool key" placeholder="Paste key (hidden once saved)" autoComplete="off" />
-                </label>
-                <button type="submit" className={saveKeyClass(false)}>Save key</button>
-              </form>
-            </div>
-            <p className="note">Keys are stored on the server, never in the app code.</p>
-          </div>
-        ) : null}
-
-        {tab === "files" ? (
-          <div className="part">
-            <div className="part-title"><h3>Files</h3><Tag /></div>
-            <p className="intro">Upload copy, briefs or lists for the site. CSV files can be matched to the right columns.</p>
-            <div className="drop" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); addFiles(event.dataTransfer.files); }}>
-              <strong>Drag CSV, XLSX or PDF files here</strong>
-              <span>or</span>
-              <button type="button" className={btn(desktopAction === "choose-files")} onClick={() => document.getElementById("tisan-files")?.click()}>Choose files</button>
-              <input id="tisan-files" type="file" accept=".csv,.xlsx,.xls,.pdf" multiple hidden onChange={(event) => { addFiles(event.target.files); event.target.value = ""; }} />
-            </div>
-            <div className="list">
-              <table className="file-table">
-                <thead>
-                  <tr>
-                    <th>File</th>
-                    <th>Type</th>
-                    <th>Rows / pages</th>
-                    <th>Uploaded</th>
-                    <th>Status</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {FILES.map((file) => (
-                    <tr key={file.name}>
-                      <td className="name">{file.name}</td>
-                      <td>{file.type}</td>
-                      <td>{file.size}</td>
-                      <td>{file.when}</td>
-                      <td><span className={file.status === "Processed" ? "pill solid" : "pill quiet"}><i />{file.status}</span></td>
-                      <td>{file.map ? <button type="button" className="text">Map columns</button> : null}</td>
-                    </tr>
-                  ))}
-                  {files.map((file) => (
-                    <tr key={file.name}>
-                      <td className="name">{file.name}</td>
-                      <td>{file.type}</td>
-                      <td>—</td>
-                      <td>—</td>
-                      <td><span className="pill quiet"><i />Needs checking</span></td>
-                      <td />
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ) : null}
-
-        {tab === "links" ? (
-          <div className="part">
-            <div className="part-title"><h3>Source links</h3><Tag /></div>
-            <p className="intro">Pages Tisan checks for changes, such as the live site or a page named in the brief.</p>
-            <form className="list link-add" onSubmit={(event) => { event.preventDefault(); addLink(event.currentTarget); }}>
-              <label>
-                Link
-                <input name="link" type="url" placeholder="Paste a link, e.g. https://…" autoComplete="off" />
-              </label>
-              <label>
-                Label (optional)
-                <input name="label" type="text" placeholder="e.g. Contact page" autoComplete="off" />
-              </label>
-              <div>
-                <span className="env-label">How often to check</span>
-                <div className="seg" role="group" aria-label="How often to check">
-                  <button type="button" className={often === "Daily" ? "on" : ""} onClick={() => setOften("Daily")}>Daily</button>
-                  <button type="button" className={often === "Weekly" ? "on" : ""} onClick={() => setOften("Weekly")}>Weekly</button>
-                </div>
-              </div>
-              <button type="submit" className={btn(desktopAction === "add-link")}>Add link</button>
-            </form>
-            <div className="list">
-              {LINKS.map((link) => (
-                <div className="link-row" key={link.host}>
-                  <div>
-                    <h4>{link.label}</h4>
-                    <span className="host">{link.host}</span>
-                  </div>
-                  <span>Last checked <b>{link.checked}</b></span>
-                  <span className={link.status === "Watching" ? "pill solid" : "pill quiet"}><i />{link.status}</span>
-                  <button type="button" className="text">Remove</button>
-                </div>
-              ))}
-              {links.map((link) => (
-                <div className="link-row" key={`${link.host}-${link.label}`}>
-                  <div>
-                    <h4>{link.label}</h4>
-                    <span className="host">{link.host}</span>
-                  </div>
-                  <span>Last checked <b>—</b></span>
-                  <span className="pill solid"><i />Watching</span>
-                  <button type="button" className="text" onClick={() => setLinks((current) => current.filter((item) => item !== link))}>Remove</button>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {tab === "mcp" ? (
-          <div className="part">
-            <div className="part-title"><h3>MCP connections</h3><Tag /></div>
-            <p className="intro">Connections to outside tools that Tisan can read from.</p>
-            <div className="list">
-              {CONNECTIONS.map((row) => (
-                <div className="conn-row" key={row.host}>
-                  <div>
-                    <h4>{row.name}</h4>
-                    <span className="host">{row.host}</span>
-                  </div>
-                  <p>{row.detail}</p>
-                  <span className={row.status === "Connected" ? "pill solid" : "pill quiet"}><i />{row.status}</span>
-                  <span>Last used <b>{row.used}</b></span>
-                  <button type="button" className="text">Disconnect</button>
-                </div>
-              ))}
-              {connections.map((row) => (
-                <div className="conn-row" key={`${row.host}-${row.name}`}>
-                  <div>
-                    <h4>{row.name}</h4>
-                    <span className="host">{row.host}</span>
-                  </div>
-                  <p>{row.tokenSaved ? MASK : "Sign in with the provider"}</p>
-                  <span className={row.tokenSaved ? "pill solid" : "pill quiet"}><i />{row.tokenSaved ? "Connected" : "Needs sign-in"}</span>
-                  <span>Last used <b>—</b></span>
-                  <button type="button" className="text" onClick={() => setConnections((current) => current.filter((item) => item !== row))}>Disconnect</button>
-                </div>
-              ))}
-            </div>
-            <form className="list conn-add" onSubmit={(event) => { event.preventDefault(); addConnection(event.currentTarget); }}>
-              <h4>Add connection</h4>
-              <div className="pair">
-                <label>
-                  Name
-                  <input name="conn-name" type="text" placeholder="e.g. Saved design" autoComplete="off" />
-                </label>
-                <label>
-                  Server URL
-                  <input name="server" type="url" placeholder="https://…" autoComplete="off" />
-                </label>
-              </div>
-              <div className="pair end">
-                <div>
-                  <span className="env-label">How it signs in</span>
-                  <div className="seg" role="group" aria-label="How it signs in">
-                    <button type="button" className={signIn === "provider" ? "on" : ""} onClick={() => setSignIn("provider")}>Sign in with the provider</button>
-                    <button type="button" className={signIn === "token" ? "on" : ""} onClick={() => setSignIn("token")}>Token</button>
-                  </div>
-                </div>
-                {signIn === "token" ? (
-                  <label>
-                    Token
-                    <input type="password" aria-label="Token" placeholder="Paste token (hidden once saved)" autoComplete="off" />
-                  </label>
-                ) : <span />}
-                <button type="submit" className={btn(desktopAction === "add-connection")}>Add connection</button>
-              </div>
-              <p className="note">A saved token shows only as {MASK}, with Replace or Remove. It is never shown again.</p>
-            </form>
-          </div>
-        ) : null}
+        {note ? <p className="note">{note}</p> : null}
+        {!enabled ? off : tab === "keys" ? (
+          <KeysPart
+            secrets={plugins.secrets}
+            busy={busy}
+            saveClass={btn(desktopAction === "save-key")}
+            onSaveKey={onSaveKey}
+            onRemove={(name) => { setBusy(true); void removeTisanSecret(name).then(finish).finally(() => setBusy(false)); }}
+          />
+        ) : tab === "files" ? (
+          <FilesPart
+            files={plugins.files}
+            busy={busy}
+            chooseClass={btn(desktopAction === "choose-files")}
+            inputId="tisan-files"
+            onFiles={onFiles}
+            onRemove={(id) => { setBusy(true); void removeTisanFile(id).then(finish).finally(() => setBusy(false)); }}
+          />
+        ) : tab === "links" ? (
+          <LinksPart
+            links={plugins.links}
+            busy={busy}
+            often={often}
+            setOften={setOften}
+            addClass={btn(desktopAction === "add-link")}
+            onAddLink={onAddLink}
+            onRemove={(id) => { setBusy(true); void removeTisanLink(id).then(finish).finally(() => setBusy(false)); }}
+          />
+        ) : (
+          <ConnectionsPart
+            connections={plugins.connections}
+            busy={busy}
+            signIn={signIn}
+            setSignIn={setSignIn}
+            addClass={btn(desktopAction === "add-connection")}
+            onAddConnection={onAddConnection}
+            onRemove={(id) => { setBusy(true); void removeTisanConnection(id).then(finish).finally(() => setBusy(false)); }}
+          />
+        )}
       </div>
 
       <div className="groups" role="dialog" aria-modal="true" aria-labelledby="plugins-sheet-title">
-        <div className="sheet-head">
-          <div>
-            <h2 id="plugins-sheet-title">Plugins</h2>
-            <p className="sub">Everything Tisan reads from. Add a key, upload a file, or paste a link.</p>
-          </div>
-          <button type="button" className="text" onClick={onClose}>Close</button>
-        </div>
-
-        <section className="group">
-          <button type="button" className="text group-toggle" aria-expanded={open.keys} onClick={() => setOpen((current) => ({ ...current, keys: !current.keys }))}>
-            <h3>API keys</h3>
-          </button>
-          <p className="countline">{KEYS.length} keys · {connected} connected · Example</p>
-          {open.keys ? (
-            <>
-              <p className="intro">Keys for tools Tisan may use. A key is write-only: once saved it is never shown again.</p>
-              <div className="list">
-                {KEYS.map((row) => (
-                  <form key={row.id} className="key-row" onSubmit={(event) => { event.preventDefault(); saveRow(row.id, event.currentTarget); }}>
-                    <div>
-                      <h4>{row.name}</h4>
-                      <p>{row.detail}</p>
-                      <span className="env-label">{row.env}</span>
-                    </div>
-                    {saved[row.id] ? <span className="pill solid"><i />Connected</span> : <span className="pill quiet"><i />Not set</span>}
-                    {saved[row.id] ? <div className="mask">{MASK}</div> : <input type="password" aria-label={`${row.name} key`} placeholder="Paste key" autoComplete="off" />}
-                    {saved[row.id] ? (
-                      <div className="row-actions">
-                        <button type="button" className="text" onClick={() => setSaved((current) => ({ ...current, [row.id]: false }))}>Replace</button>
-                        <button type="button" className="text" onClick={() => setSaved((current) => ({ ...current, [row.id]: false }))}>Remove</button>
-                      </div>
-                    ) : (
-                      <button type="submit" className="line">Save</button>
-                    )}
-                  </form>
-                ))}
-                <form className="add" onSubmit={(event) => { event.preventDefault(); saveTool(event.currentTarget); }}>
-                  <div className="who">
-                    <h4>Add a tool key</h4>
-                    <p>For a host or tool that gives you a key.</p>
-                  </div>
-                  <label>
-                    Tool name
-                    <input name="tool" type="text" placeholder="e.g. Font host" autoComplete="off" />
-                  </label>
-                  <label>
-                    Key
-                    <input type="password" aria-label="Tool key" placeholder="Paste key (hidden once saved)" autoComplete="off" />
-                  </label>
-                  <button type="submit" className="primary">Save key</button>
-                </form>
-              </div>
-              <p className="note">Keys are stored on the server, never in the app code.</p>
-            </>
-          ) : null}
-        </section>
-
-        <section className="group">
-          <button type="button" className="text group-toggle" aria-expanded={open.files} onClick={() => setOpen((current) => ({ ...current, files: !current.files }))}>
-            <h3>Files</h3>
-          </button>
-          <p className="countline">{FILES.length} files · {checking} need checking · Example</p>
-          {open.files ? (
-            <>
-              <p className="intro">Upload copy, briefs or lists for the site. CSV files can be matched to the right columns.</p>
-              <div className="drop">
-                <strong>Drag CSV, XLSX or PDF files here</strong>
-                <span>or</span>
-                <button type="button" className="line" onClick={() => document.getElementById("tisan-files-mobile")?.click()}>Choose files</button>
-                <input id="tisan-files-mobile" type="file" accept=".csv,.xlsx,.xls,.pdf" multiple hidden onChange={(event) => { addFiles(event.target.files); event.target.value = ""; }} />
-              </div>
-              <div className="file-cards">
-                {FILES.map((file) => (
-                  <article className="file-card" key={file.name}>
-                    <h4>{file.name}</h4>
-                    <p>{file.type} · {file.size}</p>
-                    <p>{file.when} · {file.status}</p>
-                    {file.map ? <button type="button" className="text">Map columns</button> : null}
-                  </article>
-                ))}
-              </div>
-            </>
-          ) : null}
-        </section>
-
-        <section className="group">
-          <button type="button" className="text group-toggle" aria-expanded={open.links} onClick={() => setOpen((current) => ({ ...current, links: !current.links }))}>
-            <h3>Source links</h3>
-          </button>
-          <p className="countline">{LINKS.length} links · {changed} changed · Example</p>
-          {open.links ? (
-            <>
-              <p className="intro">Pages Tisan checks for changes, such as the live site or a page named in the brief.</p>
-              <form className="list" onSubmit={(event) => { event.preventDefault(); addLink(event.currentTarget); }}>
-                <div className="stack">
-                  <label>
-                    Link
-                    <input name="link" type="url" placeholder="Paste a link, e.g. https://…" autoComplete="off" />
-                  </label>
-                  <label>
-                    Label (optional)
-                    <input name="label" type="text" placeholder="e.g. Contact page" autoComplete="off" />
-                  </label>
-                  <div className="seg">
-                    <button type="button" className={often === "Daily" ? "on" : ""} onClick={() => setOften("Daily")}>Daily</button>
-                    <button type="button" className={often === "Weekly" ? "on" : ""} onClick={() => setOften("Weekly")}>Weekly</button>
-                  </div>
-                  <button type="submit" className="line">Add link</button>
-                </div>
-              </form>
-              <div className="list">
-                {LINKS.map((link) => (
-                  <div className="link-row" key={link.host}>
-                    <div>
-                      <h4>{link.label}</h4>
-                      <span className="host">{link.host}</span>
-                    </div>
-                    <span className={link.status === "Watching" ? "pill solid" : "pill quiet"}><i />{link.status}</span>
-                    <span>Last checked {link.checked}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : null}
-        </section>
-
-        <section className="group">
-          <button type="button" className="text group-toggle" aria-expanded={open.mcp} onClick={() => setOpen((current) => ({ ...current, mcp: !current.mcp }))}>
-            <h3>MCP connections</h3>
-          </button>
-          <p className="countline">{CONNECTIONS.length} connections · {live} connected · Example</p>
-          {open.mcp ? (
-            <>
-              <p className="intro">Connections to outside tools that Tisan can read from.</p>
-              <div className="list">
-                {CONNECTIONS.map((row) => (
-                  <div className="conn-row" key={row.host}>
-                    <div>
-                      <h4>{row.name}</h4>
-                      <span className="host">{row.host}</span>
-                    </div>
-                    <p>{row.detail}</p>
-                    <span className={row.status === "Connected" ? "pill solid" : "pill quiet"}><i />{row.status}</span>
-                    <span>Last used {row.used}</span>
-                  </div>
-                ))}
-              </div>
-              <form className="list" onSubmit={(event) => { event.preventDefault(); addConnection(event.currentTarget); }}>
-                <div className="stack">
-                  <h4>Add connection</h4>
-                  <label>
-                    Name
-                    <input name="conn-name" type="text" placeholder="e.g. Saved design" autoComplete="off" />
-                  </label>
-                  <label>
-                    Server URL
-                    <input name="server" type="url" placeholder="https://…" autoComplete="off" />
-                  </label>
-                  <div className="seg">
-                    <button type="button" className={signIn === "provider" ? "on" : ""} onClick={() => setSignIn("provider")}>Sign in with the provider</button>
-                    <button type="button" className={signIn === "token" ? "on" : ""} onClick={() => setSignIn("token")}>Token</button>
-                  </div>
-                  {signIn === "token" ? (
-                    <label>
-                      Token
-                      <input type="password" aria-label="Token" placeholder="Paste token (hidden once saved)" autoComplete="off" />
-                    </label>
-                  ) : null}
-                  <button type="submit" className="line">Add connection</button>
-                  <p className="note">A saved token shows only as {MASK}, with Replace or Remove. It is never shown again.</p>
-                </div>
-              </form>
-            </>
-          ) : null}
-        </section>
+        <PopupHead onClose={onClose} titleId="plugins-sheet-title" />
+        {note ? <p className="note">{note}</p> : null}
+        {!enabled ? off : (
+          <>
+            <KeysPart
+              secrets={plugins.secrets}
+              busy={busy}
+              saveClass="primary"
+              onSaveKey={onSaveKey}
+              onRemove={(name) => { setBusy(true); void removeTisanSecret(name).then(finish).finally(() => setBusy(false)); }}
+            />
+            <FilesPart
+              files={plugins.files}
+              busy={busy}
+              chooseClass="line"
+              inputId="tisan-files-mobile"
+              onFiles={onFiles}
+              onRemove={(id) => { setBusy(true); void removeTisanFile(id).then(finish).finally(() => setBusy(false)); }}
+            />
+            <LinksPart
+              links={plugins.links}
+              busy={busy}
+              often={often}
+              setOften={setOften}
+              addClass="line"
+              onAddLink={onAddLink}
+              onRemove={(id) => { setBusy(true); void removeTisanLink(id).then(finish).finally(() => setBusy(false)); }}
+            />
+            <ConnectionsPart
+              connections={plugins.connections}
+              busy={busy}
+              signIn={signIn}
+              setSignIn={setSignIn}
+              addClass="line"
+              onAddConnection={onAddConnection}
+              onRemove={(id) => { setBusy(true); void removeTisanConnection(id).then(finish).finally(() => setBusy(false)); }}
+            />
+          </>
+        )}
       </div>
+    </div>
+  );
+}
+
+function PopupHead({ onClose, titleId }: { onClose: () => void; titleId: string }) {
+  return (
+    <div className="popup-head">
+      <div>
+        <h2 id={titleId}>Plugins</h2>
+        <p className="sub">Everything Tisan reads from. Add a key, upload a file, or paste a link.</p>
+      </div>
+      <button type="button" className="text" onClick={onClose}>Close</button>
+    </div>
+  );
+}
+
+function KeysPart({
+  secrets,
+  busy,
+  saveClass,
+  onSaveKey,
+  onRemove,
+}: {
+  secrets: SecretMeta[];
+  busy: boolean;
+  saveClass: string;
+  onSaveKey: (event: FormEvent<HTMLFormElement>, name: string, purpose: string) => void;
+  onRemove: (name: string) => void;
+}) {
+  return (
+    <div className="part">
+      <div className="part-title"><h3>API keys</h3><Tag /></div>
+      <p className="intro">Keys for tools Tisan may use. A key is write-only: once saved it is never shown again.</p>
+      <div className="list">
+        {secrets.map((row) => (
+          <form key={row.name} className="key-row" onSubmit={(event) => onSaveKey(event, row.name, row.purpose || "Tool key")}>
+            <div>
+              <h4>{row.name}</h4>
+              <p>{row.purpose}</p>
+            </div>
+            <span className="pill solid"><i />Saved</span>
+            <div className="mask">{row.mask}{row.savedAt ? ` saved ${savedDay(row.savedAt)}` : ""}</div>
+            <div className="row-actions">
+              <button type="submit" className="text" disabled={busy}>Replace</button>
+              <button type="button" className="text" disabled={busy} onClick={() => onRemove(row.name)}>Remove</button>
+            </div>
+          </form>
+        ))}
+        {secrets.length === 0 ? <p className="empty-row">No keys saved.</p> : null}
+        <form className="add" onSubmit={(event) => {
+          const name = event.currentTarget.querySelector<HTMLInputElement>("input[name=tool]")?.value.trim() ?? "";
+          onSaveKey(event, name, "Tool key");
+        }}>
+          <div className="who">
+            <h4>Add a tool key</h4>
+            <p>For a host or tool that gives you a key.</p>
+          </div>
+          <label>
+            Tool name
+            <input name="tool" type="text" placeholder="e.g. Font host" autoComplete="off" disabled={busy} />
+          </label>
+          <label>
+            Key
+            <input type="password" aria-label="Tool key" placeholder="Paste key (hidden once saved)" autoComplete="off" disabled={busy} />
+          </label>
+          <button type="submit" className={saveClass} disabled={busy}>Save key</button>
+        </form>
+      </div>
+      <p className="note">Keys are stored on the server, never in the app code.</p>
+    </div>
+  );
+}
+
+function FilesPart({
+  files,
+  busy,
+  chooseClass,
+  inputId,
+  onFiles,
+  onRemove,
+}: {
+  files: FileMeta[];
+  busy: boolean;
+  chooseClass: string;
+  inputId: string;
+  onFiles: (list: FileList | null) => void;
+  onRemove: (id: string) => void;
+}) {
+  return (
+    <div className="part">
+      <div className="part-title"><h3>Files</h3><Tag /></div>
+      <p className="intro">Upload copy, briefs or lists for the site. CSV, XLSX, and PDF only.</p>
+      <div
+        className="drop"
+        onDragOver={(event: DragEvent) => event.preventDefault()}
+        onDrop={(event: DragEvent) => {
+          event.preventDefault();
+          onFiles(event.dataTransfer.files);
+        }}
+      >
+        <strong>Drag CSV, XLSX or PDF files here</strong>
+        <span>or</span>
+        <button type="button" className={chooseClass} disabled={busy} onClick={() => document.getElementById(inputId)?.click()}>Choose files</button>
+        <input id={inputId} type="file" accept=".csv,.xlsx,.xls,.pdf" multiple hidden onChange={(event) => { onFiles(event.target.files); event.target.value = ""; }} />
+      </div>
+      <div className="list">
+        {files.map((file) => (
+          <div className="key-row" key={file.id}>
+            <div>
+              <h4>{file.name}</h4>
+              <p>{file.type || "File"} · {formatBytes(file.size)}{file.rows != null ? ` · ${file.rows} rows` : ""}{file.pages != null ? ` · ${file.pages} pages` : ""}</p>
+            </div>
+            <span className="pill quiet"><i />{file.status}</span>
+            <span>{file.uploadedAt ? `Uploaded ${savedDay(file.uploadedAt)}` : ""}</span>
+            <button type="button" className="text" disabled={busy} onClick={() => onRemove(file.id)}>Remove</button>
+          </div>
+        ))}
+        {files.length === 0 ? <p className="empty-row">No files stored.</p> : null}
+      </div>
+    </div>
+  );
+}
+
+function LinksPart({
+  links,
+  busy,
+  often,
+  setOften,
+  addClass,
+  onAddLink,
+  onRemove,
+}: {
+  links: LinkMeta[];
+  busy: boolean;
+  often: "Daily" | "Weekly";
+  setOften: (value: "Daily" | "Weekly") => void;
+  addClass: string;
+  onAddLink: (event: FormEvent<HTMLFormElement>) => void;
+  onRemove: (id: string) => void;
+}) {
+  return (
+    <div className="part">
+      <div className="part-title"><h3>Source links</h3><Tag /></div>
+      <p className="intro">Pages Tisan checks for changes, such as the live site or a page named in the brief.</p>
+      <form className="list link-add" onSubmit={onAddLink}>
+        <label>
+          Link
+          <input name="link" type="url" placeholder="Paste a link, e.g. https://…" autoComplete="off" disabled={busy} />
+        </label>
+        <label>
+          Label (optional)
+          <input name="label" type="text" placeholder="e.g. Contact page" autoComplete="off" disabled={busy} />
+        </label>
+        <div>
+          <span className="env-label">How often to check</span>
+          <div className="seg" role="group" aria-label="How often to check">
+            <button type="button" className={often === "Daily" ? "on" : ""} onClick={() => setOften("Daily")}>Daily</button>
+            <button type="button" className={often === "Weekly" ? "on" : ""} onClick={() => setOften("Weekly")}>Weekly</button>
+          </div>
+        </div>
+        <button type="submit" className={addClass} disabled={busy}>Add link</button>
+      </form>
+      <div className="list">
+        {links.map((link) => (
+          <div className="link-row" key={link.id}>
+            <div>
+              <h4>{link.label}</h4>
+              <span className="host">{hostOf(link.url)}</span>
+            </div>
+            <span>Last checked {link.lastChecked ? savedDay(link.lastChecked) : "not yet"}</span>
+            <span className="pill quiet"><i />{link.status}</span>
+            <button type="button" className="text" disabled={busy} onClick={() => onRemove(link.id)}>Remove</button>
+          </div>
+        ))}
+        {links.length === 0 ? <p className="empty-row">No links saved.</p> : null}
+      </div>
+    </div>
+  );
+}
+
+function ConnectionsPart({
+  connections,
+  busy,
+  signIn,
+  setSignIn,
+  addClass,
+  onAddConnection,
+  onRemove,
+}: {
+  connections: ConnectionMeta[];
+  busy: boolean;
+  signIn: "provider" | "token";
+  setSignIn: (value: "provider" | "token") => void;
+  addClass: string;
+  onAddConnection: (event: FormEvent<HTMLFormElement>) => void;
+  onRemove: (id: string) => void;
+}) {
+  return (
+    <div className="part">
+      <div className="part-title"><h3>MCP connections</h3><Tag /></div>
+      <p className="intro">Connections to outside tools that Tisan can read from.</p>
+      <div className="list">
+        {connections.map((row) => (
+          <div className="conn-row" key={row.id}>
+            <div>
+              <h4>{row.name}</h4>
+              <span className="host">{hostOf(row.serverUrl)}</span>
+            </div>
+            <p>{row.hasToken ? "••••••••" : "Sign in with the provider"}</p>
+            <span className={row.status === "saved" || row.status === "Connected" ? "pill solid" : "pill quiet"}><i />{row.status}</span>
+            <span>Last used {row.lastUsed ? savedDay(row.lastUsed) : "not yet"}</span>
+            <button type="button" className="text" disabled={busy} onClick={() => onRemove(row.id)}>Disconnect</button>
+          </div>
+        ))}
+        {connections.length === 0 ? <p className="empty-row">No connections saved.</p> : null}
+      </div>
+      <form className="list conn-add" onSubmit={onAddConnection}>
+        <h4>Add connection</h4>
+        <div className="pair">
+          <label>
+            Name
+            <input name="conn-name" type="text" placeholder="e.g. Saved design" autoComplete="off" disabled={busy} />
+          </label>
+          <label>
+            Server URL
+            <input name="server" type="url" placeholder="https://…" autoComplete="off" disabled={busy} />
+          </label>
+        </div>
+        <div className="pair end">
+          <div>
+            <span className="env-label">How it signs in</span>
+            <div className="seg" role="group" aria-label="How it signs in">
+              <button type="button" className={signIn === "provider" ? "on" : ""} onClick={() => setSignIn("provider")}>Sign in with the provider</button>
+              <button type="button" className={signIn === "token" ? "on" : ""} onClick={() => setSignIn("token")}>Token</button>
+            </div>
+          </div>
+          {signIn === "token" ? (
+            <label>
+              Token
+              <input type="password" aria-label="Token" placeholder="Paste token (hidden once saved)" autoComplete="off" disabled={busy} />
+            </label>
+          ) : <span />}
+          <button type="submit" className={addClass} disabled={busy}>Add connection</button>
+        </div>
+        <p className="note">A saved token shows only as ••••••••, with Disconnect. It is never shown again.</p>
+      </form>
     </div>
   );
 }

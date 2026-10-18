@@ -29,6 +29,7 @@ main:has(.tisan) {
   font-family: var(--font-inter), Inter, sans-serif;
   font-size: 15px;
   line-height: 1.5;
+  position: relative;
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -178,6 +179,16 @@ main:has(.tisan) {
 
 .page-slot { display: none; }
 
+.account {
+  margin: 2px 12px 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .agent {
   margin: 0 12px;
   font-size: 16px;
@@ -231,11 +242,31 @@ main:has(.tisan) {
 .refreshed b { color: #fff; font-weight: 500; font-size: 12px; }
 
 .body {
-  margin-left: 240px;
-  height: 100%;
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 72px;
+  left: 240px;
   overflow: auto;
-  padding: 48px 56px 72px;
+  padding: 48px 56px 32px;
   box-sizing: border-box;
+}
+
+.chat-bot {
+  position: fixed;
+  right: 24px;
+  bottom: 16px;
+  z-index: 35;
+  margin: 0;
+  max-width: 220px;
+  pointer-events: none;
+  background: #001840;
+  color: #fff;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 8px 20px rgba(0, 24, 64, 0.18);
 }
 
 .tisan.dialog-open .body,
@@ -739,6 +770,25 @@ main:has(.tisan) {
 .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 .groups { display: none; }
 .file-cards { display: none; }
+.vault-off h3 {
+  margin: 22px 0 6px;
+  font-family: var(--font-jost), Jost, sans-serif;
+  font-weight: 300;
+  font-size: 26px;
+}
+.vault-off > p { margin: 0; color: var(--body); font-size: 15px; }
+.vault-card {
+  margin-top: 16px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+.vault-card-top { display: flex; align-items: center; gap: 10px; }
+.vault-card-top strong { font-size: 15px; }
+.vault-line { margin: 12px 0 6px; font-weight: 600; color: var(--ink); }
+.vault-card p:last-child { margin: 0; color: var(--body); font-size: 14px; }
+.empty-row { margin: 0; padding: 14px 18px; color: var(--muted); font-size: 14px; }
 
 @media (max-width: 1100px) {
   .steps { grid-template-columns: repeat(3, 1fr); }
@@ -779,11 +829,15 @@ main:has(.tisan) {
     padding-top: 12px;
   }
   .panel-top img { display: none; }
-  .tisan.menu-open .panel { transform: none; overflow: auto; }
+  .tisan.menu-open .panel { transform: none; overflow: auto; padding-bottom: 76px; }
+  .tisan.menu-open .chat-bot { z-index: 46; }
   .body {
-    margin-left: 0;
-    padding: 80px 16px 40px;
+    left: 0;
+    top: 64px;
+    bottom: 72px;
+    padding: 16px 16px 24px;
   }
+  .tisan.dialog-open .chat-bot { display: none; }
   .page-slot {
     display: flex;
     border-color: var(--line);

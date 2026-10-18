@@ -26,9 +26,17 @@ def test_panel_stays_fixed_and_only_the_body_scrolls():
     assert "panel-top" in source
     assert "panel-own" in source
     assert "panel-bottom" in source
-    assert "Last refreshed" in source
-    assert "Workspace" in source
-    assert "headerLinks" in source
+    assert "Account name" in source
+    assert "Dashboard" in source
+    assert "Projects" in source
+    assert "Chats" in source
+    assert ">Settings<" in source
+    assert ">Support<" in source
+    assert "Last refreshed" not in source
+    assert "headerLinks" not in source
+    assert "Chat bot, to be named" in source
+    assert "pointer-events: none" in css
+    assert "bottom: 72px" in css
 
 
 def test_plugins_is_the_tab_and_sources_are_only_under_answers():
@@ -51,7 +59,7 @@ def test_plugins_is_the_tab_and_sources_are_only_under_answers():
 def test_example_values_stay_and_secrets_are_dots():
     source = _source()
     assert "Example" in source
-    assert "•••• saved 17 Oct" in source
+    assert "••••••••" in source
     assert "Tisan logo, coming later" in source
     assert "/brand/tervory-logo-reversed.png" in source
     assert "tervory-logo-on-white" not in source
@@ -61,6 +69,30 @@ def test_example_values_stay_and_secrets_are_dots():
     assert "matters" not in source.lower()
     assert 'label: "Skala"' in NAV.read_text(encoding="utf-8")
     assert '"/tisan"' in NAV.read_text(encoding="utf-8")
+    assert '"/market-lab"' in NAV.read_text(encoding="utf-8")
+
+
+def test_plugins_use_only_tisan_vault_and_stay_off():
+    source = _source()
+    assert "tisan.vault" in source
+    assert source.count("tisan.vault") == 1
+    for other in (
+        "tank.vault",
+        "lab.vault",
+        "tiger.vault",
+        "base.vault",
+        "rig.vault",
+        "zenas.vault",
+        "radix.vault",
+        "tervory.vault",
+    ):
+        assert other not in source
+    assert "/switch" not in source
+    assert "set_switch" not in source
+    assert "resolveVaultSecret" not in source
+    assert "This vault is off. Turn it on in Tank." in source
+    assert "Plugins are off" in source
+    assert "Turn it on" in source
 
 
 def test_one_red_button_style_and_the_swatch():

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { primaryAction, resultSummary, searchRecords } from "../workspace/app/tisan/copy.ts";
+import { mapVaultPayload, offPanel, TISAN_VAULT, VAULT_OFF_MESSAGE } from "../workspace/app/tisan/vault-model.ts";
 
 test("search finds the landing builds, page and tests", () => {
   const hits = searchRecords("landing", "all");
@@ -28,4 +29,32 @@ test("the red button follows the view", () => {
   assert.equal(primaryAction({ ...base, dialog: "plugins", pluginTab: "links" }), "add-link");
   assert.equal(primaryAction({ ...base, dialog: "plugins", pluginTab: "mcp" }), "add-connection");
   assert.equal(primaryAction({ ...base, dialog: "plugins", pluginTab: "files", mobile: true }), "save-key");
+});
+
+test("an off vault shows the sentence and drops any secret that arrived with it", () => {
+  const secret = "vault-secret-value-9f3a";
+  assert.equal(TISAN_VAULT, "tisan.vault");
+  assert.equal(VAULT_OFF_MESSAGE, "This vault is off. Turn it on in Tank.");
+  const panel = mapVaultPayload({
+    enabled: false,
+    message: VAULT_OFF_MESSAGE,
+    secrets: [{ name: "GITHUB_TOKEN", purpose: "Draft requests", mask: "••••••••", saved_at: "2026-10-17", value: secret }],
+    files: [{ id: "1", name: "brief.pdf", content: secret }],
+    connections: [{ id: "c1", name: "Scan", server_url: "https://example.com", token: secret }],
+  });
+  assert.equal(panel.enabled, false);
+  assert.equal(panel.message, VAULT_OFF_MESSAGE);
+  assert.equal(panel.secrets.length, 0);
+  assert.equal(panel.files.length, 0);
+  assert.equal(panel.connections.length, 0);
+  assert.equal(JSON.stringify(panel).includes(secret), false);
+  const open = mapVaultPayload({
+    enabled: true,
+    secrets: [{ name: "GITHUB_TOKEN", purpose: "Draft requests", mask: "••••••••", saved_at: "2026-10-17T00:00:00Z", value: secret }],
+    connections: [{ id: "c1", name: "Scan", server_url: "https://example.com", auth_type: "token", has_token: true, token: secret }],
+  });
+  assert.equal(open.secrets[0]?.mask, "••••••••");
+  assert.equal(open.connections[0]?.hasToken, true);
+  assert.equal(JSON.stringify(open).includes(secret), false);
+  assert.equal(JSON.stringify(offPanel()).includes(secret), false);
 });

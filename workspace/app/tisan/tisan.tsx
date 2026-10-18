@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { headerLinks } from "../product-nav";
 import {
   ALL_BUILDS,
   CHECKS,
@@ -16,7 +15,6 @@ import {
   SCORES,
   SPACING,
   STEPS,
-  REFRESHED,
   groupMeta,
   primaryAction,
   replyTo,
@@ -33,6 +31,7 @@ import {
   type View,
 } from "./copy";
 import { Plugins } from "./plugins";
+import type { PluginPanel } from "./vault-model";
 
 function Pill({ tone, children }: { tone: "solid" | "quiet"; children: ReactNode }) {
   return <span className={tone === "solid" ? "pill solid" : "pill quiet"}><i />{children}</span>;
@@ -52,7 +51,7 @@ function Foot({ lines }: { lines: string[] }) {
 
 const GROUP_ORDER: Kind[] = ["Build", "Page", "Test"];
 
-export function Tisan({ founder }: { founder: boolean }) {
+export function Tisan({ plugins }: { plugins: PluginPanel }) {
   const [view, setView] = useState<View>("overview");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -109,9 +108,8 @@ export function Tisan({ founder }: { founder: boolean }) {
   }
 
   const tabs: { id: View | "plugins"; label: string }[] = [
-    ...PAGE_NAV.slice(0, 4),
+    ...PAGE_NAV.filter((item) => item.id !== "settings"),
     { id: "plugins", label: "Plugins" },
-    ...PAGE_NAV.slice(4),
   ];
 
   const rootClass = ["tisan", dialog !== "none" ? "dialog-open" : "", menuOpen ? "menu-open" : ""].filter(Boolean).join(" ");
@@ -129,10 +127,11 @@ export function Tisan({ founder }: { founder: boolean }) {
       <aside id="tisan-panel" className="panel" aria-label="Tisan">
         <div className="panel-top">
           <img src="/brand/tervory-logo-reversed.png" alt="Tervory" />
-          <nav aria-label="Tervory">
-            {headerLinks(founder).map((link) => (
-              <a key={link.href} className="nav" href={link.href}>{link.label}</a>
-            ))}
+          <p className="account"><span>Account name</span> <Tag /></p>
+          <nav aria-label="Workspace">
+            <button type="button" className="nav">Dashboard</button>
+            <button type="button" className="nav">Projects</button>
+            <button type="button" className="nav">Chats</button>
           </nav>
         </div>
         <div className="panel-own">
@@ -159,12 +158,8 @@ export function Tisan({ founder }: { founder: boolean }) {
           </nav>
         </div>
         <div className="panel-bottom">
-          <a className="nav" href="/">Workspace</a>
-          <button type="button" className="nav">Help</button>
-          <p className="refreshed">
-            <span>Last refreshed</span>
-            <b>{REFRESHED}</b>
-          </p>
+          <button type="button" className={view === "settings" && dialog !== "plugins" ? "nav on" : "nav"} aria-current={view === "settings" && dialog !== "plugins" ? "page" : undefined} onClick={() => show("settings")}>Settings</button>
+          <button type="button" className="nav">Support</button>
         </div>
       </aside>
 
@@ -196,9 +191,10 @@ export function Tisan({ founder }: { founder: boolean }) {
       </div>
 
       {dialog === "plugins" ? (
-        <Plugins onClose={() => setDialog("none")} tab={pluginTab} setTab={setPluginTab} desktopAction={action} />
+        <Plugins onClose={() => setDialog("none")} tab={pluginTab} setTab={setPluginTab} desktopAction={action} plugins={plugins} />
       ) : null}
       {dialog === "build" ? <StartBuild onClose={() => setDialog("none")} /> : null}
+      <p className="chat-bot">Chat bot, to be named</p>
     </div>
   );
 }

@@ -1,8 +1,5 @@
 /** Example copy for the Tisan page. Placeholders stay placeholders. No secrets. */
 
-export const MASK = "•••• saved 17 Oct";
-export const REFRESHED = "Today, 7:30 AM PT · Example";
-
 export type View = "overview" | "builds" | "design" | "tests" | "settings";
 export type Filter = "all" | "Build" | "Page" | "Test";
 export type Dialog = "none" | "build" | "plugins";
@@ -200,35 +197,6 @@ export const CHECKS = [
   { title: "Accessibility", tool: "axe at each screen size", proves: "No accessibility errors on any page.", result: "Passed", tone: "solid" as const },
   { title: "Lighthouse", tool: "90 or above in all four scores", proves: "The site is fast and well built.", result: "Passed", tone: "solid" as const },
   { title: "Radix scan", tool: "Runs before any deploy", proves: "No secrets or known risks ship with the site.", result: "Not ready", tone: "quiet" as const },
-];
-
-export type KeyId = "github" | "packages" | "coolify" | "radix" | "preview";
-
-export const KEYS: { id: KeyId; name: string; detail: string; env: string; saved: boolean }[] = [
-  { id: "github", name: "GitHub", detail: "Opens draft pull requests. Tisan never merges.", env: "GITHUB_TOKEN", saved: true },
-  { id: "packages", name: "Package cache", detail: "Packages already in the room. No public fetch.", env: "PACKAGES_TOKEN", saved: true },
-  { id: "coolify", name: "Coolify", detail: "Deploy key. Stays off until the scan is clean.", env: "COOLIFY_TOKEN", saved: false },
-  { id: "radix", name: "Radix", detail: "Scan before any deploy.", env: "RADIX_TOKEN", saved: false },
-  { id: "preview", name: "Preview", detail: "A private look at the built site.", env: "PREVIEW_TOKEN", saved: false },
-];
-
-export const FILES = [
-  { name: "landing-copy.csv", type: "CSV", size: "48 rows", when: "16 Oct", status: "Processed", map: true },
-  { name: "squad-roster.xlsx", type: "XLSX", size: "12 rows", when: "15 Oct", status: "Needs checking", map: false },
-  { name: "page-brief.pdf", type: "PDF", size: "4 pages", when: "12 Oct", status: "Processed", map: false },
-  { name: "nav-labels.csv", type: "CSV", size: "18 rows", when: "10 Oct", status: "Needs checking", map: true },
-];
-
-export const LINKS = [
-  { label: "Tervory marketing page", host: "www.example.com", checked: "Today, 7:00 AM", status: "Watching" },
-  { label: "Contact page draft", host: "contact.example.com", checked: "Yesterday", status: "Changed" },
-  { label: "Preview host", host: "preview.example", checked: "16 Oct", status: "Couldn't reach" },
-];
-
-export const CONNECTIONS = [
-  { name: "Saved design", host: "files.example", detail: "The locked page in the repo", status: "Connected", used: "Today, 7:10 AM" },
-  { name: "Radix scan", host: "scan.example", detail: "Secrets and known risks before deploy", status: "Needs sign-in", used: "Never" },
-  { name: "Draft requests", host: "git.example", detail: "Opens a draft for you to review", status: "Error", used: "14 Oct" },
 ];
 
 export const PLUGIN_TABS: { id: PluginTab; label: string }[] = [
