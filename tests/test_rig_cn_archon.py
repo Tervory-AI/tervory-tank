@@ -62,7 +62,15 @@ PORTED_SPREAD = [
     *SPREAD[3:],
 ]
 PISTOLS = ["ARCHON-TYPE-B", "ARCHON-TYPE-A", "ARCHON-TYPE-B-PORTED"]
-TYPE_A_PISTOLS = ["ARCHON-TYPE-A", "ARCHON-TYPE-B", "ARCHON-TYPE-B-PORTED"]
+TYPE_A_PISTOLS = [
+    "ARCHON-TYPE-A",
+    "ARCHON-TYPE-B",
+    "ARCHON-TYPE-B-PORTED",
+    "ARCHON-LIGHT",
+    "ARCHON-MAG-12",
+    "ARCHON-MAG-15",
+    "ARCHON-MAG-18",
+]
 DOTS = ["ARCHON-DOT-RMR", "ARCHON-DOT-ACRO", "ARCHON-DOT-RMS"]
 MAGS = ["ARCHON-MAG-15", "ARCHON-MAG-12", "ARCHON-MAG-18"]
 CHEAP = [
@@ -245,6 +253,61 @@ GOLDEN = [
     ("holster for type a", "closest", ["ARCHON-HOLSTER-TB"], "ARCHON-HOLSTER-TB", False, "We don't list a holster for the Type A. The Type B holster is for the Type B."),
     ("type b gold barrel", "closest", PISTOLS, "ARCHON-TYPE-B", False, "Gold isn't a colour on the Archon Type B."),
     ("magazine 20 rounds", "closest", ["ARCHON-MAG-12", "ARCHON-MAG-15", "ARCHON-MAG-18"], "ARCHON-MAG-18", False, "We have 12, 15 and 18 rounds for the Type B."),
+    ("type b R25k", "exact", [
+        "ARCHON-TYPE-B",
+        "ARCHON-DOT-ACRO",
+        "ARCHON-DOT-RMR",
+        "ARCHON-DOT-RMS",
+        "ARCHON-HOLSTER-TB",
+        "ARCHON-LIGHT",
+        "ARCHON-MAG-12",
+        "ARCHON-MAG-15",
+        "ARCHON-MAG-18",
+        "ARCHON-RMR-SCREWS",
+        "ARCHON-TB-135",
+        "ARCHON-TB-THREADED",
+        "ARCHON-TRIGGER-PERF",
+    ], "ARCHON-TYPE-B", True, ""),
+    ("pistol under R25k", "exact", ["ARCHON-TYPE-B"], "ARCHON-TYPE-B", True, ""),
+    ("under 30k", "exact", [
+        "ARCHON-DOT-ACRO",
+        "ARCHON-DOT-RMR",
+        "ARCHON-DOT-RMS",
+        "ARCHON-HOLSTER-TB",
+        "ARCHON-LIGHT",
+        "ARCHON-MAG-12",
+        "ARCHON-MAG-15",
+        "ARCHON-MAG-18",
+        "ARCHON-RMR-SCREWS",
+        "ARCHON-TB-135",
+        "ARCHON-TB-THREADED",
+        "ARCHON-TRIGGER-PERF",
+        "ARCHON-TYPE-A",
+        "ARCHON-TYPE-B",
+        "ARCHON-TYPE-B-PORTED",
+    ], "", True, ""),
+    ("do you have the type b in fde", "exact", SPREAD, "ARCHON-TYPE-B", True, ""),
+    ("how much is the type b", "exact", SPREAD, "ARCHON-TYPE-B", True, ""),
+    ("do you have type a in stock?", "exact", TYPE_A_PISTOLS, "ARCHON-TYPE-A", True, ""),
+    ("does the rmr fit the type a", "exact", ["ARCHON-DOT-RMR"], "ARCHON-DOT-RMR", True, "Yes, with the RMR cut."),
+    ("type b + rmr + 18 round mag", "exact", ["ARCHON-TYPE-B", "ARCHON-DOT-RMR", "ARCHON-MAG-18"], "ARCHON-TYPE-B", True, ""),
+    ("type b, holster and extra mags", "exact", [
+        "ARCHON-TYPE-B",
+        "ARCHON-HOLSTER-TB",
+        "ARCHON-MAG-12",
+        "ARCHON-MAG-15",
+        "ARCHON-MAG-18",
+    ], "ARCHON-TYPE-B", True, ""),
+    ("5 inch barrel", "exact", ["ARCHON-TYPE-A"], "ARCHON-TYPE-A", True, ""),
+    ("most expensive pistol", "exact", ["ARCHON-TYPE-B-PORTED", "ARCHON-TYPE-A", "ARCHON-TYPE-B"], "ARCHON-TYPE-B-PORTED", True, ""),
+    ("cheapest red dot", "exact", ["ARCHON-DOT-RMS", "ARCHON-DOT-RMR", "ARCHON-DOT-ACRO"], "ARCHON-DOT-RMS", True, ""),
+    ("archon tyoe b", "exact", SPREAD, "ARCHON-TYPE-B", True, ""),
+    ("type b manual", "closest", SPREAD, "ARCHON-TYPE-B", False, "No exact match. Closest: Type B."),
+    ("type b grip module", "closest", SPREAD, "ARCHON-TYPE-B", False, "No exact match. Closest: Type B."),
+    ("od green", "closest", PISTOLS, "ARCHON-TYPE-B", False, "We have Black and FDE."),
+    ("cz shadow 2", "not_stocked", [], "", False, "We don't stock CZ."),
+    ("type a magazine", "exact", MAGS, "ARCHON-MAG-15", True, ""),
+    ("magazine for type a", "exact", MAGS, "ARCHON-MAG-15", True, ""),
 ]
 
 
@@ -316,6 +379,33 @@ async def test_archon_golden_queries(query, honest, ids, focus, exact, message) 
     elif focus:
         focused = next(item for item in body["results"] if item["id"] == focus)
         assert "Exact match" in focused["badges"]
+
+
+@pytest.mark.asyncio
+async def test_type_a_parts_match_and_a_question_keeps_the_stock_line() -> None:
+    service = await _archon()
+    left = await service.search(TENANT, "type a magazine", 24)
+    right = await service.search(TENANT, "magazine for type a", 24)
+    assert left["ids"] == right["ids"] == MAGS
+    assert left["focus_id"] == right["focus_id"]
+    stock = await service.search(TENANT, "do you have type a in stock?", 24)
+    type_a = next(item for item in stock["results"] if item["id"] == "ARCHON-TYPE-A")
+    assert type_a["availability"]["status"] == "on_order"
+    assert type_a["availability"]["lead"] == "ETA 3-4 weeks"
+    built = await service.search(TENANT, "type b + rmr + 18 round mag", 24)
+    badges = {item["id"]: item["badges"] for item in built["results"]}
+    assert "Exact match" in badges["ARCHON-MAG-18"]
+    assert "ARCHON-MAG-15" not in badges
+    assert "Exact match" in badges["ARCHON-TYPE-B"]
+    assert "Exact match" in badges["ARCHON-DOT-RMR"]
+    detail = await service.product(TENANT, "ARCHON-TYPE-A")
+    notes = {
+        (row["part_sku"], row["fits_family"]): row["note"]
+        for row in detail["fits"]
+    }
+    assert "Ships with the Type A" in notes[("ARCHON-MAG-15", "ARCHON-TYPE-A")]
+    assert "https://archonfirearms.com/product/type-a/" in notes[("ARCHON-MAG-12", "ARCHON-TYPE-A")]
+    assert "Manual_US_2026.pdf" in notes[("ARCHON-LIGHT", "ARCHON-TYPE-A")]
 
 
 # Words the shop may name after "We don't sell a/an". Anything else was a pasted query token.
@@ -425,9 +515,9 @@ async def test_nothing_is_fabricated() -> None:
                 assert spec.get("name") and "value" in spec
             assert ((item.get("attributes") or {}).get("verified") or []) == verified
             fit = item["fit"]
-            if fit is None:
-                assert item["id"] not in notes
-            else:
+            # A fit is judged against this search's centre. The same part can
+            # have a real note for another model and still show no fit here.
+            if fit is not None:
                 assert fit["note"] in notes[item["id"]]
             seen.add(item["id"])
     assert seen == set(products)
@@ -746,7 +836,7 @@ async def test_letter_uses_the_retailer_name_and_readable_choices(monkeypatch: p
         },
     )
     assert quoted["request_id"]
-    for part_id in ("ARCHON-HOLSTER-TB", "ARCHON-TB-THREADED", "ARCHON-TB-135", "ARCHON-MAG-15"):
+    for part_id in ("ARCHON-HOLSTER-TB", "ARCHON-TB-THREADED", "ARCHON-TB-135"):
         with pytest.raises(Exception) as unfit_part:
             await service.quote(
                 TENANT,
@@ -762,6 +852,25 @@ async def test_letter_uses_the_retailer_name_and_readable_choices(monkeypatch: p
             )
         assert unfit_part.value.status == 422  # type: ignore[attr-defined]
         assert "does not fit" in str(unfit_part.value)
+    for part_id in ("ARCHON-MAG-12", "ARCHON-MAG-15", "ARCHON-MAG-18", "ARCHON-LIGHT", "ARCHON-TRIGGER-PERF"):
+        accepted = await service.quote(
+            TENANT,
+            {
+                "setup": {
+                    "parts": [
+                        {"product": {"id": "ARCHON-TYPE-A"}, "choice": "RMR"},
+                        {"product": {"id": part_id}, "choice": ""},
+                    ]
+                },
+                "contact": {"name": "Ada Buyer", "email": "ada@example.com"},
+            },
+        )
+        assert accepted["request_id"]
+        letter = mail.letters[-1]["text"]
+        if part_id == "ARCHON-TRIGGER-PERF":
+            assert "Fit to confirm" in letter
+        else:
+            assert "Fit to confirm" not in letter
     ported = await service.quote(
         TENANT,
         {

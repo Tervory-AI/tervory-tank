@@ -133,15 +133,25 @@
     return Number(product.price.amount) + Number((barrel && barrel.delta) || 0);
   }
 
+  function fitSentence(note) {
+    return String(note || "").replace(/\s+https?:\/\/\S+/g, "").replace(/\.\s*$/, "");
+  }
+
   function fitFor(partSku, cut, fits, family) {
     const rows = (fits || []).filter(function (fit) {
       return fit.part_sku === partSku && (fit.fits_family === family || fit.fits_sku === family);
     });
     if (!rows.length) return null;
+    const refused = rows.find(function (fit) { return fit.rule && fit.rule.fits === false; });
+    if (refused) {
+      const sentence = fitSentence(refused.note) || "Does not fit";
+      return { fits: false, badge: sentence, note: refused.note || "" };
+    }
     for (let i = 0; i < rows.length; i += 1) {
       const needed = (rows[i].rule && rows[i].rule.optic_cut) || "";
       if (!needed || needed === cut) {
-        return { fits: true, badge: needed ? "Fits your " + needed + " cut" : (rows[i].note || "Fits"), note: rows[i].note || "" };
+        const sentence = fitSentence(rows[i].note) || "Fits";
+        return { fits: true, badge: needed ? "Fits your " + needed + " cut" : sentence, note: rows[i].note || "" };
       }
     }
     const note = rows[0].note || "";
@@ -181,7 +191,9 @@
       return fit.fits_family === family || fit.fits_sku === product.id || fit.fits_sku === family;
     });
     if (direct.length) {
+      if (direct.every(function (fit) { return fit.rule && fit.rule.fits === false; })) return false;
       return direct.some(function (fit) {
+        if (fit.rule && fit.rule.fits === false) return false;
         const needed = (fit.rule && fit.rule.optic_cut) || "";
         return !needed || needed === cut;
       });
@@ -198,7 +210,10 @@
 
   function lineNote(line, fit, partStock, count) {
     const singlePart = count === 1 && line.product.category !== "Pistols";
-    const role = fit && fit.badge ? fit.badge : line.product.category === "Pistols" ? "Base" : singlePart ? "" : "Added";
+    let role = "";
+    if (line.product.category === "Pistols") role = "Base";
+    else if (fit && fit.badge) role = fit.badge;
+    else if (!singlePart) role = "Fit to confirm";
     return [rand(line.product.price.amount), role, partStock.label].filter(Boolean).join(" · ");
   }
 
@@ -390,7 +405,13 @@
   }
 
   function banner(title, copy) {
-    return h("section", { class: "banner" }, [h("strong", { text: title }), h("p", { text: copy })]);
+    const heading = String(title || "").trim();
+    const body = String(copy || "").trim();
+    const same = heading && body.toLowerCase().indexOf(heading.toLowerCase().replace(/\.$/, "")) === 0;
+    const kids = [];
+    if (heading && !same) kids.push(h("strong", { text: heading }));
+    if (body) kids.push(h("p", { text: body }));
+    return h("section", { class: "banner" }, kids);
   }
 
   async function viewHome() {
@@ -570,8 +591,8 @@
     if (body.message && body.honest === "closest") {
       messageTitle = /colour/.test(body.message) ? "That colour isn't offered." : "No exact match.";
     } else if (body.message && body.honest === "not_stocked") messageTitle = "We don’t stock that.";
-    else if (body.message && body.honest === "exact") messageTitle = "Out of stock.";
-    else if (body.message) messageTitle = "Nothing matches that yet.";
+    else if (body.message && body.honest === "exact" && /out of stock/i.test(body.message)) messageTitle = "Out of stock.";
+    else if (body.message && body.honest !== "exact") messageTitle = "Nothing matches that yet.";
     const message = body.message ? banner(messageTitle, body.message) : null;
     const stockAlternative = focus && focus.alternative && body.honest === "exact" && body.message;
     const openTarget = stockAlternative ? focus.alternative : focus;
@@ -721,9 +742,10 @@
       h("h3", {}, [h("a", { class: "name-link", href: "/cn/product/" + encodeURIComponent(item.id), text: item.name })]),
       h("p", { class: "meta", text: item.brand || "" }),
     ]);
+    const onOrder = item.availability && item.availability.status === "on_order" && stock.lead;
     const avail = h("div", {}, [
-      h("p", { class: stock.tone, text: stock.label }),
-      h("p", { class: "meta", text: stockDetail(stock) }),
+      h("p", { class: stock.tone, text: onOrder ? stock.label + " · " + stock.lead : stock.label }),
+      h("p", { class: "meta", text: onOrder ? (stock.where || "") : stockDetail(stock) }),
       item.availability && item.availability.status === "out_of_stock" ? h("button", {
         type: "button",
         class: "chip tiny",
@@ -924,7 +946,8 @@
       specs.append(h("dt", { text: spec[0] }), h("dd", { text: spec[1] }));
     });
     const linked = (detail.fits || []).filter(function (fit) {
-      return fit.fits_family === family || fit.fits_sku === detail.id || fit.fits_sku === family;
+      return (fit.fits_family === family || fit.fits_sku === detail.id || fit.fits_sku === family)
+        && !(fit.rule && fit.rule.fits === false);
     }).map(function (fit) { return map[fit.part_sku]; }).filter(Boolean);
     const fitChips = h("div", { class: "fit-chips", tabindex: "0", "aria-label": "Fits" });
     if (detail.category === "Pistols") {

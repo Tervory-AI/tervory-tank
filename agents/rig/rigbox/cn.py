@@ -12,7 +12,7 @@ from typing import Any
 
 from rigbox.logic import _active, _limit, _similarity, _tokens, approved, money, public_product
 from rigbox.rank import _FILLER
-from rigbox.rank import _common_english, _intent, _shopping_word
+from rigbox.rank import _FUZZY, _common_english, _intent, _shopping_word
 from rigbox.rank import search as rank_search
 
 # Category labels are split so this file stays clear of the shared room word list.
@@ -59,14 +59,17 @@ _IN = re.compile(r"\bin stock(?: only)?\b", re.IGNORECASE)
 
 
 def shop_search(payload: dict[str, Any]) -> dict[str, Any]:
-    asked = str(payload.get("q") or "").strip()
-    query, loose, cheapest = _prepare_query(asked)
+    raw = str(payload.get("q") or "").strip()
     limit = _limit(payload.get("limit"))
     filters = dict(payload.get("filters") or {})
     products = [row for row in (payload.get("products") or []) if _active(row)]
     fits = [row for row in (payload.get("fits") or []) if approved(row)]
     shop = payload.get("shop") if isinstance(payload.get("shop"), dict) else {}
     centre_sku = str(shop.get("centre_sku") or "")
+    asked = _normalize_shopper(raw, products)
+    query, loose, price_sort = _prepare_query(asked)
+    if price_sort:
+        filters["sort"] = price_sort
     outsider = _named_outsider(query, shop.get("not_stocked") or [])
     if outsider:
         return {
@@ -80,11 +83,22 @@ def shop_search(payload: dict[str, Any]) -> dict[str, Any]:
         }
     if not query and not _has_filter(filters):
         return {"results": [], "ids": [], "exact_match": True, "honest": "empty", "focus_id": "", "groups": []}
+    colour_note = _bare_colour(asked, products)
+    if colour_note:
+        sidearms = [row for row in products if str(row.get("category") or "") == _SIDEARM]
+        return _present_closest(sidearms, _default_sidearm(products), colour_note, products, fits, filters)
+    fitted = _fit_answer(raw, products, fits, filters, limit)
+    if fitted is not None:
+        return fitted
+    matched_length = _length_answer(asked, products, fits, filters, limit)
+    if matched_length is not None:
+        return matched_length
+    many = _multi_answer(query, products, fits, filters, limit)
+    if many is not None:
+        return many
     cleaned, parsed = _parse_constraints(query)
     cleaned = _strip_chamber(cleaned)
     filters = _merge(filters, parsed)
-    if cheapest:
-        filters["sort"] = "price_asc"
     filter_only = False
     if not cleaned:
         ranked_rows = list(products)
@@ -216,6 +230,13 @@ def shop_search(payload: dict[str, Any]) -> dict[str, Any]:
         # A named row stays put. A broad query highlights a row that actually fits.
         if _cover(cleaned or query, focus) < _best_cover(cleaned or query, chosen):
             focus = _fitting_focus(cleaned or query, chosen, centre_default, fits)
+    if price_sort and chosen:
+        kind = _category_only(cleaned or query) or _phrase_category(cleaned or query)
+        if kind and kind != _ALL_PARTS:
+            pool = [row for row in chosen if str(row.get("category") or "") == kind] or list(chosen)
+            focus = min(pool, key=lambda row: (_amount(row), _sku(row)))
+            if price_sort == "price_desc":
+                focus = max(pool, key=lambda row: (_amount(row), _sku(row)))
     chosen = _order(chosen, filters, focus)
     gap = _honesty_gap(asked, chosen, focus, honest, products, fits, filters, centre_default)
     if gap is not None:
@@ -253,6 +274,7 @@ def present(
     focus_id: str,
     centre: dict[str, Any] | None,
     mark_exact: bool = True,
+    exact_ids: set[str] | None = None,
 ) -> dict[str, Any]:
     item = public_product(row)
     attributes = item["attributes"]
@@ -264,7 +286,7 @@ def present(
     item["defaults"] = attributes.get("defaults") if isinstance(attributes.get("defaults"), dict) else {}
     item["fit"] = fit_state(_sku(row), centre, fits, _centre_cut(centre)) if centre is not None else None
     item["compare"] = _compare(row, products)
-    item["badges"] = _badges(row, focus_id, item["compare"], mark_exact)
+    item["badges"] = _badges(row, focus_id, item["compare"], mark_exact, exact_ids)
     item["alternative"] = _alternative(row, products, fits, centre)
     history = attributes.get("price_history")
     item["price_history"] = history if isinstance(history, dict) else None
@@ -299,11 +321,23 @@ def fit_state(
     if not rows:
         return None
     for fit in rows:
+        if _negative_fit(fit):
+            note = str(fit.get("note") or "")
+            sentence = _fit_sentence(note)
+            return {
+                "part_sku": part_sku,
+                "fits": False,
+                "explicit": True,
+                "badge": sentence or "Does not fit",
+                "note": note,
+            }
+    for fit in rows:
         rule = fit.get("rule") if isinstance(fit.get("rule"), dict) else {}
         needed = str(rule.get("optic_cut") or "")
         if not needed or needed == cut:
-            badge = f"Fits your {needed} cut" if needed else str(fit.get("note") or "Fits")
-            return {"part_sku": part_sku, "fits": True, "badge": badge, "note": str(fit.get("note") or "")}
+            note = str(fit.get("note") or "")
+            badge = f"Fits your {needed} cut" if needed else (_fit_sentence(note) or "Fits")
+            return {"part_sku": part_sku, "fits": True, "badge": badge, "note": note}
     rule = rows[0].get("rule") if isinstance(rows[0].get("rule"), dict) else {}
     needed = str(rule.get("optic_cut") or "")
     note = str(rows[0].get("note") or "")
@@ -531,6 +565,8 @@ def _spread(focus: dict[str, Any], products: list[dict[str, Any]], fits: list[di
     sidearms = [row for row in products if str(row.get("category") or "") == _SIDEARM and str(row.get("brand") or "") == brand]
     linked: set[str] = set()
     for fit in fits:
+        if not _positive_fit(fit):
+            continue
         if str(fit.get("fits_family") or "") == family or str(fit.get("fits_sku") or "") == _sku(focus):
             linked.add(str(fit.get("part_sku") or ""))
     upgrades = []
@@ -665,6 +701,10 @@ def _parse_constraints(query: str) -> tuple[str, dict[str, Any]]:
         else:
             filters["max_price"] = amount
         text = _BOUND.sub(" ", text)
+    bare = re.search(r"\br\s*(\d{4,})\b", text, re.IGNORECASE)
+    if bare and not any(filters.get(key) is not None for key in ("max_price", "max_price_inclusive", "min_price")):
+        filters["max_price"] = int(bare.group(1))
+        text = text[: bare.start()] + " " + text[bare.end() :]
     return " ".join(text.split()), filters
 
 
@@ -710,9 +750,16 @@ def _alternative(
     return {"id": public["id"], "name": public["name"], "price": public["price"]}
 
 
-def _badges(row: dict[str, Any], focus_id: str, compare: dict[str, Any], mark_exact: bool = True) -> list[str]:
+def _badges(
+    row: dict[str, Any],
+    focus_id: str,
+    compare: dict[str, Any],
+    mark_exact: bool = True,
+    exact_ids: set[str] | None = None,
+) -> list[str]:
     badges: list[str] = []
-    if mark_exact and _sku(row) == focus_id:
+    exact = _sku(row) in exact_ids if exact_ids is not None else _sku(row) == focus_id
+    if mark_exact and exact:
         badges.append("Exact match")
     relation = ""
     attributes = row.get("attributes") if isinstance(row.get("attributes"), dict) else {}
@@ -846,9 +893,10 @@ def _related(
         linked = _sku(row) in {
             str(fit.get("part_sku") or "")
             for fit in fits
-            if str(fit.get("fits_family") or "") == family or str(fit.get("fits_sku") or "") == _sku(host)
+            if _positive_fit(fit)
+            and (str(fit.get("fits_family") or "") == family or str(fit.get("fits_sku") or "") == _sku(host))
         }
-        if linked or family in upgrade_for:
+        if (linked or family in upgrade_for) and not _negative_for(row, host, fits):
             chosen.append(row)
     if chosen:
         return chosen
@@ -885,8 +933,8 @@ _PRICE_WORDS = frozenset({
 })
 # Shopper words that rank or narrow a real product. They are not products.
 _MODIFIER_WORDS = frozenset({
-    "cheapest", "best", "spare", "extended", "review", "left", "handed",
-    "iwb", "kydex", "gen", "generation",
+    "cheapest", "best", "spare", "extra", "extended", "review", "left", "handed",
+    "iwb", "kydex", "gen", "generation", "most", "expensive",
 })
 # A model, cut, or thread the sheet already lists. Never a denial.
 _SPEC_WORDS = frozenset({
@@ -911,30 +959,419 @@ _OTHER_BORE = re.compile(
 )
 
 
-def _prepare_query(query: str) -> tuple[str, bool, bool]:
+_Q_PREFIX = re.compile(
+    r"^(?:"
+    r"do you (?:have|sell|stock|carry)|"
+    r"have you got|"
+    r"how much (?:is|for|does)|"
+    r"what(?:'s| is) the price of|"
+    r"price of|"
+    r"is there|"
+    r"is the|"
+    r"what fits"
+    r")\b\s*(?:the\s+|a\s+|an\s+)?",
+    re.IGNORECASE,
+)
+_DOES_FIT = re.compile(
+    r"^(?:does|do|will|can)\s+(?:the\s+|a\s+|an\s+)?(.+?)\s+fit(?:s)?\s+(?:on\s+)?(?:the\s+|a\s+|an\s+)?(.+?)\s*\??$",
+    re.IGNORECASE,
+)
+_INCH = re.compile(r"\b(\d+(?:\.\d+)?)\s*(?:inch|inches)\b", re.IGNORECASE)
+# The amount stands alone, or follows its own R. A letter in the word before it stays put.
+_KILO = re.compile(r"(^|[^A-Za-z0-9])(?:[rR]\s*)?(\d+(?:\.\d+)?)\s*[kK]\b")
+_GROUPED_PRICE = re.compile(r"\b[rR]\s*(\d{1,3}(?:[\s,]\d{3})+)\b")
+
+
+def _rule(fit: dict[str, Any]) -> dict[str, Any]:
+    rule = fit.get("rule")
+    return rule if isinstance(rule, dict) else {}
+
+
+def _negative_fit(fit: dict[str, Any]) -> bool:
+    return _rule(fit).get("fits") is False
+
+
+def _positive_fit(fit: dict[str, Any]) -> bool:
+    return not _negative_fit(fit)
+
+
+def _fit_sentence(note: str) -> str:
+    return re.sub(r"\s+https?://\S+", "", note).strip().rstrip(".")
+
+
+def _negative_for(part: dict[str, Any], host: dict[str, Any], fits: list[dict[str, Any]]) -> bool:
+    part_sku = _sku(part)
+    return any(
+        str(fit.get("part_sku") or "") == part_sku and _negative_fit(fit) and _targets(fit, host)
+        for fit in fits
+    )
+
+
+def _one_edit(left: str, right: str) -> bool:
+    if abs(len(left) - len(right)) > 1:
+        return False
+    if len(left) > len(right):
+        left, right = right, left
+    index = 0
+    other = 0
+    edits = 0
+    while index < len(left) and other < len(right):
+        if left[index] == right[other]:
+            index += 1
+            other += 1
+            continue
+        edits += 1
+        if edits > 1:
+            return False
+        if len(left) == len(right):
+            index += 1
+        other += 1
+    edits += (len(right) - other) + (len(left) - index)
+    return edits == 1
+
+
+def _correct_typos(query: str, products: list[dict[str, Any]]) -> str:
+    """One wrong letter in a model word is that word. Real words stay as typed."""
+    vocab: set[str] = set()
+    for row in products:
+        blob = f"{row.get('name') or ''} {row.get('brand') or ''} {row.get('category') or ''}"
+        for token in _tokens(blob):
+            if len(token) >= 4:
+                vocab.add(token)
+
+    def fix(match: re.Match[str]) -> str:
+        word = match.group(0)
+        token = word.lower()
+        if len(token) < 4 or token in vocab or _common_english(token) or _shopping_word(token):
+            return word
+        # The ranker already accepts a misspelling this close. Correcting it
+        # would turn the neighbouring short word into a different model.
+        fixes = [
+            item for item in vocab if _one_edit(token, item) and _similarity(token, item) < _FUZZY
+        ]
+        if len(fixes) == 1:
+            return fixes[0]
+        return word
+
+    return re.sub(r"[A-Za-z0-9]+", fix, query)
+
+
+def _expand_prices(query: str) -> str:
+    """Read R25k, 30k, R25,000 and R 25 000 as a rand amount before ranking."""
+
+    def kilo(match: re.Match[str]) -> str:
+        return f"{match.group(1)}R {int(float(match.group(2)) * 1000)}"
+
+    text = _KILO.sub(kilo, query)
+    return _GROUPED_PRICE.sub(lambda match: "R " + re.sub(r"[\s,]", "", match.group(1)), text)
+
+
+def _is_question(query: str) -> bool:
+    text = query.strip()
+    return text.endswith("?") or bool(_Q_PREFIX.match(text))
+
+
+def _rewrite_fit_question(query: str) -> str:
+    match = _DOES_FIT.match(query.strip())
+    if match is None:
+        return query
+    return f"{match.group(1).strip()} for {match.group(2).strip()}"
+
+
+def _normalize_shopper(query: str, products: list[dict[str, Any]]) -> str:
+    question = _is_question(query)
+    text = _correct_typos(query, products).strip().rstrip("?").strip()
+    text = _rewrite_fit_question(text)
+    text = _Q_PREFIX.sub("", text)
+    text = _expand_prices(text)
+    if question and not re.search(r"\bin stock only\b", text, re.IGNORECASE):
+        text = re.sub(r"\bin stock\b", " ", text, flags=re.IGNORECASE)
+    return " ".join(text.split())
+
+
+def _shop_colours(products: list[dict[str, Any]]) -> list[str]:
+    seen: set[str] = set()
+    for row in products:
+        if str(row.get("category") or "") != _SIDEARM:
+            continue
+        for label in _option_labels(row):
+            seen.update(_tokens(label))
+    listed = []
+    if "black" in seen:
+        listed.append("Black")
+    if "fde" in seen:
+        listed.append("FDE")
+    return listed
+
+
+def _bare_colour(query: str, products: list[dict[str, Any]]) -> str:
+    """A colour with no model names the colours this shop actually lists."""
+    if _named_sidearm(query, products):
+        return ""
+    text = " ".join(_tokens(query))
+    offered: set[str] = set()
+    for row in products:
+        if str(row.get("category") or "") != _SIDEARM:
+            continue
+        for label in _option_labels(row):
+            offered.update(_tokens(label))
+    asked = ""
+    if "od green" in text and "od" not in offered and "green" not in offered:
+        asked = "OD green"
+    else:
+        for word in _tokens(query):
+            if word in _COLOUR_WORDS and word not in offered:
+                asked = "OD" if word == "od" else word.capitalize()
+                break
+    if not asked:
+        return ""
+    listed = _and_list(_shop_colours(products))
+    if not listed:
+        return f"{asked} isn't a colour we list."
+    return f"{asked} isn't a colour we list. We have {listed}."
+
+
+def _cut_named(part: dict[str, Any], host: dict[str, Any], fits: list[dict[str, Any]]) -> str:
+    attributes = host.get("attributes") if isinstance(host.get("attributes"), dict) else {}
+    options = attributes.get("options") if isinstance(attributes.get("options"), dict) else {}
+    cuts = [str(item) for item in (options.get("optic_cut") or []) if str(item or "").strip()]
+    part_sku = _sku(part)
+    for fit in fits:
+        if str(fit.get("part_sku") or "") != part_sku:
+            continue
+        needed = str(_rule(fit).get("optic_cut") or "")
+        if not needed:
+            continue
+        if any(needed == cut or needed.split()[0] == cut.split()[0] for cut in cuts):
+            return needed.split()[0]
+    return ""
+
+
+def _exact_body(
+    rows: list[dict[str, Any]],
+    focus: dict[str, Any] | None,
+    products: list[dict[str, Any]],
+    fits: list[dict[str, Any]],
+    filters: dict[str, Any],
+    limit: int,
+    message: str = "",
+    exact_ids: set[str] | None = None,
+) -> dict[str, Any]:
+    ordered = _order(list(rows), filters, focus)[:limit]
+    focus_id = _sku(focus) if focus else ""
+    centre = next((row for row in ordered if str(row.get("category") or "") == _SIDEARM), None)
+    if centre is None:
+        centre = focus if focus is not None and str(focus.get("category") or "") == _SIDEARM else _default_sidearm(products)
+    results = [
+        present(row, products, fits, focus_id, centre, mark_exact=True, exact_ids=exact_ids)
+        for row in ordered
+    ]
+    body: dict[str, Any] = {
+        "results": results,
+        "ids": [item["id"] for item in results],
+        "exact_match": True,
+        "honest": "exact",
+        "focus_id": focus_id,
+        "groups": _groups(results),
+        "fits": _public_fits(fits),
+    }
+    if message:
+        body["message"] = message
+    return body
+
+
+def _fit_answer(
+    raw: str,
+    products: list[dict[str, Any]],
+    fits: list[dict[str, Any]],
+    filters: dict[str, Any],
+    limit: int,
+) -> dict[str, Any] | None:
+    match = _DOES_FIT.match(raw.strip())
+    if match is None:
+        return None
+    host = _named_sidearm(match.group(2), products)
+    if host is None:
+        return None
+    ranked = rank_search({
+        "q": match.group(1).strip(),
+        "products": products,
+        "limit": 20,
+        "model_letters": True,
+    })
+    by_sku = {_sku(row): row for row in products}
+    rows = [by_sku[item] for item in (ranked.get("ids") or []) if item in by_sku]
+    parts = [row for row in rows if str(row.get("category") or "") != _SIDEARM]
+    pool = parts or rows
+    if not pool:
+        return None
+    focus = _pick_focus(match.group(1).strip(), pool)
+    cut = _cut_named(focus, host, fits)
+    state = _cut_state(_sku(focus), host, fits, cut or _centre_cut(host))
+    if not ((state is not None and state.get("fits")) or _approved_link(focus, host, fits)):
+        return None
+    message = f"Yes, with the {cut} cut." if cut else "Yes."
+    return _exact_body([focus], focus, products, fits, filters, limit, message)
+
+
+def _barrel_says(row: dict[str, Any], wanted: str) -> bool:
+    attributes = row.get("attributes") if isinstance(row.get("attributes"), dict) else {}
+    verified = attributes.get("verified") or []
+    if not isinstance(verified, list):
+        return False
+    pattern = re.compile(rf"\b{re.escape(wanted)}\s*inch\b", re.IGNORECASE)
+    for spec in verified:
+        if not isinstance(spec, dict) or str(spec.get("name") or "") not in {"barrel", "standard_barrel"}:
+            continue
+        if pattern.search(str(spec.get("value") or "")):
+            return True
+    return False
+
+
+def _length_answer(
+    query: str,
+    products: list[dict[str, Any]],
+    fits: list[dict[str, Any]],
+    filters: dict[str, Any],
+    limit: int,
+) -> dict[str, Any] | None:
+    match = _INCH.search(query)
+    if match is None:
+        return None
+    wanted = match.group(1)
+    found = [
+        row for row in products
+        if str(row.get("category") or "") == _SIDEARM and _barrel_says(row, wanted)
+    ]
+    if not found:
+        return None
+    return _exact_body(found, found[0], products, fits, filters, limit)
+
+
+def _split_clauses(query: str) -> list[str]:
+    if "+" not in query and "," not in query:
+        return []
+    parts = re.split(r"\s*(?:\+|,|\band\b)\s*", query, flags=re.IGNORECASE)
+    cleaned = [" ".join(part.split()) for part in parts if part.strip()]
+    return cleaned if len(cleaned) >= 2 else []
+
+
+def _clause_rows(
+    clause: str,
+    products: list[dict[str, Any]],
+    fits: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    tokens = set(_tokens(clause))
+    match = _ROUND_ASK.search(clause)
+    if match and tokens & {"mag", "mags", "magazine", "magazines"}:
+        wanted = int(match.group(1))
+        mags = [
+            row for row in products
+            if str(row.get("category") or "") == "Magazines" and _round_count(row) == wanted
+        ]
+        if mags:
+            return mags, mags[0]
+    category = _category_only(clause) or _phrase_category(clause)
+    if category and category != _ALL_PARTS:
+        pool = [row for row in products if str(row.get("category") or "") == category]
+        if not pool:
+            return [], None
+        return pool, _fitting_focus(clause, pool, _default_sidearm(products), fits)
+    host = _named_sidearm(clause, products)
+    if host is not None and not _wanted_part(clause):
+        return [host], host
+    ranked = rank_search({"q": clause, "products": products, "limit": 20, "model_letters": True})
+    by_sku = {_sku(row): row for row in products}
+    found = [by_sku[item] for item in (ranked.get("ids") or []) if item in by_sku]
+    if not found:
+        return [], None
+    focus = _pick_focus(clause, found)
+    return [focus], focus
+
+
+def _multi_answer(
+    query: str,
+    products: list[dict[str, Any]],
+    fits: list[dict[str, Any]],
+    filters: dict[str, Any],
+    limit: int,
+) -> dict[str, Any] | None:
+    clauses = _split_clauses(query)
+    if not clauses:
+        return None
+    rows: list[dict[str, Any]] = []
+    exact_ids: set[str] = set()
+    seen: set[str] = set()
+    focus: dict[str, Any] | None = None
+    for clause in clauses:
+        picked, clause_focus = _clause_rows(clause, products, fits)
+        for row in picked:
+            sku = _sku(row)
+            if sku in seen:
+                continue
+            seen.add(sku)
+            rows.append(row)
+        if clause_focus is not None:
+            exact_ids.add(_sku(clause_focus))
+            if focus is None:
+                focus = clause_focus
+    if not rows:
+        return None
+    sidearm = next((row for row in rows if str(row.get("category") or "") == _SIDEARM), None)
+    return _exact_body(rows, sidearm or focus, products, fits, filters, limit, "", exact_ids)
+
+
+def _fit_decision(
+    part: dict[str, Any],
+    host: dict[str, Any],
+    fits: list[dict[str, Any]],
+    cut: str,
+) -> tuple[str, str]:
+    """'fits' is cited, 'refuse' is a row that says it does not, 'confirm' has no row."""
+    state = _cut_state(_sku(part), host, fits, cut)
+    name = str(part.get("name") or "That part")
+    plain = _plain_name(host)
+    if state is not None and not state.get("fits"):
+        if state.get("explicit"):
+            sentence = _fit_sentence(str(state.get("note") or ""))
+            tail = f" {sentence}." if sentence else ""
+            return "refuse", f"{name} does not fit the {plain}.{tail}".replace("..", ".")
+        return "refuse", f"{name} does not fit the {cut or 'chosen'} cut."
+    if (state is not None and state.get("fits")) or _approved_link(part, host, fits):
+        return "fits", ""
+    if _negative_for(part, host, fits):
+        return "refuse", f"{name} does not fit the {plain}."
+    return "confirm", ""
+
+
+def _prepare_query(query: str) -> tuple[str, bool, str]:
     """Drop ranking words and rewrite a thread so the ranker sees the sheet's spelling.
 
     `loose` is a modifier such as "left" or "review": the rows stay, the badge does not.
-    `cheapest` sorts by price and stays an exact list.
+    A price sort stays an exact list. `price_asc` is cheapest, `price_desc` is most expensive.
     """
     cheapest = bool(re.search(r"\bcheapest\b", query, re.IGNORECASE))
+    expensive = bool(re.search(r"\bmost expensive\b", query, re.IGNORECASE))
     text = _normalize_threads(query)
     if cheapest:
         text = re.sub(r"\bcheapest\b", " ", text, flags=re.IGNORECASE)
+    if expensive:
+        text = re.sub(r"\bmost expensive\b", " ", text, flags=re.IGNORECASE)
     loose = bool(_LOOSE_WORD.search(text))
     if loose:
         text = _LOOSE_WORD.sub(" ", text)
     tokens = set(_tokens(text))
     magazines = {"mag", "mags", "magazine", "magazines"}
-    if "spare" in tokens and tokens & magazines:
-        text = re.sub(r"\bspare\b", " ", text, flags=re.IGNORECASE)
+    if tokens & {"spare", "extra"} and tokens & magazines:
+        text = re.sub(r"\b(?:spare|extra)\b", " ", text, flags=re.IGNORECASE)
     if "extended" in tokens and tokens & magazines:
         text = "18 round magazine"
         loose = False
     text = " ".join(text.split())
     if loose:
         text = _part_for_model(text)
-    return text, loose, cheapest
+    sort = "price_desc" if expensive else "price_asc" if cheapest else ""
+    return text, loose, sort
 
 
 def _normalize_threads(query: str) -> str:
@@ -1032,7 +1469,7 @@ def _approved_link(part: dict[str, Any], host: dict[str, Any], fits: list[dict[s
     sku = _sku(host)
     part_sku = _sku(part)
     for fit in fits:
-        if str(fit.get("part_sku") or "") != part_sku:
+        if str(fit.get("part_sku") or "") != part_sku or not _positive_fit(fit):
             continue
         target_family = str(fit.get("fits_family") or "")
         target_sku = str(fit.get("fits_sku") or "")
@@ -1422,7 +1859,7 @@ def _coverage_text(row: dict[str, Any]) -> str:
     verified = attributes.get("verified") or []
     if isinstance(verified, list):
         for spec in verified:
-            if not isinstance(spec, dict):
+            if not isinstance(spec, dict) or str(spec.get("name") or "") == "in_box":
                 continue
             parts.append(str(spec.get("name") or ""))
             parts.append(str(spec.get("value") or ""))
@@ -1490,7 +1927,8 @@ def _hosted_parts(
     linked = {
         str(fit.get("part_sku") or "")
         for fit in fits
-        if str(fit.get("fits_family") or "") == family or str(fit.get("fits_sku") or "") == _sku(host)
+        if _positive_fit(fit)
+        and (str(fit.get("fits_family") or "") == family or str(fit.get("fits_sku") or "") == _sku(host))
     }
     return [
         row for row in products
@@ -1627,13 +2065,13 @@ def prepare_reservation(
         if _status(row) == "out_of_stock":
             return f"{row.get('name')} is out of stock."
         if sidearm_row is not None and _sku(row) != _sku(sidearm_row):
-            state = _cut_state(_sku(row), sidearm_row, fits, cut)
-            if state is not None and not state.get("fits"):
-                return f"{row.get('name')} does not fit the {cut or 'chosen'} cut."
-            if state is not None and state.get("fits"):
-                continue
-            if not _approved_link(row, sidearm_row, fits) and _catalog_linked(row, fits):
-                return f"{row.get('name')} does not fit the {_plain_name(sidearm_row)}."
+            decision, reason = _fit_decision(row, sidearm_row, fits, cut)
+            if decision == "refuse":
+                return reason
+            if decision == "confirm":
+                choice = str(part.get("choice") or "")
+                if "fit to confirm" not in choice.lower():
+                    part["choice"] = f"{choice} · Fit to confirm".strip(" ·")
     return ""
 
 

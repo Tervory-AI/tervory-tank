@@ -10,7 +10,8 @@
     "centre_sku": "ARCHON-TYPE-B",
     "not_stocked": [
       {"name": "Glock", "also": ["glok", "glock"]},
-      {"name": "Sig", "also": ["sig", "sigsauer"]}
+      {"name": "Sig", "also": ["sig", "sigsauer"]},
+      {"name": "CZ", "also": ["cz"]}
     ]
   },
   "keys": [
