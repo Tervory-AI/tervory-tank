@@ -18,10 +18,15 @@ def test_every_model_has_a_price_and_a_key_from_the_environment() -> None:
         assert str(m["litellm_params"]["api_key"]).startswith("os.environ/"), m["model_name"]
 
 
-def test_no_china_hosted_provider_in_the_roster() -> None:
-    for m in CONFIG["model_list"]:
-        provider = m["litellm_params"]["model"].split("/", 1)[0]
-        assert provider not in {"deepseek", "moonshot"}, m["model_name"]
+def test_deepseek_and_kimi_are_named_and_not_in_the_fallback_chains() -> None:
+    """They are on the list the page reads. The key is an environment name, not a value."""
+    by_name = {m["model_name"]: m for m in CONFIG["model_list"]}
+    assert {"gemini", "perplexity", "kimi", "deepseek", "haiku", "sonnet", "opus", "flash", "flash-lite", "argon"} <= set(by_name)
+    for name, env_name in (("kimi", "MOONSHOT_API_KEY"), ("deepseek", "DEEPSEEK_API_KEY"), ("perplexity", "PERPLEXITY_API_KEY"), ("gemini", "GEMINI_API_KEY")):
+        assert by_name[name]["litellm_params"]["api_key"] == f"os.environ/{env_name}"
+    chains = {k: v for entry in CONFIG["litellm_settings"]["fallbacks"] for k, v in entry.items()}
+    used = set(chains) | {name for chain in chains.values() for name in chain}
+    assert "deepseek" not in used and "kimi" not in used and "perplexity" not in used and "gemini" not in used
 
 
 def _price(name: str) -> float:

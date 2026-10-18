@@ -9,7 +9,8 @@
 # OAuth sign-ins. A provider with no funds is skipped automatically; topping it up brings it back.
 # Prices are USD per token (per-million / 1e6), from each provider's pricing page on 14 Oct 2026:
 #   OpenAI GPT-6: platform.openai.com/docs/pricing; Gemini: ai.google.dev/pricing; xAI: docs.x.ai/developers/pricing.
-# China-hosted providers (DeepSeek, Moonshot/Kimi) are deliberately absent.
+# China-hosted providers (DeepSeek, Moonshot/Kimi) are not on this roster.
+# The United States roster lists them by name. This file does not.
 
 model_list:
   # ---------- OpenAI (API key, Responses/Chat) ----------
@@ -111,6 +112,24 @@ model_list:
     model_info:
       input_cost_per_token: 0.000004
       output_cost_per_token: 0.00002
+
+  # Gemini is already listed as flash-lite, flash, and argon. Perplexity is not China-hosted.
+  # DeepSeek and Kimi are not listed here.
+  - model_name: gemini
+    litellm_params:
+      model: gemini/gemini-3.8-flash
+      api_key: os.environ/GEMINI_API_KEY
+    model_info:
+      input_cost_per_token: 0.00000075
+      output_cost_per_token: 0.00000375
+
+  - model_name: perplexity
+    litellm_params:
+      model: perplexity/sonar
+      api_key: os.environ/PERPLEXITY_API_KEY
+    model_info:
+      input_cost_per_token: 0.000001
+      output_cost_per_token: 0.000001
 
   # ---------- South African hosted model (not configured) ----------
   # Uncomment after the research in docs/cursor/prompts/RESEARCH-ZENAS.md.

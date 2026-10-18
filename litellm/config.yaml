@@ -6,8 +6,8 @@
 # OAuth sign-ins. A provider with no funds is skipped automatically; topping it up brings it back.
 # Prices are USD per token (per-million / 1e6), from each provider's pricing page on 14 Oct 2026:
 #   OpenAI GPT-6: platform.openai.com/docs/pricing; Gemini: ai.google.dev/pricing; xAI: docs.x.ai/developers/pricing.
-# China-hosted providers (DeepSeek, Moonshot/Kimi) are deliberately absent: they may be added for
-# platform-only work later, never for legal tenants or South African personal data.
+# DeepSeek and Kimi are listed here by name. The key stays in the environment, and neither
+# name is in the fallback chains. The South Africa roster does not list them.
 
 model_list:
   # ---------- OpenAI (API key, Responses/Chat) ----------
@@ -109,6 +109,44 @@ model_list:
     model_info:
       input_cost_per_token: 0.000004
       output_cost_per_token: 0.00002
+
+  # ---------- Also on the list. Not in the fallback chains. Keys stay in the environment. ----------
+  # Gemini is already listed as flash-lite, flash, and argon. This name stays beside them.
+  # Claude is already listed as haiku, sonnet, and opus.
+  # Prices are USD per token (per-million / 1e6): Gemini matches flash; Sonar is $1 / $1
+  # (docs.perplexity.ai); Kimi K2.6 uncached is $0.95 / $4; DeepSeek flash cache-miss
+  # off-peak is $0.15 / $0.60 (api-docs.deepseek.com).
+  - model_name: gemini
+    litellm_params:
+      model: gemini/gemini-3.8-flash
+      api_key: os.environ/GEMINI_API_KEY
+    model_info:
+      input_cost_per_token: 0.00000075
+      output_cost_per_token: 0.00000375
+
+  - model_name: perplexity
+    litellm_params:
+      model: perplexity/sonar
+      api_key: os.environ/PERPLEXITY_API_KEY
+    model_info:
+      input_cost_per_token: 0.000001
+      output_cost_per_token: 0.000001
+
+  - model_name: kimi
+    litellm_params:
+      model: moonshot/kimi-k2.6
+      api_key: os.environ/MOONSHOT_API_KEY
+    model_info:
+      input_cost_per_token: 0.00000095
+      output_cost_per_token: 0.000004
+
+  - model_name: deepseek
+    litellm_params:
+      model: deepseek/deepseek-flash
+      api_key: os.environ/DEEPSEEK_API_KEY
+    model_info:
+      input_cost_per_token: 0.00000015
+      output_cost_per_token: 0.0000006
 
 litellm_settings:
   drop_params: true

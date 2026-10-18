@@ -107,7 +107,8 @@ def test_za_compose_names_no_us_host_and_does_not_replicate() -> None:
 def test_za_roster_matches_the_funded_models_and_has_no_sa_model_yet() -> None:
     za_names = [item["model_name"] for item in ZA_CONFIG["model_list"]]
     us_names = [item["model_name"] for item in US_CONFIG["model_list"]]
-    assert za_names == us_names
+    assert "deepseek" in us_names and "kimi" in us_names
+    assert za_names == [name for name in us_names if name not in {"deepseek", "kimi"}]
     assert "za-local" not in za_names
     raw = (ROOT / "litellm" / "config.za.yaml").read_text(encoding="utf-8")
     assert "model_name: za-local" in raw
