@@ -1,0 +1,16 @@
+{
+  "name": "cn-visual",
+  "private": true,
+  "description": "Pinned build for visual.js. Do not minify whitespace: the secret scan reads each line.",
+  "scripts": {
+    "build": "esbuild visual.jsx --bundle --format=iife --outfile=visual.js --jsx=automatic --banner:js=\"/* Built from visual.jsx. React Flow is MIT. */\""
+  },
+  "dependencies": {
+    "@xyflow/react": "12.8.4",
+    "react": "19.1.1",
+    "react-dom": "19.1.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.9"
+  }
+}

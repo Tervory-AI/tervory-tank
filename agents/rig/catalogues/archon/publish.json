@@ -4,16 +4,20 @@
   "email": "sales@customnation.co.za",
   "phone": "+27 68 637 3249",
   "catalogue": "Archon demo catalogue for Custom Nation. Prices and stock are demo figures. Verified specs are marked from archonfirearms.com.",
+  "shop": {
+    "search": true,
+    "mail_reservations": true,
+    "centre_sku": "ARCHON-TYPE-B",
+    "not_stocked": [
+      {"name": "Glock", "also": ["glok", "glock"]},
+      {"name": "Sig", "also": ["sig", "sigsauer"]}
+    ]
+  },
   "keys": [
     {
       "key": "rk_pub_archon",
       "origins": [
-        "https://rig.tervory.com",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:8000",
-        "http://127.0.0.1:8765",
-        "http://localhost:8000",
-        "http://localhost:8765"
+        "https://rig.tervory.com"
       ]
     }
   ]

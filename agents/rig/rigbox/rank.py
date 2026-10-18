@@ -414,7 +414,11 @@ def _unmatched_models(query: str, rows: list[dict[str, Any]]) -> list[str]:
                 continue
         # A typo such as "typ b" is not a new model. The word before the letter
         # has to be one this catalogue already uses, as "type" is.
-        if not _covered(prev_parts[0], _listed_tokens(rows)):
+        if not _covered(prev_parts[0], listed):
+            continue
+        # The brand-after loop already owns a letter that sits on the brand.
+        # Adding it here as well would name that letter twice.
+        if _covered(prev_parts[0], brands):
             continue
         needed = _model_parts(prev_parts) + parts
         if needed and not _row_has_all(needed, rows):

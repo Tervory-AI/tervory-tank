@@ -193,6 +193,7 @@
     return {
       q: params.get("q") || "",
       inStock: params.get("in_stock") === "1",
+      minPrice: params.get("min") || "0",
       maxPrice: params.get("max") || "30000",
       sort: params.get("sort") || "",
       category: params.get("category") || "all",
@@ -204,6 +205,7 @@
     const params = new URLSearchParams();
     if (filters.q) params.set("q", filters.q);
     if (filters.inStock) params.set("in_stock", "1");
+    if (filters.minPrice && Number(filters.minPrice) > 0) params.set("min", String(filters.minPrice));
     if (filters.maxPrice && String(filters.maxPrice) !== "30000") params.set("max", String(filters.maxPrice));
     if (filters.sort) params.set("sort", filters.sort);
     if (filters.category && filters.category !== "all") params.set("category", filters.category);
@@ -217,14 +219,23 @@
     params.set("q", filters.q || "");
     params.set("limit", "24");
     if (filters.inStock) params.set("in_stock", "true");
+    if (filters.minPrice && Number(filters.minPrice) > 0) params.set("min_price", String(filters.minPrice));
     if (filters.maxPrice && Number(filters.maxPrice) < 30000) params.set("max_price", String(filters.maxPrice));
     if (filters.sort) params.set("sort", filters.sort);
     if (filters.category && filters.category !== "all") params.set("category", filters.category === "Optics" ? "Sights" : filters.category);
     return api("/v1/rig/search?" + params.toString());
   }
 
+  function specValue(verified, name) {
+    const rows = Array.isArray(verified) ? verified : [];
+    const found = rows.find(function (item) { return item && item.name === name; });
+    if (!found) return "";
+    const value = found.value;
+    return Array.isArray(value) ? value.join(", ") : String(value);
+  }
+
   function fieldSelect(name, label, value, options, onchange) {
-    const select = h("select", { id: name, name: name, onchange: onchange });
+    const select = h("select", { id: "field-" + name, name: name, "aria-label": label, onchange: onchange });
     options.forEach(function (option) {
       const node = h("option", { value: option[0], text: option[1] });
       if (option[0] === value) node.selected = true;
@@ -314,17 +325,16 @@
     const groups = order.filter(function (name) { return counts[name]; }).map(function (name) {
       return { category: name, count: counts[name] };
     });
-    const filters = { q: "", inStock: false, maxPrice: "30000", sort: "", category: "all", view: "list" };
-    const form = homeForm(filters);
+    const filters = { q: "", inStock: false, minPrice: "0", maxPrice: "30000", sort: "", category: "all", view: "list" };
+    const form = searchForm(filters, true);
     const flow = h("div", {
-      class: "flow",
+      class: "flow hero-graph",
       "data-flow": JSON.stringify({ layout: "orbit", centre: "Ready when you are.", groups: groups, items: [] }),
-      role: "img",
       "aria-label": "Categories around the search",
     });
     const popular = ["Archon Type B", "Type B Ported", "Type A", "15-round magazine", "Performance trigger"];
     return h("div", { class: "home" }, [
-      h("section", {}, [
+      h("section", { class: "hero" }, [
         h("h1", { text: "Find the right Archon, fast." }),
         h("p", { class: "lede", text: "Search the Custom Nation demo catalogue. Every price is a demo price and every stock line is demo stock." }),
         form,
@@ -333,13 +343,12 @@
           const query = label === "15-round magazine" ? "15 round mag" : label === "Type A" ? "Archon Type A" : label === "Type B Ported" ? "type b ported" : label === "Performance trigger" ? "performance trigger" : label;
           return h("a", { class: "chip", href: "/cn/results?q=" + encodeURIComponent(query), text: label });
         })),
-        askBox("ARCHON-TYPE-B"),
+        flow,
       ]),
-      h("section", {}, [flow]),
     ]);
   }
 
-  function homeForm(filters) {
+  function searchForm(filters, primary) {
     const input = h("input", {
       type: "search",
       name: "q",
@@ -348,12 +357,18 @@
       value: filters.q,
     });
     const stock = h("input", { type: "checkbox", name: "in_stock" });
-    const max = h("input", { type: "range", name: "max", min: "5000", max: "30000", step: "500", value: filters.maxPrice, "aria-describedby": "max-label" });
-    const maxLabel = h("span", { id: "max-label", text: "Any, up to " + rand(filters.maxPrice) });
+    if (filters.inStock) stock.checked = true;
+    const min = h("input", { type: "range", name: "min", min: "0", max: "30000", step: "500", value: filters.minPrice || "0", "aria-label": "Minimum price" });
+    const minLabel = h("span", { text: Number(filters.minPrice) > 0 ? "From " + rand(filters.minPrice) : "From any" });
+    min.addEventListener("input", function () {
+      minLabel.textContent = Number(min.value) <= 0 ? "From any" : "From " + rand(min.value);
+    });
+    const max = h("input", { type: "range", name: "max", min: "5000", max: "30000", step: "500", value: filters.maxPrice, "aria-label": "Maximum price" });
+    const maxLabel = h("span", { text: Number(filters.maxPrice) >= 30000 ? "Any, up to R 30 000" : "Up to " + rand(filters.maxPrice) });
     max.addEventListener("input", function () {
       maxLabel.textContent = Number(max.value) >= 30000 ? "Any, up to R 30 000" : "Up to " + rand(max.value);
     });
-    const sort = fieldSelect("sort", "Sort", filters.sort, [["", "Price low–high"], ["price_desc", "Price high–low"]]);
+    const sort = fieldSelect("sort", "Sort", filters.sort, [["", "Best match"], ["price_asc", "Price low–high"], ["price_desc", "Price high–low"]]);
     const category = fieldSelect("category", "Category", filters.category, [
       ["all", "All"], ["Pistols", "Pistols"], ["Sights", "Optics"], ["Triggers", "Triggers"],
       ["Magazines", "Magazines"], ["Lights", "Lights"], ["Holsters", "Holsters"], ["Barrels", "Barrels"], ["Parts", "Parts"],
@@ -363,16 +378,17 @@
       go(searchUrl({
         q: input.value.trim(),
         inStock: stock.checked,
+        minPrice: min.value,
         maxPrice: max.value,
-        sort: form.querySelector("#sort").value,
-        category: form.querySelector("#category").value,
-        view: "list",
+        sort: form.querySelector("[name=sort]").value,
+        category: form.querySelector("[name=category]").value,
+        view: filters.view || "list",
       }));
     } }, [
-      h("div", { class: "search-row" }, [input, h("button", { class: "primary", type: "submit", text: "Search" })]),
+      h("div", { class: "search-row" }, [input, h("button", { class: primary ? "primary" : "ghost", type: "submit", text: "Search" })]),
       h("div", { class: "filters" }, [
         h("label", { class: "check" }, [stock, " In stock only"]),
-        h("label", { class: "field" }, ["Price ", maxLabel, max]),
+        h("label", { class: "field" }, ["Price ", minLabel, min, maxLabel, max]),
         sort,
         category,
       ]),
@@ -441,19 +457,22 @@
     else main = listView(results, body.fits || []);
     const open = focus
       ? h("a", {
-          class: "primary",
+          class: "primary sticky-action",
           href: "/cn/product/" + encodeURIComponent(focus.id),
           text: (body.honest === "closest" ? "Show " : "Open ") + focus.name,
         })
       : null;
+    const wide = filters.view === "visual";
     return h("section", {}, [
       h("h1", { text: filters.q ? "Results for “" + filters.q + "”" : "Catalogue" }),
       h("p", { class: "meta", text: heading }),
+      searchForm(filters, false),
       tabs,
       message,
-      h("div", { class: "layout" }, [
-        main,
-        sidebar(results, focus, open),
+      wide ? main : null,
+      h("div", { class: wide ? "layout under-graph" : "layout" }, [
+        wide ? null : main,
+        sidebar(results, focus, open, body.focus_id || (focus && focus.id) || ""),
       ]),
     ]);
   }
@@ -494,12 +513,12 @@
         category = item.category;
         wrap.append(h("h2", { class: "group", text: category }));
       }
-      wrap.append(resultCard(item, fits));
+      wrap.append(resultCard(item, fits, true));
     });
     return wrap;
   }
 
-  function resultCard(item, fits) {
+  function resultCard(item, fits, compact) {
     const stock = stockOf(item.availability);
     const picks = loadPicks(item);
     const media = h("img", { src: item.image, alt: item.name });
@@ -544,76 +563,98 @@
       } }));
     }
     if (item.demo_item) body.append(h("p", { class: "meta", text: "Demo item" }));
-    return h("article", { class: "card" }, [media, body]);
+    return h("article", { class: compact ? "card compact" : "card" }, [media, body]);
   }
 
   function compareView(results) {
     const pistols = results.filter(function (item) { return item.category === "Pistols"; });
-    const rows = pistols.length >= 2 ? pistols : results.slice(0, 3);
-    return h("div", { class: "compare-grid" }, rows.map(function (item) {
-      const stock = stockOf(item.availability);
-      const verified = (item.attributes && item.attributes.verified) || {};
-      const history = item.price_history;
-      const specs = [
-        ["Difference from cheapest", item.compare && item.compare.delta ? "+" + rand(item.compare.delta) : rand(0)],
-        ["Availability", stock.label],
-        ["Where", stock.where || "Not in the catalogue"],
-        ["Lead time", stock.lead || "Not in the catalogue"],
-        ["Length", verified.length_in ? verified.length_in + " in" : "Not in the catalogue"],
-        ["Lockup", verified.locking || "Not in the catalogue"],
-        ["Barrel", verified.barrel || "Not in the catalogue"],
-        ["Optic cuts", ((item.options && item.options.optic_cut) || verified.optic_cuts || []).join(", ") || "Not in the catalogue"],
-        ["Colours", ((item.options && (item.options.slide_grip || item.options.grip)) || []).join(", ") || "Not in the catalogue"],
-        ["In the box", (item.attributes && item.attributes.in_box) || "Not in the catalogue"],
-        ["Fit", item.fit ? item.fit.badge : "Check fit"],
-        ["Price history", history ? "Was " + rand(history.was) + ", now " + rand(history.amount) + " on " + history.on + ". " + (history.label || "") : "Not in the catalogue"],
-      ];
-      const card = h("article", { class: "compare-card" }, [
-        h("h3", { text: item.name }),
-        priceLine(item.price.amount, item.price_label),
-      ]);
-      const list = h("dl", {});
-      specs.forEach(function (spec) {
-        list.append(h("dt", { text: spec[0] }), h("dd", { text: spec[1] }));
-      });
-      card.append(list, h("a", { class: "ghost", href: "/cn/product/" + encodeURIComponent(item.id), text: "Open" }));
-      return card;
-    }));
+    const rows = pistols.length >= 2 ? pistols : results.slice(0, 4);
+    const missing = "—";
+    const lines = [
+      ["Price", function (item) { return rand(item.price.amount) + " · " + (item.price_label || "Demo price"); }],
+      ["Difference from cheapest", function (item) { return item.compare && item.compare.delta ? "+" + rand(item.compare.delta) : rand(0); }],
+      ["Availability", function (item) { return stockOf(item.availability).label; }],
+      ["Where", function (item) { return stockOf(item.availability).where || missing; }],
+      ["Lead time", function (item) { return stockOf(item.availability).lead || missing; }],
+      ["Length", function (item) { const value = specValue(item.attributes && item.attributes.verified, "length_in"); return value ? value + " in" : missing; }],
+      ["Lockup", function (item) { return specValue(item.attributes && item.attributes.verified, "locking") || missing; }],
+      ["Barrel", function (item) { return specValue(item.attributes && item.attributes.verified, "barrel") || missing; }],
+      ["Optic cuts", function (item) { return specValue(item.attributes && item.attributes.verified, "optic_cuts") || ((item.options && item.options.optic_cut) || []).join(", ") || missing; }],
+      ["Colours", function (item) { return ((item.options && (item.options.slide_grip || item.options.grip)) || []).join(", ") || missing; }],
+      ["In the box", function (item) { return specValue(item.attributes && item.attributes.verified, "in_box") || (item.attributes && item.attributes.in_box) || missing; }],
+      ["Fit", function (item) { return item.fit ? item.fit.badge : "Check fit"; }],
+    ];
+    const table = h("table", { class: "compare" });
+    const head = h("tr", {}, [h("th", { scope: "col", text: "Spec" })].concat(rows.map(function (item) {
+      return h("th", { scope: "col" }, [h("a", { href: "/cn/product/" + encodeURIComponent(item.id), text: item.name })]);
+    })));
+    table.append(h("thead", {}, [head]));
+    const body = h("tbody");
+    lines.forEach(function (line) {
+      body.append(h("tr", {}, [h("th", { scope: "row", text: line[0] })].concat(rows.map(function (item) {
+        return h("td", { text: line[1](item) });
+      }))));
+    });
+    table.append(body);
+    return h("div", { class: "compare-wrap" }, [
+      h("h2", { text: "Compare" }),
+      table,
+      h("p", { class: "note", text: "A dash means that spec is not in the catalogue." }),
+    ]);
   }
 
   function visualView(body, focus) {
     const items = (body.results || []).map(function (item) {
-      return { id: item.id, name: item.name, category: item.category, meta: rand(item.price.amount) };
+      const stock = stockOf(item.availability);
+      return {
+        id: item.id,
+        name: item.name,
+        category: item.category,
+        meta: rand(item.price.amount) + " · " + stock.label,
+      };
     });
     return h("div", {
-      class: "flow",
+      class: "flow flow-wide",
       "data-flow": JSON.stringify({
         layout: "columns",
         centre: focus ? focus.name : "Results",
         groups: body.groups || [],
         items: items,
       }),
-      role: "img",
       "aria-label": "Results as a graph",
     });
   }
 
-  function sidebar(results, focus, open) {
-    const side = h("aside", { class: "side" }, [h("h2", { text: "In this catalogue" })]);
+  function priceBars(results) {
+    const wrap = h("div", { class: "bars" });
     ["Pistols", "Sights"].forEach(function (category) {
       const rows = results.filter(function (item) { return item.category === category; });
       if (!rows.length) return;
-      side.append(h("h3", { text: category === "Sights" ? "Red dots" : "Pistols" }));
+      const peak = Math.max.apply(null, rows.map(function (item) { return Number(item.price.amount) || 1; }));
+      wrap.append(h("h3", { text: category === "Sights" ? "Red dots" : "Pistols" }));
       rows.forEach(function (item) {
+        const width = Math.max(8, Math.round((Number(item.price.amount) / peak) * 100));
         const delta = item.compare ? item.compare.delta : 0;
-        side.append(h("p", { text: item.name + " · " + rand(item.price.amount) + (delta ? " · +" + rand(delta) : " · cheapest") }));
+        wrap.append(h("div", { class: "bar-row" }, [
+          h("span", { text: item.name }),
+          h("span", { class: "bar", style: "width:" + width + "%" }),
+          h("span", { class: "meta", text: rand(item.price.amount) + (delta ? " +" + rand(delta) : " cheapest") }),
+        ]));
       });
     });
+    return wrap;
+  }
+
+  function sidebar(results, focus, open, askId) {
+    const side = h("aside", { class: "side" }, [h("h2", { text: "Price comparison" })]);
+    side.append(priceBars(results));
     if (focus && focus.price_history) {
       const history = focus.price_history;
       side.append(h("h3", { text: "Price history" }));
       side.append(h("p", { text: focus.name + " was " + rand(history.was) + ", now " + rand(history.amount) + " on " + history.on + ". " + (history.label || "Demo data") + "." }));
     }
+    side.append(h("h2", { text: "Ask about these results" }));
+    side.append(askBox(askId || (focus && focus.id) || "ARCHON-TYPE-B"));
     if (open) side.append(open);
     return side;
   }
@@ -624,7 +665,7 @@
     const map = byId(rows);
     const picks = loadPicks(detail);
     const stock = stockOf(detail.availability);
-    const verified = (detail.attributes && detail.attributes.verified) || {};
+    const verified = (detail.attributes && detail.attributes.verified) || [];
     const family = detail.family || detail.id;
     function redraw() {
       savePicks(detail.id, picks);
@@ -632,21 +673,24 @@
     }
     const specs = h("dl", {});
     [
-      ["Lockup", verified.locking],
-      ["Action", verified.action],
-      ["Calibre", verified.caliber],
-      ["Barrel", verified.barrel],
-      ["Weight", verified.weight_oz ? verified.weight_oz + " oz" : ""],
-      ["Length", verified.length_in ? verified.length_in + " in" : ""],
-      ["Rail", verified.rail],
+      ["Lockup", specValue(verified, "locking")],
+      ["Action", specValue(verified, "action")],
+      ["Calibre", specValue(verified, "caliber")],
+      ["Barrel", specValue(verified, "barrel")],
+      ["Weight", specValue(verified, "weight_oz") ? specValue(verified, "weight_oz") + " oz" : ""],
+      ["Length", specValue(verified, "length_in") ? specValue(verified, "length_in") + " in" : ""],
+      ["Rail", specValue(verified, "rail")],
     ].forEach(function (spec) {
       if (!spec[1]) return;
       specs.append(h("dt", { text: spec[0] }), h("dd", { text: spec[1] }));
     });
-    const dots = ["ARCHON-DOT-RMS", "ARCHON-DOT-RMR", "ARCHON-DOT-ACRO"].map(function (sku) { return map[sku]; }).filter(Boolean);
-    const fitLines = dots.map(function (dot) {
-      const fit = fitFor(dot.id, picks.optic_cut, detail.fits || [], family);
-      return h("p", { text: dot.name + " · " + (fit ? fit.badge : "Check fit") + " · " + rand(dot.price.amount) + " · " + (dot.price_label || "Demo price") });
+    const linked = (detail.fits || []).filter(function (fit) {
+      return fit.fits_family === family || fit.fits_sku === detail.id || fit.fits_sku === family;
+    }).map(function (fit) { return map[fit.part_sku]; }).filter(Boolean);
+    const fitLines = linked.map(function (part) {
+      const fit = fitFor(part.id, picks.optic_cut, detail.fits || [], family);
+      const partStock = stockOf(part.availability);
+      return h("p", { text: part.name + " · " + (fit ? fit.badge : "Check fit") + " · " + partStock.label + " · " + rand(part.price.amount) + " · " + (part.price_label || "Demo price") });
     });
     const stills = [
       ["/page/cn/media/type-b-render.jpg", "Type B render, muzzle left"],
@@ -683,8 +727,10 @@
     if (detail.attributes && detail.attributes.in_box) column.append(h("h2", { text: "In the box" }), h("p", { text: detail.attributes.in_box }));
     column.append(h("h2", { text: "Fits" }));
     fitLines.forEach(function (line) { column.append(line); });
-    column.append(h("a", { class: "primary", href: "/cn/build/" + encodeURIComponent(detail.id), text: detail.category === "Pistols" ? "Build this pistol" : "Reserve this part" }));
+    column.append(h("a", { class: "primary sticky-action", href: "/cn/build/" + encodeURIComponent(detail.id), text: detail.category === "Pistols" ? "Build this pistol" : "Reserve this part" }));
+    const routeFilters = filtersFrom(new URLSearchParams(location.search));
     return h("article", { class: "product" }, [
+      searchForm(routeFilters, false),
       h("div", {}, [
         h("img", { class: "hero", src: detail.image, alt: detail.name }),
         detail.id === "ARCHON-TYPE-B" ? h("div", { class: "stills" }, stills.map(function (still) {
@@ -703,8 +749,20 @@
     const picks = loadPicks(detail);
     const lines = linesFor(detail, picks, map);
     const total = sum(lines);
-    const dots = ["ARCHON-DOT-RMS", "ARCHON-DOT-RMR", "ARCHON-DOT-ACRO"].map(function (sku) { return map[sku]; }).filter(Boolean);
-    const mags = ["ARCHON-MAG-12", "ARCHON-MAG-15", "ARCHON-MAG-18"].map(function (sku) { return map[sku]; }).filter(Boolean);
+    const family = detail.family || detail.id;
+    const linked = (detail.fits || []).map(function (fit) { return map[fit.part_sku]; }).filter(function (row) {
+      return row && (detail.fits || []).some(function (fit) {
+        return fit.part_sku === row.id && (fit.fits_family === family || fit.fits_sku === detail.id || fit.fits_sku === family);
+      });
+    });
+    function choiceFor(row) {
+      const fit = fitFor(row.id, picks.optic_cut, detail.fits || [], family);
+      const partStock = stockOf(row.availability);
+      return { code: row.id, label: row.name + " · " + rand(row.price.amount) + " · " + (fit ? fit.badge : "Check fit") + " · " + partStock.label };
+    }
+    const dots = linked.filter(function (row) { return row.category === "Sights"; });
+    const mags = linked.filter(function (row) { return row.category === "Magazines"; });
+    const triggers = linked.filter(function (row) { return row.category === "Triggers"; });
     function redraw(key, value) { picks[key] = value; savePicks(detail.id, picks); go(location.pathname); }
     const steps = [
       ["0:00", "/page/cn/media/type-b-render.jpg", "Base pistol, flush barrel"],
@@ -752,7 +810,7 @@
       h("label", { class: "field", text: "Name" }, [name]),
       h("label", { class: "field", text: "Email" }, [email]),
       h("label", { class: "field", text: "Phone" }, [phone]),
-      h("button", { class: "primary", type: "submit", text: "Reserve at Custom Nation" }),
+      h("button", { class: "primary sticky-action", type: "submit", text: "Reserve at " + CN.name }),
       status,
     ]);
     return h("article", { class: "build" }, [
@@ -773,9 +831,12 @@
         h("p", { class: "meta", text: "Running total" }),
         h("p", { class: "total", text: rand(total) }),
         h("p", {}, [h("span", { class: "gold", text: "Demo price" })]),
-        dots.length ? radioGroup("Red dot", "dot", dots.map(function (dot) { return { code: dot.id, label: dot.name + " " + rand(dot.price.amount) }; }), picks.dot, function (value) { redraw("dot", value); }) : null,
-        mags.length ? radioGroup("Magazine", "mag", mags.map(function (mag) { return { code: mag.id, label: mag.name + " " + rand(mag.price.amount) }; }), picks.mag, function (value) { redraw("mag", value); }) : null,
-        detail.id === "ARCHON-TYPE-B" ? radioGroup("Trigger", "trigger", [{ code: "standard", label: "Standard, included" }, { code: "performance", label: "Performance" }], picks.trigger, function (value) { redraw("trigger", value); }) : null,
+        dots.length ? radioGroup("Red dot", "dot", dots.map(choiceFor), picks.dot, function (value) { redraw("dot", value); }) : null,
+        mags.length ? radioGroup("Magazine", "mag", mags.map(choiceFor), picks.mag, function (value) { redraw("mag", value); }) : null,
+        triggers.length ? radioGroup("Trigger", "trigger", [{ code: "standard", label: "Standard, included · In stock" }].concat(triggers.map(function (row) {
+          const partStock = stockOf(row.availability);
+          return { code: "performance", label: row.name + " · " + rand(row.price.amount) + " · Fits · " + partStock.label };
+        })), picks.trigger, function (value) { redraw("trigger", value); }) : null,
         h("p", { class: "note", text: CN.name + " confirms stock and paperwork before anything is final. Nothing is held or charged until they confirm." }),
         form,
       ]),
@@ -802,7 +863,7 @@
           h("h2", { text: "Archon Type C" }),
           h("p", { text: missing.message || "No exact match." }),
           h("p", { text: "Closest matches: " + (missing.results || []).map(function (item) { return item.name; }).join(", ") + "." }),
-          focus ? h("a", { class: "primary", href: "/cn/product/" + encodeURIComponent(focus.id), text: "Show " + focus.name }) : null,
+          focus ? h("a", { class: "ghost", href: "/cn/product/" + encodeURIComponent(focus.id), text: "Show " + focus.name }) : null,
         ]),
         h("article", { class: "compare-card" }, [
           h("h2", { text: "Muzzle velocity" }),
@@ -818,9 +879,22 @@
           ]),
         ]),
       ]),
+      h("div", { class: "pills" }, [
+        h("a", { class: "primary", href: "mailto:" + CN.email, text: "Email " + CN.name }),
+        h("a", { class: "ghost", href: "/cn", text: "Ask another question" }),
+        h("button", { type: "button", class: "ghost", text: "Clear search", onclick: function () { go("/cn"); } }),
+      ]),
     ]);
   }
 
+  const menuToggle = document.getElementById("menu-toggle");
+  const shopNav = document.getElementById("shop-nav");
+  if (menuToggle && shopNav) {
+    menuToggle.addEventListener("click", function () {
+      const open = shopNav.classList.toggle("open");
+      menuToggle.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+  }
   document.getElementById("contact-us").addEventListener("click", function () {
     openDialog("Contact us", [
       h("p", { text: CN.email }),

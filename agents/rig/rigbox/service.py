@@ -131,10 +131,13 @@ class WebhookHandoff:
         if webhook and self.http is not None:
             await self.http.post(webhook, json={"tenant_id": tenant_id, "quote": quote})
             return
-        if email:
-            if self.mailer is None or letter is None:
-                raise RuntimeError("mail is not configured")
-            await self.mailer.send(letter)
+        # A shop that does not ask for the letter keeps the old handoff:
+        # an address with no webhook is stored and marked sent, and nothing is mailed.
+        if letter is None:
+            return
+        if self.mailer is None or not email:
+            raise RuntimeError("mail is not configured")
+        await self.mailer.send(letter)
 
 
 class Service:
@@ -150,6 +153,7 @@ class Service:
         self.models = models
         self.handoff = handoff or RecordingHandoff()
         self.limiter = RateLimiter(limit=rate_limit)
+        self.reservations = RateLimiter(limit=5)
 
     async def authenticate(self, raw_key: str) -> dict[str, Any]:
         presented = raw_key or ""
@@ -191,7 +195,8 @@ class Service:
         filters: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         text = (query or "").strip()
-        if await self._is_archon(tenant_id):
+        shop = await self._shop(tenant_id)
+        if shop.get("search"):
             from rigbox.cn import shop_search
 
             return shop_search(
@@ -201,6 +206,7 @@ class Service:
                     "products": await self.store.products(tenant_id),
                     "fits": await self._approved_fits(tenant_id),
                     "filters": filters or {},
+                    "shop": shop,
                 }
             )
         if not text:
@@ -225,10 +231,16 @@ class Service:
         detail = product_detail(await self._bundle(tenant_id, product_id))
         if detail is None:
             raise RigError("not_found", "No such product.", 404)
-        if await self._is_archon(tenant_id):
+        shop = await self._shop(tenant_id)
+        if shop.get("search"):
             from rigbox.cn import present_detail
 
-            return present_detail(detail, await self._active(tenant_id), await self._approved_fits(tenant_id))
+            return present_detail(
+                detail,
+                await self._active(tenant_id),
+                await self._approved_fits(tenant_id),
+                str(shop.get("centre_sku") or ""),
+            )
         return detail
 
     async def setups(self, tenant_id: str, product_id: str) -> dict[str, Any]:
@@ -240,7 +252,7 @@ class Service:
         if product_detail(bundle) is None:
             raise RigError("not_found", "No such product.", 404)
         built = build_setups(bundle)
-        if await self._is_archon(tenant_id):
+        if (await self._shop(tenant_id)).get("search"):
             from rigbox.cn import enrich_setups
 
             built = enrich_setups(built, bundle["products"], bundle["fits"])
@@ -275,7 +287,7 @@ class Service:
         if built is None:
             raise RigError("not_found", "No such product.", 404)
         await self._annotate_graph(tenant_id, bundle, built)
-        if await self._is_archon(tenant_id):
+        if (await self._shop(tenant_id)).get("search"):
             from rigbox.cn import enrich_graph
 
             built = enrich_graph(built, bundle["products"], bundle["fits"])
@@ -332,9 +344,34 @@ class Service:
             except KeyError:
                 raise RigError("invalid", "That setup is not in this catalogue.", 422) from None
             _restore_choices(priced, body["setup"])
+            shop = await self._shop(tenant_id)
+            if shop.get("search"):
+                from rigbox.cn import prepare_reservation
+
+                problem = prepare_reservation(
+                    priced,
+                    products,
+                    await self._approved_fits(tenant_id),
+                    str(shop.get("centre_sku") or ""),
+                )
+                if problem:
+                    raise RigError("invalid", problem, 422)
             payload = {"kind": "setup", "setup": priced}
         elif body.get("product_id"):
-            payload = {"kind": "product", "product": await self.product(tenant_id, str(body["product_id"]))}
+            product = await self.product(tenant_id, str(body["product_id"]))
+            shop = await self._shop(tenant_id)
+            if shop.get("search"):
+                from rigbox.cn import prepare_reservation
+
+                problem = prepare_reservation(
+                    {"parts": [{"product": product, "choice": ""}]},
+                    await self._active(tenant_id),
+                    await self._approved_fits(tenant_id),
+                    str(shop.get("centre_sku") or ""),
+                )
+                if problem:
+                    raise RigError("invalid", problem, 422)
+            payload = {"kind": "product", "product": product}
         else:
             raise RigError("invalid", "A setup or a product is required.", 422)
         return await self._store_quote(tenant_id, payload, contact)
@@ -703,7 +740,9 @@ class Service:
         quote_id = "req_" + uuid4().hex
         await self.store.add_quote(tenant_id, quote_id, payload, contact)
         retailer = await self.store.retailer(tenant_id) or {}
-        letter = reservation_letter(quote_id, payload, contact, retailer)
+        shop = await self._shop(tenant_id)
+        mails = bool(shop.get("mail_reservations"))
+        letter = reservation_letter(quote_id, payload, contact, retailer) if mails else None
         try:
             await self.handoff.send(
                 tenant_id=tenant_id,
@@ -713,13 +752,34 @@ class Service:
                 letter=letter,
             )
         except Exception:  # noqa: BLE001 — the quote is stored even if the handoff fails
-            return {"request_id": quote_id, "delivered": False}
+            if mails:
+                return {"request_id": quote_id, "delivered": False}
+            return {"request_id": quote_id}
         await self.store.mark_sent(tenant_id, quote_id)
-        return {"request_id": quote_id, "delivered": True}
+        if mails:
+            return {"request_id": quote_id, "delivered": True}
+        return {"request_id": quote_id}
 
-    async def _is_archon(self, tenant_id: str) -> bool:
+    async def _shop(self, tenant_id: str) -> dict[str, Any]:
         retailer = await self.store.retailer(tenant_id) or {}
-        return str(retailer.get("slug") or "") == "archon"
+        publish = _publish_for_slug(str(retailer.get("slug") or ""))
+        shop = publish.get("shop")
+        return shop if isinstance(shop, dict) else {}
+
+
+def _publish_for_slug(slug: str) -> dict[str, Any]:
+    if not slug:
+        return {}
+    configured = os.environ.get("CATALOGUE_DIR") or ""
+    base = Path(configured) if configured else Path(__file__).resolve().parents[1] / "catalogues"
+    path = base / slug / "publish.json"
+    if not path.is_file():
+        return {}
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
 
 
 def _market_average(rows: list[dict[str, Any]], currency: str) -> dict[str, Any] | None:

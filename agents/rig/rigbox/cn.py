@@ -18,8 +18,15 @@ from rigbox.rank import search as rank_search
 # Category labels are split so this file stays clear of the shared room word list.
 _SIDEARM = "Pist" + "ols"
 _CARRY = "Holst" + "ers"
-_SPREAD = ("Sights", "Triggers", "Magazines", "Lights", _CARRY)
-_ORDER = (_SIDEARM, "Sights", "Triggers", "Magazines", "Lights", _CARRY, "Barrels", "Parts")
+_SPREAD = ("Sights", "Triggers", "Magazines", "Lights", _CARRY, "Barrels", "Parts")
+_PARTS = ("Sights", "Triggers", "Magazines", "Lights", _CARRY, "Barrels", "Parts")
+_ALL_PARTS = "*"
+_SIGHT = frozenset({"optic", "optics", "sight", "sights", "dot", "dots"})
+# A chamber size ("9mm", "9x19") is not a model name.
+_CHAMBER = re.compile(
+    r"\b(?:\d+(?:\.\d+)?\s*mm|\d+\s*[x×]\s*\d+|\.\d+)\b",
+    re.IGNORECASE,
+)
 # A one-word query that names a category. "Optics" is the shopper word for Sights.
 _CATEGORY_WORD = {
     "pist" + "ol": _SIDEARM,
@@ -57,9 +64,23 @@ def shop_search(payload: dict[str, Any]) -> dict[str, Any]:
     filters = dict(payload.get("filters") or {})
     products = [row for row in (payload.get("products") or []) if _active(row)]
     fits = [row for row in (payload.get("fits") or []) if approved(row)]
+    shop = payload.get("shop") if isinstance(payload.get("shop"), dict) else {}
+    centre_sku = str(shop.get("centre_sku") or "")
+    outsider = _named_outsider(query, shop.get("not_stocked") or [])
+    if outsider:
+        return {
+            "results": [],
+            "ids": [],
+            "exact_match": False,
+            "honest": "not_stocked",
+            "message": f"We don't stock {outsider}.",
+            "focus_id": "",
+            "groups": [],
+        }
     if not query and not _has_filter(filters):
         return {"results": [], "ids": [], "exact_match": True, "honest": "empty", "focus_id": "", "groups": []}
     cleaned, parsed = _parse_constraints(query)
+    cleaned = _strip_chamber(cleaned)
     filters = _merge(filters, parsed)
     filter_only = False
     if not cleaned:
@@ -72,14 +93,18 @@ def shop_search(payload: dict[str, Any]) -> dict[str, Any]:
         by_sku = {_sku(row): row for row in products}
         ranked_rows = [by_sku[item] for item in (ranked.get("ids") or []) if item in by_sku]
         if not ranked_rows:
-            return _no_hits(cleaned, products)
+            return _no_hits(cleaned, products, shop)
         exact = bool(ranked.get("exact_match", True))
         message = str(ranked.get("message") or "")
-    if ranked_rows and not exact and not _variant_miss(message, products):
-        return _no_hits(cleaned or query, products)
+    if ranked_rows and not exact and not _variant_miss(message, products) and not _chamber_miss(message):
+        return _no_hits(cleaned or query, products, shop)
+    if not exact and _chamber_miss(message):
+        exact = True
+        message = ""
     sought, host = _intent(cleaned) if cleaned else ("", "")
     relation = bool(host)
     category_only = _category_only(cleaned)
+    centre_default = _centre_row(products, centre_sku)
     if filter_only or not ranked_rows:
         focus = None
     else:
@@ -91,9 +116,19 @@ def shop_search(payload: dict[str, Any]) -> dict[str, Any]:
         chosen = _closest_rows(cleaned, ranked_rows)
         focus = _pick_focus(cleaned, chosen) if chosen else focus
         honest = "closest"
+    elif category_only == _ALL_PARTS:
+        chosen = [row for row in products if str(row.get("category") or "") in _PARTS]
+        focus = _fitting_focus(cleaned, chosen, centre_default, fits)
+        honest = "exact"
     elif category_only:
         chosen = [row for row in products if str(row.get("category") or "") == category_only]
-        focus = _pick_focus(cleaned, chosen) if chosen else None
+        focus = _fitting_focus(cleaned, chosen, centre_default, fits)
+        honest = "exact"
+    elif relation and _phrase_category(sought):
+        host_pool = _closest_rows(host, products) or list(products)
+        host_row = _pick_focus(host, host_pool)
+        chosen = _related(host_row, products, fits, _phrase_category(sought))
+        focus = _fitting_focus(sought, chosen, host_row, fits)
         honest = "exact"
     elif (
         focus is not None
@@ -106,8 +141,23 @@ def shop_search(payload: dict[str, Any]) -> dict[str, Any]:
         honest = "exact"
     else:
         chosen = _same_cover(sought if relation else cleaned, ranked_rows)
+        if focus is None or not _row_fits(focus, centre_default, fits):
+            focus = _fitting_focus(sought if relation else cleaned, chosen, centre_default, fits)
         honest = "exact"
-    chosen = _apply_filters(chosen, filters)
+    stock_note = ""
+    if filters.get("in_stock") and focus is not None and _status(focus) == "out_of_stock":
+        centre_for_alt = focus if str(focus.get("category") or "") == _SIDEARM else centre_default
+        alternative = _alternative(focus, products, fits, centre_for_alt)
+        kept = [focus]
+        if alternative:
+            other = _by_id(products, str(alternative.get("id") or ""))
+            if other is not None:
+                kept.append(other)
+        chosen = kept
+        stock_note = f"{focus.get('name')} is out of stock."
+        honest = "exact"
+    else:
+        chosen = _apply_filters(chosen, filters)
     if not chosen:
         if not exact:
             return {
@@ -119,11 +169,23 @@ def shop_search(payload: dict[str, Any]) -> dict[str, Any]:
                 "focus_id": _sku(focus) if focus else "",
                 "groups": [],
             }
-        return _no_hits(cleaned or query, products)
-    chosen = _order(chosen, filters)
+        return _no_hits(cleaned or query, products, shop)
+    named = not filter_only
+    if named and (focus is None or _sku(focus) not in {_sku(row) for row in chosen}):
+        focus = _fitting_focus(cleaned or query, chosen, centre_default, fits) if chosen else None
+    elif focus is not None and not _row_fits(
+        focus, centre_default if str(focus.get("category") or "") != _SIDEARM else focus, fits
+    ):
+        # A named row stays put. A broad query highlights a row that actually fits.
+        if _cover(cleaned or query, focus) < _best_cover(cleaned or query, chosen):
+            focus = _fitting_focus(cleaned or query, chosen, centre_default, fits)
+    chosen = _order(chosen, filters, focus)
     chosen = chosen[:limit]
     focus_id = _sku(focus) if focus else ""
-    centre = focus if focus is not None and str(focus.get("category") or "") == _SIDEARM else _type_b(products)
+    if focus is not None and str(focus.get("category") or "") == _SIDEARM:
+        centre = focus
+    else:
+        centre = centre_default
     results = [present(row, products, fits, focus_id, centre, mark_exact=honest != "closest") for row in chosen]
     body: dict[str, Any] = {
         "results": results,
@@ -134,7 +196,9 @@ def shop_search(payload: dict[str, Any]) -> dict[str, Any]:
         "groups": _groups(results),
         "fits": _public_fits(fits),
     }
-    if honest == "closest":
+    if stock_note:
+        body["message"] = stock_note
+    elif honest == "closest":
         body["message"] = message or "No exact match."
     return body
 
@@ -164,11 +228,16 @@ def present(
     return item
 
 
-def present_detail(detail: dict[str, Any], products: list[dict[str, Any]], fits: list[dict[str, Any]]) -> dict[str, Any]:
+def present_detail(
+    detail: dict[str, Any],
+    products: list[dict[str, Any]],
+    fits: list[dict[str, Any]],
+    centre_sku: str = "",
+) -> dict[str, Any]:
     row = next((item for item in products if _sku(item) == str(detail.get("id") or "")), None)
     if row is None:
         return detail
-    centre = row if str(row.get("category") or "") == _SIDEARM else _type_b(products)
+    centre = row if str(row.get("category") or "") == _SIDEARM else _centre_row(products, centre_sku)
     rich = present(row, products, fits, _sku(row), centre)
     rich["categories_that_fit"] = detail.get("categories_that_fit") or []
     rich["fits"] = _public_fits(fits)
@@ -244,13 +313,14 @@ def enrich_setups(body: dict[str, Any], products: list[dict[str, Any]], fits: li
 def _pick_focus(query: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
     needles = [token for token in _tokens(query) if len(token) >= 2 and token not in _FILLER]
 
-    def key(row: dict[str, Any]) -> tuple[int, float, int, int, str]:
-        blob = f"{row.get('name') or ''} {row.get('brand') or ''}"
-        have = set(_tokens(blob))
+    def key(row: dict[str, Any]) -> tuple[int, float, int, int, int, str]:
+        have = set(_tokens(_blob(row)))
         cover = sum(1 for token in needles if _covered_token(token, have))
         sim = _similarity(query, str(row.get("name") or ""))
         sidearm = 1 if str(row.get("category") or "") == _SIDEARM else 0
-        return (cover, sim, sidearm, -len(str(row.get("name") or "")), _sku(row))
+        stocked = 1 if _available(row) else 0
+        # Same cover: the model itself comes ahead of an accessory with a similar name.
+        return (cover, sidearm, sim, stocked, -len(str(row.get("name") or "")), _sku(row))
 
     return max(rows, key=key)
 
@@ -264,11 +334,27 @@ def _same_cover(query: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return kept or rows
 
 
+def _blob(row: dict[str, Any]) -> str:
+    parts = [str(row.get("name") or ""), str(row.get("brand") or "")]
+    attributes = row.get("attributes") if isinstance(row.get("attributes"), dict) else {}
+    features = attributes.get("features") or []
+    if isinstance(features, list):
+        parts.extend(str(item) for item in features)
+    if attributes.get("thread"):
+        parts.append(str(attributes["thread"]))
+    return " ".join(parts)
+
+
 def _cover(query: str, row: dict[str, Any]) -> int:
     needles = [token for token in _tokens(query) if len(token) >= 2 and token not in _FILLER]
-    blob = f"{row.get('name') or ''} {row.get('brand') or ''}"
-    have = set(_tokens(blob))
+    have = set(_tokens(_blob(row)))
     return sum(1 for token in needles if _covered_token(token, have))
+
+
+def _best_cover(query: str, rows: list[dict[str, Any]]) -> int:
+    if not rows:
+        return 0
+    return max(_cover(query, row) for row in rows)
 
 
 def _covered_token(token: str, have: set[str]) -> bool:
@@ -283,7 +369,20 @@ def _category_only(query: str) -> str:
     tokens = [token for token in _tokens(query) if len(token) >= 2 and token not in _FILLER]
     if len(tokens) != 1:
         return ""
+    if tokens[0] in {"part", "parts"}:
+        return _ALL_PARTS
     return _CATEGORY_WORD.get(tokens[0], "")
+
+
+def _phrase_category(phrase: str) -> str:
+    tokens = [token for token in _tokens(phrase) if token not in _FILLER]
+    if any(token in _SIGHT for token in tokens):
+        return "Sights"
+    for token in tokens:
+        found = _CATEGORY_WORD.get(token, "")
+        if found and found != _ALL_PARTS:
+            return found
+    return ""
 
 
 def _model_query(query: str) -> bool:
@@ -364,7 +463,7 @@ def _apply_filters(rows: list[dict[str, Any]], filters: dict[str, Any]) -> list[
             continue
         if filters.get("max_price_inclusive") is not None and amount > float(filters["max_price_inclusive"]):
             continue
-        if filters.get("min_price") is not None and amount <= float(filters["min_price"]):
+        if filters.get("min_price") is not None and amount < float(filters["min_price"]):
             continue
         category = str(filters.get("category") or "")
         if category and category.lower() != "all" and str(row.get("category") or "").lower() != category.lower():
@@ -373,19 +472,33 @@ def _apply_filters(rows: list[dict[str, Any]], filters: dict[str, Any]) -> list[
     return kept
 
 
-def _order(rows: list[dict[str, Any]], filters: dict[str, Any]) -> list[dict[str, Any]]:
-    reverse_price = str(filters.get("sort") or "") == "price_desc"
+def _order(
+    rows: list[dict[str, Any]],
+    filters: dict[str, Any],
+    focus: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    sort = str(filters.get("sort") or "")
+    if sort in {"price_asc", "price_desc"}:
+        ordered = sorted(rows, key=lambda row: (_amount(row), _sku(row)), reverse=sort == "price_desc")
+        return ordered
+    if focus is None:
+        return list(rows)
+    sku = _sku(focus)
+    return [row for row in rows if _sku(row) == sku] + [row for row in rows if _sku(row) != sku]
 
-    def key(row: dict[str, Any]) -> tuple[int, float, str]:
-        category = str(row.get("category") or "")
-        index = _ORDER.index(category) if category in _ORDER else 99
-        amount = _amount(row)
-        return (index, -amount if reverse_price else amount, _sku(row))
 
-    return sorted(rows, key=key)
-
-
-def _no_hits(query: str, products: list[dict[str, Any]]) -> dict[str, Any]:
+def _no_hits(query: str, products: list[dict[str, Any]], shop: dict[str, Any] | None = None) -> dict[str, Any]:
+    named = _named_outsider(query, (shop or {}).get("not_stocked") or [])
+    if named:
+        return {
+            "results": [],
+            "ids": [],
+            "exact_match": False,
+            "honest": "not_stocked",
+            "message": f"We don't stock {named}.",
+            "focus_id": "",
+            "groups": [],
+        }
     brand = _outside_brand(query, products)
     if brand:
         return {
@@ -570,8 +683,220 @@ def _centre_cut(centre: dict[str, Any] | None) -> str:
     return str(defaults.get("optic_cut") or "")
 
 
-def _type_b(products: list[dict[str, Any]]) -> dict[str, Any] | None:
-    return next((row for row in products if _sku(row) == "ARCHON-TYPE-B"), None)
+def _centre_row(products: list[dict[str, Any]], centre_sku: str) -> dict[str, Any] | None:
+    if centre_sku:
+        found = _by_id(products, centre_sku)
+        if found is not None:
+            return found
+    return next((row for row in products if str(row.get("category") or "") == _SIDEARM), None)
+
+
+def _named_outsider(query: str, configured: Any) -> str:
+    entries = configured if isinstance(configured, list) else []
+    words = [word.lower() for word in re.findall(r"[A-Za-z0-9]+", query)]
+    if not words:
+        return ""
+    for entry in entries:
+        if isinstance(entry, str):
+            name = entry.strip()
+            aliases = [name.lower()]
+        elif isinstance(entry, dict):
+            name = str(entry.get("name") or "").strip()
+            aliases = [name.lower()] + [str(item).lower() for item in (entry.get("also") or [])]
+        else:
+            continue
+        if not name:
+            continue
+        for word in words:
+            if word in aliases:
+                return name
+            if len(word) >= 4 and any(len(alias) >= 4 and _similarity(word, alias) >= 0.75 for alias in aliases):
+                return name
+    return ""
+
+
+def _strip_chamber(query: str) -> str:
+    return " ".join(_CHAMBER.sub(" ", query).split())
+
+
+def _chamber_miss(message: str) -> bool:
+    if "No exact match for " not in message:
+        return False
+    phrase = message.split("No exact match for ", 1)[1].rstrip(".")
+    parts = [part.strip() for part in phrase.split(",") if part.strip()]
+    return bool(parts) and all(_CHAMBER.fullmatch(part) or _CHAMBER.search(part) for part in parts)
+
+
+def _related(
+    host: dict[str, Any],
+    products: list[dict[str, Any]],
+    fits: list[dict[str, Any]],
+    category: str,
+) -> list[dict[str, Any]]:
+    family = str(host.get("family") or "")
+    chosen = []
+    for row in products:
+        if str(row.get("category") or "") != category:
+            continue
+        attributes = row.get("attributes") if isinstance(row.get("attributes"), dict) else {}
+        upgrade_for = attributes.get("upgrade_for") or []
+        if isinstance(upgrade_for, str):
+            upgrade_for = [upgrade_for]
+        linked = _sku(row) in {
+            str(fit.get("part_sku") or "")
+            for fit in fits
+            if str(fit.get("fits_family") or "") == family or str(fit.get("fits_sku") or "") == _sku(host)
+        }
+        if linked or family in upgrade_for:
+            chosen.append(row)
+    if chosen:
+        return chosen
+    return [row for row in products if str(row.get("category") or "") == category]
+
+
+def _row_fits(row: dict[str, Any] | None, centre: dict[str, Any] | None, fits: list[dict[str, Any]]) -> bool:
+    if row is None:
+        return False
+    if str(row.get("category") or "") == _SIDEARM or centre is None:
+        return True
+    state = fit_state(_sku(row), centre, fits, _centre_cut(centre))
+    return state is None or bool(state.get("fits"))
+
+
+def _fitting_focus(
+    query: str,
+    rows: list[dict[str, Any]],
+    centre: dict[str, Any] | None,
+    fits: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    if not rows:
+        return None
+    fitting = [row for row in rows if _row_fits(row, centre, fits)]
+    pool = fitting or list(rows)
+    stocked = [row for row in pool if _available(row)]
+    return _pick_focus(query, stocked or pool)
+
+
+def prepare_reservation(
+    setup: dict[str, Any],
+    products: list[dict[str, Any]],
+    fits: list[dict[str, Any]],
+    centre_sku: str,
+) -> str:
+    """Rewrite choice codes to labels. Refuse a line that is out of stock or does not fit the chosen cut."""
+    by_id = {_sku(row): row for row in products}
+    parts = list(setup.get("parts") or [])
+    sidearm_row = None
+    for part in parts:
+        product = part.get("product") if isinstance(part.get("product"), dict) else {}
+        row = by_id.get(str(product.get("id") or ""))
+        if row is not None and str(row.get("category") or "") == _SIDEARM:
+            sidearm_row = row
+            break
+    cut = ""
+    if sidearm_row is not None:
+        cut = _cut_in_choice(sidearm_row, "")
+        for part in parts:
+            product = part.get("product") if isinstance(part.get("product"), dict) else {}
+            if str(product.get("id") or "") == _sku(sidearm_row):
+                part["choice"] = _readable_choice(sidearm_row, str(part.get("choice") or ""))
+                cut = _cut_in_choice(sidearm_row, str(part.get("choice") or "")) or cut
+                break
+    if not cut:
+        cut = _centre_cut(_centre_row(products, centre_sku))
+    for part in parts:
+        product = part.get("product") if isinstance(part.get("product"), dict) else {}
+        row = by_id.get(str(product.get("id") or ""))
+        if row is None:
+            return "That item is not in this catalogue."
+        choice = _readable_choice(row, str(part.get("choice") or ""))
+        refused = _unknown_choice(row, choice)
+        if refused:
+            return refused
+        part["choice"] = choice
+        if _status(row) == "out_of_stock":
+            return f"{row.get('name')} is out of stock."
+        if sidearm_row is not None and _sku(row) != _sku(sidearm_row):
+            state = fit_state(_sku(row), sidearm_row, fits, cut)
+            if state is not None and not state.get("fits"):
+                return f"{row.get('name')} does not fit the {cut or 'chosen'} cut."
+    return ""
+
+
+def _readable_choice(row: dict[str, Any], choice: str) -> str:
+    text = " ".join(str(choice or "").replace("\n", " ").replace("\r", " ").split())
+    attributes = row.get("attributes") if isinstance(row.get("attributes"), dict) else {}
+    options = attributes.get("options") if isinstance(attributes.get("options"), dict) else {}
+    for values in options.values():
+        if not isinstance(values, list):
+            continue
+        for value in values:
+            if isinstance(value, dict):
+                code = str(value.get("code") or "")
+                label = str(value.get("label") or code)
+                if code and code in text:
+                    text = text.replace(code, label)
+            elif isinstance(value, str) and value in text:
+                continue
+    return text[:200]
+
+
+def _option_labels(row: dict[str, Any]) -> set[str]:
+    attributes = row.get("attributes") if isinstance(row.get("attributes"), dict) else {}
+    options = attributes.get("options") if isinstance(attributes.get("options"), dict) else {}
+    labels: set[str] = set()
+    for values in options.values():
+        if not isinstance(values, list):
+            continue
+        for value in values:
+            if isinstance(value, dict):
+                if value.get("label"):
+                    labels.add(str(value["label"]))
+                if value.get("code"):
+                    labels.add(str(value["code"]))
+            elif isinstance(value, str):
+                labels.add(value)
+    return labels
+
+
+def _label_hit(piece: str, labels: set[str]) -> bool:
+    if piece in labels:
+        return True
+    folded = piece.lower().replace('"', "").replace("″", "").replace("“", "").replace("”", "")
+    for label in labels:
+        other = label.lower().replace('"', "").replace("″", "").replace("“", "").replace("”", "")
+        if folded == other or (len(folded) >= 3 and (folded in other or other in folded)):
+            return True
+    return False
+
+
+def _unknown_choice(row: dict[str, Any], choice: str) -> str:
+    if not choice:
+        return ""
+    labels = _option_labels(row)
+    if not labels:
+        if re.search(r"\b[a-z]+-\d+\b", choice):
+            return f"{choice} is not an option on {row.get('name')}."
+        return ""
+    pieces = [piece.strip() for piece in choice.split("·")]
+    for piece in pieces:
+        if not piece:
+            continue
+        if piece == str(row.get("name") or "") or _label_hit(piece, labels):
+            continue
+        return f"{piece} is not an option on {row.get('name')}."
+    return ""
+
+
+def _cut_in_choice(row: dict[str, Any], choice: str) -> str:
+    attributes = row.get("attributes") if isinstance(row.get("attributes"), dict) else {}
+    options = attributes.get("options") if isinstance(attributes.get("options"), dict) else {}
+    cuts = options.get("optic_cut") if isinstance(options.get("optic_cut"), list) else []
+    for cut in cuts:
+        if isinstance(cut, str) and cut and cut in choice:
+            return cut
+    defaults = attributes.get("defaults") if isinstance(attributes.get("defaults"), dict) else {}
+    return str(defaults.get("optic_cut") or "")
 
 
 def _by_id(products: list[dict[str, Any]], sku: str) -> dict[str, Any] | None:

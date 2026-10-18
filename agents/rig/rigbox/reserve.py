@@ -4,6 +4,7 @@ settings. This module does not open a network connection.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import smtplib
 from email.message import EmailMessage
@@ -48,12 +49,13 @@ def reservation_letter(
         total_amount = str(price.get("amount") or "")
         total_currency = str(price.get("currency") or "")
         total_label = _price_label(product_row)
+    shop = str(retailer.get("name") or "The shop").strip() or "The shop"
     lines.extend(
         [
             f"Total-Amount: {total_amount}",
             f"Total-Currency: {total_currency}",
             f"Total-Label: {total_label}",
-            "Note: Custom Nation confirms stock and paperwork before anything is final. Nothing is held until they confirm.",
+            f"Note: {shop} confirms stock and paperwork before anything is final. Nothing is held until they confirm.",
         ]
     )
     return {
@@ -61,6 +63,7 @@ def reservation_letter(
         "subject": subject,
         "text": "\n".join(lines),
         "reference": reference,
+        "reply_to": _clean(contact.get("email")),
     }
 
 
@@ -95,7 +98,13 @@ class SmtpMailer:
         message["Subject"] = letter.get("subject") or ""
         message["From"] = self.sender
         message["To"] = letter["to"]
+        reply_to = str(letter.get("reply_to") or "").strip()
+        if reply_to:
+            message["Reply-To"] = reply_to
         message.set_content(letter.get("text") or "")
+        await asyncio.to_thread(self._deliver, message)
+
+    def _deliver(self, message: EmailMessage) -> None:
         with smtplib.SMTP(self.host, self.port, timeout=20) as smtp:
             smtp.starttls()
             if self.username:
@@ -125,6 +134,7 @@ def _item_lines(index: int, part: dict[str, Any]) -> list[str]:
         f"Item-Currency: {price.get('currency') or ''}",
         f"Item-Price-Label: {_price_label(product)}",
         f"Item-Choice: {_clean(part.get('choice'))}",
+        f"Item-Stock: {_stock_line(product)}",
     ]
 
 
@@ -141,6 +151,19 @@ def _label_from_parts(setup: dict[str, Any]) -> str:
     if not parts:
         return "Indicative"
     return _price_label(parts[0].get("product") or {})
+
+
+def _stock_line(product: dict[str, Any]) -> str:
+    availability = product.get("availability") if isinstance(product.get("availability"), dict) else {}
+    if not availability:
+        attributes = product.get("attributes") if isinstance(product.get("attributes"), dict) else {}
+        stock = attributes.get("stock") if isinstance(attributes.get("stock"), dict) else {}
+        availability = stock
+    status = str(availability.get("status") or "").strip()
+    label = str(availability.get("label") or "").strip()
+    lead = str(availability.get("lead") or "").strip()
+    parts = [part for part in (status, label, lead) if part]
+    return " · ".join(parts)
 
 
 def _clean(value: Any) -> str:

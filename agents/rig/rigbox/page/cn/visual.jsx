@@ -1,5 +1,6 @@
 /** Visual results graph. Bundled to visual.js. React Flow is MIT. */
 
+import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Background, Handle, Position, ReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -37,15 +38,79 @@ function CardNode({ data }) {
 
 const nodeTypes = { cat: CatNode, centre: CentreNode, card: CardNode };
 
-function columns(model) {
+function columns(model, narrow) {
   const nodes = [];
   const edges = [];
   const groups = model.groups || [];
   const items = model.items || [];
+  if (narrow) {
+    const blocks = [];
+    groups.forEach((group) => {
+      blocks.push({ kind: "cat", group });
+      items.filter((item) => item.category === group.category).forEach((item) => {
+        blocks.push({ kind: "card", item });
+      });
+    });
+    const heightOf = (block) => (block.kind === "cat" ? 72 : 88);
+    const total = blocks.reduce((sum, block) => sum + heightOf(block), 0);
+    const middle = total / 2;
+    let top = 0;
+    let placed = false;
+    const centreAt = (y) => {
+      nodes.push({
+        id: "centre",
+        type: "centre",
+        position: { x: 16, y },
+        data: { label: model.centre || "Results" },
+        draggable: false,
+      });
+    };
+    blocks.forEach((block) => {
+      if (!placed && top >= middle) {
+        centreAt(top);
+        top += 96;
+        placed = true;
+      }
+      if (block.kind === "cat") {
+        const id = "cat-" + block.group.category;
+        nodes.push({
+          id,
+          type: "cat",
+          position: { x: 0, y: top },
+          data: { label: block.group.category, count: block.group.count },
+          draggable: false,
+        });
+        edges.push({
+          id: "e-" + id,
+          source: id,
+          target: "centre",
+          style: { stroke: "#7ee0d6", strokeWidth: 1.25 },
+        });
+      } else {
+        const itemId = "item-" + block.item.id;
+        nodes.push({
+          id: itemId,
+          type: "card",
+          position: { x: 0, y: top },
+          data: { id: block.item.id, label: block.item.name, meta: block.item.meta, onOpen: model.onOpen },
+          draggable: false,
+        });
+        edges.push({
+          id: "e-" + itemId,
+          source: "centre",
+          target: itemId,
+          style: { stroke: "#2f6f68", strokeWidth: 1 },
+        });
+      }
+      top += heightOf(block);
+    });
+    if (!placed) centreAt(top);
+    return { nodes, edges };
+  }
   let cursor = 0;
   const bands = groups.map((group) => {
     const mine = items.filter((item) => item.category === group.category);
-    const band = Math.max(70, mine.length * 56);
+    const band = Math.max(96, mine.length * 92);
     const row = { group, mine, top: cursor, band };
     cursor += band + 16;
     return row;
@@ -77,7 +142,7 @@ function columns(model) {
       nodes.push({
         id: itemId,
         type: "card",
-        position: { x: 620, y: top + index * 56 },
+        position: { x: 560, y: top + index * 92 },
         data: { id: item.id, label: item.name, meta: item.meta, onOpen: model.onOpen },
         draggable: false,
       });
@@ -92,13 +157,17 @@ function columns(model) {
   return { nodes, edges };
 }
 
-function orbit(model) {
+function orbit(model, narrow) {
   const groups = model.groups || [];
+  const spanX = narrow ? 110 : 230;
+  const spanY = narrow ? 90 : 150;
+  const originX = narrow ? 90 : 270;
+  const originY = narrow ? 150 : 180;
   const nodes = [
     {
       id: "centre",
       type: "centre",
-      position: { x: 250, y: 170 },
+      position: { x: narrow ? 70 : 250, y: narrow ? 140 : 170 },
       data: { label: model.centre || "Ready when you are." },
       draggable: false,
     },
@@ -110,7 +179,7 @@ function orbit(model) {
     nodes.push({
       id,
       type: "cat",
-      position: { x: 270 + Math.cos(angle) * 230, y: 180 + Math.sin(angle) * 150 },
+      position: { x: originX + Math.cos(angle) * spanX, y: originY + Math.sin(angle) * spanY },
       data: { label: group.category, count: group.count },
       draggable: false,
     });
@@ -125,14 +194,22 @@ function orbit(model) {
 }
 
 function Graph({ model }) {
-  const laid = model.layout === "orbit" ? orbit(model) : columns(model);
+  const [narrow, setNarrow] = useState(() => window.innerWidth < 800);
+  useEffect(() => {
+    const apply = () => setNarrow(window.innerWidth < 800);
+    window.addEventListener("resize", apply);
+    return () => window.removeEventListener("resize", apply);
+  }, []);
+  const laid = model.layout === "orbit" ? orbit(model, narrow) : columns(model, narrow);
   return (
     <ReactFlow
+      key={narrow ? "narrow" : "wide"}
       nodes={laid.nodes}
       edges={laid.edges}
       nodeTypes={nodeTypes}
       fitView
-      minZoom={0.4}
+      minZoom={0.8}
+      fitViewOptions={{ minZoom: 0.8, padding: 0.12 }}
       maxZoom={1.4}
       nodesDraggable={false}
       nodesConnectable={false}

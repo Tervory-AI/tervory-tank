@@ -41,70 +41,107 @@ SPREAD = [
     "ARCHON-TYPE-B",
     "ARCHON-TYPE-A",
     "ARCHON-TYPE-B-PORTED",
-    "ARCHON-DOT-RMS",
-    "ARCHON-DOT-RMR",
     "ARCHON-DOT-ACRO",
-    "ARCHON-TRIGGER-PERF",
+    "ARCHON-DOT-RMR",
+    "ARCHON-DOT-RMS",
+    "ARCHON-HOLSTER-TB",
+    "ARCHON-LIGHT",
     "ARCHON-MAG-12",
     "ARCHON-MAG-15",
     "ARCHON-MAG-18",
-    "ARCHON-LIGHT",
-    "ARCHON-HOLSTER-TB",
-]
-PISTOLS = ["ARCHON-TYPE-B", "ARCHON-TYPE-A", "ARCHON-TYPE-B-PORTED"]
-DOTS = ["ARCHON-DOT-RMS", "ARCHON-DOT-RMR", "ARCHON-DOT-ACRO"]
-MAGS = ["ARCHON-MAG-12", "ARCHON-MAG-15", "ARCHON-MAG-18"]
-CHEAP = [
-    "ARCHON-TYPE-B",
-    "ARCHON-DOT-RMS",
-    "ARCHON-DOT-RMR",
-    "ARCHON-DOT-ACRO",
-    "ARCHON-TRIGGER-PERF",
-    "ARCHON-MAG-12",
-    "ARCHON-MAG-15",
-    "ARCHON-MAG-18",
-    "ARCHON-LIGHT",
-    "ARCHON-HOLSTER-TB",
+    "ARCHON-RMR-SCREWS",
     "ARCHON-TB-135",
     "ARCHON-TB-THREADED",
+    "ARCHON-TRIGGER-PERF",
+]
+PORTED_SPREAD = [
+    "ARCHON-TYPE-B-PORTED",
+    "ARCHON-TYPE-A",
+    "ARCHON-TYPE-B",
+    *SPREAD[3:],
+]
+PISTOLS = ["ARCHON-TYPE-B", "ARCHON-TYPE-A", "ARCHON-TYPE-B-PORTED"]
+TYPE_A_PISTOLS = ["ARCHON-TYPE-A", "ARCHON-TYPE-B", "ARCHON-TYPE-B-PORTED"]
+DOTS = ["ARCHON-DOT-RMR", "ARCHON-DOT-ACRO", "ARCHON-DOT-RMS"]
+MAGS = ["ARCHON-MAG-15", "ARCHON-MAG-12", "ARCHON-MAG-18"]
+CHEAP = [
+    "ARCHON-DOT-ACRO",
+    "ARCHON-DOT-RMR",
+    "ARCHON-DOT-RMS",
+    "ARCHON-HOLSTER-TB",
+    "ARCHON-LIGHT",
+    "ARCHON-MAG-12",
+    "ARCHON-MAG-15",
+    "ARCHON-MAG-18",
     "ARCHON-RMR-SCREWS",
+    "ARCHON-TB-135",
+    "ARCHON-TB-THREADED",
+    "ARCHON-TRIGGER-PERF",
+    "ARCHON-TYPE-B",
 ]
 AVAILABLE = [
     "ARCHON-TYPE-B",
     "ARCHON-TYPE-B-PORTED",
-    "ARCHON-DOT-RMS",
     "ARCHON-DOT-RMR",
-    "ARCHON-TRIGGER-PERF",
+    "ARCHON-DOT-RMS",
+    "ARCHON-HOLSTER-TB",
+    "ARCHON-LIGHT",
     "ARCHON-MAG-12",
     "ARCHON-MAG-15",
-    "ARCHON-LIGHT",
-    "ARCHON-HOLSTER-TB",
-]
-IN_STOCK_ALL = AVAILABLE + ["ARCHON-TB-135", "ARCHON-TB-THREADED", "ARCHON-RMR-SCREWS"]
-UNDER_10 = [
-    "ARCHON-DOT-RMS",
-    "ARCHON-DOT-RMR",
+    "ARCHON-RMR-SCREWS",
+    "ARCHON-TB-135",
+    "ARCHON-TB-THREADED",
     "ARCHON-TRIGGER-PERF",
+]
+IN_STOCK_ALL = [
+    "ARCHON-DOT-RMR",
+    "ARCHON-DOT-RMS",
+    "ARCHON-HOLSTER-TB",
+    "ARCHON-LIGHT",
+    "ARCHON-MAG-12",
+    "ARCHON-MAG-15",
+    "ARCHON-RMR-SCREWS",
+    "ARCHON-TB-135",
+    "ARCHON-TB-THREADED",
+    "ARCHON-TRIGGER-PERF",
+    "ARCHON-TYPE-B",
+    "ARCHON-TYPE-B-PORTED",
+]
+UNDER_10 = [
+    "ARCHON-DOT-RMR",
+    "ARCHON-DOT-RMS",
+    "ARCHON-HOLSTER-TB",
+    "ARCHON-LIGHT",
     "ARCHON-MAG-12",
     "ARCHON-MAG-15",
     "ARCHON-MAG-18",
-    "ARCHON-LIGHT",
-    "ARCHON-HOLSTER-TB",
+    "ARCHON-RMR-SCREWS",
     "ARCHON-TB-135",
     "ARCHON-TB-THREADED",
-    "ARCHON-RMR-SCREWS",
+    "ARCHON-TRIGGER-PERF",
 ]
-BARRELS = ["ARCHON-TB-135", "ARCHON-TB-THREADED"]
+OVER_20 = ["ARCHON-TYPE-A", "ARCHON-TYPE-B", "ARCHON-TYPE-B-PORTED"]
+BARRELS = ["ARCHON-TB-THREADED", "ARCHON-TB-135"]
 
 # Each case is the query, the honest state, and the exact product ids in order.
 GOLDEN = [
     ("Archon Type B", "exact", SPREAD, "ARCHON-TYPE-B", True, ""),
     ("archon type b", "exact", SPREAD, "ARCHON-TYPE-B", True, ""),
-    ("type b ported", "exact", SPREAD, "ARCHON-TYPE-B-PORTED", True, ""),
-    ("Type B Ported", "exact", SPREAD, "ARCHON-TYPE-B-PORTED", True, ""),
+    ("type b ported", "exact", PORTED_SPREAD, "ARCHON-TYPE-B-PORTED", True, ""),
+    ("Type B Ported", "exact", PORTED_SPREAD, "ARCHON-TYPE-B-PORTED", True, ""),
     ("FDE type b", "exact", SPREAD, "ARCHON-TYPE-B", True, ""),
     ("fde type b", "exact", SPREAD, "ARCHON-TYPE-B", True, ""),
-    ("threaded type b", "exact", ["ARCHON-TB-THREADED"], "ARCHON-TB-THREADED", True, ""),
+    ("Type B FDE", "exact", SPREAD, "ARCHON-TYPE-B", True, ""),
+    ("Type B and RMR", "exact", SPREAD, "ARCHON-TYPE-B", True, ""),
+    ("RMR and Type B", "exact", SPREAD, "ARCHON-TYPE-B", True, ""),
+    ("threaded type b", "exact", BARRELS, "ARCHON-TB-THREADED", True, ""),
+    ("Archon Type B 9mm", "exact", SPREAD, "ARCHON-TYPE-B", True, ""),
+    ("optic for type b", "exact", DOTS, "ARCHON-DOT-RMR", True, ""),
+    ("acro in stock", "exact", ["ARCHON-DOT-ACRO", "ARCHON-DOT-RMR"], "ARCHON-DOT-ACRO", True, "out of stock"),
+    ("pistol under R25 000", "exact", ["ARCHON-TYPE-B"], "ARCHON-TYPE-B", True, ""),
+    ("glok 19", "not_stocked", [], "", False, "Glock"),
+    ("glock", "not_stocked", [], "", False, "Glock"),
+    ("Sig P320", "not_stocked", [], "", False, "Sig"),
     ("archn typ b", "exact", SPREAD, "ARCHON-TYPE-B", True, ""),
     ("15 round mag", "exact", ["ARCHON-MAG-15"], "ARCHON-MAG-15", True, ""),
     ("15 round magazine", "exact", ["ARCHON-MAG-15"], "ARCHON-MAG-15", True, ""),
@@ -112,37 +149,37 @@ GOLDEN = [
     ("18 round mag", "exact", ["ARCHON-MAG-18"], "ARCHON-MAG-18", True, ""),
     ("performance trigger", "exact", ["ARCHON-TRIGGER-PERF"], "ARCHON-TRIGGER-PERF", True, ""),
     ("rmr red dot", "exact", ["ARCHON-DOT-RMR"], "ARCHON-DOT-RMR", True, ""),
-    ("what red dots fit the type b", "exact", DOTS, "ARCHON-DOT-RMS", True, ""),
-    ("red dot", "exact", DOTS, "ARCHON-DOT-RMS", True, ""),
+    ("what red dots fit the type b", "exact", DOTS, "ARCHON-DOT-RMR", True, ""),
+    ("red dot", "exact", DOTS, "ARCHON-DOT-RMR", True, ""),
     ("under R25 000", "exact", CHEAP, "", True, ""),
     ("under R 25 000", "exact", CHEAP, "", True, ""),
     ("below R10000", "exact", UNDER_10, "", True, ""),
-    ("over R20000", "exact", PISTOLS, "", True, ""),
+    ("over R20000", "exact", OVER_20, "", True, ""),
     ("in stock type b", "exact", AVAILABLE, "ARCHON-TYPE-B", True, ""),
     ("in stock only", "exact", IN_STOCK_ALL, "", True, ""),
     ("Archon Type C", "closest", PISTOLS, "ARCHON-TYPE-B", False, "Type C"),
     ("Archon Type D", "closest", PISTOLS, "ARCHON-TYPE-B", False, "Type D"),
     ("type c", "closest", PISTOLS, "ARCHON-TYPE-B", False, "type c"),
     ("Glock 19", "not_stocked", [], "", False, "Glock"),
-    ("glock 19", "not_stocked", [], "", False, "glock"),
+    ("glock 19", "not_stocked", [], "", False, "Glock"),
     ("hello", "nothing", [], "", True, "Nothing matches"),
     ("the", "nothing", [], "", True, "Nothing matches"),
     ("xq-77 laser grip", "nothing", [], "", True, "Nothing matches"),
     ("asdfghjkl", "nothing", [], "", True, "Nothing matches"),
     ("pistol", "exact", PISTOLS, "ARCHON-TYPE-B", True, ""),
     ("black", "exact", PISTOLS, "ARCHON-TYPE-B", True, ""),
-    ("Archon Type A", "exact", PISTOLS, "ARCHON-TYPE-A", True, ""),
-    ("type a", "exact", PISTOLS, "ARCHON-TYPE-A", True, ""),
+    ("Archon Type A", "exact", TYPE_A_PISTOLS, "ARCHON-TYPE-A", True, ""),
+    ("type a", "exact", TYPE_A_PISTOLS, "ARCHON-TYPE-A", True, ""),
     ("acro", "exact", ["ARCHON-DOT-ACRO"], "ARCHON-DOT-ACRO", True, ""),
-    ("optic", "exact", DOTS, "ARCHON-DOT-RMS", True, ""),
-    ("sight", "exact", DOTS, "ARCHON-DOT-RMS", True, ""),
+    ("optic", "exact", DOTS, "ARCHON-DOT-RMR", True, ""),
+    ("sight", "exact", DOTS, "ARCHON-DOT-RMR", True, ""),
     ("trigger", "exact", ["ARCHON-TRIGGER-PERF"], "ARCHON-TRIGGER-PERF", True, ""),
     ("trigger for type b", "exact", ["ARCHON-TRIGGER-PERF"], "ARCHON-TRIGGER-PERF", True, ""),
-    ("magazine", "exact", MAGS, "ARCHON-MAG-18", True, ""),
+    ("magazine", "exact", MAGS, "ARCHON-MAG-15", True, ""),
     ("holster", "exact", ["ARCHON-HOLSTER-TB"], "ARCHON-HOLSTER-TB", True, ""),
     ("light", "exact", ["ARCHON-LIGHT"], "ARCHON-LIGHT", True, ""),
     ("barrel", "exact", BARRELS, "ARCHON-TB-THREADED", True, ""),
-    ("suppressor ready", "exact", ["ARCHON-TYPE-B", "ARCHON-TB-THREADED"], "ARCHON-TB-THREADED", True, ""),
+    ("suppressor ready", "exact", ["ARCHON-TYPE-B", "ARCHON-TB-THREADED"], "ARCHON-TYPE-B", True, ""),
     ("ported", "exact", ["ARCHON-TYPE-B-PORTED"], "ARCHON-TYPE-B-PORTED", True, ""),
     ("rmr mounting screw", "exact", ["ARCHON-RMR-SCREWS"], "ARCHON-RMR-SCREWS", True, ""),
     ("fde", "exact", PISTOLS, "ARCHON-TYPE-B", True, ""),
@@ -241,8 +278,14 @@ async def test_filters_stock_price_category_and_sort() -> None:
     assert "ARCHON-TYPE-B-PORTED" not in priced["ids"]
     sights = await service.search(TENANT, "Archon Type B", 24, {"category": "Sights"})
     assert sights["ids"] == DOTS
+    assert sights["focus_id"] == "ARCHON-DOT-RMR"
     high = await service.search(TENANT, "pistol", 24, {"sort": "price_desc"})
     assert high["ids"] == ["ARCHON-TYPE-B-PORTED", "ARCHON-TYPE-A", "ARCHON-TYPE-B"]
+    low = await service.search(TENANT, "pistol", 24, {"sort": "price_asc"})
+    assert low["ids"] == ["ARCHON-TYPE-B", "ARCHON-TYPE-A", "ARCHON-TYPE-B-PORTED"]
+    inclusive = await service.search(TENANT, "", 24, {"min_price": 24990})
+    assert "ARCHON-TYPE-B" in inclusive["ids"]
+    assert "ARCHON-MAG-15" not in inclusive["ids"]
 
 
 @pytest.mark.asyncio
@@ -250,8 +293,8 @@ async def test_prices_fits_and_the_out_of_stock_alternative() -> None:
     service = await _archon()
     body = await service.search(TENANT, "Archon Type B", 24)
     by_id = {item["id"]: item for item in body["results"]}
-    assert [item["delta"] for item in (by_id[sku]["compare"] for sku in PISTOLS)] == [0, 2000, 3500]
-    assert [by_id[sku]["compare"]["delta"] for sku in DOTS] == [0, 2500, 5000]
+    assert [by_id[sku]["compare"]["delta"] for sku in ("ARCHON-TYPE-B", "ARCHON-TYPE-A", "ARCHON-TYPE-B-PORTED")] == [0, 2000, 3500]
+    assert [by_id[sku]["compare"]["delta"] for sku in ("ARCHON-DOT-RMS", "ARCHON-DOT-RMR", "ARCHON-DOT-ACRO")] == [0, 2500, 5000]
     assert by_id["ARCHON-DOT-RMR"]["fit"]["badge"] == "Fits your RMR cut"
     assert by_id["ARCHON-DOT-RMS"]["fit"]["badge"] == "Needs RMS cut"
     assert by_id["ARCHON-DOT-ACRO"]["fit"]["badge"] == "Needs ACRO cut"
@@ -264,7 +307,7 @@ async def test_prices_fits_and_the_out_of_stock_alternative() -> None:
     assert by_id["ARCHON-TYPE-B"]["price_label"] == "Demo price"
     assert by_id["ARCHON-TYPE-A"]["availability"]["status"] == "on_order"
     assert by_id["ARCHON-TYPE-B-PORTED"]["availability"]["qty"] == 1
-    assert len(body["groups"]) == 6
+    assert len(body["groups"]) == 8
 
 
 @pytest.mark.asyncio
@@ -284,6 +327,13 @@ async def test_nothing_is_fabricated() -> None:
             attrs = json.loads(sheet["attributes"])
             assert item["price_label"] == attrs.get("price_label")
             assert item["availability"]["status"] == attrs["stock"]["status"]
+            verified = attrs.get("verified") or []
+            assert isinstance(verified, list)
+            for spec in verified:
+                source = str(spec.get("source") or "")
+                assert source.startswith("https://"), (item["id"], spec.get("name"))
+                assert spec.get("name") and "value" in spec
+            assert ((item.get("attributes") or {}).get("verified") or []) == verified
             fit = item["fit"]
             if fit is None:
                 assert item["id"] not in notes
@@ -357,7 +407,10 @@ async def test_reservation_letter_is_parsed_and_never_mailed(monkeypatch: pytest
     assert "Total-Amount: 39050" in text
     assert "Total-Label: Demo price" in text
     assert "confirms stock and paperwork" in text
+    assert "Custom Nation confirms stock" in text
+    assert "Item-Stock: in_stock" in text
     assert "Hacked" not in text
+    assert letter["reply_to"] == "ada@example.com"
 
 
 @pytest.mark.asyncio
@@ -472,3 +525,143 @@ def test_search_route_accepts_archon_filters() -> None:
     body = response.json()
     assert body["ids"] == AVAILABLE
     assert body["focus_id"] == "ARCHON-TYPE-B"
+
+
+@pytest.mark.asyncio
+async def test_staccato_letter_queries_match_main_wording() -> None:
+    service = Service(MemoryStore())
+    await service.load_folder(STACCATO)
+    expected = {
+        "staccato c": "No exact match for c.",
+        "staccato x": "No exact match for x.",
+        "Staccato c 4": "No exact match for c 4.",
+        "staccato z": "No exact match for z.",
+    }
+    for query, message in expected.items():
+        body = await service.search(STACCATO_TENANT, query, 12)
+        assert body.get("message") == message
+        assert body["exact_match"] is False
+        assert "staccato c," not in str(body.get("message") or "")
+    exact = await service.search(STACCATO_TENANT, "Staccato C2", 12)
+    assert exact["exact_match"] is True
+    assert exact.get("message") in (None, "")
+    pistol = await service.search(STACCATO_TENANT, "Staccato P", 12)
+    assert pistol["exact_match"] is True
+    assert any(item["id"] == "STI-P-9" for item in pistol["results"])
+
+
+@pytest.mark.asyncio
+async def test_a_shop_with_email_and_no_mailer_matches_main(monkeypatch: pytest.MonkeyPatch) -> None:
+    _guard_smtp(monkeypatch)
+    service = Service(MemoryStore(), handoff=WebhookHandoff(None, None))
+    await service.load_folder(STACCATO)
+    quoted = await service.quote(
+        STACCATO_TENANT,
+        {"product_id": "STI-C2-9", "contact": {"name": "Ada Buyer", "email": "ada@example.com"}},
+    )
+    assert quoted == {"request_id": quoted["request_id"]}
+    assert "delivered" not in quoted
+    saved = await service.store.quotes_for(STACCATO_TENANT)
+    assert saved[0]["sent_at"] == "sent"
+    example = Service(MemoryStore(), handoff=WebhookHandoff(Http(), Mail()))
+    await example.load_folder(EXAMPLE)
+    other = await example.quote(
+        EXAMPLE_TENANT,
+        {"product_id": "EXAMPLE-RIFLE-01", "contact": {"name": "Ada Buyer", "email": "ada@example.com"}},
+    )
+    assert set(other) == {"request_id"}
+
+
+@pytest.mark.asyncio
+async def test_letter_uses_the_retailer_name_and_readable_choices(monkeypatch: pytest.MonkeyPatch) -> None:
+    _guard_smtp(monkeypatch)
+    from rigbox.reserve import reservation_letter
+
+    letter = reservation_letter(
+        "req_demo",
+        {"product": {"id": "X", "name": "Item", "price": {"amount": 1, "currency": "ZAR"}, "attributes": {}}},
+        {"name": "Ada", "email": "ada@example.com"},
+        {"name": "Example Shop", "email": "buyer@example.com"},
+    )
+    assert "Example Shop confirms stock" in letter["text"]
+    assert "Custom Nation" not in letter["text"]
+    mail = Mail()
+    service = await _archon(WebhookHandoff(None, mail))
+    await service.quote(
+        TENANT,
+        {
+            "setup": {
+                "parts": [
+                    {"product": {"id": "ARCHON-TYPE-B"}, "choice": "Black/Black · barrel-1228 · RMR"},
+                    {"product": {"id": "ARCHON-DOT-RMR"}, "choice": "RMR"},
+                ]
+            },
+            "contact": {"name": "Ada Buyer", "email": "ada@example.com"},
+        },
+    )
+    text = mail.letters[0]["text"]
+    assert "1/2-28 RH" in text
+    assert "barrel-1228" not in text
+    assert "Item-Stock:" in text
+    with pytest.raises(Exception) as unfit:
+        await service.quote(
+            TENANT,
+            {
+                "setup": {
+                    "parts": [
+                        {"product": {"id": "ARCHON-TYPE-B"}, "choice": "Black/Black · 4.3\" standard · RMR"},
+                        {"product": {"id": "ARCHON-DOT-RMS"}, "choice": ""},
+                    ]
+                },
+                "contact": {"name": "Ada Buyer", "email": "ada@example.com"},
+            },
+        )
+    assert unfit.value.status == 422  # type: ignore[attr-defined]
+    with pytest.raises(Exception) as missing:
+        await service.quote(
+            TENANT,
+            {"product_id": "ARCHON-DOT-ACRO", "contact": {"name": "Ada Buyer", "email": "ada@example.com"}},
+        )
+    assert missing.value.status == 422  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_parts_query_lists_every_part_and_verified_sources_are_cited() -> None:
+    products, _notes = _sheet()
+    service = await _archon()
+    for query in ("part", "parts"):
+        body = await service.search(TENANT, query, 24)
+        ids = set(body["ids"])
+        assert "ARCHON-RMR-SCREWS" in ids
+        assert "ARCHON-TB-THREADED" in ids
+        assert "ARCHON-MAG-15" in ids
+        assert "ARCHON-TYPE-B" not in ids
+        assert ids == {sku for sku, row in products.items() if row["category"] != "Pistols"}
+    detail = await service.product(TENANT, "ARCHON-TYPE-B")
+    verified = detail["attributes"]["verified"]
+    assert any(spec["name"] == "in_box" and "lock" in str(spec["value"]) for spec in verified)
+    assert all(str(spec["source"]).startswith("https://archonfirearms.com") for spec in verified)
+    type_a = await service.product(TENANT, "ARCHON-TYPE-A")
+    assert type_a["demo_item"] is False
+    ported = await service.product(TENANT, "ARCHON-TYPE-B-PORTED")
+    assert ported["demo_item"] is False
+    assert "not listed" not in json.dumps(ported["attributes"]).lower()
+
+
+def test_reservation_route_is_limited_per_ip() -> None:
+    service = asyncio.run(_archon())
+    app = FastAPI()
+    app.state.rig = service
+    mount(app)
+    client = TestClient(app)
+    headers = {"X-Rig-Key": KEY, "Origin": ORIGIN}
+    payload = {
+        "product_id": "ARCHON-TYPE-B",
+        "contact": {"name": "Ada Buyer", "email": "ada@example.com"},
+    }
+    statuses = [
+        client.post("/v1/rig/quote", json=payload, headers=headers).status_code
+        for _ in range(6)
+    ]
+    assert statuses[:5] == [200, 200, 200, 200, 200]
+    assert statuses[5] == 429

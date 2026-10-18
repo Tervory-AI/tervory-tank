@@ -218,6 +218,9 @@ async def link_quote(request: Request, payload: LinkIn) -> Response:
 @router.post("/quote")
 async def quote(request: Request, payload: QuoteIn) -> Response:
     await _auth(request)
+    client = request.client.host if request.client is not None else "unknown"
+    if not _service(request).reservations.allow(client):
+        raise RigError("rate_limit", "Too many reservations. Try again in a minute.", 429)
     body = await _service(request).quote(
         _tenant(request),
         {"setup": payload.setup, "product_id": payload.product_id, "contact": payload.contact},
