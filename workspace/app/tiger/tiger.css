@@ -126,7 +126,14 @@ main:has(.tiger) {
   box-sizing: border-box;
 }
 
-.tiger .panel-top img,
+.tiger .panel-top img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  object-position: left center;
+}
+
 .tiger .topbar img {
   display: block;
   height: 34px;
@@ -184,6 +191,16 @@ main:has(.tiger) {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.tiger .panel-bottom img {
+  display: block;
+  width: 186px;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+  object-position: left center;
+  margin-bottom: 12px;
 }
 
 .tiger .refreshed {

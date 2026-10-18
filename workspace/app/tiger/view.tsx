@@ -106,7 +106,7 @@ export function TigerApp({
 
       <aside className="panel" aria-label="Tiger">
         <div className="panel-top">
-          <img src="/brand/tervory-logo-reversed.png" alt="Tervory" />
+          <img src="/brand/tiger-on-dark.png" alt="Tiger" width={2607} height={801} />
         </div>
         <nav className="panel-account" aria-label="Account">
           <p className="account">{accountName || "Account name"}</p>
@@ -125,6 +125,7 @@ export function TigerApp({
           </nav>
         </div>
         <div className="panel-bottom">
+          <img src="/brand/tervory-logo-reversed.png" alt="Tervory" width={186} height={34} />
           <button type="button" className="nav" onClick={() => { setSettingsNote((open) => !open); setMenuOpen(false); }}>Settings</button>
           <button type="button" className="nav" onClick={() => { setHelp((open) => !open); setMenuOpen(false); }}>Support</button>
         </div>
