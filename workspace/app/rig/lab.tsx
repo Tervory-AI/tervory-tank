@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import {
+  ACCOUNT_BOTTOM,
+  ACCOUNT_NAV,
   BUILT,
   CHANGES,
   DECIDED,
   PLAN,
-  REFRESHED,
   SKIN_STEPS,
   TABS,
   WAITING,
@@ -15,8 +16,7 @@ import {
 } from "./copy";
 import { Plugins } from "./plugins";
 import { SearchView } from "./search-view";
-
-type NavLink = { href: string; label: string };
+import type { PluginPanel } from "./vault-model";
 type Decided = { id: string; name: string; fits: string; why: string; state: string; on: boolean };
 
 function Pill({ children, on = true }: { children: string; on?: boolean }) {
@@ -49,15 +49,17 @@ function CompactSearch({ onSearch }: { onSearch: (query: string) => void }) {
 }
 
 export function Lab({
-  standardNav,
+  accountName,
   products,
   fits,
   live,
+  plugins,
 }: {
-  standardNav: NavLink[];
+  accountName: string;
   products: number;
   fits: number;
   live: boolean;
+  plugins: PluginPanel;
 }) {
   const [tab, setTab] = useState<TabId>("search");
   const [pluginsOpen, setPluginsOpen] = useState(false);
@@ -117,9 +119,10 @@ export function Lab({
       <aside className="panel" aria-label="Rig">
         <div className="panel-top">
           <img src="/brand/tervory-logo-reversed.png" alt="Tervory" width={186} height={34} />
-          <nav className="std" aria-label="Standard">
-            {standardNav.map((link) => (
-              <a key={link.href} href={link.href}>
+          <nav className="std" aria-label="Account">
+            <p className="account">{accountName}</p>
+            {ACCOUNT_NAV.map((link) => (
+              <a key={link.label} href={link.href}>
                 {link.label}
               </a>
             ))}
@@ -139,16 +142,11 @@ export function Lab({
           </nav>
         </div>
         <div className="panel-bottom">
-          <a className="nav" href="/">
-            Workspace
-          </a>
-          <button type="button" className="nav">
-            Help
-          </button>
-          <p className="refreshed">
-            <span>Last refreshed</span>
-            <b>{REFRESHED}</b>
-          </p>
+          {ACCOUNT_BOTTOM.map((link) => (
+            <a key={link.label} className="nav" href={link.href}>
+              {link.label}
+            </a>
+          ))}
         </div>
       </aside>
 
@@ -587,7 +585,7 @@ export function Lab({
         ) : null}
       </div>
 
-      {pluginsOpen ? <Plugins onClose={() => setPluginsOpen(false)} /> : null}
+      {pluginsOpen ? <Plugins panel={plugins} onClose={() => setPluginsOpen(false)} /> : null}
 
       {approve ? (
         <div className="scrim" role="presentation">

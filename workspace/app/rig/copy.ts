@@ -1,7 +1,15 @@
-/** Approved copy from the Rig agent frames. Example labels stay on Plugins only. */
+/** Approved copy from the Rig agent frames. */
 
-export const MASK = "•••• saved 17 Oct";
-export const REFRESHED = "Today, 7:30 AM PT · Example";
+export const ACCOUNT_NAV = [
+  { href: "/", label: "Dashboard" },
+  { href: "/projects", label: "Projects" },
+  { href: "/", label: "Chats" },
+] as const;
+
+export const ACCOUNT_BOTTOM = [
+  { href: "/settings", label: "Settings" },
+  { href: "/support", label: "Support" },
+] as const;
 
 export const TABS = [
   { id: "search", label: "Search" },
@@ -154,44 +162,6 @@ export const DECIDED = [
     on: false,
   },
 ] as const;
-
-export type KeyId = "fred" | "census" | "eia" | "noaa" | "legiscan";
-
-export const KEYS: { id: KeyId; name: string; detail: string; env: string; saved: boolean }[] = [
-  { id: "fred", name: "FRED", detail: "Seven economic series: interest rates, jobs, prices", env: "FRED_API_KEY", saved: true },
-  { id: "census", name: "Census", detail: "Census population and Census trade", env: "CENSUS_API_KEY", saved: true },
-  { id: "eia", name: "EIA", detail: "On-highway diesel prices", env: "EIA_API_KEY", saved: false },
-  { id: "noaa", name: "NOAA", detail: "Monthly climate", env: "NOAA_TOKEN", saved: false },
-  { id: "legiscan", name: "LegiScan", detail: "State bill tracking", env: "LEGISCAN_API_KEY", saved: false },
-];
-
-export const FILES = [
-  { name: "supplier-price-list-oct.csv", type: "CSV", size: "1,240 rows", when: "16 Oct", status: "Processed", on: true, map: true },
-  { name: "dealer-inventory.xlsx", type: "XLSX", size: "3,880 rows", when: "15 Oct", status: "Needs checking", on: false, map: false },
-  { name: "state-rules-summary.pdf", type: "PDF", size: "42 pages", when: "12 Oct", status: "Processed", on: true, map: false },
-  { name: "freight-rates-q3.csv", type: "CSV", size: "610 rows", when: "10 Oct", status: "Needs checking", on: false, map: true },
-] as const;
-
-export const LINKS = [
-  { label: "Texas hunting seasons", host: "tpwd.texas.gov", checked: "Today, 7:00 AM", status: "Watching", on: true },
-  { label: "UPS hazardous goods rules", host: "ups.com", checked: "Yesterday", status: "Changed", on: false },
-  { label: "Port of Long Beach stats", host: "polb.com", checked: "16 Oct", status: "Couldn't reach", on: false },
-] as const;
-
-export const CONNECTIONS = [
-  { name: "Supplier catalogue", host: "catalog.example-supplier.com", detail: "Product prices and stock levels", status: "Connected", on: true, used: "Today, 7:10 AM" },
-  { name: "Shipping rates", host: "mcp.example-freight.com", detail: "Carrier rates by route", status: "Needs sign-in", on: false, used: "Never" },
-  { name: "News monitor", host: "news.example-mcp.org", detail: "Headlines that mention your market", status: "Error", on: false, used: "14 Oct" },
-] as const;
-
-export type PluginTab = "keys" | "files" | "links" | "mcp";
-
-export const PLUGIN_TABS: { id: PluginTab; label: string }[] = [
-  { id: "keys", label: "API keys" },
-  { id: "files", label: "Files" },
-  { id: "links", label: "Source links" },
-  { id: "mcp", label: "MCP connections" },
-];
 
 export const OPENING_QUESTION = "What optics fit the Staccato C2?";
 

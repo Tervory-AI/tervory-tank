@@ -156,6 +156,14 @@ main:has(.rig) {
   gap: 4px;
 }
 
+.account {
+  margin: 0;
+  padding: 10px 12px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .std a,
 .panel button.nav,
 .panel a.nav {
@@ -209,26 +217,6 @@ main:has(.rig) {
   display: flex;
   flex-direction: column;
   gap: 4px;
-}
-
-.refreshed {
-  margin: 0;
-  padding: 12px 12px 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.refreshed span {
-  color: var(--soft);
-  font-size: 12px;
-  font-weight: 400;
-}
-
-.refreshed b {
-  color: #fff;
-  font-weight: 500;
-  font-size: 12px;
 }
 
 .body {
@@ -630,6 +618,7 @@ main:has(.rig) {
   font-weight: 500;
 }
 .rig-msg .note { margin: 10px 0 0; font-size: 12px; line-height: 18px; }
+.vault-off { margin: 8px 0 0; color: var(--body); font-size: 16px; line-height: 24px; }
 .rig .composer {
   position: static;
   left: auto;
@@ -872,8 +861,17 @@ main:has(.rig) {
   .link-add,
   .pair { grid-template-columns: 1fr; display: flex; flex-direction: column; align-items: stretch; }
   .scrim { left: 0; top: 68px; padding: 0; background: var(--card); }
-  .popup { display: none; }
-  .groups { display: block; background: var(--card); min-height: 100%; padding: 20px 20px 40px; }
+  .popup {
+    display: block;
+    width: 100%;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    min-height: 100%;
+    padding: 24px 20px 40px;
+  }
+  .groups { display: none; }
   .group { padding: 18px 0; border-top: 1px solid var(--line); }
   .group h3 { margin: 0 0 8px; font-size: 22px; display: flex; gap: 8px; align-items: center; }
   .file-card { padding: 12px 0; border-top: 1px solid var(--line); }
