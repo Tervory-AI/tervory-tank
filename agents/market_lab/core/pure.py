@@ -684,24 +684,10 @@ def _shift_months(day: date, months: int) -> date:
 
 
 def _citations(payload: dict[str, Any]) -> list[dict[str, str]]:
-    if payload.get("passages") is not None:
-        return [_one_citation(item) for item in payload.get("passages") or [] if _one_citation(item)]
-    text = str(payload.get("model_text") or "")
-    found: list[dict[str, str]] = []
-    claim = url = stamp = ""
-    for line in text.splitlines():
-        piece = line.strip()
-        if piece.upper().startswith("CLAIM:"):
-            if claim and url and stamp:
-                found.append({"claim": claim, "url": url, "date": stamp})
-            claim, url, stamp = piece.split(":", 1)[1].strip(), "", ""
-        elif piece.upper().startswith("URL:"):
-            url = piece.split(":", 1)[1].strip()
-        elif piece.upper().startswith("DATE:"):
-            stamp = piece.split(":", 1)[1].strip()
-    if claim and url and stamp:
-        found.append({"claim": claim, "url": url, "date": _date(stamp)})
-    return [item for item in found if item["url"].startswith("http") and item["date"]]
+    """A citation is a passage we were given. A model line is not a source."""
+    if payload.get("passages") is None:
+        return []
+    return [_one_citation(item) for item in payload.get("passages") or [] if _one_citation(item)]
 
 
 def _one_citation(item: dict[str, Any]) -> dict[str, str] | None:
