@@ -514,6 +514,9 @@ async def test_ranges_builds_and_the_light_lists_type_b() -> None:
     assert 'Upgrades for your " +' in script
     assert "Upgrades for your Type B ·" not in script
     assert "if (body.in_stock) filters.inStock = true;" in script
+    assert 'text: "Get A Quote"' in script
+    assert "Doesn't fit the \" +" in script
+    assert "reserv" not in script.lower()
 
 
 # Words the shop may name after "We don't sell a/an". Anything else was a pasted query token.

@@ -986,15 +986,18 @@
       const seenFit = {};
       (detail.fits || []).filter(function (fit) { return fit.part_sku === detail.id; }).forEach(function (fit) {
         const cut = (fit.rule && fit.rule.optic_cut) || "";
+        const refused = !!(fit.rule && fit.rule.fits === false);
         rows.filter(function (row) {
           return row.category === "Pistols" && (row.family === fit.fits_family || row.id === fit.fits_sku);
         }).forEach(function (host) {
-          const key = host.id + ":" + cut;
+          const key = host.id + ":" + cut + ":" + (refused ? "no" : "yes");
           if (seenFit[key]) return;
           seenFit[key] = true;
           fitChips.append(h("span", {
-            class: "chip tiny on",
-            text: "Fits " + host.name + (cut ? " with " + cut + " cut" : ""),
+            class: "chip tiny" + (refused ? "" : " on"),
+            text: refused
+              ? "Doesn't fit the " + (modelLabel(host) || host.name)
+              : "Fits " + host.name + (cut ? " with " + cut + " cut" : ""),
           }));
         });
       });
