@@ -36,6 +36,12 @@ The secret text is not a column. It is masked out of the summary, the rows, and 
 2. `scan.dependencies` — npm and Python packages against the baked OSV data. Reports package, version, advisory id, severity, and the fixed version.
 3. `scan.static` — Semgrep with the vendored rules. Looks for SQL built by string formatting.
 
+## Compliance check
+
+`comply.gdpr` reads a saved HTML page. It does not fetch the page, follow a link, or open a socket. It looks for a link to a privacy notice. If the page loads a script or frame from another site, it also looks for a cookie notice on that same page. A missing notice is medium. It does not block a deploy. It is not a job on the service, and the code scan still runs only the three skills above.
+
+A saved page is not a live site. This check does not open `https://lokd.co.za`. Data retention, a right-to-erasure control, a POPIA information-officer check, card-data rules, and a full accessibility audit are not this check. Those need another page, a browser, or a live fetch.
+
 ## What Radix never does
 
 - Scan a target the tenant has not registered and proven it owns (DNS TXT or a file token). That check is a later skill.
