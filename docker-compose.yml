@@ -3,8 +3,9 @@
 # by name (http://tank:8000, postgres:5432). Agent boxes are not in this file.
 # Each box is its own Coolify resource (agents/<name>/docker-compose.yml) and
 # reaches Tank and Postgres only through an external network, tervory-gw-<agent>,
-# created once on the server. Nothing else joins that network. Only the Workspace
-# gets a public domain; Tank and the stores are never exposed.
+# created once on the server. Nothing else joins that network. Coolify attaches
+# app.tervory.com to workspace and tervory.com to site. Tank and the stores
+# are never exposed.
 
 services:
   postgres:
@@ -266,6 +267,21 @@ services:
       timeout: 5s
       retries: 10
       start_period: 40s
+
+  # Public homepage and sign-up. Static files only: no secrets, no Tank, no Clerk.
+  # Coolify still has to attach https://tervory.com to this service on port 3000.
+  # app.tervory.com stays on workspace. /internal is on this same service and is noindex.
+  site:
+    build: ./site
+    restart: unless-stopped
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
 
 volumes:
   pgdata:
