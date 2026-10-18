@@ -14,14 +14,19 @@ def _text(path: Path) -> str:
 def test_product_shell_loads_the_admin_faces():
     layout = _text(APP / "layout.tsx")
     admin = _text(APP / "admin" / "layout.tsx")
-    for line in (
-        'Jost({ subsets: ["latin"], weight: "300", variable: "--font-jost", display: "swap" })',
-        'Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" })',
-        'JetBrains_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-mono", display: "swap" })',
-    ):
-        assert line in layout
-        assert line in admin
+    faces = _text(APP / "brand-fonts.ts")
+    assert 'from "./brand-fonts"' in layout
+    assert 'from "../brand-fonts"' in admin
     assert "jost.variable" in layout and "inter.variable" in layout and "mono.variable" in layout
+    assert "jost.variable" in admin and "inter.variable" in admin and "mono.variable" in admin
+    assert "next/font/google" not in layout
+    assert "next/font/google" not in admin
+    assert 'src: "./fonts/jost-latin-300.woff2"' in faces and 'weight: "300"' in faces and 'variable: "--font-jost"' in faces
+    assert 'src: "./fonts/inter-latin.woff2"' in faces and 'weight: "100 900"' in faces and 'variable: "--font-inter"' in faces
+    assert 'src: "./fonts/jetbrains-mono-latin.woff2"' in faces and 'weight: "400 800"' in faces and 'variable: "--font-mono"' in faces
+    assert 'display: "swap"' in faces
+    for name in ("jost-latin-300.woff2", "inter-latin.woff2", "jetbrains-mono-latin.woff2"):
+        assert (APP / "fonts" / name).is_file()
 
 
 def test_product_pages_use_the_pairing_and_rows_stay_in_inter():
