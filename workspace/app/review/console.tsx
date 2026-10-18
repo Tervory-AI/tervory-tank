@@ -68,7 +68,7 @@ export function ReviewConsole({
           </nav>
           <div className="zr-rule" />
           <nav className="zr-nav" aria-label="Zenas">
-            <p className="zr-kicker">ZENAS · CIVIL · SOUTH AFRICA</p>
+            <p className="zr-kicker">ZENAS</p>
             {PAGE_LINKS.map((link) => (
               <Link
                 key={link.href}
