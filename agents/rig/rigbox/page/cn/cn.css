@@ -362,9 +362,9 @@ label.field input, label.field select, .check {
   display: grid;
   gap: 6px;
   background: var(--bg-2);
-  margin-bottom: 22px;
+  margin-bottom: 0;
 }
-.product-summary .sticky-action { margin-top: 8px; }
+.search-compare + .sticky-action { display: inline-flex; margin-top: 28px; }
 .search-compare p { margin: 0; }
 .photo-coming {
   margin: 8px 0 0;
@@ -590,7 +590,7 @@ img.hero { border-radius: 20px; background: transparent; width: 100%; max-height
   padding: 12px 50px 12px 14px;
   font-size: 15px;
 }
-.side .ask input[type="text"] { font-size: 12px; padding: 11px 42px 11px 12px; min-height: 42px; }
+.side .ask input[type="text"] { font-size: 11px; padding: 11px 40px 11px 10px; min-height: 42px; }
 .side .ask-go { width: 34px; height: 34px; top: 4px; }
 .ask-go { position: absolute; right: 4px; top: 4px; width: 42px; height: 42px; justify-content: center; padding: 0; border-radius: 50%; }
 .ask [aria-live] { flex-basis: 100%; }
@@ -635,14 +635,18 @@ img.hero { border-radius: 20px; background: transparent; width: 100%; max-height
 }
 .choice-card.on { border-color: var(--teal); }
 .choice-card.is-blocked, .chip.is-blocked { opacity: 0.45; cursor: not-allowed; }
+.build-side { gap: 8px; }
+.build-side h2, .build-side p { margin: 0; }
+.build-side .form { gap: 8px; }
 .build-side .lines { list-style: none; padding: 0; }
 .build-side .lines li {
   display: flex;
   justify-content: space-between;
   gap: 12px;
   border-bottom: 1px solid var(--line);
-  padding: 8px 0;
+  padding: 6px 0;
 }
+.build-side .lines li span:last-child { text-align: right; }
 .build-side .gold { justify-self: start; width: max-content; }
 
 :focus-visible { outline: 2px solid var(--sand); outline-offset: 3px; }
