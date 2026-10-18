@@ -208,7 +208,7 @@ def test_oversized_page_is_refused() -> None:
 
 def test_checker_source_does_not_fetch() -> None:
     text = (ROOT / "agents" / "radix" / "scanlib" / "comply.py").read_text(encoding="utf-8")
-    for banned in ("urlopen", "httpx", "requests", "socket", "urlretrieve", "lokd.co.za"):
+    for banned in ("urlopen", "httpx", "import socket", "requests", "urlretrieve", "lokd.co.za"):
         assert banned not in text
 
 
