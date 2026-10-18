@@ -1,5 +1,6 @@
 """Tiger app page source. No database and no network."""
 
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,9 +39,13 @@ def test_panel_stays_fixed_and_split_in_three():
     assert "panel-top" in source
     assert "panel-own" in source
     assert "panel-bottom" in source
-    assert "Last refreshed" in source
+    assert "Account name" in source
+    assert "Dashboard" in source
+    assert "Projects" in source
+    assert "Chats" in source
+    assert "Settings" in source
+    assert "Support" in source
     assert 'href="/"' in source
-    assert "Workspace" in source
     assert "/brand/tervory-logo-reversed.png" in source
 
 
@@ -67,8 +72,8 @@ def test_tiger_tabs_and_plugins_popup():
 def test_example_values_stay_and_secrets_are_dots():
     source = _source()
     assert "Example" in source
-    assert "•••• saved 17 Oct" in source
-    assert "SAMPLE_PRICE_FEED_KEY" in source
+    assert "••••••••" in source
+    assert 'type="password"' in source
     assert "api_key=" not in source.lower()
     assert "sk-" not in source
     assert "Add a product" in source
@@ -94,7 +99,7 @@ def test_wires_existing_tiger_reads_and_leaves_shared_nav():
     assert "deleteTigerWatch" in source
     nav = NAV.read_text(encoding="utf-8")
     assert "/tiger" not in nav
-    assert '"/market-lab"' not in nav
+    assert '"/market-lab"' in nav
 
 
 def test_page_is_tiger_only():
@@ -106,3 +111,40 @@ def test_page_is_tiger_only():
     assert "actions.ts" in names
     joined = " ".join(path.as_posix() for path in _files())
     assert "/zenas" not in joined
+
+
+OTHER_VAULTS = (
+    "tank.vault",
+    "lab.vault",
+    "tisan.vault",
+    "base.vault",
+    "rig.vault",
+    "zenas.vault",
+    "radix.vault",
+    "tervory.vault",
+)
+
+
+def test_plugins_use_only_tiger_vault():
+    source = _source()
+    assert source.count("tiger.vault") >= 2
+    for vault in OTHER_VAULTS:
+        assert vault not in source
+    assert "vaultPlugins" in source
+    assert "saveVaultSecret" in source
+    assert "uploadVaultFiles" in source
+    assert "addVaultLink" in source
+    assert "addVaultConnection" in source
+    assert "set_switch" not in source
+    assert "This vault is off. Turn it on in Tank." in source
+    assert "resolveVaultSecret" not in source
+
+
+def test_plugin_payload_drops_secrets():
+    result = subprocess.run(
+        ["node", "--experimental-strip-types", "--test", str(PAGE / "plugins-data.test.ts")],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

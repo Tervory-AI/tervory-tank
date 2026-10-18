@@ -5,6 +5,7 @@ import { addProduct, removeProduct } from "./actions";
 import { ASK, EVERY_OPTIONS, FOOT, FOOT_SMALL, LEDE } from "./copy";
 import { SECTIONS, searchTiger, type AlertRow, type ProductRow, type ReadRow, type Section, type TigerData, type UnreadRow } from "./model";
 import { Plugins } from "./plugins";
+import type { PluginPanel } from "./plugins-data";
 
 function Tag() {
   return <span className="tag">Example</span>;
@@ -25,7 +26,19 @@ function Pill({ status }: { status: string }) {
   return <span className={solid ? "pill solid" : hollow ? "pill hollow" : "pill"}><i />{status}</span>;
 }
 
-export function TigerApp({ data, notice, initialTab }: { data: TigerData; notice: string; initialTab: Section }) {
+export function TigerApp({
+  data,
+  notice,
+  initialTab,
+  plugins,
+  accountName,
+}: {
+  data: TigerData;
+  notice: string;
+  initialTab: Section;
+  plugins: PluginPanel;
+  accountName: string | null;
+}) {
   const [section, setSection] = useState<Section>(initialTab === "plugins" ? "overview" : initialTab);
   const [pluginsOpen, setPluginsOpen] = useState(initialTab === "plugins");
   const [addOpen, setAddOpen] = useState(false);
@@ -34,6 +47,7 @@ export function TigerApp({ data, notice, initialTab }: { data: TigerData; notice
   const [query, setQuery] = useState("");
   const [hidden, setHidden] = useState<string[]>([]);
   const [help, setHelp] = useState(false);
+  const [settingsNote, setSettingsNote] = useState(false);
   const [checkedNote, setCheckedNote] = useState("");
   const [thread, setThread] = useState(ASK);
   const [askDraft, setAskDraft] = useState("");
@@ -53,7 +67,7 @@ export function TigerApp({ data, notice, initialTab }: { data: TigerData; notice
   const visible: TigerData = { ...data, products };
   const hit = searchTiger(visible, query);
   const popup = pluginsOpen || addOpen;
-  const headerRed = !popup && !(section === "ask" && !hit);
+  const headerRed = !addOpen && !(pluginsOpen && plugins.enabled) && !(section === "ask" && !hit);
 
   function show(next: Section) {
     setMenuOpen(false);
@@ -94,6 +108,12 @@ export function TigerApp({ data, notice, initialTab }: { data: TigerData; notice
         <div className="panel-top">
           <img src="/brand/tervory-logo-reversed.png" alt="Tervory" />
         </div>
+        <nav className="panel-account" aria-label="Account">
+          <p className="account">{accountName || "Account name"}</p>
+          <a className="nav" href="/">Dashboard</a>
+          <button type="button" className="nav" onClick={() => setMenuOpen(false)}>Projects</button>
+          <button type="button" className="nav" onClick={() => setMenuOpen(false)}>Chats</button>
+        </nav>
         <div className="panel-own">
           <nav aria-label="Tiger sections">
             {SECTIONS.filter((item) => item.id !== "plugins").map((item) => (
@@ -105,12 +125,8 @@ export function TigerApp({ data, notice, initialTab }: { data: TigerData; notice
           </nav>
         </div>
         <div className="panel-bottom">
-          <a className="nav" href="/">Workspace</a>
-          <button type="button" className="nav" onClick={() => { setHelp((open) => !open); setMenuOpen(false); }}>Help</button>
-          <p className="refreshed">
-            <span>Last refreshed</span>
-            <b>{data.refreshed}</b>
-          </p>
+          <button type="button" className="nav" onClick={() => { setSettingsNote((open) => !open); setMenuOpen(false); }}>Settings</button>
+          <button type="button" className="nav" onClick={() => { setHelp((open) => !open); setMenuOpen(false); }}>Support</button>
         </div>
       </aside>
 
@@ -140,6 +156,7 @@ export function TigerApp({ data, notice, initialTab }: { data: TigerData; notice
 
         {notice ? <p className="notice">{notice}</p> : null}
         {help ? <p className="notice">Tiger checks public product pages and tells you when a price or stock changes. It never logs in, and it does not guess a price it could not read.</p> : null}
+        {settingsNote ? <p className="notice">Account settings are not on this page.</p> : null}
         {checkedNote ? <p className="notice">{checkedNote}</p> : null}
 
         {hit ? <Results hit={hit} example={data.example} /> : null}
@@ -161,7 +178,7 @@ export function TigerApp({ data, notice, initialTab }: { data: TigerData; notice
         </footer>
       </div>
 
-      {pluginsOpen ? <Plugins onClose={() => { setPluginsOpen(false); setSection("overview"); }} /> : null}
+      {pluginsOpen ? <Plugins plugins={plugins} onClose={() => { setPluginsOpen(false); setSection("overview"); }} /> : null}
       {addOpen ? <AddProduct onClose={() => setAddOpen(false)} /> : null}
     </div>
   );

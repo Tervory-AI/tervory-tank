@@ -1,6 +1,5 @@
 /** Example rows from the Tiger app frames. Placeholders stay labelled Example. */
 
-export const MASK = "•••• saved 17 Oct";
 export const REFRESHED = "Today, 7:30 AM PT · Example";
 export const LEDE =
   "Watches store product pages and tells you when a price or stock changes. If a page can't be read clearly, Tiger says so instead of guessing.";
@@ -95,35 +94,6 @@ export const ASK: AskTurn[] = [
     sources: ["store-e.example product page, can’t read at 7:22 AM"],
   },
 ];
-
-export type KeyId = "feed" | "catalogue" | "email" | "text" | "barcode";
-
-export const KEYS: { id: KeyId; name: string; detail: string; env: string; saved: boolean }[] = [
-  { id: "feed", name: "Price feed (Example)", detail: "Prices and stock from a store partner’s feed", env: "SAMPLE_PRICE_FEED_KEY", saved: true },
-  { id: "catalogue", name: "Catalogue (Example)", detail: "Product names and barcodes for watched items", env: "SAMPLE_CATALOGUE_KEY", saved: true },
-  { id: "email", name: "Alert email (Example)", detail: "Sends price and stock alerts by email", env: "SAMPLE_ALERT_EMAIL_KEY", saved: false },
-  { id: "text", name: "Text alerts (Example)", detail: "Sends alerts by text message", env: "SAMPLE_TEXT_ALERTS_TOKEN", saved: false },
-  { id: "barcode", name: "Barcode lookup (Example)", detail: "Matches the same product across stores", env: "SAMPLE_BARCODE_KEY", saved: false },
-];
-
-export const FILES = [
-  { name: "sample-watch-list.csv", type: "CSV", size: "24 rows", when: "16 Oct", status: "Processed", map: true },
-  { name: "sample-store-price-list.xlsx", type: "XLSX", size: "1,240 rows", when: "15 Oct", status: "Needs checking", map: false },
-  { name: "sample-saved-pages-oct.zip", type: "ZIP", size: "120 saved pages", when: "12 Oct", status: "Processed", map: false },
-  { name: "sample-past-prices-q3.csv", type: "CSV", size: "610 rows", when: "10 Oct", status: "Needs checking", map: true },
-] as const;
-
-export const LINKS = [
-  { label: "Trail running shoe (Example)", host: "store-a.example/trail-shoe", checked: "Today, 7:30 AM", status: "Read" },
-  { label: "Ceramic water bottle (Example)", host: "store-b.example/bottle-750", checked: "Today, 7:30 AM", status: "Price changed" },
-  { label: "Face cream, 50 ml (Example)", host: "store-d.example/face-cream", checked: "Today, 7:26 AM", status: "Can't read" },
-] as const;
-
-export const CONNECTIONS = [
-  { name: "Store catalogue (Example)", host: "mcp.store-a.example", detail: "Product prices and stock levels", status: "Connected", used: "Today, 7:10 AM" },
-  { name: "Price history (Example)", host: "mcp.prices.example", detail: "Past prices for watched products", status: "Needs sign-in", used: "Never" },
-  { name: "Alert sender (Example)", host: "mcp.alerts.example", detail: "Sends alerts to your team chat", status: "Error", used: "14 Oct" },
-] as const;
 
 export const EVERY_OPTIONS = [
   { value: "15m", label: "Every 15 minutes" },

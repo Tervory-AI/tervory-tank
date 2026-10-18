@@ -135,6 +135,15 @@ main:has(.tiger) {
   object-position: left center;
 }
 
+.tiger .panel-account { display: flex; flex-direction: column; gap: 4px; }
+.tiger .account {
+  margin: 4px 0 8px;
+  padding-left: 12px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+}
+
 .tiger .panel-own {
   flex: 1;
   min-height: 0;
@@ -254,6 +263,7 @@ main:has(.tiger) {
 .tiger .count strong { display: block; margin-top: 4px; font-size: 14px; font-weight: 500; }
 .tiger .count .fine,
 .tiger .fine { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+.tiger .vault-off { margin: 8px 0 0; color: var(--ink); font-size: 16px; }
 
 .tiger .block { display: flex; flex-direction: column; gap: 20px; }
 .tiger .title-row { display: flex; align-items: center; gap: 10px; }
