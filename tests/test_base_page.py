@@ -24,6 +24,7 @@ def test_base_model():
             "--test",
             str(PAGE / "model.test.ts"),
             str(PAGE / "records.test.ts"),
+            str(PAGE / "vault.test.ts"),
         ],
         cwd=ROOT,
         capture_output=True,
@@ -62,9 +63,10 @@ def test_one_red_primary_per_view():
 def test_no_secrets_and_keys_show_as_dots():
     text = _sources()
     sources = (PAGE / "plugins.tsx").read_text(encoding="utf-8")
-    assert "••••" in sources
-    # Secret fields are password inputs and nothing is sent anywhere.
-    assert 'placeholder="Paste key"' in sources and 'type="password"' in sources
+    assert "{row.mask}" in sources and "••••••••" in (PAGE / "plugin-panel.ts").read_text(encoding="utf-8")
+    # Secret fields are password inputs. The browser never calls Tank itself: writes are server actions.
+    assert 'type="password"' in sources and "Paste key (hidden once saved)" in sources
+    assert "@/lib/tank" not in sources and "@/lib/tank" not in (PAGE / "view.tsx").read_text(encoding="utf-8")
     ask = (PAGE / "ask.tsx").read_text(encoding="utf-8")
     for banned in ("fetch(", "localStorage", "sessionStorage", "document.cookie", "process.env"):
         assert banned not in sources, banned
@@ -74,10 +76,7 @@ def test_no_secrets_and_keys_show_as_dots():
     assert "BRAVE_API_KEY" not in text
 
 
-def test_examples_stay_labelled_and_page_only_reads():
-    sources = (PAGE / "plugins.tsx").read_text(encoding="utf-8")
-    assert sources.count("<Example />") >= 1
-    assert "Not connected yet. Nothing was saved or sent." in sources
+def test_page_only_reads_records():
     load = (PAGE / "load.ts").read_text(encoding="utf-8")
     search = (PAGE / "search.ts").read_text(encoding="utf-8")
     for write in ("baseRun", "baseRerun", "baseRetry", "approveSkill", "retireSkill", "route(", "createTask"):
@@ -114,3 +113,59 @@ def test_search_and_ask_live_in_the_body():
     assert chat.index('className="bcp-thread"') < chat.index('className="bcp-composer"')
     composer = chat[chat.index('className="bcp-composer"'):]
     assert composer.index("<textarea") < composer.index("Send")
+
+
+OTHER_VAULTS = ("tank.vault", "lab.vault", "tisan.vault", "tiger.vault", "rig.vault", "zenas.vault", "radix.vault", "tervory.vault")
+
+
+def test_plugins_use_base_vault_only():
+    panel = (PAGE / "plugin-panel.ts").read_text(encoding="utf-8")
+    assert 'BASE_VAULT = "base.vault"' in panel and 'BASE_SQUAD = "base"' in panel
+    text = _sources()
+    code = re.sub(r"//.*|/\*.*?\*/", "", text, flags=re.S)
+    for vault in OTHER_VAULTS:
+        # Only the test of the refusal path names another vault.
+        assert vault not in code, vault
+    for name in ("vault-server.ts", "plugin-actions.ts"):
+        body = (PAGE / name).read_text(encoding="utf-8")
+        assert "BASE_VAULT, BASE_SQUAD" in body, name
+        assert '"lab.vault"' not in body and "market_lab" not in body, name
+    # Base never reads a secret value and never turns a vault on.
+    assert "resolveVaultSecret" not in text and "platform_secret" not in text
+    assert "/switch" not in text and "/v1/admin/vaults" not in text
+    assert "enabled: true" not in code.replace("enabled: true,\n    message: null", "")
+
+
+def test_vault_off_message_and_no_switch_in_the_ui():
+    plugins = (PAGE / "plugins.tsx").read_text(encoding="utf-8")
+    panel = (PAGE / "plugin-panel.ts").read_text(encoding="utf-8")
+    assert 'VAULT_OFF_MESSAGE = "This vault is off. Turn it on in Tank."' in panel
+    assert "!plugins.enabled ? (" in plugins and "{plugins.message || VAULT_OFF_MESSAGE}" in plugins
+    lowered = re.sub(r"/\*.*?\*/", "", plugins, flags=re.S).lower()
+    for banned in ("turn on</", ">turn it on<", "enable vault", "switch"):
+        assert banned not in lowered, banned
+    # The off check sits in front of every write.
+    assert "if (!plugins.enabled || busy) return;" in plugins
+
+
+def test_plugins_calls_go_through_tank_server_side():
+    actions = (PAGE / "plugin-actions.ts").read_text(encoding="utf-8")
+    assert actions.lstrip().startswith('"use server";')
+    for call in ("saveVaultSecret", "removeVaultSecret", "uploadVaultFiles", "removeVaultFile", "addVaultLink", "removeVaultLink", "addVaultConnection", "removeVaultConnection"):
+        assert call in actions, call
+    server = (PAGE / "vault-server.ts").read_text(encoding="utf-8")
+    assert '"use server"' not in server and "vaultPlugins(BASE_VAULT, BASE_SQUAD" in server
+    tank = (ROOT / "workspace" / "lib" / "tank.ts").read_text(encoding="utf-8")
+    assert 'headers.set("x-tervory-squad", squad);' in tank and 'headers.set("x-tank-key", TANK_API_KEY);' in tank
+
+
+def test_left_panel_order():
+    view = (PAGE / "view.tsx").read_text(encoding="utf-8")
+    panel = view[view.index("<aside"):view.index("</aside>")]
+    order = ["bcp-logo", "bcp-account", "STANDARD_TOP", "pageNav.map", "<span>Plugins</span>", "STANDARD_BOTTOM"]
+    spots = [panel.index(mark) for mark in order]
+    assert spots == sorted(spots), order
+    assert re.search(r'STANDARD_TOP = \[\s*\{ href: "[^"]+", label: "Dashboard" \},\s*\{ href: "[^"]+", label: "Projects" \},\s*\{ href: "[^"]+", label: "Chats" \}', view)
+    assert re.search(r'STANDARD_BOTTOM = \[\s*\{ href: "[^"]+", label: "Settings" \},\s*\{ href: "[^"]+", label: "Support" \}', view)
+    assert "tervory-logo-reversed.png" in panel
+    assert "Base logo" not in view and "base-logo" not in view
