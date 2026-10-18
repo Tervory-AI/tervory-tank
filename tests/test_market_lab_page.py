@@ -76,8 +76,8 @@ def test_page_does_not_invent_numbers_or_store_keys():
     assert "writeFile" not in readers
     assert "INSERT" not in readers
     catalog = (PAGE / "catalog.ts").read_text(encoding="utf-8")
-    assert "MARKET_LAB_LOGO_SRC: string | null = null" in catalog
-    assert "/brand/market-lab-logo.png" in catalog
+    assert 'MARKET_LAB_LOGO_SRC = "/brand/market-lab-on-dark.png"' in catalog
+    assert (ROOT / "workspace/public/brand/market-lab-on-dark.png").is_file()
     css = (PAGE / "market-lab.css").read_text(encoding="utf-8")
     assert re.search(r"\.ml-panel\s*\{[^}]*position:\s*fixed", css)
     assert re.search(r"\.ml-panel\s*\{[^}]*overflow-y:\s*auto", css)
@@ -100,6 +100,13 @@ def test_page_does_not_invent_numbers_or_store_keys():
     assert 'label: "Settings"' in view
     assert 'href: "/onboarding"' in view
     assert 'label: "Support"' in view
+    brand = view.index('className="ml-brand"')
+    bottom = view.index('className="ml-bottom"')
+    settings = view.index('aria-label="Workspace"')
+    assert brand < bottom < settings
+    assert "MARKET_LAB_LOGO_SRC" in view[brand:bottom]
+    assert "tervory-logo-reversed.png" in view[bottom:settings]
+    assert "Market Lab logo, added later" not in view
     for old in ("Chat", "Tasks", "Data", "Ledger", "Skills", "Tank"):
         assert f'label: "{old}"' not in view
     plugins = (PAGE / "plugins.ts").read_text(encoding="utf-8")

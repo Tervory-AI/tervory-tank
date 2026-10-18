@@ -111,6 +111,7 @@ body:has(.ml) main {
   position: fixed;
   top: 0;
   left: 0;
+  box-sizing: border-box;
   width: 240px;
   height: 100dvh;
   max-height: 100dvh;
@@ -130,8 +131,15 @@ body:has(.ml) main {
 .ml-brand {
   display: flex;
   flex-direction: column;
-  gap: 14px;
   padding-left: 12px;
+}
+
+.ml-agent {
+  width: 186px;
+  height: auto;
+  object-fit: contain;
+  object-position: left center;
+  display: block;
 }
 
 .ml-logo {
@@ -142,25 +150,14 @@ body:has(.ml) main {
   display: block;
 }
 
-.ml-slot {
-  width: 168px;
-  height: 36px;
-  border: 1px dashed rgba(255, 255, 255, 0.35);
-  border-radius: 6px;
+.ml-bottom {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  color: #8e99b5;
-  font-size: 11px;
-  line-height: 1.2;
-  text-align: center;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.ml-slot img {
-  max-width: calc(100% - 12px);
-  max-height: 28px;
-  object-fit: contain;
+.ml-bottom .ml-logo {
+  margin-left: 12px;
 }
 
 .ml button.ml-close {

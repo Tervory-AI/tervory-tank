@@ -2,11 +2,9 @@
  * Plain-English names for the Market Lab feeds.
  * Ids and key names follow agents/market_lab/feeds (ML-1). Values are never stored here.
  *
- * Drop the Market Lab logo at workspace/public/brand/market-lab-logo.png,
- * then set MARKET_LAB_LOGO_SRC to MARKET_LAB_LOGO_FILE.
+ * Official Market Lab mark, used as-is. Light wordmark for the dark panel.
  */
-export const MARKET_LAB_LOGO_FILE = "/brand/market-lab-logo.png";
-export const MARKET_LAB_LOGO_SRC: string | null = null;
+export const MARKET_LAB_LOGO_SRC = "/brand/market-lab-on-dark.png";
 
 export const WORKSPACE_HREF = "/";
 export const HELP_HREF = "https://tervory.com";

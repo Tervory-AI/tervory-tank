@@ -692,14 +692,7 @@ export function MarketLabView({
       <button className="ml-dim" type="button" hidden={!menu} aria-label="Close menu" onClick={() => setMenu(false)} />
       <aside className={menu ? "ml-panel open" : "ml-panel"}>
         <div className="ml-brand">
-          <img className="ml-logo" src="/brand/tervory-logo-reversed.png" alt="Tervory" width={186} height={34} />
-          <div className="ml-slot">
-            {MARKET_LAB_LOGO_SRC ? (
-              <img src={MARKET_LAB_LOGO_SRC} alt="Market Lab" />
-            ) : (
-              <span>Market Lab logo, added later</span>
-            )}
-          </div>
+          <img className="ml-agent" src={MARKET_LAB_LOGO_SRC} alt="Market Lab" width={186} height={31} />
         </div>
         <button className="ml-close" type="button" onClick={() => setMenu(false)}>
           Close
@@ -738,13 +731,16 @@ export function MarketLabView({
         </nav>
         <div className="ml-spacer" />
         <div className="ml-rule" />
-        <nav className="ml-nav" aria-label="Workspace">
-          {BOTTOM_LINKS.map((link) => (
-            <a key={link.label} className="ml-link" href={link.href} onClick={() => setMenu(false)}>
-              {link.label}
-            </a>
-          ))}
-        </nav>
+        <div className="ml-bottom">
+          <img className="ml-logo" src="/brand/tervory-logo-reversed.png" alt="Tervory" width={186} height={34} />
+          <nav className="ml-nav" aria-label="Workspace">
+            {BOTTOM_LINKS.map((link) => (
+              <a key={link.label} className="ml-link" href={link.href} onClick={() => setMenu(false)}>
+                {link.label}
+              </a>
+            ))}
+          </nav>
+        </div>
       </aside>
       <div className="ml-main" data-scroll-root>
         <div className="ml-body">
