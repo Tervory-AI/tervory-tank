@@ -660,6 +660,7 @@ def _compare(row: dict[str, Any], products: list[dict[str, Any]]) -> dict[str, A
         "cheapest_id": _sku(cheapest),
         "delta": money(delta),
         "currency": str(row.get("currency") or ""),
+        "peers": len(same),
     }
 
 
@@ -702,7 +703,7 @@ def _badges(row: dict[str, Any], focus_id: str, compare: dict[str, Any], mark_ex
         relation = attributes["relation"]
     if relation and _sku(row) != focus_id:
         badges.append(relation)
-    if compare.get("delta") == 0:
+    if compare.get("delta") == 0 and int(compare.get("peers") or 0) > 1:
         badges.append("Cheapest")
     if attributes.get("demo_item"):
         badges.append("Demo item")

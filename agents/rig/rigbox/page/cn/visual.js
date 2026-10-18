@@ -19031,17 +19031,17 @@
                     options
                   );
                   (options = preloadPropsMap.get(key)) && adoptPreloadPropsForStylesheet(href, options);
-                  var link = resource = ownerDocument.createElement("link");
-                  markNodeAsHoistable(link);
-                  setInitialProperties(link, "link", href);
-                  link._p = new Promise(function(resolve, reject) {
-                    link.onload = resolve;
-                    link.onerror = reject;
+                  var link2 = resource = ownerDocument.createElement("link");
+                  markNodeAsHoistable(link2);
+                  setInitialProperties(link2, "link", href);
+                  link2._p = new Promise(function(resolve, reject) {
+                    link2.onload = resolve;
+                    link2.onerror = reject;
                   });
-                  link.addEventListener("load", function() {
+                  link2.addEventListener("load", function() {
                     state.loading |= Loaded;
                   });
-                  link.addEventListener("error", function() {
+                  link2.addEventListener("error", function() {
                     state.loading |= Errored;
                   });
                   state.loading |= Inserted;
@@ -22915,7 +22915,7 @@
     nodes.forEach((node) => {
       nodeIds.add(node.id);
     });
-    return edges.filter((edge2) => nodeIds.has(edge2.source) || nodeIds.has(edge2.target));
+    return edges.filter((edge) => nodeIds.has(edge.source) || nodeIds.has(edge.target));
   };
   function getFitViewNodes(nodeLookup, options) {
     const fitViewNodes = /* @__PURE__ */ new Map();
@@ -22992,14 +22992,14 @@
         matchingNodes.push(node);
       }
     }
-    const edgeIds = new Set(edgesToRemove.map((edge2) => edge2.id));
-    const deletableEdges = edges.filter((edge2) => edge2.deletable !== false);
+    const edgeIds = new Set(edgesToRemove.map((edge) => edge.id));
+    const deletableEdges = edges.filter((edge) => edge.deletable !== false);
     const connectedEdges = getConnectedEdges(matchingNodes, deletableEdges);
     const matchingEdges = connectedEdges;
-    for (const edge2 of deletableEdges) {
-      const isIncluded = edgeIds.has(edge2.id);
-      if (isIncluded && !matchingEdges.find((e) => e.id === edge2.id)) {
-        matchingEdges.push(edge2);
+    for (const edge of deletableEdges) {
+      const isIncluded = edgeIds.has(edge.id);
+      if (isIncluded && !matchingEdges.find((e) => e.id === edge.id)) {
+        matchingEdges.push(edge);
       }
     }
     if (!onBeforeDelete) {
@@ -23376,33 +23376,33 @@
     return getOverlappingArea(viewRect, boxToRect(edgeBox)) > 0;
   }
   var getEdgeId = ({ source, sourceHandle, target, targetHandle }) => `xy-edge__${source}${sourceHandle || ""}-${target}${targetHandle || ""}`;
-  var connectionExists = (edge2, edges) => {
-    return edges.some((el) => el.source === edge2.source && el.target === edge2.target && (el.sourceHandle === edge2.sourceHandle || !el.sourceHandle && !edge2.sourceHandle) && (el.targetHandle === edge2.targetHandle || !el.targetHandle && !edge2.targetHandle));
+  var connectionExists = (edge, edges) => {
+    return edges.some((el) => el.source === edge.source && el.target === edge.target && (el.sourceHandle === edge.sourceHandle || !el.sourceHandle && !edge.sourceHandle) && (el.targetHandle === edge.targetHandle || !el.targetHandle && !edge.targetHandle));
   };
   var addEdge = (edgeParams, edges) => {
     if (!edgeParams.source || !edgeParams.target) {
       devWarn("006", errorMessages["error006"]());
       return edges;
     }
-    let edge2;
+    let edge;
     if (isEdgeBase(edgeParams)) {
-      edge2 = { ...edgeParams };
+      edge = { ...edgeParams };
     } else {
-      edge2 = {
+      edge = {
         ...edgeParams,
         id: getEdgeId(edgeParams)
       };
     }
-    if (connectionExists(edge2, edges)) {
+    if (connectionExists(edge, edges)) {
       return edges;
     }
-    if (edge2.sourceHandle === null) {
-      delete edge2.sourceHandle;
+    if (edge.sourceHandle === null) {
+      delete edge.sourceHandle;
     }
-    if (edge2.targetHandle === null) {
-      delete edge2.targetHandle;
+    if (edge.targetHandle === null) {
+      delete edge.targetHandle;
     }
-    return edges.concat(edge2);
+    return edges.concat(edge);
   };
   function getStraightPath({ sourceX, sourceY, targetX, targetY }) {
     const [labelX, labelY, offsetX, offsetY] = getEdgeCenter({
@@ -23650,8 +23650,8 @@
   }
   function createMarkerIds(edges, { id: id2, defaultColor, defaultMarkerStart, defaultMarkerEnd }) {
     const ids = /* @__PURE__ */ new Set();
-    return edges.reduce((markers, edge2) => {
-      [edge2.markerStart || defaultMarkerStart, edge2.markerEnd || defaultMarkerEnd].forEach((marker) => {
+    return edges.reduce((markers, edge) => {
+      [edge.markerStart || defaultMarkerStart, edge.markerEnd || defaultMarkerEnd].forEach((marker) => {
         if (marker && typeof marker === "object") {
           const markerId = getMarkerId(marker, id2);
           if (!ids.has(markerId)) {
@@ -23959,14 +23959,14 @@
   function updateConnectionLookup(connectionLookup, edgeLookup, edges) {
     connectionLookup.clear();
     edgeLookup.clear();
-    for (const edge2 of edges) {
-      const { source: sourceNode, target: targetNode, sourceHandle = null, targetHandle = null } = edge2;
-      const connection = { edgeId: edge2.id, source: sourceNode, target: targetNode, sourceHandle, targetHandle };
+    for (const edge of edges) {
+      const { source: sourceNode, target: targetNode, sourceHandle = null, targetHandle = null } = edge;
+      const connection = { edgeId: edge.id, source: sourceNode, target: targetNode, sourceHandle, targetHandle };
       const sourceKey = `${sourceNode}-${sourceHandle}--${targetNode}-${targetHandle}`;
       const targetKey = `${targetNode}-${targetHandle}--${sourceNode}-${sourceHandle}`;
       addConnectionToLookup("source", connection, targetKey, connectionLookup, sourceNode, sourceHandle);
       addConnectionToLookup("target", connection, sourceKey, connectionLookup, targetNode, targetHandle);
-      edgeLookup.set(edge2.id, edge2);
+      edgeLookup.set(edge.id, edge);
     }
   }
   function isParentSelected(node, nodeLookup) {
@@ -25430,9 +25430,9 @@
         selectedNodes.push(node.internals.userNode);
       }
     }
-    for (const [, edge2] of s.edgeLookup) {
-      if (edge2.selected) {
-        selectedEdges.push(edge2);
+    for (const [, edge] of s.edgeLookup) {
+      if (edge.selected) {
+        selectedEdges.push(edge);
       }
     }
     return { selectedNodes, selectedEdges };
@@ -26030,12 +26030,12 @@
         }));
       };
       const updateEdge = (id2, edgeUpdate, options = { replace: false }) => {
-        setEdges((prevEdges) => prevEdges.map((edge2) => {
-          if (edge2.id === id2) {
-            const nextEdge = typeof edgeUpdate === "function" ? edgeUpdate(edge2) : edgeUpdate;
-            return options.replace && isEdge(nextEdge) ? nextEdge : { ...edge2, ...nextEdge };
+        setEdges((prevEdges) => prevEdges.map((edge) => {
+          if (edge.id === id2) {
+            const nextEdge = typeof edgeUpdate === "function" ? edgeUpdate(edge) : edgeUpdate;
+            return options.replace && isEdge(nextEdge) ? nextEdge : { ...edge, ...nextEdge };
           }
-          return edge2;
+          return edge;
         }));
       };
       return {
@@ -26133,9 +26133,9 @@
         },
         updateEdge,
         updateEdgeData: (id2, dataUpdate, options = { replace: false }) => {
-          updateEdge(id2, (edge2) => {
-            const nextData = typeof dataUpdate === "function" ? dataUpdate(edge2) : dataUpdate;
-            return options.replace ? { ...edge2, data: nextData } : { ...edge2, data: { ...edge2.data, ...nextData } };
+          updateEdge(id2, (edge) => {
+            const nextData = typeof dataUpdate === "function" ? dataUpdate(edge) : dataUpdate;
+            return options.replace ? { ...edge, data: nextData } : { ...edge, data: { ...edge.data, ...nextData } };
           }, options);
         },
         getNodesBounds: (nodes) => {
@@ -26409,8 +26409,8 @@
         if (!connections)
           continue;
         for (const { edgeId } of connections.values()) {
-          const edge2 = edgeLookup.get(edgeId);
-          if (edge2 && (edge2.selectable ?? edgesSelectable)) {
+          const edge = edgeLookup.get(edgeId);
+          if (edge && (edge.selectable ?? edgesSelectable)) {
             selectedEdgeIds.current.add(edgeId);
           }
         }
@@ -27043,13 +27043,13 @@
   function useVisibleEdgeIds(onlyRenderVisible) {
     const edgeIds = useStore((0, import_react2.useCallback)((s) => {
       if (!onlyRenderVisible) {
-        return s.edges.map((edge2) => edge2.id);
+        return s.edges.map((edge) => edge.id);
       }
       const visibleEdgeIds = [];
       if (s.width && s.height) {
-        for (const edge2 of s.edges) {
-          const sourceNode = s.nodeLookup.get(edge2.source);
-          const targetNode = s.nodeLookup.get(edge2.target);
+        for (const edge of s.edges) {
+          const sourceNode = s.nodeLookup.get(edge.source);
+          const targetNode = s.nodeLookup.get(edge.target);
           if (sourceNode && targetNode && isEdgeVisible({
             sourceNode,
             targetNode,
@@ -27057,7 +27057,7 @@
             height: s.height,
             transform: s.transform
           })) {
-            visibleEdgeIds.push(edge2.id);
+            visibleEdgeIds.push(edge.id);
           }
         }
       }
@@ -27297,7 +27297,7 @@
   function EdgeAnchor({ position, centerX, centerY, radius = 10, onMouseDown, onMouseEnter, onMouseOut, type }) {
     return (0, import_jsx_runtime.jsx)("circle", { onMouseDown, onMouseEnter, onMouseOut, className: cc([EdgeUpdaterClassName, `${EdgeUpdaterClassName}-${type}`]), cx: shiftX(centerX, radius, position), cy: shiftY(centerY, radius, position), r: radius, stroke: "transparent", fill: "transparent" });
   }
-  function EdgeUpdateAnchors({ isReconnectable, reconnectRadius, edge: edge2, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, onReconnect, onReconnectStart, onReconnectEnd, setReconnecting, setUpdateHover }) {
+  function EdgeUpdateAnchors({ isReconnectable, reconnectRadius, edge, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, onReconnect, onReconnectStart, onReconnectEnd, setReconnecting, setUpdateHover }) {
     const store = useStoreApi();
     const handleEdgeUpdater = (event, oppositeHandle) => {
       if (event.button !== 0) {
@@ -27307,12 +27307,12 @@
       const isTarget = oppositeHandle.type === "target";
       const _onReconnectEnd = (evt, connectionState) => {
         setReconnecting(false);
-        onReconnectEnd?.(evt, edge2, oppositeHandle.type, connectionState);
+        onReconnectEnd?.(evt, edge, oppositeHandle.type, connectionState);
       };
-      const onConnectEdge = (connection) => onReconnect?.(edge2, connection);
+      const onConnectEdge = (connection) => onReconnect?.(edge, connection);
       const _onConnectStart = (_event, params) => {
         setReconnecting(true);
-        onReconnectStart?.(event, edge2, oppositeHandle.type);
+        onReconnectStart?.(event, edge, oppositeHandle.type);
         onConnectStart?.(_event, params);
       };
       XYHandle.onPointerDown(event.nativeEvent, {
@@ -27341,36 +27341,36 @@
         handleDomNode: event.currentTarget
       });
     };
-    const onReconnectSourceMouseDown = (event) => handleEdgeUpdater(event, { nodeId: edge2.target, id: edge2.targetHandle ?? null, type: "target" });
-    const onReconnectTargetMouseDown = (event) => handleEdgeUpdater(event, { nodeId: edge2.source, id: edge2.sourceHandle ?? null, type: "source" });
+    const onReconnectSourceMouseDown = (event) => handleEdgeUpdater(event, { nodeId: edge.target, id: edge.targetHandle ?? null, type: "target" });
+    const onReconnectTargetMouseDown = (event) => handleEdgeUpdater(event, { nodeId: edge.source, id: edge.sourceHandle ?? null, type: "source" });
     const onReconnectMouseEnter = () => setUpdateHover(true);
     const onReconnectMouseOut = () => setUpdateHover(false);
     return (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [(isReconnectable === true || isReconnectable === "source") && (0, import_jsx_runtime.jsx)(EdgeAnchor, { position: sourcePosition, centerX: sourceX, centerY: sourceY, radius: reconnectRadius, onMouseDown: onReconnectSourceMouseDown, onMouseEnter: onReconnectMouseEnter, onMouseOut: onReconnectMouseOut, type: "source" }), (isReconnectable === true || isReconnectable === "target") && (0, import_jsx_runtime.jsx)(EdgeAnchor, { position: targetPosition, centerX: targetX, centerY: targetY, radius: reconnectRadius, onMouseDown: onReconnectTargetMouseDown, onMouseEnter: onReconnectMouseEnter, onMouseOut: onReconnectMouseOut, type: "target" })] });
   }
   function EdgeWrapper({ id: id2, edgesFocusable, edgesReconnectable, elementsSelectable, onClick, onDoubleClick, onContextMenu, onMouseEnter, onMouseMove, onMouseLeave, reconnectRadius, onReconnect, onReconnectStart, onReconnectEnd, rfId, edgeTypes, noPanClassName, onError, disableKeyboardA11y }) {
-    let edge2 = useStore((s) => s.edgeLookup.get(id2));
+    let edge = useStore((s) => s.edgeLookup.get(id2));
     const defaultEdgeOptions = useStore((s) => s.defaultEdgeOptions);
-    edge2 = defaultEdgeOptions ? { ...defaultEdgeOptions, ...edge2 } : edge2;
-    let edgeType = edge2.type || "default";
+    edge = defaultEdgeOptions ? { ...defaultEdgeOptions, ...edge } : edge;
+    let edgeType = edge.type || "default";
     let EdgeComponent = edgeTypes?.[edgeType] || builtinEdgeTypes[edgeType];
     if (EdgeComponent === void 0) {
       onError?.("011", errorMessages["error011"](edgeType));
       edgeType = "default";
       EdgeComponent = edgeTypes?.["default"] || builtinEdgeTypes.default;
     }
-    const isFocusable = !!(edge2.focusable || edgesFocusable && typeof edge2.focusable === "undefined");
-    const isReconnectable = typeof onReconnect !== "undefined" && (edge2.reconnectable || edgesReconnectable && typeof edge2.reconnectable === "undefined");
-    const isSelectable = !!(edge2.selectable || elementsSelectable && typeof edge2.selectable === "undefined");
+    const isFocusable = !!(edge.focusable || edgesFocusable && typeof edge.focusable === "undefined");
+    const isReconnectable = typeof onReconnect !== "undefined" && (edge.reconnectable || edgesReconnectable && typeof edge.reconnectable === "undefined");
+    const isSelectable = !!(edge.selectable || elementsSelectable && typeof edge.selectable === "undefined");
     const edgeRef = (0, import_react2.useRef)(null);
     const [updateHover, setUpdateHover] = (0, import_react2.useState)(false);
     const [reconnecting, setReconnecting] = (0, import_react2.useState)(false);
     const store = useStoreApi();
     const { zIndex, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition } = useStore((0, import_react2.useCallback)((store2) => {
-      const sourceNode = store2.nodeLookup.get(edge2.source);
-      const targetNode = store2.nodeLookup.get(edge2.target);
+      const sourceNode = store2.nodeLookup.get(edge.source);
+      const targetNode = store2.nodeLookup.get(edge.target);
       if (!sourceNode || !targetNode) {
         return {
-          zIndex: edge2.zIndex,
+          zIndex: edge.zIndex,
           ...nullPosition
         };
       }
@@ -27378,14 +27378,14 @@
         id: id2,
         sourceNode,
         targetNode,
-        sourceHandle: edge2.sourceHandle || null,
-        targetHandle: edge2.targetHandle || null,
+        sourceHandle: edge.sourceHandle || null,
+        targetHandle: edge.targetHandle || null,
         connectionMode: store2.connectionMode,
         onError
       });
       const zIndex2 = getElevatedEdgeZIndex({
-        selected: edge2.selected,
-        zIndex: edge2.zIndex,
+        selected: edge.selected,
+        zIndex: edge.zIndex,
         sourceNode,
         targetNode,
         elevateOnSelect: store2.elevateEdgesOnSelect
@@ -27394,41 +27394,41 @@
         zIndex: zIndex2,
         ...edgePosition || nullPosition
       };
-    }, [edge2.source, edge2.target, edge2.sourceHandle, edge2.targetHandle, edge2.selected, edge2.zIndex]), shallow$1);
-    const markerStartUrl = (0, import_react2.useMemo)(() => edge2.markerStart ? `url('#${getMarkerId(edge2.markerStart, rfId)}')` : void 0, [edge2.markerStart, rfId]);
-    const markerEndUrl = (0, import_react2.useMemo)(() => edge2.markerEnd ? `url('#${getMarkerId(edge2.markerEnd, rfId)}')` : void 0, [edge2.markerEnd, rfId]);
-    if (edge2.hidden || sourceX === null || sourceY === null || targetX === null || targetY === null) {
+    }, [edge.source, edge.target, edge.sourceHandle, edge.targetHandle, edge.selected, edge.zIndex]), shallow$1);
+    const markerStartUrl = (0, import_react2.useMemo)(() => edge.markerStart ? `url('#${getMarkerId(edge.markerStart, rfId)}')` : void 0, [edge.markerStart, rfId]);
+    const markerEndUrl = (0, import_react2.useMemo)(() => edge.markerEnd ? `url('#${getMarkerId(edge.markerEnd, rfId)}')` : void 0, [edge.markerEnd, rfId]);
+    if (edge.hidden || sourceX === null || sourceY === null || targetX === null || targetY === null) {
       return null;
     }
     const onEdgeClick = (event) => {
       const { addSelectedEdges, unselectNodesAndEdges, multiSelectionActive } = store.getState();
       if (isSelectable) {
         store.setState({ nodesSelectionActive: false });
-        if (edge2.selected && multiSelectionActive) {
-          unselectNodesAndEdges({ nodes: [], edges: [edge2] });
+        if (edge.selected && multiSelectionActive) {
+          unselectNodesAndEdges({ nodes: [], edges: [edge] });
           edgeRef.current?.blur();
         } else {
           addSelectedEdges([id2]);
         }
       }
       if (onClick) {
-        onClick(event, edge2);
+        onClick(event, edge);
       }
     };
     const onEdgeDoubleClick = onDoubleClick ? (event) => {
-      onDoubleClick(event, { ...edge2 });
+      onDoubleClick(event, { ...edge });
     } : void 0;
     const onEdgeContextMenu = onContextMenu ? (event) => {
-      onContextMenu(event, { ...edge2 });
+      onContextMenu(event, { ...edge });
     } : void 0;
     const onEdgeMouseEnter = onMouseEnter ? (event) => {
-      onMouseEnter(event, { ...edge2 });
+      onMouseEnter(event, { ...edge });
     } : void 0;
     const onEdgeMouseMove = onMouseMove ? (event) => {
-      onMouseMove(event, { ...edge2 });
+      onMouseMove(event, { ...edge });
     } : void 0;
     const onEdgeMouseLeave = onMouseLeave ? (event) => {
-      onMouseLeave(event, { ...edge2 });
+      onMouseLeave(event, { ...edge });
     } : void 0;
     const onKeyDown = (event) => {
       if (!disableKeyboardA11y && elementSelectionKeys.includes(event.key) && isSelectable) {
@@ -27436,7 +27436,7 @@
         const unselect = event.key === "Escape";
         if (unselect) {
           edgeRef.current?.blur();
-          unselectNodesAndEdges({ edges: [edge2] });
+          unselectNodesAndEdges({ edges: [edge] });
         } else {
           addSelectedEdges([id2]);
         }
@@ -27445,16 +27445,16 @@
     return (0, import_jsx_runtime.jsx)("svg", { style: { zIndex }, children: (0, import_jsx_runtime.jsxs)("g", { className: cc([
       "react-flow__edge",
       `react-flow__edge-${edgeType}`,
-      edge2.className,
+      edge.className,
       noPanClassName,
       {
-        selected: edge2.selected,
-        animated: edge2.animated,
+        selected: edge.selected,
+        animated: edge.animated,
         inactive: !isSelectable && !onClick,
         updating: updateHover,
         selectable: isSelectable
       }
-    ]), onClick: onEdgeClick, onDoubleClick: onEdgeDoubleClick, onContextMenu: onEdgeContextMenu, onMouseEnter: onEdgeMouseEnter, onMouseMove: onEdgeMouseMove, onMouseLeave: onEdgeMouseLeave, onKeyDown: isFocusable ? onKeyDown : void 0, tabIndex: isFocusable ? 0 : void 0, role: edge2.ariaRole ?? (isFocusable ? "group" : "img"), "aria-roledescription": "edge", "data-id": id2, "data-testid": `rf__edge-${id2}`, "aria-label": edge2.ariaLabel === null ? void 0 : edge2.ariaLabel || `Edge from ${edge2.source} to ${edge2.target}`, "aria-describedby": isFocusable ? `${ARIA_EDGE_DESC_KEY}-${rfId}` : void 0, ref: edgeRef, ...edge2.domAttributes, children: [!reconnecting && (0, import_jsx_runtime.jsx)(EdgeComponent, { id: id2, source: edge2.source, target: edge2.target, type: edge2.type, selected: edge2.selected, animated: edge2.animated, selectable: isSelectable, deletable: edge2.deletable ?? true, label: edge2.label, labelStyle: edge2.labelStyle, labelShowBg: edge2.labelShowBg, labelBgStyle: edge2.labelBgStyle, labelBgPadding: edge2.labelBgPadding, labelBgBorderRadius: edge2.labelBgBorderRadius, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data: edge2.data, style: edge2.style, sourceHandleId: edge2.sourceHandle, targetHandleId: edge2.targetHandle, markerStart: markerStartUrl, markerEnd: markerEndUrl, pathOptions: "pathOptions" in edge2 ? edge2.pathOptions : void 0, interactionWidth: edge2.interactionWidth }), isReconnectable && (0, import_jsx_runtime.jsx)(EdgeUpdateAnchors, { edge: edge2, isReconnectable, reconnectRadius, onReconnect, onReconnectStart, onReconnectEnd, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, setUpdateHover, setReconnecting })] }) });
+    ]), onClick: onEdgeClick, onDoubleClick: onEdgeDoubleClick, onContextMenu: onEdgeContextMenu, onMouseEnter: onEdgeMouseEnter, onMouseMove: onEdgeMouseMove, onMouseLeave: onEdgeMouseLeave, onKeyDown: isFocusable ? onKeyDown : void 0, tabIndex: isFocusable ? 0 : void 0, role: edge.ariaRole ?? (isFocusable ? "group" : "img"), "aria-roledescription": "edge", "data-id": id2, "data-testid": `rf__edge-${id2}`, "aria-label": edge.ariaLabel === null ? void 0 : edge.ariaLabel || `Edge from ${edge.source} to ${edge.target}`, "aria-describedby": isFocusable ? `${ARIA_EDGE_DESC_KEY}-${rfId}` : void 0, ref: edgeRef, ...edge.domAttributes, children: [!reconnecting && (0, import_jsx_runtime.jsx)(EdgeComponent, { id: id2, source: edge.source, target: edge.target, type: edge.type, selected: edge.selected, animated: edge.animated, selectable: isSelectable, deletable: edge.deletable ?? true, label: edge.label, labelStyle: edge.labelStyle, labelShowBg: edge.labelShowBg, labelBgStyle: edge.labelBgStyle, labelBgPadding: edge.labelBgPadding, labelBgBorderRadius: edge.labelBgBorderRadius, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data: edge.data, style: edge.style, sourceHandleId: edge.sourceHandle, targetHandleId: edge.targetHandle, markerStart: markerStartUrl, markerEnd: markerEndUrl, pathOptions: "pathOptions" in edge ? edge.pathOptions : void 0, interactionWidth: edge.interactionWidth }), isReconnectable && (0, import_jsx_runtime.jsx)(EdgeUpdateAnchors, { edge, isReconnectable, reconnectRadius, onReconnect, onReconnectStart, onReconnectEnd, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, setUpdateHover, setReconnecting })] }) });
   }
   var selector$a = (s) => ({
     edgesFocusable: s.edgesFocusable,
@@ -27880,7 +27880,7 @@
           }
           return createSelectionChange(n.id, false);
         });
-        const edgeChanges = edgesToUnselect.map((edge2) => createSelectionChange(edge2.id, false));
+        const edgeChanges = edgesToUnselect.map((edge) => createSelectionChange(edge.id, false));
         triggerNodeChanges(nodeChanges);
         triggerEdgeChanges(edgeChanges);
       },
@@ -27907,7 +27907,7 @@
           return;
         }
         const nodeChanges = nodes2.reduce((res, node) => node.selected ? [...res, createSelectionChange(node.id, false)] : res, []);
-        const edgeChanges = edges2.reduce((res, edge2) => edge2.selected ? [...res, createSelectionChange(edge2.id, false)] : res, []);
+        const edgeChanges = edges2.reduce((res, edge) => edge.selected ? [...res, createSelectionChange(edge.id, false)] : res, []);
         triggerNodeChanges(nodeChanges);
         triggerEdgeChanges(edgeChanges);
       },
@@ -28426,35 +28426,95 @@
 
   // visual.jsx
   var import_jsx_runtime2 = __toESM(require_jsx_runtime());
+  var SIDES = [
+    ["t", Position.Top],
+    ["r", Position.Right],
+    ["b", Position.Bottom],
+    ["l", Position.Left]
+  ];
   function CatNode({ data }) {
-    const vertical = !!data.vertical;
     return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "cn-node cat", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(Handle, { type: "target", position: vertical ? Position.Top : Position.Left }),
+      SIDES.map(([id2, position]) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(Handle, { id: id2, type: "target", position }, "in-" + id2)),
+      SIDES.map(([id2, position]) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(Handle, { id: "s-" + id2, type: "source", position }, "out-" + id2)),
       /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "cn-node-count", children: data.count }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: data.label }),
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(Handle, { type: "source", position: vertical ? Position.Bottom : Position.Right })
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: data.label })
     ] });
   }
   function CentreNode({ data }) {
-    const vertical = !!data.vertical;
     return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("div", { className: "cn-node centre", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(Handle, { type: "target", position: vertical ? Position.Top : Position.Left }),
       /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "glow", "aria-hidden": "true" }),
       /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: data.label }),
       data.caption ? /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { className: "centre-caption", children: data.caption }) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(Handle, { type: "source", position: vertical ? Position.Bottom : Position.Right })
+      SIDES.map(([id2, position]) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(Handle, { id: id2, type: "source", position }, "out-" + id2))
     ] });
   }
   function CardNode({ data }) {
     return /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("button", { type: "button", className: "cn-node card-node", onClick: () => data.onOpen && data.onOpen(data.id), children: [
-      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(Handle, { type: "target", position: data.vertical ? Position.Top : Position.Left }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(Handle, { id: "t", type: "target", position: Position.Top }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(Handle, { id: "l", type: "target", position: Position.Left }),
+      /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(Handle, { id: "s-b", type: "source", position: Position.Bottom }),
       /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("strong", { children: data.label }),
       /* @__PURE__ */ (0, import_jsx_runtime2.jsx)("span", { children: data.meta })
     ] });
   }
   var nodeTypes = { cat: CatNode, centre: CentreNode, card: CardNode };
-  function edge(id2, source, target) {
-    return { id: id2, source, target, type: "smoothstep", style: { stroke: "#7ee0d6", strokeWidth: 1.25 } };
+  function nearestSide(from, to) {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    if (Math.abs(dx) >= Math.abs(dy)) return dx >= 0 ? "r" : "l";
+    return dy >= 0 ? "b" : "t";
+  }
+  function opposite(side) {
+    return { t: "b", b: "t", l: "r", r: "l" }[side];
+  }
+  function link(id2, source, target, sourceHandle, targetHandle) {
+    return {
+      id: id2,
+      source,
+      target,
+      sourceHandle,
+      targetHandle,
+      type: "straight",
+      style: { stroke: "#7ee0d6", strokeWidth: 1.25 }
+    };
+  }
+  var CENTRE = { w: 240, h: 108 };
+  var CAT = { w: 156, h: 58 };
+  var CARD = { w: 248, h: 84 };
+  function centreNode(data, position) {
+    return {
+      id: "centre",
+      type: "centre",
+      position,
+      width: CENTRE.w,
+      height: CENTRE.h,
+      style: { width: CENTRE.w, height: CENTRE.h },
+      data,
+      draggable: false
+    };
+  }
+  function catNode(group, position) {
+    return {
+      id: "cat-" + group.category,
+      type: "cat",
+      position,
+      width: CAT.w,
+      height: CAT.h,
+      style: { width: CAT.w, height: CAT.h },
+      data: { label: group.category, count: group.count },
+      draggable: false
+    };
+  }
+  function cardNode(item, position, onOpen) {
+    return {
+      id: "item-" + item.id,
+      type: "card",
+      position,
+      width: CARD.w,
+      style: { width: CARD.w },
+      data: { id: item.id, label: item.name, meta: item.meta, onOpen },
+      draggable: false
+    };
   }
   function columns(model, narrow) {
     const nodes = [];
@@ -28462,115 +28522,94 @@
     const groups = model.groups || [];
     const items = model.items || [];
     const centreData = { label: model.centre || "Results", caption: model.caption || "" };
+    const pitch = CARD.h + 12;
     if (narrow) {
       let top = 0;
-      nodes.push({
-        id: "centre",
-        type: "centre",
-        position: { x: 40, y: top },
-        data: { ...centreData, vertical: true },
-        draggable: false
-      });
-      top += 110;
+      nodes.push(centreNode(centreData, { x: 8, y: top }));
+      top += CENTRE.h + 28;
       groups.forEach((group) => {
         const mine = items.filter((item) => item.category === group.category);
         const id2 = "cat-" + group.category;
-        nodes.push({
-          id: id2,
-          type: "cat",
-          position: { x: 48, y: top },
-          data: { label: group.category, count: group.count, vertical: true },
-          draggable: false
-        });
-        edges.push(edge("e-" + id2, "centre", id2));
-        top += 64;
+        nodes.push(catNode(group, { x: 8, y: top }));
+        top += CAT.h + 16;
+        let previous = id2;
         mine.forEach((item) => {
           const itemId = "item-" + item.id;
-          nodes.push({
-            id: itemId,
-            type: "card",
-            position: { x: 8, y: top },
-            data: { id: item.id, label: item.name, meta: item.meta, onOpen: model.onOpen, vertical: true },
-            draggable: false
-          });
-          edges.push(edge("e-" + itemId, id2, itemId));
-          top += 72;
+          nodes.push(cardNode(item, { x: 8, y: top }, model.onOpen));
+          edges.push(link("e-" + itemId, previous, itemId, "s-b", "t"));
+          previous = itemId;
+          top += pitch;
         });
-        top += 16;
+        top += 12;
       });
+      if (groups[0]) edges.push(link("e-cat-" + groups[0].category, "centre", "cat-" + groups[0].category, "b", "t"));
       return { nodes, edges };
     }
     let cursor = 0;
     const bands = groups.map((group) => {
       const mine = items.filter((item) => item.category === group.category);
-      const band = Math.max(52, mine.length * 46);
+      const band = Math.max(pitch, mine.length * pitch);
       const row = { group, mine, top: cursor, band };
-      cursor += band + 10;
+      cursor += band + 20;
       return row;
     });
-    nodes.push({
-      id: "centre",
-      type: "centre",
-      position: { x: 0, y: Math.max(0, cursor / 2 - 36) },
-      data: centreData,
-      draggable: false
-    });
+    nodes.push(centreNode(centreData, { x: 0, y: Math.max(0, cursor / 2 - CENTRE.h / 2) }));
     bands.forEach(({ group, mine, top, band }) => {
       const id2 = "cat-" + group.category;
-      nodes.push({
-        id: id2,
-        type: "cat",
-        position: { x: 210, y: top + band / 2 - 22 },
-        data: { label: group.category, count: group.count },
-        draggable: false
-      });
-      edges.push(edge("e-" + id2, "centre", id2));
+      nodes.push(catNode(group, { x: 300, y: top + band / 2 - CAT.h / 2 }));
+      edges.push(link("e-" + id2, "centre", id2, "r", "l"));
       mine.forEach((item, index2) => {
         const itemId = "item-" + item.id;
-        nodes.push({
-          id: itemId,
-          type: "card",
-          position: { x: 360, y: top + index2 * 46 },
-          data: { id: item.id, label: item.name, meta: item.meta, onOpen: model.onOpen },
-          draggable: false
-        });
-        edges.push(edge("e-" + itemId, id2, itemId));
+        nodes.push(cardNode(item, { x: 500, y: top + index2 * pitch }, model.onOpen));
+        edges.push(link("e-" + itemId, id2, itemId, "s-r", "l"));
       });
     });
     return { nodes, edges };
   }
   function orbit(model, narrow) {
     const groups = model.groups || [];
-    const spanX = narrow ? 110 : 230;
-    const spanY = narrow ? 90 : 150;
-    const originX = narrow ? 90 : 270;
-    const originY = narrow ? 150 : 180;
-    const nodes = [
-      {
-        id: "centre",
-        type: "centre",
-        position: { x: narrow ? 70 : 250, y: narrow ? 140 : 170 },
-        data: { label: model.centre || "Ready when you are.", caption: model.caption || "" },
-        draggable: false
-      }
-    ];
+    const n = Math.max(groups.length, 1);
+    const nodes = [];
     const edges = [];
+    if (narrow) {
+      const centre2 = { x: 8, y: 8 };
+      nodes.push(centreNode(
+        { label: model.centre || "Ready when you are.", caption: model.caption || "" },
+        centre2
+      ));
+      groups.forEach((group, index2) => {
+        const col = index2 % 2;
+        const row = Math.floor(index2 / 2);
+        const position = {
+          x: 8 + col * (CAT.w + 16),
+          y: centre2.y + CENTRE.h + 36 + row * (CAT.h + 16)
+        };
+        const id2 = "cat-" + group.category;
+        nodes.push(catNode(group, position));
+        const above = row > 0 ? groups[index2 - 2] : null;
+        edges.push(above ? link("e-" + id2, "cat-" + above.category, id2, "s-b", "t") : link("e-" + id2, "centre", id2, "b", "t"));
+      });
+      return { nodes, edges };
+    }
+    const centre = { x: 250, y: 176 };
+    const mid = { x: centre.x + CENTRE.w / 2, y: centre.y + CENTRE.h / 2 };
+    const clear = Math.hypot(CENTRE.w / 2, CENTRE.h / 2) + Math.hypot(CAT.w / 2, CAT.h / 2) + 28;
+    const apart = (Math.max(CAT.w, CAT.h) + 24) / (2 * Math.sin(Math.PI / n));
+    const radius = Math.max(clear, apart);
+    nodes.push(centreNode(
+      { label: model.centre || "Ready when you are.", caption: model.caption || "" },
+      centre
+    ));
     groups.forEach((group, index2) => {
-      const angle = -Math.PI / 2 + index2 * 2 * Math.PI / Math.max(groups.length, 1);
+      const angle = -Math.PI / 2 + index2 * 2 * Math.PI / n;
       const id2 = "cat-" + group.category;
-      nodes.push({
-        id: id2,
-        type: "cat",
-        position: { x: originX + Math.cos(angle) * spanX, y: originY + Math.sin(angle) * spanY },
-        data: { label: group.category, count: group.count },
-        draggable: false
-      });
-      edges.push({
-        id: "e-" + id2,
-        source: id2,
-        target: "centre",
-        style: { stroke: "#7ee0d6", strokeWidth: 1.25 }
-      });
+      const position = {
+        x: mid.x + Math.cos(angle) * radius - CAT.w / 2,
+        y: mid.y + Math.sin(angle) * radius - CAT.h / 2
+      };
+      nodes.push(catNode(group, position));
+      const from = nearestSide(mid, { x: position.x + CAT.w / 2, y: position.y + CAT.h / 2 });
+      edges.push(link("e-" + id2, "centre", id2, from, opposite(from)));
     });
     return { nodes, edges };
   }
@@ -28589,8 +28628,8 @@
         edges: laid.edges,
         nodeTypes,
         fitView: true,
-        minZoom: 0.35,
-        fitViewOptions: { padding: 0.08, minZoom: 0.35, maxZoom: 1.15 },
+        minZoom: 0.82,
+        fitViewOptions: { padding: 0.08, minZoom: 0.82, maxZoom: 1 },
         maxZoom: 1.25,
         nodesDraggable: false,
         nodesConnectable: false,

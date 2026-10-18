@@ -107,6 +107,22 @@
     return { label: label, tone: tone, where: stock.location || "", lead: stock.lead || "", demo: stock.label || "Demo stock" };
   }
 
+  function stockDetail(stock) {
+    const lead = stock.lead && stock.lead.toLowerCase() !== stock.label.toLowerCase() ? stock.lead : "";
+    return [stock.where, lead].filter(Boolean).join(" · ");
+  }
+
+  function tally(count, singular, plural) {
+    return count + " " + (count === 1 ? singular : plural);
+  }
+
+  function peerDelta(item, results) {
+    const peers = (results || []).filter(function (row) { return row.category === item.category; });
+    if (peers.length < 2) return null;
+    const cheapest = Math.min.apply(null, peers.map(function (row) { return Number(row.price.amount) || 0; }));
+    return Number(item.price.amount) - cheapest;
+  }
+
   function barrelOf(product, picks) {
     const barrels = (product.options && product.options.barrel) || [];
     return barrels.find(function (item) { return item.code === picks.barrel; }) || null;
@@ -361,7 +377,7 @@
       "data-flow": JSON.stringify({
         layout: "orbit",
         centre: "Ready when you are.",
-        caption: "Results open as a list. Switch to Compare or Visual any time.",
+        caption: "Open a list, compare, or map.",
         groups: groups,
         items: [],
       }),
@@ -516,7 +532,7 @@
     const results = body.results || [];
     const focus = results.find(function (item) { return item.id === body.focus_id; }) || results[0];
     const heading = results.length
-      ? results.length + " matches · " + (body.groups || []).length + " categories"
+      ? tally(results.length, "match", "matches") + " · " + tally((body.groups || []).length, "category", "categories")
       : "No matches";
     const tabs = viewTabs(filters);
     let messageTitle = "";
@@ -597,18 +613,18 @@
     const wrap = h("div", { class: "list" });
     if (pistols.length) {
       wrap.append(h("h2", { class: "section-label", text: "Pistols · " + pistols.length }));
-      pistols.forEach(function (item) { wrap.append(compactRow(item)); });
+      pistols.forEach(function (item) { wrap.append(compactRow(item, results)); });
     }
     if (rest.length && pistols.length) {
       wrap.append(h("h2", { class: "section-label", text: "Upgrades for your Type B · " + rest.length }));
       const dots = rest.filter(function (item) { return item.category === "Sights"; });
       if (dots.length) {
         const grid = h("div", { class: "upgrade-dots" });
-        dots.forEach(function (item) { grid.append(dotCard(item)); });
+        dots.forEach(function (item) { grid.append(dotCard(item, results)); });
         wrap.append(grid);
       }
       rest.filter(function (item) { return item.category !== "Sights"; }).forEach(function (item) {
-        wrap.append(compactRow(item));
+        wrap.append(compactRow(item, results));
       });
     } else if (rest.length) {
       let category = "";
@@ -617,7 +633,7 @@
           category = item.category;
           wrap.append(h("h2", { class: "section-label", text: category }));
         }
-        wrap.append(compactRow(item));
+        wrap.append(compactRow(item, results));
       });
     }
     return wrap;
@@ -652,26 +668,29 @@
         }));
       });
     });
-    if (item.fit) wrap.append(h("span", { class: "chip tiny on", text: item.fit.badge }));
     return wrap;
   }
 
-  function compactRow(item) {
+  function compactRow(item, results) {
     const stock = stockOf(item.availability);
-    const delta = item.compare && item.compare.delta ? "+" + rand(item.compare.delta) : "";
-    const badges = (item.badges || []).filter(function (badge) { return badge !== "Demo item"; });
+    const delta = peerDelta(item, results);
+    const badges = (item.badges || []).filter(function (badge) {
+      return badge !== "Demo item" && badge !== "Cheapest";
+    });
+    const shown = [];
+    if (delta === 0) shown.push("Cheapest");
+    if (badges[0]) shown.push(badges[0]);
     const price = h("div", { class: "price-col" }, [
       h("strong", { text: rand(displayAmount(item, loadPicks(item))) }),
-      delta ? h("span", { class: "meta", text: delta }) : null,
-      badges.length ? h("span", { class: "badge", text: badges[0] }) : null,
-    ]);
+      delta > 0 ? h("span", { class: "meta", text: "+" + rand(delta) }) : null,
+    ].concat(shown.map(function (badge) { return h("span", { class: "badge", text: badge }); })));
     const name = h("div", {}, [
       h("h3", {}, [h("a", { class: "name-link", href: "/cn/product/" + encodeURIComponent(item.id), text: item.name })]),
       h("p", { class: "meta", text: item.brand || "" }),
     ]);
     const avail = h("div", {}, [
       h("p", { class: stock.tone, text: stock.label }),
-      h("p", { class: "meta", text: [stock.where, stock.lead].filter(Boolean).join(" · ") }),
+      h("p", { class: "meta", text: stockDetail(stock) }),
       item.availability && item.availability.status === "out_of_stock" ? h("button", {
         type: "button",
         class: "chip tiny",
@@ -686,11 +705,13 @@
     return h("article", { class: "row-line" }, [name, optionPills(item), avail, price]);
   }
 
-  function dotCard(item) {
+  function dotCard(item, results) {
     const stock = stockOf(item.availability);
+    const delta = peerDelta(item, results || []);
     return h("article", { class: "dot-card" }, [
       h("h3", {}, [h("a", { class: "name-link", href: "/cn/product/" + encodeURIComponent(item.id), text: item.name })]),
       h("p", { class: "price", text: rand(item.price.amount) }),
+      delta === 0 ? h("span", { class: "badge", text: "Cheapest" }) : null,
       item.fit ? h("span", { class: "chip tiny" + (item.fit.fits ? " on" : ""), text: item.fit.badge }) : null,
       h("p", { class: stock.tone, text: stock.label }),
       item.availability && item.availability.status === "out_of_stock" ? h("button", {
@@ -709,7 +730,11 @@
     const rows = pistols.length >= 2 ? pistols : results.slice(0, 3);
     const missing = "—";
     const lines = [
-      ["Difference from cheapest", function (item) { return item.compare && item.compare.delta ? "+" + rand(item.compare.delta) : "Cheapest"; }],
+      ["Difference from cheapest", function (item) {
+        const delta = peerDelta(item, rows);
+        if (delta === null || delta === 0) return "Cheapest";
+        return "+" + rand(delta);
+      }],
       ["Availability", function (item) { return stockOf(item.availability).label; }],
       ["Where it is", function (item) { return stockOf(item.availability).where || missing; }],
       ["Lead time", function (item) { return stockOf(item.availability).lead || missing; }],
@@ -718,16 +743,16 @@
       ["Optic cuts", function (item) { return specValue(item.attributes && item.attributes.verified, "optic_cuts") || ((item.options && item.options.optic_cut) || []).join(", ") || missing; }],
       ["Colours", function (item) { return ((item.options && (item.options.slide_grip || item.options.grip)) || []).join(", ") || missing; }],
       ["In the box", function (item) { return specValue(item.attributes && item.attributes.verified, "in_box") || (item.attributes && item.attributes.in_box) || missing; }],
-      ["Fits your build", function (item) { return item.fit ? item.fit.badge : "Check fit"; }],
     ];
     const board = h("div", { class: "compare-board", style: "--cols:" + rows.length });
     board.append(h("div", { class: "compare-label" }, [h("h2", { text: "Comparing " + rows.length + (rows.length === 1 ? " result" : " pistols") })]));
     rows.forEach(function (item, index) {
       const stock = stockOf(item.availability);
+      const detail = stockDetail(stock);
       const card = h("article", { class: "compare-card" + (index === 0 ? " is-focus" : "") }, [
         h("h3", {}, [h("a", { class: "name-link", href: "/cn/product/" + encodeURIComponent(item.id), text: item.name })]),
         h("p", { class: "price", text: rand(item.price.amount) }),
-        h("p", { class: stock.tone, text: stock.label + (stock.lead ? " · " + stock.lead : "") }),
+        h("p", { class: stock.tone, text: stock.label + (detail ? " · " + detail : "") }),
       ]);
       if (index === 0 && open) card.append(open);
       board.append(card);
@@ -754,8 +779,19 @@
         meta: rand(item.price.amount) + " · " + stock.label + (item.fit && item.fit.badge ? " · " + item.fit.badge : ""),
       };
     });
+    const groups = body.groups || [];
+    const narrow = window.matchMedia("(max-width: 800px)").matches;
+    const pitch = 96;
+    let height = narrow ? 108 + 28 : 32;
+    groups.forEach(function (group) {
+      const n = items.filter(function (item) { return item.category === group.category; }).length;
+      if (narrow) height += 58 + 16 + n * pitch + 12;
+      else height += Math.max(pitch, n * pitch) + 20;
+    });
+    if (!narrow) height += 48;
     return h("div", {
       class: "flow flow-wide",
+      style: "height:" + height + "px",
       "data-flow": JSON.stringify({
         layout: "columns",
         centre: focus ? focus.name : "Results",
@@ -773,14 +809,17 @@
       const rows = results.filter(function (item) { return item.category === category; });
       if (!rows.length) return;
       const peak = Math.max.apply(null, rows.map(function (item) { return Number(item.price.amount) || 1; }));
-      wrap.append(h("h3", { text: category === "Sights" ? "Red dots" : "Pistols" }));
+      const low = Math.min.apply(null, rows.map(function (item) { return Number(item.price.amount) || 0; }));
+      wrap.append(h("h3", { text: category === "Sights" ? "Red dots" : category }));
       rows.forEach(function (item) {
-        const width = Math.max(8, Math.round((Number(item.price.amount) / peak) * 100));
-        const delta = item.compare ? item.compare.delta : 0;
+        const amount = Number(item.price.amount) || 0;
+        const width = Math.max(8, Math.round((amount / peak) * 100));
+        const delta = rows.length > 1 ? amount - low : null;
+        const note = delta === null ? "" : delta > 0 ? " +" + rand(delta) : " cheapest";
         wrap.append(h("div", { class: "bar-row" }, [
-          h("span", { text: item.name }),
+          h("span", { class: "bar-name", text: item.name }),
           h("span", { class: "bar", style: "width:" + width + "%" }),
-          h("span", { class: "meta", text: rand(item.price.amount) + (delta ? " +" + rand(delta) : " cheapest") }),
+          h("span", { class: "meta", text: rand(amount) + note }),
         ]));
       });
     });
@@ -817,7 +856,7 @@
       savePicks(detail.id, picks);
       go(location.pathname);
     }
-    const specs = h("dl", {});
+    const specs = h("dl", { class: "specs" });
     [
       ["Lockup", specValue(verified, "locking")],
       ["Action", specValue(verified, "action")],
@@ -833,10 +872,15 @@
     const linked = (detail.fits || []).filter(function (fit) {
       return fit.fits_family === family || fit.fits_sku === detail.id || fit.fits_sku === family;
     }).map(function (fit) { return map[fit.part_sku]; }).filter(Boolean);
-    const fitLines = linked.map(function (part) {
+    const fitChips = h("div", { class: "fit-chips" });
+    linked.forEach(function (part) {
       const fit = fitFor(part.id, picks.optic_cut, detail.fits || [], family);
       const partStock = stockOf(part.availability);
-      return h("p", { text: part.name + " · " + (fit ? fit.badge : "Check fit") + " · " + partStock.label + " · " + rand(part.price.amount) });
+      const fits = fit ? fit.fits : true;
+      fitChips.append(h("span", {
+        class: "chip tiny" + (fits ? " on" : ""),
+        text: (fit ? fit.badge : "Check fit") + " · " + partStock.label,
+      }));
     });
     const stills = [
       ["/page/cn/media/type-b-render.jpg", "Type B render, muzzle left"],
@@ -844,25 +888,26 @@
       ["/page/cn/media/grip.jpg", "Modular grip"],
       ["/page/cn/media/trigger.jpg", "Flat face trigger"],
     ];
-    const options = h("div", { class: "product-options" }, [h("h2", { text: "Choose your options" })]);
+    const choices = [];
     const grips = optionValues(detail, "slide_grip").length ? optionValues(detail, "slide_grip") : optionValues(detail, "grip");
-    if (grips.length) options.append(radioGroup("Colour", "colour", grips, picks.slide_grip || picks.grip, function (value) { picks.slide_grip = value; redraw(); }));
+    if (grips.length) choices.push(radioGroup("Colour", "colour", grips, picks.slide_grip || picks.grip, function (value) { picks.slide_grip = value; redraw(); }));
     const barrels = optionValues(detail, "barrel");
     if (barrels.length) {
-      options.append(radioGroup("Barrel", "barrel", barrels.map(function (barrel) {
+      choices.push(radioGroup("Barrel", "barrel", barrels.map(function (barrel) {
         return { code: barrel.code, label: barrel.label + (barrel.delta ? " +" + rand(barrel.delta) : "") };
       }), picks.barrel, function (value) { picks.barrel = value; redraw(); }));
     }
     const cuts = optionValues(detail, "optic_cut");
-    if (cuts.length) options.append(radioGroup("Optic cut", "cut", cuts, picks.optic_cut, function (value) { picks.optic_cut = value; redraw(); }));
-    if (fitLines.length) {
-      options.append(h("h2", { text: "Fits" }));
-      fitLines.forEach(function (line) { options.append(line); });
-    }
+    if (cuts.length) choices.push(radioGroup("Optic cut", "cut", cuts, picks.optic_cut, function (value) { picks.optic_cut = value; redraw(); }));
+    const options = choices.length || linked.length ? h("div", { class: "product-options" }, [
+      choices.length ? h("h2", { text: "Choose your options" }) : null,
+    ].concat(choices).concat(linked.length ? [h("h2", { text: "Fits" }), fitChips] : [])) : null;
     const peers = h("div", { class: "search-compare" }, [h("h2", { text: "Compare in this search" })]);
-    rows.filter(function (item) { return item.category === "Pistols"; }).forEach(function (item) {
+    const same = rows.filter(function (item) { return item.category === detail.category; });
+    same.forEach(function (item) {
       const peerStock = stockOf(item.availability);
-      const mark = item.id === detail.id ? "This one" : (item.compare && item.compare.delta ? "+" + rand(item.compare.delta) : "");
+      const delta = peerDelta(item, same);
+      const mark = item.id === detail.id ? "This one" : delta > 0 ? "+" + rand(delta) : delta === 0 ? "Cheapest" : "";
       peers.append(h("p", {}, [
         h("a", { class: "name-link", href: "/cn/product/" + encodeURIComponent(item.id), text: item.name }),
         h("span", { class: "meta", text: " " + rand(item.price.amount) + " · " + peerStock.label + (mark ? " · " + mark : "") }),
@@ -873,7 +918,7 @@
       h("h1", { text: detail.name }),
       detail.attributes && detail.attributes.tagline ? h("p", { class: "lede", text: detail.attributes.tagline }) : null,
       priceLine(displayAmount(detail, picks), "Demo price"),
-      h("p", { class: stock.tone, text: stock.label + (stock.where ? " · " + stock.where : "") + (stock.lead ? " · " + stock.lead : "") }),
+      h("p", { class: stock.tone, text: stock.label + (stockDetail(stock) ? " · " + stockDetail(stock) : "") }),
       peers,
     ]);
     if (detail.price_history) {
@@ -939,9 +984,9 @@
     const triggers = linked.filter(function (row) { return row.category === "Triggers"; });
     function redraw(key, value) { picks[key] = value; savePicks(detail.id, picks); go(location.pathname); }
     const steps = [
-      ["0:00", "/page/cn/media/type-b-render.jpg", "Base pistol, flush barrel"],
-      ["0:06", "/page/cn/media/type-b-render-left.jpg", "Threaded barrel, suppressor ready"],
-      ["0:15", "/page/cn/media/sheet-versatility.jpg", "Optics ready"],
+      ["0:00", "/page/cn/media/frame-a.jpg", "Base pistol, flush barrel"],
+      ["0:06", "/page/cn/media/frame-c.jpg", "Threaded barrel, suppressor ready"],
+      ["0:15", "/page/cn/media/still-s2.jpg", "Optics ready"],
       ["0:27", "/page/cn/media/grip.jpg", "Interchangeable grip textures"],
       ["0:41", "/page/cn/media/still-up.jpg", "Modular grip"],
     ];
@@ -1006,7 +1051,7 @@
       h("div", { class: "build-stage" }, [
         h("p", { class: "meta", text: "Results · " + detail.name + " · Your build" }),
         h("h1", { text: "Your " + detail.name + " build" }),
-        h("img", { class: "hero-still", src: "/page/cn/media/versatility-full.jpg", alt: "Type B with optic, from the owner's versatility still" }),
+        h("img", { class: "hero-still", src: "/page/cn/media/still-up.jpg", alt: "Type B with optic and modular grip, Versatility video at about 41 seconds" }),
         frames,
       ]),
       h("aside", { class: "side build-side" }, [
@@ -1016,7 +1061,7 @@
         h("p", { class: "meta", text: "Running total" }),
         h("p", { class: "total", text: rand(total) }),
         dots.length ? optionCards("Red dot options", dotChoices, picks.dot, function (value) { redraw("dot", value); }) : null,
-        mags.length ? radioGroup("Magazine", "mag", mags.map(choiceFor), picks.mag, function (value) { redraw("mag", value); }) : null,
+        mags.length ? optionCards("Magazine", mags.map(choiceFor), picks.mag, function (value) { redraw("mag", value); }) : null,
         triggers.length ? radioGroup("Trigger", "trigger", [{ code: "standard", label: "Standard, included · In stock" }].concat(triggers.map(function (row) {
           const partStock = stockOf(row.availability);
           return { code: "performance", label: row.name + " · " + rand(row.price.amount) + " · Fits · " + partStock.label };
