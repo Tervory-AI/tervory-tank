@@ -1,6 +1,6 @@
 export type NavLink = { href: string; label: string };
 
-/** Product header: Chat, Tasks, Data, Skala, Ledger, Tank. Skala and Tank stay for a founder only. */
+/** Product header: Chat, Tasks, Data, Skala, Ledger, Billing, Tank. Skala and Tank stay for a founder only. */
 export function headerLinks(founder: boolean): NavLink[] {
   const links: NavLink[] = [
     { href: "/", label: "Chat" },
@@ -9,6 +9,7 @@ export function headerLinks(founder: boolean): NavLink[] {
   ];
   if (founder) links.push({ href: "/skala", label: "Skala" });
   links.push({ href: "/ledger", label: "Ledger" });
+  links.push({ href: "/billing", label: "Billing" });
   if (founder) links.push({ href: "/tank", label: "Tank" });
   return links;
 }
