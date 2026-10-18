@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { auth } from "@clerk/nextjs/server";
-import { isListedFounder } from "../review/founder";
+import { activeTenant } from "@/lib/tenant";
 import { refreshBase } from "./actions";
 import { loadBase } from "./load";
+import { offPanel, SIGN_IN_MESSAGE } from "./plugin-panel";
 import { askBase, searchBase } from "./search";
+import { loadBasePlugins } from "./vault-server";
 import { BaseView } from "./view";
 import "./base.css";
 
@@ -15,8 +16,18 @@ export const metadata: Metadata = {
 };
 
 export default async function BasePage() {
-  const { userId } = await auth();
-  const founder = isListedFounder(userId, process.env["TERVORY_ADMIN_USER_IDS"]);
+  let accountName: string | null = null;
+  let signedIn = false;
+  try {
+    const tenant = await activeTenant();
+    signedIn = Boolean(tenant);
+    accountName = tenant?.orgName ?? null;
+  } catch {
+    signedIn = false;
+    accountName = null;
+  }
+  // Plugins read base.vault through Tank. While the vault is off, Tank returns no items and the tab says so.
+  const plugins = signedIn ? await loadBasePlugins() : offPanel(SIGN_IN_MESSAGE);
   const model = await loadBase();
-  return <BaseView model={model} founder={founder} refresh={refreshBase} search={searchBase} ask={askBase} />;
+  return <BaseView model={model} plugins={plugins} accountName={accountName} refresh={refreshBase} search={searchBase} ask={askBase} />;
 }

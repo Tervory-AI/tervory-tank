@@ -169,6 +169,18 @@ body:has(.bcp) main {
   padding-bottom: 20px;
 }
 
+/* Account name: the first standard item at the top of the panel. */
+.bcp-account {
+  margin: 4px 12px 8px;
+  padding: 0 0 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .bcp-refreshed {
   padding: 12px 26px 0;
 }
@@ -210,6 +222,17 @@ body:has(.bcp) main {
   align-items: flex-start;
   justify-content: space-between;
   gap: 32px;
+}
+
+.bcp-refresh {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.bcp-refresh .bcp-refreshed-label {
+  color: #4a5570;
 }
 
 .bcp-crumb {
@@ -591,11 +614,11 @@ body:has(.bcp) main {
 }
 
 .bcp-key-row {
-  grid-template-columns: 250px 130px minmax(0, 1fr) 130px;
+  grid-template-columns: 190px 90px 180px minmax(0, 1fr);
 }
 
 .bcp-key-row.bcp-add {
-  grid-template-columns: 250px minmax(0, 1fr) minmax(0, 1fr) auto;
+  grid-template-columns: 200px repeat(3, minmax(0, 1fr)) auto;
   align-items: end;
   background: #f4f6fb;
 }
@@ -650,12 +673,34 @@ body:has(.bcp) main {
 .bcp-saved {
   background: #f4f6fb;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .bcp-actions {
   display: flex;
   gap: 14px;
   align-items: center;
+}
+
+.bcp-actions.bcp-replace .bcp-input {
+  min-width: 0;
+  flex: 1 1 140px;
+}
+
+/* Shown in place of every Plugins tab while base.vault is off. */
+.bcp-vault-off {
+  margin: 8px 0 4px;
+  padding: 16px 18px;
+  border: 1px solid #b8bfd0;
+  border-radius: 10px;
+  background: #f4f6fb;
+  color: #001840;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.bcp-dots {
+  letter-spacing: 0.08em;
 }
 
 .bcp-field {
@@ -1112,6 +1157,10 @@ body:has(.bcp) main {
     font-size: 34px;
   }
 
+  .bcp-refresh {
+    align-items: stretch;
+  }
+
   .bcp-intro form,
   .bcp-intro button.bcp-primary {
     width: 100%;
@@ -1236,5 +1285,18 @@ body:has(.bcp) main {
   .bcp-actions button.bcp-primary,
   .bcp-actions button.bcp-secondary {
     width: 100%;
+  }
+
+  .bcp-actions.bcp-replace {
+    flex-wrap: wrap;
+  }
+
+  .bcp-actions.bcp-replace .bcp-input {
+    flex: 1 1 100%;
+  }
+
+  .bcp-actions.bcp-replace button.bcp-secondary {
+    width: auto;
+    flex: 1 1 auto;
   }
 }

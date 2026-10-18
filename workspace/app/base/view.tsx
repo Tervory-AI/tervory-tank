@@ -2,13 +2,23 @@
 
 import { useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { headerLinks } from "../product-nav";
 import { formatCount, type BatchRow, type PageModel } from "./model";
 import { AskBase, RecordSearch, type AskAction, type SearchAction } from "./ask";
+import type { PluginPanel } from "./plugin-panel";
 import { PluginsDialog, type PluginsTab } from "./plugins";
 
 export const WORKSPACE_HREF = "/";
-export const HELP_HREF = "https://tervory.com";
+
+/** Standard panel items, the same on every squad page. Top: account name, then these. Bottom: settings and support. */
+export const STANDARD_TOP = [
+  { href: "/dashboard", label: "Dashboard" },
+  { href: "/projects", label: "Projects" },
+  { href: "/chats", label: "Chats" },
+] as const;
+export const STANDARD_BOTTOM = [
+  { href: "/settings", label: "Settings" },
+  { href: "/support", label: "Support" },
+] as const;
 
 const SECTIONS = ["overview", "search", "ask", "batches", "skills"] as const;
 
@@ -44,13 +54,15 @@ function skippedText(value: number | null): string {
 
 export function BaseView({
   model,
-  founder,
+  plugins: vault,
+  accountName,
   refresh,
   search,
   ask,
 }: {
   model: PageModel;
-  founder: boolean;
+  plugins: PluginPanel;
+  accountName: string | null;
   refresh: () => Promise<void>;
   search: SearchAction;
   ask: AskAction;
@@ -58,7 +70,6 @@ export function BaseView({
   const [active, setActive] = useState<string>("overview");
   const [menu, setMenu] = useState(false);
   const [plugins, setPlugins] = useState<PluginsTab | null>(null);
-  const standard = headerLinks(founder);
 
   useEffect(() => {
     const root = document.querySelector<HTMLElement>("[data-scroll-root]");
@@ -134,7 +145,10 @@ export function BaseView({
         </div>
 
         <nav aria-label="Tervory" className="bcp-standard">
-          {standard.map((link) => (
+          <p className="bcp-account" title={accountName ?? undefined}>
+            {accountName ?? "Your account"}
+          </p>
+          {STANDARD_TOP.map((link) => (
             <a key={link.href} className="bcp-link" href={link.href}>
               {link.label}
             </a>
@@ -173,18 +187,13 @@ export function BaseView({
 
         <div className="bcp-panel-bottom">
           <div className="bcp-rule" />
-          <nav aria-label="Workspace">
-            <a className="bcp-link" href={WORKSPACE_HREF}>
-              Workspace
-            </a>
-            <a className="bcp-link" href={HELP_HREF} target="_blank" rel="noreferrer">
-              Help
-            </a>
+          <nav aria-label="Account">
+            {STANDARD_BOTTOM.map((link) => (
+              <a key={link.href} className="bcp-link" href={link.href}>
+                {link.label}
+              </a>
+            ))}
           </nav>
-          <div className="bcp-refreshed">
-            <p className="bcp-refreshed-label">Last refreshed</p>
-            <p className="bcp-time">{model.refreshedLabel}</p>
-          </div>
         </div>
       </aside>
 
@@ -201,9 +210,12 @@ export function BaseView({
                 came from and how sure Base is.
               </p>
             </div>
-            <form action={refresh}>
-              <RefreshButton hidden={dialogOpen} />
-            </form>
+            <div className="bcp-refresh">
+              <form action={refresh}>
+                <RefreshButton hidden={dialogOpen} />
+              </form>
+              <p className="bcp-refreshed-label">Last refreshed {model.refreshedLabel}</p>
+            </div>
           </section>
 
           {model.loadError ? (
@@ -326,11 +338,11 @@ export function BaseView({
             )}
           </section>
 
-          <p className="bcp-footer">Base runs only approved skills. Keys are stored on the server, never in the app code.</p>
+          <p className="bcp-footer">Base runs only approved skills. Keys are stored in Tank, on the server, never in the app code.</p>
         </div>
       </div>
 
-      {plugins ? <PluginsDialog tab={plugins} onTab={setPlugins} onClose={() => setPlugins(null)} /> : null}
+      {plugins ? <PluginsDialog tab={plugins} plugins={vault} onTab={setPlugins} onClose={() => setPlugins(null)} /> : null}
     </div>
   );
 }
