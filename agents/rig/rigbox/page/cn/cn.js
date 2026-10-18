@@ -1109,8 +1109,8 @@
     const triggers = linked.filter(function (row) { return row.category === "Triggers"; });
     function redraw(key, value) { picks[key] = value; savePicks(detail.id, picks); go(location.pathname); }
     const steps = [
-      ["0:00", "/page/cn/media/frame-a.jpg", "Base pistol, flush barrel"],
-      ["0:06", "/page/cn/media/frame-c.jpg", "Threaded barrel, suppressor ready"],
+      ["0:00", "/page/cn/media/frame-a.jpg", "Slide detail"],
+      ["0:06", "/page/cn/media/frame-c.jpg", "Trigger and grip"],
       ["0:15", "/page/cn/media/still-s2.jpg", "Optics ready"],
       ["0:27", "/page/cn/media/grip.jpg", "Interchangeable grip textures"],
       ["0:41", "/page/cn/media/still-up.jpg", "Modular grip"],

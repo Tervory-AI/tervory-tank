@@ -174,12 +174,17 @@ label.field input, label.field select, .check {
 .price { font-size: 18px; color: var(--text); }
 
 .gold {
+  display: inline-block;
   color: var(--gold);
   border: 1px solid var(--gold);
   border-radius: 999px;
   padding: 2px 8px;
   font-family: var(--mono);
   font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+  width: max-content;
+  max-width: 100%;
 }
 
 .react-flow { background: transparent; }
@@ -684,7 +689,7 @@ img.hero { border-radius: 20px; background: transparent; width: 100%; max-height
   padding: 2px 0;
 }
 .build-side .lines li span:last-child { text-align: right; }
-.build-side .gold { justify-self: start; width: max-content; }
+.build-side .gold { justify-self: start; align-self: start; width: max-content; }
 
 :focus-visible { outline: 2px solid var(--sand); outline-offset: 3px; }
 
