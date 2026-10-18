@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { headerLinks } from "../product-nav";
-import { checks, exampleFindings, exampleReport, pluginSections } from "./content";
+import { useEffect, useRef, useState, type ReactNode, type KeyboardEvent } from "react";
+import { Plugins } from "./plugins";
+import { checks, exampleFindings, exampleReport } from "./content";
 import { RadixDesk } from "./conversation";
 
 type Section = "Overview" | "Findings" | "Reports";
@@ -29,60 +29,9 @@ function Logo() {
   return <img src="/brand/tervory-logo-reversed.png" width={186} height={34} alt="Tervory" className="rx-logo" />;
 }
 
-function Plugins() {
-  const [selected, setSelected] = useState(0);
-  const tabs = useRef<(HTMLButtonElement | null)[]>([]);
-  function onTabKey(event: KeyboardEvent<HTMLButtonElement>, index: number) {
-    let next = index;
-    if (event.key === "ArrowRight") next = (index + 1) % pluginSections.length;
-    else if (event.key === "ArrowLeft") next = (index + pluginSections.length - 1) % pluginSections.length;
-    else if (event.key === "Home") next = 0;
-    else if (event.key === "End") next = pluginSections.length - 1;
-    else return;
-    event.preventDefault();
-    setSelected(next);
-    tabs.current[next]?.focus();
-  }
-  function content(index: number) {
-    const item = pluginSections[index];
-    return <>
-      <p>{item.description}</p>
-      <div className="rx-card">
-        <h3>{item.title}</h3><p>{item.copy}</p>
-        {"example" in item ? <div className="rx-saved-example">
-          <span>{item.example} <span className="rx-badge">Example</span></span>
-          <p className="rx-dots" aria-label="Masked example; no credential stored">••••••••</p>
-          <small>This illustrates a saved credential. Nothing is connected.</small>
-        </div> : <p className="rx-muted">{item.empty}</p>}
-      </div>
-    </>;
-  }
-  return <>
-    <div className="rx-plugin-desktop">
-      <div className="rx-plugin-tabs" role="tablist" aria-label="Plugin types">
-        {pluginSections.map((item, index) => <button key={item.id} type="button"
-          ref={(node) => { tabs.current[index] = node; }}
-          id={"rx-tab-" + item.id} role="tab" aria-selected={selected === index}
-          aria-controls={"rx-plugin-" + item.id} tabIndex={selected === index ? 0 : -1}
-          onClick={() => setSelected(index)} onKeyDown={(event) => onTabKey(event, index)}>
-          {item.label}
-        </button>)}
-      </div>
-      {pluginSections.map((item, index) => <section key={item.id} role="tabpanel"
-        id={"rx-plugin-" + item.id} aria-labelledby={"rx-tab-" + item.id}
-        hidden={selected !== index} tabIndex={0}>
-        <h3 className="rx-plugin-heading">{item.label}</h3>{content(index)}
-      </section>)}
-    </div>
-    <div className="rx-plugin-mobile">
-      {pluginSections.map((item, index) => <details key={item.id} open={index === 0}>
-        <summary>{item.label}</summary>{content(index)}
-      </details>)}
-    </div>
-  </>;
-}
-
-export function RadixPage({ founder }: { founder: boolean }) {
+export function RadixPage({ accountName, settings }: { accountName: string; settings: ReactNode }) {
+  const [pluginsOpen, setPluginsOpen] = useState(false);
+  const [vaultEnabled, setVaultEnabled] = useState(false);
   const [section, setSection] = useState<Section>("Overview");
   const [example, setExample] = useState(false);
   const [severity, setSeverity] = useState("All");
@@ -114,13 +63,17 @@ export function RadixPage({ founder }: { founder: boolean }) {
     const fromMenu = Boolean(menu.current?.open);
     menu.current?.close();
     pluginsTrigger.current = fromMenu ? menuTrigger.current : trigger;
+    setPluginsOpen(true);
     plugins.current?.showModal();
   }
   function navigation() {
     return <>
       <a href="/" className="rx-brand" aria-label="Tervory workspace"><Logo /></a>
       <nav className="rx-standard" aria-label="Standard navigation">
-        {headerLinks(founder).map((link) => <a key={link.href} href={link.href}>{link.label}</a>)}
+        <p className="rx-account">{accountName}</p>
+        <a href="/radix">Dashboard</a>
+        <a href="/tasks">Projects</a>
+        <a href="/">Chats</a>
       </nav>
       <div className="rx-page-nav">
         <p className="rx-kicker">Radix</p>
@@ -131,8 +84,8 @@ export function RadixPage({ founder }: { founder: boolean }) {
         </nav>
       </div>
       <nav className="rx-bottom" aria-label="Workspace">
-        <a href="/">Workspace</a>
-        <a href="https://tervory.com" target="_blank" rel="noreferrer">Help<span className="rx-sr"> (opens a new tab)</span></a>
+        <span onClickCapture={() => menu.current?.close()}>{settings}</span>
+        <a href="https://tervory.com" target="_blank" rel="noreferrer">Support<span className="rx-sr"> (opens a new tab)</span></a>
       </nav>
     </>;
   }
@@ -214,13 +167,13 @@ export function RadixPage({ founder }: { founder: boolean }) {
       <footer className="rx-footnote">Code checks use supplied files. No website is scanned from this page.</footer>
     </div>
     <dialog ref={plugins} className="rx-plugins-dialog" aria-labelledby="rx-plugins-title" onKeyDown={keepDialogFocus}
-      onClose={() => pluginsTrigger.current?.focus()}>
+      onClose={() => { setPluginsOpen(false); pluginsTrigger.current?.focus(); }}>
       <div className="rx-modal-header">
         <div><h2 id="rx-plugins-title">Plugins</h2><p>The files and connections Radix can use.</p></div>
         <button type="button" className="rx-text-button" onClick={() => plugins.current?.close()}>Close</button>
       </div>
-      <Plugins />
-      <button type="button" className="rx-primary" onClick={() => plugins.current?.close()}>Done</button>
+      <Plugins open={pluginsOpen} onEnabled={setVaultEnabled} />
+      <button type="button" className={vaultEnabled ? "rx-secondary" : "rx-primary"} onClick={() => plugins.current?.close()}>Done</button>
     </dialog>
   </div>;
 }

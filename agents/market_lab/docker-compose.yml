@@ -23,6 +23,8 @@ services:
       LEGISCAN_API_KEY: ${LEGISCAN_API_KEY:-}
       EIA_API_KEY: ${EIA_API_KEY:-}
       NOAA_TOKEN: ${NOAA_TOKEN:-}
+      # Optional tenant whose lab.vault the feeds runner may read through Tank.
+      FEEDS_TENANT_ID: ${FEEDS_TENANT_ID:-}
       DATA_DIR: /data
     volumes:
       - agent_market_lab_data:/data

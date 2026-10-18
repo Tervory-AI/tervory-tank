@@ -154,3 +154,18 @@ body:has(.rx) main { width:100%; max-width:none; height:100dvh; margin:0; paddin
 
 .rx-record-pages { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:13px; margin-top:12px; }
 .rx-record-pages button:disabled { opacity:.45; cursor:default; }
+
+/* Plugins uses Tank metadata only. The off state never shows saved items. */
+.rx-account { padding:8px; font-weight:500; overflow-wrap:anywhere; }
+.rx-plugin-content { display:flex; flex-direction:column; gap:16px; }
+.rx-plugin-content > p,.rx-vault-off { color:var(--rx-muted); margin:12px 0; }
+.rx-plugin-form { display:flex; flex-direction:column; gap:16px; border-top:1px solid var(--rx-line); padding-top:20px; }
+.rx-plugin-form label { display:flex; flex-direction:column; gap:6px; font-size:14px; }
+.rx-plugin-form input,.rx-plugin-form select { width:100%; min-width:0; min-height:44px; padding:10px 12px; color:var(--rx-navy); background:#fff; border:1px solid var(--rx-line); border-radius:8px; }
+.rx-plugin-form .rx-primary { margin-top:0; }
+.rx-plugin-note { padding:12px; margin-bottom:20px!important; background:var(--rx-tint); border:1px solid var(--rx-line); border-radius:8px; }
+.rx-plugin-mobile section { border-top:1px solid var(--rx-line); padding:12px 0; }
+.rx .rx-accordion { font-family:var(--font-jost),Jost,sans-serif; font-weight:300; font-size:24px; min-height:44px; width:100%; text-align:left; }
+.rx .rx-accordion[aria-expanded="true"] { text-decoration:underline; text-underline-offset:6px; }
+.rx-plugins-dialog > .rx-secondary { margin-top:28px; }
+.rx button:disabled { cursor:default; opacity:.55; }

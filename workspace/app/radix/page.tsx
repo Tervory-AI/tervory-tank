@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { auth } from "@clerk/nextjs/server";
-import { isListedFounder } from "../review/founder";
+import { activeTenant } from "@/lib/tenant";
+import { RadixSettings } from "./settings";
 import { RadixPage } from "./view";
 import "./radix.css";
 
@@ -10,6 +10,6 @@ export const metadata: Metadata = {
 };
 
 export default async function Page() {
-  const { userId } = await auth();
-  return <RadixPage founder={isListedFounder(userId, process.env["TERVORY_ADMIN_USER_IDS"])} />;
+  const tenant = await activeTenant();
+  return <RadixPage accountName={tenant?.orgName ?? "Choose an account"} settings={<RadixSettings />} />;
 }

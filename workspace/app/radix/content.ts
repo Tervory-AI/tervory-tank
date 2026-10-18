@@ -38,37 +38,6 @@ export const exampleFindings = [
   },
 ] as const;
 
-export const pluginSections = [
-  {
-    id: "keys", label: "API keys",
-    description: "No API keys are needed for offline code checks.",
-    title: "Keys cannot be added from this page.",
-    copy: "No credentials are requested or stored.",
-    example: "Saved key",
-  },
-  {
-    id: "files", label: "Files",
-    description: "Code archives supplied for an offline check.",
-    title: "Uploads are not connected yet.",
-    copy: "The scan service accepts ZIP, tar.gz, or git bundle archives. This page cannot upload them yet.",
-    empty: "No file list is connected.",
-  },
-  {
-    id: "links", label: "Source links",
-    description: "Reference links for a security review.",
-    title: "No client hostname has been approved here.",
-    copy: "Links cannot be added or fetched from this page. Outbound access stays disabled.",
-    empty: "No links are connected.",
-  },
-  {
-    id: "mcp", label: "MCP connections",
-    description: "Connections to external tools.",
-    title: "External connections are disabled.",
-    copy: "No server is contacted and no token is requested.",
-    example: "Saved token",
-  },
-] as const;
-
 export function exampleReport(): string {
   return [
     "# Radix — EXAMPLE report",

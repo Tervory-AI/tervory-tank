@@ -679,3 +679,87 @@ BEGIN
   END IF;
 END
 $$;
+
+-- Plugins vaults. Tank is the only reader and writer. Squad vaults stay off
+-- until a founder calls POST /v1/admin/vaults/<vault>/switch. No seed row
+-- turns one on. tank.vault is always on in code and has no switch row.
+-- File bytes live in tank.vault_file. Secret values live only as ciphertext.
+
+CREATE TABLE IF NOT EXISTS tank.vault_switch (
+    vault_id    text PRIMARY KEY,
+    enabled     boolean NOT NULL DEFAULT false,
+    updated_at  timestamptz NOT NULL DEFAULT now(),
+    updated_by  text
+);
+
+CREATE TABLE IF NOT EXISTS tank.vault_secret (
+    tenant_id   uuid NOT NULL,
+    vault_id    text NOT NULL,
+    name        text NOT NULL,
+    purpose     text NOT NULL DEFAULT '',
+    nonce       bytea NOT NULL,
+    ciphertext  bytea NOT NULL,
+    mask        text NOT NULL DEFAULT '',
+    created_at  timestamptz NOT NULL DEFAULT now(),
+    updated_at  timestamptz NOT NULL DEFAULT now(),
+    updated_by  text,
+    PRIMARY KEY (tenant_id, vault_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS tank.vault_file (
+    id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id    uuid NOT NULL,
+    vault_id     text NOT NULL,
+    name         text NOT NULL,
+    media_type   text NOT NULL,
+    size_bytes   integer NOT NULL,
+    row_count    integer,
+    page_count   integer,
+    status       text NOT NULL DEFAULT 'ready',
+    bytes        bytea NOT NULL,
+    uploaded_at  timestamptz NOT NULL DEFAULT now(),
+    uploaded_by  text
+);
+CREATE INDEX IF NOT EXISTS vault_file_tenant ON tank.vault_file (tenant_id, vault_id, uploaded_at DESC);
+
+CREATE TABLE IF NOT EXISTS tank.vault_link (
+    id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id     uuid NOT NULL,
+    vault_id      text NOT NULL,
+    url           text NOT NULL,
+    label         text NOT NULL,
+    frequency     text NOT NULL,
+    last_checked  timestamptz,
+    status        text NOT NULL DEFAULT 'not checked',
+    created_at    timestamptz NOT NULL DEFAULT now(),
+    created_by    text
+);
+CREATE INDEX IF NOT EXISTS vault_link_tenant ON tank.vault_link (tenant_id, vault_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS tank.vault_mcp (
+    id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id    uuid NOT NULL,
+    vault_id     text NOT NULL,
+    name         text NOT NULL,
+    server_url   text NOT NULL,
+    auth_type    text NOT NULL,
+    token_name   text,
+    status       text NOT NULL DEFAULT 'saved',
+    last_used    timestamptz,
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    created_by   text
+);
+CREATE INDEX IF NOT EXISTS vault_mcp_tenant ON tank.vault_mcp (tenant_id, vault_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS tank.vault_audit (
+    id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    ts          timestamptz NOT NULL DEFAULT now(),
+    tenant_id   uuid NOT NULL,
+    vault_id    text NOT NULL,
+    actor       text NOT NULL,
+    action      text NOT NULL,
+    item_kind   text NOT NULL,
+    item_name   text NOT NULL,
+    detail      text NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS vault_audit_vault ON tank.vault_audit (vault_id, ts DESC);

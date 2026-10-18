@@ -415,9 +415,9 @@ async def _live_fred(series_id: str) -> dict[str, Any] | None:
     The body is for the caller to turn into points. It is not written here.
     A failure names the host only, never the key or the request URL.
     """
-    from feeds.keys import FRED_KEY
+    from feeds.keys import FRED_KEY, feed_key
 
-    key = os.environ.get(FRED_KEY, "").strip()
+    key = feed_key(FRED_KEY)
     if not key:
         return None
     import httpx
