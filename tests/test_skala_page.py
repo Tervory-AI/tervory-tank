@@ -38,6 +38,15 @@ def test_page_matches_the_app_frame():
     assert view.index("/brand/skala-on-dark.png") < view.index("/brand/tervory-logo-reversed.png")
     assert "tank.vault" not in text
     assert "set_switch" not in text
+    pipes = (PAGE / "pipelines.ts").read_text(encoding="utf-8")
+    for label in ("Base", "Tiger", "Market Lab", "Rig", "Tisan", "Radix", "Zenas", "Skala", "Tank"):
+        assert label in pipes
+    assert "This vault is off. The transfer waits." in pipes
+    assert "This pipeline waits." in pipes
+    assert "TRANSFER_WAITS" in view
+    assert "TANK_WAITS" in view
+    assert "transferLibrarySkill" in (PAGE / "pipeline-actions.ts").read_text(encoding="utf-8")
+    assert "publish" not in (PAGE / "pipeline-actions.ts").read_text(encoding="utf-8")
     nav = (ROOT / "workspace" / "app" / "product-nav.ts").read_text(encoding="utf-8")
     assert '"/skala"' not in nav.split("OWN_SHELL", 1)[1]
 

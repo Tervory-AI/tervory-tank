@@ -16,6 +16,8 @@ import {
   type PluginTab,
   type SecretMeta,
 } from "./plugins";
+import { transferToAgent } from "./pipeline-actions";
+import { TANK_WAITS, TRANSFER_WAITS, type PipelineDestination } from "./pipelines";
 import {
   addSkalaConnection,
   addSkalaLink,
@@ -54,10 +56,12 @@ export function SkalaApp({
   accountName,
   plugins,
   library,
+  destinations,
 }: {
   accountName: string | null;
   plugins: PluginPanel;
   library: LibraryPanel;
+  destinations: PipelineDestination[];
 }) {
   const [section, setSection] = useState<Section>("library");
   const [tab, setTab] = useState<PluginTab>("API keys");
@@ -199,11 +203,79 @@ export function SkalaApp({
               ) : (
                 <p className="sk-off">{library.message || LIBRARY_OFF_MESSAGE}</p>
               )}
+
+              <Pipelines destinations={destinations} skills={library.enabled ? library.skills : []} />
             </>
           )}
         </div>
       </div>
     </div>
+  );
+}
+
+function standing(agent: PipelineDestination): string {
+  if (agent.squad === "tank") return TANK_WAITS;
+  if (agent.waits || !agent.enabled) return TRANSFER_WAITS;
+  return "This vault is on. A transfer copies into it and leaves the library as it is.";
+}
+
+function Pipelines({
+  destinations,
+  skills,
+}: {
+  destinations: PipelineDestination[];
+  skills: { skill_id: string; version: string }[];
+}) {
+  const [skillKey, setSkillKey] = useState(skills[0] ? `${skills[0].skill_id}@${skills[0].version}` : "");
+  const [note, setNote] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+
+  async function send(squad: string) {
+    const [skillId, version] = skillKey.split("@");
+    setBusy(squad);
+    try {
+      const result = await transferToAgent(squad, skillId ?? "", version ?? "");
+      setNote((current) => ({ ...current, [squad]: result.message }));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <section className="sk-pipes" aria-label="Pipelines">
+      <div>
+        <h2>Pipelines</h2>
+        <p>A skill in the library can move into an agent&apos;s own vault. The library is left as it is.</p>
+      </div>
+      {skills.length > 0 ? (
+        <label className="sk-pick">
+          Skill
+          <select value={skillKey} onChange={(event) => setSkillKey(event.target.value)}>
+            {skills.map((skill) => (
+              <option key={`${skill.skill_id}@${skill.version}`} value={`${skill.skill_id}@${skill.version}`}>
+                {skill.skill_id} {skill.version}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+      <div className="sk-grid">
+        {destinations.map((agent) => (
+          <article key={agent.squad} className="sk-card">
+            <h3>{agent.label}</h3>
+            <p className="sk-pipe" aria-label={`Pipeline to ${agent.label}`}>
+              <span>Library</span>
+              <i />
+              <span>{agent.label}</span>
+            </p>
+            <p className="sk-off">{note[agent.squad] || standing(agent)}</p>
+            <button type="button" className="sk-transfer" disabled={busy !== null} onClick={() => send(agent.squad)}>
+              {busy === agent.squad ? "Sending…" : "Transfer"}
+            </button>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 

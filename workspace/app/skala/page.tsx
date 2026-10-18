@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { activeTenant } from "@/lib/tenant";
+import { waitingPipelines } from "./pipelines";
 import { offLibrary, offPanel } from "./plugins";
-import { loadSkillLibrary, loadSkalaPlugins } from "./vault-server";
+import { loadPipelines, loadSkillLibrary, loadSkalaPlugins } from "./vault-server";
 import { SkalaApp } from "./view";
 import "./skala.css";
 
@@ -22,5 +23,6 @@ export default async function SkalaPage() {
   }
   const plugins = signedIn ? await loadSkalaPlugins() : offPanel("Sign in to use Plugins.");
   const library = signedIn ? await loadSkillLibrary() : offLibrary();
-  return <SkalaApp accountName={accountName} plugins={plugins} library={library} />;
+  const destinations = signedIn ? await loadPipelines() : waitingPipelines();
+  return <SkalaApp accountName={accountName} plugins={plugins} library={library} destinations={destinations} />;
 }
