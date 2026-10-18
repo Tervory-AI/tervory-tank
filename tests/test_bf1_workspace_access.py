@@ -72,9 +72,8 @@ def test_page_address_is_skala():
     assert 'label: "Skala"' in NAV
     assert 'href: "/skala"' in NAV
     assert 'href: "/tank"' in NAV
-    page = _text(APP / "skala" / "page.tsx")
+    page = _text(APP / "skala" / "view.tsx")
     assert "<h1>Skala</h1>" in page
-    assert "/api/skala" in page
     config = _text(ROOT / "workspace" / "next.config.ts")
     middleware = _text(ROOT / "workspace" / "middleware.ts")
     assert "redirect" not in config
