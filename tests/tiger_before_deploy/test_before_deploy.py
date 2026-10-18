@@ -195,3 +195,155 @@ def test_live_check_does_not_pin_the_new_reader() -> None:
     source = LIVE_CHECK.read_text(encoding="utf-8")
     assert 'run_skill(ctx.tenant_id, "tiger.price_extract"' in source
     assert "1.1.0" not in source
+
+
+def _clock():
+    tick = {"n": 0}
+
+    def clock() -> datetime:
+        tick["n"] += 1
+        return datetime(2026, 10, 18, tzinfo=timezone.utc) + timedelta(seconds=tick["n"])
+
+    return clock
+
+
+def _harness(pages: dict[str, str]):
+    async def render(url: str, session: str, agent: str, tenant: str) -> dict:
+        return {"ok": True, "challenge": False, "html": pages["html"], "png_base64": None}
+
+    async def extract(html: str, url: str) -> dict:
+        return _reader.extract(html, url)
+
+    async def ocr(png: str, url: str) -> dict:
+        raise AssertionError("this page must not be guessed from a screenshot")
+
+    async def fetch_text(url: str) -> str:
+        return ""
+
+    return render, extract, ocr, fetch_text
+
+
+async def _watch(store, url: str, html: str, clock):
+    watch = {
+        "id": "watch-1",
+        "tenant_id": TENANT,
+        "url": url,
+        "label": "sample",
+        "engine": "core",
+        "every": "1h",
+        "enabled": True,
+        "threshold": "0",
+    }
+    if not any(item["url"] == url for item in store.watches):
+        await store.create_watch(watch)
+    else:
+        watch = next(item for item in store.watches if item["url"] == url)
+    pages = {"html": html}
+    render, extract, ocr, fetch_text = _harness(pages)
+    return await run_check(
+        store, TENANT, watch, "tiger", render, extract, ocr, fetch_text, DomainLimiter(0), now=clock,
+    )
+
+
+def test_sale_mark_keeps_the_lower_price() -> None:
+    """A crossed-out amount is not the price. The sale mark is."""
+    html = _page("element-shop.html")
+    url = "https://example.test/ceramic-mug"
+
+    async def check() -> None:
+        store = MemoryStore()
+        result = await _watch(store, url, html, _clock())
+        assert result["status"] == "observed", result
+        assert result["price"] == "12.00"
+        assert result["observation"]["price"] != "18.00"
+
+    asyncio.run(check())
+
+
+def test_two_prices_on_one_product_cannot_be_read() -> None:
+    """Two amounts, and no sale price, is not a price. Neither amount is a guess."""
+    html = _page("two-prices.html")
+    url = "https://example.test/wool-hat"
+    extracted = _reader.extract(html, url)
+    assert _price(extracted) is None
+    decision = read_page(html, learn_layout(html, extracted), extracted)
+    assert decision["status"] == "can't read", decision
+    assert decision["price"] is None
+
+    async def check() -> None:
+        store = MemoryStore()
+        result = await _watch(store, url, html, _clock())
+        assert result["status"] == "can't read", result
+        assert result["price"] is None
+        assert result["observation"]["price"] is None
+        assert result["alerts"] == []
+
+    asyncio.run(check())
+
+
+def test_sams_club_member_price_is_the_visible_price() -> None:
+    """Sam's Club shows a member price and a higher price. The visible member price stands."""
+    html = _page("sams-member.html")
+    url = "https://www.samsclub.com/ip/members-mark-towel"
+    extracted = _reader.extract(html, url)
+    assert _price(extracted) == "16.98"
+    decision = read_page(html, learn_layout(html, extracted), extracted)
+    assert decision["status"] == "read", decision
+    assert decision["price"] == "16.98"
+
+    async def check() -> None:
+        store = MemoryStore()
+        result = await _watch(store, url, html, _clock())
+        assert result["status"] == "observed", result
+        assert result["price"] == "16.98"
+        assert result["price"] != "19.78"
+        assert result["alerts"] == []
+
+    asyncio.run(check())
+
+
+def test_out_of_stock_stays_out_of_stock() -> None:
+    """Clear out-of-stock wording stays out of stock. A second read is not an alarm."""
+    html = _page("out-of-stock.html")
+    url = "https://example.test/desk-lamp-stock"
+
+    async def check() -> None:
+        store = MemoryStore()
+        clock = _clock()
+        first = await _watch(store, url, html, clock)
+        second = await _watch(store, url, html, clock)
+        assert first["status"] == "observed", first
+        assert first["price"] == "24.00"
+        assert first["stock"] == "OutOfStock"
+        assert first["alerts"] == []
+        assert second["status"] == "observed", second
+        assert second["stock"] == "OutOfStock"
+        assert second["price"] == "24.00"
+        assert second["alerts"] == []
+
+    asyncio.run(check())
+
+
+def test_couldnt_keep_it_in_stock_cannot_be_read() -> None:
+    """Demand wording is not out of stock, and it does not flip a real out-of-stock reading."""
+    html = _page("couldnt-keep.html")
+    url = "https://example.test/desk-lamp-demand"
+    sold_out = _page("out-of-stock.html")
+
+    async def check() -> None:
+        store = MemoryStore()
+        clock = _clock()
+        result = await _watch(store, url, html, clock)
+        assert result["status"] == "observed", result
+        assert result["price"] == "24.00"
+        assert result["stock"] == "can't read"
+        assert result["alerts"] == []
+
+        other = "https://example.test/desk-lamp-then-demand"
+        before = await _watch(store, other, sold_out, clock)
+        after = await _watch(store, other, html, clock)
+        assert before["stock"] == "OutOfStock"
+        assert after["stock"] == "can't read"
+        assert after["alerts"] == []
+
+    asyncio.run(check())
