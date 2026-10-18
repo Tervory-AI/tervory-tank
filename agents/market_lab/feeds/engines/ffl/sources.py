@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from feeds import licences
 from feeds.engines.ffl import lists
+from feeds.keys import FRED_KEY
 from feeds.models import SourceSpec
 
 
@@ -264,7 +267,13 @@ def sources() -> list[SourceSpec]:
         ),
     ]
     for source_id, name, url in lists.FRED_SERIES:
-        rows.append(_link(source_id, name, url, licences.FRED_LINK, "monthly"))
+        rows.append(
+            replace(
+                _link(source_id, name, url, licences.FRED_LINK, "monthly"),
+                key_name=FRED_KEY,
+                key_required=True,
+            )
+        )
     for source_id, name, url in lists.CARRIER_PAGES:
         rows.append(_link(source_id, name, url, licences.PAGE_LINK, "weekly", watch=True))
     for source_id, name, url in lists.STATE_PAGES:

@@ -1,0 +1,323 @@
+{
+  "schema": "tisan.figma.fixture/1",
+  "recorded_from": "figma-mcp",
+  "recorded_at": "2026-10-17",
+  "file_key": "ksi7ctRwEnN8wbip1yfuhL",
+  "file_name": null,
+  "note": "Recorded from the Figma MCP on 17 Oct 2026. The room has no route to the public internet, so this fixture is the page the reader opens. The recording has resolved variable values and no collection names.",
+  "page": {
+    "id": "0:1",
+    "name": "Landing — Desktop & Mobile"
+  },
+  "frames": [
+    {
+      "id": "2:11",
+      "name": "Desktop — 1440",
+      "variables": {
+        "text/secondary": "#4a5570",
+        "text/primary": "#001840",
+        "text/on-ink": "#ffffff",
+        "bg/ink": "#001840",
+        "bg/page": "#ffffff",
+        "border/default": "#d9dee9",
+        "accent/text": "#001840",
+        "size/caption": "12",
+        "size/lead": "20",
+        "text/on-accent": "#ffffff",
+        "accent/default": "#e80008",
+        "border/strong": "#b8bfd0",
+        "text/muted": "#7e889e",
+        "size/small": "14",
+        "bg/subtle": "#f4f6fb",
+        "status/positive": "#1f7a4d",
+        "accent/red": "#e80008",
+        "size/h1": "48",
+        "size/h3": "24",
+        "text/on-ink-muted": "#b8bfd0",
+        "bg/accent-soft": "#eef1f8",
+        "size/h2": "36"
+      }
+    },
+    {
+      "id": "6:45",
+      "name": "Mobile — 390",
+      "variables": {
+        "text/on-ink": "#ffffff",
+        "bg/ink": "#001840",
+        "text/primary": "#001840",
+        "border/default": "#d9dee9",
+        "bg/page": "#ffffff",
+        "accent/text": "#001840",
+        "size/caption": "12",
+        "text/secondary": "#4a5570",
+        "size/body": "17",
+        "text/on-accent": "#ffffff",
+        "accent/default": "#e80008",
+        "border/strong": "#b8bfd0",
+        "text/muted": "#7e889e",
+        "bg/subtle": "#f4f6fb",
+        "accent/red": "#e80008",
+        "size/lead": "20",
+        "text/on-ink-muted": "#b8bfd0",
+        "size/small": "14",
+        "bg/accent-soft": "#eef1f8",
+        "size/h3": "24",
+        "status/positive": "#1f7a4d"
+      }
+    }
+  ],
+  "components": [
+    {
+      "id": "2:10",
+      "name": "Button",
+      "variables": {
+        "text/on-accent": "#ffffff",
+        "accent/default": "#e80008",
+        "text/primary": "#001840",
+        "bg/page": "#ffffff",
+        "border/strong": "#b8bfd0",
+        "text/on-ink": "#ffffff",
+        "bg/ink": "#001840"
+      },
+      "variants": [
+        {
+          "id": "2:2",
+          "name": "Kind=primary",
+          "width": 79,
+          "height": 42
+        },
+        {
+          "id": "2:4",
+          "name": "Kind=secondary",
+          "width": 81,
+          "height": 44
+        },
+        {
+          "id": "2:6",
+          "name": "Kind=ghost",
+          "width": 55,
+          "height": 42
+        },
+        {
+          "id": "2:8",
+          "name": "Kind=ink",
+          "width": 79,
+          "height": 42
+        }
+      ]
+    },
+    {
+      "id": "8:121",
+      "name": "Logo",
+      "variables": {},
+      "variants": [
+        {
+          "id": "8:93",
+          "name": "Colour=navy",
+          "width": 186,
+          "height": 34
+        },
+        {
+          "id": "8:107",
+          "name": "Colour=white",
+          "width": 186,
+          "height": 34
+        }
+      ]
+    },
+    {
+      "id": "4:6",
+      "name": "Squad card",
+      "variables": {
+        "accent/red": "#e80008",
+        "bg/accent-soft": "#eef1f8",
+        "text/primary": "#001840",
+        "size/h3": "24",
+        "text/secondary": "#4a5570",
+        "text/muted": "#7e889e",
+        "size/caption": "12",
+        "bg/page": "#ffffff",
+        "border/default": "#d9dee9"
+      },
+      "variants": [],
+      "width": 384,
+      "height": 216
+    }
+  ],
+  "uses": [
+    {
+      "id": "8:122",
+      "name": "Logo / navy",
+      "page": "Desktop — 1440",
+      "section": "Nav"
+    },
+    {
+      "id": "2:21",
+      "name": "Button/ghost — Sign in",
+      "page": "Desktop — 1440",
+      "section": "Nav"
+    },
+    {
+      "id": "2:23",
+      "name": "Button/ink — Start",
+      "page": "Desktop — 1440",
+      "section": "Nav"
+    },
+    {
+      "id": "2:31",
+      "name": "Button/primary — Start with your own data",
+      "page": "Desktop — 1440",
+      "section": "Hero"
+    },
+    {
+      "id": "2:33",
+      "name": "Button/secondary — See the case study",
+      "page": "Desktop — 1440",
+      "section": "Hero"
+    },
+    {
+      "id": "4:20",
+      "name": "Squad card — Base",
+      "page": "Desktop — 1440",
+      "section": "The Squad"
+    },
+    {
+      "id": "4:27",
+      "name": "Squad card — Tiger",
+      "page": "Desktop — 1440",
+      "section": "The Squad"
+    },
+    {
+      "id": "4:34",
+      "name": "Squad card — Market Lab",
+      "page": "Desktop — 1440",
+      "section": "The Squad"
+    },
+    {
+      "id": "4:42",
+      "name": "Squad card — Radix",
+      "page": "Desktop — 1440",
+      "section": "The Squad"
+    },
+    {
+      "id": "4:49",
+      "name": "Squad card — Tisan",
+      "page": "Desktop — 1440",
+      "section": "The Squad"
+    },
+    {
+      "id": "4:56",
+      "name": "Squad card — Zenas",
+      "page": "Desktop — 1440",
+      "section": "The Squad"
+    },
+    {
+      "id": "5:154",
+      "name": "Button/secondary — Start with your own data",
+      "page": "Desktop — 1440",
+      "section": "Pricing"
+    },
+    {
+      "id": "5:181",
+      "name": "Button/primary — Start",
+      "page": "Desktop — 1440",
+      "section": "Pricing"
+    },
+    {
+      "id": "5:205",
+      "name": "Button/ink — Talk to the founder",
+      "page": "Desktop — 1440",
+      "section": "Pricing"
+    },
+    {
+      "id": "8:136",
+      "name": "Logo / white",
+      "page": "Desktop — 1440",
+      "section": "Footer"
+    },
+    {
+      "id": "8:150",
+      "name": "Logo / navy",
+      "page": "Mobile — 390",
+      "section": "Nav"
+    },
+    {
+      "id": "6:49",
+      "name": "Button/ink — Start",
+      "page": "Mobile — 390",
+      "section": "Nav"
+    },
+    {
+      "id": "6:60",
+      "name": "Button/primary — Start with your own data",
+      "page": "Mobile — 390",
+      "section": "Hero"
+    },
+    {
+      "id": "6:62",
+      "name": "Button/secondary — See the case study",
+      "page": "Mobile — 390",
+      "section": "Hero"
+    },
+    {
+      "id": "7:54",
+      "name": "Squad card — Base",
+      "page": "Mobile — 390",
+      "section": "The Squad"
+    },
+    {
+      "id": "7:61",
+      "name": "Squad card — Tiger",
+      "page": "Mobile — 390",
+      "section": "The Squad"
+    },
+    {
+      "id": "7:68",
+      "name": "Squad card — Market Lab",
+      "page": "Mobile — 390",
+      "section": "The Squad"
+    },
+    {
+      "id": "7:75",
+      "name": "Squad card — Radix",
+      "page": "Mobile — 390",
+      "section": "The Squad"
+    },
+    {
+      "id": "7:82",
+      "name": "Squad card — Tisan",
+      "page": "Mobile — 390",
+      "section": "The Squad"
+    },
+    {
+      "id": "7:89",
+      "name": "Squad card — Zenas",
+      "page": "Mobile — 390",
+      "section": "The Squad"
+    },
+    {
+      "id": "7:186",
+      "name": "Button/secondary — Start with your own data",
+      "page": "Mobile — 390",
+      "section": "Pricing"
+    },
+    {
+      "id": "7:207",
+      "name": "Button/primary — Start",
+      "page": "Mobile — 390",
+      "section": "Pricing"
+    },
+    {
+      "id": "7:225",
+      "name": "Button/ink — Talk to the founder",
+      "page": "Mobile — 390",
+      "section": "Pricing"
+    },
+    {
+      "id": "8:164",
+      "name": "Logo / white",
+      "page": "Mobile — 390",
+      "section": "Footer"
+    }
+  ]
+}
