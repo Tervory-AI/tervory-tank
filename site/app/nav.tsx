@@ -1,12 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { CLERK_SIGN_IN } from "../lib/site";
+import { CLERK_SIGN_IN, CLERK_SIGN_UP } from "../lib/site";
 
 const links = [
-  { href: "/#ask", label: "Ask" },
-  { href: "/#cost", label: "Cost" },
-  { href: "/#decide", label: "Decide" },
+  { href: "/#how", label: "How it works" },
+  { href: "/#specialists", label: "Specialists" },
 ];
 
 export function SiteNav({ signUp = true }: { signUp?: boolean }) {
@@ -32,7 +31,7 @@ export function SiteNav({ signUp = true }: { signUp?: boolean }) {
             Sign in
           </a>
           {signUp ? (
-            <a className="btn btn-primary" href="/sign-up">
+            <a className="btn btn-primary" href={CLERK_SIGN_UP}>
               Sign up
             </a>
           ) : null}

@@ -12,6 +12,8 @@
   --border-default: #d9dee9;
   --border-strong: #b8bfd0;
   --accent-red: #e80008;
+  /* Small specialist letters. Brand red on the tint is under 4.5:1. */
+  --accent-label: #c70008;
   --space-page: 20px;
   --radius-button: 8px;
   --radius-card: 12px;
@@ -281,12 +283,14 @@ p {
 .hero {
   display: grid;
   gap: 36px;
+  align-items: center;
   padding: 48px var(--space-page) 64px;
 }
 
 .hero-copy {
   display: grid;
   gap: 20px;
+  align-content: start;
 }
 
 .hero-actions {
@@ -295,102 +299,164 @@ p {
   gap: 12px;
 }
 
-.route {
+.fine {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.work {
   list-style: none;
   margin: 0;
-  padding: 8px 24px;
+  padding: 8px 28px;
   border: 1px solid var(--border-strong);
   border-radius: 14px;
   background: var(--bg-subtle);
 }
 
-.route a {
-  display: grid;
-  grid-template-columns: 48px 1fr;
-  gap: 12px;
-  align-items: center;
+.work li {
   padding: 18px 0;
   border-top: 1px solid var(--border-strong);
+  font-family: var(--font-heading);
+  font-weight: 300;
+  font-size: 32px;
+  line-height: 1.15;
   color: var(--text-primary);
-  font-size: 17px;
 }
 
-.route li:first-child a {
+.work li:first-child {
   border-top: 0;
 }
 
-.route-num {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-.chapter,
-.chapter-tint {
+.band {
   display: grid;
-  gap: 28px;
+  gap: 32px;
   padding: 64px var(--space-page);
-}
-
-.chapter-tint {
   background: var(--bg-subtle);
 }
 
-.chapter-copy {
+.band-plain {
+  background: var(--bg-page);
+}
+
+.section-head {
   display: grid;
-  gap: 16px;
-  align-content: start;
+  gap: 14px;
 }
 
-.chapter-copy p,
-.signup p,
-.internal p {
-  max-width: 40em;
-  color: var(--text-secondary);
-  font-size: 17px;
+.steps,
+.cards,
+.study-stats {
+  display: grid;
+  gap: 12px;
 }
 
-.scene,
-.facts article,
-.choices article {
-  margin: 0;
+.steps article,
+.cards article,
+.study-stats article {
   padding: 24px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-card);
   background: var(--bg-page);
 }
 
-.scene figcaption,
-.facts h3,
-.choices h3 {
+.step-no,
+.domain,
+.glyph {
   font-family: var(--font-mono);
   font-size: 12px;
-  font-weight: 400;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.step-no,
+.domain {
   color: var(--text-muted);
 }
 
-.scene-ask {
-  margin-top: 16px;
-  font-family: var(--font-heading);
-  font-weight: 300;
-  font-size: 28px;
-  line-height: 1.25;
-  color: var(--text-primary);
+.steps h3,
+.cards h3 {
+  margin: 10px 0;
 }
 
-.scene-note,
-.facts p,
-.choices p {
-  margin-top: 12px;
+.steps p,
+.cards p,
+.signup p,
+.study .lead {
+  color: var(--text-secondary);
+  font-size: 17px;
+}
+
+.glyph {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin: 0;
+  border-radius: 8px;
+  background: var(--bg-subtle);
+  color: var(--accent-label);
+  font-size: 16px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.domain {
+  margin-top: 16px;
+}
+
+.flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+
+.flow span {
+  padding: 6px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--bg-page);
+  font-size: 14px;
+}
+
+.flow-line {
+  width: 24px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--border-strong);
+}
+
+.flow .flow-ink {
+  background: var(--bg-ink);
+  color: var(--text-on-ink);
+  border-color: var(--bg-ink);
+}
+
+.flow-note {
+  max-width: 40em;
   color: var(--text-secondary);
 }
 
-.facts,
-.choices {
+.study {
   display: grid;
-  gap: 12px;
+  gap: 18px;
+  justify-items: start;
+  padding: 64px var(--space-page) 96px;
+}
+
+.study h1 {
+  max-width: 16em;
+}
+
+.stat-value {
+  font-family: var(--font-heading);
+  font-weight: 300;
+  font-size: 36px;
+  line-height: 1.1;
+  color: var(--text-primary);
 }
 
 .close {
@@ -482,30 +548,29 @@ p {
 @media (min-width: 900px) {
   .hero {
     grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
-    align-items: center;
+    min-height: calc(100vh - 83px);
     gap: 64px;
-    padding-top: 72px;
-    padding-bottom: 88px;
+    padding-top: 48px;
+    padding-bottom: 48px;
   }
 
-  .chapter {
-    grid-template-columns: minmax(0, 1fr) minmax(280px, 0.9fr);
-    align-items: center;
-    gap: 64px;
-    padding-top: 96px;
-    padding-bottom: 96px;
+  .work li {
+    font-size: 40px;
   }
 
-  .chapter-tint {
-    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  .steps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
   }
 
-  .facts {
-    grid-template-columns: 1fr;
+  .cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
   }
 
-  .choices {
-    grid-template-columns: 1fr 1fr;
+  .study-stats {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    width: 100%;
   }
 
   .footer {

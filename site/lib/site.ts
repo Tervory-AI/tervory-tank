@@ -1,10 +1,10 @@
 export const CLERK_SIGN_UP = "https://app.tervory.com/sign-up";
 export const CLERK_SIGN_IN = "https://app.tervory.com/sign-in";
 
-export const homeTitle = "Tervory AI — Ask for the work. See what it cost.";
+export const homeTitle = "Tervory AI — Ask for the work. See exactly what it cost.";
 
 export const homeDescription =
-  "Tervory is one window for a business that wants to explore AI. You ask for the work in plain language. The answer comes back with the model that did it and the price it cost.";
+  "Tervory is one window where you ask for data, research, price checks, legal reviews or a website. Specialists do the work. Every answer comes back with the model that produced it and the price it cost — down to the fraction of a cent.";
 
 export const signUpTitle = "Sign up — Tervory AI";
 
