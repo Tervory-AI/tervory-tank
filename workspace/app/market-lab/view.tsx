@@ -3,7 +3,6 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState, type DragEvent, type FormEvent } from "react";
 import { useFormStatus } from "react-dom";
-import { headerLinks } from "../product-nav";
 import { MARKET_LAB_LOGO_SRC } from "./catalog";
 import type { LinkGroupView, OnCard, PageModel } from "./model";
 import { formatDay } from "./format";
@@ -46,6 +45,19 @@ const SECTIONS = [
 ] as const;
 
 const KEYED_ON = new Set(["eia_diesel", "fred", "census_population", "census_trade", "noaa_climate", "legiscan"]);
+
+// No Dashboard, Projects, Settings, or Support pages exist yet.
+// These point at the nearest existing workspace routes.
+const TOP_LINKS = [
+  { href: "/ledger", label: "Dashboard" },
+  { href: "/tasks", label: "Projects" },
+  { href: "/", label: "Chats" },
+] as const;
+
+const BOTTOM_LINKS = [
+  { href: "/onboarding", label: "Settings" },
+  { href: "/", label: "Support" },
+] as const;
 
 type Turn = { role: "user" | "assistant"; content: string; sources?: AnswerSource[]; error?: boolean };
 
@@ -606,14 +618,12 @@ export function MarketLabView({
   plugins,
   envKeys,
   refresh,
-  founder,
   workspaceName,
 }: {
   model: PageModel;
   plugins: PluginPanel;
   envKeys: KeyFlags;
   refresh: () => Promise<void>;
-  founder: boolean;
   workspaceName: string | null;
 }) {
   const [menu, setMenu] = useState(false);
@@ -662,7 +672,7 @@ export function MarketLabView({
   const searching = query.trim().length > 0;
   const noHits = searching && onCards.length === 0 && offRows.length === 0 && groups.length === 0;
   const anyKeyedOn = [...model.featured, ...model.cards].some((card) => KEYED_ON.has(card.id));
-  const links = headerLinks(founder).map((link) => (link.href === "/skala" ? { ...link, label: "Skills" } : link));
+  const accountName = workspaceName?.trim() || "Account";
 
   function openSection(id: string) {
     setMenu(false);
@@ -694,10 +704,10 @@ export function MarketLabView({
         <button className="ml-close" type="button" onClick={() => setMenu(false)}>
           Close
         </button>
-        <nav className="ml-nav" aria-label="Workspace">
-          <p className="ml-kicker">Workspace</p>
-          {links.map((link) => (
-            <a key={link.href} className="ml-link" href={link.href} onClick={() => setMenu(false)}>
+        <nav className="ml-nav" aria-label="Account">
+          <p className="ml-account">{accountName}</p>
+          {TOP_LINKS.map((link) => (
+            <a key={link.label} className="ml-link" href={link.href} onClick={() => setMenu(false)}>
               {link.label}
             </a>
           ))}
@@ -727,12 +737,14 @@ export function MarketLabView({
           </button>
         </nav>
         <div className="ml-spacer" />
-        {workspaceName ? (
-          <>
-            <div className="ml-rule" />
-            <p className="ml-org">{workspaceName}</p>
-          </>
-        ) : null}
+        <div className="ml-rule" />
+        <nav className="ml-nav" aria-label="Workspace">
+          {BOTTOM_LINKS.map((link) => (
+            <a key={link.label} className="ml-link" href={link.href} onClick={() => setMenu(false)}>
+              {link.label}
+            </a>
+          ))}
+        </nav>
       </aside>
       <div className="ml-main" data-scroll-root>
         <div className="ml-body">

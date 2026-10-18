@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
-import { auth } from "@clerk/nextjs/server";
 import { activeTenant } from "@/lib/tenant";
-import { isListedFounder } from "../review/founder";
 import { refreshFeeds } from "./actions";
 import { readFlags, loadMarketLab } from "./load";
 import { offPanel } from "./plugins";
@@ -17,17 +15,13 @@ export const metadata: Metadata = {
 };
 
 export default async function MarketLabPage() {
-  let founder = false;
   let workspaceName: string | null = null;
   let signedIn = false;
   try {
-    const { userId } = await auth();
-    founder = isListedFounder(userId, process.env.TERVORY_ADMIN_USER_IDS);
     const tenant = await activeTenant();
     signedIn = Boolean(tenant);
     workspaceName = tenant?.orgName ?? null;
   } catch {
-    founder = false;
     workspaceName = null;
   }
   const plugins = signedIn ? await loadLabPlugins() : offPanel("Sign in to use Plugins.");
@@ -42,7 +36,6 @@ export default async function MarketLabPage() {
       plugins={plugins}
       envKeys={envKeys}
       refresh={refreshFeeds}
-      founder={founder}
       workspaceName={workspaceName}
     />
   );

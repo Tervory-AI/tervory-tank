@@ -91,3 +91,20 @@ def test_page_does_not_invent_numbers_or_store_keys():
     view = (PAGE / "view.tsx").read_text(encoding="utf-8")
     assert "Help" not in view
     assert "WORKSPACE_HREF" not in view
+    assert "headerLinks" not in view
+    assert 'label: "Dashboard"' in view
+    assert 'href: "/ledger"' in view
+    assert 'label: "Projects"' in view
+    assert 'href: "/tasks"' in view
+    assert 'label: "Chats"' in view
+    assert 'label: "Settings"' in view
+    assert 'href: "/onboarding"' in view
+    assert 'label: "Support"' in view
+    for old in ("Chat", "Tasks", "Data", "Ledger", "Skills", "Tank"):
+        assert f'label: "{old}"' not in view
+    plugins = (PAGE / "plugins.ts").read_text(encoding="utf-8")
+    assert "This vault is off. Turn it on in Tank." in plugins
+    for name in ("vault-server.ts", "plugin-actions.ts"):
+        server = (PAGE / name).read_text(encoding="utf-8")
+        assert 'const VAULT = "lab.vault"' in server
+        assert "tank.vault" not in server
