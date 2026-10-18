@@ -254,7 +254,12 @@ async def quote(request: Request, payload: QuoteIn) -> Response:
     if shop.get("mail_reservations"):
         client = f"{tenant}:{_client_ip(request)}"
         if not _service(request).reservations.allow(client):
-            raise RigError("rate_limit", "Too many reservations. Try again in a minute.", 429)
+            retailer = await _service(request).store.retailer(tenant) or {}
+            if str(retailer.get("name") or "") == "Custom Nation":
+                detail = "Too many quote requests. Try again in a minute."
+            else:
+                detail = "Too many reservations. Try again in a minute."
+            raise RigError("rate_limit", detail, 429)
     body = await _service(request).quote(
         _tenant(request),
         {"setup": payload.setup, "product_id": payload.product_id, "contact": payload.contact},

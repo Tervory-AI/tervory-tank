@@ -18,7 +18,12 @@ def reservation_letter(
     retailer: dict[str, Any],
 ) -> dict[str, str]:
     product = _product_name(payload)
-    subject = f"Reservation: {product} - {reference}"
+    shop_name = str(retailer.get("name") or "").strip()
+    # Custom Nation asks for a quote. Other shops keep the reservation subject.
+    if shop_name == "Custom Nation":
+        subject = f"Quote request: {product} - {reference}"
+    else:
+        subject = f"Reservation: {product} - {reference}"
     lines = [
         f"Reference: {reference}",
         f"Shop: {str(retailer.get('name') or '').strip()}",

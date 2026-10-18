@@ -308,13 +308,13 @@ GOLDEN = [
     ("cz shadow 2", "not_stocked", [], "", False, "We don't stock CZ."),
     ("type a magazine", "exact", MAGS, "ARCHON-MAG-15", True, ""),
     ("magazine for type a", "exact", MAGS, "ARCHON-MAG-15", True, ""),
-    ("between 20k and 30k", "exact", OVER_20, "", True, ""),
-    ("20k-30k", "exact", OVER_20, "", True, ""),
-    ("from 20k to 30k", "exact", OVER_20, "", True, ""),
-    ("between R 20 000 and R 30 000", "exact", OVER_20, "", True, ""),
-    ("R5000 to R10000", "exact", ["ARCHON-DOT-RMR", "ARCHON-DOT-RMS"], "", True, ""),
-    ("red dot between 5000 and 10000", "exact", ["ARCHON-DOT-RMR", "ARCHON-DOT-RMS"], "ARCHON-DOT-RMR", True, ""),
-    ("R1000 to R2000 magazine", "exact", MAGS, "ARCHON-MAG-15", True, ""),
+    ("between 20k and 30k", "exact", ["ARCHON-TYPE-B", "ARCHON-TYPE-A", "ARCHON-TYPE-B-PORTED"], "ARCHON-TYPE-B", True, ""),
+    ("20k-30k", "exact", ["ARCHON-TYPE-B", "ARCHON-TYPE-A", "ARCHON-TYPE-B-PORTED"], "ARCHON-TYPE-B", True, ""),
+    ("from 20k to 30k", "exact", ["ARCHON-TYPE-B", "ARCHON-TYPE-A", "ARCHON-TYPE-B-PORTED"], "ARCHON-TYPE-B", True, ""),
+    ("between R 20 000 and R 30 000", "exact", ["ARCHON-TYPE-B", "ARCHON-TYPE-A", "ARCHON-TYPE-B-PORTED"], "ARCHON-TYPE-B", True, ""),
+    ("R5000 to R10000", "exact", ["ARCHON-DOT-RMS", "ARCHON-DOT-RMR"], "ARCHON-DOT-RMS", True, ""),
+    ("red dot between 5000 and 10000", "exact", ["ARCHON-DOT-RMS", "ARCHON-DOT-RMR"], "ARCHON-DOT-RMS", True, ""),
+    ("R1000 to R2000 magazine", "exact", ["ARCHON-MAG-12", "ARCHON-MAG-15", "ARCHON-MAG-18"], "ARCHON-MAG-12", True, ""),
     ("typ b", "exact", SPREAD, "ARCHON-TYPE-B", True, ""),
     ("archon typ b", "exact", SPREAD, "ARCHON-TYPE-B", True, ""),
     ("tpye a", "exact", TYPE_A_PISTOLS, "ARCHON-TYPE-A", True, ""),
@@ -334,6 +334,20 @@ GOLDEN = [
     ("any red dots in stock", "exact", ["ARCHON-DOT-RMR", "ARCHON-DOT-RMS"], "ARCHON-DOT-RMR", True, ""),
     ("in stock", "exact", IN_STOCK_ALL, "", True, ""),
     ("in stock?", "exact", IN_STOCK_ALL, "", True, ""),
+    ("type a with holster", "closest", ["ARCHON-TYPE-A", "ARCHON-HOLSTER-TB"], "ARCHON-TYPE-A", False, "The Type B holster is for the Type B. We don't list a holster for the Type A."),
+    ("type a + holster", "closest", ["ARCHON-TYPE-A", "ARCHON-HOLSTER-TB"], "ARCHON-TYPE-A", False, "The Type B holster is for the Type B. We don't list a holster for the Type A."),
+    ("type a, holster", "closest", ["ARCHON-TYPE-A", "ARCHON-HOLSTER-TB"], "ARCHON-TYPE-A", False, "The Type B holster is for the Type B. We don't list a holster for the Type A."),
+    ("type a and type b holster", "closest", ["ARCHON-TYPE-A", "ARCHON-HOLSTER-TB"], "ARCHON-TYPE-A", False, "The Type B holster is for the Type B. We don't list a holster for the Type A."),
+    ("type a with threaded barrel", "closest", ["ARCHON-TYPE-A", "ARCHON-TB-THREADED"], "ARCHON-TYPE-A", False, "The threaded barrel is a Type B barrel. The Type A ships with a 5 inch barrel."),
+    ("type a with 13.5x1 barrel", "closest", ["ARCHON-TYPE-A", "ARCHON-TB-135"], "ARCHON-TYPE-A", False, "The 13.5x1 LH barrel is a Type B barrel. The Type A ships with a 5 inch barrel."),
+    ("17 round magazine", "closest", ["ARCHON-MAG-12", "ARCHON-MAG-15", "ARCHON-MAG-18"], "ARCHON-MAG-18", False, "We have 12, 15 and 18 rounds for the Type B."),
+    ("17 round mag", "closest", ["ARCHON-MAG-12", "ARCHON-MAG-15", "ARCHON-MAG-18"], "ARCHON-MAG-18", False, "We have 12, 15 and 18 rounds for the Type B."),
+    ("17 rounds", "closest", ["ARCHON-MAG-12", "ARCHON-MAG-15", "ARCHON-MAG-18"], "ARCHON-MAG-18", False, "We have 12, 15 and 18 rounds for the Type B."),
+    ("20 round magazine", "closest", ["ARCHON-MAG-12", "ARCHON-MAG-15", "ARCHON-MAG-18"], "ARCHON-MAG-18", False, "We have 12, 15 and 18 rounds for the Type B."),
+    ("45 acp archon", "closest", PISTOLS, "ARCHON-TYPE-B", False, "The Archon pistols are 9x19."),
+    (".45 type b", "closest", PISTOLS, "ARCHON-TYPE-B", False, "The Archon pistols are 9x19."),
+    ("type b in 45", "closest", PISTOLS, "ARCHON-TYPE-B", False, "The Archon pistols are 9x19."),
+    ("40 s&w type b", "closest", PISTOLS, "ARCHON-TYPE-B", False, "The Archon pistols are 9x19."),
 ]
 
 
@@ -482,6 +496,24 @@ async def test_ranges_builds_and_the_light_lists_type_b() -> None:
     narrow = css.split("@media (max-width: 800px)", 1)[1]
     assert "flex-wrap: wrap" in narrow
     assert "white-space: normal" in narrow
+    refused = await service.search(TENANT, "type a with holster", 24)
+    holster = next(item for item in refused["results"] if item["id"] == "ARCHON-HOLSTER-TB")
+    assert holster["fit"]["badge"] == "Doesn't fit the Type A"
+    assert holster["fit"]["fits"] is False
+    assert "Exact match" not in holster["badges"]
+    assert "Exact match" not in next(item["badges"] for item in refused["results"] if item["id"] == "ARCHON-TYPE-A")
+    barrel = await service.search(TENANT, "type a with threaded barrel", 24)
+    assert barrel["message"] == "The threaded barrel is a Type B barrel. The Type A ships with a 5 inch barrel."
+    kept_holster = await service.search(TENANT, "type b with holster", 24)
+    assert kept_holster["honest"] == "exact"
+    assert "Exact match" in next(item["badges"] for item in kept_holster["results"] if item["id"] == "ARCHON-HOLSTER-TB")
+    stocked = await service.search(TENANT, "any red dots in stock", 24)
+    assert stocked["in_stock"] is True
+    shown = await service.search(TENANT, "do you have type a in stock?", 24)
+    assert shown.get("in_stock") is not True
+    assert 'Upgrades for your " +' in script
+    assert "Upgrades for your Type B ·" not in script
+    assert "if (body.in_stock) filters.inStock = true;" in script
 
 
 # Words the shop may name after "We don't sell a/an". Anything else was a pasted query token.
@@ -648,8 +680,11 @@ async def test_reservation_letter_is_parsed_and_never_mailed(monkeypatch: pytest
     reference = quoted["request_id"]
     assert letter["to"] == "sales@customnation.co.za"
     assert letter["reference"] == reference
-    assert letter["subject"] == f"Reservation: Archon Type B - {reference}"
+    assert letter["subject"] == f"Quote request: Archon Type B - {reference}"
     text = letter["text"]
+    assert "quote request:" in text.lower()
+    assert "reserv" not in letter["subject"].lower()
+    assert "reserv" not in text.lower()
     assert "Customer-Name: Ada Buyer" in text
     assert "Customer-Email: ada@example.com" in text
     assert "Customer-Phone: +27 68 000 0000" in text
@@ -751,6 +786,9 @@ def test_cn_page_reads_the_shop_settings_and_blocks_traversal() -> None:
     script = client.get("/page/cn/cn.js")
     assert script.status_code == 200
     assert "sales@customnation.co.za" not in script.text
+    assert "Get A Quote" in script.text
+    assert "quote request" in script.text
+    assert "reserv" not in script.text.lower()
     assert "confirm stock and paperwork" in script.text
     assert "does not send alerts" in script.text
     css = (PAGE / "cn.css").read_text(encoding="utf-8")
@@ -845,8 +883,10 @@ async def test_letter_uses_the_retailer_name_and_readable_choices(monkeypatch: p
         {"name": "Ada", "email": "ada@example.com"},
         {"name": "Example Shop", "email": "buyer@example.com"},
     )
+    assert letter["subject"] == "Reservation: Item - req_demo"
     assert "Example Shop confirms stock" in letter["text"]
     assert "Custom Nation" not in letter["text"]
+    assert "Quote request" not in letter["subject"]
     mail = Mail()
     service = await _archon(WebhookHandoff(None, mail))
     await service.quote(
@@ -998,12 +1038,11 @@ def test_reservation_route_is_limited_per_ip() -> None:
         "product_id": "ARCHON-TYPE-B",
         "contact": {"name": "Ada Buyer", "email": "ada@example.com"},
     }
-    statuses = [
-        client.post("/v1/rig/quote", json=payload, headers=headers).status_code
-        for _ in range(6)
-    ]
-    assert statuses[:5] == [200, 200, 200, 200, 200]
-    assert statuses[5] == 429
+    responses = [client.post("/v1/rig/quote", json=payload, headers=headers) for _ in range(6)]
+    assert [item.status_code for item in responses[:5]] == [200, 200, 200, 200, 200]
+    blocked = responses[5]
+    assert blocked.status_code == 429
+    assert blocked.json()["error"]["message"] == "Too many quote requests. Try again in a minute."
 
 
 def test_staccato_quotes_are_not_rate_limited() -> None:

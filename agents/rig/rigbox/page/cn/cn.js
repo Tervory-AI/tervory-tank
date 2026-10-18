@@ -631,7 +631,8 @@
       ]);
     } else if (filters.view === "compare") main = compareView(results, open);
     else if (filters.view === "visual") main = visualView(body, focus);
-    else main = listView(results, body.fits || []);
+    else main = listView(results, focus);
+    if (body.in_stock) filters.inStock = true;
     const left = messageInMain ? main : h("div", { class: "results-main" }, [message, main].filter(Boolean));
     return h("section", { class: "results" }, [
       searchForm(filters, false),
@@ -674,7 +675,11 @@
     return row;
   }
 
-  function listView(results) {
+  function modelLabel(item) {
+    return String((item && item.name) || "").replace(/^Archon\s+/i, "");
+  }
+
+  function listView(results, focus) {
     const pistols = results.filter(function (item) { return item.category === "Pistols"; });
     const rest = results.filter(function (item) { return item.category !== "Pistols"; });
     const wrap = h("div", { class: "list" });
@@ -683,7 +688,8 @@
       pistols.forEach(function (item) { wrap.append(compactRow(item, results)); });
     }
     if (rest.length && pistols.length) {
-      wrap.append(h("h2", { class: "section-label", text: "Upgrades for your Type B · " + rest.length }));
+      const host = focus && focus.category === "Pistols" ? focus : pistols[0];
+      wrap.append(h("h2", { class: "section-label", text: "Upgrades for your " + (modelLabel(host) || "pistol") + " · " + rest.length }));
       const dots = rest.filter(function (item) { return item.category === "Sights"; });
       if (dots.length) {
         const grid = h("div", { class: "upgrade-dots" });
@@ -754,6 +760,7 @@
     const name = h("div", {}, [
       h("h3", {}, [h("a", { class: "name-link", href: "/cn/product/" + encodeURIComponent(item.id), text: item.name })]),
       h("p", { class: "meta", text: item.brand || "" }),
+      item.fit && item.fit.fits === false ? h("p", {}, [h("span", { class: "chip tiny", text: item.fit.badge })]) : null,
     ]);
     const lead = stock.lead && stock.lead.toLowerCase() !== stock.label.toLowerCase() ? stock.lead : "";
     const onOrder = item.availability && item.availability.status === "on_order" && lead;
@@ -1037,7 +1044,7 @@
       summary.append(h("h2", { text: "Price history" }), h("p", { text: "Was " + rand(history.was) + ". Now " + rand(history.amount) + " on " + history.on + "." }));
     }
     if (detail.attributes && detail.attributes.in_box) summary.append(h("h2", { text: "In the box" }), h("p", { text: detail.attributes.in_box }));
-    summary.append(h("a", { class: "primary sticky-action", href: "/cn/build/" + encodeURIComponent(detail.id), text: detail.category === "Pistols" ? "Build this pistol" : "Reserve this part" }));
+    summary.append(h("a", { class: "primary sticky-action", href: "/cn/build/" + encodeURIComponent(detail.id), text: detail.category === "Pistols" ? "Build this pistol" : "Get A Quote" }));
     const coming = String(detail.image || "").indexOf("photo-coming") >= 0;
     const routeFilters = filtersFrom(new URLSearchParams(location.search));
     return h("article", { class: "product-page" }, [
@@ -1122,14 +1129,14 @@
       event.preventDefault();
       const button = form.querySelector(".primary");
       button.disabled = true;
-      status.replaceChildren(h("p", { text: "Sending the reservation…" }));
+      status.replaceChildren(h("p", { text: "Sending the quote request…" }));
       try {
         const quoted = await api("/v1/rig/quote", {
           method: "POST",
           body: JSON.stringify({
             contact: { name: name.value.trim(), email: email.value.trim(), phone: phone.value.trim() },
             setup: {
-              label: detail.category === "Pistols" ? "Your " + detail.name + " build" : "Reserve " + detail.name,
+              label: detail.category === "Pistols" ? "Your " + detail.name + " build" : "Quote request for " + detail.name,
               parts: lines.map(function (line) {
                 return { role: line.product.category, product: { id: line.product.id }, choice: line.choice || "" };
               }),
@@ -1140,24 +1147,24 @@
         status.replaceChildren(h("div", { class: "banner" }, [h("strong", { text: confirmation(quoted) })]));
       } catch (error) {
         button.disabled = false;
-        status.replaceChildren(banner("The reservation was not sent.", error.message));
+        status.replaceChildren(banner("The quote request was not sent.", error.message));
       }
     } }, [
       h("label", { class: "field", text: "Name" }, [name]),
       h("label", { class: "field", text: "Email" }, [email]),
       h("label", { class: "field", text: "Phone" }, [phone]),
-      pickedBlocked ? h("p", { class: "note", text: "That red dot needs a different cut, or it is out of stock. Pick one that fits before reserving." }) : null,
+      pickedBlocked ? h("p", { class: "note", text: "That red dot needs a different cut, or it is out of stock. Pick one that fits before sending a quote request." }) : null,
       h("button", {
         class: "primary sticky-action",
         type: "submit",
         disabled: pickedBlocked ? true : null,
-        text: "Reserve at " + CN.name,
+        text: "Get A Quote",
       }),
       status,
     ]);
     const isSidearm = detail.category === "Pistols";
     const isTypeB = detail.id === "ARCHON-TYPE-B";
-    const title = isSidearm ? "Your " + detail.name + " build" : "Reserve " + detail.name;
+    const title = isSidearm ? "Your " + detail.name + " build" : "Quote request";
     const heroSrc = isTypeB ? "/page/cn/media/type-b-render.jpg" : (isSidearm ? "/page/cn/media/photo-coming.svg" : (detail.image || "/page/cn/media/photo-coming.svg"));
     const heroAlt = isTypeB ? "Type B render, muzzle left" : (String(heroSrc).indexOf("photo-coming") >= 0 ? "Photo coming" : detail.name);
     const frames = h("div", { class: "frame-strip" });
@@ -1168,7 +1175,7 @@
       ]));
     });
     const stage = [
-      h("p", { class: "meta", text: "Results · " + detail.name + " · " + (isSidearm ? "Your build" : "Reserve") }),
+      h("p", { class: "meta", text: "Results · " + detail.name + " · " + (isSidearm ? "Your build" : "Quote request") }),
       h("h1", { text: title }),
       h("img", { class: "hero-still", src: heroSrc, alt: heroAlt }),
     ];
@@ -1176,7 +1183,7 @@
     return h("article", { class: "build" }, [
       h("div", { class: "build-stage" }, stage),
       h("aside", { class: "side build-side" }, [
-        h("h2", { text: isSidearm ? "Your build" : "Reserve this part" }),
+        h("h2", { text: isSidearm ? "Your build" : "Get A Quote" }),
         h("p", { class: "gold", text: "Demo prices" }),
         list,
         h("p", { class: "meta", text: "Running total" }),
@@ -1196,9 +1203,9 @@
   function confirmation(quoted) {
     const ref = quoted.request_id || "";
     if (quoted.delivered) {
-      return "Reservation " + ref + " is with " + CN.name + ". " + CN.name + " will confirm stock and paperwork. Nothing is held or charged.";
+      return "Quote request " + ref + " is with " + CN.name + ". " + CN.name + " will confirm stock and paperwork. Nothing is held or charged.";
     }
-    return "Reservation " + ref + " is saved. Mail is not connected on this server yet. Nothing is held or charged.";
+    return "Quote request " + ref + " is saved. Mail is not connected on this server yet. Nothing is held or charged.";
   }
 
   async function viewHonest() {

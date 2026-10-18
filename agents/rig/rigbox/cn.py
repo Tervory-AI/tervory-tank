@@ -116,6 +116,10 @@ def shop_search(payload: dict[str, Any]) -> dict[str, Any]:
         by_sku = {_sku(row): row for row in products}
         ranked_rows = [by_sku[item] for item in (ranked.get("ids") or []) if item in by_sku]
         if not ranked_rows:
+            found = _known_gap(asked, products, fits)
+            if found is not None:
+                rows, host, note = found
+                return _gap_body(rows, host, note, products, fits, filters, limit)
             unsold = _unsold_results(asked, products, fits, filters)
             if unsold is not None:
                 return unsold
@@ -123,6 +127,10 @@ def shop_search(payload: dict[str, Any]) -> dict[str, Any]:
         exact = bool(ranked.get("exact_match", True))
         message = str(ranked.get("message") or "")
     if ranked_rows and not exact and not _variant_miss(message, products) and not _chamber_miss(message):
+        found = _known_gap(asked, products, fits)
+        if found is not None:
+            rows, host, note = found
+            return _gap_body(rows, host, note, products, fits, filters, limit)
         return _no_hits(cleaned or query, products, shop)
     if not exact and _chamber_miss(message):
         exact = True
@@ -238,6 +246,10 @@ def shop_search(payload: dict[str, Any]) -> dict[str, Any]:
             focus = min(pool, key=lambda row: (_amount(row), _sku(row)))
             if price_sort == "price_desc":
                 focus = max(pool, key=lambda row: (_amount(row), _sku(row)))
+    elif filters.get("price_range") and chosen:
+        if not filters.get("sort"):
+            filters["sort"] = "price_asc"
+        focus = min(chosen, key=lambda row: (_amount(row), _sku(row)))
     chosen = _order(chosen, filters, focus)
     gap = _honesty_gap(asked, chosen, focus, honest, products, fits, filters, centre_default)
     if gap is not None:
@@ -261,6 +273,8 @@ def shop_search(payload: dict[str, Any]) -> dict[str, Any]:
         "groups": _groups(results),
         "fits": _public_fits(fits),
     }
+    if filters.get("in_stock"):
+        body["in_stock"] = True
     if stock_note:
         body["message"] = stock_note
     elif honest == "closest":
@@ -699,6 +713,7 @@ def _parse_constraints(query: str) -> tuple[str, dict[str, Any]]:
         low, high = sorted((int(span.group(1)), int(span.group(2))))
         filters["min_price"] = low
         filters["max_price_inclusive"] = high
+        filters["price_range"] = True
         text = text[: span.start()] + " " + text[span.end() :]
     match = _BOUND.search(text)
     if match:
@@ -971,6 +986,11 @@ _RANGE = re.compile(
 )
 _OTHER_BORE = re.compile(
     r"\b(?:\.45|\.40|\.357|\.38|45|40|357|38|10\s*mm)\b",
+    re.IGNORECASE,
+)
+# A named cartridge, not a bare number beside a model ("type b 45" stays that model).
+_CARTRIDGE = re.compile(
+    r"\.\d+\b|\b(?:acp|auto)\b|\bs\s*&\s*w\b|\bin\s+\.?\d+",
     re.IGNORECASE,
 )
 
@@ -1354,6 +1374,9 @@ def _clause_rows(
         pool = [row for row in products if str(row.get("category") or "") == category]
         if not pool:
             return [], None
+        named = _named_in_pool(clause, pool)
+        if named is not None:
+            return [named], named
         return pool, _fitting_focus(clause, pool, _default_sidearm(products), fits)
     host = _named_sidearm(clause, products)
     if host is not None and not _wanted_part(clause):
@@ -1396,7 +1419,182 @@ def _multi_answer(
     if not rows:
         return None
     sidearm = next((row for row in rows if str(row.get("category") or "") == _SIDEARM), None)
+    if sidearm is not None:
+        blocked: list[tuple[dict[str, Any], str]] = []
+        for row in rows:
+            if _sku(row) == _sku(sidearm):
+                continue
+            note = _build_block(row, sidearm, fits)
+            if note:
+                blocked.append((row, note))
+        if blocked:
+            return _blocked_build(rows, sidearm, blocked, products, fits, filters, limit)
     return _exact_body(rows, sidearm or focus, products, fits, filters, limit, "", exact_ids)
+
+
+def _named_in_pool(clause: str, pool: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """One named item inside a category, such as the threaded barrel rather than both."""
+    if len(pool) < 2:
+        return None
+    skip = set(_CATEGORY_WORD) | _SIGHT | _MODIFIER_WORDS | _FILLER | {"type", "archon", "for"}
+    tokens = [token for token in _tokens(clause) if len(token) >= 3 and token not in skip]
+    if not tokens:
+        return None
+
+    def covers(row: dict[str, Any]) -> bool:
+        # Name and code only. A shared feature word must not pull in a sibling.
+        owned = set(_tokens(f"{row.get('name') or ''} {_sku(row)}"))
+        return all(token in owned or _covered_token(token, owned) for token in tokens)
+
+    matches = [row for row in pool if covers(row)]
+    if len(matches) != 1:
+        return None
+    return matches[0]
+
+
+def _option_cuts(host: dict[str, Any]) -> list[str]:
+    attributes = host.get("attributes") if isinstance(host.get("attributes"), dict) else {}
+    options = attributes.get("options") if isinstance(attributes.get("options"), dict) else {}
+    return [str(item) for item in (options.get("optic_cut") or []) if str(item or "").strip()]
+
+
+def _required_cut(part: dict[str, Any], fits: list[dict[str, Any]]) -> str:
+    part_sku = _sku(part)
+    for fit in fits:
+        if str(fit.get("part_sku") or "") != part_sku or not _positive_fit(fit):
+            continue
+        needed = str(_rule(fit).get("optic_cut") or "")
+        if needed:
+            return needed
+    return ""
+
+
+def _cut_matches(needed: str, offered: list[str]) -> bool:
+    head = needed.split()[0]
+    return any(needed == cut or head == str(cut).split()[0] for cut in offered)
+
+
+def _cut_note(part: dict[str, Any], fits: list[dict[str, Any]], needed: str) -> str:
+    part_sku = _sku(part)
+    for fit in fits:
+        if str(fit.get("part_sku") or "") != part_sku:
+            continue
+        if str(_rule(fit).get("optic_cut") or "") == needed:
+            return str(fit.get("note") or "")
+    return ""
+
+
+def _expand_label(sentence: str, part: dict[str, Any]) -> str:
+    """Turn a short cited label into a sentence. A full sentence stays as written."""
+    bits = [bit.strip() for bit in sentence.split(".") if bit.strip()]
+    if not bits:
+        return sentence
+    first = bits[0]
+    if re.search(r"\b(?:is|are|for|ships|needs|does|with)\b", first, re.IGNORECASE):
+        return sentence if sentence.endswith(".") else f"{sentence}."
+    name = _plain_name(part)
+    model = re.match(r"type\s+[a-d]\b", first, re.IGNORECASE)
+    if model:
+        name = re.sub(rf"^{re.escape(model.group(0))}\s+", "", name, count=1, flags=re.IGNORECASE).strip()
+    name = name or _plain_name(part)
+    article = "an" if name[:1].lower() in "aeiou" else "a"
+    lead = f"The {name} is {article} {first}"
+    tail = ". ".join(bits[1:])
+    if tail:
+        return f"{lead}. {tail}."
+    return f"{lead}."
+
+
+def _refusal_message(part: dict[str, Any], host: dict[str, Any], note: str) -> str:
+    sentence = _fit_sentence(note)
+    host_name = _plain_name(host)
+    if not sentence:
+        return f"{_plain_name(part)} does not fit the {host_name}."
+    if str(part.get("category") or "") == _CARRY:
+        return f"{sentence}. We don't list a {_CARRY_WORD} for the {host_name}."
+    return _expand_label(sentence, part)
+
+
+def _build_block(part: dict[str, Any], host: dict[str, Any], fits: list[dict[str, Any]]) -> str:
+    """A cited refusal, or a cut this model does not offer. A missing row is not a refusal."""
+    state = fit_state(_sku(part), host, fits, _centre_cut(host))
+    if state is not None and state.get("explicit") and not state.get("fits"):
+        return _refusal_message(part, host, str(state.get("note") or ""))
+    needed = _required_cut(part, fits)
+    offered = _option_cuts(host)
+    if needed and offered and not _cut_matches(needed, offered):
+        note = _cut_note(part, fits, needed)
+        if note:
+            return _refusal_message(part, host, note)
+        return f"{_plain_name(part)} does not fit the {_plain_name(host)}."
+    return ""
+
+
+def _blocked_build(
+    rows: list[dict[str, Any]],
+    sidearm: dict[str, Any],
+    blocked: list[tuple[dict[str, Any], str]],
+    products: list[dict[str, Any]],
+    fits: list[dict[str, Any]],
+    filters: dict[str, Any],
+    limit: int,
+) -> dict[str, Any]:
+    ordered = _order(list(rows), filters, sidearm)[:limit]
+    focus_id = _sku(sidearm)
+    results = [present(row, products, fits, focus_id, sidearm, mark_exact=False) for row in ordered]
+    blocked_ids = {_sku(row) for row, _note in blocked}
+    chip = f"Doesn't fit the {_plain_name(sidearm)}"
+    for item in results:
+        if str(item.get("id") or "") not in blocked_ids:
+            continue
+        fit = item.get("fit") if isinstance(item.get("fit"), dict) else {}
+        cited = str(fit.get("note") or "")
+        if not cited:
+            continue
+        item["fit"] = {"part_sku": item["id"], "fits": False, "badge": chip, "note": cited}
+    return {
+        "results": results,
+        "ids": [item["id"] for item in results],
+        "exact_match": False,
+        "honest": "closest",
+        "message": blocked[0][1],
+        "focus_id": focus_id,
+        "groups": _groups(results),
+        "fits": _public_fits(fits),
+    }
+
+
+def _known_gap(
+    query: str,
+    products: list[dict[str, Any]],
+    fits: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any], str] | None:
+    return _round_gap(query, products, fits) or _bore_gap(query, products)
+
+
+def _gap_body(
+    rows: list[dict[str, Any]],
+    host: dict[str, Any],
+    note: str,
+    products: list[dict[str, Any]],
+    fits: list[dict[str, Any]],
+    filters: dict[str, Any],
+    limit: int,
+) -> dict[str, Any]:
+    shown = list(rows)[:limit]
+    focus_id = _sku(host) if host else ""
+    centre = host if host is not None and str(host.get("category") or "") == _SIDEARM else _default_sidearm(products)
+    results = [present(row, products, fits, focus_id, centre, mark_exact=False) for row in shown]
+    return {
+        "results": results,
+        "ids": [item["id"] for item in results],
+        "exact_match": False,
+        "honest": "closest",
+        "message": note,
+        "focus_id": focus_id,
+        "groups": _groups(results),
+        "fits": _public_fits(fits),
+    }
 
 
 def _fit_decision(
@@ -1805,20 +2003,34 @@ def _bore_gap(
     query: str,
     products: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], dict[str, Any], str] | None:
-    if _OTHER_BORE.search(query) is None:
+    if _OTHER_BORE.search(query) is None and _CARTRIDGE.search(query) is None:
         return None
     host = _named_sidearm(query, products)
-    if host is None:
+    brand = str(host.get("brand") or "") if host is not None else ""
+    sidearms = [row for row in products if str(row.get("category") or "") == _SIDEARM]
+    if brand:
+        same = [row for row in sidearms if str(row.get("brand") or "") == brand]
+        sidearms = same or sidearms
+    if not sidearms:
         return None
-    bore = _bore_of(host)
-    if not bore:
-        return None
-    sidearms = [
-        row for row in products
-        if str(row.get("category") or "") == _SIDEARM and str(row.get("brand") or "") == str(host.get("brand") or "")
-    ]
-    ordered = [host] + [row for row in sidearms if _sku(row) != _sku(host)]
-    return ordered, host, f"The {_plain_name(host)} is {bore}."
+    bores = {_bore_of(row) for row in sidearms}
+    bores.discard("")
+    if len(bores) != 1:
+        if host is None:
+            return None
+        bore = _bore_of(host)
+        if not bore:
+            return None
+        ordered = [host] + [row for row in sidearms if _sku(row) != _sku(host)]
+        return ordered, host, f"The {_plain_name(host)} is {bore}."
+    bore = next(iter(bores))
+    focus = host or _default_sidearm(products) or sidearms[0]
+    ordered = [focus] + [row for row in sidearms if _sku(row) != _sku(focus)]
+    # "type b 45" names one model. ".45", "45 acp" and "in 45" are the whole line.
+    if host is not None and _CARTRIDGE.search(query) is None:
+        return ordered, host, f"The {_plain_name(host)} is {bore}."
+    label = str(focus.get("brand") or "").split(" ")[0] or "These"
+    return ordered, focus, f"The {label} {_SIDEARM.lower()} are {bore}."
 
 
 def _suppressor_gap(
