@@ -117,8 +117,8 @@ export function Lab({
       </header>
 
       <aside className="panel" aria-label="Rig">
+        <img className="rig-mark" src="/brand/rig-on-dark.png" alt="Rig" width={1173} height={651} />
         <div className="panel-top">
-          <img src="/brand/tervory-logo-reversed.png" alt="Tervory" width={186} height={34} />
           <nav className="std" aria-label="Account">
             <p className="account">{accountName}</p>
             {ACCOUNT_NAV.map((link) => (
@@ -142,6 +142,7 @@ export function Lab({
           </nav>
         </div>
         <div className="panel-bottom">
+          <img className="tervory-mark" src="/brand/tervory-logo-reversed.png" alt="Tervory" width={186} height={34} />
           {ACCOUNT_BOTTOM.map((link) => (
             <a key={link.label} className="nav" href={link.href}>
               {link.label}

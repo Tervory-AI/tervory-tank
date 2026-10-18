@@ -23,6 +23,13 @@ def test_panel_is_fixed_and_split_with_the_account_nav():
     assert "panel-own" in source
     assert "panel-bottom" in source
     assert "tervory-logo-reversed.png" in source
+    lab = (PAGE / "lab.tsx").read_text(encoding="utf-8")
+    panel = lab.split('<aside className="panel"', 1)[1].split("</aside>", 1)[0]
+    assert "rig-on-dark.png" in panel
+    assert panel.index("rig-on-dark.png") < panel.index("panel-top")
+    assert panel.index("panel-own") < panel.index("tervory-logo-reversed.png")
+    assert panel.index("tervory-logo-reversed.png") < panel.index("ACCOUNT_BOTTOM")
+    assert (ROOT / "workspace" / "public" / "brand" / "rig-on-dark.png").is_file()
     assert "Rig logo, coming later" not in source
     assert "headerLinks" not in source
     assert "Last refreshed" not in source

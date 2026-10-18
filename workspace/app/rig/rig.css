@@ -144,10 +144,19 @@ main:has(.rig) {
   gap: 20px;
 }
 
-.panel-top img {
+.rig-mark {
+  display: block;
+  width: 100%;
+  height: auto;
+  flex: none;
+}
+
+.tervory-mark {
   display: block;
   width: 186px;
   height: 34px;
+  margin: 0 0 12px;
+  flex: none;
 }
 
 .std {
