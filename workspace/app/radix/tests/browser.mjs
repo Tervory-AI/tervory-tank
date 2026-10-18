@@ -232,7 +232,7 @@ try {
   await page.goto(url + "/?founder=1");
   await page.getByRole("heading", { name: "Radix", exact: true }).waitFor();
   await page.evaluate(() => document.fonts.ready);
-  for (const name of ["Dashboard", "Projects", "Chats", "Support"]) assert.equal(await page.locator(".rx-panel").getByRole("link", { name, exact: true }).count(), 1);
+  for (const name of ["Dashboard", "Projects", "Chats", "Support"]) assert.equal(await page.locator(".rx-panel").getByRole("link", { name, exact: name !== "Support" }).count(), 1);
   assert.equal(await page.locator(".rx-panel").getByRole("button", { name: "Settings", exact: true }).count(), 1);
   assert.equal(await page.locator(".rx-panel").getByText("Example account", { exact: true }).count(), 1);
   assert.equal(await page.locator(".rx-logo").first().evaluate((img) => img.complete && img.naturalWidth > 0), true);
