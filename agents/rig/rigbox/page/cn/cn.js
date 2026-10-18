@@ -926,7 +926,7 @@
     const linked = (detail.fits || []).filter(function (fit) {
       return fit.fits_family === family || fit.fits_sku === detail.id || fit.fits_sku === family;
     }).map(function (fit) { return map[fit.part_sku]; }).filter(Boolean);
-    const fitChips = h("div", { class: "fit-chips" });
+    const fitChips = h("div", { class: "fit-chips", tabindex: "0", "aria-label": "Fits" });
     if (detail.category === "Pistols") {
       linked.forEach(function (part) {
         const fit = fitFor(part.id, picks.optic_cut, detail.fits || [], family);
