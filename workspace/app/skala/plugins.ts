@@ -1,5 +1,5 @@
 export const VAULT_OFF_MESSAGE = "This vault is off. Turn it on in Tank.";
-export const LIBRARY_OFF_MESSAGE = "The skills library is off. Nothing can be linked or transferred.";
+export const LIBRARY_OFF_MESSAGE = "This vault is off. Nothing can be linked or transferred.";
 export const PLUGIN_TABS = ["API keys", "Files", "Source links", "MCP connections"] as const;
 export type PluginTab = (typeof PLUGIN_TABS)[number];
 

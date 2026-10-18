@@ -2,7 +2,6 @@
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { AGENT_LABEL, Registry } from "./registry";
 import {
   LIBRARY_OFF_MESSAGE,
   PLUGIN_TABS,
@@ -39,14 +38,7 @@ const BOTTOM_LINKS = [
   { href: "/", label: "Support" },
 ] as const;
 
-const REGISTRY_TABS = [
-  { id: "skills", label: "Skills" },
-  { id: "tier0", label: AGENT_LABEL.tier0 },
-  { id: "base", label: AGENT_LABEL.base },
-  { id: "orchestrator", label: AGENT_LABEL.orchestrator },
-  { id: "archive", label: "Archive" },
-] as const;
-
+type Section = "library" | "plugins";
 type Turn = { who: "You" | "Skala"; text: string };
 
 function SearchIcon() {
@@ -67,31 +59,25 @@ export function SkalaApp({
   plugins: PluginPanel;
   library: LibraryPanel;
 }) {
-  const [section, setSection] = useState<string>("skills");
-  const [pluginsOpen, setPluginsOpen] = useState(false);
+  const [section, setSection] = useState<Section>("library");
   const [tab, setTab] = useState<PluginTab>("API keys");
   const [menu, setMenu] = useState(false);
   const [query, setQuery] = useState("");
   const [askDraft, setAskDraft] = useState("");
   const [thread, setThread] = useState<Turn[]>([]);
-  const [botOpen, setBotOpen] = useState(false);
   const searchId = useId();
   const account = accountName?.trim() || "Account name";
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if (event.key !== "Escape") return;
-      setPluginsOpen(false);
-      setMenu(false);
-      setBotOpen(false);
+      if (event.key === "Escape") setMenu(false);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  function show(next: string) {
+  function show(next: Section) {
     setMenu(false);
-    setPluginsOpen(false);
     setSection(next);
   }
 
@@ -107,18 +93,23 @@ export function SkalaApp({
     ]);
   }
 
+  const needle = query.trim().toLowerCase();
+  const skills = library.enabled
+    ? library.skills.filter((skill) => {
+        if (!needle) return true;
+        return [skill.skill_id, skill.version, skill.agent, skill.description].join(" ").toLowerCase().includes(needle);
+      })
+    : [];
+
   return (
     <div className={menu ? "skala menu-open" : "skala"}>
       <header className="sk-top">
-        <img src="/brand/tervory-logo-reversed.png" alt="Tervory" width={148} height={28} />
+        <img src="/brand/skala-on-dark.png" alt="Skala" width={140} height={33} />
         <button type="button" className="sk-menu" onClick={() => setMenu(true)}>Menu</button>
       </header>
       <button className="sk-dim" type="button" hidden={!menu} aria-label="Close menu" onClick={() => setMenu(false)} />
       <aside className="sk-panel" aria-label="Skala">
-        <div className="sk-brand">
-          <img className="sk-logo" src="/brand/tervory-logo-reversed.png" alt="Tervory" width={186} height={34} />
-          <img className="sk-word" src="/brand/skala-on-dark.png" alt="Skala" />
-        </div>
+        <img className="sk-logo" src="/brand/skala-on-dark.png" alt="Skala" width={186} height={44} />
         <button className="sk-close" type="button" onClick={() => setMenu(false)}>Close</button>
         <nav className="sk-nav" aria-label="Account">
           <p className="sk-account">{account}</p>
@@ -126,92 +117,91 @@ export function SkalaApp({
             <a key={link.label} href={link.href}>{link.label}</a>
           ))}
         </nav>
-        <nav className="sk-own" aria-label="Skala registry">
-          {REGISTRY_TABS.map((item) => (
-            <button key={item.id} type="button" className={!pluginsOpen && section === item.id ? "on" : ""} onClick={() => show(item.id)}>
-              {item.label}
-            </button>
-          ))}
-          <button type="button" className={pluginsOpen ? "on" : ""} onClick={() => { setMenu(false); setPluginsOpen(true); }}>
-            Plugins
-          </button>
+        <div className="sk-rule" />
+        <nav className="sk-nav" aria-label="Library and Plugins">
+          <button type="button" className={section === "library" ? "on" : ""} onClick={() => show("library")}>Library</button>
+          <button type="button" className={section === "plugins" ? "on" : ""} onClick={() => show("plugins")}>Plugins</button>
         </nav>
         <div className="sk-spacer" />
-        <nav className="sk-nav" aria-label="Workspace">
-          {BOTTOM_LINKS.map((link) => (
-            <a key={link.label} href={link.href}>{link.label}</a>
-          ))}
-        </nav>
+        <div className="sk-rule" />
+        <div className="sk-foot">
+          <img className="sk-tervory" src="/brand/tervory-logo-reversed.png" alt="Tervory" width={186} height={34} />
+          <nav className="sk-nav" aria-label="Workspace">
+            {BOTTOM_LINKS.map((link) => (
+              <a key={link.label} href={link.href}>{link.label}</a>
+            ))}
+          </nav>
+        </div>
       </aside>
 
       <div className="sk-main" data-scroll-root>
         <div className="sk-body">
-          <header className="sk-head">
-            <img className="sk-word-light" src="/brand/skala-on-light.png" alt="" />
-            <div>
-              <h1>Skala</h1>
-              <p>The skills registry. Search the packages, or ask a question. Only approved versions run for clients.</p>
-            </div>
-          </header>
-
-          <form className="sk-search" role="search" onSubmit={(event) => event.preventDefault()}>
-            <SearchIcon />
-            <label className="sk-sr" htmlFor={searchId}>Search skills</label>
-            <input
-              id={searchId}
-              type="search"
-              value={query}
-              placeholder="Search skills"
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </form>
-
-          <p className="sk-library">{library.enabled ? `${library.skills.length} approved skills are in the library.` : library.message || LIBRARY_OFF_MESSAGE}</p>
-
-          {pluginsOpen ? (
-            <PluginsPanel plugins={plugins} tab={tab} onTab={setTab} onClose={() => setPluginsOpen(false)} />
+          {section === "plugins" ? (
+            <PluginsPanel plugins={plugins} tab={tab} onTab={setTab} />
           ) : (
-            <Registry query={query} section={section} />
-          )}
+            <>
+              <header className="sk-header">
+                <div>
+                  <h1>Skala</h1>
+                  <p>Search the skills library, or ask Skala a question.</p>
+                </div>
+                <form className="sk-search" role="search" onSubmit={(event) => event.preventDefault()}>
+                  <SearchIcon />
+                  <label className="sk-sr" htmlFor={searchId}>Search the library</label>
+                  <input
+                    id={searchId}
+                    type="search"
+                    value={query}
+                    placeholder="Search the library"
+                    onChange={(event) => setQuery(event.target.value)}
+                  />
+                </form>
+              </header>
 
-          <section className="sk-ask" aria-label="Ask Skala">
-            <h2>Ask Skala</h2>
-            {thread.length > 0 && (
-              <div className="sk-thread">
-                {thread.map((turn, index) => (
-                  <div key={`${turn.who}-${index}`} className={turn.who === "You" ? "sk-turn you" : "sk-turn"}>
-                    <p className="sk-who">{turn.who}</p>
-                    <p>{turn.text}</p>
+              <section className="sk-ask" aria-label="Ask Skala">
+                <h2>Ask Skala</h2>
+                {thread.length > 0 && (
+                  <div className="sk-thread">
+                    {thread.map((turn, index) => (
+                      <div key={`${turn.who}-${index}`} className="sk-turn">
+                        <p className="sk-who">{turn.who}</p>
+                        <p>{turn.text}</p>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )}
-            <form onSubmit={sendAsk}>
-              <label className="sk-sr" htmlFor="ask-skala">Ask Skala</label>
-              <textarea
-                id="ask-skala"
-                rows={3}
-                value={askDraft}
-                placeholder="Ask about a skill"
-                onChange={(event) => setAskDraft(event.target.value)}
-              />
-              <button type="submit" className="primary">Send</button>
-            </form>
-          </section>
-        </div>
-      </div>
+                )}
+                <form onSubmit={sendAsk}>
+                  <label className="sk-sr" htmlFor="ask-skala">Ask Skala</label>
+                  <input
+                    id="ask-skala"
+                    value={askDraft}
+                    placeholder="Ask Skala"
+                    onChange={(event) => setAskDraft(event.target.value)}
+                  />
+                  <button type="submit" className="primary">Send</button>
+                </form>
+              </section>
 
-      <div className="sk-bot">
-        {botOpen && (
-          <div className="sk-bot-card" role="dialog" aria-label="Chat bot, to be named">
-            <p>Chat bot, to be named</p>
-            <p>This bot is not connected. Nothing was sent.</p>
-            <button type="button" onClick={() => setBotOpen(false)}>Close</button>
-          </div>
-        )}
-        <button type="button" className="sk-bot-btn" onClick={() => setBotOpen((open) => !open)}>
-          Chat bot, to be named
-        </button>
+              {library.enabled ? (
+                skills.length > 0 ? (
+                  <ul className="sk-skills">
+                    {skills.map((skill) => (
+                      <li key={`${skill.skill_id}@${skill.version}`}>
+                        <strong>{skill.skill_id}</strong>
+                        <span>{skill.version}</span>
+                        <span>{skill.description}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="sk-off">{needle ? "Nothing in the library matches that." : "The library is empty."}</p>
+                )
+              ) : (
+                <p className="sk-off">{library.message || LIBRARY_OFF_MESSAGE}</p>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -221,12 +211,10 @@ function PluginsPanel({
   plugins,
   tab,
   onTab,
-  onClose,
 }: {
   plugins: PluginPanel;
   tab: PluginTab;
   onTab: (tab: PluginTab) => void;
-  onClose: () => void;
 }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -317,10 +305,12 @@ function PluginsPanel({
 
   return (
     <section className="sk-plugins" aria-label="Plugins">
-      <div className="sk-plugins-head">
-        <h2>Plugins</h2>
-        <button type="button" className="text" onClick={onClose}>Close</button>
-      </div>
+      <header className="sk-header">
+        <div>
+          <h1>Plugins</h1>
+          <p>API keys, files, source links, and connections.</p>
+        </div>
+      </header>
       <div className="sk-tabs" role="tablist">
         {PLUGIN_TABS.map((name) => (
           <button key={name} type="button" role="tab" aria-selected={name === tab} className={name === tab ? "on" : ""} onClick={() => { setNote(""); onTab(name); }}>
