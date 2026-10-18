@@ -7,3 +7,7 @@ PyYAML==6.0.2
 rapidfuzz==3.10.1
 selectolax==0.3.27
 redis==5.2.1
+# AES-256-GCM for Plugins vault secrets. The same pin as requirements-dev.txt.
+cryptography==50.0.2
+# FastAPI needs this to accept Plugins file uploads.
+python-multipart==0.0.32

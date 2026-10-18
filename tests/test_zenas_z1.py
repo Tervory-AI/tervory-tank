@@ -534,7 +534,7 @@ def test_skill_config_matches_the_box_copy_and_policy_row() -> None:
     chassis = (ROOT / "agents" / "_chassis" / "requirements.txt").read_text(encoding="utf-8")
     tank_req = (ROOT / "tank" / "requirements.txt").read_text(encoding="utf-8")
     assert "cryptography" not in chassis
-    assert "cryptography" not in tank_req
+    assert [line for line in tank_req.splitlines() if "cryptography" in line] == ["cryptography==50.0.2"]
     app = (ROOT / "agents" / "zenas" / "app.py").read_text(encoding="utf-8")
     assert "agents.zenas.pool" in app
     assert len(CATALOGUE) > 0

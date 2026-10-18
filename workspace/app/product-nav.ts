@@ -13,9 +13,9 @@ export function headerLinks(founder: boolean): NavLink[] {
   return links;
 }
 
-const OWN_SHELL = ["/sign-in", "/sign-up", "/onboarding", "/tisan"];
+const OWN_SHELL = ["/sign-in", "/sign-up", "/onboarding", "/market-lab", "/tisan"];
 
-/** Sign-in, sign-up, onboarding, and Tisan use their own frame, not the product header. */
+/** Sign-in, sign-up, onboarding, Market Lab, and Tisan use their own frame, not the product header. */
 export function usesOwnShell(pathname: string): boolean {
   const path = pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
   return OWN_SHELL.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
