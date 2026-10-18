@@ -141,7 +141,20 @@
     const rows = (fits || []).filter(function (fit) {
       return fit.part_sku === partSku && (fit.fits_family === family || fit.fits_sku === family);
     });
-    if (!rows.length) return null;
+    if (!rows.length) {
+      const ruled = (fits || []).filter(function (fit) {
+        return fit.part_sku === partSku && fit.rule && fit.rule.optic_cut && !(fit.rule.fits === false);
+      });
+      if (!ruled.length || !cut) return null;
+      const matched = ruled.find(function (fit) { return fit.rule.optic_cut === cut; });
+      if (matched) {
+        return { fits: true, badge: "Fits your " + matched.rule.optic_cut + " cut", note: matched.note || "" };
+      }
+      const needed = ruled[0].rule.optic_cut || "";
+      const note = ruled[0].note || "";
+      const badge = note.toLowerCase().startsWith("needs") ? note : (needed ? "Needs " + needed + " cut" : note);
+      return { fits: false, badge: badge, note: note };
+    }
     const refused = rows.find(function (fit) { return fit.rule && fit.rule.fits === false; });
     if (refused) {
       const sentence = fitSentence(refused.note) || "Does not fit";
@@ -767,6 +780,7 @@
       h("h3", {}, [h("a", { class: "name-link", href: "/cn/product/" + encodeURIComponent(item.id), text: item.name })]),
       h("p", { class: "price", text: rand(item.price.amount) }),
       delta === 0 ? h("span", { class: "badge", text: "Cheapest" }) : null,
+      (item.badges || []).indexOf("Exact match") >= 0 ? h("span", { class: "badge", text: "Exact match" }) : null,
       item.fit ? h("span", { class: "chip tiny" + (item.fit.fits ? " on" : ""), text: item.fit.badge }) : null,
       h("p", { class: stock.tone, text: stock.label }),
       item.availability && item.availability.status === "out_of_stock" ? h("button", {
@@ -1051,10 +1065,15 @@
     const lines = linesFor(detail, picks, map);
     const total = sum(lines);
     const family = detail.family || detail.id;
-    const linked = (detail.fits || []).map(function (fit) { return map[fit.part_sku]; }).filter(function (row) {
-      return row && (detail.fits || []).some(function (fit) {
-        return fit.part_sku === row.id && (fit.fits_family === family || fit.fits_sku === detail.id || fit.fits_sku === family);
-      });
+    const seenPart = {};
+    const linked = [];
+    (detail.fits || []).forEach(function (fit) {
+      if (fit.rule && fit.rule.fits === false) return;
+      if (!(fit.fits_family === family || fit.fits_sku === detail.id || fit.fits_sku === family)) return;
+      const row = map[fit.part_sku];
+      if (!row || seenPart[row.id]) return;
+      seenPart[row.id] = true;
+      linked.push(row);
     });
     function choiceFor(row) {
       const fit = fitFor(row.id, picks.optic_cut, detail.fits || [], family);
