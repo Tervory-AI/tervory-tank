@@ -252,18 +252,47 @@
       const id = typeof value === "string" ? value : value.code;
       const label = typeof value === "string" ? value : value.label;
       const pressed = current === id;
+      const blocked = typeof value === "object" && value.disabled;
       const button = h("button", {
         type: "button",
-        class: "chip",
+        class: "chip" + (blocked ? " is-blocked" : ""),
         role: "radio",
         "data-code": id,
         "aria-checked": pressed ? "true" : "false",
+        "aria-disabled": blocked ? "true" : "false",
+        disabled: blocked ? true : null,
         tabindex: pressed || (!current && index === 0) ? "0" : "-1",
         text: label,
-        onclick: function () { onPick(id); },
-        onkeydown: function (event) { arrowRadio(event, row, onPick); },
+        onclick: function () { if (!blocked) onPick(id); },
+        onkeydown: function (event) { if (!blocked) arrowRadio(event, row, onPick); },
       });
       row.append(button);
+    });
+    group.append(row);
+    return group;
+  }
+
+  function optionCards(legend, values, current, onPick) {
+    const group = h("fieldset", { class: "option", role: "radiogroup", "aria-label": legend });
+    group.append(h("legend", { text: legend }));
+    const row = h("div", { class: "choice-list" });
+    values.forEach(function (value) {
+      const pressed = current === value.code;
+      const blocked = !!value.disabled;
+      row.append(h("button", {
+        type: "button",
+        class: "choice-card" + (pressed ? " on" : "") + (blocked ? " is-blocked" : ""),
+        role: "radio",
+        "aria-checked": pressed ? "true" : "false",
+        "aria-disabled": blocked ? "true" : "false",
+        disabled: blocked ? true : null,
+        onclick: function () { if (!blocked) onPick(value.code); },
+      }, [
+        h("strong", { text: value.name }),
+        h("span", { class: "meta", text: value.price }),
+        h("span", { class: "chip tiny" + (value.fits ? " on" : ""), text: value.badge }),
+        h("span", { class: value.tone || "meta", text: value.stock }),
+      ]));
     });
     group.append(row);
     return group;
@@ -329,14 +358,20 @@
     const form = searchForm(filters, true);
     const flow = h("div", {
       class: "flow hero-graph",
-      "data-flow": JSON.stringify({ layout: "orbit", centre: "Ready when you are.", groups: groups, items: [] }),
+      "data-flow": JSON.stringify({
+        layout: "orbit",
+        centre: "Ready when you are.",
+        caption: "Results open as a list. Switch to Compare or Visual any time.",
+        groups: groups,
+        items: [],
+      }),
       "aria-label": "Categories around the search",
     });
     const popular = ["Archon Type B", "Type B Ported", "Type A", "15-round magazine", "Performance trigger"];
     return h("div", { class: "home" }, [
       h("section", { class: "hero" }, [
         h("h1", { text: "Find the right Archon, fast." }),
-        h("p", { class: "lede", text: "Search the Custom Nation demo catalogue. Every price is a demo price and every stock line is demo stock." }),
+        h("p", { class: "lede", text: "Search Custom Nation for Archon pistols, red dots, triggers, magazines and more." }),
         form,
         h("p", { class: "meta", text: "Popular searches" }),
         h("div", { class: "pills" }, popular.map(function (label) {
@@ -344,8 +379,44 @@
           return h("a", { class: "chip", href: "/cn/results?q=" + encodeURIComponent(query), text: label });
         })),
         flow,
+        h("p", { class: "meta ask-note", text: "Or just ask. Answers come from " + CN.name + "’s own catalogue, with sources." }),
+        askBox("ARCHON-TYPE-B"),
       ]),
     ]);
+  }
+
+  function pillMenu(name, label, value, options) {
+    const current = options.find(function (option) { return option[0] === value; }) || options[0];
+    const button = h("button", {
+      type: "button",
+      class: "pill",
+      "aria-haspopup": "listbox",
+      "aria-expanded": "false",
+      text: label + ": " + current[1],
+    });
+    const hidden = h("input", { type: "hidden", name: name, value: current[0] });
+    const list = h("ul", { class: "pill-list", role: "listbox", hidden: "hidden" });
+    options.forEach(function (option) {
+      list.append(h("li", {}, [h("button", {
+        type: "button",
+        role: "option",
+        class: "pill-option",
+        text: option[1],
+        onclick: function () {
+          hidden.value = option[0];
+          button.textContent = label + ": " + option[1];
+          list.hidden = true;
+          button.setAttribute("aria-expanded", "false");
+        },
+      })]));
+    });
+    button.addEventListener("click", function () {
+      const opening = list.hidden;
+      document.querySelectorAll(".pill-list").forEach(function (node) { node.hidden = true; });
+      list.hidden = !opening;
+      button.setAttribute("aria-expanded", opening ? "true" : "false");
+    });
+    return h("div", { class: "pill-menu" }, [button, hidden, list]);
   }
 
   function searchForm(filters, primary) {
@@ -356,43 +427,51 @@
       "aria-label": "Search a model or part",
       value: filters.q,
     });
-    const stock = h("input", { type: "checkbox", name: "in_stock" });
-    if (filters.inStock) stock.checked = true;
-    const min = h("input", { type: "range", name: "min", min: "0", max: "30000", step: "500", value: filters.minPrice || "0", "aria-label": "Minimum price" });
-    const minLabel = h("span", { text: Number(filters.minPrice) > 0 ? "From " + rand(filters.minPrice) : "From any" });
-    min.addEventListener("input", function () {
-      minLabel.textContent = Number(min.value) <= 0 ? "From any" : "From " + rand(min.value);
+    let inStock = !!filters.inStock;
+    const stock = h("button", {
+      type: "button",
+      class: "pill",
+      "aria-pressed": inStock ? "true" : "false",
+      text: "In stock only",
     });
-    const max = h("input", { type: "range", name: "max", min: "5000", max: "30000", step: "500", value: filters.maxPrice, "aria-label": "Maximum price" });
-    const maxLabel = h("span", { text: Number(filters.maxPrice) >= 30000 ? "Any, up to R 30 000" : "Up to " + rand(filters.maxPrice) });
-    max.addEventListener("input", function () {
-      maxLabel.textContent = Number(max.value) >= 30000 ? "Any, up to R 30 000" : "Up to " + rand(max.value);
+    stock.addEventListener("click", function () {
+      inStock = !inStock;
+      stock.setAttribute("aria-pressed", inStock ? "true" : "false");
     });
-    const sort = fieldSelect("sort", "Sort", filters.sort, [["", "Best match"], ["price_asc", "Price low–high"], ["price_desc", "Price high–low"]]);
-    const category = fieldSelect("category", "Category", filters.category, [
-      ["all", "All"], ["Pistols", "Pistols"], ["Sights", "Optics"], ["Triggers", "Triggers"],
-      ["Magazines", "Magazines"], ["Lights", "Lights"], ["Holsters", "Holsters"], ["Barrels", "Barrels"], ["Parts", "Parts"],
+    const priceKey = (filters.minPrice || "0") + ":" + (filters.maxPrice || "30000");
+    const price = pillMenu("price", "Price", priceKey, [
+      ["0:30000", "any, up to R 30 000"],
+      ["0:25000", "up to R 25 000"],
+      ["0:10000", "up to R 10 000"],
+      ["20000:30000", "from R 20 000"],
+    ]);
+    const sort = pillMenu("sort", "Sort", filters.sort || "", [
+      ["", "best match"],
+      ["price_asc", "price low–high"],
+      ["price_desc", "price high–low"],
+    ]);
+    const category = pillMenu("category", "Category", filters.category || "all", [
+      ["all", "all"], ["Pistols", "pistols"], ["Sights", "optics"], ["Triggers", "triggers"],
+      ["Magazines", "magazines"], ["Lights", "lights"], ["Holsters", "holsters"], ["Barrels", "barrels"], ["Parts", "parts"],
     ]);
     const form = h("form", { class: "search-form", role: "search", onsubmit: function (event) {
       event.preventDefault();
+      const span = (form.querySelector("[name=price]").value || "0:30000").split(":");
       go(searchUrl({
         q: input.value.trim(),
-        inStock: stock.checked,
-        minPrice: min.value,
-        maxPrice: max.value,
+        inStock: inStock,
+        minPrice: span[0] || "0",
+        maxPrice: span[1] || "30000",
         sort: form.querySelector("[name=sort]").value,
         category: form.querySelector("[name=category]").value,
         view: filters.view || "list",
       }));
     } }, [
-      h("div", { class: "search-row" }, [input, h("button", { class: primary ? "primary" : "ghost", type: "submit", text: "Search" })]),
-      h("div", { class: "filters" }, [
-        h("label", { class: "check" }, [stock, " In stock only"]),
-        h("label", { class: "field" }, ["Price ", minLabel, min, maxLabel, max]),
-        sort,
-        category,
+      h("div", { class: "search-row" }, [
+        input,
+        h("button", { class: primary ? "primary" : "ghost", type: "submit", text: "Search" }),
       ]),
-      h("p", {}, [h("span", { class: "gold", text: "Demo stock" }), " Prices and stock on this page are demo figures."]),
+      h("div", { class: "filter-row" }, [stock, price, sort, category]),
     ]);
     return form;
   }
@@ -400,7 +479,7 @@
   function askBox(productId) {
     const input = h("input", { type: "text", name: "question", "aria-label": "Ask about this catalogue", placeholder: "Ask about a spec in the catalogue" });
     const out = h("div", { "aria-live": "polite" });
-    const form = h("form", { class: "stack", onsubmit: async function (event) {
+    const form = h("form", { class: "ask", onsubmit: async function (event) {
       event.preventDefault();
       const question = input.value.trim();
       if (!question) return;
@@ -412,8 +491,8 @@
         out.replaceChildren(banner("The catalogue didn't answer.", error.message));
       }
     } }, [
-      h("label", { class: "field", text: "Ask" }, [input]),
-      h("button", { type: "submit", class: "ghost", text: "Ask" }),
+      input,
+      h("button", { type: "submit", class: "ghost ask-go", "aria-label": "Ask", text: "→" }),
       out,
     ]);
     return form;
@@ -440,7 +519,13 @@
       ? results.length + " matches · " + (body.groups || []).length + " categories"
       : "No matches";
     const tabs = viewTabs(filters);
-    const message = body.message ? banner(body.honest === "closest" ? "No exact match." : body.honest === "not_stocked" ? "We don’t stock that." : "Nothing matches that yet.", body.message) : null;
+    let messageTitle = "";
+    if (body.message && body.honest === "closest") {
+      messageTitle = /colour/.test(body.message) ? "That colour isn't offered." : "No exact match.";
+    } else if (body.message && body.honest === "not_stocked") messageTitle = "We don’t stock that.";
+    else if (body.message && body.honest === "exact") messageTitle = "Out of stock.";
+    else if (body.message) messageTitle = "Nothing matches that yet.";
+    const message = body.message ? banner(messageTitle, body.message) : null;
     let main;
     if (!results.length) {
       main = h("div", {}, [
@@ -452,27 +537,28 @@
           h("a", { class: "chip", href: "/cn/results?q=holster", text: "Holster" }),
         ]),
       ]);
-    } else if (filters.view === "compare") main = compareView(results);
+    } else if (filters.view === "compare") main = null;
     else if (filters.view === "visual") main = visualView(body, focus);
     else main = listView(results, body.fits || []);
-    const open = focus
+    const stockAlternative = focus && focus.alternative && body.honest === "exact" && body.message;
+    const openTarget = stockAlternative ? focus.alternative : focus;
+    const open = openTarget
       ? h("a", {
           class: "primary sticky-action",
-          href: "/cn/product/" + encodeURIComponent(focus.id),
-          text: (body.honest === "closest" ? "Show " : "Open ") + focus.name,
+          href: "/cn/product/" + encodeURIComponent(openTarget.id),
+          text: (body.honest === "closest" ? "Show " : "Open ") + openTarget.name,
         })
       : null;
-    const wide = filters.view === "visual";
-    return h("section", {}, [
-      h("h1", { text: filters.q ? "Results for “" + filters.q + "”" : "Catalogue" }),
-      h("p", { class: "meta", text: heading }),
+    return h("section", { class: "results" }, [
       searchForm(filters, false),
-      tabs,
+      h("div", { class: "results-head" }, [
+        h("h1", { class: "results-title", text: heading }),
+        tabs,
+      ]),
       message,
-      wide ? main : null,
-      h("div", { class: wide ? "layout under-graph" : "layout" }, [
-        wide ? null : main,
-        sidebar(results, focus, open, body.focus_id || (focus && focus.id) || ""),
+      h("div", { class: filters.view === "compare" ? "layout compare-only" : "layout" }, [
+        filters.view === "compare" ? compareView(results, open) : main,
+        filters.view === "compare" ? null : sidebar(results, focus, open, body.focus_id || (focus && focus.id) || ""),
       ]),
     ]);
   }
@@ -505,100 +591,155 @@
     return row;
   }
 
-  function listView(results, fits) {
-    const wrap = h("div", {});
-    let category = "";
-    results.forEach(function (item) {
-      if (item.category !== category) {
-        category = item.category;
-        wrap.append(h("h2", { class: "group", text: category }));
+  function listView(results) {
+    const pistols = results.filter(function (item) { return item.category === "Pistols"; });
+    const rest = results.filter(function (item) { return item.category !== "Pistols"; });
+    const wrap = h("div", { class: "list" });
+    if (pistols.length) {
+      wrap.append(h("h2", { class: "section-label", text: "Pistols · " + pistols.length }));
+      pistols.forEach(function (item) { wrap.append(compactRow(item)); });
+    }
+    if (rest.length && pistols.length) {
+      wrap.append(h("h2", { class: "section-label", text: "Upgrades for your Type B · " + rest.length }));
+      const dots = rest.filter(function (item) { return item.category === "Sights"; });
+      if (dots.length) {
+        const grid = h("div", { class: "upgrade-dots" });
+        dots.forEach(function (item) { grid.append(dotCard(item)); });
+        wrap.append(grid);
       }
-      wrap.append(resultCard(item, fits, true));
-    });
+      rest.filter(function (item) { return item.category !== "Sights"; }).forEach(function (item) {
+        wrap.append(compactRow(item));
+      });
+    } else if (rest.length) {
+      let category = "";
+      rest.forEach(function (item) {
+        if (item.category !== category) {
+          category = item.category;
+          wrap.append(h("h2", { class: "section-label", text: category }));
+        }
+        wrap.append(compactRow(item));
+      });
+    }
     return wrap;
   }
 
-  function resultCard(item, fits, compact) {
-    const stock = stockOf(item.availability);
+  function optionPills(item) {
     const picks = loadPicks(item);
-    const media = h("img", { src: item.image, alt: item.name });
-    const body = h("div", {});
-    body.append(h("h3", {}, [h("a", { href: "/cn/product/" + encodeURIComponent(item.id), text: item.name })]));
-    body.append(priceLine(displayAmount(item, picks), item.price_label));
-    body.append(h("p", { class: stock.tone, text: stock.label + (stock.where ? " · " + stock.where : "") + (stock.lead ? " · " + stock.lead : "") }));
-    body.append(h("p", { class: "meta", text: stock.demo }));
-    if (item.badges && item.badges.length) {
-      body.append(h("div", { class: "badges" }, item.badges.map(function (badge) { return h("span", { class: "badge", text: badge }); })));
-    }
-    const grip = optionValues(item, "slide_grip");
-    const barrels = optionValues(item, "barrel");
-    const cuts = optionValues(item, "optic_cut");
-    if (grip.length) body.append(radioGroup("Slide / grip", "grip", grip, picks.slide_grip, function (value) {
-      picks.slide_grip = value;
-      savePicks(item.id, picks);
-      go(location.pathname + location.search);
-    }));
-    if (barrels.length) {
-      body.append(radioGroup("Barrel", "barrel", barrels.map(function (barrel) {
-        const extra = barrel.delta ? " +" + rand(barrel.delta) : "";
-        return { code: barrel.code, label: barrel.label + extra };
-      }), picks.barrel, function (value) {
-        picks.barrel = value;
-        savePicks(item.id, picks);
-        go(location.pathname + location.search);
-      }));
-    }
-    if (cuts.length) body.append(radioGroup("Optic cut", "cut", cuts, picks.optic_cut, function (value) { picks.optic_cut = value; savePicks(item.id, picks); go(location.pathname + location.search); }));
-    const fit = item.fit;
-    if (fit) body.append(h("p", { text: fit.badge }));
-    else if (item.category !== "Pistols") body.append(h("p", { class: "muted", text: "Check fit" }));
-    if (item.availability && item.availability.status === "out_of_stock") {
-      if (item.alternative) {
-        body.append(h("p", { text: "Nearest in stock: " + item.alternative.name + " · " + rand(item.alternative.price.amount) }));
-      }
-      body.append(h("button", { type: "button", class: "ghost", text: "Notify me", onclick: function () {
-        openDialog("Notify me", [
-          h("p", { text: "This demo does not send alerts. " + CN.name + " can confirm stock for " + item.name + " at " + CN.email + "." }),
-        ]);
-      } }));
-    }
-    if (item.demo_item) body.append(h("p", { class: "meta", text: "Demo item" }));
-    return h("article", { class: compact ? "card compact" : "card" }, [media, body]);
+    const groups = [
+      ["slide_grip", picks.slide_grip],
+      ["grip", picks.grip],
+      ["barrel", picks.barrel],
+      ["optic_cut", picks.optic_cut],
+    ];
+    const wrap = h("div", { class: "mini-pills" });
+    groups.forEach(function (pair) {
+      optionValues(item, pair[0]).forEach(function (value) {
+        const code = typeof value === "string" ? value : value.code;
+        const label = typeof value === "string" ? value : value.label;
+        const on = pair[1] === code;
+        wrap.append(h("button", {
+          type: "button",
+          class: "chip tiny" + (on ? " on" : ""),
+          "aria-pressed": on ? "true" : "false",
+          text: label,
+          onclick: function () {
+            const next = loadPicks(item);
+            if (pair[0] === "grip") next.grip = code;
+            else next[pair[0]] = code;
+            savePicks(item.id, next);
+            go(location.pathname + location.search);
+          },
+        }));
+      });
+    });
+    if (item.fit) wrap.append(h("span", { class: "chip tiny on", text: item.fit.badge }));
+    return wrap;
   }
 
-  function compareView(results) {
+  function compactRow(item) {
+    const stock = stockOf(item.availability);
+    const delta = item.compare && item.compare.delta ? "+" + rand(item.compare.delta) : "";
+    const badges = (item.badges || []).filter(function (badge) { return badge !== "Demo item"; });
+    const price = h("div", { class: "price-col" }, [
+      h("strong", { text: rand(displayAmount(item, loadPicks(item))) }),
+      delta ? h("span", { class: "meta", text: delta }) : null,
+      badges.length ? h("span", { class: "badge", text: badges[0] }) : null,
+    ]);
+    const name = h("div", {}, [
+      h("h3", {}, [h("a", { class: "name-link", href: "/cn/product/" + encodeURIComponent(item.id), text: item.name })]),
+      h("p", { class: "meta", text: item.brand || "" }),
+    ]);
+    const avail = h("div", {}, [
+      h("p", { class: stock.tone, text: stock.label }),
+      h("p", { class: "meta", text: [stock.where, stock.lead].filter(Boolean).join(" · ") }),
+      item.availability && item.availability.status === "out_of_stock" ? h("button", {
+        type: "button",
+        class: "chip tiny",
+        text: "Notify me",
+        onclick: function () {
+          openDialog("Notify me", [
+            h("p", { text: "This demo does not send alerts. " + CN.name + " can confirm stock for " + item.name + " at " + CN.email + "." }),
+          ]);
+        },
+      }) : null,
+    ]);
+    return h("article", { class: "row-line" }, [name, optionPills(item), avail, price]);
+  }
+
+  function dotCard(item) {
+    const stock = stockOf(item.availability);
+    return h("article", { class: "dot-card" }, [
+      h("h3", {}, [h("a", { class: "name-link", href: "/cn/product/" + encodeURIComponent(item.id), text: item.name })]),
+      h("p", { class: "price", text: rand(item.price.amount) }),
+      item.fit ? h("span", { class: "chip tiny" + (item.fit.fits ? " on" : ""), text: item.fit.badge }) : null,
+      h("p", { class: stock.tone, text: stock.label }),
+      item.availability && item.availability.status === "out_of_stock" ? h("button", {
+        type: "button",
+        class: "chip tiny",
+        text: "Notify me",
+        onclick: function () {
+          openDialog("Notify me", [h("p", { text: "This demo does not send alerts. " + CN.name + " can confirm stock for " + item.name + "." })]);
+        },
+      }) : null,
+    ]);
+  }
+
+  function compareView(results, open) {
     const pistols = results.filter(function (item) { return item.category === "Pistols"; });
-    const rows = pistols.length >= 2 ? pistols : results.slice(0, 4);
+    const rows = pistols.length >= 2 ? pistols : results.slice(0, 3);
     const missing = "—";
     const lines = [
-      ["Price", function (item) { return rand(item.price.amount) + " · " + (item.price_label || "Demo price"); }],
-      ["Difference from cheapest", function (item) { return item.compare && item.compare.delta ? "+" + rand(item.compare.delta) : rand(0); }],
+      ["Difference from cheapest", function (item) { return item.compare && item.compare.delta ? "+" + rand(item.compare.delta) : "Cheapest"; }],
       ["Availability", function (item) { return stockOf(item.availability).label; }],
-      ["Where", function (item) { return stockOf(item.availability).where || missing; }],
+      ["Where it is", function (item) { return stockOf(item.availability).where || missing; }],
       ["Lead time", function (item) { return stockOf(item.availability).lead || missing; }],
-      ["Length", function (item) { const value = specValue(item.attributes && item.attributes.verified, "length_in"); return value ? value + " in" : missing; }],
       ["Lockup", function (item) { return specValue(item.attributes && item.attributes.verified, "locking") || missing; }],
       ["Barrel", function (item) { return specValue(item.attributes && item.attributes.verified, "barrel") || missing; }],
       ["Optic cuts", function (item) { return specValue(item.attributes && item.attributes.verified, "optic_cuts") || ((item.options && item.options.optic_cut) || []).join(", ") || missing; }],
       ["Colours", function (item) { return ((item.options && (item.options.slide_grip || item.options.grip)) || []).join(", ") || missing; }],
       ["In the box", function (item) { return specValue(item.attributes && item.attributes.verified, "in_box") || (item.attributes && item.attributes.in_box) || missing; }],
-      ["Fit", function (item) { return item.fit ? item.fit.badge : "Check fit"; }],
+      ["Fits your build", function (item) { return item.fit ? item.fit.badge : "Check fit"; }],
     ];
-    const table = h("table", { class: "compare" });
-    const head = h("tr", {}, [h("th", { scope: "col", text: "Spec" })].concat(rows.map(function (item) {
-      return h("th", { scope: "col" }, [h("a", { href: "/cn/product/" + encodeURIComponent(item.id), text: item.name })]);
-    })));
-    table.append(h("thead", {}, [head]));
-    const body = h("tbody");
-    lines.forEach(function (line) {
-      body.append(h("tr", {}, [h("th", { scope: "row", text: line[0] })].concat(rows.map(function (item) {
-        return h("td", { text: line[1](item) });
-      }))));
+    const board = h("div", { class: "compare-board", style: "--cols:" + rows.length });
+    board.append(h("div", { class: "compare-label" }, [h("h2", { text: "Comparing " + rows.length + (rows.length === 1 ? " result" : " pistols") })]));
+    rows.forEach(function (item, index) {
+      const stock = stockOf(item.availability);
+      const card = h("article", { class: "compare-card" + (index === 0 ? " is-focus" : "") }, [
+        h("h3", {}, [h("a", { class: "name-link", href: "/cn/product/" + encodeURIComponent(item.id), text: item.name })]),
+        h("p", { class: "price", text: rand(item.price.amount) }),
+        h("p", { class: stock.tone, text: stock.label + (stock.lead ? " · " + stock.lead : "") }),
+      ]);
+      if (index === 0 && open) card.append(open);
+      board.append(card);
     });
-    table.append(body);
+    lines.forEach(function (line) {
+      board.append(h("div", { class: "compare-label" }, [h("p", { text: line[0] })]));
+      rows.forEach(function (item) {
+        board.append(h("div", { class: "compare-cell" }, [h("p", { text: line[1](item) })]));
+      });
+    });
     return h("div", { class: "compare-wrap" }, [
-      h("h2", { text: "Compare" }),
-      table,
+      board,
       h("p", { class: "note", text: "A dash means that spec is not in the catalogue." }),
     ]);
   }
@@ -610,7 +751,7 @@
         id: item.id,
         name: item.name,
         category: item.category,
-        meta: rand(item.price.amount) + " · " + stock.label,
+        meta: rand(item.price.amount) + " · " + stock.label + (item.fit && item.fit.badge ? " · " + item.fit.badge : ""),
       };
     });
     return h("div", {
@@ -618,6 +759,7 @@
       "data-flow": JSON.stringify({
         layout: "columns",
         centre: focus ? focus.name : "Results",
+        caption: (body.results || []).length + " results, same list as a map",
         groups: body.groups || [],
         items: items,
       }),
@@ -646,8 +788,12 @@
   }
 
   function sidebar(results, focus, open, askId) {
-    const side = h("aside", { class: "side" }, [h("h2", { text: "Price comparison" })]);
-    side.append(priceBars(results));
+    const bars = priceBars(results);
+    const side = h("aside", { class: "side" });
+    if (bars.childNodes.length) {
+      side.append(h("h2", { text: "Price comparison" }));
+      side.append(bars);
+    }
     if (focus && focus.price_history) {
       const history = focus.price_history;
       side.append(h("h3", { text: "Price history" }));
@@ -690,7 +836,7 @@
     const fitLines = linked.map(function (part) {
       const fit = fitFor(part.id, picks.optic_cut, detail.fits || [], family);
       const partStock = stockOf(part.availability);
-      return h("p", { text: part.name + " · " + (fit ? fit.badge : "Check fit") + " · " + partStock.label + " · " + rand(part.price.amount) + " · " + (part.price_label || "Demo price") });
+      return h("p", { text: part.name + " · " + (fit ? fit.badge : "Check fit") + " · " + partStock.label + " · " + rand(part.price.amount) });
     });
     const stills = [
       ["/page/cn/media/type-b-render.jpg", "Type B render, muzzle left"],
@@ -698,47 +844,62 @@
       ["/page/cn/media/grip.jpg", "Modular grip"],
       ["/page/cn/media/trigger.jpg", "Flat face trigger"],
     ];
-    const column = h("div", {}, [
-      h("h1", { text: detail.name }),
-      detail.attributes && detail.attributes.tagline ? h("p", { class: "lede", text: detail.attributes.tagline }) : null,
-      priceLine(displayAmount(detail, picks), detail.price_label),
-      h("p", { class: stock.tone, text: stock.label + (stock.where ? " · " + stock.where : "") + (stock.lead ? " · " + stock.lead : "") }),
-      h("p", { class: "meta", text: stock.demo }),
-      detail.demo_item ? h("p", { class: "banner", text: "Demo item. The picture is a stand-in, not a verified photo of this exact model." }) : null,
-    ]);
+    const options = h("div", { class: "product-options" }, [h("h2", { text: "Choose your options" })]);
     const grips = optionValues(detail, "slide_grip").length ? optionValues(detail, "slide_grip") : optionValues(detail, "grip");
-    if (grips.length) column.append(radioGroup("Colour", "colour", grips, picks.slide_grip || picks.grip, function (value) { picks.slide_grip = value; redraw(); }));
+    if (grips.length) options.append(radioGroup("Colour", "colour", grips, picks.slide_grip || picks.grip, function (value) { picks.slide_grip = value; redraw(); }));
     const barrels = optionValues(detail, "barrel");
     if (barrels.length) {
-      column.append(radioGroup("Barrel", "barrel", barrels.map(function (barrel) {
-        return { code: barrel.code, label: barrel.label + (barrel.delta ? " +" + rand(barrel.delta) : "") + (barrel.demo_item ? " · demo" : "") };
+      options.append(radioGroup("Barrel", "barrel", barrels.map(function (barrel) {
+        return { code: barrel.code, label: barrel.label + (barrel.delta ? " +" + rand(barrel.delta) : "") };
       }), picks.barrel, function (value) { picks.barrel = value; redraw(); }));
     }
     const cuts = optionValues(detail, "optic_cut");
-    if (cuts.length) column.append(radioGroup("Optic cut", "cut", cuts, picks.optic_cut, function (value) { picks.optic_cut = value; redraw(); }));
-    column.append(h("h2", { text: "Compared in this catalogue" }));
-    if (detail.compare) {
-      column.append(h("p", { text: detail.compare.delta ? "+" + rand(detail.compare.delta) + " from the cheapest in " + detail.category : "Cheapest in " + detail.category }));
+    if (cuts.length) options.append(radioGroup("Optic cut", "cut", cuts, picks.optic_cut, function (value) { picks.optic_cut = value; redraw(); }));
+    if (fitLines.length) {
+      options.append(h("h2", { text: "Fits" }));
+      fitLines.forEach(function (line) { options.append(line); });
     }
+    const peers = h("div", { class: "search-compare" }, [h("h2", { text: "Compare in this search" })]);
+    rows.filter(function (item) { return item.category === "Pistols"; }).forEach(function (item) {
+      const peerStock = stockOf(item.availability);
+      const mark = item.id === detail.id ? "This one" : (item.compare && item.compare.delta ? "+" + rand(item.compare.delta) : "");
+      peers.append(h("p", {}, [
+        h("a", { class: "name-link", href: "/cn/product/" + encodeURIComponent(item.id), text: item.name }),
+        h("span", { class: "meta", text: " " + rand(item.price.amount) + " · " + peerStock.label + (mark ? " · " + mark : "") }),
+      ]));
+    });
+    const summary = h("div", { class: "product-summary" }, [
+      h("p", { class: "meta", text: detail.brand || "" }),
+      h("h1", { text: detail.name }),
+      detail.attributes && detail.attributes.tagline ? h("p", { class: "lede", text: detail.attributes.tagline }) : null,
+      priceLine(displayAmount(detail, picks), "Demo price"),
+      h("p", { class: stock.tone, text: stock.label + (stock.where ? " · " + stock.where : "") + (stock.lead ? " · " + stock.lead : "") }),
+      peers,
+    ]);
     if (detail.price_history) {
       const history = detail.price_history;
-      column.append(h("h2", { text: "Price history" }), h("p", { text: "Was " + rand(history.was) + ", now " + rand(history.amount) + " on " + history.on + ". " + (history.label || "Demo data") + "." }));
+      summary.append(h("h2", { text: "Price history" }), h("p", { text: "Was " + rand(history.was) + ". Now " + rand(history.amount) + " on " + history.on + "." }));
     }
-    if (detail.attributes && detail.attributes.in_box) column.append(h("h2", { text: "In the box" }), h("p", { text: detail.attributes.in_box }));
-    column.append(h("h2", { text: "Fits" }));
-    fitLines.forEach(function (line) { column.append(line); });
-    column.append(h("a", { class: "primary sticky-action", href: "/cn/build/" + encodeURIComponent(detail.id), text: detail.category === "Pistols" ? "Build this pistol" : "Reserve this part" }));
+    if (detail.attributes && detail.attributes.in_box) summary.append(h("h2", { text: "In the box" }), h("p", { text: detail.attributes.in_box }));
+    summary.append(h("a", { class: "primary sticky-action", href: "/cn/build/" + encodeURIComponent(detail.id), text: detail.category === "Pistols" ? "Build this pistol" : "Reserve this part" }));
+    const coming = String(detail.image || "").indexOf("photo-coming") >= 0;
     const routeFilters = filtersFrom(new URLSearchParams(location.search));
-    return h("article", { class: "product" }, [
+    return h("article", { class: "product-page" }, [
       searchForm(routeFilters, false),
-      h("div", {}, [
-        h("img", { class: "hero", src: detail.image, alt: detail.name }),
-        detail.id === "ARCHON-TYPE-B" ? h("div", { class: "stills" }, stills.map(function (still) {
-          return h("figure", {}, [h("img", { src: still[0], alt: still[1] }), h("figcaption", { text: still[1] })]);
-        })) : null,
-        specs,
+      h("div", { class: "product" }, [
+        h("div", { class: "product-media" }, [
+          h("img", { class: "hero", src: detail.image, alt: coming ? "Photo coming" : detail.name }),
+          coming ? h("p", { class: "photo-coming", text: "Photo coming" }) : null,
+          detail.id === "ARCHON-TYPE-B" ? h("div", { class: "stills" }, stills.map(function (still) {
+            return h("figure", {}, [h("img", { src: still[0], alt: still[1] }), h("figcaption", { text: still[1] })]);
+          })) : null,
+          specs,
+        ]),
+        options,
+        summary,
       ]),
-      column,
+      h("h2", { text: "Ask about this" }),
+      askBox(detail.id),
     ]);
   }
 
@@ -758,9 +919,22 @@
     function choiceFor(row) {
       const fit = fitFor(row.id, picks.optic_cut, detail.fits || [], family);
       const partStock = stockOf(row.availability);
-      return { code: row.id, label: row.name + " · " + rand(row.price.amount) + " · " + (fit ? fit.badge : "Check fit") + " · " + partStock.label };
+      const blocked = (fit && fit.fits === false) || partStock.status === "out_of_stock";
+      return {
+        code: row.id,
+        disabled: blocked,
+        fits: !!(fit && fit.fits),
+        name: row.name,
+        price: rand(row.price.amount),
+        badge: fit ? fit.badge : "Check fit",
+        stock: partStock.label,
+        tone: partStock.tone,
+        label: row.name,
+      };
     }
     const dots = linked.filter(function (row) { return row.category === "Sights"; });
+    const dotChoices = dots.map(choiceFor);
+    const pickedBlocked = dotChoices.some(function (choice) { return choice.code === picks.dot && choice.disabled; });
     const mags = linked.filter(function (row) { return row.category === "Magazines"; });
     const triggers = linked.filter(function (row) { return row.category === "Triggers"; });
     function redraw(key, value) { picks[key] = value; savePicks(detail.id, picks); go(location.pathname); }
@@ -773,9 +947,11 @@
     ];
     const list = h("ol", { class: "lines" });
     lines.forEach(function (line) {
+      const fit = fitFor(line.product.id, picks.optic_cut, detail.fits || [], family);
+      const partStock = stockOf(line.product.availability);
       list.append(h("li", {}, [
-        h("span", { text: line.product.name + " · " + line.product.id }),
-        h("span", { class: "meta", text: rand(line.product.price.amount) + " · " + (line.product.price_label || "Demo price") }),
+        h("span", { text: line.product.name }),
+        h("span", { class: "meta", text: rand(line.product.price.amount) + " · " + (fit ? fit.badge : "Included") + " · " + partStock.label }),
       ]));
     });
     const name = h("input", { name: "name", required: "true", autocomplete: "name", "aria-label": "Your name" });
@@ -810,28 +986,36 @@
       h("label", { class: "field", text: "Name" }, [name]),
       h("label", { class: "field", text: "Email" }, [email]),
       h("label", { class: "field", text: "Phone" }, [phone]),
-      h("button", { class: "primary sticky-action", type: "submit", text: "Reserve at " + CN.name }),
+      pickedBlocked ? h("p", { class: "note", text: "That red dot needs a different cut, or it is out of stock. Pick one that fits before reserving." }) : null,
+      h("button", {
+        class: "primary sticky-action",
+        type: "submit",
+        disabled: pickedBlocked ? true : null,
+        text: "Reserve at " + CN.name,
+      }),
       status,
     ]);
+    const frames = h("div", { class: "frame-strip" });
+    steps.forEach(function (step, index) {
+      frames.append(h("figure", {}, [
+        h("img", { src: step[1], alt: step[2] }),
+        h("figcaption", { text: (index + 1) + " " + step[2] }),
+      ]));
+    });
     return h("article", { class: "build" }, [
-      h("div", {}, [
+      h("div", { class: "build-stage" }, [
+        h("p", { class: "meta", text: "Results · " + detail.name + " · Your build" }),
         h("h1", { text: "Your " + detail.name + " build" }),
-        detail.id === "ARCHON-TYPE-B" ? h("p", { class: "lede", text: "Stills from the versatility video. A spin and a 3D view come next. The exploded-view PDF is not in yet." }) : h("p", { class: "lede", text: "The lines below are catalogue prices. " + CN.name + " confirms stock and paperwork before anything is final." }),
-        detail.id === "ARCHON-TYPE-B" ? h("div", { class: "timeline" }, steps.map(function (step) {
-          return h("div", { class: "step" }, [
-            h("span", { class: "meta", text: step[0] }),
-            h("img", { src: step[1], alt: step[2] }),
-            h("span", { text: step[2] }),
-          ]);
-        })) : null,
-        h("h2", { text: "Parts" }),
-        list,
+        h("img", { class: "hero-still", src: "/page/cn/media/versatility-full.jpg", alt: "Type B with optic, from the owner's versatility still" }),
+        frames,
       ]),
-      h("aside", { class: "side" }, [
+      h("aside", { class: "side build-side" }, [
+        h("h2", { text: "Your build" }),
+        h("p", { class: "gold", text: "Demo prices" }),
+        list,
         h("p", { class: "meta", text: "Running total" }),
         h("p", { class: "total", text: rand(total) }),
-        h("p", {}, [h("span", { class: "gold", text: "Demo price" })]),
-        dots.length ? radioGroup("Red dot", "dot", dots.map(choiceFor), picks.dot, function (value) { redraw("dot", value); }) : null,
+        dots.length ? optionCards("Red dot options", dotChoices, picks.dot, function (value) { redraw("dot", value); }) : null,
         mags.length ? radioGroup("Magazine", "mag", mags.map(choiceFor), picks.mag, function (value) { redraw("mag", value); }) : null,
         triggers.length ? radioGroup("Trigger", "trigger", [{ code: "standard", label: "Standard, included · In stock" }].concat(triggers.map(function (row) {
           const partStock = stockOf(row.availability);
@@ -863,7 +1047,7 @@
           h("h2", { text: "Archon Type C" }),
           h("p", { text: missing.message || "No exact match." }),
           h("p", { text: "Closest matches: " + (missing.results || []).map(function (item) { return item.name; }).join(", ") + "." }),
-          focus ? h("a", { class: "ghost", href: "/cn/product/" + encodeURIComponent(focus.id), text: "Show " + focus.name }) : null,
+          focus ? h("a", { class: "primary", href: "/cn/product/" + encodeURIComponent(focus.id), text: "Show " + focus.name }) : null,
         ]),
         h("article", { class: "compare-card" }, [
           h("h2", { text: "Muzzle velocity" }),
@@ -880,7 +1064,7 @@
         ]),
       ]),
       h("div", { class: "pills" }, [
-        h("a", { class: "primary", href: "mailto:" + CN.email, text: "Email " + CN.name }),
+        h("a", { class: "ghost", href: "mailto:" + CN.email, text: "Email " + CN.name }),
         h("a", { class: "ghost", href: "/cn", text: "Ask another question" }),
         h("button", { type: "button", class: "ghost", text: "Clear search", onclick: function () { go("/cn"); } }),
       ]),

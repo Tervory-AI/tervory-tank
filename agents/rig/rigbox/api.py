@@ -215,12 +215,46 @@ async def link_quote(request: Request, payload: LinkIn) -> Response:
     return _ok(request, body)
 
 
+def _client_ip(request: Request) -> str:
+    """The shopper address. A forwarded header counts only when the peer is the proxy."""
+    peer = request.client.host if request.client is not None else ""
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded and _proxy_peer(peer):
+        first = forwarded.split(",")[0].strip()
+        if first:
+            return first
+    return peer or "unknown"
+
+
+def _proxy_peer(host: str) -> bool:
+    """Loopback and RFC1918 only. Documentation ranges are not the shop proxy."""
+    import ipaddress
+
+    nets = (
+        ipaddress.ip_network("10.0.0.0/8"),
+        ipaddress.ip_network("172.16.0.0/12"),
+        ipaddress.ip_network("192.168.0.0/16"),
+        ipaddress.ip_network("127.0.0.0/8"),
+        ipaddress.ip_network("::1/128"),
+        ipaddress.ip_network("fc00::/7"),
+    )
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return any(address in network for network in nets)
+
+
 @router.post("/quote")
 async def quote(request: Request, payload: QuoteIn) -> Response:
     await _auth(request)
-    client = request.client.host if request.client is not None else "unknown"
-    if not _service(request).reservations.allow(client):
-        raise RigError("rate_limit", "Too many reservations. Try again in a minute.", 429)
+    tenant = _tenant(request)
+    shop = await _service(request)._shop(tenant)
+    # Only the letter shop is limited. Other catalogues keep the main quote route.
+    if shop.get("mail_reservations"):
+        client = f"{tenant}:{_client_ip(request)}"
+        if not _service(request).reservations.allow(client):
+            raise RigError("rate_limit", "Too many reservations. Try again in a minute.", 429)
     body = await _service(request).quote(
         _tenant(request),
         {"setup": payload.setup, "product_id": payload.product_id, "contact": payload.contact},

@@ -6,22 +6,26 @@ import { Background, Handle, Position, ReactFlow } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
 function CatNode({ data }) {
+  const vertical = !!data.vertical;
   return (
     <div className="cn-node cat">
+      <Handle type="target" position={vertical ? Position.Top : Position.Left} />
       <span className="cn-node-count">{data.count}</span>
       <strong>{data.label}</strong>
-      <Handle type="source" position={Position.Right} />
+      <Handle type="source" position={vertical ? Position.Bottom : Position.Right} />
     </div>
   );
 }
 
 function CentreNode({ data }) {
+  const vertical = !!data.vertical;
   return (
     <div className="cn-node centre">
-      <Handle type="target" position={Position.Left} />
+      <Handle type="target" position={vertical ? Position.Top : Position.Left} />
       <span className="glow" aria-hidden="true" />
       <strong>{data.label}</strong>
-      <Handle type="source" position={Position.Right} />
+      {data.caption ? <span className="centre-caption">{data.caption}</span> : null}
+      <Handle type="source" position={vertical ? Position.Bottom : Position.Right} />
     </div>
   );
 }
@@ -29,7 +33,7 @@ function CentreNode({ data }) {
 function CardNode({ data }) {
   return (
     <button type="button" className="cn-node card-node" onClick={() => data.onOpen && data.onOpen(data.id)}>
-      <Handle type="target" position={Position.Left} />
+      <Handle type="target" position={data.vertical ? Position.Top : Position.Left} />
       <strong>{data.label}</strong>
       <span>{data.meta}</span>
     </button>
@@ -38,88 +42,67 @@ function CardNode({ data }) {
 
 const nodeTypes = { cat: CatNode, centre: CentreNode, card: CardNode };
 
+function edge(id, source, target) {
+  return { id, source, target, type: "smoothstep", style: { stroke: "#7ee0d6", strokeWidth: 1.25 } };
+}
+
 function columns(model, narrow) {
   const nodes = [];
   const edges = [];
   const groups = model.groups || [];
   const items = model.items || [];
+  const centreData = { label: model.centre || "Results", caption: model.caption || "" };
   if (narrow) {
-    const blocks = [];
-    groups.forEach((group) => {
-      blocks.push({ kind: "cat", group });
-      items.filter((item) => item.category === group.category).forEach((item) => {
-        blocks.push({ kind: "card", item });
-      });
-    });
-    const heightOf = (block) => (block.kind === "cat" ? 72 : 88);
-    const total = blocks.reduce((sum, block) => sum + heightOf(block), 0);
-    const middle = total / 2;
     let top = 0;
-    let placed = false;
-    const centreAt = (y) => {
+    nodes.push({
+      id: "centre",
+      type: "centre",
+      position: { x: 40, y: top },
+      data: { ...centreData, vertical: true },
+      draggable: false,
+    });
+    top += 110;
+    groups.forEach((group) => {
+      const mine = items.filter((item) => item.category === group.category);
+      const id = "cat-" + group.category;
       nodes.push({
-        id: "centre",
-        type: "centre",
-        position: { x: 16, y },
-        data: { label: model.centre || "Results" },
+        id,
+        type: "cat",
+        position: { x: 48, y: top },
+        data: { label: group.category, count: group.count, vertical: true },
         draggable: false,
       });
-    };
-    blocks.forEach((block) => {
-      if (!placed && top >= middle) {
-        centreAt(top);
-        top += 96;
-        placed = true;
-      }
-      if (block.kind === "cat") {
-        const id = "cat-" + block.group.category;
-        nodes.push({
-          id,
-          type: "cat",
-          position: { x: 0, y: top },
-          data: { label: block.group.category, count: block.group.count },
-          draggable: false,
-        });
-        edges.push({
-          id: "e-" + id,
-          source: id,
-          target: "centre",
-          style: { stroke: "#7ee0d6", strokeWidth: 1.25 },
-        });
-      } else {
-        const itemId = "item-" + block.item.id;
+      edges.push(edge("e-" + id, "centre", id));
+      top += 64;
+      mine.forEach((item) => {
+        const itemId = "item-" + item.id;
         nodes.push({
           id: itemId,
           type: "card",
-          position: { x: 0, y: top },
-          data: { id: block.item.id, label: block.item.name, meta: block.item.meta, onOpen: model.onOpen },
+          position: { x: 8, y: top },
+          data: { id: item.id, label: item.name, meta: item.meta, onOpen: model.onOpen, vertical: true },
           draggable: false,
         });
-        edges.push({
-          id: "e-" + itemId,
-          source: "centre",
-          target: itemId,
-          style: { stroke: "#2f6f68", strokeWidth: 1 },
-        });
-      }
-      top += heightOf(block);
+        edges.push(edge("e-" + itemId, id, itemId));
+        top += 72;
+      });
+      top += 16;
     });
-    if (!placed) centreAt(top);
     return { nodes, edges };
   }
   let cursor = 0;
   const bands = groups.map((group) => {
     const mine = items.filter((item) => item.category === group.category);
-    const band = Math.max(96, mine.length * 92);
+    const band = Math.max(52, mine.length * 46);
     const row = { group, mine, top: cursor, band };
-    cursor += band + 16;
+    cursor += band + 10;
     return row;
   });
   nodes.push({
     id: "centre",
     type: "centre",
-    position: { x: 300, y: Math.max(0, cursor / 2 - 48) },
-    data: { label: model.centre || "Results" },
+    position: { x: 0, y: Math.max(0, cursor / 2 - 36) },
+    data: centreData,
     draggable: false,
   });
   bands.forEach(({ group, mine, top, band }) => {
@@ -127,31 +110,21 @@ function columns(model, narrow) {
     nodes.push({
       id,
       type: "cat",
-      position: { x: 0, y: top + band / 2 - 28 },
+      position: { x: 210, y: top + band / 2 - 22 },
       data: { label: group.category, count: group.count },
       draggable: false,
     });
-    edges.push({
-      id: "e-" + id,
-      source: id,
-      target: "centre",
-      style: { stroke: "#7ee0d6", strokeWidth: 1.25 },
-    });
+    edges.push(edge("e-" + id, "centre", id));
     mine.forEach((item, index) => {
       const itemId = "item-" + item.id;
       nodes.push({
         id: itemId,
         type: "card",
-        position: { x: 560, y: top + index * 92 },
+        position: { x: 360, y: top + index * 46 },
         data: { id: item.id, label: item.name, meta: item.meta, onOpen: model.onOpen },
         draggable: false,
       });
-      edges.push({
-        id: "e-" + itemId,
-        source: "centre",
-        target: itemId,
-        style: { stroke: "#2f6f68", strokeWidth: 1 },
-      });
+      edges.push(edge("e-" + itemId, id, itemId));
     });
   });
   return { nodes, edges };
@@ -168,7 +141,7 @@ function orbit(model, narrow) {
       id: "centre",
       type: "centre",
       position: { x: narrow ? 70 : 250, y: narrow ? 140 : 170 },
-      data: { label: model.centre || "Ready when you are." },
+      data: { label: model.centre || "Ready when you are.", caption: model.caption || "" },
       draggable: false,
     },
   ];
@@ -208,9 +181,9 @@ function Graph({ model }) {
       edges={laid.edges}
       nodeTypes={nodeTypes}
       fitView
-      minZoom={0.8}
-      fitViewOptions={{ minZoom: 0.8, padding: 0.12 }}
-      maxZoom={1.4}
+      minZoom={0.35}
+      fitViewOptions={{ padding: 0.08, minZoom: 0.35, maxZoom: 1.15 }}
+      maxZoom={1.25}
       nodesDraggable={false}
       nodesConnectable={false}
       elementsSelectable

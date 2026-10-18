@@ -18,4 +18,6 @@ ENV AGENT_NAME=rig \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app
 EXPOSE 8000
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+# proxy-headers lets a loopback proxy set the client. Other peers are handled
+# in the quote route, which trusts X-Forwarded-For only from a private address.
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "127.0.0.1"]

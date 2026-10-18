@@ -175,6 +175,13 @@ GOLDEN = [
     ("sight", "exact", DOTS, "ARCHON-DOT-RMR", True, ""),
     ("trigger", "exact", ["ARCHON-TRIGGER-PERF"], "ARCHON-TRIGGER-PERF", True, ""),
     ("trigger for type b", "exact", ["ARCHON-TRIGGER-PERF"], "ARCHON-TRIGGER-PERF", True, ""),
+    ("Type B pink", "closest", PISTOLS, "ARCHON-TYPE-B", False, "Pink isn't a colour"),
+    ("Type B OD green", "closest", PISTOLS, "ARCHON-TYPE-B", False, "OD green isn't a colour"),
+    ("type b magazine", "exact", MAGS, "ARCHON-MAG-15", True, ""),
+    ("type b light", "exact", ["ARCHON-LIGHT"], "ARCHON-LIGHT", True, ""),
+    ("type b barrel", "exact", BARRELS, "ARCHON-TB-THREADED", True, ""),
+    ("type b rmr", "exact", ["ARCHON-DOT-RMR", "ARCHON-RMR-SCREWS"], "ARCHON-DOT-RMR", True, ""),
+    ("type b trigger", "exact", ["ARCHON-TRIGGER-PERF"], "ARCHON-TRIGGER-PERF", True, ""),
     ("magazine", "exact", MAGS, "ARCHON-MAG-15", True, ""),
     ("holster", "exact", ["ARCHON-HOLSTER-TB"], "ARCHON-HOLSTER-TB", True, ""),
     ("light", "exact", ["ARCHON-LIGHT"], "ARCHON-LIGHT", True, ""),
@@ -548,6 +555,11 @@ async def test_staccato_letter_queries_match_main_wording() -> None:
     pistol = await service.search(STACCATO_TENANT, "Staccato P", 12)
     assert pistol["exact_match"] is True
     assert any(item["id"] == "STI-P-9" for item in pistol["results"])
+    for query in ("type b", "type c", "holster c", "red dot b"):
+        body = await service.search(STACCATO_TENANT, query, 12)
+        assert body["exact_match"] is True, query
+        assert "No exact match" not in str(body.get("message") or "")
+        assert body["results"]
 
 
 @pytest.mark.asyncio
@@ -665,3 +677,66 @@ def test_reservation_route_is_limited_per_ip() -> None:
     ]
     assert statuses[:5] == [200, 200, 200, 200, 200]
     assert statuses[5] == 429
+
+
+def test_staccato_quotes_are_not_rate_limited() -> None:
+    async def prepare():
+        service = Service(MemoryStore(), handoff=WebhookHandoff(None, None))
+        await service.load_folder(STACCATO)
+        return service
+
+    service = asyncio.run(prepare())
+    app = FastAPI()
+    app.state.rig = service
+    mount(app)
+    client = TestClient(app)
+    headers = {"X-Rig-Key": "rk_pub_customnation", "Origin": ORIGIN}
+    payload = {
+        "product_id": "STI-C2-9",
+        "contact": {"name": "Ada Buyer", "email": "ada@example.com"},
+    }
+    statuses = [
+        client.post("/v1/rig/quote", json=payload, headers=headers).status_code
+        for _ in range(6)
+    ]
+    assert statuses == [200, 200, 200, 200, 200, 200]
+    body = client.post("/v1/rig/quote", json=payload, headers=headers).json()
+    assert set(body) == {"request_id"}
+
+
+def test_forwarded_for_counts_only_from_a_private_peer() -> None:
+    from rigbox.api import _client_ip
+
+    class Client:
+        def __init__(self, host: str) -> None:
+            self.host = host
+
+    class Request:
+        def __init__(self, host: str, forwarded: str) -> None:
+            self.client = Client(host)
+            self.headers = {"x-forwarded-for": forwarded}
+
+    assert _client_ip(Request("10.0.0.8", "203.0.113.9, 10.0.0.8")) == "203.0.113.9"
+    assert _client_ip(Request("172.18.0.2", "198.51.100.4")) == "198.51.100.4"
+    assert _client_ip(Request("203.0.113.8", "198.51.100.4")) == "203.0.113.8"
+    assert _client_ip(Request("testclient", "198.51.100.4")) == "testclient"
+
+
+@pytest.mark.asyncio
+async def test_a_short_choice_is_not_a_longer_option(monkeypatch: pytest.MonkeyPatch) -> None:
+    _guard_smtp(monkeypatch)
+    service = await _archon(WebhookHandoff(None, Mail()))
+    with pytest.raises(Exception) as caught:
+        await service.quote(
+            TENANT,
+            {
+                "setup": {
+                    "parts": [
+                        {"product": {"id": "ARCHON-TYPE-B"}, "choice": "Bla"},
+                    ]
+                },
+                "contact": {"name": "Ada Buyer", "email": "ada@example.com"},
+            },
+        )
+    assert caught.value.status == 422  # type: ignore[attr-defined]
+    assert "Bla" in str(caught.value)

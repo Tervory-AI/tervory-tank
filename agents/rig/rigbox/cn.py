@@ -89,7 +89,12 @@ def shop_search(payload: dict[str, Any]) -> dict[str, Any]:
         message = ""
         filter_only = True
     else:
-        ranked = rank_search({"q": cleaned, "products": products, "limit": max(limit, 50)})
+        ranked = rank_search({
+            "q": cleaned,
+            "products": products,
+            "limit": max(limit, 50),
+            "model_letters": True,
+        })
         by_sku = {_sku(row): row for row in products}
         ranked_rows = [by_sku[item] for item in (ranked.get("ids") or []) if item in by_sku]
         if not ranked_rows:
@@ -129,6 +134,27 @@ def shop_search(payload: dict[str, Any]) -> dict[str, Any]:
         host_row = _pick_focus(host, host_pool)
         chosen = _related(host_row, products, fits, _phrase_category(sought))
         focus = _fitting_focus(sought, chosen, host_row, fits)
+        honest = "exact"
+    elif cleaned and exact and not relation and _unoffered_colour(cleaned, focus):
+        message = _unoffered_colour(cleaned, focus)
+        chosen = _closest_rows(cleaned, products)
+        focus = _pick_focus(cleaned, chosen) if chosen else focus
+        honest = "closest"
+    elif cleaned and exact and not relation and _wanted_part(cleaned):
+        host_row = focus if focus is not None and str(focus.get("category") or "") == _SIDEARM else centre_default
+        wanted = _wanted_part(cleaned)
+        if wanted in _PARTS or wanted == "Sights":
+            chosen = _related(host_row, products, fits, wanted) or [
+                row for row in products if str(row.get("category") or "") == wanted
+            ]
+            focus = _fitting_focus(cleaned, chosen, host_row, fits)
+        else:
+            chosen = [
+                row for row in products
+                if str(row.get("category") or "") != _SIDEARM
+                and _covered_token(wanted, set(_tokens(_blob(row))))
+            ]
+            focus = _pick_focus(wanted, chosen) if chosen else focus
         honest = "exact"
     elif (
         focus is not None
@@ -382,6 +408,63 @@ def _phrase_category(phrase: str) -> str:
         found = _CATEGORY_WORD.get(token, "")
         if found and found != _ALL_PARTS:
             return found
+    return ""
+
+
+_COLOUR_WORDS = frozenset({
+    "pink", "green", "olive", "blue", "grey", "gray", "tan", "brown", "white",
+    "silver", "purple", "orange", "yellow", "bronze", "coyote", "gold", "od",
+})
+_PART_TAIL = {
+    "magazine": "Magazines",
+    "magazines": "Magazines",
+    "mag": "Magazines",
+    "light": "Lights",
+    "lights": "Lights",
+    "barrel": "Barrels",
+    "barrels": "Barrels",
+    "trigger": "Triggers",
+    "triggers": "Triggers",
+    "rmr": "rmr",
+    "optic": "Sights",
+    "optics": "Sights",
+    "sight": "Sights",
+    "sights": "Sights",
+    "dot": "Sights",
+    "dots": "Sights",
+}
+
+
+def _wanted_part(query: str) -> str:
+    """The part at the end of 'type b magazine'. 'Type B and RMR' stays a model query."""
+    if re.search(r"\band\b", query, re.IGNORECASE):
+        return ""
+    tokens = [token for token in _tokens(query) if token not in _FILLER and len(token) >= 2]
+    if len(tokens) < 2 or not any(token in {"type", "archon"} for token in tokens[:-1]):
+        return ""
+    tail = tokens[-1]
+    if tail in {"fde", "black", "ported", "type", "archon"}:
+        return ""
+    return _PART_TAIL.get(tail, "")
+
+
+def _unoffered_colour(query: str, row: dict[str, Any] | None) -> str:
+    """A colour the sheet does not list. FDE and black are real options, so they stay exact."""
+    if row is None or str(row.get("category") or "") != _SIDEARM:
+        return ""
+    offered: set[str] = set()
+    for label in _option_labels(row):
+        offered.update(_tokens(label))
+    text = " ".join(_tokens(query))
+    name = str(row.get("name") or "this model")
+    if "od green" in text and "od" not in offered and "green" not in offered:
+        return f"OD green isn't a colour on the {name}."
+    for word in _tokens(query):
+        if word == "green" and "od green" in text:
+            continue
+        if word in _COLOUR_WORDS and word not in offered:
+            shown = "OD" if word == "od" else word.capitalize()
+            return f"{shown} isn't a colour on the {name}."
     return ""
 
 
@@ -859,13 +942,28 @@ def _option_labels(row: dict[str, Any]) -> set[str]:
     return labels
 
 
+def _fold_choice(value: str) -> str:
+    return (
+        value.lower()
+        .replace('"', "")
+        .replace("″", "")
+        .replace("“", "")
+        .replace("”", "")
+        .replace("'", "")
+        .strip()
+    )
+
+
 def _label_hit(piece: str, labels: set[str]) -> bool:
-    if piece in labels:
-        return True
-    folded = piece.lower().replace('"', "").replace("″", "").replace("“", "").replace("”", "")
+    """A choice matches an option only when the whole label matches.
+
+    A short prefix such as "Bla" is not "Black/Black".
+    """
+    folded = _fold_choice(piece)
+    if not folded:
+        return False
     for label in labels:
-        other = label.lower().replace('"', "").replace("″", "").replace("“", "").replace("”", "")
-        if folded == other or (len(folded) >= 3 and (folded in other or other in folded)):
+        if _fold_choice(label) == folded:
             return True
     return False
 
