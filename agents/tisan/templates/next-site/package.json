@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "deploy": "node scripts/deploy-gate.cjs",
     "start": "next start",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",

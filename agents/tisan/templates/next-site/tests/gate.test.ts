@@ -26,11 +26,13 @@ test("the GitHub Actions gate requires a full pass", () => {
     "npm run typecheck",
     "npm test",
     "npm run build",
+    "npm run deploy",
     "npm run test:e2e",
     "npm run lhci",
   ]) {
     expect(workflow).toContain(command);
   }
+  expect(workflow.indexOf("npm run deploy")).toBeGreaterThan(workflow.indexOf("npm run build"));
 
   const lighthouse = readFileSync("lighthouserc.cjs", "utf8");
   for (const category of ["performance", "accessibility", "best-practices", "seo"]) {
