@@ -45,6 +45,7 @@ function CardNode({ data }) {
     <button type="button" className="cn-node card-node" onClick={() => data.onOpen && data.onOpen(data.id)}>
       <Handle id="t" type="target" position={Position.Top} />
       <Handle id="l" type="target" position={Position.Left} />
+      <Handle id="r" type="target" position={Position.Right} />
       <Handle id="s-b" type="source" position={Position.Bottom} />
       <strong>{data.label}</strong>
       <span>{data.meta}</span>
@@ -65,14 +66,14 @@ function opposite(side) {
   return { t: "b", b: "t", l: "r", r: "l" }[side];
 }
 
-function link(id, source, target, sourceHandle, targetHandle) {
+function link(id, source, target, sourceHandle, targetHandle, type) {
   return {
     id,
     source,
     target,
     sourceHandle,
     targetHandle,
-    type: "straight",
+    type: type || "straight",
     style: { stroke: "#7ee0d6", strokeWidth: 1.25 },
   };
 }
@@ -82,7 +83,8 @@ const CAT = { w: 156, h: 58 };
 const CARD = { w: 248, h: 88 };
 const PITCH = 96;
 const GROUP_GAP = 16;
-const AFTER_CENTRE = 24;
+const AFTER_CENTRE = 72;
+const GUTTER = 56;
 
 function centreNode(data, position) {
   return {
@@ -139,7 +141,7 @@ function splitColumns(groups, items) {
   return cols;
 }
 
-function placeColumn(groups, items, xCat, y0, nodes, edges, onOpen) {
+function placeColumn(groups, items, xCat, y0, nodes, edges, onOpen, cardsOnRight) {
   let y = y0;
   let previousCat = "";
   groups.forEach((group) => {
@@ -148,14 +150,18 @@ function placeColumn(groups, items, xCat, y0, nodes, edges, onOpen) {
     nodes.push(catNode(group, { x: xCat, y }));
     if (!previousCat) edges.push(link("e-" + id, "centre", id, "b", "t"));
     else edges.push(link("e-" + id, previousCat, id, "s-b", "t"));
-    let previous = id;
+    const cardX = cardsOnRight ? xCat + CAT.w + GUTTER : xCat - CARD.w - GUTTER;
     mine.forEach((item, index) => {
       const itemId = "item-" + item.id;
-      nodes.push(cardNode(item, { x: xCat + CAT.w + 28, y: y + index * PITCH }, onOpen));
-      edges.push(previous === id
-        ? link("e-" + itemId, id, itemId, "s-r", "l")
-        : link("e-" + itemId, previous, itemId, "s-b", "t"));
-      previous = itemId;
+      nodes.push(cardNode(item, { x: cardX, y: y + index * PITCH }, onOpen));
+      edges.push(link(
+        "e-" + itemId,
+        id,
+        itemId,
+        cardsOnRight ? "s-r" : "s-l",
+        cardsOnRight ? "l" : "r",
+        "smoothstep",
+      ));
     });
     previousCat = id;
     y += bandFor(mine.length) + GROUP_GAP;
@@ -178,12 +184,10 @@ function columns(model, narrow) {
       const id = "cat-" + group.category;
       nodes.push(catNode(group, { x: 8, y: top }));
       top += CAT.h + 16;
-      let previous = id;
       mine.forEach((item) => {
         const itemId = "item-" + item.id;
         nodes.push(cardNode(item, { x: 8, y: top }, model.onOpen));
-        edges.push(link("e-" + itemId, previous, itemId, "s-b", "t"));
-        previous = itemId;
+        edges.push(link("e-" + itemId, id, itemId, "s-b", "t", "smoothstep"));
         top += PITCH;
       });
       top += 12;
@@ -192,14 +196,19 @@ function columns(model, narrow) {
     return { nodes, edges };
   }
   const cols = splitColumns(groups, items);
-  const columnWidth = CAT.w + 28 + CARD.w;
-  const rightX = columnWidth + 36;
-  const block = rightX + columnWidth;
-  nodes.push(centreNode(centreData, { x: Math.max(0, (block - CENTRE.w) / 2), y: 0 }));
+  const leftCat = CARD.w + GUTTER;
+  const rightCat = leftCat + CAT.w + 80;
+  const rightCards = rightCat + CAT.w + GUTTER;
+  const block = rightCards + CARD.w;
+  const catSpan = rightCat + CAT.w - leftCat;
+  nodes.push(centreNode(centreData, {
+    x: leftCat + Math.max(0, (catSpan - CENTRE.w) / 2),
+    y: 0,
+  }));
   const y0 = CENTRE.h + AFTER_CENTRE;
-  placeColumn(cols[0], items, 0, y0, nodes, edges, model.onOpen);
-  placeColumn(cols[1], items, rightX, y0, nodes, edges, model.onOpen);
-  return { nodes, edges };
+  placeColumn(cols[0], items, leftCat, y0, nodes, edges, model.onOpen, false);
+  placeColumn(cols[1], items, rightCat, y0, nodes, edges, model.onOpen, true);
+  return { nodes, edges, width: block };
 }
 
 function orbit(model, narrow) {

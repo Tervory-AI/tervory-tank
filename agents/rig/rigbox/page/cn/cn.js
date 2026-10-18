@@ -154,21 +154,52 @@
     const lines = [{ product: product, choice: choiceText(product, picks) }];
     if (product.category !== "Pistols") return lines;
     const barrel = barrelOf(product, picks);
-    if (barrel && barrel.sku && map[barrel.sku]) lines.push({ product: map[barrel.sku], choice: barrel.label || "" });
-    if (picks.trigger === "performance" && map["ARCHON-TRIGGER-PERF"]) {
+    if (barrel && barrel.sku && map[barrel.sku] && offeredOn(product, map[barrel.sku], picks.optic_cut || "")) {
+      lines.push({ product: map[barrel.sku], choice: barrel.label || "" });
+    }
+    const cut = picks.optic_cut || "";
+    if (picks.trigger === "performance" && map["ARCHON-TRIGGER-PERF"] && offeredOn(product, map["ARCHON-TRIGGER-PERF"], cut)) {
       lines.push({ product: map["ARCHON-TRIGGER-PERF"], choice: "Performance" });
     }
-    if (picks.dot && map[picks.dot]) lines.push({ product: map[picks.dot], choice: map[picks.dot].name });
-    if (picks.dot === "ARCHON-DOT-RMR" && map["ARCHON-RMR-SCREWS"]) {
+    if (picks.dot && map[picks.dot] && offeredOn(product, map[picks.dot], cut)) {
+      lines.push({ product: map[picks.dot], choice: map[picks.dot].name });
+    }
+    if (picks.dot === "ARCHON-DOT-RMR" && map["ARCHON-RMR-SCREWS"] && offeredOn(product, map["ARCHON-RMR-SCREWS"], cut)) {
       lines.push({ product: map["ARCHON-RMR-SCREWS"], choice: "RMR" });
     }
-    if (picks.mag && map[picks.mag]) lines.push({ product: map[picks.mag], choice: map[picks.mag].name });
+    if (picks.mag && map[picks.mag] && offeredOn(product, map[picks.mag], cut)) {
+      lines.push({ product: map[picks.mag], choice: map[picks.mag].name });
+    }
     return lines;
+  }
+
+  function offeredOn(product, part, cut) {
+    const family = product.family || product.id;
+    const rows = (product.fits || []).filter(function (fit) { return fit.part_sku === part.id; });
+    if (!rows.length) return true;
+    const direct = rows.filter(function (fit) {
+      return fit.fits_family === family || fit.fits_sku === product.id || fit.fits_sku === family;
+    });
+    if (direct.length) {
+      return direct.some(function (fit) {
+        const needed = (fit.rule && fit.rule.optic_cut) || "";
+        return !needed || needed === cut;
+      });
+    }
+    const cuts = (product.options && product.options.optic_cut) || [];
+    if (!cuts.length) return false;
+    return rows.some(function (fit) { return (fit.rule && fit.rule.optic_cut) === cut; });
   }
 
   function choiceText(product, picks) {
     const parts = [picks.slide_grip || picks.grip, picks.barrel, picks.optic_cut].filter(Boolean);
     return parts.join(" · ");
+  }
+
+  function lineNote(line, fit, partStock, count) {
+    const singlePart = count === 1 && line.product.category !== "Pistols";
+    const role = fit && fit.badge ? fit.badge : line.product.category === "Pistols" ? "Base" : singlePart ? "" : "Added";
+    return [rand(line.product.price.amount), role, partStock.label].filter(Boolean).join(" · ");
   }
 
   function sum(lines) {
@@ -542,20 +573,6 @@
     else if (body.message && body.honest === "exact") messageTitle = "Out of stock.";
     else if (body.message) messageTitle = "Nothing matches that yet.";
     const message = body.message ? banner(messageTitle, body.message) : null;
-    let main;
-    if (!results.length) {
-      main = h("div", {}, [
-        message,
-        h("p", { class: "lede", text: "Try a model we list, or one of these." }),
-        h("div", { class: "pills" }, [
-          h("a", { class: "chip", href: "/cn/results?q=Archon%20Type%20B", text: "Archon Type B" }),
-          h("a", { class: "chip", href: "/cn/results?q=magazine", text: "Magazine" }),
-          h("a", { class: "chip", href: "/cn/results?q=holster", text: "Holster" }),
-        ]),
-      ]);
-    } else if (filters.view === "compare") main = null;
-    else if (filters.view === "visual") main = visualView(body, focus);
-    else main = listView(results, body.fits || []);
     const stockAlternative = focus && focus.alternative && body.honest === "exact" && body.message;
     const openTarget = stockAlternative ? focus.alternative : focus;
     const open = openTarget
@@ -565,15 +582,31 @@
           text: (body.honest === "closest" ? "Show " : "Open ") + openTarget.name,
         })
       : null;
+    let main;
+    let messageInMain = false;
+    if (!results.length) {
+      messageInMain = true;
+      main = h("div", { class: "results-main" }, [
+        message,
+        h("p", { class: "lede", text: "Try a model we list, or one of these." }),
+        h("div", { class: "pills" }, [
+          h("a", { class: "chip", href: "/cn/results?q=Archon%20Type%20B", text: "Archon Type B" }),
+          h("a", { class: "chip", href: "/cn/results?q=magazine", text: "Magazine" }),
+          h("a", { class: "chip", href: "/cn/results?q=holster", text: "Holster" }),
+        ]),
+      ]);
+    } else if (filters.view === "compare") main = compareView(results, open);
+    else if (filters.view === "visual") main = visualView(body, focus);
+    else main = listView(results, body.fits || []);
+    const left = messageInMain ? main : h("div", { class: "results-main" }, [message, main].filter(Boolean));
     return h("section", { class: "results" }, [
       searchForm(filters, false),
       h("div", { class: "results-head" }, [
         h("h1", { class: "results-title", text: heading }),
         tabs,
       ]),
-      message,
       h("div", { class: filters.view === "compare" ? "layout compare-only" : "layout" }, [
-        filters.view === "compare" ? compareView(results, open) : main,
+        left,
         filters.view === "compare" ? null : sidebar(results, focus, open, body.focus_id || (focus && focus.id) || ""),
       ]),
     ]);
@@ -794,7 +827,7 @@
       });
       return height;
     }
-    return 200 + 24 + Math.max(columnHeight(cols[0]), columnHeight(cols[1])) + 12;
+    return 200 + 72 + Math.max(columnHeight(cols[0]), columnHeight(cols[1])) + 12;
   }
 
   function visualView(body, focus) {
@@ -1035,7 +1068,7 @@
       const partStock = stockOf(line.product.availability);
       list.append(h("li", {}, [
         h("span", { text: line.product.name }),
-        h("span", { class: "meta", text: rand(line.product.price.amount) + " · " + (fit && fit.badge ? fit.badge : line.product.category === "Pistols" ? "Base" : "Added") + " · " + partStock.label }),
+        h("span", { class: "meta", text: lineNote(line, fit, partStock, lines.length) }),
       ]));
     });
     const name = h("input", { name: "name", required: "true", autocomplete: "name", "aria-label": "Your name" });

@@ -59,7 +59,8 @@ _IN = re.compile(r"\bin stock(?: only)?\b", re.IGNORECASE)
 
 
 def shop_search(payload: dict[str, Any]) -> dict[str, Any]:
-    query = str(payload.get("q") or "").strip()
+    asked = str(payload.get("q") or "").strip()
+    query, loose, cheapest = _prepare_query(asked)
     limit = _limit(payload.get("limit"))
     filters = dict(payload.get("filters") or {})
     products = [row for row in (payload.get("products") or []) if _active(row)]
@@ -82,6 +83,8 @@ def shop_search(payload: dict[str, Any]) -> dict[str, Any]:
     cleaned, parsed = _parse_constraints(query)
     cleaned = _strip_chamber(cleaned)
     filters = _merge(filters, parsed)
+    if cheapest:
+        filters["sort"] = "price_asc"
     filter_only = False
     if not cleaned:
         ranked_rows = list(products)
@@ -98,6 +101,9 @@ def shop_search(payload: dict[str, Any]) -> dict[str, Any]:
         by_sku = {_sku(row): row for row in products}
         ranked_rows = [by_sku[item] for item in (ranked.get("ids") or []) if item in by_sku]
         if not ranked_rows:
+            unsold = _unsold_results(asked, products, fits, filters)
+            if unsold is not None:
+                return unsold
             return _no_hits(cleaned, products, shop)
         exact = bool(ranked.get("exact_match", True))
         message = str(ranked.get("message") or "")
@@ -135,10 +141,15 @@ def shop_search(payload: dict[str, Any]) -> dict[str, Any]:
         chosen = _related(host_row, products, fits, _phrase_category(sought))
         focus = _fitting_focus(sought, chosen, host_row, fits)
         honest = "exact"
-    elif cleaned and exact and not relation and _unoffered_colour(cleaned, focus):
-        message = _unoffered_colour(cleaned, focus)
+    elif cleaned and exact and not relation and _colour_host(cleaned, products, focus)[0]:
+        message, colour_host = _colour_host(cleaned, products, focus)
         chosen = _closest_rows(cleaned, products)
-        focus = _pick_focus(cleaned, chosen) if chosen else focus
+        if colour_host is not None:
+            focus = colour_host
+            if not any(_sku(row) == _sku(colour_host) for row in chosen):
+                chosen = [colour_host, *chosen]
+        else:
+            focus = _pick_focus(cleaned, chosen) if chosen else focus
         honest = "closest"
     elif cleaned and exact and not relation and _wanted_part(cleaned):
         host_row = focus if focus is not None and str(focus.get("category") or "") == _SIDEARM else centre_default
@@ -206,9 +217,12 @@ def shop_search(payload: dict[str, Any]) -> dict[str, Any]:
         if _cover(cleaned or query, focus) < _best_cover(cleaned or query, chosen):
             focus = _fitting_focus(cleaned or query, chosen, centre_default, fits)
     chosen = _order(chosen, filters, focus)
-    gap = _honesty_gap(query, chosen, focus, honest, products, fits, filters, centre_default)
+    gap = _honesty_gap(asked, chosen, focus, honest, products, fits, filters, centre_default)
     if gap is not None:
         chosen, focus, honest, message = gap
+    elif loose and focus is not None:
+        honest = "closest"
+        message = f"No exact match. Closest: {_plain_name(focus)}."
     chosen = chosen[:limit]
     focus_id = _sku(focus) if focus else ""
     if focus is not None and str(focus.get("category") or "") == _SIDEARM:
@@ -869,6 +883,23 @@ _BORE = "cal" + "iber"
 _PRICE_WORDS = frozenset({
     "under", "below", "less", "than", "up", "over", "above", "more", "price", "only",
 })
+# Shopper words that rank or narrow a real product. They are not products.
+_MODIFIER_WORDS = frozenset({
+    "cheapest", "best", "spare", "extended", "review", "left", "handed",
+    "iwb", "kydex", "gen", "generation",
+})
+# A model, cut, or thread the sheet already lists. Never a denial.
+_SPEC_WORDS = frozenset({
+    "ported", "rmr", "rms", "acro", "threaded", "thread",
+})
+_THREAD_TOKEN = re.compile(r"\d+x\d+")
+_LOOSE_WORD = re.compile(
+    r"\b(?:left[-\s]?handed|left|iwb|kydex|review|best|gen(?:eration)?(?:\s+\d+)?)\b",
+    re.IGNORECASE,
+)
+_AMMO = "am" + "mo"
+_AMMUNITION = "am" + "munition"
+_CARRY_WORD = "holst" + "er"
 _QUERY_GLUE = frozenset({
     "fit", "fits", "fitting", "compatible", "suit", "suits", "go", "goes", "pair", "pairs",
     "mount", "replace", "use", "using", "what", "which", "show", "find",
@@ -878,6 +909,293 @@ _OTHER_BORE = re.compile(
     r"\b(?:\.45|\.40|\.357|\.38|45|40|357|38|10\s*mm)\b",
     re.IGNORECASE,
 )
+
+
+def _prepare_query(query: str) -> tuple[str, bool, bool]:
+    """Drop ranking words and rewrite a thread so the ranker sees the sheet's spelling.
+
+    `loose` is a modifier such as "left" or "review": the rows stay, the badge does not.
+    `cheapest` sorts by price and stays an exact list.
+    """
+    cheapest = bool(re.search(r"\bcheapest\b", query, re.IGNORECASE))
+    text = _normalize_threads(query)
+    if cheapest:
+        text = re.sub(r"\bcheapest\b", " ", text, flags=re.IGNORECASE)
+    loose = bool(_LOOSE_WORD.search(text))
+    if loose:
+        text = _LOOSE_WORD.sub(" ", text)
+    tokens = set(_tokens(text))
+    magazines = {"mag", "mags", "magazine", "magazines"}
+    if "spare" in tokens and tokens & magazines:
+        text = re.sub(r"\bspare\b", " ", text, flags=re.IGNORECASE)
+    if "extended" in tokens and tokens & magazines:
+        text = "18 round magazine"
+        loose = False
+    text = " ".join(text.split())
+    if loose:
+        text = _part_for_model(text)
+    return text, loose, cheapest
+
+
+def _normalize_threads(query: str) -> str:
+    text = re.sub(r"1\s*/\s*2\s*[x×]\s*28", "1/2-28", query, flags=re.IGNORECASE)
+    return re.sub(r"13\s*\.\s*5\s*[x×]\s*1\b", "13.5x1", text, flags=re.IGNORECASE)
+
+
+def _part_for_model(text: str) -> str:
+    if re.search(r"\bfor\b", text, re.IGNORECASE):
+        return text
+    tokens = _tokens(text)
+    part = ""
+    for token in tokens:
+        found = _CATEGORY_WORD.get(token, "")
+        if found and found != _ALL_PARTS:
+            part = token
+            break
+    letter = ""
+    for index, token in enumerate(tokens):
+        model = token in {"type", "typ"} or (len(token) >= 3 and "type".startswith(token))
+        if model and index + 1 < len(tokens) and tokens[index + 1] in {"a", "b", "c", "d"}:
+            letter = tokens[index + 1]
+            break
+    if part and letter:
+        return f"{part} for type {letter}"
+    return text
+
+
+def _colour_host(
+    query: str,
+    products: list[dict[str, Any]],
+    focus: dict[str, Any] | None,
+) -> tuple[str, dict[str, Any] | None]:
+    """The sidearm the colour was asked on. A barrel word must not jump to the Ported."""
+    named = _named_sidearm(query, products)
+    host = named
+    if host is None and focus is not None and str(focus.get("category") or "") == _SIDEARM:
+        if "barrel" not in set(_tokens(query)):
+            host = focus
+    if host is None:
+        return "", None
+    note = _unoffered_colour(query, host)
+    if not note:
+        return "", None
+    return note, host
+
+
+def _brand_note(query: str, focus: dict[str, Any] | None) -> str:
+    if focus is None or "trijicon" not in set(_tokens(query)):
+        return ""
+    if "rmr" not in set(_tokens(str(focus.get("name") or ""))):
+        return ""
+    return "We list an RMR-footprint dot, not a Trijicon."
+
+
+def _unlinked_part(
+    query: str,
+    chosen: list[dict[str, Any]],
+    focus: dict[str, Any] | None,
+    products: list[dict[str, Any]],
+    fits: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None, str, str] | None:
+    """'X for <model>' is exact only when an approved row links that part to the model."""
+    _sought, host_phrase = _intent(query)
+    if not host_phrase or focus is None:
+        return None
+    host = _named_sidearm(query, products)
+    if host is None or str(focus.get("category") or "") == _SIDEARM:
+        return None
+    if _approved_link(focus, host, fits):
+        return None
+    return chosen, focus, "closest", _unlink_message(focus, host, products, fits)
+
+
+def _unlink_message(
+    part: dict[str, Any],
+    host: dict[str, Any],
+    products: list[dict[str, Any]],
+    fits: list[dict[str, Any]],
+) -> str:
+    host_name = _plain_name(host)
+    part_name = _plain_name(part)
+    if str(part.get("category") or "") == _CARRY:
+        owner = _linked_host(part, products, fits)
+        owner_name = _plain_name(owner) if owner is not None else host_name
+        return (
+            f"We don't list a {_CARRY_WORD} for the {host_name}. "
+            f"The {part_name} is for the {owner_name}."
+        )
+    return f"No exact match. Closest: {part_name}."
+
+
+def _approved_link(part: dict[str, Any], host: dict[str, Any], fits: list[dict[str, Any]]) -> bool:
+    family = str(host.get("family") or "")
+    sku = _sku(host)
+    part_sku = _sku(part)
+    for fit in fits:
+        if str(fit.get("part_sku") or "") != part_sku:
+            continue
+        target_family = str(fit.get("fits_family") or "")
+        target_sku = str(fit.get("fits_sku") or "")
+        if target_family and target_family == family:
+            return True
+        if target_sku and target_sku in {sku, family}:
+            return True
+    attributes = part.get("attributes") if isinstance(part.get("attributes"), dict) else {}
+    upgrade = attributes.get("upgrade_for") or []
+    if isinstance(upgrade, str):
+        upgrade = [upgrade]
+    targets = {str(item) for item in upgrade}
+    return sku in targets or (bool(family) and family in targets)
+
+
+def _catalog_linked(part: dict[str, Any], fits: list[dict[str, Any]]) -> bool:
+    part_sku = _sku(part)
+    if any(str(fit.get("part_sku") or "") == part_sku for fit in fits):
+        return True
+    attributes = part.get("attributes") if isinstance(part.get("attributes"), dict) else {}
+    upgrade = attributes.get("upgrade_for") or []
+    if isinstance(upgrade, str):
+        upgrade = [upgrade]
+    return bool(upgrade)
+
+
+def _linked_host(
+    part: dict[str, Any],
+    products: list[dict[str, Any]],
+    fits: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    plain = [
+        row for row in products
+        if str(row.get("category") or "") == _SIDEARM and "ported" not in set(_tokens(str(row.get("name") or "")))
+    ]
+    for row in plain + [row for row in products if str(row.get("category") or "") == _SIDEARM]:
+        if _approved_link(part, row, fits):
+            return row
+    return None
+
+
+def _unsold_kind(query: str) -> str:
+    tokens = set(_tokens(query))
+    if "suppressor" in tokens and "ready" in tokens:
+        return ""
+    if "night" in tokens and _mentions_sight(query):
+        return "night"
+    if "cleaning" in tokens and tokens & {"kit", "kits"}:
+        return "cleaning"
+    if "suppressor" in tokens:
+        return "suppressor"
+    for word in ("compensator", "laser", "sling", "case", "bundle"):
+        if word in tokens:
+            return word
+    if _AMMO in tokens or _AMMUNITION in tokens:
+        return "supply"
+    return ""
+
+
+def _unsold_note(kind: str, host: dict[str, Any] | None) -> str:
+    name = _plain_name(host) if host is not None else ""
+    tail = f" for the {name}" if name else ""
+    if kind == "compensator":
+        return f"We don't sell a compensator{tail}."
+    if kind == "laser":
+        return f"We don't sell a laser{tail}."
+    if kind == "sling":
+        return f"We don't sell a sling{tail}."
+    if kind == "case":
+        return f"We don't sell a case{tail}."
+    if kind == "bundle":
+        return f"We don't sell a bundle{tail}."
+    if kind == "night":
+        return "We don't sell night sights."
+    if kind == "suppressor":
+        return "We don't sell a suppressor. The threaded barrel is the closest."
+    if kind == "cleaning":
+        return "We don't sell a cleaning kit."
+    if kind == "supply":
+        return f"We don't sell {_AMMO}."
+    return "No exact match."
+
+
+def _unsold_results(
+    query: str,
+    products: list[dict[str, Any]],
+    fits: list[dict[str, Any]],
+    filters: dict[str, Any],
+) -> dict[str, Any] | None:
+    kind = _unsold_kind(query)
+    if not kind or not _only_known(query, products):
+        return None
+    if kind == "suppressor":
+        found = _suppressor_gap(query, products)
+        if found is None:
+            return None
+        rows, host, note = found
+        return _present_closest(rows, host, note, products, fits, filters)
+    if kind == "night":
+        rows = [row for row in products if str(row.get("category") or "") == "Sights"]
+        host = _pick_focus("sight", rows) if rows else None
+        return _present_closest(rows, host, _unsold_note("night", None), products, fits, filters)
+    host = _named_sidearm(query, products) or _default_sidearm(products)
+    if host is None:
+        return None
+    rows = _spread(host, products, fits) or [host]
+    named = _named_sidearm(query, products)
+    return _present_closest(rows, host, _unsold_note(kind, named), products, fits, filters)
+
+
+def _present_closest(
+    rows: list[dict[str, Any]],
+    focus: dict[str, Any] | None,
+    note: str,
+    products: list[dict[str, Any]],
+    fits: list[dict[str, Any]],
+    filters: dict[str, Any],
+) -> dict[str, Any]:
+    ordered = _order(list(rows), filters, focus)
+    focus_id = _sku(focus) if focus else ""
+    if focus is not None and str(focus.get("category") or "") == _SIDEARM:
+        centre = focus
+    else:
+        centre = _default_sidearm(products)
+    results = [present(row, products, fits, focus_id, centre, mark_exact=False) for row in ordered]
+    return {
+        "results": results,
+        "ids": [item["id"] for item in results],
+        "exact_match": False,
+        "honest": "closest",
+        "message": note,
+        "focus_id": focus_id,
+        "groups": _groups(results),
+        "fits": _public_fits(fits),
+    }
+
+
+def _only_known(query: str, products: list[dict[str, Any]]) -> bool:
+    brands: set[str] = set()
+    for row in products:
+        brands.update(_tokens(str(row.get("brand") or "")))
+    skipped = {_AMMO, _AMMUNITION, "compensator", "laser", "sling", "case", "bundle", "suppressor", "night", "cleaning", "kit", "kits"}
+    for token in _tokens(query):
+        if token in skipped or token in _MODIFIER_WORDS:
+            continue
+        if not _meaningful(token, brands):
+            continue
+        if token in {"a", "b", "c", "d"}:
+            continue
+        if any(_word_covered(token, row) for row in products):
+            continue
+        return False
+    return True
+
+
+def _default_sidearm(products: list[dict[str, Any]]) -> dict[str, Any] | None:
+    for row in products:
+        if str(row.get("category") or "") != _SIDEARM:
+            continue
+        name = set(_tokens(str(row.get("name") or "")))
+        if "b" in name and "ported" not in name:
+            return row
+    return next((row for row in products if str(row.get("category") or "") == _SIDEARM), None)
 
 
 def _honesty_gap(
@@ -890,10 +1208,10 @@ def _honesty_gap(
     filters: dict[str, Any],
     centre: dict[str, Any] | None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any] | None, str, str] | None:
-    """A result is closest when a real query word is not on any returned row.
+    """A result is closest when the query asks for something the rows do not cover.
 
-    Filler, the brand, the model, a colour, a price, and a bare number do not count.
-    An exact badge is only for a row that covers the query.
+    A shopper's own word is never pasted into "We don't sell a …". Only a
+    hand-written line for a product this shop does not stock can say that.
     """
     if not query or not chosen:
         return None
@@ -912,22 +1230,29 @@ def _honesty_gap(
     priced = _price_gap(query, chosen, products, filters)
     if priced is not None:
         return chosen, focus, "closest", priced
+    brand = _brand_note(query, focus)
+    if brand:
+        return chosen, focus, "closest", brand
+    unlinked = _unlinked_part(query, chosen, focus, products, fits)
+    if unlinked is not None:
+        return unlinked
     if honest != "exact":
         return None
     missing = _uncovered_words(query, chosen, products)
     if not missing:
         return None
-    word = missing[0]
-    if word == "night" and _mentions_sight(query):
+    kind = _unsold_kind(query)
+    if kind == "night":
         kept = [row for row in chosen if str(row.get("category") or "") != "Lights"]
         if not kept:
             kept = [row for row in products if str(row.get("category") or "") == "Sights"]
         host = _fitting_focus(query, kept, centre, fits)
-        return _order(kept, filters, host), host, "closest", "We don't sell night sights."
-    named = _named_sidearm(query, products)
-    tail = f" for the {_plain_name(named)}" if named is not None else ""
-    article = "an" if word[:1] in {"a", "e", "i", "o", "u"} else "a"
-    return chosen, focus, "closest", f"We don't sell {article} {word}{tail}."
+        return _order(kept, filters, host), host, "closest", _unsold_note("night", None)
+    if kind:
+        named = _named_sidearm(query, products)
+        return chosen, focus, "closest", _unsold_note(kind, named)
+    label = _plain_name(focus) if focus is not None else "these"
+    return chosen, focus, "closest", f"No exact match. Closest: {label}."
 
 
 def _round_gap(
@@ -939,7 +1264,7 @@ def _round_gap(
     if match is None:
         return None
     wanted = int(match.group(1))
-    host = _named_sidearm(query, products)
+    host = _named_sidearm(query, products) or _default_sidearm(products)
     if host is None:
         return None
     offered = _round_counts(host, products)
@@ -1052,9 +1377,11 @@ def _uncovered_words(query: str, chosen: list[dict[str, Any]], products: list[di
 def _meaningful(token: str, brands: set[str]) -> bool:
     if len(token) < 2 or token in _FILLER or token in _QUERY_GLUE or token in _PRICE_WORDS:
         return False
-    if token.isdigit():
+    if token.isdigit() or _THREAD_TOKEN.fullmatch(token):
         return False
     if token in _COLOUR_WORDS or token in {"fde", "black"}:
+        return False
+    if token in _MODIFIER_WORDS or token in _SPEC_WORDS:
         return False
     if token in brands or token in {"type", "archon"}:
         return False
@@ -1303,6 +1630,10 @@ def prepare_reservation(
             state = _cut_state(_sku(row), sidearm_row, fits, cut)
             if state is not None and not state.get("fits"):
                 return f"{row.get('name')} does not fit the {cut or 'chosen'} cut."
+            if state is not None and state.get("fits"):
+                continue
+            if not _approved_link(row, sidearm_row, fits) and _catalog_linked(row, fits):
+                return f"{row.get('name')} does not fit the {_plain_name(sidearm_row)}."
     return ""
 
 

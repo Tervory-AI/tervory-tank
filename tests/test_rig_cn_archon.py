@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import csv
 import json
+import re
 import smtplib
 import sys
 from decimal import Decimal
@@ -214,6 +215,36 @@ GOLDEN = [
     ("ported", "exact", ["ARCHON-TYPE-B-PORTED"], "ARCHON-TYPE-B-PORTED", True, ""),
     ("rmr mounting screw", "exact", ["ARCHON-RMR-SCREWS"], "ARCHON-RMR-SCREWS", True, ""),
     ("fde", "exact", PISTOLS, "ARCHON-TYPE-B", True, ""),
+    ("cheapest archon", "exact", [
+        "ARCHON-RMR-SCREWS",
+        "ARCHON-MAG-12",
+        "ARCHON-MAG-15",
+        "ARCHON-MAG-18",
+        "ARCHON-HOLSTER-TB",
+        "ARCHON-TB-135",
+        "ARCHON-TB-THREADED",
+        "ARCHON-TRIGGER-PERF",
+        "ARCHON-LIGHT",
+        "ARCHON-DOT-RMS",
+        "ARCHON-DOT-RMR",
+        "ARCHON-DOT-ACRO",
+        "ARCHON-TYPE-B",
+        "ARCHON-TYPE-A",
+        "ARCHON-TYPE-B-PORTED",
+    ], "ARCHON-TYPE-B", True, ""),
+    ("spare mags for archon", "exact", MAGS, "ARCHON-MAG-15", True, ""),
+    ("left handed holster", "closest", ["ARCHON-HOLSTER-TB"], "ARCHON-HOLSTER-TB", False, "No exact match. Closest: Type B holster."),
+    ("iwb holster type b", "closest", ["ARCHON-HOLSTER-TB"], "ARCHON-HOLSTER-TB", False, "No exact match. Closest: Type B holster."),
+    ("kydex holster", "closest", ["ARCHON-HOLSTER-TB"], "ARCHON-HOLSTER-TB", False, "No exact match. Closest: Type B holster."),
+    ("extended magazine type b", "exact", ["ARCHON-MAG-18"], "ARCHON-MAG-18", True, ""),
+    ("archon type b review", "closest", SPREAD, "ARCHON-TYPE-B", False, "No exact match. Closest: Type B."),
+    ("type b bundle", "closest", SPREAD, "ARCHON-TYPE-B", False, "We don't sell a bundle for the Type B."),
+    ("acro for ported", "exact", ["ARCHON-DOT-ACRO"], "ARCHON-DOT-ACRO", True, ""),
+    ("type b threaded barrel 1/2x28", "exact", ["ARCHON-TB-THREADED"], "ARCHON-TB-THREADED", True, ""),
+    ("trijicon rmr", "closest", ["ARCHON-DOT-RMR", "ARCHON-RMR-SCREWS"], "ARCHON-DOT-RMR", False, "We list an RMR-footprint dot, not a Trijicon."),
+    ("holster for type a", "closest", ["ARCHON-HOLSTER-TB"], "ARCHON-HOLSTER-TB", False, "We don't list a holster for the Type A. The Type B holster is for the Type B."),
+    ("type b gold barrel", "closest", PISTOLS, "ARCHON-TYPE-B", False, "Gold isn't a colour on the Archon Type B."),
+    ("magazine 20 rounds", "closest", ["ARCHON-MAG-12", "ARCHON-MAG-15", "ARCHON-MAG-18"], "ARCHON-MAG-18", False, "We have 12, 15 and 18 rounds for the Type B."),
 ]
 
 
@@ -285,6 +316,30 @@ async def test_archon_golden_queries(query, honest, ids, focus, exact, message) 
     elif focus:
         focused = next(item for item in body["results"] if item["id"] == focus)
         assert "Exact match" in focused["badges"]
+
+
+# Words the shop may name after "We don't sell a/an". Anything else was a pasted query token.
+CURATED_DENIALS = frozenset({
+    "compensator", "laser", "sling", "case", "suppressor", "bundle", "ammo", "cleaning",
+})
+_SELL = re.compile(r"we don't sell an?\s+([a-z0-9]+)", re.IGNORECASE)
+
+
+@pytest.mark.asyncio
+async def test_a_denial_never_pastes_a_typed_word() -> None:
+    service = await _archon()
+    queries = [case[0] for case in GOLDEN]
+    queries += [
+        "cheapest", "spare", "left", "iwb", "kydex", "extended", "review", "best", "gen",
+        "ported", "gold", "trijicon", "widget", "holster", "magazine",
+    ]
+    queries += [f"{word} archon" for word in ("cheapest", "spare", "left", "review", "best", "kydex")]
+    queries += ["ammo", "cleaning kit", "compensator", "type b widget", "1/2x28", "13.5x1"]
+    for query in queries:
+        body = await service.search(TENANT, query, 24)
+        message = str(body.get("message") or "")
+        for word in _SELL.findall(message):
+            assert word.lower() in CURATED_DENIALS, (query, message)
 
 
 @pytest.mark.asyncio
@@ -685,13 +740,42 @@ async def test_letter_uses_the_retailer_name_and_readable_choices(monkeypatch: p
                 "parts": [
                     {"product": {"id": "ARCHON-TYPE-A"}, "choice": "RMR"},
                     {"product": {"id": "ARCHON-DOT-RMR"}, "choice": ""},
-                    {"product": {"id": "ARCHON-MAG-15"}, "choice": ""},
                 ]
             },
             "contact": {"name": "Ada Buyer", "email": "ada@example.com"},
         },
     )
     assert quoted["request_id"]
+    for part_id in ("ARCHON-HOLSTER-TB", "ARCHON-TB-THREADED", "ARCHON-TB-135", "ARCHON-MAG-15"):
+        with pytest.raises(Exception) as unfit_part:
+            await service.quote(
+                TENANT,
+                {
+                    "setup": {
+                        "parts": [
+                            {"product": {"id": "ARCHON-TYPE-A"}, "choice": "RMR"},
+                            {"product": {"id": part_id}, "choice": ""},
+                        ]
+                    },
+                    "contact": {"name": "Ada Buyer", "email": "ada@example.com"},
+                },
+            )
+        assert unfit_part.value.status == 422  # type: ignore[attr-defined]
+        assert "does not fit" in str(unfit_part.value)
+    ported = await service.quote(
+        TENANT,
+        {
+            "setup": {
+                "parts": [
+                    {"product": {"id": "ARCHON-TYPE-B-PORTED"}, "choice": "RMR"},
+                    {"product": {"id": "ARCHON-TB-THREADED"}, "choice": ""},
+                    {"product": {"id": "ARCHON-HOLSTER-TB"}, "choice": ""},
+                ]
+            },
+            "contact": {"name": "Ada Buyer", "email": "ada@example.com"},
+        },
+    )
+    assert ported["request_id"]
 
 
 @pytest.mark.asyncio
