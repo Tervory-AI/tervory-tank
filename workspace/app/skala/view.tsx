@@ -262,16 +262,21 @@ function Pipelines({
       <div className="sk-grid">
         {destinations.map((agent) => (
           <article key={agent.squad} className="sk-card">
-            <h3>{agent.label}</h3>
-            <p className="sk-pipe" aria-label={`Pipeline to ${agent.label}`}>
-              <span>Library</span>
-              <i />
-              <span>{agent.label}</span>
-            </p>
-            <p className="sk-off">{note[agent.squad] || standing(agent)}</p>
-            <button type="button" className="sk-transfer" disabled={busy !== null} onClick={() => send(agent.squad)}>
-              {busy === agent.squad ? "Sending…" : "Transfer"}
-            </button>
+            <div className="sk-mark">
+              <img src={agent.logo} alt="" />
+            </div>
+            <div className="sk-card-body">
+              <h3>{agent.label}</h3>
+              <p className="sk-pipe" aria-label={`Pipeline to ${agent.label}`}>
+                <span>Library</span>
+                <i />
+                <span>{agent.label}</span>
+              </p>
+              <p className="sk-off">{note[agent.squad] || standing(agent)}</p>
+              <button type="button" className="sk-transfer" disabled={busy !== null} onClick={() => send(agent.squad)}>
+                {busy === agent.squad ? "Sending…" : "Transfer"}
+              </button>
+            </div>
           </article>
         ))}
       </div>

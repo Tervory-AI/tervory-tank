@@ -41,6 +41,22 @@ def test_page_matches_the_app_frame():
     pipes = (PAGE / "pipelines.ts").read_text(encoding="utf-8")
     for label in ("Base", "Tiger", "Market Lab", "Rig", "Tisan", "Radix", "Zenas", "Skala", "Tank"):
         assert label in pipes
+    for logo in (
+        "/brand/base-on-dark.png",
+        "/brand/tiger-on-dark.png",
+        "/brand/market-lab-on-dark.png",
+        "/brand/rig-on-dark.png",
+        "/brand/tisan-on-dark.png",
+        "/brand/radix-on-dark.png",
+        "/brand/zenas-on-dark.png",
+        "/brand/skala-on-dark.png",
+        "/brand/tank-on-dark.png",
+    ):
+        assert logo in pipes
+        assert (ROOT / "workspace" / "public" / logo.lstrip("/")).is_file()
+    assert "sk-mark" in view
+    assert "grid-auto-rows: 292px" in css
+    assert "height: 292px" in css
     assert "This vault is off. The transfer waits." in pipes
     assert "This pipeline waits." in pipes
     assert "TRANSFER_WAITS" in view

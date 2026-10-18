@@ -26,14 +26,14 @@ export async function loadPipelines(): Promise<PipelineDestination[]> {
   if (!tenant) return waitingPipelines();
   return Promise.all(AGENTS.map(async (agent) => {
     if (agent.holds || !agent.vault) {
-      return { squad: agent.squad, label: agent.label, enabled: false, waits: true };
+      return { squad: agent.squad, label: agent.label, logo: agent.logo, enabled: false, waits: true };
     }
     try {
       const raw = await vaultPlugins(agent.vault, agent.squad, tenant.tenantId, tenant.userId);
       const enabled = Boolean(raw.enabled);
-      return { squad: agent.squad, label: agent.label, enabled, waits: !enabled };
+      return { squad: agent.squad, label: agent.label, logo: agent.logo, enabled, waits: !enabled };
     } catch {
-      return { squad: agent.squad, label: agent.label, enabled: false, waits: true };
+      return { squad: agent.squad, label: agent.label, logo: agent.logo, enabled: false, waits: true };
     }
   }));
 }
