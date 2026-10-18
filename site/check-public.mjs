@@ -1,18 +1,41 @@
 import { existsSync, readFileSync } from "node:fs";
 
 const home = readFileSync("out/index.html", "utf8");
-const signup = readFileSync("out/sign-up.html", "utf8");
 const robots = readFileSync("out/robots.txt", "utf8");
 const sitemap = readFileSync("out/sitemap.xml", "utf8");
 
-const banned = ["AmmoSync", "LOKD", "Custom Nation", "Shot Bonus", "TNGO", "case-study", "/internal"];
+const banned = [
+  "AmmoSync",
+  "LOKD",
+  "Custom Nation",
+  "Shot Bonus",
+  "TNGO",
+  "case-study",
+  "/internal",
+  "app.tervory.com",
+  "Sign in",
+  "Sign up",
+  "/sign-up",
+  "Pricing",
+  "has launched",
+  "launch date",
+];
 for (const word of banned) {
-  if (home.includes(word) || signup.includes(word)) {
-    throw new Error(`Public page contains ${word}`);
-  }
+  if (home.includes(word)) throw new Error(`Homepage contains ${word}`);
 }
+const visible = home.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<!--[\s\S]*?-->/g, "");
+if (visible.includes("$")) throw new Error("Homepage contains a price");
+if (existsSync("out/sign-up.html")) throw new Error("Public sign-up page is still exported");
 
-for (const id of ['id="how"', 'id="tank"', 'id="squad"', 'id="ledger"', 'id="pricing"']) {
+if (!home.includes("Email me when we release.")) {
+  throw new Error("Homepage is missing the release field");
+}
+if (!home.includes('action="/api/release-notice"')) {
+  throw new Error("Release form does not post to the store");
+}
+if (!home.includes(">Send<")) throw new Error("Homepage is missing the send button");
+if (!home.includes("Nothing is open yet.")) throw new Error("Homepage does not say the work is still closed");
+for (const id of ['id="work"', 'id="products"']) {
   if (!home.includes(id)) throw new Error(`Homepage is missing ${id}`);
 }
 
@@ -20,37 +43,27 @@ const marks = [
   "/brand/base-on-light.png",
   "/brand/tiger-on-light.png",
   "/brand/market-lab-on-light.png",
-  "/brand/radix-on-light.png",
+  "/brand/rig-on-light.png",
   "/brand/tisan-on-light.png",
+  "/brand/radix-on-light.png",
   "/brand/zenas-on-light.png",
+  "/brand/skala-on-light.png",
+  "/brand/tank-on-light.png",
 ];
 for (const mark of marks) {
   if (!home.includes(mark)) throw new Error(`Homepage is missing ${mark}`);
-}
-if (home.includes('class="glyph"')) throw new Error("Homepage still has letter tiles");
-
-if (!home.includes("https://app.tervory.com/sign-up")) {
-  throw new Error("Homepage Start button does not open the app");
-}
-if (!home.includes('href="/sign-up"')) {
-  throw new Error("Homepage does not link to the public sign-up page");
-}
-if (!signup.includes("https://app.tervory.com/sign-up")) {
-  throw new Error("Sign-up page does not continue to the app");
-}
-if (!signup.includes("https://app.tervory.com/sign-in")) {
-  throw new Error("Sign-up page does not link to sign in");
+  if (!existsSync(`public${mark}`) && !existsSync(`out${mark}`)) {
+    throw new Error(`Missing logo file ${mark}`);
+  }
 }
 
 if (!robots.includes("Disallow: /internal/")) {
   throw new Error("robots.txt does not hide /internal/");
 }
-if (sitemap.includes("internal") || sitemap.includes("ammosync")) {
-  throw new Error("Sitemap lists a hidden page");
+if (sitemap.includes("internal") || sitemap.includes("sign-up") || sitemap.includes("ammosync")) {
+  throw new Error("Sitemap lists a page that is not the homepage");
 }
-if (!sitemap.includes("https://tervory.com/sign-up")) {
-  throw new Error("Sitemap is missing the sign-up page");
-}
+if (!sitemap.includes("https://tervory.com/")) throw new Error("Sitemap is missing the homepage");
 
 const hidden = [
   "out/internal/ammosync.html",

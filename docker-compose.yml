@@ -268,12 +268,15 @@ services:
       retries: 10
       start_period: 40s
 
-  # Public homepage and sign-up. Static files only: no secrets, no Tank, no Clerk.
+  # Public one-page site. No secrets, no Tank, no Clerk, no marketing tool.
+  # A release address is appended to /data/release-signups.jsonl on site_signups.
   # Coolify still has to attach https://tervory.com to this service on port 3000.
   # app.tervory.com stays on workspace. /internal is on this same service and is noindex.
   site:
     build: ./site
     restart: unless-stopped
+    volumes:
+      - site_signups:/data
     expose:
       - "3000"
     healthcheck:
@@ -288,6 +291,7 @@ volumes:
   redisdata:
   qdrantdata:
   tiger_data:
+  site_signups:
 
 # Created once on the server before this stack is deployed:
 #   docker network create tervory-gw-template

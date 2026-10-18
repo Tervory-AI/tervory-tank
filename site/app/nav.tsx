@@ -1,12 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { CLERK_SIGN_IN, CLERK_SIGN_UP } from "../lib/site";
 
 const links = [
-  { href: "/#how", label: "How it works" },
-  { href: "/#tank", label: "Tank" },
-  { href: "/#pricing", label: "Pricing" },
+  { href: "/#work", label: "The work" },
+  { href: "/#products", label: "Products" },
 ];
 
 export function SiteNav() {
@@ -15,38 +13,28 @@ export function SiteNav() {
   return (
     <header className="site-nav">
       <div className="nav-bar">
-        <div className="nav-left">
-          <a href="/">
-            <img className="logo" src="/brand/tervory-logo-display.png" width={186} height={34} alt="Tervory AI" />
-          </a>
-          <nav className="nav-links" aria-label="Page">
-            {links.map((link) => (
-              <a key={link.href} href={link.href}>
-                {link.label}
-              </a>
-            ))}
-          </nav>
-        </div>
-        <div className="nav-right">
-          <a className="btn btn-ghost wide-only" href={CLERK_SIGN_IN}>
-            Sign in
-          </a>
-          <a className="btn btn-ink" href={CLERK_SIGN_UP}>
-            Start
-          </a>
-          <button
-            className="menu-button"
-            type="button"
-            aria-expanded={open}
-            aria-controls="site-menu"
-            aria-label={open ? "Close menu" : "Open menu"}
-            onClick={() => setOpen((value) => !value)}
-          >
-            <span />
-            <span />
-            <span />
-          </button>
-        </div>
+        <a href="/">
+          <img className="logo" src="/brand/tervory-logo-display.png" width={186} height={34} alt="Tervory AI" />
+        </a>
+        <nav className="nav-links" aria-label="Page">
+          {links.map((link) => (
+            <a key={link.href} href={link.href}>
+              {link.label}
+            </a>
+          ))}
+        </nav>
+        <button
+          className="menu-button"
+          type="button"
+          aria-expanded={open}
+          aria-controls="site-menu"
+          aria-label={open ? "Close menu" : "Open menu"}
+          onClick={() => setOpen((value) => !value)}
+        >
+          <span />
+          <span />
+          <span />
+        </button>
       </div>
       {open ? (
         <nav id="site-menu" className="nav-panel" aria-label="Page">
@@ -55,12 +43,6 @@ export function SiteNav() {
               {link.label}
             </a>
           ))}
-          <a href="/sign-up" onClick={() => setOpen(false)}>
-            Sign up
-          </a>
-          <a href={CLERK_SIGN_IN} onClick={() => setOpen(false)}>
-            Sign in
-          </a>
         </nav>
       ) : null}
     </header>
