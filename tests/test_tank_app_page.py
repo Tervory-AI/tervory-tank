@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -50,9 +51,17 @@ def test_page_matches_the_panel_and_hides_keys():
     assert "Account name" in view
     assert "Plugins" in view
     assert "Ask Tank" in view
-    assert "Search ledger, tasks and data" in view
+    assert "Search agents, models, ledger and tasks" in view
     assert "Skills" not in view
-    assert "skala" not in text.lower()
+    assert "pipelineTo(" in view
+    assert "Pipeline to ${name}" in (PAGE / "squads.ts").read_text(encoding="utf-8")
+    assert "Key is missing" in view
+    assert 'from "./models"' not in view
+    squads = (PAGE / "squads.ts").read_text(encoding="utf-8")
+    for name in ("Base", "Tiger", "Market Lab", "Rig", "Tisan", "Radix", "Zenas", "Skala", "Tank"):
+        assert f'name: "{name}"' in squads
+    assert "squads.map" in view
+    assert "app/skala" not in text
     assert 'type="password"' not in text
     assert "sk-" not in text
     assert "market.vault" not in text
@@ -71,3 +80,22 @@ def test_page_matches_the_panel_and_hides_keys():
 
     nav = NAV.read_text(encoding="utf-8")
     assert '"/tank"' not in nav.split("OWN_SHELL", 1)[-1]
+
+    config = (ROOT / "litellm" / "config.yaml").read_text(encoding="utf-8")
+    roster: list[tuple[str, str]] = []
+    pending: str | None = None
+    for line in config.splitlines():
+        if line.lstrip().startswith("#"):
+            continue
+        named = re.search(r"model_name:\s*([a-z0-9-]+)", line)
+        if named:
+            pending = named.group(1)
+        keyed = re.search(r"os\.environ/([A-Z0-9_]+)", line)
+        if keyed and pending:
+            roster.append((pending, keyed.group(1)))
+            pending = None
+    models = (PAGE / "models.ts").read_text(encoding="utf-8")
+    listed = re.findall(r'name: "([a-z0-9-]+)", env: "([A-Z0-9_]+)"', models)
+    assert listed == roster
+    assert "fetch(" not in models
+    assert "process.env" not in (PAGE / "view.tsx").read_text(encoding="utf-8")

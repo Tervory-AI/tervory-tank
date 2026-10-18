@@ -2,6 +2,7 @@
 
 import { useId, useState, type FormEvent } from "react";
 import { searchTank, VAULT_LINE } from "./records";
+import { modelsMatching, pipelineTo, SQUAD_LINE, squadsMatching, type ModelRow } from "./squads";
 
 // Dashboard, Projects, Settings, and Support have no pages yet.
 // These point at the nearest existing workspace routes.
@@ -98,14 +99,17 @@ function AskTank() {
   );
 }
 
-export function TankView({ workspaceName }: { workspaceName: string | null }) {
+export function TankView({ workspaceName, models }: { workspaceName: string | null; models: ModelRow[] }) {
   const searchId = useId();
   const [menu, setMenu] = useState(false);
   const [query, setQuery] = useState("");
   const [plugins, setPlugins] = useState(false);
   const accountName = workspaceName?.trim() || "Account name";
   const hits = searchTank(query);
+  const squads = squadsMatching(query);
+  const shownModels = modelsMatching(query, models);
   const searching = query.trim().length > 0;
+  const noHits = searching && hits.length === 0 && squads.length === 0 && shownModels.length === 0;
 
   function closeMenu() {
     setMenu(false);
@@ -184,32 +188,54 @@ export function TankView({ workspaceName }: { workspaceName: string | null }) {
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search ledger, tasks and data"
+                placeholder="Search agents, models, ledger and tasks"
               />
             </div>
           </header>
-          {searching ? (
-            hits.length ? (
-              <ul className="tk-hits">
-                {hits.map((hit) => (
-                  <li key={hit.id}>
-                    {hit.href ? (
-                      <a href={hit.href}>{hit.title}</a>
-                    ) : (
-                      <span>{hit.title}</span>
-                    )}
-                    <p>{hit.detail}</p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="tk-none">Nothing in Tank matches that.</p>
-            )
+          {searching && hits.length ? (
+            <ul className="tk-hits">
+              {hits.map((hit) => (
+                <li key={hit.id}>
+                  {hit.href ? <a href={hit.href}>{hit.title}</a> : <span>{hit.title}</span>}
+                  <p>{hit.detail}</p>
+                </li>
+              ))}
+            </ul>
           ) : null}
+          {noHits ? <p className="tk-none">Nothing in Tank matches that.</p> : null}
           <AskTank />
           <p className={plugins ? "tk-vault on" : "tk-vault"} id="plugins">
             {VAULT_LINE}
           </p>
+          {squads.length ? (
+            <section className="tk-section" aria-label="Boxes">
+              <h2>Boxes</h2>
+              <div className="tk-boxes">
+                {squads.map((squad) => (
+                  <article className="tk-box" key={squad.id}>
+                    <h3>{squad.name}</h3>
+                    <p className="tk-pipe">{pipelineTo(squad.name)}</p>
+                    {squad.id === "tank" ? <p className="tk-pipe">tank.vault is on.</p> : null}
+                  </article>
+                ))}
+              </div>
+              <p className="tk-vault">{SQUAD_LINE}</p>
+            </section>
+          ) : null}
+          {shownModels.length ? (
+            <section className="tk-section" aria-label="Models">
+              <h2>Models</h2>
+              <p className="tk-lead">Names only. Nothing here is a key.</p>
+              <ul className="tk-models">
+                {shownModels.map((model) => (
+                  <li key={model.name}>
+                    <span className="tk-model-name">{model.name}</span>
+                    {model.keyMissing ? <span className="tk-missing">Key is missing</span> : null}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
         </div>
       </div>
     </div>

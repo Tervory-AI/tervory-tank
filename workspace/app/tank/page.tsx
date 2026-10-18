@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { activeTenant } from "@/lib/tenant";
+import { modelRows } from "./models";
 import { TankView } from "./view";
 import "./tank.css";
 
@@ -18,5 +19,5 @@ export default async function TankPage() {
   } catch {
     workspaceName = null;
   }
-  return <TankView workspaceName={workspaceName} />;
+  return <TankView workspaceName={workspaceName} models={modelRows(process.env)} />;
 }

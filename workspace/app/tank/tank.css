@@ -383,6 +383,87 @@ body:has(.tk) main {
   color: #001840;
 }
 
+.tk-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tk-section h2 {
+  font-size: 26px;
+}
+
+.tk-lead {
+  margin: -8px 0 0;
+  color: #6b7590;
+  font-size: 14px;
+}
+
+.tk-boxes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.tk-box {
+  background: #fff;
+  border: 1px solid #b8bfd0;
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tk-box h3 {
+  margin: 0;
+  font-family: var(--font-jost), Jost, sans-serif;
+  font-weight: 300;
+  font-size: 22px;
+  line-height: 1.2;
+  color: #001840;
+}
+
+.tk-pipe {
+  margin: 0;
+  color: #3d4a66;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.tk-models {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: #fff;
+  border: 1px solid #b8bfd0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.tk-models li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 20px;
+}
+
+.tk-models li + li {
+  border-top: 1px solid #b8bfd0;
+}
+
+.tk-model-name {
+  font-family: var(--font-mono), "JetBrains Mono", ui-monospace, monospace;
+  font-size: 14px;
+}
+
+.tk-missing {
+  color: #6b7590;
+  font-size: 13px;
+}
+
 @media (max-width: 1100px) {
   .tk-body {
     padding: 40px 32px 48px;
@@ -390,6 +471,10 @@ body:has(.tk) main {
 
   .tk-search {
     width: 320px;
+  }
+
+  .tk-boxes {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -482,5 +567,9 @@ body:has(.tk) main {
 
   .tk h1 {
     font-size: 36px;
+  }
+
+  .tk-boxes {
+    grid-template-columns: 1fr;
   }
 }
