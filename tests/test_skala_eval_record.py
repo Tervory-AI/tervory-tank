@@ -125,17 +125,16 @@ async def test_record_shows_the_real_goal_and_result_and_refuses_a_bare_pass_cou
 
 
 def test_page_lists_every_case_and_does_not_print_a_pass_count() -> None:
+    # The squad page replaced the old skills console. The case record still lives in record.ts.
+    record = (PAGE.parent / "record.ts").read_text(encoding="utf-8")
+    view = (PAGE.parent / "view.tsx").read_text(encoding="utf-8")
     page = PAGE.read_text(encoding="utf-8")
-    assert "caseRecord" in page
-    assert "Goal: {item.goal}" in page
-    assert "Result: {item.result}" in page
-    assert "shown.cases.map" in page
+    assert "caseRecord" in record
+    assert "splitPackages" in record
+    assert "<h1>Skala</h1>" in view
     assert "{r.passed}/{r.total} passed" not in page
-    assert "details.filter" not in page
-    assert "splitPackages" in page
-    assert ">Archive<" in page
-    assert "/api/skala" in page
-    assert "<h1>Skala</h1>" in page
+    assert "{r.passed}/{r.total} passed" not in view
+    assert "approve" not in view.lower()
     for face in ("Jost", "Inter", "JetBrains", "next/font"):
         assert face not in page
     assert not (PAGE.parent / "layout.tsx").exists()
