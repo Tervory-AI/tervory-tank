@@ -1,13 +1,20 @@
 """Plugins vaults. Tank is the only door.
 
-Nine vaults: lab.vault, tisan.vault, tiger.vault, base.vault, rig.vault,
-zenas.vault, tervory.vault, radix.vault, and tank.vault. Squad pages and
-squad agents call these routes. They do not open the database themselves.
+Eleven vaults: lab.vault, tisan.vault, tiger.vault, base.vault, rig.vault,
+zenas.vault, tervory.vault, radix.vault, skala.vault, library.vault, and
+tank.vault. Squad pages and squad agents call these routes. They do not
+open the database themselves.
 
 tank.vault holds platform secrets Tank uses on a squad's behalf (a model
 key such as Perplexity). It is always on. No squad route can read it.
-The other eight are off until a founder turns one on. While a vault is off,
-reads return an empty Plugins list and writes are refused, so nothing in it
+skala.vault is Skala's own Plugins vault, the same as the other squad vaults.
+library.vault is a separate skills library. It is not skala.vault. Approved
+skills live there. Another squad may link to one and transfer a copy into
+its own vault. It cannot rewrite the library, read another squad's vault,
+or read tank.vault. While library.vault is off, nothing links and nothing
+transfers.
+The other vaults are off until a founder turns one on. While a vault is off,
+reads return an empty list and writes are refused, so nothing in it
 reaches an agent or a feed.
 
 Secrets are AES-256-GCM with VAULT_MASTER_KEY. A list returns the name, what
@@ -58,10 +65,17 @@ SQUAD_VAULTS: dict[str, str] = {
     "zenas": "zenas.vault",
     "tervory": "tervory.vault",
     "radix": "radix.vault",
+    "skala": "skala.vault",
 }
 TANK_VAULT = "tank.vault"
+# Skills library. Not a squad Plugins vault, and not skala.vault.
+LIBRARY_VAULT = "library.vault"
+LIBRARY_OWNER = "skala"
 VAULT_SQUAD = {vault_id: squad for squad, vault_id in SQUAD_VAULTS.items()}
-ALL_VAULTS = tuple(SQUAD_VAULTS.values()) + (TANK_VAULT,)
+ALL_VAULTS = tuple(SQUAD_VAULTS.values()) + (LIBRARY_VAULT, TANK_VAULT)
+
+_SKILL_ID = re.compile(r"^[a-z][a-z0-9._-]{0,80}$")
+_SKILL_VERSION = re.compile(r"^[0-9A-Za-z][0-9A-Za-z._-]{0,40}$")
 
 _NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._:@-]{0,79}$")
 _SECRET_QUERY = re.compile(r"(?i)(api_key|apikey|access_token|token|key)=")
@@ -336,6 +350,11 @@ class VaultStore(Protocol):
     async def delete_connection(self, tenant_id: str, vault_id: str, connection_id: str) -> bool: ...
     async def add_audit(self, row: dict[str, Any]) -> None: ...
     async def list_audit(self, vault_id: str, limit: int) -> list[dict[str, Any]]: ...
+    async def upsert_library_skill(self, row: dict[str, Any]) -> None: ...
+    async def get_library_skill(self, tenant_id: str, skill_id: str, version: str) -> dict[str, Any] | None: ...
+    async def list_library_skills(self, tenant_id: str) -> list[dict[str, Any]]: ...
+    async def add_library_link(self, row: dict[str, Any]) -> None: ...
+    async def list_library_links(self, tenant_id: str, squad: str) -> list[dict[str, Any]]: ...
 
 
 class MemoryVaultStore:
@@ -348,6 +367,8 @@ class MemoryVaultStore:
         self.links: dict[str, dict[str, Any]] = {}
         self.connections: dict[str, dict[str, Any]] = {}
         self.audit: list[dict[str, Any]] = []
+        self.library_skills: dict[tuple[str, str, str], dict[str, Any]] = {}
+        self.library_links: dict[str, dict[str, Any]] = {}
 
     async def get_switch(self, vault_id: str) -> bool | None:
         if vault_id not in self.switches:
@@ -436,6 +457,48 @@ class MemoryVaultStore:
     async def list_audit(self, vault_id: str, limit: int) -> list[dict[str, Any]]:
         rows = [row for row in self.audit if row["vault_id"] == vault_id]
         return list(reversed(rows[-limit:]))
+
+    async def upsert_library_skill(self, row: dict[str, Any]) -> None:
+        self.library_skills[(row["tenant_id"], row["skill_id"], row["version"])] = row
+
+    async def get_library_skill(self, tenant_id: str, skill_id: str, version: str) -> dict[str, Any] | None:
+        row = self.library_skills.get((tenant_id, skill_id, version))
+        return None if row is None else dict(row)
+
+    async def list_library_skills(self, tenant_id: str) -> list[dict[str, Any]]:
+        rows = [row for (tenant, _skill, _version), row in self.library_skills.items() if tenant == tenant_id]
+        return [_public_library_skill(row) for row in sorted(rows, key=lambda item: (item["skill_id"], item["version"]))]
+
+    async def add_library_link(self, row: dict[str, Any]) -> None:
+        self.library_links[row["id"]] = row
+
+    async def list_library_links(self, tenant_id: str, squad: str) -> list[dict[str, Any]]:
+        rows = [
+            row for row in self.library_links.values()
+            if row["tenant_id"] == tenant_id and row["squad"] == squad
+        ]
+        return [_public_library_link(row) for row in sorted(rows, key=lambda item: item["created_at"], reverse=True)]
+
+
+def _public_library_skill(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "skill_id": row["skill_id"],
+        "version": row["version"],
+        "agent": row["agent"],
+        "description": row["description"],
+        "published_at": row["published_at"],
+    }
+
+
+def _public_library_link(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": row["id"],
+        "squad": row["squad"],
+        "vault": row["vault_id"],
+        "skill_id": row["skill_id"],
+        "version": row["version"],
+        "created_at": row["created_at"],
+    }
 
 
 def _public_file(row: dict[str, Any]) -> dict[str, Any]:
@@ -791,6 +854,105 @@ class PostgresVaultStore:
             for row in rows
         ]
 
+    async def upsert_library_skill(self, row: dict[str, Any]) -> None:
+        async with self._pool().acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO tank.library_skill
+                    (tenant_id, skill_id, version, agent, description, published_by, published_at)
+                VALUES ($1::uuid, $2, $3, $4, $5, $6, $7)
+                ON CONFLICT (tenant_id, skill_id, version) DO UPDATE
+                SET agent = EXCLUDED.agent, description = EXCLUDED.description,
+                    published_by = EXCLUDED.published_by, published_at = EXCLUDED.published_at
+                """,
+                row["tenant_id"],
+                row["skill_id"],
+                row["version"],
+                row["agent"],
+                row["description"],
+                row["published_by"],
+                row["published_at"],
+            )
+
+    async def get_library_skill(self, tenant_id: str, skill_id: str, version: str) -> dict[str, Any] | None:
+        async with self._pool().acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT skill_id, version, agent, description, published_at
+                FROM tank.library_skill
+                WHERE tenant_id = $1::uuid AND skill_id = $2 AND version = $3
+                """,
+                tenant_id,
+                skill_id,
+                version,
+            )
+        if row is None:
+            return None
+        return {
+            "skill_id": row["skill_id"],
+            "version": row["version"],
+            "agent": row["agent"],
+            "description": row["description"],
+            "published_at": row["published_at"],
+        }
+
+    async def list_library_skills(self, tenant_id: str) -> list[dict[str, Any]]:
+        async with self._pool().acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT skill_id, version, agent, description, published_at
+                FROM tank.library_skill
+                WHERE tenant_id = $1::uuid
+                ORDER BY skill_id, version
+                """,
+                tenant_id,
+            )
+        return [_public_library_skill(dict(row)) for row in rows]
+
+    async def add_library_link(self, row: dict[str, Any]) -> None:
+        async with self._pool().acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO tank.library_link
+                    (id, tenant_id, squad, vault_id, skill_id, version, created_by, created_at)
+                VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8)
+                """,
+                row["id"],
+                row["tenant_id"],
+                row["squad"],
+                row["vault_id"],
+                row["skill_id"],
+                row["version"],
+                row["created_by"],
+                row["created_at"],
+            )
+
+    async def list_library_links(self, tenant_id: str, squad: str) -> list[dict[str, Any]]:
+        async with self._pool().acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT id, squad, vault_id, skill_id, version, created_at
+                FROM tank.library_link
+                WHERE tenant_id = $1::uuid AND squad = $2
+                ORDER BY created_at DESC
+                """,
+                tenant_id,
+                squad,
+            )
+        return [
+            _public_library_link(
+                {
+                    "id": str(row["id"]),
+                    "squad": row["squad"],
+                    "vault_id": row["vault_id"],
+                    "skill_id": row["skill_id"],
+                    "version": row["version"],
+                    "created_at": row["created_at"],
+                }
+            )
+            for row in rows
+        ]
+
 
 def _connection_from_row(row: Any) -> dict[str, Any]:
     return {
@@ -812,7 +974,7 @@ class VaultService:
     async def is_on(self, vault_id: str) -> bool:
         if vault_id == TANK_VAULT:
             return True
-        if vault_id not in VAULT_SQUAD:
+        if vault_id not in VAULT_SQUAD and vault_id != LIBRARY_VAULT:
             raise VaultError(404, "Unknown vault.")
         stored = await self.store.get_switch(vault_id)
         return bool(stored)
@@ -824,7 +986,9 @@ class VaultService:
             if actor.kind == "tank":
                 return
             raise VaultError(403, "tank.vault is not open to squads.")
-        expected = VAULT_SQUAD[vault_id]
+        # library.vault's Plugins routes belong to Skala. Other squads use
+        # link and transfer, which never open this vault's secrets.
+        expected = LIBRARY_OWNER if vault_id == LIBRARY_VAULT else VAULT_SQUAD[vault_id]
         if actor.kind == "agent":
             if actor.squad != expected:
                 raise VaultError(403, "This squad cannot read that vault.")
@@ -1037,6 +1201,139 @@ class VaultService:
             await self._audit(tenant_id, vault_id, actor.id, "remove", "secret", token_name, "")
         await self._audit(tenant_id, vault_id, actor.id, "remove", "mcp", row["name"], "")
         return {"ok": True}
+
+    def _known_squad(self, actor: Actor) -> str:
+        if actor.kind not in {"user", "agent"} or not actor.squad or actor.squad not in SQUAD_VAULTS:
+            raise VaultError(403, "This squad cannot read that vault.")
+        if actor.kind == "user" and not actor.id:
+            raise VaultError(403, "This squad cannot read that vault.")
+        return actor.squad
+
+    def _own_vault(self, squad: str) -> str:
+        vault_id = SQUAD_VAULTS.get(squad)
+        if not vault_id or vault_id in {TANK_VAULT, LIBRARY_VAULT} or VAULT_SQUAD.get(vault_id) != squad:
+            raise VaultError(403, "This squad cannot read that vault.")
+        return vault_id
+
+    def _skill_ref(self, skill_id: str, version: str) -> tuple[str, str]:
+        skill = skill_id.strip()
+        ver = version.strip()
+        if not _SKILL_ID.match(skill) or not _SKILL_VERSION.match(ver):
+            raise VaultError(400, "That skill is not in the library.")
+        return skill, ver
+
+    async def publish_library_skill(
+        self,
+        actor: Actor,
+        skill_id: str,
+        version: str,
+        agent: str,
+        description: str,
+        state: str,
+    ) -> dict[str, Any]:
+        """Skala puts an approved skill in the library. Other squads cannot rewrite it."""
+        if actor.kind != "user" or actor.squad != LIBRARY_OWNER or not actor.id:
+            raise VaultError(403, "This squad cannot rewrite the library.")
+        await self._require_on(LIBRARY_VAULT)
+        if state != "approved":
+            raise VaultError(400, "Only an approved skill can live in the library.")
+        skill, ver = self._skill_ref(skill_id, version)
+        agent_name = " ".join(str(agent).split())[:80]
+        if not agent_name:
+            raise VaultError(400, "Say which agent the skill belongs to.")
+        text = " ".join(str(description).split())[:500]
+        row = {
+            "tenant_id": PLATFORM_TENANT,
+            "skill_id": skill,
+            "version": ver,
+            "agent": agent_name,
+            "description": text,
+            "published_by": actor.id,
+            "published_at": _now(),
+        }
+        await self.store.upsert_library_skill(row)
+        await self._audit(PLATFORM_TENANT, LIBRARY_VAULT, actor.id, "add", "skill", f"{skill}@{ver}", agent_name)
+        return _dates(_public_library_skill(row))
+
+    async def library(self, actor: Actor, tenant_id: str) -> dict[str, Any]:
+        squad = self._known_squad(actor)
+        tenant_id = _tenant(tenant_id)
+        if not await self.is_on(LIBRARY_VAULT):
+            return {
+                "vault": LIBRARY_VAULT,
+                "enabled": False,
+                "message": OFF_MESSAGE,
+                "skills": [],
+                "links": [],
+            }
+        skills = await self.store.list_library_skills(PLATFORM_TENANT)
+        links = await self.store.list_library_links(tenant_id, squad)
+        return {
+            "vault": LIBRARY_VAULT,
+            "enabled": True,
+            "message": None,
+            "skills": [_dates(row) for row in skills],
+            "links": [_dates(row) for row in links],
+        }
+
+    async def link_library_skill(self, actor: Actor, tenant_id: str, skill_id: str, version: str) -> dict[str, Any]:
+        """Point the caller's own vault at a library skill. Does not change the library."""
+        squad = self._known_squad(actor)
+        await self._require_on(LIBRARY_VAULT)
+        tenant_id = _tenant(tenant_id)
+        skill, ver = self._skill_ref(skill_id, version)
+        own = self._own_vault(squad)
+        held = await self.store.get_library_skill(PLATFORM_TENANT, skill, ver)
+        if held is None:
+            raise VaultError(404, "That skill is not in the library.")
+        before = dict(held)
+        row = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "squad": squad,
+            "vault_id": own,
+            "skill_id": skill,
+            "version": ver,
+            "created_by": actor.id,
+            "created_at": _now(),
+        }
+        await self.store.add_library_link(row)
+        after = await self.store.get_library_skill(PLATFORM_TENANT, skill, ver)
+        if after is None or after.get("description") != before.get("description") or after.get("agent") != before.get("agent"):
+            raise VaultError(403, "This squad cannot rewrite the library.")
+        await self._audit(tenant_id, LIBRARY_VAULT, actor.id, "link", "skill", f"{skill}@{ver}", squad)
+        return _dates(_public_library_link(row))
+
+    async def transfer_library_skill(self, actor: Actor, tenant_id: str, skill_id: str, version: str) -> dict[str, Any]:
+        """Copy an approved library skill into the caller's own vault. Nowhere else."""
+        squad = self._known_squad(actor)
+        await self._require_on(LIBRARY_VAULT)
+        tenant_id = _tenant(tenant_id)
+        skill, ver = self._skill_ref(skill_id, version)
+        own = self._own_vault(squad)
+        if not await self.is_on(own):
+            raise VaultOff()
+        held = await self.store.get_library_skill(PLATFORM_TENANT, skill, ver)
+        if held is None:
+            raise VaultError(404, "That skill is not in the library.")
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(["skill_id", "version", "agent", "description"])
+        writer.writerow([held["skill_id"], held["version"], held["agent"], held["description"]])
+        content = buf.getvalue().encode()
+        meta = inspect_upload(f"{skill}-{ver}.csv", content)
+        file_row = {
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "vault_id": own,
+            "uploaded_at": _now(),
+            "uploaded_by": actor.id,
+            "content": content,
+            **meta,
+        }
+        await self.store.add_file(file_row)
+        await self._audit(tenant_id, own, actor.id, "transfer", "skill", f"{skill}@{ver}", LIBRARY_VAULT)
+        return {"ok": True, "vault": own, "file": _dates(_public_file(file_row))}
 
     async def set_switch(self, actor: Actor, vault_id: str, enabled: bool) -> dict[str, Any]:
         if actor.kind != "admin" or not actor.id:
@@ -1386,6 +1683,52 @@ async def post_connection(vault_id: str, request: Request) -> dict[str, Any]:
 async def delete_connection(vault_id: str, connection_id: str, request: Request) -> dict[str, Any]:
     try:
         return await current_service().remove_connection(_actor(request), vault_id, _tenant_of(request), connection_id)
+    except VaultError as exc:
+        raise _http(exc) from None
+
+
+@router.get("/v1/vaults/library.vault/skills")
+async def list_library_skills(request: Request) -> dict[str, Any]:
+    try:
+        return await current_service().library(_actor(request), _tenant_of(request))
+    except VaultError as exc:
+        raise _http(exc) from None
+
+
+@router.post("/v1/vaults/library.vault/skills")
+async def post_library_skill(request: Request) -> dict[str, Any]:
+    body = await _json(request)
+    try:
+        return await current_service().publish_library_skill(
+            _actor(request),
+            str(body.get("skill_id") or ""),
+            str(body.get("version") or ""),
+            str(body.get("agent") or ""),
+            str(body.get("description") or ""),
+            str(body.get("state") or ""),
+        )
+    except VaultError as exc:
+        raise _http(exc) from None
+
+
+@router.post("/v1/vaults/library.vault/skills/{skill_id}/{version}/link")
+async def post_library_link(skill_id: str, version: str, request: Request) -> dict[str, Any]:
+    body = await _json(request)
+    try:
+        return await current_service().link_library_skill(
+            _actor(request), _tenant_of(request, body), skill_id, version
+        )
+    except VaultError as exc:
+        raise _http(exc) from None
+
+
+@router.post("/v1/vaults/library.vault/skills/{skill_id}/{version}/transfer")
+async def post_library_transfer(skill_id: str, version: str, request: Request) -> dict[str, Any]:
+    body = await _json(request)
+    try:
+        return await current_service().transfer_library_skill(
+            _actor(request), _tenant_of(request, body), skill_id, version
+        )
     except VaultError as exc:
         raise _http(exc) from None
 

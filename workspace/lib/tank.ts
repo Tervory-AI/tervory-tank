@@ -507,3 +507,66 @@ export function removeVaultConnection(
     { method: "DELETE" },
   );
 }
+
+// Skills library. library.vault is not skala.vault. Server-side only.
+// A squad may list, link, or transfer. It cannot rewrite the library from here.
+
+export type LibrarySkill = {
+  skill_id: string;
+  version: string;
+  agent: string;
+  description: string;
+  published_at: string | null;
+};
+
+export type LibraryLink = {
+  id: string;
+  squad: string;
+  vault: string;
+  skill_id: string;
+  version: string;
+  created_at: string | null;
+};
+
+export type LibraryView = {
+  vault: string;
+  enabled: boolean;
+  message: string | null;
+  skills: LibrarySkill[];
+  links: LibraryLink[];
+};
+
+export function librarySkills(squad: string, tenantId: string, userId: string): Promise<LibraryView> {
+  const q = new URLSearchParams({ tenant_id: tenantId });
+  return vaultJson<LibraryView>(`/v1/vaults/library.vault/skills?${q}`, userId, squad, { method: "GET" });
+}
+
+export function linkLibrarySkill(
+  squad: string,
+  tenantId: string,
+  userId: string,
+  skillId: string,
+  version: string,
+): Promise<{ id: string; vault: string }> {
+  return vaultJson(
+    `/v1/vaults/library.vault/skills/${encodeURIComponent(skillId)}/${encodeURIComponent(version)}/link`,
+    userId,
+    squad,
+    { method: "POST", body: JSON.stringify({ tenant_id: tenantId }) },
+  );
+}
+
+export function transferLibrarySkill(
+  squad: string,
+  tenantId: string,
+  userId: string,
+  skillId: string,
+  version: string,
+): Promise<{ ok: boolean; vault: string }> {
+  return vaultJson(
+    `/v1/vaults/library.vault/skills/${encodeURIComponent(skillId)}/${encodeURIComponent(version)}/transfer`,
+    userId,
+    squad,
+    { method: "POST", body: JSON.stringify({ tenant_id: tenantId }) },
+  );
+}

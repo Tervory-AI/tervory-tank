@@ -763,3 +763,30 @@ CREATE TABLE IF NOT EXISTS tank.vault_audit (
     detail      text NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS vault_audit_vault ON tank.vault_audit (vault_id, ts DESC);
+
+-- Skills library. library.vault stays off until a founder turns it on.
+-- Approved skills live here, under the platform tenant. A squad may link
+-- one, or transfer a copy into its own vault. No seed row turns it on.
+-- This table is not skala.vault.
+CREATE TABLE IF NOT EXISTS tank.library_skill (
+    tenant_id     uuid NOT NULL,
+    skill_id      text NOT NULL,
+    version       text NOT NULL,
+    agent         text NOT NULL,
+    description   text NOT NULL DEFAULT '',
+    published_by  text NOT NULL,
+    published_at  timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, skill_id, version)
+);
+
+CREATE TABLE IF NOT EXISTS tank.library_link (
+    id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id    uuid NOT NULL,
+    squad        text NOT NULL,
+    vault_id     text NOT NULL,
+    skill_id     text NOT NULL,
+    version      text NOT NULL,
+    created_by   text NOT NULL,
+    created_at   timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS library_link_tenant ON tank.library_link (tenant_id, squad, created_at DESC);

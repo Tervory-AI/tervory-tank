@@ -469,3 +469,89 @@ def test_http_routes_hide_secrets_and_enforce_the_switch(monkeypatch: pytest.Mon
     assert hidden.json()["files"] == []
     assert "FRED_API_KEY" not in hidden.text
     assert "prices.csv" not in hidden.text
+
+
+def test_skala_vault_and_library_stay_off_until_a_founder_switches_them():
+    service = _service()
+
+    async def check() -> None:
+        assert vault.SQUAD_VAULTS["skala"] == "skala.vault"
+        assert vault.LIBRARY_VAULT == "library.vault"
+        assert vault.LIBRARY_VAULT not in vault.SQUAD_VAULTS.values()
+        assert await service.is_on("skala.vault") is False
+        assert await service.is_on("library.vault") is False
+
+        with pytest.raises(vault.VaultError) as tank_denied:
+            await service.plugins(_user("skala"), vault.TANK_VAULT, TENANT_A)
+        assert "tank.vault" in tank_denied.value.message
+        with pytest.raises(vault.VaultError) as resolved:
+            await service.resolve(_agent("skala"), vault.TANK_VAULT, PLATFORM_TENANT, "PERPLEXITY_API_KEY")
+        assert "tank.vault" in resolved.value.message
+
+        quiet = await service.library(_user("tiger"), TENANT_A)
+        assert quiet["enabled"] is False
+        assert quiet["skills"] == []
+        assert quiet["links"] == []
+        with pytest.raises(vault.VaultOff):
+            await service.link_library_skill(_user("tiger"), TENANT_A, "base.find_site", "1.0.0")
+        with pytest.raises(vault.VaultOff):
+            await service.transfer_library_skill(_agent("tiger"), TENANT_A, "base.find_site", "1.0.0")
+
+        await service.set_switch(_admin(), "library.vault", True)
+        with pytest.raises(vault.VaultError) as rewrite:
+            await service.publish_library_skill(_user("tiger"), "base.find_site", "1.0.0", "base", "Find a site", "approved")
+        assert "rewrite" in rewrite.value.message
+        with pytest.raises(vault.VaultError):
+            await service.publish_library_skill(_user("skala"), "base.find_site", "1.0.0", "base", "Find a site", "staging")
+        await service.publish_library_skill(_user("skala"), "base.find_site", "1.0.0", "base", "Find a site", "approved")
+
+        await service.set_switch(_admin(), "skala.vault", True)
+        await service.save_secret(_user("skala"), "skala.vault", TENANT_A, "SKALA_KEY", "Skala", SECRET)
+        with pytest.raises(vault.VaultError):
+            await service.plugins(_user("tiger"), "skala.vault", TENANT_A)
+        with pytest.raises(vault.VaultError):
+            await service.resolve(_agent("tiger"), "skala.vault", TENANT_A, "SKALA_KEY")
+        with pytest.raises(vault.VaultError):
+            await service.plugins(_agent("tiger"), "lab.vault", TENANT_A)
+        with pytest.raises(vault.VaultError):
+            await service.resolve(_agent("tiger"), vault.TANK_VAULT, PLATFORM_TENANT, "PERPLEXITY_API_KEY")
+
+        before = await service.library(_user("skala"), TENANT_A)
+        link = await service.link_library_skill(_user("tiger"), TENANT_A, "base.find_site", "1.0.0")
+        assert link["vault"] == "tiger.vault"
+        after = await service.library(_user("skala"), TENANT_A)
+        assert after["skills"] == before["skills"]
+        assert await service.library(_user("base"), TENANT_B)
+        base_view = await service.library(_user("base"), TENANT_B)
+        assert base_view["links"] == []
+        tiger_view = await service.library(_user("tiger"), TENANT_A)
+        assert len(tiger_view["links"]) == 1
+
+        with pytest.raises(vault.VaultOff):
+            await service.transfer_library_skill(_user("tiger"), TENANT_A, "base.find_site", "1.0.0")
+        await service.set_switch(_admin(), "tiger.vault", True)
+        moved = await service.transfer_library_skill(_agent("tiger"), TENANT_A, "base.find_site", "1.0.0")
+        assert moved["vault"] == "tiger.vault"
+        tiger_files = await service.plugins(_user("tiger"), "tiger.vault", TENANT_A)
+        assert any("base.find_site" in row["name"] for row in tiger_files["files"])
+        skala_files = await service.plugins(_user("skala"), "skala.vault", TENANT_A)
+        assert all("find_site" not in row["name"] for row in skala_files["files"])
+        copied = [row for row in service.store.files.values() if row["vault_id"] == "tiger.vault"]
+        assert copied and SECRET.encode() not in copied[0]["content"]
+        assert all(row["vault_id"] != vault.TANK_VAULT for row in service.store.files.values())
+        assert all(row["vault_id"] != vault.LIBRARY_VAULT for row in service.store.files.values())
+
+        await service.set_switch(_admin(), "library.vault", False)
+        with pytest.raises(vault.VaultOff):
+            await service.link_library_skill(_user("base"), TENANT_A, "base.find_site", "1.0.0")
+        hidden = await service.library(_user("tiger"), TENANT_A)
+        assert hidden["skills"] == []
+        assert hidden["links"] == []
+
+    _run(check())
+    schema = (ROOT / "tank" / "schema.sql").read_text(encoding="utf-8")
+    main = (ROOT / "tank" / "main.py").read_text(encoding="utf-8")
+    assert "CREATE TABLE IF NOT EXISTS tank.library_skill" in schema
+    assert "INSERT INTO tank.vault_switch" not in schema
+    assert "library.vault" not in main
+    assert "apply_lab_dev_fixture(" not in main
