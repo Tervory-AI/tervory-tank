@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import csv
+import hashlib
 import json
 import re
 import smtplib
@@ -1109,3 +1110,77 @@ async def test_a_short_choice_is_not_a_longer_option(monkeypatch: pytest.MonkeyP
         )
     assert caught.value.status == 422  # type: ignore[attr-defined]
     assert "Bla" in str(caught.value)
+
+
+# The contact sheets and the grey plate that used to ship in the build strip.
+_BAD_STILLS = {
+    "229f30ac04a7fd0cf7a1c9812cf7dd2fc265645bb5d6cd45108503b382811dfb",
+    "64639d53ca265c7483a15bd8a633e233bbe194938ee7433e1595dc21bac1aed6",
+    "28090a0eb6e86e05620fa7f96c45521c384489fad9def312f9f716736240f737",
+    "30647196a4c8d6a1bdf3867b75ef55c6a8942cd52aa7e286509af99f8b01e832",
+    "786888e69023de7471e7a2b4fb86731de3a0ca9ecb772a0c3570602f4ee1ffaf",
+}
+
+
+def _strip_and_gallery(script: str) -> list[str]:
+    names: list[str] = []
+    for marker in ("const stills = [", "const steps = ["):
+        chunk = script.split(marker, 1)[1].split("];", 1)[0]
+        names.extend(re.findall(r"/page/cn/media/([A-Za-z0-9._-]+\.jpg)", chunk))
+    ordered: list[str] = []
+    for name in names:
+        if name not in ordered:
+            ordered.append(name)
+    return ordered
+
+
+def _near_white(pixel: tuple[int, int, int]) -> bool:
+    return min(pixel) >= 230
+
+
+def _flat_grey(corners: list[tuple[int, int, int]]) -> bool:
+    def chroma(pixel: tuple[int, int, int]) -> int:
+        return max(pixel) - min(pixel)
+
+    def luma(pixel: tuple[int, int, int]) -> float:
+        return (pixel[0] + pixel[1] + pixel[2]) / 3
+
+    if any(chroma(pixel) > 12 for pixel in corners):
+        return False
+    if any(not 80 <= luma(pixel) <= 200 for pixel in corners):
+        return False
+    return True
+
+
+def test_build_stills_have_no_grey_border_and_are_not_contact_sheets() -> None:
+    from PIL import Image
+
+    script = (PAGE / "cn.js").read_text(encoding="utf-8")
+    names = _strip_and_gallery(script)
+    assert names == [
+        "type-b-render.jpg",
+        "type-b-photo.jpg",
+        "grip.jpg",
+        "trigger.jpg",
+        "frame-a.jpg",
+        "frame-c.jpg",
+        "still-s2.jpg",
+        "still-up.jpg",
+    ]
+    assert "Base pistol, flush barrel" in script
+    assert "Threaded barrel, suppressor ready" in script
+    media = PAGE / "media"
+    for name in names:
+        path = media / name
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        assert digest not in _BAD_STILLS, name
+        image = Image.open(path).convert("RGB")
+        width, height = image.size
+        corners = [
+            image.getpixel((0, 0)),
+            image.getpixel((width - 1, 0)),
+            image.getpixel((0, height - 1)),
+            image.getpixel((width - 1, height - 1)),
+        ]
+        assert not any(_near_white(pixel) for pixel in corners), (name, corners)
+        assert not _flat_grey(corners), (name, corners)

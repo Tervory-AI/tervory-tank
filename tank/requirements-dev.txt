@@ -1,5 +1,7 @@
 pytest==8.3.5
 pytest-asyncio==0.25.3
+# The Archon still test samples JPEG corners. Not used at runtime.
+pillow==13.0.0
 ruff==0.11.12
 # Zenas seal tests import AES-GCM. The running box installs this from
 # agents/zenas/Dockerfile. Tank's image does not.
