@@ -1,0 +1,12 @@
+This is the place for Tiger's 100-page gold set.
+
+A person adds real product pages here after checking each price.
+Do not invent prices. Do not fetch a live store into this folder.
+
+Add expected.jsonl when the pages are ready. One JSON object per line:
+
+{"file": "shop-001.html", "price": "12.34"}
+
+The HTML file sits in this folder. The price is the exact amount a person
+read on that page. The harness scores those rows and no others. Until
+expected.jsonl exists, the 100-page set is not part of the pass.
