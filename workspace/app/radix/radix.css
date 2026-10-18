@@ -18,6 +18,7 @@ body:has(.rx) main { width:100%; max-width:none; height:100dvh; margin:0; paddin
 .rx .rx-primary:hover { background:#C90007; text-decoration:none; }
 .rx-panel { position:fixed; inset:0 auto 0 0; width:240px; height:100dvh; padding:24px; background:var(--rx-navy); color:#fff; display:flex; flex-direction:column; gap:16px; z-index:10; }
 .rx-logo { width:186px; height:34px; display:block; object-fit:contain; }
+.rx-radix-mark { width:186px; height:auto; display:block; }
 .rx-brand { display:block; flex-shrink:0; }
 .rx nav { display:flex; flex-direction:column; gap:4px; }
 .rx nav a,.rx nav button { color:inherit; text-align:left; padding:8px; min-height:36px; font-size:14px; line-height:20px; border-radius:8px; }
@@ -27,6 +28,8 @@ body:has(.rx) main { width:100%; max-width:none; height:100dvh; margin:0; paddin
 .rx .rx-kicker { margin:0 8px 10px; color:var(--rx-line); text-transform:uppercase; font-size:12px; letter-spacing:.08em; }
 .rx nav button[aria-current="page"],.rx nav a:hover,.rx nav button:hover { background:rgb(255 255 255 / 12%); text-decoration:none; }
 .rx .rx-bottom { margin-top:auto; border-top:1px solid rgb(184 191 208 / 45%); padding-top:16px; }
+.rx-panel-foot { margin-top:auto; display:flex; flex-direction:column; gap:12px; border-top:1px solid rgb(184 191 208 / 45%); padding-top:16px; }
+.rx-panel-foot .rx-bottom { margin-top:0; border-top:0; padding-top:0; }
 .rx-body { margin-left:240px; height:100dvh; overflow-y:auto; overflow-x:hidden; overscroll-behavior:contain; padding:48px 56px 64px; display:flex; flex-direction:column; gap:32px; scrollbar-gutter:stable; }
 .rx-body > * { flex-shrink:0; }
 .rx-crumb { font-size:13px; color:var(--rx-muted); }
@@ -90,6 +93,7 @@ body:has(.rx) main { width:100%; max-width:none; height:100dvh; margin:0; paddin
   .rx .rx-standard a { min-height:24px; padding:2px 8px; }
   .rx .rx-page-nav { margin-top:0; }
   .rx .rx-bottom { padding-top:8px; }
+  .rx-panel-foot { gap:8px; padding-top:8px; }
 }
 @media(max-height:520px) {
   .rx-panel,.rx-menu-dialog { overflow-y:auto; }

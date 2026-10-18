@@ -203,9 +203,11 @@ const server = createServer(async (req, res) => {
     } catch (error) { res.statusCode = error.status ?? 502; res.end(JSON.stringify({ error: "The request could not be sent. Try again." })); }
     return;
   }
-  if (req.url?.startsWith("/brand/")) {
+  if (requestUrl.pathname.startsWith("/brand/")) {
+    const name = requestUrl.pathname.slice("/brand/".length);
+    if (!/^[\w.-]+$/.test(name)) { res.statusCode = 404; res.end(); return; }
     res.setHeader("content-type", "image/png");
-    res.end(await readFile("public/brand/tervory-logo-reversed.png"));
+    res.end(await readFile("public/brand/" + name));
   } else if (req.url === "/page.js") {
     res.setHeader("content-type", "text/javascript"); res.end(bundle.outputFiles[0].contents);
   } else if (req.url === "/page.css") {

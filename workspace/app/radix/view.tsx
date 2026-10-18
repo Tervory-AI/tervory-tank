@@ -25,8 +25,12 @@ function keepDialogFocus(event: KeyboardEvent<HTMLDialogElement>) {
   }
 }
 
-function Logo() {
+function TervoryLogo() {
   return <img src="/brand/tervory-logo-reversed.png" width={186} height={34} alt="Tervory" className="rx-logo" />;
+}
+
+function RadixLogo() {
+  return <img src="/brand/radix-on-dark.png" width={186} height={64} alt="Radix" className="rx-radix-mark" />;
 }
 
 export function RadixPage({ accountName, settings }: { accountName: string; settings: ReactNode }) {
@@ -66,9 +70,15 @@ export function RadixPage({ accountName, settings }: { accountName: string; sett
     setPluginsOpen(true);
     plugins.current?.showModal();
   }
-  function navigation() {
+  function navigation(variant: "panel" | "menu" = "menu") {
+    const workspace = <nav className="rx-bottom" aria-label="Workspace">
+      <span onClickCapture={() => menu.current?.close()}>{settings}</span>
+      <a href="https://tervory.com" target="_blank" rel="noreferrer">Support<span className="rx-sr"> (opens a new tab)</span></a>
+    </nav>;
     return <>
-      <a href="/" className="rx-brand" aria-label="Tervory workspace"><Logo /></a>
+      {variant === "panel"
+        ? <div className="rx-brand"><RadixLogo /></div>
+        : <a href="/" className="rx-brand" aria-label="Tervory workspace"><TervoryLogo /></a>}
       <nav className="rx-standard" aria-label="Standard navigation">
         <p className="rx-account">{accountName}</p>
         <a href="/radix">Dashboard</a>
@@ -83,10 +93,9 @@ export function RadixPage({ accountName, settings }: { accountName: string; sett
           <button type="button" onClick={(event) => openPlugins(event.currentTarget)} aria-haspopup="dialog">Plugins</button>
         </nav>
       </div>
-      <nav className="rx-bottom" aria-label="Workspace">
-        <span onClickCapture={() => menu.current?.close()}>{settings}</span>
-        <a href="https://tervory.com" target="_blank" rel="noreferrer">Support<span className="rx-sr"> (opens a new tab)</span></a>
-      </nav>
+      {variant === "panel"
+        ? <div className="rx-panel-foot"><a href="/" className="rx-brand" aria-label="Tervory workspace"><TervoryLogo /></a>{workspace}</div>
+        : workspace}
     </>;
   }
   const filtered = exampleFindings.filter((finding) =>
@@ -95,10 +104,10 @@ export function RadixPage({ accountName, settings }: { accountName: string; sett
   return <div className="rx">
     <a className="rx-skip" href="#rx-heading">Skip to page content</a>
     <header className="rx-mobile-bar">
-      <Logo />
+      <TervoryLogo />
       <button ref={menuTrigger} type="button" aria-haspopup="dialog" onClick={() => menu.current?.showModal()}>Menu</button>
     </header>
-    <aside className="rx-panel" data-panel-anchor="fixed">{navigation()}</aside>
+    <aside className="rx-panel" data-panel-anchor="fixed">{navigation("panel")}</aside>
     <dialog className="rx-menu-dialog" ref={menu} aria-label="Navigation" onKeyDown={keepDialogFocus}>
       <button className="rx-menu-close" type="button" onClick={() => menu.current?.close()}>Close menu</button>
       {navigation()}
