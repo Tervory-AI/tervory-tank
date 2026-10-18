@@ -5,10 +5,11 @@ import { CLERK_SIGN_IN, CLERK_SIGN_UP } from "../lib/site";
 
 const links = [
   { href: "/#how", label: "How it works" },
-  { href: "/#specialists", label: "Specialists" },
+  { href: "/#tank", label: "Tank" },
+  { href: "/#pricing", label: "Pricing" },
 ];
 
-export function SiteNav({ signUp = true }: { signUp?: boolean }) {
+export function SiteNav() {
   const [open, setOpen] = useState(false);
 
   return (
@@ -30,11 +31,9 @@ export function SiteNav({ signUp = true }: { signUp?: boolean }) {
           <a className="btn btn-ghost wide-only" href={CLERK_SIGN_IN}>
             Sign in
           </a>
-          {signUp ? (
-            <a className="btn btn-primary" href={CLERK_SIGN_UP}>
-              Sign up
-            </a>
-          ) : null}
+          <a className="btn btn-ink" href={CLERK_SIGN_UP}>
+            Start
+          </a>
           <button
             className="menu-button"
             type="button"
@@ -56,6 +55,9 @@ export function SiteNav({ signUp = true }: { signUp?: boolean }) {
               {link.label}
             </a>
           ))}
+          <a href="/sign-up" onClick={() => setOpen(false)}>
+            Sign up
+          </a>
           <a href={CLERK_SIGN_IN} onClick={() => setOpen(false)}>
             Sign in
           </a>

@@ -1,5 +1,6 @@
 export const CLERK_SIGN_UP = "https://app.tervory.com/sign-up";
 export const CLERK_SIGN_IN = "https://app.tervory.com/sign-in";
+export const MAIL = "mailto:hello@tervory.com";
 
 export const homeTitle = "Tervory AI — Ask for the work. See exactly what it cost.";
 

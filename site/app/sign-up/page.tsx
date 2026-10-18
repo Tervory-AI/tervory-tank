@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SiteFooter } from "../footer";
 import { SiteNav } from "../nav";
 import { CLERK_SIGN_IN, CLERK_SIGN_UP, signUpDescription, signUpTitle } from "../../lib/site";
 
@@ -20,12 +21,12 @@ export default function SignUpPage() {
       <a className="skip" href="#main">
         Skip to content
       </a>
-      <SiteNav signUp={false} />
-      <main id="main" className="signup">
+      <SiteNav />
+      <main id="main" className="section signup">
         <p className="eyebrow">One path</p>
         <h1>Sign up</h1>
         <p className="lead">{signUpDescription}</p>
-        <p>
+        <p className="signup-body">
           You set the account up on the Tervory app. There is no second account system on this site, and this page does
           not ask for a password.
         </p>
@@ -38,6 +39,7 @@ export default function SignUpPage() {
           Already have an account? <a href={CLERK_SIGN_IN}>Sign in</a>
         </p>
       </main>
+      <SiteFooter />
     </>
   );
 }
