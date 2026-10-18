@@ -1,22 +1,22 @@
 "use client";
 
 import { useState } from "react";
+import { CLERK_SIGN_IN } from "../lib/site";
 
 const links = [
-  { href: "#how", label: "How it works" },
-  { href: "#tank", label: "Tank" },
-  { href: "#case-study", label: "Case study" },
-  { href: "#pricing", label: "Pricing" },
+  { href: "/#ask", label: "Ask" },
+  { href: "/#cost", label: "Cost" },
+  { href: "/#decide", label: "Decide" },
 ];
 
-export function SiteNav() {
+export function SiteNav({ signUp = true }: { signUp?: boolean }) {
   const [open, setOpen] = useState(false);
 
   return (
     <header className="site-nav">
       <div className="nav-bar">
         <div className="nav-left">
-          <a href="#top">
+          <a href="/">
             <img className="logo" src="/brand/tervory-logo-display.png" width={186} height={34} alt="Tervory AI" />
           </a>
           <nav className="nav-links" aria-label="Page">
@@ -28,12 +28,14 @@ export function SiteNav() {
           </nav>
         </div>
         <div className="nav-right">
-          <a className="btn btn-ghost wide-only" href="https://app.tervory.com/sign-in">
+          <a className="btn btn-ghost wide-only" href={CLERK_SIGN_IN}>
             Sign in
           </a>
-          <a className="btn btn-ink" href="https://app.tervory.com/sign-up">
-            Start
-          </a>
+          {signUp ? (
+            <a className="btn btn-primary" href="/sign-up">
+              Sign up
+            </a>
+          ) : null}
           <button
             className="menu-button"
             type="button"
@@ -55,7 +57,7 @@ export function SiteNav() {
               {link.label}
             </a>
           ))}
-          <a href="https://app.tervory.com/sign-in" onClick={() => setOpen(false)}>
+          <a href={CLERK_SIGN_IN} onClick={() => setOpen(false)}>
             Sign in
           </a>
         </nav>
