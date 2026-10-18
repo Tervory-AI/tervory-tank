@@ -930,17 +930,12 @@ h2 {
   padding: 28px;
 }
 
-.glyph {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
-  background: var(--bg-accent-soft);
-  color: var(--accent-label);
-  font-family: var(--font-mono);
-  font-weight: 700;
-  font-size: 16px;
+.wordmark {
+  display: block;
+  align-self: flex-start;
+  height: 36px;
+  width: auto;
+  max-width: 100%;
 }
 
 .card-title {

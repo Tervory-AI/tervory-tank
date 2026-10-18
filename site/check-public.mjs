@@ -16,6 +16,19 @@ for (const id of ['id="how"', 'id="tank"', 'id="squad"', 'id="ledger"', 'id="pri
   if (!home.includes(id)) throw new Error(`Homepage is missing ${id}`);
 }
 
+const marks = [
+  "/brand/base-on-light.png",
+  "/brand/tiger-on-light.png",
+  "/brand/market-lab-on-light.png",
+  "/brand/radix-on-light.png",
+  "/brand/tisan-on-light.png",
+  "/brand/zenas-on-light.png",
+];
+for (const mark of marks) {
+  if (!home.includes(mark)) throw new Error(`Homepage is missing ${mark}`);
+}
+if (home.includes('class="glyph"')) throw new Error("Homepage still has letter tiles");
+
 if (!home.includes("https://app.tervory.com/sign-up")) {
   throw new Error("Homepage Start button does not open the app");
 }

@@ -11,38 +11,38 @@ const SIGN_UP = CLERK_SIGN_UP;
 
 const squad = [
   {
-    letter: "B",
     name: "Base",
+    mark: "/brand/base-on-light.png",
     body: "Finds, cleans and enriches data. Takes a list of names and returns a list of people and companies you can actually contact — every field sourced and scored.",
     domain: "data · enrichment",
   },
   {
-    letter: "T",
     name: "Tiger",
+    mark: "/brand/tiger-on-light.png",
     body: "Watches prices and competitors. Tells you when a rival moves, what they changed and what it means for your margin.",
     domain: "pricing · competitor watch",
   },
   {
-    letter: "M",
     name: "Market Lab",
+    mark: "/brand/market-lab-on-light.png",
     body: "Market research on demand. Sizing, segments, demand signals and the sources behind every number.",
     domain: "market research",
   },
   {
-    letter: "R",
     name: "Radix",
+    mark: "/brand/radix-on-light.png",
     body: "Security. Reviews what you expose, what you store and who can reach it, and reports in plain language.",
     domain: "security",
   },
   {
-    letter: "Ti",
     name: "Tisan",
+    mark: "/brand/tisan-on-light.png",
     body: "Builds websites and apps from a brief. Ships working pages, not mockups, inside your tenant.",
     domain: "websites · apps",
   },
   {
-    letter: "Z",
     name: "Zenas",
+    mark: "/brand/zenas-on-light.png",
     body: "Legal. Reads contracts, policies and terms, flags risk and drafts what you need to sign or send.",
     domain: "legal",
   },
@@ -366,9 +366,7 @@ export default function HomePage() {
           <div className="cards">
             {squad.map((member) => (
               <article className="card" key={member.name}>
-                <div className="glyph" aria-hidden="true">
-                  {member.letter}
-                </div>
+                <img className="wordmark" src={member.mark} alt="" />
                 <div>
                   <h3 className="card-title">{member.name}</h3>
                   <p className="card-body">{member.body}</p>
