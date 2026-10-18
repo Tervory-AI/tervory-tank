@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { DeadlinesPanel } from "./deadlines-panel";
 import { AREAS, COURTS, DEADLINE_ROWS, MATTER_ROWS, REVIEW_ROWS, SEARCH_KINDS, hitsFor, type SearchKind } from "./frame";
 import { MOOT_LABEL } from "./moot";
 import { MootCourt } from "./moot-court";
@@ -18,7 +19,8 @@ const PAGE_LINKS = [
   { href: "/review", label: "Review" },
 ] as const;
 
-const PLACE_LINKS = ["Draft", "Court bundles", "Deadlines", "Library"] as const;
+const PLACE_LINKS = ["Draft", "Court bundles"] as const;
+const PLACE_TAIL = ["Library"] as const;
 
 const BOTTOM_LINKS = [
   { href: "/onboarding", label: "Settings" },
@@ -86,7 +88,11 @@ export function ZenasView({ plugins, workspaceName }: { plugins: PluginPanel; wo
   const [pluginsOpen, setPluginsOpen] = useState(false);
   const [tab, setTab] = useState<PluginTab>(PLUGIN_TABS[0]);
   const [areasOpen, setAreasOpen] = useState(false);
+  const [areasPos, setAreasPos] = useState({ top: 8, left: 248 });
   const [areaPick, setAreaPick] = useState("All areas (civil)");
+  const areasRef = useRef<HTMLButtonElement>(null);
+  const areasMenuRef = useRef<HTMLDivElement>(null);
+  const areasMenuId = useId();
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<SearchKind>("All");
@@ -101,13 +107,11 @@ export function ZenasView({ plugins, workspaceName }: { plugins: PluginPanel; wo
   const [messages, setMessages] = useState(0);
   const [attached, setAttached] = useState<string | null>(null);
   const [actionNote, setActionNote] = useState("");
-  const [section, setSection] = useState<"chats" | "moot">("chats");
+  const [section, setSection] = useState<"chats" | "moot" | "deadlines">("chats");
   const bodyRef = useRef<HTMLDivElement>(null);
 
   const hits = hitsFor(kind, query);
   const showFrame = query.trim().length === 0;
-  const preview = [AREAS[0], AREAS[1], AREAS[2], "Banking and finance"] as const;
-  const areas = areasOpen ? AREAS : preview;
 
   useEffect(() => {
     function onKey(event: globalThis.KeyboardEvent) {
@@ -120,21 +124,35 @@ export function ZenasView({ plugins, workspaceName }: { plugins: PluginPanel; wo
         setSearchOpen(false);
         setPluginsOpen(false);
         setMenu(false);
+        setAreasOpen(false);
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  useEffect(() => {
+    if (!areasOpen) return;
+    function onPointer(event: PointerEvent) {
+      const target = event.target as Node;
+      if (areasRef.current?.contains(target) || areasMenuRef.current?.contains(target)) return;
+      setAreasOpen(false);
+    }
+    window.addEventListener("pointerdown", onPointer);
+    return () => window.removeEventListener("pointerdown", onPointer);
+  }, [areasOpen]);
+
   function openPlugins() {
     setMenu(false);
     setSearchOpen(false);
+    setAreasOpen(false);
     setPluginsOpen(true);
   }
 
   function showChats() {
     setSection("chats");
     setPluginsOpen(false);
+    setAreasOpen(false);
     setMenu(false);
     bodyRef.current?.scrollTo(0, 0);
   }
@@ -143,8 +161,34 @@ export function ZenasView({ plugins, workspaceName }: { plugins: PluginPanel; wo
     setSection("moot");
     setPluginsOpen(false);
     setSearchOpen(false);
+    setAreasOpen(false);
     setMenu(false);
     bodyRef.current?.scrollTo(0, 0);
+  }
+
+  function showDeadlines() {
+    setSection("deadlines");
+    setPluginsOpen(false);
+    setSearchOpen(false);
+    setAreasOpen(false);
+    setMenu(false);
+    bodyRef.current?.scrollTo(0, 0);
+  }
+
+  function toggleAreas() {
+    if (areasOpen) {
+      setAreasOpen(false);
+      return;
+    }
+    const rect = areasRef.current?.getBoundingClientRect();
+    if (rect) {
+      const menuWidth = 260;
+      const left = rect.right + 8 + menuWidth > window.innerWidth
+        ? Math.max(8, window.innerWidth - menuWidth - 8)
+        : rect.right + 8;
+      setAreasPos({ top: Math.max(8, rect.top), left });
+    }
+    setAreasOpen(true);
   }
 
   function closePlugins() {
@@ -188,7 +232,6 @@ export function ZenasView({ plugins, workspaceName }: { plugins: PluginPanel; wo
       <aside className={menu ? "zn-panel open" : "zn-panel"}>
         <div className="zn-panel-main">
         <div className="zn-brand">
-          <img src="/brand/tervory-logo-reversed.png" alt="Tervory" width={186} height={34} />
           <img className="zn-zenas-logo" src="/brand/zenas-on-dark.png" alt="Zenas" width={150} height={53} />
         </div>
         <button className="zn-close" type="button" onClick={() => setMenu(false)}>
@@ -232,24 +275,31 @@ export function ZenasView({ plugins, workspaceName }: { plugins: PluginPanel; wo
               {label}
             </button>
           ))}
-        </nav>
-        <section className="zn-side" aria-label="Areas of law">
-          <div className="zn-side-head">
-            <p className="zn-kicker">AREAS OF LAW</p>
-            <button type="button" onClick={() => setAreasOpen((open) => !open)}>
-              {AREAS.length} · {areasOpen ? "Show less" : "Show all"}
+          <button
+            className={!pluginsOpen && section === "deadlines" ? "active" : ""}
+            type="button"
+            aria-current={!pluginsOpen && section === "deadlines" ? "page" : undefined}
+            onClick={showDeadlines}
+          >
+            Deadlines
+          </button>
+          {PLACE_TAIL.map((label) => (
+            <button key={label} type="button" onClick={() => setMenu(false)}>
+              {label}
             </button>
-          </div>
-          <ul className={areasOpen ? "zn-areas open" : "zn-areas"}>
-            {areas.map((name) => (
-              <li key={name}>
-                <button className={areaPick === name ? "on" : ""} type="button" onClick={() => setAreaPick(name)}>
-                  {name}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
+          ))}
+        </nav>
+        <button
+          ref={areasRef}
+          className={areasOpen ? "zn-areas-row open" : "zn-areas-row"}
+          type="button"
+          aria-expanded={areasOpen}
+          aria-controls={areasMenuId}
+          onClick={toggleAreas}
+        >
+          <span>Areas of law</span>
+          <span>{areaPick === AREAS[0] ? AREAS.length : areaPick}</span>
+        </button>
         <section className="zn-side" aria-label="Diary">
           <div className="zn-side-head">
             <p className="zn-kicker">DIARY</p>
@@ -278,6 +328,7 @@ export function ZenasView({ plugins, workspaceName }: { plugins: PluginPanel; wo
         </div>
         <div className="zn-panel-foot">
         <div className="zn-rule" />
+        <img className="zn-foot-logo" src="/brand/tervory-logo-reversed.png" alt="Tervory" width={186} height={34} />
         <nav className="zn-nav" aria-label="Account settings">
           {BOTTOM_LINKS.map((link) => (
             <Link key={link.label} href={link.href} onClick={() => setMenu(false)}>
@@ -289,6 +340,7 @@ export function ZenasView({ plugins, workspaceName }: { plugins: PluginPanel; wo
       </aside>
       <div ref={bodyRef} className={pluginsOpen ? "zn-body dimmed" : "zn-body"} data-scroll-root>
         {section === "moot" ? <MootCourt /> : null}
+        {section === "deadlines" ? <DeadlinesPanel /> : null}
         {section === "chats" ? (
         <>
         <header className="zn-head">
@@ -590,6 +642,31 @@ export function ZenasView({ plugins, workspaceName }: { plugins: PluginPanel; wo
       <button className="zn-bot" type="button" onClick={() => askRef.current?.focus()}>
         Chat bot, to be named
       </button>
+      ) : null}
+      {areasOpen ? (
+        <div
+          ref={areasMenuRef}
+          id={areasMenuId}
+          className="zn-areas-menu"
+          role="menu"
+          aria-label="Areas of law"
+          style={{ top: areasPos.top, left: areasPos.left }}
+        >
+          {AREAS.map((name) => (
+            <button
+              className={areaPick === name ? "on" : ""}
+              key={name}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setAreaPick(name);
+                setAreasOpen(false);
+              }}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
       ) : null}
       <PluginsDialog open={pluginsOpen} tab={tab} plugins={plugins} onTab={setTab} onClose={closePlugins} />
     </div>

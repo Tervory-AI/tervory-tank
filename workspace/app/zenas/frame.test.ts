@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { AREAS, hitsFor } from "./frame";
+import { AREAS, DEADLINE_ALERTS, DEADLINE_NOTE, DEADLINE_ROWS, hitsFor } from "./frame";
 import { VAULT_OFF_MESSAGE, mapVaultPayload, offPanel } from "./plugins";
 
 test("areas of law lists the forty-nine civil areas", () => {
@@ -41,6 +41,17 @@ test("an on vault keeps names and masks and still drops the value", () => {
   assert.equal(panel.links[0]?.url, "https://example.test/act");
   assert.equal(panel.connections[0]?.hasToken, true);
   assert.equal(JSON.stringify(panel).includes(secret), false);
+});
+
+test("the deadlines panel keeps the drawn blanks and does not add matters", () => {
+  const text = [
+    ...DEADLINE_ROWS.flatMap((row) => [row.title, row.meta]),
+    ...DEADLINE_ALERTS.flatMap((alert) => [alert.title, alert.detail]),
+    DEADLINE_NOTE,
+  ].join(" ");
+  assert.equal(DEADLINE_ALERTS.length, 3);
+  assert.equal(/Kanos|Mokoena|Ndlovu|Sunfield|Highveld/i.test(text), false);
+  assert.match(DEADLINE_NOTE, /lawyer must confirm/);
 });
 
 test("search stays inside the drawn record kinds", () => {

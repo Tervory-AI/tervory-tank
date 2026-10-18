@@ -52,6 +52,20 @@ def test_moot_court_starts_empty() -> None:
     assert re.search(r"overflow:\s*hidden", panel.group(1))
     assert "overflow-y" not in panel.group(1)
     assert re.search(r"overflow-y:\s*auto", body.group(1))
+    brand = view.split('className="zn-brand"', 1)[1].split("</div>", 1)[0]
+    foot = view.split('className="zn-panel-foot"', 1)[1].split("</aside>", 1)[0]
+    assert "zenas-on-dark.png" in brand
+    assert "tervory-logo-reversed.png" not in brand
+    assert foot.index("tervory-logo-reversed.png") < foot.index("BOTTOM_LINKS")
+    assert "zenas-on-dark.png" not in foot
+    panel = view.split("<aside", 1)[1].split("</aside>", 1)[0]
+    assert "zn-areas-row" in panel
+    assert "zn-areas-menu" not in panel
+    assert "Show all" not in view
+    assert "DeadlinesPanel" in view
+    drawn = (PAGE / "deadlines-panel.tsx").read_text(encoding="utf-8")
+    assert "Upcoming" in drawn and "Alerts" in drawn
+    assert "Kanos" not in drawn and "Mokoena" not in drawn
 
 
 def test_page_uses_zenas_vault_and_does_not_turn_it_on() -> None:

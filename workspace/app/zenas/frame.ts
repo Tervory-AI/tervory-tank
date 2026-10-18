@@ -93,6 +93,16 @@ export const DEADLINE_ROWS = [
   { title: "Court date", meta: "__ / __ / ____ · Court" },
 ] as const;
 
+/** Alert timings from the drawn Deadlines panel. These are not matters. */
+export const DEADLINE_ALERTS = [
+  { title: "5 court days before", detail: "Email and in-app, to the matter attorney" },
+  { title: "1 court day before", detail: "Email, in-app and SMS, to the attorney and reviewer" },
+  { title: "On the day", detail: "In-app banner on the lawyer review console" },
+] as const;
+
+export const DEADLINE_NOTE =
+  "Rule periods are shown for design. A lawyer must confirm each rule card before deadlines go live.";
+
 export function hitsFor(kind: SearchKind, query: string): SearchHit[] {
   const needle = query.trim().toLowerCase();
   return SEARCH_HITS.filter((hit) => {
