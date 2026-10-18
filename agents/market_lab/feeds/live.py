@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import re
 import time
 import urllib.error
@@ -34,7 +33,10 @@ class NeedsKey(RuntimeError):
 
 
 def require_env(name: str) -> str:
-    value = os.environ.get(name, "").strip()
+    """Env key, or the lab.vault key when that vault is on. The value is not logged."""
+    from feeds.keys import feed_key
+
+    value = feed_key(name)
     if not value:
         raise NeedsKey(name)
     return value
