@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent } from "react";
 
 type Status = "idle" | "saving" | "saved" | "failed";
 
 export function ReleaseForm() {
+  const fieldId = useId();
   const [status, setStatus] = useState<Status>("idle");
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -26,10 +27,10 @@ export function ReleaseForm() {
 
   return (
     <form className="release" action="/api/release-notice" method="post" onSubmit={onSubmit}>
-      <label htmlFor="release-email">Email me when we release.</label>
+      <label htmlFor={fieldId}>Get early access</label>
       <div className="release-row">
         <input
-          id="release-email"
+          id={fieldId}
           name="email"
           type="email"
           autoComplete="email"
@@ -39,7 +40,7 @@ export function ReleaseForm() {
           disabled={status === "saving"}
         />
         <button className="btn-primary" type="submit" disabled={status === "saving"}>
-          Send
+          Join the list
         </button>
       </div>
       <p className="release-status" role="status">

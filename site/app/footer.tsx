@@ -8,7 +8,7 @@ export function SiteFooter() {
         height={31}
         alt="Tervory AI"
       />
-      <p>One window for the work. An answer shows which model did it.</p>
+      <p>Every answer shows its sources, the model that ran it, and what it cost.</p>
       <p className="footer-meta">© 2026 Tervory AI</p>
     </footer>
   );
