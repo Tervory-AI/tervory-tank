@@ -106,6 +106,7 @@ export function FeedSwitch({
         </button>
       </p>
       <h2>Test scores</h2>
+      <p className="note">LegalBench rows are a code baseline, not a model score.</p>
       {scores.length === 0 ? <p>No scores yet.</p> : (
         <table>
           <thead>
@@ -123,7 +124,7 @@ export function FeedSwitch({
             {scores.map((row) => (
               <tr key={`${row.kind}-${row.area}-${row.set}`}>
                 <td>{row.area || row.jurisdiction}</td>
-                <td>{row.set || row.kind}</td>
+                <td>{row.label || row.set || row.kind}</td>
                 <td className="meta">{row.cases}</td>
                 <td className="meta">{row.outcome_agreement}%</td>
                 <td className="meta">{row.element_agreement}%</td>

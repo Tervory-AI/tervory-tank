@@ -350,7 +350,11 @@ async def test_selftest_scores_and_regions_do_not_cross() -> None:
     assert hold["outcome_agreement"] == 100
     assert hold["element_agreement"] == 100
     assert hold["citations_valid"] == 100
-    assert any(run["kind"] == "legalbench" for run in us["runs"])
+    bench = [run for run in us["runs"] if run["kind"] == "legalbench"]
+    assert bench
+    assert all(run["scored_by"] == "code baseline" for run in bench)
+    assert all(run["label"] == "LegalBench code baseline" for run in bench)
+    assert all(run["model"] is False for run in bench)
     assert all(run["kind"] != "legalbench" for run in za["runs"])
     visible = await ladder.visible_worked(region="us-east", tenant_id=TENANT, sharing="tenant")
     assert all(row.get("pool_doc_id") != "id-1" for row in visible)

@@ -252,12 +252,17 @@ async def run_selftest(ladder: Any, *, region: str) -> dict[str, Any]:
 
 
 def _public_run(row: dict[str, Any]) -> dict[str, Any]:
-    """Scores only. No judgment text, no matter, no document body."""
+    """Scores only. No judgment text, no matter, no document body.
+
+    A LegalBench row is a code baseline. The label is on the response so a
+    reader does not take the percentage for a model score.
+    """
     detail = row.get("detail") or {}
-    return {
+    kind = str(row.get("kind") or "")
+    published: dict[str, Any] = {
         "id": row.get("id"),
         "region": row.get("region"),
-        "kind": row.get("kind"),
+        "kind": kind,
         "area": row.get("area") or "",
         "jurisdiction": row.get("jurisdiction") or "",
         "cases": int(row.get("cases") or 0),
@@ -267,7 +272,13 @@ def _public_run(row: dict[str, Any]) -> dict[str, Any]:
         "cost_per_case": float(row.get("cost_per_case") or 0),
         "case_ids": [str(item) for item in (detail.get("case_ids") or [])],
         "set": str(detail.get("set") or ""),
+        "scored_by": "",
     }
+    if kind == "legalbench":
+        published["scored_by"] = "code baseline"
+        published["label"] = "LegalBench code baseline"
+        published["model"] = False
+    return published
 
 
 async def list_scores(ladder: Any, *, region: str) -> dict[str, Any]:

@@ -97,6 +97,7 @@ def legalbench_scores() -> list[dict]:
                 "cost_per_case": 0.0,
                 "detail": {
                     "set": name,
+                    "label": "LegalBench code baseline",
                     "baseline": "question words in the clause",
                     "correct": scored["correct"],
                     "model": False,

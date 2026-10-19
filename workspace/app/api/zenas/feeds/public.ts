@@ -20,6 +20,8 @@ export type PublicScore = {
   citations_valid: number;
   cost_per_case: number;
   set: string;
+  scored_by: string;
+  label: string;
 };
 
 function rowsFrom(payload: unknown, key: string): unknown[] {
@@ -71,9 +73,11 @@ export function publicScores(payload: unknown): { region: string; runs: PublicSc
   const runs = rowsFrom(payload, "runs").flatMap((item) => {
     if (!item || typeof item !== "object") return [];
     const row = item as Record<string, unknown>;
+    const kind = String(row.kind ?? "");
+    const codeBaseline = kind === "legalbench";
     return [{
       region: String(row.region ?? region),
-      kind: String(row.kind ?? ""),
+      kind,
       area: String(row.area ?? ""),
       jurisdiction: String(row.jurisdiction ?? ""),
       cases: Number(row.cases ?? 0),
@@ -82,6 +86,8 @@ export function publicScores(payload: unknown): { region: string; runs: PublicSc
       citations_valid: Number(row.citations_valid ?? 0),
       cost_per_case: Number(row.cost_per_case ?? 0),
       set: String(row.set ?? ""),
+      scored_by: codeBaseline ? "code baseline" : "",
+      label: codeBaseline ? "LegalBench code baseline" : "",
     }];
   });
   return { region, runs };
