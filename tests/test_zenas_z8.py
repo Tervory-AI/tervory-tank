@@ -6,6 +6,7 @@ SA case, and the reverse.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import sys
@@ -16,7 +17,14 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from agents.zenas.core.convert import convert_cases, convert_limit, conversion_report  # noqa: E402
+from agents.zenas.core.convert import (  # noqa: E402
+    _convert_running,
+    begin_convert,
+    convert_cases,
+    convert_limit,
+    convert_running,
+    conversion_report,
+)
 from agents.zenas.core.ladder_store import LadderMemory  # noqa: E402
 from agents.zenas.core.selftest import is_holdout  # noqa: E402
 
@@ -292,12 +300,127 @@ def test_feeds_page_has_a_convert_button_per_region() -> None:
     route = (ROOT / "workspace" / "app" / "api" / "zenas" / "feeds" / "region" / "convert" / "route.ts").read_text(
         encoding="utf-8"
     )
+    public = (ROOT / "workspace" / "app" / "api" / "zenas" / "feeds" / "public.ts").read_text(encoding="utf-8")
+    app = (ROOT / "agents" / "zenas" / "app.py").read_text(encoding="utf-8")
+    example = (ROOT / ".env.example").read_text(encoding="utf-8")
+    timeout = (ROOT / "tank" / "main.py").read_text(encoding="utf-8").split("def zenas_timeout", 1)[1].split("\ndef ", 1)[0]
+    post = app.split("async def post_cases_convert", 1)[1].split("@app.", 1)[0]
+    get = app.split("async def get_cases_convert", 1)[1].split("@app.", 1)[0]
     assert "Convert cases" in board
     assert "decided cases loaded" in board
     assert "held out" in board
     assert "failed" in board
+    assert 'setMessage(body.status)' in board
+    assert '"Started"' in board
+    assert '"Already running"' in board
+    assert "setInterval" in board
+    assert "3000" in board
+    assert "body.running" in board
     assert "zenasIn" in route
     assert "publicConvert" in route
     assert "matter_id" not in route
     assert "tenant_id" not in route
     assert "JUDGMENT" not in route
+    assert 'root.status === "Started" || root.status === "Already running"' in public
+    assert "await begin_convert" in post
+    assert "return await convert_cases" not in post
+    assert "return report" in post
+    assert 'report["running"] = convert_running(box)' in get
+    assert "root.running === true" in public
+    assert "ZENAS_CONVERT_MAX=200" in example
+    assert "cases/convert" not in timeout
+    assert "return ZENAS_TIMEOUT" in timeout
+
+
+@pytest.mark.asyncio
+async def test_convert_starts_in_the_background_and_a_second_press_is_already_running() -> None:
+    _convert_running.clear()
+    started = asyncio.Event()
+    release = asyncio.Event()
+    calls = 0
+
+    async def runner() -> None:
+        nonlocal calls
+        calls += 1
+        started.set()
+        await release.wait()
+
+    try:
+        first = await begin_convert("us-east", runner)
+        assert first == {"ok": True, "region": "us-east", "running": True, "status": "Started"}
+        assert started.is_set() is False
+        assert convert_running("us-east") is True
+        await asyncio.wait_for(started.wait(), timeout=1)
+        second = await begin_convert("us-east", runner)
+        assert second["status"] == "Already running"
+        assert second["running"] is True
+        assert calls == 1
+        other = await begin_convert("za", runner)
+        assert other["status"] == "Started"
+        await asyncio.sleep(0)
+        assert calls == 2
+        release.set()
+        for _ in range(50):
+            if not convert_running("us-east") and not convert_running("za"):
+                break
+            await asyncio.sleep(0.01)
+        assert convert_running("us-east") is False
+        assert convert_running("za") is False
+        again = await begin_convert("us-east", runner)
+        assert again["status"] == "Started"
+    finally:
+        release.set()
+        for _ in range(50):
+            if not _convert_running:
+                break
+            await asyncio.sleep(0.01)
+        _convert_running.clear()
+
+
+@pytest.mark.asyncio
+async def test_a_case_outside_the_court_list_is_not_stored() -> None:
+    doc = Doc(
+        id="statute-0002",
+        jurisdiction="us",
+        citation="49 U.S.C. § 14706",
+        text="The court stated fact number 0002 for this sale of goods.",
+        source_id="govinfo-uscode",
+    )
+    ladder = LadderMemory()
+    report = await convert_cases(Pool([doc], home_region="us-east"), ladder, Model(), region="us-east")
+    assert report["converted"] == 0
+    assert report["failed"] == 1
+    assert doc.text_reads == 0
+    assert ladder.worked == []
+    assert ladder.failures[0]["reason"] == "material type is unknown"
+
+
+@pytest.mark.asyncio
+async def test_a_not_yet_area_is_still_converted() -> None:
+    doc = Doc(
+        id="family-0001",
+        jurisdiction="za",
+        citation="[2024] ZACC 1",
+        text="This divorce judgment. The court stated fact number 0001 for this sale of goods.",
+        source_id="concourt",
+    )
+    ladder = LadderMemory()
+    report = await convert_cases(Pool([doc], home_region="za"), ladder, Model(), region="za")
+    assert report["converted"] == 1
+    assert report["failed"] == 0
+    assert ladder.worked[0]["material_type"] == "public_record"
+
+
+def test_facts_and_convert_share_one_court_list() -> None:
+    from agents.zenas.pool.catalogue import CATALOGUE, _za_case_sources
+    from agents.zenas.core.release_mask import COURT_SOURCES, material_type_for_pool
+
+    expected = {row.source_id for row in _za_case_sources()}
+    expected.update({"saflii", "courtlistener", "cap", "govza-gazette"})
+    assert set(COURT_SOURCES) == expected
+    assert expected <= {row.source_id for row in CATALOGUE}
+    assert material_type_for_pool("concourt") == "public_record"
+    assert material_type_for_pool("special-tribunal") == "public_record"
+    assert material_type_for_pool("labour-appeal") == "public_record"
+    assert material_type_for_pool("govinfo-uscode") is None
+    assert material_type_for_pool("uniform-rules") is None

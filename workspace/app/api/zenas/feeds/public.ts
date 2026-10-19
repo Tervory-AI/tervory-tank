@@ -99,16 +99,21 @@ export type PublicConvert = {
   converted: number;
   held_out: number;
   failed: number;
+  running: boolean;
+  status: "" | "Started" | "Already running";
 };
 
 export function publicConvert(payload: unknown): PublicConvert {
   const root = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+  const status = root.status === "Started" || root.status === "Already running" ? root.status : "";
   return {
     region: String(root.region ?? ""),
     decided: Number(root.decided ?? 0) || 0,
     converted: Number(root.converted ?? 0) || 0,
     held_out: Number(root.held_out ?? 0) || 0,
     failed: Number(root.failed ?? 0) || 0,
+    running: root.running === true,
+    status,
   };
 }
 

@@ -19,7 +19,7 @@ async function readBox(region: Region): Promise<{
   let sources: PublicSource[] = [];
   let scores: PublicScore[] = [];
   let review: "on" | "off" = "off";
-  let convert: PublicConvert = { region, decided: 0, converted: 0, held_out: 0, failed: 0 };
+  let convert: PublicConvert = { region, decided: 0, converted: 0, held_out: 0, failed: 0, running: false, status: "" };
   let note = "";
   try {
     const feeds = await zenasIn(region, `pool/status?home_region=${region}`, { method: "GET" });
@@ -48,7 +48,7 @@ async function readBox(region: Region): Promise<{
     const cases = await zenasIn(region, `cases/convert?home_region=${region}`, { method: "GET" });
     if (cases && cases.ok) convert = publicConvert(await cases.json());
   } catch {
-    convert = { region, decided: 0, converted: 0, held_out: 0, failed: 0 };
+    convert = { region, decided: 0, converted: 0, held_out: 0, failed: 0, running: false, status: "" };
   }
   return { sources, scores, review, convert, note };
 }

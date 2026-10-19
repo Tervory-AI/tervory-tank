@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { PublicConvert, PublicScore, PublicSource } from "@/app/api/zenas/feeds/public";
 
 type Region = "us-east" | "za";
@@ -27,6 +27,32 @@ export function FeedSwitch({
   const [counts, setCounts] = useState<PublicConvert>(initialConvert);
   const [message, setMessage] = useState(note);
   const [busy, setBusy] = useState("");
+  const [watching, setWatching] = useState(initialConvert.running);
+
+  useEffect(() => {
+    if (!watching) return;
+    let stop = false;
+    const timer = setInterval(() => {
+      void refresh();
+    }, 3000);
+
+    async function refresh() {
+      const res = await fetch(`/api/zenas/feeds/region/convert?region=${region}`);
+      if (!res.ok || stop) return;
+      const body = (await res.json()) as PublicConvert;
+      if (stop) return;
+      setCounts(body);
+      if (!body.running) {
+        setWatching(false);
+        setMessage("");
+      }
+    }
+
+    return () => {
+      stop = true;
+      clearInterval(timer);
+    };
+  }, [watching, region]);
 
   async function choose(next: Region) {
     setRegion(next);
@@ -56,9 +82,12 @@ export function FeedSwitch({
       setReview(body.review === "on" ? "on" : "off");
     }
     if (converted.ok) {
-      setCounts((await converted.json()) as PublicConvert);
+      const body = (await converted.json()) as PublicConvert;
+      setCounts(body);
+      setWatching(body.running);
     } else {
-      setCounts({ region: next, decided: 0, converted: 0, held_out: 0, failed: 0 });
+      setCounts({ region: next, decided: 0, converted: 0, held_out: 0, failed: 0, running: false, status: "" });
+      setWatching(false);
     }
   }
 
@@ -76,8 +105,14 @@ export function FeedSwitch({
       setMessage(body?.error || "Cases could not be converted.");
       return;
     }
-    setCounts((await res.json()) as PublicConvert);
-    setMessage("Conversion finished.");
+    const body = (await res.json()) as PublicConvert;
+    setCounts(body);
+    if (body.status === "Started" || body.status === "Already running") {
+      setMessage(body.status);
+      setWatching(true);
+      return;
+    }
+    setMessage("Cases could not be converted.");
   }
 
   async function flipReview() {
@@ -134,7 +169,7 @@ export function FeedSwitch({
         <span className="meta">{counts.failed}</span> failed.
       </p>
       <button type="button" disabled={busy === "convert"} onClick={convertCases}>
-        {busy === "convert" ? "Converting" : "Convert cases"}
+        Convert cases
       </button>
       <p className="note">
         Lawyer review is {review}.{" "}

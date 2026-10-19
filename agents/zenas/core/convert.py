@@ -11,11 +11,13 @@ with os.nice.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from typing import Any
 
 from agents.zenas.core.engine import cite_check, keys_match, parse_json_object
+from agents.zenas.core.release_mask import material_type_for_pool
 from agents.zenas.core.selftest import box_jurisdiction, is_holdout
 from agents.zenas.core.service import ModelAdapter
 from agents.zenas.core.scope_rules import ruled
@@ -24,6 +26,8 @@ log = logging.getLogger("zenas.convert")
 
 _PLATFORM = "00000000-0000-0000-0000-000000000001"
 _DEFAULT_MAX = 200
+_convert_lock = asyncio.Lock()
+_convert_running: set[str] = set()
 
 _LIST_SQL = """
 SELECT DISTINCT ON (document_id)
@@ -263,6 +267,43 @@ async def _remember_failure(ladder: Any, *, region: str, pool_doc_id: str, reaso
     await ladder.record_convert_failure(region=region, pool_doc_id=pool_doc_id, reason=clean)
 
 
+def convert_running(region: str) -> bool:
+    """True while a background conversion for this region has not finished."""
+    box = _box(region)
+    return box is not None and box in _convert_running
+
+
+async def begin_convert(region: str, runner: Any) -> dict[str, Any]:
+    """Start runner in the background and return at once.
+
+    The status is Started, or Already running when this region is already going.
+    """
+    box = _box(region)
+    if box is None:
+        return {"ok": False, "region": "", "running": False, "status": ""}
+    async with _convert_lock:
+        if box in _convert_running:
+            return {"ok": True, "region": box, "running": True, "status": "Already running"}
+        _convert_running.add(box)
+
+    async def _go() -> None:
+        try:
+            await runner()
+        except Exception:
+            log.warning("convert failed")
+        finally:
+            async with _convert_lock:
+                _convert_running.discard(box)
+
+    try:
+        asyncio.create_task(_go())
+    except Exception:
+        async with _convert_lock:
+            _convert_running.discard(box)
+        raise
+    return {"ok": True, "region": box, "running": True, "status": "Started"}
+
+
 async def conversion_report(pool: Any, ladder: Any, *, region: str) -> dict[str, Any]:
     """Counts only: decided cases loaded, converted, held out, failed."""
     box = _box(region)
@@ -313,6 +354,12 @@ async def convert_cases(
     for case in pending:
         if case["jurisdiction"] != jurisdiction:
             continue
+        material = material_type_for_pool(case["source_id"])
+        if material != "public_record":
+            await _remember_failure(
+                ladder, region=box, pool_doc_id=case["document_id"], reason="material type is unknown"
+            )
+            continue
         text = await _judgment(pool, case)
         if ruled(text) == "criminal":
             await _remember_failure(ladder, region=box, pool_doc_id=case["document_id"], reason="criminal law is refused")
@@ -359,7 +406,7 @@ async def convert_cases(
                 "region": box,
                 "tenant_id": None,
                 "source": "case",
-                "material_type": "public_record",
+                "material_type": material,
                 "jurisdiction": jurisdiction,
                 "area": "",
                 "rule_card_ids": [],
