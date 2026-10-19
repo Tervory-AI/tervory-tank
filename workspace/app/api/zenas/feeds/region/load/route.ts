@@ -26,7 +26,9 @@ export async function POST(req: Request) {
     if (!res) return NextResponse.json({ error: "That box is not connected." }, { status: 404 });
     if (res.status === 404) return NextResponse.json({ error: "Loading is not available on that box yet." }, { status: 404 });
     if (!res.ok) return NextResponse.json({ error: "The load did not start." }, { status: 502 });
-    return NextResponse.json({ ok: true, source: sent.source, region: sent.home_region });
+    const payload = (await res.json().catch(() => null)) as { status?: string } | null;
+    const status = payload?.status === "already running" ? "already running" : "running";
+    return NextResponse.json({ ok: true, status, source: sent.source, region: sent.home_region });
   } catch {
     return NextResponse.json({ error: "The load did not start." }, { status: 502 });
   }

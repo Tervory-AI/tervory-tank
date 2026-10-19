@@ -145,7 +145,7 @@ export type PublicConvert = {
   held_out: number;
   failed: number;
   running: boolean;
-  status: "" | "Started" | "Already running";
+  status: "" | "running" | "already running";
   failures: PublicFailure[];
 };
 
@@ -164,9 +164,15 @@ function failureCounts(value: unknown): PublicFailure[] {
   return [...totals.entries()].map(([reason, count]) => ({ reason, count }));
 }
 
+function convertStatus(value: unknown): "" | "running" | "already running" {
+  if (value === "running" || value === "Started") return "running";
+  if (value === "already running" || value === "Already running") return "already running";
+  return "";
+}
+
 export function publicConvert(payload: unknown): PublicConvert {
   const root = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
-  const status = root.status === "Started" || root.status === "Already running" ? root.status : "";
+  const status = convertStatus(root.status);
   return {
     region: String(root.region ?? ""),
     decided: Number(root.decided ?? 0) || 0,
