@@ -19,7 +19,12 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  if (request.headers.get("origin") !== new URL(request.url).origin) {
+  // Coolify terminates HTTPS before Next. Compare hosts, not the internal URL's
+  // protocol; a browser cannot override Host to forge a same-origin request.
+  let originHost = "";
+  try { originHost = new URL(request.headers.get("origin") ?? "").host; } catch { /* Refuse below. */ }
+  const host = request.headers.get("host") ?? new URL(request.url).host;
+  if (!originHost || originHost !== host) {
     return NextResponse.json({ error: "Request refused." }, { status: 403 });
   }
   const identity = await goldIdentity(new URL(request.url).searchParams.get("scope") ?? "platform");

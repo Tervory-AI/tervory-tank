@@ -64,6 +64,7 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/train1-browser" --no-audit --no-fund playwright@1.64.1 esbuild@0.28.2
           "$RUNNER_TEMP/train1-browser/node_modules/.bin/playwright" install --with-deps chromium
           node tests/test_train1_page.mjs
+          node tests/test_train1_api.mjs
         env:
           TRAIN1_ESBUILD_PATH: ${{ runner.temp }}/train1-browser/node_modules/esbuild
           TRAIN1_PLAYWRIGHT_PATH: ${{ runner.temp }}/train1-browser/node_modules/playwright
