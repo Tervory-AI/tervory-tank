@@ -16,7 +16,7 @@ const fixture = await build({ stdin: { contents: `import React from 'react'; imp
 const css = await fs.readFile(path.join(root, 'workspace/app/skala/gold/gold.css'), 'utf8');
 const calls = [];
 const examples = [{id:'00000000-0000-0000-0000-000000000011',input:{name:'Example company',website:'https://example.invalid'},expected:{match:true},source:'package'}, {id:'00000000-0000-0000-0000-000000000012',input:{name:'Second example'},expected:{match:false},source:'package'}];
-const summary = {region:'us-east',pairs:{base:34,tiger:18,zenas:22},skills:[{agent:'base',skill_id:'base.find_site',checked:82,target:100,holdout:16,candidates:2,last_score:.98,trend:.01,ran_at:'2026-01-01'},{agent:'tiger',skill_id:'tiger.price_extract',checked:46,target:100,holdout:9,candidates:2,last_score:.96,trend:-.01,ran_at:'2026-01-01'}]};
+const summary = {region:'us-east',pairs:{base:34,tiger:18,zenas:22},skills:[{agent:'base',skill_id:'base.find_site',checked:82,target:100,holdout:16,candidates:2,last_score:.95,trend:-.03,ran_at:'2026-01-01'},{agent:'tiger',skill_id:'tiger.price_extract',checked:46,target:100,holdout:9,candidates:2,last_score:.96,trend:-.01,ran_at:'2026-01-01'}]};
 const server = createServer(async (request,response) => {
   const url = new URL(request.url, 'http://localhost');
   if (url.pathname === '/bundle.js') {response.setHeader('content-type','text/javascript'); response.end(fixture.outputFiles[0].text);return;}
@@ -34,6 +34,8 @@ try {
   const errors=[]; page.on('pageerror',e=>errors.push(e.message));
   await page.goto(`http://127.0.0.1:${server.address().port}/skala/gold`);
   await page.getByText('Example company', {exact:false}).waitFor();
+  await page.getByText('-3.0 points', {exact:true}).waitFor();
+  await page.getByText('95.0%', {exact:true}).waitFor();
   await page.screenshot({path:path.join(output,'gold-desktop.png'),fullPage:true});
   await page.setViewportSize({width:390,height:844});
   await page.screenshot({path:path.join(output,'gold-mobile.png'),fullPage:true});
