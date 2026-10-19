@@ -269,7 +269,13 @@ export function FeedSwitch({
               <td>{row.title}</td>
               <td className="meta">{row.documents}</td>
               <td className="meta">{statusLabel(row.last_status)}</td>
-              <td>{row.detail || "—"}</td>
+              <td>
+                {row.id === "courtlistener" && row.detail.includes("snapshot ") ? (
+                  <span className="meta">{row.detail}</span>
+                ) : (
+                  row.detail || "—"
+                )}
+              </td>
               <td className="meta">{row.last_load ?? "—"}</td>
               <td>
                 <button type="button" disabled={busy === row.id} onClick={() => load(row.id)}>

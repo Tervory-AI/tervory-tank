@@ -1,0 +1,119 @@
+id,date_created,date_modified,judges,date_filed,date_filed_is_approximate,slug,case_name_short,case_name,case_name_full,scdb_id,scdb_decision_direction,scdb_votes_majority,scdb_votes_minority,source,procedural_history,attorneys,nature_of_suit,posture,syllabus,headnotes,summary,disposition,history,other_dates,cross_reference,correction,citation_count,precedential_status,date_blocked,blocked,filepath_json_harvard,filepath_pdf_harvard,docket_id,arguments,headmatter
+2756301,2014-12-01 21:00:56.067068+00,2024-11-06 03:35:34.22842+00,"Fernandez, Ikuta, Albritton",2014-12-01,f,albert-njie-v-eric-holder-jr,,"Albert Njie v. Eric Holder, Jr.","Albert Sesay Bully NJIE, Petitioner, v. Eric HOLDER, Jr., Attorney General, Respondent",,,,,CU,,"John Martin Pope, Pope & Associates, PC, Phoenix, AZ, for Petitioner., Oil, Andrew Jacob Oliveira, Esquire, Trial, DOJ — U.S. Department of Justice, Washington, DC, Chief Counsel Ice, Office of the Chief Counsel Department of Homeland Security, San Francisco, CA, for Respondent.",Agency,,,,,,,"Submitted Nov. 20, 2014.*",,,0,Unpublished,,f,law.free.cap.f-appx.586/287.4313832.json,harvard_pdf/2756301.pdf,2610106,,"<parties id=""b315-8"">
+    Albert Sesay Bully NJIE, Petitioner, v. Eric HOLDER, Jr., Attorney General, Respondent.
+   </parties><br><docketnumber id=""b315-11"">
+    No. 11-71226.
+   </docketnumber><br><court id=""b315-12"">
+    United States Court of Appeals, Ninth Circuit.
+   </court><br><otherdate id=""b315-13"">
+    Submitted Nov. 20, 2014.
+    <a class=""footnote"" href=""#fn*"" id=""fn*_ref"">
+     *
+    </a>
+</otherdate><br><decisiondate id=""b315-14"">
+    Filed Dec. 1, 2014.
+   </decisiondate><br><attorneys id=""b315-15"">
+    John Martin Pope, Pope
+    <em>
+     &amp;
+    </em>
+    Associates, PC, Phoenix, AZ, for Petitioner.
+   </attorneys><br><attorneys id=""b315-16"">
+    Oil, Andrew Jacob Oliveira, Esquire, Trial, DOJ — U.S. Department of Justice, Washington, DC, Chief Counsel Ice, Office of the Chief Counsel Department of Homeland Security, San Francisco, CA, for Respondent.
+   </attorneys><br><judges id=""b315-21"">
+    Before: FERNANDEZ and IKUTA, Circuit Judges, and ALBRITTON, Senior District Judge.
+    <a class=""footnote"" href=""#fn**"" id=""fn**_ref"">
+     **
+    </a>
+</judges><div class=""footnotes""><div class=""footnote"" id=""fn*"" label=""*"">
+<a class=""footnote"" href=""#fn*_ref"">
+     *
+    </a>
+<p id=""b315-18"">
+     The panel unanimously concludes this case is suitable for decision without oral argument.
+     <em>
+      See
+     </em>
+     Fed. R.App. P. 34(a)(2).
+    </p>
+</div><div class=""footnote"" id=""fn**"" label=""**"">
+<a class=""footnote"" href=""#fn**_ref"">
+     **
+    </a>
+<p id=""b315-19"">
+     The Honorable William H. Albritton, III, Senior District Judge for the U.S. District Court for Middle Alabama, sitting by designation.
+    </p>
+</div></div>"
+2756371,2014-12-02 01:09:55.488737+00,2024-11-06 03:34:34.468929+00,"Jolly, Barksdale, Owen",2014-12-01,f,united-states-v-harold-callaway,,United States v. Harold Callaway,"UNITED STATES of America, Plaintiff-Appellee, v. Harold Bruce CALLAWAY, Defendant-Appellant",,,,,CU,,"Joseph H. Gay, Jr., Assistant U.S. Attorney, U.S. Attorney’s Office, San Antonio, TX, for Plaintiff-Appellee., Philip J. Lynch, San Antonio, TX, for Defendant-Appellant.",Direct Criminal,,,,,,,,,,0,Unpublished,,f,law.free.cap.f-appx.585/867.4303689.json,harvard_pdf/2756371.pdf,2610196,,"<parties data-order=""0"" data-type=""parties"" id=""b907-11"">
+    UNITED STATES of America, Plaintiff-Appellee, v. Harold Bruce CALLAWAY, Defendant-Appellant.
+   </parties><br><docketnumber data-order=""1"" data-type=""docketnumber"" id=""b907-14"">
+    No. 13-51169
+   </docketnumber><p data-order=""2"" data-type=""misc"" id=""AMl"">
+    Summary Calendar.
+   </p><br><court data-order=""3"" data-type=""court"" id=""b907-15"">
+    United States Court of Appeals, Fifth Circuit.
+   </court><br><decisiondate data-order=""4"" data-type=""decisiondate"" id=""b907-17"">
+    Dec. 1, 2014.
+   </decisiondate><br><attorneys data-order=""5"" data-type=""attorneys"" id=""b907-18"">
+    Joseph H. Gay, Jr., Assistant U.S. Attorney, U.S. Attorney’s Office, San Antonio, TX, for Plaintiff-Appellee.
+   </attorneys><br><attorneys data-order=""6"" data-type=""attorneys"" id=""b907-19"">
+    Philip J. Lynch, San Antonio, TX, for Defendant-Appellant.
+   </attorneys><br><judges data-order=""7"" data-type=""judges"" id=""b908-3"">
+<span citation-index=""1"" class=""star-pagination"" label=""868""> 
+     *868
+     </span>
+    Before JOLLY, BARKSDALE, and OWEN, Circuit Judges.
+   </judges>"
+2756651,2014-12-02 21:10:24.691336+00,2024-11-06 03:35:36.827375+00,"Clifton, Smith, Hurwitz",2014-12-02,f,united-states-v-jack-sexton,,United States v. Jack Sexton,"UNITED STATES of America, Plaintiff-Appellee, v. Jack Pershing SEXTON, Defendant-Appellant; United States of America, Plaintiff-Appellee, v. Ronald Claude Kettells, Defendant-Appellant",,,,,CU,,"Helen J. Brunner, Esquire, Assistant U.S., Francis Franze-Nakamura, Esquire, Assistant U.S., Andrew Cameron Friedman, Esquire, Assistant U.S., Office of the U.S. Attorney, Seattle, WA, for Plaintiff-Appellee., Carlton Gunn, Esquire, Kaye, Mclane, Bednarski & Litt, LLP, Pasadena, CA, for Defendant-Appellant.",Criminal,,,,,,,"Argued and Submitted Nov. 17, 2014.",,,0,Unpublished,,f,law.free.cap.f-appx.586/304.4314565.json,harvard_pdf/2756651.pdf,2610487,,"<parties id=""b332-13"">
+    UNITED STATES of America, Plaintiff-Appellee, v. Jack Pershing SEXTON, Defendant-Appellant. United States of America, Plaintiff-Appellee, v. Ronald Claude Kettells, Defendant-Appellant.
+   </parties><br><docketnumber id=""b332-19"">
+    Nos. 13-30171, 13-30172.
+   </docketnumber><br><court id=""b332-20"">
+    United States Court of Appeals, Ninth Circuit.
+   </court><br><otherdate id=""b332-21"">
+    Argued and Submitted Nov. 17, 2014.
+   </otherdate><decisiondate id=""AEG"">
+    Filed Dec. 2, 2014.
+   </decisiondate><br><attorneys id=""b332-22"">
+    Helen J. Brunner, Esquire, Assistant U.S., Francis Franze-Nakamura, Esquire,
+    <span citation-index=""1"" class=""star-pagination"" label=""305""> 
+     *305
+     </span>
+    Assistant U.S., Andrew Cameron Friedman, Esquire, Assistant U.S., Office of the U.S. Attorney, Seattle, WA, for Plaintiff-Appellee.
+   </attorneys><br><attorneys id=""b333-5"">
+    Carlton Gunn, Esquire, Kaye, Mclane, Bednarski &amp; Litt, LLP, Pasadena, CA, for Defendant-Appellant.
+   </attorneys><br><judges id=""b333-7"">
+    Before: CLIFTON, M. SMITH, and HURWITZ, Circuit Judges.
+   </judges>"
+2756657,2014-12-02 21:11:31.317705+00,2024-11-06 03:35:35.732217+00,"Noonan, Fernandez, Ikuta",2014-12-02,f,regional-care-services-corp-v-companion-life-insurance,,"Regional Care Services, Corp. v. Companion Life Insurance","REGIONAL CARE SERVICES, CORPORATION, an Arizona Corporation; Regional Care Services Corporation Health and Welfare Employee Benefit Plan, Plaintiffs-Appellees, v. COMPANION LIFE INSURANCE COMPANY, Defendant-Appellant",,,,,CU,,"Kory A. Langhofer, John Clifton West, Brownstein Hyatt Farber Schreck, LLP, Phoenix, AZ, for Plaintiffs-Appellees., M. Courtney Koger, Esquire, Kutak Rock LLP, Kansas City, MO, Philip A. Overcash, Esquire Natalie Anderson, Esquire, S. David Childers, Esquire, Kutak Rock LLP, Scottsdale, AZ, for Defendant-Appellant.",Civil,,,,,,,"Submitted Nov. 19, 2014.*",,,0,Unpublished,,f,law.free.cap.f-appx.586/297.4312856.json,harvard_pdf/2756657.pdf,2610493,,"<parties id=""b325-17"">
+    REGIONAL CARE SERVICES, CORPORATION, an Arizona corporation; Regional Care Services Corporation Health And Welfare Employee Benefit Plan, Plaintiffs-Appellees, v. COMPANION LIFE INSURANCE COMPANY, Defendant-Appellant.
+   </parties><br><docketnumber id=""b325-20"">
+    No. 12-16538.
+   </docketnumber><br><court id=""b325-21"">
+    United States Court of Appeals, Ninth Circuit.
+   </court><br><otherdate id=""b326-3"">
+<span citation-index=""1"" class=""star-pagination"" label=""298""> 
+     *298
+     </span>
+    Submitted Nov. 19, 2014.
+    <a class=""footnote"" href=""#fn*"" id=""fn*_ref"">
+     *
+    </a>
+</otherdate><br><decisiondate id=""b326-4"">
+    Filed Dec. 2, 2014.
+   </decisiondate><br><attorneys id=""b326-5"">
+    Kory A. Langhofer, John Clifton West, Brownstein Hyatt Farber Schreck, LLP, Phoenix, AZ, for Plaintiffs-Appellees.
+   </attorneys><br><attorneys id=""b326-6"">
+    M. Courtney Koger, Esquire, Kutak Rock LLP, Kansas City, MO, Philip A. Overcash, Esquire Natalie Anderson, Esquire, S. David Childers, Esquire, Kutak Rock LLP, Scottsdale, AZ, for Defendant-Appellant.
+   </attorneys><br><judges id=""b326-8"">
+    Before: NOONAN, FERNANDEZ and IKUTA, Circuit Judges.
+   </judges><div class=""footnotes""><div class=""footnote"" id=""fn*"" label=""*"">
+<a class=""footnote"" href=""#fn*_ref"">
+     *
+    </a>
+<p id=""b326-11"">
+     The panel unanimously finds this case suitable for decision without oral argument. Fed. R.App. P. 34(a)(2).
+    </p>
+</div></div>"
+5406423,,,,1916-10-15,,sheriff-v-tna-life-insurance,,Sheriff v. Ætna Life Insurance,,,,,,,,,,,,,,,,,,,,Published,,,,,61754815,,
+5846027,,,,2006-06-08,,people-v-walker,,People v. Walker,,,,,,,,,,,,,,,,,,,,Published,,,,,62203897,,
