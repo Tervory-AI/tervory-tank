@@ -2378,3 +2378,6 @@ async def tiger_alerts(request: Request) -> Response:
 
 
 app.include_router(__import__("admin").router)
+
+app.include_router(__import__("gold").router)
+app.include_router(__import__("training").router)

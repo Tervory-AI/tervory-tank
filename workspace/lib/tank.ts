@@ -593,3 +593,45 @@ export function transferLibrarySkill(
     { method: "POST", body: JSON.stringify({ tenant_id: tenantId }) },
   );
 }
+
+// Gold review: identity and tenant come only from the authenticated server route.
+export function goldSummary(identity: { userId: string; tenantId: string; role: string }): Promise<{
+  region: string;
+  skills: Array<{ agent: string; skill_id: string; checked: number; target: number; holdout: number; candidates: number; last_score: number | null; trend: number | null; ran_at: string | null }>;
+  pairs: Record<string, number>;
+}> {
+  return tank("/v1/gold/summary", { method: "GET", headers: {
+    "x-tervory-user": identity.userId, "x-tervory-tenant": identity.tenantId, "x-tervory-role": identity.role,
+  } });
+}
+
+export function goldNext(identity: { userId: string; tenantId: string; role: string }, agent: string, skill: string, after?: string): Promise<{
+  id: string; input: unknown; expected: Record<string, unknown>; source: string;
+} | null> {
+  const query = new URLSearchParams({ agent, skill });
+  if (after) query.set("after", after);
+  return tank(`/v1/gold/next?${query}`, { method: "GET", headers: {
+    "x-tervory-user": identity.userId, "x-tervory-tenant": identity.tenantId, "x-tervory-role": identity.role,
+  } });
+}
+
+export function checkGold(identity: { userId: string; tenantId: string; role: string }, id: string,
+  body: { action: "right" | "wrong" | "skip"; correction?: Record<string, unknown>; note?: string }): Promise<{ ok: boolean }> {
+  return tank(`/v1/gold/${encodeURIComponent(id)}/check`, { method: "POST", body: JSON.stringify(body), headers: {
+    "x-tervory-user": identity.userId, "x-tervory-tenant": identity.tenantId, "x-tervory-role": identity.role,
+  } });
+}
+
+export function confirmTrainingRead(identity: { userId: string; tenantId: string; role: string }, observationId: string): Promise<{ ok: boolean }> {
+  return tank(`/v1/training/tiger/${encodeURIComponent(observationId)}/confirm`, { method: "POST", headers: {
+    "x-tervory-user": identity.userId, "x-tervory-tenant": identity.tenantId, "x-tervory-role": identity.role,
+  } });
+}
+
+export function finalGoldCheck(identity: { userId: string; tenantId: string; role: string }, skill: string, version: string): Promise<{
+  results: Array<{ skill_id: string; version: string; score: number; n: number }>;
+}> {
+  return tank(`/v1/gold/final/${encodeURIComponent(skill)}/${encodeURIComponent(version)}`, { method: "POST", headers: {
+    "x-tervory-user": identity.userId, "x-tervory-tenant": identity.tenantId, "x-tervory-role": identity.role,
+  } });
+}
