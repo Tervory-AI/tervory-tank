@@ -14,13 +14,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 from typing import Any
 
 from agents.zenas.core.engine import cite_check, keys_match, parse_json_object
 from agents.zenas.core.release_mask import material_type_for_pool
 from agents.zenas.core.selftest import box_jurisdiction, is_holdout
 from agents.zenas.core.service import ModelAdapter
-from agents.zenas.pool.adapters.za_case_common import is_criminal_caption
 
 log = logging.getLogger("zenas.convert")
 
@@ -31,7 +31,7 @@ _convert_running: set[str] = set()
 
 _LIST_SQL = """
 SELECT DISTINCT ON (document_id)
-       document_id, version_id, jurisdiction, citation, source_id
+       document_id, version_id, jurisdiction, citation, source_id, title
 FROM zenas_pool.documents
 WHERE kind = 'case'
   AND jurisdiction = $1
@@ -135,6 +135,7 @@ async def _list_cases(pool: Any, jurisdiction: str) -> list[dict[str, Any]]:
                     "jurisdiction": jurisdiction,
                     "citation": str(row["citation"] or ""),
                     "source_id": str(row["source_id"] or ""),
+                    "title": str(row["title"] or ""),
                 }
             )
         return found
@@ -163,6 +164,9 @@ async def _list_cases(pool: Any, jurisdiction: str) -> list[dict[str, Any]]:
                 "jurisdiction": jurisdiction,
                 "citation": str(getattr(doc, "citation", "") or ""),
                 "source_id": str(getattr(doc, "source_id", "") or ""),
+                "title": str(getattr(doc, "title", "") or ""),
+                "docket": str(getattr(doc, "docket", "") or ""),
+                "nature_of_suit": str(getattr(doc, "nature_of_suit", "") or ""),
                 "doc": doc,
             }
         )
@@ -243,18 +247,29 @@ def _statements(case: dict[str, Any], parsed: dict[str, Any]) -> list[dict[str, 
     return rows
 
 
-def _criminal_case(citation: str, text: str) -> bool:
-    """A criminal caption is refused. A word in the reasons is not.
+# CourtListener writes the docket type as its own token: "cr", or "1:21-cr-10".
+_CR_DOCKET = re.compile(r"(?:^|[^a-z0-9])cr(?:[^a-z0-9]|$)")
+_SA_CAPTION = re.compile(
+    r"(?i)(?:^\s*s\s+v\s+\S|\bDPP\b|director of public prosecutions|\bNPA\b|national prosecuting authority)"
+)
 
-    The client-question list treats "prosecution" and "charged with" as
-    criminal. Civil judgments use those words. The loader already drops a
-    criminal caption, and this check reads the same opening.
+
+def _criminal_from_source(case: dict[str, Any]) -> bool:
+    """Refuse only a criminal marker the source itself recorded.
+
+    A US case is refused for a CourtListener "cr" docket or a criminal nature
+    of suit. Those two fields are not columns on zenas_pool.documents, so a
+    stored US case has neither and is converted. A US caption is not read.
+    An SA case is refused when the stored title is an "S v …" caption or names
+    DPP or NPA. The judgment text is not read. An empty field is unknown.
     """
-    opening = f"{citation}\n{text}"
-    if is_criminal_caption(citation, opening):
+    if str(case.get("jurisdiction") or "") == "za":
+        return _SA_CAPTION.search(str(case.get("title") or "")) is not None
+    docket = str(case.get("docket") or "").lower()
+    nature = str(case.get("nature_of_suit") or "").lower()
+    if docket and _CR_DOCKET.search(docket):
         return True
-    head = opening[:600].lower()
-    return "criminal charge" in head or "criminal charges" in head
+    return bool(nature) and "criminal" in nature
 
 
 def _cite_reason(statements: list[dict[str, str]], passages: list[dict[str, Any]]) -> str:
@@ -377,10 +392,10 @@ async def convert_cases(
                 ladder, region=box, pool_doc_id=case["document_id"], reason="material type is unknown"
             )
             continue
-        text = await _judgment(pool, case)
-        if _criminal_case(case["citation"], text):
+        if _criminal_from_source(case):
             await _remember_failure(ladder, region=box, pool_doc_id=case["document_id"], reason="criminal law is refused")
             continue
+        text = await _judgment(pool, case)
         if not text.strip() or not case["citation"].strip():
             await _remember_failure(ladder, region=box, pool_doc_id=case["document_id"], reason="cite check failed")
             continue

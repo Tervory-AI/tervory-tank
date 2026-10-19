@@ -43,6 +43,9 @@ class Doc:
         status: str = "in_force",
         effective_to: object = None,
         source_id: str = "cap",
+        title: str | None = None,
+        docket: str = "",
+        nature_of_suit: str = "",
     ) -> None:
         self.id = id
         self.jurisdiction = jurisdiction
@@ -53,7 +56,9 @@ class Doc:
         self.effective_to = effective_to
         self.source_id = source_id
         self.version_id = f"v-{id}"
-        self.title = id
+        self.title = id if title is None else title
+        self.docket = docket
+        self.nature_of_suit = nature_of_suit
         self.text_reads = 0
 
     @property
@@ -230,7 +235,9 @@ async def test_sql_list_asks_only_for_this_regions_jurisdiction() -> None:
         async def fetch(self, sql: str, *args: object) -> list[dict[str, str]]:
             self.calls.append((sql, args))
             selected = sql.lower().split("from", 1)[0]
-            assert "text" not in selected
+            names = re.findall(r"[a-z_]+", selected)
+            assert "text" not in names
+            assert "title" in names
             assert "kind = 'case'" in sql
             return []
 
@@ -251,18 +258,85 @@ async def test_sql_list_asks_only_for_this_regions_jurisdiction() -> None:
 
 
 @pytest.mark.asyncio
-async def test_criminal_case_is_not_stored(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("ZENAS_CONVERT_MAX", raising=False)
-    doc = Doc(
+async def test_a_cr_docket_is_refused_and_a_cv_docket_converts() -> None:
+    criminal = Doc(
         id="crime-0001",
         jurisdiction="us",
         citation="9 F.2d 9",
+        title="United States v. Acme Corp",
+        docket="1:21-cr-00010",
         text="The accused faced a criminal charge. The court stated fact number 0001 for this sale of goods.",
+        source_id="courtlistener",
     )
-    report = await convert_cases(Pool([doc], home_region="us-east"), LadderMemory(), Model(), region="us-east")
-    assert report["converted"] == 0
+    civil = Doc(
+        id="civil-us-0001",
+        jurisdiction="us",
+        citation="9 F.2d 8",
+        title="United States v. Acme Corp",
+        docket="1:21-cv-00010",
+        text="The accused faced a criminal charge. The court stated fact number 0001 for this sale of goods.",
+        source_id="courtlistener",
+    )
+    unknown = Doc(
+        id="unknown-0001",
+        jurisdiction="us",
+        citation="9 F.2d 7",
+        title="United States v. Acme Corp",
+        text="The accused faced a criminal charge. The court stated fact number 0001 for this sale of goods.",
+        source_id="courtlistener",
+    )
+    ladder = LadderMemory()
+    report = await convert_cases(
+        Pool([criminal, civil, unknown], home_region="us-east"), ladder, Model(), region="us-east"
+    )
+    assert report["converted"] == 2
     assert report["failed"] == 1
-    assert doc.text_reads == 1
+    assert criminal.text_reads == 0
+    assert civil.text_reads == 1
+    assert unknown.text_reads == 1
+    assert ladder.failures[0]["reason"] == "criminal law is refused"
+    assert {row["pool_doc_id"] for row in ladder.worked} == {"civil-us-0001", "unknown-0001"}
+
+
+@pytest.mark.asyncio
+async def test_a_criminal_nature_of_suit_is_refused_and_an_sa_caption_is_refused() -> None:
+    nature = Doc(
+        id="nature-0001",
+        jurisdiction="us",
+        citation="9 F.2d 6",
+        title="United States v. Acme Corp",
+        docket="1:21-cv-00099",
+        nature_of_suit="Criminal",
+        text="The court stated fact number 0001 for this sale of goods.",
+        source_id="courtlistener",
+    )
+    caption = Doc(
+        id="caption-0001",
+        jurisdiction="za",
+        citation="[2024] ZASCA 9",
+        title="S v Dlamini",
+        text="The court stated fact number 0001 for this sale of goods.",
+        source_id="sca",
+    )
+    dpp = Doc(
+        id="dpp-0001",
+        jurisdiction="za",
+        citation="[2024] ZASCA 10",
+        title="Director of Public Prosecutions v Mahlangu",
+        text="The court stated fact number 0001 for this sale of goods.",
+        source_id="sca",
+    )
+    us_only = await convert_cases(Pool([nature], home_region="us-east"), LadderMemory(), Model(), region="us-east")
+    assert us_only["failed"] == 1
+    assert us_only["converted"] == 0
+    assert nature.text_reads == 0
+    assert us_only["failures"][0]["reason"] == "criminal law is refused"
+    za = await convert_cases(Pool([caption, dpp], home_region="za"), LadderMemory(), Model(), region="za")
+    assert za["converted"] == 0
+    assert za["failed"] == 2
+    assert caption.text_reads == 0
+    assert dpp.text_reads == 0
+    assert {row["reason"] for row in za["failures"]} == {"criminal law is refused"}
 
 
 def test_convert_limit_defaults_to_200(monkeypatch: pytest.MonkeyPatch) -> None:
