@@ -1,0 +1,125 @@
+name: Squad training
+
+on:
+  schedule:
+    - cron: '0 6 * * 0'
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Training operation
+        type: choice
+        options: [retest, export]
+        default: retest
+  # Validate the implementation before opening its PR. No deployment step.
+  push:
+    branches: [cursor/train-1-squad-training]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: squad-training-${{ github.event_name }}-${{ github.event.schedule || inputs.operation || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install -r tank/requirements.txt -r tank/requirements-dev.txt
+      - run: ruff check tank tests --select E9,F --per-file-ignores 'tank/skills/base.socials/1.0.0/run.py:F401'
+      - run: pytest -q
+        env:
+          PYTHONPATH: tank
+          TRAINING_SCHEMA_DATABASE_URL: postgresql://postgres@localhost:5432/postgres
+          POOL_SCHEMA_DATABASE_URL: postgresql://postgres@localhost:5432/postgres
+          ZENAS_SCHEMA_DATABASE_URL: postgresql://postgres@localhost:5432/postgres
+      - working-directory: workspace
+        run: |
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-package-lock --no-audit --no-fund; fi
+          npx next build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA==
+          CLERK_SECRET_KEY: sk_test_dummy
+
+      - name: Browser review checks
+        run: |
+          npm install --prefix "$RUNNER_TEMP/train1-browser" --no-audit --no-fund playwright@1.64.1 esbuild@0.28.2
+          "$RUNNER_TEMP/train1-browser/node_modules/.bin/playwright" install --with-deps chromium
+          node tests/test_train1_page.mjs
+          node tests/test_train1_api.mjs
+        env:
+          TRAIN1_ESBUILD_PATH: ${{ runner.temp }}/train1-browser/node_modules/esbuild
+          TRAIN1_PLAYWRIGHT_PATH: ${{ runner.temp }}/train1-browser/node_modules/playwright
+          TRAIN1_SCREENSHOT_DIR: ${{ runner.temp }}/train1-screenshots
+      - uses: actions/upload-artifact@v4
+        with:
+          name: squad-training-screenshots
+          path: ${{ runner.temp }}/train1-screenshots
+
+  training:
+    if: github.event_name != 'push'
+    strategy:
+      fail-fast: false
+      matrix:
+        region: [us-east, za]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Run training operation and report score drops
+        uses: actions/github-script@v7
+        env:
+          TRAINING_TANK_URL: ${{ matrix.region == 'za' && vars.TRAINING_TANK_URL_ZA || (matrix.region == 'us-east' && vars.TRAINING_TANK_URL || '') }}
+          TRAINING_REGION: ${{ matrix.region }}
+          TRAINING_JOB_KEY: ${{ secrets.TRAINING_JOB_KEY }}
+          TRAINING_OPERATION: ${{ inputs.operation || (github.event.schedule == '0 2 * * *' && 'export' || 'retest') }}
+        with:
+          script: |
+            const origin = process.env.TRAINING_TANK_URL;
+            const key = process.env.TRAINING_JOB_KEY;
+            if (!origin || !key) { core.notice('Training jobs are not configured.'); return; }
+            let url;
+            try { url = new URL(origin); } catch { core.setFailed('Invalid Tank origin.'); return; }
+            if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.pathname !== '/') {
+              core.setFailed('Tank origin must be HTTPS without credentials, path or query.'); return;
+            }
+            const exporting = process.env.TRAINING_OPERATION === 'export';
+            url.pathname = exporting ? '/v1/training/jobs/export' : '/v1/gold/jobs/retest';
+            let data;
+            try {
+              const response = await fetch(url, {
+                method: 'POST', redirect: 'error',
+                headers: { 'x-tank-key': key }, signal: AbortSignal.timeout(45 * 60 * 1000),
+              });
+              if (!response.ok) { core.setFailed('Tank training operation failed.'); return; }
+              data = await response.json();
+            } catch { core.setFailed('Tank training operation could not complete.'); return; }
+            if (exporting) { core.notice('Training export operation completed.'); return; }
+            for (const result of data.results || []) {
+              if (!result.drop || typeof result.skill_id !== 'string' || !/^[a-zA-Z0-9_.-]+$/.test(result.skill_id)) continue;
+              const title = `Score drop: ${result.skill_id}`;
+              const issues = await github.paginate(github.rest.issues.listForRepo, { ...context.repo, state: 'open', per_page: 100 });
+              if (issues.some(issue => !issue.pull_request && issue.title === title)) continue;
+              await github.rest.issues.create({ ...context.repo, title,
+                body: `The weekly gold re-test (${process.env.TRAINING_REGION || 'configured region'}) fell from ${(result.previous * 100).toFixed(1)}% to ${(result.score * 100).toFixed(1)}% (${result.n} checked examples).\n\nReview the skill in /skala/gold. Holdout examples were excluded. No client examples are included in this issue.` });
+            }
