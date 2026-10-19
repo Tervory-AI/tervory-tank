@@ -2070,10 +2070,41 @@ def zenas_upstream(path: str) -> str:
     return raw.rstrip("/") + "/" + cleaned
 
 
+# A load detail is one short operational line. A judgment does not belong in it.
+_DETAIL_LIMIT = 240
+_URL = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
+_SK_SECRET = re.compile(r"sk-[A-Za-z0-9_-]{8,}")
+# Same marks the pool refuses to fetch. An env var name such as
+# COURTLISTENER_API_TOKEN has no '=' and stays.
+_KEYED_URL_MARKS = ("api_key=", "token=", "password=", "secret=", "?key=", "&key=")
+
+
+def _scrub_public_text(text: str) -> str:
+    """Remove keyed URLs and sk- secrets. Other words stay."""
+
+    def drop_url(match: re.Match[str]) -> str:
+        url = match.group(0)
+        lowered = url.lower()
+        if any(mark in lowered for mark in _KEYED_URL_MARKS):
+            return ""
+        return url
+
+    cleaned = _SK_SECRET.sub("", _URL.sub(drop_url, text))
+    if cleaned == text:
+        return text
+    return " ".join(cleaned.split())
+
+
 def public_feed(value: Any) -> Any:
-    """Drop key material from a pool status payload. key_name and key_set stay."""
+    """Drop key material from a pool status payload. key_name and key_set stay.
+
+    Each source's last_status and a short detail stay, so the feeds page can
+    show why a load failed. A URL that carries a key does not.
+    """
     if isinstance(value, list):
         return [public_feed(item) for item in value]
+    if isinstance(value, str):
+        return _scrub_public_text(value)
     if not isinstance(value, dict):
         return value
     kept: dict[str, Any] = {}
@@ -2082,6 +2113,13 @@ def public_feed(value: Any) -> Any:
         if lowered not in {"key_name", "key_set"} and "key" in lowered:
             continue
         if any(part in lowered for part in ("secret", "password", "token")):
+            continue
+        if lowered == "detail":
+            text = item if isinstance(item, str) else ""
+            kept[key] = _scrub_public_text(text)[:_DETAIL_LIMIT]
+            continue
+        if lowered == "last_status":
+            kept[key] = _scrub_public_text(item) if isinstance(item, str) else item
             continue
         kept[key] = public_feed(item)
     return kept
