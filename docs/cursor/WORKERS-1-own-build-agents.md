@@ -2,13 +2,13 @@
 
 > Written 18 Oct 2026, 21:45 PT. Goal: our own workers take briefs off the list and open draft PRs, the same way Cursor builders do, on a server the founder owns, with every model call going through Tank.
 
-**Founder first:** add the new worker server in Coolify (Servers → New Server). At least 8 cores and 32 GB of memory. Tell Claude when it shows "Ready".
+**Where it runs (updated 18 Oct 21:50):** start on the **Boston server** as its own Coolify app (`tervory-workers`), with `WORKER_MAX_TASKS=1` and per-task limits of 2 CPU / 4 GB, so the live app is never starved. Never on the ZA server (SA data only). When the third server is added (planned before Wednesday 21 Oct), move the app there by changing its Coolify destination and raise the limits below; no code change.
 
 **Files you may change:** new `workers/` folder (service, Dockerfile, task image, tests), new `docker-compose.workers.yml`, `.env.example` (names only), `docs/workers/README.md`, new tests. Do not change Tank's router, ledger or any agent room.
 
 ## How it works
 1. **Queue.** A brief becomes a task when a GitHub issue is opened with the label `worker` and a body that names one brief file under `docs/cursor/`. The worker service polls for these (GitHub API, read issues; nothing public is exposed).
-2. **One sealed computer per task.** Each task runs in a fresh rootless **podman** container (gVisor runtime where available), thrown away at the end. Limits per task: 4 CPU, 8 GB memory, 90 minutes, at most 3 tasks at once (setting `WORKER_MAX_TASKS`).
+2. **One sealed computer per task.** Each task runs in a fresh rootless **podman** container (gVisor runtime where available), thrown away at the end. Limits per task come from settings (`WORKER_MAX_TASKS`, `WORKER_TASK_CPUS`, `WORKER_TASK_MEMORY`), default 1 task, 2 CPU, 4 GB, 90 minutes. On the third server: 3 tasks, 4 CPU, 8 GB.
 3. **Inside the container:** a clone of `Tervory-AI/tervory-tank`, Python, Node 22, **Chromium via Playwright** (the agents' own browser for tests and screenshots), and **Aider** (Apache-2.0) as the coding engine.
 4. **Models through Tank.** Aider calls Tank's model route, never a provider directly, so the ladder, cache, ledger and costs apply. The worker server reaches Tank over a **private link** (WireGuard between the worker server and Boston); Tank stays off the public internet.
 5. **GitHub access.** A GitHub App installed on the repo with only: contents write on branches, pull requests write, issues read/write. It **cannot push to `main`** (branch protection) and **cannot merge**. The container gets a short-lived installation token, never a long-lived key.
