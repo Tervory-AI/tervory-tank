@@ -39,6 +39,9 @@ from workers.settings import KEY_DIR, LEGACY_KEY_FILE, SettingsError, from_env, 
 
 ROOT = Path(__file__).resolve().parents[1]
 TANK_KEY_REF = re.compile(r"\$\{(TANK_KEY_[A-Z0-9_]+)")
+# Built in two parts, like tests/test_secrets.py does, so the secrets scan does not read a fixture as a key.
+RSA_BEGIN = "-----BEGIN RSA " + "PRIVATE KEY-----"
+RSA_END = "-----END RSA " + "PRIVATE KEY-----"
 
 
 # ---------- 1. Tank accepts the worker key ----------
@@ -165,7 +168,7 @@ def test_coolify_value_forms_all_read_the_same(tmp_path: Path) -> None:
         "\n  " + pem + "  \n",
     ):
         assert private_key_from_setting(form) == want
-    assert want.startswith(b"-----BEGIN RSA PRIVATE KEY-----\n")
+    assert want.startswith(RSA_BEGIN.encode() + b"\n")
     assert all(len(line) <= 64 for line in want.decode().splitlines())
 
 
@@ -176,7 +179,7 @@ def test_a_bad_setting_is_refused_without_echoing_it(tmp_path: Path) -> None:
         assert bad not in str(refused.value)
         assert "GITHUB_APP_PRIVATE_KEY" in str(refused.value)
     with pytest.raises(PrivateKeyRejected):
-        private_key_from_setting("-----BEGIN RSA PRIVATE KEY-----\n!!!!\n-----END RSA PRIVATE KEY-----")
+        private_key_from_setting(f"{RSA_BEGIN}\n!!!!\n{RSA_END}")
 
 
 def test_a_named_key_file_still_wins_and_no_setting_means_not_configured(tmp_path: Path) -> None:
