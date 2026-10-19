@@ -6,6 +6,8 @@ export type PublicSource = {
   region: string;
   documents: number;
   last_load: string | null;
+  last_status: string;
+  detail: string;
   errors: string[];
 };
 
@@ -32,10 +34,24 @@ function rowsFrom(payload: unknown, key: string): unknown[] {
   return [];
 }
 
-function cleanError(value: unknown): string {
-  const text = String(value ?? "").replace(/sk-[A-Za-z0-9_-]{8,}/g, "").trim();
-  if (!text || /api[_-]?key|token|secret|password/i.test(text)) return "";
+/** Short operational text only. Env var names are fine; secret values and credential URLs are not. */
+function cleanDetail(value: unknown): string {
+  const text = String(value ?? "")
+    .replace(/sk-[A-Za-z0-9_-]{8,}/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return "";
+  // Never pass a URL that carries a credential in the query string.
+  if (/https?:\/\/\S+/i.test(text) && /[?&](?:api[_-]?key|token|key|password|secret|authorization)=/i.test(text)) {
+    return "";
+  }
   return text.slice(0, 240);
+}
+
+function cleanStatus(value: unknown): string {
+  const text = String(value ?? "").trim().toLowerCase();
+  if (!/^[a-z0-9_]{1,40}$/.test(text)) return "";
+  return text;
 }
 
 export function publicFeeds(payload: unknown): { region: string; sources: PublicSource[] } {
@@ -44,16 +60,18 @@ export function publicFeeds(payload: unknown): { region: string; sources: Public
   const sources = rowsFrom(payload, "sources").flatMap((item) => {
     if (!item || typeof item !== "object") return [];
     const row = item as Record<string, unknown>;
+    const last_status = cleanStatus(row.last_status);
+    // Operational detail only crosses with a load status (pool run record).
+    // Document/matter bodies parked in `detail` without a status stay out.
+    let detail = last_status ? cleanDetail(row.detail) : "";
     const errors: string[] = [];
     if (Array.isArray(row.errors)) {
       for (const entry of row.errors) {
-        const clean = cleanError(entry);
+        const clean = cleanDetail(entry);
         if (clean) errors.push(clean);
       }
-    } else if (row.last_status === "error") {
-      const clean = cleanError(row.detail);
-      if (clean) errors.push(clean);
     }
+    if (!detail && errors.length) detail = errors[0];
     const last = row.last_load ?? row.last_update;
     return [{
       id: String(row.source_id ?? row.id ?? ""),
@@ -61,6 +79,8 @@ export function publicFeeds(payload: unknown): { region: string; sources: Public
       region: String(row.region ?? region),
       documents: Number(row.documents ?? row.document_count ?? 0),
       last_load: typeof last === "string" ? last : null,
+      last_status,
+      detail,
       errors,
     }];
   });
