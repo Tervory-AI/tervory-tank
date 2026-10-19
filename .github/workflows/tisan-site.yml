@@ -1,9 +1,16 @@
 name: tisan-site
 
+# Docs-only changes do not run this gate (docs/** or Markdown files only).
 on:
   pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
   push:
     branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
 
 jobs:
   gate:
