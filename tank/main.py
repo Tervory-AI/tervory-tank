@@ -590,6 +590,7 @@ class RouteResponse(BaseModel):
     tokens_out: int
     cost_usd: float
     latency_ms: int
+    finish_reason: str = ""
 
 
 class PolicyRow(BaseModel):
@@ -749,6 +750,69 @@ async def put_policy(task_type: str, body: PolicyRow) -> dict[str, Any]:
 
 # ---------- the one call ----------
 
+# Roster names that are Gemini. Gemini 3 Flash thinks at high unless told otherwise,
+# and those thought tokens come out of max_tokens.
+_GEMINI_MODELS = frozenset({"flash", "flash-lite", "argon"})
+_JSON_OBJECT_MODELS = _GEMINI_MODELS | frozenset(
+    {"luna", "sol", "astra", "grok", "grok-top", "grok-build"}
+)
+
+
+def _gemini_model(model: str) -> bool:
+    name = (model or "").strip().lower()
+    return name in _GEMINI_MODELS or "gemini" in name
+
+
+def _json_object_model(model: str) -> bool:
+    name = (model or "").strip().lower()
+    if name in _JSON_OBJECT_MODELS or _gemini_model(name):
+        return True
+    return name.startswith("gpt") or name.startswith("openai/") or "grok" in name
+
+
+def case_facts_generation(model: str) -> dict[str, Any]:
+    """JSON output, and low thinking for Gemini, for zenas.case_facts only.
+
+    Gemini 3 Flash defaults to high thinking. Thought tokens come out of
+    max_tokens, so the answer comes back empty. reasoning_effort low is what
+    LiteLLM maps to thinking_level low on Gemini 3, and to a small thinking
+    budget on Gemini 2.5. A thinking budget on its own does not set that
+    level on Gemini 3, so it is not sent. JSON mode goes only to models that
+    support a JSON object.
+    """
+    body: dict[str, Any] = {}
+    if _json_object_model(model):
+        body["response_format"] = {"type": "json_object"}
+    if _gemini_model(model):
+        body["reasoning_effort"] = "low"
+    return body
+
+
+def _content_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                parts.append(str(item.get("text") or ""))
+        return "".join(parts)
+    return ""
+
+
+def _choice_answer(data: dict[str, Any]) -> tuple[str, str]:
+    choices = data.get("choices") or [{}]
+    choice = choices[0] if isinstance(choices, list) and choices else {}
+    if not isinstance(choice, dict):
+        return "", ""
+    message = choice.get("message") or {}
+    if not isinstance(message, dict):
+        message = {}
+    return _content_text(message.get("content")), str(choice.get("finish_reason") or "")
+
+
 async def run_route(
     req: RouteRequest,
     task_id: uuid.UUID | None = None,
@@ -789,6 +853,7 @@ async def run_route(
     if policy["system_prompt"]:
         messages = [{"role": "system", "content": policy["system_prompt"]}, *messages]
     max_tokens = min(req.max_tokens or policy["max_tokens_out"], policy["max_tokens_out"])
+    generation = case_facts_generation(model) if req.task_type == "zenas.case_facts" else {}
     sent = "\n".join(str(item.get("content") or "") for item in messages)
     holds_identifier = prompt_has_identifier(sent)
     blocked = model_call_refusal(
@@ -810,7 +875,10 @@ async def run_route(
     cache_key = None
     if not holds_identifier and _redis is not None and policy.get("cache_scope") in ("tenant", "platform"):
         scope = str(req.tenant_id) if policy["cache_scope"] == "tenant" else "platform"
-        digest = hashlib.sha256(json.dumps([req.task_type, model, max_tokens, messages], sort_keys=True).encode()).hexdigest()
+        digest_parts: list[Any] = [req.task_type, model, max_tokens, messages]
+        if generation:
+            digest_parts.append(generation)
+        digest = hashlib.sha256(json.dumps(digest_parts, sort_keys=True).encode()).hexdigest()
         cache_key = f"tank:cache:{scope}:{digest}"
         try:
             hit = await _redis.get(cache_key)
@@ -839,7 +907,7 @@ async def run_route(
             r = await client.post(
                 f"{LITELLM_URL}/v1/chat/completions",
                 headers={"Authorization": f"Bearer {LITELLM_MASTER_KEY}"},
-                json={"model": model, "messages": messages, "max_tokens": max_tokens},
+                json={"model": model, "messages": messages, "max_tokens": max_tokens, **generation},
             )
     except httpx.HTTPError as exc:
         # The gateway never answered. Still a call on the books, so the failure rate is honest.
@@ -880,8 +948,9 @@ async def run_route(
     # roster model that actually answered, so spend is booked to the right provider.
     answered = r.headers.get("x-litellm-model-group") or model
     content = ""
+    finish_reason = ""
     if outcome == "delivered":
-        content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "") or ""
+        content, finish_reason = _choice_answer(data)
 
     ledger_id = uuid.uuid4()
     async with pool().acquire() as conn:
@@ -926,6 +995,7 @@ async def run_route(
     return RouteResponse(
         ledger_id=ledger_id, model=answered, rung=policy["rung"], content=content,
         tokens_in=tokens_in, tokens_out=tokens_out, cost_usd=cost_usd, latency_ms=latency_ms,
+        finish_reason=finish_reason,
     )
 
 

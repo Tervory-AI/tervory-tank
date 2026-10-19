@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { PublicConvert, PublicScore, PublicSource } from "@/app/api/zenas/feeds/public";
+import { emptyConvert, type PublicConvert, type PublicScore, type PublicSource } from "@/app/api/zenas/feeds/public";
 
 type Region = "us-east" | "za";
 
@@ -33,6 +33,7 @@ export function FeedSwitch({
   const [message, setMessage] = useState(note);
   const [busy, setBusy] = useState("");
   const [watching, setWatching] = useState(initialConvert.running);
+  const [why, setWhy] = useState("");
   const anyRunning = sources.some((row) => row.last_status === "running");
 
   useEffect(() => {
@@ -83,6 +84,7 @@ export function FeedSwitch({
 
   async function choose(next: Region) {
     setRegion(next);
+    setWhy("");
     setMessage("");
     const [feeds, scored, switched, converted] = await Promise.all([
       fetch(`/api/zenas/feeds/region?region=${next}`),
@@ -113,7 +115,7 @@ export function FeedSwitch({
       setCounts(body);
       setWatching(body.running);
     } else {
-      setCounts({ region: next, decided: 0, converted: 0, held_out: 0, failed: 0, running: false, status: "", failures: [] });
+      setCounts(emptyConvert(next));
       setWatching(false);
     }
   }
@@ -204,6 +206,39 @@ export function FeedSwitch({
               <span className="meta">{row.count}</span> {row.reason}
             </li>
           ))}
+        </ul>
+      ) : null}
+      {counts.cases.length > 0 ? (
+        <ul className="fails">
+          {counts.cases.map((row, index) => {
+            const anchor = `why-${index}`;
+            const open = why === row.id;
+            return (
+              <li key={row.id}>
+                <span className="meta">{row.citation || row.id}</span> {row.reason}{" "}
+                <a
+                  className="why"
+                  href={`#${anchor}`}
+                  aria-expanded={open}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    setWhy(open ? "" : row.id);
+                  }}
+                >
+                  Why
+                </a>
+                {open ? (
+                  <div className="why-panel" id={anchor}>
+                    <p className="meta">Finish reason: {row.finish_reason || "—"}</p>
+                    <p className="meta">
+                      Tokens in {row.tokens_in}. Tokens out {row.tokens_out}.
+                    </p>
+                    <pre>{row.answer || "No answer was stored."}</pre>
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       ) : null}
       <button type="button" disabled={busy === "convert"} onClick={convertCases}>

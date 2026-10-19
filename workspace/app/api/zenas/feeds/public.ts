@@ -138,6 +138,16 @@ const FAILURE_REASONS = new Set([
   "quote is not in the judgment",
 ]);
 
+export type PublicCaseFailure = {
+  id: string;
+  citation: string;
+  reason: string;
+  answer: string;
+  finish_reason: string;
+  tokens_in: number;
+  tokens_out: number;
+};
+
 export type PublicConvert = {
   region: string;
   decided: number;
@@ -147,7 +157,16 @@ export type PublicConvert = {
   running: boolean;
   status: "" | "running" | "already running";
   failures: PublicFailure[];
+  cases: PublicCaseFailure[];
 };
+
+const CUTOFF = /^answer cut off \([A-Za-z0-9_.:-]{1,40}\)$/;
+
+function knownReason(raw: string): string {
+  if (FAILURE_REASONS.has(raw)) return raw;
+  if (CUTOFF.test(raw)) return raw;
+  return "other";
+}
 
 function failureCounts(value: unknown): PublicFailure[] {
   if (!Array.isArray(value)) return [];
@@ -155,13 +174,72 @@ function failureCounts(value: unknown): PublicFailure[] {
   for (const item of value) {
     if (!item || typeof item !== "object") continue;
     const row = item as Record<string, unknown>;
-    const raw = String(row.reason ?? "");
-    const reason = FAILURE_REASONS.has(raw) ? raw : "other";
+    const reason = knownReason(String(row.reason ?? ""));
     const count = Number(row.count ?? 0);
     if (!Number.isFinite(count) || count <= 0) continue;
     totals.set(reason, (totals.get(reason) ?? 0) + count);
   }
   return [...totals.entries()].map(([reason, count]) => ({ reason, count }));
+}
+
+function cleanCaseId(value: unknown): string {
+  const text = String(value ?? "").replace(/\s+/g, " ").trim();
+  if (!text || text.length > 200) return "";
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.: -]{0,199}$/.test(text)) return "";
+  return text;
+}
+
+function cleanCitation(value: unknown): string {
+  const text = String(value ?? "").replace(/\s+/g, " ").trim().slice(0, 160);
+  if (/https?:\/\//i.test(text)) return "";
+  return text;
+}
+
+function cleanFinish(value: unknown): string {
+  const text = String(value ?? "").trim();
+  if (!/^[A-Za-z0-9_.:-]{0,40}$/.test(text)) return "";
+  return text;
+}
+
+function cleanAnswer(value: unknown): string {
+  return String(value ?? "").replace(/sk-[A-Za-z0-9_-]{8,}/g, "").slice(0, 1500);
+}
+
+function caseFailures(value: unknown): PublicCaseFailure[] {
+  if (!Array.isArray(value)) return [];
+  const rows: PublicCaseFailure[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    const id = cleanCaseId(row.id);
+    if (!id) continue;
+    const tokensIn = Number(row.tokens_in ?? 0);
+    const tokensOut = Number(row.tokens_out ?? 0);
+    rows.push({
+      id,
+      citation: cleanCitation(row.citation),
+      reason: knownReason(String(row.reason ?? "")),
+      answer: cleanAnswer(row.answer),
+      finish_reason: cleanFinish(row.finish_reason),
+      tokens_in: Number.isFinite(tokensIn) && tokensIn > 0 ? Math.floor(tokensIn) : 0,
+      tokens_out: Number.isFinite(tokensOut) && tokensOut > 0 ? Math.floor(tokensOut) : 0,
+    });
+  }
+  return rows;
+}
+
+export function emptyConvert(region: string): PublicConvert {
+  return {
+    region,
+    decided: 0,
+    converted: 0,
+    held_out: 0,
+    failed: 0,
+    running: false,
+    status: "",
+    failures: [],
+    cases: [],
+  };
 }
 
 function convertStatus(value: unknown): "" | "running" | "already running" {
@@ -182,6 +260,7 @@ export function publicConvert(payload: unknown): PublicConvert {
     running: root.running === true,
     status,
     failures: failureCounts(root.failures),
+    cases: caseFailures(root.cases),
   };
 }
 
