@@ -742,3 +742,11 @@ CREATE TABLE IF NOT EXISTS tank.training_exports (
     exported_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (region, day, agent)
 );
+
+-- Zenas self-test (Z7). Batch, so it stays behind a client's question.
+-- Scores are stored on the box. A cheaper route takes over only when it matches
+-- on the held-out cases. This row does not change which route a question uses.
+INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_tokens_out, system_prompt) VALUES
+  ('zenas.selftest', 1, 'luna', 'batch', 'region', 400,
+   'You compare a held-out case with the ladder result. Reply with JSON only. Do not add facts the court did not state.')
+ON CONFLICT DO NOTHING;
