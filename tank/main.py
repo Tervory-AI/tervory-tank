@@ -258,7 +258,7 @@ _agent_keys_synced = False
 HOMES_PRINCIPAL = "founder-homes"
 _HOMES_DENIED = "This homes key cannot call that."
 _HOMES_LOAD = re.compile(r"^/v1/zenas/pool/sources/([A-Za-z0-9._-]{1,80})/load$")
-_HOMES_FEEDS = frozenset({"/v1/zenas/selftest", "/v1/zenas/review-switch"})
+_HOMES_FEEDS = frozenset({"/v1/zenas/selftest", "/v1/zenas/review-switch", "/v1/zenas/cases/convert"})
 
 
 def _explicit_home_is_za(query_home: str | None, parsed: dict | None) -> bool:
@@ -289,7 +289,7 @@ async def _homes_tenant_body(request: Request) -> None:
 
 
 async def _homes_founder_feed(request: Request, path: str) -> bool:
-    """ZA founder feeds: status, one load, self-test, review switch. Home must be za.
+    """ZA founder feeds: status, one load, self-test, review switch, case conversion. Home must be za.
 
     Returns False when the path is not one of those routes. A matching route
     with the wrong home, a body, or extra fields is refused here. Allowed
@@ -318,7 +318,7 @@ async def _homes_founder_feed(request: Request, path: str) -> bool:
         if not isinstance(loaded, dict):
             raise HTTPException(status_code=403, detail=_HOMES_DENIED)
         parsed = loaded
-    if path == "/v1/zenas/selftest":
+    if path in {"/v1/zenas/selftest", "/v1/zenas/cases/convert"}:
         if parsed and set(parsed) - {"home_region"}:
             raise HTTPException(status_code=403, detail=_HOMES_DENIED)
     elif path == "/v1/zenas/review-switch":
@@ -340,8 +340,8 @@ async def _homes_key_scope(request: Request) -> None:
     """TANK_HOMES_KEY on the ZA Tank only.
 
     It may set a za tenant's home. It may also read pool status, load one
-    source, read or run the self-test, and read or set the review switch,
-    each only with home_region=za. Those routes return names, counts, dates,
+    source, read or run the self-test, read or set the review switch, and read
+    or run case conversion, each only with home_region=za. Those routes return names, counts, dates,
     errors and scores. Documents, matters and client data stay refused.
     The Boston Workspace holds this key. It never holds the ZA TANK_API_KEY.
     """
@@ -2014,7 +2014,7 @@ async def base_proxy(path: str, request: Request) -> Response:
 
 _LOCAL_ZENAS_HOSTS = frozenset({"agent-zenas", "localhost", "127.0.0.1"})
 _ZENAS_PATH = re.compile(
-    r"^(consents|matters|pool|pool/status|health|review|selftest|review-switch|rule-cards|worked|matches|training-pairs|drafts|tenants)$"
+    r"^(consents|matters|pool|pool/status|health|review|selftest|review-switch|cases/convert|rule-cards|worked|matches|training-pairs|drafts|tenants)$"
     r"|^(matters|documents|rule-cards|worked)/[0-9a-fA-F-]{36}$"
     r"|^matters/[0-9a-fA-F-]{36}/documents$"
     r"|^documents/[0-9a-fA-F-]{36}/reviews$"

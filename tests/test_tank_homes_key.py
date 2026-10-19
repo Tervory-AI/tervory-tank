@@ -1,7 +1,7 @@
 """TANK_HOMES_KEY: the ZA Tank lets it set a za tenant's home, and call the founder feeds.
 
-Pool status, one source load, self-test, and the review switch are allowed only
-with home_region=za. They return names, counts, dates, errors and scores.
+Pool status, one source load, self-test, the review switch, and case conversion
+are allowed only with home_region=za. They return names, counts, dates, errors and scores.
 Everything else is refused. Network mocked: the Zenas room is a fake. No database.
 """
 from __future__ import annotations
@@ -106,6 +106,9 @@ def test_homes_key_sets_a_za_home_through_the_proxy(za: _Room) -> None:
         ("POST", "selftest", b"", b"home_region=za", "/selftest"),
         ("POST", "selftest", json.dumps({"home_region": "za"}).encode(), b"", "/selftest"),
         ("GET", "review-switch", b"", b"home_region=za", "/review-switch"),
+        ("GET", "cases/convert", b"", b"home_region=za", "/cases/convert"),
+        ("POST", "cases/convert", json.dumps({"home_region": "za"}).encode(), b"", "/cases/convert"),
+        ("POST", "cases/convert", b"", b"home_region=za", "/cases/convert"),
         (
             "POST",
             "review-switch",
@@ -154,6 +157,10 @@ def test_homes_key_may_call_za_founder_feeds(
         ("POST", "/v1/zenas/review-switch", b'{"home_region":"za","review":"on","note":"client"}', b""),
         ("POST", "/v1/zenas/review-switch", b'{"home_region":"us-east","review":"off"}', b""),
         ("POST", "/v1/zenas/review-switch", b'{"home_region":"za"}', b"home_region=za"),
+        ("GET", "/v1/zenas/cases/convert", b"", b""),
+        ("GET", "/v1/zenas/cases/convert", b"", b"home_region=us-east"),
+        ("POST", "/v1/zenas/cases/convert", b'{"home_region":"us-east"}', b""),
+        ("POST", "/v1/zenas/cases/convert", b'{"home_region":"za","judgment":"a client memo"}', b"home_region=za"),
         ("GET", "/v1/zenas/matters", b"", b"home_region=za"),
         ("POST", "/v1/route", b"{}", b""),
         ("GET", "/health", b"", b""),
