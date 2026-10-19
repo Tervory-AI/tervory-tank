@@ -169,7 +169,7 @@ def test_feed_passes_load_status_and_strips_keyed_urls() -> None:
     assert saflii["detail"].startswith("HTTP 401 from courtlistener.com")
     assert tail not in saflii["detail"]
     leaked = main.public_feed(
-        {"sources": [{"last_status": "error", "detail": "upstream said sk-abcdefghijklmnopqrstuvwxyz012345 bad"}]}
+        {"sources": [{"last_status": "error", "detail": "upstream said sk-abcd1234 bad"}]}
     )
     assert "sk-" not in leaked["sources"][0]["detail"]
     assert "upstream said" in leaked["sources"][0]["detail"]
