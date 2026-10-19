@@ -4,22 +4,25 @@ Saved slices of the 2026-09-30 bulk CSVs. No live network. No API key in a
 URL, a header on the bulk read, or a log.
 
 Every opinion row is that case's own row from the opinions file, in opinion
-id order. Robinson Quality Constructors (175448) and Callaway (2756371) come
-before the commercial keeps. Robinson's row has text and a citation and no
-commercial words. Callaway's row has text and the citations file has no row
-for it, so the load counts it as no text. Regional Care (2756657) and Sheriff
-(5243701) are the commercial keeps. Njie's own opinion says "customs", which
-would keep it, and Sexton's own opinion says "firearm", so neither is the
-not-commercial case.
+id order. Robinson Quality Constructors (175448) has text and a citation and
+no commercial words, so it is not commercial. Callaway (2756371) has text and
+the citations file has no row for it, so it is kept with a docket-number
+citation and counted as no reporter citation. Regional Care (2756657) and
+Sheriff (5243701) are the commercial keeps. An empty opinion is still no text.
+Njie's own opinion says "customs", and Sexton's says "firearm", so neither
+row is in the fixture.
 """
 
 from __future__ import annotations
 
 import asyncio
 import bz2
+import copy
+import io
 import json
 import os
 import sys
+import threading
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -30,7 +33,6 @@ sys.path.insert(0, str(ROOT))
 
 from agents.zenas.pool.adapters.courtlistener_bulk import (  # noqa: E402
     BulkState,
-    be_polite,
     bulk_cap,
     choose_snapshot,
     iter_csv_bytes,
@@ -40,7 +42,7 @@ from agents.zenas.pool.adapters.courtlistener_bulk import (  # noqa: E402
 from agents.zenas.pool.catalogue import CATALOGUE  # noqa: E402
 from agents.zenas.pool.ingest import ingest_snapshot  # noqa: E402
 from agents.zenas.pool.licence import FetchNotConfigured  # noqa: E402
-from agents.zenas.pool.nightly import courtlistener_night  # noqa: E402
+from agents.zenas.pool.nightly import courtlistener_night, urllib_get  # noqa: E402
 from agents.zenas.pool.store import MemoryStore, PostgresStore  # noqa: E402
 
 BULK = ROOT / "tests" / "fixtures" / "courtlistener" / "bulk"
@@ -119,20 +121,58 @@ def test_bz2_csv_is_read_from_memory_not_a_path():
     assert rows == [["id", "court_id"], ["1", "ca9"]]
 
 
-def test_cap_defaults_to_50000_and_the_read_is_low_priority(monkeypatch: pytest.MonkeyPatch):
+def test_cap_defaults_to_50000(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("ZENAS_CL_BULK_MAX", raising=False)
     assert bulk_cap() == 50_000
     monkeypatch.setenv("ZENAS_CL_BULK_MAX", "3")
     assert bulk_cap() == 3
-    calls: list[int] = []
-    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
-    monkeypatch.setattr("agents.zenas.pool.adapters.courtlistener_bulk.os.nice", lambda level: calls.append(level))
-    import agents.zenas.pool.adapters.courtlistener_bulk as bulk
+    monkeypatch.setenv("ZENAS_CL_BULK_MAX", "nope")
+    assert bulk_cap() == 50_000
 
-    bulk._NICE_DONE = False
-    be_polite()
-    assert calls == [19]
-    bulk._NICE_DONE = False
+
+def test_bulk_load_does_not_lower_the_main_thread(monkeypatch: pytest.MonkeyPatch):
+    asyncio.run(_priority(monkeypatch))
+
+
+class _Body(io.BytesIO):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        self.close()
+        return False
+
+
+async def _priority(monkeypatch: pytest.MonkeyPatch):
+    real_nice = os.nice
+    before = real_nice(0)
+    seen: list[tuple[int, str, bool]] = []
+
+    def spy(level: int) -> int:
+        is_main = threading.current_thread() is threading.main_thread()
+        seen.append((level, threading.current_thread().name, is_main))
+        if is_main:
+            return before
+        return real_nice(level)
+
+    monkeypatch.setattr("agents.zenas.pool.adapters.courtlistener_bulk.os.nice", spy)
+    files = _files()
+
+    def fake_urlopen(request, timeout=60):  # noqa: ARG001
+        url = request.full_url
+        if "list-type=" in url:
+            return _Body(_listing(list(files)))
+        for key, payload in files.items():
+            if key in url:
+                return _Body(payload)
+        raise AssertionError(url)
+
+    monkeypatch.setattr("agents.zenas.pool.adapters.courtlistener_bulk.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setenv("ZENAS_CL_BULK_MAX", "50")
+    await load_bulk(urllib_get, state=BulkState())
+    assert real_nice(0) == before
+    assert seen, seen
+    assert all(level == 19 and name == "cl-bulk-reader" and is_main is False for level, name, is_main in seen), seen
 
 
 def test_fixture_keeps_commercial_cases_and_drops_the_rest(monkeypatch: pytest.MonkeyPatch):
@@ -145,7 +185,8 @@ async def _fixture(monkeypatch: pytest.MonkeyPatch):
     result = await load_bulk(_bulk_get(calls), state=BulkState())
     assert result.snapshot == DAY
     assert result.cursor == f"cl-bulk:{DAY}:done"
-    assert _citations(result.blobs) == {"175 A.D. 882", "586 F. App'x 297"}
+    callaway_cite = "No. 13-51169 (Fifth Circuit 2014-12-01)"
+    assert _citations(result.blobs) == {"175 A.D. 882", "586 F. App'x 297", callaway_cite}
     kept = [row for blob in result.blobs for row in json.loads(blob)["results"]]
     by_cite = {row["citations"][0]: row for row in kept}
     sheriff = by_cite["175 A.D. 882"]
@@ -155,23 +196,28 @@ async def _fixture(monkeypatch: pytest.MonkeyPatch):
     regional = by_cite["586 F. App'x 297"]
     assert regional["docket_number"] == "12-16538"
     assert regional["court_id"] == "ca9"
+    callaway = by_cite[callaway_cite]
+    assert "Callaway" in callaway["case_name"]
+    assert callaway["docket_number"] == "13-51169"
+    assert callaway["court_id"] == "ca5"
+    assert callaway["plain_text"]
     names = " ".join(row["case_name"] for row in kept)
     assert "Walker" not in names
     assert "Samuels" not in names
     assert "John Does" not in names
     assert "Njie" not in names
     assert "Sexton" not in names
-    assert "Callaway" not in names
     assert "Robinson" not in names
     assert result.skips["criminal"] >= 2
     assert result.skips["not-appellate"] >= 1
     assert result.skips["not-commercial"] >= 1
-    assert result.skips["no-text"] >= 1
+    assert result.skips["no-reporter-citation"] >= 1
     line = progress_line(result.snapshot, result.file_label, result.rows_read, result.cases_kept, result.skips)
     assert line.startswith(f"snapshot {DAY}; file opinions; rows read ")
-    assert "cases kept 2" in line
+    assert "cases kept 3" in line
     assert "skipped not our court" in line
     assert "criminal" in line and "not commercial" in line and "no text" in line
+    assert "no reporter citation" in line
     assert all("s3-us-west-2.amazonaws.com" in url for url, _headers in calls)
     assert not any(url.startswith("https://www.courtlistener.com/api/") for url, _headers in calls)
 
@@ -183,22 +229,69 @@ def test_a_stopped_run_resumes_without_duplicates(monkeypatch: pytest.MonkeyPatc
 async def _resume(monkeypatch: pytest.MonkeyPatch):
     # The cap counts opinions that have text. Robinson and Callaway are read
     # before Regional Care, so the first commercial case is the third.
+    # Callaway is kept (docket-number citation); Robinson is not commercial.
     monkeypatch.setenv("ZENAS_CL_BULK_MAX", "3")
+    callaway_cite = "No. 13-51169 (Fifth Circuit 2014-12-01)"
     first = await load_bulk(_bulk_get([]), state=BulkState())
-    assert _citations(first.blobs) == {"586 F. App'x 297"}
+    assert _citations(first.blobs) == {"586 F. App'x 297", callaway_cite}
     assert first.cursor == f"cl-bulk:{DAY}:opinions:2756657"
-    # A new process: empty memory, same cursor. The opinion already stored is not emitted.
+    # A new process: empty memory, same cursor. The opinions already stored are not emitted.
     second = await load_bulk(_bulk_get([]), resume=first.cursor, state=BulkState())
     assert "586 F. App'x 297" not in _citations(second.blobs)
+    assert callaway_cite not in _citations(second.blobs)
     assert "175 A.D. 882" in _citations(second.blobs)
     source = _source()
     store = MemoryStore(home_region="us-east")
     await ingest_snapshot(store, source, first.blobs, on=ON, region="us-east")
     await ingest_snapshot(store, source, second.blobs, on=ON, region="us-east")
-    assert len(store.docs) == 2
+    assert len(store.docs) == 3
     again = await load_bulk(_bulk_get([]), state=BulkState())
     await ingest_snapshot(store, source, again.blobs, on=ON, region="us-east")
-    assert len(store.docs) == 2
+    assert len(store.docs) == 3
+
+
+def test_a_restored_run_still_names_the_court(monkeypatch: pytest.MonkeyPatch):
+    asyncio.run(_restored_court(monkeypatch))
+
+
+async def _restored_court(monkeypatch: pytest.MonkeyPatch):
+    # A new process restores docket and cluster ids from the table. Court
+    # names are not in that table, so the courts file is read again.
+    monkeypatch.setenv("ZENAS_CL_BULK_MAX", "50")
+    warmed = BulkState()
+    await load_bulk(_bulk_get([]), state=warmed)
+    dockets = dict(warmed.dockets)
+    clusters = copy.deepcopy(warmed.clusters)
+    for item in clusters.values():
+        if "Callaway" in item.case_name:
+            item.citation = ""
+            item.citation_type = ""
+
+    class _Conn:
+        async def execute(self, *_args, **_kwargs):
+            return None
+
+        async def executemany(self, *_args, **_kwargs):
+            return None
+
+        async def close(self):
+            return None
+
+    async def open_db():
+        return _Conn()
+
+    async def load_ids(_conn, state: BulkState):
+        state.dockets.update(dockets)
+        state.clusters.update(clusters)
+
+    monkeypatch.setattr("agents.zenas.pool.adapters.courtlistener_bulk._open_db", open_db)
+    monkeypatch.setattr("agents.zenas.pool.adapters.courtlistener_bulk._load_ids", load_ids)
+    resumed = await load_bulk(
+        _bulk_get([]),
+        resume=f"cl-bulk:{DAY}:opinions:175448",
+        state=BulkState(),
+    )
+    assert "No. 13-51169 (Fifth Circuit 2014-12-01)" in _citations(resumed.blobs)
 
 
 def test_api_updates_ask_only_for_dates_after_the_snapshot(monkeypatch: pytest.MonkeyPatch):
@@ -269,10 +362,16 @@ def test_progress_line_is_what_the_feeds_page_shows():
     board = (ROOT / "workspace/app/zenas/feeds/board.tsx").read_text()
     assert 'row.id === "courtlistener"' in board
     assert 'row.detail.includes("snapshot ")' in board
-    line = progress_line(DAY, "opinions", 40, 2, {"not-appellate": 1, "criminal": 2, "not-commercial": 1, "no-text": 2})
+    line = progress_line(
+        DAY,
+        "opinions",
+        40,
+        2,
+        {"not-appellate": 1, "criminal": 2, "not-commercial": 1, "no-text": 2, "no-reporter-citation": 3},
+    )
     assert line == (
         f"snapshot {DAY}; file opinions; rows read 40; cases kept 2; "
-        "skipped not our court 1, criminal 2, not commercial 1, no text 2"
+        "skipped not our court 1, criminal 2, not commercial 1, no text 2, no reporter citation 3"
     )
 
 

@@ -60,7 +60,7 @@ LIST_PREFIXES = (
     "bulk-data/citations-",
     "bulk-data/schema-",
 )
-_NICE_DONE = False
+_READER_THREAD = "cl-bulk-reader"
 
 
 def bulk_cap() -> int:
@@ -75,15 +75,13 @@ def bulk_cap() -> int:
 
 
 def be_polite() -> None:
-    """Lower this process once, so a bulk read does not crowd the room."""
-    global _NICE_DONE
-    if _NICE_DONE or os.environ.get("PYTEST_CURRENT_TEST"):
+    """Lower the calling thread. Only the file reader calls this, never the event loop."""
+    if threading.current_thread() is threading.main_thread():
         return
     try:
         os.nice(19)
     except OSError:
         pass
-    _NICE_DONE = True
 
 
 def _reject_credential(url: str) -> None:
@@ -214,7 +212,8 @@ def progress_line(day: str, file: str, rows_read: int, cases_kept: int, skips: C
     return (
         f"snapshot {day}; file {file}; rows read {rows_read}; cases kept {cases_kept}; "
         f"skipped not our court {n('not-appellate')}, criminal {n('criminal')}, "
-        f"not commercial {n('not-commercial')}, no text {n('no-text')}"
+        f"not commercial {n('not-commercial')}, no text {n('no-text')}, "
+        f"no reporter citation {n('no-reporter-citation')}"
     )
 
 
@@ -300,6 +299,7 @@ async def _aiter_thread(worker, stop: threading.Event) -> AsyncIterator[object]:
 
     def run() -> None:
         try:
+            be_polite()
             for item in worker():
                 if stop.is_set():
                     break
@@ -320,7 +320,8 @@ async def _aiter_thread(worker, stop: threading.Event) -> AsyncIterator[object]:
         finally:
             asyncio.run_coroutine_threadsafe(_try_put(queue, done), loop).result(timeout=30)
 
-    task = asyncio.create_task(asyncio.to_thread(run))
+    thread = threading.Thread(target=run, name=_READER_THREAD, daemon=True)
+    thread.start()
     try:
         while True:
             item = await queue.get()
@@ -329,7 +330,8 @@ async def _aiter_thread(worker, stop: threading.Event) -> AsyncIterator[object]:
             yield item
     finally:
         stop.set()
-        await task
+        while thread.is_alive():
+            await asyncio.sleep(0.01)
     if errors:
         raise errors[0]
 
@@ -416,6 +418,7 @@ class BulkState:
 
     day: str = ""
     files_done: set[str] = field(default_factory=set)
+    courts: dict[str, str] = field(default_factory=dict)
     dockets: dict[int, DocketKept] = field(default_factory=dict)
     clusters: dict[int, ClusterKept] = field(default_factory=dict)
     last_opinion_id: int = 0
@@ -423,6 +426,7 @@ class BulkState:
     def clear(self) -> None:
         self.day = ""
         self.files_done.clear()
+        self.courts.clear()
         self.dockets.clear()
         self.clusters.clear()
         self.last_opinion_id = 0
@@ -454,6 +458,12 @@ def _case_payload(docket: DocketKept, cluster: ClusterKept, text: str) -> dict:
         "precedential_status": cluster.precedential_status or "Published",
         "absolute_url": url,
     }
+
+
+def _docket_citation(docket: DocketKept, cluster: ClusterKept, courts: dict[str, str]) -> str:
+    """A citation from the cluster's own docket, court, and date filed."""
+    court = courts.get(docket.court_id.lower(), "")
+    return f"No. {docket.docket_number} ({court} {cluster.date_filed})"
 
 
 def _prefer_citation(cluster: ClusterKept, volume: str, reporter: str, page: str, cite_type: str) -> None:
@@ -682,7 +692,6 @@ async def load_bulk(http_get, *, resume: str = "", state: BulkState | None = Non
     """Stream the latest snapshot. Returns stored-row JSON and the resume cursor."""
     if os.environ.get("TANK_REGION", "").strip().lower() == "za":
         raise FetchNotConfigured("CourtListener bulk runs on the US box only")
-    be_polite()
     state = state if state is not None else BulkState()
     bulk_text, api = split_cursor(resume)
     cursor = parse_cursor(bulk_text)
@@ -709,7 +718,9 @@ async def load_bulk(http_get, *, resume: str = "", state: BulkState | None = Non
         if cursor and _past(cursor, "dockets") and not state.dockets:
             await _load_ids(conn, state)
             if state.dockets:
-                state.files_done.update({"schema", "courts", "dockets"})
+                # Court names are not in the id table. Re-read that small file
+                # so a docket-number citation still names the court.
+                state.files_done.update({"schema", "dockets"})
             if state.clusters:
                 state.files_done.add("clusters")
         for kind in FILE_ORDER:
@@ -720,7 +731,7 @@ async def load_bulk(http_get, *, resume: str = "", state: BulkState | None = Non
             if kind == "schema":
                 await _read_schema(http_get, object_url(snapshot.files["schema"]), progress)
             elif kind == "courts":
-                await _read_courts(http_get, object_url(snapshot.files["courts"]), progress)
+                await _read_courts(http_get, object_url(snapshot.files["courts"]), state, progress)
             elif kind == "dockets":
                 await _read_dockets(http_get, object_url(snapshot.files["dockets"]), state, progress, conn)
             elif kind == "clusters":
@@ -765,8 +776,10 @@ async def load_bulk(http_get, *, resume: str = "", state: BulkState | None = Non
 
 def _ready(state: BulkState, kind: str) -> bool:
     """A finished file can be skipped when the ids it produced are still here."""
-    if kind in {"schema", "courts"}:
+    if kind == "schema":
         return kind in state.files_done or bool(state.dockets or state.clusters)
+    if kind == "courts":
+        return bool(state.courts)
     if kind == "dockets":
         return bool(state.dockets)
     if kind == "clusters":
@@ -812,13 +825,17 @@ async def _consume_csv(http_get, url: str):
         stop.set()
 
 
-async def _read_courts(http_get, url: str, progress: _Progress) -> None:
+async def _read_courts(http_get, url: str, state: BulkState, progress: _Progress) -> None:
     header: list[str] | None = None
-    async for row in _consume_csv(http_get, url):
+    async for raw in _consume_csv(http_get, url):
         if header is None:
-            header = row
+            header = raw
             continue
         progress.rows_read += 1
+        row = _mapping(header, raw)
+        court_id = _cell(row, "id").lower()
+        if court_id:
+            state.courts[court_id] = _cell(row, "short_name") or _cell(row, "full_name") or court_id
         if progress.rows_read % 5000 == 0:
             await progress.note()
     await progress.note(force=True)
@@ -1032,10 +1049,15 @@ def _emit(state: BulkState, texts: dict[int, list[str]], skips: Counter[str]) ->
         if not text:
             skips["no-text"] += 1
             continue
+        missing_reporter = not cluster.citation
+        if missing_reporter:
+            cluster.citation = _docket_citation(docket, cluster, state.courts)
+            skips["no-reporter-citation"] += 1
         payload = _case_payload(docket, cluster, text)
-        if not cluster.citation:
-            skips["no-text"] += 1
-            continue
+        # A reporter citation still has to be a commercial case. Opinion text
+        # with no row in the citations file is kept under the docket citation.
+        if missing_reporter:
+            payload["commercial"] = True
         if not is_commercial(payload):
             skips["not-commercial"] += 1
             continue
