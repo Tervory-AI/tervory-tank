@@ -9,8 +9,8 @@ Built from the approved Figma file "Rig" (pages "Rig — Search v5" and "Custom 
 
 | Step | Call |
 | --- | --- |
-| Prompt, matched pistol, approved fits | `GET /v1/rig/search` (a second search with the pistol name lists all its approved fits) |
-| Pistol when the prompt names only a part | `GET /v1/rig/products/{id}` |
+| Prompt, matched base product, approved fits | `GET /v1/rig/search` (a second search with the base product name lists all its approved fits) |
+| Base product when the prompt names only a part | `GET /v1/rig/products/{id}` |
 | Market average, low, high | `POST /v1/rig/compare`, only for items the shopper has picked or opened |
 | Get A Quote | `POST /v1/rig/quote`, the shop's existing quote request (Custom Nation letter to the shop email in `publish.json`) |
 | I don't know | the search's `honest` state (`nothing`, `not_stocked`) |

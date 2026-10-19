@@ -141,10 +141,19 @@ async def _assert_imported(url: str) -> None:
         assert products == expected
         assert expected == 18 + 3 + 2 + 15
         seen = await conn.fetch("SELECT seen_at, price FROM agent_rig.market_prices")
-        assert len(seen) == 32
+        # One row per market sheet line: 32 Custom Nation rows seen 2026-03-01,
+        # plus 53 labelled sample rows for the Archon catalogue seen 2026-10-18.
+        days: dict[str, int] = {}
+        for sheet in CATALOGUES.glob("*/market.csv"):
+            for line in sheet.read_text(encoding="utf-8").splitlines()[1:]:
+                if line.strip():
+                    day = line.rsplit(",", 1)[1].strip()
+                    days[day] = days.get(day, 0) + 1
+        assert days == {"2026-03-01": 32, "2026-10-18": 53}
+        assert len(seen) == sum(days.values())
         for row in seen:
             assert isinstance(row["seen_at"], datetime)
-            assert row["seen_at"].date().isoformat() == "2026-03-01"
+            assert row["seen_at"].date().isoformat() in days
             assert row["price"] is not None
         kind = await conn.fetchval(
             "SELECT jsonb_typeof(attributes) FROM agent_rig.products WHERE sku = $1",
