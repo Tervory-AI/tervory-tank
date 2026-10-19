@@ -10,12 +10,12 @@ export const metadata: Metadata = {
 };
 
 export default async function Page() {
-  let accountName = "Choose an account";
+  let accountName = "Your account";
   try {
     const tenant = await activeTenant();
     if (tenant?.orgName.trim()) accountName = tenant.orgName.trim();
   } catch {
-    accountName = "Choose an account";
+    accountName = "Your account";
   }
   return <RadixPage accountName={accountName} settings={<RadixSettings />} />;
 }

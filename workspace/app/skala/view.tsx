@@ -71,7 +71,7 @@ export function SkalaApp({
   const [askDraft, setAskDraft] = useState("");
   const [thread, setThread] = useState<Turn[]>([]);
   const searchId = useId();
-  const account = accountName?.trim() || "Account name";
+  const account = accountName?.trim() || "Your account";
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {

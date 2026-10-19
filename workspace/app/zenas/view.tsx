@@ -26,7 +26,7 @@ const BOTTOM_LINKS = [
 ] as const;
 
 export function ZenasView({ plugins, workspaceName }: { plugins: PluginPanel; workspaceName: string | null }) {
-  const accountName = workspaceName?.trim() || "Account name";
+  const accountName = workspaceName?.trim() || "Your account";
   const initial = accountName.slice(0, 1).toUpperCase();
   const searchRef = useRef<HTMLInputElement>(null);
   const askRef = useRef<HTMLTextAreaElement>(null);
@@ -387,7 +387,7 @@ export function ZenasView({ plugins, workspaceName }: { plugins: PluginPanel; wo
               </div>
             </div>
           </form>
-          <p className="zn-disclaimer">Zenas provides legal information, not legal advice. A lawyer reviews before anything is filed.</p>
+          <p className="zn-disclaimer">Zenas provides legal information, not legal advice.</p>
           {actionNote ? <p className="zn-note-line">{actionNote}</p> : null}
         </section>
         <section className="zn-work" aria-label="Your work">

@@ -1,6 +1,6 @@
 import type { TigerAlert, TigerObservation, TigerWatch } from "@/lib/tank";
 import { everyLabel, stockLabel, watchTitle } from "../prices/format";
-import { ALERTS, PRODUCTS, READS, REFRESHED, UNREAD, type ExampleAlert, type ReadStatus } from "./copy";
+import type { ReadStatus } from "./copy";
 
 export type Section = "overview" | "ask" | "alerts" | "watch" | "unread" | "plugins";
 
@@ -29,7 +29,18 @@ export type ProductRow = {
 };
 
 export type ReadRow = { id: string; when: string; product: string; price: string; stock: string };
-export type AlertRow = ExampleAlert & { live?: boolean };
+export type AlertRow = {
+  id: string;
+  when: string;
+  product: string;
+  store: string;
+  kind: "Price" | "Stock";
+  before: string;
+  now: string;
+  change: string;
+  today: boolean;
+  live?: boolean;
+};
 export type UnreadRow = { id: string; product: string; store: string; why: string; since: string };
 
 export type TigerData = {
@@ -55,18 +66,19 @@ export type SearchHit = {
 
 const SKIPPED = new Set(["blocked", "robots", "error", "none", "unread"]);
 
-export function exampleData(): TigerData {
+/** No watched pages yet. Counts stay at zero and no sample rows are shown. */
+export function emptyData(): TigerData {
   return {
-    example: true,
-    refreshed: REFRESHED,
-    watchedCount: 24,
-    changesToday: 3,
-    unreadCount: 2,
-    products: PRODUCTS.map((row) => ({ ...row, url: `https://${row.path}`, live: false })),
-    reads: READS.map((row) => ({ ...row })),
-    alerts: ALERTS.map((row) => ({ ...row })),
-    unread: UNREAD.map((row) => ({ ...row })),
-    listNote: "Showing 6 of 24 · Example",
+    example: false,
+    refreshed: "",
+    watchedCount: 0,
+    changesToday: 0,
+    unreadCount: 0,
+    products: [],
+    reads: [],
+    alerts: [],
+    unread: [],
+    listNote: null,
   };
 }
 

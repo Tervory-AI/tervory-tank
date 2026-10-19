@@ -671,7 +671,7 @@ export function MarketLabView({
   const searching = query.trim().length > 0;
   const noHits = searching && onCards.length === 0 && offRows.length === 0 && groups.length === 0;
   const anyKeyedOn = [...model.featured, ...model.cards].some((card) => KEYED_ON.has(card.id));
-  const accountName = workspaceName?.trim() || "Account";
+  const accountName = workspaceName?.trim() || "Your account";
 
   function openSection(id: string) {
     setMenu(false);

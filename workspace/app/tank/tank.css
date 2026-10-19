@@ -373,10 +373,10 @@ body:has(.tk) main {
 
 .tk-vault {
   margin: 0;
-  color: #6b7590;
-  font-family: var(--font-mono), "JetBrains Mono", ui-monospace, monospace;
-  font-size: 13px;
-  line-height: 1.45;
+  color: #3d4a66;
+  font-family: var(--font-inter), Inter, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
 }
 
 .tk-vault.on {

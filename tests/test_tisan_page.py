@@ -27,13 +27,14 @@ def test_panel_stays_fixed_and_only_the_body_scrolls():
     assert "panel-own" in source
     assert "panel-bottom" in source
     panel = source.split('id="tisan-panel"', 1)[1].split("</aside>", 1)[0]
-    assert panel.index('src="/brand/tisan-on-dark.png"') < panel.index("Account name")
+    assert panel.index('src="/brand/tisan-on-dark.png"') < panel.index("Your account")
     assert 'class="panel-mark"' in panel or 'className="panel-mark"' in panel
     assert "logo-slot" not in panel
     assert panel.index('src="/brand/tervory-logo-reversed.png"') < panel.index(">Settings<")
     assert panel.index(">Settings<") < panel.index(">Support<")
     assert panel.count('src="/brand/tervory-logo-reversed.png"') == 1
-    assert "Account name" in source
+    assert "Your account" in source
+    assert "Account name" not in source
     assert "Dashboard" in source
     assert "Projects" in source
     assert "Chats" in source
@@ -67,7 +68,8 @@ def test_plugins_is_the_tab_and_sources_are_only_under_answers():
 
 def test_example_values_stay_and_secrets_are_dots():
     source = _source()
-    assert "Example" in source
+    assert "No builds yet." in source
+    assert "Example" not in source
     assert "••••••••" in source
     assert "Tisan logo, coming later" not in source
     assert 'src="/brand/tisan-on-dark.png"' in source

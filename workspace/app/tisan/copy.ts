@@ -1,4 +1,4 @@
-/** Example copy for the Tisan page. Placeholders stay placeholders. No secrets. */
+/** Labels for the Tisan page. Sample builds are not shown. No secrets. */
 
 export type View = "overview" | "builds" | "design" | "tests" | "settings";
 export type Filter = "all" | "Build" | "Page" | "Test";
@@ -29,19 +29,8 @@ export const FILTERS: { id: Filter; label: string }[] = [
   { id: "Test", label: "Tests" },
 ];
 
-/** Records search can find. A query of "landing" matches the five rows in the search frame. */
-export const RECORDS: SearchRecord[] = [
-  { id: "b98", kind: "Build", title: "Tervory landing page", detail: "Draft pull request #98 · Today, 7:12 AM PT · Tests passed", view: "builds" },
-  { id: "b96", kind: "Build", title: "Starter site test gate", detail: "Draft pull request #96 · Yesterday, 4:40 PM PT · Tests passed", view: "builds" },
-  { id: "blanding", kind: "Build", title: "Tervory landing page", detail: "Branch tisan/landing · Yesterday, 11:05 AM PT · Code checks failed", view: "builds" },
-  { id: "b44", kind: "Build", title: "Starter site", detail: "Pull request #44 · 15 Oct · Tests passed", view: "builds" },
-  { id: "page", kind: "Page", title: "Landing — Desktop & Mobile", detail: "Locked Figma page · saved copy in the repo", view: "design" },
-  { id: "screens", kind: "Test", title: "Screens at 390, 768 and 1440 wide", detail: "Tervory landing page · Passed", view: "tests" },
-  { id: "lh", kind: "Test", title: "Lighthouse", detail: "Tervory landing page · 100 in all four scores", view: "tests" },
-  { id: "lint", kind: "Test", title: "Lint and type checks", detail: "eslint and tsc · Passed", view: "tests" },
-  { id: "unit", kind: "Test", title: "Unit tests", detail: "vitest · Passed", view: "tests" },
-  { id: "radix", kind: "Test", title: "Radix scan", detail: "Runs before any deploy · Not ready", view: "tests" },
-];
+/** Records search can find. Empty until a real build exists. */
+export const RECORDS: SearchRecord[] = [];
 
 export function showsChat(view: View, query: string, filter: Filter): boolean {
   return view === "overview" && query.trim() === "" && filter === "all";
@@ -91,67 +80,29 @@ export function groupMeta(kind: Kind, count: number): { heading: string; countLa
 export function resultSummary(query: string, count: number): string {
   const noun = count === 1 ? "result" : "results";
   const q = query.trim();
-  if (!q) return `${count} ${noun} · Example`;
-  return `${count} ${noun} for “${q}” · Example`;
+  if (!q) return `${count} ${noun}`;
+  return `${count} ${noun} for “${q}”`;
 }
 
 export type Citation = { title: string; detail: string; view: View };
 
-export const OPENING_THREAD: { role: "user" | "assistant"; text: string; when?: string; sources?: Citation[] }[] = [
-  {
-    role: "user",
-    text: "Build a one-page site for the Boise gunsmith from the saved landing page.",
-  },
-  {
-    role: "assistant",
-    text: "Done. The site is built on a new branch and passed all six checks. Draft pull request #112 is open for your review. Deploy stays off until the Radix scan is ready.",
-    when: "Answered 7:14 AM PT",
-    sources: [
-      { title: "Saved Figma page", detail: "Landing — Desktop & Mobile · saved copy in the repo", view: "design" },
-      { title: "Build log", detail: "Branch tisan/boise-gunsmith · Example", view: "builds" },
-      { title: "Test gate report", detail: "Lint, unit, build, three screen sizes, accessibility, Lighthouse 100 · Example", view: "tests" },
-      { title: "Draft pull request #112", detail: "tervory-tank · Example", view: "builds" },
-    ],
-  },
-];
+export const OPENING_THREAD: { role: "user" | "assistant"; text: string; when?: string; sources?: Citation[] }[] = [];
 
 export function replyTo(text: string): { text: string; when: string; sources: Citation[] } {
   const hits = searchRecords(text, "all").slice(0, 4);
   if (hits.length === 0) {
     return {
-      text: "Example only. Nothing was sent, and no build was started. None of the example builds, pages or tests match that.",
+      text: "No builds yet. Nothing was sent, and no build was started.",
       when: "Answered just now",
       sources: [],
     };
   }
   return {
-    text: "Example only. Nothing was sent, and no build was started. These records are the closest match.",
+    text: "These are the closest matches. Nothing was sent, and no build was started.",
     when: "Answered just now",
-    sources: hits.map((hit) => ({ title: hit.title, detail: `${hit.detail} · Example`, view: hit.view })),
+    sources: hits.map((hit) => ({ title: hit.title, detail: hit.detail, view: hit.view })),
   };
 }
-
-export const STEPS = [
-  { n: "1", title: "Brief", tone: "solid" as const, state: "Done", detail: "Short brief read." },
-  { n: "2", title: "Design", tone: "solid" as const, state: "Done", detail: "Saved Figma page read. No live call." },
-  { n: "3", title: "Build", tone: "solid" as const, state: "Done", detail: "Next.js site built." },
-  { n: "4", title: "Tests", tone: "solid" as const, state: "Passed", detail: "All checks passed." },
-  { n: "5", title: "Scan", tone: "quiet" as const, state: "Not ready", detail: "Radix scan is not ready yet." },
-  { n: "6", title: "Deploy", tone: "quiet" as const, state: "Off", detail: "Waits for a clean scan." },
-];
-
-export const RECENT = [
-  { title: "Tervory landing page", detail: "Draft pull request #98 · Today · Example", tests: "Passed", scan: "Not ready", deploy: "Off", when: "Today, 7:12 AM PT" },
-  { title: "Starter site test gate", detail: "Draft pull request #96 · Example", tests: "Passed", scan: "Not ready", deploy: "Off", when: "Yesterday, 4:40 PM PT" },
-  { title: "Starter site", detail: "Pull request #44 · Example", tests: "Passed", scan: "Not ready", deploy: "Off", when: "15 Oct" },
-];
-
-export const ALL_BUILDS = [
-  { title: "Tervory landing page", detail: "Draft pull request #98 · Today, 7:12 AM PT · Example", code: "Passed", screens: "Passed", access: "Passed", light: "100", scan: "Not ready", deploy: "Off" },
-  { title: "Starter site test gate", detail: "Draft pull request #96 · Yesterday, 4:40 PM PT · Example", code: "Passed", screens: "Passed", access: "Passed", light: "100", scan: "Not ready", deploy: "Off" },
-  { title: "Tervory landing page", detail: "Branch tisan/landing · Yesterday, 11:05 AM PT · Example", code: "Failed", screens: "Not run", access: "Not run", light: "—", scan: "Not run", deploy: "Off" },
-  { title: "Starter site", detail: "Pull request #44 · 15 Oct · Example", code: "Passed", screens: "Passed", access: "Passed", light: "98", scan: "Not ready", deploy: "Off" },
-];
 
 export const RULES = [
   { title: "Saved page only", detail: "Tisan reads the locked Figma page saved in the repo. It does not call Figma live." },
@@ -160,52 +111,9 @@ export const RULES = [
   { title: "Deploy on a clean scan", detail: "Tisan deploys only after the tests pass and the scan comes back clean." },
 ];
 
-export const COLOURS = [
-  { name: "Navy", hex: "#001840", swatch: "navy" },
-  { name: "Red, one primary action", hex: "#E80008", swatch: "red" },
-  { name: "Lines", hex: "#B8BFD0", swatch: "lines" },
-  { name: "Tint", hex: "#F4F6FB", swatch: "tint" },
-];
-
-export const SPACING = [4, 8, 12, 16, 24, 32, 48];
-
-export const GAPS = [
-  { title: "No spacing variables", detail: "The page has no named spacing.", did: "Used the spacing from the layout and listed it." },
-  { title: "No font family or weights", detail: "Text styles do not name them.", did: "Left them out of the type tokens." },
-  { title: "No h4 to h6", detail: "Only three heading sizes exist.", did: "Did not invent the missing sizes." },
-  { title: "No button hover or disabled states", detail: "Only the resting button is drawn.", did: "Kept the resting state only." },
-];
-
-export const COMPONENTS = [
-  { title: "Button", detail: "Primary and secondary", built: "components/Button.tsx" },
-  { title: "Squad card", detail: "One card per Squad member", built: "components/SquadCard.tsx" },
-  { title: "Logo", detail: "Tervory logo, navy and white", built: "Logo files used as they are" },
-];
-
-export const SCORES = [
-  { score: "100", label: "Performance" },
-  { score: "100", label: "Accessibility" },
-  { score: "100", label: "Best practices" },
-  { score: "100", label: "SEO" },
-];
-
-export const CHECKS = [
-  { title: "Lint and type checks", tool: "eslint and tsc", proves: "The code is tidy and the types line up.", result: "Passed", tone: "solid" as const },
-  { title: "Unit tests", tool: "vitest", proves: "Small parts of the site work on their own.", result: "Passed", tone: "solid" as const },
-  { title: "Production build", tool: "next build", proves: "The site builds the way it will run live.", result: "Passed", tone: "solid" as const },
-  { title: "Screens", tool: "Playwright at 390, 768 and 1440 wide", proves: "Pages open and work on phone, tablet and desktop.", result: "Passed", tone: "solid" as const },
-  { title: "Accessibility", tool: "axe at each screen size", proves: "No accessibility errors on any page.", result: "Passed", tone: "solid" as const },
-  { title: "Lighthouse", tool: "90 or above in all four scores", proves: "The site is fast and well built.", result: "Passed", tone: "solid" as const },
-  { title: "Radix scan", tool: "Runs before any deploy", proves: "No secrets or known risks ship with the site.", result: "Not ready", tone: "quiet" as const },
-];
-
 export const PLUGIN_TABS: { id: PluginTab; label: string }[] = [
   { id: "keys", label: "API keys" },
   { id: "files", label: "Files" },
   { id: "links", label: "Source links" },
   { id: "mcp", label: "MCP connections" },
 ];
-
-export function toneFor(label: string): "solid" | "quiet" {
-  return label === "Passed" || label === "Done" || label === "Connected" || label === "Watching" || label === "Processed" ? "solid" : "quiet";
-}

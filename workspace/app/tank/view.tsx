@@ -119,7 +119,7 @@ export function TankView({
   const [menu, setMenu] = useState(false);
   const [query, setQuery] = useState("");
   const [plugins, setPlugins] = useState(false);
-  const accountName = workspaceName?.trim() || "Account name";
+  const accountName = workspaceName?.trim() || "Your account";
   const hits = searchTank(query);
   const squads = squadsMatching(query);
   const shownModels = modelsMatching(query, models);

@@ -1,7 +1,7 @@
 // Tank's own labels. No key, no secret, and no other squad's vault.
 
 export const VAULT_LINE =
-  "tank.vault is always on. It holds the platform keys. A squad cannot read another squad's vault, and cannot read the platform keys.";
+  "Tank keeps the platform keys. No agent can read another agent's vault or the platform keys.";
 
 export type TankRecord = {
   id: string;
@@ -32,7 +32,7 @@ export const TANK_RECORDS: readonly TankRecord[] = [
   {
     id: "plugins",
     title: "Plugins",
-    detail: "tank.vault is always on. It holds the platform keys. This page does not show them.",
+    detail: "Tank keeps the platform keys. This page does not show them.",
   },
   {
     id: "vault",

@@ -37,7 +37,8 @@ def test_panel_is_fixed_and_split_with_the_account_nav():
     assert ">Help<" not in source
     page = (PAGE / "page.tsx").read_text(encoding="utf-8")
     assert "headerLinks" not in page
-    assert 'accountName = "Account name"' in page
+    assert 'accountName = "Your account"' in page
+    assert 'accountName = "Account name"' not in page
     nav = (PAGE / "copy.ts").read_text(encoding="utf-8")
     for label in ("Dashboard", "Projects", "Chats", "Settings", "Support"):
         assert f'label: "{label}"' in nav

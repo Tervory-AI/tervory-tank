@@ -39,7 +39,8 @@ def test_panel_stays_fixed_and_split_in_three():
     assert "panel-top" in source
     assert "panel-own" in source
     assert "panel-bottom" in source
-    assert "Account name" in source
+    assert "Your account" in source
+    assert "Account name" not in source
     assert "Dashboard" in source
     assert "Projects" in source
     assert "Chats" in source
@@ -71,7 +72,8 @@ def test_tiger_tabs_and_plugins_popup():
 
 def test_example_values_stay_and_secrets_are_dots():
     source = _source()
-    assert "Example" in source
+    assert "No products watched yet." in source
+    assert "Trail running shoe" not in source
     assert "••••••••" in source
     assert 'type="password"' in source
     assert "api_key=" not in source.lower()
