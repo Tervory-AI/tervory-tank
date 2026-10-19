@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { addProduct, removeProduct } from "./actions";
-import { ASK, EVERY_OPTIONS, FOOT, FOOT_SMALL, LEDE } from "./copy";
+import { EVERY_OPTIONS, FOOT, FOOT_SMALL, LEDE } from "./copy";
 import { SECTIONS, searchTiger, type AlertRow, type ProductRow, type ReadRow, type Section, type TigerData, type UnreadRow } from "./model";
 import { Plugins } from "./plugins";
 import type { PluginPanel } from "./plugins-data";
 import { SquadLinks } from "../squad-links";
+
+type AskTurn = { who: "You"; text: string } | { who: "Tiger"; text: string; sources: string[] };
 
 function Tag() {
   return <span className="tag">Example</span>;
@@ -48,9 +50,8 @@ export function TigerApp({
   const [query, setQuery] = useState("");
   const [hidden, setHidden] = useState<string[]>([]);
   const [help, setHelp] = useState(false);
-  const [settingsNote, setSettingsNote] = useState(false);
   const [checkedNote, setCheckedNote] = useState("");
-  const [thread, setThread] = useState(ASK);
+  const [thread, setThread] = useState<AskTurn[]>([]);
   const [askDraft, setAskDraft] = useState("");
 
   useEffect(() => {
@@ -92,7 +93,7 @@ export function TigerApp({
     setThread((current) => [
       ...current,
       { who: "You", text },
-      { who: "Tiger", text: "Ask Tiger is not connected from this page yet, so this reply has no sources. The earlier answers are an Example.", sources: [] },
+      { who: "Tiger", text: "Tiger cannot answer from this page yet. Use Add a product to watch a page.", sources: [] },
     ]);
   }
 
@@ -110,10 +111,10 @@ export function TigerApp({
           <img src="/brand/tiger-on-dark.png" alt="Tiger" width={2607} height={801} />
         </div>
         <nav className="panel-account" aria-label="Account">
-          <p className="account">{accountName || "Account name"}</p>
+          <p className="account">{accountName?.trim() || "Your account"}</p>
           <a className="nav" href="/">Dashboard</a>
-          <button type="button" className="nav" onClick={() => setMenuOpen(false)}>Projects</button>
-          <button type="button" className="nav" onClick={() => setMenuOpen(false)}>Chats</button>
+          <a className="nav" href="/tasks" onClick={() => setMenuOpen(false)}>Projects</a>
+          <a className="nav" href="/" onClick={() => setMenuOpen(false)}>Chats</a>
         </nav>
         <SquadLinks className="panel-account squad-nav" linkClassName="nav" />
         <div className="panel-own">
@@ -128,7 +129,7 @@ export function TigerApp({
         </div>
         <div className="panel-bottom">
           <img src="/brand/tervory-logo-reversed.png" alt="Tervory" width={186} height={34} />
-          <button type="button" className="nav" onClick={() => { setSettingsNote((open) => !open); setMenuOpen(false); }}>Settings</button>
+          <a className="nav" href="/onboarding" onClick={() => setMenuOpen(false)}>Settings</a>
           <button type="button" className="nav" onClick={() => { setHelp((open) => !open); setMenuOpen(false); }}>Support</button>
         </div>
       </aside>
@@ -159,7 +160,6 @@ export function TigerApp({
 
         {notice ? <p className="notice">{notice}</p> : null}
         {help ? <p className="notice">Tiger checks public product pages and tells you when a price or stock changes. It never logs in, and it does not guess a price it could not read.</p> : null}
-        {settingsNote ? <p className="notice">Account settings are not on this page.</p> : null}
         {checkedNote ? <p className="notice">{checkedNote}</p> : null}
 
         {hit ? <Results hit={hit} example={data.example} /> : null}
@@ -202,6 +202,7 @@ function Overview({ data, onWatch, onAlerts }: { data: TigerData; onWatch: () =>
           {data.example ? <Tag /> : null}
         </div>
         <p className="intro">The price and stock Tiger read on each watched page, next to that product’s add-to-cart button.</p>
+        {data.products.length === 0 ? <p className="empty">No products watched yet.</p> : (
         <ul className="cards">
           {data.products.map((row) => (
             <li key={row.id}>
@@ -219,6 +220,9 @@ function Overview({ data, onWatch, onAlerts }: { data: TigerData; onWatch: () =>
             </li>
           ))}
         </ul>
+        )}
+        {data.products.length === 0 ? null : (
+        <>
         <div className="table-wrap overview-table">
           <table>
             <thead><tr><th>Product</th><th>Store</th><th>Price</th><th>Stock</th><th>Last checked</th><th>Status</th></tr></thead>
@@ -240,6 +244,8 @@ function Overview({ data, onWatch, onAlerts }: { data: TigerData; onWatch: () =>
           <span>{data.listNote ?? `${data.products.length} watched`}</span>
           <button type="button" className="text" onClick={onWatch}>See full watch list →</button>
         </div>
+        </>
+        )}
       </section>
       <section className="block">
         <div className="title-row">
@@ -247,6 +253,7 @@ function Overview({ data, onWatch, onAlerts }: { data: TigerData; onWatch: () =>
           {data.example ? <Tag /> : null}
         </div>
         <p className="intro">Only real changes. A page that can’t be read never sends an alert.</p>
+        {recent.length === 0 ? <p className="empty">No alerts yet.</p> : (
         <ul className="cards">
           {recent.map((row) => (
             <li key={row.id}>
@@ -256,6 +263,9 @@ function Overview({ data, onWatch, onAlerts }: { data: TigerData; onWatch: () =>
             </li>
           ))}
         </ul>
+        )}
+        {recent.length === 0 ? null : (
+        <>
         <div className="table-wrap overview-table">
           <table>
             <thead><tr><th>When</th><th>Product</th><th>What changed</th></tr></thead>
@@ -269,6 +279,8 @@ function Overview({ data, onWatch, onAlerts }: { data: TigerData; onWatch: () =>
         <div className="table-foot end">
           <button type="button" className="text" onClick={onAlerts}>See all alerts →</button>
         </div>
+        </>
+        )}
       </section>
     </>
   );
@@ -282,7 +294,7 @@ function Ask({
   example,
   sendClass,
 }: {
-  thread: typeof ASK;
+  thread: AskTurn[];
   draft: string;
   setDraft: (value: string) => void;
   onSend: () => void;
@@ -307,15 +319,11 @@ function Ask({
             <article className="tiger-msg" key={`tiger-${index}`}>
               <h3>Tiger</h3>
               <p>{turn.text}</p>
-              {turn.sources.length > 0 ? (
-                <>
-                  <hr />
-                  <div className="sources">
-                    <p className="sources-label">Sources:</p>
-                    {turn.sources.map((source) => <p key={source}>{source}</p>)}
-                  </div>
-                </>
-              ) : null}
+              <hr />
+              <div className="sources">
+                <p className="sources-label">Sources:</p>
+                {turn.sources.length > 0 ? turn.sources.map((source) => <p key={source}>{source}</p>) : <p>No sources for this answer.</p>}
+              </div>
             </article>
           )
         ))}
@@ -340,6 +348,7 @@ function Alerts({ rows, example }: { rows: AlertRow[]; example: boolean }) {
         {example ? <Tag /> : null}
       </div>
       <p className="intro">Real price and stock changes. Tiger only alerts when it read the page clearly. A page that can’t be read never sends an alert.</p>
+      {rows.length === 0 ? <p className="empty">No alerts yet.</p> : null}
       <div className="filters">
         {(["All", "Price", "Stock"] as const).map((item) => (
           <button key={item} type="button" className={kind === item ? "chip on" : "chip"} onClick={() => setKind(item)}>{item}</button>
@@ -384,6 +393,7 @@ function Watch({ rows, example, note, onHide }: { rows: ProductRow[]; example: b
         {example ? <Tag /> : null}
       </div>
       <p className="intro">Product pages Tiger checks. Add a product with the red button at the top. Remove a page any time.</p>
+      {rows.length === 0 ? <p className="empty">No products watched yet.</p> : null}
       <div className="table-wrap">
         <table>
           <thead><tr><th>Product</th><th>Page link</th><th>How often</th><th>Alert me on</th><th>Status</th><th /></tr></thead>
@@ -426,6 +436,7 @@ function Unread({ rows, example, onCheck }: { rows: UnreadRow[]; example: boolea
         {example ? <Tag /> : null}
       </div>
       <p className="intro">Pages Tiger could not read clearly. It records them and skips them. It never guesses a price or stock.</p>
+      {rows.length === 0 ? <p className="empty">No pages Tiger could not read.</p> : null}
       <div className="table-wrap">
         <table>
           <thead><tr><th>Product</th><th>Store</th><th>Why Tiger could not read it</th><th>Since</th><th /></tr></thead>
@@ -520,7 +531,7 @@ function AddProduct({ onClose }: { onClose: () => void }) {
           </label>
           <label>
             Name (optional)
-            <input name="label" type="text" placeholder="e.g. Trail running shoe" maxLength={200} autoComplete="off" />
+            <input name="label" type="text" placeholder="Product name" maxLength={200} autoComplete="off" />
           </label>
           <label>
             How often

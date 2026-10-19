@@ -4,14 +4,13 @@ import { primaryAction, resultSummary, searchRecords } from "../workspace/app/ti
 import { mapVaultPayload, offPanel, TISAN_VAULT, VAULT_OFF_MESSAGE } from "../workspace/app/tisan/vault-model.ts";
 
 test("search finds the landing builds, page and tests", () => {
-  const hits = searchRecords("landing", "all");
-  assert.equal(hits.length, 5);
-  assert.deepEqual(hits.map((row) => row.kind), ["Build", "Build", "Page", "Test", "Test"]);
-  assert.equal(searchRecords("lighthouse", "Test").length, 1);
-  assert.equal(searchRecords("landing", "Page")[0]?.title, "Landing — Desktop & Mobile");
-  assert.deepEqual(searchRecords("   ", "all").map((row) => row.id).length, 10);
+  assert.deepEqual(searchRecords("landing", "all"), []);
+  assert.equal(searchRecords("lighthouse", "Test").length, 0);
+  assert.equal(searchRecords("landing", "Page")[0]?.title, undefined);
+  assert.deepEqual(searchRecords("   ", "all"), []);
   assert.deepEqual(searchRecords("zzzz-no-match", "all"), []);
-  assert.match(resultSummary("landing", 5), /5 results for “landing” · Example/);
+  assert.match(resultSummary("landing", 0), /0 results for “landing”/);
+  assert.equal(resultSummary("landing", 0).includes("Example"), false);
 });
 
 test("the red button follows the view", () => {

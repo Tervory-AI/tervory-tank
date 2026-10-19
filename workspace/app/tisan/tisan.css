@@ -257,28 +257,11 @@ main:has(.tisan) {
   position: absolute;
   top: 0;
   right: 0;
-  bottom: 72px;
+  bottom: 0;
   left: 240px;
   overflow: auto;
   padding: 48px 56px 32px;
   box-sizing: border-box;
-}
-
-.chat-bot {
-  position: fixed;
-  right: 24px;
-  bottom: 16px;
-  z-index: 35;
-  margin: 0;
-  max-width: 220px;
-  pointer-events: none;
-  background: #001840;
-  color: #fff;
-  border-radius: 12px;
-  padding: 10px 14px;
-  font-size: 13px;
-  font-weight: 500;
-  box-shadow: 0 8px 20px rgba(0, 24, 64, 0.18);
 }
 
 .tisan.dialog-open .body,
@@ -840,22 +823,15 @@ main:has(.tisan) {
     z-index: 45;
     padding-top: 12px;
   }
-  .tisan.menu-open .panel { transform: none; overflow: auto; padding-bottom: 76px; }
-  .tisan.menu-open .chat-bot { z-index: 46; }
+  .tisan.menu-open .panel { transform: none; overflow: auto; padding-bottom: 24px; }
+  .topbar .menu { min-height: 44px; }
   .body {
     left: 0;
     top: 64px;
-    bottom: 72px;
+    bottom: 0;
     padding: 16px 16px 24px;
   }
-  .tisan.dialog-open .chat-bot { display: none; }
-  .page-slot {
-    display: flex;
-    border-color: var(--line);
-    color: var(--muted);
-    margin: 0 0 12px;
-    background: #fff;
-  }
+  .search, .search input, .composer, .composer textarea { width: 100%; max-width: 100%; }
   .head { display: block; }
   .head h1 { font-size: 32px; }
   .head .page-primary { width: 100%; margin-top: 14px; }

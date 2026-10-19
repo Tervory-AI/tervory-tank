@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { DeadlinesPanel } from "./deadlines-panel";
-import { AREAS, COURTS, DEADLINE_ROWS, MATTER_ROWS, REVIEW_ROWS, SEARCH_KINDS, hitsFor, type SearchKind } from "./frame";
+import { AREAS, DEADLINE_ROWS, MATTER_ROWS, REVIEW_ROWS, SEARCH_KINDS, hitsFor, type SearchKind } from "./frame";
 import { MOOT_LABEL } from "./moot";
 import { MootCourt } from "./moot-court";
 import { PluginsDialog } from "./plugins-dialog";
@@ -20,64 +20,10 @@ const PAGE_LINKS = [
   { href: "/review", label: "Review" },
 ] as const;
 
-const PLACE_LINKS = ["Draft", "Court bundles"] as const;
-const PLACE_TAIL = ["Library"] as const;
-
 const BOTTOM_LINKS = [
   { href: "/onboarding", label: "Settings" },
   { href: "/", label: "Support" },
 ] as const;
-
-function Bars({ widths }: { widths: string[] }) {
-  return (
-    <span className="zn-bars" aria-hidden="true">
-      {widths.map((width, index) => (
-        <span key={`${width}-${index}`} className="zn-bar" style={{ width }} />
-      ))}
-    </span>
-  );
-}
-
-function Cite({ children }: { children: string }) {
-  return <span className="zn-cite">↗ {children}</span>;
-}
-
-function Issue({ n }: { n: 1 | 2 }) {
-  return (
-    <article className="zn-issue">
-      <h4>Issue {n}</h4>
-      <div className="zn-ira">
-        <span>Rule</span>
-        <div>
-          <Bars widths={["100%", "63%"]} />
-          <Cite>Act name No __ of ____, s __</Cite>
-        </div>
-      </div>
-      <div className="zn-ira">
-        <span>Application</span>
-        <div>
-          <Bars widths={["100%", "63%"]} />
-          <Cite>[____] ZA____ __ at para __</Cite>
-        </div>
-      </div>
-      <div className="zn-ira">
-        <span>Conclusion</span>
-        <Bars widths={["100%"]} />
-      </div>
-    </article>
-  );
-}
-
-function RiskRow() {
-  return (
-    <div className="zn-risk-row">
-      <Bars widths={["76%"]} />
-      <span className="zn-chip">Level</span>
-      <span className="zn-chip">Level</span>
-      <Bars widths={["79%"]} />
-    </div>
-  );
-}
 
 export function ZenasView({
   plugins,
@@ -88,7 +34,7 @@ export function ZenasView({
   workspaceName: string | null;
   founderLine?: string | null;
 }) {
-  const accountName = workspaceName?.trim() || "Account name";
+  const accountName = workspaceName?.trim() || "Your account";
   const initial = accountName.slice(0, 1).toUpperCase();
   const searchRef = useRef<HTMLInputElement>(null);
   const askRef = useRef<HTMLTextAreaElement>(null);
@@ -106,12 +52,6 @@ export function ZenasView({
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<SearchKind>("All");
   const [cursor, setCursor] = useState(0);
-  const [civil, setCivil] = useState(false);
-  const [southAfrica, setSouthAfrica] = useState(false);
-  const [area, setArea] = useState("Any");
-  const [court, setCourt] = useState("Any");
-  const [matter, setMatter] = useState("None");
-  const [reasoning, setReasoning] = useState<"Auto" | "High">("Auto");
   const [asked, setAsked] = useState<string | null>(null);
   const [messages, setMessages] = useState(0);
   const [attached, setAttached] = useState<string | null>(null);
@@ -120,7 +60,6 @@ export function ZenasView({
   const bodyRef = useRef<HTMLDivElement>(null);
 
   const hits = hitsFor(kind, query);
-  const showFrame = query.trim().length === 0;
 
   useEffect(() => {
     function onKey(event: globalThis.KeyboardEvent) {
@@ -227,7 +166,7 @@ export function ZenasView({
       return;
     }
     setAsked(text);
-    setMessages((count) => count + 1);
+    setMessages((count) => count + 2);
     setActionNote("");
     if (askRef.current) askRef.current.value = "";
   }
@@ -285,11 +224,6 @@ export function ZenasView({
           <button className={pluginsOpen ? "active" : ""} type="button" onClick={openPlugins}>
             Plugins
           </button>
-          {PLACE_LINKS.map((label) => (
-            <button key={label} type="button" onClick={() => setMenu(false)}>
-              {label}
-            </button>
-          ))}
           <button
             className={!pluginsOpen && section === "deadlines" ? "active" : ""}
             type="button"
@@ -298,11 +232,6 @@ export function ZenasView({
           >
             Deadlines
           </button>
-          {PLACE_TAIL.map((label) => (
-            <button key={label} type="button" onClick={() => setMenu(false)}>
-              {label}
-            </button>
-          ))}
         </nav>
         <button
           ref={areasRef}
@@ -318,26 +247,14 @@ export function ZenasView({
         <section className="zn-side" aria-label="Diary">
           <div className="zn-side-head">
             <p className="zn-kicker">DIARY</p>
-            <button type="button">View all</button>
           </div>
-          <div className="zn-skel-row" aria-hidden="true">
-            <span />
-            <span><i /><i /></span>
-          </div>
+          <p className="zn-empty">No matters yet.</p>
         </section>
         <section className="zn-side" aria-label="Upcoming court dates">
           <div className="zn-side-head">
             <p className="zn-kicker">UPCOMING COURT DATES</p>
-            <button type="button">View all</button>
           </div>
-          <div className="zn-skel-row" aria-hidden="true">
-            <span />
-            <span><i /><i /></span>
-          </div>
-          <div className="zn-skel-row" aria-hidden="true">
-            <span />
-            <span><i /><i /></span>
-          </div>
+          <p className="zn-empty">No matters yet.</p>
         </section>
         <div className="zn-spacer" />
         </div>
@@ -392,7 +309,7 @@ export function ZenasView({
             {searchOpen ? (
               <div className="zn-results" id={listId} role="listbox" aria-label="Search results">
                 <div className="zn-results-head">
-                  <strong>Results in your records · {showFrame ? "__" : hits.length}</strong>
+                  <strong>Results in your records · {hits.length}</strong>
                   <button type="button" onClick={() => setSearchOpen(false)}>Esc to close</button>
                 </div>
                 <div className="zn-result-filters">
@@ -425,144 +342,43 @@ export function ZenasView({
                     </section>
                   );
                 })}
-                {hits.length === 0 ? <p className="zn-empty">No records match that search.</p> : null}
+                {hits.length === 0 ? <p className="zn-empty">{query.trim() ? "No records match that search." : "No matters yet."}</p> : null}
                 <p className="zn-results-foot">
-                  Enter to see all {showFrame ? "__" : hits.length} results · ↑↓ to move · Searches matters, drafts, documents, citations and review in Zenas only.
+                  Enter to see all {hits.length} results · ↑↓ to move · Searches matters, drafts, documents, citations and review in Zenas only.
                 </p>
               </div>
             ) : null}
           </div>
         </header>
-        <div className="zn-filters">
-          <span>Optional</span>
-          <button className={civil ? "zn-chip zn-chip-fill" : "zn-chip"} type="button" onClick={() => setCivil((value) => !value)}>Civil only</button>
-          <button className={southAfrica ? "zn-chip zn-chip-fill" : "zn-chip"} type="button" onClick={() => setSouthAfrica((value) => !value)}>South Africa</button>
-          <label className="zn-select">
-            <span className="zn-sr">Area</span>
-            <select value={area} onChange={(event) => setArea(event.target.value)} aria-label="Area">
-              <option value="Any">Area: Any</option>
-              {AREAS.map((name) => (
-                <option key={name} value={name}>Area: {name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="zn-select">
-            <span className="zn-sr">Court</span>
-            <select value={court} onChange={(event) => setCourt(event.target.value)} aria-label="Court">
-              {COURTS.map((name) => (
-                <option key={name} value={name}>{name === "Any" ? "Court: Any" : `Court: ${name}`}</option>
-              ))}
-            </select>
-          </label>
-          <label className="zn-select">
-            <span className="zn-sr">Matter</span>
-            <select value={matter} onChange={(event) => setMatter(event.target.value)} aria-label="Matter">
-              <option value="None">Matter: None</option>
-            </select>
-          </label>
-        </div>
         <section className="zn-ask" aria-label="Ask Zenas">
           <div className="zn-ask-head">
             <h2>Ask Zenas</h2>
-            <p>Thread · {messages === 0 ? "__" : messages} {messages === 1 ? "message" : "messages"}</p>
+            <p>Thread · {messages} {messages === 1 ? "message" : "messages"}</p>
           </div>
           <div className="zn-thread">
-            <article className="zn-you">
-              <h3>You</h3>
-              {asked ? <p>{asked}</p> : <Bars widths={["100%", "63%"]} />}
-            </article>
-            <article className="zn-answer" aria-label="Answer">
-              <header>
-                <span className="zn-mark" aria-hidden="true">Z</span>
-                <strong>Zenas</strong>
-                <span className="zn-chip">Reasoning: {reasoning}</span>
-                <time>__ / __ / ____ __:__</time>
-              </header>
-              <section>
-                <h3>Brief Summary</h3>
-                <Bars widths={["100%", "96%", "63%"]} />
-                <Cite>[____] ZA____ __ at para __</Cite>
-              </section>
-              <section>
-                <h3>Factual Background</h3>
-                <ol>
-                  <li><Bars widths={["100%", "63%"]} /></li>
-                  <li><Bars widths={["100%", "63%"]} /></li>
-                  <li>
-                    <Bars widths={["100%"]} />
-                    <Cite>Annexure FA __</Cite>
-                  </li>
-                </ol>
-              </section>
-              <section>
-                <h3>Legal Analysis</h3>
-                <Issue n={1} />
-                <Issue n={2} />
-              </section>
-              <section>
-                <h3>Risk Analysis</h3>
-                <div className="zn-risk" role="table" aria-label="Risk analysis">
-                  <div className="zn-risk-head" role="row">
-                    <span role="columnheader">Risk</span>
-                    <span role="columnheader">Likelihood</span>
-                    <span role="columnheader">Impact</span>
-                    <span role="columnheader">Mitigation</span>
-                  </div>
-                  <RiskRow />
-                  <RiskRow />
-                  <RiskRow />
-                </div>
-              </section>
-              <section>
-                <h3>Citations</h3>
-                <ul className="zn-citations">
-                  <li><span>[1]</span><Cite>[____] ZA____ __ at para __</Cite><span className="zn-verified">✓ Verified against stored paragraph</span></li>
-                  <li><span>[2]</span><Cite>Case name v Case name ____ (_) SA ___ (_)</Cite><span className="zn-verified">✓ Verified against stored paragraph</span></li>
-                  <li><span>[3]</span><Cite>Act name No __ of ____, s __</Cite><span className="zn-verified">✓ Verified against stored paragraph</span></li>
-                  <li><span>[4]</span><Cite>Rule __(_)(_)</Cite><span className="zn-verified">✓ Verified against stored paragraph</span></li>
-                </ul>
-              </section>
-              <section className="zn-sources" aria-label="Sources">
-                <header>
-                  <h3>Sources</h3>
-                  <p>Information and references returned with this answer.</p>
-                </header>
-                <div className="zn-source-cols">
-                  <article>
-                    <h4>Statute</h4>
-                    <p><strong>Act name No __ of ____</strong><span>Sections: s __, s __(_), s __(_)(_)</span></p>
-                    <p><strong>Act name No __ of ____</strong><span>Sections: s __, s __(_), s __(_)(_)</span></p>
-                    <p><strong>Act name No __ of ____</strong><span>Sections: s __, s __(_), s __(_)(_)</span></p>
-                  </article>
-                  <article>
-                    <h4>Case Law</h4>
-                    <p className="zn-weight">BINDING</p>
-                    <p><strong>Case name v Case name</strong><span>[____] ZA____ __ · Court · para __</span></p>
-                    <p><strong>Case name v Case name</strong><span>[____] ZA____ __ · Court · para __</span></p>
-                    <p className="zn-weight">PERSUASIVE</p>
-                    <p><strong>Case name v Case name</strong><span>[____] ZA____ __ · Court · para __</span></p>
-                    <p><strong>Case name v Case name</strong><span>[____] ZA____ __ · Court · para __</span></p>
-                  </article>
-                  <article>
-                    <h4>Full List of Authorities</h4>
-                    <ol>
-                      <li>Act name No __ of ____, s __</li>
-                      <li>Act name No __ of ____, s __</li>
-                      <li>Rule __(_)</li>
-                      <li>Case name v Case name [____] ZA____ __</li>
-                      <li>Case name v Case name ____ (_) SA ___ (_)</li>
-                      <li>Case name v Case name [____] ZA____ __</li>
-                      <li>Case name v Case name [____] ZA____ __</li>
-                    </ol>
-                  </article>
-                </div>
-              </section>
-              <div className="zn-answer-actions">
-                <button className="zn-outline" type="button" onClick={() => setActionNote("Nothing was sent.")}>Send to Email</button>
-                <button className="zn-outline" type="button" onClick={() => setActionNote("Nothing was sent.")}>Send WhatsApp</button>
-                <button className="zn-outline" type="button" onClick={() => setActionNote("Nothing was filed. A lawyer reviews before anything is filed.")}>Proceed to Legal Draft</button>
-              </div>
-            </article>
+            {asked ? (
+              <>
+                <article className="zn-you">
+                  <h3>You</h3>
+                  <p>{asked}</p>
+                </article>
+                <article className="zn-answer" aria-label="Answer">
+                  <header>
+                    <span className="zn-mark" aria-hidden="true">Z</span>
+                    <strong>Zenas</strong>
+                  </header>
+                  <p>Zenas cannot answer from this page yet. Open Matters, or ask again after a lawyer releases an answer.</p>
+                  <section className="zn-sources" aria-label="Sources">
+                    <header>
+                      <h3>Sources</h3>
+                      <p>No sources for this answer.</p>
+                    </header>
+                  </section>
+                </article>
+              </>
+            ) : (
+              <p className="zn-empty">No matters yet.</p>
+            )}
           </div>
           <form className="zn-composer" onSubmit={onAsk}>
             <label className="zn-sr" htmlFor="zenas-ask">Ask Zenas</label>
@@ -570,7 +386,7 @@ export function ZenasView({
             <div className="zn-composer-actions">
               <div>
                 <label className="zn-outline zn-attach">
-                  ＋ Attach
+                  + Attach
                   <input
                     className="zn-sr"
                     type="file"
@@ -578,19 +394,13 @@ export function ZenasView({
                   />
                 </label>
                 {attached ? <span className="zn-attached">{attached}</span> : null}
-                <span className="zn-chip">Matter: {matter}</span>
               </div>
               <div className="zn-send-row">
-                <span>Reasoning</span>
-                <div className="zn-segment" role="group" aria-label="Reasoning">
-                  <button className={reasoning === "Auto" ? "on" : ""} type="button" onClick={() => setReasoning("Auto")}>Auto</button>
-                  <button className={reasoning === "High" ? "on" : ""} type="button" onClick={() => setReasoning("High")}>High</button>
-                </div>
                 <button className="zn-primary" type="submit">Send</button>
               </div>
             </div>
           </form>
-          <p className="zn-disclaimer">Zenas provides legal information, not legal advice. A lawyer reviews before anything is filed.</p>
+          <p className="zn-disclaimer">Zenas provides legal information, not legal advice.</p>
           {actionNote ? <p className="zn-note-line">{actionNote}</p> : null}
         </section>
         <section className="zn-work" aria-label="Your work">
@@ -599,24 +409,7 @@ export function ZenasView({
               <h2>Recent matters</h2>
               <Link href="/matters">View all</Link>
             </header>
-            <div className="zn-table" role="table">
-              <div className="zn-tr head" role="row">
-                <span role="columnheader">Matter</span>
-                <span role="columnheader">Area</span>
-                <span role="columnheader">Court</span>
-                <span role="columnheader">Next date</span>
-                <span role="columnheader">Status</span>
-              </div>
-              {Array.from({ length: MATTER_ROWS }, (_, index) => (
-                <div className="zn-tr" role="row" key={index}>
-                  <span>Case name v Case name</span>
-                  <span>Area</span>
-                  <span>Court</span>
-                  <span>__ / __ / ____</span>
-                  <span><i className="zn-chip">Status</i></span>
-                </div>
-              ))}
-            </div>
+            {MATTER_ROWS === 0 ? <p className="zn-empty">No matters yet.</p> : null}
           </article>
           <div className="zn-work-side">
             <article className="zn-card">
@@ -624,40 +417,20 @@ export function ZenasView({
                 <h2>Review</h2>
                 <Link href="/review">View all</Link>
               </header>
-              {Array.from({ length: REVIEW_ROWS }, (_, index) => (
-                <div className="zn-line" key={index}>
-                  <span>
-                    <strong>Item name</strong>
-                    <em>Reviewer · __ / __ / ____</em>
-                  </span>
-                  <i className="zn-chip">Status</i>
-                </div>
-              ))}
+              {REVIEW_ROWS === 0 ? <p className="zn-empty">No matters yet.</p> : null}
             </article>
             <article className="zn-card">
               <header>
                 <h2>Deadlines</h2>
-                <button type="button">View all</button>
+                <button type="button" onClick={showDeadlines}>View all</button>
               </header>
-              {DEADLINE_ROWS.map((row, index) => (
-                <div className="zn-line" key={`${row.title}-${index}`}>
-                  <span>
-                    <strong>{row.title}</strong>
-                    <em>{row.meta}</em>
-                  </span>
-                </div>
-              ))}
+              {DEADLINE_ROWS.length === 0 ? <p className="zn-empty">No matters yet.</p> : null}
             </article>
           </div>
         </section>
         </>
         ) : null}
       </div>
-      {section === "chats" ? (
-      <button className="zn-bot" type="button" onClick={() => askRef.current?.focus()}>
-        Chat bot, to be named
-      </button>
-      ) : null}
       {areasOpen ? (
         <div
           ref={areasMenuRef}

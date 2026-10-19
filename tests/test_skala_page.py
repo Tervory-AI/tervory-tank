@@ -17,7 +17,8 @@ def test_page_matches_the_app_frame():
     text = _text()
     view = (PAGE / "view.tsx").read_text(encoding="utf-8")
     css = (PAGE / "skala.css").read_text(encoding="utf-8")
-    assert "Account name" in view
+    assert "Your account" in view
+    assert "Account name" not in view
     for label in ("Dashboard", "Projects", "Chats", "Library", "Plugins", "Settings", "Support"):
         assert label in view
     assert "Ask Skala" in view

@@ -47,7 +47,8 @@ def test_page_matches_the_panel_and_hides_keys():
     assert view.index('label: "Dashboard"') < view.index('label: "Projects"') < view.index('label: "Chats"')
     assert view.index('label: "Ledger"') < view.index('label: "Tasks"') < view.index('label: "Data"')
     assert view.index('label: "Settings"') < view.index('label: "Support"')
-    assert "Account name" in view
+    assert "Your account" in view
+    assert "Account name" not in view
     assert "Plugins" in view
     assert "Ask Tank" in view
     assert "Search agents, models, ledger and tasks" in view

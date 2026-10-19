@@ -49,14 +49,16 @@ test("the deadlines panel keeps the drawn blanks and does not add matters", () =
     ...DEADLINE_ALERTS.flatMap((alert) => [alert.title, alert.detail]),
     DEADLINE_NOTE,
   ].join(" ");
+  assert.equal(DEADLINE_ROWS.length, 0);
   assert.equal(DEADLINE_ALERTS.length, 3);
+  assert.equal(text.includes("_"), false);
   assert.equal(/Kanos|Mokoena|Ndlovu|Sunfield|Highveld/i.test(text), false);
   assert.match(DEADLINE_NOTE, /lawyer must confirm/);
 });
 
 test("search stays inside the drawn record kinds", () => {
-  assert.equal(hitsFor("All", "").length, 8);
-  assert.equal(hitsFor("Citations", "").length, 2);
-  assert.equal(hitsFor("Documents", "annexure").length, 1);
+  assert.equal(hitsFor("All", "").length, 0);
+  assert.equal(hitsFor("Citations", "").length, 0);
+  assert.equal(hitsFor("Documents", "annexure").length, 0);
   assert.equal(hitsFor("Matters", "no such record").length, 0);
 });

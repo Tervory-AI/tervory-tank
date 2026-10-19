@@ -26,10 +26,6 @@ import {
   type SecretMeta,
 } from "./vault-model";
 
-function Tag() {
-  return <span className="tag">Example</span>;
-}
-
 function btn(primary: boolean): string {
   return primary ? "primary" : "line";
 }
@@ -291,7 +287,7 @@ function KeysPart({
 }) {
   return (
     <div className="part">
-      <div className="part-title"><h3>API keys</h3><Tag /></div>
+      <div className="part-title"><h3>API keys</h3></div>
       <p className="intro">Keys for tools Tisan may use. A key is write-only: once saved it is never shown again.</p>
       <div className="list">
         {secrets.map((row) => (
@@ -350,7 +346,7 @@ function FilesPart({
 }) {
   return (
     <div className="part">
-      <div className="part-title"><h3>Files</h3><Tag /></div>
+      <div className="part-title"><h3>Files</h3></div>
       <p className="intro">Upload copy, briefs or lists for the site. CSV, XLSX, and PDF only.</p>
       <div
         className="drop"
@@ -402,7 +398,7 @@ function LinksPart({
 }) {
   return (
     <div className="part">
-      <div className="part-title"><h3>Source links</h3><Tag /></div>
+      <div className="part-title"><h3>Source links</h3></div>
       <p className="intro">Pages Tisan checks for changes, such as the live site or a page named in the brief.</p>
       <form className="list link-add" onSubmit={onAddLink}>
         <label>
@@ -459,7 +455,7 @@ function ConnectionsPart({
 }) {
   return (
     <div className="part">
-      <div className="part-title"><h3>MCP connections</h3><Tag /></div>
+      <div className="part-title"><h3>MCP connections</h3></div>
       <p className="intro">Connections to outside tools that Tisan can read from.</p>
       <div className="list">
         {connections.map((row) => (
