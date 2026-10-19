@@ -2,7 +2,7 @@
 
 > Written 18 Oct 2026, 18:30 PT by Claude. The live copy was rejected by the founder. This brief carries the replacement copy; use it **word for word**. The founder designed the product logos himself: they lead the products section at full size.
 
-**Files you may change:** `site/app/page.tsx`, `site/app/globals.css`, `site/app/release-form.tsx` (labels only), `site/app/layout.tsx` (title and description only), new tests under `tests/` or `site/`. Use only the existing logo files in `site/public/brand/` (exact files, never redrawn, recoloured or cropped). No new pages, no pricing, no sign-up, no tracking.
+**Files you may change (corrected 18 Oct 18:50):** `site/app/page.tsx`, `site/app/globals.css`, `site/app/release-form.tsx` (labels only), `site/app/layout.tsx` (title and description only), `site/app/footer.tsx` (copy only), `site/lib/site.ts` (title and description: this is the single source, layout reads from it), `site/check-public.mjs` and `site/check-store.mjs` (update them to expect the new copy), new tests under `tests/` or `site/`. Use only the existing logo files in `site/public/brand/` (exact files, never redrawn, recoloured or cropped). No new pages, no pricing, no sign-up, no tracking.
 
 ## Layout
 - Hero, How it works, Why it gets cheaper, Products, Built on proof, Early access, footer.
@@ -44,6 +44,9 @@ Most AI charges the same for the hundredth question as the first. Tervory learns
 
 **Built on proof** (heading: Measured, not promised)
 Every skill passes a test set before it goes live. A cheaper route only takes over once it matches the results. If we cannot measure it, we do not claim it.
+
+**Footer line**
+Every answer shows its sources, the model that ran it, and what it cost.
 
 **Early access** (heading: Be first in)
 We are opening Tervory to a small group of businesses first. Leave your email and we will tell you when your seat is ready.
