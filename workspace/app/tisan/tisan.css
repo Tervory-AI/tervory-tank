@@ -391,18 +391,25 @@ main:has(.tisan) {
 .citations strong { display: block; font-size: 14px; }
 .citations li span span { display: block; color: var(--muted); font-size: 13px; }
 
-.composer {
+.tisan .composer {
+  position: static;
+  left: auto;
+  right: auto;
+  bottom: auto;
   display: flex;
   gap: 12px;
   align-items: center;
+  width: 100%;
+  max-width: 100%;
   margin-top: 16px;
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 8px 8px 8px 14px;
   background: #fff;
+  box-sizing: border-box;
 }
-.composer label { flex: 1; display: block; }
-.composer textarea {
+.tisan .composer label { flex: 1; display: block; min-width: 0; }
+.tisan .composer textarea {
   width: 100%;
   border: 0;
   resize: vertical;
@@ -411,8 +418,8 @@ main:has(.tisan) {
   background: transparent;
   color: var(--ink);
 }
-.composer textarea:focus-visible { outline: none; }
-.composer textarea::placeholder { color: var(--muted); }
+.tisan .composer textarea:focus-visible { outline: none; }
+.tisan .composer textarea::placeholder { color: var(--muted); }
 
 .panel-card { padding: 20px 22px 16px; margin-top: 16px; }
 .card-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
