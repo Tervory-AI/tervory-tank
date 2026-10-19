@@ -240,7 +240,9 @@ async def run_retests(*, final: bool = False, tenant: uuid.UUID = PLATFORM_TENAN
                 passed = 0
                 for case in cases:
                     try:
-                        ctx = rt.make_ctx(pkg, tenant, preview=True, home_region=rt.box_region())
+                        # Like existing Skala evals, re-test spend belongs to the platform.
+                        # The corpus and scores above/below remain scoped to its owner.
+                        ctx = rt.make_ctx(pkg, PLATFORM_TENANT, preview=True, home_region=rt.box_region())
                         output = await skala.run_skill(pkg, obj(case["input"]), ctx)
                         ok, _ = skala.score_case(obj(case["expected"]), output, case["tolerance"])
                         passed += int(ok)

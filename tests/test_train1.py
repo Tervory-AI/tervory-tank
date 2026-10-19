@@ -221,9 +221,11 @@ async def test_lawyer_released_and_decided_case_pairs(database):
 @pytest.mark.asyncio
 async def test_retest_excludes_holdout_and_records_three_point_drop(database, monkeypatch):
     pool, rt = database
+    tenant = uuid.uuid4()
+    contexts = []
     pkg = SimpleNamespace(id="base.fixture", version="1.0.0")
     rt.get_package = lambda *_: pkg
-    rt.make_ctx = lambda *args, **kwargs: None
+    rt.make_ctx = lambda pkg, owner, **kwargs: contexts.append(owner)
     seen = []
 
     async def run(_pkg, value, _ctx):
@@ -234,10 +236,10 @@ async def test_retest_excludes_holdout_and_records_three_point_drop(database, mo
     async with pool.acquire() as conn:
         await conn.execute("INSERT INTO tank.skills(id,version,agent,rung,state) VALUES ('base.fixture','1.0.0','base',3,'approved')")
         for i in range(101):
-            ident = await candidate(conn, gold.PLATFORM_TENANT, {"i": i})
+            ident = await candidate(conn, tenant, {"i": i})
             await conn.execute("UPDATE tank.gold_examples SET status='checked',expected='{\"ok\":true}',holdout=$2 WHERE id=$1", ident, i == 100)
-        await conn.execute("INSERT INTO tank.gold_scores(tenant_id,region,skill_id,version,score,n) VALUES ($1,'us-east','base.fixture','1.0.0',0.98,100)", gold.PLATFORM_TENANT)
-    result = await gold.run_retests()
+        await conn.execute("INSERT INTO tank.gold_scores(tenant_id,region,skill_id,version,score,n) VALUES ($1,'us-east','base.fixture','1.0.0',0.98,100)", tenant)
+    result = await gold.run_retests(tenant=tenant)
     assert result[0]["score"] == 0.95 and result[0]["drop"] is True
     assert result[0]["previous"] == 0.98 and result[0]["n"] == 100
     assert 100 not in seen
@@ -247,8 +249,9 @@ async def test_retest_excludes_holdout_and_records_three_point_drop(database, mo
     async with pool.acquire() as conn:
         await conn.execute("INSERT INTO tank.skills(id,version,agent,rung,state) VALUES ('base.fixture','1.1.0','base',3,'staging')")
     rt.get_package = lambda skill, version: SimpleNamespace(id=skill, version=version)
-    await gold.final_check("base.fixture", "1.1.0", gold.Reviewer("founder", gold.PLATFORM_TENANT, True))
+    await gold.final_check("base.fixture", "1.1.0", gold.Reviewer("founder", tenant, True))
     assert seen == [100]
+    assert contexts and set(contexts) == {gold.PLATFORM_TENANT}
 
 
 @pytest.mark.asyncio
