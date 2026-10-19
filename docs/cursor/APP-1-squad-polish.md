@@ -2,7 +2,7 @@
 
 > Written 18 Oct 2026, 18:30 PT. The squad pages are live (PR #136) but show build placeholders and controls that do nothing. Clients and lawyers will see these.
 
-**Files you may change:** `workspace/app/{base,tiger,market-lab,rig,tisan,radix,zenas,skala,tank}/` (page and CSS files only), `workspace/app/shell.tsx`, `workspace/app/squad-links.tsx`, `workspace/app/globals.css`, new tests. No backend, no schema, no new routes.
+**Files you may change (corrected 18 Oct 18:45):** every file inside `workspace/app/{base,tiger,market-lab,rig,tisan,radix,zenas,skala,tank}/` (pages, view components such as `view.tsx`, `tisan.tsx`, `lab.tsx`, `plugins.tsx`, `plugins.ts`, and CSS), `workspace/app/shell.tsx`, `workspace/app/squad-links.tsx`, `workspace/app/globals.css`, and the **existing page tests** under `tests/` for those pages (`tests/test_*_page.py`, `tests/*_page.test.ts`, `tests/*_page_*.mjs`). Where an existing test pins a placeholder, a dead control or `pointer-events: none` (for example `tests/test_tisan_page.py` requiring "Chat bot, to be named"), update that test to the new behaviour; never delete a test that checks real behaviour. New tests are welcome. No backend, no schema, no new routes.
 
 ## Fix
 1. **No placeholder text anywhere.** Remove or replace: "Chat bot, to be named", "Thread · __ messages", "49 · Show all", "to be named", lorem text, TODO labels, fake counts. Every number shown comes from real data; if there is none, show a short empty state ("No matters yet.").
