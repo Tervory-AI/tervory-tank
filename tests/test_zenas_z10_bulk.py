@@ -3,11 +3,13 @@
 Saved slices of the 2026-09-30 bulk CSVs. No live network. No API key in a
 URL, a header on the bulk read, or a log.
 
-Sheriff v. Ætna and People v. Walker use their own opinion HTML from the
-opinions file. Regional Care and Njie use a short excerpt of that same saved
-HTML: Regional Care's case name already contains "Insurance", and Njie's name
-and empty nature of suit do not, so the commercial check can run. Their
-docket, cluster, and citation rows are the rows from the bulk files.
+Every opinion row is that case's own row from the opinions file, in opinion
+id order. Callaway (2756371) and Sexton (2756651) come before the commercial
+keeps. Callaway's row has text and the citations file has no row for it, so
+the load counts it as no text. Sexton's row has text and a citation and no
+commercial words. Regional Care (2756657) and Sheriff (5243701) are the
+commercial keeps. Njie's own opinion says "customs", which would keep it, so
+Sexton is the not-commercial case instead.
 """
 
 from __future__ import annotations
@@ -157,6 +159,8 @@ async def _fixture(monkeypatch: pytest.MonkeyPatch):
     assert "Samuels" not in names
     assert "John Does" not in names
     assert "Njie" not in names
+    assert "Sexton" not in names
+    assert "Callaway" not in names
     assert result.skips["criminal"] >= 2
     assert result.skips["not-appellate"] >= 1
     assert result.skips["not-commercial"] >= 1
@@ -175,14 +179,16 @@ def test_a_stopped_run_resumes_without_duplicates(monkeypatch: pytest.MonkeyPatc
 
 
 async def _resume(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("ZENAS_CL_BULK_MAX", "1")
+    # The cap counts opinions that have text. Callaway and Sexton are read
+    # before Regional Care, so the first commercial case is the third.
+    monkeypatch.setenv("ZENAS_CL_BULK_MAX", "3")
     first = await load_bulk(_bulk_get([]), state=BulkState())
-    assert _citations(first.blobs) == {"175 A.D. 882"}
-    assert first.cursor == f"cl-bulk:{DAY}:opinions:5243701"
+    assert _citations(first.blobs) == {"586 F. App'x 297"}
+    assert first.cursor == f"cl-bulk:{DAY}:opinions:2756657"
     # A new process: empty memory, same cursor. The opinion already stored is not emitted.
     second = await load_bulk(_bulk_get([]), resume=first.cursor, state=BulkState())
-    assert "175 A.D. 882" not in _citations(second.blobs)
-    assert "586 F. App'x 297" in _citations(second.blobs)
+    assert "586 F. App'x 297" not in _citations(second.blobs)
+    assert "175 A.D. 882" in _citations(second.blobs)
     source = _source()
     store = MemoryStore(home_region="us-east")
     await ingest_snapshot(store, source, first.blobs, on=ON, region="us-east")
