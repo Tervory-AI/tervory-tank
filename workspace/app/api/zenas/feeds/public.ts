@@ -93,6 +93,25 @@ export function publicScores(payload: unknown): { region: string; runs: PublicSc
   return { region, runs };
 }
 
+export type PublicConvert = {
+  region: string;
+  decided: number;
+  converted: number;
+  held_out: number;
+  failed: number;
+};
+
+export function publicConvert(payload: unknown): PublicConvert {
+  const root = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+  return {
+    region: String(root.region ?? ""),
+    decided: Number(root.decided ?? 0) || 0,
+    converted: Number(root.converted ?? 0) || 0,
+    held_out: Number(root.held_out ?? 0) || 0,
+    failed: Number(root.failed ?? 0) || 0,
+  };
+}
+
 export function loadBody(source: string, region: "us-east" | "za"): { source: string; home_region: "us-east" | "za" } {
   return { source, home_region: region };
 }

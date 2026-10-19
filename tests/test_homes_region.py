@@ -28,6 +28,7 @@ def test_other_region_tank_is_https_with_its_own_key_and_forced_home() -> None:
 FOUNDER_BOX = {
     "feeds/region/route.ts",
     "feeds/region/load/route.ts",
+    "feeds/region/convert/route.ts",
     "selftest/route.ts",
     "review-switch/route.ts",
 }

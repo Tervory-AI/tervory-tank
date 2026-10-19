@@ -1,4 +1,4 @@
-import { loadBody, publicFeeds, publicScores } from "../workspace/app/api/zenas/feeds/public.ts";
+import { loadBody, publicConvert, publicFeeds, publicScores } from "../workspace/app/api/zenas/feeds/public.ts";
 
 const judgment = "JUDGMENT-TEXT-MUST-NOT-CROSS the court held for the buyer.";
 const matter = "MATTER-BODY-MUST-NOT-CROSS client names and notes.";
@@ -45,6 +45,21 @@ if (bench.label !== "LegalBench code baseline" || bench.scored_by !== "code base
   throw new Error("LegalBench must be labelled as a code baseline");
 }
 if (JSON.stringify(bench).includes("luna")) throw new Error("a LegalBench row must not carry a model name");
+
+const converted = publicConvert({
+  region: "za",
+  decided: 12,
+  converted: 9,
+  held_out: 2,
+  failed: 1,
+  text: judgment,
+  reason: judgment,
+});
+if (JSON.stringify(converted).includes(judgment)) throw new Error("a convert report included a judgment");
+if (converted.decided !== 12 || converted.converted !== 9 || converted.held_out !== 2 || converted.failed !== 1) {
+  throw new Error("convert counts must cross");
+}
+if (converted.region !== "za") throw new Error("the convert region must cross");
 
 const sent = loadBody("ecfr", "za");
 if (JSON.stringify(sent) !== JSON.stringify({ source: "ecfr", home_region: "za" })) {

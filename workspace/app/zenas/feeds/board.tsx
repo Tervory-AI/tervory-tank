@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { PublicScore, PublicSource } from "@/app/api/zenas/feeds/public";
+import type { PublicConvert, PublicScore, PublicSource } from "@/app/api/zenas/feeds/public";
 
 type Region = "us-east" | "za";
 
@@ -10,28 +10,32 @@ export function FeedSwitch({
   initialSources,
   initialScores,
   initialReview,
+  initialConvert,
   note,
 }: {
   initialRegion: Region;
   initialSources: PublicSource[];
   initialScores: PublicScore[];
   initialReview: "on" | "off";
+  initialConvert: PublicConvert;
   note: string;
 }) {
   const [region, setRegion] = useState<Region>(initialRegion);
   const [sources, setSources] = useState(initialSources);
   const [scores, setScores] = useState(initialScores);
   const [review, setReview] = useState<"on" | "off">(initialReview);
+  const [counts, setCounts] = useState<PublicConvert>(initialConvert);
   const [message, setMessage] = useState(note);
   const [busy, setBusy] = useState("");
 
   async function choose(next: Region) {
     setRegion(next);
     setMessage("");
-    const [feeds, scored, switched] = await Promise.all([
+    const [feeds, scored, switched, converted] = await Promise.all([
       fetch(`/api/zenas/feeds/region?region=${next}`),
       fetch(`/api/zenas/selftest?region=${next}`),
       fetch(`/api/zenas/review-switch?region=${next}`),
+      fetch(`/api/zenas/feeds/region/convert?region=${next}`),
     ]);
     if (!feeds.ok) {
       setSources([]);
@@ -51,6 +55,29 @@ export function FeedSwitch({
       const body = (await switched.json()) as { review?: string };
       setReview(body.review === "on" ? "on" : "off");
     }
+    if (converted.ok) {
+      setCounts((await converted.json()) as PublicConvert);
+    } else {
+      setCounts({ region: next, decided: 0, converted: 0, held_out: 0, failed: 0 });
+    }
+  }
+
+  async function convertCases() {
+    setBusy("convert");
+    setMessage("");
+    const res = await fetch("/api/zenas/feeds/region/convert", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ region }),
+    });
+    setBusy("");
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      setMessage(body?.error || "Cases could not be converted.");
+      return;
+    }
+    setCounts((await res.json()) as PublicConvert);
+    setMessage("Conversion finished.");
   }
 
   async function flipReview() {
@@ -99,6 +126,16 @@ export function FeedSwitch({
         </button>
       </div>
       {message ? <p className="note">{message}</p> : null}
+      <h2>Decided cases</h2>
+      <p className="note">
+        <span className="meta">{counts.decided}</span> decided cases loaded.{" "}
+        <span className="meta">{counts.converted}</span> converted.{" "}
+        <span className="meta">{counts.held_out}</span> held out.{" "}
+        <span className="meta">{counts.failed}</span> failed.
+      </p>
+      <button type="button" disabled={busy === "convert"} onClick={convertCases}>
+        {busy === "convert" ? "Converting" : "Convert cases"}
+      </button>
       <p className="note">
         Lawyer review is {review}.{" "}
         <button type="button" disabled={busy === "review"} onClick={flipReview}>
