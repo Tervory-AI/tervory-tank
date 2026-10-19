@@ -23,8 +23,14 @@
 - Every source with no key must load real content on "Load now"; a test per source on a saved real response proves the parser handles it.
 - Keyed sources (`GOVINFO_API_KEY`, `COURTLISTENER_API_TOKEN`, `NY_OPENLEG_API_KEY`, `LAWS_AFRICA_API_TOKEN`) stay skipped until the key is set.
 
+## 4. Two regions stay separate
+- Everything above runs **per region on its own box**: the US library, rule cards, worked matters, self-tests and training pairs on Boston; the SA ones on the ZA box. Nothing is copied between them.
+- Held-out cases are chosen per region: US self-tests use only US decided cases, SA self-tests only SA cases (SAFLII and the SA court adapters already on main).
+- **Founder feeds page shows both regions:** the Zenas feeds page (founder only) gets a US / South Africa switch. The South Africa view reads pool status and starts loads on the ZA box through the existing `TANK_URL_ZA` / `TANK_API_KEY_ZA` founder link. Only source names, counts, dates and errors cross; no documents, matters or client data.
+- Fix SA loaders the same way: every keyless SA source must load real content on "Load now" (test each on a saved real response).
+
 ## Done when
-CI green; with `ZENAS_REVIEW=off` a question on loaded law returns a cited memo with no human step (tested); a planted bad citation is never delivered (tested); the self-test runs on fixture held-out cases and reports outcome and element agreement (tested); eCFR, FRCP, FRE, FRAP and Federal Register parsers load fixture copies of real responses into many documents (tested).
+CI green; a US self-test never sees an SA case and an SA self-test never sees a US case (tested); the feeds page shows ZA status and can start a ZA load through the founder link, with no documents crossing (tested); with `ZENAS_REVIEW=off` a question on loaded law returns a cited memo with no human step (tested); a planted bad citation is never delivered (tested); the self-test runs on fixture held-out cases and reports outcome and element agreement (tested); eCFR, FRCP, FRE, FRAP and Federal Register parsers load fixture copies of real responses into many documents (tested).
 
 ## After merge (Claude)
 Press Load now on every keyless source, start the first self-test run, and report the scores to the founder.
