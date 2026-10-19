@@ -137,6 +137,7 @@ const FAILURE_REASONS = new Set([
   "citation is superseded",
   "quote is not in the judgment",
   "not a judgment",
+  "facts too short",
 ]);
 
 export type PublicCaseFailure = {
