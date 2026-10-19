@@ -28,12 +28,18 @@ def _load() -> Any:
     raise RuntimeError("market lab logic is missing")
 
 
+def _has_source_passages(value: object) -> bool:
+    return isinstance(value, list) and len(value) > 0
+
+
 async def run(payload: dict, ctx) -> dict:
-    pure = _load()
     data = dict(payload or {})
-    if "passages" not in data and "model_text" not in data:
-        data["model_text"] = await ctx.model(
-            [{"role": "user", "content": pure.research_prompt(str(data.get("question") or ""))}],
-            task_type="market.research",
-        )
+    if not _has_source_passages(data.get("passages")):
+        return {
+            "question": str(data.get("question") or "").strip(),
+            "answer": "no sources yet",
+            "citations": [],
+            "cost_usd": 0,
+        }
+    pure = _load()
     return pure.research_answer(data)

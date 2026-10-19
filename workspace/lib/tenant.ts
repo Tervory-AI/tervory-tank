@@ -25,6 +25,23 @@ export function uuidFrom(input: string): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+/** Production Clerk gave every organization a new id. TERVORY_TENANT_ALIASES maps a new org id
+ *  to the org id its data was filed under, so existing records keep their tenant:
+ *  "org_new1=org_old1,org_new2=org_old2". Org ids are not secrets. Unlisted orgs map to themselves. */
+function aliases(): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const pair of (process.env["TERVORY_TENANT_ALIASES"] ?? "").split(",")) {
+    const [from, to] = pair.split("=").map((part) => part.trim());
+    if (from && to && from.startsWith("org_") && to.startsWith("org_")) map.set(from, to);
+  }
+  return map;
+}
+
+/** The tenant id for a Clerk organization, after any alias. */
+export function tenantIdFor(orgId: string): string {
+  return uuidFrom(aliases().get(orgId) ?? orgId);
+}
+
 /** The current user's tenant. Creates a personal organization if they have none. */
 export async function currentTenant(): Promise<Tenant> {
   const { userId, orgId } = await auth();
@@ -35,7 +52,7 @@ export async function currentTenant(): Promise<Tenant> {
   if (orgId) {
     // The session carries the org id and slug; the display name needs one lookup.
     const org = await client.organizations.getOrganization({ organizationId: orgId });
-    return { tenantId: uuidFrom(orgId), orgId, orgName: org.name, userId };
+    return { tenantId: tenantIdFor(orgId), orgId, orgName: org.name, userId };
   }
 
   // No active organization: use the first one they belong to, or create a personal one.
@@ -46,7 +63,7 @@ export async function currentTenant(): Promise<Tenant> {
     const label = user?.firstName || user?.primaryEmailAddress?.emailAddress?.split("@")[0] || "My";
     org = await client.organizations.createOrganization({ name: `${label} workspace`, createdBy: userId });
   }
-  return { tenantId: uuidFrom(org.id), orgId: org.id, orgName: org.name, userId };
+  return { tenantId: tenantIdFor(org.id), orgId: org.id, orgName: org.name, userId };
 }
 
 /** The active Clerk organization, or null when the user has not chosen one.
@@ -56,5 +73,5 @@ export async function activeTenant(): Promise<Tenant | null> {
   if (!userId || !orgId) return null;
   const client = await clerkClient();
   const org = await client.organizations.getOrganization({ organizationId: orgId });
-  return { tenantId: uuidFrom(orgId), orgId, orgName: org.name, userId };
+  return { tenantId: tenantIdFor(orgId), orgId, orgName: org.name, userId };
 }

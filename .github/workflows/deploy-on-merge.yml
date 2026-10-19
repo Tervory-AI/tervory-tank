@@ -1,0 +1,45 @@
+# After CI passes on main, deploy only the apps whose code changed.
+# The main app goes first; rooms deploy only if main finished. No manual clicks after a merge.
+# The Coolify token lives only in the repo secret COOLIFY_TOKEN and is never printed.
+name: deploy-on-merge
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-on-merge
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      COOLIFY_URL: ${{ vars.COOLIFY_URL || 'https://coolify.tervory.com' }}
+      COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+      AFTER: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 50
+      - name: Find the previous deployed commit
+        run: |
+          # The commit before this push on main: the parent of the first commit in the push is not
+          # known here, so compare with the previous successful run of this workflow.
+          prev=$(curl -sS -H "Authorization: Bearer ${{ github.token }}" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/deploy-on-merge.yml/runs?branch=main&status=success&per_page=1" \
+            | jq -r '.workflow_runs[0].head_sha // empty')
+          if [ -n "$prev" ] && git cat-file -e "$prev^{commit}" 2>/dev/null; then echo "BEFORE=$prev" >> "$GITHUB_ENV"; fi
+      - name: Deploy changed apps
+        run: |
+          case "$COOLIFY_URL" in https://*) ;; *) echo "::error::COOLIFY_URL must be https"; exit 1 ;; esac
+          test -n "$COOLIFY_TOKEN" || { echo "::error::COOLIFY_TOKEN secret is missing"; exit 1; }
+          python3 .github/scripts/deploy_changed.py

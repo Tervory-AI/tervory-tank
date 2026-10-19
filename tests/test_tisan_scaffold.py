@@ -62,6 +62,8 @@ def test_template_has_the_pages_and_no_analytics() -> None:
         "playwright.config.ts",
         "lighthouserc.cjs",
         "scripts/site-paths.cjs",
+        "scripts/deploy-gate.cjs",
+        "tests/deploy-gate.test.ts",
         "e2e/a11y.spec.ts",
         "e2e/pages.spec.ts",
         "tests/gate.test.ts",
@@ -97,6 +99,7 @@ def test_site_gate_runs_in_github_actions() -> None:
         "npm run typecheck",
         "npm test",
         "npm run build",
+        "npm run deploy",
         "npm run test:e2e",
         "npm run lhci",
     )
@@ -105,7 +108,17 @@ def test_site_gate_runs_in_github_actions() -> None:
     for command in commands:
         assert command in template_ci
         assert command in repo_ci
+    assert template_ci.index("npm run deploy") > template_ci.index("npm run build")
+    assert repo_ci.index("npm run deploy") > repo_ci.index("npm run build")
     assert "agents/tisan/templates/next-site" in repo_ci
+    gate = (TEMPLATE / "scripts" / "deploy-gate.cjs").read_text(encoding="utf-8")
+    assert "missing-privacy-notice" in gate
+    assert "missing-cookie-notice" in gate
+    assert "comply.gdpr" in gate
+    package = json.loads((TEMPLATE / "package.json").read_text(encoding="utf-8"))
+    assert package["scripts"]["deploy"] == "node scripts/deploy-gate.cjs"
+    for banned in ("urlopen", "httpx", "fetch(", "requests", "lokd.co.za", "createConnection"):
+        assert banned not in gate
     lighthouse = (TEMPLATE / "lighthouserc.cjs").read_text(encoding="utf-8")
     for category in ("performance", "accessibility", "best-practices", "seo"):
         assert f"categories:{category}" in lighthouse

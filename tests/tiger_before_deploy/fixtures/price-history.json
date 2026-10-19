@@ -1,0 +1,6 @@
+[
+  {"price": "19.99", "method": "jsonld"},
+  {"price": "$19.99", "method": "jsonld"},
+  {"price": "19.994", "method": "jsonld"},
+  {"price": "17.50", "method": "jsonld"}
+]

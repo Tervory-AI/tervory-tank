@@ -2,7 +2,7 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { isFounder } from "@/lib/admin";
-import { uuidFrom } from "@/lib/tenant";
+import { tenantIdFor } from "@/lib/tenant";
 import { HomeBoard, type OrgHome } from "./board";
 import "./homes.css";
 
@@ -16,7 +16,7 @@ async function listOrganisations(): Promise<OrgHome[]> {
   for (;;) {
     const page = await client.organizations.getOrganizationList({ limit, offset, orderBy: "name" });
     for (const org of page.data) {
-      found.push({ orgId: org.id, name: org.name, tenantId: uuidFrom(org.id) });
+      found.push({ orgId: org.id, name: org.name, tenantId: tenantIdFor(org.id) });
     }
     offset += page.data.length;
     if (page.data.length < limit || offset >= page.totalCount || offset >= 1000) break;
