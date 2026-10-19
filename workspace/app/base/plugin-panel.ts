@@ -10,10 +10,10 @@ export const VAULT_OFF_MESSAGE = "This vault is off. Turn it on in Tank.";
 export const SIGN_IN_MESSAGE = "Sign in to use Plugins.";
 export const LOAD_ERROR_MESSAGE = "Plugins could not be loaded from Tank. No vault data is shown.";
 
-export const STUB_KEY = "Add a key first. Nothing was stored.";
-export const STUB_FILE = "Choose a file first. Nothing was saved.";
-export const STUB_LINK = "Add a link first. Nothing was saved.";
-export const STUB_MCP = "Add a name and a server URL first. Nothing was saved.";
+export const NEED_KEY = "Add a key first. Nothing was stored.";
+export const NEED_FILE = "Choose a file first. Nothing was saved.";
+export const NEED_LINK = "Add a link first. Nothing was saved.";
+export const NEED_MCP = "Add a name and a server URL first. Nothing was saved.";
 
 export const MASK = "••••••••";
 

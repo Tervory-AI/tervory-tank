@@ -520,8 +520,9 @@ body:has(.tk) main {
   }
 
   .tk-top img {
-    width: 150px;
-    height: 37px;
+    width: auto;
+    height: 40px;
+    max-width: 70%;
     object-fit: contain;
     object-position: left center;
   }

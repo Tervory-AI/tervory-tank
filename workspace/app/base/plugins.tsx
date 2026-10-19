@@ -25,10 +25,10 @@ import {
 } from "./plugin-actions";
 import {
   formatBytes,
-  STUB_FILE,
-  STUB_KEY,
-  STUB_LINK,
-  STUB_MCP,
+  NEED_FILE,
+  NEED_KEY,
+  NEED_LINK,
+  NEED_MCP,
   VAULT_OFF_MESSAGE,
   type ConnectionMeta,
   type FileMeta,
@@ -83,7 +83,7 @@ function KeyRow({ row, busy, run, say }: { row: SecretMeta } & Omit<TabProps, "p
         const form = event.currentTarget;
         const value = form.querySelector<HTMLInputElement>("input[type=password]")?.value ?? "";
         form.reset();
-        if (!value.trim()) return say(STUB_KEY);
+        if (!value.trim()) return say(NEED_KEY);
         void run(() => saveBaseKey(row.name, value, row.purpose));
       }}
     >
@@ -126,7 +126,7 @@ function KeysTab({ plugins, busy, run, say }: TabProps) {
     const purpose = form.querySelector<HTMLInputElement>("input[name=key-purpose]")?.value.trim() ?? "";
     const value = form.querySelector<HTMLInputElement>("input[type=password]")?.value ?? "";
     form.reset();
-    if (!name || !value.trim()) return say(STUB_KEY);
+    if (!name || !value.trim()) return say(NEED_KEY);
     void run(() => saveBaseKey(name, value, purpose || "Base key"));
   }
   return (
@@ -195,7 +195,7 @@ function FilesTab({ plugins, busy, run, say }: TabProps) {
   function send(list: FileList | File[] | null) {
     const files = list ? Array.from(list) : [];
     if (input.current) input.current.value = "";
-    if (!files.length) return say(STUB_FILE);
+    if (!files.length) return say(NEED_FILE);
     const body = new FormData();
     for (const file of files) body.append("file", file);
     void run(() => uploadBaseFiles(body));
@@ -275,7 +275,7 @@ function LinksTab({ plugins, busy, run, say }: TabProps) {
     form.reset();
     const frequency = often;
     setOften("daily");
-    if (!url) return say(STUB_LINK);
+    if (!url) return say(NEED_LINK);
     void run(() => addBaseLink(url, label, frequency));
   }
   return (
@@ -352,7 +352,7 @@ function McpTab({ plugins, busy, run, say }: TabProps) {
     const url = form.querySelector<HTMLInputElement>("input[name=server]")?.value.trim() ?? "";
     const token = how === "token" ? form.querySelector<HTMLInputElement>("input[type=password]")?.value ?? "" : "";
     form.reset();
-    if (!name || !url) return say(STUB_MCP);
+    if (!name || !url) return say(NEED_MCP);
     void run(() => addBaseConnection(name, url, how, token));
   }
   return (

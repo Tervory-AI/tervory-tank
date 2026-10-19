@@ -24,7 +24,7 @@ const BOTTOM_LINKS = [
   { href: "/", label: "Support" },
 ] as const;
 
-type Turn = { role: "user" | "assistant"; content: string; error?: boolean };
+type Turn = { role: "user" | "assistant"; content: string; error?: boolean; sources?: string[] };
 
 function SearchIcon() {
   return (
@@ -77,6 +77,12 @@ function AskTank() {
             <div className={turn.role === "user" ? "tk-bubble tk-you" : "tk-bubble tk-answer"} key={`${turn.role}-${index}`}>
               <p className="tk-who">{turn.role === "user" ? "You" : "Tank"}</p>
               <p className={turn.error ? "tk-said tk-err" : "tk-said"}>{turn.content}</p>
+              {turn.role === "assistant" ? (
+                <div className="tk-sources">
+                  <p>Sources</p>
+                  {turn.sources && turn.sources.length ? turn.sources.map((source) => <p key={source}>{source}</p>) : <p>No sources for this answer.</p>}
+                </div>
+              ) : null}
             </div>
           ))}
         </div>

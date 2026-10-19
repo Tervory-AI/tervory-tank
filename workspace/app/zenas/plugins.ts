@@ -8,10 +8,10 @@ export const VAULT_OFF_DETAIL =
   "Nothing here can be added or changed while zenas.vault is off. Tank returns no items and refuses writes.";
 export const VAULT_NOTE =
   "Calls go through Tank, server-side. This page uses zenas.vault only and never reads another vault. Saved values are never sent back to the page.";
-export const STUB_KEY = "Add a key first. Nothing was stored.";
-export const STUB_FILE = "Choose a file first. Nothing was saved.";
-export const STUB_LINK = "Add a link first. Nothing was saved.";
-export const STUB_MCP = "Add a name and a server URL first. Nothing was saved.";
+export const NEED_KEY = "Add a key first. Nothing was stored.";
+export const NEED_FILE = "Choose a file first. Nothing was saved.";
+export const NEED_LINK = "Add a link first. Nothing was saved.";
+export const NEED_MCP = "Add a name and a server URL first. Nothing was saved.";
 export const SEARCH_PLACEHOLDER = "Search matters, drafts, documents and citations";
 
 export const PLUGIN_TABS = ["API keys", "Files", "Source links", "MCP connections"] as const;
@@ -150,16 +150,16 @@ export function mapVaultPayload(raw: {
 }
 
 export function formatSaved(iso: string | null | undefined): string {
-  if (!iso) return "__ / __ / ____";
+  if (!iso) return "No date";
   const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "__ / __ / ____";
+  if (Number.isNaN(date.getTime())) return "No date";
   const day = String(date.getUTCDate()).padStart(2, "0");
   const month = String(date.getUTCMonth() + 1).padStart(2, "0");
   return `${day} / ${month} / ${date.getUTCFullYear()}`;
 }
 
 export function formatBytes(size: number): string {
-  if (!Number.isFinite(size) || size < 0) return "__ MB";
+  if (!Number.isFinite(size) || size < 0) return "No size";
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(size < 10 * 1024 ? 1 : 0)} KB`;
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
@@ -168,6 +168,6 @@ export function formatBytes(size: number): string {
 export function fileDetail(file: FileMeta): string {
   const kind = (file.type || "File").toUpperCase();
   const measure =
-    file.pages != null ? `${file.pages} pages` : file.rows != null ? `${file.rows} rows` : "__ pages";
+    file.pages != null ? `${file.pages} pages` : file.rows != null ? `${file.rows} rows` : "No page count";
   return `${kind} · ${measure} · ${formatBytes(file.size)} · uploaded ${formatSaved(file.uploadedAt)}`;
 }

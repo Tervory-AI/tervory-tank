@@ -6,10 +6,10 @@ import { readFlags, scrubSecrets } from "./load";
 import { buildPage, feedsToCall } from "./model";
 import {
   REFERENCE_LABEL,
-  STUB_FILE,
-  STUB_KEY,
-  STUB_LINK,
-  STUB_MCP,
+  NEED_FILE,
+  NEED_KEY,
+  NEED_LINK,
+  NEED_MCP,
   VAULT_OFF_MESSAGE,
   clientPluginState,
   flagsWithVault,
@@ -218,11 +218,11 @@ test("plugin state sent to the browser is a set of booleans and never a saved se
   assert.equal(state.connections.length, 0);
   const dumped = JSON.stringify(state);
   assert.equal(dumped.includes("example-key"), false);
-  assert.match(STUB_KEY, /Nothing was stored/);
-  assert.match(STUB_FILE, /Nothing was saved/);
-  assert.match(STUB_LINK, /Nothing was saved/);
-  assert.match(STUB_MCP, /Nothing was saved/);
-  assert.equal(STUB_KEY.includes("saved 17"), false);
+  assert.match(NEED_KEY, /Nothing was stored/);
+  assert.match(NEED_FILE, /Nothing was saved/);
+  assert.match(NEED_LINK, /Nothing was saved/);
+  assert.match(NEED_MCP, /Nothing was saved/);
+  assert.equal(NEED_KEY.includes("saved 17"), false);
 });
 
 test("a vault key turns a feed on only while that vault is on", () => {

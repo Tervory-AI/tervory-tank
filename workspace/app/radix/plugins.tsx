@@ -125,11 +125,11 @@ export function Plugins({ open, onEnabled }: { open: boolean; onEnabled: (value:
           <label>Link<input name="url" type="url" required disabled={busy} /></label>
           <label>Label<input name="label" maxLength={80} disabled={busy} /></label>
           <label>Check frequency<select name="frequency" defaultValue="weekly" disabled={busy}><option value="weekly">Weekly</option><option value="daily">Daily</option></select></label>
-          <p className="rx-muted">Frequency is saved for later. Checks stay off.</p>
+          <p className="rx-muted">The link is saved only. Checks stay off.</p>
           <button type="submit" className="rx-primary" disabled={busy}>Save link</button>
         </form>
       </> : <>
-        <p>Save a connection for later. No MCP server is contacted. Tokens stay hidden after saving.</p>
+        <p>Save a connection. No server is contacted. Tokens stay hidden after saving.</p>
         {panel.connections.map((row) => <article className="rx-card" key={row.id}>
           <h3>{row.name}</h3><p>{row.serverUrl}</p><p>{row.status}{row.hasToken ? " · ••••••••" : ""}</p>
           <button type="button" className="rx-text-button" disabled={busy} onClick={() => void run(() => removeRadixConnection(row.id))}>Remove {row.name}</button>

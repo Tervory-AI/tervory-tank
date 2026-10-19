@@ -260,9 +260,6 @@ export function Lab({
                 <p className="lede">The product lists Rig searches. Everything here is stand-in data for now.</p>
               </div>
               <CompactSearch onSearch={searchFrom} />
-              <button type="button" className="primary">
-                Add a catalogue
-              </button>
             </header>
             <section className="counts">
               <article className="count">
@@ -332,7 +329,7 @@ export function Lab({
             </section>
             <section className="block">
               <h2>Distributor feeds</h2>
-              <p className="intro">Where real products will come from later.</p>
+              <p className="intro">Real product feeds stay off until the search is proven.</p>
               <article className="card">
                 <div className="card-top">
                   <h3>Distributor product feeds</h3>
@@ -359,9 +356,6 @@ export function Lab({
                 <p className="lede">New fits wait here until an admin approves them. Shoppers only see approved fits.</p>
               </div>
               <CompactSearch onSearch={searchFrom} />
-              <button type="button" className="primary">
-                Find new fits
-              </button>
             </header>
             <article className="card key-card">
               <div>
@@ -488,9 +482,9 @@ export function Lab({
                 <p className="fine">Tervory, on rig.tervory.com.</p>
               </article>
               <article className="count">
-                <b>1</b>
-                <strong>Dealer skin planned</strong>
-                <p className="fine">Custom Nation is first.</p>
+                <b>0</b>
+                <strong>Dealer skins</strong>
+                <p className="fine">No dealer skin is on this page.</p>
               </article>
               <article className="count">
                 <b>0</b>
@@ -511,15 +505,6 @@ export function Lab({
                   <a className="text more" href="https://rig.tervory.com">
                     Open rig.tervory.com →
                   </a>
-                </article>
-                <article className="card skin later">
-                  <div className="banner dashed">Custom Nation skin preview, coming later</div>
-                  <div className="card-top">
-                    <h3>Custom Nation</h3>
-                    <Pill on={false}>Later</Pill>
-                  </div>
-                  <p>The first dealer skin and our case study. Custom Nation's own logo, colours and prices. No Tervory branding anywhere on the page.</p>
-                  <p className="meta">Starts once the main product is finished</p>
                 </article>
               </div>
             </section>
@@ -548,9 +533,6 @@ export function Lab({
                 <p className="lede">Where Rig is on the build plan.</p>
               </div>
               <CompactSearch onSearch={searchFrom} />
-              <button type="button" className="primary">
-                Open build plan
-              </button>
             </header>
             <section className="block">
               <h2>Build plan</h2>

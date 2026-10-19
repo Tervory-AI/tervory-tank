@@ -41,9 +41,11 @@ def test_panel_stays_fixed_and_only_the_body_scrolls():
     assert ">Support<" in source
     assert "Last refreshed" not in source
     assert "headerLinks" not in source
-    assert "Chat bot, to be named" in source
-    assert "pointer-events: none" in css
-    assert "bottom: 72px" in css
+    assert "Chat bot, to be named" not in source
+    assert "to be named" not in source
+    assert "pointer-events: none" not in css
+    assert "bottom: 0" in css
+    assert "bottom: 72px" not in css
 
 
 def test_plugins_is_the_tab_and_sources_are_only_under_answers():
@@ -67,7 +69,8 @@ def test_example_values_stay_and_secrets_are_dots():
     source = _source()
     assert "Example" in source
     assert "••••••••" in source
-    assert "Tisan logo, coming later" in source
+    assert "Tisan logo, coming later" not in source
+    assert 'src="/brand/tisan-on-dark.png"' in source
     assert "/brand/tervory-logo-reversed.png" in source
     assert "tervory-logo-on-white" not in source
     assert "fetch(" not in source

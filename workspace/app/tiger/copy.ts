@@ -5,7 +5,7 @@ export const LEDE =
   "Watches store product pages and tells you when a price or stock changes. If a page can't be read clearly, Tiger says so instead of guessing.";
 export const FOOT =
   "Public pages only. Tiger checks one page at a time, slowly, and never logs in. A store that blocks checks is recorded and skipped.";
-export const FOOT_SMALL = "Values marked Example are placeholders in this design.";
+export const FOOT_SMALL = "Rows marked Example are samples, not your products.";
 
 export type ReadStatus = "Read" | "Price changed" | "Stock changed" | "Can't read";
 

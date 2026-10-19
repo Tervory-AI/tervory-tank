@@ -130,9 +130,9 @@ export function Tisan({ plugins }: { plugins: PluginPanel }) {
         <div className="panel-top">
           <p className="account"><span>Account name</span> <Tag /></p>
           <nav aria-label="Workspace">
-            <button type="button" className="nav">Dashboard</button>
-            <button type="button" className="nav">Projects</button>
-            <button type="button" className="nav">Chats</button>
+            <a className="nav" href="/ledger">Dashboard</a>
+            <a className="nav" href="/tasks">Projects</a>
+            <a className="nav" href="/">Chats</a>
           </nav>
           <SquadLinks className="squad-nav" linkClassName="nav" />
         </div>
@@ -161,12 +161,11 @@ export function Tisan({ plugins }: { plugins: PluginPanel }) {
         <div className="panel-bottom">
           <img className="panel-sign" src="/brand/tervory-logo-reversed.png" alt="Tervory" />
           <button type="button" className={view === "settings" && dialog !== "plugins" ? "nav on" : "nav"} aria-current={view === "settings" && dialog !== "plugins" ? "page" : undefined} onClick={() => show("settings")}>Settings</button>
-          <button type="button" className="nav">Support</button>
+          <a className="nav" href="/">Support</a>
         </div>
       </aside>
 
       <div className="body">
-        <div className="page-slot">Tisan logo, coming later</div>
         {view === "overview" ? (
           <Overview
             startPrimary={action === "start"}
@@ -196,7 +195,6 @@ export function Tisan({ plugins }: { plugins: PluginPanel }) {
         <Plugins onClose={() => setDialog("none")} tab={pluginTab} setTab={setPluginTab} desktopAction={action} plugins={plugins} />
       ) : null}
       {dialog === "build" ? <StartBuild onClose={() => setDialog("none")} /> : null}
-      <p className="chat-bot">Chat bot, to be named</p>
     </div>
   );
 }
@@ -271,7 +269,7 @@ function Overview({
           <Current onOpen={() => onOpen("builds")} />
           <Recent onOpen={() => onOpen("builds")} />
           <Rules />
-          <Foot lines={["Keys and tokens are stored on the server, never in the app code.", "Values marked Example are placeholders in this design."]} />
+          <Foot lines={["Keys and tokens are stored on the server, never in the app code.", "Rows marked Example are samples, not a live build."]} />
         </>
       ) : null}
     </>
@@ -328,7 +326,7 @@ function Results({ query, hits, onOpen }: { query: string; hits: { id: string; k
           </section>
         );
       })}
-      <Foot lines={["Search looks only at Tisan's own builds, pages and tests.", "Values marked Example are placeholders in this design."]} />
+      <Foot lines={["Search looks only at Tisan's own builds, pages and tests.", "Rows marked Example are samples, not a live build."]} />
     </div>
   );
 }
@@ -577,7 +575,7 @@ function Builds({ startPrimary, onStart }: { startPrimary: boolean; onStart: () 
         </div>
         <p className="aside-note">Code checks are lint, type checks, unit tests and the production build. Screens means Playwright at 390, 768 and 1440 wide.</p>
       </section>
-      <Foot lines={["Tisan never merges a build. You review each draft pull request.", "Values marked Example are placeholders in this design."]} />
+      <Foot lines={["Tisan never merges a build. You review each draft pull request.", "Rows marked Example are samples, not a live build."]} />
     </>
   );
 }
@@ -688,7 +686,7 @@ function Design({ startPrimary, onStart }: { startPrimary: boolean; onStart: () 
           </table>
         </div>
       </section>
-      <Foot lines={["The saved page is the approved read. A live Figma call is not approved.", "Values marked Example are placeholders in this design."]} />
+      <Foot lines={["The saved page is the approved read. A live Figma call is not approved.", "Rows marked Example are samples, not a live build."]} />
     </>
   );
 }
@@ -742,7 +740,7 @@ function Tests({ startPrimary, onStart }: { startPrimary: boolean; onStart: () =
           <p>They need a gold set of examples and a trap-case runner first. Tisan will add them when those exist.</p>
         </div>
       </section>
-      <Foot lines={["Tests run on every build. A failed check stops the build.", "Values marked Example are placeholders in this design."]} />
+      <Foot lines={["Tests run on every build. A failed check stops the build.", "Rows marked Example are samples, not a live build."]} />
     </>
   );
 }
@@ -773,7 +771,7 @@ function Settings({ startPrimary, onStart }: { startPrimary: boolean; onStart: (
           <Setting title="Deploy key" detail="Set by your admin in Plugins. Shown as dots once saved." control={<Pill tone="quiet">Not set</Pill>} />
         </div>
       </section>
-      <Foot lines={["Keys and tokens are stored on the server, never in the app code.", "Values marked Example are placeholders in this design."]} />
+      <Foot lines={["Keys and tokens are stored on the server, never in the app code.", "Rows marked Example are samples, not a live build."]} />
     </>
   );
 }

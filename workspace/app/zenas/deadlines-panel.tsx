@@ -1,6 +1,6 @@
 import { DEADLINE_ALERTS, DEADLINE_NOTE, DEADLINE_ROWS } from "./frame";
 
-/** The drawn Deadlines column: Upcoming, then Alerts. Blanks stay blanks. */
+/** Deadlines column: Upcoming, then Alerts. Dates appear only when a matter has them. */
 export function DeadlinesPanel() {
   return (
     <section className="zn-deadlines" aria-label="Deadlines">
@@ -17,7 +17,7 @@ export function DeadlinesPanel() {
             <p>Next 30 days</p>
           </header>
           <ul>
-            {DEADLINE_ROWS.map((row, index) => (
+            {DEADLINE_ROWS.length === 0 ? <li>No matters yet.</li> : DEADLINE_ROWS.map((row, index) => (
               <li className={index === 0 ? "soon" : ""} key={`${row.title}-${index}`}>
                 <strong>{row.title}</strong>
                 <span>{row.meta}</span>

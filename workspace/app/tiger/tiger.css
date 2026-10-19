@@ -128,8 +128,9 @@ main:has(.tiger) {
 
 .tiger .panel-top img {
   display: block;
-  width: 100%;
-  height: auto;
+  width: auto;
+  height: 48px;
+  max-width: 100%;
   object-fit: contain;
   object-position: left center;
 }

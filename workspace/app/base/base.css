@@ -96,7 +96,7 @@ body:has(.bcp) main {
 }
 
 .bcp-logo {
-  width: 168px;
+  width: auto;
   height: 43px;
   max-width: 100%;
   object-fit: contain;

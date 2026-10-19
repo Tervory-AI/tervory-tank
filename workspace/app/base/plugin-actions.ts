@@ -15,7 +15,7 @@ import {
   saveVaultSecret,
   uploadVaultFiles,
 } from "@/lib/tank";
-import { BASE_SQUAD, BASE_VAULT, safeMessage, STUB_FILE, STUB_KEY, STUB_LINK, STUB_MCP } from "./plugin-panel";
+import { BASE_SQUAD, BASE_VAULT, safeMessage, NEED_FILE, NEED_KEY, NEED_LINK, NEED_MCP } from "./plugin-panel";
 
 export type PluginResult = { ok: boolean; message: string };
 
@@ -29,7 +29,7 @@ function done(message: string): PluginResult {
 export async function saveBaseKey(name: string, value: string, purpose: string): Promise<PluginResult> {
   const tenant = await activeTenant();
   if (!tenant) return { ok: false, message: SIGN_IN };
-  if (!name.trim() || !value.trim()) return { ok: false, message: STUB_KEY };
+  if (!name.trim() || !value.trim()) return { ok: false, message: NEED_KEY };
   try {
     await saveVaultSecret(BASE_VAULT, BASE_SQUAD, tenant.tenantId, tenant.userId, name.trim(), purpose, value);
     return done("Saved. The key is hidden and will not be shown again.");
@@ -52,7 +52,7 @@ export async function removeBaseSecret(name: string): Promise<PluginResult> {
 export async function uploadBaseFiles(formData: FormData): Promise<PluginResult> {
   const tenant = await activeTenant();
   if (!tenant) return { ok: false, message: SIGN_IN };
-  if (formData.getAll("file").length === 0) return { ok: false, message: STUB_FILE };
+  if (formData.getAll("file").length === 0) return { ok: false, message: NEED_FILE };
   try {
     await uploadVaultFiles(BASE_VAULT, BASE_SQUAD, tenant.tenantId, tenant.userId, formData);
     return done("Saved.");
@@ -75,7 +75,7 @@ export async function removeBaseFile(fileId: string): Promise<PluginResult> {
 export async function addBaseLink(url: string, label: string, frequency: string): Promise<PluginResult> {
   const tenant = await activeTenant();
   if (!tenant) return { ok: false, message: SIGN_IN };
-  if (!url.trim()) return { ok: false, message: STUB_LINK };
+  if (!url.trim()) return { ok: false, message: NEED_LINK };
   try {
     await addVaultLink(BASE_VAULT, BASE_SQUAD, tenant.tenantId, tenant.userId, url, label, frequency);
     return done("Saved.");
@@ -98,7 +98,7 @@ export async function removeBaseLink(linkId: string): Promise<PluginResult> {
 export async function addBaseConnection(name: string, serverUrl: string, authType: string, token: string): Promise<PluginResult> {
   const tenant = await activeTenant();
   if (!tenant) return { ok: false, message: SIGN_IN };
-  if (!name.trim() || !serverUrl.trim()) return { ok: false, message: STUB_MCP };
+  if (!name.trim() || !serverUrl.trim()) return { ok: false, message: NEED_MCP };
   try {
     await addVaultConnection(BASE_VAULT, BASE_SQUAD, tenant.tenantId, tenant.userId, name, serverUrl, authType, token);
     return done("Saved. A token is hidden and will not be shown again.");

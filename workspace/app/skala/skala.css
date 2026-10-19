@@ -97,8 +97,9 @@ body:has(.skala) main {
 }
 
 .sk-logo {
-  width: 186px;
+  width: auto;
   height: 44px;
+  max-width: calc(100% - 12px);
   margin-left: 12px;
   object-fit: contain;
   object-position: left center;
@@ -383,14 +384,17 @@ body:has(.skala) main {
     padding: 0 16px;
     background: #001840;
   }
-  .sk-top img { width: 140px; height: 33px; object-fit: contain; object-position: left center; }
+  .sk-top img { width: auto; height: 40px; max-width: 70%; object-fit: contain; object-position: left center; }
   .sk-menu {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
     color: #fff;
     border: 1px solid rgba(255, 255, 255, 0.4);
     border-radius: 8px;
-    padding: 6px 10px;
+    padding: 8px 14px;
   }
+  .sk-search, .sk-search input, .sk-ask form, .sk-ask input { width: 100%; max-width: 100%; }
   .sk-panel { transform: translateX(-105%); transition: transform 0.2s ease; }
   .skala.menu-open .sk-panel { transform: none; }
   .skala.menu-open .sk-dim {

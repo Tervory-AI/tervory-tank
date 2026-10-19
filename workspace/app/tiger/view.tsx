@@ -48,7 +48,6 @@ export function TigerApp({
   const [query, setQuery] = useState("");
   const [hidden, setHidden] = useState<string[]>([]);
   const [help, setHelp] = useState(false);
-  const [settingsNote, setSettingsNote] = useState(false);
   const [checkedNote, setCheckedNote] = useState("");
   const [thread, setThread] = useState(ASK);
   const [askDraft, setAskDraft] = useState("");
@@ -92,7 +91,7 @@ export function TigerApp({
     setThread((current) => [
       ...current,
       { who: "You", text },
-      { who: "Tiger", text: "Ask Tiger is not connected from this page yet, so this reply has no sources. The earlier answers are an Example.", sources: [] },
+      { who: "Tiger", text: "Tiger cannot answer from this page yet. Use Add a product to watch a page. The earlier answers are an Example.", sources: [] },
     ]);
   }
 
@@ -112,8 +111,8 @@ export function TigerApp({
         <nav className="panel-account" aria-label="Account">
           <p className="account">{accountName || "Account name"}</p>
           <a className="nav" href="/">Dashboard</a>
-          <button type="button" className="nav" onClick={() => setMenuOpen(false)}>Projects</button>
-          <button type="button" className="nav" onClick={() => setMenuOpen(false)}>Chats</button>
+          <a className="nav" href="/tasks" onClick={() => setMenuOpen(false)}>Projects</a>
+          <a className="nav" href="/" onClick={() => setMenuOpen(false)}>Chats</a>
         </nav>
         <SquadLinks className="panel-account squad-nav" linkClassName="nav" />
         <div className="panel-own">
@@ -128,7 +127,7 @@ export function TigerApp({
         </div>
         <div className="panel-bottom">
           <img src="/brand/tervory-logo-reversed.png" alt="Tervory" width={186} height={34} />
-          <button type="button" className="nav" onClick={() => { setSettingsNote((open) => !open); setMenuOpen(false); }}>Settings</button>
+          <a className="nav" href="/onboarding" onClick={() => setMenuOpen(false)}>Settings</a>
           <button type="button" className="nav" onClick={() => { setHelp((open) => !open); setMenuOpen(false); }}>Support</button>
         </div>
       </aside>
@@ -159,7 +158,6 @@ export function TigerApp({
 
         {notice ? <p className="notice">{notice}</p> : null}
         {help ? <p className="notice">Tiger checks public product pages and tells you when a price or stock changes. It never logs in, and it does not guess a price it could not read.</p> : null}
-        {settingsNote ? <p className="notice">Account settings are not on this page.</p> : null}
         {checkedNote ? <p className="notice">{checkedNote}</p> : null}
 
         {hit ? <Results hit={hit} example={data.example} /> : null}
@@ -307,15 +305,11 @@ function Ask({
             <article className="tiger-msg" key={`tiger-${index}`}>
               <h3>Tiger</h3>
               <p>{turn.text}</p>
-              {turn.sources.length > 0 ? (
-                <>
-                  <hr />
-                  <div className="sources">
-                    <p className="sources-label">Sources:</p>
-                    {turn.sources.map((source) => <p key={source}>{source}</p>)}
-                  </div>
-                </>
-              ) : null}
+              <hr />
+              <div className="sources">
+                <p className="sources-label">Sources:</p>
+                {turn.sources.length > 0 ? turn.sources.map((source) => <p key={source}>{source}</p>) : <p>No sources for this answer.</p>}
+              </div>
             </article>
           )
         ))}
