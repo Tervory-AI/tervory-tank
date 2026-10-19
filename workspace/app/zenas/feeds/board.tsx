@@ -5,6 +5,11 @@ import type { PublicConvert, PublicScore, PublicSource } from "@/app/api/zenas/f
 
 type Region = "us-east" | "za";
 
+function statusLabel(status: string): string {
+  if (!status) return "—";
+  return status.replace(/_/g, " ");
+}
+
 export function FeedSwitch({
   initialRegion,
   initialSources,
@@ -213,8 +218,9 @@ export function FeedSwitch({
           <tr>
             <th>Source</th>
             <th>Documents</th>
+            <th>Status</th>
+            <th>Detail</th>
             <th>Last load</th>
-            <th>Errors</th>
             <th></th>
           </tr>
         </thead>
@@ -223,8 +229,9 @@ export function FeedSwitch({
             <tr key={row.id}>
               <td>{row.title}</td>
               <td className="meta">{row.documents}</td>
+              <td className="meta">{statusLabel(row.last_status)}</td>
+              <td>{row.detail || "—"}</td>
               <td className="meta">{row.last_load ?? "—"}</td>
-              <td>{row.errors.join(" ")}</td>
               <td>
                 <button type="button" disabled={busy === row.id} onClick={() => load(row.id)}>
                   {busy === row.id ? "Starting" : "Load now"}
