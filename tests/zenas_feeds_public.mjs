@@ -88,17 +88,19 @@ if (JSON.stringify(withUrl).includes(leakedKey)) {
   throw new Error("a credential value must not appear in the public feed");
 }
 
+// Build the OpenAI-style probe at runtime so the file never commits a literal sk- + 20+ alphanumerics.
+const skProbe = "sk" + "-" + "abcdefghijklmnopqrstuvwxyz012345";
 const withSk = publicFeeds({
   region: "us-east",
   sources: [
     {
       source_id: "x",
       last_status: "error",
-      detail: "upstream said sk-abcdefghijklmnopqrstuvwxyz012345 bad",
+      detail: `upstream said ${skProbe} bad`,
     },
   ],
 });
-if (/sk-[A-Za-z0-9]/.test(withSk.sources[0].detail)) {
+if (withSk.sources[0].detail.includes(skProbe) || /sk-[A-Za-z0-9]/.test(withSk.sources[0].detail)) {
   throw new Error("sk- secrets must be stripped from detail");
 }
 
