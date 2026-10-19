@@ -6,9 +6,10 @@ URL, a header on the bulk read, or a log.
 Every opinion row is that case's own row from the opinions file, in opinion
 id order. Robinson Quality Constructors (175448) has text and a citation and
 no commercial words, so it is not commercial. Callaway (2756371) has text and
-the citations file has no row for it, so it is kept with a docket-number
-citation and counted as no reporter citation. Regional Care (2756657) and
-Sheriff (5243701) are the commercial keeps. An empty opinion is still no text.
+the citations file has no row for it. It is not commercial, so it is dropped
+as not commercial; the missing citation does not skip that filter. It is
+counted as no reporter citation. Regional Care (2756657) and Sheriff
+(5243701) are the commercial keeps. An empty opinion is still no text.
 Njie's own opinion says "customs", and Sexton's says "firearm", so neither
 row is in the fixture.
 """
@@ -185,8 +186,7 @@ async def _fixture(monkeypatch: pytest.MonkeyPatch):
     result = await load_bulk(_bulk_get(calls), state=BulkState())
     assert result.snapshot == DAY
     assert result.cursor == f"cl-bulk:{DAY}:done"
-    callaway_cite = "No. 13-51169 (Fifth Circuit 2014-12-01)"
-    assert _citations(result.blobs) == {"175 A.D. 882", "586 F. App'x 297", callaway_cite}
+    assert _citations(result.blobs) == {"175 A.D. 882", "586 F. App'x 297"}
     kept = [row for blob in result.blobs for row in json.loads(blob)["results"]]
     by_cite = {row["citations"][0]: row for row in kept}
     sheriff = by_cite["175 A.D. 882"]
@@ -196,12 +196,8 @@ async def _fixture(monkeypatch: pytest.MonkeyPatch):
     regional = by_cite["586 F. App'x 297"]
     assert regional["docket_number"] == "12-16538"
     assert regional["court_id"] == "ca9"
-    callaway = by_cite[callaway_cite]
-    assert "Callaway" in callaway["case_name"]
-    assert callaway["docket_number"] == "13-51169"
-    assert callaway["court_id"] == "ca5"
-    assert callaway["plain_text"]
     names = " ".join(row["case_name"] for row in kept)
+    assert "Callaway" not in names
     assert "Walker" not in names
     assert "Samuels" not in names
     assert "John Does" not in names
@@ -210,11 +206,11 @@ async def _fixture(monkeypatch: pytest.MonkeyPatch):
     assert "Robinson" not in names
     assert result.skips["criminal"] >= 2
     assert result.skips["not-appellate"] >= 1
-    assert result.skips["not-commercial"] >= 1
+    assert result.skips["not-commercial"] >= 2
     assert result.skips["no-reporter-citation"] >= 1
     line = progress_line(result.snapshot, result.file_label, result.rows_read, result.cases_kept, result.skips)
     assert line.startswith(f"snapshot {DAY}; file opinions; rows read ")
-    assert "cases kept 3" in line
+    assert "cases kept 2" in line
     assert "skipped not our court" in line
     assert "criminal" in line and "not commercial" in line and "no text" in line
     assert "no reporter citation" in line
@@ -229,25 +225,24 @@ def test_a_stopped_run_resumes_without_duplicates(monkeypatch: pytest.MonkeyPatc
 async def _resume(monkeypatch: pytest.MonkeyPatch):
     # The cap counts opinions that have text. Robinson and Callaway are read
     # before Regional Care, so the first commercial case is the third.
-    # Callaway is kept (docket-number citation); Robinson is not commercial.
+    # Both of those earlier opinions fail the commercial filter.
     monkeypatch.setenv("ZENAS_CL_BULK_MAX", "3")
-    callaway_cite = "No. 13-51169 (Fifth Circuit 2014-12-01)"
     first = await load_bulk(_bulk_get([]), state=BulkState())
-    assert _citations(first.blobs) == {"586 F. App'x 297", callaway_cite}
+    assert _citations(first.blobs) == {"586 F. App'x 297"}
     assert first.cursor == f"cl-bulk:{DAY}:opinions:2756657"
-    # A new process: empty memory, same cursor. The opinions already stored are not emitted.
+    # A new process: empty memory, same cursor. The opinion already stored is not emitted.
     second = await load_bulk(_bulk_get([]), resume=first.cursor, state=BulkState())
     assert "586 F. App'x 297" not in _citations(second.blobs)
-    assert callaway_cite not in _citations(second.blobs)
+    assert "No. 13-51169 (Fifth Circuit 2014-12-01)" not in _citations(second.blobs)
     assert "175 A.D. 882" in _citations(second.blobs)
     source = _source()
     store = MemoryStore(home_region="us-east")
     await ingest_snapshot(store, source, first.blobs, on=ON, region="us-east")
     await ingest_snapshot(store, source, second.blobs, on=ON, region="us-east")
-    assert len(store.docs) == 3
+    assert len(store.docs) == 2
     again = await load_bulk(_bulk_get([]), state=BulkState())
     await ingest_snapshot(store, source, again.blobs, on=ON, region="us-east")
-    assert len(store.docs) == 3
+    assert len(store.docs) == 2
 
 
 def test_a_restored_run_still_names_the_court(monkeypatch: pytest.MonkeyPatch):
@@ -255,8 +250,8 @@ def test_a_restored_run_still_names_the_court(monkeypatch: pytest.MonkeyPatch):
 
 
 async def _restored_court(monkeypatch: pytest.MonkeyPatch):
-    # A new process restores docket and cluster ids from the table. Court
-    # names are not in that table, so the courts file is read again.
+    # A new process restores docket and cluster ids from the table. Callaway
+    # still fails the commercial filter, so it is not stored.
     monkeypatch.setenv("ZENAS_CL_BULK_MAX", "50")
     warmed = BulkState()
     await load_bulk(_bulk_get([]), state=warmed)
@@ -291,7 +286,9 @@ async def _restored_court(monkeypatch: pytest.MonkeyPatch):
         resume=f"cl-bulk:{DAY}:opinions:175448",
         state=BulkState(),
     )
-    assert "No. 13-51169 (Fifth Circuit 2014-12-01)" in _citations(resumed.blobs)
+    cites = _citations(resumed.blobs)
+    assert "No. 13-51169 (Fifth Circuit 2014-12-01)" not in cites
+    assert cites == {"586 F. App'x 297", "175 A.D. 882"}
 
 
 def test_api_updates_ask_only_for_dates_after_the_snapshot(monkeypatch: pytest.MonkeyPatch):

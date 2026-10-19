@@ -1049,15 +1049,12 @@ def _emit(state: BulkState, texts: dict[int, list[str]], skips: Counter[str]) ->
         if not text:
             skips["no-text"] += 1
             continue
-        missing_reporter = not cluster.citation
-        if missing_reporter:
+        # A missing reporter citation uses the docket number. It does not skip
+        # the commercial filter, or any other filter.
+        if not cluster.citation:
             cluster.citation = _docket_citation(docket, cluster, state.courts)
             skips["no-reporter-citation"] += 1
         payload = _case_payload(docket, cluster, text)
-        # A reporter citation still has to be a commercial case. Opinion text
-        # with no row in the citations file is kept under the docket citation.
-        if missing_reporter:
-            payload["commercial"] = True
         if not is_commercial(payload):
             skips["not-commercial"] += 1
             continue
