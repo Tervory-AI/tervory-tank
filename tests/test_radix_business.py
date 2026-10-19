@@ -134,7 +134,7 @@ class BusinessEvidenceTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(pkg.rung, 3)
                 self.assertEqual(pkg.input_schema, ENGINE.Request.model_json_schema())
                 for case in pkg.cases:
-                    ctx = SimpleNamespace(tenant_id=fixture()["tenant_id"], env={}, http=AsyncMock(), model=AsyncMock())
+                    ctx = SimpleNamespace(tenant_id="00000000-0000-0000-0000-000000000001", env={}, http=AsyncMock(), model=AsyncMock())
                     with patch("socket.socket", side_effect=AssertionError("No outbound sockets")):
                         output = await skala.run_skill(pkg, case["input"], ctx)
                     self.assertTrue(skala.score_case(case["expected"], output, case["tolerance"])[0], (skill, case["name"]))
