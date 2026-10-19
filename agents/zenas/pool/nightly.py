@@ -186,6 +186,8 @@ async def courtlistener_night(
     embedder: Embedder,
     index: VectorIndex,
     region: str,
+    budget=None,
+    clock=None,
 ) -> None:
     """Finish the bulk snapshot, then ask the API only for later opinions.
 
@@ -262,7 +264,13 @@ async def courtlistener_night(
     since = date.fromisoformat(day) if day else None
     done_cursor = f"cl-bulk:{day}:done" if day else ""
     try:
-        blobs, api_cursor = await adapter.fetch_updates(http_get, since=since, resume=api_resume)
+        blobs, api_cursor = await adapter.fetch_updates(
+            http_get,
+            since=since,
+            resume=api_resume,
+            budget=budget,
+            clock=clock,
+        )
     except RateLimited as exc:
         await store.set_checkpoint(source.source_id, join_cursor(done_cursor, api_resume), await store.stored_bytes())
         await store.record_source(source)
@@ -309,7 +317,11 @@ async def courtlistener_night(
     if line:
         detail = f"{line}; {detail}"
     status = "ok"
-    if note.get("status") == "rate_limited":
+    if note.get("status") == "budget":
+        status = "budget"
+        phrase = str(note.get("message") or "")
+        detail = f"{line}; {phrase}" if line else phrase
+    elif note.get("status") == "rate_limited":
         status = "rate_limited"
         detail = f"{note.get('message') or 'HTTP 429'}; the next Load resumes; {detail}"
     await store.record_run(

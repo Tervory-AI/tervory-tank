@@ -26,7 +26,7 @@ import xml.etree.ElementTree as ET
 from collections import Counter
 from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 
 from agents.zenas.pool.adapters.cases import (
     ALLOWED_COURTS,
@@ -522,6 +522,117 @@ async def _open_db():
         return await asyncpg.connect(dsn)
     except Exception:
         return None
+
+
+# The account allows 5/min, 50/hour and 125/day. These defaults stay under that
+# so a person can still look things up. Bulk reads do not use this ledger.
+DAILY_BUDGET_STOP = "daily budget used, resumes tomorrow"
+HOURLY_BUDGET_STOP = "hourly budget used, resumes next hour"
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return default
+
+
+def api_min_interval() -> float:
+    """Seconds between CourtListener API calls. Default 12."""
+    raw = os.environ.get("COURTLISTENER_MIN_INTERVAL", "").strip()
+    if not raw:
+        return 12.0
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return 12.0
+
+
+def api_hourly_max() -> int:
+    """API calls kept in any rolling hour. Default 45."""
+    return _env_int("COURTLISTENER_HOURLY_MAX", 45)
+
+
+def api_daily_max() -> int:
+    """API calls kept in the UTC day. Default 100."""
+    return _env_int("COURTLISTENER_DAILY_MAX", 100)
+
+
+def _aware(when: datetime) -> datetime:
+    if when.tzinfo is None:
+        return when.replace(tzinfo=timezone.utc)
+    return when.astimezone(timezone.utc)
+
+
+def api_day_start(now: datetime) -> datetime:
+    """Midnight UTC of the calendar day that contains now."""
+    utc = _aware(now)
+    return datetime(utc.year, utc.month, utc.day, tzinfo=timezone.utc)
+
+
+def api_hour_start(now: datetime) -> datetime:
+    """One hour before now. Calls at this instant still count."""
+    return _aware(now) - timedelta(hours=1)
+
+
+class MemoryApiBudget:
+    """Call times kept in this process. Tests use this as the pool table."""
+
+    def __init__(self) -> None:
+        self.calls: list[datetime] = []
+
+    async def count_since(self, start: datetime) -> int:
+        start = _aware(start)
+        return sum(1 for item in self.calls if _aware(item) >= start)
+
+    async def record(self, when: datetime) -> None:
+        self.calls.append(_aware(when))
+
+    async def aclose(self) -> None:
+        return None
+
+
+class PostgresApiBudget:
+    """Call times in zenas_pool.cl_api_calls. A restart reads the same rows."""
+
+    def __init__(self, conn) -> None:
+        self.conn = conn
+
+    async def count_since(self, start: datetime) -> int:
+        value = await self.conn.fetchval(
+            "SELECT count(*) FROM zenas_pool.cl_api_calls WHERE called_at >= $1",
+            _aware(start),
+        )
+        return int(value or 0)
+
+    async def record(self, when: datetime) -> None:
+        await self.conn.execute(
+            "INSERT INTO zenas_pool.cl_api_calls (called_at) VALUES ($1)",
+            _aware(when),
+        )
+
+    async def aclose(self) -> None:
+        await self.conn.close()
+
+
+async def open_api_budget() -> MemoryApiBudget | PostgresApiBudget:
+    """The pool table when this process has a database. Otherwise memory."""
+    conn = await _open_db()
+    if conn is None:
+        return MemoryApiBudget()
+    return PostgresApiBudget(conn)
+
+
+async def api_block_reason(budget: MemoryApiBudget | PostgresApiBudget, now: datetime) -> str:
+    """Empty when another API call is allowed. Daily is checked before hourly."""
+    if await budget.count_since(api_day_start(now)) >= api_daily_max():
+        return DAILY_BUDGET_STOP
+    if await budget.count_since(api_hour_start(now)) >= api_hourly_max():
+        return HOURLY_BUDGET_STOP
+    return ""
 
 
 async def _flush_ids(conn, rows: list[tuple]) -> None:

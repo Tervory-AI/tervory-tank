@@ -24,7 +24,7 @@ import json
 import os
 import sys
 import threading
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -32,8 +32,13 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from agents.zenas.pool.adapters.cases import CourtListenerAdapter  # noqa: E402
 from agents.zenas.pool.adapters.courtlistener_bulk import (  # noqa: E402
+    DAILY_BUDGET_STOP,
+    HOURLY_BUDGET_STOP,
     BulkState,
+    MemoryApiBudget,
+    api_block_reason,
     bulk_cap,
     choose_snapshot,
     iter_csv_bytes,
@@ -345,6 +350,153 @@ async def _api_after(monkeypatch: pytest.MonkeyPatch):
     assert marker not in dumped
 
 
+def _api_page() -> bytes:
+    row = {
+        "caseName": "Regional Care Services v. Companion Life Insurance",
+        "court_id": "ca9",
+        "docketNumber": "12-16538",
+        "dateFiled": "2026-10-01",
+        "plain_text": "The insurance contract covers the goods.",
+    }
+    return json.dumps({"results": [row], "next": None}).encode()
+
+
+def _clock(when: datetime):
+    def now() -> datetime:
+        return when
+
+    return now
+
+
+def test_api_calls_wait_twelve_seconds_by_default(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("COURTLISTENER_MIN_INTERVAL", raising=False)
+    monkeypatch.setenv("COURTLISTENER_API_TOKEN", "interval-token")
+    monkeypatch.setenv("COURTLISTENER_MAX_PAGES", "1")
+    sleeps: list[float] = []
+
+    async def sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr("agents.zenas.pool.adapters.cases.asyncio.sleep", sleep)
+    calls: list[str] = []
+
+    async def get(url: str, headers: dict) -> bytes:
+        calls.append(url)
+        return _api_page()
+
+    budget = MemoryApiBudget()
+    asyncio.run(CourtListenerAdapter().fetch_updates(get, budget=budget, clock=_clock(WHEN)))
+    assert sleeps == [12.0]
+    assert len(calls) == 1
+    assert len(budget.calls) == 1
+
+
+def test_hourly_cap_stops_without_another_request(monkeypatch: pytest.MonkeyPatch):
+    asyncio.run(_hourly_cap(monkeypatch))
+
+
+async def _hourly_cap(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("COURTLISTENER_MIN_INTERVAL", "0")
+    monkeypatch.setenv("COURTLISTENER_HOURLY_MAX", "45")
+    monkeypatch.setenv("COURTLISTENER_DAILY_MAX", "100")
+    monkeypatch.setenv("COURTLISTENER_API_TOKEN", "hourly-token")
+    now = WHEN
+    budget = MemoryApiBudget()
+    for _ in range(44):
+        await budget.record(now - timedelta(minutes=10))
+    calls: list[str] = []
+
+    async def get(url: str, headers: dict) -> bytes:
+        calls.append(url)
+        return _api_page()
+
+    first = CourtListenerAdapter()
+    await first.fetch_updates(get, since=date.fromisoformat(DAY), budget=budget, clock=_clock(now))
+    assert len(calls) == 1
+    assert len(budget.calls) == 45
+    assert first.budget_message == ""
+    # A new adapter is a restart. The same table still holds the 45 calls.
+    second = CourtListenerAdapter()
+    await second.fetch_updates(get, since=date.fromisoformat(DAY), budget=budget, clock=_clock(now))
+    assert len(calls) == 1
+    assert second.budget_message == HOURLY_BUDGET_STOP
+    assert "429" not in second.budget_message
+
+
+def test_daily_cap_stops_and_records_the_message(monkeypatch: pytest.MonkeyPatch):
+    asyncio.run(_daily_cap(monkeypatch))
+
+
+async def _daily_cap(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("COURTLISTENER_MIN_INTERVAL", "0")
+    monkeypatch.setenv("COURTLISTENER_HOURLY_MAX", "45")
+    monkeypatch.setenv("COURTLISTENER_DAILY_MAX", "100")
+    monkeypatch.setenv("COURTLISTENER_API_TOKEN", "daily-token")
+    now = datetime(2026, 10, 19, 15, 0, tzinfo=timezone.utc)
+    budget = MemoryApiBudget()
+    # Outside the rolling hour, inside the UTC day, so only the daily cap trips.
+    for _ in range(100):
+        await budget.record(now - timedelta(hours=2))
+    calls: list[str] = []
+
+    async def get(url: str, headers: dict) -> bytes:
+        calls.append(url)
+        raise AssertionError("the daily budget must stop before a request")
+
+    store = MemoryStore(home_region="us-east")
+    await store.set_checkpoint("courtlistener", f"cl-bulk:{DAY}:done", 0)
+    await courtlistener_night(
+        store,
+        _source(),
+        on=ON,
+        when=WHEN,
+        http_get=get,
+        embedder=None,
+        index=None,
+        region="us-east",
+        budget=budget,
+        clock=_clock(now),
+    )
+    assert calls == []
+    row = (await store.status_rows())[0]
+    assert row["last_status"] == "budget"
+    assert row["detail"] == DAILY_BUDGET_STOP
+    assert row["detail"] == "daily budget used, resumes tomorrow"
+
+
+def test_a_new_utc_day_clears_the_daily_budget_and_the_hour_rolls(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("COURTLISTENER_HOURLY_MAX", raising=False)
+    monkeypatch.delenv("COURTLISTENER_DAILY_MAX", raising=False)
+    asyncio.run(_windows())
+
+
+async def _windows():
+    now = datetime(2026, 10, 19, 15, 0, tzinfo=timezone.utc)
+    budget = MemoryApiBudget()
+    for _ in range(100):
+        await budget.record(now - timedelta(days=1))
+    await budget.record(now - timedelta(minutes=61))
+    assert await api_block_reason(budget, now) == ""
+
+
+def test_bulk_reads_are_not_api_calls(monkeypatch: pytest.MonkeyPatch):
+    asyncio.run(_bulk_not_counted(monkeypatch))
+
+
+async def _bulk_not_counted(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("ZENAS_CL_BULK_MAX", "50")
+    recorded: list[datetime] = []
+    real = MemoryApiBudget.record
+
+    async def spy(self, when: datetime) -> None:
+        recorded.append(when)
+        await real(self, when)
+
+    monkeypatch.setattr(MemoryApiBudget, "record", spy)
+    await load_bulk(_bulk_get([]), state=BulkState())
+    assert recorded == []
+
+
 def test_bulk_refuses_the_za_box(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("TANK_REGION", "za")
 
@@ -401,7 +553,7 @@ async def _schema() -> None:
         await store.apply_schema()
         await store.apply_schema()
         names = await _tables(conn)
-        assert {"cl_bulk_files", "cl_bulk_ids", "sources", "checkpoints"} <= names
+        assert {"cl_bulk_files", "cl_bulk_ids", "cl_api_calls", "sources", "checkpoints"} <= names
 
         await conn.execute("DROP SCHEMA IF EXISTS zenas_pool CASCADE")
         for statement in statements_for("zenas", "z10-schema-password"):
@@ -421,7 +573,14 @@ async def _schema() -> None:
         await store.apply_schema()
         await store.apply_schema()
         names = await _tables(conn)
-        assert {"cl_bulk_files", "cl_bulk_ids"} <= names
+        assert {"cl_bulk_files", "cl_bulk_ids", "cl_api_calls"} <= names
+        from agents.zenas.pool.adapters.courtlistener_bulk import PostgresApiBudget
+
+        ledger = PostgresApiBudget(conn)
+        await ledger.record(WHEN)
+        await store.apply_schema()
+        kept_calls = await ledger.count_since(WHEN - timedelta(days=1))
+        assert kept_calls == 1
         kept = await conn.fetchval("SELECT count(*) FROM zenas_pool.sources WHERE source_id = 'courtlistener'")
         assert kept == 1
         owner = await conn.fetchval(
