@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import importlib.util
 import json
 import os
 import secrets
@@ -34,12 +33,7 @@ async def database(monkeypatch):
     pool = await asyncpg.create_pool(URL, database=name, min_size=1, max_size=4)
     async with pool.acquire() as conn:
         await conn.execute((ROOT / "tank/schema.sql").read_text())
-    detector_path = ROOT / "tank/skills/zenas.pii/1.0.0/detect.py"
-    spec = importlib.util.spec_from_file_location("train1_detector", detector_path)
-    detector = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(detector)
-    rt = SimpleNamespace(pool=lambda: pool, box_region=lambda: "us-east", _packages={},
-                         prompt_has_identifier=lambda text: bool(detector.detect(text)["matches"]))
+    rt = SimpleNamespace(pool=lambda: pool, box_region=lambda: "us-east", _packages={})
     monkeypatch.setattr(gold, "runtime", lambda: rt)
     monkeypatch.setattr(training, "runtime", lambda: rt)
     try:
@@ -245,6 +239,15 @@ async def test_retest_excludes_holdout_and_records_three_point_drop(database, mo
     assert 100 not in seen
     async with pool.acquire() as conn:
         assert await conn.fetchval("SELECT count(*) FROM tank.gold_scores") == 2
+    # Read the persisted scores through the endpoint used by /skala/gold.
+    report = await gold.summary(gold.Reviewer("founder", tenant, True))
+    assert report["skills"][0]["trend"] == -0.03
+    assert report["skills"][0]["drop"] is True
+    assert report["skills"][0]["last_score"] == 0.95
+    assert not (await gold.summary(gold.Reviewer("founder", uuid.uuid4(), True)))["skills"]
+    assert not (await gold.summary(gold.Reviewer("reviewer", tenant, False)))["skills"]
+    from datetime import datetime, timezone
+    assert await gold.run_retests(tenant=tenant, since=datetime(2000, 1, 1, tzinfo=timezone.utc)) == []
     seen.clear()
     async with pool.acquire() as conn:
         await conn.execute("INSERT INTO tank.skills(id,version,agent,rung,state) VALUES ('base.fixture','1.1.0','base',3,'staging')")
@@ -275,17 +278,18 @@ async def test_empty_optional_configuration_starts_normally(database, monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_export_za_identifier_holdout_and_private_only(database, monkeypatch):
+async def test_export_za_preserves_identifiers_excludes_holdout_and_inactive_private_only(database, monkeypatch):
     pool, rt = database
     rt.box_region = lambda: "za"
     monkeypatch.setenv("HF_TOKEN", secrets.token_urlsafe(32))
     monkeypatch.setenv("HF_ORG", "fixture")
     tenant = uuid.uuid4()
     async with pool.acquire() as conn:
-        for i, value in enumerate(({"text": "masked facts"}, {"text": "person@example.invalid"}, {"text": "held back"})):
+        for i, value in enumerate(({"text": "masked facts"}, {"text": "person@example.invalid"}, {"text": "held back"}, {"text": "inactive"}, {"text": "ID 8001015009087"})):
             await training.save_pair(conn, tenant=tenant, agent="zenas", task="zenas.reasoning", value=value,
                                      output={"answer": "masked"}, approved_by="reviewer", source="gold", ref=str(i),
                                      holdout=i == 2, client_matter=True)
+        await conn.execute("UPDATE tank.training_pairs SET active=false WHERE tenant_id=$1 AND source_ref='3'", tenant)
     requests = []
 
     async def handler(request):
@@ -300,15 +304,16 @@ async def test_export_za_identifier_holdout_and_private_only(database, monkeypat
     real_client = httpx.AsyncClient
     monkeypatch.setattr(training.httpx, "AsyncClient", lambda **kwargs: real_client(transport=httpx.MockTransport(handler), **kwargs))
     result = await training.export_once()
-    assert result["exported"] == 1
+    assert result["exported"] == 3
     assert (await training.export_once())["exported"] == 0
     commit = requests[-1].content.decode()
     operations = [json.loads(line) for line in commit.splitlines()]
     import base64
-    data = json.loads(base64.b64decode(operations[1]["value"]["content"]))
-    assert data["region"] == "za"
+    data = [json.loads(line) for line in base64.b64decode(operations[1]["value"]["content"]).splitlines()]
+    assert {row["input"]["text"] for row in data} == {"masked facts", "person@example.invalid", "ID 8001015009087"}
+    assert all(row["region"] == "za" for row in data)
     assert "/za/" in operations[1]["value"]["path"]
-    assert "tenant_id" not in data and "approved_by" not in data
+    assert all("tenant_id" not in row and "approved_by" not in row for row in data)
     assert all(not request.url.query for request in requests)
 
 

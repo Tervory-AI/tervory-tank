@@ -12,6 +12,7 @@ import os
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -138,7 +139,7 @@ async def summary(actor: Reviewer = Depends(require_reviewer)) -> dict[str, Any]
             """SELECT skill_id,version,score,ran_at FROM (
               SELECT *,row_number() OVER (PARTITION BY skill_id ORDER BY ran_at DESC,id DESC) AS rn
               FROM tank.gold_scores WHERE tenant_id=$1 AND region=$2 AND NOT final_check
-            ) s WHERE rn<=2 ORDER BY skill_id,ran_at DESC""", actor.tenant, region,
+            ) s WHERE rn<=2 ORDER BY skill_id,rn""", actor.tenant, region,
         )
     history: dict[str, list] = {}
     for score in scores:
@@ -150,6 +151,9 @@ async def summary(actor: Reviewer = Depends(require_reviewer)) -> dict[str, Any]
         item.update(target=100, last_score=float(recent[0]["score"]) if recent else None,
                     ran_at=recent[0]["ran_at"] if recent else None,
                     trend=round(float(recent[0]["score"])-float(recent[1]["score"]), 4) if len(recent)>1 else None)
+        # Scores are the durable drop record; the existing founder card renders
+        # this signed trend, including a planted three-point regression.
+        item["drop"] = item["trend"] is not None and item["trend"] < -0.02
         skills.append(item)
     return {"skills": skills, "pairs": {r["agent"]: r["n"] for r in pairs}, "region": region}
 
@@ -214,7 +218,8 @@ async def check(example_id: uuid.UUID, body: Verdict,
 
 
 async def run_retests(*, final: bool = False, tenant: uuid.UUID = PLATFORM_TENANT,
-                      skill: str | None = None, version: str | None = None) -> list[dict[str, Any]]:
+                      skill: str | None = None, version: str | None = None,
+                      since: datetime | None = None) -> list[dict[str, Any]]:
     import skala
     rt = runtime()
     results = []
@@ -230,6 +235,14 @@ async def run_retests(*, final: bool = False, tenant: uuid.UUID = PLATFORM_TENAN
             )
             for record in skills:
                 pkg = rt.get_package(record["id"], record["version"])
+                # A retry after partial completion must not re-score completed
+                # skills and erase their previous-run comparison.
+                if since is not None and await conn.fetchval(
+                    """SELECT 1 FROM tank.gold_scores WHERE tenant_id=$1 AND region=$2
+                    AND skill_id=$3 AND NOT final_check AND ran_at >= $4 LIMIT 1""",
+                    tenant, rt.box_region(), pkg.id, since,
+                ):
+                    continue
                 cases = await conn.fetch(
                     """SELECT DISTINCT ON (input_hash) input,expected,tolerance FROM tank.gold_examples
                     WHERE tenant_id=$1 AND region=$2 AND skill_id=$3 AND status='checked' AND holdout=$4
@@ -267,8 +280,7 @@ async def run_retests(*, final: bool = False, tenant: uuid.UUID = PLATFORM_TENAN
     return results
 
 
-@router.post("/jobs/retest", dependencies=[Depends(require_job)])
-async def retest() -> dict[str, Any]:
+async def retest(*, since: datetime | None = None) -> dict[str, Any]:
     results = []
     async with runtime().pool().acquire() as conn:
         scopes = await conn.fetch(
@@ -276,7 +288,7 @@ async def retest() -> dict[str, Any]:
             runtime().box_region(),
         )
     for scope in scopes:
-        results.extend(await run_retests(tenant=scope["tenant_id"]))
+        results.extend(await run_retests(tenant=scope["tenant_id"], since=since))
     return {"results": results}
 
 
@@ -288,3 +300,8 @@ async def final_check(skill: str, version: str, actor: Reviewer = Depends(requir
     if not results:
         raise HTTPException(409, "A staging version and checked holdout examples are required.")
     return {"results": results}
+
+
+@router.post("/jobs/retest", dependencies=[Depends(require_job)])
+async def retest_job() -> dict[str, Any]:
+    return await retest()

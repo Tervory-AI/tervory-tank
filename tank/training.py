@@ -1,7 +1,7 @@
-"""Local collection and optional private exports. No model calls in this module.
+"""Local collection, scheduled re-tests and optional private exports.
 
 The background collector reads only existing accepted/released sources. Rooms
-need no hooks and keep their own credentials. Identifiers never enter exports.
+need no hooks and keep their own credentials. Exports preserve reviewed content.
 """
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import os
 import re
 import uuid
 from contextlib import asynccontextmanager, suppress
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -173,13 +173,17 @@ async def collect_once() -> None:
 
 @asynccontextmanager
 async def lifespan(_app):
-    task = asyncio.create_task(collector_loop())
+    tasks = [asyncio.create_task(collector_loop()),
+             asyncio.create_task(schedule_loop("export")),
+             asyncio.create_task(schedule_loop("retest"))]
     try:
         yield
     finally:
-        task.cancel()
-        with suppress(asyncio.CancelledError):
-            await task
+        for task in tasks:
+            task.cancel()
+        for task in tasks:
+            with suppress(asyncio.CancelledError):
+                await task
 
 
 async def collector_loop() -> None:
@@ -191,6 +195,63 @@ async def collector_loop() -> None:
             # credentials, prompts, or matter data. Retry next cycle.
             log.warning("Training maintenance failed; will retry.")
         await asyncio.sleep(300)
+
+
+def scheduled_slot(operation: str, now: datetime) -> datetime:
+    """Most recent UTC boundary; a restart catches up once, never a backlog."""
+    now = now.astimezone(timezone.utc)
+    if operation == "export":
+        slot = now.replace(hour=2, minute=0, second=0, microsecond=0)
+        return slot if slot <= now else slot - timedelta(days=1)
+    if operation != "retest":
+        raise ValueError("Unknown training operation")
+    slot = now.replace(hour=6, minute=0, second=0, microsecond=0)
+    slot -= timedelta(days=(now.weekday() + 1) % 7)
+    return slot if slot <= now else slot - timedelta(days=7)
+
+
+async def scheduled_once(operation: str, now: datetime | None = None) -> None:
+    slot = scheduled_slot(operation, now or datetime.now(timezone.utc))
+    region = runtime().box_region()
+    if region not in ("us-east", "za"):
+        return
+    # A separate session lock per operation covers the completion check and work
+    # across workers. The existing platform audit log needs no schema change.
+    lock = 871224 if operation == "export" else 871225
+    marker = encoded({"tenant_id": str(PLATFORM_TENANT), "region": region,
+                      "operation": operation, "slot": slot.isoformat()})
+    async with runtime().pool().acquire() as conn:
+        if not await conn.fetchval("SELECT pg_try_advisory_lock($1)", lock):
+            return
+        try:
+            if await conn.fetchval(
+                """SELECT 1 FROM tank.policy_log WHERE task_type='training.schedule'
+                AND action='complete' AND detail=$1::jsonb LIMIT 1""", marker,
+            ):
+                return
+            if operation == "export":
+                await collect_once()
+                result = await export_once(day=slot.date())
+                if result["status"] != "complete":
+                    return  # Missing configuration or a busy exporter can retry.
+            else:
+                from gold import retest
+                await retest(since=slot)
+            await conn.execute(
+                """INSERT INTO tank.policy_log(task_type,action,by_user,detail)
+                VALUES ('training.schedule','complete','tank',$1::jsonb)""", marker,
+            )
+        finally:
+            await conn.execute("SELECT pg_advisory_unlock($1)", lock)
+
+
+async def schedule_loop(operation: str) -> None:
+    while True:
+        try:
+            await scheduled_once(operation)
+        except Exception:
+            log.warning("Scheduled training maintenance failed; will retry.")
+        await asyncio.sleep(60)
 
 
 router = APIRouter(prefix="/v1/training", lifespan=lifespan)
@@ -216,18 +277,8 @@ async def confirm_tiger(observation_id: uuid.UUID, actor: Reviewer = Depends(req
     return {"ok": True}
 
 
-_EMAIL = re.compile(r"\b[^\s@]+@[^\s@]+\.[^\s@]+\b")
-
-
 def exportable(row: dict[str, Any]) -> bool:
-    if row["region"] not in ("us-east", "za") or row["holdout"] or not row["active"]:
-        return False
-    payload = encoded([obj(row["input"]), obj(row["output"])])
-    # Apply to all rows, including public examples, not just client matters.
-    try:
-        return not _EMAIL.search(payload) and not runtime().prompt_has_identifier(payload)
-    except Exception:
-        return False  # Missing detector is never permission to export.
+    return row["region"] in ("us-east", "za") and not row["holdout"] and bool(row["active"])
 
 
 async def upload_dataset(client: httpx.AsyncClient, org: str, agent: str, day: str, rows: list[dict], region: str = "us-east") -> None:
@@ -254,7 +305,7 @@ async def upload_dataset(client: httpx.AsyncClient, org: str, agent: str, day: s
         raise RuntimeError("Private dataset commit failed")
 
 
-async def export_once() -> dict[str, Any]:
+async def export_once(*, day: date | None = None) -> dict[str, Any]:
     token, org = os.environ.get("HF_TOKEN", ""), os.environ.get("HF_ORG", "")
     if not token or not org:
         return {"status": "skipped", "reason": "not configured"}
@@ -263,7 +314,7 @@ async def export_once() -> dict[str, Any]:
         return {"status": "skipped", "reason": "unknown region"}
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,95}", org):
         return {"status": "skipped", "reason": "invalid organisation"}
-    day = datetime.now(timezone.utc).date()
+    day = day or datetime.now(timezone.utc).date()
     exported = 0
     async with runtime().pool().acquire() as conn:
         if not await conn.fetchval("SELECT pg_try_advisory_lock(871223)"):
