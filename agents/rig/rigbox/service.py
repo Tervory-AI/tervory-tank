@@ -43,6 +43,7 @@ from rigbox.logic import reprice
 from rigbox.logic import setups as build_setups
 from rigbox.rank import search as rank_room
 from rigbox.recall import latest
+from rigbox.recall import recall_days
 from rigbox.recall import part_hit
 from rigbox.recall import part_query
 from rigbox.recall import parts_of
@@ -258,7 +259,7 @@ class Service:
             return {"results": []}
         cap = _limit(limit)
         version = await self._catalogue_version(tenant_id)
-        saved = await self.store.searches_for(tenant_id, version)
+        saved = await self.store.searches_for(tenant_id, version, recall_days())
         wholes, known = latest(saved)
         whole = whole_hit(wholes, host, pieces, cap)
         if whole is not None:
@@ -396,6 +397,10 @@ class Service:
                 return None
             found.append(item)
         return found
+
+    async def expire_searches(self) -> int:
+        """Delete saved searches older than the recall window. Every retailer."""
+        return await self.store.expire_searches(recall_days())
 
     async def product(self, tenant_id: str, product_id: str) -> dict[str, Any]:
         detail = product_detail(await self._bundle(tenant_id, product_id))

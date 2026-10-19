@@ -10,10 +10,15 @@ that code, so this path does not call a model.
 
 from __future__ import annotations
 
+import os
 import re
 from typing import Any
 
 from rigbox.rank import _intent
+
+# A later search only reads this many of the newest saved rows.
+SEARCH_RECALL_CAP = 500
+_DEFAULT_RECALL_DAYS = 90
 
 _AND = re.compile(r"\s+and\s+", re.IGNORECASE)
 
@@ -48,19 +53,36 @@ def part_query(part: str, host: str) -> str:
     return part
 
 
+def recall_days() -> int:
+    """How many days of saved searches are read and kept. Default 90."""
+    raw = os.environ.get("RIG_SEARCH_RECALL_DAYS", "").strip()
+    if not raw:
+        return _DEFAULT_RECALL_DAYS
+    try:
+        days = int(raw)
+    except ValueError:
+        return _DEFAULT_RECALL_DAYS
+    if days < 1:
+        return _DEFAULT_RECALL_DAYS
+    return days
+
+
 def latest(
     rows: list[dict[str, Any]],
 ) -> tuple[dict[tuple[str, str], dict[str, Any]], dict[tuple[str, str], dict[str, Any]]]:
-    """Latest whole search by (host, signature), and latest part by (host, part)."""
+    """First row wins. Callers pass rows newest first."""
     wholes: dict[tuple[str, str], dict[str, Any]] = {}
     parts: dict[tuple[str, str], dict[str, Any]] = {}
     for row in rows:
         host = str(row.get("host") or "")
-        wholes[(host, str(row.get("signature") or ""))] = row
+        key = (host, str(row.get("signature") or ""))
+        if key not in wholes:
+            wholes[key] = row
         for part in row.get("parts") or []:
             name = str(part.get("part") or "")
-            if name:
-                parts[(host, name)] = part
+            part_key = (host, name)
+            if name and part_key not in parts:
+                parts[part_key] = part
     return wholes, parts
 
 

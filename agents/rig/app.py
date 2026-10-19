@@ -59,16 +59,34 @@ async def pull_feeds(ctx: JobContext) -> dict:
     return {"pulled": len(reports), "reports": reports}
 
 
+async def expire_searches(ctx: JobContext) -> dict:
+    """Nightly. Deletes saved searches older than the recall window.
+
+    Safe to run twice: the second run finds nothing left to delete.
+    It writes only to agent_rig.searches.
+    """
+    service: Service = app.state.rig
+    deleted = await service.expire_searches()
+    log_line(AGENT, json.dumps({"deleted": deleted}), tenant_id=ctx.tenant_id, job_id=ctx.job_id)
+    return {"deleted": deleted}
+
+
 app = create_app(
     agent=AGENT,
-    handlers={"ping": ping, "pull_feeds": pull_feeds},
+    handlers={"ping": ping, "pull_feeds": pull_feeds, "expire_searches": expire_searches},
     schedules=[
         {
             "tenant_id": HEARTBEAT_TENANT,
             "cron": "*/5 * * * *",
             "kind": "ping",
             "input": {"heartbeat": True},
-        }
+        },
+        {
+            "tenant_id": HEARTBEAT_TENANT,
+            "cron": "0 3 * * *",
+            "kind": "expire_searches",
+            "input": {},
+        },
     ],
 )
 mount(app)
