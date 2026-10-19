@@ -3,7 +3,8 @@
 Runs after CI passes on main. Reads the changed paths between BEFORE and AFTER,
 maps them to Coolify app names, looks up each app's uuid by name through the
 Coolify API, and queues a deploy. The main app goes first and must finish with
-success before any room is deployed, so a broken main deploy never fans out.
+success. The South Africa stack (tervory-tank-za) is next and must finish
+before any room is deployed, so a broken main or SA deploy never fans out.
 The token comes from COOLIFY_TOKEN and is never printed.
 """
 
@@ -21,6 +22,7 @@ TOKEN = os.environ["COOLIFY_TOKEN"]
 BEFORE = os.environ.get("BEFORE", "")
 AFTER = os.environ.get("AFTER", "HEAD")
 MAIN_APP = "xnmc0jkz8j9i5jh1jwanbsfv"
+SA_APP = "tervory-tank-za"
 
 # Paths that rebuild the main stack (Tank, Workspace, LiteLLM, Hermes, SearXNG, site, shared compose).
 MAIN_PREFIXES = (
@@ -112,6 +114,10 @@ def main() -> int:
     if want_main:
         if not deploy(MAIN_APP, "main") or not wait_for(MAIN_APP, "main"):
             print("::error title=stopped::main did not deploy; rooms were not touched")
+            return 1
+        za_uuid = by_name.get(SA_APP)
+        if not za_uuid or not deploy(za_uuid, SA_APP) or not wait_for(za_uuid, SA_APP):
+            print("::error title=stopped::tervory-tank-za did not deploy; rooms were not touched")
             return 1
     ok = True
     for name, uuid in sorted(targets.items()):
