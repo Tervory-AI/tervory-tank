@@ -95,6 +95,8 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       XAI_API_KEY: ${XAI_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      MOONSHOT_API_KEY: ${MOONSHOT_API_KEY:-}
     healthcheck:
       # Port only. The image is Python; this does not send the master key.
       test: ["CMD", "python", "-c", "import socket; s=socket.create_connection(('127.0.0.1',4000),3); s.close()"]
