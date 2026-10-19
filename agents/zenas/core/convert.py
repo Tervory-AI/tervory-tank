@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 from typing import Any
 
 from agents.zenas.core.engine import cite_check, keys_match, parse_json_object
@@ -31,7 +32,8 @@ _convert_running: set[str] = set()
 
 _LIST_SQL = """
 SELECT DISTINCT ON (document_id)
-       document_id, version_id, jurisdiction, citation, source_id
+       document_id, version_id, jurisdiction, citation, source_id,
+       docket_number, nature_of_suit
 FROM zenas_pool.documents
 WHERE kind = 'case'
   AND jurisdiction = $1
@@ -55,6 +57,26 @@ _PROMPT_HEAD = (
     '"holding":"","citations":[{"citation":"","quote":""}]}\n\n'
     "Citation: "
 )
+
+
+# A criminal docket: "1:20-cr-00123", "18-1234-cr", "No. 19-CR-55", "Crim. No. 4".
+_CRIMINAL_DOCKET = re.compile(r"(?i)(?:^|[^a-z])(?:cr|crim)(?:[^a-z]|$)|criminal")
+
+
+def criminal_record(docket_number: str, nature_of_suit: str) -> bool:
+    """True when the stored docket number or nature of suit marks a criminal matter."""
+    nature = (nature_of_suit or "").lower()
+    if "criminal" in nature or "habeas" in nature or "prisoner" in nature:
+        return True
+    return bool(_CRIMINAL_DOCKET.search(docket_number or ""))
+
+
+def _row_text(row: Any, name: str) -> str:
+    try:
+        value = row[name]
+    except (KeyError, IndexError, TypeError):
+        return ""
+    return str(value or "")
 
 
 def convert_limit() -> int:
@@ -134,6 +156,8 @@ async def _list_cases(pool: Any, jurisdiction: str) -> list[dict[str, Any]]:
                     "jurisdiction": jurisdiction,
                     "citation": str(row["citation"] or ""),
                     "source_id": str(row["source_id"] or ""),
+                    "docket_number": _row_text(row, "docket_number"),
+                    "nature_of_suit": _row_text(row, "nature_of_suit"),
                 }
             )
         return found
@@ -162,6 +186,8 @@ async def _list_cases(pool: Any, jurisdiction: str) -> list[dict[str, Any]]:
                 "jurisdiction": jurisdiction,
                 "citation": str(getattr(doc, "citation", "") or ""),
                 "source_id": str(getattr(doc, "source_id", "") or ""),
+                "docket_number": str(getattr(doc, "docket_number", "") or ""),
+                "nature_of_suit": str(getattr(doc, "nature_of_suit", "") or ""),
                 "doc": doc,
             }
         )
@@ -359,6 +385,9 @@ async def convert_cases(
             await _remember_failure(
                 ladder, region=box, pool_doc_id=case["document_id"], reason="material type is unknown"
             )
+            continue
+        if criminal_record(case.get("docket_number", ""), case.get("nature_of_suit", "")):
+            await _remember_failure(ladder, region=box, pool_doc_id=case["document_id"], reason="criminal law is refused")
             continue
         text = await _judgment(pool, case)
         if ruled(text) == "criminal":
