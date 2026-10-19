@@ -12,6 +12,7 @@ from agents.zenas.pool.adapters import get_adapter
 from agents.zenas.pool.catalogue import sources_for_region
 from agents.zenas.pool.config import current_region
 from agents.zenas.pool.embed import Embedder, NoOpEmbedder, NoOpVectorIndex, VectorIndex
+from agents.zenas.pool.http import RateLimited
 from agents.zenas.pool.ingest import ingest_snapshot
 from agents.zenas.pool.licence import FetchNotConfigured, LicenceError, refusal_reason
 from agents.zenas.pool.region import RegionError, assert_source_region, bind_store
@@ -19,6 +20,9 @@ from agents.zenas.pool.status import pool_status
 from agents.zenas.pool.store import Store
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
+# Official statute feeds. Load now uses fetch_bulk through the pool loader.
+# Nightly uses the same resume cursor and writes the feeds sentence itself.
+_OFFICIAL_STATUTES = frozenset({"govza-acts", "govza-regulations"})
 
 
 def packaged_snapshots(region: str) -> dict[str, list[bytes]]:
@@ -52,6 +56,7 @@ async def run_nightly(
     http_get=None,
     embedder: Embedder | None = None,
     index: VectorIndex | None = None,
+    only: list[str] | None = None,
 ) -> dict:
     """Update every source configured for this region.
 
@@ -67,7 +72,11 @@ async def run_nightly(
     index = index or NoOpVectorIndex()
     getter = http_get or urllib_get
 
-    for source in sources_for_region(region):
+    sources = sources_for_region(region)
+    if only is not None:
+        wanted = set(only)
+        sources = [source for source in sources if source.source_id in wanted]
+    for source in sources:
         try:
             assert_source_region(source, region)
             await _update_source(
@@ -114,6 +123,18 @@ async def _update_source(
             when=when,
         )
         return
+    if snapshots is None and live and source.source_id in _OFFICIAL_STATUTES:
+        await _update_official(
+            store,
+            source,
+            on=on,
+            when=when,
+            http_get=http_get,
+            embedder=embedder,
+            index=index,
+            region=region,
+        )
+        return
     blobs: list[bytes] | None
     if snapshots is not None:
         blobs = list(snapshots.get(source.source_id, []))
@@ -157,6 +178,73 @@ async def _update_source(
         source.source_id,
         status="ok",
         detail=f"inserted {inserted}",
+        documents=count,
+        when=when,
+    )
+
+
+async def _update_official(
+    store: Store,
+    source,
+    *,
+    on: date,
+    when: datetime,
+    http_get,
+    embedder: Embedder,
+    index: VectorIndex,
+    region: str,
+) -> None:
+    """Resume the gov.za walk and record Acts loaded, amendments, and errors."""
+    adapter = get_adapter(source)
+    resume = await store.get_checkpoint(source.source_id)
+    if resume.startswith("snap:"):
+        resume = ""
+    try:
+        blobs, cursor = await adapter.fetch_bulk(http_get, resume=resume)
+    except RateLimited as exc:
+        await store.record_source(source)
+        await store.record_run(
+            source.source_id,
+            status="rate_limited",
+            detail=str(exc),
+            documents=await store.instrument_count(source.source_id),
+            when=when,
+        )
+        return
+    except (FetchNotConfigured, LicenceError) as exc:
+        await store.record_source(source)
+        await store.record_run(
+            source.source_id,
+            status="not_configured",
+            detail=str(exc),
+            documents=0,
+            when=when,
+        )
+        return
+    inserted = 0
+    if blobs:
+        inserted = await ingest_snapshot(
+            store,
+            source,
+            list(blobs),
+            on=on,
+            embedder=embedder,
+            index=index,
+            region=region,
+        )
+    else:
+        await store.record_source(source)
+    detail = adapter.feeds_detail()
+    errors = int(getattr(adapter.report, "errors", 0) or 0)
+    if not blobs and errors == 0:
+        detail = f"{detail}; unchanged"
+    status = "error" if errors and inserted == 0 else "ok"
+    await store.set_checkpoint(source.source_id, cursor, await store.stored_bytes())
+    count = await store.instrument_count(source.source_id)
+    await store.record_run(
+        source.source_id,
+        status=status,
+        detail=detail,
         documents=count,
         when=when,
     )
