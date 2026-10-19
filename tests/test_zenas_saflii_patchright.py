@@ -1,11 +1,13 @@
 """SAFLII live fetch uses patchright. A challenge page is an error and is not stored."""
 
 import asyncio
+import re
 import sys
 from datetime import date
 from pathlib import Path
 
 import pytest
+import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -160,3 +162,33 @@ def test_adapter_parse_still_returns_the_judgment():
     documents = SafliiAdapter().parse(COMMERCIAL[1], _source())
     assert len(documents) == 1
     assert documents[0].citation == "[2023] ZASCA 12"
+
+
+# Docker's k, m and g suffixes are powers of 1024. 2g is the 2 GB floor.
+_TWO_GB = 2 * 1024 * 1024 * 1024
+_MEM_UNIT = {
+    "b": 1,
+    "k": 1024,
+    "kb": 1024,
+    "m": 1024**2,
+    "mb": 1024**2,
+    "g": 1024**3,
+    "gb": 1024**3,
+}
+
+
+def _mem_bytes(value: object) -> int:
+    if isinstance(value, int):
+        return value
+    text = str(value).strip().lower()
+    match = re.fullmatch(r"(\d+(?:\.\d+)?)([a-z]*)", text)
+    assert match, value
+    scale = _MEM_UNIT[match.group(2)] if match.group(2) else 1
+    return int(float(match.group(1)) * scale)
+
+
+def test_zenas_room_memory_is_at_least_2gb() -> None:
+    for name in ("docker-compose.yml", "docker-compose.za.yml"):
+        compose = yaml.safe_load((ROOT / "agents" / "zenas" / name).read_text(encoding="utf-8"))
+        limit = compose["services"]["agent-zenas"]["mem_limit"]
+        assert _mem_bytes(limit) >= _TWO_GB
