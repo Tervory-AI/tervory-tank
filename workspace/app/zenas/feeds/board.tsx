@@ -233,6 +233,11 @@ export function FeedSwitch({
                     <p className="meta">
                       Tokens in {row.tokens_in}. Tokens out {row.tokens_out}.
                     </p>
+                    {row.quote_part ? (
+                      <p className="meta">
+                        {row.quote_part}: {row.quote_excerpt || "—"}
+                      </p>
+                    ) : null}
                     <pre>{row.answer || "No answer was stored."}</pre>
                   </div>
                 ) : null}
@@ -304,7 +309,13 @@ export function FeedSwitch({
               <td>{row.title}</td>
               <td className="meta">{row.documents}</td>
               <td className="meta">{statusLabel(row.last_status)}</td>
-              <td>{row.detail || "—"}</td>
+              <td>
+                {row.id === "courtlistener" && row.detail.includes("snapshot ") ? (
+                  <span className="meta">{row.detail}</span>
+                ) : (
+                  row.detail || "—"
+                )}
+              </td>
               <td className="meta">{row.last_load ?? "—"}</td>
               <td>
                 <button type="button" disabled={busy === row.id} onClick={() => load(row.id)}>
