@@ -233,6 +233,11 @@ export function FeedSwitch({
                     <p className="meta">
                       Tokens in {row.tokens_in}. Tokens out {row.tokens_out}.
                     </p>
+                    {row.quote_part ? (
+                      <p className="meta">
+                        {row.quote_part}: {row.quote_excerpt || "—"}
+                      </p>
+                    ) : null}
                     <pre>{row.answer || "No answer was stored."}</pre>
                   </div>
                 ) : null}

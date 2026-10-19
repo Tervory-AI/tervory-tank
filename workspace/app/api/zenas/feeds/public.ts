@@ -136,6 +136,7 @@ const FAILURE_REASONS = new Set([
   "citation did not resolve",
   "citation is superseded",
   "quote is not in the judgment",
+  "not a judgment",
 ]);
 
 export type PublicCaseFailure = {
@@ -146,6 +147,8 @@ export type PublicCaseFailure = {
   finish_reason: string;
   tokens_in: number;
   tokens_out: number;
+  quote_part: string;
+  quote_excerpt: string;
 };
 
 export type PublicConvert = {
@@ -205,6 +208,18 @@ function cleanAnswer(value: unknown): string {
   return String(value ?? "").replace(/sk-[A-Za-z0-9_-]{8,}/g, "").slice(0, 1500);
 }
 
+function cleanPart(value: unknown): string {
+  const text = String(value ?? "").trim();
+  if (text === "facts") return text;
+  if (/^element [1-9]\d{0,2}$/.test(text)) return text;
+  if (/^citation [1-9]\d{0,2}$/.test(text)) return text;
+  return "";
+}
+
+function cleanQuote(value: unknown): string {
+  return String(value ?? "").replace(/sk-[A-Za-z0-9_-]{8,}/g, "").slice(0, 120);
+}
+
 function caseFailures(value: unknown): PublicCaseFailure[] {
   if (!Array.isArray(value)) return [];
   const rows: PublicCaseFailure[] = [];
@@ -223,6 +238,8 @@ function caseFailures(value: unknown): PublicCaseFailure[] {
       finish_reason: cleanFinish(row.finish_reason),
       tokens_in: Number.isFinite(tokensIn) && tokensIn > 0 ? Math.floor(tokensIn) : 0,
       tokens_out: Number.isFinite(tokensOut) && tokensOut > 0 ? Math.floor(tokensOut) : 0,
+      quote_part: cleanPart(row.quote_part),
+      quote_excerpt: cleanQuote(row.quote_excerpt),
     });
   }
   return rows;
