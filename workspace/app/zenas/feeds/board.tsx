@@ -33,6 +33,28 @@ export function FeedSwitch({
   const [message, setMessage] = useState(note);
   const [busy, setBusy] = useState("");
   const [watching, setWatching] = useState(initialConvert.running);
+  const anyRunning = sources.some((row) => row.last_status === "running");
+
+  useEffect(() => {
+    if (!anyRunning) return;
+    let stop = false;
+    const timer = setInterval(() => {
+      void refreshSources();
+    }, 3000);
+
+    async function refreshSources() {
+      const res = await fetch(`/api/zenas/feeds/region?region=${region}`);
+      if (!res.ok || stop) return;
+      const body = (await res.json()) as { sources?: PublicSource[] };
+      if (stop) return;
+      setSources(body.sources ?? []);
+    }
+
+    return () => {
+      stop = true;
+      clearInterval(timer);
+    };
+  }, [anyRunning, region]);
 
   useEffect(() => {
     if (!watching) return;
@@ -112,7 +134,7 @@ export function FeedSwitch({
     }
     const body = (await res.json()) as PublicConvert;
     setCounts(body);
-    if (body.status === "Started" || body.status === "Already running") {
+    if (body.status === "running" || body.status === "already running") {
       setMessage(body.status);
       setWatching(true);
       return;
@@ -151,8 +173,10 @@ export function FeedSwitch({
       setMessage(body?.error || "The load did not start.");
       return;
     }
-    setMessage(`${source} started.`);
+    const body = (await res.json().catch(() => null)) as { status?: string } | null;
+    const status = body?.status === "already running" ? "already running" : "running";
     await choose(region);
+    setMessage(status);
   }
 
   return (
@@ -183,7 +207,7 @@ export function FeedSwitch({
         </ul>
       ) : null}
       <button type="button" disabled={busy === "convert"} onClick={convertCases}>
-        Convert cases
+        {busy === "convert" || counts.running ? "running" : "Convert cases"}
       </button>
       <p className="note">
         Lawyer review is {review}.{" "}
@@ -249,7 +273,7 @@ export function FeedSwitch({
               <td className="meta">{row.last_load ?? "—"}</td>
               <td>
                 <button type="button" disabled={busy === row.id} onClick={() => load(row.id)}>
-                  {busy === row.id ? "Starting" : "Load now"}
+                  {busy === row.id || row.last_status === "running" ? "running" : "Load now"}
                 </button>
               </td>
             </tr>
