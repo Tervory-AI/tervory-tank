@@ -792,7 +792,14 @@ def _market_average(rows: list[dict[str, Any]], currency: str) -> dict[str, Any]
     if not amounts:
         return None
     mean = sum(amounts, Decimal("0")) / Decimal(len(amounts))
-    return {"amount": money(mean), "currency": code, "indicative": True}
+    return {
+        "amount": money(mean),
+        "currency": code,
+        "indicative": True,
+        "low": money(min(amounts)),
+        "high": money(max(amounts)),
+        "sources": len(amounts),
+    }
 
 
 def _roles_for(templates: Any, category: str) -> dict[str, str]:
