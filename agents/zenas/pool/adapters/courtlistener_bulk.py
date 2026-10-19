@@ -557,7 +557,7 @@ def api_hourly_max() -> int:
 
 
 def api_daily_max() -> int:
-    """API calls kept in the UTC day. Default 100."""
+    """API calls kept in the rolling 24 hours. Default 100."""
     return _env_int("COURTLISTENER_DAILY_MAX", 100)
 
 
@@ -567,10 +567,9 @@ def _aware(when: datetime) -> datetime:
     return when.astimezone(timezone.utc)
 
 
-def api_day_start(now: datetime) -> datetime:
-    """Midnight UTC of the calendar day that contains now."""
-    utc = _aware(now)
-    return datetime(utc.year, utc.month, utc.day, tzinfo=timezone.utc)
+def api_daily_start(now: datetime) -> datetime:
+    """24 hours before now. A call at this instant still counts."""
+    return _aware(now) - timedelta(hours=24)
 
 
 def api_hour_start(now: datetime) -> datetime:
@@ -628,7 +627,7 @@ async def open_api_budget() -> MemoryApiBudget | PostgresApiBudget:
 
 async def api_block_reason(budget: MemoryApiBudget | PostgresApiBudget, now: datetime) -> str:
     """Empty when another API call is allowed. Daily is checked before hourly."""
-    if await budget.count_since(api_day_start(now)) >= api_daily_max():
+    if await budget.count_since(api_daily_start(now)) >= api_daily_max():
         return DAILY_BUDGET_STOP
     if await budget.count_since(api_hour_start(now)) >= api_hourly_max():
         return HOURLY_BUDGET_STOP

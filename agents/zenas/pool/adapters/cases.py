@@ -13,7 +13,8 @@ criminal, court and commercial filters has its text fetched from the v4
 opinions endpoint, one request per COURTLISTENER_MIN_INTERVAL (default 12 s),
 with the same Authorization header. The hour and day budgets
 (COURTLISTENER_HOURLY_MAX, default 45; COURTLISTENER_DAILY_MAX, default 100)
-count those API calls in zenas_pool.cl_api_calls, including after a restart.
+count those API calls in zenas_pool.cl_api_calls over the last hour and the
+last 24 hours, including after a restart.
 Bulk file reads are not counted. When a budget is used up the walk stops
 before another request. A 429 that outlasts the retries also stops the walk:
 the pages already read are kept, the cursor is saved, and the run is

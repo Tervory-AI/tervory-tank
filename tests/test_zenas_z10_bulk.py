@@ -434,7 +434,7 @@ async def _daily_cap(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("COURTLISTENER_API_TOKEN", "daily-token")
     now = datetime(2026, 10, 19, 15, 0, tzinfo=timezone.utc)
     budget = MemoryApiBudget()
-    # Outside the rolling hour, inside the UTC day, so only the daily cap trips.
+    # Outside the rolling hour, inside the last 24 hours, so only the daily cap trips.
     for _ in range(100):
         await budget.record(now - timedelta(hours=2))
     calls: list[str] = []
@@ -464,19 +464,29 @@ async def _daily_cap(monkeypatch: pytest.MonkeyPatch):
     assert row["detail"] == "daily budget used, resumes tomorrow"
 
 
-def test_a_new_utc_day_clears_the_daily_budget_and_the_hour_rolls(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.delenv("COURTLISTENER_HOURLY_MAX", raising=False)
-    monkeypatch.delenv("COURTLISTENER_DAILY_MAX", raising=False)
-    asyncio.run(_windows())
+def test_daily_budget_counts_the_last_24_hours(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("COURTLISTENER_HOURLY_MAX", "45")
+    monkeypatch.setenv("COURTLISTENER_DAILY_MAX", "100")
+    asyncio.run(_rolling_day())
 
 
-async def _windows():
+async def _rolling_day():
     now = datetime(2026, 10, 19, 15, 0, tzinfo=timezone.utc)
-    budget = MemoryApiBudget()
+    inside = MemoryApiBudget()
     for _ in range(100):
-        await budget.record(now - timedelta(days=1))
-    await budget.record(now - timedelta(minutes=61))
-    assert await api_block_reason(budget, now) == ""
+        await inside.record(now - timedelta(hours=23))
+    assert await api_block_reason(inside, now) == DAILY_BUDGET_STOP
+    # A call 24 hours ago is still inside the window.
+    edge = MemoryApiBudget()
+    for _ in range(100):
+        await edge.record(now - timedelta(hours=24))
+    assert await api_block_reason(edge, now) == DAILY_BUDGET_STOP
+    # One second older than 24 hours does not count. The hour is unaffected.
+    outside = MemoryApiBudget()
+    for _ in range(100):
+        await outside.record(now - timedelta(hours=24, seconds=1))
+    await outside.record(now - timedelta(minutes=61))
+    assert await api_block_reason(outside, now) == ""
 
 
 def test_bulk_reads_are_not_api_calls(monkeypatch: pytest.MonkeyPatch):
