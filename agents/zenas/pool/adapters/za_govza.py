@@ -678,11 +678,23 @@ def _iso_date(value: str) -> date | None:
         return None
 
 
-def _citation(act_number: str, act_year: str, schedule: str, number: str) -> str:
+def _citation(
+    act_number: str,
+    act_year: str,
+    schedule: str,
+    number: str,
+    notice: str,
+    gazette_number: str,
+) -> str:
     base = f"Act {act_number} of {act_year}"
     if schedule:
         return f"{base}, Schedule {schedule}, item {number}"
     if number == "notice":
+        # Two notices under one Act must not share a citation.
+        if notice:
+            return f"{base}, GN R. {notice}"
+        if gazette_number:
+            return f"{base}, Gazette {gazette_number}"
         return base
     return f"{base}, s {number}"
 
@@ -753,7 +765,7 @@ def documents_from_text(
         documents.append(document)
 
     for schedule, number, heading, chunk in parts:
-        citation = _citation(act_number, act_year, schedule, number)
+        citation = _citation(act_number, act_year, schedule, number, notice, gazette_number)
         head = heading if len(heading) <= 140 else heading[:137] + "..."
         doc_title = ", ".join(
             bit

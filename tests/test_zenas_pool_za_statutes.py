@@ -131,6 +131,7 @@ def test_regulation_pdf_keeps_the_gazette_and_drops_the_form(monkeypatch: pytest
     assert all(doc.kind == "regulation" for doc in documents)
     assert all(doc.date == date(2026, 10, 16) for doc in documents)
     assert all("Gazette 55544" in doc.title for doc in documents)
+    assert any(doc.citation == "Act 91 of 1964, GN R. 8022" and doc.status == "as_passed" for doc in documents)
     assert all("Act 91 of 1964" in doc.citation for doc in documents)
     assert all("PPeettrroolleeuumm" not in doc.text for doc in documents)
     record = next(doc for doc in documents if doc.status.startswith("as_amended_by"))
