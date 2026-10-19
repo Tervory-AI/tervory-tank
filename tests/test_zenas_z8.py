@@ -171,6 +171,7 @@ async def test_a_failed_cite_check_is_not_stored_and_is_retried(monkeypatch: pyt
     assert ladder.worked == []
     assert ladder.failures[0]["reason"] == "quote is not in the judgment"
     assert "TAIL-US-NOT-STORED" not in ladder.failures[0]["reason"]
+    assert report["failures"] == [{"reason": "quote is not in the judgment", "count": 1}]
     good = Model()
     retried = await convert_cases(pool, ladder, good, region="us-east")
     assert retried["converted"] == 1
@@ -393,6 +394,23 @@ async def test_a_case_outside_the_court_list_is_not_stored() -> None:
     assert doc.text_reads == 0
     assert ladder.worked == []
     assert ladder.failures[0]["reason"] == "material type is unknown"
+
+
+@pytest.mark.asyncio
+async def test_a_civil_judgment_that_says_prosecution_is_still_converted() -> None:
+    doc = Doc(
+        id="civil-0001",
+        jurisdiction="za",
+        citation="[2024] ZASCA 8",
+        text="The prosecution of the appeal failed. The court stated fact number 0001 for this sale of goods.",
+        source_id="sca",
+    )
+    ladder = LadderMemory()
+    report = await convert_cases(Pool([doc], home_region="za"), ladder, Model(), region="za")
+    assert report["converted"] == 1
+    assert report["failed"] == 0
+    assert report["failures"] == []
+    assert ladder.worked[0]["material_type"] == "public_record"
 
 
 @pytest.mark.asyncio

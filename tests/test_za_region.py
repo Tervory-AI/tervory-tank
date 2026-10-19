@@ -144,6 +144,13 @@ def test_za_refuses_an_identifier_for_a_non_sa_provider(monkeypatch: pytest.Monk
     assert main.model_call_refusal(text, "luna", box="us-east", tenant_id=TENANT) is None
     phone = "Call +27 82 123 4567 tomorrow."
     assert main.model_call_refusal(phone, "haiku", box="za", tenant_id=TENANT) == main.IDENTIFIER_REFUSAL
+    # A decided-case read is public record. A client draft is not.
+    assert main.model_call_refusal(text, "luna", box="za", tenant_id=TENANT, task_type="zenas.case_facts") is None
+    assert main.model_call_refusal(text, None, box="za", tenant_id=TENANT, task_type="zenas.case_facts") is None
+    assert main.model_call_refusal(phone, "luna", box="za", tenant_id=TENANT, task_type="zenas.case_facts") is None
+    assert main.model_call_refusal(text, "luna", box="za", tenant_id=TENANT, task_type="zenas.draft") == main.IDENTIFIER_REFUSAL
+    assert main.model_call_refusal(text, "luna", box="za", tenant_id=TENANT, task_type="zenas.review") == main.IDENTIFIER_REFUSAL
+    assert SA_ID not in str(main.model_call_refusal(text, "luna", box="za", tenant_id=TENANT, task_type="zenas.draft") or "")
 
 
 def test_sa_hosted_model_may_see_an_identifier_and_the_allow_list_can_narrow_it(
@@ -160,6 +167,16 @@ def test_sa_hosted_model_may_see_an_identifier_and_the_allow_list_can_narrow_it(
     assert main.model_call_refusal("No identifier here.", "luna", box="za", tenant_id=TENANT) is None
     assert main.model_call_refusal("No identifier here.", "haiku", box="za", tenant_id=TENANT) == main.ALLOW_REFUSAL
     assert main.model_call_refusal("No identifier here.", "deepseek/chat", box="za", tenant_id=TENANT) == main.ALLOW_REFUSAL
+    identified = f"ID {SA_ID}"
+    assert (
+        main.model_call_refusal(identified, "haiku", box="za", tenant_id=TENANT, task_type="zenas.case_facts")
+        == main.ALLOW_REFUSAL
+    )
+    assert main.model_call_refusal(identified, "luna", box="za", tenant_id=TENANT, task_type="zenas.case_facts") is None
+    assert (
+        main.model_call_refusal(identified, "deepseek/chat", box="za", tenant_id=TENANT, task_type="zenas.case_facts")
+        == main.ALLOW_REFUSAL
+    )
 
 
 def test_pure_code_detect_is_not_a_model_refusal() -> None:
@@ -231,6 +248,24 @@ async def test_za_identifier_prompt_never_calls_a_provider(monkeypatch: pytest.M
     assert caught.value.status_code == 403
     assert caught.value.detail == main.IDENTIFIER_REFUSAL
     assert SA_ID not in str(caught.value.detail)
+    upload = main.RouteRequest(
+        tenant_id=uuid.UUID(TENANT),
+        home_region="za",
+        task_type="zenas.draft",
+        messages=[main.Message(role="user", content=f"Revise this clause for ID {SA_ID}.")],
+    )
+    with pytest.raises(HTTPException) as client:
+        await main.run_route(upload)
+    assert client.value.status_code == 403
+    assert client.value.detail == main.IDENTIFIER_REFUSAL
+    public = main.RouteRequest(
+        tenant_id=uuid.UUID(TENANT),
+        home_region="za",
+        task_type="zenas.case_facts",
+        messages=[main.Message(role="user", content=f"Judgment. The ID {SA_ID} is in the reasons.")],
+    )
+    with pytest.raises(AssertionError, match="this region must not touch the database"):
+        await main.run_route(public)
 
 
 @pytest.mark.asyncio

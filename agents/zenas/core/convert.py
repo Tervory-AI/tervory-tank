@@ -20,7 +20,7 @@ from agents.zenas.core.engine import cite_check, keys_match, parse_json_object
 from agents.zenas.core.release_mask import material_type_for_pool
 from agents.zenas.core.selftest import box_jurisdiction, is_holdout
 from agents.zenas.core.service import ModelAdapter
-from agents.zenas.core.scope_rules import ruled
+from agents.zenas.pool.adapters.za_case_common import is_criminal_caption
 
 log = logging.getLogger("zenas.convert")
 
@@ -92,6 +92,7 @@ def _empty(*, ok: bool, region: str, reason: str = "") -> dict[str, Any]:
         "converted": 0,
         "held_out": 0,
         "failed": 0,
+        "failures": [],
     }
     if reason:
         report["reason"] = reason
@@ -242,6 +243,20 @@ def _statements(case: dict[str, Any], parsed: dict[str, Any]) -> list[dict[str, 
     return rows
 
 
+def _criminal_case(citation: str, text: str) -> bool:
+    """A criminal caption is refused. A word in the reasons is not.
+
+    The client-question list treats "prosecution" and "charged with" as
+    criminal. Civil judgments use those words. The loader already drops a
+    criminal caption, and this check reads the same opening.
+    """
+    opening = f"{citation}\n{text}"
+    if is_criminal_caption(citation, opening):
+        return True
+    head = opening[:600].lower()
+    return "criminal charge" in head or "criminal charges" in head
+
+
 def _cite_reason(statements: list[dict[str, str]], passages: list[dict[str, Any]]) -> str:
     """A short reason. The judgment text is not included."""
     if not statements:
@@ -313,6 +328,7 @@ async def conversion_report(pool: Any, ladder: Any, *, region: str) -> dict[str,
     decided = await _list_cases(pool, jurisdiction)
     tally = await ladder.case_tally(region=box, jurisdiction=jurisdiction)
     failed = await ladder.convert_failure_count(region=box)
+    reasons = await ladder.convert_failure_reasons(region=box)
     return {
         "ok": True,
         "region": box,
@@ -320,6 +336,7 @@ async def conversion_report(pool: Any, ladder: Any, *, region: str) -> dict[str,
         "converted": int(tally["converted"]),
         "held_out": int(tally["held_out"]),
         "failed": int(failed),
+        "failures": reasons,
     }
 
 
@@ -361,7 +378,7 @@ async def convert_cases(
             )
             continue
         text = await _judgment(pool, case)
-        if ruled(text) == "criminal":
+        if _criminal_case(case["citation"], text):
             await _remember_failure(ladder, region=box, pool_doc_id=case["document_id"], reason="criminal law is refused")
             continue
         if not text.strip() or not case["citation"].strip():

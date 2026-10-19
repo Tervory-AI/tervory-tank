@@ -218,16 +218,33 @@ def _china_model(model: str) -> bool:
     return head in _CHINA_PROVIDERS or model.lower() in _CHINA_PROVIDERS
 
 
-def model_call_refusal(text: str, model: str | None, *, box: str, tenant_id: str) -> str | None:
+# Decided cases are read with this task. Legislation sources are not in
+# COURT_SOURCES, and they are not sent on this task, so they stay covered
+# by the identifier rule.
+_PUBLIC_RECORD_TASKS = frozenset({"zenas.case_facts"})
+
+
+def model_call_refusal(
+    text: str,
+    model: str | None,
+    *,
+    box: str,
+    tenant_id: str,
+    task_type: str | None = None,
+) -> str | None:
     """Whether this model call must be refused before anything is stored or sent.
 
     In za, a prompt that still contains an identifier is refused unless the
     model runs in South Africa and the tenant's allow-list includes it.
-    model=None asks the early question: is there any permitted SA model at all?
-    Pure-code skills do not call this.
+    A public-record case read (zenas.case_facts) is not subject to that
+    identifier refusal. China-provider and allow-list refusals still apply.
+    Client matters and uploads use other task types, and the identifier
+    rule stays in force for them. model=None asks the early question: is
+    there any permitted SA model at all? Pure-code skills do not call this.
     """
     here = normalize_box(box)
     allow = tenant_allowlist(tenant_id)
+    public_record = (task_type or "") in _PUBLIC_RECORD_TASKS
     if here != ZA_REGION:
         if model is not None and allow is not None and model not in allow:
             return ALLOW_REFUSAL
@@ -235,7 +252,7 @@ def model_call_refusal(text: str, model: str | None, *, box: str, tenant_id: str
     if model is not None and _china_model(model):
         return ALLOW_REFUSAL
     hosted = sa_hosted_models()
-    if prompt_has_identifier(text):
+    if prompt_has_identifier(text) and not public_record:
         permitted = hosted if allow is None else hosted & allow
         if model is None:
             return None if permitted else IDENTIFIER_REFUSAL
@@ -637,7 +654,9 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
         # Empty, unknown, or the other region's text is not written.
         raise HTTPException(status_code=403, detail=foreign)
     client_text = "\n".join(m.content for m in req.messages)
-    early = model_call_refusal(client_text, None, box=box, tenant_id=str(req.tenant_id))
+    early = model_call_refusal(
+        client_text, None, box=box, tenant_id=str(req.tenant_id), task_type=req.task_type
+    )
     if early:
         raise HTTPException(status_code=403, detail=early)
 
@@ -654,7 +673,9 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
     max_tokens = min(req.max_tokens or policy["max_tokens_out"], policy["max_tokens_out"])
     sent = "\n".join(str(item.get("content") or "") for item in messages)
     holds_identifier = prompt_has_identifier(sent)
-    blocked = model_call_refusal(sent, model, box=box, tenant_id=str(req.tenant_id))
+    blocked = model_call_refusal(
+        sent, model, box=box, tenant_id=str(req.tenant_id), task_type=req.task_type
+    )
     if blocked:
         raise HTTPException(status_code=403, detail=blocked)
 
@@ -1675,7 +1696,9 @@ async def create_task(body: TaskCreate) -> dict[str, Any]:
     if foreign:
         raise HTTPException(status_code=403, detail=foreign)
     text = "\n".join(m.content for m in body.messages)
-    early = model_call_refusal(text, None, box=box, tenant_id=str(body.tenant_id))
+    early = model_call_refusal(
+        text, None, box=box, tenant_id=str(body.tenant_id), task_type=body.task_type
+    )
     if early:
         raise HTTPException(status_code=403, detail=early)
     # Fail fast on a bad task_type rather than queueing a task that can only fail.
