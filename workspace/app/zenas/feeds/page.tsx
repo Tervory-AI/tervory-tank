@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { isFounder } from "@/lib/admin";
-import { publicConvert, publicFeeds, publicScores, type PublicConvert, type PublicScore, type PublicSource } from "@/app/api/zenas/feeds/public";
+import { emptyConvert, publicConvert, publicFeeds, publicScores, type PublicConvert, type PublicScore, type PublicSource } from "@/app/api/zenas/feeds/public";
 import { homeRegion, zenasIn, type Region } from "@/app/api/zenas/tank";
 import { FeedSwitch } from "./board";
 import "./feeds.css";
@@ -19,7 +19,7 @@ async function readBox(region: Region): Promise<{
   let sources: PublicSource[] = [];
   let scores: PublicScore[] = [];
   let review: "on" | "off" = "off";
-  let convert: PublicConvert = { region, decided: 0, converted: 0, held_out: 0, failed: 0, running: false, status: "", failures: [] };
+  let convert: PublicConvert = emptyConvert(region);
   let note = "";
   try {
     const feeds = await zenasIn(region, `pool/status?home_region=${region}`, { method: "GET" });
@@ -48,7 +48,7 @@ async function readBox(region: Region): Promise<{
     const cases = await zenasIn(region, `cases/convert?home_region=${region}`, { method: "GET" });
     if (cases && cases.ok) convert = publicConvert(await cases.json());
   } catch {
-    convert = { region, decided: 0, converted: 0, held_out: 0, failed: 0, running: false, status: "", failures: [] };
+    convert = emptyConvert(region);
   }
   return { sources, scores, review, convert, note };
 }
