@@ -36,7 +36,7 @@ export function ReviewConsole({
   account: string;
 }) {
   const [menu, setMenu] = useState(false);
-  const name = account.trim() || "Account name";
+  const name = account.trim() || "Your account";
   const initial = name.slice(0, 1).toUpperCase();
   const example = WORKED_EXAMPLE;
 
