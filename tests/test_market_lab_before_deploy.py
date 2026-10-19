@@ -1,13 +1,16 @@
 """Market Lab checks before deploy. Fixtures only: no database server, no network, no feed keys.
 
-The three rows are the Market Lab lines on Agent tests:
+The rows are the Market Lab lines on Agent tests:
 - a copied number matches the saved source, and a blank source adds no number
 - surge and shift on planted past series: 80%+ of the labeled moves are caught, and any other hit is listed
 - a research citation is a passage we were given; a URL the model typed is dropped
+- a research question with no passages makes no model call and costs nothing
 """
 
 from __future__ import annotations
 
+import asyncio
+import importlib.util
 import json
 import sqlite3
 import subprocess
@@ -129,6 +132,104 @@ def test_surge_and_shift_catch_labeled_moves_and_list_false_alarms() -> None:
         "false_alarms": shift_false,
     }
     assert shift_false == [], shift_false
+
+
+class _ChargingModel:
+    """A model that would bill if research called it. The no-passages path must not."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.cost_usd = 0.0
+
+    async def model(self, *_args: object, **_kwargs: object) -> str:
+        self.calls += 1
+        self.cost_usd += 0.03
+        return "CLAIM: made up\nURL: https://example.com/made-up\nDATE: 2026-01-01\n"
+
+    async def route(self, *_args: object, **_kwargs: object) -> dict[str, object]:
+        self.calls += 1
+        self.cost_usd += 0.03
+        return {"content": "made up", "cost_usd": 0.03}
+
+
+def _load_named(module_name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_research_with_no_passages_makes_no_model_call_and_costs_nothing() -> None:
+    """Missing passages return 'no sources yet' at $0. The model is not asked."""
+    skill_run = _load_named(
+        "market_research_run_no_sources",
+        ROOT / "tank" / "skills" / "market.research" / "1.0.0" / "run.py",
+    ).run
+    sys.path.insert(0, str(ROOT / "agents" / "_chassis"))
+    if str(ROOT / "agents" / "market_lab") not in sys.path:
+        sys.path.insert(0, str(ROOT / "agents" / "market_lab"))
+    from chassis.jobs import JobContext  # noqa: E402
+
+    research = _load_named(
+        "market_lab_research_app",
+        ROOT / "agents" / "market_lab" / "app.py",
+    ).research
+
+    async def check() -> None:
+        for payload in (
+            {"question": "Why did diesel move?"},
+            {"question": "Why did diesel move?", "passages": None},
+            {"question": "Why did diesel move?", "passages": []},
+        ):
+            ctx = _ChargingModel()
+            result = await skill_run(payload, ctx)
+            assert ctx.calls == 0
+            assert ctx.cost_usd == 0
+            assert result["answer"] == "no sources yet"
+            assert result["citations"] == []
+            assert result["cost_usd"] == 0
+
+        cited = _ChargingModel()
+        kept = await skill_run(
+            {
+                "question": "Why did the series move?",
+                "passages": [
+                    {"claim": "A rate rose.", "url": "https://example.com/rates", "date": "2026-01-15"}
+                ],
+            },
+            cited,
+        )
+        assert cited.calls == 0
+        assert cited.cost_usd == 0
+        assert kept["citations"] == [
+            {"claim": "A rate rose.", "url": "https://example.com/rates", "date": "2026-01-15"}
+        ]
+        assert kept["answer"] == "A rate rose."
+
+        for job_input in (
+            {"question": "Why did diesel move?"},
+            {"question": "Why did diesel move?", "passages": None},
+            {"question": "Why did diesel move?", "passages": []},
+        ):
+            tank = _ChargingModel()
+            job = JobContext(
+                agent="market_lab",
+                tenant_id="00000000-0000-0000-0000-000000000001",
+                job_id="job",
+                kind="research",
+                input=job_input,
+                files=None,
+                tank=tank,
+                memory=None,
+                browser=None,
+            )
+            answer = await research(job)
+            assert tank.calls == 0
+            assert tank.cost_usd == 0
+            assert answer == {"answer": "no sources yet", "citations": [], "cost_usd": 0}
+
+    asyncio.run(check())
 
 
 def test_research_drops_a_source_the_model_made_up() -> None:
