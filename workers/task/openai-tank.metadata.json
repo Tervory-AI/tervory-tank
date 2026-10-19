@@ -1,0 +1,10 @@
+{
+  "openai/tank": {
+    "max_tokens": 4096,
+    "max_input_tokens": 8192,
+    "input_cost_per_token": 0,
+    "output_cost_per_token": 0,
+    "litellm_provider": "openai",
+    "mode": "chat"
+  }
+}
