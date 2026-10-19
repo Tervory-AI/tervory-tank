@@ -91,7 +91,7 @@ export function FeedSwitch({
       setCounts(body);
       setWatching(body.running);
     } else {
-      setCounts({ region: next, decided: 0, converted: 0, held_out: 0, failed: 0, running: false, status: "" });
+      setCounts({ region: next, decided: 0, converted: 0, held_out: 0, failed: 0, running: false, status: "", failures: [] });
       setWatching(false);
     }
   }
@@ -173,6 +173,15 @@ export function FeedSwitch({
         <span className="meta">{counts.held_out}</span> held out.{" "}
         <span className="meta">{counts.failed}</span> failed.
       </p>
+      {counts.failures.length > 0 ? (
+        <ul>
+          {counts.failures.map((row) => (
+            <li key={row.reason}>
+              <span className="meta">{row.count}</span> {row.reason}
+            </li>
+          ))}
+        </ul>
+      ) : null}
       <button type="button" disabled={busy === "convert"} onClick={convertCases}>
         Convert cases
       </button>
@@ -201,12 +210,18 @@ export function FeedSwitch({
             {scores.map((row) => (
               <tr key={`${row.kind}-${row.area}-${row.set}`}>
                 <td>{row.area || row.jurisdiction}</td>
-                <td>{row.label || row.set || row.kind}</td>
+                <td>{row.error ? "error" : row.label || row.set || row.kind}</td>
                 <td className="meta">{row.cases}</td>
-                <td className="meta">{row.outcome_agreement}%</td>
-                <td className="meta">{row.element_agreement}%</td>
-                <td className="meta">{row.citations_valid}%</td>
-                <td className="meta">{row.cost_per_case}</td>
+                {row.error ? (
+                  <td colSpan={4}>{row.reason}</td>
+                ) : (
+                  <>
+                    <td className="meta">{row.outcome_agreement}%</td>
+                    <td className="meta">{row.element_agreement}%</td>
+                    <td className="meta">{row.citations_valid}%</td>
+                    <td className="meta">{row.cost_per_case}</td>
+                  </>
+                )}
               </tr>
             ))}
           </tbody>

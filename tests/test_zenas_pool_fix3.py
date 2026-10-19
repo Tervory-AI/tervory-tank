@@ -30,7 +30,7 @@ sys.path.insert(0, str(ROOT))
 
 import agents.zenas.pool.adapters.cases as cases  # noqa: E402
 import agents.zenas.pool.http as pool_http  # noqa: E402
-from agents.zenas.core.convert import convert_cases, criminal_record  # noqa: E402
+from agents.zenas.core.convert import convert_cases, criminal_case, criminal_record  # noqa: E402
 from agents.zenas.core.ladder_store import LadderMemory  # noqa: E402
 from agents.zenas.pool.adapters.cases import CourtListenerAdapter, skip_reason  # noqa: E402
 from agents.zenas.pool.adapters.ecfr import EcfrAdapter, date_for_title, title_dates  # noqa: E402
@@ -368,6 +368,32 @@ def test_criminal_record_reads_saved_docket_shapes():
     assert not criminal_record("21-1830-cv", "")
     assert not criminal_record("11 Civ. 3004 (JSR)", "")
     assert not criminal_record("19-15222", "Civil")
+    assert criminal_record("Crim. No. 4", "")
+    assert criminal_record("No. 19-CR-55", "")
+    assert not criminal_record("", "")
+
+
+def test_criminal_case_is_the_one_check_for_both_regions():
+    # US: only the stored docket_number and nature_of_suit decide; the caption is not read.
+    assert criminal_case({"jurisdiction": "us", "docket_number": "1:21-cr-00010", "title": "Acme v. Beta"})
+    assert criminal_case({"jurisdiction": "us", "nature_of_suit": "Criminal", "title": "Acme v. Beta"})
+    assert not criminal_case({"jurisdiction": "us", "title": "S v Dlamini"})
+    assert not criminal_case({"jurisdiction": "us", "docket_number": "19-87", "nature_of_suit": "Contract"})
+    # SA: only the stored title decides.
+    assert criminal_case({"jurisdiction": "za", "title": "S v Dlamini"})
+    assert criminal_case({"jurisdiction": "za", "title": "National Director of Public Prosecutions v Zuma"})
+    assert criminal_case({"jurisdiction": "za", "title": "NPA v Mokoena"})
+    assert not criminal_case({"jurisdiction": "za", "title": "Acme (Pty) Ltd v Beta CC", "docket_number": "1:21-cr-1"})
+    # No type information at all: converts.
+    assert not criminal_case({"jurisdiction": "us"})
+    assert not criminal_case({"jurisdiction": "za"})
+
+
+def test_convert_has_one_criminal_check_and_never_reads_judgment_text_for_it():
+    source = (ROOT / "agents" / "zenas" / "core" / "convert.py").read_text(encoding="utf-8")
+    assert source.count("if criminal_case(case):") == 1
+    assert "ruled(" not in source
+    assert "scope_rules" not in source
 
 
 # --- http: 429 and Retry-After ----------------------------------------------

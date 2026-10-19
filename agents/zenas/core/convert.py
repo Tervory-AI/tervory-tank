@@ -21,7 +21,6 @@ from agents.zenas.core.engine import cite_check, keys_match, parse_json_object
 from agents.zenas.core.release_mask import material_type_for_pool
 from agents.zenas.core.selftest import box_jurisdiction, is_holdout
 from agents.zenas.core.service import ModelAdapter
-from agents.zenas.core.scope_rules import ruled
 
 log = logging.getLogger("zenas.convert")
 
@@ -32,7 +31,7 @@ _convert_running: set[str] = set()
 
 _LIST_SQL = """
 SELECT DISTINCT ON (document_id)
-       document_id, version_id, jurisdiction, citation, source_id,
+       document_id, version_id, jurisdiction, citation, source_id, title,
        docket_number, nature_of_suit
 FROM zenas_pool.documents
 WHERE kind = 'case'
@@ -66,7 +65,7 @@ _CRIMINAL_DOCKET = re.compile(r"(?i)(?:^|[^a-z])(?:cr|crim)(?:[^a-z]|$)|criminal
 def criminal_record(docket_number: str, nature_of_suit: str) -> bool:
     """True when the stored docket number or nature of suit marks a criminal matter."""
     nature = (nature_of_suit or "").lower()
-    if "criminal" in nature or "habeas" in nature or "prisoner" in nature:
+    if "criminal" in nature:
         return True
     return bool(_CRIMINAL_DOCKET.search(docket_number or ""))
 
@@ -114,6 +113,7 @@ def _empty(*, ok: bool, region: str, reason: str = "") -> dict[str, Any]:
         "converted": 0,
         "held_out": 0,
         "failed": 0,
+        "failures": [],
     }
     if reason:
         report["reason"] = reason
@@ -156,6 +156,7 @@ async def _list_cases(pool: Any, jurisdiction: str) -> list[dict[str, Any]]:
                     "jurisdiction": jurisdiction,
                     "citation": str(row["citation"] or ""),
                     "source_id": str(row["source_id"] or ""),
+                    "title": str(row["title"] or ""),
                     "docket_number": _row_text(row, "docket_number"),
                     "nature_of_suit": _row_text(row, "nature_of_suit"),
                 }
@@ -186,6 +187,7 @@ async def _list_cases(pool: Any, jurisdiction: str) -> list[dict[str, Any]]:
                 "jurisdiction": jurisdiction,
                 "citation": str(getattr(doc, "citation", "") or ""),
                 "source_id": str(getattr(doc, "source_id", "") or ""),
+                "title": str(getattr(doc, "title", "") or ""),
                 "docket_number": str(getattr(doc, "docket_number", "") or ""),
                 "nature_of_suit": str(getattr(doc, "nature_of_suit", "") or ""),
                 "doc": doc,
@@ -268,6 +270,26 @@ def _statements(case: dict[str, Any], parsed: dict[str, Any]) -> list[dict[str, 
     return rows
 
 
+# An SA criminal caption: "S v …", or the DPP / NPA as a party.
+_SA_CAPTION = re.compile(
+    r"(?i)(?:^\s*s\s+v\s+\S|\bDPP\b|director of public prosecutions|\bNPA\b|national prosecuting authority)"
+)
+
+
+def criminal_case(case: dict[str, Any]) -> bool:
+    """The one criminal check. It reads only what the source recorded.
+
+    A US case is refused when its stored docket_number is a criminal ("cr")
+    docket or its stored nature_of_suit is criminal; its caption is not read.
+    An SA case is refused when its stored title is an "S v …" caption or names
+    the DPP or NPA. The judgment text is never read. An empty field is
+    unknown, so a case with no type converts.
+    """
+    if str(case.get("jurisdiction") or "") == "za":
+        return _SA_CAPTION.search(str(case.get("title") or "")) is not None
+    return criminal_record(str(case.get("docket_number") or ""), str(case.get("nature_of_suit") or ""))
+
+
 def _cite_reason(statements: list[dict[str, str]], passages: list[dict[str, Any]]) -> str:
     """A short reason. The judgment text is not included."""
     if not statements:
@@ -339,6 +361,7 @@ async def conversion_report(pool: Any, ladder: Any, *, region: str) -> dict[str,
     decided = await _list_cases(pool, jurisdiction)
     tally = await ladder.case_tally(region=box, jurisdiction=jurisdiction)
     failed = await ladder.convert_failure_count(region=box)
+    reasons = await ladder.convert_failure_reasons(region=box)
     return {
         "ok": True,
         "region": box,
@@ -346,6 +369,7 @@ async def conversion_report(pool: Any, ladder: Any, *, region: str) -> dict[str,
         "converted": int(tally["converted"]),
         "held_out": int(tally["held_out"]),
         "failed": int(failed),
+        "failures": reasons,
     }
 
 
@@ -386,13 +410,10 @@ async def convert_cases(
                 ladder, region=box, pool_doc_id=case["document_id"], reason="material type is unknown"
             )
             continue
-        if criminal_record(case.get("docket_number", ""), case.get("nature_of_suit", "")):
+        if criminal_case(case):
             await _remember_failure(ladder, region=box, pool_doc_id=case["document_id"], reason="criminal law is refused")
             continue
         text = await _judgment(pool, case)
-        if ruled(text) == "criminal":
-            await _remember_failure(ladder, region=box, pool_doc_id=case["document_id"], reason="criminal law is refused")
-            continue
         if not text.strip() or not case["citation"].strip():
             await _remember_failure(ladder, region=box, pool_doc_id=case["document_id"], reason="cite check failed")
             continue
