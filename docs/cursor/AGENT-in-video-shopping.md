@@ -5,9 +5,16 @@
 ## What it does
 1. **Find products in a video.** For each scene, detect the products on screen (clothing, gear, devices, furniture) with open models that run on our own servers: an object finder (for example Grounding DINO or YOLO-World), SAM 2 for clean outlines, and an image embedder (SigLIP or CLIP) to describe each item.
 2. **Match them to a real catalogue.** Each detected item is matched against a retailer's own catalogue through Rig's search (the same engine that finds parts that fit). Matches above a confidence threshold are kept, with the frame time, the product, the price and the shop link.
-3. **Shoppable player.** A web player shows small product tags at the right moments. Tapping one opens a side panel with the product, the price and "Buy" (the retailer's own checkout or an affiliate link). Pausing shows everything in the current scene.
+3. **Shoppable player.** A web player shows small product tags at the right moments. Tapping one opens a side panel with the product, the price and "Buy", which goes to the AmmoSync platform for firearms-industry sales. Pausing shows everything in the current scene.
 4. **Viewer home page,** in the spirit of the reference: a headline, category pills, a fanned carousel of titles, and a "Shop this show" strip under each title.
 5. **Owner dashboard:** which products were shown, tapped and bought, per video and per scene, with every figure from real data.
+
+## First market: firearms (founder, 19 Oct 05:42 PT)
+- Gun channels and firearms retailers: reviews, range days, builds and gear videos, where mainstream platforms do not allow selling links.
+- **Every sale goes through the AmmoSync platform.** A tag never links to an outside checkout; "Buy" opens the product on AmmoSync.
+- **Firearms ship to the FFL closest to the buyer.** AmmoSync picks the nearest licensed dealer from Base's FFL records (ATF list, active licences only) using the buyer's location, and the buyer can choose another. Firearms are never shipped to the buyer directly.
+- Accessories, optics, holsters, magazines and ammunition follow AmmoSync's own checkout rules, including state restrictions.
+- Rig shows only parts that fit the gun on screen.
 
 ## Rules
 - Only videos the client owns or has the rights to; the upload asks for that confirmation.
