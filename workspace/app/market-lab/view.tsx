@@ -11,10 +11,10 @@ import {
   PLUGIN_TABS,
   POPUP_TITLE,
   REFERENCE_LABEL,
-  STUB_FILE,
-  STUB_KEY,
-  STUB_LINK,
-  STUB_MCP,
+  NEED_FILE,
+  NEED_KEY,
+  NEED_LINK,
+  NEED_MCP,
   VAULT_OFF_MESSAGE,
   type AnswerSource,
   type ConnectionMeta,
@@ -183,24 +183,22 @@ function ChatBox() {
               <div className="ml-bubble ml-answer" key={`lab-${index}`}>
                 <p className="ml-who">Market Lab</p>
                 <p className="ml-said">{turn.content}</p>
-                {turn.sources && turn.sources.length ? (
-                  <div className="ml-refs">
-                    <p className="ml-refs-label">{REFERENCE_LABEL}</p>
-                    {turn.sources.map((source) => (
-                      <div className="ml-ref" key={`${source.name}-${source.href ?? ""}`}>
-                        <span className="ml-ref-name">{source.name}</span>
-                        {source.href ? (
-                          <a className="ml-ref-link" href={source.href}>
-                            {linkLabel(source.href)}
-                          </a>
-                        ) : (
-                          <span />
-                        )}
-                        {source.date ? <span className="ml-ref-date">{source.date}</span> : null}
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
+                <div className="ml-refs">
+                  <p className="ml-refs-label">{REFERENCE_LABEL}</p>
+                  {turn.sources && turn.sources.length ? turn.sources.map((source) => (
+                    <div className="ml-ref" key={`${source.name}-${source.href ?? ""}`}>
+                      <span className="ml-ref-name">{source.name}</span>
+                      {source.href ? (
+                        <a className="ml-ref-link" href={source.href}>
+                          {linkLabel(source.href)}
+                        </a>
+                      ) : (
+                        <span />
+                      )}
+                      {source.date ? <span className="ml-ref-date">{source.date}</span> : null}
+                    </div>
+                  )) : <p>No sources for this answer.</p>}
+                </div>
               </div>
             ),
           )}
@@ -266,7 +264,7 @@ function PluginsDialog({
     const value = form.querySelector<HTMLInputElement>("input[type=password]")?.value ?? "";
     form.reset();
     if (!value.trim()) {
-      setNote(STUB_KEY);
+      setNote(NEED_KEY);
       return;
     }
     setBusy(true);
@@ -292,7 +290,7 @@ function PluginsDialog({
     const files = list ? Array.from(list) : [];
     if (fileRef.current) fileRef.current.value = "";
     if (!files.length) {
-      setNote(STUB_FILE);
+      setNote(NEED_FILE);
       return;
     }
     const body = new FormData();
@@ -314,7 +312,7 @@ function PluginsDialog({
     form.reset();
     setCadence("Daily");
     if (!url) {
-      setNote(STUB_LINK);
+      setNote(NEED_LINK);
       return;
     }
     setBusy(true);
@@ -334,7 +332,7 @@ function PluginsDialog({
     const token = form.querySelector<HTMLInputElement>("input[type=password]")?.value ?? "";
     form.reset();
     if (!name || !url) {
-      setNote(STUB_MCP);
+      setNote(NEED_MCP);
       return;
     }
     setBusy(true);
@@ -381,7 +379,7 @@ function PluginsDialog({
             </button>
           ))}
         </div>
-        {note ? <p className="ml-stub">{note}</p> : null}
+        {note ? <p className="ml-status">{note}</p> : null}
         {!plugins.enabled ? (
           <p className="ml-lead">{plugins.message || VAULT_OFF_MESSAGE}</p>
         ) : tab === "API keys" ? (
@@ -447,7 +445,7 @@ function PluginsDialog({
                 const value = form.querySelector<HTMLInputElement>("input[type=password]")?.value ?? "";
                 form.reset();
                 if (!name || !value.trim()) {
-                  setNote(STUB_KEY);
+                  setNote(NEED_KEY);
                   return;
                 }
                 setBusy(true);
@@ -673,7 +671,7 @@ export function MarketLabView({
   const searching = query.trim().length > 0;
   const noHits = searching && onCards.length === 0 && offRows.length === 0 && groups.length === 0;
   const anyKeyedOn = [...model.featured, ...model.cards].some((card) => KEYED_ON.has(card.id));
-  const accountName = workspaceName?.trim() || "Account";
+  const accountName = workspaceName?.trim() || "Your account";
 
   function openSection(id: string) {
     setMenu(false);
@@ -693,7 +691,7 @@ export function MarketLabView({
       <button className="ml-dim" type="button" hidden={!menu} aria-label="Close menu" onClick={() => setMenu(false)} />
       <aside className={menu ? "ml-panel open" : "ml-panel"}>
         <div className="ml-brand">
-          <img className="ml-agent" src={MARKET_LAB_LOGO_SRC} alt="Market Lab" width={186} height={31} />
+          <img className="ml-agent" src={MARKET_LAB_LOGO_SRC} alt="Market Lab" width={243} height={40} />
         </div>
         <button className="ml-close" type="button" onClick={() => setMenu(false)}>
           Close

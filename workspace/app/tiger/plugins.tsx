@@ -13,10 +13,10 @@ import {
 } from "./plugin-actions";
 import {
   PLUGIN_TABS,
-  STUB_FILE,
-  STUB_KEY,
-  STUB_LINK,
-  STUB_MCP,
+  NEED_FILE,
+  NEED_KEY,
+  NEED_LINK,
+  NEED_MCP,
   VAULT_OFF_MESSAGE,
   type PluginPanel,
   type PluginTab,
@@ -43,7 +43,7 @@ export function Plugins({ plugins, onClose }: { plugins: PluginPanel; onClose: (
     const value = form.querySelector<HTMLInputElement>("input[type=password]")?.value ?? "";
     form.reset();
     if (!name || !value.trim()) {
-      setNote(STUB_KEY);
+      setNote(NEED_KEY);
       return;
     }
     setBusy(true);
@@ -59,7 +59,7 @@ export function Plugins({ plugins, onClose }: { plugins: PluginPanel; onClose: (
     const files = list ? Array.from(list) : [];
     if (fileRef.current) fileRef.current.value = "";
     if (!files.length) {
-      setNote(STUB_FILE);
+      setNote(NEED_FILE);
       return;
     }
     const body = new FormData();
@@ -80,7 +80,7 @@ export function Plugins({ plugins, onClose }: { plugins: PluginPanel; onClose: (
     const label = form.querySelector<HTMLInputElement>("input[name=label]")?.value.trim() ?? "";
     form.reset();
     if (!url) {
-      setNote(STUB_LINK);
+      setNote(NEED_LINK);
       return;
     }
     setBusy(true);
@@ -100,7 +100,7 @@ export function Plugins({ plugins, onClose }: { plugins: PluginPanel; onClose: (
     const token = form.querySelector<HTMLInputElement>("input[type=password]")?.value ?? "";
     form.reset();
     if (!name || !server) {
-      setNote(STUB_MCP);
+      setNote(NEED_MCP);
       return;
     }
     setBusy(true);

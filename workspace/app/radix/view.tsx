@@ -112,7 +112,7 @@ export function RadixPage({ accountName, settings }: { accountName: string; sett
     <aside className="rx-panel" data-panel-anchor="fixed">{navigation("panel")}</aside>
     <dialog className="rx-menu-dialog" ref={menu} aria-label="Navigation" onKeyDown={keepDialogFocus}>
       <button className="rx-menu-close" type="button" onClick={() => menu.current?.close()}>Close menu</button>
-      {navigation()}
+      {navigation("panel")}
     </dialog>
     <div className="rx-body" ref={body} data-scroll-root>
       <p className="rx-crumb"><a href="/">Workspace</a> / Radix</p>
@@ -144,16 +144,16 @@ export function RadixPage({ accountName, settings }: { accountName: string; sett
           </article>)}</div>
         </section>
         <section className="rx-card">
-          <h2>Scan results are not connected</h2>
-          <p>This page cannot load or start a scan yet. Open the example report to see how findings and fixes will appear.</p>
+          <h2>Scan results are not on this page yet</h2>
+          <p>Open the example report to see how findings and fixes will appear. This page does not start a scan.</p>
         </section>
         <section aria-labelledby="rx-flow">
           <h2 id="rx-flow" className="rx-section-heading">From finding to fix</h2>
           <ol className="rx-steps"><li>Review the file and rule.</li><li>Make the change.</li><li>Run a fresh check.</li></ol>
         </section>
       </> : !example ? <section className="rx-card rx-empty">
-        <h2>{section === "Findings" ? "Findings are not connected" : "Reports are not connected"}</h2>
-        <p>This page cannot read your scan history yet. That does not mean your code has no findings.</p>
+        <h2>{section === "Findings" ? "No findings yet" : "No reports yet"}</h2>
+        <p>This page cannot read your scan history yet. Open the example to see the layout, or send a request below.</p>
         {section === "Findings" ? <button type="button" className="rx-text-button" onClick={() => navigate("Findings", true)}>Browse example findings</button> : null}
       </section> : <>
         <div className="rx-example-banner"><span className="rx-badge">Example</span><p>3 made-up findings. This is not a scan of your code or approval to release it.</p></div>

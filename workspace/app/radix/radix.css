@@ -18,7 +18,7 @@ body:has(.rx) main { width:100%; max-width:none; height:100dvh; margin:0; paddin
 .rx .rx-primary:hover { background:#C90007; text-decoration:none; }
 .rx-panel { position:fixed; inset:0 auto 0 0; width:240px; height:100dvh; padding:24px; background:var(--rx-navy); color:#fff; display:flex; flex-direction:column; gap:16px; z-index:10; }
 .rx-logo { width:186px; height:34px; display:block; object-fit:contain; }
-.rx-radix-mark { width:186px; height:auto; display:block; }
+.rx-radix-mark { width:auto; height:64px; max-width:100%; object-fit:contain; object-position:left center; display:block; }
 .rx-brand { display:block; flex-shrink:0; }
 .rx nav { display:flex; flex-direction:column; gap:4px; }
 .rx nav a,.rx nav button { color:inherit; text-align:left; padding:8px; min-height:36px; font-size:14px; line-height:20px; border-radius:8px; }
@@ -101,6 +101,7 @@ body:has(.rx) main { width:100%; max-width:none; height:100dvh; margin:0; paddin
 @media(max-width:800px) {
   .rx-panel { display:none; }
   .rx-mobile-bar { height:74px; padding:20px 24px; background:var(--rx-navy); color:#fff; display:flex; align-items:center; justify-content:space-between; gap:16px; }
+  .rx-crumb a { display:inline-flex; align-items:center; min-height:44px; }
   .rx-mobile-bar button { min-height:44px; padding:0 8px; }
   .rx-body { margin-left:0; height:calc(100dvh - 74px); padding:24px 24px 48px; gap:28px; }
   .rx h1 { font-size:40px; }

@@ -6,10 +6,10 @@ export const POPUP_TITLE = "Plugins";
 export const REFERENCE_LABEL = "Sources";
 
 export const VAULT_OFF_MESSAGE = "This vault is off. Turn it on in Tank.";
-export const STUB_KEY = "Add a key first. Nothing was stored.";
-export const STUB_FILE = "Choose a file first. Nothing was saved.";
-export const STUB_LINK = "Add a link first. Nothing was saved.";
-export const STUB_MCP = "Add a name and a server URL first. Nothing was saved.";
+export const NEED_KEY = "Add a key first. Nothing was stored.";
+export const NEED_FILE = "Choose a file first. Nothing was saved.";
+export const NEED_LINK = "Add a link first. Nothing was saved.";
+export const NEED_MCP = "Add a name and a server URL first. Nothing was saved.";
 
 export const PLUGIN_TABS = ["API keys", "Files", "Source links", "MCP connections"] as const;
 export type PluginTab = (typeof PLUGIN_TABS)[number];

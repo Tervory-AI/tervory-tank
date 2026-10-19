@@ -96,7 +96,7 @@ body:has(.bcp) main {
 }
 
 .bcp-logo {
-  width: 168px;
+  width: auto;
   height: 43px;
   max-width: 100%;
   object-fit: contain;
@@ -180,7 +180,7 @@ body:has(.bcp) main {
   padding-bottom: 20px;
 }
 
-/* Account name: the first standard item at the top of the panel. */
+/* The signed-in organisation, at the top of the panel. */
 .bcp-account {
   margin: 4px 12px 8px;
   padding: 0 0 8px;

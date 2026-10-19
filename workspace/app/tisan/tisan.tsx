@@ -3,19 +3,10 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { SquadLinks } from "../squad-links";
 import {
-  ALL_BUILDS,
-  CHECKS,
-  COLOURS,
-  COMPONENTS,
   FILTERS,
-  GAPS,
   OPENING_THREAD,
   PAGE_NAV,
-  RECENT,
   RULES,
-  SCORES,
-  SPACING,
-  STEPS,
   groupMeta,
   primaryAction,
   replyTo,
@@ -23,7 +14,6 @@ import {
   searchRecords,
   showsChat,
   showsResults,
-  toneFor,
   type Citation,
   type Dialog,
   type Filter,
@@ -38,10 +28,6 @@ function Pill({ tone, children }: { tone: "solid" | "quiet"; children: ReactNode
   return <span className={tone === "solid" ? "pill solid" : "pill quiet"}><i />{children}</span>;
 }
 
-function Tag() {
-  return <span className="tag">Example</span>;
-}
-
 function Foot({ lines }: { lines: string[] }) {
   return (
     <footer className="foot">
@@ -52,7 +38,7 @@ function Foot({ lines }: { lines: string[] }) {
 
 const GROUP_ORDER: Kind[] = ["Build", "Page", "Test"];
 
-export function Tisan({ plugins }: { plugins: PluginPanel }) {
+export function Tisan({ plugins, accountName }: { plugins: PluginPanel; accountName: string | null }) {
   const [view, setView] = useState<View>("overview");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -128,11 +114,11 @@ export function Tisan({ plugins }: { plugins: PluginPanel }) {
       <aside id="tisan-panel" className="panel" aria-label="Tisan">
         <img className="panel-mark" src="/brand/tisan-on-dark.png" alt="Tisan" width={2806} height={701} />
         <div className="panel-top">
-          <p className="account"><span>Account name</span> <Tag /></p>
+          <p className="account">{accountName?.trim() || "Your account"}</p>
           <nav aria-label="Workspace">
-            <button type="button" className="nav">Dashboard</button>
-            <button type="button" className="nav">Projects</button>
-            <button type="button" className="nav">Chats</button>
+            <a className="nav" href="/ledger">Dashboard</a>
+            <a className="nav" href="/tasks">Projects</a>
+            <a className="nav" href="/">Chats</a>
           </nav>
           <SquadLinks className="squad-nav" linkClassName="nav" />
         </div>
@@ -161,12 +147,11 @@ export function Tisan({ plugins }: { plugins: PluginPanel }) {
         <div className="panel-bottom">
           <img className="panel-sign" src="/brand/tervory-logo-reversed.png" alt="Tervory" />
           <button type="button" className={view === "settings" && dialog !== "plugins" ? "nav on" : "nav"} aria-current={view === "settings" && dialog !== "plugins" ? "page" : undefined} onClick={() => show("settings")}>Settings</button>
-          <button type="button" className="nav">Support</button>
+          <a className="nav" href="/">Support</a>
         </div>
       </aside>
 
       <div className="body">
-        <div className="page-slot">Tisan logo, coming later</div>
         {view === "overview" ? (
           <Overview
             startPrimary={action === "start"}
@@ -196,7 +181,6 @@ export function Tisan({ plugins }: { plugins: PluginPanel }) {
         <Plugins onClose={() => setDialog("none")} tab={pluginTab} setTab={setPluginTab} desktopAction={action} plugins={plugins} />
       ) : null}
       {dialog === "build" ? <StartBuild onClose={() => setDialog("none")} /> : null}
-      <p className="chat-bot">Chat bot, to be named</p>
     </div>
   );
 }
@@ -266,12 +250,10 @@ function Overview({
       {results ? <Results query={query} hits={hits} onOpen={onOpen} /> : null}
       {chat ? (
         <>
-          <Stats />
+          <p className="empty">No builds yet.</p>
           <Chat thread={thread} draft={draft} sendPrimary={sendPrimary} onDraft={onDraft} onSend={onSend} onOpen={onOpen} />
-          <Current onOpen={() => onOpen("builds")} />
-          <Recent onOpen={() => onOpen("builds")} />
           <Rules />
-          <Foot lines={["Keys and tokens are stored on the server, never in the app code.", "Values marked Example are placeholders in this design."]} />
+          <Foot lines={["Keys and tokens are stored on the server, never in the app code."]} />
         </>
       ) : null}
     </>
@@ -304,7 +286,7 @@ function Results({ query, hits, onOpen }: { query: string; hits: { id: string; k
   return (
     <div className="results">
       <p className="result-count">{resultSummary(query, hits.length)}</p>
-      {hits.length === 0 ? <p className="empty">Nothing in the example matches that.</p> : null}
+      {hits.length === 0 ? <p className="empty">No builds yet.</p> : null}
       {GROUP_ORDER.map((kind) => {
         const rows = hits.filter((hit) => hit.kind === kind);
         if (rows.length === 0) return null;
@@ -328,31 +310,8 @@ function Results({ query, hits, onOpen }: { query: string; hits: { id: string; k
           </section>
         );
       })}
-      <Foot lines={["Search looks only at Tisan's own builds, pages and tests.", "Values marked Example are placeholders in this design."]} />
+      <Foot lines={["Search looks only at Tisan's own builds, pages and tests."]} />
     </div>
-  );
-}
-
-function Stats() {
-  return (
-    <section className="counts" aria-label="Counts">
-      <article className="count">
-        <div className="stat-top"><b>2</b><Tag /></div>
-        <strong className="desk">Waiting for your review</strong>
-        <strong className="phone">Waiting for review</strong>
-        <p className="fine">Draft pull requests Tisan opened.</p>
-      </article>
-      <article className="count">
-        <div className="stat-top"><b className="desk">6 of 6</b><b className="phone">6/6</b><Tag /></div>
-        <strong>Tests passing</strong>
-        <p className="fine">On the last build.</p>
-      </article>
-      <article className="count">
-        <div className="stat-top"><b>Off</b><Tag /></div>
-        <strong>Deploy</strong>
-        <p className="fine">Waits for the Radix scan.</p>
-      </article>
-    </section>
   );
 }
 
@@ -378,7 +337,7 @@ function Chat({
       <div className="thread">
         {thread.map((message, index) => (
           <article key={`${message.role}-${index}`} className={message.role === "user" ? "bubble you" : "bubble"}>
-            <p className="who">{message.role === "user" ? "You" : "Tisan"}{message.role === "assistant" ? <> <Tag /></> : null}</p>
+            <p className="who">{message.role === "user" ? "You" : "Tisan"}</p>
             <p>{message.text}</p>
             {message.when ? <p className="when">{message.when}</p> : null}
             {message.sources && message.sources.length > 0 ? (
@@ -425,92 +384,6 @@ function Chat({
   );
 }
 
-function Current({ onOpen }: { onOpen: () => void }) {
-  return (
-    <section className="block">
-      <h2>Current build</h2>
-      <p className="intro">Where the build is now. Each step must finish before the next one starts.</p>
-      <div className="panel-card">
-        <div className="card-head">
-          <div>
-            <h3>Tervory landing page <Tag /></h3>
-            <p>Draft pull request #98 · Branch tisan/landing · Started 7:12 AM PT</p>
-          </div>
-          <button type="button" className="text" onClick={onOpen}>Open pull request →</button>
-        </div>
-        <div className="steps">
-          {STEPS.map((step) => (
-            <article key={step.n}>
-              <p className="kicker">Step {step.n}</p>
-              <h4>{step.title}</h4>
-              <Pill tone={step.tone}>{step.state}</Pill>
-              <p>{step.detail}</p>
-            </article>
-          ))}
-        </div>
-        <ol className="step-list">
-          {STEPS.map((step) => (
-            <li key={step.n}>
-              <span>{step.n}</span>
-              <strong>{step.title}</strong>
-              <Pill tone={step.tone}>{step.state}</Pill>
-            </li>
-          ))}
-        </ol>
-        <p className="card-note desk">Tisan deploys only when every test passes and the scan comes back clean. It never merges on its own.</p>
-        <p className="card-note phone">Deploy waits for a clean Radix scan. Tisan never merges on its own.</p>
-        <button type="button" className="text phone-link" onClick={onOpen}>Open pull request →</button>
-      </div>
-    </section>
-  );
-}
-
-function Recent({ onOpen }: { onOpen: () => void }) {
-  return (
-    <section className="block">
-      <h2>Recent builds</h2>
-      <p className="intro">The last builds and how they did.</p>
-      <div className="table-wrap">
-        <table className="recent">
-          <thead>
-            <tr>
-              <th>Build</th>
-              <th className="mid">Tests</th>
-              <th className="mid">Scan</th>
-              <th className="mid">Deploy</th>
-              <th className="end">When</th>
-            </tr>
-          </thead>
-          <tbody>
-            {RECENT.map((row) => (
-              <tr key={row.detail}>
-                <td>
-                  <strong>{row.title}</strong>
-                  <span>{row.detail}</span>
-                </td>
-                <td className="mid"><Pill tone="solid">{row.tests}</Pill></td>
-                <td className="mid"><Pill tone="quiet">{row.scan}</Pill></td>
-                <td className="mid"><Pill tone="quiet">{row.deploy}</Pill></td>
-                <td className="end">{row.when}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="recent-cards">
-        {RECENT.map((row) => (
-          <article key={row.detail}>
-            <h3>{row.title}</h3>
-            <p>{row.detail}</p>
-            <p className="chips"><span>Tests <Pill tone="solid">{row.tests}</Pill></span><span>Deploy <Pill tone="quiet">{row.deploy}</Pill></span></p>
-          </article>
-        ))}
-      </div>
-      <button type="button" className="text see" onClick={onOpen}>See all builds →</button>
-    </section>
-  );
-}
-
 function Rules() {
   return (
     <section className="block">
@@ -535,49 +408,9 @@ function Builds({ startPrimary, onStart }: { startPrimary: boolean; onStart: () 
       <section className="block tight">
         <h2>All builds</h2>
         <p className="intro">A build can deploy only when every check passes and the scan is clean.</p>
-        <div className="table-wrap">
-          <table className="builds">
-            <colgroup>
-              <col className="c-name" />
-              <col className="c-pill" />
-              <col className="c-pill" />
-              <col className="c-pill" />
-              <col className="c-score" />
-              <col className="c-pill" />
-              <col className="c-pill" />
-            </colgroup>
-            <thead>
-              <tr>
-                <th>Build</th>
-                <th className="mid">Code checks</th>
-                <th className="mid">Screens</th>
-                <th className="mid">Accessibility</th>
-                <th className="mid">Lighthouse</th>
-                <th className="mid">Scan</th>
-                <th className="mid">Deploy</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ALL_BUILDS.map((row) => (
-                <tr key={row.detail}>
-                  <td>
-                    <strong>{row.title}</strong>
-                    <span>{row.detail}</span>
-                  </td>
-                  <td className="mid"><Pill tone={toneFor(row.code)}>{row.code}</Pill></td>
-                  <td className="mid"><Pill tone={toneFor(row.screens)}>{row.screens}</Pill></td>
-                  <td className="mid"><Pill tone={toneFor(row.access)}>{row.access}</Pill></td>
-                  <td className="mid score">{row.light}</td>
-                  <td className="mid"><Pill tone={toneFor(row.scan)}>{row.scan}</Pill></td>
-                  <td className="mid"><Pill tone={toneFor(row.deploy)}>{row.deploy}</Pill></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="aside-note">Code checks are lint, type checks, unit tests and the production build. Screens means Playwright at 390, 768 and 1440 wide.</p>
+        <p className="empty">No builds yet.</p>
       </section>
-      <Foot lines={["Tisan never merges a build. You review each draft pull request.", "Values marked Example are placeholders in this design."]} />
+      <Foot lines={["Tisan never merges a build. You review each draft pull request."]} />
     </>
   );
 }
@@ -589,106 +422,9 @@ function Design({ startPrimary, onStart }: { startPrimary: boolean; onStart: () 
       <section className="block tight">
         <h2>Locked page</h2>
         <p className="intro">Tisan reads one saved page. It never calls Figma while it builds.</p>
-        <div className="locked">
-          <div>
-            <h3>Landing — Desktop & Mobile <Pill tone="solid">Locked</Pill> <Tag /></h3>
-            <p>Saved copy in the repo · Read 16 Oct, 3:10 PM PT</p>
-          </div>
-          <div>
-            <h3>Live Figma reads are off.</h3>
-            <p>Tisan builds only from this saved page. To change the design, update the saved page.</p>
-          </div>
-        </div>
+        <p className="empty">No builds yet.</p>
       </section>
-      <section className="block">
-        <div className="part-title"><h2>Tokens</h2><Tag /></div>
-        <p className="intro">Named colours, type and spacing read from the saved page.</p>
-        <div className="tokens">
-          <article>
-            <h3>Colours</h3>
-            <ul className="swatches">
-              {COLOURS.map((colour) => (
-                <li key={colour.hex}>
-                  <span className={`swatch ${colour.swatch}`} />
-                  <span>
-                    <strong>{colour.name}</strong>
-                    <span className="hex">{colour.hex}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </article>
-          <article>
-            <h3>Type</h3>
-            <p className="kicker">Headings</p>
-            <p className="face display">Jost Light</p>
-            <p className="kicker">Body</p>
-            <p className="face body">Inter Regular</p>
-            <p className="sizes">Sizes: 44, 36, 26, 16, 14, 12</p>
-          </article>
-          <article>
-            <h3>Spacing</h3>
-            <ul className="spaces">
-              {SPACING.map((size) => (
-                <li key={size}>
-                  <span>{size}</span>
-                  <i style={{ width: `${(size / 48) * 100}%` }} />
-                </li>
-              ))}
-            </ul>
-            <p className="sizes">Read from the layout. Not named in Figma.</p>
-          </article>
-        </div>
-      </section>
-      <section className="block">
-        <div className="part-title"><h2>Gaps found</h2><Tag /></div>
-        <p className="intro">Tisan lists what it could not find instead of guessing. These come from the saved copy and are not confirmed against the live file.</p>
-        <div className="table-wrap">
-          <table className="plain">
-            <thead>
-              <tr>
-                <th>What is missing</th>
-                <th>What Tisan did</th>
-                <th className="end">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {GAPS.map((gap) => (
-                <tr key={gap.title}>
-                  <td><strong>{gap.title}</strong><span>{gap.detail}</span></td>
-                  <td>{gap.did}</td>
-                  <td className="end"><Pill tone="quiet">Not confirmed</Pill></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-      <section className="block">
-        <div className="part-title"><h2>Component map</h2><Tag /></div>
-        <p className="intro">Each Figma component and the part of the site built from it.</p>
-        <div className="table-wrap">
-          <table className="plain">
-            <thead>
-              <tr>
-                <th>Figma component</th>
-                <th>Built as</th>
-                <th className="end">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {COMPONENTS.map((row) => (
-                <tr key={row.title}>
-                  <td><strong>{row.title}</strong><span>{row.detail}</span></td>
-                  <td>{row.built}</td>
-                  <td className="end"><Pill tone="solid">Mapped</Pill></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-      <Foot lines={["The saved page is the approved read. A live Figma call is not approved.", "Values marked Example are placeholders in this design."]} />
+      <Foot lines={["The saved page is the approved read. A live Figma call is not approved."]} />
     </>
   );
 }
@@ -698,41 +434,9 @@ function Tests({ startPrimary, onStart }: { startPrimary: boolean; onStart: () =
     <>
       <PageHead title="Tests" lede="The test gate every build must pass before it can go any further." primary={startPrimary} onStart={onStart} />
       <section className="block tight">
-        <div className="part-title"><h2>Lighthouse scores</h2><Tag /></div>
-        <p className="intro">From the last build. Each score must be 90 or above.</p>
-        <div className="scores">
-          {SCORES.map((score) => (
-            <article key={score.label}>
-              <div className="stat-top"><b>{score.score}</b><Tag /></div>
-              <strong>{score.label}</strong>
-              <p>Must be 90 or above.</p>
-            </article>
-          ))}
-        </div>
-      </section>
-      <section className="block">
-        <div className="part-title"><h2>Checks</h2><Tag /></div>
+        <h2>Checks</h2>
         <p className="intro">What each check proves, and how it did on the last build.</p>
-        <div className="table-wrap">
-          <table className="plain checks">
-            <thead>
-              <tr>
-                <th>Check</th>
-                <th>What it proves</th>
-                <th className="end">Result</th>
-              </tr>
-            </thead>
-            <tbody>
-              {CHECKS.map((check) => (
-                <tr key={check.title}>
-                  <td><strong>{check.title}</strong><span>{check.tool}</span></td>
-                  <td>{check.proves}</td>
-                  <td className="end"><Pill tone={check.tone}>{check.result}</Pill></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <p className="empty">No builds yet.</p>
       </section>
       <section className="block">
         <h2>Shared agent tests</h2>
@@ -742,7 +446,7 @@ function Tests({ startPrimary, onStart }: { startPrimary: boolean; onStart: () =
           <p>They need a gold set of examples and a trap-case runner first. Tisan will add them when those exist.</p>
         </div>
       </section>
-      <Foot lines={["Tests run on every build. A failed check stops the build.", "Values marked Example are placeholders in this design."]} />
+      <Foot lines={["Tests run on every build. A failed check stops the build."]} />
     </>
   );
 }
@@ -752,7 +456,7 @@ function Settings({ startPrimary, onStart }: { startPrimary: boolean; onStart: (
     <>
       <PageHead title="Settings" lede="How Tisan builds, where it reads from, and when it may deploy." primary={startPrimary} onStart={onStart} />
       <section className="block tight">
-        <div className="part-title"><h2>Building</h2><Tag /></div>
+        <h2>Building</h2>
         <div className="settings">
           <Setting title="Repository" detail="Tisan works in tervory-tank and opens draft pull requests only." control={<span className="repo">tervory-tank</span>} />
           <Setting title="Merging" detail="Tisan never merges. You review and merge each pull request." control={<Pill tone="quiet">Off</Pill>} />
@@ -760,20 +464,20 @@ function Settings({ startPrimary, onStart }: { startPrimary: boolean; onStart: (
         </div>
       </section>
       <section className="block">
-        <div className="part-title"><h2>Design source</h2><Tag /></div>
+        <h2>Design source</h2>
         <div className="settings">
           <Setting title="Saved Figma page" detail="The approved read. Tisan builds from the saved copy in the repo." control={<Pill tone="solid">On</Pill>} />
           <Setting title="Live Figma reads" detail="Not approved. Tisan does not call Figma live." control={<Pill tone="quiet">Off</Pill>} />
         </div>
       </section>
       <section className="block">
-        <div className="part-title"><h2>Deploy</h2><Tag /></div>
+        <h2>Deploy</h2>
         <div className="settings">
           <Setting title="Coolify deploy" detail="Deploys only after the tests pass and the Radix scan is clean." control={<Pill tone="quiet">Off</Pill>} />
           <Setting title="Deploy key" detail="Set by your admin in Plugins. Shown as dots once saved." control={<Pill tone="quiet">Not set</Pill>} />
         </div>
       </section>
-      <Foot lines={["Keys and tokens are stored on the server, never in the app code.", "Values marked Example are placeholders in this design."]} />
+      <Foot lines={["Keys and tokens are stored on the server, never in the app code."]} />
     </>
   );
 }
@@ -804,12 +508,8 @@ function StartBuild({ onClose }: { onClose: () => void }) {
             What should Tisan build?
             <textarea placeholder="e.g. A one-page site for a gunsmith in Boise, with a contact form." rows={4} />
           </label>
-          <p className="hint"><Tag /> Example text. Plain English is fine.</p>
           <p className="kicker">Design</p>
-          <div className="design-row">
-            <span>Landing — Desktop & Mobile (saved page)</span>
-            <Pill tone="solid">Locked</Pill>
-          </div>
+          <p className="empty">No saved page yet.</p>
           <div className="next">
             <h3>What happens next</h3>
             <ol>

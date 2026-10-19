@@ -6,10 +6,10 @@ import { SquadLinks } from "../squad-links";
 import {
   LIBRARY_OFF_MESSAGE,
   PLUGIN_TABS,
-  STUB_FILE,
-  STUB_KEY,
-  STUB_LINK,
-  STUB_MCP,
+  NEED_FILE,
+  NEED_KEY,
+  NEED_LINK,
+  NEED_MCP,
   VAULT_OFF_MESSAGE,
   type ConnectionMeta,
   type LibraryPanel,
@@ -71,7 +71,7 @@ export function SkalaApp({
   const [askDraft, setAskDraft] = useState("");
   const [thread, setThread] = useState<Turn[]>([]);
   const searchId = useId();
-  const account = accountName?.trim() || "Account name";
+  const account = accountName?.trim() || "Your account";
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -94,7 +94,7 @@ export function SkalaApp({
     setThread((current) => [
       ...current,
       { who: "You", text },
-      { who: "Skala", text: "Ask Skala is not connected from this page yet. Nothing was run." },
+      { who: "Skala", text: "Skala cannot answer from this page yet. Search the library, or transfer a skill from Pipelines. Nothing was run." },
     ]);
   }
 
@@ -172,6 +172,12 @@ export function SkalaApp({
                       <div key={`${turn.who}-${index}`} className="sk-turn">
                         <p className="sk-who">{turn.who}</p>
                         <p>{turn.text}</p>
+                        {turn.who === "Skala" ? (
+                          <div className="sk-sources">
+                            <p>Sources</p>
+                            <p>No sources for this answer.</p>
+                          </div>
+                        ) : null}
                       </div>
                     ))}
                   </div>
@@ -314,7 +320,7 @@ function PluginsPanel({
     const value = form.querySelector<HTMLInputElement>("input[type=password]")?.value ?? "";
     form.reset();
     if (!name.trim() || !value.trim()) {
-      setNote(STUB_KEY);
+      setNote(NEED_KEY);
       return;
     }
     setBusy(true);
@@ -330,7 +336,7 @@ function PluginsPanel({
     const files = list ? Array.from(list) : [];
     if (fileRef.current) fileRef.current.value = "";
     if (!files.length) {
-      setNote(STUB_FILE);
+      setNote(NEED_FILE);
       return;
     }
     const body = new FormData();
@@ -351,7 +357,7 @@ function PluginsPanel({
     const label = form.querySelector<HTMLInputElement>("input[name=label]")?.value.trim() ?? "";
     form.reset();
     if (!url) {
-      setNote(STUB_LINK);
+      setNote(NEED_LINK);
       return;
     }
     setBusy(true);
@@ -371,7 +377,7 @@ function PluginsPanel({
     const token = form.querySelector<HTMLInputElement>("input[type=password]")?.value ?? "";
     form.reset();
     if (!name || !url) {
-      setNote(STUB_MCP);
+      setNote(NEED_MCP);
       return;
     }
     setBusy(true);

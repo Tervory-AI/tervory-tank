@@ -1,4 +1,4 @@
-/** Drawn frame copy. Blanks stay blanks. These are not filed matters. */
+/** Civil areas and courts. Matters come from the workspace; this page starts empty. */
 
 export const AREAS = [
   "All areas (civil)",
@@ -74,24 +74,11 @@ export type SearchHit = {
   status?: string;
 };
 
-export const SEARCH_HITS: SearchHit[] = [
-  { kind: "Matters", title: "Case name v Case name", meta: "Matter · Area · Court · updated __ / __ / ____", status: "Status" },
-  { kind: "Matters", title: "Case name v Case name", meta: "Matter · Area · Court · updated __ / __ / ____", status: "Status" },
-  { kind: "Drafts", title: "Draft name · v__", meta: "Draft · Case name v Case name · __ / __ / ____", status: "Status" },
-  { kind: "Drafts", title: "Draft name · v__", meta: "Draft · Case name v Case name · __ / __ / ____", status: "Status" },
-  { kind: "Documents", title: "Document name.pdf", meta: "Document · __ pages · Annexure FA __" },
-  { kind: "Citations", title: "[____] ZA____ __ at para __", meta: "Saved citation · Case name v Case name" },
-  { kind: "Citations", title: "Act name No __ of ____, s __", meta: "Saved citation · Statute" },
-  { kind: "Review", title: "Item name", meta: "Review · Reviewer · __ / __ / ____", status: "Status" },
-];
+export const SEARCH_HITS: SearchHit[] = [];
 
-export const MATTER_ROWS = 5;
-export const REVIEW_ROWS = 2;
-export const DEADLINE_ROWS = [
-  { title: "Deadline name", meta: "__ / __ / ____ · Rule __" },
-  { title: "Deadline name", meta: "__ / __ / ____ · Rule __" },
-  { title: "Court date", meta: "__ / __ / ____ · Court" },
-] as const;
+export const MATTER_ROWS = 0;
+export const REVIEW_ROWS = 0;
+export const DEADLINE_ROWS: { title: string; meta: string }[] = [];
 
 /** Alert timings from the drawn Deadlines panel. These are not matters. */
 export const DEADLINE_ALERTS = [
@@ -101,7 +88,7 @@ export const DEADLINE_ALERTS = [
 ] as const;
 
 export const DEADLINE_NOTE =
-  "Rule periods are shown for design. A lawyer must confirm each rule card before deadlines go live.";
+  "A lawyer must confirm each rule card before deadlines go live.";
 
 export function hitsFor(kind: SearchKind, query: string): SearchHit[] {
   const needle = query.trim().toLowerCase();

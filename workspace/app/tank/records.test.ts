@@ -18,8 +18,8 @@ test("search stays inside Tank's own records", () => {
 });
 
 test("the vault line names tank.vault and no key", () => {
-  assert.match(VAULT_LINE, /tank\.vault is always on/);
-  assert.match(VAULT_LINE, /cannot read the platform keys/);
+  assert.match(VAULT_LINE, /Tank keeps the platform keys/);
+  assert.match(VAULT_LINE, /No agent can read another agent's vault or the platform keys/);
   assert.match(SQUAD_LINE, /another squad's vault/);
   assert.equal(/sk-|BEGIN |eyJ/.test(VAULT_LINE + SQUAD_LINE), false);
   for (const record of TANK_RECORDS) {
@@ -49,5 +49,5 @@ test("Ask Tank hides a key and refuses to pass one through", () => {
   const grounded = groundAsk([{ role: "user", content: leaked }]);
   assert.equal(grounded[0]?.content.includes("sk-"), false);
   assert.match(grounded[0]?.content ?? "", /another squad's vault/);
-  assert.match(grounded[0]?.content ?? "", /tank\.vault is always on/);
+  assert.match(grounded[0]?.content ?? "", /Tank keeps the platform keys/);
 });

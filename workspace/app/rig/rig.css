@@ -146,8 +146,11 @@ main:has(.rig) {
 
 .rig-mark {
   display: block;
-  width: 100%;
-  height: auto;
+  width: auto;
+  height: 48px;
+  max-width: 100%;
+  object-fit: contain;
+  object-position: left center;
   flex: none;
 }
 
@@ -881,6 +884,7 @@ main:has(.rig) {
     padding: 24px 20px 40px;
   }
   .groups { display: none; }
+  .sheet { max-width: 100%; overflow-x: auto; }
   .group { padding: 18px 0; border-top: 1px solid var(--line); }
   .group h3 { margin: 0 0 8px; font-size: 22px; display: flex; gap: 8px; align-items: center; }
   .file-card { padding: 12px 0; border-top: 1px solid var(--line); }

@@ -128,8 +128,9 @@ main:has(.tiger) {
 
 .tiger .panel-top img {
   display: block;
-  width: 100%;
-  height: auto;
+  width: auto;
+  height: 48px;
+  max-width: 100%;
   object-fit: contain;
   object-position: left center;
 }
@@ -286,6 +287,7 @@ main:has(.tiger) {
 .tiger .title-row { display: flex; align-items: center; gap: 10px; }
 .tiger .block h2 { margin: 0; font-size: 26px; }
 .tiger .intro { margin: -14px 0 0; color: var(--muted); font-size: 14px; line-height: 21px; }
+.tiger .empty { margin: 0; color: var(--body); font-size: 15px; line-height: 1.5; }
 .tiger .group { margin: 4px 0 0; font-size: 15px; font-weight: 600; font-family: var(--font-inter), Inter, sans-serif; }
 
 .tiger .table-wrap {
