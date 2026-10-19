@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { SiteFooter } from "./footer";
 import { SiteNav } from "./nav";
 import { ReleaseForm } from "./release-form";
-import { homeDescription } from "../lib/site";
+import { homeDescription, homeTitle } from "../lib/site";
 
 export const metadata: Metadata = {
   alternates: { canonical: "/" },
@@ -12,63 +12,72 @@ const products = [
   {
     name: "Base",
     mark: "/brand/base-on-light.png",
-    width: 124,
-    body: "Finds, cleans and enriches data. A list of names comes back as people and companies you can contact, each field with a source.",
+    width: 2323,
+    height: 601,
+    body: "Turns a raw list into verified businesses: websites, contacts and licences, each with a source.",
   },
   {
     name: "Tiger",
     mark: "/brand/tiger-on-light.png",
-    width: 104,
-    body: "Watches prices and competitors, and says when a rival moves.",
+    width: 2607,
+    height: 801,
+    body: "Watches prices and competitors, and tells you the moment a rival moves.",
   },
   {
     name: "Market Lab",
     mark: "/brand/market-lab-on-light.png",
-    width: 194,
-    body: "Market research. Sizing, segments, demand, and the source behind a number.",
+    width: 3685,
+    height: 608,
+    body: "Market research with every number sourced: demand, gaps, and shifts before they show.",
   },
   {
     name: "Rig",
     mark: "/brand/rig-on-light.png",
-    width: 58,
-    body: "Finds a product in a shop's catalogue.",
+    width: 1173,
+    height: 651,
+    body: "Finds the right product, and every part that fits it, in a retailer's own catalogue.",
   },
   {
     name: "Tisan",
     mark: "/brand/tisan-on-light.png",
-    width: 128,
-    body: "Builds a website or an app from a short brief.",
+    width: 2806,
+    height: 701,
+    body: "Builds websites and apps from a short brief, tested before they go live.",
   },
   {
     name: "Radix",
     mark: "/brand/radix-on-light.png",
-    width: 93,
-    body: "Reviews what a system exposes, what it stores, and who can reach it.",
+    width: 1893,
+    height: 651,
+    body: "Finds what your systems and sites expose, before someone else does.",
   },
   {
     name: "Zenas",
     mark: "/brand/zenas-on-light.png",
-    width: 90,
-    body: "Reads contracts, policies and terms, and flags risk.",
+    width: 1970,
+    height: 701,
+    body: "Legal research and drafting for US and South African business law, reviewed by licensed lawyers.",
   },
   {
     name: "Skala",
     mark: "/brand/skala-on-light.png",
-    width: 134,
-    body: "Keeps the skills each specialist uses.",
+    width: 3778,
+    height: 901,
+    body: "The skills library. Every skill is tested before a specialist may use it.",
   },
   {
     name: "Tank",
     mark: "/brand/tank-on-light.png",
-    width: 131,
-    body: "The only path to a model. An answer names the model that did the work.",
+    width: 2466,
+    height: 601,
+    body: "The engine underneath. It routes every task to the best-value model and keeps the receipts.",
   },
 ];
 
 const structured = {
   "@context": "https://schema.org",
   "@type": "WebPage",
-  name: "Tervory AI",
+  name: homeTitle,
   url: "https://tervory.com/",
   description: homeDescription,
 };
@@ -83,61 +92,85 @@ export default function HomePage() {
       <SiteNav />
       <main id="main">
         <section className="hero" id="top">
-          <p className="eyebrow">Being built</p>
-          <h1>One window for the work.</h1>
+          <p className="eyebrow">Tervory AI · In build</p>
+          <h1>Specialist AI for the work that runs a business.</h1>
           <p className="lead">
-            Tervory is one place to ask for data, research, price checks, legal reviews, or a website. Specialists do
-            the work. An answer shows which model did it.
+            Tervory is a squad of specialist AI agents for data, pricing, markets, legal, security and the web. Ask in
+            plain language. The right specialist does the work, shows its sources, and tells you which model ran it and
+            what it cost.
           </p>
-          <p className="closed">Nothing is open yet.</p>
           <ReleaseForm />
+          <p className="note">We are opening to a small group of businesses first.</p>
         </section>
         <section className="band" id="work">
           <div className="section-head">
-            <p className="eyebrow">The work</p>
-            <h2>What is being built.</h2>
+            <h2>How it works</h2>
           </div>
           <div className="steps">
             <article className="step">
-              <p className="step-no">01</p>
-              <h3>Ask</h3>
-              <p>You describe the work in plain language.</p>
+              <h3>Ask.</h3>
+              <p>Describe the job the way you would brief a colleague.</p>
             </article>
             <article className="step">
-              <p className="step-no">02</p>
-              <h3>Routed</h3>
-              <p>Tank sends it to the specialist for that job.</p>
+              <h3>Routed.</h3>
+              <p>Tank sends it to the specialist built for that job, on the best-value route that still gets it right.</p>
             </article>
             <article className="step">
-              <p className="step-no">03</p>
-              <h3>Answer</h3>
-              <p>The answer shows which model did the work.</p>
+              <h3>Answered.</h3>
+              <p>Every answer comes with its sources, the model that produced it, and the cost.</p>
             </article>
           </div>
         </section>
-        <section className="section" id="research">
+        <section className="section" id="cheaper">
           <div className="section-head">
-            <p className="eyebrow">Research</p>
-            <h2>Research underway.</h2>
+            <h2>It gets cheaper the more it works</h2>
           </div>
-          <div className="research">
-            <p>Skills are tested before a specialist uses them.</p>
-            <p>A cheaper model has to agree before it takes over a task.</p>
-          </div>
+          <p className="prose">
+            Most AI charges the same for the hundredth question as the first. Tervory learns. When a cheaper model, or
+            plain code, proves it gives the same answer, it takes over the task, automatically and only after it has
+            been tested. The work stays right. The cost keeps falling.
+          </p>
         </section>
         <section className="section" id="products">
           <div className="section-head">
-            <p className="eyebrow">Products</p>
-            <h2>Nine products. None of them is open yet.</h2>
+            <h2>The squad</h2>
+            <p className="sub">Nine specialists. Each one built for a single job.</p>
           </div>
           <div className="products">
             {products.map((product) => (
               <article className="product" key={product.name}>
-                <img className="wordmark" src={product.mark} width={product.width} height={32} alt={product.name} />
+                <img
+                  className="wordmark"
+                  src={product.mark}
+                  width={product.width}
+                  height={product.height}
+                  alt={product.name}
+                  loading="lazy"
+                  decoding="async"
+                />
                 <p>{product.body}</p>
               </article>
             ))}
           </div>
+        </section>
+        <section className="band" id="proof">
+          <div className="section-head">
+            <h2>Measured, not promised</h2>
+          </div>
+          <p className="prose">
+            Every skill passes a test set before it goes live. A cheaper route only takes over once it matches the
+            results. If we cannot measure it, we do not claim it.
+          </p>
+        </section>
+        <section className="section" id="early">
+          <div className="section-head">
+            <h2>Be first in</h2>
+          </div>
+          <p className="prose">
+            We are opening Tervory to a small group of businesses first. Leave your email and we will tell you when your
+            seat is ready.
+          </p>
+          <ReleaseForm />
         </section>
       </main>
       <SiteFooter />

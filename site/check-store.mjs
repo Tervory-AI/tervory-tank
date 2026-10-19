@@ -96,7 +96,8 @@ try {
   const home = await fetch(`http://127.0.0.1:${port}/`);
   const homeText = await home.text();
   assert(home.status === 200, "homepage was not served");
-  assert(homeText.includes("Email me when we release."), "served homepage is missing the field");
+  assert(homeText.includes("Get early access"), "served homepage is missing the field");
+  assert(homeText.includes("Join the list"), "served homepage is missing the join button");
 
   const hidden = await fetch(`http://127.0.0.1:${port}/internal/ammosync.html`);
   assert(hidden.headers.get("x-robots-tag") === "noindex, nofollow", "/internal is missing noindex");

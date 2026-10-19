@@ -27,21 +27,57 @@ const visible = home.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<!--[\s
 if (visible.includes("$")) throw new Error("Homepage contains a price");
 if (existsSync("out/sign-up.html")) throw new Error("Public sign-up page is still exported");
 
-if (!home.includes("Email me when we release.")) {
-  throw new Error("Homepage is missing the release field");
+const flat = home.replace(/\s+/g, " ");
+const retired = ["one", "window"].join(" ");
+if (flat.toLowerCase().includes(retired)) throw new Error("Homepage contains a retired phrase");
+
+const required = [
+  "Get early access",
+  ">Join the list<",
+  "Tervory AI · In build",
+  "Specialist AI for the work that runs a business.",
+  "Tervory is a squad of specialist AI agents for data, pricing, markets, legal, security and the web.",
+  "How it works",
+  ">Ask.<",
+  "Describe the job the way you would brief a colleague.",
+  ">Routed.<",
+  "Tank sends it to the specialist built for that job, on the best-value route that still gets it right.",
+  ">Answered.<",
+  "Every answer comes with its sources, the model that produced it, and the cost.",
+  "It gets cheaper the more it works",
+  "Most AI charges the same for the hundredth question as the first.",
+  "The work stays right. The cost keeps falling.",
+  "The squad",
+  "Nine specialists. Each one built for a single job.",
+  "Turns a raw list into verified businesses: websites, contacts and licences, each with a source.",
+  "Watches prices and competitors, and tells you the moment a rival moves.",
+  "Market research with every number sourced: demand, gaps, and shifts before they show.",
+  "Finds the right product, and every part that fits it, in a retailer's own catalogue.",
+  "Builds websites and apps from a short brief, tested before they go live.",
+  "Finds what your systems and sites expose, before someone else does.",
+  "Legal research and drafting for US and South African business law, reviewed by licensed lawyers.",
+  "The skills library. Every skill is tested before a specialist may use it.",
+  "The engine underneath. It routes every task to the best-value model and keeps the receipts.",
+  "Measured, not promised",
+  "Every skill passes a test set before it goes live.",
+  "If we cannot measure it, we do not claim it.",
+  "Be first in",
+  "Leave your email and we will tell you when your seat is ready.",
+  "Every answer shows its sources, the model that ran it, and what it cost.",
+  "Tervory AI: specialist AI for the work that runs a business",
+  "A squad of specialist AI agents for data, pricing, markets, legal, security and the web. Every answer shows its sources, the model that ran it, and what it cost.",
+];
+for (const line of required) {
+  if (!flat.includes(line)) throw new Error(`Homepage is missing copy: ${line}`);
+}
+const retiredCopy = ["Email me when we release.", ">Send<", "Nothing is open yet."];
+for (const line of retiredCopy) {
+  if (flat.includes(line)) throw new Error(`Homepage still contains old copy: ${line}`);
 }
 if (!home.includes('action="/api/release-notice"')) {
   throw new Error("Release form does not post to the store");
 }
-if (!home.includes(">Send<")) throw new Error("Homepage is missing the send button");
-if (!home.includes("Nothing is open yet.")) throw new Error("Homepage does not say the work is still closed");
 if (home.includes('class="card"')) throw new Error("Products are still shown in cards");
-if (!home.includes("Skills are tested before a specialist uses them.")) {
-  throw new Error("Homepage is missing the research line about skills");
-}
-if (!home.includes("A cheaper model has to agree before it takes over a task.")) {
-  throw new Error("Homepage is missing the research line about a cheaper model");
-}
 for (const word of ["Brave", "Hawaii", "internal batch"]) {
   if (home.includes(word)) throw new Error(`Homepage contains ${word}`);
 }

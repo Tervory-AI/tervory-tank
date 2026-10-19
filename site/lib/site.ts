@@ -1,4 +1,4 @@
-export const homeTitle = "Tervory AI — One window for the work.";
+export const homeTitle = "Tervory AI: specialist AI for the work that runs a business";
 
 export const homeDescription =
-  "Tervory is one place to ask for data, research, price checks, legal reviews, or a website. Specialists do the work. An answer shows which model did it. Nothing is open yet.";
+  "A squad of specialist AI agents for data, pricing, markets, legal, security and the web. Every answer shows its sources, the model that ran it, and what it cost.";
