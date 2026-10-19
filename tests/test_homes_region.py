@@ -23,9 +23,29 @@ def test_other_region_tank_is_https_with_its_own_key_and_forced_home() -> None:
     assert "withHome(path, init, region, true)" in TANK_TS
 
 
+# Z7 founder feeds, scores, and the review switch talk to the other box.
+# They send a source name or on/off. Matter routes stay on this box.
+FOUNDER_BOX = {
+    "feeds/region/route.ts",
+    "feeds/region/load/route.ts",
+    "selftest/route.ts",
+    "review-switch/route.ts",
+}
+
+
 def test_matter_routes_stay_on_this_regions_tank() -> None:
     api = ROOT / "workspace" / "app" / "api" / "zenas"
     for route in api.rglob("route.ts"):
-        if route.parent.name == "tenants":
+        rel = route.relative_to(api).as_posix()
+        if route.parent.name == "tenants" or rel in FOUNDER_BOX:
             continue
         assert "zenasIn(" not in route.read_text(encoding="utf-8"), route
+
+
+def test_founder_box_routes_carry_no_matter() -> None:
+    api = ROOT / "workspace" / "app" / "api" / "zenas"
+    for rel in FOUNDER_BOX:
+        text = (api / rel).read_text(encoding="utf-8")
+        assert "zenasIn(" in text
+        assert "matter_id" not in text
+        assert "tenant_id" not in text

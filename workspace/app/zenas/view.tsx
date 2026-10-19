@@ -79,7 +79,15 @@ function RiskRow() {
   );
 }
 
-export function ZenasView({ plugins, workspaceName }: { plugins: PluginPanel; workspaceName: string | null }) {
+export function ZenasView({
+  plugins,
+  workspaceName,
+  founderLine,
+}: {
+  plugins: PluginPanel;
+  workspaceName: string | null;
+  founderLine?: string | null;
+}) {
   const accountName = workspaceName?.trim() || "Account name";
   const initial = accountName.slice(0, 1).toUpperCase();
   const searchRef = useRef<HTMLInputElement>(null);
@@ -243,6 +251,11 @@ export function ZenasView({ plugins, workspaceName }: { plugins: PluginPanel; wo
             <span className="zn-avatar" aria-hidden="true">{initial}</span>
             {accountName}
           </p>
+          {founderLine ? (
+            <Link href="/zenas/feeds" onClick={() => setMenu(false)}>
+              {founderLine}
+            </Link>
+          ) : null}
           {TOP_LINKS.map((link) => (
             <Link key={link.label} href={link.href} onClick={() => setMenu(false)}>
               {link.label}
