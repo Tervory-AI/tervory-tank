@@ -256,30 +256,104 @@ _agent_keys_synced = False
 
 
 HOMES_PRINCIPAL = "founder-homes"
-_HOMES_DENIED = "This homes key can only set a za tenant's home."
+_HOMES_DENIED = "This homes key cannot call that."
+_HOMES_LOAD = re.compile(r"^/v1/zenas/pool/sources/([A-Za-z0-9._-]{1,80})/load$")
+_HOMES_FEEDS = frozenset({"/v1/zenas/selftest", "/v1/zenas/review-switch"})
 
 
-async def _homes_key_scope(request: Request) -> None:
-    """TANK_HOMES_KEY (ZA Tank only) may call POST /v1/zenas/tenants with home za, nothing else.
+def _explicit_home_is_za(query_home: str | None, parsed: dict | None) -> bool:
+    """True only when every stated home is za and at least one home is stated."""
+    if query_home is not None and query_home != ZA_REGION:
+        return False
+    body_home = None
+    if isinstance(parsed, dict) and "home_region" in parsed:
+        body_home = parsed.get("home_region")
+        if body_home != ZA_REGION:
+            return False
+    return query_home == ZA_REGION or body_home == ZA_REGION
 
-    The Boston Workspace holds this key to set ZA tenant homes. It never holds
-    the ZA TANK_API_KEY. Anything else with this key is refused before a route runs.
-    """
-    if box_region() != "za":
-        raise HTTPException(status_code=403, detail=_HOMES_DENIED)
-    if request.method != "POST" or request.url.path.rstrip("/") != "/v1/zenas/tenants":
-        raise HTTPException(status_code=403, detail=_HOMES_DENIED)
+
+async def _homes_tenant_body(request: Request) -> None:
+    """POST /v1/zenas/tenants may name a tenant and home_region=za, nothing else."""
     query_home = request.query_params.get("home_region")
-    if query_home is not None and query_home != "za":
+    if query_home is not None and query_home != ZA_REGION:
         raise HTTPException(status_code=403, detail=_HOMES_DENIED)
     try:
         parsed = json.loads(await request.body() or b"null")
     except (json.JSONDecodeError, UnicodeDecodeError):
         parsed = None
-    if not isinstance(parsed, dict) or parsed.get("home_region") != "za":
+    if not isinstance(parsed, dict) or parsed.get("home_region") != ZA_REGION:
         raise HTTPException(status_code=403, detail=_HOMES_DENIED)
     if set(parsed) - {"tenant_id", "home_region"}:
         raise HTTPException(status_code=403, detail=_HOMES_DENIED)
+
+
+async def _homes_founder_feed(request: Request, path: str) -> bool:
+    """ZA founder feeds: status, one load, self-test, review switch. Home must be za.
+
+    Returns False when the path is not one of those routes. A matching route
+    with the wrong home, a body, or extra fields is refused here. Allowed
+    bodies are the fields those routes already take (source, review). They
+    carry no document, matter, or client text.
+    """
+    method = request.method
+    load = _HOMES_LOAD.fullmatch(path)
+    allowed = (
+        (method == "GET" and path == "/v1/zenas/pool/status")
+        or (method == "POST" and load is not None)
+        or (method in {"GET", "POST"} and path in _HOMES_FEEDS)
+    )
+    if not allowed:
+        return False
+    raw = await request.body()
+    parsed: dict | None = None
+    if method == "GET":
+        if raw:
+            raise HTTPException(status_code=403, detail=_HOMES_DENIED)
+    elif raw:
+        try:
+            loaded = json.loads(raw)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            raise HTTPException(status_code=403, detail=_HOMES_DENIED) from None
+        if not isinstance(loaded, dict):
+            raise HTTPException(status_code=403, detail=_HOMES_DENIED)
+        parsed = loaded
+    if path == "/v1/zenas/selftest":
+        if parsed and set(parsed) - {"home_region"}:
+            raise HTTPException(status_code=403, detail=_HOMES_DENIED)
+    elif path == "/v1/zenas/review-switch":
+        if method == "POST" and (
+            not parsed or set(parsed) - {"home_region", "review"} or parsed.get("review") not in {"on", "off"}
+        ):
+            raise HTTPException(status_code=403, detail=_HOMES_DENIED)
+    elif load is not None and parsed:
+        if set(parsed) - {"home_region", "source"}:
+            raise HTTPException(status_code=403, detail=_HOMES_DENIED)
+        if "source" in parsed and parsed.get("source") != load.group(1):
+            raise HTTPException(status_code=403, detail=_HOMES_DENIED)
+    if not _explicit_home_is_za(request.query_params.get("home_region"), parsed):
+        raise HTTPException(status_code=403, detail=_HOMES_DENIED)
+    return True
+
+
+async def _homes_key_scope(request: Request) -> None:
+    """TANK_HOMES_KEY on the ZA Tank only.
+
+    It may set a za tenant's home. It may also read pool status, load one
+    source, read or run the self-test, and read or set the review switch,
+    each only with home_region=za. Those routes return names, counts, dates,
+    errors and scores. Documents, matters and client data stay refused.
+    The Boston Workspace holds this key. It never holds the ZA TANK_API_KEY.
+    """
+    if box_region() != ZA_REGION:
+        raise HTTPException(status_code=403, detail=_HOMES_DENIED)
+    path = request.url.path.rstrip("/")
+    if request.method == "POST" and path == "/v1/zenas/tenants":
+        await _homes_tenant_body(request)
+        return
+    if await _homes_founder_feed(request, path):
+        return
+    raise HTTPException(status_code=403, detail=_HOMES_DENIED)
 
 
 async def require_key(request: Request, x_tank_key: str = Header(default="")) -> str | None:
@@ -1940,7 +2014,7 @@ async def base_proxy(path: str, request: Request) -> Response:
 
 _LOCAL_ZENAS_HOSTS = frozenset({"agent-zenas", "localhost", "127.0.0.1"})
 _ZENAS_PATH = re.compile(
-    r"^(consents|matters|pool|pool/status|health|review|rule-cards|worked|matches|training-pairs|drafts|tenants)$"
+    r"^(consents|matters|pool|pool/status|health|review|selftest|review-switch|rule-cards|worked|matches|training-pairs|drafts|tenants)$"
     r"|^(matters|documents|rule-cards|worked)/[0-9a-fA-F-]{36}$"
     r"|^matters/[0-9a-fA-F-]{36}/documents$"
     r"|^documents/[0-9a-fA-F-]{36}/reviews$"

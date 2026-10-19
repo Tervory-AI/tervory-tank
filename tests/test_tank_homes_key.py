@@ -1,6 +1,8 @@
-"""TANK_HOMES_KEY: the ZA Tank lets it set a za tenant's home and nothing else.
+"""TANK_HOMES_KEY: the ZA Tank lets it set a za tenant's home, and call the founder feeds.
 
-Network mocked: the Zenas room is a fake. No database.
+Pool status, one source load, self-test, and the review switch are allowed only
+with home_region=za. They return names, counts, dates, errors and scores.
+Everything else is refused. Network mocked: the Zenas room is a fake. No database.
 """
 from __future__ import annotations
 
@@ -83,11 +85,76 @@ def test_homes_key_sets_a_za_home_through_the_proxy(za: _Room) -> None:
 
 
 @pytest.mark.parametrize(
+    ("method", "proxy_path", "body", "query", "upstream"),
+    [
+        ("GET", "pool/status", b"", b"home_region=za", "/pool/status"),
+        (
+            "POST",
+            "pool/sources/ecfr/load",
+            json.dumps({"source": "ecfr", "home_region": "za"}).encode(),
+            b"home_region=za",
+            "/pool/sources/ecfr/load",
+        ),
+        (
+            "POST",
+            "pool/sources/uncitral-cisg/load",
+            json.dumps({"home_region": "za"}).encode(),
+            b"",
+            "/pool/sources/uncitral-cisg/load",
+        ),
+        ("GET", "selftest", b"", b"home_region=za", "/selftest"),
+        ("POST", "selftest", b"", b"home_region=za", "/selftest"),
+        ("POST", "selftest", json.dumps({"home_region": "za"}).encode(), b"", "/selftest"),
+        ("GET", "review-switch", b"", b"home_region=za", "/review-switch"),
+        (
+            "POST",
+            "review-switch",
+            json.dumps({"home_region": "za", "review": "off"}).encode(),
+            b"home_region=za",
+            "/review-switch",
+        ),
+        (
+            "POST",
+            "review-switch",
+            json.dumps({"home_region": "za", "review": "on"}).encode(),
+            b"",
+            "/review-switch",
+        ),
+    ],
+)
+def test_homes_key_may_call_za_founder_feeds(
+    za: _Room, method: str, proxy_path: str, body: bytes, query: bytes, upstream: str
+) -> None:
+    path = "/v1/zenas/" + proxy_path
+    assert _auth(method, path, body, query) == main.HOMES_PRINCIPAL
+    resp = asyncio.run(main.zenas_proxy(proxy_path, _request(method, path, body, query)))
+    assert resp.status_code == 200
+    assert za.calls == [f"{method} http://agent-zenas:8000{upstream}"]
+
+
+@pytest.mark.parametrize(
     ("method", "path", "body", "query"),
     [
         ("GET", "/v1/zenas/tenants", b"", b""),
         ("POST", "/v1/zenas/matters", _tenant_body(), b""),
-        ("GET", "/v1/zenas/pool/status", b"", b"home_region=za"),
+        ("GET", "/v1/zenas/pool/status", b"", b""),
+        ("GET", "/v1/zenas/pool/status", b"", b"home_region=us-east"),
+        ("GET", "/v1/zenas/pool/status", b'{"home_region":"za"}', b"home_region=za"),
+        ("POST", "/v1/zenas/pool/sources/ecfr/load", json.dumps({"source": "ecfr", "home_region": "us-east"}).encode(), b""),
+        ("POST", "/v1/zenas/pool/sources/ecfr/load", json.dumps({"home_region": "za", "text": "a client memo"}).encode(), b""),
+        ("POST", "/v1/zenas/pool/sources/ecfr/load", json.dumps({"source": "other", "home_region": "za"}).encode(), b""),
+        ("POST", "/v1/zenas/pool/sources/not a source/load", json.dumps({"home_region": "za"}).encode(), b""),
+        ("GET", "/v1/zenas/pool/sources/ecfr/load", b"", b"home_region=za"),
+        ("GET", "/v1/zenas/selftest", b"", b""),
+        ("GET", "/v1/zenas/selftest", b"", b"home_region=us-east"),
+        ("POST", "/v1/zenas/selftest", b'{"home_region":"us-east"}', b""),
+        ("POST", "/v1/zenas/selftest", b'{"home_region":"za","matter":"NDA"}', b"home_region=za"),
+        ("PUT", "/v1/zenas/selftest", b"", b"home_region=za"),
+        ("GET", "/v1/zenas/review-switch", b"", b"home_region=us-east"),
+        ("POST", "/v1/zenas/review-switch", b'{"home_region":"za","review":"on","note":"client"}', b""),
+        ("POST", "/v1/zenas/review-switch", b'{"home_region":"us-east","review":"off"}', b""),
+        ("POST", "/v1/zenas/review-switch", b'{"home_region":"za"}', b"home_region=za"),
+        ("GET", "/v1/zenas/matters", b"", b"home_region=za"),
         ("POST", "/v1/route", b"{}", b""),
         ("GET", "/health", b"", b""),
         ("POST", "/v1/zenas/tenants", _tenant_body("us-east"), b""),
