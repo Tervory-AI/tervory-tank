@@ -10,10 +10,6 @@ import { SquadLinks } from "../squad-links";
 
 type AskTurn = { who: "You"; text: string } | { who: "Tiger"; text: string; sources: string[] };
 
-function Tag() {
-  return <span className="tag">Example</span>;
-}
-
 function SearchIcon() {
   return (
     <svg className="search-icon" viewBox="0 0 16 16" aria-hidden="true">
@@ -162,17 +158,17 @@ export function TigerApp({
         {help ? <p className="notice">Tiger checks public product pages and tells you when a price or stock changes. It never logs in, and it does not guess a price it could not read.</p> : null}
         {checkedNote ? <p className="notice">{checkedNote}</p> : null}
 
-        {hit ? <Results hit={hit} example={data.example} /> : null}
+        {hit ? <Results hit={hit} /> : null}
         {!hit && section === "overview" ? <Overview data={visible} onWatch={() => show("watch")} onAlerts={() => show("alerts")} /> : null}
         {!hit && section === "ask" ? (
-          <Ask thread={thread} draft={askDraft} setDraft={setAskDraft} onSend={sendAsk} example={data.example} sendClass={addOpen ? "line" : "primary"} />
+          <Ask thread={thread} draft={askDraft} setDraft={setAskDraft} onSend={sendAsk} sendClass={addOpen ? "line" : "primary"} />
         ) : null}
         {!hit && section === "alerts" ? <Alerts rows={data.alerts} example={data.example} /> : null}
         {!hit && section === "watch" ? (
-          <Watch rows={products} example={data.example} note={data.listNote} onHide={(id) => setHidden((current) => [...current, id])} />
+          <Watch rows={products} note={data.listNote} onHide={(id) => setHidden((current) => [...current, id])} />
         ) : null}
         {!hit && section === "unread" ? (
-          <Unread rows={data.unread} example={data.example} onCheck={() => setCheckedNote("Tiger tries this page again at its next check. Nothing was guessed.")} />
+          <Unread rows={data.unread} onCheck={() => setCheckedNote("Tiger tries this page again at its next check. Nothing was guessed.")} />
         ) : null}
 
         <footer className="foot">
@@ -199,7 +195,6 @@ function Overview({ data, onWatch, onAlerts }: { data: TigerData; onWatch: () =>
       <section className="block">
         <div className="title-row">
           <h2>Latest reads</h2>
-          {data.example ? <Tag /> : null}
         </div>
         <p className="intro">The price and stock Tiger read on each watched page, next to that product’s add-to-cart button.</p>
         {data.products.length === 0 ? <p className="empty">No products watched yet.</p> : (
@@ -250,7 +245,6 @@ function Overview({ data, onWatch, onAlerts }: { data: TigerData; onWatch: () =>
       <section className="block">
         <div className="title-row">
           <h2>Recent alerts</h2>
-          {data.example ? <Tag /> : null}
         </div>
         <p className="intro">Only real changes. A page that can’t be read never sends an alert.</p>
         {recent.length === 0 ? <p className="empty">No alerts yet.</p> : (
@@ -291,21 +285,18 @@ function Ask({
   draft,
   setDraft,
   onSend,
-  example,
   sendClass,
 }: {
   thread: AskTurn[];
   draft: string;
   setDraft: (value: string) => void;
   onSend: () => void;
-  example: boolean;
   sendClass: string;
 }) {
   return (
     <section className="block">
       <div className="title-row">
         <h2>Ask Tiger</h2>
-        {example ? <Tag /> : null}
       </div>
       <p className="intro">Ask about your watched products, prices and alerts. Every answer lists its sources.</p>
       <div className="thread">
@@ -345,7 +336,6 @@ function Alerts({ rows, example }: { rows: AlertRow[]; example: boolean }) {
     <section className="block">
       <div className="title-row">
         <h2>Alerts</h2>
-        {example ? <Tag /> : null}
       </div>
       <p className="intro">Real price and stock changes. Tiger only alerts when it read the page clearly. A page that can’t be read never sends an alert.</p>
       {rows.length === 0 ? <p className="empty">No alerts yet.</p> : null}
@@ -385,12 +375,11 @@ function Alerts({ rows, example }: { rows: AlertRow[]; example: boolean }) {
   );
 }
 
-function Watch({ rows, example, note, onHide }: { rows: ProductRow[]; example: boolean; note: string | null; onHide: (id: string) => void }) {
+function Watch({ rows, note, onHide }: { rows: ProductRow[]; note: string | null; onHide: (id: string) => void }) {
   return (
     <section className="block">
       <div className="title-row">
         <h2>Watch list</h2>
-        {example ? <Tag /> : null}
       </div>
       <p className="intro">Product pages Tiger checks. Add a product with the red button at the top. Remove a page any time.</p>
       {rows.length === 0 ? <p className="empty">No products watched yet.</p> : null}
@@ -428,12 +417,11 @@ function Watch({ rows, example, note, onHide }: { rows: ProductRow[]; example: b
   );
 }
 
-function Unread({ rows, example, onCheck }: { rows: UnreadRow[]; example: boolean; onCheck: () => void }) {
+function Unread({ rows, onCheck }: { rows: UnreadRow[]; onCheck: () => void }) {
   return (
     <section className="block">
       <div className="title-row">
         <h2>Can&apos;t read</h2>
-        {example ? <Tag /> : null}
       </div>
       <p className="intro">Pages Tiger could not read clearly. It records them and skips them. It never guesses a price or stock.</p>
       {rows.length === 0 ? <p className="empty">No pages Tiger could not read.</p> : null}
@@ -461,12 +449,11 @@ function Unread({ rows, example, onCheck }: { rows: UnreadRow[]; example: boolea
   );
 }
 
-function Results({ hit, example }: { hit: NonNullable<ReturnType<typeof searchTiger>>; example: boolean }) {
+function Results({ hit }: { hit: NonNullable<ReturnType<typeof searchTiger>> }) {
   return (
     <section className="block">
       <div className="title-row">
         <h2>Results for “{hit.query}”</h2>
-        {example ? <Tag /> : null}
       </div>
       <p className="intro">{hit.total} matches in your watched products, reads and alerts.</p>
       <h3 className="group">Watched products</h3>

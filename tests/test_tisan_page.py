@@ -49,6 +49,16 @@ def test_panel_stays_fixed_and_only_the_body_scrolls():
     assert "bottom: 72px" not in css
 
 
+def test_chat_box_stays_in_the_content_area():
+    css = (PAGE / "tisan.css").read_text(encoding="utf-8")
+    composer = css.split(".tisan .composer {", 1)[1].split("}", 1)[0]
+    assert "position: static" in composer
+    assert "left: auto" in composer
+    assert "right: auto" in composer
+    assert "bottom: auto" in composer
+    assert "width: 100%" in composer
+
+
 def test_plugins_is_the_tab_and_sources_are_only_under_answers():
     source = _source()
     assert "Plugins" in source
