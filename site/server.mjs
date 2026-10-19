@@ -1,7 +1,8 @@
-import { createReadStream, existsSync, statSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { extname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { brotliCompressSync, constants as zlibConstants, gzipSync } from "node:zlib";
 import { storeAddress } from "./release-store.mjs";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
@@ -53,6 +54,48 @@ function pagePath(urlPath) {
     if (stat.isFile()) return path;
   }
   return null;
+}
+
+const compressible = new Set([".html", ".css", ".js", ".mjs", ".json", ".svg", ".txt", ".xml"]);
+
+function encodingQuality(header) {
+  const scores = new Map();
+  for (const part of String(header || "").split(",")) {
+    const [rawName, ...params] = part.trim().split(";");
+    const name = rawName.trim().toLowerCase();
+    if (!name || name === "identity") continue;
+    let quality = 1;
+    for (const param of params) {
+      const [key, value] = param.trim().split("=");
+      if (key.trim() === "q") quality = Number(value);
+    }
+    if (!Number.isFinite(quality) || quality <= 0) continue;
+    const names = name === "*" ? ["br", "gzip"] : [name];
+    for (const candidate of names) {
+      if (candidate !== "br" && candidate !== "gzip") continue;
+      const previous = scores.get(candidate);
+      if (previous == null || quality > previous) scores.set(candidate, quality);
+    }
+  }
+  return scores;
+}
+
+function chosenEncoding(header) {
+  const scores = encodingQuality(header);
+  const brotli = scores.get("br") || 0;
+  const gzip = scores.get("gzip") || 0;
+  if (brotli <= 0 && gzip <= 0) return null;
+  if (brotli === gzip) return "br";
+  return brotli > gzip ? "br" : "gzip";
+}
+
+function compressBody(body, encoding) {
+  if (encoding === "br") {
+    return brotliCompressSync(body, {
+      params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 5 },
+    });
+  }
+  return gzipSync(body, { level: 6 });
 }
 
 function wantsHtml(req) {
@@ -166,13 +209,29 @@ const server = createServer(async (req, res) => {
       console.log(`${req.method} ${url.pathname} 404`);
       return;
     }
-    const headers = { "content-type": types[extname(path)] || "application/octet-stream" };
+    const ext = extname(path);
+    const headers = { "content-type": types[ext] || "application/octet-stream" };
     if (url.pathname.startsWith("/internal")) headers["x-robots-tag"] = "noindex, nofollow";
-    res.writeHead(200, headers);
+    const text = compressible.has(ext);
+    if (text) headers.vary = "Accept-Encoding";
     if (req.method === "HEAD") {
+      res.writeHead(200, headers);
       res.end();
       return;
     }
+    const encoding = text ? chosenEncoding(req.headers["accept-encoding"]) : null;
+    if (encoding) {
+      const raw = readFileSync(path);
+      const zipped = compressBody(raw, encoding);
+      if (zipped.length < raw.length) {
+        headers["content-encoding"] = encoding;
+        headers["content-length"] = String(zipped.length);
+        res.writeHead(200, headers);
+        res.end(zipped);
+        return;
+      }
+    }
+    res.writeHead(200, headers);
     createReadStream(path).pipe(res);
   } catch {
     if (!res.headersSent) {

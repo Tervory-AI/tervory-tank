@@ -1,7 +1,9 @@
 import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { brotliDecompressSync, gunzipSync } from "node:zlib";
 import { storeAddress } from "./release-store.mjs";
 
 const dir = mkdtempSync(join(tmpdir(), "tervory-release-"));
@@ -9,6 +11,20 @@ const file = join(dir, "signups.jsonl");
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+function rawGet(portNumber, path, headers) {
+  return new Promise((resolveGet, reject) => {
+    const req = httpRequest({ hostname: "127.0.0.1", port: portNumber, path, method: "GET", headers }, (res) => {
+      const chunks = [];
+      res.on("data", (chunk) => chunks.push(chunk));
+      res.on("end", () =>
+        resolveGet({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks) }),
+      );
+    });
+    req.on("error", reject);
+    req.end();
+  });
 }
 
 const saved = await storeAddress(file, "  ada@example.com  ");
@@ -96,7 +112,37 @@ try {
   const home = await fetch(`http://127.0.0.1:${port}/`);
   const homeText = await home.text();
   assert(home.status === 200, "homepage was not served");
-  assert(homeText.includes("Email me when we release."), "served homepage is missing the field");
+  assert(homeText.includes("Get early access"), "served homepage is missing the field");
+  assert(homeText.includes("Join the list"), "served homepage is missing the join button");
+
+  const gzipped = await rawGet(port, "/", { "accept-encoding": "gzip" });
+  assert(gzipped.status === 200, "gzipped homepage was not served");
+  assert(gzipped.headers["content-encoding"] === "gzip", "a text page was not gzipped");
+  assert(String(gzipped.headers.vary || "").toLowerCase().includes("accept-encoding"), "Vary: Accept-Encoding is missing");
+  const gzipText = gunzipSync(gzipped.body).toString("utf8");
+  assert(gzipText.includes("Get early access"), "a gzipped homepage lost the form");
+
+  const brotli = await rawGet(port, "/", { "accept-encoding": "br" });
+  assert(brotli.headers["content-encoding"] === "br", "a text page was not brotli-compressed");
+  assert(brotliDecompressSync(brotli.body).toString("utf8").includes("Join the list"), "a brotli homepage lost the button");
+
+  const either = await rawGet(port, "/", { "accept-encoding": "br, gzip" });
+  assert(either.headers["content-encoding"] === "br", "the browser's brotli preference was ignored");
+  assert(String(either.headers.vary || "").toLowerCase().includes("accept-encoding"), "a text file omitted Vary");
+
+  const image = await rawGet(port, "/brand/base-on-light.png", { "accept-encoding": "br, gzip" });
+  assert(!image.headers["content-encoding"], "an image was compressed");
+  assert(image.body.subarray(0, 8).toString("hex") === "89504e470d0a1a0a", "image bytes were changed");
+
+  const savedAgain = await fetch(`http://127.0.0.1:${port}/api/release-notice`, {
+    method: "POST",
+    headers: { accept: "application/json", "content-type": "application/json", "accept-encoding": "gzip, br" },
+    body: JSON.stringify({ email: "ada.compressed@example.com" }),
+  });
+  const savedBody = await savedAgain.json();
+  assert(savedAgain.status === 200 && savedBody.stored === true, "the form did not save an email after compression");
+  assert(readFileSync(file, "utf8").includes('"email":"ada.compressed@example.com"'), "a compressed client did not write the address");
+  assert(!savedAgain.headers.get("content-encoding"), "the form response was compressed");
 
   const hidden = await fetch(`http://127.0.0.1:${port}/internal/ammosync.html`);
   assert(hidden.headers.get("x-robots-tag") === "noindex, nofollow", "/internal is missing noindex");
@@ -107,6 +153,7 @@ try {
 assert(!logs.includes("ada@example.com"), "the server log contains an address");
 assert(!logs.includes("grace@example.com"), "the server log contains an address");
 assert(!logs.includes("june@example.com"), "the server log contains an address");
+assert(!logs.includes("ada.compressed@example.com"), "the server log contains an address");
 
 const badPort = 3100;
 const badChild = spawn(

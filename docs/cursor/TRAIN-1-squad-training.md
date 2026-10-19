@@ -20,7 +20,7 @@
 
 ## 4. Training pairs (what our own models learn from)
 - Table `tank.training_pairs (id, agent, task_type, region, input jsonb, output jsonb, approved_by, source, created_at)`: every checked gold example, every client-accepted answer, every lawyer-released Zenas matter, every decided case converted by Zenas. Region is kept; ZA pairs stay in the ZA region's database.
-- Nightly export to a private Hugging Face dataset per agent when `HF_TOKEN` and `HF_ORG` are set (JSONL, versioned by date); skipped cleanly when not set. Never export a row with a detected personal identifier from a client matter.
+- Nightly export to a private Hugging Face dataset per agent when `HF_TOKEN` and `HF_ORG` are set (JSONL, versioned by date); skipped cleanly when not set. **Founder decision 18 Oct 19:49:** no identifier or email filter on exports (it would strip the parties from cases); the lawyers using it decide what to keep. Holdout and inactive rows are still never exported.
 
 ## 5. Squad training view (on the Tank page)
 Per agent: gold examples checked / target, last re-test score and trend, training pairs collected, holdout size.

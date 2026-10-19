@@ -53,6 +53,12 @@ export function parseFred(payload: unknown): { value: string; date: string } | n
   return best;
 }
 
+function indicatorCode(record: Record<string, unknown>): string | null {
+  const indicator = asRecord(record.indicator);
+  if (!indicator || indicator.id == null || indicator.id === "") return null;
+  return String(indicator.id);
+}
+
 export function parseWorldBank(payload: unknown, code: string): { label: string; value: string; date: string } | null {
   if (!Array.isArray(payload) || payload.length < 2 || !Array.isArray(payload[1])) return null;
   const known = COMMODITIES.find((item) => item.code === code);
@@ -61,6 +67,8 @@ export function parseWorldBank(payload: unknown, code: string): { label: string;
   for (const row of payload[1]) {
     const record = asRecord(row);
     if (!record) continue;
+    const id = indicatorCode(record);
+    if (id && id !== code) continue;
     const value = exactNumber(record.value);
     const date = String(record.date ?? "").slice(0, 10);
     if (!value || !date) continue;

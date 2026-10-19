@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import copy
 import json
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 from uuid import UUID
 
 from rigbox.logic import public_product
+from rigbox.recall import SEARCH_RECALL_CAP
 
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schema.sql"
 
@@ -138,6 +139,14 @@ def _role_cannot_create_schema(exc: BaseException) -> bool:
     return "permission denied" in str(exc).lower()
 
 
+def _search_time(value: Any) -> datetime:
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+    return datetime.now(timezone.utc)
+
+
 def _uuid(value: str) -> UUID:
     return value if isinstance(value, UUID) else UUID(str(value))
 
@@ -225,6 +234,7 @@ class MemoryStore:
         self.answers: dict[tuple[str, str, str], tuple[str, dict[str, Any]]] = {}
         self.fit_why: dict[tuple[str, str, str], list[str]] = {}
         self.market: dict[tuple[str, str, str], dict[str, Any]] = {}
+        self.searches: list[dict[str, Any]] = []
 
     def _drop_answers(self, tenant_id: str) -> None:
         tenant = str(tenant_id)
@@ -391,6 +401,52 @@ class MemoryStore:
 
     async def put_fit_why(self, tenant_id: str, fit_id: str, rule_hash: str, why: list[str]) -> None:
         self.fit_why[(str(tenant_id), fit_id, rule_hash)] = [str(line) for line in why]
+
+    async def add_search(self, tenant_id: str, version: str, row: dict[str, Any]) -> None:
+        self.searches.append(
+            {
+                "tenant_id": str(tenant_id),
+                "id": str(row.get("id") or ""),
+                "version": version,
+                "query": str(row.get("query") or ""),
+                "host": str(row.get("host") or ""),
+                "signature": str(row.get("signature") or ""),
+                "limit": int(row.get("limit") or 0),
+                "ids": [str(item) for item in row.get("ids") or []],
+                "exact_match": bool(row.get("exact_match", True)),
+                "message": row.get("message"),
+                "parts": copy.deepcopy(list(row.get("parts") or [])),
+                "created_at": _search_time(row.get("created_at")),
+            }
+        )
+
+    async def searches_for(self, tenant_id: str, version: str, days: int = 90) -> list[dict[str, Any]]:
+        """Newest first, inside the window, at most 500. One retailer only.
+
+        The live store does this in SQL. This stand-in keeps the same rule
+        for tests that never open a database.
+        """
+        tenant = str(tenant_id)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=int(days))
+        rows = [
+            row
+            for row in self.searches
+            if row["tenant_id"] == tenant and row["version"] == version and row["created_at"] >= cutoff
+        ]
+        rows.sort(key=lambda row: (row["created_at"], row["id"]), reverse=True)
+        return [copy.deepcopy(row) for row in rows[:SEARCH_RECALL_CAP]]
+
+    async def drop_searches(self, tenant_id: str) -> None:
+        tenant = str(tenant_id)
+        self.searches = [row for row in self.searches if row["tenant_id"] != tenant]
+
+    async def expire_searches(self, days: int) -> int:
+        """Delete saved searches older than the window, for every retailer."""
+        cutoff = datetime.now(timezone.utc) - timedelta(days=int(days))
+        kept = [row for row in self.searches if row["created_at"] >= cutoff]
+        deleted = len(self.searches) - len(kept)
+        self.searches = kept
+        return deleted
 
 
 def _record_product(row: Any) -> dict[str, Any]:
@@ -926,6 +982,96 @@ class PgStore:
                 rule_hash,
                 _json(list(why)),
             )
+
+    async def add_search(self, tenant_id: str, version: str, row: dict[str, Any]) -> None:
+        created = row.get("created_at")
+        when = created if isinstance(created, datetime) else None
+        if when is not None and when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO agent_rig.searches (
+                    tenant_id, id, version, query, host, signature, result_limit,
+                    ids, exact_match, message, parts, created_at
+                )
+                VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, $10, $11::jsonb,
+                    COALESCE($12::timestamptz, now())
+                )
+                """,
+                _uuid(tenant_id),
+                str(row["id"]),
+                version,
+                str(row.get("query") or ""),
+                str(row.get("host") or ""),
+                str(row.get("signature") or ""),
+                int(row.get("limit") or 0),
+                _json([str(item) for item in row.get("ids") or []]),
+                bool(row.get("exact_match", True)),
+                row.get("message"),
+                _json(list(row.get("parts") or [])),
+                when,
+            )
+
+    async def searches_for(self, tenant_id: str, version: str, days: int = 90) -> list[dict[str, Any]]:
+        """One retailer's recent searches. The window, order, and cap are in the query."""
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT query, host, signature, result_limit, ids, exact_match, message, parts
+                FROM agent_rig.searches
+                WHERE tenant_id = $1
+                  AND version = $2
+                  AND created_at >= now() - ($3::int * interval '1 day')
+                ORDER BY created_at DESC
+                LIMIT 500
+                """,
+                _uuid(tenant_id),
+                version,
+                int(days),
+            )
+        found: list[dict[str, Any]] = []
+        for row in rows:
+            ids = row["ids"]
+            parts = row["parts"]
+            if isinstance(ids, str):
+                ids = json.loads(ids)
+            if isinstance(parts, str):
+                parts = json.loads(parts)
+            found.append(
+                {
+                    "query": row["query"],
+                    "host": row["host"],
+                    "signature": row["signature"],
+                    "limit": row["result_limit"],
+                    "ids": list(ids),
+                    "exact_match": row["exact_match"],
+                    "message": row["message"],
+                    "parts": parts,
+                }
+            )
+        return found
+
+    async def drop_searches(self, tenant_id: str) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute("DELETE FROM agent_rig.searches WHERE tenant_id = $1", _uuid(tenant_id))
+
+    async def expire_searches(self, days: int) -> int:
+        """Delete saved searches older than the window. Every retailer. This table only.
+
+        Running it again deletes nothing that the first run already removed.
+        """
+        async with self.pool.acquire() as conn:
+            result = await conn.execute(
+                """
+                DELETE FROM agent_rig.searches
+                WHERE created_at < now() - ($1::int * interval '1 day')
+                """,
+                int(days),
+            )
+        parts = str(result).split()
+        return int(parts[-1]) if parts and parts[-1].isdigit() else 0
 
 
 def as_public_results(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
