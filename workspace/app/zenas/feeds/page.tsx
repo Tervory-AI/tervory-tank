@@ -65,7 +65,7 @@ export default async function ZenasFeedsPage() {
         <div>
           <picture>
             <source srcSet="/brand/tervory-logo-reversed.png" media="(prefers-color-scheme: dark)" />
-            <img src="/brand/tervory-logo-on-white.png" alt="Tervory" />
+            <img src="/brand/tervory-logo.png" alt="Tervory" />
           </picture>
           <h1>Zenas feeds</h1>
         </div>
