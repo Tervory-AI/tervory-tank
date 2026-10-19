@@ -490,6 +490,56 @@ body:has(.tk) main {
   font-size: 14px;
 }
 
+.tk-workers {
+  background: #fff;
+  border: 1px solid #b8bfd0;
+  border-radius: 12px;
+  overflow-x: auto;
+}
+
+.tk-workers table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  color: #001840;
+}
+
+.tk-workers th,
+.tk-workers td {
+  padding: 12px 20px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.tk-workers th {
+  color: #6b7590;
+  font-weight: 500;
+}
+
+.tk-workers tbody tr {
+  border-top: 1px solid #b8bfd0;
+}
+
+.tk-workers a {
+  color: #001840;
+}
+
+.tk-wk-issue {
+  display: block;
+  font-family: var(--font-mono), "JetBrains Mono", ui-monospace, monospace;
+}
+
+.tk-wk-brief {
+  display: block;
+  color: #6b7590;
+  font-size: 13px;
+}
+
+.tk-wk-num {
+  font-family: var(--font-mono), "JetBrains Mono", ui-monospace, monospace;
+  white-space: nowrap;
+}
+
 @media (max-width: 1100px) {
   .tk-body {
     padding: 40px 32px 48px;
