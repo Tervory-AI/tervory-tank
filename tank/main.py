@@ -218,16 +218,137 @@ def _china_model(model: str) -> bool:
     return head in _CHINA_PROVIDERS or model.lower() in _CHINA_PROVIDERS
 
 
-def model_call_refusal(text: str, model: str | None, *, box: str, tenant_id: str) -> str | None:
+# Same ids as agents/zenas/core/release_mask.py COURT_SOURCES. Tank's image
+# does not include that package. A test checks the two sets stay equal.
+# Legislation sources are not in this set.
+_COURT_SOURCES = frozenset(
+    {
+        "courtlistener",
+        "cap",
+        "saflii",
+        "govza-gazette",
+        "concourt",
+        "sca",
+        "cac",
+        "comptrib",
+        "sars-taxcourt",
+        "landcourt",
+        "ocj-highcourt",
+        "labour-court",
+        "labour-appeal",
+        "special-tribunal",
+    }
+)
+# require_key returns this for TANK_KEY_ZENAS. The request body cannot set it.
+_ZENAS_CALLER = "zenas"
+# The two prompts Zenas builds after it has read the pool. Anything else is
+# not that read. Convert's head is agents/zenas/core/convert.py _PROMPT_HEAD.
+_CONVERT_HEAD = (
+    "Read this judgment as published. Copy the facts in the court's own words, "
+    "as a continuous passage from the judgment. Name the question, the elements, "
+    "and the holding. Cite only this case. Every quote must appear in the judgment "
+    "word for word. Reply with JSON only:\n"
+    '{"facts":"","question":"","elements":[{"element_id":"","finding":"met|not_met|unclear","quote":""}],'
+    '"holding":"","citations":[{"citation":"","quote":""}]}\n\n'
+    "Citation: "
+)
+_FACTS_PREFIX = (
+    "Read this judgment as published. Reply with JSON only: "
+    '{"features":{},"narrative":"","element_findings":[{"element_id":"","finding":"met|not_met|unclear","reasoning":"","basis":[]}],"outcome":""}\n\n'
+)
+_POOL_MATCH_SQL = """
+SELECT source_id, text, citation
+FROM zenas_pool.documents
+WHERE kind = 'case'
+  AND effective_to IS NULL
+  AND status IS DISTINCT FROM 'superseded'
+  AND source_id = ANY($2::text[])
+  AND char_length(text) >= 40
+  AND char_length($1) >= char_length(text)
+  AND right($1::text, char_length(text)) = text
+""".strip()
+
+
+def _zenas_pool_prefix(prefix: str, citation: str) -> bool:
+    """True when the text before the stored judgment is that row's own wrapper.
+
+    The citation is the one stored on the row. A caller cannot fill that
+    line with other text.
+    """
+    if prefix == _FACTS_PREFIX:
+        return True
+    return bool(citation) and prefix == _CONVERT_HEAD + citation + "\n\n"
+
+
+def _pool_read_candidate(text: str, *, caller: str | None, task_type: str | None, skill: str | None) -> bool:
+    """The three names a caller can try to set. The database check is still ahead."""
+    return caller == _ZENAS_CALLER and (task_type or "") == "zenas.case_facts" and not skill and bool(text)
+
+
+async def zenas_pool_prompt(
+    text: str,
+    *,
+    caller: str | None,
+    task_type: str | None,
+    skill: str | None,
+) -> bool:
+    """Whether this prompt is a judgment Tank just read from the pool.
+
+    The caller cannot vouch for this. Tank loads zenas_pool.documents itself
+    and accepts the prompt only when all of these are true: require_key
+    returned the Zenas room (TANK_KEY_ZENAS), the task is zenas.case_facts,
+    the call is not a Skala run, the prompt ends with a stored case whose
+    source_id is in the court list, and the text before that case is either
+    the facts wrapper or the convert wrapper plus that row's own citation.
+    An added sentence, a different citation, a different wrapper, or a body
+    field does not match a row, so the identifier rule still applies.
+    """
+    if not _pool_read_candidate(text, caller=caller, task_type=task_type, skill=skill):
+        return False
+    if not prompt_has_identifier(text):
+        return False
+    try:
+        async with pool().acquire() as conn:
+            rows = await conn.fetch(_POOL_MATCH_SQL, text, list(_COURT_SOURCES))
+    except Exception:  # noqa: BLE001 — a failed read is not proof, and the text is not logged
+        return False
+    for row in rows:
+        judgment = str(row["text"] or "")
+        source = str(row["source_id"] or "")
+        citation = str(row["citation"] or "")
+        if source not in _COURT_SOURCES or len(judgment) < 40 or not text.endswith(judgment):
+            continue
+        if _zenas_pool_prefix(text[: -len(judgment)], citation):
+            return True
+    return False
+
+
+def model_call_refusal(
+    text: str,
+    model: str | None,
+    *,
+    box: str,
+    tenant_id: str,
+    task_type: str | None = None,
+    caller: str | None = None,
+    skill: str | None = None,
+    pool_read: bool = False,
+) -> str | None:
     """Whether this model call must be refused before anything is stored or sent.
 
     In za, a prompt that still contains an identifier is refused unless the
     model runs in South Africa and the tenant's allow-list includes it.
-    model=None asks the early question: is there any permitted SA model at all?
-    Pure-code skills do not call this.
+    The identifier rule is skipped only when caller is the Zenas room key,
+    the task is zenas.case_facts, this is not a Skala run, and pool_read is
+    true. pool_read is true only after zenas_pool_prompt has matched the
+    text to a court row. China-provider and allow-list refusals still apply.
+    The Workspace key, every other room key, and a task name alone do not
+    skip the rule. model=None asks the early question: is there any
+    permitted SA model at all? Pure-code skills do not call this.
     """
     here = normalize_box(box)
     allow = tenant_allowlist(tenant_id)
+    public_record = _pool_read_candidate(text, caller=caller, task_type=task_type, skill=skill) and pool_read
     if here != ZA_REGION:
         if model is not None and allow is not None and model not in allow:
             return ALLOW_REFUSAL
@@ -235,7 +356,7 @@ def model_call_refusal(text: str, model: str | None, *, box: str, tenant_id: str
     if model is not None and _china_model(model):
         return ALLOW_REFUSAL
     hosted = sa_hosted_models()
-    if prompt_has_identifier(text):
+    if prompt_has_identifier(text) and not public_record:
         permitted = hosted if allow is None else hosted & allow
         if model is None:
             return None if permitted else IDENTIFIER_REFUSAL
@@ -628,7 +749,11 @@ async def put_policy(task_type: str, body: PolicyRow) -> dict[str, Any]:
 
 # ---------- the one call ----------
 
-async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> RouteResponse:
+async def run_route(
+    req: RouteRequest,
+    task_id: uuid.UUID | None = None,
+    caller: str | None = None,
+) -> RouteResponse:
     """Pick the model from policy, call it through LiteLLM, write the ledger row.
     Used directly by /v1/route and in the background by tasks."""
     box = box_region()
@@ -637,7 +762,19 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
         # Empty, unknown, or the other region's text is not written.
         raise HTTPException(status_code=403, detail=foreign)
     client_text = "\n".join(m.content for m in req.messages)
-    early = model_call_refusal(client_text, None, box=box, tenant_id=str(req.tenant_id))
+    pool_read = await zenas_pool_prompt(
+        client_text, caller=caller, task_type=req.task_type, skill=req.skill
+    )
+    early = model_call_refusal(
+        client_text,
+        None,
+        box=box,
+        tenant_id=str(req.tenant_id),
+        task_type=req.task_type,
+        caller=caller,
+        skill=req.skill,
+        pool_read=pool_read,
+    )
     if early:
         raise HTTPException(status_code=403, detail=early)
 
@@ -654,7 +791,16 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
     max_tokens = min(req.max_tokens or policy["max_tokens_out"], policy["max_tokens_out"])
     sent = "\n".join(str(item.get("content") or "") for item in messages)
     holds_identifier = prompt_has_identifier(sent)
-    blocked = model_call_refusal(sent, model, box=box, tenant_id=str(req.tenant_id))
+    blocked = model_call_refusal(
+        sent,
+        model,
+        box=box,
+        tenant_id=str(req.tenant_id),
+        task_type=req.task_type,
+        caller=caller,
+        skill=req.skill,
+        pool_read=pool_read,
+    )
     if blocked:
         raise HTTPException(status_code=403, detail=blocked)
 
@@ -1629,7 +1775,7 @@ async def search_task(task_type: str, body: SearchBody | None = None) -> dict[st
 async def route(req: RouteRequest, caller: str | None = Depends(require_key)) -> RouteResponse:
     if caller:
         req = req.model_copy(update={"agent": caller})
-    return await run_route(req)
+    return await run_route(req, caller=caller)
 
 
 # ---------- tasks: the board ----------
@@ -1675,7 +1821,9 @@ async def create_task(body: TaskCreate) -> dict[str, Any]:
     if foreign:
         raise HTTPException(status_code=403, detail=foreign)
     text = "\n".join(m.content for m in body.messages)
-    early = model_call_refusal(text, None, box=box, tenant_id=str(body.tenant_id))
+    early = model_call_refusal(
+        text, None, box=box, tenant_id=str(body.tenant_id), task_type=body.task_type
+    )
     if early:
         raise HTTPException(status_code=403, detail=early)
     # Fail fast on a bad task_type rather than queueing a task that can only fail.
@@ -2047,10 +2195,41 @@ def zenas_upstream(path: str) -> str:
     return raw.rstrip("/") + "/" + cleaned
 
 
+# A load detail is one short operational line. A judgment does not belong in it.
+_DETAIL_LIMIT = 240
+_URL = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
+_SK_SECRET = re.compile(r"sk-[A-Za-z0-9_-]{8,}")
+# Same marks the pool refuses to fetch. An env var name such as
+# COURTLISTENER_API_TOKEN has no '=' and stays.
+_KEYED_URL_MARKS = ("api_key=", "token=", "password=", "secret=", "?key=", "&key=")
+
+
+def _scrub_public_text(text: str) -> str:
+    """Remove keyed URLs and sk- secrets. Other words stay."""
+
+    def drop_url(match: re.Match[str]) -> str:
+        url = match.group(0)
+        lowered = url.lower()
+        if any(mark in lowered for mark in _KEYED_URL_MARKS):
+            return ""
+        return url
+
+    cleaned = _SK_SECRET.sub("", _URL.sub(drop_url, text))
+    if cleaned == text:
+        return text
+    return " ".join(cleaned.split())
+
+
 def public_feed(value: Any) -> Any:
-    """Drop key material from a pool status payload. key_name and key_set stay."""
+    """Drop key material from a pool status payload. key_name and key_set stay.
+
+    Each source's last_status and a short detail stay, so the feeds page can
+    show why a load failed. A URL that carries a key does not.
+    """
     if isinstance(value, list):
         return [public_feed(item) for item in value]
+    if isinstance(value, str):
+        return _scrub_public_text(value)
     if not isinstance(value, dict):
         return value
     kept: dict[str, Any] = {}
@@ -2059,6 +2238,13 @@ def public_feed(value: Any) -> Any:
         if lowered not in {"key_name", "key_set"} and "key" in lowered:
             continue
         if any(part in lowered for part in ("secret", "password", "token")):
+            continue
+        if lowered == "detail":
+            text = item if isinstance(item, str) else ""
+            kept[key] = _scrub_public_text(text)[:_DETAIL_LIMIT]
+            continue
+        if lowered == "last_status":
+            kept[key] = _scrub_public_text(item) if isinstance(item, str) else item
             continue
         kept[key] = public_feed(item)
     return kept

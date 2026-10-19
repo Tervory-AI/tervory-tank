@@ -24,7 +24,11 @@ export type PublicScore = {
   set: string;
   scored_by: string;
   label: string;
+  error: boolean;
+  reason: string;
 };
+
+const SCORE_REASONS = new Set(["no rule card", "criminal law is refused", "the ladder did not run"]);
 
 function rowsFrom(payload: unknown, key: string): unknown[] {
   if (Array.isArray(payload)) return payload;
@@ -95,6 +99,9 @@ export function publicScores(payload: unknown): { region: string; runs: PublicSc
     const row = item as Record<string, unknown>;
     const kind = String(row.kind ?? "");
     const codeBaseline = kind === "legalbench";
+    const rawReason = String(row.reason ?? "");
+    const error = row.error === true || row.label === "error";
+    const reason = error && SCORE_REASONS.has(rawReason) ? rawReason : "";
     return [{
       region: String(row.region ?? region),
       kind,
@@ -107,11 +114,29 @@ export function publicScores(payload: unknown): { region: string; runs: PublicSc
       cost_per_case: Number(row.cost_per_case ?? 0),
       set: String(row.set ?? ""),
       scored_by: codeBaseline ? "code baseline" : "",
-      label: codeBaseline ? "LegalBench code baseline" : "",
+      label: codeBaseline ? "LegalBench code baseline" : error ? "error" : "",
+      error: error && reason !== "",
+      reason,
     }];
   });
   return { region, runs };
 }
+
+export type PublicFailure = {
+  reason: string;
+  count: number;
+};
+
+const FAILURE_REASONS = new Set([
+  "material type is unknown",
+  "criminal law is refused",
+  "cite check failed",
+  "model call failed",
+  "the model did not return case facts",
+  "citation did not resolve",
+  "citation is superseded",
+  "quote is not in the judgment",
+]);
 
 export type PublicConvert = {
   region: string;
@@ -121,7 +146,23 @@ export type PublicConvert = {
   failed: number;
   running: boolean;
   status: "" | "Started" | "Already running";
+  failures: PublicFailure[];
 };
+
+function failureCounts(value: unknown): PublicFailure[] {
+  if (!Array.isArray(value)) return [];
+  const totals = new Map<string, number>();
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    const raw = String(row.reason ?? "");
+    const reason = FAILURE_REASONS.has(raw) ? raw : "other";
+    const count = Number(row.count ?? 0);
+    if (!Number.isFinite(count) || count <= 0) continue;
+    totals.set(reason, (totals.get(reason) ?? 0) + count);
+  }
+  return [...totals.entries()].map(([reason, count]) => ({ reason, count }));
+}
 
 export function publicConvert(payload: unknown): PublicConvert {
   const root = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
@@ -134,6 +175,7 @@ export function publicConvert(payload: unknown): PublicConvert {
     failed: Number(root.failed ?? 0) || 0,
     running: root.running === true,
     status,
+    failures: failureCounts(root.failures),
   };
 }
 
