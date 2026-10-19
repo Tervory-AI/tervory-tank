@@ -2,7 +2,7 @@
 
 > Written 18 Oct 2026, 17:05 PT. Shared infrastructure for every agent, so the squad can be tested and trained the same way. Implements "Tests every agent gets" from the Agent tests page and the Build plan. One PR; it touches shared files (`tank/`), so it goes to the final review before deploy.
 
-**Files you may change:** `tank/gold.py`, `tank/training.py` (new), `tank/main.py` (mount the two new routers only), `tank/schema.sql` (additive only), `workspace/app/skala/gold/` (new page), `workspace/app/api/skala/` (new routes only), `workspace/lib/tank.ts` (add gold and training request helpers only; do not change existing functions), `.github/workflows/retest.yml` (new), `.env.example` (names only), new tests under `tests/`.
+**Files you may change:** `tank/gold.py`, `tank/training.py` (new), `tank/main.py` (mount the two new routers only), `tank/Dockerfile` (add `gold.py` and `training.py` to the COPY line only; a test checks every module `main.py` imports is copied), `tank/schema.sql` (additive only), `workspace/app/skala/gold/` (new page), `workspace/app/api/skala/` (new routes only), `workspace/lib/tank.ts` (add gold and training request helpers only; do not change existing functions), `.github/workflows/retest.yml` (new), `.env.example` (names only), new tests under `tests/`.
 
 ## 1. Gold sets (one store for every agent)
 - Table `tank.gold_examples (id, skill_id, agent, input jsonb, expected jsonb, status candidate|checked|rejected, holdout bool, source, checked_by, checked_at, note)`.
