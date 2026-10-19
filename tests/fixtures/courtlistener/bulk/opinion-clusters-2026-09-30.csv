@@ -19,27 +19,6 @@ id,date_created,date_modified,judges,date_filed,date_filed_is_approximate,slug,c
      </span>
     Before JOLLY, BARKSDALE, and OWEN, Circuit Judges.
    </judges>"
-2756651,2014-12-02 21:10:24.691336+00,2024-11-06 03:35:36.827375+00,"Clifton, Smith, Hurwitz",2014-12-02,f,united-states-v-jack-sexton,,United States v. Jack Sexton,"UNITED STATES of America, Plaintiff-Appellee, v. Jack Pershing SEXTON, Defendant-Appellant; United States of America, Plaintiff-Appellee, v. Ronald Claude Kettells, Defendant-Appellant",,,,,CU,,"Helen J. Brunner, Esquire, Assistant U.S., Francis Franze-Nakamura, Esquire, Assistant U.S., Andrew Cameron Friedman, Esquire, Assistant U.S., Office of the U.S. Attorney, Seattle, WA, for Plaintiff-Appellee., Carlton Gunn, Esquire, Kaye, Mclane, Bednarski & Litt, LLP, Pasadena, CA, for Defendant-Appellant.",Criminal,,,,,,,"Argued and Submitted Nov. 17, 2014.",,,0,Unpublished,,f,law.free.cap.f-appx.586/304.4314565.json,harvard_pdf/2756651.pdf,2610487,,"<parties id=""b332-13"">
-    UNITED STATES of America, Plaintiff-Appellee, v. Jack Pershing SEXTON, Defendant-Appellant. United States of America, Plaintiff-Appellee, v. Ronald Claude Kettells, Defendant-Appellant.
-   </parties><br><docketnumber id=""b332-19"">
-    Nos. 13-30171, 13-30172.
-   </docketnumber><br><court id=""b332-20"">
-    United States Court of Appeals, Ninth Circuit.
-   </court><br><otherdate id=""b332-21"">
-    Argued and Submitted Nov. 17, 2014.
-   </otherdate><decisiondate id=""AEG"">
-    Filed Dec. 2, 2014.
-   </decisiondate><br><attorneys id=""b332-22"">
-    Helen J. Brunner, Esquire, Assistant U.S., Francis Franze-Nakamura, Esquire,
-    <span citation-index=""1"" class=""star-pagination"" label=""305""> 
-     *305
-     </span>
-    Assistant U.S., Andrew Cameron Friedman, Esquire, Assistant U.S., Office of the U.S. Attorney, Seattle, WA, for Plaintiff-Appellee.
-   </attorneys><br><attorneys id=""b333-5"">
-    Carlton Gunn, Esquire, Kaye, Mclane, Bednarski &amp; Litt, LLP, Pasadena, CA, for Defendant-Appellant.
-   </attorneys><br><judges id=""b333-7"">
-    Before: CLIFTON, M. SMITH, and HURWITZ, Circuit Judges.
-   </judges>"
 2756657,2014-12-02 21:11:31.317705+00,2024-11-06 03:35:35.732217+00,"Noonan, Fernandez, Ikuta",2014-12-02,f,regional-care-services-corp-v-companion-life-insurance,,"Regional Care Services, Corp. v. Companion Life Insurance","REGIONAL CARE SERVICES, CORPORATION, an Arizona Corporation; Regional Care Services Corporation Health and Welfare Employee Benefit Plan, Plaintiffs-Appellees, v. COMPANION LIFE INSURANCE COMPANY, Defendant-Appellant",,,,,CU,,"Kory A. Langhofer, John Clifton West, Brownstein Hyatt Farber Schreck, LLP, Phoenix, AZ, for Plaintiffs-Appellees., M. Courtney Koger, Esquire, Kutak Rock LLP, Kansas City, MO, Philip A. Overcash, Esquire Natalie Anderson, Esquire, S. David Childers, Esquire, Kutak Rock LLP, Scottsdale, AZ, for Defendant-Appellant.",Civil,,,,,,,"Submitted Nov. 19, 2014.*",,,0,Unpublished,,f,law.free.cap.f-appx.586/297.4312856.json,harvard_pdf/2756657.pdf,2610493,,"<parties id=""b325-17"">
     REGIONAL CARE SERVICES, CORPORATION, an Arizona corporation; Regional Care Services Corporation Health And Welfare Employee Benefit Plan, Plaintiffs-Appellees, v. COMPANION LIFE INSURANCE COMPANY, Defendant-Appellant.
    </parties><br><docketnumber id=""b325-20"">
@@ -72,3 +51,18 @@ id,date_created,date_modified,judges,date_filed,date_filed_is_approximate,slug,c
 </div></div>"
 5406423,,,,1916-10-15,,sheriff-v-tna-life-insurance,,Sheriff v. Ætna Life Insurance,,,,,,,,,,,,,,,,,,,,Published,,,,,61754815,,
 5846027,,,,2006-06-08,,people-v-walker,,People v. Walker,,,,,,,,,,,,,,,,,,,,Published,,,,,62203897,,
+175448,2014-12-21 11:09:51.647071+00,2024-11-05 21:08:08.05915+00,"Mayer, Lourie, Bryson",2010-09-16,f,robinson-quality-constructors-v-mchugh,McHugh,Robinson Quality Constructors v. McHugh,"ROBINSON QUALITY CONSTRUCTORS, Appellant, v. John McHUGH, Secretary of the Army, Appellee",,,,,CU,,"Domenique Kirchner, Department of Justice, Washington, DC, for Appellee., D. Lynn Whitt, Lake Saint Louis, MO, for Appellant.",,,,,,,,,,,0,Unpublished,2021-04-18,t,law.free.cap.f-appx.395/690.5883132.json,harvard_pdf/175448.pdf,953200,,"<parties id=""b716-5"">
+    ROBINSON QUALITY CONSTRUCTORS, Appellant, v. John McHUGH, Secretary of the Army, Appellee.
+   </parties><br><docketnumber id=""b716-9"">
+    No. 2010-1255.
+   </docketnumber><br><court id=""b716-10"">
+    United States Court of Appeals, Federal Circuit.
+   </court><br><decisiondate id=""b716-12"">
+    Sept. 16, 2010.
+   </decisiondate><br><attorneys id=""b716-14"">
+    Domenique Kirchner, Department of Justice, Washington, DC, for Appellee.
+   </attorneys><br><attorneys id=""b716-15"">
+    D. Lynn Whitt, Lake Saint Louis, MO, for Appellant.
+   </attorneys><br><judges id=""b716-16"">
+    Before MAYER, LOURIE, and BRYSON, Circuit Judges.
+   </judges>"

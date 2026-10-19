@@ -4,12 +4,13 @@ Saved slices of the 2026-09-30 bulk CSVs. No live network. No API key in a
 URL, a header on the bulk read, or a log.
 
 Every opinion row is that case's own row from the opinions file, in opinion
-id order. Callaway (2756371) and Sexton (2756651) come before the commercial
-keeps. Callaway's row has text and the citations file has no row for it, so
-the load counts it as no text. Sexton's row has text and a citation and no
-commercial words. Regional Care (2756657) and Sheriff (5243701) are the
-commercial keeps. Njie's own opinion says "customs", which would keep it, so
-Sexton is the not-commercial case instead.
+id order. Robinson Quality Constructors (175448) and Callaway (2756371) come
+before the commercial keeps. Robinson's row has text and a citation and no
+commercial words. Callaway's row has text and the citations file has no row
+for it, so the load counts it as no text. Regional Care (2756657) and Sheriff
+(5243701) are the commercial keeps. Njie's own opinion says "customs", which
+would keep it, and Sexton's own opinion says "firearm", so neither is the
+not-commercial case.
 """
 
 from __future__ import annotations
@@ -161,6 +162,7 @@ async def _fixture(monkeypatch: pytest.MonkeyPatch):
     assert "Njie" not in names
     assert "Sexton" not in names
     assert "Callaway" not in names
+    assert "Robinson" not in names
     assert result.skips["criminal"] >= 2
     assert result.skips["not-appellate"] >= 1
     assert result.skips["not-commercial"] >= 1
@@ -179,7 +181,7 @@ def test_a_stopped_run_resumes_without_duplicates(monkeypatch: pytest.MonkeyPatc
 
 
 async def _resume(monkeypatch: pytest.MonkeyPatch):
-    # The cap counts opinions that have text. Callaway and Sexton are read
+    # The cap counts opinions that have text. Robinson and Callaway are read
     # before Regional Care, so the first commercial case is the third.
     monkeypatch.setenv("ZENAS_CL_BULK_MAX", "3")
     first = await load_bulk(_bulk_get([]), state=BulkState())
