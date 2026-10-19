@@ -10,7 +10,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import parse_qs, quote, urlencode, urlparse
 
 import httpx
 from fastapi import FastAPI, Request
@@ -299,7 +299,7 @@ def register_oauth(app: FastAPI, settings: Settings, store: Store) -> None:
         return RedirectResponse(f"{settings.clerk_frontend_api}/oauth/authorize?{query}", status_code=302)
 
     @app.get("/oauth/clerk/callback", response_model=None)
-    async def clerk_callback(request: Request) -> RedirectResponse | JSONResponse:
+    async def clerk_callback(request: Request) -> RedirectResponse | JSONResponse | HTMLResponse:
         txn_id = str(request.query_params.get("state") or "")
         record = await store.pop(f"mcp:txn:{txn_id}")
         if not record or record.get("kind") != "authorize":
@@ -312,28 +312,50 @@ def register_oauth(app: FastAPI, settings: Settings, store: Store) -> None:
         if not code:
             return RedirectResponse(_client_redirect(redirect_uri, {"error": "access_denied", "state": client_state}), status_code=302)
         try:
-            identity = await _clerk_identity(request.app.state.http, settings, code, str(record.get("clerk_verifier") or ""))
+            user_id = await _clerk_user(request.app.state.http, settings, code, str(record.get("clerk_verifier") or ""))
+            orgs = await _memberships(request.app.state.http, settings, user_id)
         except _ClerkProblem:
             log.info("clerk sign-in failed")
             return RedirectResponse(_client_redirect(redirect_uri, {"error": "access_denied", "state": client_state}), status_code=302)
-        our_code = secrets.token_urlsafe(32)
+        if not orgs:
+            return HTMLResponse(_screen("Your account has no business yet.", "<p>Your account has no business yet.</p>"))
+        if len(orgs) == 1:
+            return await _send_code(store, settings, record, user_id, orgs[0]["id"])
+        pick_id = secrets.token_urlsafe(24)
         await store.put(
-            f"mcp:code:{_hash(our_code)}",
+            f"mcp:pick:{pick_id}",
             {
+                "kind": "pick",
+                "user_id": user_id,
                 "client_id": record["client_id"],
                 "redirect_uri": redirect_uri,
+                "state": client_state,
                 "challenge": record["challenge"],
-                "user_id": identity["user_id"],
-                "org_id": identity["org_id"],
-                "tenant_id": identity["tenant_id"],
             },
-            CODE_TTL,
+            TXN_TTL,
         )
-        log.info("authorization code issued")
-        return RedirectResponse(
-            _client_redirect(redirect_uri, {"code": our_code, "state": client_state}),
-            status_code=302,
-        )
+        log.info("business choice shown")
+        return HTMLResponse(_choose_page(pick_id, orgs))
+
+    @app.post("/oauth/choose", response_model=None)
+    async def choose_business(request: Request) -> RedirectResponse | HTMLResponse:
+        form = await _form(request)
+        pick_id = str(form.get("pick") or "")
+        record = await store.get(f"mcp:pick:{pick_id}")
+        if not record or record.get("kind") != "pick":
+            return HTMLResponse(_screen("Sign-in expired", "<p>This sign-in has expired. Start it again from Claude.</p>"), status_code=400)
+        chosen = str(form.get("org_id") or "")
+        try:
+            orgs = await _memberships(request.app.state.http, settings, str(record["user_id"]))
+        except _ClerkProblem:
+            log.info("clerk sign-in failed")
+            return HTMLResponse(_screen("Sign-in expired", "<p>This sign-in has expired. Start it again from Claude.</p>"), status_code=400)
+        allowed = {org["id"] for org in orgs}
+        if chosen not in allowed:
+            log.info("business choice refused")
+            return HTMLResponse(_screen("Choose a business", "<p>That business is not on your account.</p>"), status_code=400)
+        await store.pop(f"mcp:pick:{pick_id}")
+        return await _send_code(store, settings, record, str(record["user_id"]), chosen)
 
     @app.post("/token")
     async def token(request: Request) -> JSONResponse:
@@ -488,11 +510,76 @@ def _client_redirect(redirect_uri: str, query: dict[str, str]) -> str:
     return redirect_uri + sep + urlencode({key: value for key, value in query.items() if value})
 
 
+def _screen(title: str, inner: str) -> str:
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{html.escape(title)}</title>
+<style>
+  body {{ margin: 0; background: #F4F6FB; color: #001840; font-family: Inter, "Segoe UI", sans-serif; }}
+  main {{ max-width: 32rem; margin: 4rem auto; padding: 0 1.25rem; }}
+  h1 {{ font-family: Jost, "Segoe UI", sans-serif; font-weight: 300; font-size: 2rem; }}
+  button {{ background: #E80008; color: white; border: 0; border-radius: 999px; padding: 0.7rem 1.2rem; font: inherit; cursor: pointer; }}
+  label {{ display: block; margin: 0.6rem 0; }}
+</style>
+</head>
+<body>
+<main>
+  <h1>{html.escape(title)}</h1>
+  {inner}
+</main>
+</body>
+</html>"""
+
+
+def _choose_page(pick_id: str, orgs: list[dict[str, str]]) -> str:
+    choices = []
+    for org in orgs:
+        choices.append(
+            "<label><input type=\"radio\" name=\"org_id\" value=\""
+            + html.escape(org["id"])
+            + "\" required> "
+            + html.escape(org["name"])
+            + "</label>"
+        )
+    form = (
+        "<form method=\"post\" action=\"/oauth/choose\">"
+        + f"<input type=\"hidden\" name=\"pick\" value=\"{html.escape(pick_id)}\">"
+        + "".join(choices)
+        + "<button type=\"submit\">Continue</button></form>"
+    )
+    return _screen("Choose a business", form)
+
+
+async def _send_code(store: Store, settings: Settings, record: dict[str, Any], user_id: str, org_id: str) -> RedirectResponse:
+    tenant_id = tenant_id_for(org_id, settings.tenant_aliases)
+    our_code = secrets.token_urlsafe(32)
+    await store.put(
+        f"mcp:code:{_hash(our_code)}",
+        {
+            "client_id": record["client_id"],
+            "redirect_uri": record["redirect_uri"],
+            "challenge": record["challenge"],
+            "user_id": user_id,
+            "org_id": org_id,
+            "tenant_id": tenant_id,
+        },
+        CODE_TTL,
+    )
+    log.info("authorization code issued")
+    return RedirectResponse(
+        _client_redirect(str(record["redirect_uri"]), {"code": our_code, "state": str(record.get("state") or "")}),
+        status_code=302,
+    )
+
+
 class _ClerkProblem(Exception):
     pass
 
 
-async def _clerk_identity(http: httpx.AsyncClient, settings: Settings, code: str, verifier: str) -> dict[str, str]:
+async def _clerk_user(http: httpx.AsyncClient, settings: Settings, code: str, verifier: str) -> str:
     token_url = f"{settings.clerk_frontend_api}/oauth/token"
     try:
         exchanged = await http.post(
@@ -536,50 +623,52 @@ async def _clerk_identity(http: httpx.AsyncClient, settings: Settings, code: str
     user_id = str(profile.get("sub") or "")
     if not user_id.startswith("user_"):
         raise _ClerkProblem()
-    org_id = _org_from_profile(profile)
-    if not org_id:
-        org_id = await _one_org(http, settings, user_id)
-    if not org_id.startswith("org_"):
-        raise _ClerkProblem()
-    return {"user_id": user_id, "org_id": org_id, "tenant_id": tenant_id_for(org_id, settings.tenant_aliases)}
+    return user_id
 
 
-def _org_from_profile(profile: dict[str, Any]) -> str:
-    for key in ("org_id", "organization_id"):
-        value = profile.get(key)
-        if isinstance(value, str) and value.startswith("org_"):
-            return value
-    org = profile.get("org") or profile.get("organization")
-    if isinstance(org, dict):
-        value = org.get("id")
-        if isinstance(value, str) and value.startswith("org_"):
-            return value
-    return ""
-
-
-async def _one_org(http: httpx.AsyncClient, settings: Settings, user_id: str) -> str:
-    try:
-        response = await http.get(
-            f"https://api.clerk.com/v1/users/{user_id}/organization_memberships",
-            headers={"Accept": "application/json", "Authorization": f"Bearer {settings.clerk_secret_key}"},
-            timeout=8,
-        )
-    except httpx.HTTPError:
-        raise _ClerkProblem() from None
-    if response.status_code != 200:
-        raise _ClerkProblem()
-    try:
-        body = response.json()
-    except ValueError:
-        raise _ClerkProblem() from None
-    rows = body.get("data") if isinstance(body, dict) else None
-    if not isinstance(rows, list) or len(rows) != 1:
-        raise _ClerkProblem()
-    org = rows[0].get("organization") if isinstance(rows[0], dict) else None
-    org_id = org.get("id") if isinstance(org, dict) else ""
-    if not isinstance(org_id, str) or not org_id.startswith("org_"):
-        raise _ClerkProblem()
-    return org_id
+async def _memberships(http: httpx.AsyncClient, settings: Settings, user_id: str) -> list[dict[str, str]]:
+    """Every organisation this person belongs to. Pages of 100, then the next page."""
+    found: list[dict[str, str]] = []
+    seen: set[str] = set()
+    offset = 0
+    limit = 100
+    for _page in range(20):
+        try:
+            response = await http.get(
+                "https://api.clerk.com/v1/users/" + quote(user_id, safe="") + "/organization_memberships",
+                params={"limit": str(limit), "offset": str(offset)},
+                headers={"Accept": "application/json", "Authorization": f"Bearer {settings.clerk_secret_key}"},
+                timeout=8,
+            )
+        except httpx.HTTPError:
+            raise _ClerkProblem() from None
+        if response.status_code != 200:
+            raise _ClerkProblem()
+        try:
+            body = response.json()
+        except ValueError:
+            raise _ClerkProblem() from None
+        rows = body.get("data") if isinstance(body, dict) else None
+        if not isinstance(rows, list):
+            raise _ClerkProblem()
+        for row in rows:
+            org = row.get("organization") if isinstance(row, dict) else None
+            if not isinstance(org, dict):
+                continue
+            org_id = org.get("id")
+            if not isinstance(org_id, str) or not org_id.startswith("org_") or org_id in seen:
+                continue
+            name = org.get("name")
+            label = name.strip() if isinstance(name, str) and name.strip() else org_id
+            seen.add(org_id)
+            found.append({"id": org_id, "name": label[:200]})
+        offset += len(rows)
+        total = body.get("total_count") if isinstance(body, dict) else None
+        if not rows or len(rows) < limit:
+            break
+        if isinstance(total, int) and offset >= total:
+            break
+    return found
 
 
 # Authorize must confirm the client before showing the page. The sync helper

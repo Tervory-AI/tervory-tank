@@ -23,7 +23,8 @@ from connector.oauth import Settings, redirect_allowed
 from connector.store import MemoryStore
 from connector.tank import HttpTank, TankError
 from connector.tenant import tenant_id_for
-from connector.tokens import code_challenge, code_verifier, sign_access
+from connector.oauth import _memberships
+from connector.tokens import code_challenge, code_verifier, read_access, sign_access
 
 ACCEPT = "application/json, text/event-stream"
 CLAUDE = "https://claude.ai/api/mcp/auth_callback"
@@ -217,16 +218,25 @@ def test_register_rejects_a_foreign_redirect_and_machine_tokens() -> None:
     assert secret.status_code == 400
 
 
-def test_oauth_code_exchange_and_refresh_rotation(monkeypatch) -> None:
-    async def fake_identity(http, settings, code, verifier):
-        del http, code, verifier
-        return {
-            "user_id": "user_review",
-            "org_id": "org_new",
-            "tenant_id": tenant_id_for("org_new", settings.tenant_aliases),
-        }
+def _patch_businesses(monkeypatch, orgs: list[dict[str, str]], user_id: str = "user_review") -> list[str]:
+    asked: list[str] = []
 
-    monkeypatch.setattr("connector.oauth._clerk_identity", fake_identity)
+    async def fake_user(http, settings, code, verifier):
+        del http, settings, code, verifier
+        return user_id
+
+    async def fake_orgs(http, settings, who):
+        del http, settings
+        asked.append(who)
+        return orgs
+
+    monkeypatch.setattr("connector.oauth._clerk_user", fake_user)
+    monkeypatch.setattr("connector.oauth._memberships", fake_orgs)
+    return asked
+
+
+def test_oauth_code_exchange_and_refresh_rotation(monkeypatch) -> None:
+    _patch_businesses(monkeypatch, [{"id": "org_new", "name": "New Co"}])
     verifier = code_verifier()
     with TestClient(_app()) as client:
         registered = client.post("/register", json={"redirect_uris": [CLAUDE, "http://127.0.0.1/callback"], "client_name": "Claude"})
@@ -321,11 +331,7 @@ def test_oauth_code_exchange_and_refresh_rotation(monkeypatch) -> None:
 
 
 def test_wrong_pkce_verifier_is_invalid_grant(monkeypatch) -> None:
-    async def fake_identity(http, settings, code, verifier):
-        del http, code, verifier
-        return {"user_id": "user_review", "org_id": "org_old", "tenant_id": tenant_id_for("org_old", settings.tenant_aliases)}
-
-    monkeypatch.setattr("connector.oauth._clerk_identity", fake_identity)
+    _patch_businesses(monkeypatch, [{"id": "org_old", "name": "Old Co"}])
     verifier = code_verifier()
     with TestClient(_app()) as client:
         client_id = client.post("/register", json={"redirect_uris": [CLAUDE]}).json()["client_id"]
@@ -370,6 +376,166 @@ def test_wrong_pkce_verifier_is_invalid_grant(monkeypatch) -> None:
         )
     assert denied.status_code == 400
     assert denied.json()["error"] == "invalid_grant"
+
+
+def _begin(client: TestClient, verifier: str) -> tuple[str, str]:
+    client_id = client.post("/register", json={"redirect_uris": [CLAUDE]}).json()["client_id"]
+    page = client.get(
+        "/authorize",
+        params={
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": CLAUDE,
+            "state": "client-state",
+            "code_challenge": code_challenge(verifier),
+            "code_challenge_method": "S256",
+        },
+    )
+    assert page.status_code == 200
+    txn = re.search(r'name="txn" value="([^"]+)"', page.text)
+    assert txn is not None
+    return client_id, txn.group(1)
+
+
+def test_two_businesses_show_a_picker(monkeypatch) -> None:
+    _patch_businesses(
+        monkeypatch,
+        [{"id": "org_new", "name": "New Co"}, {"id": "org_other", "name": "Other Co"}],
+    )
+    with TestClient(_app()) as client:
+        _client_id, txn = _begin(client, code_verifier())
+        page = client.get("/oauth/clerk/callback", params={"code": "from-idp", "state": txn})
+    assert page.status_code == 200
+    assert "Choose a business" in page.text
+    assert "New Co" in page.text
+    assert "Other Co" in page.text
+    assert 'value="org_new"' in page.text
+    assert 'value="org_other"' in page.text
+    assert "code=" not in page.headers.get("location", "")
+
+
+def test_picking_a_business_uses_that_tenant_and_its_alias(monkeypatch) -> None:
+    asked = _patch_businesses(
+        monkeypatch,
+        [{"id": "org_new", "name": "New Co"}, {"id": "org_other", "name": "Other Co"}],
+    )
+    tank = FakeTank()
+    verifier = code_verifier()
+    with TestClient(_app(tank)) as client:
+        client_id, txn = _begin(client, verifier)
+        page = client.get("/oauth/clerk/callback", params={"code": "from-idp", "state": txn})
+        pick = re.search(r'name="pick" value="([^"]+)"', page.text)
+        assert pick is not None
+        chosen = client.post(
+            "/oauth/choose",
+            data={"pick": pick.group(1), "org_id": "org_new"},
+            follow_redirects=False,
+        )
+        assert chosen.status_code == 302
+        code = parse_qs(urlparse(chosen.headers["location"]).query)["code"][0]
+        exchanged = client.post(
+            "/token",
+            data={
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": CLAUDE,
+                "client_id": client_id,
+                "code_verifier": verifier,
+            },
+            headers={"content-type": "application/x-www-form-urlencoded"},
+        )
+        access = exchanged.json()["access_token"]
+        _call(client, access, "rig_search", {"query": "brass"})
+    payload = read_access(access, secret="dummy-signing-key-ok", issuer=PUBLIC, audience=RESOURCE)
+    assert payload["org_id"] == "org_new"
+    assert payload["tenant_id"] == _reference_tenant("org_old")
+    assert tank.calls[0]["body"]["tenant_id"] == _reference_tenant("org_old")
+    assert asked == ["user_review", "user_review"]
+
+
+def test_an_org_outside_the_list_is_refused(monkeypatch) -> None:
+    asked = _patch_businesses(
+        monkeypatch,
+        [{"id": "org_new", "name": "New Co"}, {"id": "org_other", "name": "Other Co"}],
+    )
+    with TestClient(_app()) as client:
+        _client_id, txn = _begin(client, code_verifier())
+        page = client.get("/oauth/clerk/callback", params={"code": "from-idp", "state": txn})
+        pick = re.search(r'name="pick" value="([^"]+)"', page.text).group(1)
+        refused = client.post(
+            "/oauth/choose",
+            data={"pick": pick, "org_id": "org_stranger"},
+            follow_redirects=False,
+        )
+    assert refused.status_code == 400
+    assert refused.headers.get("location") is None
+    assert "not on your account" in refused.text
+    assert len(asked) == 2
+
+
+def test_one_business_skips_the_picker(monkeypatch) -> None:
+    _patch_businesses(monkeypatch, [{"id": "org_old", "name": "Old Co"}])
+    verifier = code_verifier()
+    with TestClient(_app()) as client:
+        client_id, txn = _begin(client, verifier)
+        page = client.get("/oauth/clerk/callback", params={"code": "from-idp", "state": txn}, follow_redirects=False)
+        assert page.status_code == 302
+        assert "Choose a business" not in page.text
+        code = parse_qs(urlparse(page.headers["location"]).query)["code"][0]
+        exchanged = client.post(
+            "/token",
+            data={
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": CLAUDE,
+                "client_id": client_id,
+                "code_verifier": verifier,
+            },
+            headers={"content-type": "application/x-www-form-urlencoded"},
+        )
+    payload = read_access(exchanged.json()["access_token"], secret="dummy-signing-key-ok", issuer=PUBLIC, audience=RESOURCE)
+    assert payload["org_id"] == "org_old"
+    assert payload["tenant_id"] == _reference_tenant("org_old")
+
+
+def test_no_business_is_a_plain_page(monkeypatch) -> None:
+    _patch_businesses(monkeypatch, [])
+    with TestClient(_app()) as client:
+        _client_id, txn = _begin(client, code_verifier())
+        page = client.get("/oauth/clerk/callback", params={"code": "from-idp", "state": txn})
+    assert page.status_code == 200
+    assert "<p>Your account has no business yet.</p>" in page.text
+    assert "Choose a business" not in page.text
+
+
+def test_membership_pages_follow_the_next_hundred() -> None:
+    seen: list[tuple[str, str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(
+            (
+                request.url.params.get("limit", ""),
+                request.url.params.get("offset", ""),
+                request.headers.get("authorization", ""),
+            )
+        )
+        offset = int(request.url.params.get("offset", "0"))
+        if offset == 0:
+            rows = [{"organization": {"id": f"org_page{i}", "name": f"Business {i}"}} for i in range(100)]
+            return httpx.Response(200, json={"data": rows, "total_count": 101})
+        return httpx.Response(200, json={"data": [{"organization": {"id": "org_last", "name": "Last Co"}}], "total_count": 101})
+
+    async def run() -> list[dict[str, str]]:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http:
+            return await _memberships(http, _settings(), "user_founder")
+
+    orgs = asyncio.run(run())
+    assert [item[0] for item in seen] == ["100", "100"]
+    assert [item[1] for item in seen] == ["0", "100"]
+    assert seen[0][2] == "Bearer dummy-clerk-secret"
+    assert orgs[0] == {"id": "org_page0", "name": "Business 0"}
+    assert orgs[-1] == {"id": "org_last", "name": "Last Co"}
+    assert len(orgs) == 101
 
 
 def test_tools_have_titles_and_one_hint_each() -> None:
