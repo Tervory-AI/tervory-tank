@@ -160,12 +160,17 @@ async def gold_candidates(
 ) -> list[dict]:
     import hmac
     from fastapi import HTTPException
-    from gold_sources import candidates
+    import importlib.util
+    from pathlib import Path
 
     key = os.environ.get("TANK_KEY", "")
-    if not key or not x_tank_key or not hmac.compare_digest(key, x_tank_key):
+    if not key or not x_tank_key or not hmac.compare_digest(key.encode(), x_tank_key.encode()):
         raise HTTPException(status_code=401, detail="Room key required")
+    region = os.environ.get("TANK_REGION", "us-east")
+    if region != "us-east":
+        return []
+    spec = importlib.util.spec_from_file_location("market_lab_gold_sources", Path(__file__).with_name("gold_sources.py"))
+    gold = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gold)
     async with _ledger() as ledger:
-        series = await ledger.series_for(HEARTBEAT_TENANT)
-        points = await ledger.points_for(HEARTBEAT_TENANT)
-    return candidates(series, points, region=os.environ.get("TANK_REGION", "us-east"), limit=limit)
+        return await gold.collect(ledger.conn, region=region, limit=limit)
