@@ -126,3 +126,69 @@ async def test_two_sources_on_one_skill_need_their_own_ten_checks(database):
     for correction in corrections:
         await gold.check(correction['id'], gold.Verdict(action='right'), actor)
     await approve_sample('source B')
+
+
+@pytest.mark.asyncio
+async def test_failed_source_cannot_borrow_trust_and_holdouts_never_train(database):
+    import training
+    pool, _ = database
+    actor = gold.Reviewer('source reviewer', gold.PLATFORM_TENANT, True)
+    async with pool.acquire() as conn:
+        for source in ('trusted', 'failed', 'unchecked'):
+            for number in range(20):
+                value = {'source': source, 'number': number}
+                await conn.execute(
+                    """INSERT INTO tank.gold_examples
+                    (tenant_id,region,skill_id,agent,input,expected,source,source_ref,input_hash,
+                     auto_label,label_source,public,holdout)
+                    VALUES ($1,'us-east','base.fixture','base',$2::jsonb,'{}','room_auto',
+                            $3,$3,true,$4,true,$5)""",
+                    actor.tenant, gold.encoded(value), gold.input_hash(value), source, number in (0, 19),
+                )
+    for source in ('trusted', 'failed'):
+        async with pool.acquire() as conn:
+            sample = await conn.fetch(
+                """SELECT * FROM tank.gold_examples WHERE label_source=$1
+                ORDER BY created_at,id LIMIT 10""", source,
+            )
+        for index, row in enumerate(sample):
+            wrong = source == 'failed' and index >= 8
+            await gold.check(row['id'], gold.Verdict(
+                action='wrong' if wrong else 'right',
+                correction={'corrected': True} if wrong else None,
+            ), actor)
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("SELECT * FROM tank.gold_examples WHERE auto_label")
+        for row in rows:
+            await training.pair_from_gold(conn, dict(row))
+        assert await conn.fetchval(
+            """SELECT count(*) FROM tank.training_pairs p JOIN tank.gold_examples g ON g.id=p.gold_id
+            WHERE g.label_source='trusted'"""
+        ) == 18
+        assert not await conn.fetchval(
+            """SELECT 1 FROM tank.training_pairs p JOIN tank.gold_examples g ON g.id=p.gold_id
+            WHERE g.label_source IN ('failed','unchecked') OR g.holdout OR p.holdout"""
+        )
+        assert not await conn.fetchval(
+            "SELECT 1 FROM tank.gold_examples WHERE label_source='failed' AND auto_approved"
+        )
+        assert await conn.fetchval(
+            "SELECT count(*) FROM tank.gold_examples WHERE label_source='failed' AND note='Source needs code review'"
+        ) == 10
+        assert await conn.fetchval(
+            "SELECT count(*) FROM tank.gold_examples WHERE label_source='unchecked' AND status='candidate'"
+        ) == 20
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('holdout,approved', [(True, True), (True, False), (False, False)])
+async def test_training_gate_requires_source_approval_and_excludes_holdouts(holdout, approved):
+    import training
+
+    class NoWrites:
+        async def execute(self, *args):
+            pytest.fail('Untrusted or held-out gold must not enter training')
+
+    await training.pair_from_gold(NoWrites(), {
+        'holdout': holdout, 'auto_label': True, 'auto_approved': approved,
+    })

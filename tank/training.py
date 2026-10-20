@@ -40,7 +40,7 @@ async def save_pair(conn, *, tenant: uuid.UUID, agent: str, task: str, value: An
 
 
 async def pair_from_gold(conn, row: dict[str, Any]) -> None:
-    if row["holdout"]:
+    if row["holdout"] or (row.get("auto_label") and not row.get("auto_approved")):
         return
     await save_pair(conn, tenant=row["tenant_id"], agent=row["agent"], task=row["skill_id"],
                     value=obj(row["input"]), output=obj(row["expected"]), approved_by=row["checked_by"],
