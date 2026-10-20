@@ -417,17 +417,93 @@ def _document_from_nodes(payload: dict[str, Any], node_id: str) -> tuple[dict[st
     return node["document"], name
 
 
+def visual_frames(document: dict[str, Any], variables_payload: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Keep measured geometry/text and bound colours; never derive them from a built page.
+
+    DOM selectors are stable Figma node ids. A builder must map those ids onto
+    rendered elements. Missing boxes or unresolved paint tokens leave the frame
+    incomplete so the browser gate refuses it.
+    """
+    meta = (variables_payload or {}).get("meta", variables_payload or {})
+    variables = meta.get("variables", {})
+    roots = document.get("children", []) if document.get("type") == "CANVAS" else [document]
+    result = []
+    for frame in roots:
+        if frame.get("type") != "FRAME":
+            continue
+        origin = frame.get("absoluteBoundingBox", {})
+        tokens: dict[str, str] = {}
+        elements: list[dict[str, Any]] = []
+        incomplete = False
+
+        def visit(node: dict[str, Any]) -> None:
+            nonlocal incomplete
+            if node.get("visible") is False:
+                return
+            box = node.get("absoluteBoundingBox", {})
+            if not all(isinstance(box.get(k), (int, float)) for k in ("x", "y", "width", "height")):
+                incomplete = True
+                return
+            colours = {}
+            fills = [fill for fill in node.get("fills", []) if fill.get("visible") is not False]
+            binding = node.get("boundVariables", {}).get("fills", [])
+            if fills:
+                # Multiple paints, gradients and bitmap fills need a separate original-asset reference.
+                # They are retained in frame_data, but never approximated as a single colour.
+                if len(fills) != 1 or fills[0].get("type") != "SOLID" or not binding:
+                    incomplete = True
+                else:
+                    alias = binding[0] if isinstance(binding, list) else binding
+                    variable = variables.get(alias.get("id"), {})
+                    values = variable.get("valuesByMode", {})
+                    resolved = {_resolve(v, mode, variables, set())[0] for mode, v in values.items()}
+                    if len(resolved) != 1 or None in resolved:
+                        incomplete = True
+                    else:
+                        value = next(iter(resolved))
+                        name = "--colour-" + _slug(variable.get("name", ""))
+                        if not value or not re.fullmatch(r"#[0-9a-fA-F]{6}", value):
+                            incomplete = True
+                        else:
+                            tokens[name] = value
+                            colours["color" if node.get("type") == "TEXT" else "backgroundColor"] = name
+            node_id = str(node.get("id", ""))
+            if not re.fullmatch(r"\d+:\d+", node_id):
+                incomplete = True
+                return
+            element = {"nodeId": node_id, "selector": f'[data-figma-id="{node_id}"]',
+                       "box": {"x": box["x"] - origin.get("x", 0), "y": box["y"] - origin.get("y", 0),
+                               "width": box["width"], "height": box["height"]}, "colours": colours}
+            if node.get("type") == "TEXT":
+                if not isinstance(node.get("characters"), str):
+                    incomplete = True
+                else:
+                    element["text"] = node["characters"]
+            elements.append(element)
+            for child in node.get("children", []):
+                visit(child)
+
+        visit(frame)
+        result.append({"page": "/", "frameId": frame.get("id"), "width": origin.get("width"),
+                       "height": origin.get("height"), "tokens": tokens, "elements": elements,
+                       **({"incomplete": True} if incomplete else {})})
+    return result
+
+
 def normalise_rest(file_key: str, node_id: str, nodes_payload: dict[str, Any], variables_payload: dict[str, Any] | None) -> dict[str, Any]:
     document, file_name = _document_from_nodes(nodes_payload, node_id)
     page, frames, components, uses = components_from_document(document)
     if document.get("type") != "CANVAS":
         page = {"id": node_id, "name": str(document.get("name") or page.get("name") or "")}
     variables, gaps, known = variables_from_rest(variables_payload)
+    measured = {frame["frameId"]: frame for frame in visual_frames(document, variables_payload)}
+    frames = [{**frame, **({"visual": measured[frame["id"]]} if frame["id"] in measured else {})} for frame in frames]
     node = page if node_id == page["id"] else {"id": node_id, "name": str(document.get("name") or "")}
     return {
         "file_key": file_key,
         "file_name": file_name,
         "source": "figma",
+        "frame_data": document,
         "recorded_at": None,
         "note": None,
         "collections_known": known,
@@ -478,7 +554,9 @@ def normalise_fixture(payload: dict[str, Any], node_id: str) -> dict[str, Any]:
         item = _mapping(frame, "frame")
         frame_id = normalise_node_id(item.get("id"), default="")
         frame_name = _text(item.get("name"), "frame.name")
-        frames.append({"id": frame_id, "name": frame_name})
+        frames.append({"id": frame_id, "name": frame_name,
+                       **({"visual": item["visual"]} if "visual" in item else {}),
+                       **({"preview_png": item["preview_png"]} if "preview_png" in item else {})})
         for name, value in _frame_variables(item).items():
             by_name.setdefault(name, []).append({"scope": frame_name, "value": value})
     components = []
@@ -935,6 +1013,10 @@ def compile_reading(source: dict[str, Any]) -> dict[str, Any]:
     gaps = sorted(gaps, key=lambda item: json.dumps(item, sort_keys=True))
     return {
         "ok": True,
+        "visual": [frame["visual"] for frame in source.get("frames", []) if "visual" in frame],
+        "frame_data": source.get("frame_data", source.get("frames", [])),
+        "preview_png": source.get("frames", [{}])[0].get("preview_png") if len(source.get("frames", [])) == 1 else None,
+        "visual_status": "recorded" if any("visual" in frame for frame in source.get("frames", [])) else "frame data incomplete",
         "ready": not blocked,
         "blocked": blocked,
         "source": source.get("source"),
