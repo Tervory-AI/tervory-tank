@@ -140,7 +140,7 @@ export function RadixDesk() {
 
     <section className="rx-card rx-chat" aria-labelledby="rx-chat-title">
       <h2 id="rx-chat-title">Ask Radix</h2>
-      <p>Ask about a finding or request help checking code. Website scans stay off.</p>
+      <p>Ask about a finding or request help checking code.</p>
       <div className="rx-thread" role="log" aria-label="Radix conversation" aria-live="polite" aria-relevant="additions">
         {!thread.length ? <p className="rx-thread-empty">Your requests and Radix replies appear here.</p> : null}
         {thread.map((message, index) => <article className={"rx-message rx-message-" + message.role} key={index}>
@@ -164,7 +164,7 @@ export function RadixDesk() {
             }
           }} />
         <div className="rx-send-row"><small>Enter to send. Shift + Enter for a new line.</small>
-          <button type="submit" className="rx-primary" disabled={busy || !draft.trim()}>{busy ? "Sending…" : "Send"}</button></div>
+          <button type="submit" className="rx-primary" disabled={busy}>{busy ? "Sending…" : "Send"}</button></div>
         {progress ? <p className="rx-request-progress" role="status">{progress}</p> : null}
         {error ? <p className="rx-request-error" role="alert">{error}</p> : null}
       </form>

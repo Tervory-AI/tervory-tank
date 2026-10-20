@@ -135,12 +135,12 @@ body:has(.ml) main {
 }
 
 .ml-agent {
-  width: auto;
-  height: 40px;
-  max-width: 100%;
+  display: block;
+  width: min(100%, 242px);
+  height: auto;
+  aspect-ratio: 3685 / 608;
   object-fit: contain;
   object-position: left center;
-  display: block;
 }
 
 .ml-logo {

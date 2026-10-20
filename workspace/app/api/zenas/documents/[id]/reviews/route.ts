@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { currentTenant } from "@/lib/tenant";
 import { requireReviewer } from "@/app/review/access";
+import { signOffRefusal } from "@/app/review/founder";
 import { reviewerMay } from "../../../rules";
 import { homeRegion, zenas } from "../../../tank";
 
@@ -17,7 +18,10 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
   const decision = body?.decision === "approved" || body?.decision === "rejected" ? body.decision : "";
   const jurisdiction = body?.jurisdiction ?? "";
   const changes = (body?.changes ?? "").slice(0, 8000);
-  if (!decision || !reviewerMay(reviewer.jurisdictions, jurisdiction)) {
+  const refusal = signOffRefusal(reviewer, jurisdiction);
+  if (refusal) return NextResponse.json({ error: refusal }, { status: 403 });
+  const scope = reviewer.founder ? ["us", "za"] : reviewer.jurisdictions;
+  if (!decision || !reviewerMay(scope, jurisdiction)) {
     return NextResponse.json({ error: "You can only sign off work in your jurisdiction." }, { status: 403 });
   }
   try {
@@ -30,6 +34,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
         reviewer: reviewer.name,
         jurisdiction,
         admission_no: reviewer.admissionNo,
+        reviewer_kind: reviewer.founder ? "founder" : "reviewer",
         decision,
         changes,
       }),

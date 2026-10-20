@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { FeedbackButtons } from "../feedback-buttons";
+import "./tasks.css";
 
 type Status = "queued" | "running" | "done" | "failed";
 type Task = {
@@ -59,7 +60,11 @@ export default function TasksPage() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (busy || !title.trim() || !request.trim()) return;
+    if (busy) return;
+    if (!title.trim() || !request.trim()) {
+      setError("Add a title and what you need done.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -81,17 +86,21 @@ export default function TasksPage() {
   }
 
   return (
-    <>
+    <div className="tasks-page">
       <h1>Tasks</h1>
       <form onSubmit={submit} className="task-form">
+        <label htmlFor="task-title">Title</label>
         <input
+          id="task-title"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="Short title, e.g. Pricing email to a supplier"
           maxLength={200}
           disabled={busy}
         />
+        <label htmlFor="task-request">What you need</label>
         <textarea
+          id="task-request"
           value={request}
           onChange={(e) => setRequest(e.target.value)}
           placeholder="What do you need done?"
@@ -99,12 +108,13 @@ export default function TasksPage() {
           disabled={busy}
         />
         <div className="task-form-row">
-          <select value={kind} onChange={(e) => setKind(e.target.value)} disabled={busy}>
+          <label htmlFor="task-kind">Kind</label>
+          <select id="task-kind" value={kind} onChange={(e) => setKind(e.target.value)} disabled={busy}>
             {KINDS.map((k) => (
               <option key={k.value} value={k.value}>{k.label}</option>
             ))}
           </select>
-          <button type="submit" disabled={busy || !title.trim() || !request.trim()}>
+          <button type="submit" disabled={busy}>
             {busy ? "Queueing…" : "Add task"}
           </button>
         </div>
@@ -144,6 +154,6 @@ export default function TasksPage() {
           );
         })}
       </div>
-    </>
+    </div>
   );
 }

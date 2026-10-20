@@ -456,7 +456,7 @@ export async function loadMarketLab(options?: {
     if (flags.FRED_API_KEY) {
       const key = await keyFor("FRED_API_KEY");
       if (!key) {
-        // FRED stays unread. A vault that is off cannot supply this key.
+        // FRED stays unread. A closed vault cannot supply this key.
       } else for (const item of CATALOG) {
         if (item.kind !== "fred" || !item.fredSeries || !callable.has(item.id)) continue;
         const series = item.fredSeries;
