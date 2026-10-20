@@ -162,7 +162,7 @@ def test_gold_route_accepts_only_the_room_key(monkeypatch: pytest.MonkeyPatch) -
         raise AssertionError("wrong gold module")
 
     foreign.candidates = wrong
-    sys.modules["gold_sources"] = foreign
+    monkeypatch.setitem(sys.modules, "gold_sources", foreign)
     monkeypatch.setenv("TANK_KEY", KEY)
     monkeypatch.setenv("TANK_REGION", "us-east")
     monkeypatch.setenv("CATALOGUE_DIR", str(CATALOGUES))
