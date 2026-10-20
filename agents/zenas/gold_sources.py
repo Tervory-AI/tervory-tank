@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import re
+from datetime import datetime, timezone
 from typing import Any
 
 from agents.zenas.core.convert import criminal_case, fact_passages
@@ -10,6 +12,44 @@ from agents.zenas.core.engine import quote_in_source
 from agents.zenas.core.release_mask import COURT_SOURCES
 from agents.zenas.core.scope_rules import classify
 from agents.zenas.pool.catalogue import CATALOGUE
+
+JSON_MAX_BYTES = 60 * 1024
+ROW_MAX_BYTES = 64 * 1024
+RESPONSE_MAX_BYTES = 4500000
+PAGE_SIZE = 50
+
+
+def _encoded(value: Any) -> bytes:
+    return json.dumps(value, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode("utf-8")
+
+
+def _bounded(candidate: dict[str, Any]) -> dict[str, Any] | None:
+    try:
+        if any(len(_encoded(candidate[key])) > JSON_MAX_BYTES for key in ("input", "expected")):
+            return None
+        if len(json.dumps(candidate, ensure_ascii=False, allow_nan=False).encode("utf-8")) > ROW_MAX_BYTES:
+            return None
+    except (TypeError, ValueError, RecursionError):
+        return None
+    return candidate
+
+
+def _references(facts: str, judgment: str) -> list[dict[str, Any]]:
+    headings = list(re.finditer(r"(?m)^\s*(?:\[(\d+)\]|(\d+)\.)\s+", judgment))
+    references = []
+    for passage in fact_passages(facts):
+        numbers = []
+        for index, heading in enumerate(headings):
+            end = headings[index + 1].start() if index + 1 < len(headings) else len(judgment)
+            paragraph = judgment[heading.end():end].strip()
+            if paragraph and (quote_in_source(passage, paragraph) or quote_in_source(paragraph, passage)):
+                numbers.append(int(heading.group(1) or heading.group(2)))
+        words = passage.split()
+        references.append({
+            "paragraphs": numbers,
+            "first_words": " ".join(words[:8]), "last_words": " ".join(words[-8:]),
+        })
+    return references
 
 
 def _object(value: Any) -> Any:
@@ -38,10 +78,11 @@ def case_candidate(row: dict[str, Any], region: str) -> dict[str, Any] | None:
     if not findings or not outcome:
         return None
     held = bool(row.get("holdout"))
-    return {
+    return _bounded({
         "skill_id": "zenas.case_facts",
         "input": {
-            "pool_doc_id": str(row["pool_doc_id"]), "judgment": judgment,
+            "pool_doc_id": str(row["pool_doc_id"]), "pool_version_id": str(row["pool_version_id"]),
+            "judgment": facts, "paragraph_references": _references(facts, judgment),
             "home_region": region, "holdout": held,
         },
         "expected": {
@@ -50,8 +91,9 @@ def case_candidate(row: dict[str, Any], region: str) -> dict[str, Any] | None:
         },
         "label_source": f"{'held_out' if held else 'converted'}:{row['source_id']}:{row['pool_version_id']}",
         "region": region,
-        "public": not held,
-    }
+        "public": True,
+        "holdout": held,
+    })
 
 
 def statute_candidate(row: dict[str, Any], region: str) -> dict[str, Any] | None:
@@ -70,14 +112,15 @@ def statute_candidate(row: dict[str, Any], region: str) -> dict[str, Any] | None
         "jurisdiction": jurisdiction, "kind": "statute", "status": "effective",
         "path": row.get("path") or "", "level": "",
     }
-    return {
+    return _bounded({
         "skill_id": "zenas.retrieve",
         "input": {"citation": row["citation"], "jurisdiction": jurisdiction, "corpus": [passage]},
         "expected": {"count": 1, "citations": [row["citation"]], "passages": [passage]},
         "label_source": f"statute_section:{row['source_id']}:{row['version_id']}:{row.get('path') or ''}",
         "region": region,
         "public": True,
-    }
+        "holdout": False,
+    })
 
 
 async def candidates(pool: Any, *, region: str, limit: int = 200) -> list[dict[str, Any]]:
@@ -88,8 +131,14 @@ async def candidates(pool: Any, *, region: str, limit: int = 200) -> list[dict[s
         return []
     jurisdiction = "za" if region == "za" else "us"
     sources = [item.source_id for item in CATALOGUE if item.region == region]
+    rotation = datetime.now(timezone.utc).date().isoformat()
+    result: list[dict[str, Any]] = []
+    size = 2
     async with pool.acquire() as conn:
-        cases = await conn.fetch(
+        async def worked_rows():
+            offset = 0
+            while True:
+                rows = await conn.fetch(
             """
             SELECT w.*, d.text, d.source_id, d.title, d.docket_number, d.nature_of_suit
             FROM agent_zenas.worked_matters w
@@ -99,27 +148,58 @@ async def candidates(pool: Any, *, region: str, limit: int = 200) -> list[dict[s
               AND w.source = 'case' AND w.material_type = 'public_record'
               AND d.kind = 'case' AND d.source_id = ANY($3::text[])
               AND d.effective_to IS NULL AND d.status IS DISTINCT FROM 'superseded'
-            ORDER BY row_number() OVER (PARTITION BY w.holdout ORDER BY w.id), w.holdout LIMIT $4
+            ORDER BY md5(w.id::text || $4), w.id LIMIT $5 OFFSET $6
             """,
-            region, jurisdiction, sorted(COURT_SOURCES), limit,
-        )
-        sections = await conn.fetch(
+                    region, jurisdiction, sorted(COURT_SOURCES), rotation, PAGE_SIZE, offset,
+                )
+                for row in rows:
+                    yield row
+                if len(rows) < PAGE_SIZE:
+                    return
+                offset += len(rows)
+
+        async def statute_rows():
+            offset = 0
+            while True:
+                rows = await conn.fetch(
             """
             SELECT c.*, d.source_id, d.kind, d.title
             FROM zenas_pool.chunks c JOIN zenas_pool.documents d ON d.version_id = c.version_id
             WHERE c.jurisdiction = $1 AND d.jurisdiction = $1
               AND d.source_id = ANY($2::text[]) AND d.kind = 'statute'
               AND d.effective_to IS NULL AND d.status IS DISTINCT FROM 'superseded'
-            ORDER BY c.chunk_id LIMIT $3
+            ORDER BY md5(c.chunk_id || $3), c.chunk_id LIMIT $4 OFFSET $5
             """,
-            jurisdiction, sources, limit,
-        )
-    worked = [candidate for row in cases if (candidate := case_candidate(dict(row), region)) is not None]
-    statutes = [candidate for row in sections if (candidate := statute_candidate(dict(row), region)) is not None]
-    result = []
-    for index in range(max(len(worked), len(statutes))):
-        if index < len(worked):
-            result.append(worked[index])
-        if index < len(statutes):
-            result.append(statutes[index])
-    return result[:limit]
+                    jurisdiction, sources, rotation, PAGE_SIZE, offset,
+                )
+                for row in rows:
+                    yield row
+                if len(rows) < PAGE_SIZE:
+                    return
+                offset += len(rows)
+
+        async def filtered(rows, build):
+            async for row in rows:
+                try:
+                    candidate = build(dict(row), region)
+                except (TypeError, ValueError, KeyError, AttributeError, RecursionError):
+                    continue
+                if candidate is not None:
+                    yield candidate
+
+        streams = [filtered(worked_rows(), case_candidate), filtered(statute_rows(), statute_candidate)]
+        while streams and len(result) < limit:
+            for stream in list(streams):
+                try:
+                    candidate = await stream.__anext__()
+                except StopAsyncIteration:
+                    streams.remove(stream)
+                    continue
+                added = len(_encoded(candidate)) + bool(result)
+                if size + added > RESPONSE_MAX_BYTES:
+                    return result
+                result.append(candidate)
+                size += added
+                if len(result) == limit:
+                    break
+    return result

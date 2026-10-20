@@ -1,6 +1,9 @@
 import copy
+import hashlib
+import json
 import secrets
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -9,6 +12,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from agents.zenas import app as room
+from agents.zenas import gold_sources
 from agents.zenas.core.engine import retrieve_passages
 from agents.zenas.gold_sources import candidates, case_candidate, statute_candidate
 
@@ -40,9 +44,10 @@ def section(region="us-east"):
 def test_public_cases_and_heldout_labels(region):
     for held in (True, False):
         result = case_candidate(case(region, held), region)
-        assert set(result) == {"skill_id", "input", "expected", "label_source", "region", "public"}
+        assert set(result) == {"skill_id", "input", "expected", "label_source", "region", "public", "holdout"}
         assert result["region"] == region
-        assert result["public"] is (not held)
+        assert result["public"] is True
+        assert result["holdout"] is held
         assert result["input"]["holdout"] is held
         assert result["label_source"].startswith("held_out:" if held else "converted:")
     assert case_candidate(case(region), "us-east" if region == "za" else "za") is None
@@ -88,6 +93,116 @@ class Connection:
 class Pool:
     def acquire(self):
         return Connection()
+
+
+class PagedPool(Connection):
+    def __init__(self, cases=(), sections=()):
+        self.cases = list(cases)
+        self.sections = list(sections)
+        self.offsets = []
+
+    def acquire(self):
+        return self
+
+    async def fetch(self, query, *args):
+        worked = "worked_matters" in query
+        rows = self.cases if worked else self.sections
+        rotation, limit, offset = args[-3:]
+        assert "ORDER BY md5(" in query and "OFFSET" in query
+        self.offsets.append(offset)
+        key = "id" if worked else "chunk_id"
+        ordered = sorted(rows, key=lambda row: (
+            hashlib.md5((str(row[key]) + rotation).encode()).hexdigest(), row[key],
+        ))
+        return ordered[offset:offset + limit]
+
+
+def test_full_judgment_is_not_exported_but_paragraph_references_are():
+    row = case()
+    facts = row["fact_pattern"]["facts"]
+    row["text"] = "[1] " + "Background only. " * 50000 + "\n[42] " + facts
+    result = case_candidate(row, "us-east")
+    assert result["input"]["judgment"] == facts
+    assert result["input"]["paragraph_references"][0]["paragraphs"] == [42]
+    assert len(json.dumps(result).encode()) < 2000
+
+
+@pytest.mark.parametrize("field", ["facts", "features", "element_findings"])
+def test_oversized_judgment_passages_and_labels_are_skipped(field):
+    row = case()
+    large = "é" * (60 * 1024)
+    if field == "facts":
+        row["text"] = large
+        row["fact_pattern"]["facts"] = large
+    elif field == "features":
+        row["fact_pattern"]["features"] = {"large": large}
+    else:
+        row["element_findings"] = [{"reasoning": large}]
+    assert case_candidate(row, "us-east") is None
+
+
+@pytest.mark.asyncio
+async def test_filtering_pages_until_limit_and_rotates_each_day(monkeypatch):
+    monkeypatch.setattr(gold_sources, "PAGE_SIZE", 2)
+    rows = [dict(case(), id=str(number), pool_doc_id=str(number)) for number in range(30)]
+    for row in rows[:20]:
+        row["tenant_id"] = "private"
+    rows[20]["fact_pattern"] = "{malformed"
+    rows[21]["element_findings"] = [{"reasoning": "x" * 70000}]
+    pool = PagedPool(rows)
+    orders = []
+    for day in (20, 21):
+        class Clock:
+            @staticmethod
+            def now(zone):
+                assert zone == timezone.utc
+                return datetime(2026, 10, day, tzinfo=zone)
+        monkeypatch.setattr(gold_sources, "datetime", Clock)
+        result = await candidates(pool, region="us-east", limit=5)
+        assert len(result) == 5
+        order = [item["input"]["pool_doc_id"] for item in result]
+        assert len(set(order)) == 5
+        assert set(order) <= {str(number) for number in range(22, 30)}
+        assert result == await candidates(pool, region="us-east", limit=5)
+        orders.append(order)
+    assert set(orders[0]) != set(orders[1])
+    assert max(pool.offsets) >= 4
+
+
+@pytest.mark.asyncio
+async def test_actual_endpoint_response_stays_under_five_mb(monkeypatch):
+    key = secrets.token_urlsafe(24)
+    monkeypatch.setenv("TANK_KEY", key)
+    monkeypatch.setenv("TANK_REGION", "us-east")
+    rows = [
+        dict(section(), chunk_id=str(number), path=str(number), text="Civil agreement. " + "é" * 14000)
+        for number in range(200)
+    ]
+    monkeypatch.setattr(room.app.state, "pool", PagedPool(sections=rows), raising=False)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=room.app), base_url="http://test") as client:
+        response = await client.get("/gold/candidates?limit=200", headers={"X-Tank-Key": key})
+    assert response.status_code == 200
+    assert 4400000 < len(response.content) <= gold_sources.RESPONSE_MAX_BYTES < 5000000
+    result = response.json()
+    assert 1 < len(result) < 200
+    for row in result:
+        for field in ("input", "expected"):
+            assert len(gold_sources._encoded(row[field])) <= gold_sources.JSON_MAX_BYTES
+
+
+@pytest.mark.asyncio
+async def test_explicit_holdout_cannot_create_a_training_pair():
+    import training
+
+    row = case_candidate(case(holdout=True), "us-east")
+    assert row["public"] is True
+    assert training.valid_auto_candidate(row, "zenas", "us-east")
+
+    class NoWrites:
+        async def execute(self, *args):
+            pytest.fail("Held-out public record must not become a training pair")
+
+    await training.pair_from_gold(NoWrites(), row)
 
 
 @pytest.mark.asyncio
