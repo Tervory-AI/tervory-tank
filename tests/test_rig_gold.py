@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -13,8 +14,19 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "agents" / "rig"))
 sys.path.insert(0, str(ROOT / "agents" / "_chassis"))
 
-from gold_sources import candidates  # noqa: E402
 from rigbox.logic import search  # noqa: E402
+
+
+def _load_gold():
+    path = ROOT / "agents" / "rig" / "gold_sources.py"
+    spec = importlib.util.spec_from_file_location("rig_room_gold_sources_test", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+candidates = _load_gold().candidates
 
 CATALOGUES = ROOT / "agents" / "rig" / "catalogues"
 KEY = "room-key-for-gold"
@@ -143,6 +155,14 @@ def _call(module, path: str, headers: dict[str, str]) -> tuple[int, bytes]:
 
 
 def test_gold_route_accepts_only_the_room_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Another room's gold_sources is already imported under that name in the full suite.
+    foreign = types.ModuleType("gold_sources")
+
+    def wrong(*_args: object, **_kwargs: object) -> list:
+        raise AssertionError("wrong gold module")
+
+    foreign.candidates = wrong
+    sys.modules["gold_sources"] = foreign
     monkeypatch.setenv("TANK_KEY", KEY)
     monkeypatch.setenv("TANK_REGION", "us-east")
     monkeypatch.setenv("CATALOGUE_DIR", str(CATALOGUES))

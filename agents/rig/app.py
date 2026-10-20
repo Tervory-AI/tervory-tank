@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hmac
+import importlib.util
 import json
 import logging
 import os
@@ -16,7 +17,6 @@ from chassis.jobs import JobContext
 from chassis.logs import log_line
 from fastapi import FastAPI, Header, HTTPException, Query
 
-from gold_sources import candidates
 from rigbox.api import mount
 from rigbox.page_route import mount_page
 from rigbox.service import Service, WebhookHandoff
@@ -128,7 +128,26 @@ async def gold_candidates(
     if not key or not x_tank_key or not hmac.compare_digest(key, x_tank_key):
         raise HTTPException(status_code=401, detail="room key required")
     root = Path(os.environ.get("CATALOGUE_DIR", str(Path(__file__).resolve().parent / "catalogues")))
-    return candidates(limit, region=os.environ.get("TANK_REGION", "us-east"), root=root)
+    return _gold_candidates()(limit, region=os.environ.get("TANK_REGION", "us-east"), root=root)
+
+
+def _gold_candidates():
+    """Load this room's gold module by file, not by the shared import name.
+
+    Other rooms also ship a module called gold_sources. Importing by name
+    picks up whichever room a test put on the path first.
+    """
+    cached = getattr(_gold_candidates, "fn", None)
+    if cached is not None:
+        return cached
+    path = Path(__file__).resolve().parent / "gold_sources.py"
+    spec = importlib.util.spec_from_file_location("rig_room_gold_sources", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("rig gold sources are missing")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    _gold_candidates.fn = module.candidates
+    return module.candidates
 
 _inner = app.router.lifespan_context
 
