@@ -26,6 +26,7 @@ from agents.zenas.core.engine import (
     quote_in_source,
 )
 from agents.zenas.core.release_mask import material_type_for_pool
+from agents.zenas.core.pointers import PointerError, judgment_text, resolve_answer
 from agents.zenas.core.selftest import box_jurisdiction, is_holdout
 
 log = logging.getLogger("zenas.convert")
@@ -64,11 +65,13 @@ WHERE version_id = $1 AND jurisdiction = $2 AND kind = 'case'
 """.strip()
 
 _PROMPT_HEAD = (
-    "Read this judgment as published. Copy the facts in the court's own words, "
-    "as a continuous passage from the judgment. Name the question, the elements, "
+    "Read this judgment as published. Return facts_pointer and quote_pointer objects "
+    "using {\"paragraphs\":[1,2]} or {\"first\":\"first eight words\",\"last\":\"last eight words\"}. "
+    "Select facts totalling at least 200 characters. Code will extract the passages. "
+    "Name the question, the elements, "
     "and the holding. Cite only this case. Every quote must appear in the judgment "
     "word for word. Reply with JSON only:\n"
-    '{"facts":"","question":"","elements":[{"element_id":"","finding":"met|not_met|unclear","quote":""}],'
+    '{"facts_pointer":{},"question":"","elements":[{"element_id":"","finding":"met|not_met|unclear","quote_pointer":{}}],'
     '"holding":"","citations":[{"citation":"","quote":""}]}\n\n'
     "Citation: "
 )
@@ -345,9 +348,11 @@ async def _judgment(pool: Any, case: dict[str, Any]) -> str:
     return str(row["text"] or "")
 
 
-def parse_worked(raw: str) -> dict[str, Any]:
+def parse_worked(raw: str, text: str | None = None) -> dict[str, Any]:
     """Facts, question, elements, holding. The policy shape is accepted too."""
     data = parse_json_object(raw)
+    if text is not None:
+        data = resolve_answer(data, text)
     facts = _fold(str(data.get("facts") or data.get("narrative") or ""))
     question = _fold(str(data.get("question") or ""))
     holding = _fold(str(data.get("holding") or data.get("outcome") or ""))
@@ -387,6 +392,7 @@ def parse_worked(raw: str) -> dict[str, Any]:
         "holding": holding,
         "citations": citations,
         "features": features,
+        "pointed": "facts_pointer" in data,
     }
 
 
@@ -771,6 +777,7 @@ async def convert_cases(
         if not text.strip() or not case["citation"].strip():
             await _remember_failure(ladder, region=box, pool_doc_id=case["document_id"], reason="cite check failed")
             continue
+        text = judgment_text(text)
         prompt = _PROMPT_HEAD + case["citation"] + "\n\n" + text
         try:
             called = await _ask_model(model, [{"role": "user", "content": prompt}])
@@ -794,7 +801,14 @@ async def convert_cases(
             )
             continue
         try:
-            parsed = parse_worked(content)
+            parsed = parse_worked(content, text)
+        except PointerError:
+            await _remember_failure(
+                ladder, region=box, pool_doc_id=case["document_id"],
+                reason="pointer did not resolve", answer=content,
+                finish_reason=finish, tokens_in=tokens_in, tokens_out=tokens_out,
+            )
+            continue
         except (ValueError, TypeError):
             await _remember_failure(
                 ladder,
@@ -807,7 +821,7 @@ async def convert_cases(
                 tokens_out=tokens_out,
             )
             continue
-        if facts_too_short(str(parsed.get("facts") or "")):
+        if (parsed["pointed"] and len(parsed["facts"]) < _MIN_FACTS_CHARS) or facts_too_short(parsed["facts"]):
             await _remember_failure(
                 ladder,
                 region=box,
