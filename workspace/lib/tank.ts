@@ -241,6 +241,13 @@ export function baseRun(
 export function baseEngines(): Promise<string[]> {
   return tank<string[]>("/v1/base/engines", { method: "GET" });
 }
+export function runContextTrial(userId: string): Promise<{
+  records_sent: number; message?: string; comparison_records?: Pick<BaseRecord, "profile" | "passes">[];
+}> {
+  return tank("/v1/base/context-dev/trial", {
+    method: "POST", headers: { "x-tervory-admin": userId },
+  });
+}
 export function baseRecords(tenantId: string, opts: { taskId?: string; batch?: string; limit?: number; offset?: number } = {}): Promise<BaseRecord[]> {
   const q = new URLSearchParams({ tenant_id: tenantId, limit: String(opts.limit ?? 200), offset: String(opts.offset ?? 0) });
   if (opts.taskId) q.set("task_id", opts.taskId);

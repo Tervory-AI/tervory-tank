@@ -2255,6 +2255,23 @@ BASE_AGENT_URL = os.environ.get("BASE_AGENT_URL", "http://agent-base:8000")
 _BASE_ROUTES = {"run", "retry", "rerun", "batches", "engines", "records"}
 
 
+@app.post("/v1/base/context-dev/trial", dependencies=[Depends(__import__("admin").require_admin)])
+async def base_context_trial() -> Response:
+    key = os.environ.get("TANK_KEY_BASE", "")
+    if _http is None or not key:
+        raise HTTPException(status_code=503, detail="Base trial is unavailable")
+    try:
+        response = await _http.post(
+            BASE_AGENT_URL.rstrip("/") + "/context-dev/trial",
+            json={"tenant_id": str(PLATFORM_TENANT)},
+            headers={"X-Tank-Key": key},
+            timeout=3600, follow_redirects=False,
+        )
+    except httpx.HTTPError:
+        raise HTTPException(status_code=503, detail="Trial interrupted; refresh results before trying again") from None
+    return Response(content=response.content, status_code=response.status_code, media_type="application/json")
+
+
 @app.api_route("/v1/base/{path:path}", methods=["GET", "POST"], dependencies=[Depends(require_key)])
 async def base_proxy(path: str, request: Request) -> Response:
     """Forward /v1/base/* to the Base room. The Workspace key is checked here and not sent on."""
