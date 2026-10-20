@@ -190,6 +190,7 @@ services:
       TANK_KEY_ZENAS: ${TANK_KEY_ZENAS:-}
       TANK_KEY_BASE: ${TANK_KEY_BASE:-}
       TANK_KEY_RIG: ${TANK_KEY_RIG:-}
+      TANK_KEY_WORKERS: ${TANK_KEY_WORKERS:-}
       TANK_REGION: ${TANK_REGION:-us-east}
       BASE_AGENT_URL: http://agent-base:8000
       SEARXNG_URL: http://searxng:8080
