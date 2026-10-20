@@ -785,7 +785,7 @@ def training_candidate(policy: dict, candidates: list[dict], gold_count: int) ->
     """Display a held-out winner only; screening/shadow scores are not holdout scores."""
     if gold_count < 100:
         return None
-    eligible = [c for c in candidates if c.get('heldout_n', 0) > 0
+    eligible = [c for c in candidates if c.get('gold_count', gold_count) >= 100 and c.get('heldout_n', 0) > 0
                 and c.get('heldout_score') is not None
                 and float(c['heldout_score']) >= float(policy['eval_threshold'])
                 and c.get('kind') in ('code', 'model', 'owned')
@@ -803,16 +803,17 @@ async def training_table(conn, tenant, region: str) -> list[dict]:
     gold = await conn.fetch("""SELECT skill_id,count(DISTINCT input_hash) AS n FROM tank.gold_examples
         WHERE tenant_id=$1 AND region=$2 AND status='checked' AND (NOT auto_label OR auto_approved)
         GROUP BY skill_id""", tenant, region)
-    scores = await conn.fetch("""SELECT DISTINCT ON (skill_id,version) * FROM tank.gold_scores
-        WHERE tenant_id=$1 AND region=$2 AND final_check ORDER BY skill_id,version,ran_at DESC,id DESC""", tenant, region)
-    costs = await conn.fetch("""SELECT task_type,avg(cost_usd) AS cost FROM tank.ledger
+    scores = await conn.fetch("""SELECT DISTINCT ON (skill_id,version,task_type,candidate_model) * FROM tank.gold_scores
+        WHERE tenant_id=$1 AND region=$2 AND final_check ORDER BY skill_id,version,task_type,candidate_model,ran_at DESC,id DESC""", tenant, region)
+    costs = await conn.fetch("""SELECT task_type,model,avg(cost_usd) AS cost FROM tank.ledger
         WHERE tenant_id=$1 AND region=$2 AND ts>now()-interval '30 days' AND NOT cache_hit
-        GROUP BY task_type""", tenant, region)
+        GROUP BY task_type,model""", tenant, region)
     counts = {r['skill_id']: r['n'] for r in gold}
-    prices = {r['task_type']: float(r['cost']) for r in costs}
+    prices = {(r['task_type'], r['model']): float(r['cost']) for r in costs}
     result = []
     for policy in policies:
         task = policy['task_type']
+        current_cost = prices.get((task, policy['model']))
         mapped = {task} | {s['id'] for s in skills if s['task_type'] == task}
         task_ranks = [dict(r) for r in ranks if r['task_type'] == task]
         for rank in task_ranks:
@@ -822,7 +823,7 @@ async def training_table(conn, tenant, region: str) -> list[dict]:
                 approved = any(s['id'] == parsed[0] and s['version'] == parsed[1]
                                and s['state'] == 'approved' and s['present'] and not s['task_type'] for s in skills)
                 evidence = next((s for s in scores if s['skill_id'] == parsed[0] and s['version'] == parsed[1]), None)
-                rank.update(heldout_score=float(evidence['score']) if approved and evidence else None,
+                rank.update(gold_count=counts.get(parsed[0], 0), heldout_score=float(evidence['score']) if approved and evidence else None,
                             heldout_n=evidence['n'] if approved and evidence else 0, cost_per_call=0.0)
             else:
                 # Model evaluations explicitly name the task and model in the score store.
@@ -831,14 +832,14 @@ async def training_table(conn, tenant, region: str) -> list[dict]:
                 rank.update(heldout_score=float(evidence['score']) if evidence else None,
                             heldout_n=evidence['n'] if evidence else 0,
                             cost_per_call=float(evidence['cost_per_call']) if evidence and evidence.get('cost_per_call') is not None else None)
-                rank['cheaper'] = (rank['cost_per_call'] is not None and task in prices
-                                   and rank['cost_per_call'] < prices[task])
+                rank['cheaper'] = (rank['cost_per_call'] is not None and current_cost is not None
+                                   and rank['cost_per_call'] < current_cost)
         count = max((counts.get(skill, 0) for skill in mapped), default=0)
         best = training_candidate(dict(policy), task_ranks, count)
         result.append({'task_type': task, 'model': policy['model'], 'gold_count': count,
                        'candidate': best['candidate'] if best else None,
                        'heldout_score': best['heldout_score'] if best else None,
-                       'current_cost': prices.get(task), 'candidate_cost': best['cost_per_call'] if best else None,
+                       'current_cost': current_cost, 'candidate_cost': best['cost_per_call'] if best else None,
                        'can_promote': bool(best and best['candidate'] == policy['candidate_model']
                                            and not router_cannot_serve(best['candidate']) and not policy['auto_promote'])})
     return result
