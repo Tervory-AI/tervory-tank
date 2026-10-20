@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
+import json
 import os
 import re
 import uuid
@@ -177,76 +178,133 @@ async def collect_once() -> None:
 ROOMS = ("base", "tiger", "market_lab", "rig", "zenas", "radix", "tisan")
 
 
-def valid_auto_candidate(row: Any, room: str, region: str) -> bool:
-    """Fail closed on provenance and region before anything is persisted."""
+GOLD_RESPONSE_MAX_BYTES = 5 * 1024 * 1024
+GOLD_ROW_MAX_BYTES = 64 * 1024
+
+
+def gold_auto_max() -> int:
+    raw = os.environ.get("GOLD_AUTO_MAX")
+    if raw is None:
+        return 200
+    try:
+        value = int(raw)
+        if value > 0:
+            return value
+    except ValueError:
+        pass
+    log.warning("Invalid GOLD_AUTO_MAX; using 200")
+    return 200
+
+
+def skill_owners() -> dict[str, set[str]]:
+    from skala import load_packages
+
+    owners: dict[str, set[str]] = {}
+    for package in load_packages().values():
+        owners.setdefault(package.id, set()).add(package.agent)
+    return owners
+
+
+def valid_auto_candidate(row: Any, room: str, region: str,
+                         owners: dict[str, set[str]] | None = None) -> bool:
+    """Only known packages owned by this authenticated room may label rows."""
+    owners = skill_owners() if owners is None else owners
     return (isinstance(row, dict) and row.get("public") is True
             and row.get("client_matter", False) is False
             and row.get("tenant_id") in (None, str(PLATFORM_TENANT))
             and region in ("us-east", "za") and row.get("region") == region
             and isinstance(row.get("skill_id"), str)
-            and row["skill_id"].startswith({"market_lab": ("market.",), "radix": ("radix.", "scan.")}.get(room, (room + ".",)))
+            and owners.get(row["skill_id"]) == {room}
             and isinstance(row.get("label_source"), str)
             and 0 < len(row["label_source"]) <= 500
-            and "input" in row and "expected" in row)
+            and isinstance(row.get("input"), dict) and isinstance(row.get("expected"), dict))
 
 
-async def collect_room_gold(day: date) -> None:
+def candidate_json(value: dict) -> str:
+    text = json.dumps(value, ensure_ascii=False, allow_nan=False, sort_keys=True)
+    if len(text.encode("utf-8")) > GOLD_ROW_MAX_BYTES:
+        raise ValueError("Candidate field exceeds size limit")
+    return text
+
+
+async def collect_room_gold(day: date) -> dict[str, int]:
+    stats = dict(inserted=0, rejected=0, capped=0, duplicates=0, rejected_responses=0, unavailable=0)
     region = runtime().box_region()
     if region not in ("us-east", "za"):
-        return
-    limit = max(0, int(os.environ.get("GOLD_AUTO_MAX") or "200"))
-    if not limit:
-        return
+        return stats
+    limit = gold_auto_max()
+    owners = skill_owners()
     async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
         for room in ROOMS:
             key = os.environ.get(f"TANK_KEY_{room.upper()}", "")
             if not key:
                 continue
-            # Fixed local destinations: a room can never redirect its key elsewhere.
             host = "agent-" + room.replace("_", "-")
             try:
-                response = await client.get(f"http://{host}:8000/gold/candidates",
-                                            params={"limit": min(limit, 200)},
-                                            headers={"X-Tank-Key": key})
-                if response.status_code in (404, 405, 501):
-                    continue
-                response.raise_for_status()
-                rows = response.json()
-                if not isinstance(rows, list):
-                    continue
-            except (httpx.HTTPError, ValueError):
-                log.warning("Room gold intake unavailable: %s", room)
+                # Stream decoded bytes, so a compressed or chunked response is also capped.
+                async with client.stream("GET", f"http://{host}:8000/gold/candidates",
+                                         params={"limit": min(limit, 200)},
+                                         headers={"X-Tank-Key": key}) as response:
+                    if response.status_code in (404, 405, 501):
+                        continue
+                    response.raise_for_status()
+                    body = bytearray()
+                    async for chunk in response.aiter_bytes(chunk_size=65536):
+                        if len(body) + len(chunk) > GOLD_RESPONSE_MAX_BYTES:
+                            raise ValueError("Room response exceeds size limit")
+                        body.extend(chunk)
+                    rows = json.loads(body)
+                    if not isinstance(rows, list):
+                        raise ValueError("Room response must be a list")
+            except (httpx.HTTPError, ValueError, RecursionError):
+                stats["rejected_responses"] += 1
+                log.warning("Room gold response rejected: %s", room)
                 continue
-            async with runtime().pool().acquire() as conn, conn.transaction():
-                # Serialise retries/manual runs and enforce a durable per-source daily cap.
-                await conn.execute("SELECT pg_advisory_xact_lock(871226)")
-                for row in rows[:200]:
-                    if not valid_auto_candidate(row, room, region):
-                        continue
-                    source = row["label_source"]
-                    used = await conn.fetchval(
-                        """SELECT count(*) FROM tank.gold_examples
-                        WHERE tenant_id=$1 AND region=$2 AND agent=$3
-                        AND auto_label AND intake_day=$4""",
-                        PLATFORM_TENANT, region, room, day,
-                    )
-                    if used >= limit:
-                        continue
-                    await conn.execute(
-                        """INSERT INTO tank.gold_examples
-                        (tenant_id,region,skill_id,agent,input,expected,source,source_ref,
-                         input_hash,holdout,auto_label,label_source,public,intake_day)
-                        VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,'room_auto',$7,$8,$9,true,$10,true,$11)
-                        ON CONFLICT (tenant_id,region,skill_id,source,source_ref) DO NOTHING""",
-                        PLATFORM_TENANT, region, row["skill_id"], room,
-                        encoded(row["input"]), encoded(row["expected"]),
-                        input_hash([source, row["input"], row["expected"]]), input_hash(row["input"]),
-                        is_holdout(PLATFORM_TENANT, row["skill_id"], row["input"]),
-                        source, day,
-                    )
-                    from gold import settle_auto_source
-                    await settle_auto_source(conn, {"tenant_id": PLATFORM_TENANT, "region": region,
-                                                   "skill_id": row["skill_id"], "source": "room_auto"})
+            stats["rejected"] += max(0, len(rows) - 200)
+            try:
+                async with runtime().pool().acquire() as conn, conn.transaction():
+                    await conn.execute("SELECT pg_advisory_xact_lock(871226)")
+                    for row in rows[:200]:
+                        try:
+                            # Nested transaction is a PostgreSQL savepoint. Catch outside
+                            # it so a JSON/database error cannot poison the next insertion.
+                            async with conn.transaction():
+                                if not valid_auto_candidate(row, room, region, owners):
+                                    raise ValueError("Invalid candidate")
+                                value = candidate_json(row["input"])
+                                expected = candidate_json(row["expected"])
+                                source = row["label_source"]
+                                used = await conn.fetchval(
+                                    """SELECT count(*) FROM tank.gold_examples
+                                    WHERE tenant_id=$1 AND region=$2 AND agent=$3
+                                    AND auto_label AND intake_day=$4""",
+                                    PLATFORM_TENANT, region, room, day,
+                                )
+                                if used >= limit:
+                                    stats["capped"] += 1
+                                    continue
+                                result = await conn.execute(
+                                    """INSERT INTO tank.gold_examples
+                                    (tenant_id,region,skill_id,agent,input,expected,source,source_ref,
+                                     input_hash,holdout,auto_label,label_source,public,intake_day)
+                                    VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,'room_auto',$7,$8,$9,true,$10,true,$11)
+                                    ON CONFLICT (tenant_id,region,skill_id,source,source_ref) DO NOTHING""",
+                                    PLATFORM_TENANT, region, row["skill_id"], room, value, expected,
+                                    input_hash([source, row["input"], row["expected"]]), input_hash(row["input"]),
+                                    is_holdout(PLATFORM_TENANT, row["skill_id"], row["input"]), source, day,
+                                )
+                                from gold import settle_auto_source
+                                await settle_auto_source(conn, {"tenant_id": PLATFORM_TENANT, "region": region,
+                                                               "skill_id": row["skill_id"], "source": "room_auto"})
+                            stats["inserted" if result == "INSERT 0 1" else "duplicates"] += 1
+                        except Exception:
+                            # No exception text: it may contain private data or credentials.
+                            stats["rejected"] += 1
+            except Exception:
+                stats["unavailable"] += 1
+                log.warning("Room gold storage unavailable: %s", room)
+    log.info("Room gold intake counts: %s", stats)
+    return stats
 
 @asynccontextmanager
 async def lifespan(_app):
