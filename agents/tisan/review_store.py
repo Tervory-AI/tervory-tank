@@ -70,4 +70,4 @@ def save(root: Path, project: Path, tenant: str, slug: str, build: int, source: 
     record = {"tenant_id": tenant, "figma_file_id": file_id, "figma_frame_id": frame_id,
               "frame_path": frame_path, "built_page_path": built_path,
               "region": os.environ.get("TANK_REGION", "us-east"), "public": False}
-    (review_dir / f"{slug}-{build}-{page}.json").write_text(json.dumps(record))
+    (review_dir / f"{slug}-{page}.json").write_text(json.dumps(record))

@@ -154,10 +154,17 @@ def test_scaffold_review_saves_built_page_without_approval(tmp_path):
     reading.write_text('{"node":{"id":"2:11"}}')
     (tmp_path / "builds" / TENANT / "example").mkdir(parents=True)
     store.save(tmp_path, project, TENANT, "example", 1, {"file_key": file_id, "node_id": "2:11"})
-    row = gold.snapshot(tmp_path, TENANT, "example-1-home")
+    row = gold.snapshot(tmp_path, TENANT, "example-home")
     assert row["page_structure"]["nodes"] == [{"tag": "h1", "attrs": {}, "children": [{"text": "Example"}]}]
     assert row["public"] is False
     assert "approval" not in row
+    # A new build replaces this page's review reference, invalidating its old approval.
+    old_approval = dict(row)
+    html.write_text("<h1>Updated page</h1>")
+    store.save(tmp_path, project, TENANT, "example", 2, {"file_key": file_id, "node_id": "2:11"})
+    updated = gold.snapshot(tmp_path, TENANT, "example-home")
+    assert not gold.matches(updated, old_approval)
+    assert len(list((tmp_path / "reviews" / TENANT).glob("*.json"))) == 1
 
 
 def test_approved_structure_keeps_dom_hierarchy():

@@ -69,7 +69,9 @@ The recorded page has no spacing variables, no font family, weight, or line heig
 A successful scaffold job can include `figma: {file_key, node_id, page}` (`page`
 is home/about/contact/privacy). Save the Figma reading first. The checked static
 HTML, CSS and page structure are retained under the tenant's builds directory;
-a review reference is saved under `/data/reviews/<tenant>/`. No approval is seeded.
+a stable per-page review reference is saved under `/data/reviews/<tenant>/`.
+Rebuilding the page replaces that reference and invalidates its previous approval.
+No approval is seeded.
 
 The Tisan page loads platform pages and the active organization’s pages beside
 sandboxed built-page previews. Approval scope is limited to those two tenants.
