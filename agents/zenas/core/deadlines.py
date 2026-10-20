@@ -5,8 +5,8 @@ South Africa: Uniform Rules of Court. Court days, public holidays, and the
 16 December to 15 January exclusion only where that rule states it.
 Every step names the rule it applied.
 
-The Zenas box and zenas.deadlines 1.1.0 keep this file byte-identical:
-agents/zenas/core/deadlines.py and tank/skills/zenas.deadlines/1.1.0/compute.py.
+The Zenas box and zenas.deadlines 1.2.0 keep this file byte-identical:
+agents/zenas/core/deadlines.py and tank/skills/zenas.deadlines/1.2.0/compute.py.
 """
 
 from __future__ import annotations
@@ -344,7 +344,7 @@ def _sa_days(
     steps = [
         _step(
             length_rule,
-            f"The day of the trigger {trigger.isoformat()} is not counted. {days} court {'day' if days == 1 else 'days'} {verb} after it.",
+            f"The sheriff's service date {trigger.isoformat()} is not counted. {days} court {'day' if days == 1 else 'days'} {verb} after it.",
         )
     ]
     cursor = trigger
@@ -429,9 +429,11 @@ def compute(payload: dict[str, Any] | None) -> dict[str, Any]:
             "steps": steps,
         }
 
-    trigger = _parse_date(str(body.get("trigger") or ""))
+    trigger_field = "service_date" if jurisdiction == _ZA else "trigger"
+    trigger = _parse_date(str(body.get(trigger_field) or ""))
     if trigger is None:
-        return {"ok": False, "reason": "trigger must be a date"}
+        reason = "service_date from the sheriff's return of service is required" if jurisdiction == _ZA else "trigger must be a date"
+        return {"ok": False, "reason": reason}
 
     named = _za_step(body) if jurisdiction == _ZA else None
     if named is not None:
@@ -467,6 +469,7 @@ def compute(payload: dict[str, Any] | None) -> dict[str, Any]:
     return {
         "ok": True,
         "jurisdiction": _ZA,
+        "service_date": trigger.isoformat(),
         "trigger": trigger.isoformat(),
         "deadline": end.isoformat(),
         "days": count,
