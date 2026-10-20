@@ -29,6 +29,7 @@ export default async function ReviewPage() {
       items={items}
       note={note}
       reviewer={reviewer.admissionNo ? `${reviewer.name} · ${reviewer.admissionNo}` : reviewer.name}
+      viewOnly={reviewer.founder}
     />
   );
 }

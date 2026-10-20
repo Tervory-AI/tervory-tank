@@ -16,7 +16,7 @@ function sameOrigin(request: Request): boolean {
 
 export async function POST(request: Request) {
   if (!sameOrigin(request)) {
-    return Response.json({ error: "Rig did not answer. Try again." }, { status: 403 });
+    return Response.json({ error: "Request refused." }, { status: 403 });
   }
   let body: { op?: string } = {};
   try {

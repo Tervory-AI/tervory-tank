@@ -7,6 +7,8 @@ export type Reviewer = {
   name: string;
   admissionNo: string;
   jurisdictions: Array<"us" | "za">;
+  founder: boolean;
+  role: string;
 };
 
 /** Clerk role `org:reviewer`, plus a jurisdiction tag and an admission number. Founders open the same page. */
@@ -27,7 +29,7 @@ export async function requireReviewer(): Promise<Reviewer> {
   });
   if (!gate) notFound();
   const name = [user.firstName, user.lastName].filter(Boolean).join(" ") || (gate.founder ? "Founder" : "Reviewer");
-  return { userId, name, admissionNo: gate.admissionNo, jurisdictions: gate.jurisdictions };
+  return { userId, name, admissionNo: gate.admissionNo, jurisdictions: gate.jurisdictions, founder: gate.founder, role };
 }
 
 /** Skala and Tank. Same Clerk user list as the admin page (`TERVORY_ADMIN_USER_IDS`). */
