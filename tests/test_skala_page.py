@@ -83,7 +83,10 @@ def test_library_page_uses_the_skills_list_and_official_logos():
     assert "overflow: hidden" in css
     assert "overflow: auto" in css
     nav = (ROOT / "workspace" / "app" / "product-nav.ts").read_text(encoding="utf-8")
-    assert '"/skala"' not in nav.split("OWN_SHELL", 1)[1]
+    own = nav.split("const OWN_SHELL = ", 1)[1].split(";", 1)[0]
+    assert '"/skala"' not in own
+    routes = nav.split("export const SHELL_ROUTES", 1)[1].split("];", 1)[0]
+    assert '"/skala"' in routes
 
 
 def test_approve_is_refused_for_a_non_founder():

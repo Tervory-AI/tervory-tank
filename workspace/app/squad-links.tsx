@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { createContext, useContext, useEffect, useId, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 
 // shell-1 logic
@@ -97,52 +97,55 @@ export function applySquadAction(
 }
 // shell-1 view
 
+/** True inside the shared shell, so a page's own copy of this control stays out of the list. */
+export const InAppShell = createContext(false);
+
 const SquadFounderContext = createContext(false);
 
-/** Shell passes the same founder flag the header already uses. */
+/** Shell passes the same founder flag the rest of the sidebar uses. */
 export function SquadFounderProvider({ founder, children }: { founder: boolean; children: React.ReactNode }) {
   return <SquadFounderContext.Provider value={founder}>{children}</SquadFounderContext.Provider>;
 }
 
-const MOBILE_SHEET = "(max-width: 800px)";
-
-function placeSquadPopout(panel: HTMLElement, anchor: HTMLElement) {
-  const mobile = window.matchMedia(MOBILE_SHEET).matches;
-  if (mobile) {
-    panel.style.left = "0px";
-    panel.style.top = "0px";
-    panel.style.right = "0px";
-    panel.style.width = "100%";
-    panel.style.height = "100dvh";
-    panel.style.maxHeight = "none";
-    return;
-  }
-  panel.style.right = "auto";
-  panel.style.width = "";
-  panel.style.height = "";
-  panel.style.maxHeight = "";
-  const rect = anchor.getBoundingClientRect();
-  const top = Math.max(8, rect.top);
-  panel.style.left = `${Math.round(rect.right + 8)}px`;
-  panel.style.top = `${top}px`;
-  const box = panel.getBoundingClientRect();
-  const overflow = box.bottom + 8 - window.innerHeight;
-  if (overflow > 0) panel.style.top = `${Math.max(8, top - overflow)}px`;
-}
-
-/** One Squad control. The member list is portaled onto the body, so the sidebar does not grow. */
+/**
+ * One Squad button. The member list is a pop-out beside the sidebar.
+ * Pages still render this; inside the shell only the active copy is shown.
+ */
 export function SquadLinks({
-  className = "squad-nav",
+  active = false,
+  founder: founderProp,
+  className,
   linkClassName,
 }: {
+  active?: boolean;
+  founder?: boolean;
+  className?: string;
+  linkClassName?: string;
+}) {
+  const nested = useContext(InAppShell);
+  const fromShell = useContext(SquadFounderContext);
+  if (nested && !active) return null;
+  return (
+    <SquadControl
+      founder={founderProp ?? fromShell}
+      className={active ? undefined : className}
+      linkClassName={active ? undefined : linkClassName}
+    />
+  );
+}
+
+function SquadControl({
+  founder,
+  className,
+  linkClassName,
+}: {
+  founder: boolean;
   className?: string;
   linkClassName?: string;
 }) {
   const pathname = usePathname() ?? "";
-  const founder = useContext(SquadFounderContext);
   const members = visibleMembers(founder);
-  const panelId = `squad-panel-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
-  const slotRef = useRef<HTMLElement>(null);
+  const panelId = "squad-popout";
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const membersRef = useRef(members);
@@ -154,10 +157,7 @@ export function SquadLinks({
   const landed = useRef(false);
 
   function dispatch(action: SquadAction) {
-    setPanel((current) => {
-      const sidebarHeight = slotRef.current?.offsetHeight ?? current.sidebarHeight;
-      return applySquadAction({ ...current, sidebarHeight }, action, membersRef.current, pathRef.current);
-    });
+    setPanel((current) => applySquadAction(current, action, membersRef.current, pathRef.current));
   }
 
   useEffect(() => setReady(true), []);
@@ -168,7 +168,7 @@ export function SquadLinks({
       return;
     }
     if (panel.open) {
-      const links = [...(panelRef.current?.querySelectorAll<HTMLAnchorElement>("a.squad-row") ?? [])];
+      const links = [...(panelRef.current?.querySelectorAll<HTMLAnchorElement>("[data-squad-member]") ?? [])];
       const target = links.find((link) => link.dataset.squadHref === panel.focus) ?? links[0];
       (target ?? buttonRef.current)?.focus();
       return;
@@ -178,39 +178,43 @@ export function SquadLinks({
 
   useEffect(() => {
     if (!panel.open) return;
-    const place = () => {
-      if (panelRef.current && buttonRef.current) placeSquadPopout(panelRef.current, buttonRef.current);
-    };
-    place();
-    const onKey = (event: KeyboardEvent) => {
+    function onKey(event: globalThis.KeyboardEvent) {
       if (event.key !== "Escape") return;
       event.preventDefault();
-      event.stopPropagation();
       dispatch({ type: "escape" });
-    };
-    const onPointer = (event: PointerEvent) => {
+    }
+    function onPointer(event: PointerEvent) {
       const target = event.target;
       if (!(target instanceof Node)) return;
       if (buttonRef.current?.contains(target) || panelRef.current?.contains(target)) return;
       dispatch({ type: "outside" });
-    };
-    document.addEventListener("keydown", onKey, true);
-    document.addEventListener("pointerdown", onPointer, true);
-    window.addEventListener("resize", place);
-    window.addEventListener("scroll", place, true);
+    }
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onPointer);
     return () => {
-      document.removeEventListener("keydown", onKey, true);
-      document.removeEventListener("pointerdown", onPointer, true);
-      window.removeEventListener("resize", place);
-      window.removeEventListener("scroll", place, true);
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onPointer);
     };
   }, [panel.open]);
 
-  function onPanelKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+  function onPanelKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Escape") {
       event.preventDefault();
-      event.stopPropagation();
       dispatch({ type: "escape" });
+      return;
+    }
+    if (event.key === "Tab") {
+      const items = [...(panelRef.current?.querySelectorAll<HTMLElement>("a, button") ?? [])];
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
       return;
     }
     if (!isArrowKey(event.key)) return;
@@ -219,38 +223,38 @@ export function SquadLinks({
     dispatch({ type: "arrow", key: event.key, from });
   }
 
-  const triggerClass = [linkClassName, "squad-trigger"].filter(Boolean).join(" ");
   const popout = (
     <div
+      ref={panelRef}
       id={panelId}
-      className={panel.open ? "squad-pop open" : "squad-pop"}
+      className="squad-pop shell-pop"
       role="dialog"
+      aria-modal="true"
       aria-label="Squad"
       hidden={!panel.open}
-      ref={panelRef}
       onKeyDown={onPanelKeyDown}
     >
-      <div className="squad-pop-bar">
-        <p className="squad-pop-title">Squad</p>
-        <button type="button" className="squad-pop-close" onClick={() => dispatch({ type: "close" })}>
-          Close
-        </button>
+      <div className="squad-pop-bar shell-pop-head">
+        <p className="shell-kicker">Squad</p>
+        <button type="button" className="squad-pop-close shell-pop-close" onClick={() => dispatch({ type: "close" })}>Close</button>
       </div>
-      <ul className="squad-list">
+      <ul className="squad-list shell-members">
         {members.map((member) => {
-          const current = isCurrent(pathname, member.href);
+          const here = isCurrent(pathname, member.href);
+          const width = Math.round((member.width / member.height) * 40);
           return (
             <li key={member.href}>
               <a
-                className="squad-row"
+                className={linkClassName ? `squad-row ${linkClassName}` : "squad-row"}
                 href={member.href}
+                data-squad-member=""
                 data-squad-href={member.href}
-                aria-current={current ? "page" : undefined}
+                aria-current={here ? "page" : undefined}
                 onClick={() => dispatch({ type: "choose" })}
               >
-                <img src={member.logo} alt="" width={member.width} height={member.height} />
-                <span className="squad-name">{member.label}</span>
-                <span className="squad-job">{member.job}</span>
+                <img src={member.logo} alt="" width={width} height={40} />
+                <span className="squad-name shell-member-name">{member.label}</span>
+                <span className="squad-job shell-member-job">{member.job}</span>
               </a>
             </li>
           );
@@ -260,22 +264,20 @@ export function SquadLinks({
   );
 
   return (
-    <>
-      <nav className={className} aria-label="Squad" ref={slotRef} data-squad-slot="">
-        <button
-          type="button"
-          className={triggerClass}
-          ref={buttonRef}
-          aria-expanded={panel.open}
-          aria-controls={panelId}
-          aria-haspopup="dialog"
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => dispatch({ type: "toggle" })}
-        >
-          Squad
-        </button>
-      </nav>
-      {ready && document.body ? createPortal(popout, document.body) : null}
-    </>
+    <nav className={className ? `shell-squad ${className}` : "shell-squad"} aria-label="Squad">
+      <button
+        ref={buttonRef}
+        id="squad-button"
+        type="button"
+        className="shell-squad-button squad-trigger"
+        aria-expanded={panel.open}
+        aria-controls={panelId}
+        aria-haspopup="dialog"
+        onClick={() => dispatch({ type: "toggle" })}
+      >
+        Squad
+      </button>
+      {ready ? createPortal(popout, document.body) : null}
+    </nav>
   );
 }
