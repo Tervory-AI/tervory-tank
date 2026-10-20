@@ -170,5 +170,69 @@ async def test_room_auto_selection_and_cap_response(monkeypatch):
         assert response.json()["message"] == "credit cap reached"
         assert response.json()["comparison_records"][0]["passes"]["context_dev_checked"] == {"checked": False, "expected": {}}
         assert runner.await_args.args[2:] == (PLATFORM_TENANT, run, records)
-        select.return_value = (None, [])
+        select.return_value = (run, [])
         assert (await client.post("/context-dev/trial", json={"tenant_id": PLATFORM_TENANT}, headers=headers)).json()["records_sent"] == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('explicit', [False, True])
+async def test_trial_without_completed_batch_has_actionable_conflict(monkeypatch, explicit):
+    import secrets
+    base = _load('base_missing_trial_app', ROOT / 'agents/base/app.py')
+    monkeypatch.setattr(base, 'ensure_worker', AsyncMock())
+    key = secrets.token_hex(24)
+    monkeypatch.setenv('TANK_KEY', key)
+    monkeypatch.setattr(base.app.state, 'pool', object(), raising=False)
+    monkeypatch.setattr(base.app.state, 'http', object(), raising=False)
+    monkeypatch.setattr(base, 'latest_trial', AsyncMock(return_value=(None, [])))
+    monkeypatch.setattr(base, 'run_trial', AsyncMock(side_effect=ValueError('a completed batch in this tenant is required')))
+    body = {'tenant_id': PLATFORM_TENANT}
+    if explicit:
+        body.update(run_id=str(uuid.uuid4()), records=[{
+            'record_id': str(uuid.uuid4()), 'public': True, 'domain': 'example.com',
+        }])
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=base.app), base_url='http://base') as client:
+        response = await client.post('/context-dev/trial', json=body, headers={'X-Tank-Key': key})
+    assert response.status_code == 409
+    assert response.json() == {'detail': 'No completed batch to test yet. Run a Base batch first.'}
+    assert base.app.state.context_trial_started is None
+
+
+@pytest.mark.asyncio
+async def test_concurrent_trial_reports_original_start_and_releases_guard(monkeypatch):
+    import asyncio
+    import secrets
+    from datetime import datetime, timezone
+    from unittest.mock import Mock
+    base = _load('base_running_trial_app', ROOT / 'agents/base/app.py')
+    monkeypatch.setattr(base, 'ensure_worker', AsyncMock())
+    key = secrets.token_hex(24)
+    monkeypatch.setenv('TANK_KEY', key)
+    monkeypatch.setattr(base.app.state, 'pool', object(), raising=False)
+    monkeypatch.setattr(base.app.state, 'http', object(), raising=False)
+    clock = Mock()
+    clock.now.return_value = datetime(2026, 10, 20, 9, 7, tzinfo=timezone.utc)
+    monkeypatch.setattr(base, 'datetime', clock)
+    record = {'record_id': str(uuid.uuid4()), 'url': 'https://example.test', 'checked_answers': {}}
+    monkeypatch.setattr(base, 'latest_trial', AsyncMock(return_value=(str(uuid.uuid4()), [record])))
+    entered, finish = asyncio.Event(), asyncio.Event()
+    async def running(*args):
+        entered.set()
+        await finish.wait()
+        return {'results': [], 'records_sent': 0}
+    monkeypatch.setattr(base, 'run_trial', running)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=base.app), base_url='http://base') as client:
+        async def post():
+            return await client.post('/context-dev/trial', json={'tenant_id': PLATFORM_TENANT}, headers={'X-Tank-Key': key})
+        first = asyncio.create_task(post())
+        try:
+            await asyncio.wait_for(entered.wait(), timeout=2)
+            clock.now.return_value = datetime(2026, 10, 20, 9, 9, tzinfo=timezone.utc)
+            response = await post()
+            assert response.status_code == 409
+            assert response.json() == {'detail': 'A trial is already running (started 09:07).'}
+        finally:
+            finish.set()
+            await first
+        assert (await post()).status_code == 200
+    assert base.app.state.context_trial_started is None

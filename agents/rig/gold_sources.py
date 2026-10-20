@@ -20,6 +20,10 @@ from rigbox.catalogue import families_from, load_folder
 
 MAX_CANDIDATES = 200
 _REGIONS = {"us-east", "za"}
+# A public catalogue with no observed_on is the sealed fixture set. Its family
+# month does not follow the clock. A published observed_on, as_of, or updated
+# date replaces it, so two months are two families.
+SEALED_CATALOGUE_MONTH = "2026-10"
 
 
 def candidates(limit: int = 200, *, region: str = "us-east", root: Path | None = None) -> list[dict[str, Any]]:
@@ -38,6 +42,32 @@ def candidates(limit: int = 200, *, region: str = "us-east", root: Path | None =
             if len(rows) >= cap:
                 return rows[:cap]
     return rows[:cap]
+
+
+def _month(value: Any) -> str | None:
+    if value is None or isinstance(value, bool):
+        return None
+    text = value.isoformat() if hasattr(value, "isoformat") else str(value).strip()
+    if len(text) < 7 or text[4] != "-" or not (text[:4].isdigit() and text[5:7].isdigit()):
+        return None
+    if not 1 <= int(text[5:7]) <= 12:
+        return None
+    return text[:7]
+
+
+def _catalogue_month(publish: dict[str, Any]) -> str:
+    for key in ("observed_on", "as_of", "updated"):
+        month = _month(publish.get(key))
+        if month:
+            return month
+    return SEALED_CATALOGUE_MONTH
+
+
+def _family(slug: str, publish: dict[str, Any]) -> str:
+    family = f"fitment:{slug}:{_catalogue_month(publish)}"
+    if publish.get("synthetic") is True:
+        return family.replace(":", "-synthetic:", 1)
+    return family
 
 
 def _marked_public(publish: dict[str, Any]) -> bool:
@@ -86,7 +116,12 @@ def _pairs(path: Path, region: str) -> list[tuple[dict[str, Any], dict[str, Any]
     for part in sorted(grouped):
         compatibility = _ordered(grouped[part])
         source = f"{loaded['slug']}:{part}"
-        common = {"label_source": source, "region": catalogue_region, "public": True}
+        common = {
+            "label_source": source,
+            "label_family": _family(str(loaded["slug"]), publish),
+            "region": catalogue_region,
+            "public": True,
+        }
         pairs.append(
             (
                 {

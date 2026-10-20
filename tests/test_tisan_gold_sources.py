@@ -43,6 +43,7 @@ class Pool:
         assert "INSERT INTO agent_tisan.page_approvals" in sql
         fields = ["tenant_id", "page_id", "figma_file_id", "figma_frame_id", "frame_hash", "built_page_path", "page_hash", "approved_by"]
         row = dict(zip(fields, args))
+        row["approved_at"] = "2026-10-20T00:00:00+00:00"
         self.rows = [r for r in self.rows if (r["tenant_id"], r["page_id"]) != (row["tenant_id"], row["page_id"])] + [row]
 
     async def fetch(self, sql, tenant):
@@ -86,7 +87,8 @@ def test_approval_creates_both_candidates_and_preserves_truth(setup):
     assert rows[0]["input"]["text"] == "Example"
     assert rows[0]["expected"]["nodes"][0]["tag"] == "h1"
     assert rows[0]["public"] is False
-    assert set(rows[0]) == {"skill_id", "input", "expected", "label_source", "region", "public"}
+    assert set(rows[0]) == {"skill_id", "input", "expected", "label_source", "label_family", "region", "public"}
+    assert rows[0]["label_family"] == "founder-approved-page:2026-10"
     assert "founder-user" not in json.dumps(rows)
     assert len(client.get("/gold/candidates?limit=1", headers=headers).json()) == 1
 

@@ -29,8 +29,9 @@ def test_corpus_and_candidates():
     assert len(output) == len(eligible) * 2
     assert {r['skill_id'] for r in output} == {'tiger.price_extract', 'tiger.price_ocr'}
     for row in output:
-        assert set(row) == {'skill_id', 'input', 'expected', 'label_source', 'region', 'public'}
+        assert set(row) == {'skill_id', 'input', 'expected', 'label_source', 'label_family', 'region', 'public'}
         assert row['public'] is True and row['region'] == 'us-east'
+        assert row['label_family'] == 'auto:price-gold-109' or row['label_family'].startswith('jsonld-match:')
         assert row['label_source'].startswith('auto:')
         if row['skill_id'].endswith('ocr'):
             import base64

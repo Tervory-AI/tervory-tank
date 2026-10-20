@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import uuid
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from fastapi import Header, HTTPException, Query
@@ -141,8 +142,31 @@ async def context_trial(body: ContextTrial, x_tank_key: str = Header(default="")
         raise HTTPException(status_code=401, detail="Base room key required")
     if body.tenant_id != uuid.UUID(PLATFORM_TENANT):
         raise HTTPException(status_code=403, detail="company trials require the platform tenant")
+    started = getattr(app.state, "context_trial_started", None)
+    if started is not None:
+        raise HTTPException(status_code=409, detail=f"A trial is already running (started {started:%H:%M}).")
+    # Base runs one worker. Check/set without awaiting so concurrent HTTP requests
+    # cannot both start a platform trial. PostgreSQL still protects ledger recovery.
+    app.state.context_trial_started = datetime.now(timezone.utc)
+    try:
+        return await _context_trial(body)
+    finally:
+        app.state.context_trial_started = None
+
+
+def _trial_conflict(exc: ValueError) -> HTTPException:
+    if str(exc) == "this trial is already running":
+        # Another database lock holder may be the ledger recovery worker; do not
+        # invent a trial start time for it.
+        return HTTPException(status_code=503, detail="Trial temporarily unavailable. Try again.")
+    return HTTPException(status_code=409, detail="No completed batch to test yet. Run a Base batch first.")
+
+
+async def _context_trial(body: ContextTrial) -> dict[str, Any]:
     if body.run_id is None and body.records is None:
         run_id, records = await latest_trial(app.state.pool)
+        if run_id is None:
+            raise HTTPException(status_code=409, detail="No completed batch to test yet. Run a Base batch first.")
         if not records:
             return {"results": [], "records_sent": 0, "message": "No untried public records in the latest completed batch."}
         try:
@@ -162,8 +186,8 @@ async def context_trial(body: ContextTrial, x_tank_key: str = Header(default="")
                 for row in result["results"]
             ]
             return result
-        except ValueError:
-            raise HTTPException(status_code=409, detail="completed batch unavailable or trial already running") from None
+        except ValueError as exc:
+            raise _trial_conflict(exc) from None
         except Exception:
             raise HTTPException(status_code=503, detail="trial paused; refresh results before trying again") from None
     if body.run_id is None or body.records is None:
@@ -181,8 +205,8 @@ async def context_trial(body: ContextTrial, x_tank_key: str = Header(default="")
             raise HTTPException(status_code=422, detail="checked answers must contain only business comparison fields")
     try:
         return await run_trial(app.state.pool, app.state.http, str(body.tenant_id), str(body.run_id), records)
-    except ValueError:
-        raise HTTPException(status_code=409, detail="completed batch unavailable or trial already running") from None
+    except ValueError as exc:
+        raise _trial_conflict(exc) from None
     except Exception:
         raise HTTPException(status_code=503, detail="trial paused; pending ledger entries will retry automatically") from None
 

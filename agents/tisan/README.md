@@ -101,8 +101,11 @@ on the Tisan room; it is now passed through its compose file.
 The additive, idempotent `agent_tisan.page_approvals` table is created at room
 startup. It stores tenant, file/frame ids, saved frame hash, built page path and
 hash, founder user id and approval time. Approval rejects a stale review (409).
-`GET /gold/candidates?limit=N` is room-key only. It returns the requested six
-fields for both skills only while both hashes and source identities still match.
+`GET /gold/candidates?limit=N` is room-key only. It returns both skills only
+while both hashes and source identities still match. Each row's `label_family`
+is `founder-approved-page:YYYY-MM`, taken from the approval time. A new month
+is a new family. A page marked synthetic uses a family whose name contains
+`synthetic`. An approval with no usable time is not emitted.
 `tenant_id` defaults to the platform tenant; supply the tenant explicitly for
 private records. Every database read/write is tenant scoped. Private builds
 remain `public: false`; no client page becomes exportable by approval alone.

@@ -171,6 +171,8 @@ export type Skill = {
   approved_by: string | null;
   approved_at: string | null;
   present: boolean;
+  calls_30d?: number;
+  avg_cost_usd?: number | string | null;
 };
 
 export type EvalResult = {
@@ -291,7 +293,9 @@ export function setCandidate(taskType: string, candidateModel: string | null, sh
   });
 }
 export function promoteCandidate(taskType: string, by: string) {
-  return tank<{ ok: true; model: string }>(`/v1/graduation/${encodeURIComponent(taskType)}/promote`, { method: "POST", body: JSON.stringify({ by }) });
+  return tank<{ ok: true; model: string }>(`/v1/graduation/${encodeURIComponent(taskType)}/promote`, {
+    method: "POST", headers: { "X-Tervory-Admin": by }, body: JSON.stringify({ by }),
+  });
 }
 export function rollbackModel(taskType: string, by: string) {
   return tank<{ ok: true; model: string }>(`/v1/graduation/${encodeURIComponent(taskType)}/rollback`, { method: "POST", body: JSON.stringify({ by }) });
@@ -665,6 +669,16 @@ export function markBillingEventHandled(eventId: string): Promise<{ handled: boo
   });
 }
 
+export type TrainingGraduation = {
+  task_type: string; model: string; gold_count: number; candidate: string | null;
+  heldout_score: number | null; current_cost: number | null; candidate_cost: number | null; can_promote: boolean;
+};
+export function trainingGraduation(identity: {userId: string; tenantId: string; role: string}) {
+  return tank<TrainingGraduation[]>("/v1/training/graduation", {method: "GET", headers: {
+    "x-tervory-user": identity.userId, "x-tervory-tenant": identity.tenantId, "x-tervory-role": identity.role,
+  }});
+}
+
 export type TisanGoldPage = {
   page_id: string; tenant_id: string; figma_file_id: string; figma_frame_id: string;
   built_page_path: string; frame_hash: string; page_hash: string;
@@ -682,4 +696,44 @@ export function approveTisanGold(tenantId: string, userId: string, pageId: strin
     method: "POST", headers: { "X-Tervory-Admin": userId },
     body: JSON.stringify({ tenant_id: tenantId, page_id: pageId, frame_hash: frameHash, page_hash: pageHash }),
   });
+}
+
+export type RigCatalogueCounts = { products: number; fits: number };
+
+function wholeCount(value: unknown): number | null {
+  const count = typeof value === "number" ? value : Number(value);
+  if (!Number.isInteger(count) || count < 0) return null;
+  return count;
+}
+
+/** Product and fit totals for this tenant, from the Rig room through Tank. Null when Rig does not answer. */
+export async function rigCatalogueCounts(tenantId: string): Promise<RigCatalogueCounts | null> {
+  if (!tenantId) return null;
+  try {
+    const row = await tank<{ products?: unknown; fits?: unknown }>(
+      `/v1/rig/catalogues?tenant_id=${encodeURIComponent(tenantId)}`,
+      { method: "GET" },
+    );
+    const products = wholeCount(row.products);
+    const fits = wholeCount(row.fits);
+    if (products === null || fits === null) return null;
+    return { products, fits };
+  } catch {
+    return null;
+  }
+}
+
+/** Read-only Rig room calls. The Workspace key stays here; a shopper key never does. */
+export function rigProxy(
+  pathname: string,
+  tenantId: string,
+  init: { method?: "GET" | "POST"; query?: Record<string, string>; body?: unknown } = {},
+): Promise<Record<string, unknown>> {
+  const params = new URLSearchParams({ tenant_id: tenantId });
+  for (const [key, value] of Object.entries(init.query ?? {})) params.set(key, value);
+  const path = `${pathname}?${params.toString()}`;
+  if ((init.method ?? "GET") === "POST") {
+    return tank<Record<string, unknown>>(path, { method: "POST", body: JSON.stringify(init.body ?? {}) });
+  }
+  return tank<Record<string, unknown>>(path, { method: "GET" });
 }

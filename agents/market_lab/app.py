@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import hmac
 import logging
 import os
 
 from chassis.app import create_app
 from chassis.jobs import JobContext
+from fastapi import Header, HTTPException, Query
 
 from core.jobs import (
     perform_opportunities,
@@ -149,3 +151,27 @@ app = create_app(
     },
     schedules=_schedules(),
 )
+
+
+@app.get("/gold/candidates")
+async def gold_candidates(
+    limit: int = Query(default=200, ge=1, le=200),
+    x_tank_key: str = Header(default=""),
+) -> list[dict]:
+    """Room key only. Public feeds on this box's region."""
+    key = os.environ.get("TANK_KEY", "")
+    try:
+        matches = bool(key) and bool(x_tank_key) and hmac.compare_digest(key.encode(), x_tank_key.encode())
+    except (AttributeError, TypeError, UnicodeError):
+        matches = False
+    if not matches:
+        raise HTTPException(status_code=401, detail="room key required")
+    try:
+        from gold_sources import read_candidates
+    except ImportError:
+        raise HTTPException(status_code=503, detail="gold evidence unavailable") from None
+    try:
+        return await read_candidates(limit=limit, region=os.environ.get("TANK_REGION", "us-east"))
+    except Exception as exc:  # noqa: BLE001 — class name only; the message can carry the database URL
+        log.warning("gold candidates failed (%s)", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="gold evidence unavailable") from None

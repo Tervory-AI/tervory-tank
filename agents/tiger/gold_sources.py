@@ -17,6 +17,10 @@ from urllib.parse import urlsplit
 
 CORPUS = Path(__file__).with_name("gold") / "public-pages.zip"
 MAX_CANDIDATES = 200
+# The sealed bundle has no per-page capture date. Structured matches from it
+# share this month. A row's observed_on, or a date in its structured data,
+# replaces it, so two capture months are two families.
+SEALED_BUNDLE_MONTH = "2026-10"
 
 
 def amount(value: Any) -> str | None:
@@ -81,6 +85,38 @@ class Evidence(HTMLParser):
                 self.currencies.add(data.strip().upper())
 
 
+def _month(value: Any) -> str | None:
+    if value is None or isinstance(value, bool):
+        return None
+    text = value.isoformat() if hasattr(value, "isoformat") else str(value).strip()
+    if len(text) < 7 or text[4] != "-" or not (text[:4].isdigit() and text[5:7].isdigit()):
+        return None
+    if not 1 <= int(text[5:7]) <= 12:
+        return None
+    return text[:7]
+
+
+def _structured_month(html: str) -> str | None:
+    match = re.search(
+        r'"(?:datePublished|dateModified|priceValidUntil)"\s*:\s*"(\d{4}-\d{2})',
+        html,
+    )
+    if match is None:
+        return None
+    return _month(match.group(1) + "-01")
+
+
+def _family(row: dict[str, Any], html: str, matched: bool) -> str:
+    if matched:
+        month = _month(row.get("observed_on")) or _structured_month(html) or SEALED_BUNDLE_MONTH
+        family = f"jsonld-match:{month}"
+    else:
+        family = "auto:price-gold-109"
+    if row.get("synthetic") is True:
+        return family.replace(":", "-synthetic:", 1)
+    return family
+
+
 def agreement(html: str) -> str | None:
     evidence = Evidence()
     evidence.feed(html)
@@ -136,8 +172,10 @@ def candidates(limit: int = 200, *, region: str = "us-east", corpus: Path = CORP
                 continue
             html = archive.read(row["id"] + ".html").decode()
             source = "auto:price-gold-demo:" + row["id"]
-            if agreement(html) == price:
+            matched = agreement(html) == price
+            if matched:
                 source += ":visible-structured-agreement"
+            family = _family(row, html, matched)
             expected = {"items": [{"price": price}]}
             if row.get("currency"):
                 expected["items"][0]["currency"] = row["currency"]
@@ -146,7 +184,7 @@ def candidates(limit: int = 200, *, region: str = "us-east", corpus: Path = CORP
                 ("tiger.price_ocr", {"png_base64": base64.b64encode(archive.read(row["id"] + ".png")).decode(), "url": row["url"]}),
             ):
                 result.append({"skill_id": skill, "input": payload, "expected": expected,
-                               "label_source": source, "region": region, "public": True})
+                               "label_source": source, "label_family": family, "region": region, "public": True})
                 if len(result) >= min(limit, MAX_CANDIDATES):
                     return result
     return result

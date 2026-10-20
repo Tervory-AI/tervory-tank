@@ -12,6 +12,7 @@ COPY market_lab/core /app/core
 COPY market_lab/engines /app/engines
 COPY market_lab/schema.sql /app/schema.sql
 COPY market_lab/app.py /app/app.py
+COPY market_lab/gold_sources.py /app/gold_sources.py
 USER agent
 ENV AGENT_NAME=market_lab \
     DATA_DIR=/data \

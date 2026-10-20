@@ -771,3 +771,21 @@ ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS units         numeric;
 
 ALTER TABLE tank.gold_examples ADD COLUMN IF NOT EXISTS auto_approved boolean NOT NULL DEFAULT false;
 ALTER TABLE tank.gold_examples ADD COLUMN IF NOT EXISTS label_family text;
+
+-- Explicit model holdout evidence; never substitute offline screening scores.
+ALTER TABLE tank.gold_scores ADD COLUMN IF NOT EXISTS task_type text;
+ALTER TABLE tank.gold_scores ADD COLUMN IF NOT EXISTS candidate_model text;
+ALTER TABLE tank.gold_scores ADD COLUMN IF NOT EXISTS cost_per_call numeric(14,8);
+
+-- Export provenance defaults to private; legacy rows require explicit review.
+ALTER TABLE tank.training_pairs ADD COLUMN IF NOT EXISTS public boolean NOT NULL DEFAULT false;
+CREATE TABLE IF NOT EXISTS tank.training_jobs (
+    id text PRIMARY KEY,
+    tenant_id uuid NOT NULL,
+    region text NOT NULL,
+    model_repo text NOT NULL,
+    estimated_usd numeric(12,6) NOT NULL,
+    actual_usd numeric(12,6),
+    ledger_id uuid UNIQUE REFERENCES tank.ledger(id),
+    created_at timestamptz NOT NULL DEFAULT now()
+);

@@ -30,7 +30,7 @@ candidates = _load_gold().candidates
 
 CATALOGUES = ROOT / "agents" / "rig" / "catalogues"
 KEY = "room-key-for-gold"
-FIELDS = {"skill_id", "input", "expected", "label_source", "region", "public"}
+FIELDS = {"skill_id", "input", "expected", "label_source", "label_family", "region", "public"}
 
 
 def _publish_secrets() -> set[str]:
@@ -57,6 +57,7 @@ def _assert_labelled(rows: list[dict], region: str) -> None:
         catalogue, part = row["label_source"].split(":", 1)
         assert catalogue
         assert part
+        assert row["label_family"] == f"fitment:{catalogue}:2026-10"
         assert catalogue != "customnation"
         assert (CATALOGUES / catalogue).is_dir()
         by_source.setdefault(row["label_source"], set()).add(row["skill_id"])
