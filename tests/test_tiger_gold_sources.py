@@ -88,3 +88,10 @@ def test_additional_public_snapshots_fail_closed(tmp_path):
 def test_microdata_text_and_currency_disagreement():
     assert gold.agreement('<p itemprop="price">$9.00</p>') == '9.00'
     assert gold.agreement('<p>£9.00</p><meta itemprop="price" content="9"><meta itemprop="priceCurrency" content="USD">') is None
+
+
+def test_image_ships_corpus_and_region():
+    dockerfile = (ROOT / 'agents/tiger/Dockerfile').read_text()
+    assert 'COPY tiger/gold_sources.py /app/gold_sources.py' in dockerfile
+    assert 'COPY tiger/gold /app/gold' in dockerfile
+    assert 'TANK_REGION: ${TANK_REGION:-us-east}' in (ROOT / 'agents/tiger/docker-compose.yml').read_text()
