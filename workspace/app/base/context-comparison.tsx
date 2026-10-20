@@ -29,6 +29,7 @@ export function ContextComparison({ report: storedReport, canRunTrial = false }:
       <p className="bcp-copy">Context.dev suggestions stay beside Base’s answers. Only checked answers count toward accuracy.</p>
       {canRunTrial && <button type="button" className="bcp-secondary" disabled={pending} onClick={run}>{pending ? "Running trial…" : "Run Context.dev trial"}</button>}
       {message && <p role="status">{message}</p>}
+      {message.startsWith("A trial is already running") && <p className="bcp-copy">Start time is UTC.</p>}
       {report?.creditCapReached && <p role="status">credit cap reached</p>}
       {!report ? <p>Comparison could not load.</p> : !report.records && !latestReport ? (
         <p>No trial results yet. Selected public businesses can be compared once the trial key is set.</p>
