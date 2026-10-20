@@ -42,7 +42,7 @@ def test_public_cases_and_heldout_labels(region):
         result = case_candidate(case(region, held), region)
         assert set(result) == {"skill_id", "input", "expected", "label_source", "region", "public"}
         assert result["region"] == region
-        assert result["public"] is True
+        assert result["public"] is (not held)
         assert result["input"]["holdout"] is held
         assert result["label_source"].startswith("held_out:" if held else "converted:")
     assert case_candidate(case(region), "us-east" if region == "za" else "za") is None

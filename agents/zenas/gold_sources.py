@@ -50,7 +50,7 @@ def case_candidate(row: dict[str, Any], region: str) -> dict[str, Any] | None:
         },
         "label_source": f"{'held_out' if held else 'converted'}:{row['source_id']}:{row['pool_version_id']}",
         "region": region,
-        "public": True,
+        "public": not held,
     }
 
 
