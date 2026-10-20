@@ -116,5 +116,5 @@ async def test_lifespan_starts_and_cancels_all_three_background_loops(monkeypatc
     monkeypatch.setattr(training, 'schedule_loop', loop)
     async with training.lifespan(None):
         await asyncio.sleep(0)
-        assert started == {'collect', 'export', 'retest'}
+        assert started == {'collect', 'export', 'retest', 'gold'}
     assert stopped == started

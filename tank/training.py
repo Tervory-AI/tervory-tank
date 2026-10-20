@@ -19,7 +19,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 
 from gold import (PLATFORM_TENANT, Reviewer, add_candidate, encoded, input_hash,
-                  obj, require_job, require_reviewer, runtime)
+                  obj, require_job, require_reviewer, runtime, is_holdout)
 
 log = logging.getLogger("tank.training")
 
@@ -171,10 +171,81 @@ async def collect_once() -> None:
             await conn.execute("SELECT pg_advisory_unlock(871222)")
 
 
+
+ROOMS = ("base", "tiger", "market_lab", "rig", "zenas", "radix", "tisan")
+
+
+def valid_auto_candidate(row: Any, room: str, region: str) -> bool:
+    """Fail closed on provenance and region before anything is persisted."""
+    return (isinstance(row, dict) and row.get("public") is True
+            and region in ("us-east", "za") and row.get("region") == region
+            and isinstance(row.get("skill_id"), str)
+            and row["skill_id"].startswith(room + ".")
+            and isinstance(row.get("label_source"), str)
+            and 0 < len(row["label_source"]) <= 500
+            and "input" in row and "expected" in row)
+
+
+async def collect_room_gold(day: date) -> None:
+    region = runtime().box_region()
+    if region not in ("us-east", "za"):
+        return
+    limit = max(0, int(os.environ.get("GOLD_AUTO_MAX") or "200"))
+    if not limit:
+        return
+    async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
+        for room in ROOMS:
+            key = os.environ.get(f"TANK_KEY_{room.upper()}", "")
+            if not key:
+                continue
+            # Fixed local destinations: a room can never redirect its key elsewhere.
+            host = "agent-" + room.replace("_", "-")
+            try:
+                response = await client.get(f"http://{host}:8000/gold/candidates",
+                                            params={"limit": min(limit, 200)},
+                                            headers={"X-Tank-Key": key})
+                if response.status_code in (404, 405, 501):
+                    continue
+                response.raise_for_status()
+                rows = response.json()
+                if not isinstance(rows, list):
+                    continue
+            except (httpx.HTTPError, ValueError):
+                log.warning("Room gold intake unavailable: %s", room)
+                continue
+            async with runtime().pool().acquire() as conn, conn.transaction():
+                # Serialise retries/manual runs and enforce a durable per-source daily cap.
+                await conn.execute("SELECT pg_advisory_xact_lock(871226)")
+                for row in rows[:200]:
+                    if not valid_auto_candidate(row, room, region):
+                        continue
+                    source = row["label_source"]
+                    used = await conn.fetchval(
+                        """SELECT count(*) FROM tank.gold_examples
+                        WHERE tenant_id=$1 AND region=$2 AND agent=$3 AND label_source=$4
+                        AND auto_label AND intake_day=$5""",
+                        PLATFORM_TENANT, region, room, source, day,
+                    )
+                    if used >= limit:
+                        continue
+                    await conn.execute(
+                        """INSERT INTO tank.gold_examples
+                        (tenant_id,region,skill_id,agent,input,expected,source,source_ref,
+                         input_hash,holdout,auto_label,label_source,public,intake_day)
+                        VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,'room_auto',$7,$8,$9,true,$10,true,$11)
+                        ON CONFLICT (tenant_id,region,skill_id,source,source_ref) DO NOTHING""",
+                        PLATFORM_TENANT, region, row["skill_id"], room,
+                        encoded(row["input"]), encoded(row["expected"]),
+                        input_hash([source, row["input"], row["expected"]]), input_hash(row["input"]),
+                        is_holdout(PLATFORM_TENANT, row["skill_id"], row["input"]),
+                        source, day,
+                    )
+
 @asynccontextmanager
 async def lifespan(_app):
     tasks = [asyncio.create_task(collector_loop()),
              asyncio.create_task(schedule_loop("export")),
+             asyncio.create_task(schedule_loop("gold")),
              asyncio.create_task(schedule_loop("retest"))]
     try:
         yield
@@ -200,7 +271,7 @@ async def collector_loop() -> None:
 def scheduled_slot(operation: str, now: datetime) -> datetime:
     """Most recent UTC boundary; a restart catches up once, never a backlog."""
     now = now.astimezone(timezone.utc)
-    if operation == "export":
+    if operation in ("export", "gold"):
         slot = now.replace(hour=2, minute=0, second=0, microsecond=0)
         return slot if slot <= now else slot - timedelta(days=1)
     if operation != "retest":
@@ -217,7 +288,7 @@ async def scheduled_once(operation: str, now: datetime | None = None) -> None:
         return
     # A separate session lock per operation covers the completion check and work
     # across workers. The existing platform audit log needs no schema change.
-    lock = 871224 if operation == "export" else 871225
+    lock = {"export": 871224, "retest": 871225, "gold": 871227}[operation]
     marker = encoded({"tenant_id": str(PLATFORM_TENANT), "region": region,
                       "operation": operation, "slot": slot.isoformat()})
     async with runtime().pool().acquire() as conn:
@@ -229,7 +300,9 @@ async def scheduled_once(operation: str, now: datetime | None = None) -> None:
                 AND action='complete' AND detail=$1::jsonb LIMIT 1""", marker,
             ):
                 return
-            if operation == "export":
+            if operation == "gold":
+                await collect_room_gold(slot.date())
+            elif operation == "export":
                 await collect_once()
                 result = await export_once(day=slot.date())
                 if result["status"] != "complete":
