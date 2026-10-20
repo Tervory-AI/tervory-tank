@@ -4,7 +4,9 @@ import { test } from "node:test";
 import { founderDenial } from "../workspace/app/review/founder.ts";
 import {
   applyApproval,
+  approvalRowText,
   confirmApprove,
+  tankRefusal,
   costLabel,
   founderActionRefusal,
   oneLine,
@@ -110,4 +112,30 @@ test("Approve is refused for a non-founder", () => {
   const page = readFileSync(new URL("../workspace/app/skala/page.tsx", import.meta.url), "utf8");
   assert.ok(page.indexOf("rejectUnlessFounder()") < page.indexOf("listSkills()"));
   assert.ok(page.indexOf("notFound()") < page.indexOf("<SkalaApp"));
+});
+
+test("approving a zenas skill with no 50 of 50 shows the refusal on the row", () => {
+  const sentence = "This Zenas skill stays unapproved. The made-up-case test has not run on this box through answer_question.";
+  const thrown = `Tank /v1/skala/zenas.cite_check/1.0.0/approve 409: ${JSON.stringify({ detail: sentence })}`;
+  const refused = tankRefusal(thrown);
+  assert.ok(refused);
+  assert.equal(refused.status, 409);
+  assert.equal(refused.error, sentence);
+  assert.equal(approvalRowText(refused.status, refused.error), sentence);
+  const short = "This Zenas skill stays unapproved. The latest made-up-case test on this box is 49 of 50, not 50 of 50 through answer_question.";
+  assert.equal(tankRefusal(`Tank /v1/skala/zenas.scope/1.0.0/approve 409: ${JSON.stringify({ detail: short })}`)?.error, short);
+  assert.equal(approvalRowText(409, thrown), null);
+  assert.equal(approvalRowText(502, sentence), null);
+  const route = readFileSync(new URL("../workspace/app/api/skala/route.ts", import.meta.url), "utf8");
+  const post = route.slice(route.indexOf("export async function POST"));
+  assert.ok(post.includes("tankRefusal"));
+  assert.ok(post.includes("status: refused.status"));
+  const view = readFileSync(new URL("../workspace/app/skala/view.tsx", import.meta.url), "utf8");
+  const row = view.slice(view.indexOf('className="sk-version"'), view.indexOf('className="sk-cases"'));
+  const approveAt = row.indexOf("Approve");
+  const messageAt = row.indexOf("sk-row-err");
+  assert.ok(approveAt >= 0 && messageAt > approveAt);
+  assert.ok(row.includes("rowRefusal.text"));
+  assert.ok(row.includes("approvalRowText") === false);
+  assert.ok(view.includes("approvalRowText"));
 });

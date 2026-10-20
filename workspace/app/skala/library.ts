@@ -119,6 +119,29 @@ export function confirmApprove(id: string, version: string): string {
   return `Approve ${id} ${version}?`;
 }
 
+/** Tank's 409 body, as the sentence to show. A raw "Tank … 409" string is not that sentence. */
+export function tankRefusal(message: string): { status: 409; error: string } | null {
+  const match = /^Tank \S+ (\d+): ([\s\S]*)$/.exec(message.trim());
+  if (!match || Number(match[1]) !== 409) return null;
+  let error = "";
+  try {
+    const parsed = JSON.parse(match[2].trim()) as { detail?: unknown };
+    if (typeof parsed.detail === "string") error = parsed.detail.trim();
+  } catch {
+    error = "";
+  }
+  if (!error || error.startsWith("Tank ")) return null;
+  return { status: 409, error };
+}
+
+/** The sentence under the Approve button. Anything else stays off the row. */
+export function approvalRowText(status: number, error: unknown): string | null {
+  if (status !== 409 || typeof error !== "string") return null;
+  const text = error.trim();
+  if (!text || /^Tank \S+ \d+:/.test(text)) return null;
+  return text;
+}
+
 /** Founder actions are refused for everyone else. The route applies the same rule. */
 export function founderActionRefusal(founder: boolean): { error: "Not found"; status: 404 } | null {
   if (founder) return null;

@@ -7,6 +7,7 @@ import {
   agentChoices,
   applyApproval,
   applyEval,
+  approvalRowText,
   confirmApprove,
   costLabel,
   scoreDate,
@@ -68,6 +69,7 @@ export function SkalaApp({
   const [notice, setNotice] = useState<Notice | null>(loadError ? { tone: "err", text: loadError } : null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [pending, setPending] = useState<LibrarySkill | null>(null);
+  const [rowRefusal, setRowRefusal] = useState<{ key: string; text: string } | null>(null);
   const [record, setRecord] = useState<{ key: string; result: EvalResult } | null>(null);
   const searchId = useId();
   const agentFilterId = useId();
@@ -137,10 +139,17 @@ export function SkalaApp({
         return;
       }
       if (!response.ok || !payload) {
+        const refused = action === "approve" ? approvalRowText(response.status, payload?.error) : null;
+        if (refused) {
+          setRowRefusal({ key: `${skill.id}@${skill.version}`, text: refused });
+          closeApprove();
+          return;
+        }
         setNotice({ tone: "err", text: failureText(action, response.status) });
         return;
       }
       if (action === "approve") {
+        setRowRefusal(null);
         await refreshAfter(applyApproval(skills, skill.id, skill.version));
         setNotice({ tone: "ok", text: `${skill.id} ${skill.version} is approved. The previous approved version is retired.` });
         closeApprove();
@@ -304,9 +313,12 @@ export function SkalaApp({
                                   </button>
                                 ) : null}
                                 {action === "approve" ? (
-                                  <button type="button" className="primary" disabled={busyKey !== null} onClick={() => openApprove(version)}>
-                                    Approve
-                                  </button>
+                                  <>
+                                    <button type="button" className="primary" disabled={busyKey !== null} onClick={() => openApprove(version)}>
+                                      Approve
+                                    </button>
+                                    {rowRefusal?.key === key ? <p className="sk-err sk-row-err" role="alert">{rowRefusal.text}</p> : null}
+                                  </>
                                 ) : null}
                                 {action === "retire" ? (
                                   <button type="button" disabled={busyKey !== null} onClick={() => run(version, "retire")}>

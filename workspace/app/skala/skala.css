@@ -370,6 +370,11 @@ body:has(.skala) main {
   min-width: 0;
 }
 
+.sk-version .sk-row-err {
+  flex: 1 0 100%;
+  margin: 0;
+}
+
 .sk-meta {
   font-family: var(--font-mono), "JetBrains Mono", ui-monospace, monospace;
   font-size: 13px;
