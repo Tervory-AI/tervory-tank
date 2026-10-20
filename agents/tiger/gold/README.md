@@ -1,7 +1,9 @@
 # Public price candidates
 
-Rebuild `public-pages.zip` with `python tests/build_tiger_gold_bundle.py` from the repository root. The bundle preserves all 109 source records and PNGs, with scripts and tracking attributes removed from HTML. The endpoint excludes held-out, conflicting and unreadable rows. No human verification is asserted.
+Rebuild `public-pages.zip` with `python tests/build_tiger_gold_bundle.py` from the repository root. Only the exact demo/practice hosts in `allowed-hosts.json` may contribute labels, HTML or PNGs. The filtered bundle contains 51 records; real-retailer records and their assets are excluded. Adding a host requires a terms review; subdomains are not implicitly allowed.
 
-For additional snapshots an authorised collector can write `/data/gold/public_snapshots.json`, a JSON array. Each row requires `url`, `html`, `region`, `public: true`, `robots_allowed: true`, `terms_allowed: true`, `challenge: false`, `authenticated: false`; optional `png_base64` supplies the actual same-page screenshot. No private watch data belongs here. Query strings and credential-bearing URLs are refused. Only single visible prices agreeing with JSON-LD or microdata qualify. Collection is not performed by this endpoint.
+The builder removes executable scripts, tracking attributes, and every meta tag without itemprop, including session and CSRF metadata. The endpoint excludes held-out, conflicting and unreadable rows. No human verification is asserted.
+
+Optional snapshot ingestion is disabled until a reviewed collector exists. The endpoint reads only the shipped corpus, never `/data/gold/public_snapshots.json` or client watch data.
 
 The result's `expected.items` labels price and known currency only. Unknown names, identifiers and stock status are omitted; downstream comparison must project onto the labelled fields. These are machine candidates for spot-checking, not checked training examples.

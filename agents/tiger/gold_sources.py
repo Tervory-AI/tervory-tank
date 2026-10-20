@@ -117,70 +117,25 @@ def agreement(html: str) -> str | None:
     return None
 
 
-def snapshot_candidates(rows: list[dict], *, region: str) -> list[dict]:
-    """Additional public snapshots from an authorised collector, never client watches.
-
-    Each snapshot must attest access permission and region. This module never
-    fetches pages or bypasses robots, terms, authentication or challenges.
-    """
-    result = []
-    if region not in {"us-east", "za"}:
-        return result
-    for row in rows:
-        if not all(row.get(key) is True for key in ("public", "robots_allowed", "terms_allowed")):
-            continue
-        if row.get("challenge") is not False or row.get("authenticated") is not False or row.get("region") != region:
-            continue
-        url = str(row.get("url") or "")
-        try:
-            parsed = urlsplit(url)
-        except ValueError:
-            continue
-        if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
-            continue
-        html = row.get("html")
-        if not isinstance(html, str) or len(html) > 2_000_000:
-            continue
-        price = agreement(html)
-        if price is None:
-            continue
-        common = {"expected": {"items": [{"price": price}]},
-                  "label_source": "auto:visible-structured-agreement", "region": region, "public": True}
-        result.append({**common, "skill_id": "tiger.price_extract", "input": {"html": html, "url": url}})
-        png = row.get("png_base64")
-        if isinstance(png, str) and len(png) <= 2_000_000:
-            try:
-                valid = base64.b64decode(png, validate=True).startswith(b"\x89PNG\r\n\x1a\n")
-            except ValueError:
-                valid = False
-            if valid:
-                result.append({**common, "skill_id": "tiger.price_ocr", "input": {"png_base64": png, "url": url}})
-    return result
-
-
-def candidates(limit: int = 200, *, region: str = "us-east", corpus: Path = CORPUS, snapshots: Path | None = None) -> list[dict]:
+def candidates(limit: int = 200, *, region: str = "us-east", corpus: Path = CORPUS) -> list[dict]:
     if region not in {"us-east", "za"} or limit <= 0:
         return []
     result: list[dict] = []
-    if snapshots is not None and snapshots.is_file() and snapshots.stat().st_size <= 20_000_000:
-        try:
-            rows = json.loads(snapshots.read_text())
-            if isinstance(rows, list) and all(isinstance(row, dict) for row in rows):
-                result = snapshot_candidates(rows, region=region)[:min(limit, MAX_CANDIDATES)]
-        except (ValueError, OSError):
-            pass
-    if len(result) >= min(limit, MAX_CANDIDATES) or region != "us-east":
+    if region != "us-east":
         return result
+    allowed = set(json.loads(CORPUS.with_name("allowed-hosts.json").read_text()))
     with ZipFile(corpus) as archive:
         rows = json.loads(archive.read("manifest.json"))
         for row in rows:
+            if urlsplit(row["url"]).hostname not in allowed:
+                continue
             if row["split"] != "build" or row["conflict"] or row["unreadable"]:
                 continue
             price = amount(row["expected_price"])
             if price is None:
                 continue
             html = archive.read(row["id"] + ".html").decode()
-            source = "auto:price-gold-109:" + row["id"]
+            source = "auto:price-gold-demo:" + row["id"]
             if agreement(html) == price:
                 source += ":visible-structured-agreement"
             expected = {"items": [{"price": price}]}

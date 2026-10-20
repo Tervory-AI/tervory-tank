@@ -2,6 +2,10 @@
 import importlib.util
 import json
 import sys
+import secrets
+from urllib.parse import urlsplit
+
+from selectolax.parser import HTMLParser
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -19,7 +23,7 @@ _spec.loader.exec_module(gold)
 def test_corpus_and_candidates():
     with ZipFile(gold.CORPUS) as archive:
         rows = json.loads(archive.read("manifest.json"))
-    assert len(rows) == 109
+    assert len(rows) == 51
     output = gold.candidates()
     eligible = [r for r in rows if r['split'] == 'build' and not r['conflict'] and not r['unreadable']]
     assert len(output) == len(eligible) * 2
@@ -56,11 +60,13 @@ async def test_room_auth_and_limit(monkeypatch):
     spec = importlib.util.spec_from_file_location('tiger_gold_app', ROOT / 'agents/tiger/app.py')
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    monkeypatch.setenv('TANK_KEY', 'test-room-key')
+    key = secrets.token_hex(24)
+    monkeypatch.setenv('TANK_KEY', key)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=mod.app), base_url='http://test') as client:
-        for headers in ({}, {'X-Tank-Key': 'other-room-key'}, {'X-Tank-Key': 'workspace-key'}):
+        for headers in ({}, {'X-Tank-Key': 'other-room-key'}, {'X-Tank-Key': 'workspace-key'},
+                        {b'X-Tank-Key': b'\xff'}):
             assert (await client.get('/gold/candidates', headers=headers)).status_code == 401
-        headers = {'X-Tank-Key': 'test-room-key'}
+        headers = {'X-Tank-Key': key}
         response = await client.get('/gold/candidates?limit=2', headers=headers)
         assert response.status_code == 200 and len(response.json()) == 2
         for limit in ('0', '-1', '201', 'no'):
@@ -71,21 +77,83 @@ async def test_room_auth_and_limit(monkeypatch):
         assert (await client.get('/gold/candidates', headers=headers)).status_code == 401
 
 
-def test_additional_public_snapshots_fail_closed(tmp_path):
-    row = dict(public=True, robots_allowed=True, terms_allowed=True, challenge=False,
-               authenticated=False, region='us-east', url='https://example.test/item',
-               html='<p>$9.00</p><meta itemprop="price" content="9">')
-    assert len(gold.snapshot_candidates([row], region='us-east')) == 1
-    for key, value in [('public', False), ('robots_allowed', False), ('terms_allowed', False),
-                       ('challenge', True), ('authenticated', True), ('region', 'za'),
-                       ('url', 'https://example.test/item?session=private'), ('html', '<p>$8.00</p>')]:
-        assert gold.snapshot_candidates([{**row, key: value}], region='us-east') == []
-    path = tmp_path / 'snapshots.json'
-    path.write_text(json.dumps([row]))
-    result = gold.candidates(1, snapshots=path)
-    assert len(result) == 1 and result[0]['label_source'] == 'auto:visible-structured-agreement'
-    path.write_text('{bad')
-    assert gold.candidates(1, snapshots=path) == gold.candidates(1)
+def test_bundle_only_contains_allowlisted_hosts_and_no_token_meta():
+    allowed = set(json.loads(gold.CORPUS.with_name("allowed-hosts.json").read_text()))
+    assert allowed == {
+        "demo.spreecommerce.org", "demo.mage-os.org", "demo.solidus.io",
+        "scrapeme.live", "webscraper.io", "books.toscrape.com", "example.test",
+    }
+    with ZipFile(gold.CORPUS) as archive:
+        rows = json.loads(archive.read("manifest.json"))
+        assert {urlsplit(row["url"]).hostname for row in rows} == allowed
+        assert set(archive.namelist()) == {"manifest.json"} | {
+            row["id"] + suffix for row in rows for suffix in (".html", ".png")
+        }
+        for row in rows:
+            tree = HTMLParser(archive.read(row["id"] + ".html"))
+            for meta in tree.css("meta"):
+                assert meta.attributes.get("itemprop")
+                attrs = json.dumps(meta.attributes).lower()
+                assert "csrf" not in attrs and "token" not in attrs
+
+
+def test_bundle_rebuild_removes_non_itemprop_meta(tmp_path, monkeypatch):
+    spec = importlib.util.spec_from_file_location("tiger_bundle", ROOT / "tests/build_tiger_gold_bundle.py")
+    builder = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(builder)
+    source = tmp_path / "source"
+    (source / "gold/shots").mkdir(parents=True)
+    rows = []
+    token = secrets.token_hex(24)
+    for name, host in [("demo", "example.test"), ("retailer", "retailer.invalid")]:
+        rows.append({"id": name, "url": f"https://{host}/item", "html": name + ".html"})
+        (source / (name + ".html")).write_text(
+            f'<meta name="csrf-token" content="{token}">'
+            f'<meta name="anti-csrftoken" content="{token}">'
+            '<meta name="description" content="remove">'
+            '<meta itemprop="price" content="9"><p>$9</p>'
+        )
+        (source / "gold/shots" / (name + ".png")).write_bytes(b"\x89PNG\r\n\x1a\n")
+    (source / "gold/pages.jsonl").write_text("\n".join(json.dumps(row) for row in rows))
+    dest = tmp_path / "public-pages.zip"
+    dest.with_name("allowed-hosts.json").write_text('["example.test"]')
+    monkeypatch.setattr(builder, "SOURCE", source)
+    monkeypatch.setattr(builder, "DEST", dest)
+    builder.build()
+    first = dest.read_bytes()
+    builder.build()
+    assert dest.read_bytes() == first
+    with ZipFile(dest) as archive:
+        assert json.loads(archive.read("manifest.json")) == rows[:1]
+        assert set(archive.namelist()) == {"manifest.json", "demo.html", "demo.png"}
+        html = archive.read("demo.html").decode()
+        assert token not in html
+        assert "csrf" not in html and "token" not in html
+        assert HTMLParser(html).css_first('meta[itemprop="price"]').attributes["content"] == "9"
+
+
+@pytest.mark.asyncio
+async def test_optional_snapshot_file_is_never_exported(tmp_path, monkeypatch):
+    monkeypatch.setitem(sys.modules, "gold_sources", gold)
+    spec = importlib.util.spec_from_file_location('tiger_snapshot_app', ROOT / 'agents/tiger/app.py')
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("TANK_REGION", "us-east")
+    key = secrets.token_hex(24)
+    monkeypatch.setenv("TANK_KEY", key)
+    (tmp_path / "gold").mkdir()
+    (tmp_path / "gold/public_snapshots.json").write_text(json.dumps([{
+        "public": True, "robots_allowed": True, "terms_allowed": True,
+        "challenge": False, "authenticated": False, "region": "us-east",
+        "url": "https://example.test/client-watch",
+        "html": '<p>$9.00</p><meta itemprop="price" content="9">',
+    }]))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=mod.app), base_url='http://test') as client:
+        response = await client.get('/gold/candidates', headers={'X-Tank-Key': key})
+    assert response.status_code == 200
+    assert response.json() == gold.candidates()
+    assert not hasattr(gold, "snapshot_candidates")
 
 
 def test_microdata_text_and_currency_disagreement():

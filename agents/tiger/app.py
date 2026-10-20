@@ -6,7 +6,6 @@ import hmac
 import logging
 import os
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 from uuid import UUID
 
@@ -260,9 +259,8 @@ async def gold_candidates(
     x_tank_key: str = Header(default=""),
 ) -> list[dict]:
     key = os.environ.get("TANK_KEY", "")
-    if not key or not hmac.compare_digest(key, x_tank_key):
+    if not key or not hmac.compare_digest(key.encode("utf-8"), x_tank_key.encode("utf-8")):
         raise HTTPException(status_code=401, detail="room key required")
     return candidates(
         limit, region=os.environ.get("TANK_REGION", "us-east"),
-        snapshots=Path(os.environ.get("DATA_DIR", "/data")) / "gold" / "public_snapshots.json",
     )
