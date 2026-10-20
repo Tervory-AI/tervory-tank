@@ -32,6 +32,7 @@ def test_labels_match_skills_and_limit():
     for row in rows:
         assert funcs[row["skill_id"]](row["input"]) == row["expected"]
         assert row["public"] is True and "2025-" in row["label_source"]
+        assert "census_population" not in row["label_source"]
     assert len(candidates(*history(), region="za", limit=3)) == 3
     assert {r["region"] for r in candidates(*history(), region="za", limit=3)} == {"za"}
 

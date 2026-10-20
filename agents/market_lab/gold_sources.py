@@ -96,7 +96,7 @@ def candidates(series: list[dict], points: list[dict], *, region: str, limit: in
                        "kind": "bottleneck" if e["kind"] == "surge" else "saturating", "size": e["size"]}
                       for e in _events(history)]
             add("shift_detect", {"areas": [{"area": row["area"], "gap": list(history)}]},
-                {"events": events}, "gap:listing_counts+check_counts+census_population:" + stamp)
+                {"events": events}, "gap:" + "+".join(sorted({s["source"] for s in eligible})) + ":" + row["area"] + ":" + stamp)
     # Round-robin skills so a large source cannot starve shift examples.
     groups = [[r for r in out if r["skill_id"] == "market." + skill]
               for skill in ("series_fetch", "surge_detect", "shift_detect")]
