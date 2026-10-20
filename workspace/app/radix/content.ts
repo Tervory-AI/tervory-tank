@@ -43,7 +43,7 @@ export function exampleReport(): string {
     "# Radix — EXAMPLE report",
     "",
     "EXAMPLE ONLY. These findings are made up. This is not a scan of your code.",
-    "Outbound scans remain disabled. This report does not approve a release.",
+    "This report does not approve a release.",
     "",
     ...exampleFindings.flatMap((finding) => [
       "## " + finding.severity + " — " + finding.title + " (Example)",

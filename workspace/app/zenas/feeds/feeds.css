@@ -1,8 +1,25 @@
 .zf {
   min-height: 100vh;
+  max-width: 100%;
+  overflow-x: hidden;
   background: #f4f6fb;
   color: #001840;
   font-family: var(--font-inter), Inter, sans-serif;
+}
+
+.zf-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.zf-scroll table {
+  width: max-content;
+  min-width: 100%;
+}
+
+.zf-scroll th,
+.zf-scroll td {
+  white-space: nowrap;
 }
 
 .zf header,

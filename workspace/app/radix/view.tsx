@@ -131,11 +131,6 @@ export function RadixPage({ accountName, settings }: { accountName: string; sett
 
       <RadixDesk />
 
-      <section className="rx-card rx-seal" aria-label="Outbound access">
-        <h2>Outbound scans are off</h2>
-        <p>A real client hostname must be named and approved before a site can be checked.</p>
-      </section>
-
       {section === "Overview" ? <>
         <section aria-labelledby="rx-checks">
           <h2 id="rx-checks" className="rx-section-heading">Code checks</h2>
@@ -143,17 +138,13 @@ export function RadixPage({ accountName, settings }: { accountName: string; sett
             <h3>{check.title}</h3><p>{check.copy}</p>
           </article>)}</div>
         </section>
-        <section className="rx-card">
-          <h2>Scan results are not on this page yet</h2>
-          <p>Open the example report to see how findings and fixes will appear. This page does not start a scan.</p>
-        </section>
         <section aria-labelledby="rx-flow">
           <h2 id="rx-flow" className="rx-section-heading">From finding to fix</h2>
           <ol className="rx-steps"><li>Review the file and rule.</li><li>Make the change.</li><li>Run a fresh check.</li></ol>
         </section>
       </> : !example ? <section className="rx-card rx-empty">
         <h2>{section === "Findings" ? "No findings yet" : "No reports yet"}</h2>
-        <p>This page cannot read your scan history yet. Open the example to see the layout, or send a request below.</p>
+        <p>{section === "Findings" ? "No findings yet." : "No reports yet."}</p>
         {section === "Findings" ? <button type="button" className="rx-text-button" onClick={() => navigate("Findings", true)}>Browse example findings</button> : null}
       </section> : <>
         <div className="rx-example-banner"><span className="rx-badge">Example</span><p>3 made-up findings. This is not a scan of your code or approval to release it.</p></div>

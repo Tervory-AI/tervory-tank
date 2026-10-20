@@ -258,6 +258,7 @@ export function FeedSwitch({
       <h2>Test scores</h2>
       <p className="note">LegalBench rows are a code baseline, not a model score.</p>
       {scores.length === 0 ? <p>No scores yet.</p> : (
+        <div className="zf-scroll">
         <table>
           <thead>
             <tr>
@@ -290,8 +291,10 @@ export function FeedSwitch({
             ))}
           </tbody>
         </table>
+        </div>
       )}
       <h2>Sources</h2>
+      <div className="zf-scroll">
       <table>
         <thead>
           <tr>
@@ -326,6 +329,7 @@ export function FeedSwitch({
           ))}
         </tbody>
       </table>
+      </div>
     </>
   );
 }

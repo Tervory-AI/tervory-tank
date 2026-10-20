@@ -41,7 +41,6 @@ import { SquadLinks } from "../squad-links";
 const SECTIONS = [
   { id: "overview", label: "Overview" },
   { id: "on", label: "On" },
-  { id: "off", label: "Off (needs a key)" },
   { id: "linked", label: "Linked pages" },
 ] as const;
 
@@ -144,7 +143,8 @@ function ChatBox() {
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     const text = draft.trim();
-    if (!text || sending) return;
+    if (sending) return;
+    if (!text) return;
     const next: Turn[] = [...turns, { role: "user", content: text }];
     setTurns(next);
     setDraft("");
@@ -215,7 +215,7 @@ function ChatBox() {
           placeholder="Ask Market Lab about your market…"
           disabled={sending}
         />
-        <button className="ml-send" type="submit" disabled={sending || !draft.trim()}>
+        <button className="ml-send" type="submit" disabled={sending}>
           {sending ? "Sending…" : "Send"}
         </button>
       </form>
@@ -664,12 +664,11 @@ export function MarketLabView({
 
   const scope = searchMarketLab(model, query);
   const onCards = [...model.featured, ...model.cards].filter((card) => scope.onIds.includes(card.id));
-  const offRows = model.off.filter((row) => scope.offIds.includes(row.id));
   const groups = model.groups
     .map((group) => ({ ...group, pages: group.pages.filter((page) => scope.linkIds.includes(page.id)) }))
     .filter((group) => group.pages.length > 0);
   const searching = query.trim().length > 0;
-  const noHits = searching && onCards.length === 0 && offRows.length === 0 && groups.length === 0;
+  const noHits = searching && onCards.length === 0 && groups.length === 0;
   const anyKeyedOn = [...model.featured, ...model.cards].some((card) => KEYED_ON.has(card.id));
   const accountName = workspaceName?.trim() || "Your account";
 
@@ -691,7 +690,7 @@ export function MarketLabView({
       <button className="ml-dim" type="button" hidden={!menu} aria-label="Close menu" onClick={() => setMenu(false)} />
       <aside className={menu ? "ml-panel open" : "ml-panel"}>
         <div className="ml-brand">
-          <img className="ml-agent" src={MARKET_LAB_LOGO_SRC} alt="Market Lab" width={243} height={40} />
+          <img className="ml-agent" src={MARKET_LAB_LOGO_SRC} alt="Market Lab" width={242} height={40} />
         </div>
         <button className="ml-close" type="button" onClick={() => setMenu(false)}>
           Close
@@ -770,10 +769,6 @@ export function MarketLabView({
               <p>On</p>
             </article>
             <article>
-              <p className="ml-count">{model.offCount}</p>
-              <p>Off</p>
-            </article>
-            <article>
               <p className="ml-count">{model.linkedCount}</p>
               <p>Linked pages</p>
             </article>
@@ -804,24 +799,6 @@ export function MarketLabView({
                 ))}
               </div>
             ) : null}
-          </section>
-          <section id="off" className="ml-section">
-            <h2>Off (needs a key)</h2>
-            <p className="ml-lead">These feeds stay off until a key is added in Plugins. They are not called.</p>
-            {offRows.length ? (
-              <ul className="ml-off">
-                {offRows.map((row) => (
-                  <li key={row.id}>
-                    <span className="ml-off-name">{row.title}</span>
-                    <span>Off. Needs a key.</span>
-                    <span className="ml-keychip">{row.keyName}</span>
-                    <span className="ml-off-quiet">Not called</span>
-                  </li>
-                ))}
-              </ul>
-            ) : searching ? null : (
-              <p className="ml-lead">Every keyed feed is on.</p>
-            )}
           </section>
           <section id="linked" className="ml-section">
             <h2>Linked pages</h2>

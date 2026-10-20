@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import "./data.css";
 
 type Field = { value: unknown; source: string; confidence: number };
 type Rec = {
@@ -74,6 +75,15 @@ export default function DataPage() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (busy) return;
+    if (!batch.trim()) {
+      setError("Add a batch name.");
+      return;
+    }
+    if (!file && !link.trim() && !csv.trim()) {
+      setError("Add a file, a link, or paste the rows.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -108,7 +118,7 @@ export default function DataPage() {
   }
 
   return (
-    <>
+    <div className="data-page">
       <h1>Data</h1>
       <p style={{ color: "var(--muted)" }}>
         Upload a CSV (or paste one; header row first: name, address, city, state, zip, phone, website — any you have). Base runs
@@ -119,7 +129,8 @@ export default function DataPage() {
         auditable while the big ones are still going. A restart resumes where it stopped.
       </p>
       <form onSubmit={submit} className="task-form">
-        <input value={batch} onChange={(e) => setBatch(e.target.value)} placeholder="Batch name, e.g. ATF full list Oct 2026" maxLength={120} disabled={busy} required />
+        <label htmlFor="batch-name">Batch name</label>
+        <input id="batch-name" value={batch} onChange={(e) => setBatch(e.target.value)} placeholder="Batch name, e.g. ATF full list Oct 2026" maxLength={120} disabled={busy} />
         <div className="task-form-row">
           <input ref={fileRef} type="file" accept=".csv,.txt,.tsv,text/csv,text/plain" disabled={busy}
             onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
@@ -142,7 +153,7 @@ export default function DataPage() {
           <label style={{ color: "var(--muted)", fontSize: 13 }}>
             <input type="checkbox" checked={preview} onChange={(e) => setPreview(e.target.checked)} /> preview (allow unapproved skill versions)
           </label>
-          <button type="submit" disabled={busy || !batch.trim() || (!file && !link.trim() && !csv.trim())}>{busy ? "Importing… (a big file takes a couple of minutes)" : "Run Base"}</button>
+          <button type="submit" disabled={busy}>{busy ? "Importing… (a big file takes a couple of minutes)" : "Run Base"}</button>
         </div>
         {error && <p className="err">{error}</p>}
       </form>
@@ -183,6 +194,7 @@ export default function DataPage() {
         </div>
       )}
 
+      <div className="data-scroll">
       <table>
         <thead>
           <tr><th>Name</th><th>City</th><th>Website</th><th>Emails</th><th>Decision maker</th><th>Segment</th><th>Tier</th><th>Conf.</th><th>Status</th></tr>
@@ -222,9 +234,10 @@ export default function DataPage() {
           {records.length === 0 && <tr><td colSpan={9} style={{ color: "var(--muted)" }}>No records in this batch yet.</td></tr>}
         </tbody>
       </table>
+      </div>
       {current && current.total > records.length && (
         <p style={{ color: "var(--muted)", fontSize: 13 }}>Showing the newest {records.length} of {current.total.toLocaleString()}. Export CSV for the full batch.</p>
       )}
-    </>
+    </div>
   );
 }

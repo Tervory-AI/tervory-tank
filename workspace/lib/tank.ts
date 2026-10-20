@@ -676,3 +676,43 @@ export function approveTisanGold(tenantId: string, userId: string, pageId: strin
     body: JSON.stringify({ tenant_id: tenantId, page_id: pageId, frame_hash: frameHash, page_hash: pageHash }),
   });
 }
+
+export type RigCatalogueCounts = { products: number; fits: number };
+
+function wholeCount(value: unknown): number | null {
+  const count = typeof value === "number" ? value : Number(value);
+  if (!Number.isInteger(count) || count < 0) return null;
+  return count;
+}
+
+/** Product and fit totals for this tenant, from the Rig room through Tank. Null when Rig does not answer. */
+export async function rigCatalogueCounts(tenantId: string): Promise<RigCatalogueCounts | null> {
+  if (!tenantId) return null;
+  try {
+    const row = await tank<{ products?: unknown; fits?: unknown }>(
+      `/v1/rig/catalogues?tenant_id=${encodeURIComponent(tenantId)}`,
+      { method: "GET" },
+    );
+    const products = wholeCount(row.products);
+    const fits = wholeCount(row.fits);
+    if (products === null || fits === null) return null;
+    return { products, fits };
+  } catch {
+    return null;
+  }
+}
+
+/** Read-only Rig room calls. The Workspace key stays here; a shopper key never does. */
+export function rigProxy(
+  pathname: string,
+  tenantId: string,
+  init: { method?: "GET" | "POST"; query?: Record<string, string>; body?: unknown } = {},
+): Promise<Record<string, unknown>> {
+  const params = new URLSearchParams({ tenant_id: tenantId });
+  for (const [key, value] of Object.entries(init.query ?? {})) params.set(key, value);
+  const path = `${pathname}?${params.toString()}`;
+  if ((init.method ?? "GET") === "POST") {
+    return tank<Record<string, unknown>>(path, { method: "POST", body: JSON.stringify(init.body ?? {}) });
+  }
+  return tank<Record<string, unknown>>(path, { method: "GET" });
+}

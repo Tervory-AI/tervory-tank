@@ -28,7 +28,7 @@ export default async function ReviewPage() {
       account={reviewer.name}
       items={items}
       note={note}
-      reviewer={`${reviewer.name} · ${reviewer.admissionNo}`}
+      reviewer={reviewer.admissionNo ? `${reviewer.name} · ${reviewer.admissionNo}` : reviewer.name}
     />
   );
 }
