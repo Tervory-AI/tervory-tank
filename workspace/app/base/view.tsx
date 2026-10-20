@@ -7,6 +7,7 @@ import { AskBase, RecordSearch, type AskAction, type SearchAction } from "./ask"
 import type { PluginPanel } from "./plugin-panel";
 import { PluginsDialog, type PluginsTab } from "./plugins";
 import { SquadLinks } from "../squad-links";
+import { ContextComparison } from "./context-comparison";
 
 export const WORKSPACE_HREF = "/";
 
@@ -60,6 +61,7 @@ export function BaseView({
   refresh,
   search,
   ask,
+  canRunTrial = false,
 }: {
   model: PageModel;
   plugins: PluginPanel;
@@ -67,6 +69,7 @@ export function BaseView({
   refresh: () => Promise<void>;
   search: SearchAction;
   ask: AskAction;
+  canRunTrial?: boolean;
 }) {
   const [active, setActive] = useState<string>("overview");
   const [menu, setMenu] = useState(false);
@@ -297,6 +300,8 @@ export function BaseView({
               </div>
             )}
           </section>
+
+          <ContextComparison report={model.contextTrial} canRunTrial={canRunTrial} />
 
           <section id="skills" className="bcp-section">
             <h2>Skills</h2>
