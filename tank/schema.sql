@@ -789,3 +789,39 @@ CREATE TABLE IF NOT EXISTS tank.training_jobs (
     ledger_id uuid UNIQUE REFERENCES tank.ledger(id),
     created_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- A training row keeps the batch it came from. A removed batch retires its gold
+-- and marks every model trained on it.
+ALTER TABLE tank.gold_examples ADD COLUMN IF NOT EXISTS batch_id text;
+ALTER TABLE tank.gold_examples ADD COLUMN IF NOT EXISTS currency text;
+ALTER TABLE tank.gold_examples ADD COLUMN IF NOT EXISTS unit text;
+ALTER TABLE tank.gold_examples ADD COLUMN IF NOT EXISTS quarantine text;
+
+ALTER TABLE tank.training_pairs ADD COLUMN IF NOT EXISTS batch_id text;
+ALTER TABLE tank.training_pairs ADD COLUMN IF NOT EXISTS currency text;
+ALTER TABLE tank.training_pairs ADD COLUMN IF NOT EXISTS unit text;
+
+CREATE TABLE IF NOT EXISTS tank.removed_batches (
+    tenant_id uuid NOT NULL,
+    batch_id text NOT NULL,
+    removed_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, batch_id)
+);
+
+CREATE TABLE IF NOT EXISTS tank.training_job_batches (
+    tenant_id uuid NOT NULL,
+    job_id text NOT NULL,
+    model_repo text NOT NULL,
+    batch_id text NOT NULL,
+    region text NOT NULL,
+    PRIMARY KEY (tenant_id, job_id, batch_id)
+);
+
+CREATE TABLE IF NOT EXISTS tank.training_snapshot_batches (
+    tenant_id uuid NOT NULL,
+    region text NOT NULL,
+    day date NOT NULL,
+    agent text NOT NULL,
+    batch_id text NOT NULL,
+    PRIMARY KEY (tenant_id, region, day, agent, batch_id)
+);

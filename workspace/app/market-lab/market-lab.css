@@ -1095,3 +1095,63 @@ body:has(.ml) main {
     overflow-x: auto;
   }
 }
+
+.ml-quarantine {
+  margin: 32px 0 0;
+  padding: 24px;
+  color: #001840;
+  background: #f4f6fb;
+  border: 1px solid #b8bfd0;
+  border-radius: 12px;
+}
+
+.ml-quarantine h2,
+.ml-quarantine h3 {
+  font-family: var(--font-jost), Jost, sans-serif;
+  font-weight: 300;
+}
+
+.ml-quarantine-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.ml-quarantine table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+}
+
+.ml-quarantine th,
+.ml-quarantine td {
+  border-bottom: 1px solid #b8bfd0;
+  padding: 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.ml-quarantine td form {
+  display: inline-block;
+  margin: 0 8px 8px 0;
+}
+
+.ml-quarantine button {
+  color: #001840;
+  background: #fff;
+  border: 1px solid #b8bfd0;
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+.ml-quarantine-error {
+  color: #001840;
+  background: #fff;
+  border: 1px solid #b8bfd0;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.ml-mono {
+  font-family: var(--font-jetbrains), "JetBrains Mono", ui-monospace, monospace;
+  font-size: 12px;
+}

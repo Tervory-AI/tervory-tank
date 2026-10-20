@@ -12,7 +12,8 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PACKAGE = ROOT / "tank/skills/market.series_fetch/1.0.0"
+LEGACY = ROOT / "tank/skills/market.series_fetch/1.0.0"
+PACKAGE = ROOT / "tank/skills/market.series_fetch/1.1.0"
 
 
 def platform_tenant() -> str:
@@ -100,9 +101,18 @@ class CandidateEvalRuntimeTests(unittest.TestCase):
                         self.assertTrue(source["url"].startswith(f"client://{tenant}/"))
                 self.assertNotIn("10000000-0000-0000-0000-000000000001", json.dumps(case))
 
-    def test_bundled_feeds_and_fixtures_match_existing_sources(self):
-        files = [p for p in (PACKAGE / "feeds").rglob("*") if p.is_file() and p.suffix in {".py", ".sql"}]
+    def test_one_oh_oh_stays_free_of_the_batch_guard(self):
+        files = [p for p in (LEGACY / "feeds").rglob("*") if p.is_file() and p.suffix in {".py", ".sql"}]
         self.assertEqual(len(files), 19)
+        self.assertFalse((LEGACY / "feeds" / "batch_guard.py").exists())
+        self.assertNotIn("batch_guard", (LEGACY / "feeds" / "store.py").read_text(encoding="utf-8"))
+        self.assertIn("version: 1.0.0", (LEGACY / "skill.yaml").read_text(encoding="utf-8"))
+        self.assertNotIn("1.1.0", (LEGACY / "CHANGELOG.md").read_text(encoding="utf-8"))
+
+    def test_bundled_feeds_and_fixtures_match_existing_sources(self):
+        self.assertIn("version: 1.1.0", (PACKAGE / "skill.yaml").read_text(encoding="utf-8"))
+        files = [p for p in (PACKAGE / "feeds").rglob("*") if p.is_file() and p.suffix in {".py", ".sql"}]
+        self.assertEqual(len(files), 20)
         for path in files:
             original = ROOT / "agents/market_lab/feeds" / path.relative_to(PACKAGE / "feeds")
             self.assertEqual(path.read_bytes(), original.read_bytes(), str(path))

@@ -160,6 +160,17 @@ async def summary(actor: Reviewer = Depends(require_reviewer)) -> dict[str, Any]
 
 
 
+def retire_gold_rows(rows: list[dict[str, Any]], batch_id: str) -> list[dict[str, Any]]:
+    """Gold that came from a removed batch is retired and cannot train."""
+    retired: list[dict[str, Any]] = []
+    for row in rows:
+        if str(row.get("batch_id") or "") == batch_id and row.get("status") != "rejected":
+            retired.append({**row, "status": "rejected", "note": "Batch removed"})
+        else:
+            retired.append(dict(row))
+    return retired
+
+
 def source_verdict(statuses: list[str]) -> str:
     if len(statuses) < 10 or "candidate" in statuses:
         return "pending"

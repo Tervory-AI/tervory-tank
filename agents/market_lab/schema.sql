@@ -81,3 +81,54 @@ CREATE TABLE IF NOT EXISTS agent_market_lab.reports (
 
 CREATE INDEX IF NOT EXISTS reports_tenant_idx
     ON agent_market_lab.reports (tenant_id, made_at);
+
+-- Provenance on every stored point. A batch stays out of the pool until it passes.
+ALTER TABLE agent_market_lab.series ADD COLUMN IF NOT EXISTS region text NOT NULL DEFAULT '';
+ALTER TABLE agent_market_lab.series ADD COLUMN IF NOT EXISTS currency text NOT NULL DEFAULT '';
+ALTER TABLE agent_market_lab.series ADD COLUMN IF NOT EXISTS jump_limit numeric NOT NULL DEFAULT 10;
+
+ALTER TABLE agent_market_lab.points ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT '';
+ALTER TABLE agent_market_lab.points ADD COLUMN IF NOT EXISTS region text NOT NULL DEFAULT '';
+ALTER TABLE agent_market_lab.points ADD COLUMN IF NOT EXISTS currency text NOT NULL DEFAULT '';
+ALTER TABLE agent_market_lab.points ADD COLUMN IF NOT EXISTS unit text NOT NULL DEFAULT '';
+ALTER TABLE agent_market_lab.points ADD COLUMN IF NOT EXISTS batch_id text NOT NULL DEFAULT '';
+
+CREATE TABLE IF NOT EXISTS agent_market_lab.batches (
+    id          text PRIMARY KEY,
+    tenant_id   uuid NOT NULL,
+    series_id   text NOT NULL,
+    source      text NOT NULL,
+    fetched_at  text NOT NULL,
+    region      text NOT NULL,
+    currency    text NOT NULL,
+    unit        text NOT NULL,
+    status      text NOT NULL,
+    reason      text NOT NULL DEFAULT '',
+    jump_limit  numeric NOT NULL DEFAULT 10,
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS batches_tenant_idx
+    ON agent_market_lab.batches (tenant_id, status);
+
+CREATE TABLE IF NOT EXISTS agent_market_lab.batch_points (
+    batch_id    text NOT NULL,
+    tenant_id   uuid NOT NULL,
+    series_id   text NOT NULL,
+    date        text NOT NULL,
+    value       numeric NOT NULL,
+    source      text NOT NULL,
+    fetched_at  text NOT NULL,
+    region      text NOT NULL,
+    currency    text NOT NULL,
+    unit        text NOT NULL,
+    PRIMARY KEY (batch_id, series_id, date)
+);
+
+CREATE TABLE IF NOT EXISTS agent_market_lab.official_values (
+    tenant_id   uuid NOT NULL,
+    series_id   text NOT NULL,
+    date        text NOT NULL,
+    value       numeric NOT NULL,
+    PRIMARY KEY (tenant_id, series_id, date)
+);
