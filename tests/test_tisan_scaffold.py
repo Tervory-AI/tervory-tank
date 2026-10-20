@@ -282,3 +282,11 @@ def test_skill_cases_are_two_different_brands() -> None:
     assert "rung: 3" in meta
     assert (SKILL / "CHANGELOG.md").is_file()
     assert (SKILL / "run.py").is_file()
+
+
+@pytest.mark.asyncio
+async def test_figma_linked_scaffold_refuses_missing_reading(tmp_path: Path) -> None:
+    scaffold = _load()
+    with pytest.raises(scaffold.ScaffoldError, match="frame data incomplete"):
+        await scaffold.execute(_brief(figma={"file_key": "f" * 22, "node_id": "2:11"}), TENANT_A,
+                               data_root=tmp_path, run_checks_now=False)
