@@ -425,6 +425,12 @@ def exportable(row: dict[str, Any]) -> bool:
 
 
 async def upload_dataset(client: httpx.AsyncClient, org: str, agent: str, day: str, rows: list[dict], region: str = "us-east") -> None:
+    # Validate again at the network boundary, before any request is sent.
+    if region != "us-east" or any(
+        row.get("scope") != "platform" or "tenant_id" in row
+        or not exportable({**row, "tenant_id": PLATFORM_TENANT}) for row in rows
+    ):
+        raise ValueError("Unsafe training export")
     name = f"tervory-public-{agent}"
     created = await client.post("https://huggingface.co/api/repos/create",
                                 json={"type": "dataset", "name": name, "organization": org, "private": True})

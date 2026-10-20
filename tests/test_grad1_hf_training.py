@@ -33,7 +33,7 @@ def test_private_or_za_never_exports(change):
     assert training.exportable(row)
     assert not training.exportable(row | change)
 
-@pytest.mark.parametrize('change', [{'scope': 'client'}, {'public': False}, {'client_matter': True}, {'region': 'za'}, {'tenant_id': 'any'}])
+@pytest.mark.parametrize('change', [{'scope': 'client'}, {'public': False}, {'public': None}, {'holdout': True}, {'holdout': None}, {'client_matter': True}, {'region': 'za'}, {'tenant_id': 'any'}])
 def test_training_aborts_if_export_contains_one_private_row(change):
     row = dict(public=True, client_matter=False, scope='platform', region='us-east', holdout=False,
                active=True, task_type='base.fixture', input={}, output={})
@@ -114,3 +114,55 @@ async def test_launcher_estimates_before_any_submission_and_passes_secrets_only(
     assert len(repos) == expected_jobs
     assert all(r['private'] is True for r in repos)
     assert token not in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('change', [{'public': False}, {'public': None}, {'holdout': True}, {'holdout': None},
+                                    {'scope': 'client'}, {'tenant_id': 'private'}, {'region': 'za'}])
+async def test_upload_rejects_unsafe_rows_before_network(change):
+    from unittest.mock import AsyncMock
+    client = AsyncMock()
+    row = dict(public=True, holdout=False, active=True, client_matter=False, scope='platform',
+               region='us-east', task_type='base.fixture', input={}, output={})
+    with pytest.raises(ValueError, match='Unsafe training export'):
+        await training.upload_dataset(client, 'fixture', 'base', '2026-10-20', [row, row | change])
+    client.post.assert_not_called()
+    client.get.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_legacy_ledger_and_package_pairs_stay_private_after_upgrade(database, monkeypatch):
+    import secrets
+    pool, _ = database
+    monkeypatch.setenv('HF_TOKEN', secrets.token_urlsafe(24))
+    monkeypatch.setenv('HF_ORG', 'fixture')
+    async with pool.acquire() as conn:
+        # Reproduce the pre-upgrade table only in this disposable test database.
+        await conn.execute('ALTER TABLE tank.training_pairs DROP COLUMN public')
+        for source in ('ledger', 'package'):
+            for held in (False, True):
+                await conn.execute("""INSERT INTO tank.training_pairs
+                    (tenant_id,agent,task_type,region,input,output,approved_by,source,source_ref,holdout)
+                    VALUES ($1,'base','base.fixture','us-east',$2::jsonb,'{}','fixture',$3,$4,$5)""",
+                    PLATFORM_TENANT, training.encoded({'source': source, 'held': held}), source, str(held), held)
+        schema = (ROOT / 'tank/schema.sql').read_text()
+        await conn.execute(schema)
+        await conn.execute(schema)
+        legacy = await conn.fetch('SELECT public,holdout FROM tank.training_pairs')
+        assert len(legacy) == 4 and all(row['public'] is False for row in legacy)
+        assert sum(row['holdout'] for row in legacy) == 2
+        # Even explicitly public legacy provenance must still exclude holdouts.
+        for source in ('ledger', 'package'):
+            for held in (False, True):
+                await training.save_pair(conn, tenant=PLATFORM_TENANT, agent='base', task='base.fixture',
+                    value={'public_source': source, 'held': held}, output={}, approved_by='fixture',
+                    source=source, ref='public-' + str(held), public=True, holdout=held)
+    captured = []
+    async def upload(client, org, agent, day, rows, region):
+        load('train').validate_rows(rows)
+        captured.extend(rows)
+    monkeypatch.setattr(training, 'upload_dataset', upload)
+    result = await training.export_once()
+    assert result['exported'] == 2
+    assert {row['input']['public_source'] for row in captured} == {'ledger', 'package'}
+    assert all(row['public'] is True and row['holdout'] is False and row['input']['held'] is False for row in captured)
