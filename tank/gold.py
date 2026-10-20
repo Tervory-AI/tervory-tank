@@ -123,8 +123,8 @@ async def summary(actor: Reviewer = Depends(require_reviewer)) -> dict[str, Any]
     region = runtime().box_region()
     async with runtime().pool().acquire() as conn:
         rows = await conn.fetch(
-            """SELECT agent,skill_id,count(*) FILTER (WHERE status='checked' AND (NOT auto_label OR auto_approved)) AS checked,
-            count(*) FILTER (WHERE status='checked' AND (NOT auto_label OR auto_approved) AND holdout) AS holdout,
+            """SELECT agent,skill_id,count(DISTINCT input_hash) FILTER (WHERE status='checked' AND (NOT auto_label OR auto_approved)) AS checked,
+            count(DISTINCT input_hash) FILTER (WHERE status='checked' AND (NOT auto_label OR auto_approved) AND holdout) AS holdout,
             count(*) FILTER (WHERE status='candidate') AS candidates
             FROM tank.gold_examples g WHERE tenant_id=$1 AND region=$2
             AND ($3 OR agent='zenas') GROUP BY agent,skill_id ORDER BY agent,skill_id""",
