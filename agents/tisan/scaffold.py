@@ -495,7 +495,15 @@ async def execute(
             # Empty/incomplete measurements cause that gate to fail; never derive a baseline from the page.
             visual_dir = project / "visual"
             visual_dir.mkdir(exist_ok=True)
-            (visual_dir / "frames.json").write_text(json.dumps(reading.get("visual", [])))
+            target_page = source.get("page", "home")
+            if target_page not in brief["pages"]:
+                raise ScaffoldError("frame data incomplete")
+            target_path = "/" if target_page == "home" else f"/{target_page}"
+            measurements = reading.get("visual", [])
+            if not isinstance(measurements, list):
+                raise ScaffoldError("frame data incomplete")
+            measurements = [{**frame, "page": target_path} for frame in measurements if isinstance(frame, dict)]
+            (visual_dir / "frames.json").write_text(json.dumps(measurements))
         if run_checks_now:
             checks, detail = await run_checks(project)
         else:

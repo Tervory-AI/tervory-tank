@@ -435,3 +435,17 @@ def test_rest_frame_retains_measured_boxes_text_and_bound_colours() -> None:
     assert frame["elements"][1]["text"] == "Recorded text"
     document["children"][0].pop("absoluteBoundingBox")
     assert figma.visual_frames(document, variables)[0]["incomplete"] is True
+
+
+@pytest.mark.asyncio
+async def test_saved_reading_keeps_visual_evidence(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    raw = json.loads(FIXTURE.read_text())
+    # Synthetic capture explicitly marked incomplete, never substituted for approved truth.
+    raw["frames"][0]["visual"] = {"frameId": "2:11", "incomplete": True, "elements": []}
+    fixture = tmp_path / "capture.json"
+    fixture.write_text(json.dumps(raw))
+    monkeypatch.setenv("TISAN_FIGMA_FIXTURE", str(fixture))
+    result = await _load().execute({"node_id": "2:11"}, TENANT, data_root=tmp_path / "data")
+    saved = json.loads((tmp_path / "data" / result["stored"]).read_text())
+    assert saved["visual"] == [raw["frames"][0]["visual"]]
+    assert saved["frame_data"][0]["visual"]["incomplete"] is True
