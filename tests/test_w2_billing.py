@@ -12,7 +12,14 @@ BILLING = ROOT / "workspace" / "app" / "billing"
 
 def test_billing_logic_runs_without_stripe() -> None:
     result = subprocess.run(
-        ["node", "--experimental-strip-types", "--test", str(ROOT / "tests" / "w2" / "billing.test.ts")],
+        [
+            "node",
+            "--experimental-strip-types",
+            "--import",
+            str(ROOT / "tests" / "base_page_register.mjs"),
+            "--test",
+            str(ROOT / "tests" / "w2" / "billing.test.ts"),
+        ],
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -44,6 +51,13 @@ def test_billing_screen_stays_in_the_workspace() -> None:
     assert "sk_live_" not in example
     assert "sk_live_" not in webhook
     assert "constructEvent" in webhook
+    assert "memoryWebhookStore" not in webhook
+    assert "new Set" not in webhook
+    assert "tankWebhookStore" in webhook
+    assert 'from "../../lib/tank"' in webhook
+    assert "claimBillingEvent" in webhook
+    assert "releaseBillingEvent" in webhook
+    assert "store" not in route
     assert "STRIPE_WEBHOOK_SECRET" in route
     assert "/api/billing/webhook" in middleware
     for name in ("STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_PLAN_PRICE_IDS", "BILLING_PUBLIC_ORIGIN"):

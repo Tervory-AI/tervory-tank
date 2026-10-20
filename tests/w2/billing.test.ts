@@ -21,7 +21,7 @@ import {
   safeOrigin,
   type FetchLike,
 } from "../../workspace/app/billing/billing.ts";
-import { memoryWebhookStore, receiveStripeWebhook } from "../../workspace/app/billing/webhook.ts";
+import { receiveStripeWebhook, tankWebhookStore } from "../../workspace/app/billing/webhook.ts";
 
 const requireFromWorkspace = createRequire(new URL("../../workspace/package.json", import.meta.url));
 const Stripe = requireFromWorkspace("stripe");
@@ -29,8 +29,44 @@ const Stripe = requireFromWorkspace("stripe");
 const KEY = "sk_test_billingfixture";
 const TENANT = "7f3b1c2e-9a4d-4c1e-8f2a-5b6d7e8f9a0b";
 
-function json(body: unknown, status = 200): { ok: boolean; status: number; json: () => Promise<unknown> } {
-  return { ok: status >= 200 && status < 300, status, json: async () => body };
+function json(body: unknown, status = 200): { ok: boolean; status: number; json: () => Promise<unknown>; text: () => Promise<string> } {
+  const text = JSON.stringify(body);
+  return { ok: status >= 200 && status < 300, status, json: async () => body, text: async () => text };
+}
+
+type ClaimCall = { url: string; method: string; body: string; hasKey: boolean };
+
+function tankClaimStandIn() {
+  const rows = new Map<string, { type: string; handled: boolean }>();
+  const calls: ClaimCall[] = [];
+  const previous = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? "GET";
+    const body = typeof init?.body === "string" ? init.body : "";
+    const headers = new Headers(init?.headers);
+    calls.push({ url, method, body, hasKey: headers.has("x-tank-key") });
+    const parsed = JSON.parse(body) as { event_id?: string; type?: string };
+    const eventId = parsed.event_id ?? "";
+    if (url.endsWith("/v1/billing/events/claim")) {
+      const existing = rows.get(eventId);
+      if (existing) return json({ first: false });
+      rows.set(eventId, { type: parsed.type ?? "", handled: false });
+      return json({ first: true });
+    }
+    if (url.endsWith("/v1/billing/events/release")) {
+      const existing = rows.get(eventId);
+      if (existing && existing.handled === false) rows.delete(eventId);
+      return json({ released: Boolean(existing && existing.handled === false) });
+    }
+    throw new Error("unexpected tank call");
+  };
+  return {
+    calls,
+    restore() {
+      globalThis.fetch = previous;
+    },
+  };
 }
 
 test("amounts come from the unit Stripe sends, and a missing amount stays a dash", () => {
@@ -297,125 +333,206 @@ test("Stripe's own event fixture is signed with Stripe's helper and applied once
   assert.equal(fixture.type, "plan.created");
   const header = signed(STRIPE_EVENT);
   const seen: { id: string; type: string }[] = [];
-  const store = memoryWebhookStore();
-  const previous = globalThis.fetch;
-  globalThis.fetch = async () => {
-    throw new Error("network");
+  const shared = tankWebhookStore();
+  const standin = tankClaimStandIn();
+  const effect = (event: { id: string; type: string }) => {
+    seen.push(event);
   };
   try {
     const first = await receiveStripeWebhook({
       rawBody: STRIPE_EVENT,
       signature: header,
       secret: WEBHOOK_SECRET,
-      store,
-      effect: (event) => {
-        seen.push(event);
-      },
+      store: shared,
+      effect,
     });
     const second = await receiveStripeWebhook({
       rawBody: STRIPE_EVENT,
       signature: header,
       secret: WEBHOOK_SECRET,
-      store,
-      effect: (event) => {
-        seen.push(event);
-      },
+      store: shared,
+      effect,
+    });
+    const otherInstance = await receiveStripeWebhook({
+      rawBody: STRIPE_EVENT,
+      signature: header,
+      secret: WEBHOOK_SECRET,
+      store: tankWebhookStore(),
+      effect,
+    });
+    const defaultStore = await receiveStripeWebhook({
+      rawBody: STRIPE_EVENT,
+      signature: header,
+      secret: WEBHOOK_SECRET,
+      effect,
     });
     assert.deepEqual(first, { status: 200, body: { received: true } });
     assert.deepEqual(second, { status: 200, body: { received: true, duplicate: true } });
+    assert.deepEqual(otherInstance, { status: 200, body: { received: true, duplicate: true } });
+    assert.deepEqual(defaultStore, { status: 200, body: { received: true, duplicate: true } });
     assert.deepEqual(seen, [{ id: fixture.id, type: fixture.type }]);
+    const claims = standin.calls.filter((call) => call.url.endsWith("/v1/billing/events/claim"));
+    assert.equal(claims.length, 4);
+    assert.ok(claims.every((call) => call.method === "POST" && call.hasKey));
+    assert.ok(claims.every((call) => call.body.includes(fixture.id) && call.body.includes(fixture.type)));
+    assert.ok(claims.every((call) => !call.body.includes(WEBHOOK_SECRET)));
+    assert.equal(standin.calls.some((call) => call.url.endsWith("/v1/billing/events/release")), false);
     assert.equal(JSON.stringify(first).includes(WEBHOOK_SECRET), false);
     assert.equal(JSON.stringify(second).includes("2000"), false);
     assert.equal(JSON.stringify(second).includes(fixture.id), false);
+    assert.notEqual(shared, tankWebhookStore());
+  } finally {
+    standin.restore();
+  }
+});
+
+test("a bad Stripe signature is refused and does not apply the event", async () => {
+  let applied = 0;
+  let tankCalls = 0;
+  const effect = () => {
+    applied += 1;
+  };
+  const previous = globalThis.fetch;
+  globalThis.fetch = async () => {
+    tankCalls += 1;
+    throw new Error("network");
+  };
+  try {
+    const missing = await receiveStripeWebhook({
+      rawBody: STRIPE_EVENT,
+      signature: null,
+      secret: WEBHOOK_SECRET,
+      effect,
+    });
+    const tampered = await receiveStripeWebhook({
+      rawBody: STRIPE_EVENT.replace("plan.created", "plan.updated"),
+      signature: signed(STRIPE_EVENT),
+      secret: WEBHOOK_SECRET,
+      effect,
+    });
+    const wrongSecret = await receiveStripeWebhook({
+      rawBody: STRIPE_EVENT,
+      signature: signed(STRIPE_EVENT, "whsec_test_other_placeholder"),
+      secret: WEBHOOK_SECRET,
+      effect,
+    });
+    const stale = await receiveStripeWebhook({
+      rawBody: STRIPE_EVENT,
+      signature: signed(STRIPE_EVENT, WEBHOOK_SECRET, Math.floor(Date.now() / 1000) - 3600),
+      secret: WEBHOOK_SECRET,
+      effect,
+    });
+    const unconfigured = await receiveStripeWebhook({
+      rawBody: STRIPE_EVENT,
+      signature: signed(STRIPE_EVENT),
+      secret: "  ",
+      effect,
+    });
+    assert.equal(missing.status, 400);
+    assert.equal(tampered.status, 400);
+    assert.equal(wrongSecret.status, 400);
+    assert.equal(stale.status, 400);
+    assert.equal(unconfigured.status, 500);
+    assert.equal(applied, 0);
+    assert.equal(tankCalls, 0);
+    for (const result of [missing, tampered, wrongSecret, stale, unconfigured]) {
+      assert.equal(JSON.stringify(result).includes(WEBHOOK_SECRET), false);
+      assert.equal(JSON.stringify(result).includes("whsec_test_other_placeholder"), false);
+    }
   } finally {
     globalThis.fetch = previous;
   }
 });
 
-test("a bad Stripe signature is refused and does not apply the event", async () => {
-  const store = memoryWebhookStore();
-  let applied = 0;
-  const effect = () => {
-    applied += 1;
-  };
-  const missing = await receiveStripeWebhook({
-    rawBody: STRIPE_EVENT,
-    signature: null,
-    secret: WEBHOOK_SECRET,
-    store,
-    effect,
-  });
-  const tampered = await receiveStripeWebhook({
-    rawBody: STRIPE_EVENT.replace("plan.created", "plan.updated"),
-    signature: signed(STRIPE_EVENT),
-    secret: WEBHOOK_SECRET,
-    store,
-    effect,
-  });
-  const wrongSecret = await receiveStripeWebhook({
-    rawBody: STRIPE_EVENT,
-    signature: signed(STRIPE_EVENT, "whsec_test_other_placeholder"),
-    secret: WEBHOOK_SECRET,
-    store,
-    effect,
-  });
-  const stale = await receiveStripeWebhook({
-    rawBody: STRIPE_EVENT,
-    signature: signed(STRIPE_EVENT, WEBHOOK_SECRET, Math.floor(Date.now() / 1000) - 3600),
-    secret: WEBHOOK_SECRET,
-    store,
-    effect,
-  });
-  const unconfigured = await receiveStripeWebhook({
-    rawBody: STRIPE_EVENT,
-    signature: signed(STRIPE_EVENT),
-    secret: "  ",
-    store,
-    effect,
-  });
-  assert.equal(missing.status, 400);
-  assert.equal(tampered.status, 400);
-  assert.equal(wrongSecret.status, 400);
-  assert.equal(stale.status, 400);
-  assert.equal(unconfigured.status, 500);
-  assert.equal(applied, 0);
-  for (const result of [missing, tampered, wrongSecret, stale, unconfigured]) {
-    assert.equal(JSON.stringify(result).includes(WEBHOOK_SECRET), false);
-    assert.equal(JSON.stringify(result).includes("whsec_test_other_placeholder"), false);
-  }
-});
-
 test("a failed webhook releases the event id so Stripe's retry runs once", async () => {
-  const store = memoryWebhookStore();
   let calls = 0;
   const failOnce = () => {
     calls += 1;
     if (calls === 1) throw new Error("not stored");
   };
   const header = signed(STRIPE_EVENT);
-  const failed = await receiveStripeWebhook({
-    rawBody: STRIPE_EVENT,
-    signature: header,
-    secret: WEBHOOK_SECRET,
-    store,
-    effect: failOnce,
-  });
-  const retried = await receiveStripeWebhook({
-    rawBody: STRIPE_EVENT,
-    signature: header,
-    secret: WEBHOOK_SECRET,
-    store,
-    effect: failOnce,
-  });
-  const again = await receiveStripeWebhook({
-    rawBody: STRIPE_EVENT,
-    signature: header,
-    secret: WEBHOOK_SECRET,
-    store,
-    effect: failOnce,
-  });
-  assert.equal(failed.status, 500);
-  assert.deepEqual(retried, { status: 200, body: { received: true } });
-  assert.deepEqual(again, { status: 200, body: { received: true, duplicate: true } });
-  assert.equal(calls, 2);
+  const standin = tankClaimStandIn();
+  try {
+    const failed = await receiveStripeWebhook({
+      rawBody: STRIPE_EVENT,
+      signature: header,
+      secret: WEBHOOK_SECRET,
+      store: tankWebhookStore(),
+      effect: failOnce,
+    });
+    const retried = await receiveStripeWebhook({
+      rawBody: STRIPE_EVENT,
+      signature: header,
+      secret: WEBHOOK_SECRET,
+      store: tankWebhookStore(),
+      effect: failOnce,
+    });
+    const again = await receiveStripeWebhook({
+      rawBody: STRIPE_EVENT,
+      signature: header,
+      secret: WEBHOOK_SECRET,
+      store: tankWebhookStore(),
+      effect: failOnce,
+    });
+    assert.equal(failed.status, 500);
+    assert.equal(JSON.stringify(failed).includes("not stored"), false);
+    assert.deepEqual(retried, { status: 200, body: { received: true } });
+    assert.deepEqual(again, { status: 200, body: { received: true, duplicate: true } });
+    assert.equal(calls, 2);
+    const releases = standin.calls.filter((call) => call.url.endsWith("/v1/billing/events/release"));
+    assert.equal(releases.length, 1);
+    assert.equal(releases[0].method, "POST");
+    assert.equal(releases[0].hasKey, true);
+  } finally {
+    standin.restore();
+  }
+});
+
+test("when Tank cannot be reached the webhook answers 500 and does not apply the event", async () => {
+  let applied = 0;
+  const effect = () => {
+    applied += 1;
+  };
+  const header = signed(STRIPE_EVENT);
+  const previous = globalThis.fetch;
+  globalThis.fetch = async () => {
+    throw new Error("connect ECONNREFUSED");
+  };
+  try {
+    const down = await receiveStripeWebhook({
+      rawBody: STRIPE_EVENT,
+      signature: header,
+      secret: WEBHOOK_SECRET,
+      store: tankWebhookStore(),
+      effect,
+    });
+    globalThis.fetch = async () => json({ error: "unavailable" }, 503);
+    const refused = await receiveStripeWebhook({
+      rawBody: STRIPE_EVENT,
+      signature: header,
+      secret: WEBHOOK_SECRET,
+      store: tankWebhookStore(),
+      effect,
+    });
+    globalThis.fetch = async () => json({ ok: true }, 200);
+    const unstored = await receiveStripeWebhook({
+      rawBody: STRIPE_EVENT,
+      signature: header,
+      secret: WEBHOOK_SECRET,
+      store: tankWebhookStore(),
+      effect,
+    });
+    assert.equal(down.status, 500);
+    assert.equal(refused.status, 500);
+    assert.equal(unstored.status, 500);
+    assert.equal(applied, 0);
+    for (const result of [down, refused, unstored]) {
+      assert.equal(result.body.received, undefined);
+      assert.equal(JSON.stringify(result).includes(WEBHOOK_SECRET), false);
+      assert.equal(JSON.stringify(result).includes("ECONNREFUSED"), false);
+      assert.equal(JSON.stringify(result).includes("unavailable"), false);
+    }
+  } finally {
+    globalThis.fetch = previous;
+  }
 });

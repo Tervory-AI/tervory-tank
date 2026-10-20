@@ -1,33 +1,34 @@
 // Stripe webhook for the Workspace. Server-side only.
 // Stripe's library checks the signature. The same event id is applied once.
+// The claim lives in Tank, so a second Workspace process sees it too.
 
 import Stripe from "stripe";
+import { claimBillingEvent, releaseBillingEvent } from "../../lib/tank";
 
 export type WebhookEffect = (event: { id: string; type: string }) => void | Promise<void>;
 
 export type WebhookStore = {
   /** True when this caller is the first to take the event id. */
-  claim(eventId: string): boolean;
+  claim(eventId: string, eventType: string): Promise<boolean>;
   /** Drop a claim when handling failed, so Stripe's retry can run once. */
-  release(eventId: string): void;
+  release(eventId: string): Promise<void>;
 };
 
-export function memoryWebhookStore(): WebhookStore {
-  const seen = new Set<string>();
+/** One claim store. State is in Tank, not in this process. */
+export function tankWebhookStore(): WebhookStore {
   return {
-    claim(eventId: string) {
-      if (seen.has(eventId)) return false;
-      seen.add(eventId);
-      return true;
+    async claim(eventId: string, eventType: string) {
+      const result = await claimBillingEvent(eventId, eventType);
+      if (typeof result?.first !== "boolean") {
+        throw new Error("Billing claim was not stored.");
+      }
+      return result.first;
     },
-    release(eventId: string) {
-      seen.delete(eventId);
+    async release(eventId: string) {
+      await releaseBillingEvent(eventId);
     },
   };
 }
-
-/** One Workspace process. A repeat delivery to this process does not run the effect again. */
-const processStore = memoryWebhookStore();
 
 export type WebhookResponse = {
   status: number;
@@ -58,19 +59,30 @@ export async function receiveStripeWebhook(input: {
   }
 
   const eventId = typeof event.id === "string" ? event.id.trim() : "";
-  if (!eventId) {
+  const eventType = typeof event.type === "string" ? event.type.trim() : "";
+  if (!eventId || !eventType) {
     return { status: 400, body: { error: "Invalid Stripe event." } };
   }
 
-  const store = input.store ?? processStore;
-  if (!store.claim(eventId)) {
+  const store = input.store ?? tankWebhookStore();
+  let first: boolean;
+  try {
+    first = await store.claim(eventId, eventType);
+  } catch {
+    return { status: 500, body: { error: "Billing webhook could not be recorded." } };
+  }
+  if (!first) {
     return { status: 200, body: { received: true, duplicate: true } };
   }
 
   try {
-    if (input.effect) await input.effect({ id: eventId, type: event.type });
+    if (input.effect) await input.effect({ id: eventId, type: eventType });
   } catch {
-    store.release(eventId);
+    try {
+      await store.release(eventId);
+    } catch {
+      return { status: 500, body: { error: "Billing webhook could not be recorded." } };
+    }
     return { status: 500, body: { error: "Billing webhook could not be recorded." } };
   }
 

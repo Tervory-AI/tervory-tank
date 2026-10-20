@@ -2772,6 +2772,68 @@ async def workers_panel() -> dict[str, Any]:
     return {"available": True, "tasks": tasks}
 
 
+# ---------- billing events (Workspace key only) ----------
+
+class BillingEventClaim(BaseModel):
+    event_id: str = Field(min_length=1, max_length=255)
+    type: str = Field(min_length=1, max_length=255)
+
+
+class BillingEventRelease(BaseModel):
+    event_id: str = Field(min_length=1, max_length=255)
+
+
+def _billing_text(value: str, label: str) -> str:
+    text = value.strip()
+    if not text or any(ord(ch) < 32 or ord(ch) == 127 for ch in text):
+        raise HTTPException(status_code=400, detail=f"{label} is required")
+    return text
+
+
+@app.post("/v1/billing/events/claim", dependencies=[Depends(require_key)])
+async def claim_billing_event(body: BillingEventClaim) -> dict[str, bool]:
+    """Store a Stripe event id once. The first caller gets first=true."""
+    event_id = _billing_text(body.event_id, "event_id")
+    event_type = _billing_text(body.type, "type")
+    try:
+        async with pool().acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                INSERT INTO tank.billing_events (event_id, type, received_at)
+                VALUES ($1, $2, now())
+                ON CONFLICT (event_id) DO NOTHING
+                RETURNING event_id
+                """,
+                event_id,
+                event_type,
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Billing event could not be stored.") from None
+    return {"first": row is not None}
+
+
+@app.post("/v1/billing/events/release", dependencies=[Depends(require_key)])
+async def release_billing_event(body: BillingEventRelease) -> dict[str, bool]:
+    """Delete an unhandled claim so Stripe's retry can run."""
+    event_id = _billing_text(body.event_id, "event_id")
+    try:
+        async with pool().acquire() as conn:
+            result = await conn.execute(
+                """
+                DELETE FROM tank.billing_events
+                WHERE event_id = $1 AND handled IS NOT TRUE
+                """,
+                event_id,
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Billing event could not be released.") from None
+    return {"released": result == "DELETE 1"}
+
+
 app.include_router(__import__("admin").router)
 
 app.include_router(__import__("gold").router)
