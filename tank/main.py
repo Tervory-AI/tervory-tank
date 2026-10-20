@@ -39,6 +39,7 @@ import os
 import time
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
@@ -557,7 +558,8 @@ async def require_key(request: Request, x_tank_key: str = Header(default="")) ->
         raise HTTPException(status_code=401, detail="missing or invalid X-Tank-Key")
     path = request.url.path
     skill_run = path.startswith("/v1/skala/") and path.endswith("/run") and path.count("/") == 4
-    if path not in {"/health", "/v1/route"} and not skill_run:
+    vendor_write = request.method == "POST" and path == "/v1/ledger/vendor"
+    if path not in {"/health", "/v1/route"} and not skill_run and not vendor_write:
         raise HTTPException(status_code=403, detail="This agent key cannot call that.")
     return matched
 
@@ -2040,6 +2042,57 @@ def make_ctx(pkg: skala.SkillPackage, tenant_id: uuid.UUID, task_id: uuid.UUID |
 PLATFORM_TENANT = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 
+class VendorCall(BaseModel):
+    model_config = {"extra": "forbid"}
+    id: uuid.UUID = Field(default_factory=uuid.uuid4)
+    tenant_id: uuid.UUID = PLATFORM_TENANT
+    agent: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
+    task_type: str = Field(pattern=r"^[a-z][a-z0-9_.-]{0,119}$")
+    vendor: str = Field(pattern=r"^[a-z][a-z0-9_.-]{0,79}$")
+    units: Decimal = Field(gt=0, le=1000, max_digits=18, decimal_places=6)
+    cost_usd: Decimal = Field(default=Decimal("0"), ge=0, max_digits=12, decimal_places=6)
+    outcome: Literal["delivered", "failed", "unverified"]
+    region: Literal["us-east", "za"]
+
+
+@app.post("/v1/ledger/vendor")
+async def vendor_ledger(body: VendorCall, agent: str | None = Depends(require_key)) -> dict[str, Any]:
+    if agent is None or agent == HOMES_PRINCIPAL or agent != body.agent:
+        raise HTTPException(status_code=403, detail="an agent may record only its own vendor calls")
+    if not body.task_type.startswith(f"{agent}."):
+        raise HTTPException(status_code=403, detail="task type must belong to the calling agent")
+    if body.tenant_id != PLATFORM_TENANT:
+        raise HTTPException(status_code=403, detail="vendor calls belong to the platform tenant")
+    if body.region != box_region():
+        raise HTTPException(status_code=403, detail="vendor call region must match this Tank")
+    if body.cost_usd != 0:
+        raise HTTPException(status_code=422, detail="credit calls must have zero dollar cost")
+    async with pool().acquire() as conn:
+        inserted = await conn.fetchval(
+            """
+            INSERT INTO tank.ledger
+                (id, tenant_id, region, agent, task_type, model, vendor, units, cost_usd, outcome, rung)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,1)
+            ON CONFLICT (id) DO NOTHING RETURNING id
+            """,
+            body.id, PLATFORM_TENANT, body.region, agent, body.task_type,
+            f"vendor:{body.vendor}", body.vendor, body.units, body.cost_usd, body.outcome,
+        )
+        if inserted is None:
+            same = await conn.fetchval(
+                """
+                SELECT 1 FROM tank.ledger WHERE id=$1 AND tenant_id=$2 AND region=$3
+                  AND agent=$4 AND task_type=$5 AND vendor=$6
+                  AND units IS NOT DISTINCT FROM $7::numeric AND cost_usd=$8 AND outcome=$9
+                """,
+                body.id, PLATFORM_TENANT, body.region, agent, body.task_type,
+                body.vendor, body.units, body.cost_usd, body.outcome,
+            )
+            if same != 1:
+                raise HTTPException(status_code=409, detail="vendor call id already used")
+    return {"ledger_id": str(body.id), "recorded": True}
+
+
 @app.get("/v1/skala", dependencies=[Depends(require_key)])
 async def list_skills() -> list[dict[str, Any]]:
     async with pool().acquire() as conn:
@@ -2869,3 +2922,27 @@ app.include_router(__import__("admin").router)
 
 app.include_router(__import__("gold").router)
 app.include_router(__import__("training").router)
+
+
+@app.api_route("/v1/tisan/gold/{action}", methods=["GET", "POST"],
+               dependencies=[Depends(__import__("admin").require_admin)])
+async def tisan_gold_proxy(action: str, request: Request) -> Response:
+    """Founder-only fixed corridor for reviewing and approving saved Tisan pages."""
+    if (request.method, action) not in {("GET", "pages"), ("POST", "approve")}:
+        raise HTTPException(status_code=404, detail="not found")
+    key = os.environ.get("TANK_KEY_TISAN", "")
+    if _http is None or not key:
+        raise HTTPException(status_code=503, detail="Tisan room is unavailable")
+    raw = await request.body()
+    if len(raw) > 8192:
+        raise HTTPException(status_code=413, detail="request too large")
+    try:
+        response = await _http.request(
+            request.method, f"http://agent-tisan:8000/gold/{action}",
+            params=list(request.query_params.multi_items()), content=raw or None,
+            headers={"X-Tank-Key": key, "X-Tervory-Admin": request.headers.get("x-tervory-admin", ""),
+                     "Content-Type": "application/json"}, timeout=30,
+        )
+    except httpx.HTTPError:
+        raise HTTPException(status_code=503, detail="Tisan room is unavailable") from None
+    return Response(content=response.content, status_code=response.status_code, media_type="application/json")

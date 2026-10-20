@@ -7,6 +7,7 @@ import { AskBase, RecordSearch, type AskAction, type SearchAction } from "./ask"
 import type { PluginPanel } from "./plugin-panel";
 import { PluginsDialog, type PluginsTab } from "./plugins";
 import { SquadLinks } from "../squad-links";
+import { ContextComparison } from "./context-comparison";
 
 export const WORKSPACE_HREF = "/";
 
@@ -297,6 +298,8 @@ export function BaseView({
               </div>
             )}
           </section>
+
+          <ContextComparison report={model.contextTrial} />
 
           <section id="skills" className="bcp-section">
             <h2>Skills</h2>
