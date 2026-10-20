@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import hmac
 import logging
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from fastapi import HTTPException, Query
+from fastapi import Header, HTTPException, Query
+from gold_sources import candidates
 from pydantic import BaseModel
 
 from chassis.app import create_app
@@ -249,3 +252,17 @@ async def list_alerts(tenant_id: UUID = Query(), url: str | None = Query(default
             raise _watch_http(exc) from exc
     rows = await _store().list_alerts(str(tenant_id), page)
     return {"alerts": rows}
+
+
+@app.get("/gold/candidates")
+async def gold_candidates(
+    limit: int = Query(default=200, ge=1, le=200),
+    x_tank_key: str = Header(default=""),
+) -> list[dict]:
+    key = os.environ.get("TANK_KEY", "")
+    if not key or not hmac.compare_digest(key, x_tank_key):
+        raise HTTPException(status_code=401, detail="room key required")
+    return candidates(
+        limit, region=os.environ.get("TANK_REGION", "us-east"),
+        snapshots=Path(os.environ.get("DATA_DIR", "/data")) / "gold" / "public_snapshots.json",
+    )
