@@ -204,6 +204,59 @@ def score_case(expected: dict[str, Any], output: dict[str, Any], tolerance: str)
     return True, "ok"
 
 
+def zenas_approval_reason(skill_id: str, area: str | None) -> str | None:
+    """Why a zenas.* skill cannot be approved. None means this box's gate passed.
+
+    The latest made-up-case row must be 50 of 50 through answer_question.
+    Any other skill is not this gate.
+    """
+    if not str(skill_id or "").startswith("zenas."):
+        return None
+    text = " ".join(str(area or "").split())
+    if text.startswith("Made-up cases: 50 of 50.") and "path: answer_question" in text:
+        return None
+    if not text or "not run" in text:
+        return (
+            "This Zenas skill stays unapproved. The made-up-case test has not run "
+            "on this box through answer_question."
+        )
+    if "path: answer_question" not in text:
+        return (
+            "This Zenas skill stays unapproved. The latest made-up-case test on this box "
+            "did not run through answer_question."
+        )
+    return (
+        "This Zenas skill stays unapproved. The latest made-up-case test on this box is "
+        f"{text.removeprefix('Made-up cases: ').split('. path:')[0]}, not 50 of 50 through answer_question."
+    )
+
+
+_MADE_UP_AREA_SQL = """
+SELECT area
+FROM agent_zenas.selftest_runs
+WHERE region = $1
+  AND area LIKE 'Made-up cases:%'
+ORDER BY created_at DESC
+LIMIT 1
+""".strip()
+
+
+async def zenas_approval_refusal(conn: Any, skill_id: str, *, region: str) -> str | None:
+    """The sentence Skala shows when this box has not passed the made-up-case test."""
+    if not str(skill_id or "").startswith("zenas."):
+        return None
+    box = "za" if str(region or "").strip().lower() == "za" else "us-east"
+    area = ""
+    if conn is not None and hasattr(conn, "fetchrow"):
+        row = await conn.fetchrow(_MADE_UP_AREA_SQL, box)
+        if row is not None:
+            try:
+                area = str(row["area"] or "")
+            except (KeyError, IndexError, TypeError):
+                area = ""
+    return zenas_approval_reason(skill_id, area)
+
+
 async def run_evals(pkg: SkillPackage, make_ctx: Callable[[], SkillContext]) -> dict[str, Any]:
     details: list[dict[str, Any]] = []
     passed = 0
