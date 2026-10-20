@@ -34,6 +34,7 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
         reviewer: reviewer.name,
         jurisdiction,
         admission_no: reviewer.admissionNo,
+        reviewer_kind: reviewer.founder ? "founder" : "reviewer",
         decision,
         changes,
       }),
