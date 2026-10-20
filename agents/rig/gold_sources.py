@@ -2,8 +2,12 @@
 
 Each part that has its own compatibility list labels ``rig.search`` and
 ``rig.fit_suggest``. The list is catalogue data shipped with the room.
-Publish keys, shopper mail, and webhooks are not copied. Nothing here is a
-client upload.
+Publish keys, shopper mail, and webhooks are not copied.
+
+A folder is emitted only when its publish file marks it ``gold: public``
+(or ``catalogue_kind: public``) and names a region this server is running
+(``us-east`` or ``za``). A missing marker or a missing or unknown region
+skips the folder. A catalogue from the other region is skipped too.
 """
 
 from __future__ import annotations
@@ -36,10 +40,33 @@ def candidates(limit: int = 200, *, region: str = "us-east", root: Path | None =
     return rows[:cap]
 
 
+def _marked_public(publish: dict[str, Any]) -> bool:
+    """The room marks a non-client catalogue. Anything else is skipped."""
+    if "gold" in publish:
+        return publish.get("gold") == "public"
+    return publish.get("catalogue_kind") == "public"
+
+
+def _catalogue_region(publish: dict[str, Any]) -> str:
+    raw = publish.get("region")
+    if not isinstance(raw, str):
+        return ""
+    region = raw.strip().lower()
+    if region not in _REGIONS:
+        return ""
+    return region
+
+
 def _pairs(path: Path, region: str) -> list[tuple[dict[str, Any], dict[str, Any]]]:
     try:
         loaded = load_folder(path)
     except (OSError, UnicodeError, json.JSONDecodeError):
+        return []
+    publish = loaded.get("publish")
+    if not isinstance(publish, dict) or not _marked_public(publish):
+        return []
+    catalogue_region = _catalogue_region(publish)
+    if catalogue_region != region:
         return []
     if loaded["products"]["rejected"] or loaded["fits"]["rejected"] or not loaded["tenant_id"]:
         return []
@@ -59,7 +86,7 @@ def _pairs(path: Path, region: str) -> list[tuple[dict[str, Any], dict[str, Any]
     for part in sorted(grouped):
         compatibility = _ordered(grouped[part])
         source = f"{loaded['slug']}:{part}"
-        common = {"label_source": source, "region": region, "public": True}
+        common = {"label_source": source, "region": catalogue_region, "public": True}
         pairs.append(
             (
                 {

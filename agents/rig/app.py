@@ -125,7 +125,13 @@ async def gold_candidates(
 ) -> list[dict[str, Any]]:
     """Room key only. Catalogue compatibility lists, marked public."""
     key = os.environ.get("TANK_KEY", "")
-    if not key or not x_tank_key or not hmac.compare_digest(key, x_tank_key):
+    # compare_digest on str rejects some headers with TypeError. Bytes compare
+    # instead, so a bad or non-ASCII header is 401.
+    try:
+        matches = bool(key) and bool(x_tank_key) and hmac.compare_digest(key.encode(), x_tank_key.encode())
+    except (AttributeError, TypeError, UnicodeError):
+        matches = False
+    if not matches:
         raise HTTPException(status_code=401, detail="room key required")
     root = Path(os.environ.get("CATALOGUE_DIR", str(Path(__file__).resolve().parent / "catalogues")))
     return _gold_candidates()(limit, region=os.environ.get("TANK_REGION", "us-east"), root=root)
