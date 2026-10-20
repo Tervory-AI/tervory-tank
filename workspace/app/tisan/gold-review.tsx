@@ -30,7 +30,7 @@ export function GoldReview({ initialPages = [] }: { initialPages?: TisanGoldPage
   }
   async function approve(page: TisanGoldPage) {
     setBusy(true);
-    try { await approveGoldPage(page.page_id, page.frame_hash, page.page_hash); setMessage("Approved as gold. A changed page or frame will need approval again."); }
+    try { await approveGoldPage(page.page_id, page.frame_hash, page.page_hash, page.tenant_id === "00000000-0000-0000-0000-000000000001" ? "platform" : "workspace"); setMessage("Approved as gold. A changed page or frame will need approval again."); }
     catch { setMessage("Approval failed. Reload the pages and review again."); }
     finally { setBusy(false); }
   }
@@ -38,8 +38,9 @@ export function GoldReview({ initialPages = [] }: { initialPages?: TisanGoldPage
     <h2>Approve built pages</h2>
     <button type="button" disabled={busy} onClick={load}>Load pages for review</button>
     <p role="status">{message}</p>
-    {pages.map((page) => <article key={page.page_id}>
+    {pages.map((page) => <article key={`${page.tenant_id}:${page.page_id}`}>
       <h3>{page.page_id}</h3>
+      <p>{page.tenant_id === "00000000-0000-0000-0000-000000000001" ? "Platform page" : "Workspace page"}</p>
       <p>Frame {page.figma_frame_id} · {page.built_page_path}</p>
       <div className="gold-comparison">
         <div><h4>Saved frame</h4><SavedFrame frame={page.frame} /></div>
