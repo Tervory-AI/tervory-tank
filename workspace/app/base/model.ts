@@ -53,6 +53,7 @@ export type Totals = {
 };
 
 export type PageModel = {
+  contextTrial?: import("./context-report").ContextReport | null;
   loadError: boolean;
   empty: boolean;
   totals: Totals;

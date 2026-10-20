@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
+from base_gold.observations import observation
+
 BASE_CORE = [
     "base.normalize",
     "base.resolve",
@@ -332,6 +334,9 @@ async def enrich_one(
                 "error": scr.get("error"),
                 "via": scr.get("via"),
             }
+            observed = observation(url, scr)
+            if observed:
+                passes["2b"]["gold_observation"] = observed
             if (scr.get("text") or "") and len(scr["text"]) >= 40:
                 try:
                     ex = await call("base.extract", {

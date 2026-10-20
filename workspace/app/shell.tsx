@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { headerLinks, usesOwnShell } from "./product-nav";
+import { SquadFounderProvider } from "./squad-links";
 
 export function Shell({
   founder: initialFounder,
@@ -34,25 +35,31 @@ export function Shell({
     };
   }, [isLoaded, userId, readFounder]);
 
-  if (usesOwnShell(pathname)) return <main>{children}</main>;
+  if (usesOwnShell(pathname)) return (
+    <SquadFounderProvider founder={founder}>
+      <main>{children}</main>
+    </SquadFounderProvider>
+  );
 
   return (
-    <div className="product">
-      <header className="top">
-        <Link href="/" className="brand">Tervory</Link>
-        <nav>
-          {headerLinks(founder).map((link) => (
-            <Link key={link.href} href={link.href}>{link.label}</Link>
-          ))}
-        </nav>
-        <SignedIn>
-          <div className="who">
-            <OrganizationSwitcher hidePersonal afterSelectOrganizationUrl="/" />
-            <UserButton />
-          </div>
-        </SignedIn>
-      </header>
-      <main>{children}</main>
-    </div>
+    <SquadFounderProvider founder={founder}>
+      <div className="product">
+        <header className="top">
+          <Link href="/" className="brand">Tervory</Link>
+          <nav>
+            {headerLinks(founder).map((link) => (
+              <Link key={link.href} href={link.href}>{link.label}</Link>
+            ))}
+          </nav>
+          <SignedIn>
+            <div className="who">
+              <OrganizationSwitcher hidePersonal afterSelectOrganizationUrl="/" />
+              <UserButton />
+            </div>
+          </SignedIn>
+        </header>
+        <main>{children}</main>
+      </div>
+    </SquadFounderProvider>
   );
 }

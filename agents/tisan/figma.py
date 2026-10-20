@@ -417,6 +417,23 @@ def _document_from_nodes(payload: dict[str, Any], node_id: str) -> tuple[dict[st
     return node["document"], name
 
 
+def visual_page(frame: dict[str, Any], document: dict[str, Any]) -> str | None:
+    """Use a recorded route or the page name preceding a responsive frame suffix."""
+    route = frame.get("page") or frame.get("sharedPluginData", {}).get("tisan", {}).get("page")
+    if isinstance(route, str) and re.fullmatch(r"/(?:[a-z0-9/-]*)", route):
+        return route
+    name = re.split(r"\s+[—–|]\s+", str(frame.get("name", "")))[0].strip().lower()
+    if name in {"desktop", "mobile", "tablet"}:
+        name = re.split(r"\s+[—–|]\s+", str(document.get("name", "")))[0].strip().lower()
+    if name in {"desktop", "mobile", "tablet"}:
+        return None
+    if name in {"home", "landing"}:
+        return "/"
+    if re.fullmatch(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*", name):
+        return "/" + name
+    return None
+
+
 def visual_frames(document: dict[str, Any], variables_payload: dict[str, Any] | None) -> list[dict[str, Any]]:
     """Keep measured geometry/text and bound colours; never derive them from a built page.
 
@@ -434,7 +451,8 @@ def visual_frames(document: dict[str, Any], variables_payload: dict[str, Any] | 
         origin = frame.get("absoluteBoundingBox", {})
         tokens: dict[str, str] = {}
         elements: list[dict[str, Any]] = []
-        incomplete = False
+        page = visual_page(frame, document)
+        incomplete = page is None
 
         def visit(node: dict[str, Any]) -> None:
             nonlocal incomplete
@@ -447,9 +465,10 @@ def visual_frames(document: dict[str, Any], variables_payload: dict[str, Any] | 
             colours = {}
             fills = [fill for fill in node.get("fills", []) if fill.get("visible") is not False]
             binding = node.get("boundVariables", {}).get("fills", [])
-            if fills:
-                # Multiple paints, gradients and bitmap fills need a separate original-asset reference.
-                # They are retained in frame_data, but never approximated as a single colour.
+            logo = bool(re.match(r"^logo(?:\b|[/_ -])", str(node.get("name", "")), re.I))
+            image = any(fill.get("type") == "IMAGE" for fill in fills)
+            if fills and not (logo or image):
+                # Non-image paints still require a resolved token.
                 if len(fills) != 1 or fills[0].get("type") != "SOLID" or not binding:
                     incomplete = True
                 else:
@@ -474,17 +493,25 @@ def visual_frames(document: dict[str, Any], variables_payload: dict[str, Any] | 
             element = {"nodeId": node_id, "selector": f'[data-figma-id="{node_id}"]',
                        "box": {"x": box["x"] - origin.get("x", 0), "y": box["y"] - origin.get("y", 0),
                                "width": box["width"], "height": box["height"]}, "colours": colours}
-            if node.get("type") == "TEXT":
+            if logo or image:
+                element["asset"] = "logo" if logo else "image"
+            if logo:
+                brand_file = node.get("brandFile") or node.get("sharedPluginData", {}).get("tisan", {}).get("brandFile")
+                element["brandFile"] = brand_file
+                if not isinstance(brand_file, str) or not re.fullmatch(r"[a-z0-9-]+\.png", brand_file):
+                    incomplete = True
+            if node.get("type") == "TEXT" and not (logo or image):
                 if not isinstance(node.get("characters"), str):
                     incomplete = True
                 else:
                     element["text"] = node["characters"]
             elements.append(element)
-            for child in node.get("children", []):
-                visit(child)
+            if not (logo or image):
+                for child in node.get("children", []):
+                    visit(child)
 
         visit(frame)
-        result.append({"page": "/", "frameId": frame.get("id"), "width": origin.get("width"),
+        result.append({"page": page, "frameId": frame.get("id"), "width": origin.get("width"),
                        "height": origin.get("height"), "tokens": tokens, "elements": elements,
                        **({"incomplete": True} if incomplete else {})})
     return result
@@ -1016,7 +1043,7 @@ def compile_reading(source: dict[str, Any]) -> dict[str, Any]:
         "visual": [frame["visual"] for frame in source.get("frames", []) if "visual" in frame],
         "frame_data": source.get("frame_data", source.get("frames", [])),
         "preview_png": source.get("frames", [{}])[0].get("preview_png") if len(source.get("frames", [])) == 1 else None,
-        "visual_status": "recorded" if any("visual" in frame for frame in source.get("frames", [])) else "frame data incomplete",
+        "visual_status": "recorded" if source.get("frames") and all(isinstance(frame.get("visual"), dict) and not frame["visual"].get("incomplete") for frame in source["frames"]) else "frame data incomplete",
         "ready": not blocked,
         "blocked": blocked,
         "source": source.get("source"),
