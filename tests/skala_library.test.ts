@@ -57,7 +57,20 @@ test("search and filters keep only matching versions", () => {
 test("descriptions stay on one line and code skills say no model", () => {
   assert.equal(oneLine("  Finds a site.\n  Uses the name.  "), "Finds a site. Uses the name.");
   assert.equal(costLabel({ rung: 3, task_type: null }), "no model");
-  assert.equal(costLabel({ rung: 1, task_type: "reason.brief" }), "uses a model");
+  assert.equal(costLabel({ rung: 3, task_type: null, calls_30d: 4, avg_cost_usd: 1.2 }), "no model");
+  assert.equal(
+    costLabel({ rung: 1, task_type: "reason.brief", calls_30d: 40, avg_cost_usd: 0.0031 }),
+    "uses a model · $0.0031/call (30 days)",
+  );
+  assert.equal(
+    costLabel({ rung: 1, task_type: "reason.brief", calls_30d: 0, avg_cost_usd: null }),
+    "uses a model · no calls yet",
+  );
+  assert.equal(costLabel({ rung: 3, task_type: "market.research" }), "uses a model · no calls yet");
+  assert.equal(
+    costLabel({ rung: 1, task_type: "reason.brief", calls_30d: 2, avg_cost_usd: "0.000012" }),
+    "uses a model · $0.000012/call (30 days)",
+  );
   assert.equal(scoreLabel(null), "No score yet");
   assert.equal(scoreLabel("0.956"), "95.6%");
   assert.equal(scoreDate("2026-10-12T15:00:00Z"), "12 Oct 2026");

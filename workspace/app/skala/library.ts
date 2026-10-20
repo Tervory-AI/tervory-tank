@@ -11,6 +11,8 @@ export type LibrarySkill = {
   last_eval_score: number | string | null;
   last_eval_at: string | null;
   present: boolean;
+  calls_30d?: number | null;
+  avg_cost_usd?: number | string | null;
 };
 
 export type AgentGroup = {
@@ -59,11 +61,31 @@ export function oneLine(description: string): string {
   return line || "No description yet.";
 }
 
-/** Code skills have no model call. A price is not on the skills list, so a model skill is named, not priced. */
-export function costLabel(skill: { rung: number; task_type: string | null }): "no model" | "uses a model" {
-  if (skill.task_type) return "uses a model";
-  if (skill.rung >= 3 || skill.rung === 0) return "no model";
-  return "uses a model";
+function usesModel(skill: { rung: number; task_type: string | null }): boolean {
+  if (skill.task_type) return true;
+  if (skill.rung >= 3 || skill.rung === 0) return false;
+  return true;
+}
+
+/** Four places, matching a few cents of a cent. A smaller non-zero price keeps six. */
+export function formatCallCost(usd: number): string {
+  const four = usd.toFixed(4);
+  if ((four === "0.0000" || four === "-0.0000") && usd !== 0) return `$${usd.toFixed(6)}`;
+  return `$${four}`;
+}
+
+/** Code skills have no model call. A model skill shows this box's 30-day average. */
+export function costLabel(skill: {
+  rung: number;
+  task_type: string | null;
+  calls_30d?: number | null;
+  avg_cost_usd?: number | string | null;
+}): string {
+  if (!usesModel(skill)) return "no model";
+  const calls = Number(skill.calls_30d ?? 0);
+  const avg = typeof skill.avg_cost_usd === "number" ? skill.avg_cost_usd : Number(skill.avg_cost_usd);
+  if (!Number.isFinite(calls) || calls <= 0 || !Number.isFinite(avg)) return "uses a model · no calls yet";
+  return `uses a model · ${formatCallCost(avg)}/call (30 days)`;
 }
 
 export function scoreLabel(score: number | string | null): string {

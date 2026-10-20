@@ -21,8 +21,8 @@ const fixture = [
   { id: "base.extract", version: "2.0.0", agent: "base", rung: 3, task_type: null, description: "Reads a business page and returns what they sell.", state: "staging", last_eval_score: 0.98, last_eval_at: "2026-10-18T00:00:00Z", present: true },
   { id: "base.normalize", version: "1.0.0", agent: "base", rung: 3, task_type: null, description: "Cleans a raw business record into canonical fields.", state: "candidate", last_eval_score: null, last_eval_at: null, present: true },
   { id: "tiger.price_extract", version: "1.1.0", agent: "tiger", rung: 3, task_type: null, description: "Reads the prices a page actually shows.", state: "approved", last_eval_score: 1, last_eval_at: "2026-10-01T00:00:00Z", present: true },
-  { id: "market.research", version: "1.1.0", agent: "market_lab", rung: 3, task_type: "market.research", description: "A short answer, each claim with a source.", state: "candidate", last_eval_score: null, last_eval_at: null, present: true },
-  { id: "reason.brief", version: "1.0.0", agent: "tier0", rung: 1, task_type: "reason.brief", description: "Concise structured analysis for a business owner.", state: "approved", last_eval_score: 0.8, last_eval_at: "2026-08-01T00:00:00Z", present: true },
+  { id: "market.research", version: "1.1.0", agent: "market_lab", rung: 3, task_type: "market.research", description: "A short answer, each claim with a source.", state: "candidate", last_eval_score: null, last_eval_at: null, present: true, calls_30d: 0, avg_cost_usd: null },
+  { id: "reason.brief", version: "1.0.0", agent: "tier0", rung: 1, task_type: "reason.brief", description: "Concise structured analysis for a business owner.", state: "approved", last_eval_score: 0.8, last_eval_at: "2026-08-01T00:00:00Z", present: true, calls_30d: 40, avg_cost_usd: 0.0031 },
 ];
 
 const bundle = await build({
@@ -91,7 +91,18 @@ try {
   await page.getByRole("heading", { name: "Skala", level: 1 }).waitFor();
   await page.getByRole("heading", { name: "base.find_site" }).waitFor();
   await page.getByText("no model").first().waitFor();
-  await page.getByText("uses a model").first().waitFor();
+  await page.getByText("uses a model · $0.0031/call (30 days)").waitFor();
+  await page.getByText("uses a model · no calls yet").waitFor();
+  const colours = await page.evaluate(() => {
+    const badge = document.querySelector(".sk-state.approved");
+    const button = document.querySelector("button.primary");
+    return {
+      badge: badge ? getComputedStyle(badge).backgroundColor : "",
+      button: button ? getComputedStyle(button).backgroundColor : "",
+    };
+  });
+  assert.notEqual(colours.badge, colours.button);
+  assert.notEqual(colours.badge, "rgb(232, 0, 8)");
   assert.equal(await page.getByRole("button", { name: "Transfer" }).count(), 0);
   assert.equal(await page.getByText("This vault is off").count(), 0);
   assert.equal(await page.getByText("Ask Skala").count(), 0);
@@ -121,7 +132,12 @@ try {
     }
   }
 
+  await page.getByText("uses a model · $0.0031/call (30 days)").scrollIntoViewIfNeeded();
   await page.screenshot({ path: join(shots, "skala-1440.png") });
+  await page.evaluate(() => {
+    const root = document.querySelector("[data-scroll-root]");
+    if (root) root.scrollTop = 0;
+  });
 
   await page.setViewportSize({ width: 375, height: 812 });
   await page.getByRole("button", { name: "Menu" }).click();

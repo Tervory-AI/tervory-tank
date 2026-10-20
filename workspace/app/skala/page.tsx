@@ -25,6 +25,8 @@ function asSkill(row: Skill): LibrarySkill {
     last_eval_score: row.last_eval_score,
     last_eval_at: row.last_eval_at,
     present: row.present !== false,
+    calls_30d: Number(row.calls_30d ?? 0),
+    avg_cost_usd: row.avg_cost_usd ?? null,
   };
 }
 
