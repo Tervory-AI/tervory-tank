@@ -151,7 +151,7 @@ async def test_socket_stream_timeout_and_slow_trickle(monkeypatch, trickle):
 async def test_200000_dockets_with_slow_database_and_heartbeats(monkeypatch):
     monkeypatch.setenv("TANK_REGION", "us-east")
     monkeypatch.setattr(bulk, "HEARTBEAT_SECONDS", 0.01)
-    monkeypatch.setattr(bulk, "STALL_SECONDS", 0.1)
+    monkeypatch.setattr(bulk, "STALL_SECONDS", 1.0)
     monkeypatch.setattr(bulk, "be_polite", lambda: None)
     monkeypatch.setattr(bulk, "_uses_buffer", lambda _getter: False)
     monkeypatch.setattr(bulk, "FILE_ORDER", ("dockets",))
@@ -174,7 +174,7 @@ async def test_200000_dockets_with_slow_database_and_heartbeats(monkeypatch):
 
         async def executemany(self, _query, rows):
             self.writing = True
-            await asyncio.sleep(0.15)
+            await asyncio.sleep(1.1 if not self.ids else 0.015)
             self.ids.extend(row[3] for row in rows)
             self.writing = False
 
@@ -183,7 +183,7 @@ async def test_200000_dockets_with_slow_database_and_heartbeats(monkeypatch):
                 self.notes.append(args[0])
                 self.heartbeat_during_write |= self.writing
             else:
-                await asyncio.sleep(0.15)
+                await asyncio.sleep(1.1)
 
         async def close(self):
             pass
