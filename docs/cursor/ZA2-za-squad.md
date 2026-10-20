@@ -50,6 +50,13 @@
   - **Tisan and Radix:** the same on both boxes.
 - **Ledger:** model costs are billed by providers in USD, so they stay USD on both ledgers. The ZA billing page may also show ZAR at a stored daily rate, labelled as an estimate.
 
+## 3b. Billing and prices shown to clients: rand or dollars by country
+- **The account's country decides its currency:** South Africa = ZAR (and its home is the ZA box), everything else = USD. It is set at onboarding with the home region and shown on the billing page. Only the founder can change it, in Admin > Homes.
+- **Plan prices are set by the founder in each currency, never converted live.** Stripe prices exist per currency: `STRIPE_PLAN_PRICE_IDS` holds a ZAR set on the ZA box and a USD set on Boston. A ZAR account can only be offered ZAR prices, and a USD account only USD prices. Tested.
+- **Usage that passes on model costs** (charged by providers in USD): converted to ZAR at the rate stored for that day, with its source and date saved on the invoice line. A missing rate means the line waits; it is never guessed. The rate comes from one named public source (SARB or the founder's choice) fetched once a day on the ZA box.
+- **Every amount on every page shows its currency** (R 1 299,00 / $1,299.00, formatted by locale). No bare numbers.
+- **Stripe:** one Stripe account with both currencies, or a separate SA Stripe account. Founder decides. Both are config, with no code change between them.
+
 ## 4. Skills, gold and training
 - The skill code is the same on both boxes, and each box's Tank keeps its own skill states.
 - A founder-only button on ZA Skala, "Copy approvals from Boston", copies skill ids, versions and states one way. It copies no data and no examples.
@@ -70,6 +77,7 @@ CI green, and tested:
 - an SA account gets home za at onboarding, and sign-in sends it to `APP_URL_ZA`;
 - a founder sees all tenants on each box, and a reviewer only their own;
 - mixed-currency comparisons are refused in Tiger, Rig and Market Lab;
-- ZA defaults are ZAR, en-ZA and Africa/Johannesburg.
+- ZA defaults are ZAR, en-ZA and Africa/Johannesburg;
+- a ZAR account is only offered ZAR Stripe prices and a USD account only USD; a usage line with no stored rate waits instead of guessing.
 
 The PR reports the ZA resource total and the list of SA data on Boston. After merge, the founder adds DNS and secrets, and Claude creates and deploys the ZA apps and checks each one.
