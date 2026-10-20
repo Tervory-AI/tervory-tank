@@ -57,6 +57,22 @@ The room's only network is `tervory-gw-tisan`. A live Figma call would need a ro
 
 The recorded page has no spacing variables, no font family, weight, or line height, and the Button component has no hover, active, disabled, or error state. Those are gaps. The reader does not fill them in.
 
+## Visual review
+
+Saved Figma readings now retain `frame_data` and any recorded `visual` mappings
+(boxes, text, token colours and selectors). The reader does not invent missing
+measurements. The existing 390px/mobile recording remains incomplete for the
+375px gate. Capture the real 375px frame before using it for this check.
+
+A scaffold input with `figma: {file_key, node_id}` copies that tenant's saved
+visual evidence into `visual/frames.json`. The generated project's existing
+Playwright CI runs these comparisons; incomplete evidence fails with
+`frame data incomplete`. A generic scaffold with no Figma reference has no
+comparison target. `npm run test:visual` explicitly requires recorded data and
+fails if it is absent. See the template's `visual/README.md` for the mapping
+schema and scoring rules. No model call, external screenshot service or new
+runtime dependency is added. No logo is drawn or replaced.
+
 ## What Tisan never does
 
 - Deploy anything to production without a Radix scan result of "no critical findings".

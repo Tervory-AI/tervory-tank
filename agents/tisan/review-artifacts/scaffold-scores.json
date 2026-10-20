@@ -1,0 +1,64 @@
+[
+  {
+    "page": "/",
+    "frameId": "synthetic-starter-css-reference",
+    "width": 375,
+    "score": 1,
+    "scores": {
+      "layout": 1,
+      "text": 1,
+      "colour": 1
+    },
+    "passed": true,
+    "overflow": false,
+    "checks": [
+      {
+        "nodeId": "heading",
+        "kind": "layout",
+        "passed": true
+      },
+      {
+        "nodeId": "heading",
+        "kind": "text",
+        "passed": true
+      },
+      {
+        "nodeId": "heading",
+        "kind": "colour",
+        "passed": true
+      }
+    ],
+    "evidence": "Synthetic starter CSS reference, not an approved Figma frame"
+  },
+  {
+    "page": "/",
+    "frameId": "synthetic-starter-css-reference",
+    "width": 1440,
+    "score": 1,
+    "scores": {
+      "layout": 1,
+      "text": 1,
+      "colour": 1
+    },
+    "passed": true,
+    "overflow": false,
+    "checks": [
+      {
+        "nodeId": "heading",
+        "kind": "layout",
+        "passed": true
+      },
+      {
+        "nodeId": "heading",
+        "kind": "text",
+        "passed": true
+      },
+      {
+        "nodeId": "heading",
+        "kind": "colour",
+        "passed": true
+      }
+    ],
+    "evidence": "Synthetic starter CSS reference, not an approved Figma frame"
+  }
+]
