@@ -15,7 +15,7 @@ const mocks = {
   "@/lib/admin": { isFounder: (value) => value === "founder-placeholder" },
   "@/lib/tank": { runContextTrial: async (value) => {
     calls.push(value);
-    if (fail) throw new Error("not exposed");
+    if (fail) throw fail instanceof Error ? fail : new Error("not exposed");
     return { records_sent: 3 };
   } },
   "next/server": { NextResponse: { json: (value, init) => Response.json(value, init) } },
@@ -31,6 +31,7 @@ function load(file) {
   );
   return module.exports;
 }
+mocks["@/app/base/context-trial-error"] = load("workspace/app/base/context-trial-error.ts");
 mocks["./context-report"] = load("workspace/app/base/context-report.ts");
 (async () => {
   const { POST } = load("workspace/app/api/base/context-trial/route.ts");
@@ -50,6 +51,49 @@ mocks["./context-report"] = load("workspace/app/base/context-report.ts");
   const failed = await POST(request());
   assert.equal(failed.status, 503);
   assert.ok(!(await failed.text()).includes("not exposed"));
+  for (const message of [
+    "No completed batch to test yet. Run a Base batch first.",
+    "A trial is already running (started 09:07).",
+  ]) {
+    fail = new Error(`Tank /v1/base/context-dev/trial 409: ${JSON.stringify({ detail: message })}`);
+    const response = await POST(request());
+    assert.equal(response.status, 409);
+    const result = await response.json();
+    assert.deepEqual(result, { error: message });
+    const state = [];
+    let index = 0;
+    mocks.react = { ...React, useState: (initial) => {
+      const slot = index++;
+      if (!(slot in state)) state[slot] = initial;
+      return [state[slot], (next) => { state[slot] = next; }];
+    } };
+    const Component = load("workspace/app/base/context-comparison.tsx").ContextComparison;
+    const props = { report: { records: 0, fields: [] }, canRunTrial: true };
+    const section = Component(props);
+    const button = section.props.children.find(child => child?.type === "button");
+    global.fetch = async () => ({ ok: false, json: async () => result });
+    await button.props.onClick();
+    index = 0;
+    const markup = renderToStaticMarkup(Component(props));
+    assert.ok(markup.includes(message));
+    assert.ok(markup.includes('role="status"'));
+    assert.equal(markup.includes("Start time is UTC."), message.startsWith("A trial"));
+    if (process.env.BASE_TRIAL_PREVIEW_DIR) {
+      fs.mkdirSync(process.env.BASE_TRIAL_PREVIEW_DIR, { recursive: true });
+      fs.writeFileSync(path.join(process.env.BASE_TRIAL_PREVIEW_DIR, message.startsWith("A trial") ? "running.html" : "no-batch.html"), markup);
+    }
+    delete mocks.react;
+  }
+  for (const error of [
+    new Error('Tank /v1/base/context-dev/trial 409: {"detail":"private error"}'),
+    new Error('Tank /v1/base/context-dev/trial 409: malformed'),
+    new Error('Tank /v1/base/context-dev/trial 503: {"detail":"A trial is already running (started 09:07)."}'),
+  ]) {
+    fail = error;
+    const response = await POST(request());
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: "Trial interrupted. Refresh results before trying again." });
+  }
   const { ContextComparison } = load("workspace/app/base/context-comparison.tsx");
   const report = { records: 2, creditsUsed: 20, noTruth: 2, creditsPerRecord: 10, unknownCharges: 0, fields: [] };
   const client = renderToStaticMarkup(React.createElement(ContextComparison, { report }));

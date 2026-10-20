@@ -1,3 +1,4 @@
+import { contextTrialError } from "@/app/base/context-trial-error";
 import { auth } from "@clerk/nextjs/server";
 import { isFounder } from "@/lib/admin";
 import { runContextTrial } from "@/lib/tank";
@@ -13,7 +14,9 @@ export async function POST(request: Request) {
   }
   try {
     return NextResponse.json(await runContextTrial(userId));
-  } catch {
+  } catch (error) {
+    const message = contextTrialError(error);
+    if (message) return NextResponse.json({ error: message }, { status: 409 });
     return NextResponse.json({ error: "Trial interrupted. Refresh results before trying again." }, { status: 503 });
   }
 }
