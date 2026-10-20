@@ -291,7 +291,9 @@ export function setCandidate(taskType: string, candidateModel: string | null, sh
   });
 }
 export function promoteCandidate(taskType: string, by: string) {
-  return tank<{ ok: true; model: string }>(`/v1/graduation/${encodeURIComponent(taskType)}/promote`, { method: "POST", body: JSON.stringify({ by }) });
+  return tank<{ ok: true; model: string }>(`/v1/graduation/${encodeURIComponent(taskType)}/promote`, {
+    method: "POST", headers: { "X-Tervory-Admin": by }, body: JSON.stringify({ by }),
+  });
 }
 export function rollbackModel(taskType: string, by: string) {
   return tank<{ ok: true; model: string }>(`/v1/graduation/${encodeURIComponent(taskType)}/rollback`, { method: "POST", body: JSON.stringify({ by }) });
@@ -663,6 +665,16 @@ export function markBillingEventHandled(eventId: string): Promise<{ handled: boo
     method: "POST",
     body: JSON.stringify({ event_id: eventId }),
   });
+}
+
+export type TrainingGraduation = {
+  task_type: string; model: string; gold_count: number; candidate: string | null;
+  heldout_score: number | null; current_cost: number | null; candidate_cost: number | null; can_promote: boolean;
+};
+export function trainingGraduation(identity: {userId: string; tenantId: string; role: string}) {
+  return tank<TrainingGraduation[]>("/v1/training/graduation", {method: "GET", headers: {
+    "x-tervory-user": identity.userId, "x-tervory-tenant": identity.tenantId, "x-tervory-role": identity.role,
+  }});
 }
 
 export type TisanGoldPage = {

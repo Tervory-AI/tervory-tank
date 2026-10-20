@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
-import { listRoster } from "@/lib/tank";
+import { goldIdentity } from "../skala/gold/access";
+import { GraduationPanel } from "./graduation-panel";
+import { trainingGraduation, listRoster } from "@/lib/tank";
 import { activeTenant } from "@/lib/tenant";
 import type { ModelRow } from "./squads";
 import { TankView } from "./view";
@@ -35,5 +37,7 @@ export default async function TankPage() {
   } catch {
     workers = { available: false, tasks: [] };
   }
-  return <TankView workspaceName={workspaceName} models={models} modelsUnavailable={modelsUnavailable} workers={workers} />;
+  const identity = await goldIdentity("platform");
+  const graduation = identity.role === "founder" ? await trainingGraduation(identity).catch(() => null) : null;
+  return <TankView graduation={<GraduationPanel rows={graduation}/>} workspaceName={workspaceName} models={models} modelsUnavailable={modelsUnavailable} workers={workers} />;
 }

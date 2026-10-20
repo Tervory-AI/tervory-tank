@@ -771,3 +771,8 @@ ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS units         numeric;
 
 ALTER TABLE tank.gold_examples ADD COLUMN IF NOT EXISTS auto_approved boolean NOT NULL DEFAULT false;
 ALTER TABLE tank.gold_examples ADD COLUMN IF NOT EXISTS label_family text;
+
+-- Explicit model holdout evidence; never substitute offline screening scores.
+ALTER TABLE tank.gold_scores ADD COLUMN IF NOT EXISTS task_type text;
+ALTER TABLE tank.gold_scores ADD COLUMN IF NOT EXISTS candidate_model text;
+ALTER TABLE tank.gold_scores ADD COLUMN IF NOT EXISTS cost_per_call numeric(14,8);
