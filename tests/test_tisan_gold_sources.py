@@ -6,7 +6,7 @@ from pathlib import Path
 import secrets
 import uuid
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 import pytest
 
@@ -15,6 +15,15 @@ spec = importlib.util.spec_from_file_location("tisan_gold", ROOT / "agents/tisan
 gold = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gold)
 TENANT = gold.PLATFORM_TENANT
+
+
+def complete_reading():
+    return {"node": {"id": "2:11"}, "text": "Example", "visual": [
+        {"frameId": f"2:{width}", "width": width, "height": 900,
+         "tokens": {"--ink": "#001840"}, "elements": [
+             {"nodeId": "2:12", "text": "Example", "box": {"x": 16, "y": 32, "width": 200, "height": 40},
+              "colours": {"color": "--ink"}}]}
+        for width in (375, 1440)]}
 
 
 class Pool:
@@ -53,7 +62,7 @@ def setup(tmp_path, monkeypatch):
     reference = tmp_path / "reviews" / TENANT / "example.json"
     for path in (frame, page, reference):
         path.parent.mkdir(parents=True, exist_ok=True)
-    frame.write_text(json.dumps({"node": {"id": "2:11"}, "text": "Example"}))
+    frame.write_text(json.dumps(complete_reading()))
     page.write_text(json.dumps({"html": "<h1>Example</h1>", "structure": {"nodes": [{"tag": "h1", "text": "Example"}]}}))
     reference.write_text(json.dumps({"tenant_id": TENANT, "region": "us-east", "public": False,
         "figma_file_id": "f" * 22, "figma_frame_id": "2:11", "frame_path": "frame.json", "built_page_path": "page.json"}))
@@ -151,7 +160,7 @@ def test_scaffold_review_saves_built_page_without_approval(tmp_path):
     file_id = "f" * 22
     reading = tmp_path / "readings" / TENANT / file_id / "2-11.json"
     reading.parent.mkdir(parents=True)
-    reading.write_text('{"node":{"id":"2:11"}}')
+    reading.write_text(json.dumps(complete_reading()))
     (tmp_path / "builds" / TENANT / "example").mkdir(parents=True)
     store.save(tmp_path, project, TENANT, "example", 1, {"file_key": file_id, "node_id": "2:11"})
     row = gold.snapshot(tmp_path, TENANT, "example-home")
@@ -176,3 +185,50 @@ def test_approved_structure_keeps_dom_hierarchy():
     main = parser.nodes[0]
     assert [node["tag"] for node in main["children"]] == ["section", "footer"]
     assert [node["tag"] for node in main["children"][0]["children"]] == ["h1", "p"]
+
+
+@pytest.mark.parametrize("defect", ["missing", "empty", "incomplete", "width", "elements", "box", "text", "tokens", "bad-box"])
+def test_incomplete_frames_refused_at_all_gold_boundaries(setup, defect):
+    client, headers, root = setup
+    row = gold.snapshot(root, TENANT, "example")
+    assert approve(client, headers).status_code == 200
+    reading = complete_reading()
+    visual = reading["visual"]
+    if defect == "missing":
+        reading.pop("visual")
+    elif defect == "empty":
+        reading["visual"] = []
+    elif defect == "incomplete":
+        visual[1]["incomplete"] = True
+    elif defect == "width":
+        visual.pop()
+    elif defect == "elements":
+        visual[1]["elements"] = []
+    elif defect == "box":
+        visual[1]["elements"][0].pop("box")
+    elif defect == "text":
+        visual[1]["elements"][0].pop("text")
+    elif defect == "tokens":
+        visual[1]["tokens"] = {}
+    else:
+        visual[1]["elements"][0]["box"]["width"] = -1
+    (root / "readings" / TENANT / "frame.json").write_text(json.dumps(reading))
+    with pytest.raises(HTTPException) as caught:
+        gold.snapshot(root, TENANT, "example")
+    assert caught.value.status_code == 422
+    assert caught.value.detail == "frame data incomplete"
+    body = {k: row[k] for k in ("tenant_id", "page_id", "frame_hash", "page_hash")}
+    for response in (client.post("/gold/approve", headers=headers, json=body),
+                     client.get("/gold/candidates", headers=headers)):
+        assert response.status_code == 422
+        assert response.json() == {"detail": "frame data incomplete"}
+    assert len(client.app.state.pool.rows) == 1
+
+
+def test_nonstandard_page_skips_review_without_error(tmp_path):
+    spec = importlib.util.spec_from_file_location("tisan_custom_review", ROOT / "agents/tisan/review_store.py")
+    store = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(store)
+    store.save(tmp_path, tmp_path / "project", TENANT, "example", 1,
+               {"file_key": "f" * 22, "node_id": "2:11", "page": "notes"})
+    assert not (tmp_path / "reviews").exists()

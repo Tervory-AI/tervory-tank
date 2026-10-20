@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import math
 import os
 import re
 import secrets
@@ -41,6 +42,44 @@ def safe_path(root: Path, relative: str) -> Path:
     return path
 
 
+def require_visual_data(reading: Any) -> None:
+    """Gold requires recorded geometry, text and tokens at both review widths."""
+    def refuse() -> None:
+        raise HTTPException(422, "frame data incomplete")
+
+    frames = reading.get("visual") if isinstance(reading, dict) else None
+    if not isinstance(frames, list) or not frames:
+        refuse()
+    widths = set()
+    for frame in frames:
+        if not isinstance(frame, dict) or frame.get("incomplete"):
+            refuse()
+        width = frame.get("width")
+        if type(width) not in (int, float) or width not in (375, 1440):
+            refuse()
+        widths.add(width)
+        tokens = frame.get("tokens")
+        elements = frame.get("elements")
+        if not isinstance(tokens, dict) or not tokens or not isinstance(elements, list) or not elements:
+            refuse()
+        has_text = False
+        for element in elements:
+            if not isinstance(element, dict) or not isinstance(element.get("box"), dict):
+                refuse()
+            box = element["box"]
+            for key in ("x", "y", "width", "height"):
+                value = box.get(key)
+                if type(value) not in (int, float) or not math.isfinite(value):
+                    refuse()
+                if key in ("width", "height") and value <= 0:
+                    refuse()
+            has_text = has_text or isinstance(element.get("text"), str) and bool(element["text"].strip())
+        if not has_text:
+            refuse()
+    if widths != {375, 1440}:
+        refuse()
+
+
 def snapshot(root: Path, tenant: str, page_id: str) -> dict[str, Any]:
     tenant = str(uuid.UUID(tenant))
     if not re.fullmatch(r"[a-z0-9-]{1,100}", page_id):
@@ -52,6 +91,7 @@ def snapshot(root: Path, tenant: str, page_id: str) -> dict[str, Any]:
     frame_root = root / "readings" / tenant
     build_root = root / "builds" / tenant
     frame = json.loads(safe_path(frame_root, row["frame_path"]).read_text())
+    require_visual_data(frame)
     page = json.loads(safe_path(build_root, row["built_page_path"]).read_text())
     return {**row, "page_id": page_id, "frame": frame, "page_structure": page["structure"],
             "html": page["html"], "css": page.get("css", ""), "frame_hash": digest(frame), "page_hash": digest(page)}

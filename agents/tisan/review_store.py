@@ -47,9 +47,11 @@ class Structure(HTMLParser):
 def save(root: Path, project: Path, tenant: str, slug: str, build: int, source: dict[str, Any]) -> None:
     file_id, frame_id = source.get("file_key", ""), source.get("node_id", "")
     page = source.get("page", "home")
+    # Custom routes have no standard static review artifact; leave them unreviewed.
+    if page not in {"home", "about", "contact", "privacy"}:
+        return
     if (not re.fullmatch(r"[A-Za-z0-9]{22,128}", file_id)
-            or not re.fullmatch(r"\d+:\d+", frame_id)
-            or page not in {"home", "about", "contact", "privacy"}):
+            or not re.fullmatch(r"\d+:\d+", frame_id)):
         raise ValueError("invalid review frame or page")
     frame_path = f"{file_id}/{frame_id.replace(':', '-')}.json"
     # The saved reading is the exact frame evidence; a missing reading cannot be approved.
