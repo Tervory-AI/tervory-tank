@@ -854,6 +854,12 @@ async def run_route(
     messages = [m.model_dump() for m in req.messages]
     if policy["system_prompt"]:
         messages = [{"role": "system", "content": policy["system_prompt"]}, *messages]
+    if req.task_type == "zenas.case_facts" and any(str(message.get("content", "")).startswith(_CONVERT_HEAD) for message in messages):
+        messages.insert(0, {"role": "system", "content": (
+            "For this judgment conversion use facts_pointer and element quote_pointer objects instead of copying text. "
+            "Each pointer is {\"paragraphs\":[1,2]} or {\"first\":\"first eight words\",\"last\":\"last eight words\"}. "
+            "Select at least 200 characters of facts. Return question, holding, elements and citations as JSON."
+        )})
     max_tokens = min(req.max_tokens or policy["max_tokens_out"], policy["max_tokens_out"])
     generation = case_facts_generation(model) if req.task_type == "zenas.case_facts" else {}
     sent = "\n".join(str(item.get("content") or "") for item in messages)

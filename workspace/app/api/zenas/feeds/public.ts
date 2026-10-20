@@ -138,6 +138,7 @@ const FAILURE_REASONS = new Set([
   "quote is not in the judgment",
   "not a judgment",
   "facts too short",
+  "pointer did not resolve",
 ]);
 
 export type PublicCaseFailure = {
