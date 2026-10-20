@@ -16,6 +16,8 @@ COPY tank/skills /tmp/skills
 RUN mkdir -p /app/skills && cd /tmp/skills \
     && find . -path './*.profile/*/data/*.json' -exec cp --parents {} /app/skills/ \; \
     && rm -rf /tmp/skills
+COPY agents/base/base_gold /app/base_gold
+COPY agents/base/engines /app/engines
 USER agent
 ENV AGENT_NAME=base \
     DATA_DIR=/data \

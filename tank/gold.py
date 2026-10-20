@@ -123,10 +123,10 @@ async def summary(actor: Reviewer = Depends(require_reviewer)) -> dict[str, Any]
     region = runtime().box_region()
     async with runtime().pool().acquire() as conn:
         rows = await conn.fetch(
-            """SELECT agent,skill_id,count(*) FILTER (WHERE status='checked') AS checked,
-            count(*) FILTER (WHERE status='checked' AND holdout) AS holdout,
+            """SELECT agent,skill_id,count(DISTINCT input_hash) FILTER (WHERE status='checked' AND (NOT auto_label OR auto_approved)) AS checked,
+            count(DISTINCT input_hash) FILTER (WHERE status='checked' AND (NOT auto_label OR auto_approved) AND holdout) AS holdout,
             count(*) FILTER (WHERE status='candidate') AS candidates
-            FROM tank.gold_examples WHERE tenant_id=$1 AND region=$2
+            FROM tank.gold_examples g WHERE tenant_id=$1 AND region=$2
             AND ($3 OR agent='zenas') GROUP BY agent,skill_id ORDER BY agent,skill_id""",
             actor.tenant, region, actor.founder,
         )
@@ -155,20 +155,89 @@ async def summary(actor: Reviewer = Depends(require_reviewer)) -> dict[str, Any]
         # this signed trend, including a planted three-point regression.
         item["drop"] = item["trend"] is not None and item["trend"] < -0.02
         skills.append(item)
+    skills.sort(key=lambda row: (max(0, 100 - row["checked"]), row["skill_id"]))
     return {"skills": skills, "pairs": {r["agent"]: r["n"] for r in pairs}, "region": region}
 
+
+
+def source_verdict(statuses: list[str]) -> str:
+    if len(statuses) < 10 or "candidate" in statuses:
+        return "pending"
+    return "passed" if statuses.count("checked") >= 9 else "review"
+
+
+# Separate explicit families from exact-source fallbacks, even if their text matches.
+FAMILY_SQL = "CASE WHEN label_family IS NULL THEN 'source:' || label_source ELSE 'family:' || label_family END"
+
+
+def label_family(row: dict[str, Any]) -> str | None:
+    if row.get("label_family") is not None:
+        return row["label_family"]
+    source = row.get("label_source")
+    return source
+
+
+def label_group(row: dict[str, Any]) -> str | None:
+    value = label_family(row)
+    if value is None:
+        return None
+    return ("family:" if row.get("label_family") is not None else "source:") + value
+
+
+async def settle_auto_source(conn, row: dict[str, Any]) -> str:
+    """Only ten original spot checks can release a label family."""
+    from training import pair_from_gold
+    args = (row["tenant_id"], row["region"], row["skill_id"], row["source"], label_group(row))
+    sample = await conn.fetch(
+        f"""SELECT status FROM tank.gold_examples WHERE tenant_id=$1 AND region=$2
+        AND skill_id=$3 AND source=$4 AND {FAMILY_SQL} IS NOT DISTINCT FROM $5 AND auto_label ORDER BY created_at,id LIMIT 10""", *args,
+    )
+    verdict = source_verdict([r["status"] for r in sample])
+    if verdict == "pending":
+        return verdict
+    if verdict == "review":
+        await conn.execute(
+            f"""UPDATE tank.gold_examples SET status='rejected',note='Source needs code review'
+            WHERE tenant_id=$1 AND region=$2 AND skill_id=$3 AND source=$4 AND {FAMILY_SQL} IS NOT DISTINCT FROM $5
+            AND auto_label AND status='candidate'""", *args,
+        )
+        return verdict
+    await conn.execute(
+        f"""UPDATE tank.gold_examples SET status='checked',auto_approved=true,checked_by=coalesce(checked_by,'source spot check'),checked_at=coalesce(checked_at,now())
+        WHERE tenant_id=$1 AND region=$2 AND skill_id=$3 AND source=$4 AND {FAMILY_SQL} IS NOT DISTINCT FROM $5
+        AND auto_label AND status IN ('candidate','checked')""", *args,
+    )
+    rows = await conn.fetch(
+        f"""SELECT * FROM tank.gold_examples WHERE tenant_id=$1 AND region=$2
+        AND skill_id=$3 AND source=$4 AND {FAMILY_SQL} IS NOT DISTINCT FROM $5 AND auto_label AND status='checked'""", *args,
+    )
+    for checked in rows:
+        await pair_from_gold(conn, dict(checked))
+    return verdict
+
+
+async def sample_queue(conn, actor: Reviewer, agent: str, skill: str) -> list[dict]:
+    rows = await conn.fetch(
+        f"""WITH ranked AS (
+          SELECT *,{FAMILY_SQL} AS family,
+          row_number() OVER (PARTITION BY skill_id,source,{FAMILY_SQL},auto_label ORDER BY created_at,id) AS sample_n
+          FROM tank.gold_examples WHERE tenant_id=$1 AND region=$2 AND agent=$3 AND skill_id=$4
+        ), waiting AS (
+          SELECT * FROM ranked WHERE status='candidate' AND (NOT auto_label OR sample_n<=10)
+        ) SELECT id,input,expected,source,label_source,label_family,auto_label FROM waiting
+        WHERE NOT auto_label OR (source,family) IS NOT DISTINCT FROM
+          (SELECT ROW(source,family) FROM waiting WHERE auto_label ORDER BY created_at,id LIMIT 1)
+        ORDER BY id""", actor.tenant, runtime().box_region(), agent, skill,
+    )
+    return [dict(row) for row in rows]
 
 @router.get("/next")
 async def next_example(agent: str, skill: str, after: uuid.UUID | None = None,
                        actor: Reviewer = Depends(require_reviewer)) -> dict[str, Any] | None:
     allowed_agent(actor, agent)
     async with runtime().pool().acquire() as conn:
-        row = await conn.fetchrow(
-            """SELECT id,input,expected,source FROM tank.gold_examples
-            WHERE tenant_id=$1 AND region=$2 AND agent=$3 AND skill_id=$4 AND status='candidate'
-            AND ($5::uuid IS NULL OR id>$5) ORDER BY id LIMIT 1""",
-            actor.tenant, runtime().box_region(), agent, skill, after,
-        )
+        rows = await sample_queue(conn, actor, agent, skill)
+        row = next((r for r in rows if after is None or r["id"] > after), None)
     if not row:
         return None
     return {**dict(row), "input": obj(row["input"]), "expected": obj(row["expected"])}
@@ -185,6 +254,7 @@ async def check(example_id: uuid.UUID, body: Verdict,
                 actor: Reviewer = Depends(require_reviewer)) -> dict[str, bool]:
     from training import pair_from_gold
     async with runtime().pool().acquire() as conn, conn.transaction():
+        await conn.execute("SELECT pg_advisory_xact_lock(871226)")
         row = await conn.fetchrow(
             """SELECT * FROM tank.gold_examples WHERE id=$1 AND tenant_id=$2 AND region=$3 FOR UPDATE""",
             example_id, actor.tenant, runtime().box_region(),
@@ -198,6 +268,14 @@ async def check(example_id: uuid.UUID, body: Verdict,
             raise HTTPException(409, "This example has already been checked.")
         if body.action == "wrong" and not body.correction:
             raise HTTPException(422, "A corrected JSON answer is required.")
+        if row["auto_label"]:
+            sample = await conn.fetch(
+                f"""SELECT id FROM tank.gold_examples WHERE tenant_id=$1 AND region=$2
+                AND skill_id=$3 AND source=$4 AND {FAMILY_SQL} IS NOT DISTINCT FROM $5 AND auto_label ORDER BY created_at,id LIMIT 10""",
+                actor.tenant, row["region"], row["skill_id"], row["source"], label_group(dict(row)),
+            )
+            if example_id not in {r["id"] for r in sample}:
+                raise HTTPException(409, "Review the source sample first.")
         expected = obj(row["expected"]) if body.action == "right" else body.correction
         # Preserve the wrong original and queue its correction for a separate check.
         if body.action == "wrong":
@@ -213,7 +291,10 @@ async def check(example_id: uuid.UUID, body: Verdict,
                 """UPDATE tank.gold_examples SET status='checked',checked_by=$3,checked_at=now(),note=$4
                 WHERE id=$1 AND tenant_id=$2 RETURNING *""", example_id, actor.tenant, actor.user, body.note,
             )
-            await pair_from_gold(conn, dict(updated))
+            if not row["auto_label"]:
+                await pair_from_gold(conn, dict(updated))
+        if row["auto_label"]:
+            await settle_auto_source(conn, dict(row))
     return {"ok": True}
 
 
@@ -245,7 +326,7 @@ async def run_retests(*, final: bool = False, tenant: uuid.UUID = PLATFORM_TENAN
                     continue
                 cases = await conn.fetch(
                     """SELECT DISTINCT ON (input_hash) input,expected,tolerance FROM tank.gold_examples
-                    WHERE tenant_id=$1 AND region=$2 AND skill_id=$3 AND status='checked' AND holdout=$4
+                    WHERE tenant_id=$1 AND region=$2 AND skill_id=$3 AND status='checked' AND (NOT auto_label OR auto_approved) AND holdout=$4
                     ORDER BY input_hash,checked_at DESC,id""", tenant, rt.box_region(), pkg.id, final,
                 )
                 if not cases:
@@ -284,7 +365,7 @@ async def retest(*, since: datetime | None = None) -> dict[str, Any]:
     results = []
     async with runtime().pool().acquire() as conn:
         scopes = await conn.fetch(
-            "SELECT DISTINCT tenant_id FROM tank.gold_examples WHERE region=$1 AND status='checked' AND NOT holdout",
+            "SELECT DISTINCT tenant_id FROM tank.gold_examples WHERE region=$1 AND status='checked' AND (NOT auto_label OR auto_approved) AND NOT holdout",
             runtime().box_region(),
         )
     for scope in scopes:
