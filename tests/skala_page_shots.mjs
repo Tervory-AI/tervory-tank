@@ -27,7 +27,7 @@ const fixture = [
 
 const bundle = await build({
   stdin: {
-    contents: `import React from "react"; import { createRoot } from "react-dom/client"; import { SkalaApp } from "./app/skala/view"; const skills = ${JSON.stringify(fixture)}; createRoot(document.getElementById("root")).render(<SkalaApp accountName="Northwind" skills={skills} loadError={null} />);`,
+    contents: `import React from "react"; import { createRoot } from "react-dom/client"; import { SkalaApp } from "./app/skala/view"; import { SquadFounderProvider } from "./app/squad-links"; const skills = ${JSON.stringify(fixture)}; createRoot(document.getElementById("root")).render(<SquadFounderProvider founder={true}><SkalaApp accountName="Northwind" skills={skills} loadError={null} /></SquadFounderProvider>);`,
     resolveDir: join(root, "workspace"),
     loader: "tsx",
   },
