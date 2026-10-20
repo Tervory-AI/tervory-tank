@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useRef, useState, type DragEvent, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type DragEvent, type FormEvent, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import { MARKET_LAB_LOGO_SRC } from "./catalog";
 import type { LinkGroupView, OnCard, PageModel } from "./model";
@@ -618,12 +618,14 @@ export function MarketLabView({
   envKeys,
   refresh,
   workspaceName,
+  quarantine,
 }: {
   model: PageModel;
   plugins: PluginPanel;
   envKeys: KeyFlags;
   refresh: () => Promise<void>;
   workspaceName: string | null;
+  quarantine?: ReactNode;
 }) {
   const [menu, setMenu] = useState(false);
   const [active, setActive] = useState("overview");
@@ -659,6 +661,8 @@ export function MarketLabView({
       const el = document.getElementById(section.id);
       if (el) observer.observe(el);
     }
+    const held = document.getElementById("quarantine");
+    if (held) observer.observe(held);
     return () => observer.disconnect();
   }, []);
 
@@ -727,6 +731,15 @@ export function MarketLabView({
           >
             Plugins
           </button>
+          {quarantine ? (
+            <button
+              className={!pluginsOpen && active === "quarantine" ? "ml-navbtn active" : "ml-navbtn"}
+              type="button"
+              onClick={() => openSection("quarantine")}
+            >
+              Quarantine
+            </button>
+          ) : null}
         </nav>
         <div className="ml-spacer" />
         <div className="ml-rule" />
@@ -814,6 +827,7 @@ export function MarketLabView({
               ))}
             </div>
           </section>
+          {quarantine}
           <footer className="ml-foot">
             <p>
               Public data only. FRED data is read live and never stored.{" "}

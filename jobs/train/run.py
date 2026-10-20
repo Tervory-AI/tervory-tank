@@ -5,6 +5,7 @@ No production DB credential is ever sent to a GPU job. Run this on the US box.
 from __future__ import annotations
 import argparse
 import asyncio
+from datetime import date
 from decimal import Decimal
 import json
 import os
@@ -28,6 +29,23 @@ def validate_name(value: str) -> str:
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,95}', value):
         raise ValueError('Invalid repository name')
     return value
+
+
+async def link_snapshot_batches(conn, job_id: str, model_repo: str, day: str) -> None:
+    """Remember which batches this shared model was trained on."""
+    if not day:
+        return
+    rows = await conn.fetch(
+        """SELECT batch_id, region FROM tank.training_snapshot_batches
+        WHERE tenant_id=$1 AND day=$2""",
+        PLATFORM, date.fromisoformat(day),
+    )
+    for row in rows:
+        await conn.execute(
+            """INSERT INTO tank.training_job_batches (tenant_id, job_id, model_repo, batch_id, region)
+            VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING""",
+            PLATFORM, job_id, model_repo, row["batch_id"], row["region"],
+        )
 
 
 async def record_receipt(conn, job_id: str, actual: Decimal) -> None:
@@ -99,6 +117,7 @@ async def run(args) -> None:
                                 env={'HF_ORG': org, 'TRAIN_DAY': args.day, 'OUTPUT_REPO': repo},
                                 secrets={'HF_TOKEN': os.environ['HF_TOKEN']})
             await conn.execute('UPDATE tank.training_jobs SET id=$1 WHERE id=$2 AND tenant_id=$3', job.id, pending, PLATFORM)
+            await link_snapshot_batches(conn, job.id, repo, args.day)
             print(f'Training job: {job.id}')
         finally:
             await conn.execute('SELECT pg_advisory_unlock(871228)')

@@ -133,6 +133,11 @@ async def test_model_needs_holdout_evidence_and_manual_promotion(database):
             (tenant_id,region,skill_id,version,task_type,candidate_model,score,n,final_check,cost_per_call)
             VALUES ($1,'us-east','fixture.task','1','fixture.task','cheaper',.99,20,true,.01)""",
             PLATFORM_TENANT)
+        await conn.execute(
+            """INSERT INTO tank.gold_scores
+            (tenant_id,region,skill_id,version,task_type,candidate_model,score,n,final_check,cost_per_call)
+            VALUES ($1,'za','fixture.task','1','fixture.task','cheaper',.99,20,true,.01)""",
+            PLATFORM_TENANT)
         rows = await graduate.training_table(conn, PLATFORM_TENANT, 'us-east')
         row = next(row for row in rows if row['task_type'] == 'fixture.task')
         assert row['heldout_score'] == .99 and row['can_promote']

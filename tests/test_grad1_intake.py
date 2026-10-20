@@ -115,7 +115,12 @@ async def test_bad_rows_savepoint_and_later_rooms(database, monkeypatch):
     rows = [example(input={'n': 1})] + bad + [example(input={'n': 2}, skill_id='ffl.ingest')]
     real_client = httpx.AsyncClient
     def respond(req):
-        payload = rows if req.url.host == 'agent-base' else [example(skill_id='market.series_fetch' if req.url.host == 'agent-market-lab' else 'scan.secrets')]
+        if req.url.host == 'agent-base':
+            payload = rows
+        elif req.url.host == 'agent-market-lab':
+            payload = [example(skill_id='market.series_fetch', quarantine='passed', batch_id='batch-ok', currency='USD', unit='count')]
+        else:
+            payload = [example(skill_id='scan.secrets')]
         # Deliberately malformed JSON numbers are accepted by Python's decoder;
         # row serialization must reject them without rejecting healthy siblings.
         return httpx.Response(200, content=json.dumps(payload).encode())

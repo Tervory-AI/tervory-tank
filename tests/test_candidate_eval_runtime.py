@@ -102,7 +102,7 @@ class CandidateEvalRuntimeTests(unittest.TestCase):
 
     def test_bundled_feeds_and_fixtures_match_existing_sources(self):
         files = [p for p in (PACKAGE / "feeds").rglob("*") if p.is_file() and p.suffix in {".py", ".sql"}]
-        self.assertEqual(len(files), 19)
+        self.assertEqual(len(files), 20)
         for path in files:
             original = ROOT / "agents/market_lab/feeds" / path.relative_to(PACKAGE / "feeds")
             self.assertEqual(path.read_bytes(), original.read_bytes(), str(path))

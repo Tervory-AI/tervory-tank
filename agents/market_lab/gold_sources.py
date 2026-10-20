@@ -35,7 +35,7 @@ ORDER BY id
 """
 
 POINTS_SQL = """
-SELECT p.series_id, p.date, p.value, p.fetched_at
+SELECT p.series_id, p.date, p.value, p.fetched_at, p.source, p.region, p.currency, p.unit, p.batch_id
 FROM agent_market_lab.points p
 JOIN agent_market_lab.series s ON s.id = p.series_id
 WHERE s.tenant_id = $1
@@ -113,6 +113,8 @@ def _grouped_points(rows: Iterable[dict[str, Any]]) -> dict[str, list[dict[str, 
     for row in rows:
         if not isinstance(row, dict):
             continue
+        if _text(row.get("batch_status")).strip() in {"held", "rejected", "removed"}:
+            continue
         series_id = _text(row.get("series_id")).strip()
         stamp = _day(row.get("date"))
         number = _number(row.get("value"))
@@ -122,6 +124,10 @@ def _grouped_points(rows: Iterable[dict[str, Any]]) -> dict[str, list[dict[str, 
         fetched_at = _text(row.get("fetched_at")).strip()
         if fetched_at:
             item["fetched_at"] = fetched_at
+        for key in ("batch_id", "currency", "unit", "source"):
+            text = _text(row.get(key)).strip()
+            if text:
+                item[key] = text
         grouped.setdefault(series_id, []).append((stamp, item))
     ordered: dict[str, list[dict[str, Any]]] = {}
     for series_id, pairs in grouped.items():
@@ -226,6 +232,31 @@ def _row(
     }
 
 
+def _stamp_labels(row: dict[str, Any], point: dict[str, Any], series_row: dict[str, Any]) -> dict[str, Any]:
+    """A pooled batch labels the example with the series currency and unit."""
+    batch_id = _text(point.get("batch_id")).strip()
+    if not batch_id:
+        return row
+    currency = _text(point.get("currency")).strip() or _text(series_row.get("currency")).strip()
+    unit = _text(point.get("unit")).strip() or _text(series_row.get("unit")).strip()
+    labeled = dict(row)
+    labeled["batch_id"] = batch_id
+    labeled["quarantine"] = "passed"
+    if currency:
+        labeled["currency"] = currency
+    if unit:
+        labeled["unit"] = unit
+    payload = dict(row["input"])
+    if currency:
+        payload["currency"] = currency
+    if unit:
+        payload["unit"] = unit
+    labeled["input"] = payload
+    if row["skill_id"] == "market.series_fetch":
+        labeled["expected"] = series_fetch(payload)
+    return labeled
+
+
 def _history(points: list[dict[str, Any]], index: int) -> list[dict[str, Any]]:
     return [{"date": point["date"], "value": point["value"]} for point in points[: index + 1]]
 
@@ -245,8 +276,8 @@ def candidates(
     claims = [row for row in (predictions or []) if isinstance(row, dict)]
     output: list[dict[str, Any]] = []
 
-    def add(row: dict[str, Any]) -> bool:
-        output.append(row)
+    def add(row: dict[str, Any], point: dict[str, Any]) -> bool:
+        output.append(_stamp_labels(row, point, raw))
         return len(output) >= cap
 
     ordered = sorted(
@@ -286,7 +317,7 @@ def candidates(
                 source=f"later-value:{source}:{point['date']}",
                 family=family,
                 region=region,
-            )):
+            ), point):
                 return output
             if add(_row(
                 skill="market.shift_detect",
@@ -295,7 +326,7 @@ def candidates(
                 source=f"later-value:{source}:{ref}:{point['date']}",
                 family=family,
                 region=region,
-            )):
+            ), point):
                 return output
         for point in stored:
             month = _month(point["date"])
@@ -316,7 +347,7 @@ def candidates(
                 source=f"official-match:{source}:{ref}:{point['date']}",
                 family=_family(f"official-match:{source}:{month}", synthetic),
                 region=region,
-            )):
+            ), point):
                 return output
     return output
 
@@ -336,6 +367,10 @@ async def read_candidates(*, limit: int, region: str) -> list[dict[str, Any]]:
         return []
     conn = await _connect()
     try:
+        if getattr(conn, "execute", None) is not None:
+            from core.ledger import PostgresLedger
+
+            await PostgresLedger(conn).apply_schema()
         tenant = uuid.UUID(PLATFORM_TENANT)
         series = await conn.fetch(SERIES_SQL, tenant)
         points = await conn.fetch(POINTS_SQL, tenant)

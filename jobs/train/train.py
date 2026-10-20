@@ -9,13 +9,56 @@ import os
 from pathlib import Path
 
 
+def _walk(value):
+    if isinstance(value, dict):
+        yield value
+        for item in value.values():
+            yield from _walk(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _walk(item)
+
+
+def _numeric(value) -> bool:
+    if isinstance(value, bool) or value is None:
+        return False
+    if isinstance(value, (int, float)):
+        return True
+    try:
+        float(str(value).strip().replace(',', ''))
+    except (TypeError, ValueError):
+        return False
+    return bool(str(value).strip())
+
+
+def carries_regional_fact(row: dict) -> bool:
+    for blob in (row.get('input'), row.get('output')):
+        for node in _walk(blob):
+            if isinstance(node.get('currency'), str) and node.get('currency').strip():
+                return True
+            if 'price' in node and _numeric(node.get('price')):
+                return True
+            if 'value' in node and _numeric(node.get('value')) and ('date' in node or 'unit' in node):
+                return True
+    return False
+
+
 def validate_rows(rows: list[dict]) -> None:
     for row in rows:
+        labelled = str(row.get('currency') or '').strip() and str(row.get('unit') or '').strip()
         if (row.get('public') is not True or row.get('client_matter') is not False
                 or row.get('scope') != 'platform' or row.get('region') not in ('us-east', 'za')
                 or row.get('holdout') is not False or row.get('active') is not True
-                or 'tenant_id' in row or not row.get('task_type') or 'input' not in row or 'output' not in row):
+                or 'tenant_id' in row or not row.get('task_type') or 'input' not in row or 'output' not in row
+                or (carries_regional_fact(row) and (not labelled or not str(row.get('batch_id') or '').strip()))):
             raise ValueError('Dataset contains unapproved or private rows')
+
+
+def shared_rows(groups: list[list[dict]]) -> list[dict]:
+    """One model sees every region. Each row keeps its own region and batch."""
+    rows = [row for group in groups for row in group]
+    validate_rows(rows)
+    return rows
 
 
 def load_snapshots(api, org: str, day: str) -> list[dict]:

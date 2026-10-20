@@ -104,7 +104,7 @@ async def test_launcher_estimates_before_any_submission_and_passes_secrets_only(
                           create_repo=lambda **kw: repos.append(kw), model_info=lambda repo: SimpleNamespace(private=True), run_uv_job=launch)
     monkeypatch.setitem(sys.modules, 'huggingface_hub', SimpleNamespace(HfApi=lambda **kw: api))
     import asyncpg
-    conn = SimpleNamespace(execute=AsyncMock(), fetchval=AsyncMock(return_value=False), close=AsyncMock())
+    conn = SimpleNamespace(execute=AsyncMock(), fetchval=AsyncMock(return_value=False), fetch=AsyncMock(return_value=[]), close=AsyncMock())
     monkeypatch.setattr(asyncpg, 'connect', AsyncMock(return_value=conn))
     args = SimpleNamespace(receipt=None, minutes=120, submit=submit, day='2026-10-20')
     if cap == '1':

@@ -3,6 +3,8 @@ import { activeTenant } from "@/lib/tenant";
 import { refreshFeeds } from "./actions";
 import { readFlags, loadMarketLab } from "./load";
 import { offPanel } from "./plugins";
+import { loadQuarantine } from "./quarantine-server";
+import { QuarantinePanel } from "./quarantine-view";
 import { loadLabPlugins, resolveLabFeedKey } from "./vault-server";
 import { MarketLabView } from "./view";
 import "./market-lab.css";
@@ -30,6 +32,7 @@ export default async function MarketLabPage() {
     vault: { enabled: plugins.enabled, names: plugins.enabled ? plugins.secrets.map((row) => row.name) : [] },
     resolveKey: plugins.enabled ? resolveLabFeedKey : undefined,
   });
+  const batches = await loadQuarantine();
   return (
     <MarketLabView
       model={model}
@@ -37,6 +40,7 @@ export default async function MarketLabPage() {
       envKeys={envKeys}
       refresh={refreshFeeds}
       workspaceName={workspaceName}
+      quarantine={batches ? <QuarantinePanel batches={batches} /> : null}
     />
   );
 }

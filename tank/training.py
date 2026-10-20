@@ -25,28 +25,121 @@ from gold import (PLATFORM_TENANT, Reviewer, add_candidate, encoded, input_hash,
 log = logging.getLogger("tank.training")
 
 
+def market_row(row: dict[str, Any]) -> bool:
+    agent = str(row.get("agent") or "")
+    skill = str(row.get("skill_id") or row.get("task_type") or "")
+    return agent == "market_lab" or skill.startswith("market.")
+
+
+def _walk(value: Any):
+    if isinstance(value, dict):
+        yield value
+        for item in value.values():
+            yield from _walk(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _walk(item)
+
+
+def _numeric(value: Any) -> bool:
+    if isinstance(value, bool) or value is None:
+        return False
+    if isinstance(value, (int, float)):
+        return True
+    text = str(value).strip().replace(",", "")
+    if not text:
+        return False
+    try:
+        float(text)
+    except ValueError:
+        return False
+    return True
+
+
+def carries_regional_fact(row: dict[str, Any]) -> bool:
+    """A price, a series value, or a currency has to stay labelled."""
+    for blob in (row.get("input"), row.get("expected"), row.get("output")):
+        for node in _walk(blob):
+            if _text_present(node.get("currency")):
+                return True
+            if "price" in node and _numeric(node.get("price")):
+                return True
+            if "value" in node and _numeric(node.get("value")) and ("date" in node or "unit" in node):
+                return True
+    return False
+
+
+def _text_present(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def regional_labels(row: dict[str, Any]) -> tuple[str, str]:
+    currency = str(row.get("currency") or "").strip()
+    unit = str(row.get("unit") or "").strip()
+    for blob in (row.get("input"), row.get("expected"), row.get("output")):
+        for node in _walk(blob):
+            if not currency:
+                currency = str(node.get("currency") or "").strip()
+            if not unit:
+                unit = str(node.get("unit") or "").strip()
+    return currency, unit
+
+
+def admits_market_candidate(row: dict[str, Any]) -> bool:
+    """A market row enters gold only after its batch has passed quarantine."""
+    if not market_row(row):
+        return True
+    if row.get("quarantine") != "passed" or not str(row.get("batch_id") or "").strip():
+        return False
+    if row.get("region") not in ("us-east", "za"):
+        return False
+    currency, unit = regional_labels(row)
+    return bool(currency and unit)
+
+
+def admits_training(row: dict[str, Any]) -> bool:
+    """Spot check and quarantine both have to pass before a regional row is trained."""
+    if market_row(row) and not admits_market_candidate(row):
+        return False
+    if market_row(row) and row.get("status") not in (None, "checked"):
+        return False
+    currency, unit = regional_labels(row)
+    if carries_regional_fact(row) and not (currency and unit):
+        return False
+    return True
+
+
 async def save_pair(conn, *, tenant: uuid.UUID, agent: str, task: str, value: Any,
                     output: Any, approved_by: str, source: str, ref: str,
                     gold_id: uuid.UUID | None = None, holdout: bool = False,
-                    client_matter: bool = False, public: bool = False) -> None:
+                    client_matter: bool = False, public: bool = False,
+                    region: str | None = None, batch_id: str | None = None,
+                    currency: str | None = None, unit: str | None = None) -> None:
+    stored_region = region if region in ("us-east", "za") else runtime().box_region()
     await conn.execute(
         """INSERT INTO tank.training_pairs
-        (tenant_id,agent,task_type,region,input,output,approved_by,source,source_ref,gold_id,holdout,client_matter,public)
-        VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,$8,$9,$10,$11,$12,$13)
+        (tenant_id,agent,task_type,region,input,output,approved_by,source,source_ref,gold_id,holdout,client_matter,public,batch_id,currency,unit)
+        VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
         ON CONFLICT (tenant_id,region,source,source_ref) DO NOTHING""",
-        tenant, agent, task, runtime().box_region(), encoded(value), encoded(output),
+        tenant, agent, task, stored_region, encoded(value), encoded(output),
         approved_by, source, ref, gold_id, holdout, client_matter, public,
+        batch_id or None, currency or None, unit or None,
     )
 
 
 async def pair_from_gold(conn, row: dict[str, Any]) -> None:
     if row["holdout"] or (row.get("auto_label") and not row.get("auto_approved")):
         return
+    if not admits_training(row):
+        return
+    currency, unit = regional_labels(row)
     await save_pair(conn, tenant=row["tenant_id"], agent=row["agent"], task=row["skill_id"],
                     value=obj(row["input"]), output=obj(row["expected"]), approved_by=row["checked_by"],
                     source="gold", ref=str(row["id"]), gold_id=row["id"], holdout=row["holdout"],
                     client_matter=row["tenant_id"] != PLATFORM_TENANT,
-                    public=row.get("public") is True and row["tenant_id"] == PLATFORM_TENANT)
+                    public=row.get("public") is True and row["tenant_id"] == PLATFORM_TENANT,
+                    region=row.get("region"), batch_id=row.get("batch_id"),
+                    currency=currency or None, unit=unit or None)
 
 
 async def collect_ledger(conn, tenant: uuid.UUID) -> None:
@@ -275,6 +368,8 @@ async def collect_room_gold(day: date) -> dict[str, int]:
                             async with conn.transaction():
                                 if not valid_auto_candidate(row, room, region, owners):
                                     raise ValueError("Invalid candidate")
+                                if not admits_market_candidate(row):
+                                    raise ValueError("Invalid candidate")
                                 candidate_json(row)
                                 value = candidate_json(row["input"])
                                 expected = candidate_json(row["expected"])
@@ -291,13 +386,15 @@ async def collect_room_gold(day: date) -> dict[str, int]:
                                 result = await conn.execute(
                                     """INSERT INTO tank.gold_examples
                                     (tenant_id,region,skill_id,agent,input,expected,source,source_ref,
-                                     input_hash,holdout,auto_label,label_source,public,intake_day,label_family)
-                                    VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,'room_auto',$7,$8,$9,true,$10,true,$11,$12)
+                                     input_hash,holdout,auto_label,label_source,public,intake_day,label_family,
+                                     batch_id,currency,unit,quarantine)
+                                    VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,'room_auto',$7,$8,$9,true,$10,true,$11,$12,$13,$14,$15,$16)
                                     ON CONFLICT (tenant_id,region,skill_id,source,source_ref) DO NOTHING""",
                                     PLATFORM_TENANT, region, row["skill_id"], room, value, expected,
                                     input_hash([source, row["input"], row["expected"]]), input_hash(row["input"]),
                                     row.get("holdout") is True or is_holdout(PLATFORM_TENANT, row["skill_id"], row["input"]), source, day,
-                                    row.get("label_family"),
+                                    row.get("label_family"), row.get("batch_id"), row.get("currency"),
+                                    row.get("unit"), row.get("quarantine"),
                                 )
                                 from gold import settle_auto_source
                                 await settle_auto_source(conn, {"tenant_id": PLATFORM_TENANT, "region": region,
@@ -496,14 +593,28 @@ async def export_once(*, day: date | None = None) -> dict[str, Any]:
                             scope["tenant_id"], agent, region,
                         )
                         for row in rows:
-                            if exportable(dict(row)):
+                            if exportable(dict(row)) and not await _batch_removed(conn, scope["tenant_id"], row["batch_id"]):
                                 # No tenant, reviewer identity or matter reference leaves the box.
-                                payload.append({"region": region, "public": True, "client_matter": False,
-                                                "scope": "platform", "holdout": False, "active": True, "task_type": row["task_type"], "input": obj(row["input"]),
-                                                "output": obj(row["output"])})
+                                item = {"region": region, "public": True, "client_matter": False,
+                                        "scope": "platform", "holdout": False, "active": True, "task_type": row["task_type"], "input": obj(row["input"]),
+                                        "output": obj(row["output"])}
+                                if row["batch_id"]:
+                                    item["batch_id"] = row["batch_id"]
+                                if row["currency"]:
+                                    item["currency"] = row["currency"]
+                                if row["unit"]:
+                                    item["unit"] = row["unit"]
+                                payload.append(item)
                     if not payload:
                         continue
                     await upload_dataset(client, org, agent, day.isoformat(), payload, region)
+                    for item in payload:
+                        if item.get("batch_id"):
+                            await conn.execute(
+                                """INSERT INTO tank.training_snapshot_batches(tenant_id,region,day,agent,batch_id)
+                                VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING""",
+                                PLATFORM_TENANT, region, day, agent, item["batch_id"],
+                            )
                     await conn.execute(
                         """INSERT INTO tank.training_exports(region,day,agent) VALUES ($3,$1,$2)
                         ON CONFLICT DO NOTHING""", day, agent, region,
@@ -512,6 +623,77 @@ async def export_once(*, day: date | None = None) -> dict[str, Any]:
         finally:
             await conn.execute("SELECT pg_advisory_unlock(871223)")
     return {"status": "complete", "exported": exported}
+
+
+async def _batch_removed(conn, tenant: uuid.UUID, batch_id: str | None) -> bool:
+    if not batch_id:
+        return False
+    return bool(await conn.fetchval(
+        "SELECT 1 FROM tank.removed_batches WHERE tenant_id=$1 AND batch_id=$2", tenant, batch_id,
+    ))
+
+
+async def models_trained_on(conn, tenant: uuid.UUID, batch_id: str) -> list[str]:
+    rows = await conn.fetch(
+        """SELECT DISTINCT model_repo FROM tank.training_job_batches
+        WHERE tenant_id=$1 AND batch_id=$2 ORDER BY model_repo""",
+        tenant, batch_id,
+    )
+    return [row["model_repo"] for row in rows]
+
+
+async def retire_batch(conn, tenant: uuid.UUID, batch_id: str) -> list[str]:
+    """Drop a batch from training and name every model that already used it."""
+    await conn.execute(
+        """INSERT INTO tank.removed_batches (tenant_id, batch_id) VALUES ($1, $2)
+        ON CONFLICT DO NOTHING""",
+        tenant, batch_id,
+    )
+    await conn.execute(
+        """UPDATE tank.gold_examples SET status='rejected', note='Batch removed'
+        WHERE tenant_id=$1 AND batch_id=$2 AND status <> 'rejected'""",
+        tenant, batch_id,
+    )
+    await conn.execute(
+        """UPDATE tank.training_pairs SET active=false
+        WHERE tenant_id=$1 AND batch_id=$2""",
+        tenant, batch_id,
+    )
+    return await models_trained_on(conn, tenant, batch_id)
+
+
+async def record_job_batches(conn, *, tenant: uuid.UUID, job_id: str, model_repo: str, day: date) -> None:
+    rows = await conn.fetch(
+        """SELECT DISTINCT batch_id, region FROM tank.training_snapshot_batches
+        WHERE tenant_id=$1 AND day=$2""",
+        tenant, day,
+    )
+    for row in rows:
+        await conn.execute(
+            """INSERT INTO tank.training_job_batches (tenant_id, job_id, model_repo, batch_id, region)
+            VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING""",
+            tenant, job_id, model_repo, row["batch_id"], row["region"],
+        )
+
+
+_BATCH_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,80}$")
+
+
+@router.get("/batches/{batch_id}/models")
+async def list_batch_models(batch_id: str, actor: Reviewer = Depends(require_reviewer)) -> dict[str, Any]:
+    if not actor.founder or _BATCH_ID.fullmatch(batch_id) is None:
+        raise HTTPException(404, "not found")
+    async with runtime().pool().acquire() as conn:
+        return {"models": await models_trained_on(conn, actor.tenant, batch_id)}
+
+
+@router.post("/batches/{batch_id}/remove")
+async def remove_training_batch(batch_id: str, actor: Reviewer = Depends(require_reviewer)) -> dict[str, Any]:
+    if not actor.founder or _BATCH_ID.fullmatch(batch_id) is None:
+        raise HTTPException(404, "not found")
+    async with runtime().pool().acquire() as conn:
+        models = await retire_batch(conn, actor.tenant, batch_id)
+    return {"removed": True, "models": models}
 
 
 @router.post("/jobs/export", dependencies=[Depends(require_job)])
