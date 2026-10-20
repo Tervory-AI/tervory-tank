@@ -52,7 +52,7 @@
 
 ## 3b. Billing and prices shown to clients: rand or dollars by country
 - **The account's country decides its currency:** South Africa = ZAR (and its home is the ZA box), everything else = USD. It is set at onboarding with the home region and shown on the billing page. Only the founder can change it, in Admin > Homes.
-- **Plan prices are set by the founder in each currency, never converted live.** Stripe prices exist per currency: `STRIPE_PLAN_PRICE_IDS` holds a ZAR set on the ZA box and a USD set on Boston. A ZAR account can only be offered ZAR prices, and a USD account only USD prices. Tested.
+- **Plan prices are fixed amounts set by the founder in each currency, never converted live.** Founder decision (20 Oct): fixed rand prices, not Stripe Adaptive Pricing. Each plan is one Stripe Price with a USD default and a ZAR amount in `currency_options` (for example $55 and R999). The Checkout Session passes `currency` explicitly from the account's currency (`zar` or `usd`), so the charge never depends on where the customer happens to be browsing from. Adaptive Pricing stays off. A ZAR account is only ever charged the ZAR amount, and a USD account the USD amount. Tested. A plan with no ZAR amount cannot be offered to a ZAR account; the billing page says "pricing is being finalised".
 - **Usage that passes on model costs** (charged by providers in USD): converted to ZAR at the rate stored for that day, with its source and date saved on the invoice line. A missing rate means the line waits; it is never guessed. The rate comes from one named public source (SARB or the founder's choice) fetched once a day on the ZA box.
 - **Every amount on every page shows its currency** (R 1 299,00 / $1,299.00, formatted by locale). No bare numbers.
 - **Stripe:** one Stripe account with both currencies, or a separate SA Stripe account. Founder decides. Both are config, with no code change between them.
@@ -78,6 +78,6 @@ CI green, and tested:
 - a founder sees all tenants on each box, and a reviewer only their own;
 - mixed-currency comparisons are refused in Tiger, Rig and Market Lab;
 - ZA defaults are ZAR, en-ZA and Africa/Johannesburg;
-- a ZAR account is only offered ZAR Stripe prices and a USD account only USD; a usage line with no stored rate waits instead of guessing.
+- a ZAR account is only charged the plan's ZAR amount (currency passed explicitly) and a USD account only USD; a plan without a ZAR amount is not offered to a ZAR account; a usage line with no stored rate waits instead of guessing.
 
 The PR reports the ZA resource total and the list of SA data on Boston. After merge, the founder adds DNS and secrets, and Claude creates and deploys the ZA apps and checks each one.
