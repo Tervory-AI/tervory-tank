@@ -402,3 +402,36 @@ def test_skill_package_is_offline_and_versioned() -> None:
     assert len(cases) == 3
     assert cases[0]["expected"]["source"] == "fixture"
     assert cases[0]["expected"]["ready"] is False
+
+
+def test_visual_frame_data_is_retained_without_inventing_missing_measurements() -> None:
+    figma = _load()
+    raw = json.loads(FIXTURE.read_text())
+    visual = {"page": "/", "frameId": "2:11", "width": 1440, "height": 900,
+              "tokens": {"--colour-ink": "#001840"},
+              "elements": [{"nodeId": "heading", "selector": "h1", "text": "Example",
+                            "box": {"x": 16, "y": 32, "width": 200, "height": 40},
+                            "colours": {"color": "--colour-ink"}}]}
+    raw["frames"][0]["visual"] = visual
+    result = figma.compile_reading(figma.normalise_fixture(raw, "2:11"))
+    assert result["visual"] == [visual]
+    assert result["frame_data"][0]["visual"] == visual
+    missing = figma.compile_reading(figma.load_fixture("6:45"))
+    assert missing["visual"] == []
+    assert missing["visual_status"] == "frame data incomplete"
+
+
+def test_rest_frame_retains_measured_boxes_text_and_bound_colours() -> None:
+    figma = _load()
+    document = {"type": "FRAME", "id": "1:1", "absoluteBoundingBox": {"x": 100, "y": 200, "width": 375, "height": 900},
+                "children": [{"type": "TEXT", "id": "1:2", "characters": "Recorded text",
+                              "absoluteBoundingBox": {"x": 116, "y": 232, "width": 200, "height": 40},
+                              "fills": [{"type": "SOLID"}], "boundVariables": {"fills": [{"id": "ink"}]}}]}
+    variables = {"variables": {"ink": {"name": "ink", "valuesByMode": {"default": {"r": 0, "g": 24 / 255, "b": 64 / 255}}}}}
+    frame = figma.visual_frames(document, variables)[0]
+    assert "incomplete" not in frame
+    assert frame["tokens"] == {"--colour-ink": "#001840"}
+    assert frame["elements"][1]["box"] == {"x": 16, "y": 32, "width": 200, "height": 40}
+    assert frame["elements"][1]["text"] == "Recorded text"
+    document["children"][0].pop("absoluteBoundingBox")
+    assert figma.visual_frames(document, variables)[0]["incomplete"] is True

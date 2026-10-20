@@ -479,6 +479,23 @@ async def execute(
     with tempfile.TemporaryDirectory(prefix="tisan-") as tmp:
         project = Path(tmp) / "project"
         write_project(brief, project)
+        if "figma" in payload:
+            source = payload["figma"]
+            if not isinstance(source, dict):
+                raise ScaffoldError("frame data incomplete")
+            file_key, node_id = source.get("file_key", ""), source.get("node_id", "")
+            if not re.fullmatch(r"[A-Za-z0-9]{22,128}", file_key) or not re.fullmatch(r"\d+:\d+", node_id):
+                raise ScaffoldError("frame data incomplete")
+            reading_path = root / "readings" / tenant / file_key / (node_id.replace(":", "-") + ".json")
+            try:
+                reading = json.loads(reading_path.read_text())
+            except (OSError, ValueError):
+                raise ScaffoldError("frame data incomplete") from None
+            # Validation is performed by the browser gate, against the saved evidence.
+            # Empty/incomplete measurements cause that gate to fail; never derive a baseline from the page.
+            visual_dir = project / "visual"
+            visual_dir.mkdir(exist_ok=True)
+            (visual_dir / "frames.json").write_text(json.dumps(reading.get("visual", [])))
         if run_checks_now:
             checks, detail = await run_checks(project)
         else:
