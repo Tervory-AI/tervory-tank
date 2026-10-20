@@ -4,7 +4,7 @@ agent: market_lab
 rung: 3
 task_type: market.research
 description: >
-  Code-first series adapter lookups and gap arithmetic; the existing Tank
+  Code-first series adapter lookups and market.gap_score 1.1.0 arithmetic; the existing Tank
   market.research route writes only the summary. Requires room-supplied
   adapter responses, never uses a model to retrieve series.
 input:
@@ -22,4 +22,6 @@ output:
     citations: {type: array}
     series: {type: array}
     gaps: {type: object}
+    status: {type: string}
+    reason: {type: string}
 eval_threshold: 1.0
