@@ -13,15 +13,15 @@ export type SquadMember = {
 
 /** Every squad member. Skala and Tank are founders only. */
 export const SQUAD_MEMBERS: readonly SquadMember[] = [
-  { href: "/base", label: "Base", logo: "/brand/base-on-dark.png", width: 2322, height: 601, job: "Fills in business records from public pages.", founderOnly: false },
-  { href: "/tiger", label: "Tiger", logo: "/brand/tiger-on-dark.png", width: 2607, height: 801, job: "Watches a product page and reports price and stock.", founderOnly: false },
-  { href: "/market-lab", label: "Market Lab", logo: "/brand/market-lab-on-dark.png", width: 3685, height: 608, job: "Shows how a market is moving from public feeds.", founderOnly: false },
-  { href: "/rig", label: "Rig", logo: "/brand/rig-on-dark.png", width: 1173, height: 651, job: "Looks up parts, catalogues and fits.", founderOnly: false },
-  { href: "/tisan", label: "Tisan", logo: "/brand/tisan-on-dark.png", width: 2806, height: 701, job: "Builds a page and checks the result.", founderOnly: false },
-  { href: "/radix", label: "Radix", logo: "/brand/radix-on-dark.png", width: 1893, height: 651, job: "Checks code before it ships.", founderOnly: false },
-  { href: "/zenas", label: "Zenas", logo: "/brand/zenas-on-dark.png", width: 1970, height: 701, job: "Prepares drafts for a lawyer to review.", founderOnly: false },
-  { href: "/skala", label: "Skala", logo: "/brand/skala-on-dark.png", width: 3796, height: 901, job: "Keeps every skill, its versions and its scores.", founderOnly: true },
-  { href: "/tank", label: "Tank", logo: "/brand/tank-on-dark.png", width: 2466, height: 601, job: "Holds the models, the keys and the ledger.", founderOnly: true },
+  { href: "/base", label: "Base", logo: "/brand/base-on-dark.png", width: 2322, height: 601, job: "Verified businesses from a raw list.", founderOnly: false },
+  { href: "/tiger", label: "Tiger", logo: "/brand/tiger-on-dark.png", width: 2607, height: 801, job: "Watches prices and rival moves.", founderOnly: false },
+  { href: "/market-lab", label: "Market Lab", logo: "/brand/market-lab-on-dark.png", width: 3685, height: 608, job: "Sourced market research.", founderOnly: false },
+  { href: "/rig", label: "Rig", logo: "/brand/rig-on-dark.png", width: 1173, height: 651, job: "The product and the parts that fit.", founderOnly: false },
+  { href: "/tisan", label: "Tisan", logo: "/brand/tisan-on-dark.png", width: 2806, height: 701, job: "Sites and apps from a short brief.", founderOnly: false },
+  { href: "/radix", label: "Radix", logo: "/brand/radix-on-dark.png", width: 1893, height: 651, job: "Finds what systems and sites expose.", founderOnly: false },
+  { href: "/zenas", label: "Zenas", logo: "/brand/zenas-on-dark.png", width: 1970, height: 701, job: "US and South African legal research.", founderOnly: false },
+  { href: "/skala", label: "Skala", logo: "/brand/skala-on-dark.png", width: 3796, height: 901, job: "Tests skills before they are used.", founderOnly: true },
+  { href: "/tank", label: "Tank", logo: "/brand/tank-on-dark.png", width: 2466, height: 601, job: "Routes each task and keeps receipts.", founderOnly: true },
 ];
 
 /** Same list the pages used to expand in the sidebar. The shell shows one Squad button instead. */
@@ -223,8 +223,8 @@ export function squadKey(key: string, index: number, count: number): number | "c
   if (key === "Escape") return "close";
   if (count <= 0) return null;
   const current = index < 0 ? -1 : index;
-  if (key === "ArrowDown") return current < 0 ? 0 : (current + 1) % count;
-  if (key === "ArrowUp") return current < 0 ? count - 1 : (current - 1 + count) % count;
+  if (key === "ArrowDown" || key === "ArrowRight") return current < 0 ? 0 : Math.min(count - 1, current + 1);
+  if (key === "ArrowUp" || key === "ArrowLeft") return current < 0 ? count - 1 : Math.max(0, current - 1);
   if (key === "Home") return 0;
   if (key === "End") return count - 1;
   return null;

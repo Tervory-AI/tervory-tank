@@ -89,7 +89,10 @@ def test_product_header_skips_sign_in_and_sign_up():
     body = SHELL.split("export function Shell", 1)[1]
     assert body.index("if (usesOwnShell(pathname)) return") < body.index("OrganizationSwitcher")
     assert "headerLinks(founder)" not in SHELL
-    assert 'aria-controls="squad-popout"' in SHELL or 'aria-controls="squad-popout"' in _text(APP / "squad-links.tsx")
+    squad = _text(APP / "squad-links.tsx")
+    assert 'aria-controls="squad-popout"' in SHELL or 'aria-controls="squad-popout"' in squad or (
+        "aria-controls={panelId}" in squad and 'const panelId = "squad-popout"' in squad
+    )
     for rel in (
         "sign-in/layout.tsx",
         "sign-in/[[...sign-in]]/page.tsx",

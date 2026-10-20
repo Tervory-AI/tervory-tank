@@ -49,8 +49,8 @@ test("founders see Skala and Tank in the squad pop-out, and other people do not"
 test("Escape closes and arrows move between members", () => {
   assert.equal(squadKey("Escape", 0, 7), "close");
   assert.equal(squadKey("ArrowDown", 0, 7), 1);
-  assert.equal(squadKey("ArrowDown", 6, 7), 0);
-  assert.equal(squadKey("ArrowUp", 0, 7), 6);
+  assert.equal(squadKey("ArrowDown", 6, 7), 6);
+  assert.equal(squadKey("ArrowUp", 0, 7), 0);
   assert.equal(squadKey("ArrowUp", -1, 7), 6);
   assert.equal(squadKey("ArrowDown", -1, 7), 0);
   assert.equal(squadKey("Home", 3, 7), 0);
@@ -78,13 +78,13 @@ test("every signed-in route uses the shared shell", () => {
 test("the shell wires the pop-out, Escape, and focus return", () => {
   const squad = readFileSync(new URL("workspace/app/squad-links.tsx", root), "utf8");
   const shell = readFileSync(new URL("workspace/app/shell.tsx", root), "utf8");
-  assert.match(squad, /aria-expanded=\{open\}/);
-  assert.match(squad, /aria-controls="squad-popout"/);
-  assert.match(squad, /createPortal/);
+  assert.match(squad, /aria-expanded=\{panel\.open\}/);
+  assert.match(squad, /aria-controls=\{panelId\}/);
+  assert.match(squad, /createPortal\(popout, document\.body\)/);
   assert.match(squad, /event\.key !== "Escape"/);
   assert.match(squad, /buttonRef\.current\?\.focus\(\)/);
   assert.match(squad, /data-squad-member/);
-  assert.match(squad, /squadKey\(event\.key/);
+  assert.match(squad, /isArrowKey\(event\.key\)/);
   assert.match(shell, /id="app-sidebar"/);
   assert.match(shell, /aria-controls="app-sidebar"/);
   assert.match(shell, />Menu</);

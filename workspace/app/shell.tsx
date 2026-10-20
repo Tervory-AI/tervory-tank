@@ -14,7 +14,7 @@ import {
   usesOwnShell,
   type NavLink,
 } from "./product-nav";
-import { InAppShell, SquadLinks } from "./squad-links";
+import { InAppShell, SquadFounderProvider, SquadLinks } from "./squad-links";
 
 export type ShellAccess = { founder: boolean; reviewer: boolean };
 
@@ -58,27 +58,33 @@ export function Shell({
     setMenu(false);
   }, [pathname]);
 
-  if (usesOwnShell(pathname)) return <main>{children}</main>;
+  if (usesOwnShell(pathname)) return (
+    <SquadFounderProvider founder={founder}>
+      <main>{children}</main>
+    </SquadFounderProvider>
+  );
 
   return (
-    <InAppShell.Provider value={true}>
-      <div className={menu ? "app-shell product menu-open" : "app-shell product"}>
-        <a className="shell-skip" href="#shell-content">Skip to content</a>
-        <header className="shell-mobile">
-          <img src="/brand/tervory-logo-reversed.png" alt="Tervory" width={218} height={40} />
-          <button type="button" className="shell-menu" aria-expanded={menu} aria-controls="app-sidebar" onClick={() => setMenu(true)}>Menu</button>
-        </header>
-        {menu ? (
-          <button type="button" className="shell-dim" aria-label="Close menu" onClick={() => setMenu(false)} />
-        ) : null}
-        <Suspense fallback={<ShellBar pathname={pathname} search="" hash="" founder={founder} reviewer={reviewer} menu={menu} onClose={() => setMenu(false)} />}>
-          <ShellBarLive founder={founder} reviewer={reviewer} menu={menu} onClose={() => setMenu(false)} />
-        </Suspense>
-        <div id="shell-content" className="shell-main">
-          <main>{children}</main>
+    <SquadFounderProvider founder={founder}>
+      <InAppShell.Provider value={true}>
+        <div className={menu ? "app-shell product menu-open" : "app-shell product"}>
+          <a className="shell-skip" href="#shell-content">Skip to content</a>
+          <header className="shell-mobile">
+            <img src="/brand/tervory-logo-reversed.png" alt="Tervory" width={218} height={40} />
+            <button type="button" className="shell-menu" id="shell-menu" aria-expanded={menu} aria-controls="app-sidebar" onClick={() => setMenu(true)}>Menu</button>
+          </header>
+          {menu ? (
+            <button type="button" className="shell-dim" aria-label="Close menu" onClick={() => setMenu(false)} />
+          ) : null}
+          <Suspense fallback={<ShellBar pathname={pathname} search="" hash="" founder={founder} reviewer={reviewer} menu={menu} onClose={() => setMenu(false)} />}>
+            <ShellBarLive founder={founder} reviewer={reviewer} menu={menu} onClose={() => setMenu(false)} />
+          </Suspense>
+          <div id="shell-content" className="shell-main">
+            <main>{children}</main>
+          </div>
         </div>
-      </div>
-    </InAppShell.Provider>
+      </InAppShell.Provider>
+    </SquadFounderProvider>
   );
 }
 
@@ -141,7 +147,7 @@ function ShellBar({
     <aside id="app-sidebar" className={menu ? "shell-side open" : "shell-side"} aria-label="Sidebar">
       <div className="shell-brand">
         <img src="/brand/tervory-logo-reversed.png" alt="Tervory" width={218} height={40} />
-        <button type="button" className="shell-side-close" onClick={onClose}>Close</button>
+        <button type="button" className="shell-side-close" id="shell-side-close" onClick={onClose}>Close</button>
       </div>
       <SignedIn>
         <div className="shell-account">
@@ -153,8 +159,8 @@ function ShellBar({
         {TOP_LINKS.map((link) => (
           <ShellLink key={link.label} link={link} current={current(link.href)} onClose={onClose} />
         ))}
-        <SquadLinks active founder={founder} />
       </nav>
+      <SquadLinks active founder={founder} />
       {section ? (
         <nav className="shell-nav shell-own" aria-label={section.title}>
           <p className="shell-kicker">{section.title}</p>
