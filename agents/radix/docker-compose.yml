@@ -25,6 +25,7 @@ services:
       - NET_RAW
     environment:
       AGENT_NAME: radix
+      TANK_REGION: ${TANK_REGION:-us-east}
       DATABASE_URL: postgresql://agent_radix:${AGENT_DB_PASSWORD_RADIX}@postgres:5432/${POSTGRES_DB:-tervory}
       TANK_URL: http://tank:8000
       TANK_KEY: ${TANK_KEY_RADIX:-}

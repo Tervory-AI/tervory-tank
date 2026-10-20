@@ -679,3 +679,74 @@ BEGIN
   END IF;
 END
 $$;
+
+-- TRAIN-1. Client examples stay tenant- and region-scoped. Holdouts are stored
+-- but never enter the weekly run or an exported training dataset.
+CREATE TABLE IF NOT EXISTS tank.gold_examples (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    region text NOT NULL CHECK (region IN ('us-east', 'za')),
+    skill_id text NOT NULL,
+    agent text NOT NULL,
+    input jsonb NOT NULL,
+    expected jsonb NOT NULL,
+    tolerance text NOT NULL DEFAULT 'exact',
+    status text NOT NULL DEFAULT 'candidate' CHECK (status IN ('candidate','checked','rejected')),
+    holdout boolean NOT NULL DEFAULT false,
+    source text NOT NULL,
+    source_ref text NOT NULL,
+    input_hash text NOT NULL,
+    checked_by text,
+    checked_at timestamptz,
+    note text NOT NULL DEFAULT '',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (tenant_id, region, skill_id, source, source_ref)
+);
+CREATE INDEX IF NOT EXISTS gold_review_queue ON tank.gold_examples (tenant_id, region, agent, skill_id, status);
+CREATE INDEX IF NOT EXISTS gold_input_group ON tank.gold_examples (tenant_id, region, skill_id, input_hash);
+CREATE TABLE IF NOT EXISTS tank.gold_scores (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    region text NOT NULL CHECK (region IN ('us-east','za')),
+    skill_id text NOT NULL,
+    version text NOT NULL,
+    score numeric(5,4) NOT NULL CHECK (score BETWEEN 0 AND 1),
+    n integer NOT NULL CHECK (n > 0),
+    final_check boolean NOT NULL DEFAULT false,
+    ran_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS gold_score_history ON tank.gold_scores (tenant_id, region, skill_id, final_check, ran_at DESC);
+CREATE TABLE IF NOT EXISTS tank.training_pairs (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    agent text NOT NULL,
+    task_type text NOT NULL,
+    region text NOT NULL CHECK (region IN ('us-east','za')),
+    input jsonb NOT NULL,
+    output jsonb NOT NULL,
+    approved_by text NOT NULL,
+    source text NOT NULL,
+    source_ref text NOT NULL,
+    gold_id uuid REFERENCES tank.gold_examples(id),
+    holdout boolean NOT NULL DEFAULT false,
+    active boolean NOT NULL DEFAULT true,
+    client_matter boolean NOT NULL DEFAULT false,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (tenant_id, region, source, source_ref)
+);
+CREATE INDEX IF NOT EXISTS training_pairs_scope ON tank.training_pairs (tenant_id, region, agent);
+CREATE TABLE IF NOT EXISTS tank.training_exports (
+    region text NOT NULL,
+    day date NOT NULL,
+    agent text NOT NULL,
+    exported_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (region, day, agent)
+);
+
+-- Zenas self-test (Z7). Batch, so it stays behind a client's question.
+-- Scores are stored on the box. A cheaper route takes over only when it matches
+-- on the held-out cases. This row does not change which route a question uses.
+INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_tokens_out, system_prompt) VALUES
+  ('zenas.selftest', 1, 'luna', 'batch', 'region', 400,
+   'You compare a held-out case with the ladder result. Reply with JSON only. Do not add facts the court did not state.')
+ON CONFLICT DO NOTHING;

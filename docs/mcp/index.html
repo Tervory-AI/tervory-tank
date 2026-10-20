@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tervory for Claude</title>
+<style>
+  body { margin: 0; background: #F4F6FB; color: #001840; font-family: Inter, "Segoe UI", sans-serif; line-height: 1.5; }
+  header, main, footer { max-width: 42rem; margin: 0 auto; padding: 1.25rem; }
+  header { display: flex; gap: 1rem; align-items: center; padding-top: 2rem; }
+  img { width: 9rem; height: auto; }
+  h1, h2 { font-family: Jost, "Segoe UI", sans-serif; font-weight: 300; }
+  h1 { font-size: 2.25rem; margin: 0; }
+  a { color: #001840; }
+  code, .meta { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.92em; }
+  table { width: 100%; border-collapse: collapse; background: white; }
+  th, td { text-align: left; padding: 0.6rem 0.7rem; border-bottom: 1px solid #B8BFD0; vertical-align: top; }
+  .band { background: #001840; color: white; }
+  .band a { color: white; }
+</style>
+</head>
+<body>
+<header>
+  <img src="icon.png" alt="Tervory">
+  <h1>Tervory for Claude</h1>
+</header>
+<main>
+  <p>Connect Claude to the Tervory account you already use. Claude can search your catalogue, look up enriched records, send a short list to be enriched, ask a business-law question, write a sourced market brief, and add a product page to your price watchlist.</p>
+  <p>Sign-in uses your Tervory account. There is no API key to copy.</p>
+
+  <h2>Connect</h2>
+  <ol>
+    <li>In Claude, add a custom connector.</li>
+    <li>Use this server address: <code>https://mcp.tervory.com/mcp</code></li>
+    <li>Sign in when Claude asks. Pick the organization whose data you want Claude to use.</li>
+  </ol>
+  <p>Claude on the web, the desktop app, the mobile app, and Cowork return to <code>https://claude.ai/api/mcp/auth_callback</code>. Claude Code returns to a page on your own computer. The sign-in screen names that host before you continue.</p>
+  <p>A person with no organization is asked to use the Tervory app first, so an organization exists to sign in with.</p>
+
+  <h2>Tools</h2>
+  <table>
+    <thead>
+      <tr><th>Tool</th><th>What it does</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>rig_search</code></td>
+        <td>Search a catalogue. Read only. Ask for a product name, brand, or sku. Example: “Search my catalogue for a brass widget.”</td>
+      </tr>
+      <tr>
+        <td><code>base_lookup</code></td>
+        <td>Look up records. Read only. Returns your own enriched business records. You can name words to keep, or a batch id. Example: “Look up records that mention example.com.”</td>
+      </tr>
+      <tr>
+        <td><code>base_enrich</code></td>
+        <td>Enrich a list. This writes. Send up to 100 rows. You get a batch id back. Example: “Enrich this list of ten companies.”</td>
+      </tr>
+      <tr>
+        <td><code>zenas_research</code></td>
+        <td>Research a legal question. Read only. United States or South Africa business law. A scope check runs first. Criminal law is refused. Example: “What does the South African Companies Act say a company is?”</td>
+      </tr>
+      <tr>
+        <td><code>market_lab_brief</code></td>
+        <td>Write a market brief. Read only. One topic, with the source URL and date for each claim that has them. Example: “Write a short brief on brass widget demand.”</td>
+      </tr>
+      <tr>
+        <td><code>tiger_watch</code></td>
+        <td>Watch a price. This writes. Add one public product page to your price watchlist. Example: “Watch https://example.com/widget and tell me if the price moves by 5%.”</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="meta">Every answer includes its sources, the model that ran it, and the cost in USD.</p>
+
+  <h2 id="privacy">Privacy</h2>
+  <p>The full privacy policy is also in <a href="privacy.md">privacy.md</a>. The same text is below.</p>
+  <p>Tervory collects the Clerk user id and the organization id you sign in with, so each call stays inside that organization. Tool arguments you send from Claude, and the results Tank returns, are processed to answer that call. We store short-lived sign-in state (authorization codes for a few minutes, refresh tokens for 30 days) so Claude can stay connected. Enriched rows and price watches are stored as part of that organization’s Tervory account until someone removes them in the app.</p>
+  <p>We use that data to run the tool you asked for, to show cost, and to keep one organization’s rows away from another. We do not sell it.</p>
+  <p>Third parties: Clerk checks who you are. Claude, which you chose to connect, sends the tool call and receives the answer. Tank, inside Tervory, runs the work. A market brief or a legal question may cause Tank to read a public page or a configured model in order to answer.</p>
+  <p>Retention: authorization codes expire in minutes. Refresh tokens expire after 30 days, and reusing an old refresh token signs that connection out. Access tokens expire after one hour. Account records follow the retention of the Tervory app.</p>
+  <p>Contact: <a href="mailto:support@tervory.com">support@tervory.com</a>.</p>
+
+  <h2>Support</h2>
+  <p>Email <a href="mailto:support@tervory.com">support@tervory.com</a>. Include the organization name and what Claude showed you. Do not send access tokens or passwords.</p>
+</main>
+<footer class="band">
+  <p>Tervory. Support: <a href="mailto:support@tervory.com">support@tervory.com</a></p>
+</footer>
+</body>
+</html>

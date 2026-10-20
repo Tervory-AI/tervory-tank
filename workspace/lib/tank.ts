@@ -30,6 +30,23 @@ async function tank<T>(path: string, init: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
+export type RosterModel = { name: string };
+
+/** Names on the roster Tank already loads. No key and no missing-key flag. */
+export async function listRoster(): Promise<RosterModel[]> {
+  const rows = await tank<unknown>("/v1/models", { method: "GET" });
+  if (!Array.isArray(rows)) return [];
+  const models: RosterModel[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const record = row as Record<string, unknown>;
+    const name = typeof record.name === "string" ? record.name.trim() : "";
+    if (!name) continue;
+    models.push({ name });
+  }
+  return models;
+}
+
 export function route(tenantId: string, taskType: string, messages: ChatMessage[], agent = "tier0"): Promise<RouteResult> {
   return tank<RouteResult>("/v1/route", {
     method: "POST",
@@ -69,15 +86,21 @@ export function createTask(
   title: string,
   taskType: string,
   messages: ChatMessage[],
+  agent = "tier0",
 ): Promise<Task> {
   return tank<Task>("/v1/tasks", {
     method: "POST",
-    body: JSON.stringify({ tenant_id: tenantId, created_by: createdBy, title, task_type: taskType, messages }),
+    body: JSON.stringify({ tenant_id: tenantId, created_by: createdBy, title, task_type: taskType, messages, agent }),
   });
 }
 
 export function listTasks(tenantId: string, limit = 50): Promise<Task[]> {
   return tank<Task[]>(`/v1/tasks?tenant_id=${tenantId}&limit=${limit}`, { method: "GET" });
+}
+
+export function getTask(tenantId: string, taskId: string): Promise<Task> {
+  const query = new URLSearchParams({ tenant_id: tenantId });
+  return tank<Task>(`/v1/tasks/${encodeURIComponent(taskId)}?${query}`, { method: "GET" });
 }
 
 // ---- feedback: the outcome column ----
@@ -356,4 +379,259 @@ export function listTigerAlerts(tenantId: string, url?: string): Promise<{ alert
   const q = new URLSearchParams({ tenant_id: tenantId });
   if (url) q.set("url", url);
   return tigerCall<{ alerts: TigerAlert[] }>(`/v1/tiger/alerts?${q}`, { method: "GET" });
+}
+
+// ---- Plugins vaults. Server-side only. The browser never receives a secret value. ----
+
+export const VAULT_OFF_MESSAGE = "This vault is off. Turn it on in Tank.";
+
+export type VaultPlugins = {
+  vault: string;
+  enabled: boolean;
+  message: string | null;
+  secrets: { name: string; purpose: string; mask: string; saved_at: string }[];
+  files: { id: string; name: string; type: string; size: number; rows: number | null; pages: number | null; uploaded_at: string; status: string }[];
+  links: { id: string; url: string; label: string; frequency: string; last_checked: string | null; status: string }[];
+  connections: { id: string; name: string; server_url: string; auth_type: string; status: string; last_used: string | null; has_token: boolean }[];
+};
+
+async function vaultFetch(path: string, userId: string, squad: string, init: RequestInit): Promise<Response> {
+  const headers = new Headers(init.headers);
+  headers.set("x-tank-key", TANK_API_KEY);
+  headers.set("x-tervory-user", userId);
+  headers.set("x-tervory-squad", squad);
+  if (typeof init.body === "string" && !headers.has("content-type")) headers.set("content-type", "application/json");
+  return fetch(`${TANK_URL}${path}`, { ...init, headers, cache: "no-store" });
+}
+
+async function vaultJson<T>(path: string, userId: string, squad: string, init: RequestInit): Promise<T> {
+  const res = await vaultFetch(path, userId, squad, init);
+  const text = await res.text();
+  if (!res.ok) throw new Error(`Tank ${path} ${res.status}: ${text.slice(0, 180)}`);
+  return (text ? JSON.parse(text) : {}) as T;
+}
+
+export function vaultPlugins(vault: string, squad: string, tenantId: string, userId: string): Promise<VaultPlugins> {
+  const q = new URLSearchParams({ tenant_id: tenantId });
+  return vaultJson<VaultPlugins>(`/v1/vaults/${encodeURIComponent(vault)}/plugins?${q}`, userId, squad, { method: "GET" });
+}
+
+export function saveVaultSecret(
+  vault: string,
+  squad: string,
+  tenantId: string,
+  userId: string,
+  name: string,
+  purpose: string,
+  value: string,
+): Promise<{ ok: boolean }> {
+  return vaultJson(`/v1/vaults/${encodeURIComponent(vault)}/secrets`, userId, squad, {
+    method: "POST",
+    body: JSON.stringify({ tenant_id: tenantId, name, purpose, value }),
+  });
+}
+
+export function removeVaultSecret(vault: string, squad: string, tenantId: string, userId: string, name: string): Promise<{ ok: boolean }> {
+  const q = new URLSearchParams({ tenant_id: tenantId, name });
+  return vaultJson(`/v1/vaults/${encodeURIComponent(vault)}/secrets?${q}`, userId, squad, { method: "DELETE" });
+}
+
+/** Server-only. Do not pass the result to a client component. */
+export async function resolveVaultSecret(
+  vault: string,
+  squad: string,
+  tenantId: string,
+  userId: string,
+  name: string,
+): Promise<string | null> {
+  const body = await vaultJson<{ found?: boolean; value?: string }>(
+    `/v1/vaults/${encodeURIComponent(vault)}/secrets/resolve`,
+    userId,
+    squad,
+    { method: "POST", body: JSON.stringify({ tenant_id: tenantId, name }) },
+  );
+  return body.found && typeof body.value === "string" ? body.value : null;
+}
+
+export async function uploadVaultFiles(
+  vault: string,
+  squad: string,
+  tenantId: string,
+  userId: string,
+  files: FormData,
+): Promise<{ ok: boolean }> {
+  const q = new URLSearchParams({ tenant_id: tenantId });
+  const res = await vaultFetch(`/v1/vaults/${encodeURIComponent(vault)}/files?${q}`, userId, squad, {
+    method: "POST",
+    body: files,
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`Tank /files ${res.status}: ${text.slice(0, 180)}`);
+  return { ok: true };
+}
+
+export function removeVaultFile(vault: string, squad: string, tenantId: string, userId: string, fileId: string): Promise<{ ok: boolean }> {
+  const q = new URLSearchParams({ tenant_id: tenantId });
+  return vaultJson(`/v1/vaults/${encodeURIComponent(vault)}/files/${encodeURIComponent(fileId)}?${q}`, userId, squad, {
+    method: "DELETE",
+  });
+}
+
+export function addVaultLink(
+  vault: string,
+  squad: string,
+  tenantId: string,
+  userId: string,
+  url: string,
+  label: string,
+  frequency: string,
+): Promise<{ ok: boolean }> {
+  return vaultJson(`/v1/vaults/${encodeURIComponent(vault)}/links`, userId, squad, {
+    method: "POST",
+    body: JSON.stringify({ tenant_id: tenantId, url, label, frequency }),
+  });
+}
+
+export function removeVaultLink(vault: string, squad: string, tenantId: string, userId: string, linkId: string): Promise<{ ok: boolean }> {
+  const q = new URLSearchParams({ tenant_id: tenantId });
+  return vaultJson(`/v1/vaults/${encodeURIComponent(vault)}/links/${encodeURIComponent(linkId)}?${q}`, userId, squad, {
+    method: "DELETE",
+  });
+}
+
+export function addVaultConnection(
+  vault: string,
+  squad: string,
+  tenantId: string,
+  userId: string,
+  name: string,
+  serverUrl: string,
+  authType: string,
+  token: string,
+): Promise<{ ok: boolean }> {
+  return vaultJson(`/v1/vaults/${encodeURIComponent(vault)}/connections`, userId, squad, {
+    method: "POST",
+    body: JSON.stringify({ tenant_id: tenantId, name, server_url: serverUrl, auth_type: authType, token }),
+  });
+}
+
+export function removeVaultConnection(
+  vault: string,
+  squad: string,
+  tenantId: string,
+  userId: string,
+  connectionId: string,
+): Promise<{ ok: boolean }> {
+  const q = new URLSearchParams({ tenant_id: tenantId });
+  return vaultJson(
+    `/v1/vaults/${encodeURIComponent(vault)}/connections/${encodeURIComponent(connectionId)}?${q}`,
+    userId,
+    squad,
+    { method: "DELETE" },
+  );
+}
+
+// Skills library. library.vault is not skala.vault. Server-side only.
+// A squad may list, link, or transfer. It cannot rewrite the library from here.
+
+export type LibrarySkill = {
+  skill_id: string;
+  version: string;
+  agent: string;
+  description: string;
+  published_at: string | null;
+};
+
+export type LibraryLink = {
+  id: string;
+  squad: string;
+  vault: string;
+  skill_id: string;
+  version: string;
+  created_at: string | null;
+};
+
+export type LibraryView = {
+  vault: string;
+  enabled: boolean;
+  message: string | null;
+  skills: LibrarySkill[];
+  links: LibraryLink[];
+};
+
+export function librarySkills(squad: string, tenantId: string, userId: string): Promise<LibraryView> {
+  const q = new URLSearchParams({ tenant_id: tenantId });
+  return vaultJson<LibraryView>(`/v1/vaults/library.vault/skills?${q}`, userId, squad, { method: "GET" });
+}
+
+export function linkLibrarySkill(
+  squad: string,
+  tenantId: string,
+  userId: string,
+  skillId: string,
+  version: string,
+): Promise<{ id: string; vault: string }> {
+  return vaultJson(
+    `/v1/vaults/library.vault/skills/${encodeURIComponent(skillId)}/${encodeURIComponent(version)}/link`,
+    userId,
+    squad,
+    { method: "POST", body: JSON.stringify({ tenant_id: tenantId }) },
+  );
+}
+
+export function transferLibrarySkill(
+  squad: string,
+  tenantId: string,
+  userId: string,
+  skillId: string,
+  version: string,
+): Promise<{ ok: boolean; vault: string }> {
+  return vaultJson(
+    `/v1/vaults/library.vault/skills/${encodeURIComponent(skillId)}/${encodeURIComponent(version)}/transfer`,
+    userId,
+    squad,
+    { method: "POST", body: JSON.stringify({ tenant_id: tenantId }) },
+  );
+}
+
+// Gold review: identity and tenant come only from the authenticated server route.
+export function goldSummary(identity: { userId: string; tenantId: string; role: string }): Promise<{
+  region: string;
+  skills: Array<{ agent: string; skill_id: string; checked: number; target: number; holdout: number; candidates: number; last_score: number | null; trend: number | null; ran_at: string | null }>;
+  pairs: Record<string, number>;
+}> {
+  return tank("/v1/gold/summary", { method: "GET", headers: {
+    "x-tervory-user": identity.userId, "x-tervory-tenant": identity.tenantId, "x-tervory-role": identity.role,
+  } });
+}
+
+export function goldNext(identity: { userId: string; tenantId: string; role: string }, agent: string, skill: string, after?: string): Promise<{
+  id: string; input: unknown; expected: Record<string, unknown>; source: string;
+} | null> {
+  const query = new URLSearchParams({ agent, skill });
+  if (after) query.set("after", after);
+  return tank(`/v1/gold/next?${query}`, { method: "GET", headers: {
+    "x-tervory-user": identity.userId, "x-tervory-tenant": identity.tenantId, "x-tervory-role": identity.role,
+  } });
+}
+
+export function checkGold(identity: { userId: string; tenantId: string; role: string }, id: string,
+  body: { action: "right" | "wrong" | "skip"; correction?: Record<string, unknown>; note?: string }): Promise<{ ok: boolean }> {
+  return tank(`/v1/gold/${encodeURIComponent(id)}/check`, { method: "POST", body: JSON.stringify(body), headers: {
+    "x-tervory-user": identity.userId, "x-tervory-tenant": identity.tenantId, "x-tervory-role": identity.role,
+  } });
+}
+
+export function confirmTrainingRead(identity: { userId: string; tenantId: string; role: string }, observationId: string): Promise<{ ok: boolean }> {
+  return tank(`/v1/training/tiger/${encodeURIComponent(observationId)}/confirm`, { method: "POST", headers: {
+    "x-tervory-user": identity.userId, "x-tervory-tenant": identity.tenantId, "x-tervory-role": identity.role,
+  } });
+}
+
+export function finalGoldCheck(identity: { userId: string; tenantId: string; role: string }, skill: string, version: string): Promise<{
+  results: Array<{ skill_id: string; version: string; score: number; n: number }>;
+}> {
+  return tank(`/v1/gold/final/${encodeURIComponent(skill)}/${encodeURIComponent(version)}`, { method: "POST", headers: {
+    "x-tervory-user": identity.userId, "x-tervory-tenant": identity.tenantId, "x-tervory-role": identity.role,
+  } });
 }

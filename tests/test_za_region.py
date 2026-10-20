@@ -7,8 +7,10 @@ is refused for every provider that is not running in South Africa.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import re
+import sys
 import uuid
 from pathlib import Path
 
@@ -144,6 +146,13 @@ def test_za_refuses_an_identifier_for_a_non_sa_provider(monkeypatch: pytest.Monk
     assert main.model_call_refusal(text, "luna", box="us-east", tenant_id=TENANT) is None
     phone = "Call +27 82 123 4567 tomorrow."
     assert main.model_call_refusal(phone, "haiku", box="za", tenant_id=TENANT) == main.IDENTIFIER_REFUSAL
+    # The task name alone is not a pool read. A client draft is not either.
+    assert main.model_call_refusal(text, "luna", box="za", tenant_id=TENANT, task_type="zenas.case_facts") == main.IDENTIFIER_REFUSAL
+    assert main.model_call_refusal(text, None, box="za", tenant_id=TENANT, task_type="zenas.case_facts") == main.IDENTIFIER_REFUSAL
+    assert main.model_call_refusal(phone, "luna", box="za", tenant_id=TENANT, task_type="zenas.case_facts") == main.IDENTIFIER_REFUSAL
+    assert main.model_call_refusal(text, "luna", box="za", tenant_id=TENANT, task_type="zenas.draft") == main.IDENTIFIER_REFUSAL
+    assert main.model_call_refusal(text, "luna", box="za", tenant_id=TENANT, task_type="zenas.review") == main.IDENTIFIER_REFUSAL
+    assert SA_ID not in str(main.model_call_refusal(text, "luna", box="za", tenant_id=TENANT, task_type="zenas.draft") or "")
 
 
 def test_sa_hosted_model_may_see_an_identifier_and_the_allow_list_can_narrow_it(
@@ -160,6 +169,38 @@ def test_sa_hosted_model_may_see_an_identifier_and_the_allow_list_can_narrow_it(
     assert main.model_call_refusal("No identifier here.", "luna", box="za", tenant_id=TENANT) is None
     assert main.model_call_refusal("No identifier here.", "haiku", box="za", tenant_id=TENANT) == main.ALLOW_REFUSAL
     assert main.model_call_refusal("No identifier here.", "deepseek/chat", box="za", tenant_id=TENANT) == main.ALLOW_REFUSAL
+    identified = f"ID {SA_ID}"
+    # Without a proven pool read the identifier rule answers first.
+    assert (
+        main.model_call_refusal(identified, "haiku", box="za", tenant_id=TENANT, task_type="zenas.case_facts")
+        == main.IDENTIFIER_REFUSAL
+    )
+    assert (
+        main.model_call_refusal(identified, "luna", box="za", tenant_id=TENANT, task_type="zenas.case_facts")
+        == main.IDENTIFIER_REFUSAL
+    )
+    proven = dict(task_type="zenas.case_facts", caller="zenas", pool_read=True)
+    assert main.model_call_refusal(identified, "luna", box="za", tenant_id=TENANT, **proven) is None
+    assert main.model_call_refusal(identified, "haiku", box="za", tenant_id=TENANT, **proven) == main.ALLOW_REFUSAL
+    assert (
+        main.model_call_refusal(identified, "deepseek/chat", box="za", tenant_id=TENANT, **proven)
+        == main.ALLOW_REFUSAL
+    )
+    assert (
+        main.model_call_refusal(identified, "luna", box="za", tenant_id=TENANT, caller="tiger", pool_read=True, task_type="zenas.case_facts")
+        == main.IDENTIFIER_REFUSAL
+    )
+    assert (
+        main.model_call_refusal(identified, "luna", box="za", tenant_id=TENANT, caller=None, pool_read=True, task_type="zenas.case_facts")
+        == main.IDENTIFIER_REFUSAL
+    )
+    assert (
+        main.model_call_refusal(
+            identified, "luna", box="za", tenant_id=TENANT, caller="zenas", pool_read=True,
+            task_type="zenas.case_facts", skill="zenas.case_facts@1.0.0",
+        )
+        == main.IDENTIFIER_REFUSAL
+    )
 
 
 def test_pure_code_detect_is_not_a_model_refusal() -> None:
@@ -231,6 +272,28 @@ async def test_za_identifier_prompt_never_calls_a_provider(monkeypatch: pytest.M
     assert caught.value.status_code == 403
     assert caught.value.detail == main.IDENTIFIER_REFUSAL
     assert SA_ID not in str(caught.value.detail)
+    upload = main.RouteRequest(
+        tenant_id=uuid.UUID(TENANT),
+        home_region="za",
+        task_type="zenas.draft",
+        messages=[main.Message(role="user", content=f"Revise this clause for ID {SA_ID}.")],
+    )
+    with pytest.raises(HTTPException) as client:
+        await main.run_route(upload)
+    assert client.value.status_code == 403
+    assert client.value.detail == main.IDENTIFIER_REFUSAL
+    public = main.RouteRequest(
+        tenant_id=uuid.UUID(TENANT),
+        home_region="za",
+        agent="zenas",
+        task_type="zenas.case_facts",
+        messages=[main.Message(role="user", content=f"Judgment. The ID {SA_ID} is in the reasons.")],
+    )
+    with pytest.raises(HTTPException) as named:
+        await main.run_route(public)
+    assert named.value.status_code == 403
+    assert named.value.detail == main.IDENTIFIER_REFUSAL
+    assert SA_ID not in str(named.value.detail)
 
 
 @pytest.mark.asyncio
@@ -449,5 +512,373 @@ async def test_evals_pass_for_a_skill_that_calls_a_model(tmp_path, monkeypatch: 
     preview = main.make_ctx(pkg, uuid.uuid4(), preview=True)
     await preview.model([{"role": "user", "content": "hi"}], task_type="tier0.answer")
     assert homes == ["us-east", "us-east"]
+
+
+def _published_judgment() -> str:
+    return (
+        "The Constitutional Court dismissed the appeal on the sale of goods. "
+        f"The published reasons record identity number {SA_ID} as it appears in the record."
+    )
+
+
+def _convert_prompt(judgment: str, citation: str = "2020 ZACC 1") -> str:
+    return main._CONVERT_HEAD + citation + "\n\n" + judgment
+
+
+class _CourtPool:
+    """Tank's own read. A caller does not hand this object in."""
+
+    def __init__(self, rows: list[dict[str, str]]) -> None:
+        self.rows = rows
+        self.fetches: list[tuple[object, ...]] = []
+
+    def acquire(self) -> "_CourtPool":
+        return self
+
+    async def __aenter__(self) -> "_CourtPool":
+        return self
+
+    async def __aexit__(self, *_exc: object) -> bool:
+        return False
+
+    async def fetch(self, sql: str, *args: object) -> list[dict[str, str]]:
+        self.fetches.append((sql, args))
+        text = str(args[0])
+        sources = set(args[1])  # type: ignore[arg-type]
+        return [
+            row for row in self.rows
+            if row["source_id"] in sources and len(row["text"]) >= 40 and text.endswith(row["text"])
+        ]
+
+    async def fetchrow(self, *_args: object, **_kwargs: object) -> dict[str, object]:
+        return {
+            "id": uuid.uuid4(),
+            "model": "luna",
+            "priority": "standard",
+            "rung": 1,
+            "max_tokens_out": 800,
+            "system_prompt": None,
+            "cache_scope": "none",
+        }
+
+    async def execute(self, *_args: object, **_kwargs: object) -> str:
+        return "INSERT 0 1"
+
+
+class _SeenGateway:
+    def __init__(self, *_args: object, **_kwargs: object) -> None:
+        self.sent: list[dict[str, object]] = []
+
+    async def __aenter__(self) -> "_SeenGateway":
+        return self
+
+    async def __aexit__(self, *_exc: object) -> bool:
+        return False
+
+    async def post(self, *_args: object, **kwargs: object) -> _Answer:
+        body = kwargs.get("json")
+        if isinstance(body, dict):
+            self.sent.append(body)
+        return _Answer()
+
+
+def _key_request(path: str) -> object:
+    from starlette.requests import Request
+
+    return Request({
+        "type": "http",
+        "asgi": {"version": "3.0", "spec_version": "2.3"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": path,
+        "raw_path": path.encode(),
+        "query_string": b"",
+        "headers": [],
+        "client": ("127.0.0.1", 1234),
+        "server": ("test", 80),
+    })
+
+
+def test_tank_wrappers_match_the_zenas_pool_read() -> None:
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from agents.zenas.core.convert import _PROMPT_HEAD
+    from agents.zenas.core.release_mask import COURT_SOURCES
+    from agents.zenas.core.service import FACTS_PROMPT_PREFIX
+
+    assert main._COURT_SOURCES == COURT_SOURCES
+    assert main._CONVERT_HEAD == _PROMPT_HEAD
+    assert main._FACTS_PREFIX == FACTS_PROMPT_PREFIX
+
+
+@pytest.mark.asyncio
+async def test_only_the_zenas_key_and_a_real_pool_row_skip_the_identifier_rule(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TANK_REGION", "za")
+    monkeypatch.delenv("ZA_HOSTED_MODELS", raising=False)
+    monkeypatch.delenv("TANK_PROVIDER_ALLOW", raising=False)
+    monkeypatch.setattr(main, "_pool", None)
+    monkeypatch.setattr(main, "_agent_keys_synced", False)
+    monkeypatch.setenv("TANK_KEY_ZENAS", "zenas-room-secret")
+    monkeypatch.setenv("TANK_KEY_TIGER", "tiger-room-secret")
+    route = _key_request("/v1/route")
+    assert await main.require_key(route, main.TANK_API_KEY) is None
+    assert await main.require_key(route, "zenas-room-secret") == "zenas"
+    assert await main.require_key(route, "tiger-room-secret") == "tiger"
+
+    judgment = _published_judgment()
+    court = _CourtPool([{"source_id": "concourt", "text": judgment, "citation": "2020 ZACC 1"}])
+    gate = _SeenGateway()
+    monkeypatch.setattr(main, "pool", lambda: court)
+    monkeypatch.setattr(main, "_redis", None)
+    monkeypatch.setattr(main.httpx, "AsyncClient", lambda *_a, **_k: gate)
+    client = (
+        "Please advise our client. The identity number "
+        f"{SA_ID} is on the instruction."
+    )
+    stored = main.RouteRequest(
+        tenant_id=uuid.UUID(TENANT),
+        home_region="za",
+        agent="tiger",
+        task_type="zenas.case_facts",
+        messages=[main.Message(role="user", content=_convert_prompt(judgment))],
+    )
+    delivered = await main.route(stored, caller="zenas")
+    assert delivered.content == "Value added tax."
+    assert gate.sent
+    assert judgment in str(gate.sent[0]["messages"])
+    assert court.fetches
+    assert "zenas_pool.documents" in str(court.fetches[0][0])
+
+    async def refused(req: main.RouteRequest, caller: str | None) -> None:
+        before = len(gate.sent)
+        with pytest.raises(HTTPException) as caught:
+            await main.route(req, caller=caller)
+        assert caught.value.status_code == 403
+        assert caught.value.detail == main.IDENTIFIER_REFUSAL
+        assert SA_ID not in str(caught.value.detail)
+        assert len(gate.sent) == before
+
+    spoofed = stored.model_copy(update={"agent": "zenas"})
+    await refused(spoofed, None)
+    await refused(stored, "tiger")
+    await refused(
+        main.RouteRequest(
+            tenant_id=uuid.UUID(TENANT),
+            home_region="za",
+            task_type="zenas.case_facts",
+            messages=[main.Message(role="user", content=client)],
+        ),
+        "zenas",
+    )
+    await refused(
+        main.RouteRequest(
+            tenant_id=uuid.UUID(TENANT),
+            home_region="za",
+            task_type="zenas.case_facts",
+            messages=[main.Message(role="user", content=_convert_prompt(judgment) + f"\nAlso note ID {SA_ID}.")],
+        ),
+        "zenas",
+    )
+    await refused(
+        main.RouteRequest(
+            tenant_id=uuid.UUID(TENANT),
+            home_region="za",
+            task_type="zenas.case_facts",
+            messages=[main.Message(role="user", content="Summarise this case.\n\n" + judgment)],
+        ),
+        "zenas",
+    )
+    await refused(
+        main.RouteRequest(
+            tenant_id=uuid.UUID(TENANT),
+            home_region="za",
+            task_type="zenas.case_facts",
+            messages=[main.Message(role="user", content=_convert_prompt(judgment, citation=f"Note ID {SA_ID}"))],
+        ),
+        "zenas",
+    )
+    statute = _CourtPool([{"source_id": "client-upload", "text": judgment}])
+    monkeypatch.setattr(main, "pool", lambda: statute)
+    await refused(stored, "zenas")
+    facts = main.RouteRequest(
+        tenant_id=uuid.UUID(TENANT),
+        home_region="za",
+        task_type="zenas.case_facts",
+        messages=[main.Message(role="user", content=main._FACTS_PREFIX + judgment)],
+    )
+    monkeypatch.setattr(main, "pool", lambda: court)
+    again = await main.route(facts, caller="zenas")
+    assert again.content == "Value added tax."
+
+
+@pytest.mark.asyncio
+async def test_a_failed_pool_read_does_not_skip_the_rule(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture,
+) -> None:
+    monkeypatch.setenv("TANK_REGION", "za")
+    monkeypatch.delenv("ZA_HOSTED_MODELS", raising=False)
+
+    class _Broken:
+        def acquire(self) -> "_Broken":
+            return self
+
+        async def __aenter__(self) -> "_Broken":
+            return self
+
+        async def __aexit__(self, *_exc: object) -> bool:
+            return False
+
+        async def fetch(self, *_args: object, **_kwargs: object) -> list[dict[str, str]]:
+            raise RuntimeError(f"driver said {SA_ID}")
+
+    monkeypatch.setattr(main, "pool", lambda: _Broken())
+    monkeypatch.setattr(main.httpx, "AsyncClient", _Provider)
+    judgment = _published_judgment()
+    req = main.RouteRequest(
+        tenant_id=uuid.UUID(TENANT),
+        home_region="za",
+        task_type="zenas.case_facts",
+        messages=[main.Message(role="user", content=_convert_prompt(judgment))],
+    )
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(HTTPException) as caught:
+            await main.run_route(req, caller="zenas")
+    assert caught.value.detail == main.IDENTIFIER_REFUSAL
+    assert SA_ID not in str(caught.value.detail)
+    assert SA_ID not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_skala_run_never_skips_the_identifier_rule(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("TANK_REGION", "za")
+    monkeypatch.delenv("ZA_HOSTED_MODELS", raising=False)
+    judgment = _published_judgment()
+    folder = tmp_path / "zenas.case_facts" / "1.0.0"
+    folder.mkdir(parents=True)
+    (folder / "run.py").write_text(
+        "async def run(payload, ctx):\n"
+        "    text = await ctx.model(\n"
+        "        [{'role': 'user', 'content': payload['text']}],\n"
+        "        task_type='zenas.case_facts',\n"
+        "    )\n"
+        "    return {'text': text}\n",
+        encoding="utf-8",
+    )
+    pkg = main.skala.SkillPackage(
+        id="zenas.case_facts",
+        version="1.0.0",
+        agent="zenas",
+        rung=1,
+        task_type="zenas.case_facts",
+        description="",
+        input_schema={},
+        output_schema={},
+        eval_threshold=1.0,
+        path=folder,
+        cases=[],
+    )
+    court = _CourtPool([{"source_id": "concourt", "text": judgment, "citation": "2020 ZACC 1"}])
+    gate = _SeenGateway()
+    monkeypatch.setattr(main, "pool", lambda: court)
+    monkeypatch.setattr(main, "_redis", None)
+    monkeypatch.setattr(main, "_http", object())
+    monkeypatch.setattr(main, "get_package", lambda *_a, **_k: pkg)
+    monkeypatch.setattr(main.httpx, "AsyncClient", lambda *_a, **_k: gate)
+
+    async def approved(*_args: object, **_kwargs: object) -> str:
+        return "approved"
+
+    monkeypatch.setattr(main, "skill_state", approved)
+    body = main.SkillRun(
+        tenant_id=uuid.UUID(TENANT),
+        home_region="za",
+        input={"text": _convert_prompt(judgment)},
+        version="1.0.0",
+    )
+    for caller in (None, "zenas"):
+        with pytest.raises(HTTPException) as caught:
+            await main._run_one_skill("zenas.case_facts", body, caller)
+        assert caught.value.status_code == 403
+        assert caught.value.detail == main.IDENTIFIER_REFUSAL
+        assert SA_ID not in str(caught.value.detail)
+    assert gate.sent == []
+
+
+@pytest.mark.asyncio
+async def test_cases_facts_refuses_judgment_text_from_the_body(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TANK_REGION", "za")
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from agents.zenas import app as zapp
+
+    client = f"Our client, identity number {SA_ID}, wants this contract reviewed."
+    court_text = "The court dismissed the appeal on a sale of goods between two companies."
+    used: list[dict[str, str]] = []
+
+    async def extract(*_args: object, **kwargs: object) -> dict[str, bool]:
+        used.append({
+            "judgment": str(kwargs.get("judgment") or ""),
+            "source_id": str(kwargs.get("source_id") or ""),
+        })
+        return {"ok": True}
+
+    async def refuse_body(source_id: str, text: str) -> None:
+        async def row(_pool_doc_id: str) -> dict[str, str]:
+            return {"source_id": source_id, "text": text, "citation": "2020 ZACC 1"}
+
+        monkeypatch.setattr(zapp, "_pool_case_row", row)
+        body = zapp.CaseFactsIn(
+            tenant_id=uuid.UUID(TENANT),
+            home_region="za",
+            jurisdiction="za",
+            pool_doc_id="doc-1",
+            source_id="concourt",
+            judgment=client,
+        )
+        with pytest.raises(HTTPException) as caught:
+            await zapp.post_case_facts(body)
+        assert caught.value.status_code == 403
+        assert caught.value.detail == main.IDENTIFIER_REFUSAL
+        assert SA_ID not in str(caught.value.detail)
+
+    async def ready() -> object:
+        return object()
+
+    zapp.app.state.tank = object()
+    monkeypatch.setattr(zapp, "extract_case_facts", extract)
+    monkeypatch.setattr(zapp, "_ready", ready)
+    monkeypatch.setattr(zapp, "_model", lambda _tenant: object())
+    await refuse_body("concourt", court_text)
+
+    async def missing(_pool_doc_id: str) -> None:
+        return None
+
+    monkeypatch.setattr(zapp, "_pool_case_row", missing)
+    gone = zapp.CaseFactsIn(
+        tenant_id=uuid.UUID(TENANT),
+        home_region="za",
+        jurisdiction="za",
+        pool_doc_id="doc-1",
+        source_id="concourt",
+        judgment=client,
+    )
+    with pytest.raises(HTTPException) as caught:
+        await zapp.post_case_facts(gone)
+    assert caught.value.detail == main.IDENTIFIER_REFUSAL
+    await refuse_body("client-upload", court_text + " " + client)
+    assert used == []
+
+    async def court(_pool_doc_id: str) -> dict[str, str]:
+        return {"source_id": "sca", "text": court_text, "citation": "2020 ZASCA 1"}
+
+    monkeypatch.setattr(zapp, "_pool_case_row", court)
+    loaded = await zapp.post_case_facts(gone.model_copy(update={"judgment": "", "source_id": "concourt"}))
+    assert loaded["ok"] is True
+    assert used == [{"judgment": court_text, "source_id": "sca"}]
 
 

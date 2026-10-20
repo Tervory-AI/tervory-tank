@@ -1,7 +1,8 @@
 """Read a price only from the layout Tiger already learned.
 
 A later page that no longer has that layout answers "can't read". A currency
-amount sitting somewhere else on the page is not used.
+amount sitting somewhere else on the page is not used. Two different amounts
+on the product, with no price the reader can point at, are "can't read".
 """
 
 from __future__ import annotations
@@ -34,6 +35,9 @@ def learn_layout(html: str, extracted: dict[str, Any] | None) -> dict[str, Any]:
         return {"primary": method}
     if not html or not html.strip():
         return {"primary": None}
+    # The reader already refused two amounts. Do not pick one of them.
+    if not price and len(_price_class_amounts(html)) > 1:
+        return {"primary": None}
     found = _dom_marker(html, price)
     if found is None:
         return {"primary": None}
@@ -58,7 +62,7 @@ def read_page(
             return _cant(layout, "missing-price")
         return _read(layout, price, primary)
     if primary == "dom":
-        price = _price_in_dom(html, str(layout.get("dom") or ""))
+        price = _price_in_dom(html, str(layout.get("dom") or ""), _first_price(extracted))
         if not price:
             return _cant(layout, "layout")
         return _read(layout, price, "dom")
@@ -213,6 +217,21 @@ def _dom_marker(html: str, hint: str | None) -> tuple[str, str] | None:
     return selector, chosen["money"]
 
 
+def _price_class_amounts(html: str) -> set[str]:
+    """Distinct amounts in price elements. One amount repeated is still one price."""
+    scan = _Scan()
+    try:
+        scan.feed(html)
+        scan.close()
+    except Exception:  # noqa: BLE001 — broken markup is not two prices
+        return set()
+    found: set[str] = set()
+    for node in scan.nodes:
+        if _price_class(node["classes"]):
+            found.add(node["money"])
+    return found
+
+
 def _price_class(classes: list[str]) -> str | None:
     for name in classes:
         if "price" in name.lower():
@@ -271,7 +290,7 @@ def _split_selector(selector: str) -> tuple[str, str, str, str]:
     return scope_tag, scope_class, target_tag, target_class
 
 
-def _price_in_dom(html: str, selector: str) -> str | None:
+def _price_in_dom(html: str, selector: str, hint: str | None = None) -> str | None:
     if not selector:
         return None
     scope_tag, scope_class, target_tag, target_class = _split_selector(selector)
@@ -316,13 +335,12 @@ def _price_in_dom(html: str, selector: str) -> str | None:
             inside = self.scope_depth is not None and len(self.stack) + 1 >= self.scope_depth
             if (
                 inside
-                and not found
                 and name == target_tag
                 and (not target_class or target_class in node["classes"])
                 and len(node["text"]) <= 180
             ):
                 money = _money_in(node["text"])
-                if money:
+                if money and money not in found:
                     found.append(money)
             if self.scope_depth is not None and len(self.stack) < self.scope_depth:
                 self.scope_depth = None
@@ -333,4 +351,10 @@ def _price_in_dom(html: str, selector: str) -> str | None:
         finder.close()
     except Exception:  # noqa: BLE001 — broken markup is not a price
         return None
-    return found[0] if found else None
+    if len(found) == 1:
+        return found[0]
+    # Two amounts in the learned spot. Use the price the reader pointed at.
+    # Otherwise this is a guess, and the page cannot be read.
+    if hint and hint in found:
+        return hint
+    return None

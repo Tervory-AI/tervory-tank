@@ -23,7 +23,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Loading is not available on this server yet." }, { status: 404 });
     }
     if (!res.ok) return NextResponse.json({ error: "The load did not start." }, { status: 502 });
-    return NextResponse.json({ ok: true, source });
+    const payload = (await res.json().catch(() => null)) as { status?: string } | null;
+    const status = payload?.status === "already running" ? "already running" : "running";
+    return NextResponse.json({ ok: true, status, source });
   } catch (err) {
     const message = err instanceof Error ? err.message : "The load did not start.";
     return NextResponse.json({ error: message }, { status: 502 });

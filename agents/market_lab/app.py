@@ -15,7 +15,6 @@ from core.jobs import (
     perform_resolve,
 )
 from core.ledger import PostgresLedger
-from core.pure import research_prompt
 from engines.ffl.engine import schedules as case_schedules
 
 AGENT = os.environ.get("AGENT_NAME", "market_lab")
@@ -71,24 +70,22 @@ async def resolve(ctx: JobContext) -> dict:
         return await perform_resolve(tenant_id=ctx.tenant_id, ledger=ledger)
 
 
+def _has_source_passages(value: object) -> bool:
+    return isinstance(value, list) and len(value) > 0
+
+
 async def research(ctx: JobContext) -> dict:
     question = str(ctx.input.get("question") or "").strip()
     passages = ctx.input.get("passages")
-    model_text = None
-    if passages is None and question:
-        routed = await ctx.tank.route(
-            ctx.tenant_id,
-            "market.research",
-            [{"role": "user", "content": research_prompt(question)}],
-        )
-        model_text = str(routed.get("content") or "")
+    if not _has_source_passages(passages):
+        return {"answer": "no sources yet", "citations": [], "cost_usd": 0}
     async with _ledger() as ledger:
         answer = await perform_research(
             tenant_id=ctx.tenant_id,
             ledger=ledger,
             question=question,
             passages=passages,
-            model_text=model_text,
+            model_text=None,
             memory=_SafeMemory(ctx.memory),
         )
     return {"answer": answer["answer"], "citations": answer["citations"]}

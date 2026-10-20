@@ -480,7 +480,11 @@ def test_schema_is_additive_and_queries_are_tenant_scoped() -> None:
     assert "drop " not in lowered
     assert "rename " not in lowered
     for statement in schema_statements():
-        assert "IF NOT EXISTS" in statement.upper()
+        upper = statement.upper()
+        if upper.startswith("INSERT"):
+            assert "ON CONFLICT" in upper and "DO NOTHING" in upper
+        else:
+            assert "IF NOT EXISTS" in upper
     for sql in READS:
         assert "tenant_id" in sql
     assert "tenant_id" in MATTERS_FOR_TENANT
@@ -507,7 +511,7 @@ def test_room_files_and_main_compose_add_the_corridor() -> None:
     assert "postgresql://agent_zenas:" in agent
     assert "TANK_KEY: ${TANK_KEY_ZENAS:-}" in agent
     assert "HERMES_URL: http://hermes:8000" in agent
-    assert "mem_limit: 512m" in agent
+    assert "mem_limit: 2g" in agent
     assert "POSTGRES_PASSWORD" not in agent
     assert "POSTGRES_USER" not in agent
     readme = (ROOT / "agents" / "README.md").read_text(encoding="utf-8")

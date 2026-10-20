@@ -10,7 +10,7 @@ export default function ContactPage() {
           type="text"
           autoComplete="name"
           required
-          className="border border-line bg-paper px-3 py-2"
+          className="min-h-12 border border-line bg-paper px-3"
         />
         <label htmlFor="contact-email">Email</label>
         <input
@@ -19,7 +19,7 @@ export default function ContactPage() {
           type="email"
           autoComplete="email"
           required
-          className="border border-line bg-paper px-3 py-2"
+          className="min-h-12 border border-line bg-paper px-3"
         />
         <label htmlFor="contact-message">Message</label>
         <textarea
@@ -27,9 +27,12 @@ export default function ContactPage() {
           name="message"
           required
           rows={5}
-          className="border border-line bg-paper px-3 py-2"
+          className="min-h-12 border border-line bg-paper px-3 py-2"
         />
-        <button type="submit" className="bg-accent px-4 py-2 text-paper">
+        <button
+          type="submit"
+          className="inline-flex min-h-12 items-center bg-accent px-4 text-paper"
+        >
           Send
         </button>
       </form>

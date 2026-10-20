@@ -36,6 +36,10 @@ The tenant is the job's `tenant_id`. Brand colours and fonts become CSS variable
 
 Before it returns, the room runs `npm ci`, `npm run lint`, `npm run build`, and `npm test`. The project is stored at `/data/builds/<tenant>/<slug>/<n>.tar.gz` with a manifest: `files`, `token_set`, and `checks`.
 
+The generated project also carries a GitHub Actions gate. That gate runs ESLint, `tsc`, the unit tests, the production build, Playwright at 390px, 768px, and 1440px (including axe-core), and Lighthouse CI. Performance, accessibility, best practices, and SEO must each score 90 or above. Those browser checks run in GitHub Actions. The room does not launch a browser.
+
+`npm run deploy` reads the HTML that build wrote. It refuses to continue until every saved page has a privacy notice, and a cookie notice when that page loads a script or frame from another site. It does not fetch a page. A web address is not a saved page. The command does not publish the site.
+
 ## Figma reader
 
 Skill `tisan.figma` (job kind `figma`). It reads one page and returns named colour, type, and spacing tokens as CSS custom properties, a Tailwind config that points at those properties, and a component manifest. A value that disagrees with itself is listed under `conflicts` and left out of the tokens. A state a component does not have is listed under `gaps` and is not invented.
@@ -53,12 +57,9 @@ The room's only network is `tervory-gw-tisan`. A live Figma call would need a ro
 
 The recorded page has no spacing variables, no font family, weight, or line height, and the Button component has no hover, active, disabled, or error state. Those are gaps. The reader does not fill them in.
 
-## Later skills
-
-1. The Playwright test runner.
-
 ## What Tisan never does
 
 - Deploy anything to production without a Radix scan result of "no critical findings".
+- Deploy the starter site when a saved page has no privacy notice, or loads a script or frame from another site without a cookie notice.
 - Hold model keys. Every model call goes through Tank.
 - Push to a client's repo without that tenant's approval recorded.
