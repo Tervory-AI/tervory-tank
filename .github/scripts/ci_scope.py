@@ -20,7 +20,7 @@ SAFETY = (
     "test_secrets.py", "test_agent_chassis.py", "test_agent_roles.py",
     "test_c10_rooms.py", "test_tenant_scoping.py", "test_bf2_tank_guards.py",
     "test_rig_isolation.py", "test_*region*.py", "test_*schema*.py",
-    "test_rig_postgres.py",
+    "test_rig_postgres.py", "test_deploy_changed.py", "test_train1.py",
 )
 
 
@@ -38,6 +38,15 @@ def select(paths: list[str]) -> dict:
     if code and not full:
         for pattern in (*SAFETY, *(p for room in sorted(rooms) for p in ROOM_TESTS[room])):
             tests.update(str(p.relative_to(ROOT)) for p in (ROOT / "tests").glob(pattern))
+        # Cross-room tests may have unrelated names. Keep every Python test
+        # that references a changed room, using either paths or dotted imports.
+        references = tuple(ref for room in rooms for ref in (f"agents/{room}", f"agents.{room}"))
+        for directory in (ROOT / "tests", ROOT / "agents"):
+            for pattern in ("test_*.py", "*_test.py"):
+                for path in directory.rglob(pattern):
+                    text = path.read_text(encoding="utf-8")
+                    if any(ref in text for ref in references):
+                        tests.add(str(path.relative_to(ROOT)))
         for room in rooms:
             tests.update(str(p.relative_to(ROOT)) for p in (ROOT / "agents" / room).rglob("test_*.py"))
     return {"run": bool(code), "full": full, "tisan": full or "tisan" in rooms,

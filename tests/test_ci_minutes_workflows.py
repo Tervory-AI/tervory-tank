@@ -214,7 +214,8 @@ def test_room_changes_keep_safety_without_unrelated_room_tests(room):
     assert scope["tisan"] == (room == "tisan")
     for required in ("test_secrets.py", "test_agent_roles.py", "test_c10_rooms.py",
                      "test_tenant_scoping.py", "test_za_region.py", "test_zenas_schema_apply.py",
-                     "test_zenas_pool_schema_postgres.py", "test_radix_business_schema.py"):
+                     "test_zenas_pool_schema_postgres.py", "test_radix_business_schema.py",
+                     "test_deploy_changed.py", "test_train1.py"):
         assert f"tests/{required}" in scope["tests"]
     assert any(room in path for path in scope["tests"])
     if room == "radix":
@@ -279,3 +280,39 @@ def test_workflows_use_scope_and_do_not_hide_failed_detection():
     step = next(step for step in ci["tank"]["steps"] if step.get("name") == "Secret scan and tests")
     assert step["run"] == "python3 .github/scripts/ci_scope.py test"
     assert step["env"]["TEST_TARGETS"] == "${{ needs.changes.outputs.tests }}"
+
+
+@pytest.mark.parametrize("room", ["base", "tiger", "market_lab", "radix", "rig", "tisan", "zenas"])
+def test_every_test_mentioning_room_is_selected(room):
+    selected = set(_scope_module().select([f"agents/{room}/app.py"])["tests"])
+    mentioning = set()
+    for directory in (ROOT / "tests", ROOT / "agents"):
+        for path in directory.rglob("*.py"):
+            if not (path.name.startswith("test_") or path.name.endswith("_test.py")):
+                continue
+            text = path.read_text(encoding="utf-8")
+            if f"agents/{room}" in text or f"agents.{room}" in text:
+                mentioning.add(str(path.relative_to(ROOT)))
+    assert mentioning <= selected, sorted(mentioning - selected)
+
+
+@pytest.mark.parametrize("reference", ["agents/market_lab", "agents.market_lab"])
+@pytest.mark.parametrize("relative", ["tests/nested/test_unrelated.py", "agents/rig/tests/unrelated_test.py"])
+def test_reference_selection_is_recursive_and_independent_of_filename(tmp_path, monkeypatch, reference, relative):
+    module = _scope_module()
+    path = tmp_path / relative
+    path.parent.mkdir(parents=True)
+    path.write_text(f"# Covers {reference}\n", encoding="utf-8")
+    unrelated = tmp_path / "tests/test_unmentioned.py"
+    unrelated.parent.mkdir(parents=True, exist_ok=True)
+    unrelated.write_text("# No room reference\n", encoding="utf-8")
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+    assert module.select(["agents/market_lab/app.py"])["tests"] == [relative]
+
+
+def test_review_reported_cross_room_tests_are_selected():
+    module = _scope_module()
+    for room, path in (("market_lab", "tests/test_candidate_eval_runtime.py"),
+                       ("rig", "tests/test_train1.py"), ("zenas", "tests/test_train1.py"),
+                       ("zenas", "tests/test_deploy_changed.py")):
+        assert path in module.select([f"agents/{room}/app.py"])["tests"]
