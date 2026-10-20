@@ -21,6 +21,7 @@ import {
   type PluginTab,
   type View,
 } from "./copy";
+import { GoldReview } from "./gold-review";
 import { Plugins } from "./plugins";
 import type { PluginPanel } from "./vault-model";
 
@@ -38,7 +39,7 @@ function Foot({ lines }: { lines: string[] }) {
 
 const GROUP_ORDER: Kind[] = ["Build", "Page", "Test"];
 
-export function Tisan({ plugins, accountName }: { plugins: PluginPanel; accountName: string | null }) {
+export function Tisan({ plugins, accountName, canApproveGold = false }: { plugins: PluginPanel; accountName: string | null; canApproveGold?: boolean }) {
   const [view, setView] = useState<View>("overview");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -152,6 +153,7 @@ export function Tisan({ plugins, accountName }: { plugins: PluginPanel; accountN
       </aside>
 
       <div className="body">
+        {view === "overview" && canApproveGold && <GoldReview />}
         {view === "overview" ? (
           <Overview
             startPrimary={action === "start"}

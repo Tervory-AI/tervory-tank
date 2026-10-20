@@ -241,6 +241,13 @@ export function baseRun(
 export function baseEngines(): Promise<string[]> {
   return tank<string[]>("/v1/base/engines", { method: "GET" });
 }
+export function runContextTrial(userId: string): Promise<{
+  records_sent: number; message?: string; comparison_records?: Pick<BaseRecord, "profile" | "passes">[];
+}> {
+  return tank("/v1/base/context-dev/trial", {
+    method: "POST", headers: { "x-tervory-admin": userId },
+  });
+}
 export function baseRecords(tenantId: string, opts: { taskId?: string; batch?: string; limit?: number; offset?: number } = {}): Promise<BaseRecord[]> {
   const q = new URLSearchParams({ tenant_id: tenantId, limit: String(opts.limit ?? 200), offset: String(opts.offset ?? 0) });
   if (opts.taskId) q.set("task_id", opts.taskId);
@@ -655,5 +662,24 @@ export function markBillingEventHandled(eventId: string): Promise<{ handled: boo
   return tank<{ handled: boolean }>("/v1/billing/events/handled", {
     method: "POST",
     body: JSON.stringify({ event_id: eventId }),
+  });
+}
+
+export type TisanGoldPage = {
+  page_id: string; tenant_id: string; figma_file_id: string; figma_frame_id: string;
+  built_page_path: string; frame_hash: string; page_hash: string;
+  frame: Record<string, unknown>; page_structure: Record<string, unknown>; html: string; css: string;
+};
+
+export function tisanGoldPages(tenantId: string, userId: string): Promise<TisanGoldPage[]> {
+  return tank<TisanGoldPage[]>(`/v1/tisan/gold/pages?tenant_id=${encodeURIComponent(tenantId)}`, {
+    method: "GET", headers: { "X-Tervory-Admin": userId },
+  });
+}
+
+export function approveTisanGold(tenantId: string, userId: string, pageId: string, frameHash: string, pageHash: string) {
+  return tank<{ approved: boolean }>("/v1/tisan/gold/approve", {
+    method: "POST", headers: { "X-Tervory-Admin": userId },
+    body: JSON.stringify({ tenant_id: tenantId, page_id: pageId, frame_hash: frameHash, page_hash: pageHash }),
   });
 }

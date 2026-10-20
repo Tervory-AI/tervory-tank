@@ -758,3 +758,13 @@ CREATE TABLE IF NOT EXISTS tank.billing_events (
     received_at timestamptz,
     handled boolean DEFAULT false
 );
+
+-- GRAD-1: machine labels remain candidates until a source passes review.
+ALTER TABLE tank.gold_examples ADD COLUMN IF NOT EXISTS auto_label boolean NOT NULL DEFAULT false;
+ALTER TABLE tank.gold_examples ADD COLUMN IF NOT EXISTS label_source text;
+ALTER TABLE tank.gold_examples ADD COLUMN IF NOT EXISTS public boolean NOT NULL DEFAULT false;
+ALTER TABLE tank.gold_examples ADD COLUMN IF NOT EXISTS intake_day date;
+CREATE INDEX IF NOT EXISTS gold_auto_source ON tank.gold_examples
+    (tenant_id,region,agent,label_source,intake_day) WHERE auto_label;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS vendor        text;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS units         numeric;
