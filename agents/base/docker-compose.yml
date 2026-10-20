@@ -14,6 +14,7 @@ services:
     cpus: 0.5
     environment:
       AGENT_NAME: base
+      TANK_REGION: us-east
       DATABASE_URL: postgresql://agent_base:${AGENT_DB_PASSWORD_BASE}@postgres:5432/${POSTGRES_DB:-tervory}
       TANK_URL: http://tank:8000
       TANK_KEY: ${TANK_KEY_BASE:-}
@@ -21,6 +22,8 @@ services:
       SEARXNG_URL: http://searxng:8080
       HERMES_URL: http://hermes:8000
       DATA_DIR: /data
+      CONTEXT_DEV_API_KEY: ${CONTEXT_DEV_API_KEY:-}
+      CONTEXT_DEV_MAX_CREDITS: ${CONTEXT_DEV_MAX_CREDITS:-500}
     volumes:
       - agent_base_data:/data
     networks:
