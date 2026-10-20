@@ -17,6 +17,25 @@ Failures are settled too. No automatic retry or redirect is followed.
 
 ## Running a trial
 
+The founder can press **Run Context.dev trial** on the Base page. Workspace
+checks the signed-in founder and same-origin request, then calls Tank with the
+Workspace key and founder identity. Tank checks both and replaces them with
+Base's room key. No client-supplied tenant, record selection or answers are forwarded.
+
+Base selects up to 50 untried records from the latest completed platform batch.
+Repeated presses do not reset that batch's credit cap or repeat recorded calls.
+The page refreshes the comparison after the request finishes; interrupted requests
+can be checked with Refresh before trying again.
+
+When #188's local `official-matches.jsonl` and validator are present, the selection
+matches the original ATF licence ID and reuses its freshness, region, active-licence
+and independent website checks. Website truth is the independently matched site;
+phone and premises address come only from the official list. The list name and
+snapshot date are saved with the checked answers. Missing or rejected evidence
+means **no truth yet**: credits count but accuracy does not. No Context.dev output
+or Base profile field supplies its own expected answer. An absent vendor field is
+scored as incorrect where official truth exists, rather than invented.
+
 After deployment, set `CONTEXT_DEV_API_KEY` in Base's environment. Claude can
 submit selected public businesses to Base's internal `POST /context-dev/trial`
 with its room key in `X-Tank-Key`. The body contains `tenant_id`, `run_id` (a
