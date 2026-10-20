@@ -192,3 +192,80 @@ async def test_training_gate_requires_source_approval_and_excludes_holdouts(hold
     await training.pair_from_gold(NoWrites(), {
         'holdout': holdout, 'auto_label': True, 'auto_approved': approved,
     })
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('room,skill,prefix', [
+    ('radix', 'scan.secrets', 'radix:fixture:v1:scan.secrets'),
+    ('tiger', 'price_extract', 'auto:price-gold-109'),
+])
+@pytest.mark.parametrize('explicit', [False, True])
+@pytest.mark.parametrize('wrong', [1, 2])
+async def test_intake_family_spot_checks(database, monkeypatch, room, skill, prefix, explicit, wrong):
+    import secrets
+    from datetime import date
+    import httpx
+    import training
+
+    pool, _ = database
+    actor = gold.Reviewer('family reviewer', gold.PLATFORM_TENANT, True)
+    monkeypatch.setattr(training, 'ROOMS', (room,))
+    monkeypatch.setattr(training, 'skill_owners', lambda: {skill: {room}})
+    monkeypatch.setattr(training, 'is_holdout', lambda *args: False)
+    monkeypatch.setenv('TANK_KEY_' + room.upper(), secrets.token_urlsafe(20))
+
+    def candidate(number, family):
+        row = dict(skill_id=skill, input={'number': number, 'family': family},
+                   expected={'ok': True}, region='us-east', public=True,
+                   holdout=number == 0,
+                   label_source=f'{prefix}:{family}:live-{number:03}')
+        if explicit:
+            row['label_source'] = f'unrelated-{number}:row-{family}'
+            row['label_family'] = f'{prefix}:{family}'
+        return row
+
+    rows = [candidate(number, 'first') for number in range(10)]
+    client = httpx.AsyncClient
+    monkeypatch.setattr(training.httpx, 'AsyncClient', lambda **kwargs: client(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json=rows)), **kwargs))
+    assert (await training.collect_room_gold(date(2026, 10, 20)))['inserted'] == 10
+    rows[:] = [candidate(number, 'second') for number in range(10)]
+    assert (await training.collect_room_gold(date(2026, 10, 20)))['inserted'] == 10
+    async with pool.acquire() as conn:
+        queue = await gold.sample_queue(conn, actor, room, skill)
+        assert len(queue) == 10
+        assert {row['label_family'] for row in queue} == {f'{prefix}:first'}
+        assert len({row['label_source'] for row in queue}) == 10
+    for index, row in enumerate(queue):
+        disagree = index >= 10 - wrong
+        await gold.check(row['id'], gold.Verdict(
+            action='wrong' if disagree else 'right',
+            correction={'fixed': True} if disagree else None), actor)
+    rows[:] = [candidate(10, 'first'), candidate(10, 'second')]
+    assert (await training.collect_room_gold(date(2026, 10, 21)))['inserted'] == 2
+    async with pool.acquire() as conn:
+        first = await conn.fetch(
+            "SELECT * FROM tank.gold_examples WHERE input->>'family'='first' AND auto_label")
+        second = await conn.fetch(
+            "SELECT * FROM tank.gold_examples WHERE input->>'family'='second' AND auto_label")
+        assert sum(row['auto_approved'] for row in first) == (10 if wrong == 1 else 0)
+        assert all(row['status'] == 'candidate' and not row['auto_approved'] for row in second)
+        later = next(row for row in first if gold.obj(row['input'])['number'] == 10)
+        assert later['status'] == ('checked' if wrong == 1 else 'rejected')
+        if wrong == 2:
+            assert later['note'] == 'Source needs code review'
+        assert not await conn.fetchval(
+            """SELECT 1 FROM tank.training_pairs p JOIN tank.gold_examples g ON g.id=p.gold_id
+            WHERE g.input->>'family'='second' OR g.holdout OR NOT g.auto_approved""")
+        assert await conn.fetchval("SELECT count(*) FROM tank.training_pairs") == (
+            sum(row['auto_approved'] and not row['holdout'] for row in first))
+
+
+@pytest.mark.parametrize('source,family,expected', [
+    ('radix:fixture:v1:scan.secrets:planted key', None, 'radix:fixture:v1:scan.secrets'),
+    ('auto:price-gold-109:live-017', None, 'auto:price-gold-109'),
+    ('plain', None, 'plain'),
+    ('different:row', 'explicit:family', 'explicit:family'),
+])
+def test_family_fallback(source, family, expected):
+    assert gold.label_family({'label_source': source, 'label_family': family}) == expected

@@ -770,3 +770,4 @@ ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS vendor        text;
 ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS units         numeric;
 
 ALTER TABLE tank.gold_examples ADD COLUMN IF NOT EXISTS auto_approved boolean NOT NULL DEFAULT false;
+ALTER TABLE tank.gold_examples ADD COLUMN IF NOT EXISTS label_family text;

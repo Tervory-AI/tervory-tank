@@ -29,6 +29,16 @@ def test_region_is_exact():
     assert not training.valid_auto_candidate(example(), 'base', 'za')
 
 
+@pytest.mark.parametrize('family', ['', ' ', 42, [], 'a' * 501])
+def test_invalid_label_family(family):
+    assert not training.valid_auto_candidate(example(label_family=family), 'base', 'us-east')
+
+
+@pytest.mark.parametrize('family', [None, 'auto:price-gold-109'])
+def test_optional_label_family(family):
+    assert training.valid_auto_candidate(example(label_family=family), 'base', 'us-east')
+
+
 @pytest.mark.asyncio
 async def test_missing_endpoint_and_room_auth(monkeypatch):
     key = secrets.token_urlsafe(20)
