@@ -31,7 +31,7 @@ _CORE_COLOURS = ("ink", "paper", "accent", "line")
 _CORE_FONTS = ("heading", "body")
 _STANDARD_PAGES = ("home", "about", "contact", "privacy")
 _IGNORED_PAGES = {"404", "not-found"}
-_SKIP_DIRS = {"node_modules", ".next", "playwright-report", "test-results", "out"}
+_SKIP_DIRS = {"node_modules", ".next", "playwright-report", "test-results", ".lighthouseci", "out"}
 _LABELS = {"home": "Home", "about": "About", "contact": "Contact", "privacy": "Privacy"}
 _CHECKS = (
     ("npm ci", 240),
@@ -271,6 +271,7 @@ def write_project(brief: dict[str, Any], dest: Path) -> None:
             ".next",
             "playwright-report",
             "test-results",
+            ".lighthouseci",
             "out",
             "tsconfig.tsbuildinfo",
         ),

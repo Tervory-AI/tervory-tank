@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { ReviewItem } from "@/app/api/zenas/rules";
 
-export function ReviewDesk({ items, note, reviewer }: { items: ReviewItem[]; note: string; reviewer: string }) {
+export function ReviewDesk({ items, note }: { items: ReviewItem[]; note: string }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
@@ -37,30 +37,30 @@ export function ReviewDesk({ items, note, reviewer }: { items: ReviewItem[]; not
   }
 
   return (
-    <>
-      <p className="meta">Signed in as {reviewer}</p>
+    <section className="zr-card" aria-labelledby="waiting-title">
+      <h2 id="waiting-title">Waiting for review</h2>
       {note && <p className="note">{note}</p>}
       {confirm && <p className="confirm">{confirm}</p>}
       {error && <p className="error">{error}</p>}
-      {items.length === 0 && <p className="note">Nothing is waiting in your jurisdictions.</p>}
+      {items.length === 0 && !note && <p className="note">Nothing is waiting in your jurisdictions.</p>}
       {items.map((item) => (
-        <article className="card" key={item.documentId}>
-          <h2>{item.title}</h2>
+        <article className="zr-item-card" key={item.documentId}>
+          <h3>{item.title}</h3>
           <p className="meta">{item.jurisdiction} · {item.area} · {item.state}</p>
           <div className="split">
             <section>
-              <h2>Draft</h2>
+              <h3>Draft</h3>
               <p className="draft">{item.body}</p>
             </section>
             <section>
-              <h2>Sources</h2>
+              <h3>Sources</h3>
               {item.sources.length === 0 && <p className="note">No sources were attached.</p>}
               {item.sources.map((source) => (
                 <p key={source.citation}>
                   <span className="meta">{source.citation}</span><br />{source.quote}
                 </p>
               ))}
-              <h2>Worked matters</h2>
+              <h3>Worked matters</h3>
               {item.matches.length === 0 && <p className="note">No worked matter was matched.</p>}
               {item.matches.map((match) => (
                 <div key={match.id}>
@@ -79,6 +79,6 @@ export function ReviewDesk({ items, note, reviewer }: { items: ReviewItem[]; not
           </form>
         </article>
       ))}
-    </>
+    </section>
   );
 }

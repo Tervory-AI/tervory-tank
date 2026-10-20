@@ -23,6 +23,7 @@ _CHASSIS = _ROOT / "agents" / "_chassis"
 if _CHASSIS.is_dir() and str(_CHASSIS) not in sys.path:
     sys.path.insert(0, str(_CHASSIS))
 
+from agents.zenas.pool.api import interrupt_abandoned_loads  # noqa: E402
 from agents.zenas.pool.api import register_routes as register_pool_routes  # noqa: E402
 from agents.zenas.pool.catalogue import CATALOGUE  # noqa: E402
 from agents.zenas.pool.region import RegionError, assert_box_region  # noqa: E402
@@ -43,12 +44,15 @@ from agents.zenas.core.seal import key_from_env  # noqa: E402
 from agents.zenas.core.service import (  # noqa: E402
     add_approved_clause,
     add_playbook,
+    answer_question,
     apply_law,
     approve_rule_card,
     build_rule_card,
     check_citations,
     draft_contract,
+    BODY_TEXT_REFUSED,
     extract_case_facts,
+    judgment_from_pool_row,
     ladder_metrics,
     mark_stale,
     match_matters,
@@ -60,6 +64,8 @@ from agents.zenas.core.service import (  # noqa: E402
     review_queue,
     write_memo,
 )
+from agents.zenas.core.convert import begin_convert, conversion_report, convert_cases, convert_running  # noqa: E402
+from agents.zenas.core.selftest import list_scores, run_selftest  # noqa: E402
 from agents.zenas.core.store import PgStore, register_home  # noqa: E402
 
 AGENT = os.environ.get("AGENT_NAME", "zenas")
@@ -246,6 +252,29 @@ async def _pool_store():
 
 # Feeds switchboard: pool status and "Load now" per source (Tank proxies /v1/zenas/pool/*).
 register_pool_routes(app, _pool_store, _box_region)
+
+_inner_lifespan = app.router.lifespan_context
+
+
+@asynccontextmanager
+async def _room_lifespan(application):
+    """After the chassis pool is up, a load still marked running was cut off."""
+    async with _inner_lifespan(application):
+        raw = os.environ.get("TANK_REGION", "").strip().lower()
+        try:
+            assert_box_region(raw or None)
+        except RegionError:
+            yield
+            return
+        try:
+            async with _pool_store() as store:
+                await interrupt_abandoned_loads(store)
+        except Exception as exc:
+            log.warning("could not mark interrupted loads: %s", type(exc).__name__)
+        yield
+
+
+app.router.lifespan_context = _room_lifespan
 
 
 @app.post("/consents", status_code=201)
@@ -544,8 +573,34 @@ async def post_stale(body: StaleIn) -> dict[str, Any]:
     return result
 
 
+_POOL_CASE_SQL = """
+SELECT source_id, text, citation
+FROM zenas_pool.documents
+WHERE document_id = $1
+  AND kind = 'case'
+  AND effective_to IS NULL
+  AND status IS DISTINCT FROM 'superseded'
+ORDER BY version_id DESC
+LIMIT 1
+""".strip()
+
+
+async def _pool_case_row(pool_doc_id: str) -> dict[str, Any] | None:
+    """The pool's own row. The request body is not consulted."""
+    async with app.state.pool.acquire() as conn:
+        row = await conn.fetchrow(_POOL_CASE_SQL, pool_doc_id)
+    if row is None:
+        return None
+    return {"source_id": str(row["source_id"] or ""), "text": str(row["text"] or ""), "citation": str(row["citation"] or "")}
+
+
 @app.post("/cases/facts")
 async def post_case_facts(body: CaseFactsIn) -> dict[str, Any]:
+    loaded = judgment_from_pool_row(body.judgment, body.source_id, await _pool_case_row(body.pool_doc_id))
+    if not loaded.get("ok"):
+        if loaded.get("reason") == BODY_TEXT_REFUSED:
+            raise HTTPException(status_code=403, detail=BODY_TEXT_REFUSED)
+        _fail(loaded)
     result = await extract_case_facts(
         await _ready(),
         _model(str(body.tenant_id)),
@@ -555,9 +610,9 @@ async def post_case_facts(body: CaseFactsIn) -> dict[str, Any]:
         jurisdiction=body.jurisdiction,
         pool_doc_id=body.pool_doc_id,
         pool_version_id=body.pool_version_id,
-        citation=body.citation,
-        source_id=body.source_id,
-        judgment=body.judgment,
+        citation=str(loaded.get("citation") or ""),
+        source_id=str(loaded.get("source_id") or ""),
+        judgment=str(loaded.get("judgment") or ""),
         rule_card_ids=body.rule_card_ids,
         as_at=body.as_at,
         provider=body.provider,
@@ -792,6 +847,7 @@ class ContractReviewIn(BaseModel):
     playbook_id: UUID
     text: str
     provider: str = "luna"
+    matter_id: UUID | None = None
 
 
 @app.post("/contract-reviews", status_code=200)
@@ -807,6 +863,7 @@ async def post_contract_review(body: ContractReviewIn) -> dict[str, Any]:
         playbook_id=str(body.playbook_id),
         text=body.text,
         provider=body.provider,
+        matter_id=str(body.matter_id) if body.matter_id else None,
     )
     _fail(result)
     return result
@@ -824,6 +881,127 @@ async def get_review(tenant_id: UUID, home_region: str, jurisdiction: str = "") 
     )
     _fail(result)
     return result
+
+
+class AnswerIn(BaseModel):
+    tenant_id: UUID
+    home_region: str
+    jurisdiction: str
+    question: str
+    passages: list[dict[str, Any]] = Field(default_factory=list)
+    features: dict[str, Any] = Field(default_factory=dict)
+    matter_id: UUID | None = None
+    provider: str = "luna"
+
+
+@app.post("/answers", status_code=200)
+async def post_answer(body: AnswerIn) -> dict[str, Any]:
+    store = _store()
+    await store.apply_schema()
+    result = await answer_question(
+        store,
+        await _ready(),
+        _model(str(body.tenant_id)),
+        tenant_id=str(body.tenant_id),
+        home_region=body.home_region,
+        box_region=_box_region(),
+        jurisdiction=body.jurisdiction,
+        question=body.question,
+        passages=body.passages,
+        features=body.features,
+        matter_id=str(body.matter_id) if body.matter_id else None,
+        provider=body.provider,
+        tank=app.state.tank,
+    )
+    if result.get("reason") == "could not verify":
+        return result
+    _fail(result)
+    return result
+
+
+class ReviewSwitchIn(BaseModel):
+    home_region: str
+    review: str
+
+
+@app.get("/review-switch")
+async def get_review_switch(home_region: str) -> dict[str, Any]:
+    ladder = await _ready()
+    from agents.zenas.core.review_switch import review_required
+
+    box = _box_region()
+    if home_region != box:
+        raise HTTPException(status_code=403, detail="wrong region")
+    on = await review_required(ladder, region=box)
+    return {"ok": True, "region": box, "review": "on" if on else "off"}
+
+
+@app.post("/review-switch")
+async def post_review_switch(body: ReviewSwitchIn) -> dict[str, Any]:
+    ladder = await _ready()
+    box = _box_region()
+    if body.home_region != box:
+        raise HTTPException(status_code=403, detail="wrong region")
+    if body.review not in ("on", "off"):
+        raise HTTPException(status_code=422, detail="review is on or off")
+    await ladder.set_review(region=box, review=body.review)
+    return {"ok": True, "region": box, "review": body.review}
+
+
+class ConvertIn(BaseModel):
+    home_region: str
+
+
+@app.get("/cases/convert")
+async def get_cases_convert(home_region: str) -> dict[str, Any]:
+    """Counts for this region: decided cases loaded, converted, held out, failed."""
+    box = _box_region()
+    if home_region != box:
+        raise HTTPException(status_code=403, detail="wrong region")
+    ladder = await _ready()
+    async with _pool_store() as pool:
+        report = await conversion_report(pool, ladder, region=box)
+    report["running"] = convert_running(box)
+    return report
+
+
+@app.post("/cases/convert")
+async def post_cases_convert(body: ConvertIn) -> dict[str, Any]:
+    """Start this region's conversion and return at once. The other region's cases are not read."""
+    box = _box_region()
+    if body.home_region != box:
+        raise HTTPException(status_code=403, detail="wrong region")
+
+    async def runner() -> None:
+        ladder = await _ready()
+        async with _pool_store() as pool:
+            await convert_cases(pool, ladder, _model(HEARTBEAT_TENANT), region=box)
+
+    started = await begin_convert(box, runner)
+    ladder = await _ready()
+    async with _pool_store() as pool:
+        report = await conversion_report(pool, ladder, region=box)
+    report["running"] = bool(started["running"])
+    report["status"] = started["status"]
+    return report
+
+
+@app.get("/selftest")
+async def get_selftest(home_region: str) -> dict[str, Any]:
+    ladder = await _ready()
+    box = _box_region()
+    if home_region != box:
+        raise HTTPException(status_code=403, detail="wrong region")
+    return await list_scores(ladder, region=box)
+
+
+@app.post("/selftest")
+async def post_selftest(home_region: str) -> dict[str, Any]:
+    ladder = await _ready()
+    box = _box_region()
+    if home_region != box:
+        raise HTTPException(status_code=403, detail="wrong region")
+    return await run_selftest(ladder, region=box)
 
 
 @app.get("/ladder/metrics")

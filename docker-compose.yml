@@ -3,8 +3,9 @@
 # by name (http://tank:8000, postgres:5432). Agent boxes are not in this file.
 # Each box is its own Coolify resource (agents/<name>/docker-compose.yml) and
 # reaches Tank and Postgres only through an external network, tervory-gw-<agent>,
-# created once on the server. Nothing else joins that network. Only the Workspace
-# gets a public domain; Tank and the stores are never exposed.
+# created once on the server. Nothing else joins that network. Coolify attaches
+# app.tervory.com to workspace and tervory.com to site. Tank and the stores
+# are never exposed.
 
 services:
   postgres:
@@ -177,6 +178,9 @@ services:
       LITELLM_URL: http://litellm:4000
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       TANK_API_KEY: ${TANK_API_KEY}
+      HF_TOKEN: ${HF_TOKEN:-}
+      HF_ORG: ${HF_ORG:-}
+      TRAINING_JOB_KEY: ${TRAINING_JOB_KEY:-}
       TERVORY_ADMIN_USER_IDS: ${TERVORY_ADMIN_USER_IDS:-}
       TANK_KEY_TEMPLATE: ${TANK_KEY_TEMPLATE:-}
       TANK_KEY_TIGER: ${TANK_KEY_TIGER:-}
@@ -186,6 +190,7 @@ services:
       TANK_KEY_ZENAS: ${TANK_KEY_ZENAS:-}
       TANK_KEY_BASE: ${TANK_KEY_BASE:-}
       TANK_KEY_RIG: ${TANK_KEY_RIG:-}
+      TANK_KEY_WORKERS: ${TANK_KEY_WORKERS:-}
       TANK_REGION: ${TANK_REGION:-us-east}
       BASE_AGENT_URL: http://agent-base:8000
       SEARXNG_URL: http://searxng:8080
@@ -253,6 +258,8 @@ services:
       TANK_URL_ZA: ${TANK_URL_ZA:-}
       TANK_API_KEY_ZA: ${TANK_API_KEY_ZA:-}
       TERVORY_ADMIN_USER_IDS: ${TERVORY_ADMIN_USER_IDS:-}
+      # New production org id = old org id its data was filed under (not secrets). See workspace/lib/tenant.ts.
+      TERVORY_TENANT_ALIASES: ${TERVORY_TENANT_ALIASES:-}
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
     depends_on:
@@ -267,11 +274,61 @@ services:
       retries: 10
       start_period: 40s
 
+  # Public one-page site. No secrets, no Tank, no Clerk, no marketing tool.
+  # A release address is appended to /data/release-signups.jsonl on site_signups.
+  # Coolify still has to attach https://tervory.com to this service on port 3000.
+  # app.tervory.com stays on workspace. /internal is on this same service and is noindex.
+  site:
+    build: ./site
+    restart: unless-stopped
+    volumes:
+      - site_signups:/data
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  # Public Claude connector. Coolify attaches https://mcp.tervory.com to port 8000.
+  # Main network only, so it can reach Tank and Redis and no agent corridor.
+  mcp:
+    build: ./mcp
+    restart: unless-stopped
+    environment:
+      TANK_URL: http://tank:8000
+      TANK_API_KEY: ${TANK_API_KEY}
+      REDIS_URL: redis://redis:6379/1
+      MCP_PUBLIC_URL: ${MCP_PUBLIC_URL:-https://mcp.tervory.com}
+      MCP_TOKEN_SIGNING_KEY: ${MCP_TOKEN_SIGNING_KEY:-}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+      CLERK_FRONTEND_API: ${CLERK_FRONTEND_API:-}
+      CLERK_OAUTH_CLIENT_ID: ${CLERK_OAUTH_CLIENT_ID:-}
+      CLERK_OAUTH_CLIENT_SECRET: ${CLERK_OAUTH_CLIENT_SECRET:-}
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:-}
+      TERVORY_TENANT_ALIASES: ${TERVORY_TENANT_ALIASES:-}
+    depends_on:
+      - tank
+      - redis
+    networks:
+      - default
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
 volumes:
   pgdata:
   redisdata:
   qdrantdata:
   tiger_data:
+  site_signups:
 
 # Created once on the server before this stack is deployed:
 #   docker network create tervory-gw-template

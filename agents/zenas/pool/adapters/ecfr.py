@@ -2,6 +2,13 @@
 
 The checked-in wave stays on ``fetch``. ``fetch_bulk`` walks the launch parts:
 all of title 19, 15 CFR 730–774, 22 CFR 120–130, and 31 CFR 500–599.
+
+The versioner answers 404 for a date after a title's ``up_to_date_as_of`` and
+for ``current`` on the full-text endpoint. ``fetch_bulk`` therefore reads
+``/api/versioner/v1/titles.json`` first and asks each title for its own
+``latest_issue_date``. ``ECFR_DATE`` pins a date; one later than the title's
+latest issue is clamped to it. A part that still answers 404 is skipped and
+counted, and the walk goes on.
 """
 
 from __future__ import annotations
@@ -9,11 +16,13 @@ from __future__ import annotations
 import json
 import os
 import re
+import urllib.error
 from datetime import date
 from xml.etree import ElementTree as ET
 
 from agents.zenas.pool.builddoc import build_document
 from agents.zenas.pool.htmlparse import ecfr_sections
+from agents.zenas.pool.http import USER_AGENT
 from agents.zenas.pool.model import LegalDocument, Section, SourceSpec
 
 # Checked-in wave. The ranges in the plan (EAR 730–774, ITAR 120–130, OFAC 500s,
@@ -33,6 +42,9 @@ _BODIES = {
 }
 
 # None means every part the structure endpoint lists for that title.
+# A numeric range is still limited to parts the structure endpoint lists.
+# The versioner returns 404 for a number that is not listed (reserved gaps
+# such as 15 CFR 731 and 31 CFR 502). Those gaps are not requested.
 ECFR_TARGETS: tuple[tuple[str, range | None], ...] = (
     ("19", None),
     ("15", range(730, 775)),
@@ -48,16 +60,53 @@ def ecfr_url(on: str, title: str, part: str, section: str) -> str:
     )
 
 
+ECFR_API = "https://www.ecfr.gov/api/versioner/v1"
+ECFR_TITLES_URL = f"{ECFR_API}/titles.json"
+
+
 def ecfr_structure_url(on: str, title: str) -> str:
-    return f"https://www.ecfr.gov/api/versioner/v1/structure/{on}/title-{title}.json"
+    return f"{ECFR_API}/structure/{on}/title-{title}.json"
 
 
 def ecfr_full_url(on: str, title: str, part: str) -> str:
-    return f"https://www.ecfr.gov/api/versioner/v1/full/{on}/title-{title}.xml?part={part}"
+    return f"{ECFR_API}/full/{on}/title-{title}.xml?part={part}"
+
+
+_FALLBACK_DATE = "2024-07-01"
 
 
 def _ecfr_date() -> str:
-    return os.environ.get("ECFR_DATE", "2024-07-01").strip() or "2024-07-01"
+    """ECFR_DATE as set, or "current" (each title's latest issue)."""
+    return os.environ.get("ECFR_DATE", "").strip() or "current"
+
+
+def title_dates(payload: dict) -> dict[str, tuple[str, str]]:
+    """{title: (latest_issue_date, up_to_date_as_of)} from titles.json."""
+    found: dict[str, tuple[str, str]] = {}
+    for item in payload.get("titles") or []:
+        if not isinstance(item, dict) or item.get("reserved"):
+            continue
+        number = str(item.get("number") or "")
+        latest = str(item.get("latest_issue_date") or "")
+        upto = str(item.get("up_to_date_as_of") or latest)
+        if number and latest:
+            found[number] = (latest, upto)
+    return found
+
+
+def date_for_title(title: str, pinned: str, dates: dict[str, tuple[str, str]]) -> str:
+    """The versioner date to ask for. Never later than the title's latest issue."""
+    latest, upto = dates.get(title, ("", ""))
+    if pinned and pinned != "current":
+        if latest and pinned > upto:
+            return latest
+        return pinned
+    return latest or _FALLBACK_DATE
+
+
+def _headers(accept: str) -> dict[str, str]:
+    """Accept matches the endpoint. Gzip is required by the versioner XML."""
+    return {"Accept": accept, "Accept-Encoding": "gzip", "User-Agent": USER_AGENT}
 
 
 def _part_numbers(payload: dict) -> list[str]:
@@ -75,6 +124,29 @@ def _part_numbers(payload: dict) -> list[str]:
     return found
 
 
+def _part_in_range(identifier: str, parts: range | None) -> bool:
+    """True when a structure identifier sits inside the launch range.
+
+    Identifiers are part numbers ("730") or reserved spans ("102-199").
+    None keeps every part the structure endpoint listed.
+    """
+    if parts is None:
+        return True
+    piece = identifier.strip()
+    if "-" in piece:
+        left, right = piece.split("-", 1)
+        try:
+            start, end = int(left), int(right)
+        except ValueError:
+            return False
+        return start <= parts.stop - 1 and end >= parts.start
+    try:
+        number = int(piece)
+    except ValueError:
+        return False
+    return number in parts
+
+
 def display_citation(raw: str) -> str:
     match = re.search(r"(\d+)\s+CFR\s+([0-9]+\.[0-9]+)", raw, re.I)
     if not match:
@@ -85,36 +157,59 @@ def display_citation(raw: str) -> str:
 class EcfrAdapter:
     source_id = "ecfr"
 
+    def __init__(self) -> None:
+        self.missing = 0
+
+    def load_note(self) -> dict:
+        return {"skips": {"not-found": self.missing}} if self.missing else {}
+
     async def fetch(self, http_get) -> list[bytes]:
         blobs = []
         for on, title, part, section in ECFR_WAVE:
             url = ecfr_url(on, title, part, section)
-            blobs.append(
-                await http_get(url, {"Accept": "text/html", "User-Agent": "TervoryZenasPool/0.1"})
-            )
+            blobs.append(await http_get(url, _headers("text/html")))
         return blobs
 
     async def fetch_bulk(self, http_get, *, resume: str = "") -> tuple[list[bytes], str]:
-        on = _ecfr_date()
-        headers = {"Accept": "application/xml", "User-Agent": "TervoryZenasPool/0.1"}
+        self.missing = 0
+        pinned = _ecfr_date()
+        try:
+            raw = await http_get(ECFR_TITLES_URL, _headers("application/json"))
+            dates = title_dates(json.loads(raw.decode("utf-8")))
+        except (urllib.error.HTTPError, ValueError, UnicodeDecodeError):
+            dates = {}
+        headers = _headers("application/xml")
         blobs: list[bytes] = []
         seen_resume = resume == ""
         for title, parts in ECFR_TARGETS:
-            if parts is None:
+            on = date_for_title(title, pinned, dates)
+            try:
                 structure = await http_get(
                     ecfr_structure_url(on, title),
-                    {"Accept": "application/json", "User-Agent": "TervoryZenasPool/0.1"},
+                    _headers("application/json"),
                 )
-                numbers = _part_numbers(json.loads(structure.decode("utf-8")))
-            else:
-                numbers = [str(part) for part in parts]
+            except urllib.error.HTTPError as exc:
+                if exc.code != 404:
+                    raise
+                self.missing += 1
+                continue
+            numbers = [
+                number
+                for number in _part_numbers(json.loads(structure.decode("utf-8")))
+                if _part_in_range(number, parts)
+            ]
             for part in numbers:
                 marker = f"{title}:{part}"
                 if not seen_resume:
                     if marker == resume:
                         seen_resume = True
                     continue
-                blobs.append(await http_get(ecfr_full_url(on, title, part), headers))
+                try:
+                    blobs.append(await http_get(ecfr_full_url(on, title, part), headers))
+                except urllib.error.HTTPError as exc:
+                    if exc.code != 404:
+                        raise
+                    self.missing += 1
         return blobs, ""
 
     def parse(self, blob: bytes, source: SourceSpec) -> list[LegalDocument]:
@@ -170,6 +265,11 @@ def _parse_ecfr_xml(blob: bytes, source: SourceSpec) -> list[LegalDocument]:
                 title_no = str(current.attrib["N"])
                 break
             current = parents.get(current)
+        if not title_no:
+            meta = element.attrib.get("hierarchy_metadata") or ""
+            found = re.search(r"(\d+)\s+CFR", meta) or re.search(r"title-(\d+)", meta)
+            if found:
+                title_no = found.group(1)
         if not title_no:
             continue
         heading = ""
