@@ -36,9 +36,16 @@ def test_billing_screen_stays_in_the_workspace() -> None:
     assert "@/lib/tank" not in page
     assert "@/lib/tank" not in actions
     assert "tank/main.py" not in billing
+    webhook = (BILLING / "webhook.ts").read_text(encoding="utf-8")
+    route = (ROOT / "workspace" / "app" / "api" / "billing" / "webhook" / "route.ts").read_text(encoding="utf-8")
+    middleware = (ROOT / "workspace" / "middleware.ts").read_text(encoding="utf-8")
     assert re.search(r"\$\d", screen) is None
     assert "NEXT_PUBLIC_STRIPE" not in example
     assert "sk_live_" not in example
-    for name in ("STRIPE_SECRET_KEY", "STRIPE_PLAN_PRICE_IDS", "BILLING_PUBLIC_ORIGIN"):
+    assert "sk_live_" not in webhook
+    assert "constructEvent" in webhook
+    assert "STRIPE_WEBHOOK_SECRET" in route
+    assert "/api/billing/webhook" in middleware
+    for name in ("STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_PLAN_PRICE_IDS", "BILLING_PUBLIC_ORIGIN"):
         line = next(item for item in example.splitlines() if item.startswith(f"{name}="))
         assert line == f"{name}="
