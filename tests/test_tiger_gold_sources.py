@@ -11,7 +11,9 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "agents/tiger"))
 sys.path.insert(0, str(ROOT / "agents/_chassis"))
-import gold_sources as gold  # noqa: E402
+_spec = importlib.util.spec_from_file_location('tiger_gold_sources', ROOT / 'agents/tiger/gold_sources.py')
+gold = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(gold)
 
 
 def test_corpus_and_candidates():
@@ -50,6 +52,7 @@ def test_independent_agreement(html, want):
 
 @pytest.mark.asyncio
 async def test_room_auth_and_limit(monkeypatch):
+    monkeypatch.setitem(sys.modules, "gold_sources", gold)
     spec = importlib.util.spec_from_file_location('tiger_gold_app', ROOT / 'agents/tiger/app.py')
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
