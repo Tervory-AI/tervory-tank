@@ -21,6 +21,7 @@ services:
       SEARXNG_URL: http://searxng:8080
       HERMES_URL: http://hermes:8000
       DATA_DIR: /data
+      TANK_REGION: us-east
     volumes:
       - agent_base_data:/data
     networks:

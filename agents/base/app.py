@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 import logging
 import os
 import uuid
 from typing import Any
 
-from fastapi import HTTPException
+from fastapi import Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from chassis.app import create_app
 from chassis.jobs import JobContext
+from gold_sources import read_candidates
 from pipeline import order_states, state_of
 from room import (
     SQL_BATCHES_BY_TENANT,
@@ -67,6 +69,22 @@ app = create_app(
         }
     ],
 )
+
+
+@app.get("/gold/candidates")
+async def gold_candidates(
+    limit: int = Query(default=200, ge=1, le=200),
+    x_tank_key: str | None = Header(default=None),
+) -> list[dict[str, Any]]:
+    expected = os.environ.get("TANK_KEY", "")
+    if not expected or not x_tank_key or not hmac.compare_digest(x_tank_key.encode(), expected.encode()):
+        raise HTTPException(status_code=401, detail="room key required")
+    try:
+        return await asyncio.to_thread(
+            read_candidates, limit=limit, region=os.environ.get("TANK_REGION", "us-east"),
+        )
+    except (OSError, ValueError):
+        raise HTTPException(status_code=503, detail="gold evidence unavailable") from None
 
 
 def _skills() -> SkillClient:
