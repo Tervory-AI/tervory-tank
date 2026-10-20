@@ -12,15 +12,23 @@ const compiled = ts.transpileModule(source, {
   compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS },
 }).outputText;
 const component = { exports: {} };
-new Function("require", "module", "exports", compiled)(workspaceRequire, component, component.exports);
+const reportSource = ts.transpileModule(fs.readFileSync(path.join(root, "workspace/app/base/context-report.ts"), "utf8"), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS },
+}).outputText;
+const reportModule = { exports: {} };
+new Function("require", "module", "exports", reportSource)(workspaceRequire, reportModule, reportModule.exports);
+const previewRequire = (name) => name === "next/navigation" ? { useRouter: () => ({ refresh() {} }) }
+  : name === "./context-report" ? reportModule.exports : workspaceRequire(name);
+new Function("require", "module", "exports", compiled)(previewRequire, component, component.exports);
 const report = {
-  records: 20, creditsPerRecord: 10, unknownCharges: 0, creditCapReached: true,
+  records: 20, creditsUsed: 200, noTruth: 10, creditsPerRecord: 10, unknownCharges: 0, creditCapReached: true,
   fields: [
     { field: "website", checked: 10, baseCorrect: 9, contextCorrect: 8 },
-    { field: "name", checked: 10, baseCorrect: 10, contextCorrect: 9 },
+    { field: "phone", checked: 10, baseCorrect: 10, contextCorrect: 0 },
+    { field: "address", checked: 10, baseCorrect: 10, contextCorrect: 0 },
   ],
 };
-const markup = renderToStaticMarkup(React.createElement(component.exports.ContextComparison, { report }));
+const markup = renderToStaticMarkup(React.createElement(component.exports.ContextComparison, { report, canRunTrial: true }));
 const css = fs.readFileSync(path.join(root, "workspace/app/base/base.css"), "utf8");
 (async () => {
   const browser = await chromium.launch({ headless: true });

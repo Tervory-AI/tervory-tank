@@ -61,6 +61,7 @@ export function BaseView({
   refresh,
   search,
   ask,
+  canRunTrial = false,
 }: {
   model: PageModel;
   plugins: PluginPanel;
@@ -68,6 +69,7 @@ export function BaseView({
   refresh: () => Promise<void>;
   search: SearchAction;
   ask: AskAction;
+  canRunTrial?: boolean;
 }) {
   const [active, setActive] = useState<string>("overview");
   const [menu, setMenu] = useState(false);
@@ -299,7 +301,7 @@ export function BaseView({
             )}
           </section>
 
-          <ContextComparison report={model.contextTrial} />
+          <ContextComparison report={model.contextTrial} canRunTrial={canRunTrial} />
 
           <section id="skills" className="bcp-section">
             <h2>Skills</h2>

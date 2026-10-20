@@ -18,6 +18,7 @@ from chassis.jobs import JobContext
 from pipeline import order_states, state_of
 from sources.context_dev import lookup_body
 from sources.trial import run_trial
+from sources.trial_selection import latest_trial
 from sources.vendor_ledger import PLATFORM_TENANT, flush_pending
 from room import (
     SQL_BATCHES_BY_TENANT,
@@ -94,8 +95,8 @@ class ContextTrialRecord(BaseModel):
 class ContextTrial(BaseModel):
     model_config = {"extra": "forbid"}
     tenant_id: uuid.UUID
-    run_id: uuid.UUID
-    records: list[ContextTrialRecord] = Field(min_length=1, max_length=50)
+    run_id: uuid.UUID | None = None
+    records: list[ContextTrialRecord] | None = Field(default=None, min_length=1, max_length=50)
 
 
 @app.post("/context-dev/trial")
@@ -105,6 +106,33 @@ async def context_trial(body: ContextTrial, x_tank_key: str = Header(default="")
         raise HTTPException(status_code=401, detail="Base room key required")
     if body.tenant_id != uuid.UUID(PLATFORM_TENANT):
         raise HTTPException(status_code=403, detail="company trials require the platform tenant")
+    if body.run_id is None and body.records is None:
+        run_id, records = await latest_trial(app.state.pool)
+        if not records:
+            return {"results": [], "records_sent": 0, "message": "No untried public records in the latest completed batch."}
+        try:
+            result = await run_trial(app.state.pool, app.state.http, PLATFORM_TENANT, run_id, records)
+            selected = {record["record_id"]: record for record in records}
+            result["comparison_records"] = [
+                {
+                    "profile": selected[row["record_id"]].get("base_profile", {}),
+                    "passes": {
+                        "context_dev": row,
+                        "context_dev_checked": {
+                            "checked": bool(selected[row["record_id"]]["checked_answers"]),
+                            "expected": selected[row["record_id"]]["checked_answers"],
+                        },
+                    },
+                }
+                for row in result["results"]
+            ]
+            return result
+        except ValueError:
+            raise HTTPException(status_code=409, detail="completed batch unavailable or trial already running") from None
+        except Exception:
+            raise HTTPException(status_code=503, detail="trial paused; refresh results before trying again") from None
+    if body.run_id is None or body.records is None:
+        raise HTTPException(status_code=422, detail="run and records must be supplied together")
     records = [record.model_dump(mode="json") for record in body.records]
     for record in records:
         try:
@@ -113,7 +141,7 @@ async def context_trial(body: ContextTrial, x_tank_key: str = Header(default="")
             raise HTTPException(status_code=422, detail="a public business identity is required") from None
         checked = record["checked_answers"]
         if checked is not None and (
-            set(checked) - {"name", "website", "description", "socials"} or len(json.dumps(checked)) > 10000
+            set(checked) - {"name", "website", "description", "socials", "phone", "address"} or len(json.dumps(checked)) > 10000
         ):
             raise HTTPException(status_code=422, detail="checked answers must contain only business comparison fields")
     try:
