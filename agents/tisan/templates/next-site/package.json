@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "lhci": "lhci autorun"
+    "lhci": "lhci autorun",
+    "test:visual": "node scripts/require-frames.cjs && playwright test e2e/visual.spec.ts --project=desktop"
   },
   "dependencies": {
     "next": "15.5.28",
