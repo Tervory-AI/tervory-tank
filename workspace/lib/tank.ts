@@ -635,3 +635,25 @@ export function finalGoldCheck(identity: { userId: string; tenantId: string; rol
     "x-tervory-user": identity.userId, "x-tervory-tenant": identity.tenantId, "x-tervory-role": identity.role,
   } });
 }
+
+// Stripe event ids. The Workspace key is the only caller. A repeat claim is first: false.
+export function claimBillingEvent(eventId: string, type: string): Promise<{ first: boolean }> {
+  return tank<{ first: boolean }>("/v1/billing/events/claim", {
+    method: "POST",
+    body: JSON.stringify({ event_id: eventId, type }),
+  });
+}
+
+export function releaseBillingEvent(eventId: string): Promise<{ released: boolean }> {
+  return tank<{ released: boolean }>("/v1/billing/events/release", {
+    method: "POST",
+    body: JSON.stringify({ event_id: eventId }),
+  });
+}
+
+export function markBillingEventHandled(eventId: string): Promise<{ handled: boolean }> {
+  return tank<{ handled: boolean }>("/v1/billing/events/handled", {
+    method: "POST",
+    body: JSON.stringify({ event_id: eventId }),
+  });
+}

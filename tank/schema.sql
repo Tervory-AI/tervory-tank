@@ -750,3 +750,11 @@ INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_toke
   ('zenas.selftest', 1, 'luna', 'batch', 'region', 400,
    'You compare a held-out case with the ladder result. Reply with JSON only. Do not add facts the court did not state.')
 ON CONFLICT DO NOTHING;
+
+-- Workspace billing webhook. One row per Stripe event id.
+CREATE TABLE IF NOT EXISTS tank.billing_events (
+    event_id text PRIMARY KEY,
+    type text,
+    received_at timestamptz,
+    handled boolean DEFAULT false
+);
