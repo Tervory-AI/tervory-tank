@@ -65,13 +65,11 @@ WHERE version_id = $1 AND jurisdiction = $2 AND kind = 'case'
 """.strip()
 
 _PROMPT_HEAD = (
-    "Read this judgment as published. Return facts_pointer and quote_pointer objects "
-    "using {\"paragraphs\":[1,2]} or {\"first\":\"first eight words\",\"last\":\"last eight words\"}. "
-    "Select facts totalling at least 200 characters. Code will extract the passages. "
-    "Name the question, the elements, "
+    "Read this judgment as published. Copy the facts in the court's own words, "
+    "as a continuous passage from the judgment. Name the question, the elements, "
     "and the holding. Cite only this case. Every quote must appear in the judgment "
     "word for word. Reply with JSON only:\n"
-    '{"facts_pointer":{},"question":"","elements":[{"element_id":"","finding":"met|not_met|unclear","quote_pointer":{}}],'
+    '{"facts":"","question":"","elements":[{"element_id":"","finding":"met|not_met|unclear","quote":""}],'
     '"holding":"","citations":[{"citation":"","quote":""}]}\n\n'
     "Citation: "
 )
@@ -777,7 +775,6 @@ async def convert_cases(
         if not text.strip() or not case["citation"].strip():
             await _remember_failure(ladder, region=box, pool_doc_id=case["document_id"], reason="cite check failed")
             continue
-        text = judgment_text(text)
         prompt = _PROMPT_HEAD + case["citation"] + "\n\n" + text
         try:
             called = await _ask_model(model, [{"role": "user", "content": prompt}])
@@ -801,6 +798,7 @@ async def convert_cases(
             )
             continue
         try:
+            text = judgment_text(text)
             parsed = parse_worked(content, text)
         except PointerError:
             await _remember_failure(

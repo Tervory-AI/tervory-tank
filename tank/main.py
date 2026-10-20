@@ -852,7 +852,7 @@ async def run_route(
     messages = [m.model_dump() for m in req.messages]
     if policy["system_prompt"]:
         messages = [{"role": "system", "content": policy["system_prompt"]}, *messages]
-    if req.task_type == "zenas.case_facts" and any("facts_pointer" in str(message.get("content", "")) for message in messages):
+    if req.task_type == "zenas.case_facts" and any(str(message.get("content", "")).startswith(_CONVERT_HEAD) for message in messages):
         messages.insert(0, {"role": "system", "content": (
             "For this judgment conversion use facts_pointer and element quote_pointer objects instead of copying text. "
             "Each pointer is {\"paragraphs\":[1,2]} or {\"first\":\"first eight words\",\"last\":\"last eight words\"}. "
