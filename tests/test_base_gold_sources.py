@@ -44,7 +44,7 @@ def test_four_public_candidates_and_deduplication():
         "base.find_site", "base.verify", "base.normalize", "base.resolve",
     ]
     for row in rows:
-        assert set(row) == {"skill_id", "input", "expected", "label_source", "region", "public"} | (
+        assert set(row) == {"skill_id", "input", "expected", "label_source", "label_family", "region", "public"} | (
             {"needs_network"} if row["skill_id"] == "base.find_site" else set()
         )
         assert row["public"] is True and row["region"] == "us-east"

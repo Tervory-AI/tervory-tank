@@ -172,11 +172,13 @@ def _examples(
             "verdict": "matched", "match": registry, "score": 100.0,
         }),
     ]
+    family = "atf-ffl" if snapshot["source_id"] == "atf-active" else snapshot["source_id"]
     return [
         {
             "skill_id": skill, "input": value, "expected": expected,
             "label_source": f"{source['label']} · {official['source_url']} · {official['observed_on']}",
             "region": region, "public": True,
+            "label_family": f"{family}:{official['observed_on'][:7]}",
             **({"needs_network": True} if skill == "base.find_site" else {}),
         }
         for skill, value, expected in cases
@@ -223,8 +225,11 @@ def _negative(
                 },
             },
             "expected": {"checks": {"phone_matches_site": False}},
+            "synthetic": True,
+            "label_family": positive["label_family"].replace(":", "-synthetic:", 1),
             "label_source": (
-                positive["label_source"] + f" · mismatch against published licence {target['id']}"
+                f" · synthetic pairing: site of published licence {target['id']}"
+                + f" · {positive['label_source']}"
                 + f" · {catalogue[other['source_id']]['label']} · {target['source_url']} · {target['observed_on']}"
             ),
         }

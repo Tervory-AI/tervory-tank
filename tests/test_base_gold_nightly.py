@@ -257,3 +257,38 @@ async def test_nightly_handler_refuses_non_platform_tenant(monkeypatch):
     with pytest.raises(ValueError, match="platform tenant"):
         await module.gold_nightly(SimpleNamespace(tenant_id=str(uuid.uuid4())))
     builder.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("host", ["facebook.com", "yelp.com", "m.facebook.com", "www.yelp.com", "gunbroker.com", "armslist.com", "atf.gov"])
+async def test_directory_social_and_engine_blocked_hosts_never_join(host):
+    record = observed()
+    record["observation"]["website"] = f"https://{host}/business"
+    record["observation"]["source_url"] = f"https://{host}/business/contact"
+    assert await joined([listing()], [record]) == []
+
+
+def test_gold_exclusions_match_find_site_and_ffl_profile():
+    import ast
+    from base_gold.ffl.atf_gold import BLOCKED_HOSTS
+    tree = ast.parse((ROOT / "tank/skills/base.find_site/1.7.0/run.py").read_text())
+    neutral = next(ast.literal_eval(node.value) for node in tree.body if isinstance(node, ast.Assign)
+                   and any(isinstance(target, ast.Name) and target.id == "NEUTRAL_SKIP_HOSTS" for target in node.targets))
+    assert set(build.NEUTRAL_SKIP_HOSTS) == set(neutral)
+    profile = json.loads((ROOT / "tank/skills/ffl.profile/1.1.0/data/site.json").read_text())
+    assert set(BLOCKED_HOSTS) == set(profile["blocked_hosts"])
+
+
+@pytest.mark.asyncio
+async def test_synthetic_pairing_is_explicit_and_has_separate_monthly_family():
+    labels = candidates(await joined(), region="us-east", today=TODAY)
+    positives = [row for row in labels if not row.get("synthetic")]
+    negatives = [row for row in labels if row.get("synthetic")]
+    assert positives and len(negatives) == 2
+    assert {row["label_family"] for row in positives} == {"atf-ffl:2026-10"}
+    for row in negatives:
+        assert row["synthetic"] is True
+        assert row["label_source"].startswith(" · synthetic pairing: site of published licence ")
+        assert "ATF Federal Firearms Licensees" in row["label_source"] and "2026-10-01" in row["label_source"]
+        assert row["label_family"] == "atf-ffl-synthetic:2026-10"
+        assert row["expected"]["checks"]["phone_matches_site"] is False

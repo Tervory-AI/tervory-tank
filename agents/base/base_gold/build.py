@@ -13,7 +13,14 @@ from pathlib import Path
 from typing import Any
 
 from base_gold.gold_sources import PLATFORM_TENANT, _host, _phone, _text
-from base_gold.ffl.atf_gold import expires, fetch_list, licence_id
+from base_gold.ffl.atf_gold import BLOCKED_HOSTS, expires, fetch_list, licence_id
+
+# Mirrors base.find_site 1.7.0; a regression checks parity without importing skill code.
+NEUTRAL_SKIP_HOSTS = ('facebook.com', 'instagram.com', 'yelp.com', 'yellowpages.com', 'bbb.org', 'linkedin.com',
+ 'mapquest.com', 'google.com', 'youtube.com', 'twitter.com', 'x.com', 'manta.com', 'bizapedia.com',
+ 'opencorporates.com', 'dnb.com', 'zoominfo.com', 'apollo.io', 'wikipedia.org', 'wikimedia.org',
+ 'reddit.com', 'amazon.com', 'ebay.com', 'tripadvisor.com', 'justia.com', 'buzzfile.com',
+ 'chamberofcommerce.com', 'nextdoor.com', 'angi.com')
 
 ADDRESS = ("address", "city", "state", "zip")
 
@@ -37,6 +44,10 @@ async def join_list(rows, observations, call, *, source_url: str, snapshot: date
             source = official_rows[identity]
             expiry = expires(source["lic_xprdte"].upper(), snapshot)
             if expiry is None or expiry < today:
+                continue
+            host = _host(observed["website"])
+            if any(host == blocked or host.endswith("." + blocked)
+                   for blocked in (*NEUTRAL_SKIP_HOSTS, *BLOCKED_HOSTS)):
                 continue
             if (
                 observed.get("blocked") is not False or observed.get("status") != 200

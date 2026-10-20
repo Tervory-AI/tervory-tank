@@ -11,6 +11,9 @@ from typing import Any
 from urllib.parse import urljoin, urlsplit
 from urllib.robotparser import RobotFileParser
 
+# Mirrors the FFL profile host exclusions; checked against its versioned data in tests.
+BLOCKED_HOSTS = ("gunbroker.com", "armslist.com", "atf.gov")
+
 LISTING = "https://www.atf.gov/firearms/listing-federal-firearms-licensees/complete"
 USER_AGENT = "Tervory-Base-Gold"
 MAX_BYTES = 40_000_000
