@@ -39,6 +39,7 @@ import os
 import time
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
@@ -557,7 +558,8 @@ async def require_key(request: Request, x_tank_key: str = Header(default="")) ->
         raise HTTPException(status_code=401, detail="missing or invalid X-Tank-Key")
     path = request.url.path
     skill_run = path.startswith("/v1/skala/") and path.endswith("/run") and path.count("/") == 4
-    if path not in {"/health", "/v1/route"} and not skill_run:
+    vendor_write = request.method == "POST" and path == "/v1/ledger/vendor"
+    if path not in {"/health", "/v1/route"} and not skill_run and not vendor_write:
         raise HTTPException(status_code=403, detail="This agent key cannot call that.")
     return matched
 
@@ -2032,6 +2034,57 @@ def make_ctx(pkg: skala.SkillPackage, tenant_id: uuid.UUID, task_id: uuid.UUID |
 
 # Evals and previews run under the platform tenant so their model spend never lands on a client.
 PLATFORM_TENANT = uuid.UUID("00000000-0000-0000-0000-000000000001")
+
+
+class VendorCall(BaseModel):
+    model_config = {"extra": "forbid"}
+    id: uuid.UUID = Field(default_factory=uuid.uuid4)
+    tenant_id: uuid.UUID = PLATFORM_TENANT
+    agent: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
+    task_type: str = Field(pattern=r"^[a-z][a-z0-9_.-]{0,119}$")
+    vendor: str = Field(pattern=r"^[a-z][a-z0-9_.-]{0,79}$")
+    units: Decimal | None = Field(ge=0, max_digits=18, decimal_places=6)
+    cost_usd: Decimal = Field(default=Decimal("0"), ge=0, max_digits=12, decimal_places=6)
+    outcome: Literal["delivered", "failed", "unverified"]
+    region: Literal["us-east", "za"]
+
+
+@app.post("/v1/ledger/vendor")
+async def vendor_ledger(body: VendorCall, agent: str | None = Depends(require_key)) -> dict[str, Any]:
+    if agent is None or agent == HOMES_PRINCIPAL or agent != body.agent:
+        raise HTTPException(status_code=403, detail="an agent may record only its own vendor calls")
+    if body.tenant_id != PLATFORM_TENANT:
+        raise HTTPException(status_code=403, detail="vendor calls belong to the platform tenant")
+    if body.region != box_region():
+        raise HTTPException(status_code=403, detail="vendor call region must match this Tank")
+    if body.units is not None and body.cost_usd != 0:
+        raise HTTPException(status_code=422, detail="credit calls must have zero dollar cost")
+    if body.units is None and body.cost_usd == 0 and body.outcome != "unverified":
+        raise HTTPException(status_code=422, detail="an unknown charge must be unverified")
+    async with pool().acquire() as conn:
+        inserted = await conn.fetchval(
+            """
+            INSERT INTO tank.ledger
+                (id, tenant_id, region, agent, task_type, model, vendor, units, cost_usd, outcome, rung)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,1)
+            ON CONFLICT (id) DO NOTHING RETURNING id
+            """,
+            body.id, PLATFORM_TENANT, body.region, agent, body.task_type,
+            f"vendor:{body.vendor}", body.vendor, body.units, body.cost_usd, body.outcome,
+        )
+        if inserted is None:
+            same = await conn.fetchval(
+                """
+                SELECT 1 FROM tank.ledger WHERE id=$1 AND tenant_id=$2 AND region=$3
+                  AND agent=$4 AND task_type=$5 AND vendor=$6
+                  AND units IS NOT DISTINCT FROM $7::numeric AND cost_usd=$8 AND outcome=$9
+                """,
+                body.id, PLATFORM_TENANT, body.region, agent, body.task_type,
+                body.vendor, body.units, body.cost_usd, body.outcome,
+            )
+            if same != 1:
+                raise HTTPException(status_code=409, detail="vendor call id already used")
+    return {"ledger_id": str(body.id), "recorded": True}
 
 
 @app.get("/v1/skala", dependencies=[Depends(require_key)])

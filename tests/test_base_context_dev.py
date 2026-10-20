@@ -2,8 +2,6 @@
 
 import asyncio
 import importlib.util
-import sys
-from contextlib import asynccontextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -102,27 +100,10 @@ def test_reservation_failure_means_no_network(monkeypatch):
     http.post.assert_not_called()
 
 
-def test_candidate_storage_scopes_and_preserves_serving_profile():
-    sys.path.insert(0, str(ROOT / "agents/base"))
-    from sources.trial import store_trial_candidate
+def test_documented_example_is_parsed_without_inventing_credit_metadata():
+    import json
 
-    @asynccontextmanager
-    async def transaction():
-        yield
-
-    client = AsyncMock()
-    client.tenant_id, client.run_id = TENANT, RUN
-    client.lookup.return_value = {"status": "candidate", "fields": {"name": "Example"}, "credits": 10}
-    conn = AsyncMock()
-    conn.transaction = transaction
-    conn.fetchrow.return_value = {"passes": {}}
-    asyncio.run(store_trial_candidate(conn, client, RUN, {"name": "Example", "email": "excluded"}))
-    client.lookup.assert_awaited_once_with(name="Example")
-    sql, *params = conn.execute.call_args.args
-    assert "tenant_id=$1 AND task_id=$2 AND id=$3" in sql
-    assert "profile=" not in sql
-    assert str(params[0]) == TENANT
-    conn.fetchrow.return_value = None
-    with pytest.raises(ValueError):
-        asyncio.run(store_trial_candidate(conn, client, RUN, {"name": "Example"}))
-    assert client.lookup.await_count == 1
+    body = json.loads((ROOT / "tests/fixtures/context-dev/brand-documented.json").read_text())
+    assert adapter.candidate_fields(body)["website"] == "https://stripe.com"
+    assert adapter.candidate_fields(body)["name"] == "Stripe"
+    assert adapter.charged_credits(httpx.Response(200), body) is None

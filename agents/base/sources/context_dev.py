@@ -23,6 +23,10 @@ class Ledger(Protocol):
     async def settle(self, reservation: str, event: dict[str, Any]) -> None: ...
 
 
+class CreditLimit(Exception):
+    pass
+
+
 def public_domain(value: str) -> str:
     parsed = urlsplit(value if "://" in value else f"https://{value}")
     host = (parsed.hostname or "").lower().removeprefix("www.")
@@ -102,7 +106,7 @@ class ContextDev:
         self.stopped = False
         self.lock = asyncio.Lock()
 
-    async def lookup(self, *, name: str = "", domain: str = "", url: str = "") -> dict[str, Any]:
+    async def lookup(self, *, name: str = "", domain: str = "", url: str = "", record_id: str | None = None) -> dict[str, Any]:
         payload = lookup_body(name=name, domain=domain, url=url)
         if self.ledger is None:
             return {"status": "ledger_unavailable", "fields": {}}
@@ -116,8 +120,12 @@ class ContextDev:
                 "tenant_id": self.tenant_id, "run_id": self.run_id,
                 "call_id": str(uuid.uuid4()), "agent": "base",
                 "task_type": "base.context_dev", "reserved_credits": BRAND_CREDITS,
+                "record_id": record_id,
             }
-            reservation = await self.ledger.reserve(event, self.max_credits)
+            try:
+                reservation = await self.ledger.reserve(event, self.max_credits)
+            except CreditLimit:
+                return {"status": "credit_limit", "fields": {}}
             self.reserved += BRAND_CREDITS
             result: dict[str, Any] = {"status": "unknown", "fields": {}, "credits": None}
             try:

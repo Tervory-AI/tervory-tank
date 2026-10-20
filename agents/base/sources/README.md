@@ -15,23 +15,44 @@ Actual reported credits are kept separately; an unreported charge stays unknown,
 holds its reservation and stops the trial. Credits are never treated as dollars.
 Failures are settled too. No automatic retry or redirect is followed.
 
-## Integration required before enabling
+## Running a trial
 
-Tank has no external-credit ledger API. Implementing it requires a separate
-authorized change in `tank/` (an authenticated reservation/settlement API and
-additive storage for credit units). The `Ledger` contract must atomically reserve
-against `(tenant_id, run_id)` in Tank, enforce the supplied limit across processes
-and restarts, persist pending attempts before network calls, and settle by
-reservation id idempotently. Failed or unknown attempts retain their reservation.
-Never replace this contract with an in-memory logger in production.
+After deployment, set `CONTEXT_DEV_API_KEY` in Base's environment. Claude can
+submit selected public businesses to Base's internal `POST /context-dev/trial`
+with its room key in `X-Tank-Key`. The body contains `tenant_id`, `run_id` (a
+completed Base batch UUID), and `records`, an array of up to 50 entries:
 
-The adapter refuses all live calls without that ledger. It is deliberately not
-wired into the batch worker yet. `trial.store_trial_candidate` locks and scopes
-the selected record, keeps an existing candidate, and writes only the candidate
-slot. After that API is available, instantiate one
-adapter per persisted batch/run, call it only for explicitly selected public
-business records, and store its result in `passes.context_dev`, alongside Base's
-profile, never merged into it. The Base page reads this slot for comparisons.
+```json
+{
+  "record_id": "the selected completed record UUID",
+  "public": true,
+  "domain": "stripe.com",
+  "checked_answers": {"website": "https://stripe.com"}
+}
+```
+
+Each entry requires `public: true`; supply `domain`, `url`, or `name`.
+Checked answers are optional and independently checked, never provider output.
+Neither environment setting starts calls automatically.
+
+## Accounting and recovery
+
+Base durably reserves 10 credits in its own `context_dev_calls` table before
+each provider request. A batch lock and persisted reservations enforce the cap
+across processes and restarts. Failed attempts retain their reservation.
+
+Every attempted lookup is delivered through Tank's `POST /v1/ledger/vendor`,
+with agent `base`, task type `base.context_dev`, vendor `context.dev`, actual
+reported credit units and zero dollars. Missing charges remain NULL with an
+unverified outcome. Tank scopes these events to PLATFORM_TENANT. The Base key can
+write only for Base; the Workspace key cannot use this route. Stable call IDs
+make delivery retries append-only and idempotent.
+
+Base's durable outbox retries ledger delivery on its heartbeat or the next trial.
+A crash without a stored response becomes an unknown-charge event, not another
+paid request. Candidates are saved in `passes.context_dev` after Tank acknowledges
+the ledger entry, alongside Base's unchanged profile. The Base page reads this
+slot for comparisons across its latest 200 displayed records.
 Checked answers belong in `passes.context_dev_checked` as
 `{"checked": true, "expected": {"website": "...", "name": "..."}}`, written by a
 trusted review process, never copied from provider output or raw upload fields.
@@ -41,8 +62,8 @@ Neither setting enables a trial by itself.
 
 ## Fixtures
 
-Tests use explicitly synthetic protocol samples and HTTP mocks. No provider
-credential is available in this build environment, so there are **no captured
-real responses**. Capture sanitized business-only responses after ledger support
-is deployed, retaining credit headers and capture provenance. Do not describe
-the synthetic samples as evidence of provider accuracy.
+`tests/fixtures/context-dev/brand-documented.json` is a labelled documented
+example, not a capture or accuracy evidence. Other protocol samples are synthetic.
+CI uses no live vendor calls. There are **no captured real responses** yet.
+After the key is set, Claude captures sanitized public-business responses,
+retaining credit headers and provenance.

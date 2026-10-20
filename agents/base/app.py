@@ -3,18 +3,22 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 import logging
 import os
 import uuid
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import HTTPException
+from fastapi import Header, HTTPException
 from pydantic import BaseModel, Field
 
 from chassis.app import create_app
 from chassis.jobs import JobContext
 from pipeline import order_states, state_of
+from sources.context_dev import lookup_body
+from sources.trial import run_trial
+from sources.vendor_ledger import flush_pending
 from room import (
     SQL_BATCHES_BY_TENANT,
     SQL_RECORDS_BY_TENANT,
@@ -41,6 +45,10 @@ _worker_on = False
 async def ping(ctx: JobContext) -> dict:
     result: dict = {"pong": True, "agent": ctx.agent}
     if ctx.input.get("heartbeat"):
+        try:
+            await flush_pending(app.state.pool, app.state.http)
+        except Exception:
+            log.warning("vendor ledger delivery deferred")
         try:
             saved = await ctx.memory.remember(
                 ctx.tenant_id,
@@ -71,6 +79,47 @@ app = create_app(
 
 def _skills() -> SkillClient:
     return SkillClient(app.state.http, TANK_URL, os.environ.get("TANK_KEY", ""))
+
+
+class ContextTrialRecord(BaseModel):
+    model_config = {"extra": "forbid"}
+    record_id: uuid.UUID
+    public: Literal[True]
+    name: str = Field(default="", max_length=30)
+    domain: str = Field(default="", max_length=253)
+    url: str = Field(default="", max_length=2048)
+    checked_answers: dict[str, Any] | None = None
+
+
+class ContextTrial(BaseModel):
+    model_config = {"extra": "forbid"}
+    tenant_id: uuid.UUID
+    run_id: uuid.UUID
+    records: list[ContextTrialRecord] = Field(min_length=1, max_length=50)
+
+
+@app.post("/context-dev/trial")
+async def context_trial(body: ContextTrial, x_tank_key: str = Header(default="")) -> dict[str, Any]:
+    key = os.environ.get("TANK_KEY", "")
+    if not key or not hmac.compare_digest(key.encode(), x_tank_key.encode()):
+        raise HTTPException(status_code=401, detail="Base room key required")
+    records = [record.model_dump(mode="json") for record in body.records]
+    for record in records:
+        try:
+            lookup_body(name=record["name"], domain=record["domain"], url=record["url"])
+        except ValueError:
+            raise HTTPException(status_code=422, detail="a public business identity is required") from None
+        checked = record["checked_answers"]
+        if checked is not None and (
+            set(checked) - {"name", "website", "description", "socials"} or len(json.dumps(checked)) > 10000
+        ):
+            raise HTTPException(status_code=422, detail="checked answers must contain only business comparison fields")
+    try:
+        return await run_trial(app.state.pool, app.state.http, str(body.tenant_id), str(body.run_id), records)
+    except ValueError:
+        raise HTTPException(status_code=409, detail="completed batch unavailable or trial already running") from None
+    except Exception:
+        raise HTTPException(status_code=503, detail="trial paused; pending ledger entries will retry automatically") from None
 
 
 async def ensure_worker() -> None:

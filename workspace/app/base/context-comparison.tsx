@@ -6,7 +6,7 @@ export function ContextComparison({ report }: { report?: ContextReport | null })
       <h2>Company data trial</h2>
       <p className="bcp-copy">Context.dev suggestions stay beside Base’s answers. Only checked answers count toward accuracy.</p>
       {!report ? <p>Comparison could not load.</p> : !report.records ? (
-        <p>No trial results yet. Live lookups need the Tank credit ledger connection.</p>
+        <p>No trial results yet. Selected public businesses can be compared once the trial key is set.</p>
       ) : (
         <>
           <p className="bcp-copy">Latest 200 records: {report.records} trial records. Credits per record: {report.creditsPerRecord?.toFixed(2) ?? "Not known"}.</p>
