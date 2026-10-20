@@ -26,17 +26,17 @@ async def link_card(pool: Any, ladder: Any, model: Any, worked: dict[str, Any], 
     ):
         return False
     pattern = worked.get("fact_pattern") or {}
-    scope = classify(
-        str(pattern.get("question") or "") + " " + str(pattern.get("facts") or pattern.get("narrative") or ""),
-        jurisdiction,
-    )
+    facts = str(pattern.get("question") or "") + " " + str(pattern.get("facts") or pattern.get("narrative") or "")
+    scope = classify(facts, jurisdiction)
     if not scope.get("in_scope") or scope.get("criminal"):
         return False
     area = str(scope["area"])
-    topic = next(
-        (item["phrases"][0] for item in load_config()["allowed"] if item["id"] == area),
-        area.replace("_", " "),
-    )
+    config = load_config()
+    topic = next((
+        phrase for item in config["allowed"] + config["regulatory"]
+        for phrase in item["phrases"] if phrase.casefold() in facts.casefold()
+        and (item["id"] == area or area == "regulatory_compliance")
+    ), area.replace("_", " "))
     passages = []
     for kind in ("statute", "court_rule"):
         passages.extend(await _passages_from_pool(

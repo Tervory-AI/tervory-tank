@@ -62,6 +62,7 @@ async def test_converted_holdout_gets_law_only_card_and_reuses_it(region, jurisd
     assert row["area"] == "contracts"
     assert len(model.calls) == 1
     assert model.calls[0][0] == "zenas.rule_card"
+    assert "legal elements for supply agreement" in str(model.calls)
     assert "PRIVATE-TO-EVALUATION" not in str(model.calls)
     assert all(item["jurisdiction"] == jurisdiction for item in pool.queries)
     assert await link_card(pool, ladder, model, row, region=region)
