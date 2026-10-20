@@ -101,6 +101,7 @@ async def test_bad_rows_savepoint_and_later_rooms(database, monkeypatch):
     bad = [example(input={'value': value}) for value in ('\x00', float('nan'), float('inf'), -float('inf'))]
     bad += [example(input=[]), example(expected='wrong'), example(label_source='\x00')]
     bad += [example(**{field: {'large': 'é' * 40000}}) for field in ('input', 'expected')]
+    bad += [example(input={'large': 'x' * 33000}, expected={'large': 'x' * 33000})]
     rows = [example(input={'n': 1})] + bad + [example(input={'n': 2}, skill_id='ffl.ingest')]
     real_client = httpx.AsyncClient
     def respond(req):
@@ -146,3 +147,34 @@ def test_row_size_byte_boundary():
     training.candidate_json({'v': 'x' * (65536 - overhead)})
     with pytest.raises(ValueError):
         training.candidate_json({'v': 'x' * (65537 - overhead)})
+
+
+@pytest.mark.asyncio
+async def test_explicit_holdout_survives_intake_review_and_correction(database, monkeypatch):
+    import gold
+    pool, _ = database
+    monkeypatch.setattr(training, 'ROOMS', ('base',))
+    monkeypatch.setenv('TANK_KEY_BASE', secrets.token_urlsafe(20))
+    def no_rehash(*args):
+        pytest.fail('An explicit holdout must never be re-split')
+    monkeypatch.setattr(training, 'is_holdout', no_rehash)
+    monkeypatch.setattr(gold, 'is_holdout', no_rehash)
+    rows = [example(input={'held': n}, holdout=True) for n in range(2)]
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(training.httpx, 'AsyncClient', lambda **kw: real_client(
+        transport=httpx.MockTransport(lambda req: httpx.Response(200, json=rows)), **kw))
+    for _ in range(2):
+        stats = await training.collect_room_gold(date(2026, 10, 20))
+        assert stats['rejected'] == 0
+    async with pool.acquire() as conn:
+        saved = await conn.fetch('SELECT * FROM tank.gold_examples ORDER BY id')
+        assert len(saved) == 2 and all(row['holdout'] for row in saved)
+    reviewer = gold.Reviewer('founder', gold.PLATFORM_TENANT, True)
+    await gold.check(saved[0]['id'], gold.Verdict(action='right'), reviewer)
+    await gold.check(saved[1]['id'], gold.Verdict(action='wrong', correction={'fixed': True}), reviewer)
+    async with pool.acquire() as conn:
+        correction = await conn.fetchrow("SELECT * FROM tank.gold_examples WHERE source='correction'")
+        assert correction['holdout'] is True
+    await gold.check(correction['id'], gold.Verdict(action='right'), reviewer)
+    async with pool.acquire() as conn:
+        assert await conn.fetchval('SELECT count(*) FROM tank.training_pairs') == 0
