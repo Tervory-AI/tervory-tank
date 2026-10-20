@@ -40,6 +40,8 @@ async def save_pair(conn, *, tenant: uuid.UUID, agent: str, task: str, value: An
 
 
 async def pair_from_gold(conn, row: dict[str, Any]) -> None:
+    if row["holdout"]:
+        return
     await save_pair(conn, tenant=row["tenant_id"], agent=row["agent"], task=row["skill_id"],
                     value=obj(row["input"]), output=obj(row["expected"]), approved_by=row["checked_by"],
                     source="gold", ref=str(row["id"]), gold_id=row["id"], holdout=row["holdout"],
@@ -223,7 +225,7 @@ def valid_auto_candidate(row: Any, room: str, region: str,
 def candidate_json(value: dict) -> str:
     text = json.dumps(value, ensure_ascii=False, allow_nan=False, sort_keys=True)
     if len(text.encode("utf-8")) > GOLD_ROW_MAX_BYTES:
-        raise ValueError("Candidate field exceeds size limit")
+        raise ValueError("Candidate row exceeds size limit")
     return text
 
 
@@ -271,6 +273,7 @@ async def collect_room_gold(day: date) -> dict[str, int]:
                             async with conn.transaction():
                                 if not valid_auto_candidate(row, room, region, owners):
                                     raise ValueError("Invalid candidate")
+                                candidate_json(row)
                                 value = candidate_json(row["input"])
                                 expected = candidate_json(row["expected"])
                                 source = row["label_source"]
@@ -291,7 +294,7 @@ async def collect_room_gold(day: date) -> dict[str, int]:
                                     ON CONFLICT (tenant_id,region,skill_id,source,source_ref) DO NOTHING""",
                                     PLATFORM_TENANT, region, row["skill_id"], room, value, expected,
                                     input_hash([source, row["input"], row["expected"]]), input_hash(row["input"]),
-                                    is_holdout(PLATFORM_TENANT, row["skill_id"], row["input"]), source, day,
+                                    row.get("holdout") is True or is_holdout(PLATFORM_TENANT, row["skill_id"], row["input"]), source, day,
                                 )
                                 from gold import settle_auto_source
                                 await settle_auto_source(conn, {"tenant_id": PLATFORM_TENANT, "region": region,

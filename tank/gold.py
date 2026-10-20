@@ -86,7 +86,7 @@ async def require_job(x_tank_key: str = Header(default="")) -> None:
 
 async def add_candidate(conn, *, tenant: uuid.UUID, skill: str, agent: str,
                         value: Any, expected: Any, source: str, ref: str,
-                        tolerance: str = "exact") -> uuid.UUID:
+                        tolerance: str = "exact", holdout: bool = False) -> uuid.UUID:
     return await conn.fetchval(
         """INSERT INTO tank.gold_examples
         (tenant_id,region,skill_id,agent,input,expected,source,source_ref,input_hash,holdout,tolerance)
@@ -94,7 +94,7 @@ async def add_candidate(conn, *, tenant: uuid.UUID, skill: str, agent: str,
         ON CONFLICT (tenant_id,region,skill_id,source,source_ref)
         DO UPDATE SET source_ref=EXCLUDED.source_ref RETURNING id""",
         tenant, runtime().box_region(), skill, agent, encoded(value), encoded(expected),
-        source, ref, input_hash(value), is_holdout(tenant, skill, value), tolerance,
+        source, ref, input_hash(value), holdout or is_holdout(tenant, skill, value), tolerance,
     )
 
 
@@ -266,7 +266,7 @@ async def check(example_id: uuid.UUID, body: Verdict,
             )
             await add_candidate(conn, tenant=actor.tenant, skill=row["skill_id"], agent=row["agent"],
                                 value=obj(row["input"]), expected=expected, source="correction",
-                                ref=str(example_id), tolerance=row["tolerance"])
+                                ref=str(example_id), tolerance=row["tolerance"], holdout=row["holdout"])
         else:
             updated = await conn.fetchrow(
                 """UPDATE tank.gold_examples SET status='checked',checked_by=$3,checked_at=now(),note=$4
