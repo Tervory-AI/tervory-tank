@@ -128,6 +128,14 @@
       "offer": true
     },
     {
+      "id": "same-court-later-decision",
+      "status": "draft",
+      "same_court": true,
+      "weight": "binding",
+      "reason": "A later decision of the same court is enough to warn.",
+      "offer": true
+    },
+    {
       "id": "conflicting-authority",
       "status": "draft",
       "kind": "flag",

@@ -1628,8 +1628,22 @@ async def answer_question(
     if fresh is None:
         return _refuse("could not verify", delivered=False)
     memo = compose_memo(fresh, applied["elements"])
-    known_names = [str(item.get("citation") or "") for item in passages]
-    known_names.extend(str(item.get("text") or "") for item in passages)
+    known_names: list[str] = []
+    for item in passages:
+        for key in ("citation", "text", "title", "name"):
+            value = " ".join(str(item.get(key) or "").split())
+            if value:
+                known_names.append(value)
+    if isinstance(features, dict):
+        client_matter = " ".join(str(features.get("client_matter") or "").split())
+        if client_matter:
+            known_names.append(client_matter)
+    if matter_id:
+        matter_row = await store.get_matter(str(tenant_id), str(matter_id))
+        if matter_row is not None:
+            title = " ".join(str(matter_row.get("title") or "").split())
+            if title:
+                known_names.append(title)
     memo["text"] = drop_unverified_cases(str(memo.get("text") or ""), known_names)
     if str(jurisdiction or "") == "za" and rules_are_draft():
         memo["text"] = f"{memo['text']}\n{draft_label()}".strip()

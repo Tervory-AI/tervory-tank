@@ -13,6 +13,7 @@ export type PrecedentRule = {
   citing_court_not_in?: string[];
   same_division?: boolean;
   different_division?: boolean;
+  same_court?: boolean;
   benches_known?: boolean;
   cited_bench?: number;
   citing_bench?: number;
@@ -181,6 +182,7 @@ function matches(rule: PrecedentRule, citing: CourtIdentity, cited: CourtIdentit
     if (!citing.division || !cited.division || citing.division === cited.division) return false;
   }
   if (rule.benches_known && (citing.bench_size === null || cited.bench_size === null)) return false;
+  if (rule.same_court && (!citing.court || citing.court !== cited.court)) return false;
   return true;
 }
 

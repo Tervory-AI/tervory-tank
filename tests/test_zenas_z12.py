@@ -12,9 +12,11 @@ sys.path.insert(0, str(ROOT))
 
 from agents.zenas.core.convert import COURT_UPDATE_SQL, CITE_TREATMENT_SQL, parse_worked  # noqa: E402
 from agents.zenas.core.pointers import resolve_pointer  # noqa: E402
+from agents.zenas.core.ladder_store import LadderMemory  # noqa: E402
 from agents.zenas.core.precedent import (  # noqa: E402
     conflicting_authority,
     draft_label,
+    drop_unverified_cases,
     load_rules,
     matching_rules,
     parse_forum,
@@ -23,8 +25,8 @@ from agents.zenas.core.precedent import (  # noqa: E402
     weight,
 )
 from agents.zenas.core.selftest import (  # noqa: E402
-    answer_from_library,
     run_made_up_test,
+    run_selftest,
     zenas_skills_may_be_approved,
 )
 from agents.zenas.core.service import passages_for_model, rule_card_prompt  # noqa: E402
@@ -236,6 +238,8 @@ def test_treatment_is_read_from_the_court_words():
     assert overruled["treatment"] == "overruled"
     assert "was overruled in" in overruled["evidence"]
     assert overruled["paragraph"] == "18"
+    assert by_cite["Fresh v Case"]["treatment"] != "overruled"
+    assert by_cite["[2020] ZASCA 9"]["treatment"] != "overruled"
     distinguished = next(row for row in saved if "Computicket" in row["citation"])
     assert distinguished["treatment"] == "distinguished"
     assert "is distinguishable" in distinguished["evidence"]
@@ -273,16 +277,135 @@ def test_an_overruled_case_shows_the_warning_and_what_was_checked():
     assert "complete" not in note.lower()
 
 
-def test_a_made_up_case_cannot_be_found_and_the_gate_is_perfect():
-    assert "Leave to appeal is refused." in _read("grancy-zacc-40.txt")
-    answer = answer_from_library("What did Imaginary Holdings v Nobody [2099] ZASCA 1 decide?")
-    assert "I could not verify Imaginary Holdings v Nobody, so I have left it out" in answer
-    assert "cannot find" in answer.lower()
-    result = run_made_up_test()
+def test_the_nightly_made_up_gate_uses_answer_question_or_says_not_run():
+    """The 40 traps and 10 real questions go through answer_question, region za.
+
+    With no library on the nightly box the row says not run, never 50 of 50.
+    """
+    import asyncio
+
+    bare = asyncio.run(run_made_up_test())
+    assert bare["path"] == "not run"
+    assert bare["skills_may_be_approved"] is False
+    assert bare["area"] == "Made-up cases: not run."
+    assert "50 of 50" not in bare["area"]
+    assert zenas_skills_may_be_approved() is False
+    nightly = asyncio.run(run_selftest(LadderMemory(), region="za"))
+    made_up = next(run for run in nightly["runs"] if str(run["area"]).startswith("Made-up"))
+    assert made_up["area"] == "Made-up cases: not run."
+    assert "50 of 50" not in made_up["area"]
+
+    quote = "Leave to appeal is refused."
+    judgment = _read("grancy-zacc-40.txt")
+    assert quote in judgment
+    document = {
+        "name": "Grancy Property Limited and Another v Gihwala and Others",
+        "citation": "[2026] ZACC 40",
+        "quote": quote,
+        "text": judgment,
+    }
+    ladder = LadderMemory()
+
+    class Model:
+        def __init__(self) -> None:
+            self.calls = []
+
+        async def complete(self, messages, *, task_type: str, provider: str) -> dict:
+            self.calls.append(task_type)
+            if task_type != "zenas.rule_card":
+                return {"content": '{"finding":"met"}', "cost_usd": 0, "model": "za-local"}
+            payload = {
+                "elements": [
+                    {"id": "holding", "test": quote, "citation": document["citation"], "quote": quote}
+                ],
+                "decision_table": [{"element_id": "holding", "when": {"asked": "yes"}, "finding": "met"}],
+            }
+            return {"content": json.dumps(payload), "cost_usd": 0, "model": "za-local"}
+
+    result = asyncio.run(run_made_up_test(ladder, ladder, Model(), library=[document]))
+    assert result["path"] == "answer_question"
     assert result["asked"] == 50
-    assert result["passed"] == 50
+    assert result["passed"] == 50, result["failures"]
     assert result["skills_may_be_approved"] is True
-    assert zenas_skills_may_be_approved() is True
+    assert "path: answer_question" in result["area"]
+    assert zenas_skills_may_be_approved(result) is True
+    assert len(ladder.rule_cards) == 50
+    assert all(card["region"] == "za" and card["jurisdiction"] == "za" for card in ladder.rule_cards)
+    real = [item for item in result["questions"] if item["kind"] == "real"]
+    traps = [item for item in result["questions"] if item["kind"] == "trap"]
+    assert len(real) == 10
+    assert len(traps) == 40
+    assert all(document["name"] in item["question"] and document["citation"] in item["question"] for item in real)
+
+
+def test_one_word_in_another_sentence_does_not_taint_every_case():
+    text = (
+        "[12] The objection was overruled by the trial judge. "
+        "In Smith v Jones [2015] ZASCA 12 and Brown v Green [2016] ZAWCHC 9 the point was merely noted."
+    )
+    rows = cite_treatments(text)
+    by_cite = {row["citation"]: row for row in rows}
+    for citation in ("Smith v Jones", "Brown v Green", "[2015] ZASCA 12", "[2016] ZAWCHC 9"):
+        assert by_cite[citation]["treatment"] == "referred to", citation
+        assert not by_cite[citation]["citation"].startswith("In ")
+    near = (
+        "[4] The court a quo was overruled. Smith v Jones [2015] ZASCA 12 stands. "
+        "The appeal was dismissed."
+    )
+    again = {row["citation"]: row for row in cite_treatments(near)}
+    assert again["Smith v Jones"]["treatment"] == "referred to"
+    assert again["[2015] ZASCA 12"]["treatment"] == "referred to"
+
+
+def test_a_later_decision_of_the_same_court_warns():
+    assert any(
+        rule.get("id") == "same-court-later-decision" and rule.get("status") == "draft"
+        for rule in load_rules()
+    )
+    got = weight({"court": "Supreme Court of Appeal"}, {"court": "Supreme Court of Appeal"})
+    assert got["rule_id"] == "same-court-later-decision"
+    assert got["weight"] == "binding"
+    note = still_good_law(
+        {"court": "Supreme Court of Appeal", "bench_size": 5},
+        [
+            {
+                "case": "Later v Earlier [2024] ZASCA 10",
+                "court": "Supreme Court of Appeal",
+                "bench_size": 5,
+                "treatment": "overruled",
+                "paragraph": "22",
+            }
+        ],
+        as_at="2026-10-20",
+    )
+    assert "Overruled by Later v Earlier [2024] ZASCA 10 para 22" in note
+    bench = still_good_law(
+        {"court": "High Court", "division": "Gauteng Division", "bench_size": 3},
+        [
+            {
+                "case": "Later Bench v Earlier Bench [2024] ZAGPJHC 10",
+                "court": "High Court",
+                "division": "Gauteng Division",
+                "bench_size": 3,
+                "treatment": "overruled",
+                "paragraph": "4",
+            }
+        ],
+        as_at="2026-10-20",
+    )
+    assert "Overruled by Later Bench v Earlier Bench [2024] ZAGPJHC 10 para 4" in bench
+
+
+def test_a_short_name_beside_a_citation_and_the_client_matter_stay():
+    library = ["Grancy Property Limited and Another v Gihwala and Others [2026] ZACC 40"]
+    text = "Your client in Naidoo v Pillay should sue. Grancy v Gihwala [2026] ZACC 40 applies."
+    result = drop_unverified_cases(text, [*library, "Naidoo v Pillay"])
+    assert "Naidoo v Pillay" in result
+    assert "Grancy v Gihwala" in result
+    assert "[2026] ZACC 40" in result
+    assert "could not verify" not in result
+    miss = drop_unverified_cases("Imaginary Holdings v Nobody [2099] ZASCA 1 decides the point.", library)
+    assert "I could not verify Imaginary Holdings v Nobody, so I have left it out" in miss
 
 
 def test_a_long_judgment_is_stored_and_searched_whole():

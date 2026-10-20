@@ -82,22 +82,121 @@ _TREATMENT_RANK = {
 }
 
 
-def _treatment_of(window: str) -> str:
-    """Treatment from the court's words. 'do not follow that approach' is not a treatment."""
-    folded = " ".join((window or "").split()).lower()
-    if re.search(r"\b(?:we |i )?declin(?:e|ed) to follow\b|\bnot followed\b", folded):
-        return "not followed"
-    if re.search(r"\bwas overruled\b|\boverruled\b", folded):
-        return "overruled"
-    if re.search(r"\bis distinguishable\b|\bdistinguished\b|\bdistinguishable\b", folded):
-        return "distinguished"
-    if re.search(r"\bapproved\b", folded):
-        return "approved"
-    if re.search(r"\bapplied\b", folded):
-        return "applied"
-    if re.search(r"\bfollowed\b", folded):
-        return "followed"
-    return "referred to"
+_SENTENCE = re.compile(r"(?<!v)\.\s+")
+# These are not a case being overruled or dismissed.
+_NOT_CASE = re.compile(
+    r"\b(?:the |an )?objection was overruled\b"
+    r"|\bthe court a quo was overruled\b"
+    r"|\b(?:the |an )?appeal was dismissed\b",
+    re.I,
+)
+_OVERRULED = re.compile(r"\b(?:was )?overruled\b", re.I)
+_NOT_FOLLOWED = re.compile(r"\b(?:we |i )?declin(?:e|ed) to follow\b|\bnot followed\b", re.I)
+_DISTINGUISHED = re.compile(r"\bis distinguishable\b|\bdistinguished\b|\bdistinguishable\b", re.I)
+_APPROVED = re.compile(r"\bapproved\b", re.I)
+_APPLIED = re.compile(r"\bapplied\b", re.I)
+_FOLLOWED = re.compile(r"\bfollowed\b", re.I)
+
+
+def _case_label(raw: str) -> str:
+    """'In Smith v Jones' is the case Smith v Jones."""
+    return re.sub(r"^In\s+", "", " ".join((raw or "").split()))
+
+
+def _sentences(text: str) -> list[str]:
+    return [part.strip() for part in _SENTENCE.split(text or "") if part.strip()]
+
+
+def _holds(sentence: str, label: str) -> bool:
+    return " ".join(label.split()).lower() in " ".join(sentence.split()).lower()
+
+
+def _label_before(sentence: str, label: str, pattern: re.Pattern[str]) -> bool:
+    """The case is the subject when it sits before the treatment words."""
+    folded = " ".join(sentence.split())
+    needle = " ".join(label.split()).lower()
+    lower = folded.lower()
+    start = 0
+    while True:
+        at = lower.find(needle, start)
+        if at < 0:
+            return False
+        if pattern.search(folded[at + len(needle) :]):
+            return True
+        start = at + len(needle)
+
+
+def _label_after(sentence: str, label: str, pattern: re.Pattern[str], limit: int = 80) -> bool:
+    """The case is the object when it sits just after the treatment words."""
+    folded = " ".join(sentence.split())
+    needle = " ".join(label.split()).lower()
+    for match in pattern.finditer(folded):
+        tail = folded[match.end() : match.end() + limit].lower()
+        if needle in tail:
+            return True
+    return False
+
+
+def _followed_case(sentence: str, label: str) -> bool:
+    """'followed' counts. 'not followed' and 'do not follow' do not."""
+    folded = " ".join(sentence.split())
+    needle = " ".join(label.split()).lower()
+    lower = folded.lower()
+    start = 0
+    while True:
+        at = lower.find(needle, start)
+        if at < 0:
+            return False
+        tail = folded[at + len(needle) :]
+        for match in _FOLLOWED.finditer(tail):
+            prefix = tail[max(0, match.start() - 4) : match.start()].lower()
+            if prefix.endswith("not "):
+                continue
+            return True
+        start = at + len(needle)
+
+
+def _treatment_of_sentence(sentence: str, label: str) -> str:
+    """Treatment whose subject is this case, in this one sentence."""
+    raw = " ".join(_NOT_CASE.sub(" ", sentence).split())
+    if not _holds(raw, label) and not _holds(sentence, label):
+        return "referred to"
+    found = ["referred to"]
+    if _label_before(raw, label, _OVERRULED):
+        found.append("overruled")
+    if _label_before(raw, label, _NOT_FOLLOWED) or _label_after(raw, label, _NOT_FOLLOWED):
+        found.append("not followed")
+    if _label_before(raw, label, _DISTINGUISHED):
+        found.append("distinguished")
+    if _label_before(raw, label, _APPROVED):
+        found.append("approved")
+    if _label_before(raw, label, _APPLIED):
+        found.append("applied")
+    if _followed_case(raw, label):
+        found.append("followed")
+    return max(found, key=lambda item: _TREATMENT_RANK[item])
+
+
+def _treatment_of(window: str, label: str) -> str:
+    """Read the sentence that holds this citation, and the sentence before it.
+
+    A treatment word applies only when this case is its subject. 'do not follow
+    that approach' is not a treatment. The court's words stay in the evidence.
+    """
+    sentences = _sentences(window)
+    indexes = [index for index, sentence in enumerate(sentences) if _holds(sentence, label)]
+    if not indexes:
+        return "referred to"
+    best = "referred to"
+    for index in indexes:
+        chosen = [index]
+        if index > 0 and _holds(sentences[index - 1], label):
+            chosen.append(index - 1)
+        for cursor in chosen:
+            treatment = _treatment_of_sentence(sentences[cursor], label)
+            if _TREATMENT_RANK[treatment] > _TREATMENT_RANK[best]:
+                best = treatment
+    return best
 
 
 def _paragraph_at(text: str, index: int) -> str:
@@ -110,8 +209,10 @@ def _paragraph_at(text: str, index: int) -> str:
 def cite_treatments(text: str) -> list[dict[str, str]]:
     """How this judgment treats each case it cites.
 
-    The treatment, the court's words, and the paragraph number come from the
-    paragraph that contains the citation. The default treatment is "referred to".
+    The court's words and the paragraph number come from the paragraph that
+    contains the citation. The treatment is read only from the sentence that
+    holds that citation, and the sentence before it, when this case is the
+    subject. The default treatment is "referred to".
     """
     body = text or ""
     if not body.strip():
@@ -131,9 +232,10 @@ def cite_treatments(text: str) -> list[dict[str, str]]:
         if right < 0:
             right = len(body)
         evidence = " ".join(body[left:right].split())
-        treatment = _treatment_of(evidence)
+        label = _case_label(key)
+        treatment = _treatment_of(evidence, label)
         row = {
-            "citation": key,
+            "citation": label,
             "treatment": treatment,
             "evidence": evidence,
             "paragraph": _paragraph_at(body, start),

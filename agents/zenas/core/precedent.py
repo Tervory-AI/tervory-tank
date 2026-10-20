@@ -201,6 +201,11 @@ def rule_matches(rule: dict[str, Any], citing: dict[str, Any], cited: dict[str, 
     if rule.get("benches_known"):
         if citing.get("bench_size") is None or cited.get("bench_size") is None:
             return False
+    if rule.get("same_court"):
+        left = str(citing.get("court") or "")
+        right = str(cited.get("court") or "")
+        if not left or left != right:
+            return False
     return True
 
 
@@ -291,29 +296,115 @@ def still_good_law(
     return " ".join([*warnings, checked])
 
 
+def _tidy_case_name(name: str) -> str:
+    """Drop a leading 'In ' so 'In Smith v Jones' is the case, not a sentence start."""
+    return re.sub(r"^In\s+", "", " ".join((name or "").split()))
+
+
 def named_cases(text: str) -> list[str]:
     """Neutral citations and 'Name v Name' cases written in this text."""
     found: list[str] = []
     for pattern in (_NEUTRAL, _CASE_NAME):
         for match in pattern.finditer(text or ""):
-            name = " ".join(match.group(0).split())
-            if name not in found:
+            name = _tidy_case_name(match.group(0))
+            if name and name not in found:
                 found.append(name)
     return found
+
+
+_PARTY_SKIP = frozenset(
+    {
+        "the",
+        "another",
+        "others",
+        "and",
+        "ltd",
+        "limited",
+        "pty",
+        "inc",
+        "plc",
+        "proprietary",
+        "company",
+        "cc",
+        "npc",
+    }
+)
+
+
+def _party_heads(name: str) -> tuple[str, str] | None:
+    """First meaningful word on each side of 'v'. 'Grancy v Gihwala' matches the long form."""
+    cleaned = _NEUTRAL.sub(" ", name or "")
+    cleaned = _tidy_case_name(cleaned)
+    parts = re.split(r"\s+v\.?\s+", cleaned, maxsplit=1, flags=re.I)
+    if len(parts) != 2:
+        return None
+
+    def head(side: str) -> str:
+        for word in re.findall(r"[A-Za-z][A-Za-z0-9'’\-]*", side):
+            token = word.lower().rstrip(".")
+            if token not in _PARTY_SKIP:
+                return token
+        return ""
+
+    left, right = head(parts[0]), head(parts[1])
+    if not left or not right:
+        return None
+    return left, right
+
+
+def _norm_cite(citation: str) -> str:
+    return " ".join((citation or "").split()).lower()
 
 
 def drop_unverified_cases(answer: str, known: list[str]) -> str:
     """Remove a case name or neutral citation that is not in this library.
 
-    The sentence that replaces it is the one the lawyer sees.
+    A name beside a library citation stays. A short form matches a library case
+    name party by party. The client's own matter stays when it is passed in
+    among the known names. A true miss keeps the sentence the lawyer sees.
     """
     text = answer or ""
-    library = " ".join(known).lower()
-    missing = [name for name in named_cases(text) if name.lower() not in library]
+    library = [" ".join(item.split()) for item in known if " ".join(str(item).split())]
+    known_cites = {
+        _norm_cite(match.group(0))
+        for item in library
+        for match in _NEUTRAL.finditer(item)
+    }
+    known_heads = {heads for item in library if (heads := _party_heads(item))}
+    known_exact = {_tidy_case_name(item).lower() for item in library}
+    # One library case name, not every known string joined together.
+    known_case_names = [name for name in known_exact if len(name) <= 240 and _party_heads(name)]
+
+    def citation_known(name: str) -> bool:
+        return name.startswith("[") and _norm_cite(name) in known_cites
+
+    def name_known(name: str) -> bool:
+        if name.lower() in known_exact:
+            return True
+        heads = _party_heads(name)
+        if heads and heads in known_heads:
+            return True
+        folded = name.lower()
+        if any(folded in blob for blob in known_case_names):
+            return True
+        for match in re.finditer(re.escape(name), text):
+            tail = text[match.end() : match.end() + 48].lstrip()
+            cite = _NEUTRAL.match(tail)
+            if cite and _norm_cite(cite.group(0)) in known_cites:
+                return True
+        return False
+
+    missing = []
+    for name in named_cases(text):
+        if name.startswith("["):
+            if not citation_known(name):
+                missing.append(name)
+        elif not name_known(name):
+            missing.append(name)
     if not missing:
         return text
     cleaned = text
-    for name in missing:
+    for name in sorted(dict.fromkeys(missing), key=len, reverse=True):
         cleaned = cleaned.replace(name, "")
     cleaned = " ".join(cleaned.split())
     notes = [
