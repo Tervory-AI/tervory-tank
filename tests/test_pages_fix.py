@@ -52,11 +52,12 @@ def test_each_route_file_is_present_for_a_founder():
     sign = _text(APP / "api" / "zenas" / "documents" / "[id]" / "reviews" / "route.ts")
     assert "signOffRefusal" in sign
     assert "Only an admitted reviewer can sign off." in founder
+    assert "View only" not in founder
     assert "{ status: 403 }" in sign
     desk = _text(APP / "review" / "desk.tsx")
-    assert "View only. Sign-off needs an admitted reviewer." in founder
-    assert "VIEW_ONLY" in desk
-    assert "!viewOnly" in desk
+    assert "View only" not in desk
+    assert "Approve" in desk
+    assert "viewOnly" not in desk
     assert "Request refused." in _text(APP / "rig" / "api" / "rig" / "route.ts")
     result = subprocess.run(
         ["node", "--experimental-strip-types", "--test", str(ROOT / "tests" / "pages_fix_access.test.ts")],

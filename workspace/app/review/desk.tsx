@@ -3,9 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { ReviewItem } from "@/app/api/zenas/rules";
-import { VIEW_ONLY } from "./founder";
 
-export function ReviewDesk({ items, note, viewOnly }: { items: ReviewItem[]; note: string; viewOnly: boolean }) {
+export function ReviewDesk({ items, note }: { items: ReviewItem[]; note: string }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
@@ -40,7 +39,6 @@ export function ReviewDesk({ items, note, viewOnly }: { items: ReviewItem[]; not
   return (
     <section className="zr-card" aria-labelledby="waiting-title">
       <h2 id="waiting-title">Waiting for review</h2>
-      {viewOnly && <p className="note">{VIEW_ONLY}</p>}
       {note && <p className="note">{note}</p>}
       {confirm && <p className="confirm">{confirm}</p>}
       {error && <p className="error">{error}</p>}
@@ -72,15 +70,13 @@ export function ReviewDesk({ items, note, viewOnly }: { items: ReviewItem[]; not
               ))}
             </section>
           </div>
-          {!viewOnly && (
-            <form onSubmit={(event) => sign(event, item)}>
-              <textarea name="changes" rows={4} placeholder="What you changed. Write none if you changed nothing." />
-              <div className="actions">
-                <button className="primary" disabled={busy} name="decision" value="approved" type="submit">Approve</button>
-                <button className="secondary" disabled={busy} name="decision" value="rejected" type="submit">Reject</button>
-              </div>
-            </form>
-          )}
+          <form onSubmit={(event) => sign(event, item)}>
+            <textarea name="changes" rows={4} placeholder="What you changed. Write none if you changed nothing." />
+            <div className="actions">
+              <button className="primary" disabled={busy} name="decision" value="approved" type="submit">Approve</button>
+              <button className="secondary" disabled={busy} name="decision" value="rejected" type="submit">Reject</button>
+            </div>
+          </form>
         </article>
       ))}
     </section>

@@ -29,13 +29,11 @@ export function ReviewConsole({
   note,
   reviewer,
   account,
-  viewOnly = false,
 }: {
   items: ReviewItem[];
   note: string;
   reviewer: string;
   account: string;
-  viewOnly?: boolean;
 }) {
   const [menu, setMenu] = useState(false);
   const name = account.trim() || "Your account";
@@ -116,7 +114,7 @@ export function ReviewConsole({
       <div className="zr-body">
         <header className="zr-head">
           <h1>Review</h1>
-          <p className="lede">{viewOnly ? "Read a draft beside its sources." : "Read a draft beside its sources. Approve it or send it back. Your name, admission number, and changes are recorded."}</p>
+          <p className="lede">Read a draft beside its sources. Approve it or send it back. Your name, admission number, and changes are recorded.</p>
           <p className="meta">Signed in as {reviewer}</p>
         </header>
         <article className="zr-card" aria-labelledby="worked-example-title">
@@ -136,7 +134,7 @@ export function ReviewConsole({
             ))}
           </ol>
         </article>
-        <ReviewDesk items={items} note={note} viewOnly={viewOnly} />
+        <ReviewDesk items={items} note={note} />
         <p className="fine">Zenas prepares drafts and research for review by a licensed lawyer.</p>
       </div>
     </div>

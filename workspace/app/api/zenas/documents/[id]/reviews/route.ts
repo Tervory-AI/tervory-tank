@@ -20,7 +20,8 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
   const changes = (body?.changes ?? "").slice(0, 8000);
   const refusal = signOffRefusal(reviewer, jurisdiction);
   if (refusal) return NextResponse.json({ error: refusal }, { status: 403 });
-  if (!decision || !reviewerMay(reviewer.jurisdictions, jurisdiction)) {
+  const scope = reviewer.founder ? ["us", "za"] : reviewer.jurisdictions;
+  if (!decision || !reviewerMay(scope, jurisdiction)) {
     return NextResponse.json({ error: "You can only sign off work in your jurisdiction." }, { status: 403 });
   }
   try {

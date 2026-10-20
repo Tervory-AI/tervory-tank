@@ -29,33 +29,41 @@ test("a reviewer with an admission number and a jurisdiction opens review", () =
   assert.deepEqual(gate?.jurisdictions, ["za"]);
 });
 
-test("a founder can view both queues and cannot sign off", () => {
+test("a founder can view and sign off in both jurisdictions", () => {
   const gate = reviewGate({
     userId: "user_founder",
     orgRole: "org:admin",
     adminIds: admins,
-    jurisdiction: "",
+    jurisdiction: "za",
     admissionNo: "",
   });
   assert.ok(gate);
+  assert.equal(gate.founder, true);
   assert.deepEqual(gate.jurisdictions, ["us", "za"]);
   const founder = { founder: true, role: "admin", admissionNo: "", jurisdictions: gate.jurisdictions };
-  assert.equal(signOffRefusal(founder, "us"), SIGN_OFF_REFUSED);
-  assert.equal(signOffRefusal(founder, "za"), SIGN_OFF_REFUSED);
-  assert.equal(signOffRefusal({
-    founder: true,
-    role: "org:reviewer",
-    admissionNo: "12345",
-    jurisdictions: ["us", "za"],
-  }, "za"), SIGN_OFF_REFUSED);
+  assert.equal(signOffRefusal(founder, "us"), null);
+  assert.equal(signOffRefusal(founder, "za"), null);
 });
 
-test("a full reviewer can sign off in their jurisdiction", () => {
+test("a reviewer without an admission number is refused", () => {
+  assert.equal(signOffRefusal({
+    founder: false,
+    role: "org:reviewer",
+    admissionNo: "",
+    jurisdictions: ["za"],
+  }, "za"), SIGN_OFF_REFUSED);
+  assert.equal(signOffRefusal({
+    founder: false,
+    role: "reviewer",
+    admissionNo: "   ",
+    jurisdictions: ["us"],
+  }, "us"), SIGN_OFF_REFUSED);
+});
+
+test("a full reviewer can sign off in their own jurisdiction only", () => {
   const reviewer = { founder: false, role: "org:reviewer", admissionNo: "12345", jurisdictions: ["za"] };
   assert.equal(signOffRefusal(reviewer, "za"), null);
   assert.equal(signOffRefusal(reviewer, "us"), "You can only sign off work in your jurisdiction.");
-  assert.equal(signOffRefusal({ ...reviewer, admissionNo: "" }, "za"), SIGN_OFF_REFUSED);
-  assert.equal(signOffRefusal({ ...reviewer, role: "admin" }, "za"), SIGN_OFF_REFUSED);
 });
 
 test("a customer and an incomplete reviewer are refused", () => {

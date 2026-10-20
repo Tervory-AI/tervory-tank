@@ -30,7 +30,6 @@ export type ReviewGateResult = {
 };
 
 export const SIGN_OFF_REFUSED = "Only an admitted reviewer can sign off.";
-export const VIEW_ONLY = "View only. Sign-off needs an admitted reviewer.";
 
 export type SignOffReviewer = {
   founder: boolean;
@@ -39,12 +38,13 @@ export type SignOffReviewer = {
   jurisdictions: readonly string[];
 };
 
-/** A review decision needs the reviewer role, an admission number, and a matching jurisdiction. A founder may view, not sign off. */
+/** A reviewer needs the role, an admission number, and a matching jurisdiction. A founder may sign off in both. */
 export function signOffRefusal(reviewer: SignOffReviewer, itemJurisdiction: string): string | null {
-  const role = reviewer.role.replace(/^org:/, "");
-  const admitted = !reviewer.founder && role === "reviewer" && reviewer.admissionNo.trim().length > 0;
-  if (!admitted) return SIGN_OFF_REFUSED;
-  const tags = reviewer.jurisdictions;
+  const tags = reviewer.founder ? ["us", "za"] : reviewer.jurisdictions;
+  if (!reviewer.founder) {
+    const role = reviewer.role.replace(/^org:/, "");
+    if (role !== "reviewer" || reviewer.admissionNo.trim().length === 0) return SIGN_OFF_REFUSED;
+  }
   const matches = itemJurisdiction === "both" ? tags.includes("us") || tags.includes("za") : tags.includes(itemJurisdiction);
   if (!matches) return "You can only sign off work in your jurisdiction.";
   return null;
@@ -63,6 +63,6 @@ export function reviewGate(input: ReviewGateInput): ReviewGateResult | null {
   return {
     founder,
     admissionNo,
-    jurisdictions: tagged.length > 0 ? tagged : ["us", "za"],
+    jurisdictions: founder ? ["us", "za"] : tagged,
   };
 }
