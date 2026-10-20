@@ -166,20 +166,28 @@ def source_verdict(statuses: list[str]) -> str:
     return "passed" if statuses.count("checked") >= 9 else "review"
 
 
-FAMILY_SQL = "coalesce(label_family, regexp_replace(label_source, ':[^:]*$', ''))"
+# Separate explicit families from exact-source fallbacks, even if their text matches.
+FAMILY_SQL = "CASE WHEN label_family IS NULL THEN 'source:' || label_source ELSE 'family:' || label_family END"
 
 
 def label_family(row: dict[str, Any]) -> str | None:
     if row.get("label_family") is not None:
         return row["label_family"]
     source = row.get("label_source")
-    return source.rsplit(":", 1)[0] if source is not None else None
+    return source
+
+
+def label_group(row: dict[str, Any]) -> str | None:
+    value = label_family(row)
+    if value is None:
+        return None
+    return ("family:" if row.get("label_family") is not None else "source:") + value
 
 
 async def settle_auto_source(conn, row: dict[str, Any]) -> str:
     """Only ten original spot checks can release a label family."""
     from training import pair_from_gold
-    args = (row["tenant_id"], row["region"], row["skill_id"], row["source"], label_family(row))
+    args = (row["tenant_id"], row["region"], row["skill_id"], row["source"], label_group(row))
     sample = await conn.fetch(
         f"""SELECT status FROM tank.gold_examples WHERE tenant_id=$1 AND region=$2
         AND skill_id=$3 AND source=$4 AND {FAMILY_SQL} IS NOT DISTINCT FROM $5 AND auto_label ORDER BY created_at,id LIMIT 10""", *args,
@@ -216,7 +224,7 @@ async def sample_queue(conn, actor: Reviewer, agent: str, skill: str) -> list[di
           FROM tank.gold_examples WHERE tenant_id=$1 AND region=$2 AND agent=$3 AND skill_id=$4
         ), waiting AS (
           SELECT * FROM ranked WHERE status='candidate' AND (NOT auto_label OR sample_n<=10)
-        ) SELECT id,input,expected,source,label_source,family AS label_family,auto_label FROM waiting
+        ) SELECT id,input,expected,source,label_source,label_family,auto_label FROM waiting
         WHERE NOT auto_label OR (source,family) IS NOT DISTINCT FROM
           (SELECT ROW(source,family) FROM waiting WHERE auto_label ORDER BY created_at,id LIMIT 1)
         ORDER BY id""", actor.tenant, runtime().box_region(), agent, skill,
@@ -264,7 +272,7 @@ async def check(example_id: uuid.UUID, body: Verdict,
             sample = await conn.fetch(
                 f"""SELECT id FROM tank.gold_examples WHERE tenant_id=$1 AND region=$2
                 AND skill_id=$3 AND source=$4 AND {FAMILY_SQL} IS NOT DISTINCT FROM $5 AND auto_label ORDER BY created_at,id LIMIT 10""",
-                actor.tenant, row["region"], row["skill_id"], row["source"], label_family(dict(row)),
+                actor.tenant, row["region"], row["skill_id"], row["source"], label_group(dict(row)),
             )
             if example_id not in {r["id"] for r in sample}:
                 raise HTTPException(409, "Review the source sample first.")

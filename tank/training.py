@@ -218,7 +218,7 @@ def valid_auto_candidate(row: Any, room: str, region: str,
             and isinstance(row.get("label_source"), str)
             and 0 < len(row["label_source"]) <= 500
             and (row.get("label_family") is None or
-                 (isinstance(row["label_family"], str) and 0 < len(row["label_family"].strip()) <= 500))
+                 (isinstance(row["label_family"], str) and bool(row["label_family"].strip()) and len(row["label_family"]) <= 500))
             and isinstance(row.get("input"), dict) and isinstance(row.get("expected"), dict))
 
 

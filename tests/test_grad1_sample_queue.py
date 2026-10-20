@@ -199,9 +199,8 @@ async def test_training_gate_requires_source_approval_and_excludes_holdouts(hold
     ('radix', 'scan.secrets', 'radix:fixture:v1:scan.secrets'),
     ('tiger', 'price_extract', 'auto:price-gold-109'),
 ])
-@pytest.mark.parametrize('explicit', [False, True])
 @pytest.mark.parametrize('wrong', [1, 2])
-async def test_intake_family_spot_checks(database, monkeypatch, room, skill, prefix, explicit, wrong):
+async def test_intake_family_spot_checks(database, monkeypatch, room, skill, prefix, wrong):
     import secrets
     from datetime import date
     import httpx
@@ -219,9 +218,8 @@ async def test_intake_family_spot_checks(database, monkeypatch, room, skill, pre
                    expected={'ok': True}, region='us-east', public=True,
                    holdout=number == 0,
                    label_source=f'{prefix}:{family}:live-{number:03}')
-        if explicit:
-            row['label_source'] = f'unrelated-{number}:row-{family}'
-            row['label_family'] = f'{prefix}:{family}'
+        row['label_source'] = f'unrelated-{number}:row-{family}'
+        row['label_family'] = f'{prefix}:{family}'
         return row
 
     rows = [candidate(number, 'first') for number in range(10)]
@@ -242,7 +240,13 @@ async def test_intake_family_spot_checks(database, monkeypatch, room, skill, pre
             action='wrong' if disagree else 'right',
             correction={'fixed': True} if disagree else None), actor)
     rows[:] = [candidate(10, 'first'), candidate(10, 'second')]
-    assert (await training.collect_room_gold(date(2026, 10, 21)))['inserted'] == 2
+    for number, source in enumerate([f'{prefix}:first', 'unrelated-0:row-first',
+                                     f'{prefix}:first:unique-1', f'{prefix}:first:unique-2']):
+        fallback = candidate(20 + number, 'fallback')
+        del fallback['label_family']
+        fallback['label_source'] = source
+        rows.append(fallback)
+    assert (await training.collect_room_gold(date(2026, 10, 21)))['inserted'] == 6
     async with pool.acquire() as conn:
         first = await conn.fetch(
             "SELECT * FROM tank.gold_examples WHERE input->>'family'='first' AND auto_label")
@@ -250,6 +254,14 @@ async def test_intake_family_spot_checks(database, monkeypatch, room, skill, pre
             "SELECT * FROM tank.gold_examples WHERE input->>'family'='second' AND auto_label")
         assert sum(row['auto_approved'] for row in first) == (10 if wrong == 1 else 0)
         assert all(row['status'] == 'candidate' and not row['auto_approved'] for row in second)
+        fallback = await conn.fetch("SELECT * FROM tank.gold_examples WHERE input->>'family'='fallback'")
+        assert len(fallback) == 4
+        for row in fallback:
+            assert row['label_family'] is None
+            assert await gold.settle_auto_source(conn, dict(row)) == 'pending'
+            assert row['status'] == 'candidate' and not row['auto_approved']
+        assert not await conn.fetchval('''SELECT 1 FROM tank.training_pairs p
+            JOIN tank.gold_examples g ON g.id=p.gold_id WHERE g.input->>'family'='fallback' ''')
         later = next(row for row in first if gold.obj(row['input'])['number'] == 10)
         assert later['status'] == ('checked' if wrong == 1 else 'rejected')
         if wrong == 2:
@@ -262,8 +274,8 @@ async def test_intake_family_spot_checks(database, monkeypatch, room, skill, pre
 
 
 @pytest.mark.parametrize('source,family,expected', [
-    ('radix:fixture:v1:scan.secrets:planted key', None, 'radix:fixture:v1:scan.secrets'),
-    ('auto:price-gold-109:live-017', None, 'auto:price-gold-109'),
+    ('radix:fixture:v1:scan.secrets:planted key', None, 'radix:fixture:v1:scan.secrets:planted key'),
+    ('auto:price-gold-109:live-017', None, 'auto:price-gold-109:live-017'),
     ('plain', None, 'plain'),
     ('different:row', 'explicit:family', 'explicit:family'),
 ])
