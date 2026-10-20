@@ -74,6 +74,20 @@ async def test_service_periods_require_service_not_delivery(selector):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("selector", ["kind", "step"])
+@pytest.mark.parametrize("extra", [{}, {"days": 10}])
+async def test_spaced_notice_requires_service_date_with_only_trigger(selector, extra):
+    result = await module.run({
+        "jurisdiction": "za", selector: "notice of intention to defend",
+        "trigger": "2026-03-02", **extra,
+    }, None)
+    assert result == {
+        "ok": False,
+        "reason": "service_date from the sheriff's return of service is required",
+    }
+
+
+@pytest.mark.asyncio
 async def test_proclaimed_sunday_holiday_observed_on_monday():
     result = await module.run({
         "jurisdiction": "za", "kind": "after_service", "service_date": "2026-03-06",

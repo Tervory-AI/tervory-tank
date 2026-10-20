@@ -214,7 +214,7 @@ def _criminal(body: dict[str, Any]) -> bool:
 
 
 def _za_step(body: dict[str, Any]) -> tuple[int, str, bool] | None:
-    kind = str(body.get("kind") or body.get("step") or "").strip().lower()
+    kind = str(body.get("kind") or body.get("step") or "").strip().lower().replace(" ", "_")
     service = str(body.get("service") or "").strip().lower()
     if kind in _ZA_STEPS:
         return _ZA_STEPS[kind]
