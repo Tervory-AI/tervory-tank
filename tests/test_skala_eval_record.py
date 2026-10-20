@@ -132,9 +132,10 @@ def test_page_lists_every_case_and_does_not_print_a_pass_count() -> None:
     assert "caseRecord" in record
     assert "splitPackages" in record
     assert "<h1>Skala</h1>" in view
+    assert "caseRecord" in view
+    assert "confirmApprove" in view
     assert "{r.passed}/{r.total} passed" not in page
     assert "{r.passed}/{r.total} passed" not in view
-    assert "approve" not in view.lower()
     for face in ("Jost", "Inter", "JetBrains", "next/font"):
         assert face not in page
     assert not (PAGE.parent / "layout.tsx").exists()
