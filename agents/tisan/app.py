@@ -95,3 +95,6 @@ app = create_app(
         }
     ],
 )
+
+# Room-only export of previously approved frame/page pairs.
+_load_beside({}, "tisan_gold_sources", "gold_sources.py").mount(app)
