@@ -19,7 +19,8 @@ def _object(value: Any) -> Any:
 def case_candidate(row: dict[str, Any], region: str) -> dict[str, Any] | None:
     jurisdiction = "za" if region == "za" else "us"
     if (
-        row.get("region") != region or row.get("jurisdiction") != jurisdiction
+        region not in {"za", "us-east"}
+        or row.get("region") != region or row.get("jurisdiction") != jurisdiction
         or row.get("tenant_id") is not None or row.get("source") != "case"
         or row.get("material_type") != "public_record"
         or row.get("source_id") not in COURT_SOURCES or criminal_case(row)
@@ -57,7 +58,8 @@ def statute_candidate(row: dict[str, Any], region: str) -> dict[str, Any] | None
     jurisdiction = "za" if region == "za" else "us"
     sources = {item.source_id for item in CATALOGUE if item.region == region}
     if (
-        row.get("jurisdiction") != jurisdiction or row.get("source_id") not in sources
+        region not in {"za", "us-east"}
+        or row.get("jurisdiction") != jurisdiction or row.get("source_id") not in sources
         or row.get("kind") != "statute" or not row.get("text") or not row.get("citation")
         or classify(str(row.get("title") or "") + " " + str(row["text"]), jurisdiction).get("criminal")
     ):
