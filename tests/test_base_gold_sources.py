@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "agents/_chassis"))
 sys.path.insert(0, str(ROOT / "agents/base"))
 
-from gold_sources import candidates, read_candidates  # noqa: E402
+from base_gold.gold_sources import candidates, read_candidates  # noqa: E402
 
 TODAY = date(2026, 10, 20)
 

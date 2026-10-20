@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from chassis.app import create_app
 from chassis.jobs import JobContext
-from gold_sources import read_candidates
+from base_gold.gold_sources import read_candidates
 from pipeline import order_states, state_of
 from room import (
     SQL_BATCHES_BY_TENANT,

@@ -15,7 +15,7 @@ from urllib.parse import urlsplit
 PLATFORM_TENANT = "00000000-0000-0000-0000-000000000001"
 MAX_CANDIDATES = 200
 MAX_SNAPSHOT_BYTES = 20_000_000
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 
 
 def _text(value: Any) -> str:
