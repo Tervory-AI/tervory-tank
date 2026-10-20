@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import textwrap
@@ -123,6 +124,7 @@ def _flat(tmp_path: Path, skills_dir: Path | None) -> dict:
     app = tmp_path / "app"
     app.mkdir()
     (app / "pipeline.py").write_text((ROOT / "agents/base/pipeline.py").read_text())
+    shutil.copytree(ROOT / "agents/base/base_gold", app / "base_gold", ignore=shutil.ignore_patterns("__pycache__"))
     env = {k: v for k, v in os.environ.items() if k != "SKILLS_DIR"}
     if skills_dir:
         env["SKILLS_DIR"] = str(skills_dir)

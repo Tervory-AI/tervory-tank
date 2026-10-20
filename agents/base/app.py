@@ -10,11 +10,13 @@ import os
 import uuid
 from typing import Any, Literal
 
-from fastapi import Header, HTTPException
+from fastapi import Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from chassis.app import create_app
 from chassis.jobs import JobContext
+from base_gold.gold_sources import read_candidates
+from base_gold.build import nightly
 from pipeline import order_states, state_of
 from sources.context_dev import lookup_body
 from sources.trial import run_trial
@@ -64,18 +66,51 @@ async def ping(ctx: JobContext) -> dict:
     return result
 
 
+async def gold_nightly(ctx: JobContext) -> dict:
+    if ctx.tenant_id != HEARTBEAT_TENANT:
+        raise ValueError("gold build requires the platform tenant")
+    try:
+        return await nightly(app.state.pool, app.state.http, _skills())
+    except Exception:
+        log.warning("official gold build deferred; source unavailable")
+        raise RuntimeError("official gold build deferred; source unavailable") from None
+
+
 app = create_app(
     agent=AGENT,
-    handlers={"ping": ping},
+    handlers={"ping": ping, "gold.nightly": gold_nightly},
+    job_timeouts={"gold.nightly": 3600},
     schedules=[
         {
             "tenant_id": HEARTBEAT_TENANT,
             "cron": "*/5 * * * *",
             "kind": "ping",
             "input": {"heartbeat": True},
-        }
+        },
+        {
+            "tenant_id": HEARTBEAT_TENANT,
+            "cron": "15 1 * * *",
+            "kind": "gold.nightly",
+            "input": {},
+        },
     ],
 )
+
+
+@app.get("/gold/candidates")
+async def gold_candidates(
+    limit: int = Query(default=200, ge=1, le=200),
+    x_tank_key: str | None = Header(default=None),
+) -> list[dict[str, Any]]:
+    expected = os.environ.get("TANK_KEY", "")
+    if not expected or not x_tank_key or not hmac.compare_digest(x_tank_key.encode(), expected.encode()):
+        raise HTTPException(status_code=401, detail="room key required")
+    try:
+        return await asyncio.to_thread(
+            read_candidates, limit=limit, region=os.environ.get("TANK_REGION", "us-east"),
+        )
+    except (OSError, ValueError):
+        raise HTTPException(status_code=503, detail="gold evidence unavailable") from None
 
 
 def _skills() -> SkillClient:
