@@ -31,6 +31,15 @@ test("the product header says Skala and the address is /skala", () => {
   assert.equal(headerLinks(false).find((link) => link.label === "Billing")?.href, "/billing");
 });
 
+test("sign-in, sign-up, and onboarding use their own shell", () => {
+  for (const path of ["/sign-in", "/sign-in/", "/sign-in/factor-one", "/sign-up", "/sign-up/verify", "/onboarding", "/onboarding/"]) {
+    assert.equal(usesOwnShell(path), true, path);
+  }
+  for (const path of ["/", "/tasks", "/data", "/skala", "/ledger", "/billing", "/tank", "/admin", "/review"]) {
+    assert.equal(usesOwnShell(path), false, path);
+  }
+});
+
 test("sign-in, sign-up, onboarding, and the squad frames use their own shell", () => {
   for (const path of ["/sign-in", "/sign-in/", "/sign-in/factor-one", "/sign-up", "/sign-up/verify", "/onboarding", "/onboarding/", "/base", "/tiger", "/market-lab", "/market-lab/", "/rig", "/tisan", "/radix", "/zenas"]) {
     assert.equal(usesOwnShell(path), true, path);
