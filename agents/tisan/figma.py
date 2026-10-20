@@ -447,9 +447,10 @@ def visual_frames(document: dict[str, Any], variables_payload: dict[str, Any] | 
             colours = {}
             fills = [fill for fill in node.get("fills", []) if fill.get("visible") is not False]
             binding = node.get("boundVariables", {}).get("fills", [])
-            if fills:
-                # Multiple paints, gradients and bitmap fills need a separate original-asset reference.
-                # They are retained in frame_data, but never approximated as a single colour.
+            logo = bool(re.match(r"^logo(?:\b|[/_ -])", str(node.get("name", "")), re.I))
+            image = any(fill.get("type") == "IMAGE" for fill in fills)
+            if fills and not (logo or image):
+                # Non-image paints still require a resolved token.
                 if len(fills) != 1 or fills[0].get("type") != "SOLID" or not binding:
                     incomplete = True
                 else:
@@ -474,14 +475,17 @@ def visual_frames(document: dict[str, Any], variables_payload: dict[str, Any] | 
             element = {"nodeId": node_id, "selector": f'[data-figma-id="{node_id}"]',
                        "box": {"x": box["x"] - origin.get("x", 0), "y": box["y"] - origin.get("y", 0),
                                "width": box["width"], "height": box["height"]}, "colours": colours}
-            if node.get("type") == "TEXT":
+            if logo or image:
+                element["asset"] = "logo" if logo else "image"
+            if node.get("type") == "TEXT" and not (logo or image):
                 if not isinstance(node.get("characters"), str):
                     incomplete = True
                 else:
                     element["text"] = node["characters"]
             elements.append(element)
-            for child in node.get("children", []):
-                visit(child)
+            if not (logo or image):
+                for child in node.get("children", []):
+                    visit(child)
 
         visit(frame)
         result.append({"page": "/", "frameId": frame.get("id"), "width": origin.get("width"),
@@ -1016,7 +1020,7 @@ def compile_reading(source: dict[str, Any]) -> dict[str, Any]:
         "visual": [frame["visual"] for frame in source.get("frames", []) if "visual" in frame],
         "frame_data": source.get("frame_data", source.get("frames", [])),
         "preview_png": source.get("frames", [{}])[0].get("preview_png") if len(source.get("frames", [])) == 1 else None,
-        "visual_status": "recorded" if any("visual" in frame for frame in source.get("frames", [])) else "frame data incomplete",
+        "visual_status": "recorded" if source.get("frames") and all(isinstance(frame.get("visual"), dict) and not frame["visual"].get("incomplete") for frame in source["frames"]) else "frame data incomplete",
         "ready": not blocked,
         "blocked": blocked,
         "source": source.get("source"),

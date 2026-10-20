@@ -290,3 +290,25 @@ async def test_figma_linked_scaffold_refuses_missing_reading(tmp_path: Path) -> 
     with pytest.raises(scaffold.ScaffoldError, match="frame data incomplete"):
         await scaffold.execute(_brief(figma={"file_key": "f" * 22, "node_id": "2:11"}), TENANT_A,
                                data_root=tmp_path, run_checks_now=False)
+
+
+def test_visual_frames_select_requested_page_and_widths() -> None:
+    scaffold = _load()
+    frames = [{"frameId": "1:1", "page": "/", "width": 1440},
+              {"frameId": "1:2", "page": "/", "width": 375},
+              {"frameId": "1:3", "page": "/about", "width": 1440},
+              {"frameId": "1:4", "page": "/about", "width": 375},
+              {"frameId": "1:5", "page": "/", "width": 390},
+              {"frameId": "1:6", "page": "/", "width": 1440}]
+    assert scaffold.select_visual_frames({"visual": frames}, "1:1", "/") == frames[:2]
+    assert scaffold.select_visual_frames({"visual": frames}, "0:1", "/about") == frames[2:4]
+
+
+def test_logo_allowlist_matches_exact_repository_assets() -> None:
+    import hashlib
+    hashes = json.loads((TEMPLATE / "visual/brand-hashes.json").read_text())
+    assert hashes == {path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+                      for path in (ROOT / "workspace/public/brand").glob("*.png")}
+
+    copied = TEMPLATE / "visual/assets/tervory-logo-on-white.png"
+    assert hashlib.sha256(copied.read_bytes()).hexdigest() == hashes[copied.name]

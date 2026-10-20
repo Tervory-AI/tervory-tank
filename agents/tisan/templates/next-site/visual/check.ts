@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import brandHashes from "./brand-hashes.json";
 import type { Page } from "@playwright/test";
 
 export type Frame = {
@@ -12,6 +14,7 @@ export type Frame = {
     selector: string;
     box: { x: number; y: number; width: number; height: number };
     text?: string;
+    asset?: "image" | "logo";
     colours: Partial<Record<"color" | "backgroundColor" | "borderTopColor", string>>;
   }[];
 };
@@ -65,6 +68,7 @@ function validateFrameData(raw: unknown, requirePair: boolean): Frame[] {
         element.box.width <= 0 ||
         element.box.height <= 0 ||
         (element.text !== undefined && typeof element.text !== "string") ||
+        (element.asset !== undefined && !["image", "logo"].includes(element.asset)) ||
         !element.colours
       )
         throw new Error("frame data incomplete");
@@ -102,7 +106,11 @@ export async function scoreFrame(page: Page, frame: Frame) {
   } catch {
     throw new Error("frame data incomplete");
   }
-  const checks: { nodeId: string; kind: "layout" | "text" | "colour"; passed: boolean }[] = [];
+  const checks: {
+    nodeId: string;
+    kind: "layout" | "text" | "colour" | "asset";
+    passed: boolean;
+  }[] = [];
   for (const element of frame.elements) {
     const locator = page.locator(element.selector);
     const unique = (await locator.count()) === 1;
@@ -132,14 +140,48 @@ export async function scoreFrame(page: Page, frame: Frame) {
           (key) => Math.abs(measured.box[key] - element.box[key]) <= 2,
         ),
     });
-    if (element.text !== undefined)
+    if (element.asset === "logo") {
+      // Fetch only the actual, local rendered image. A filename alone does not prove identity.
+      const bytes = visible
+        ? await locator.evaluate(async (node) => {
+            const style = getComputedStyle(node);
+            const source =
+              node instanceof HTMLImageElement
+                ? node.complete && node.naturalWidth > 0
+                  ? node.currentSrc
+                  : ""
+                : /^url\("?([^"()]+)"?\)$/.exec(style.backgroundImage)?.[1];
+            if (!source) return null;
+            try {
+              const url = new URL(source, location.href);
+              if (url.origin !== location.origin || !["http:", "https:"].includes(url.protocol))
+                return null;
+              const response = await fetch(url.href, { credentials: "omit", redirect: "error" });
+              if (!response.ok) return null;
+              return Array.from(new Uint8Array(await response.arrayBuffer()));
+            } catch {
+              return null;
+            }
+          })
+        : null;
+      checks.push({
+        nodeId: element.nodeId,
+        kind: "asset",
+        passed:
+          bytes !== null &&
+          Object.values(brandHashes).includes(
+            createHash("sha256").update(Buffer.from(bytes)).digest("hex"),
+          ),
+      });
+    }
+    if (!element.asset && element.text !== undefined)
       checks.push({
         nodeId: element.nodeId,
         kind: "text",
         passed:
           measured?.text.replace(/\s+/g, " ").trim() === element.text.replace(/\s+/g, " ").trim(),
       });
-    for (const [property, token] of Object.entries(element.colours)) {
+    for (const [property, token] of Object.entries(element.asset ? {} : element.colours)) {
       const declared = visible
         ? await locator.evaluate(
             (node, name) => getComputedStyle(node).getPropertyValue(name).trim(),
@@ -159,7 +201,7 @@ export async function scoreFrame(page: Page, frame: Frame) {
     }
   }
   const scores = Object.fromEntries(
-    ["layout", "text", "colour"].map((kind) => {
+    ["layout", "text", "colour", "asset"].map((kind) => {
       const group = checks.filter((check) => check.kind === kind);
       return [
         kind,

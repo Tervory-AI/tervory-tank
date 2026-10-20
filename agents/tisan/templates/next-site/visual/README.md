@@ -35,7 +35,14 @@ Run `npm run test:visual` for an explicit review gate. This command fails with
 jobs always write a reference file from the saved reading, so missing fields
 cannot silently skip their generated CI comparison. REST captures retain the
 original document and map measured nodes to `data-figma-id` selectors; a builder
-must carry those ids onto the matching DOM elements. Unsupported paints remain
+must carry those ids onto the matching DOM elements. Unsupported non-image paints remain
 in the raw evidence and are flagged incomplete, never approximated. Fixture
 captures may supply the same explicit mapping plus an original `preview_png`
 for the founder review; the reader retains it without redrawing the frame.
+
+Image fills and logo instances are atomic elements (`asset: "image"` or
+`asset: "logo"`): score their position and size, without text or paint checks
+inside them. Logos additionally require a local image whose SHA-256 matches an
+exact PNG in `workspace/public/brand/`. Inline redraws and altered files fail.
+`brand-hashes.json` records those hashes; a repository test detects drift.
+Other unsupported paints still leave the frame incomplete.
