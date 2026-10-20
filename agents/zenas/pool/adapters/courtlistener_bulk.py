@@ -26,9 +26,10 @@ import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 from collections import Counter
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Awaitable, Iterator
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
+from typing import TypeVar
 
 from agents.zenas.pool.adapters.cases import (
     ALLOWED_COURTS,
@@ -42,6 +43,7 @@ from agents.zenas.pool.licence import FetchNotConfigured
 BUCKET = "https://com-courtlistener-storage.s3-us-west-2.amazonaws.com/"
 LIST_NS = "{http://s3.amazonaws.com/doc/2006-03-01/}"
 SOURCE_ID = "courtlistener"
+OperationResult = TypeVar("OperationResult")
 FILE_ORDER = ("schema", "courts", "dockets", "clusters", "citations", "opinions")
 REQUIRED_KINDS = frozenset({"courts", "dockets", "clusters", "opinions", "schema"})
 _DATE = r"(\d{4}-\d{2}-\d{2})"
@@ -324,16 +326,18 @@ async def _aiter_thread(worker, stop: threading.Event) -> AsyncIterator[object]:
                 item = pending.get_nowait()
             except queue.Empty:
                 if finished.is_set():
-                    break
+                    if pending.empty():
+                        break
+                    continue
                 if time.monotonic() - last_row >= STALL_SECONDS:
                     raise BulkStalled()
                 await asyncio.sleep(0.01)
                 continue
-            last_row = time.monotonic()
             yield item
+            last_row = time.monotonic()
     finally:
         stop.set()
-        await asyncio.to_thread(thread.join, 0.2)
+        await asyncio.to_thread(thread.join, SOCKET_TIMEOUT)
     if errors:
         if isinstance(errors[0], TimeoutError) or (
             isinstance(errors[0], urllib.error.URLError) and isinstance(errors[0].reason, TimeoutError)
@@ -490,7 +494,9 @@ class _Progress:
         self.rows_read = 0
         self.cases_kept = 0
         self.skips: Counter[str] = Counter()
-        self._since_flush = 0
+        self._noted_rows = 0
+        self.paused = 0
+        self.last_row = time.monotonic()
         self.started = time.monotonic()
         self.lock = asyncio.Lock()
 
@@ -501,16 +507,16 @@ class _Progress:
         )
 
     async def note(self, force: bool = False) -> None:
-        self._since_flush += 1
-        if not force and self._since_flush < 5000:
+        if not force and self.rows_read - self._noted_rows < 10000:
             return
-        self._since_flush = 0
+        if not force:
+            self._noted_rows = self.rows_read
         conn = self.conn
         if conn is None:
             return
         try:
             async with self.lock:
-                await asyncio.wait_for(conn.execute(
+                await self.non_row(asyncio.wait_for(conn.execute(
                     """
                     UPDATE zenas_pool.updates
                     SET detail = $1
@@ -518,9 +524,25 @@ class _Progress:
                     """,
                     self.line(),
                     SOURCE_ID,
-                ), timeout=10)
+                ), timeout=10))
         except Exception:
             self.conn = None
+
+    async def non_row(self, operation: Awaitable[OperationResult]) -> OperationResult:
+        if not self.paused:
+            self._paused_since = time.monotonic()
+        self.paused += 1
+        try:
+            return await operation
+        finally:
+            self.paused -= 1
+            if not self.paused:
+                self.last_row += time.monotonic() - max(self.last_row, self._paused_since)
+
+    async def row(self) -> None:
+        self.rows_read += 1
+        self.last_row = time.monotonic()
+        await self.note()
 
 
 async def _open_db():
@@ -844,14 +866,9 @@ async def load_bulk(http_get, *, resume: str = "", state: BulkState | None = Non
 
     async def heartbeat() -> None:
         nonlocal stalled
-        previous = progress.rows_read
-        changed = time.monotonic()
         while True:
             await asyncio.sleep(HEARTBEAT_SECONDS)
-            if progress.rows_read != previous:
-                previous = progress.rows_read
-                changed = time.monotonic()
-            elif time.monotonic() - changed >= STALL_SECONDS:
+            if not progress.paused and time.monotonic() - progress.last_row >= STALL_SECONDS:
                 stalled = True
                 if owner is not None:
                     owner.cancel()
@@ -861,7 +878,7 @@ async def load_bulk(http_get, *, resume: str = "", state: BulkState | None = Non
     pulse = asyncio.create_task(heartbeat())
     try:
         if cursor and _past(cursor, "dockets") and not state.dockets:
-            await _load_ids(conn, state)
+            await progress.non_row(_load_ids(conn, state))
             if state.dockets:
                 # Court names are not in the id table. Re-read that small file
                 # so a docket-number citation still names the court.
@@ -898,7 +915,7 @@ async def load_bulk(http_get, *, resume: str = "", state: BulkState | None = Non
                 else:
                     state.files_done.add("opinions")
                     rendered = BulkCursor(snapshot.day, "done").render(api)
-                    await _mark_file(conn, snapshot.day, "opinions", snapshot.files["opinions"], "done", progress.rows_read, progress.cases_kept, state.last_opinion_id)
+                    await progress.non_row(_mark_file(conn, snapshot.day, "opinions", snapshot.files["opinions"], "done", progress.rows_read, progress.cases_kept, state.last_opinion_id))
                 return BulkResult(
                     blobs,
                     rendered,
@@ -915,6 +932,8 @@ async def load_bulk(http_get, *, resume: str = "", state: BulkState | None = Non
     except asyncio.CancelledError:
         state.last_opinion_id = starting_opinion_id
         if stalled:
+            if owner is not None:
+                owner.uncancel()
             raise BulkStalled(progress.line()) from None
         raise
     except TimeoutError:
@@ -959,7 +978,7 @@ async def _read_schema(http_get, url: str, progress: _Progress) -> None:
 
     try:
         async for _line in _aiter_thread(worker, stop):
-            progress.rows_read += 1
+            await progress.row()
     finally:
         stop.set()
     await progress.note(force=True)
@@ -989,7 +1008,7 @@ async def _read_courts(http_get, url: str, state: BulkState, progress: _Progress
         if header is None:
             header = raw
             continue
-        progress.rows_read += 1
+        await progress.row()
         row = _mapping(header, raw)
         court_id = _cell(row, "id").lower()
         if court_id:
@@ -1006,7 +1025,7 @@ async def _read_dockets(http_get, url: str, state: BulkState, progress: _Progres
         if header is None:
             header = raw
             continue
-        progress.rows_read += 1
+        await progress.row()
         row = _mapping(header, raw)
         reason = docket_skip(row)
         if reason:
@@ -1041,12 +1060,12 @@ async def _read_dockets(http_get, url: str, state: BulkState, progress: _Progres
             )
         )
         if len(batch) >= 2000:
-            await _flush_ids(conn, batch)
+            await progress.non_row(_flush_ids(conn, batch))
             batch = []
             await progress.note()
     if batch:
-        await _flush_ids(conn, batch)
-    await _mark_file(conn, state.day, "dockets", url, "done", progress.rows_read, len(state.dockets), 0)
+        await progress.non_row(_flush_ids(conn, batch))
+    await progress.non_row(_mark_file(conn, state.day, "dockets", url, "done", progress.rows_read, len(state.dockets), 0))
     await progress.note(force=True)
 
 
@@ -1057,7 +1076,7 @@ async def _read_clusters(http_get, url: str, state: BulkState, progress: _Progre
         if header is None:
             header = raw
             continue
-        progress.rows_read += 1
+        await progress.row()
         row = _mapping(header, raw)
         docket_id = _int_id(_cell(row, "docket_id"))
         docket = state.dockets.get(docket_id)
@@ -1093,12 +1112,12 @@ async def _read_clusters(http_get, url: str, state: BulkState, progress: _Progre
             )
         )
         if len(batch) >= 2000:
-            await _flush_ids(conn, batch)
+            await progress.non_row(_flush_ids(conn, batch))
             batch = []
             await progress.note()
     if batch:
-        await _flush_ids(conn, batch)
-    await _mark_file(conn, state.day, "clusters", url, "done", progress.rows_read, len(state.clusters), 0)
+        await progress.non_row(_flush_ids(conn, batch))
+    await progress.non_row(_mark_file(conn, state.day, "clusters", url, "done", progress.rows_read, len(state.clusters), 0))
     await progress.note(force=True)
 
 
@@ -1109,7 +1128,7 @@ async def _read_citations(http_get, url: str, state: BulkState, progress: _Progr
         if header is None:
             header = raw
             continue
-        progress.rows_read += 1
+        await progress.row()
         row = _mapping(header, raw)
         cluster = state.clusters.get(_int_id(_cell(row, "cluster_id")))
         if cluster is None:
@@ -1147,10 +1166,10 @@ async def _read_citations(http_get, url: str, state: BulkState, progress: _Progr
                 )
             )
             if len(rows) >= 2000:
-                await _flush_ids(conn, rows)
+                await progress.non_row(_flush_ids(conn, rows))
                 rows = []
         if rows:
-            await _flush_ids(conn, rows)
+            await progress.non_row(_flush_ids(conn, rows))
     await progress.note(force=True)
 
 
@@ -1165,7 +1184,7 @@ async def _read_opinions(http_get, url: str, state: BulkState, progress: _Progre
         if header is None:
             header = raw
             continue
-        progress.rows_read += 1
+        await progress.row()
         row = _mapping(header, raw)
         opinion_id = _int_id(_cell(row, "id"))
         if opinion_id and opinion_id <= state.last_opinion_id:
@@ -1188,7 +1207,7 @@ async def _read_opinions(http_get, url: str, state: BulkState, progress: _Progre
             break
         if progress.rows_read % 5000 == 0:
             await progress.note()
-    blobs, kept = _emit(state, texts, progress.skips)
+    blobs, kept = await progress.non_row(asyncio.to_thread(_emit, state, texts, progress.skips))
     progress.cases_kept += kept
     await progress.note(force=True)
     return blobs, stopped
