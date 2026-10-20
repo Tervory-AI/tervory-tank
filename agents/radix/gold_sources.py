@@ -17,6 +17,14 @@ SKILLS = (
 )
 
 
+def fixture_family(skill: str, case: dict) -> str:
+    """Fixtures are one family per skill. A planted wrong answer is its own family."""
+    family = f"radix:fixture:v1:{skill}"
+    if case.get("synthetic") is True:
+        return family.replace(":", "-synthetic:", 1)
+    return family
+
+
 def candidates(limit: int = 200) -> list[dict]:
     """Read frozen labels, not predictions from the implementation under test."""
     region = os.environ.get("TANK_REGION", "us-east")
@@ -46,6 +54,7 @@ def candidates(limit: int = 200) -> list[dict]:
                 "input": payload,
                 "expected": case["expected"],
                 "label_source": f"radix:fixture:v1:{skill}:{case['name']}",
+                "label_family": fixture_family(skill, case),
                 "region": region,
                 # These are repository-authored synthetic examples, including
                 # the business records whose client:// URIs are fixture IDs.

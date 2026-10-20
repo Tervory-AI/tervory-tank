@@ -35,9 +35,10 @@ def test_frozen_answers_match_skills_and_independent_business_truth():
     assert {r['skill_id'] for r in rows} == set(gold.SKILLS)
     scanners = {'scan.secrets': scanner_secrets, 'scan.dependencies': dependencies, 'scan.static': static}
     for row in rows:
-        assert set(row) == {'skill_id', 'input', 'expected', 'label_source', 'region', 'public'}
+        assert set(row) == {'skill_id', 'input', 'expected', 'label_source', 'label_family', 'region', 'public'}
         assert row['public'] is True and row['region'] == 'us-east'
         assert row['label_source'].startswith('radix:fixture:v1:')
+        assert row['label_family'] == f"radix:fixture:v1:{row['skill_id']}"
         if row['skill_id'] in scanners:
             actual = scanners[row['skill_id']].run_skill(row['input'])
         else:
