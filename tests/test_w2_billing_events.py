@@ -57,12 +57,7 @@ def _schemas() -> tuple[str, str]:
     index = sql.find(APPENDIX)
     assert index > 0, "billing_events must be appended to tank/schema.sql"
     main_sql = sql[:index]
-    legacy_sql = main_sql.replace(
-        "ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS vendor        text;\n", "",
-    ).replace(
-        "ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS units         numeric;\n", "",
-    )
-    assert hashlib.sha256(legacy_sql.encode()).hexdigest() == MAIN_SCHEMA_SHA256
+    assert hashlib.sha256(main_sql.encode()).hexdigest() == MAIN_SCHEMA_SHA256
     assert "billing_events" not in main_sql
     assert "CREATE TABLE IF NOT EXISTS tank.billing_events" in sql[index:]
     assert "ON CONFLICT" not in sql[index:]

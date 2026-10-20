@@ -34,8 +34,6 @@ ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS feedback_at   timestamptz;
 ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS feedback_by   text;         -- user id of who said so
 ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS task_id       uuid;         -- set when the call ran a task
 ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS error         text;         -- why a failed call failed: upstream status and a short message
-ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS vendor        text;
-ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS units         numeric;
 
 -- Routing policy. Data, not code: change a row, not a deploy.
 CREATE TABLE IF NOT EXISTS tank.policy (
@@ -760,3 +758,5 @@ CREATE TABLE IF NOT EXISTS tank.billing_events (
     received_at timestamptz,
     handled boolean DEFAULT false
 );
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS vendor        text;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS units         numeric;
