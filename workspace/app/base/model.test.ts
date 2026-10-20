@@ -22,6 +22,17 @@ test("trial accuracy uses checked answers, includes missing answers and unknown 
   assert.equal(contextReport([record]).creditsPerRecord, 10);
 });
 
+test("social comparison accepts source formats with the same checked links", () => {
+  const row = {
+    profile: { socials: { value: { linkedin: "https://www.linkedin.com/company/example/" } } },
+    passes: {
+      context_dev: { status: "candidate", credits: 10, fields: { socials: [{ url: "https://linkedin.com/company/example" }] } },
+      context_dev_checked: { checked: true, expected: { socials: ["https://linkedin.com/company/example"] } },
+    },
+  } as unknown as BaseRecord;
+  assert.deepEqual(contextReport([row]).fields, [{ field: "socials", checked: 1, baseCorrect: 1, contextCorrect: 1 }]);
+});
+
 const batch = (over: Partial<BatchIn>): BatchIn => ({
   batch: "ATF FFL list Sep 2026 · HI",
   started: "2026-10-01T00:00:00Z",
