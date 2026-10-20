@@ -33,6 +33,14 @@ def test_base_model():
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_founder_trial_action():
+    result = subprocess.run(
+        ["node", str(ROOT / "tests/base_trial_route.cjs")],
+        cwd=ROOT, capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_panel_is_anchored_and_only_body_scrolls():
     css = (PAGE / "base.css").read_text(encoding="utf-8")
     assert re.search(r"\.bcp-panel\s*\{[^}]*position:\s*fixed", css)
