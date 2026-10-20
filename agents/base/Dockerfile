@@ -9,14 +9,14 @@ COPY agents/_chassis/chassis /app/chassis
 COPY agents/base/app.py /app/app.py
 COPY agents/base/pipeline.py /app/pipeline.py
 COPY agents/base/room.py /app/room.py
-COPY agents/base/gold_sources.py /app/gold_sources.py
-COPY agents/base/engines /app/engines
 # Engine data files only (word lists, tables). Skill code stays in Skala.
 # Every version's data is in the image; at runtime Base reads only the approved version's folder.
 COPY tank/skills /tmp/skills
 RUN mkdir -p /app/skills && cd /tmp/skills \
     && find . -path './*.profile/*/data/*.json' -exec cp --parents {} /app/skills/ \; \
     && rm -rf /tmp/skills
+COPY agents/base/gold_sources.py /app/gold_sources.py
+COPY agents/base/engines /app/engines
 USER agent
 ENV AGENT_NAME=base \
     DATA_DIR=/data \
