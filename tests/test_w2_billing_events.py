@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import secrets
 import sys
 import uuid
 from pathlib import Path
@@ -177,7 +176,7 @@ async def test_billing_events_on_an_empty_database_and_reapplied() -> None:
 @pytest.mark.asyncio
 async def test_billing_events_on_current_main_schema_with_agent_roles() -> None:
     main_sql, full = _schemas()
-    password = secrets.token_hex(24)
+    password = "billing-schema-placeholder"
     async with _Throwaway() as dbs:
         conn = await dbs.connect()
         try:
