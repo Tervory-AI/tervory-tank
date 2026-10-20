@@ -1,7 +1,9 @@
-"""comply.gdpr — privacy notice and cookie notice on a saved page.
+"""comply.gdpr — GDPR / POPIA privacy and cookie notices on a saved page.
 
 Reads HTML that is already on disk. It does not fetch a page, follow a link,
 or open a socket. A missing notice is medium and does not block a deploy.
+The tool id stays comply.gdpr; privacy notice wording covers GDPR and South
+Africa's POPIA. Notice presence alone does not establish legal compliance.
 
 Data retention, a right-to-erasure control, a POPIA information-officer check,
 card-data rules, and a full accessibility audit are not this check. Those need
@@ -229,11 +231,12 @@ def summarize(name: str, findings: list[dict[str, Any]]) -> str:
     noun = "finding" if count == 1 else "findings"
     if count == 0:
         return (
-            f"Checked {name}. No privacy or cookie notice findings. "
+            f"Checked {name}. No GDPR / POPIA privacy or cookie notice findings. "
             "This check does not block the build."
         )
     return (
-        f"Checked {name}. {count} {noun}, none critical. "
+        f"Checked {name} for GDPR / POPIA privacy and cookie notices. "
+        f"{count} {noun}, none critical. "
         "This check does not block the build."
     )
 
@@ -264,7 +267,7 @@ def scan_html(html: str, *, name: str = "page.html", page_host: str | None = Non
         findings.append(
             _finding(
                 "missing-privacy-notice",
-                "Add a link to the privacy notice.",
+                "Add a link to a privacy notice covering GDPR or POPIA, as applicable.",
                 page_name,
                 None,
             )

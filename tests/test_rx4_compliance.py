@@ -1,4 +1,4 @@
-"""RX-4: privacy and cookie notice on a saved page. No database and no network."""
+"""RX-4: GDPR / POPIA privacy and cookie notices on a saved page. No database and no network."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ def test_missing_privacy_link_is_one_medium_finding() -> None:
     finding = result["findings"][0]
     assert finding["severity"] == "medium"
     assert finding["line"] is None
-    assert finding["fix"] == "Add a link to the privacy notice."
+    assert finding["fix"] == "Add a link to a privacy notice covering GDPR or POPIA, as applicable."
     assert result["deploy_blocked"] is False
 
 
@@ -216,3 +216,25 @@ def test_code_scan_still_runs_only_the_three_rx1_tools() -> None:
     text = (ROOT / "agents" / "radix" / "scanlib" / "orchestrate.py").read_text(encoding="utf-8")
     assert '["scan.secrets", "scan.dependencies", "scan.static"]' in text
     assert "comply" not in text
+
+
+@pytest.mark.parametrize("name", ["popia-link.html", "popia-full-name-link.html", "popia-page.html"])
+def test_saved_popia_notice_is_accepted_without_following_links(name: str) -> None:
+    result = comply.scan_file(FIXTURES / name)
+    assert result["findings"] == []
+    assert result["tool"] == "comply.gdpr"
+    assert result["fetched"] is False
+    assert result["deploy_blocked"] is False
+    assert "GDPR / POPIA" in result["summary"]
+
+
+def test_south_african_saved_page_missing_notice_mentions_popia_and_gdpr() -> None:
+    result = comply.scan_file(FIXTURES / "popia-missing.html")
+    assert _rules(result) == ["missing-privacy-notice"]
+    finding = result["findings"][0]
+    assert finding["file"] == "popia-missing.html"
+    assert finding["severity"] == "medium"
+    assert "GDPR or POPIA, as applicable" in finding["fix"]
+    assert "GDPR / POPIA" in result["summary"]
+    assert result["fetched"] is False
+    assert result["deploy_blocked"] is False
