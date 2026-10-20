@@ -42,6 +42,38 @@
   - Each screen is its own URL, so it can go on its own monitor and camera.
 - **Practice mode:** one student alone against the AI judge from a laptop browser, using the same flow.
 
+## 3b. Look and sound: a real courtroom, not a cartoon
+Founder: "not a cartoon... make it professional. That also wows the USA."
+- **No cartoon avatar, no animated face.** The judge appears as a dignified bench screen:
+  - the court's name and the judge's title in a classic serif;
+  - a quiet speaking indicator (a thin level line, not bouncing bars);
+  - live captions under it, as on a broadcast court feed.
+- **Fictional insignia only.** No real court crest, coat of arms or seal: the court name and emblem are the founder's own.
+- **Palette:** dark navy, ivory text and one restrained accent. No gradients, emoji or playful motion. Transitions are fades of 200ms or less.
+- **Voice:** a natural, measured, broadcast-quality voice that sounds like a senior judge (the founder picks from shortlisted voices). It speaks at court pace with real pauses, in formal register: "Counsel, I have difficulty with that submission." It never says "As an AI".
+- **The citation screen reads like a court's case-management system,** not an app: a clean table, small caps, paragraph numbers.
+- **Built for camera:** large type readable on video at 1080p from 3 metres, safe margins for broadcast, no flicker, and a clean-feed URL (no controls, no cursor) for each screen.
+- **Courtroom procedure:**
+  - the judge opens the court and calls the matter;
+  - counsel's appearances are noted;
+  - "May it please the court" is expected;
+  - it calls time politely, then firmly;
+  - it adjourns at the end.
+- **The judgment reads like a reported judgment:** numbered paragraphs, order at the end.
+
+## 3c. Two courts: South Africa and the United States
+- **A session is either SA or US.** Procedure, forms of address and voice follow that country.
+  - SA: "My Lady/My Lord", "M'Lord", heads of argument, SA appeal practice.
+  - US: "Your Honor", "May it please the Court", a federal appellate argument with a fixed time per side, and questions from the bench throughout.
+- **US sessions use the US library** (CourtListener appellate opinions, statutes) and run on the Boston box. SA sessions run on the ZA box.
+- **US binding rules come from a US rules file**, in the same shape as Z12's SA file, seeded as draft:
+  - the Supreme Court binds everything;
+  - a circuit binds its district courts and later panels of that circuit;
+  - other circuits are persuasive;
+  - a state's highest court binds that state's courts on state law.
+  - The founder confirms it.
+- **Civil only in both countries.**
+
 ## 4. Feedback after the session
 For each counsel:
 - their arguments set against the real court's reasoning;
@@ -61,7 +93,7 @@ It goes out as a PDF and as a page.
 The founder creates sessions, adds participants by name (no accounts are needed for counsel in practice mode), and can delete a session and its recordings.
 
 ## Rules
-- Civil law only. SA sessions run on the ZA box. Model calls go only through Tank.
+- Civil law only. SA sessions on the ZA box, US sessions on Boston. Model calls go only through Tank.
 - No secrets in code, URLs, logs or tests.
 - The judge never invents an authority. This is tested.
 
@@ -73,6 +105,6 @@ CI green. Tests on fixture data:
 - the judge's speech never names an authority outside the library;
 - the judgment cites only verified authorities;
 - timers and floor changes work;
-- each screen loads on its own URL at 1440px, and practice mode works at 375px.
+- each screen loads on its own URL at 1440px and 1920x1080 with a clean feed, practice mode works at 375px; an SA and a US session each use their own procedure, library and box.
 
 Then a 10-minute recorded demo run on staging with two people, linked in the PR. After merge, Claude sets up the first session with the founder.
