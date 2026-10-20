@@ -146,11 +146,14 @@ async def test_model_needs_holdout_evidence_and_manual_promotion(database):
 async def test_promotion_endpoint_requires_verified_founder(monkeypatch):
     import secrets
     import httpx
-    import main
     from types import SimpleNamespace
 
     key = secrets.token_urlsafe(24)
+    monkeypatch.setenv('DATABASE_URL', 'postgresql://localhost/test')
+    monkeypatch.setenv('LITELLM_MASTER_KEY', secrets.token_urlsafe(24))
     monkeypatch.setenv('TANK_API_KEY', key)
+    import main
+
     monkeypatch.setattr(main, 'TANK_API_KEY', key)
     monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'fixture-founder')
     monkeypatch.setattr(main, '_pool', None)
