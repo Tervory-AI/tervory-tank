@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { DeadlinesPanel } from "./deadlines-panel";
 import { AREAS, DEADLINE_ROWS, MATTER_ROWS, REVIEW_ROWS, SEARCH_KINDS, hitsFor, type SearchKind } from "./frame";
+import { FORUMS, showCourt, weightFor, type CitedCase, type PrecedentRule } from "./precedent";
 import { MOOT_LABEL } from "./moot";
 import { MootCourt } from "./moot-court";
 import { PluginsDialog } from "./plugins-dialog";
@@ -29,10 +30,16 @@ export function ZenasView({
   plugins,
   workspaceName,
   founderLine,
+  draftLabel = "",
+  rules = [],
+  citedCases = [],
 }: {
   plugins: PluginPanel;
   workspaceName: string | null;
   founderLine?: string | null;
+  draftLabel?: string;
+  rules?: PrecedentRule[];
+  citedCases?: CitedCase[];
 }) {
   const accountName = workspaceName?.trim() || "Your account";
   const initial = accountName.slice(0, 1).toUpperCase();
@@ -57,6 +64,7 @@ export function ZenasView({
   const [attached, setAttached] = useState<string | null>(null);
   const [actionNote, setActionNote] = useState("");
   const [section, setSection] = useState<"chats" | "moot" | "deadlines">("chats");
+  const [forum, setForum] = useState("Western Cape Division, single judge");
   const bodyRef = useRef<HTMLDivElement>(null);
 
   const hits = hitsFor(kind, query);
@@ -279,6 +287,7 @@ export function ZenasView({
           <div>
             <h1>Zenas</h1>
             <p>Civil law, South Africa. Search your own records, or ask Zenas a legal question.</p>
+            {draftLabel ? <p className="zn-draft">{draftLabel}</p> : null}
           </div>
           <div className="zn-search">
             <label className="zn-sr" htmlFor="zenas-search">Search</label>
@@ -354,6 +363,14 @@ export function ZenasView({
           <div className="zn-ask-head">
             <h2>Ask Zenas</h2>
             <p>Thread · {messages} {messages === 1 ? "message" : "messages"}</p>
+            <label className="zn-forum" htmlFor="zenas-forum">
+              Your forum
+              <select id="zenas-forum" value={forum} onChange={(event) => setForum(event.target.value)}>
+                {FORUMS.map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            </label>
           </div>
           <div className="zn-thread">
             {asked ? (
@@ -371,8 +388,32 @@ export function ZenasView({
                   <section className="zn-sources" aria-label="Sources">
                     <header>
                       <h3>Sources</h3>
-                      <p>No sources for this answer.</p>
+                      <p>{draftLabel || "No sources for this answer."}</p>
                     </header>
+                    <ul className="zn-cited">
+                      {citedCases.length === 0 ? <li>No cited case yet.</li> : null}
+                      {citedCases.map((item) => {
+                        const answer = weightFor(forum, {
+                          court: item.court,
+                          division: item.division,
+                          seat: item.seat,
+                          bench_size: item.bench_size,
+                        }, rules);
+                        const href = item.url
+                          ? `${item.url}${item.paragraph ? `#para-${item.paragraph}` : ""}`
+                          : "";
+                        return (
+                          <li key={`${item.citation}-${item.paragraph}`}>
+                            <strong>{item.citation || "unknown"}</strong>
+                            <span>{showCourt(item)}</span>
+                            <span>{answer.weight === "not_precedent" ? "not precedent" : answer.weight}. {answer.reason}</span>
+                            {item.treatment ? <span>Treatment: {item.treatment}</span> : null}
+                            {item.warning ? <span>{item.warning}</span> : null}
+                            {href ? <a href={href}>Full judgment{item.paragraph ? `, paragraph ${item.paragraph}` : ""}</a> : <span>Paragraph {item.paragraph || "unknown"}</span>}
+                          </li>
+                        );
+                      })}
+                    </ul>
                   </section>
                 </article>
               </>

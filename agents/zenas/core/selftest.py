@@ -226,6 +226,127 @@ def _group(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return grouped
 
 
+# One real case, copied from the saved Grancy judgment. The nightly traps are not this case.
+_MADE_UP_LIBRARY = (
+    {
+        "name": "Grancy Property Limited and Another v Gihwala and Others",
+        "citation": "[2026] ZACC 40",
+        "quote": "Leave to appeal is refused.",
+        "text": (
+            "On appeal from the Supreme Court of Appeal (hearing an appeal from the High Court "
+            "of South Africa, Western Cape Division, Cape Town): 1. Leave to appeal is refused."
+        ),
+    },
+)
+
+
+def made_up_questions() -> list[dict[str, str]]:
+    """Fifty questions. Forty name cases that are not in the library."""
+    rows: list[dict[str, str]] = []
+    codes = ("ZASCA", "ZAGPJHC", "ZAWCHC", "ZACC", "ZAFSHC")
+    for index in range(40):
+        name = f"Fictional Party {index} v Nobody {index}"
+        citation = f"[2099] {codes[index % len(codes)]} {9000 + index}"
+        rows.append(
+            {
+                "kind": "trap",
+                "question": f"What did {name} {citation} decide?",
+                "name": name,
+                "citation": citation,
+            }
+        )
+    real = _MADE_UP_LIBRARY[0]
+    for index in range(10):
+        rows.append(
+            {
+                "kind": "real",
+                "question": f"Question {index}: what did {real['name']} {real['citation']} hold?",
+                "name": real["name"],
+                "citation": real["citation"],
+            }
+        )
+    return rows
+
+
+def answer_from_library(question: str) -> str:
+    """Answer only from the library. A name that is not there is left out."""
+    from agents.zenas.core.engine import cite_check
+    from agents.zenas.core.precedent import drop_unverified_cases, named_cases
+
+    known: list[str] = []
+    for item in _MADE_UP_LIBRARY:
+        known.extend((item["name"], item["citation"], item["text"], item["quote"]))
+    library = " \n ".join(known)
+    named = named_cases(question or "")
+    if any(name.lower() not in library.lower() for name in named):
+        return drop_unverified_cases(question, known)
+    hit = _MADE_UP_LIBRARY[0]
+    answer = f"{hit['name']} {hit['citation']}. {hit['quote']}"
+    checked = cite_check(
+        [{"citation": hit["citation"], "quote": hit["quote"]}],
+        [{"citation": hit["citation"], "text": hit["text"], "status": "in_force"}],
+    )
+    if not checked.get("passed"):
+        return f"I could not verify {hit['name']}, so I have left it out. I cannot find it."
+    return answer
+
+
+def run_made_up_test() -> dict[str, Any]:
+    """The nightly gate. Every question is code. No model is called."""
+    questions = made_up_questions()
+    passed = 0
+    for item in questions:
+        answer = answer_from_library(item["question"])
+        if item["kind"] == "trap":
+            ok = (
+                "cannot find" in answer.lower()
+                and "I could not verify" in answer
+                and "I have left it out" in answer
+            )
+        else:
+            ok = "cannot find" not in answer.lower() and item["citation"] in answer and _MADE_UP_LIBRARY[0]["quote"] in answer
+        if ok:
+            passed += 1
+    asked = len(questions)
+    return {
+        "asked": asked,
+        "passed": passed,
+        "skills_may_be_approved": passed == asked == 50,
+    }
+
+
+def zenas_skills_may_be_approved() -> bool:
+    """No Zenas skill is ready to approve unless the made-up-case test is perfect."""
+    return bool(run_made_up_test()["skills_may_be_approved"])
+
+
+def _made_up_row(box: str, jurisdiction: str) -> dict[str, Any]:
+    result = run_made_up_test()
+    asked = int(result["asked"])
+    passed = int(result["passed"])
+    score = round(100.0 * passed / asked, 2) if asked else 0
+    approved = bool(result["skills_may_be_approved"])
+    standing = "Zenas skills may be approved." if approved else "Zenas skills may not be approved."
+    return {
+        "region": box,
+        "kind": "holdout",
+        "area": f"Made-up cases: {passed} of {asked}. {standing}",
+        "jurisdiction": jurisdiction,
+        "cases": asked,
+        "outcome_agreement": score,
+        "element_agreement": score,
+        "citations_valid": score,
+        "cost_per_case": 0,
+        "detail": {
+            "case_ids": [],
+            "made_up": True,
+            "asked": asked,
+            "passed": passed,
+            "skills_may_be_approved": approved,
+        },
+    }
+
+
 async def run_selftest(ladder: Any, *, region: str) -> dict[str, Any]:
     """Score this box's held-out cases. The other region's cases are ignored."""
     box = "za" if region == "za" else "us-east"
@@ -278,6 +399,7 @@ async def run_selftest(ladder: Any, *, region: str) -> dict[str, Any]:
     if box == "us-east":
         for item in legalbench_scores():
             saved.append(await ladder.add_selftest({"region": box, **item}))
+    saved.append(await ladder.add_selftest(_made_up_row(box, jurisdiction)))
     return {
         "ok": True,
         "region": box,
