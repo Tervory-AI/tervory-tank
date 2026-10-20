@@ -83,3 +83,8 @@ def test_additional_public_snapshots_fail_closed(tmp_path):
     assert len(result) == 1 and result[0]['label_source'] == 'auto:visible-structured-agreement'
     path.write_text('{bad')
     assert gold.candidates(1, snapshots=path) == gold.candidates(1)
+
+
+def test_microdata_text_and_currency_disagreement():
+    assert gold.agreement('<p itemprop="price">$9.00</p>') == '9.00'
+    assert gold.agreement('<p>£9.00</p><meta itemprop="price" content="9"><meta itemprop="priceCurrency" content="USD">') is None

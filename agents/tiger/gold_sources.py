@@ -36,9 +36,10 @@ class Evidence(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self.hidden = 0
-        self.stack: list[tuple[str, bool]] = []
+        self.stack: list[tuple[str, bool, str]] = []
         self.visible: list[str] = []
         self.structured: set[str] = set()
+        self.currencies: set[str] = set()
         self.script: list[str] | None = None
         self.blocks: list[str] = []
 
@@ -48,8 +49,10 @@ class Evidence(HTMLParser):
         if tag == "script" and attr.get("type", "").lower() == "application/ld+json":
             self.script = []
         if tag not in {"meta", "link", "img", "br", "input", "hr", "source", "wbr"}:
-            self.stack.append((tag, hide))
+            self.stack.append((tag, hide, attr.get("itemprop", "")))
             self.hidden += int(hide)
+        if "priceCurrency" in attr.get("itemprop", "").split() and attr.get("content"):
+            self.currencies.add(attr["content"].upper())
         if "price" in attr.get("itemprop", "").split():
             price = amount(attr.get("content", ""))
             if price:
@@ -61,7 +64,7 @@ class Evidence(HTMLParser):
             self.script = None
         for i in range(len(self.stack) - 1, -1, -1):
             if self.stack[i][0] == tag:
-                self.hidden -= sum(int(hidden) for _, hidden in self.stack[i:])
+                self.hidden -= sum(int(hidden) for _, hidden, _ in self.stack[i:])
                 del self.stack[i:]
                 break
 
@@ -70,6 +73,12 @@ class Evidence(HTMLParser):
             self.script.append(data)
         if not self.hidden:
             self.visible.append(data)
+            if self.stack and "price" in self.stack[-1][2].split():
+                price = amount(data.strip().lstrip("$£€").strip())
+                if price:
+                    self.structured.add(price)
+            if self.stack and "priceCurrency" in self.stack[-1][2].split():
+                self.currencies.add(data.strip().upper())
 
 
 def agreement(html: str) -> str | None:
@@ -83,6 +92,8 @@ def agreement(html: str) -> str | None:
             types = node.get("@type", [])
             types = types if isinstance(types, list) else [types]
             product = product or any(str(t).rsplit("/", 1)[-1] == "Product" for t in types)
+            if product and node.get("priceCurrency"):
+                evidence.currencies.add(str(node["priceCurrency"]).upper())
             if product and "price" in node:
                 price = amount(node["price"])
                 if price:
@@ -97,6 +108,10 @@ def agreement(html: str) -> str | None:
             continue
     visible = {amount(m) for m in re.findall(r"(?:US\$|\$|£|€|USD|GBP|EUR)\s*(\d[\d,]*(?:\.\d{1,2})?)(?!\d)", " ".join(evidence.visible))}
     visible.discard(None)
+    codes = {"$": "USD", "US$": "USD", "£": "GBP", "€": "EUR"}
+    seen_currencies = {codes.get(token, token) for token in re.findall(r"US\$|\$|£|€|USD|GBP|EUR", " ".join(evidence.visible))}
+    if evidence.currencies and evidence.currencies != seen_currencies:
+        return None
     if len(visible) == 1 and visible == evidence.structured:
         return next(iter(visible))
     return None
