@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import uuid
 from dataclasses import replace
 from pathlib import Path
 
@@ -86,7 +85,6 @@ def run(
         started = utc_now()
         rows = 0
         error: str | None = None
-        store.begin_batch(str(uuid.uuid4()))
         try:
             if not spec.enabled:
                 error = "disabled"
@@ -107,14 +105,11 @@ def run(
             else:
                 adapter = ADAPTERS[spec.adapter]
                 rows = adapter(spec, reader, store, backfill=backfill)
-            store.finish_batch()
         except NeedsKey:
             conn.rollback()
-            store.clear_batch()
             continue
         except Exception as exc:
             conn.rollback()
-            store.clear_batch()
             rows = 0
             error = redact(f"{type(exc).__name__}: {exc}")
         store.finish_run(spec.id, started, rows, error)

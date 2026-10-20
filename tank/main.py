@@ -27,6 +27,10 @@ Endpoints
   POST /v1/rig/ask                       proxy: a catalogue question (model call is /v1/route)
   GET  /v1/rig/products/{id}             proxy: one product
   GET  /v1/rig/catalogues                proxy: product and fit counts for one catalogue
+  GET  /v1/market/quarantine             founder: batches waiting in Market Lab
+  POST /v1/market/quarantine/{batch}/release   founder: let a held batch into the pool
+  POST /v1/market/quarantine/{batch}/reject    founder: keep a held batch out
+  POST /v1/market/quarantine/{batch}/remove    founder: drop a batch and mark it removed
 
 Build Pack v2, "Tank — the centrepiece". Batch queue, cache, evals and graduation
 are later build-order steps and are not in this file yet.
@@ -3188,3 +3192,73 @@ async def rig_catalogues(request: Request) -> Response:
     tenant_id = _rig_tenant(request)
     resp = await _rig_call("GET", "/catalogues", [("tenant_id", str(tenant_id))], None, timeout=30)
     return _rig_response(resp, tenant_id)
+
+
+# ---------- Market Lab quarantine: the room holds the batches; Tank only proxies ----------
+# The Workspace is not on the room corridor. These routes check the founder,
+# forward with TANK_KEY_MARKET_LAB, and return the room's JSON. Remove also
+# marks the batch removed in training lineage after the room accepts it.
+
+MARKET_AGENT_URL = "http://agent-market-lab:8000"
+_MARKET_BATCH = re.compile(r"^[A-Za-z0-9_.:-]{1,80}$")
+_MARKET_ACTIONS = frozenset({"release", "reject", "remove"})
+_MARKET_DOWN = "Market Lab did not answer."
+
+
+async def _market_call(method: str, path: str) -> Any:
+    key = os.environ.get("TANK_KEY_MARKET_LAB", "").strip()
+    if _http is None or not key:
+        raise HTTPException(status_code=502, detail=_MARKET_DOWN)
+    try:
+        return await _http.request(
+            method,
+            MARKET_AGENT_URL + path,
+            headers={"X-Tank-Key": key, "Accept": "application/json"},
+            timeout=30,
+            follow_redirects=False,
+        )
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail=_MARKET_DOWN) from None
+
+
+def _market_ok(resp: Any) -> dict[str, Any]:
+    if getattr(resp, "status_code", 0) < 200 or getattr(resp, "status_code", 0) >= 300:
+        raise HTTPException(status_code=502, detail=_MARKET_DOWN)
+    raw = getattr(resp, "content", b"") or b""
+    if not raw or len(raw) > 1_000_000:
+        raise HTTPException(status_code=502, detail=_MARKET_DOWN)
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=502, detail=_MARKET_DOWN) from None
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=502, detail=_MARKET_DOWN)
+    return payload
+
+
+@app.get("/v1/market/quarantine")
+async def market_quarantine_list(actor=Depends(__import__("gold").require_reviewer)) -> dict[str, Any]:
+    if not actor.founder:
+        raise HTTPException(status_code=404, detail="not found")
+    return _market_ok(await _market_call("GET", "/quarantine"))
+
+
+@app.post("/v1/market/quarantine/{batch_id}/{action}")
+async def market_quarantine_act(
+    batch_id: str,
+    action: str,
+    actor=Depends(__import__("gold").require_reviewer),
+) -> dict[str, Any]:
+    if not actor.founder or action not in _MARKET_ACTIONS or _MARKET_BATCH.fullmatch(batch_id) is None:
+        raise HTTPException(status_code=404, detail="not found")
+    payload = _market_ok(await _market_call("POST", f"/quarantine/{batch_id}/{action}"))
+    if action != "remove":
+        return payload
+    try:
+        async with pool().acquire() as conn:
+            models = await __import__("training").retire_batch(conn, actor.tenant, batch_id)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=502, detail=_MARKET_DOWN) from None
+    return {**payload, "models": models}

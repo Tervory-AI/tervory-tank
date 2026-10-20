@@ -1,33 +1,34 @@
 import "server-only";
 import { auth } from "@clerk/nextjs/server";
 import { isListedFounder } from "../review/founder";
-import { asBatch, type QuarantineBatch } from "./quarantine";
-import { readFeedBatches } from "./quarantine-store";
+import { quarantineFromResponse, type QuarantineLoad } from "./quarantine";
 
-export async function loadQuarantine(): Promise<QuarantineBatch[] | null> {
+const PLATFORM = "00000000-0000-0000-0000-000000000001";
+
+export async function loadQuarantine(): Promise<QuarantineLoad | null> {
+  let userId: string | null = null;
   try {
-    const { userId } = await auth();
-    if (!isListedFounder(userId, process.env.TERVORY_ADMIN_USER_IDS)) return null;
+    userId = (await auth()).userId;
   } catch {
     return null;
   }
-  const fromFile = await readFeedBatches();
-  const key = process.env.TANK_KEY_MARKET_LAB ?? "";
-  if (!key) return fromFile;
+  if (!isListedFounder(userId, process.env.TERVORY_ADMIN_USER_IDS) || !userId) return null;
+  const key = process.env.TANK_API_KEY ?? "";
+  if (!key) return quarantineFromResponse(null, null);
+  const host = process.env.TANK_URL ?? "http://tank:8000";
   try {
-    const host = process.env.MARKET_LAB_URL ?? "http://agent-market-lab:8000";
-    const response = await fetch(`${host}/quarantine`, {
-      headers: { "X-Tank-Key": key },
+    const response = await fetch(`${host}/v1/market/quarantine`, {
+      headers: {
+        "x-tank-key": key,
+        "x-tervory-user": userId,
+        "x-tervory-tenant": PLATFORM,
+        "x-tervory-role": "founder",
+      },
       cache: "no-store",
     });
-    if (!response.ok) return fromFile;
-    const body = (await response.json()) as { batches?: unknown };
-    if (!Array.isArray(body.batches)) return fromFile;
-    const remote = body.batches
-      .map((row) => (row && typeof row === "object" ? asBatch(row as Record<string, unknown>) : null))
-      .filter((row): row is QuarantineBatch => row !== null);
-    return remote.length ? remote : fromFile;
+    const body = response.ok ? await response.json().catch(() => null) : null;
+    return quarantineFromResponse(response.status, body);
   } catch {
-    return fromFile;
+    return quarantineFromResponse(null, null);
   }
 }

@@ -47,7 +47,15 @@ function BatchTable({ rows }: { rows: QuarantineBatch[] }) {
   );
 }
 
-export function QuarantinePanel({ batches }: { batches: QuarantineBatch[] }) {
+export function QuarantinePanel({
+  batches,
+  error,
+  listFailed = false,
+}: {
+  batches: QuarantineBatch[];
+  error?: string | null;
+  listFailed?: boolean;
+}) {
   const held = batches.filter((batch) => batch.status === "held");
   const pooled = batches.filter((batch) => batch.status === "pooled");
   const closed = batches.filter((batch) => batch.status === "rejected" || batch.status === "removed");
@@ -55,17 +63,26 @@ export function QuarantinePanel({ batches }: { batches: QuarantineBatch[] }) {
     <section id="quarantine" className="ml-quarantine" aria-labelledby="quarantine-title">
       <h2 id="quarantine-title">Quarantine</h2>
       <p>A new batch waits here until it matches the series. Rejected batches stay out of the pool.</p>
-      <h3>Waiting</h3>
-      <BatchTable rows={held} />
-      <h3>In the pool</h3>
-      <p>Remove drops the batch from the pool. Gold from it is retired.</p>
-      <BatchTable rows={pooled} />
-      {closed.length ? (
-        <>
-          <h3>Closed</h3>
-          <BatchTable rows={closed} />
-        </>
+      {error ? (
+        <p className="ml-quarantine-error" role="alert">
+          {error}
+        </p>
       ) : null}
+      {listFailed ? null : (
+        <>
+          <h3>Waiting</h3>
+          <BatchTable rows={held} />
+          <h3>In the pool</h3>
+          <p>Remove drops the batch from the pool. Gold from it is retired.</p>
+          <BatchTable rows={pooled} />
+          {closed.length ? (
+            <>
+              <h3>Closed</h3>
+              <BatchTable rows={closed} />
+            </>
+          ) : null}
+        </>
+      )}
     </section>
   );
 }

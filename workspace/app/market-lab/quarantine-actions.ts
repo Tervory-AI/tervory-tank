@@ -1,11 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { auth } from "@clerk/nextjs/server";
 import { isListedFounder } from "../review/founder";
-import { writeFeedBatch } from "./quarantine-store";
 
 const PLATFORM = "00000000-0000-0000-0000-000000000001";
+const BATCH = /^[A-Za-z0-9_.:-]{1,80}$/;
 
 async function founderId(): Promise<string | null> {
   try {
@@ -17,51 +18,34 @@ async function founderId(): Promise<string | null> {
   }
 }
 
-async function tellLab(batchId: string, action: "release" | "reject" | "remove"): Promise<void> {
-  const key = process.env.TANK_KEY_MARKET_LAB ?? "";
-  if (!key) return;
-  const host = process.env.MARKET_LAB_URL ?? "http://agent-market-lab:8000";
-  await fetch(`${host}/quarantine/${encodeURIComponent(batchId)}/${action}`, {
-    method: "POST",
-    headers: { "X-Tank-Key": key },
-    cache: "no-store",
-  });
-}
-
-async function tellTank(batchId: string, userId: string): Promise<void> {
-  if (!process.env.TANK_API_KEY) return;
+async function tellTank(batchId: string, action: "release" | "reject" | "remove", userId: string): Promise<boolean> {
+  const key = process.env.TANK_API_KEY ?? "";
+  if (!key) return false;
   const host = process.env.TANK_URL ?? "http://tank:8000";
-  await fetch(`${host}/v1/training/batches/${encodeURIComponent(batchId)}/remove`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-tank-key": process.env.TANK_API_KEY,
-      "x-tervory-user": userId,
-      "x-tervory-tenant": PLATFORM,
-      "x-tervory-role": "founder",
-    },
-    cache: "no-store",
-  });
+  try {
+    const response = await fetch(`${host}/v1/market/quarantine/${encodeURIComponent(batchId)}/${action}`, {
+      method: "POST",
+      headers: {
+        "x-tank-key": key,
+        "x-tervory-user": userId,
+        "x-tervory-tenant": PLATFORM,
+        "x-tervory-role": "founder",
+      },
+      cache: "no-store",
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
 }
 
 async function act(form: FormData, action: "release" | "reject" | "remove"): Promise<void> {
   const userId = await founderId();
   if (!userId) throw new Error("Not found");
   const batchId = String(form.get("batch") ?? "").trim();
-  if (!batchId) throw new Error("Not found");
-  await writeFeedBatch(batchId, action);
-  try {
-    await tellLab(batchId, action);
-  } catch {
-    // The feeds file is already changed. The box can be reached on the next try.
-  }
-  if (action === "remove") {
-    try {
-      await tellTank(batchId, userId);
-    } catch {
-      // Gold retirement is retried from Tank when the batch id is sent again.
-    }
-  }
+  if (!BATCH.test(batchId)) throw new Error("Not found");
+  const changed = await tellTank(batchId, action, userId);
+  if (!changed) redirect("/market-lab?quarantine_error=1");
   revalidatePath("/market-lab");
 }
 

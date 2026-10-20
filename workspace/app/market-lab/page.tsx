@@ -3,6 +3,7 @@ import { activeTenant } from "@/lib/tenant";
 import { refreshFeeds } from "./actions";
 import { readFlags, loadMarketLab } from "./load";
 import { offPanel } from "./plugins";
+import { quarantinePageError } from "./quarantine";
 import { loadQuarantine } from "./quarantine-server";
 import { QuarantinePanel } from "./quarantine-view";
 import { loadLabPlugins, resolveLabFeedKey } from "./vault-server";
@@ -16,7 +17,12 @@ export const metadata: Metadata = {
   title: "Market Lab · Tervory",
 };
 
-export default async function MarketLabPage() {
+export default async function MarketLabPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ quarantine_error?: string | string[] }>;
+}) {
+  const params = await searchParams;
   let workspaceName: string | null = null;
   let signedIn = false;
   try {
@@ -32,7 +38,7 @@ export default async function MarketLabPage() {
     vault: { enabled: plugins.enabled, names: plugins.enabled ? plugins.secrets.map((row) => row.name) : [] },
     resolveKey: plugins.enabled ? resolveLabFeedKey : undefined,
   });
-  const batches = await loadQuarantine();
+  const quarantine = await loadQuarantine();
   return (
     <MarketLabView
       model={model}
@@ -40,7 +46,15 @@ export default async function MarketLabPage() {
       envKeys={envKeys}
       refresh={refreshFeeds}
       workspaceName={workspaceName}
-      quarantine={batches ? <QuarantinePanel batches={batches} /> : null}
+      quarantine={
+        quarantine ? (
+          <QuarantinePanel
+            batches={quarantine.batches}
+            error={quarantinePageError(quarantine.error, params.quarantine_error)}
+            listFailed={quarantine.error !== null}
+          />
+        ) : null
+      }
     />
   );
 }
