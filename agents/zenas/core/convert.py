@@ -351,7 +351,7 @@ def parse_worked(raw: str, text: str | None = None) -> dict[str, Any]:
     data = parse_json_object(raw)
     if text is not None:
         data = resolve_answer(data, text)
-    facts = _fold(str(data.get("facts") or data.get("narrative") or ""))
+    facts = str(data.get("facts") or "").strip() if "facts_pointer" in data else _fold(str(data.get("facts") or data.get("narrative") or ""))
     question = _fold(str(data.get("question") or ""))
     holding = _fold(str(data.get("holding") or data.get("outcome") or ""))
     raw_elements = data.get("elements")
@@ -391,6 +391,11 @@ def parse_worked(raw: str, text: str | None = None) -> dict[str, Any]:
         "citations": citations,
         "features": features,
         "pointed": "facts_pointer" in data,
+        "has_pointers": "facts_pointer" in data or any(
+            isinstance(item, dict) and "quote_pointer" in item
+            for field in ("elements", "element_findings", "citations")
+            for item in (data.get(field) or [])
+        ),
     }
 
 
@@ -798,8 +803,8 @@ async def convert_cases(
             )
             continue
         try:
-            text = judgment_text(text)
-            parsed = parse_worked(content, text)
+            resolved_text = judgment_text(text)
+            parsed = parse_worked(content, resolved_text)
         except PointerError:
             await _remember_failure(
                 ladder, region=box, pool_doc_id=case["document_id"],
@@ -834,7 +839,7 @@ async def convert_cases(
         passages = [
             {
                 "citation": case["citation"],
-                "text": text,
+                "text": resolved_text if parsed["has_pointers"] else text,
                 "doc_id": case["document_id"],
                 "version_id": case["version_id"],
                 "status": "in_force",
