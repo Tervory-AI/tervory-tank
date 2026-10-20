@@ -17,6 +17,26 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      run: ${{ steps.scope.outputs.run }}
+      full: ${{ steps.scope.outputs.full }}
+      tisan: ${{ steps.scope.outputs.tisan }}
+      tests: ${{ steps.scope.outputs.tests }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Select checks from changed paths
+        id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DIFF_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          DIFF_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python3 .github/scripts/ci_scope.py
+
   # Picks where the real jobs run. It only runs when the founder has switched the
   # self-hosted runner on (repository variable SELF_HOSTED_RUNNER_ONLINE=true) and
   # the change is not from a fork. Otherwise it is skipped and the jobs below fall
@@ -72,9 +92,9 @@ jobs:
           echo "runner=$runner" >> "$GITHUB_OUTPUT"
 
   tank:
-    needs: runner
+    needs: [changes, runner]
     # Run even when "pick runner" was skipped; then the runner falls back to ubuntu-latest.
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.run == 'true' }}
     # Self-hosted only when "pick runner" chose it and the change is not from a fork.
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.runner.outputs.runner && fromJSON(needs.runner.outputs.runner) || 'ubuntu-latest' }}
     timeout-minutes: 12
@@ -109,6 +129,7 @@ jobs:
         with:
           node-version: "22"
       - name: Install workspace packages for offline billing tests
+        if: needs.changes.outputs.full == 'true'
         working-directory: workspace
         run: |
           if [ -f package-lock.json ]; then
@@ -117,12 +138,14 @@ jobs:
             npm install --no-package-lock --no-audit --no-fund
           fi
       - name: Lint
+        if: needs.changes.outputs.full == 'true'
         # F401 in base.socials/1.0.0/run.py is a pre-existing unused import.
         # This lane cannot edit an approved skill in place.
         run: ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"
       - name: Secret scan and tests
-        run: pytest -q
+        run: python3 .github/scripts/ci_scope.py test
         env:
+          TEST_TARGETS: ${{ needs.changes.outputs.tests }}
           PYTHONPATH: tank
           # One Postgres service. The pool schema test and the ladder schema test
           # both connect here. The ladder test creates its own databases from this URL.
@@ -130,8 +153,8 @@ jobs:
           ZENAS_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pooltest
 
   workspace:
-    needs: runner
-    if: ${{ !cancelled() }}
+    needs: [changes, runner]
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.full == 'true' }}
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.runner.outputs.runner && fromJSON(needs.runner.outputs.runner) || 'ubuntu-latest' }}
     timeout-minutes: 5
     steps:

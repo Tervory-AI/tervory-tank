@@ -1,11 +1,11 @@
 # Self-hosted GitHub Actions runner
 
-This cuts GitHub Actions minutes in two ways.
+This cuts GitHub Actions minutes with path selection and an optional self-hosted runner.
 
 1. **Docs-only changes skip CI.** `ci.yml` and `tisan-site.yml` have
    `paths-ignore: ["docs/**", "**/*.md"]` on both `push` and `pull_request`. A change
    that touches only files under `docs/` or Markdown files anywhere starts no run. If
-   even one other file changes, everything runs as normal.
+   other files change, the selector below chooses the checks.
 2. **`ci.yml` can run on our own machine.** The `tank` and `workspace` jobs run on a
    self-hosted runner with the labels `self-hosted, linux` when you switch it on. When
    it's off, or the runner isn't online, they run on GitHub's `ubuntu-latest` exactly
@@ -173,3 +173,26 @@ reports the same check name.
 One trade-off to know: a few tests read Markdown files (for example the Tisan template
 scan and the skill packages). A change to only those `.md` files won't run CI. The
 next non-doc change will catch any break.
+
+
+## Checks selected by changed paths
+
+Both workflows use `.github/scripts/ci_scope.py`. Pull requests compare the base
+and head using their merge base; pushes compare the previous and current main.
+Deleted files and both sides of a rename count. Checkout fetches full history,
+so large pull requests are not limited to GitHub's changed-file API page size.
+
+- Only docs or Markdown: neither workflow starts.
+- Only `agents/<room>/` (plus optional docs): run that room's Python tests and
+  the shared secret, room/client isolation, region and schema checks. Multiple
+  rooms select the union. Postgres stays enabled for the schema apply checks.
+- Tisan room changes also run the Tisan site gate on GitHub-hosted runners.
+- `tank/`, `agents/_chassis/`, `workspace/`, shared files, workflow/test changes,
+  and unrecognised rooms or paths run all Python tests, the Workspace build and
+  the Tisan site gate. This conservative fallback protects new rooms until their
+  test mapping is added to the selector.
+
+Room checks include existing room page tests, so Node 22 remains available, but
+only a full run installs Workspace packages and runs the global Ruff check.
+The lightweight changed-path jobs always use GitHub-hosted runners. The existing
+self-hosted choice and fork guards still apply to `tank` and `workspace`.

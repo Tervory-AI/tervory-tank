@@ -55,7 +55,7 @@ def test_no_workflow_uses_pull_request_target(path: Path) -> None:
 def test_ci_keeps_job_names_and_main_push_trigger() -> None:
     text = CI.read_text(encoding="utf-8")
     jobs = _load(CI)["jobs"]
-    assert set(jobs) == {"runner", "tank", "workspace"}
+    assert set(jobs) == {"changes", "runner", "tank", "workspace"}
     assert "push:" in text and "branches: [main]" in text
     assert _load(CI)["permissions"] == {"contents": "read"}
 
@@ -75,7 +75,7 @@ def test_preflight_is_cheap_hosted_and_guarded() -> None:
 @pytest.mark.parametrize("name", ["tank", "workspace"])
 def test_main_jobs_fall_back_to_ubuntu_latest(name: str) -> None:
     job = _load(CI)["jobs"][name]
-    assert job["needs"] == "runner"
+    assert job["needs"] == ["changes", "runner"]
     # Still runs when "pick runner" was skipped.
     assert "!cancelled()" in job["if"]
     runs_on = job["runs-on"]
@@ -192,3 +192,88 @@ def test_founder_doc_covers_setup_and_security() -> None:
         assert needle in doc, needle
     for needle in ("unprivileged", "boston", "docker socket", "coolify", "tank key", "rootless"):
         assert needle in lowered, needle
+
+
+def _scope_module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("ci_scope", ROOT / ".github/scripts/ci_scope.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize("paths", [[], ["README.md"], ["docs/spec.json", "agents/rig/README.md"]])
+def test_docs_select_no_checks(paths):
+    assert _scope_module().select(paths) == {"run": False, "full": False, "tisan": False, "tests": []}
+
+
+@pytest.mark.parametrize("room", ["base", "tiger", "market_lab", "radix", "rig", "tisan", "zenas"])
+def test_room_changes_keep_safety_without_unrelated_room_tests(room):
+    scope = _scope_module().select([f"agents/{room}/app.py", "docs/notes.md"])
+    assert scope["run"] and not scope["full"]
+    assert scope["tisan"] == (room == "tisan")
+    for required in ("test_secrets.py", "test_agent_roles.py", "test_c10_rooms.py",
+                     "test_tenant_scoping.py", "test_za_region.py", "test_zenas_schema_apply.py",
+                     "test_zenas_pool_schema_postgres.py", "test_radix_business_schema.py"):
+        assert f"tests/{required}" in scope["tests"]
+    assert any(room in path for path in scope["tests"])
+    for other in ("rig", "tiger", "zenas", "tisan"):
+        if other != room:
+            assert f"tests/test_{other}_page.py" not in scope["tests"]
+
+
+@pytest.mark.parametrize("path", ["tank/main.py", "agents/_chassis/chassis/db.py", "workspace/app/page.tsx",
+                                  "agents/_template/app.py", "agents/vshop/app.py", "agents/check_isolation.sh",
+                                  ".github/workflows/ci.yml", "tests/test_rig.py", "docker-compose.yml"])
+def test_shared_or_unknown_paths_run_everything(path):
+    assert _scope_module().select(["agents/rig/app.py", path]) == {
+        "run": True, "full": True, "tisan": True, "tests": ["tests"]}
+
+
+def test_multiple_rooms_select_union():
+    module = _scope_module()
+    combined = module.select(["agents/rig/app.py", "agents/tisan/app.py"])
+    assert not combined["full"] and combined["tisan"]
+    assert set(combined["tests"]) == set(module.select(["agents/rig/app.py"])["tests"]) | set(
+        module.select(["agents/tisan/app.py"])["tests"])
+
+
+def test_changed_paths_includes_deletions_and_both_sides_of_rename(tmp_path, monkeypatch):
+    module = _scope_module()
+    def git(*args):
+        return subprocess.check_output(["git", *args], cwd=tmp_path).decode().strip()
+    git("init", "-q")
+    git("config", "user.email", "ci@example.invalid")
+    git("config", "user.name", "CI test")
+    (tmp_path / "tank").mkdir()
+    (tmp_path / "tank/old.py").write_text("old content\n")
+    (tmp_path / "removed.py").write_text("removed\n")
+    git("add", ".")
+    git("commit", "-qm", "base")
+    base = git("rev-parse", "HEAD")
+    (tmp_path / "agents/rig").mkdir(parents=True)
+    git("mv", "tank/old.py", "agents/rig/new.py")
+    git("rm", "removed.py")
+    git("commit", "-qm", "head")
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+    monkeypatch.setenv("DIFF_BASE", base)
+    monkeypatch.setenv("DIFF_HEAD", git("rev-parse", "HEAD"))
+    for event in ("pull_request", "push"):
+        monkeypatch.setenv("EVENT_NAME", event)
+        paths = module.changed_paths()
+        assert set(paths) == {"tank/old.py", "agents/rig/new.py", "removed.py"}
+        assert module.select(paths)["full"]
+
+
+def test_workflows_use_scope_and_do_not_hide_failed_detection():
+    ci = _load(CI)["jobs"]
+    for path in (CI, TISAN):
+        changes = _load(path)["jobs"]["changes"]
+        assert changes["steps"][0]["with"]["fetch-depth"] == 0
+        assert changes["steps"][1]["run"] == "python3 .github/scripts/ci_scope.py"
+    assert "needs.changes.result == 'success'" in ci["tank"]["if"]
+    assert "needs.changes.outputs.full == 'true'" in ci["workspace"]["if"]
+    assert "needs.changes.outputs.tisan == 'true'" in _load(TISAN)["jobs"]["gate"]["if"]
+    step = next(step for step in ci["tank"]["steps"] if step.get("name") == "Secret scan and tests")
+    assert step["run"] == "python3 .github/scripts/ci_scope.py test"
+    assert step["env"]["TEST_TARGETS"] == "${{ needs.changes.outputs.tests }}"
