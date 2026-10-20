@@ -854,6 +854,12 @@ async def run_route(
     messages = [m.model_dump() for m in req.messages]
     if policy["system_prompt"]:
         messages = [{"role": "system", "content": policy["system_prompt"]}, *messages]
+    if req.task_type == "zenas.case_facts" and any(str(message.get("content", "")).startswith(_CONVERT_HEAD) for message in messages):
+        messages.insert(0, {"role": "system", "content": (
+            "For this judgment conversion use facts_pointer and element quote_pointer objects instead of copying text. "
+            "Each pointer is {\"paragraphs\":[1,2]} or {\"first\":\"first eight words\",\"last\":\"last eight words\"}. "
+            "Select at least 200 characters of facts. Return question, holding, elements and citations as JSON."
+        )})
     max_tokens = min(req.max_tokens or policy["max_tokens_out"], policy["max_tokens_out"])
     generation = case_facts_generation(model) if req.task_type == "zenas.case_facts" else {}
     sent = "\n".join(str(item.get("content") or "") for item in messages)
@@ -2253,6 +2259,23 @@ async def _run_one_skill(
 
 BASE_AGENT_URL = os.environ.get("BASE_AGENT_URL", "http://agent-base:8000")
 _BASE_ROUTES = {"run", "retry", "rerun", "batches", "engines", "records"}
+
+
+@app.post("/v1/base/context-dev/trial", dependencies=[Depends(__import__("admin").require_admin)])
+async def base_context_trial() -> Response:
+    key = os.environ.get("TANK_KEY_BASE", "")
+    if _http is None or not key:
+        raise HTTPException(status_code=503, detail="Base trial is unavailable")
+    try:
+        response = await _http.post(
+            BASE_AGENT_URL.rstrip("/") + "/context-dev/trial",
+            json={"tenant_id": str(PLATFORM_TENANT)},
+            headers={"X-Tank-Key": key},
+            timeout=3600, follow_redirects=False,
+        )
+    except httpx.HTTPError:
+        raise HTTPException(status_code=503, detail="Trial interrupted; refresh results before trying again") from None
+    return Response(content=response.content, status_code=response.status_code, media_type="application/json")
 
 
 @app.api_route("/v1/base/{path:path}", methods=["GET", "POST"], dependencies=[Depends(require_key)])

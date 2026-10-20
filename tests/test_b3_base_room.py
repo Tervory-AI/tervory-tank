@@ -224,6 +224,11 @@ def test_sample_batch_matches_the_pre_move_records() -> None:
     got = asyncio.run(_sample())
     assert FIXTURE.is_file(), "missing tests/fixtures/b3-sample-batch.json"
     expected = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    for record in [*got["records"], got["engine_record"]]:
+        observation = record["passes"].get("2b", {}).pop("gold_observation", None)
+        assert observation is not None
+        assert observation["website"] == record["profile"]["website"]["value"]
+        assert observation["phones"]
     assert got == expected
     first, second = got["records"]
     assert first["status"] == "done" and second["status"] == "done"
@@ -361,7 +366,7 @@ def test_room_is_wired_and_client_queries_are_tenant_scoped() -> None:
     paths = {getattr(route, "path", "") for route in base_app.app.routes}
     for path in ("/v1/base/run", "/v1/base/retry", "/v1/base/rerun", "/v1/base/batches", "/v1/base/engines", "/v1/base/records", "/health"):
         assert path in paths
-    assert base_app.app.state.handlers.keys() == {"ping"}
+    assert base_app.app.state.handlers.keys() == {"ping", "gold.nightly"}
 
 
 def test_tank_proxies_base_and_does_not_keep_the_worker() -> None:

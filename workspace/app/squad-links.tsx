@@ -1,9 +1,136 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { SQUAD_LINKS } from "./product-nav";
+import { createContext, useContext, useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
-/** The same squad list on every left panel. Each page keeps its own tabs beside this. */
+// shell-1 logic
+export type SquadMember = {
+  href: string;
+  label: string;
+  job: string;
+  logo: string;
+  width: number;
+  height: number;
+  founderOnly: boolean;
+};
+
+/** Same order as the old sidebar list. Logos are the official on-dark files. */
+export const SQUAD_MEMBERS: readonly SquadMember[] = [
+  { href: "/base", label: "Base", job: "Verified businesses from a raw list.", logo: "/brand/base-on-dark.png", width: 2322, height: 601, founderOnly: false },
+  { href: "/tiger", label: "Tiger", job: "Watches prices and rival moves.", logo: "/brand/tiger-on-dark.png", width: 2607, height: 801, founderOnly: false },
+  { href: "/market-lab", label: "Market Lab", job: "Sourced market research.", logo: "/brand/market-lab-on-dark.png", width: 3685, height: 608, founderOnly: false },
+  { href: "/rig", label: "Rig", job: "The product and the parts that fit.", logo: "/brand/rig-on-dark.png", width: 1173, height: 651, founderOnly: false },
+  { href: "/tisan", label: "Tisan", job: "Sites and apps from a short brief.", logo: "/brand/tisan-on-dark.png", width: 2806, height: 701, founderOnly: false },
+  { href: "/radix", label: "Radix", job: "Finds what systems and sites expose.", logo: "/brand/radix-on-dark.png", width: 1893, height: 651, founderOnly: false },
+  { href: "/zenas", label: "Zenas", job: "US and South African legal research.", logo: "/brand/zenas-on-dark.png", width: 1970, height: 701, founderOnly: false },
+  { href: "/skala", label: "Skala", job: "Tests skills before they are used.", logo: "/brand/skala-on-dark.png", width: 3796, height: 901, founderOnly: true },
+  { href: "/tank", label: "Tank", job: "Routes each task and keeps receipts.", logo: "/brand/tank-on-dark.png", width: 2466, height: 601, founderOnly: true },
+];
+
+export type SquadPanelState = {
+  open: boolean;
+  focus: string;
+  sidebarHeight: number;
+};
+
+export type SquadAction =
+  | { type: "toggle" }
+  | { type: "escape" }
+  | { type: "outside" }
+  | { type: "choose" }
+  | { type: "close" }
+  | { type: "arrow"; key: string; from?: string };
+
+export function visibleMembers(founder: boolean): SquadMember[] {
+  return SQUAD_MEMBERS.filter((member) => founder || !member.founderOnly);
+}
+
+export function isCurrent(pathname: string, href: string): boolean {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+export function memberToFocus(pathname: string, members: readonly SquadMember[]): string {
+  const current = members.find((member) => isCurrent(pathname, member.href));
+  return current?.href ?? members[0]?.href ?? "squad";
+}
+
+export function isArrowKey(key: string): boolean {
+  return key === "ArrowDown" || key === "ArrowUp" || key === "ArrowLeft" || key === "ArrowRight" || key === "Home" || key === "End";
+}
+
+export function focusAfterArrow(hrefs: readonly string[], focused: string, key: string): string {
+  if (hrefs.length === 0) return focused;
+  const index = hrefs.indexOf(focused);
+  if (key === "Home") return hrefs[0] ?? focused;
+  if (key === "End") return hrefs[hrefs.length - 1] ?? focused;
+  if (key === "ArrowDown" || key === "ArrowRight") {
+    if (index < 0) return hrefs[0] ?? focused;
+    return hrefs[Math.min(hrefs.length - 1, index + 1)] ?? focused;
+  }
+  if (key === "ArrowUp" || key === "ArrowLeft") {
+    if (index < 0) return hrefs[hrefs.length - 1] ?? focused;
+    return hrefs[Math.max(0, index - 1)] ?? focused;
+  }
+  return focused;
+}
+
+/** Opening, closing, Escape, an outside click, a choice, and arrow keys. Sidebar height is never changed. */
+export function applySquadAction(
+  state: SquadPanelState,
+  action: SquadAction,
+  members: readonly SquadMember[],
+  pathname: string,
+): SquadPanelState {
+  const sidebarHeight = state.sidebarHeight;
+  if (action.type === "arrow") {
+    if (!state.open) return { ...state, sidebarHeight };
+    const from = action.from && members.some((member) => member.href === action.from) ? action.from : state.focus;
+    return { ...state, sidebarHeight, focus: focusAfterArrow(members.map((member) => member.href), from, action.key) };
+  }
+  if (action.type === "toggle") {
+    if (state.open) return { open: false, focus: "squad", sidebarHeight };
+    return { open: true, focus: memberToFocus(pathname, members), sidebarHeight };
+  }
+  if (!state.open) return { ...state, sidebarHeight };
+  return { open: false, focus: "squad", sidebarHeight };
+}
+// shell-1 view
+
+const SquadFounderContext = createContext(false);
+
+/** Shell passes the same founder flag the header already uses. */
+export function SquadFounderProvider({ founder, children }: { founder: boolean; children: React.ReactNode }) {
+  return <SquadFounderContext.Provider value={founder}>{children}</SquadFounderContext.Provider>;
+}
+
+const MOBILE_SHEET = "(max-width: 800px)";
+
+function placeSquadPopout(panel: HTMLElement, anchor: HTMLElement) {
+  const mobile = window.matchMedia(MOBILE_SHEET).matches;
+  if (mobile) {
+    panel.style.left = "0px";
+    panel.style.top = "0px";
+    panel.style.right = "0px";
+    panel.style.width = "100%";
+    panel.style.height = "100dvh";
+    panel.style.maxHeight = "none";
+    return;
+  }
+  panel.style.right = "auto";
+  panel.style.width = "";
+  panel.style.height = "";
+  panel.style.maxHeight = "";
+  const rect = anchor.getBoundingClientRect();
+  const top = Math.max(8, rect.top);
+  panel.style.left = `${Math.round(rect.right + 8)}px`;
+  panel.style.top = `${top}px`;
+  const box = panel.getBoundingClientRect();
+  const overflow = box.bottom + 8 - window.innerHeight;
+  if (overflow > 0) panel.style.top = `${Math.max(8, top - overflow)}px`;
+}
+
+/** One Squad control. The member list is portaled onto the body, so the sidebar does not grow. */
 export function SquadLinks({
   className = "squad-nav",
   linkClassName,
@@ -12,16 +139,143 @@ export function SquadLinks({
   linkClassName?: string;
 }) {
   const pathname = usePathname() ?? "";
+  const founder = useContext(SquadFounderContext);
+  const members = visibleMembers(founder);
+  const panelId = `squad-panel-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  const slotRef = useRef<HTMLElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const membersRef = useRef(members);
+  const pathRef = useRef(pathname);
+  membersRef.current = members;
+  pathRef.current = pathname;
+  const [ready, setReady] = useState(false);
+  const [panel, setPanel] = useState<SquadPanelState>({ open: false, focus: "squad", sidebarHeight: 0 });
+  const landed = useRef(false);
+
+  function dispatch(action: SquadAction) {
+    setPanel((current) => {
+      const sidebarHeight = slotRef.current?.offsetHeight ?? current.sidebarHeight;
+      return applySquadAction({ ...current, sidebarHeight }, action, membersRef.current, pathRef.current);
+    });
+  }
+
+  useEffect(() => setReady(true), []);
+
+  useEffect(() => {
+    if (!landed.current) {
+      landed.current = true;
+      return;
+    }
+    if (panel.open) {
+      const links = [...(panelRef.current?.querySelectorAll<HTMLAnchorElement>("a.squad-row") ?? [])];
+      const target = links.find((link) => link.dataset.squadHref === panel.focus) ?? links[0];
+      (target ?? buttonRef.current)?.focus();
+      return;
+    }
+    buttonRef.current?.focus();
+  }, [panel.open, panel.focus]);
+
+  useEffect(() => {
+    if (!panel.open) return;
+    const place = () => {
+      if (panelRef.current && buttonRef.current) placeSquadPopout(panelRef.current, buttonRef.current);
+    };
+    place();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      dispatch({ type: "escape" });
+    };
+    const onPointer = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (buttonRef.current?.contains(target) || panelRef.current?.contains(target)) return;
+      dispatch({ type: "outside" });
+    };
+    document.addEventListener("keydown", onKey, true);
+    document.addEventListener("pointerdown", onPointer, true);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      document.removeEventListener("keydown", onKey, true);
+      document.removeEventListener("pointerdown", onPointer, true);
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [panel.open]);
+
+  function onPanelKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      dispatch({ type: "escape" });
+      return;
+    }
+    if (!isArrowKey(event.key)) return;
+    event.preventDefault();
+    const from = (event.target as HTMLElement).dataset.squadHref;
+    dispatch({ type: "arrow", key: event.key, from });
+  }
+
+  const triggerClass = [linkClassName, "squad-trigger"].filter(Boolean).join(" ");
+  const popout = (
+    <div
+      id={panelId}
+      className={panel.open ? "squad-pop open" : "squad-pop"}
+      role="dialog"
+      aria-label="Squad"
+      hidden={!panel.open}
+      ref={panelRef}
+      onKeyDown={onPanelKeyDown}
+    >
+      <div className="squad-pop-bar">
+        <p className="squad-pop-title">Squad</p>
+        <button type="button" className="squad-pop-close" onClick={() => dispatch({ type: "close" })}>
+          Close
+        </button>
+      </div>
+      <ul className="squad-list">
+        {members.map((member) => {
+          const current = isCurrent(pathname, member.href);
+          return (
+            <li key={member.href}>
+              <a
+                className="squad-row"
+                href={member.href}
+                data-squad-href={member.href}
+                aria-current={current ? "page" : undefined}
+                onClick={() => dispatch({ type: "choose" })}
+              >
+                <img src={member.logo} alt="" width={member.width} height={member.height} />
+                <span className="squad-name">{member.label}</span>
+                <span className="squad-job">{member.job}</span>
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+
   return (
-    <nav className={className} aria-label="Squad">
-      {SQUAD_LINKS.map((link) => {
-        const current = pathname === link.href || pathname.startsWith(`${link.href}/`);
-        return (
-          <a key={link.href} className={linkClassName} href={link.href} aria-current={current ? "page" : undefined}>
-            {link.label}
-          </a>
-        );
-      })}
-    </nav>
+    <>
+      <nav className={className} aria-label="Squad" ref={slotRef} data-squad-slot="">
+        <button
+          type="button"
+          className={triggerClass}
+          ref={buttonRef}
+          aria-expanded={panel.open}
+          aria-controls={panelId}
+          aria-haspopup="dialog"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => dispatch({ type: "toggle" })}
+        >
+          Squad
+        </button>
+      </nav>
+      {ready && document.body ? createPortal(popout, document.body) : null}
+    </>
   );
 }

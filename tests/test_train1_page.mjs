@@ -34,10 +34,11 @@ try {
   const errors=[]; page.on('pageerror',e=>errors.push(e.message));
   await page.goto(`http://127.0.0.1:${server.address().port}/skala/gold`);
   await page.getByText('Example company', {exact:false}).waitFor();
+  await page.getByText('Ten machine-labelled examples per source for each skill', {exact:false}).waitFor();
   await page.getByText('-3.0 points', {exact:true}).waitFor();
   await page.getByText('95.0%', {exact:true}).waitFor();
   await page.screenshot({path:path.join(output,'gold-desktop.png'),fullPage:true});
-  await page.setViewportSize({width:390,height:844});
+  await page.setViewportSize({width:375,height:844});
   await page.screenshot({path:path.join(output,'gold-mobile.png'),fullPage:true});
   assert(await page.evaluate(()=>document.documentElement.scrollWidth <= window.innerWidth));
   await page.keyboard.press('r');

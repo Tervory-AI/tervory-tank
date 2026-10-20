@@ -29,6 +29,16 @@ def test_region_is_exact():
     assert not training.valid_auto_candidate(example(), 'base', 'za')
 
 
+@pytest.mark.parametrize('family', ['', ' ', 42, [], 'a' * 501])
+def test_invalid_label_family(family):
+    assert not training.valid_auto_candidate(example(label_family=family), 'base', 'us-east')
+
+
+@pytest.mark.parametrize('family', [None, 'auto:price-gold-109'])
+def test_optional_label_family(family):
+    assert training.valid_auto_candidate(example(label_family=family), 'base', 'us-east')
+
+
 @pytest.mark.asyncio
 async def test_missing_endpoint_and_room_auth(monkeypatch):
     key = secrets.token_urlsafe(20)
@@ -150,16 +160,25 @@ def test_row_size_byte_boundary():
 
 
 @pytest.mark.asyncio
-async def test_explicit_holdout_survives_intake_review_and_correction(database, monkeypatch):
+@pytest.mark.parametrize("room", ["base", "zenas"])
+async def test_explicit_holdout_survives_intake_review_and_correction(database, monkeypatch, room):
     import gold
     pool, _ = database
-    monkeypatch.setattr(training, 'ROOMS', ('base',))
-    monkeypatch.setenv('TANK_KEY_BASE', secrets.token_urlsafe(20))
+    monkeypatch.setattr(training, 'ROOMS', (room,))
+    monkeypatch.setenv('TANK_KEY_' + room.upper(), secrets.token_urlsafe(20))
     def no_rehash(*args):
         pytest.fail('An explicit holdout must never be re-split')
     monkeypatch.setattr(training, 'is_holdout', no_rehash)
     monkeypatch.setattr(gold, 'is_holdout', no_rehash)
     rows = [example(input={'held': n}, holdout=True) for n in range(2)]
+    if room == "zenas":
+        from agents.zenas.gold_sources import case_candidate
+        from test_zenas_gold_sources import case
+        rows = [
+            case_candidate(dict(case(holdout=True), pool_version_id=f"held-{number}"), "us-east")
+            for number in range(2)
+        ]
+        assert all(row["public"] is True and row["holdout"] is True for row in rows)
     real_client = httpx.AsyncClient
     monkeypatch.setattr(training.httpx, 'AsyncClient', lambda **kw: real_client(
         transport=httpx.MockTransport(lambda req: httpx.Response(200, json=rows)), **kw))

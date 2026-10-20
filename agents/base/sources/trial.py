@@ -36,6 +36,7 @@ async def run_trial(pool: Any, http: Any, tenant_id: str, run_id: str, records: 
             await ledger.recover()
             adapter = ContextDev(http, ledger, tenant_id=tenant_id, run_id=run_id)
             results = []
+            records_sent = 0
             uncertain = await conn.fetchval(
                 "SELECT 1 FROM agent_base.context_dev_calls WHERE tenant_id=$1 AND run_id=$2 "
                 "AND (result->'credits'='null'::jsonb OR (result->>'credits')::numeric <= 0 "
@@ -53,13 +54,14 @@ async def run_trial(pool: Any, http: Any, tenant_id: str, run_id: str, records: 
                 else:
                     identity = {key: record[key] for key in ("name", "domain", "url") if record.get(key)}
                     result = await adapter.lookup(**identity, record_id=record["record_id"])
+                    records_sent += result["status"] in ("candidate", "failed", "transport_error", "unknown")
                 checked = record.get("checked_answers")
                 if checked is not None:
                     await conn.execute(
                         "UPDATE agent_base.records SET passes=jsonb_set(passes,'{context_dev_checked}',$4::jsonb) "
                         "WHERE tenant_id=$1 AND task_id=$2 AND id=$3",
                         tenant, run, uuid.UUID(record["record_id"]),
-                        json.dumps({"checked": True, "expected": checked}),
+                        json.dumps({"checked": bool(checked), "expected": checked, "label_source": record.get("label_source")}),
                     )
                 results.append({"record_id": record["record_id"], **result})
                 if result["status"] == "credit_limit":
@@ -76,7 +78,11 @@ async def run_trial(pool: Any, http: Any, tenant_id: str, run_id: str, records: 
                     tenant, run, uuid.UUID(results[-1]["record_id"]),
                     json.dumps({key: value for key, value in results[-1].items() if key != "record_id"}),
                 )
-                return {"run_id": run_id, "results": results, "status": "credit_limit", "message": "credit cap reached"}
-            return {"run_id": run_id, "results": results}
+                return {"run_id": run_id, "results": results, "records_sent": records_sent, "status": "credit_limit", "message": "credit cap reached"}
+            return {
+                "run_id": run_id, "results": results, "records_sent": records_sent,
+                **({"message": "Context.dev trial key is not configured."}
+                   if results and results[-1]["status"] == "not_configured" else {}),
+            }
         finally:
             await conn.execute("SELECT pg_advisory_unlock(hashtextextended($1,0))", lock)
