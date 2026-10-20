@@ -171,6 +171,7 @@ async def gold_candidates(
     except ImportError:
         raise HTTPException(status_code=503, detail="gold evidence unavailable") from None
     try:
-        return read_candidates(limit=limit, region=os.environ.get("TANK_REGION", "us-east"))
-    except (OSError, ValueError):
+        return await read_candidates(limit=limit, region=os.environ.get("TANK_REGION", "us-east"))
+    except Exception as exc:  # noqa: BLE001 — class name only; the message can carry the database URL
+        log.warning("gold candidates failed (%s)", type(exc).__name__)
         raise HTTPException(status_code=503, detail="gold evidence unavailable") from None

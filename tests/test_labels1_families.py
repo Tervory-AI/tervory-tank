@@ -6,7 +6,6 @@ import json
 import secrets
 import sys
 import uuid
-from datetime import date, timedelta
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -227,127 +226,177 @@ def test_tisan_approval_months_are_separate_families(tmp_path, monkeypatch):
     assert client.get("/gold/candidates", headers={"X-Tank-Key": "other-room"}).status_code == 401
 
 
-def _feed(points, *, fetched=None, official=None, **extra):
-    body = {
-        "feed": "public-prices", "public": True, "region": "us-east",
-        "series_id": "public-prices:east", "points": points,
-        "areas": [{"area": "east", "segment": "all", "gap": points}],
+PLATFORM = "00000000-0000-0000-0000-000000000001"
+OTHER_TENANT = "11111111-1111-4111-8111-111111111111"
+
+
+def _series(tenant: str = PLATFORM, source: str = "public-prices", ref: str = "east", engine: str = "ffl") -> dict:
+    return {
+        "id": f"{tenant}:{source}:{ref}",
+        "tenant_id": tenant,
+        "source": source,
+        "ref": ref,
+        "unit": "index",
+        "engine": engine,
     }
-    if official is not None:
-        body["official"] = official
-    if fetched is not None:
-        body["fetched"] = fetched
-    body.update(extra)
-    return body
 
 
-def _monthly(start: date, count: int, value: float, jump: float | None = None) -> list[dict]:
-    rows = []
-    for index in range(count):
-        year = start.year + (start.month - 1 + index) // 12
-        month = (start.month - 1 + index) % 12 + 1
-        amount = jump if jump is not None and index == count - 1 else value
-        rows.append({"date": date(year, month, 1).isoformat(), "value": amount})
+def _stored(series_id: str, rows: list[dict]) -> list[dict]:
+    return [
+        {
+            "series_id": series_id,
+            "date": row["date"],
+            "value": row["value"],
+            "fetched_at": row.get("fetched_at") or f"{row['date']}T00:00:00+00:00",
+        }
+        for row in rows
+    ]
+
+
+def _spike() -> list[dict]:
+    """Six flat months, a jump the live rule calls a surge, then a fall."""
+    rows = [{"date": f"2025-{month:02d}-01", "value": 10} for month in range(1, 7)]
+    rows.append({"date": "2025-07-01", "value": 40})
+    rows.append({"date": "2025-07-15", "value": 8})
+    rows.append({"date": "2025-08-15", "value": 8})
+    rows.append({"date": "2025-08-20", "value": 9})
     return rows
 
 
-def test_market_lab_labels_only_after_the_window_and_splits_months():
+def test_market_lab_labels_the_later_move_not_the_live_rule():
     _room(ROOT / "agents" / "market_lab")
     from core.pure import series_fetch, shift_detect, surge_detect
 
     lab = _load("market_lab_label_families", ROOT / "agents" / "market_lab" / "gold_sources.py")
     assert lab.WINDOW_DAYS == 28
-    early = date(2025, 1, 1)
-    packed = [
-        {"date": (date(2025, 7, 1) + timedelta(days=index)).isoformat(), "value": 10 if index < 6 else 80}
-        for index in range(8)
+    assert lab.PCT_THRESHOLD == 0.25
+    assert "public-feeds.jsonl" not in (ROOT / "agents" / "market_lab" / "gold_sources.py").read_text(encoding="utf-8")
+    assert "agent_market_lab.series" in lab.SERIES_SQL
+    assert "agent_market_lab.points" in lab.POINTS_SQL
+    assert "agent_market_lab.predictions" in lab.PREDICTIONS_SQL
+    assert "tenant_id = $1" in lab.SERIES_SQL
+
+    too_soon = [{"date": "2025-01-01", "value": 10}, {"date": "2025-01-28", "value": 1}]
+    early = _series()
+    assert [row["skill_id"] for row in lab.candidates([early], _stored(early["id"], too_soon), region="us-east")] == [
+        "market.series_fetch", "market.series_fetch",
     ]
-    assert [row["skill_id"] for row in lab.candidates([_feed(packed)], region="us-east")] == []
+    opened_points = [{"date": "2025-02-01", "value": 10}, {"date": "2025-03-01", "value": 10}]
+    opened = lab.candidates([early], _stored(early["id"], opened_points), region="us-east")
+    assert {row["skill_id"] for row in opened} == {"market.surge_detect", "market.shift_detect", "market.series_fetch"}
+    assert {row["label_family"] for row in opened if row["skill_id"] == "market.surge_detect"} == {
+        "later-value:public-prices:2025-02",
+    }
+    assert all("2025-03-01" not in row["label_source"] or row["skill_id"] == "market.series_fetch" for row in opened)
 
-    exact = [{"date": "2025-01-01", "value": 10}, {"date": "2025-01-28", "value": 12}]
-    assert lab.candidates([_feed(exact)], region="us-east") == []
-    exact[1]["date"] = "2025-01-29"
-    opened = lab.candidates([_feed(exact)], region="us-east")
-    assert {row["skill_id"] for row in opened} == {"market.surge_detect", "market.shift_detect"}
-    assert {row["label_family"] for row in opened} == {"later-value:public-prices:2025-01"}
-    assert all("2025-01-29" not in row["label_source"] for row in opened)
-
-    series = _monthly(early, 7, 10, jump=80)
-    series.append({"date": "2025-08-15", "value": 80})
-    labelled = lab.candidates([_feed(series)], region="us-east")
+    own = _series()
+    foreign = _series(tenant=OTHER_TENANT)
+    upload = _series(source="upload", ref="notes")
+    points = _stored(own["id"], _spike()) + _stored(foreign["id"], _spike()) + _stored(upload["id"], _spike())
+    prediction = {
+        "id": "11111111-1111-4111-8111-111111111112",
+        "tenant_id": PLATFORM,
+        "made_at": "2025-07-01T00:00:00+00:00",
+        "metric_series_id": own["id"],
+        "comparator": "gt",
+        "target": 30,
+        "resolve_by": "2025-08-01T00:00:00+00:00",
+        "outcome": "hit",
+    }
+    labelled = lab.candidates([foreign, upload, own], points, [prediction], region="us-east")
     surge = [row for row in labelled if row["skill_id"] == "market.surge_detect"]
     shift = [row for row in labelled if row["skill_id"] == "market.shift_detect"]
+    assert surge
+    assert all(OTHER_TENANT not in row["label_source"] and "upload" not in row["label_family"] for row in labelled)
     assert {row["label_family"] for row in surge} >= {
         "later-value:public-prices:2025-01", "later-value:public-prices:2025-07",
     }
-    assert all("2025-08" not in row["label_family"] for row in labelled)
+    assert all("2025-08" not in row["label_family"] for row in surge + shift)
+    assert all("2025-08-20" not in row["label_source"] for row in surge + shift)
     july = next(row for row in surge if row["label_source"].endswith("2025-07-01"))
-    assert july["expected"] == surge_detect({"points": july["input"]["points"]})
-    assert any(event["date"] == "2025-07-01" for event in july["expected"]["events"])
-    assert all(event["date"] < "2025-08-15" for row in surge for event in row["expected"]["events"])
+    live = surge_detect({"points": july["input"]["points"]})
+    assert any(event["kind"] == "surge" and event["date"] == "2025-07-01" for event in live["events"])
+    assert july["expected"]["outcome"] == "no surge"
+    assert july["expected"]["prediction_agrees"] is False
+    assert all(point["date"] <= "2025-07-01" for point in july["input"]["points"])
     july_shift = next(row for row in shift if row["label_source"].endswith("2025-07-01"))
-    assert july_shift["expected"] == shift_detect({"areas": july_shift["input"]["areas"]})
-    assert july_shift["expected"]["events"][0]["kind"] == "bottleneck"
+    assert shift_detect({"areas": july_shift["input"]["areas"]})["events"][0]["kind"] == "bottleneck"
+    assert july_shift["expected"]["outcome"] == "saturating"
+    fetched = next(row for row in labelled if row["skill_id"] == "market.series_fetch" and row["label_source"].endswith("2025-07-01"))
+    assert fetched["label_family"] == "official-match:public-prices:2025-07"
+    assert fetched["expected"] == series_fetch(fetched["input"])
+    planted = _series(engine="synthetic")
+    synthetic_rows = lab.candidates([planted], _stored(planted["id"], opened_points), region="us-east")
+    assert synthetic_rows
+    assert all("synthetic" in row["label_family"] for row in synthetic_rows)
 
-    official = [{"date": "2025-09-01", "value": 3}, {"date": "2025-10-01", "value": 4}]
-    fetched = [
-        {"date": "2025-09-01", "value": 3, "fetched_at": "2025-09-02T00:00:00+00:00"},
-        {"date": "2025-10-01", "value": 9, "fetched_at": "2025-10-02T00:00:00+00:00"},
-        {"date": "2025-11-01", "value": 4, "fetched_at": "2025-11-02T00:00:00+00:00"},
-    ]
-    matched = lab.candidates([_feed([], official=official, fetched=fetched)], region="us-east")
-    assert [row["skill_id"] for row in matched] == ["market.series_fetch"]
-    assert matched[0]["label_family"] == "official-match:public-prices:2025-09"
-    assert matched[0]["expected"] == series_fetch(matched[0]["input"])
-    both = lab.candidates([_feed(
-        [], official=official,
-        fetched=[fetched[0], {"date": "2025-10-01", "value": 4, "fetched_at": "2025-10-02T00:00:00+00:00"}],
-    )], region="us-east")
-    assert {row["label_family"] for row in both} == {
-        "official-match:public-prices:2025-09", "official-match:public-prices:2025-10",
-    }
-    planted = lab.candidates([_feed(
-        exact, synthetic=True, official=[{"date": "2025-01-01", "value": 10}],
-        fetched=[{"date": "2025-01-01", "value": 10, "fetched_at": "2025-02-01T00:00:00+00:00"}],
-    )], region="us-east")
-    assert planted
-    assert all("synthetic" in row["label_family"] for row in planted)
-    hidden = _feed(series, public=False)
-    other = _feed(series, region="za")
-    private = _feed(series, tenant_id="11111111-1111-4111-8111-111111111111")
-    assert lab.candidates([hidden, other, private], region="us-east") == []
-    assert lab.candidates([_feed(series, region="za")], region="za")
+
+class _GoldConn:
+    def __init__(self, series: list[dict], points: list[dict], predictions: list[dict]) -> None:
+        self.series = series
+        self.points = points
+        self.predictions = predictions
+        self.queries: list[tuple[str, tuple]] = []
+
+    async def fetch(self, sql: str, *args: object) -> list[dict]:
+        self.queries.append((sql, args))
+        tenant = str(args[0])
+        if "agent_market_lab.predictions" in sql:
+            return [row for row in self.predictions if str(row["tenant_id"]) == tenant]
+        if "agent_market_lab.points" in sql:
+            owned = {row["id"] for row in self.series if str(row["tenant_id"]) == tenant}
+            return [row for row in self.points if row["series_id"] in owned]
+        if "agent_market_lab.series" in sql:
+            return [row for row in self.series if str(row["tenant_id"]) == tenant]
+        raise AssertionError(sql)
+
+    async def close(self) -> None:
+        return None
 
 
 @pytest.mark.asyncio
-async def test_market_lab_rejects_a_wrong_room_key(tmp_path, monkeypatch):
+async def test_market_lab_rejects_a_wrong_room_key(monkeypatch):
     _room(ROOT / "agents" / "_chassis")
     _room(ROOT / "agents" / "market_lab")
     lab = _load("market_lab_label_route", ROOT / "agents" / "market_lab" / "gold_sources.py")
-    monkeypatch.setenv("DATA_DIR", str(tmp_path))
     monkeypatch.setenv("TANK_REGION", "us-east")
     key = secrets.token_hex(24)
     monkeypatch.setenv("TANK_KEY", key)
-    folder = tmp_path / "gold" / "us-east"
-    folder.mkdir(parents=True)
-    (folder / "public-feeds.jsonl").write_text(json.dumps({
-        "feed": "public-prices", "public": True, "region": "us-east",
-        "official": [{"date": "2025-09-01", "value": 3}],
-        "fetched": [{"date": "2025-09-01", "value": 3, "fetched_at": "2025-09-02T00:00:00+00:00"}],
-    }) + "\n", encoding="utf-8")
+    own = _series()
+    foreign = _series(tenant=OTHER_TENANT)
+    conn = _GoldConn(
+        [own, foreign],
+        _stored(own["id"], [{"date": "2025-09-01", "value": 3}, {"date": "2025-10-01", "value": 3}])
+        + _stored(foreign["id"], [{"date": "2025-09-01", "value": 99}, {"date": "2025-10-01", "value": 99}]),
+        [],
+    )
+    available = {"database": True}
+
+    async def connect() -> _GoldConn:
+        if not available["database"]:
+            raise OSError("database unavailable")
+        return conn
+
+    monkeypatch.setattr(lab, "_connect", connect)
     monkeypatch.setitem(sys.modules, "gold_sources", lab)
     app = _load("market_lab_label_app", ROOT / "agents" / "market_lab" / "app.py").app
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         assert (await client.get("/gold/candidates")).status_code == 401
         assert (await client.get("/gold/candidates", headers={"X-Tank-Key": "other-room-key"})).status_code == 401
         assert (await client.get("/gold/candidates", headers={"X-Tank-Key": "workspace-key"})).status_code == 401
+        assert conn.queries == []
         response = await client.get("/gold/candidates?limit=5", headers={"X-Tank-Key": key})
         assert response.status_code == 200
         body = response.json()
-        assert body and body[0]["label_family"] == "official-match:public-prices:2025-09"
+        assert body and body[0]["label_family"] == "later-value:public-prices:2025-09"
+        assert body[0]["expected"]["outcome"] == "no surge"
         assert body[0]["public"] is True and body[0]["region"] == "us-east"
+        assert all("99" not in json.dumps(row) for row in body)
+        assert conn.queries and all(str(args[0]) == PLATFORM for _sql, args in conn.queries)
         for limit in ("0", "-1", "201", "no"):
             assert (await client.get("/gold/candidates?limit=" + limit, headers={"X-Tank-Key": key})).status_code == 422
+        available["database"] = False
+        assert (await client.get("/gold/candidates", headers={"X-Tank-Key": key})).status_code == 503
         monkeypatch.delenv("TANK_KEY")
         assert (await client.get("/gold/candidates", headers={"X-Tank-Key": key})).status_code == 401
 
