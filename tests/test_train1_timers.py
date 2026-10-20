@@ -29,13 +29,13 @@ def test_utc_schedule_boundaries(operation, now, expected):
 
 
 @pytest.mark.parametrize('region,holdout,active,expected', [
-    ('za', False, True, True), ('us-east', False, True, True),
+    ('za', False, True, False), ('us-east', False, True, True),
     ('unknown', False, True, False), ('za', True, True, False),
     ('us-east', False, False, False),
 ])
 def test_export_eligibility_only_checks_region_holdout_active(region, holdout, active, expected):
     # No content/detector needed: reviewed names and email addresses are retained.
-    assert training.exportable(dict(region=region, holdout=holdout, active=active)) is expected
+    assert training.exportable(dict(region=region, holdout=holdout, active=active, public=True, client_matter=False, tenant_id=gold.PLATFORM_TENANT)) is expected
 
 
 @pytest.mark.asyncio

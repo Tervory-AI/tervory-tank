@@ -304,17 +304,8 @@ async def test_export_za_preserves_identifiers_excludes_holdout_and_inactive_pri
     real_client = httpx.AsyncClient
     monkeypatch.setattr(training.httpx, "AsyncClient", lambda **kwargs: real_client(transport=httpx.MockTransport(handler), **kwargs))
     result = await training.export_once()
-    assert result["exported"] == 3
-    assert (await training.export_once())["exported"] == 0
-    commit = requests[-1].content.decode()
-    operations = [json.loads(line) for line in commit.splitlines()]
-    import base64
-    data = [json.loads(line) for line in base64.b64decode(operations[1]["value"]["content"]).splitlines()]
-    assert {row["input"]["text"] for row in data} == {"masked facts", "person@example.invalid", "ID 8001015009087"}
-    assert all(row["region"] == "za" for row in data)
-    assert "/za/" in operations[1]["value"]["path"]
-    assert all("tenant_id" not in row and "approved_by" not in row for row in data)
-    assert all(not request.url.query for request in requests)
+    assert result == {"status": "skipped", "reason": "region stays local"}
+    assert requests == []
 
 
 @pytest.mark.asyncio

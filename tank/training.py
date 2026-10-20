@@ -27,14 +27,14 @@ log = logging.getLogger("tank.training")
 async def save_pair(conn, *, tenant: uuid.UUID, agent: str, task: str, value: Any,
                     output: Any, approved_by: str, source: str, ref: str,
                     gold_id: uuid.UUID | None = None, holdout: bool = False,
-                    client_matter: bool = False) -> None:
+                    client_matter: bool = False, public: bool = False) -> None:
     await conn.execute(
         """INSERT INTO tank.training_pairs
-        (tenant_id,agent,task_type,region,input,output,approved_by,source,source_ref,gold_id,holdout,client_matter)
-        VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,$8,$9,$10,$11,$12)
+        (tenant_id,agent,task_type,region,input,output,approved_by,source,source_ref,gold_id,holdout,client_matter,public)
+        VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,$8,$9,$10,$11,$12,$13)
         ON CONFLICT (tenant_id,region,source,source_ref) DO NOTHING""",
         tenant, agent, task, runtime().box_region(), encoded(value), encoded(output),
-        approved_by, source, ref, gold_id, holdout, client_matter,
+        approved_by, source, ref, gold_id, holdout, client_matter, public,
     )
 
 
@@ -42,7 +42,8 @@ async def pair_from_gold(conn, row: dict[str, Any]) -> None:
     await save_pair(conn, tenant=row["tenant_id"], agent=row["agent"], task=row["skill_id"],
                     value=obj(row["input"]), output=obj(row["expected"]), approved_by=row["checked_by"],
                     source="gold", ref=str(row["id"]), gold_id=row["id"], holdout=row["holdout"],
-                    client_matter=row["agent"] == "zenas" and row["tenant_id"] != PLATFORM_TENANT)
+                    client_matter=row["tenant_id"] != PLATFORM_TENANT,
+                    public=row.get("public") is True and row["tenant_id"] == PLATFORM_TENANT)
 
 
 async def collect_ledger(conn, tenant: uuid.UUID) -> None:
@@ -118,7 +119,8 @@ async def collect_zenas(conn, tenant: uuid.UUID | None) -> None:
         await save_pair(conn, tenant=scope, agent="zenas", task=skill, value=value, output=output,
                         approved_by=row["reviewer"] or "decided case", source="zenas", ref=str(row["id"]),
                         gold_id=gold_id, holdout=is_holdout(scope, skill, value),
-                        client_matter=row["source"] == "released")
+                        client_matter=row["source"] == "released",
+                        public=row["source"] == "case" and tenant is None)
 
 
 async def collect_fits(conn, tenant: uuid.UUID) -> None:
@@ -354,11 +356,13 @@ async def confirm_tiger(observation_id: uuid.UUID, actor: Reviewer = Depends(req
 
 
 def exportable(row: dict[str, Any]) -> bool:
-    return row["region"] in ("us-east", "za") and not row["holdout"] and bool(row["active"])
+    return (row.get("region") == "us-east" and row.get("holdout") is False and row.get("active") is True
+            and row.get("public") is True and row.get("client_matter") is False
+            and row.get("tenant_id") == PLATFORM_TENANT)
 
 
 async def upload_dataset(client: httpx.AsyncClient, org: str, agent: str, day: str, rows: list[dict], region: str = "us-east") -> None:
-    name = f"tervory-{agent}"
+    name = f"tervory-public-{agent}"
     created = await client.post("https://huggingface.co/api/repos/create",
                                 json={"type": "dataset", "name": name, "organization": org, "private": True})
     if created.status_code not in (200, 201, 409):
@@ -386,8 +390,8 @@ async def export_once(*, day: date | None = None) -> dict[str, Any]:
     if not token or not org:
         return {"status": "skipped", "reason": "not configured"}
     region = runtime().box_region()
-    if region not in ("us-east", "za"):
-        return {"status": "skipped", "reason": "unknown region"}
+    if region != "us-east":
+        return {"status": "skipped", "reason": "region stays local"}
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,95}", org):
         return {"status": "skipped", "reason": "invalid organisation"}
     day = day or datetime.now(timezone.utc).date()
@@ -407,12 +411,12 @@ async def export_once(*, day: date | None = None) -> dict[str, Any]:
                         continue
                     payload = []
                     scopes = await conn.fetch(
-                        "SELECT DISTINCT tenant_id FROM tank.training_pairs WHERE region=$2 AND agent=$1", agent, region,
+                        "SELECT DISTINCT tenant_id FROM tank.training_pairs WHERE region=$2 AND agent=$1 AND tenant_id=$3 AND public AND NOT client_matter", agent, region, PLATFORM_TENANT,
                     )
                     for scope in scopes:
                         rows = await conn.fetch(
                             """SELECT p.* FROM tank.training_pairs p
-                            WHERE p.tenant_id=$1 AND p.region=$3 AND p.agent=$2 AND p.active AND NOT p.holdout
+                            WHERE p.tenant_id=$1 AND p.region=$3 AND p.agent=$2 AND p.active AND NOT p.holdout AND p.public AND NOT p.client_matter
                             AND NOT EXISTS (SELECT 1 FROM tank.gold_examples g WHERE g.tenant_id=p.tenant_id
                               AND g.region=p.region AND g.input=p.input AND (g.holdout OR (g.status='rejected' AND g.id=p.gold_id)))""",
                             scope["tenant_id"], agent, region,
@@ -420,7 +424,8 @@ async def export_once(*, day: date | None = None) -> dict[str, Any]:
                         for row in rows:
                             if exportable(dict(row)):
                                 # No tenant, reviewer identity or matter reference leaves the box.
-                                payload.append({"region": region, "task_type": row["task_type"], "input": obj(row["input"]),
+                                payload.append({"region": region, "public": True, "client_matter": False,
+                                                "scope": "platform", "holdout": False, "active": True, "task_type": row["task_type"], "input": obj(row["input"]),
                                                 "output": obj(row["output"])})
                     if not payload:
                         continue
