@@ -4,6 +4,8 @@ import { useId, useState, type FormEvent } from "react";
 import { SquadLinks } from "../squad-links";
 import { searchTank, VAULT_LINE } from "./records";
 import { MODEL_KEY_LINE, modelsMatching, pipelineTo, SQUAD_LINE, squadsMatching, type ModelRow } from "./squads";
+import type { WorkersFeed } from "./workers";
+import { WorkersPanel } from "./workers-panel";
 
 // Dashboard, Projects, Settings, and Support have no pages yet.
 // These point at the nearest existing workspace routes.
@@ -110,10 +112,12 @@ export function TankView({
   workspaceName,
   models,
   modelsUnavailable = false,
+  workers = { available: false, tasks: [] },
 }: {
   workspaceName: string | null;
   models: ModelRow[];
   modelsUnavailable?: boolean;
+  workers?: WorkersFeed;
 }) {
   const searchId = useId();
   const [menu, setMenu] = useState(false);
@@ -261,6 +265,7 @@ export function TankView({
               )}
             </section>
           ) : null}
+          {!searching ? <WorkersPanel feed={workers} /> : null}
         </div>
       </div>
     </div>

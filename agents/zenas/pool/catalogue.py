@@ -105,14 +105,16 @@ CATALOGUE: tuple[SourceSpec, ...] = (
         store_full_text=True,
         canonical_url="https://www.courtlistener.com/help/api/bulk-data/",
         notes=(
-            "COURTLISTENER_API_TOKEN is read from the environment and sent as a header. "
-            "A live load is skipped until it is set. The value is never written into a URL or a log. "
+            "The back catalogue is the free quarterly bulk files. They need no key. "
+            "COURTLISTENER_API_TOKEN is read from the environment and sent as a header "
+            "only for opinions filed after the snapshot date. The value is never written "
+            "into a URL or a log. "
             "Courts: SCOTUS, the thirteen circuits, Delaware Supreme Court and Court of Chancery, "
             "the New York Court of Appeals and Appellate Division, and the Texas Supreme Court."
         ),
         adapter="courtlistener",
         key_name="COURTLISTENER_API_TOKEN",
-        key_required=True,
+        key_required=False,
     ),
     SourceSpec(
         source_id="cap",
@@ -410,6 +412,66 @@ def _za_sources() -> tuple[SourceSpec, ...]:
     )
     rows.append(
         SourceSpec(
+            source_id="govza-acts",
+            name="National Acts (gov.za)",
+            region="za",
+            jurisdiction="za",
+            licence="Public record. Act text as published in the Government Gazette on gov.za.",
+            terms=(
+                "Acts are published in the Government Gazette and on gov.za. "
+                "These terms are recorded as information. Data use is the founder's decision."
+            ),
+            terms_url="https://www.gov.za/documents/acts",
+            bulk_use="allowed",
+            store_full_text=True,
+            canonical_url="https://www.gov.za/documents/acts",
+            notes=(
+                "Keyless. Every national Act on the gov.za Acts index, the Act as passed and "
+                "every amendment Act, as the official PDF. One document per section. "
+                "Each section keeps its source URL, Act number and year, and Gazette number and date. "
+                "Status is as_passed, or as_amended_by: [the amending Act]. "
+                "No consolidated text is written. ZA box only; a US box does not fetch. "
+                "Weekly full index walk; other nights read the newest index page. "
+                "A PDF whose gazette row and content hash are unchanged is not downloaded again. "
+                "robots.txt is respected. A challenge page is logged and not stored. "
+                "Text is extracted with pypdf. "
+                "GOVZA_STATUTE_MIN_INTERVAL is the pause between requests (default 1; set 1 on the ZA box). "
+                "GOVZA_ACTS_MAX_PAGES (default 20) and GOVZA_ACTS_MAX_FILES (default 40) bound one wave. "
+                "GOVZA_STATUTE_WEEK_DAYS (default 7) is the full-walk interval. "
+                "The checkpoint resumes the next Load now."
+            ),
+            adapter="govza-acts",
+        )
+    )
+    rows.append(
+        SourceSpec(
+            source_id="govza-regulations",
+            name="Government Gazette regulations",
+            region="za",
+            jurisdiction="za",
+            licence="Public record. Regulations and rules as published in the Government Gazette.",
+            terms=(
+                "Regulations are published in the Government Gazette and on gov.za. "
+                "These terms are recorded as information. Data use is the founder's decision."
+            ),
+            terms_url="https://www.gov.za/documents/notices",
+            bulk_use="allowed",
+            store_full_text=True,
+            canonical_url="https://www.gov.za/documents/notices",
+            notes=(
+                "Keyless. Regulation and rules notices on the gov.za notices index "
+                "(a title that says regulation, or a Regulation Gazette row for rules). "
+                "Same section shape, amendment record, hash, robots.txt, and ZA-only rule as National Acts. "
+                "No consolidated regulations are written. "
+                "GOVZA_REG_MAX_PAGES (default 10) and GOVZA_REG_MAX_FILES (default 20) bound one wave. "
+                "GOVZA_STATUTE_MIN_INTERVAL (default 1) and GOVZA_STATUTE_WEEK_DAYS (default 7) are shared "
+                "with National Acts. The checkpoint resumes the next Load now."
+            ),
+            adapter="govza-regulations",
+        )
+    )
+    rows.append(
+        SourceSpec(
             source_id="uniform-rules",
             name="Uniform Rules of Court",
             region="za",
@@ -497,10 +559,12 @@ def _za_case_sources() -> tuple[SourceSpec, ...]:
             "Constitutional Court judgments (DSpace)",
             "https://collections.concourt.org.za/server/oai/request",
             (
-                "Keyless. OAI-PMH set col_20.500.12144_1949 (Latest Judgments) plus the "
-                "item REST record. PDFs are fetched only from /server/api/core/bitstreams/{uuid}/content. "
-                "Discover, search, browse and admin paths are refused. "
-                "CONCOURT_MIN_INTERVAL defaults to 10 seconds. CONCOURT_MAX_ITEMS defaults to 5."
+                "Keyless. Every year collection from OAI ListSets, then Latest Judgments "
+                "(col_20.500.12144_1949). PDFs are fetched only from "
+                "/server/api/core/bitstreams/{uuid}/content. Discover, search, browse and admin "
+                "paths are refused. CONCOURT_MIN_INTERVAL defaults to 10 seconds. "
+                "The walk resumes from the last page and stops at ZENAS_ZA_ARCHIVE_MAX "
+                "(default 2000 documents). The feeds line lists years covered and skip reasons."
             ),
             licence=licence,
         ),
@@ -509,10 +573,12 @@ def _za_case_sources() -> tuple[SourceSpec, ...]:
             "Supreme Court of Appeal and Electoral Court judgments",
             "https://www.supremecourtofappeal.org.za/index.php/judgements",
             (
-                "Keyless. Year categories are read from the judgments index and from the Electoral "
-                "Court index on the same host. The PDF path is /component/jdownloads/send/{category}/{id}. "
-                "/download/ is not used. Pages step ?start= by 10. "
-                "SCA_MAX_YEARS defaults to 1, SCA_MAX_PAGES to 1, SCA_MAX_FILES to ZA_CASE_MAX_DOCS (8)."
+                "Keyless. Every year category on the judgments index and the Electoral Court "
+                "index, and every ?start= page of each year. The PDF path is "
+                "/component/jdownloads/send/{category}/{id}. /download/ is not used. "
+                "SCA_MAX_YEARS and SCA_MAX_PAGES unset means the whole archive. "
+                "The walk resumes from the last page and stops at ZENAS_ZA_ARCHIVE_MAX "
+                "(default 2000 documents). The feeds line lists years covered and skip reasons."
             ),
             licence=licence,
         ),
@@ -521,8 +587,9 @@ def _za_case_sources() -> tuple[SourceSpec, ...]:
             "Competition Appeal Court judgments",
             "https://www.cac.org.za/judgments/",
             (
-                "Keyless PDFs listed on the judgments page. The comments RSS and the sitemap "
-                "index do not list those files. Rules and practice notes on the page are skipped."
+                "Keyless. The judgments page is one HTML document; the on-page pager does not "
+                "request a second listing. Rules and practice notes are skipped. "
+                "Unchanged files are not downloaded again. ZENAS_ZA_ARCHIVE_MAX defaults to 2000."
             ),
             licence=licence,
         ),
@@ -531,8 +598,9 @@ def _za_case_sources() -> tuple[SourceSpec, ...]:
             "Competition Tribunal decided cases",
             "https://www.comptrib.co.za/decided-cases",
             (
-                "Keyless PDFs on the decided-cases page. Confidential versions are skipped. "
-                "A file marked non confidential is kept."
+                "Keyless. Every page of decided-cases. Confidential versions and merger approval "
+                "letters are skipped. A reasons document is kept, including one that approves a "
+                "merger. A caught-up run re-reads page 1 only. ZENAS_ZA_ARCHIVE_MAX defaults to 2000."
             ),
             licence=licence,
         ),
@@ -541,8 +609,9 @@ def _za_case_sources() -> tuple[SourceSpec, ...]:
             "SARS Tax Court judgments",
             "https://www.sars.gov.za/legal-counsel/dispute-resolution-judgments/tax-court/",
             (
-                "Keyless. The year index links to anonymised judgment PDFs. "
-                "SARS_MAX_YEARS defaults to 1 (the newest band)."
+                "Keyless. Every year band on the Tax Court index, including older lapd-drj files. "
+                "SARS_MAX_YEARS unset means every band. The walk resumes per band. "
+                "ZENAS_ZA_ARCHIVE_MAX defaults to 2000."
             ),
             licence="Public record. Anonymised Tax Court judgments published by SARS.",
         ),
@@ -550,17 +619,23 @@ def _za_case_sources() -> tuple[SourceSpec, ...]:
             "landcourt",
             "Land Court judgments",
             "https://www.judiciary.org.za/landcourt/index.php/land-court-library/judgements/land-court-judgements",
-            "Keyless Phoca PDF listings. Court rolls on the same site are not collected.",
+            (
+                "Keyless. Every judgment category on the Land Court index, and every Phoca page "
+                "of each category. Reports, minutes, media summaries, directives, and court rolls "
+                "are not collected. LAND_MAX_YEARS unset means every year. "
+                "ZENAS_ZA_ARCHIVE_MAX defaults to 2000."
+            ),
             licence=licence,
         ),
         _case_row(
             "ocj-highcourt",
-            "High Court judgments (Gauteng, Free State, Eastern Cape)",
+            "High Court judgments (OCJ divisions that publish them)",
             "https://www.judiciary.org.za/index.php/courts/high-courts/gauteng-division-of-the-high-court/court-judgments",
             (
-                "Keyless Phoca PDFs for Gauteng, the Free State, and the Eastern Cape "
-                "(courtjudgments, with no hyphen). Western Cape, KwaZulu-Natal, Mpumalanga, "
-                "North West, Limpopo and the Northern Cape are not requested from this site."
+                "Keyless Phoca PDFs, every ?start= page, for Gauteng, the Free State, the "
+                "Eastern Cape (courtjudgments, no hyphen), KwaZulu-Natal, and the Western Cape. "
+                "Limpopo, Mpumalanga, North West, and the Northern Cape publish no judgments "
+                "on this site and are not requested. ZENAS_ZA_ARCHIVE_MAX defaults to 2000."
             ),
             licence=licence,
         ),
@@ -568,14 +643,21 @@ def _za_case_sources() -> tuple[SourceSpec, ...]:
             "labour-court",
             "Labour Court judgments",
             "https://www.judiciary.org.za/index.php/courts/specialised-courts/labour-and-labour-appeal-court/court-judgments",
-            "Keyless. Year folders under judgements-labour-court, then Phoca PDFs. LABOUR_MAX_YEARS defaults to 1.",
+            (
+                "Keyless. Every year folder under judgements-labour-court, then every Phoca page. "
+                "Directives and court rolls are skipped. LABOUR_MAX_YEARS unset means every folder. "
+                "ZENAS_ZA_ARCHIVE_MAX defaults to 2000."
+            ),
             licence=licence,
         ),
         _case_row(
             "labour-appeal",
             "Labour Appeal Court judgments",
             "https://www.judiciary.org.za/index.php/courts/specialised-courts/labour-and-labour-appeal-court/court-judgments",
-            "Keyless. Year folders under judgements-labour-court-2, then Phoca PDFs.",
+            (
+                "Keyless. Every year folder under judgements-labour-court-2, including a folder "
+                "with no year in its URL, then every Phoca page. ZENAS_ZA_ARCHIVE_MAX defaults to 2000."
+            ),
             licence=licence,
         ),
         _case_row(
@@ -583,9 +665,10 @@ def _za_case_sources() -> tuple[SourceSpec, ...]:
             "Special Tribunal judgments",
             "https://www.justice.gov.za/tribunal/jdgm.html",
             (
-                "Keyless. Historic PDFs on justice.gov.za/tribunal/jdgm.html, and newer matters on "
+                "Keyless. The historic PDF list on justice.gov.za/tribunal/jdgm.html, and every page of "
                 "https://www.siu.org.za/special-tribunal-judgements/ (each matter page links to one PDF). "
-                "Affidavits and schedules are skipped. Other SIU lists are not followed."
+                "Affidavits, schedules, and SAFLII links are skipped. Other SIU lists are not followed. "
+                "ZENAS_ZA_ARCHIVE_MAX defaults to 2000."
             ),
             licence=licence,
         ),

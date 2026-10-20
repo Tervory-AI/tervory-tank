@@ -74,6 +74,7 @@ def test_upstream_is_only_the_local_room(monkeypatch: pytest.MonkeyPatch) -> Non
     assert main.zenas_upstream("tenants") == "http://agent-zenas:8000/tenants"
     assert main.zenas_upstream("selftest") == "http://agent-zenas:8000/selftest"
     assert main.zenas_upstream("review-switch") == "http://agent-zenas:8000/review-switch"
+    assert main.zenas_upstream("cases/convert") == "http://agent-zenas:8000/cases/convert"
     assert main.zenas_upstream("pool/sources/companies-act/load").endswith("/pool/sources/companies-act/load")
     with pytest.raises(HTTPException) as caught:
         main.zenas_upstream("self-test")
@@ -114,6 +115,65 @@ def test_feed_payload_keeps_the_key_name_and_drops_the_value(monkeypatch: pytest
     assert cleaned["sources"][0]["key_name"] == "LAWS_AFRICA_API_TOKEN"
     assert cleaned["sources"][0]["key_set"] is True
     assert "api_key" not in cleaned["sources"][0]
+
+
+def test_feed_passes_load_status_and_strips_keyed_urls() -> None:
+    secret = "super-secret-value-do-not-show"
+    tail = "TAIL-MUST-NOT-CROSS"
+    long_detail = ("HTTP 401 from courtlistener.com " * 20) + tail
+    cleaned = main.public_feed(
+        {
+            "sources": [
+                {
+                    "source_id": "courtlistener",
+                    "key_name": "COURTLISTENER_API_TOKEN",
+                    "api_key": secret,
+                    "token": secret,
+                    "last_status": "not_configured",
+                    "detail": "COURTLISTENER_API_TOKEN is not set",
+                    "terms_url": f"https://www.courtlistener.com/api/rest/v4/?api_key={secret}",
+                },
+                {
+                    "source_id": "govinfo",
+                    "last_status": "error",
+                    "detail": f"fetch failed https://api.govinfo.gov/docs?api_key={secret} after the call",
+                    "errors": [f"https://api.govinfo.gov/packages?token={secret}"],
+                },
+                {
+                    "source_id": "saflii",
+                    "last_status": "error",
+                    "detail": long_detail,
+                },
+            ]
+        }
+    )
+    encoded = json.dumps(cleaned)
+    assert secret not in encoded
+    assert "api_key=" not in encoded
+    assert "token=" not in encoded
+    assert "sk-" not in encoded
+    court = cleaned["sources"][0]
+    assert court["last_status"] == "not_configured"
+    assert court["detail"] == "COURTLISTENER_API_TOKEN is not set"
+    assert court["key_name"] == "COURTLISTENER_API_TOKEN"
+    assert "api_key" not in court
+    assert "token" not in court
+    assert secret not in court["terms_url"]
+    gov = cleaned["sources"][1]
+    assert gov["last_status"] == "error"
+    assert gov["detail"] == "fetch failed after the call"
+    assert gov["errors"] == [""]
+    saflii = cleaned["sources"][2]
+    assert saflii["last_status"] == "error"
+    assert len(saflii["detail"]) <= 240
+    assert saflii["detail"].startswith("HTTP 401 from courtlistener.com")
+    assert tail not in saflii["detail"]
+    leaked = main.public_feed(
+        {"sources": [{"last_status": "error", "detail": "upstream said sk-abcd1234 bad"}]}
+    )
+    assert "sk-" not in leaked["sources"][0]["detail"]
+    assert "upstream said" in leaked["sources"][0]["detail"]
+    assert "bad" in leaked["sources"][0]["detail"]
 
 
 @pytest.mark.asyncio
@@ -177,6 +237,45 @@ async def test_proxy_forwards_only_inside_the_region_and_strips_keys(
 
 
 @pytest.mark.asyncio
+async def test_proxy_passes_load_status_and_strips_keyed_urls(monkeypatch: pytest.MonkeyPatch) -> None:
+    secret = "super-secret-value-do-not-show"
+    monkeypatch.setenv("TANK_REGION", "us-east")
+    monkeypatch.setenv("ZENAS_AGENT_URL", "http://agent-zenas:8000")
+    monkeypatch.setenv("COURTLISTENER_API_TOKEN", secret)
+    room = _Room(
+        json.dumps(
+            {
+                "region": "us-east",
+                "sources": [
+                    {
+                        "source_id": "courtlistener",
+                        "key_name": "COURTLISTENER_API_TOKEN",
+                        "api_key": secret,
+                        "last_status": "not_configured",
+                        "detail": "COURTLISTENER_API_TOKEN is not set",
+                        "terms_url": f"https://www.courtlistener.com/api/?api_key={secret}",
+                    }
+                ],
+            }
+        ).encode()
+    )
+    monkeypatch.setattr(main, "_http", room)
+    response = await main.zenas_proxy(
+        "pool/status",
+        _request("GET", "/v1/zenas/pool/status", query=b"home_region=us-east"),
+    )
+    assert secret.encode() not in response.body
+    assert b"api_key=" not in response.body
+    payload = json.loads(response.body)
+    row = payload["sources"][0]
+    assert row["last_status"] == "not_configured"
+    assert row["detail"] == "COURTLISTENER_API_TOKEN is not set"
+    assert row["key_name"] == "COURTLISTENER_API_TOKEN"
+    assert row["key_set"] is True
+    assert "api_key" not in row
+
+
+@pytest.mark.asyncio
 async def test_proxy_forwards_tenants_only_for_this_regions_home(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TANK_REGION", "us-east")
     monkeypatch.setenv("ZENAS_AGENT_URL", "http://agent-zenas:8000")
@@ -207,6 +306,8 @@ async def test_proxy_forwards_tenants_only_for_this_regions_home(monkeypatch: py
         ("POST", "selftest", b""),
         ("GET", "review-switch", b""),
         ("POST", "review-switch", b'{"home_region":"za","review":"off"}'),
+        ("GET", "cases/convert", b""),
+        ("POST", "cases/convert", b'{"home_region":"za"}'),
     ],
 )
 async def test_selftest_and_review_switch_reach_the_room(

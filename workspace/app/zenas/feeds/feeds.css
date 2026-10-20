@@ -86,3 +86,22 @@
   font-size: 22px;
   margin: 28px 0 8px;
 }
+
+.zf a.why {
+  color: #001840;
+}
+
+.zf .why-panel {
+  margin-top: 8px;
+  background: #fff;
+  border: 1px solid #b8bfd0;
+  padding: 12px;
+}
+
+.zf .why-panel pre {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono), "JetBrains Mono", monospace;
+  font-size: 12px;
+}

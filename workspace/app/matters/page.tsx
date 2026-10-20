@@ -22,7 +22,7 @@ export default async function MattersPage() {
     <>
       <picture>
         <source srcSet="/brand/tervory-logo-reversed.png" media="(prefers-color-scheme: dark)" />
-        <img className="logo" src="/brand/tervory-logo-on-white.png" alt="Tervory" />
+        <img className="logo" src="/brand/tervory-logo.png" alt="Tervory" />
       </picture>
       <h1>Matters</h1>
       <p className="lede">Zenas prepares drafts and research for a licensed lawyer to review. You see a draft only after that lawyer releases it.</p>

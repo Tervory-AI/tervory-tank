@@ -13,7 +13,7 @@ export const SQUAD_LINKS: NavLink[] = [
   { href: "/tank", label: "Tank" },
 ];
 
-/** Product header. Skala and Tank stay in the founder list. The other squad pages are on every header. */
+/** Product header. Billing follows Ledger. Skala and Tank stay in the founder list. The other squad pages are on every header. */
 export function headerLinks(founder: boolean): NavLink[] {
   const links: NavLink[] = [
     { href: "/", label: "Chat" },
@@ -22,6 +22,7 @@ export function headerLinks(founder: boolean): NavLink[] {
   ];
   if (founder) links.push({ href: "/skala", label: "Skala" });
   links.push({ href: "/ledger", label: "Ledger" });
+  links.push({ href: "/billing", label: "Billing" });
   if (founder) links.push({ href: "/tank", label: "Tank" });
   for (const link of SQUAD_LINKS) {
     if (!links.some((item) => item.href === link.href)) links.push(link);

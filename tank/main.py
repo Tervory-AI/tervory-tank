@@ -218,16 +218,137 @@ def _china_model(model: str) -> bool:
     return head in _CHINA_PROVIDERS or model.lower() in _CHINA_PROVIDERS
 
 
-def model_call_refusal(text: str, model: str | None, *, box: str, tenant_id: str) -> str | None:
+# Same ids as agents/zenas/core/release_mask.py COURT_SOURCES. Tank's image
+# does not include that package. A test checks the two sets stay equal.
+# Legislation sources are not in this set.
+_COURT_SOURCES = frozenset(
+    {
+        "courtlistener",
+        "cap",
+        "saflii",
+        "govza-gazette",
+        "concourt",
+        "sca",
+        "cac",
+        "comptrib",
+        "sars-taxcourt",
+        "landcourt",
+        "ocj-highcourt",
+        "labour-court",
+        "labour-appeal",
+        "special-tribunal",
+    }
+)
+# require_key returns this for TANK_KEY_ZENAS. The request body cannot set it.
+_ZENAS_CALLER = "zenas"
+# The two prompts Zenas builds after it has read the pool. Anything else is
+# not that read. Convert's head is agents/zenas/core/convert.py _PROMPT_HEAD.
+_CONVERT_HEAD = (
+    "Read this judgment as published. Copy the facts in the court's own words, "
+    "as a continuous passage from the judgment. Name the question, the elements, "
+    "and the holding. Cite only this case. Every quote must appear in the judgment "
+    "word for word. Reply with JSON only:\n"
+    '{"facts":"","question":"","elements":[{"element_id":"","finding":"met|not_met|unclear","quote":""}],'
+    '"holding":"","citations":[{"citation":"","quote":""}]}\n\n'
+    "Citation: "
+)
+_FACTS_PREFIX = (
+    "Read this judgment as published. Reply with JSON only: "
+    '{"features":{},"narrative":"","element_findings":[{"element_id":"","finding":"met|not_met|unclear","reasoning":"","basis":[]}],"outcome":""}\n\n'
+)
+_POOL_MATCH_SQL = """
+SELECT source_id, text, citation
+FROM zenas_pool.documents
+WHERE kind = 'case'
+  AND effective_to IS NULL
+  AND status IS DISTINCT FROM 'superseded'
+  AND source_id = ANY($2::text[])
+  AND char_length(text) >= 40
+  AND char_length($1) >= char_length(text)
+  AND right($1::text, char_length(text)) = text
+""".strip()
+
+
+def _zenas_pool_prefix(prefix: str, citation: str) -> bool:
+    """True when the text before the stored judgment is that row's own wrapper.
+
+    The citation is the one stored on the row. A caller cannot fill that
+    line with other text.
+    """
+    if prefix == _FACTS_PREFIX:
+        return True
+    return bool(citation) and prefix == _CONVERT_HEAD + citation + "\n\n"
+
+
+def _pool_read_candidate(text: str, *, caller: str | None, task_type: str | None, skill: str | None) -> bool:
+    """The three names a caller can try to set. The database check is still ahead."""
+    return caller == _ZENAS_CALLER and (task_type or "") == "zenas.case_facts" and not skill and bool(text)
+
+
+async def zenas_pool_prompt(
+    text: str,
+    *,
+    caller: str | None,
+    task_type: str | None,
+    skill: str | None,
+) -> bool:
+    """Whether this prompt is a judgment Tank just read from the pool.
+
+    The caller cannot vouch for this. Tank loads zenas_pool.documents itself
+    and accepts the prompt only when all of these are true: require_key
+    returned the Zenas room (TANK_KEY_ZENAS), the task is zenas.case_facts,
+    the call is not a Skala run, the prompt ends with a stored case whose
+    source_id is in the court list, and the text before that case is either
+    the facts wrapper or the convert wrapper plus that row's own citation.
+    An added sentence, a different citation, a different wrapper, or a body
+    field does not match a row, so the identifier rule still applies.
+    """
+    if not _pool_read_candidate(text, caller=caller, task_type=task_type, skill=skill):
+        return False
+    if not prompt_has_identifier(text):
+        return False
+    try:
+        async with pool().acquire() as conn:
+            rows = await conn.fetch(_POOL_MATCH_SQL, text, list(_COURT_SOURCES))
+    except Exception:  # noqa: BLE001 — a failed read is not proof, and the text is not logged
+        return False
+    for row in rows:
+        judgment = str(row["text"] or "")
+        source = str(row["source_id"] or "")
+        citation = str(row["citation"] or "")
+        if source not in _COURT_SOURCES or len(judgment) < 40 or not text.endswith(judgment):
+            continue
+        if _zenas_pool_prefix(text[: -len(judgment)], citation):
+            return True
+    return False
+
+
+def model_call_refusal(
+    text: str,
+    model: str | None,
+    *,
+    box: str,
+    tenant_id: str,
+    task_type: str | None = None,
+    caller: str | None = None,
+    skill: str | None = None,
+    pool_read: bool = False,
+) -> str | None:
     """Whether this model call must be refused before anything is stored or sent.
 
     In za, a prompt that still contains an identifier is refused unless the
     model runs in South Africa and the tenant's allow-list includes it.
-    model=None asks the early question: is there any permitted SA model at all?
-    Pure-code skills do not call this.
+    The identifier rule is skipped only when caller is the Zenas room key,
+    the task is zenas.case_facts, this is not a Skala run, and pool_read is
+    true. pool_read is true only after zenas_pool_prompt has matched the
+    text to a court row. China-provider and allow-list refusals still apply.
+    The Workspace key, every other room key, and a task name alone do not
+    skip the rule. model=None asks the early question: is there any
+    permitted SA model at all? Pure-code skills do not call this.
     """
     here = normalize_box(box)
     allow = tenant_allowlist(tenant_id)
+    public_record = _pool_read_candidate(text, caller=caller, task_type=task_type, skill=skill) and pool_read
     if here != ZA_REGION:
         if model is not None and allow is not None and model not in allow:
             return ALLOW_REFUSAL
@@ -235,7 +356,7 @@ def model_call_refusal(text: str, model: str | None, *, box: str, tenant_id: str
     if model is not None and _china_model(model):
         return ALLOW_REFUSAL
     hosted = sa_hosted_models()
-    if prompt_has_identifier(text):
+    if prompt_has_identifier(text) and not public_record:
         permitted = hosted if allow is None else hosted & allow
         if model is None:
             return None if permitted else IDENTIFIER_REFUSAL
@@ -258,7 +379,7 @@ _agent_keys_synced = False
 HOMES_PRINCIPAL = "founder-homes"
 _HOMES_DENIED = "This homes key cannot call that."
 _HOMES_LOAD = re.compile(r"^/v1/zenas/pool/sources/([A-Za-z0-9._-]{1,80})/load$")
-_HOMES_FEEDS = frozenset({"/v1/zenas/selftest", "/v1/zenas/review-switch"})
+_HOMES_FEEDS = frozenset({"/v1/zenas/selftest", "/v1/zenas/review-switch", "/v1/zenas/cases/convert"})
 
 
 def _explicit_home_is_za(query_home: str | None, parsed: dict | None) -> bool:
@@ -289,7 +410,7 @@ async def _homes_tenant_body(request: Request) -> None:
 
 
 async def _homes_founder_feed(request: Request, path: str) -> bool:
-    """ZA founder feeds: status, one load, self-test, review switch. Home must be za.
+    """ZA founder feeds: status, one load, self-test, review switch, case conversion. Home must be za.
 
     Returns False when the path is not one of those routes. A matching route
     with the wrong home, a body, or extra fields is refused here. Allowed
@@ -318,7 +439,7 @@ async def _homes_founder_feed(request: Request, path: str) -> bool:
         if not isinstance(loaded, dict):
             raise HTTPException(status_code=403, detail=_HOMES_DENIED)
         parsed = loaded
-    if path == "/v1/zenas/selftest":
+    if path in {"/v1/zenas/selftest", "/v1/zenas/cases/convert"}:
         if parsed and set(parsed) - {"home_region"}:
             raise HTTPException(status_code=403, detail=_HOMES_DENIED)
     elif path == "/v1/zenas/review-switch":
@@ -340,8 +461,8 @@ async def _homes_key_scope(request: Request) -> None:
     """TANK_HOMES_KEY on the ZA Tank only.
 
     It may set a za tenant's home. It may also read pool status, load one
-    source, read or run the self-test, and read or set the review switch,
-    each only with home_region=za. Those routes return names, counts, dates,
+    source, read or run the self-test, read or set the review switch, and read
+    or run case conversion, each only with home_region=za. Those routes return names, counts, dates,
     errors and scores. Documents, matters and client data stay refused.
     The Boston Workspace holds this key. It never holds the ZA TANK_API_KEY.
     """
@@ -469,6 +590,7 @@ class RouteResponse(BaseModel):
     tokens_out: int
     cost_usd: float
     latency_ms: int
+    finish_reason: str = ""
 
 
 class PolicyRow(BaseModel):
@@ -628,7 +750,74 @@ async def put_policy(task_type: str, body: PolicyRow) -> dict[str, Any]:
 
 # ---------- the one call ----------
 
-async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> RouteResponse:
+# Roster names that are Gemini. Gemini 3 Flash thinks at high unless told otherwise,
+# and those thought tokens come out of max_tokens.
+_GEMINI_MODELS = frozenset({"flash", "flash-lite", "argon"})
+_JSON_OBJECT_MODELS = _GEMINI_MODELS | frozenset(
+    {"luna", "sol", "astra", "grok", "grok-top", "grok-build"}
+)
+
+
+def _gemini_model(model: str) -> bool:
+    name = (model or "").strip().lower()
+    return name in _GEMINI_MODELS or "gemini" in name
+
+
+def _json_object_model(model: str) -> bool:
+    name = (model or "").strip().lower()
+    if name in _JSON_OBJECT_MODELS or _gemini_model(name):
+        return True
+    return name.startswith("gpt") or name.startswith("openai/") or "grok" in name
+
+
+def case_facts_generation(model: str) -> dict[str, Any]:
+    """JSON output, and low thinking for Gemini, for zenas.case_facts only.
+
+    Gemini 3 Flash defaults to high thinking. Thought tokens come out of
+    max_tokens, so the answer comes back empty. reasoning_effort low is what
+    LiteLLM maps to thinking_level low on Gemini 3, and to a small thinking
+    budget on Gemini 2.5. A thinking budget on its own does not set that
+    level on Gemini 3, so it is not sent. JSON mode goes only to models that
+    support a JSON object.
+    """
+    body: dict[str, Any] = {}
+    if _json_object_model(model):
+        body["response_format"] = {"type": "json_object"}
+    if _gemini_model(model):
+        body["reasoning_effort"] = "low"
+    return body
+
+
+def _content_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                parts.append(str(item.get("text") or ""))
+        return "".join(parts)
+    return ""
+
+
+def _choice_answer(data: dict[str, Any]) -> tuple[str, str]:
+    choices = data.get("choices") or [{}]
+    choice = choices[0] if isinstance(choices, list) and choices else {}
+    if not isinstance(choice, dict):
+        return "", ""
+    message = choice.get("message") or {}
+    if not isinstance(message, dict):
+        message = {}
+    return _content_text(message.get("content")), str(choice.get("finish_reason") or "")
+
+
+async def run_route(
+    req: RouteRequest,
+    task_id: uuid.UUID | None = None,
+    caller: str | None = None,
+) -> RouteResponse:
     """Pick the model from policy, call it through LiteLLM, write the ledger row.
     Used directly by /v1/route and in the background by tasks."""
     box = box_region()
@@ -637,7 +826,19 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
         # Empty, unknown, or the other region's text is not written.
         raise HTTPException(status_code=403, detail=foreign)
     client_text = "\n".join(m.content for m in req.messages)
-    early = model_call_refusal(client_text, None, box=box, tenant_id=str(req.tenant_id))
+    pool_read = await zenas_pool_prompt(
+        client_text, caller=caller, task_type=req.task_type, skill=req.skill
+    )
+    early = model_call_refusal(
+        client_text,
+        None,
+        box=box,
+        tenant_id=str(req.tenant_id),
+        task_type=req.task_type,
+        caller=caller,
+        skill=req.skill,
+        pool_read=pool_read,
+    )
     if early:
         raise HTTPException(status_code=403, detail=early)
 
@@ -652,9 +853,19 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
     if policy["system_prompt"]:
         messages = [{"role": "system", "content": policy["system_prompt"]}, *messages]
     max_tokens = min(req.max_tokens or policy["max_tokens_out"], policy["max_tokens_out"])
+    generation = case_facts_generation(model) if req.task_type == "zenas.case_facts" else {}
     sent = "\n".join(str(item.get("content") or "") for item in messages)
     holds_identifier = prompt_has_identifier(sent)
-    blocked = model_call_refusal(sent, model, box=box, tenant_id=str(req.tenant_id))
+    blocked = model_call_refusal(
+        sent,
+        model,
+        box=box,
+        tenant_id=str(req.tenant_id),
+        task_type=req.task_type,
+        caller=caller,
+        skill=req.skill,
+        pool_read=pool_read,
+    )
     if blocked:
         raise HTTPException(status_code=403, detail=blocked)
 
@@ -664,7 +875,10 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
     cache_key = None
     if not holds_identifier and _redis is not None and policy.get("cache_scope") in ("tenant", "platform"):
         scope = str(req.tenant_id) if policy["cache_scope"] == "tenant" else "platform"
-        digest = hashlib.sha256(json.dumps([req.task_type, model, max_tokens, messages], sort_keys=True).encode()).hexdigest()
+        digest_parts: list[Any] = [req.task_type, model, max_tokens, messages]
+        if generation:
+            digest_parts.append(generation)
+        digest = hashlib.sha256(json.dumps(digest_parts, sort_keys=True).encode()).hexdigest()
         cache_key = f"tank:cache:{scope}:{digest}"
         try:
             hit = await _redis.get(cache_key)
@@ -693,7 +907,7 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
             r = await client.post(
                 f"{LITELLM_URL}/v1/chat/completions",
                 headers={"Authorization": f"Bearer {LITELLM_MASTER_KEY}"},
-                json={"model": model, "messages": messages, "max_tokens": max_tokens},
+                json={"model": model, "messages": messages, "max_tokens": max_tokens, **generation},
             )
     except httpx.HTTPError as exc:
         # The gateway never answered. Still a call on the books, so the failure rate is honest.
@@ -734,8 +948,9 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
     # roster model that actually answered, so spend is booked to the right provider.
     answered = r.headers.get("x-litellm-model-group") or model
     content = ""
+    finish_reason = ""
     if outcome == "delivered":
-        content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "") or ""
+        content, finish_reason = _choice_answer(data)
 
     ledger_id = uuid.uuid4()
     async with pool().acquire() as conn:
@@ -780,6 +995,7 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
     return RouteResponse(
         ledger_id=ledger_id, model=answered, rung=policy["rung"], content=content,
         tokens_in=tokens_in, tokens_out=tokens_out, cost_usd=cost_usd, latency_ms=latency_ms,
+        finish_reason=finish_reason,
     )
 
 
@@ -1629,7 +1845,7 @@ async def search_task(task_type: str, body: SearchBody | None = None) -> dict[st
 async def route(req: RouteRequest, caller: str | None = Depends(require_key)) -> RouteResponse:
     if caller:
         req = req.model_copy(update={"agent": caller})
-    return await run_route(req)
+    return await run_route(req, caller=caller)
 
 
 # ---------- tasks: the board ----------
@@ -1675,7 +1891,9 @@ async def create_task(body: TaskCreate) -> dict[str, Any]:
     if foreign:
         raise HTTPException(status_code=403, detail=foreign)
     text = "\n".join(m.content for m in body.messages)
-    early = model_call_refusal(text, None, box=box, tenant_id=str(body.tenant_id))
+    early = model_call_refusal(
+        text, None, box=box, tenant_id=str(body.tenant_id), task_type=body.task_type
+    )
     if early:
         raise HTTPException(status_code=403, detail=early)
     # Fail fast on a bad task_type rather than queueing a task that can only fail.
@@ -2014,7 +2232,7 @@ async def base_proxy(path: str, request: Request) -> Response:
 
 _LOCAL_ZENAS_HOSTS = frozenset({"agent-zenas", "localhost", "127.0.0.1"})
 _ZENAS_PATH = re.compile(
-    r"^(consents|matters|pool|pool/status|health|review|selftest|review-switch|rule-cards|worked|matches|training-pairs|drafts|tenants)$"
+    r"^(consents|matters|pool|pool/status|health|review|selftest|review-switch|cases/convert|rule-cards|worked|matches|training-pairs|drafts|tenants)$"
     r"|^(matters|documents|rule-cards|worked)/[0-9a-fA-F-]{36}$"
     r"|^matters/[0-9a-fA-F-]{36}/documents$"
     r"|^documents/[0-9a-fA-F-]{36}/reviews$"
@@ -2047,10 +2265,41 @@ def zenas_upstream(path: str) -> str:
     return raw.rstrip("/") + "/" + cleaned
 
 
+# A load detail is one short operational line. A judgment does not belong in it.
+_DETAIL_LIMIT = 240
+_URL = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
+_SK_SECRET = re.compile(r"sk-[A-Za-z0-9_-]{8,}")
+# Same marks the pool refuses to fetch. An env var name such as
+# COURTLISTENER_API_TOKEN has no '=' and stays.
+_KEYED_URL_MARKS = ("api_key=", "token=", "password=", "secret=", "?key=", "&key=")
+
+
+def _scrub_public_text(text: str) -> str:
+    """Remove keyed URLs and sk- secrets. Other words stay."""
+
+    def drop_url(match: re.Match[str]) -> str:
+        url = match.group(0)
+        lowered = url.lower()
+        if any(mark in lowered for mark in _KEYED_URL_MARKS):
+            return ""
+        return url
+
+    cleaned = _SK_SECRET.sub("", _URL.sub(drop_url, text))
+    if cleaned == text:
+        return text
+    return " ".join(cleaned.split())
+
+
 def public_feed(value: Any) -> Any:
-    """Drop key material from a pool status payload. key_name and key_set stay."""
+    """Drop key material from a pool status payload. key_name and key_set stay.
+
+    Each source's last_status and a short detail stay, so the feeds page can
+    show why a load failed. A URL that carries a key does not.
+    """
     if isinstance(value, list):
         return [public_feed(item) for item in value]
+    if isinstance(value, str):
+        return _scrub_public_text(value)
     if not isinstance(value, dict):
         return value
     kept: dict[str, Any] = {}
@@ -2059,6 +2308,13 @@ def public_feed(value: Any) -> Any:
         if lowered not in {"key_name", "key_set"} and "key" in lowered:
             continue
         if any(part in lowered for part in ("secret", "password", "token")):
+            continue
+        if lowered == "detail":
+            text = item if isinstance(item, str) else ""
+            kept[key] = _scrub_public_text(text)[:_DETAIL_LIMIT]
+            continue
+        if lowered == "last_status":
+            kept[key] = _scrub_public_text(item) if isinstance(item, str) else item
             continue
         kept[key] = public_feed(item)
     return kept
@@ -2449,6 +2705,158 @@ async def tiger_alerts(request: Request) -> Response:
         params.append(("url", url.strip()))
     resp = await _tiger_call("GET", "/alerts", params, None)
     return _tiger_response(resp, tenant_id)
+
+
+# ---------- workers panel (read only) ----------
+
+_WORKER_STATUS = re.compile(r"^[a-z_]{1,32}$")
+_WORKER_PR = re.compile(r"^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/[0-9]{1,9}$")
+_WORKERS_MAX_ROWS = 50
+_WORKERS_MAX_BYTES = 256 * 1024
+
+
+def _worker_number(value: Any, *, digits: int) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    number = float(value)
+    if number != number or number < 0 or number > 1e9:
+        return None
+    return round(number, digits)
+
+
+def _worker_row(raw: Any) -> dict[str, Any] | None:
+    """Keep the panel's columns only, as plain values. Anything else in a row is dropped."""
+    if not isinstance(raw, dict):
+        return None
+    issue = raw.get("issue")
+    if isinstance(issue, bool) or not isinstance(issue, int) or issue <= 0:
+        return None
+    status = str(raw.get("status") or "").strip().lower()
+    pr_url = raw.get("pr_url")
+    brief = raw.get("brief")
+    return {
+        "issue": issue,
+        "brief": brief.strip()[:200] if isinstance(brief, str) else "",
+        "status": status if _WORKER_STATUS.fullmatch(status) else "unknown",
+        "pr_url": pr_url if isinstance(pr_url, str) and _WORKER_PR.fullmatch(pr_url) else None,
+        "minutes": _worker_number(raw.get("minutes"), digits=2),
+        "cost_usd": _worker_number(raw.get("cost_usd"), digits=6),
+    }
+
+
+@app.get("/v1/workers", dependencies=[Depends(require_key)])
+async def workers_panel() -> dict[str, Any]:
+    """Recent worker tasks for the Tank page. Reads the workers service's /workers page as
+    JSON (/workers.json, the same rows). Read only: no ledger row, no write, no key."""
+    base = (os.environ.get("WORKERS_URL", "").strip() or "http://workers:8000").rstrip("/")
+    parsed = urlparse(base)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+        return {"available": False, "tasks": []}
+    try:
+        if _http is not None:
+            resp = await _http.get(f"{base}/workers.json", timeout=5, follow_redirects=False)
+        else:
+            async with httpx.AsyncClient(timeout=5) as client:
+                resp = await client.get(f"{base}/workers.json", follow_redirects=False)
+    except httpx.HTTPError:
+        return {"available": False, "tasks": []}
+    if resp.status_code != 200 or len(resp.content) > _WORKERS_MAX_BYTES:
+        return {"available": False, "tasks": []}
+    try:
+        rows = resp.json()
+    except ValueError:
+        return {"available": False, "tasks": []}
+    if not isinstance(rows, list):
+        return {"available": False, "tasks": []}
+    tasks = [row for row in (_worker_row(item) for item in rows[:_WORKERS_MAX_ROWS]) if row is not None]
+    return {"available": True, "tasks": tasks}
+
+
+# ---------- billing events (Workspace key only) ----------
+
+class BillingEventClaim(BaseModel):
+    event_id: str = Field(min_length=1, max_length=255)
+    type: str = Field(min_length=1, max_length=255)
+
+
+class BillingEventRelease(BaseModel):
+    event_id: str = Field(min_length=1, max_length=255)
+
+
+class BillingEventHandled(BaseModel):
+    event_id: str = Field(min_length=1, max_length=255)
+
+
+def _billing_text(value: str, label: str) -> str:
+    text = value.strip()
+    if not text or any(ord(ch) < 32 or ord(ch) == 127 for ch in text):
+        raise HTTPException(status_code=400, detail=f"{label} is required")
+    return text
+
+
+@app.post("/v1/billing/events/claim", dependencies=[Depends(require_key)])
+async def claim_billing_event(body: BillingEventClaim) -> dict[str, bool]:
+    """Store a Stripe event id once. The first caller gets first=true."""
+    event_id = _billing_text(body.event_id, "event_id")
+    event_type = _billing_text(body.type, "type")
+    try:
+        async with pool().acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                INSERT INTO tank.billing_events (event_id, type, received_at)
+                VALUES ($1, $2, now())
+                ON CONFLICT (event_id) DO NOTHING
+                RETURNING event_id
+                """,
+                event_id,
+                event_type,
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Billing event could not be stored.") from None
+    return {"first": row is not None}
+
+
+@app.post("/v1/billing/events/release", dependencies=[Depends(require_key)])
+async def release_billing_event(body: BillingEventRelease) -> dict[str, bool]:
+    """Delete an unhandled claim so Stripe's retry can run."""
+    event_id = _billing_text(body.event_id, "event_id")
+    try:
+        async with pool().acquire() as conn:
+            result = await conn.execute(
+                """
+                DELETE FROM tank.billing_events
+                WHERE event_id = $1 AND handled IS NOT TRUE
+                """,
+                event_id,
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Billing event could not be released.") from None
+    return {"released": result == "DELETE 1"}
+
+
+@app.post("/v1/billing/events/handled", dependencies=[Depends(require_key)])
+async def mark_billing_event_handled(body: BillingEventHandled) -> dict[str, bool]:
+    """Mark a stored claim handled so a later release leaves it in place."""
+    event_id = _billing_text(body.event_id, "event_id")
+    try:
+        async with pool().acquire() as conn:
+            result = await conn.execute(
+                """
+                UPDATE tank.billing_events
+                SET handled = true
+                WHERE event_id = $1
+                """,
+                event_id,
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Billing event could not be marked handled.") from None
+    return {"handled": result == "UPDATE 1"}
 
 
 app.include_router(__import__("admin").router)

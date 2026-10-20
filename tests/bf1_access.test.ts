@@ -24,17 +24,27 @@ test("a blank list and a missing user are rejected", () => {
 test("the product header says Skala and the address is /skala", () => {
   const customer = headerLinks(false).map((link) => link.label);
   const founder = headerLinks(true).map((link) => link.label);
-  assert.deepEqual(customer, ["Chat", "Tasks", "Data", "Ledger", "Base", "Tiger", "Market Lab", "Rig", "Tisan", "Radix", "Zenas", "Skala", "Tank"]);
-  assert.deepEqual(founder, ["Chat", "Tasks", "Data", "Skala", "Ledger", "Tank", "Base", "Tiger", "Market Lab", "Rig", "Tisan", "Radix", "Zenas"]);
+  assert.deepEqual(customer, ["Chat", "Tasks", "Data", "Ledger", "Billing", "Base", "Tiger", "Market Lab", "Rig", "Tisan", "Radix", "Zenas", "Skala", "Tank"]);
+  assert.deepEqual(founder, ["Chat", "Tasks", "Data", "Skala", "Ledger", "Billing", "Tank", "Base", "Tiger", "Market Lab", "Rig", "Tisan", "Radix", "Zenas"]);
   assert.equal(headerLinks(true).find((link) => link.label === "Skala")?.href, "/skala");
   assert.equal(headerLinks(true).find((link) => link.label === "Tank")?.href, "/tank");
+  assert.equal(headerLinks(false).find((link) => link.label === "Billing")?.href, "/billing");
+});
+
+test("sign-in, sign-up, and onboarding use their own shell", () => {
+  for (const path of ["/sign-in", "/sign-in/", "/sign-in/factor-one", "/sign-up", "/sign-up/verify", "/onboarding", "/onboarding/"]) {
+    assert.equal(usesOwnShell(path), true, path);
+  }
+  for (const path of ["/", "/tasks", "/data", "/skala", "/ledger", "/billing", "/tank", "/admin", "/review"]) {
+    assert.equal(usesOwnShell(path), false, path);
+  }
 });
 
 test("sign-in, sign-up, onboarding, and the squad frames use their own shell", () => {
   for (const path of ["/sign-in", "/sign-in/", "/sign-in/factor-one", "/sign-up", "/sign-up/verify", "/onboarding", "/onboarding/", "/base", "/tiger", "/market-lab", "/market-lab/", "/rig", "/tisan", "/radix", "/zenas"]) {
     assert.equal(usesOwnShell(path), true, path);
   }
-  for (const path of ["/", "/tasks", "/data", "/skala", "/ledger", "/tank", "/admin", "/review"]) {
+  for (const path of ["/", "/tasks", "/data", "/skala", "/ledger", "/billing", "/tank", "/admin", "/review"]) {
     assert.equal(usesOwnShell(path), false, path);
   }
 });

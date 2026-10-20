@@ -38,10 +38,10 @@ services:
       TANK_KEY_WORKERS: ${TANK_KEY_WORKERS:-}
       GITHUB_APP_ID: ${GITHUB_APP_ID:-}
       GITHUB_APP_INSTALLATION_ID: ${GITHUB_APP_INSTALLATION_ID:-}
-      GITHUB_APP_PRIVATE_KEY_FILE: /run/secrets/github_app_key
+      # Multiline PEM from the Coolify setting. Kept in memory (tmpfs) in a 0700 directory
+      # only the service reads. Never mounted into a task container. No host file.
+      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
       WORKER_STATE_DIR: /var/lib/workers
-    volumes:
-      - ${GITHUB_APP_PRIVATE_KEY_FILE}:/run/secrets/github_app_key:ro
     tmpfs:
       - /var/lib/workers
       - /run/user/1000

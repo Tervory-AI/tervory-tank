@@ -30,6 +30,10 @@ jobs:
         with:
           node-version: '22'
       - run: pip install -r tank/requirements.txt -r tank/requirements-dev.txt
+      - name: Install workspace packages for offline billing tests
+        working-directory: workspace
+        run: |
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-package-lock --no-audit --no-fund; fi
       - run: ruff check tank tests --select E9,F --per-file-ignores 'tank/skills/base.socials/1.0.0/run.py:F401'
       - run: pytest -q
         env:

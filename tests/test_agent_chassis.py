@@ -319,8 +319,9 @@ def test_agent_key_is_limited_to_route_skill_run_and_health(monkeypatch: pytest.
 def test_route_overwrites_agent_with_the_authenticated_caller(monkeypatch: pytest.MonkeyPatch):
     seen: dict[str, str] = {}
 
-    async def fake_run_route(req, task_id=None):
+    async def fake_run_route(req, task_id=None, caller=None):
         seen["agent"] = req.agent
+        seen["caller"] = caller
         return "sent"
 
     monkeypatch.setattr(TANK, "run_route", fake_run_route)
@@ -333,10 +334,12 @@ def test_route_overwrites_agent_with_the_authenticated_caller(monkeypatch: pytes
     async def check():
         assert await TANK.route(body, "template") == "sent"
         assert seen["agent"] == "template"
+        assert seen["caller"] == "template"
         assert body.agent == "tier0"
         other = body.model_copy(update={"agent": "tiger"})
         assert await TANK.route(other, None) == "sent"
         assert seen["agent"] == "tiger"
+        assert seen["caller"] is None
 
     asyncio.run(check())
 

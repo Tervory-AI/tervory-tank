@@ -1,4 +1,8 @@
-"""Environment for the worker service. Values come from Coolify. Nothing here is a secret."""
+"""Environment for the worker service. Values come from Coolify.
+
+Settings hold no secret. The GitHub App key (GITHUB_APP_PRIVATE_KEY) is checked here and,
+in from_env, kept in a private file for the service; Settings only carries that path.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +10,7 @@ import ipaddress
 import os
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from urllib.parse import urlsplit
 
 PLATFORM_TENANT = "00000000-0000-0000-0000-000000000001"
@@ -30,6 +35,13 @@ PROVIDER_HOSTS = frozenset(
 )
 
 
+# The service's own key directory, inside the tmpfs state dir. Task directories are
+# tervory-worker-<issue>-<hex>, so this never collides with one and is never mounted.
+KEY_DIR = ".github-app"
+KEY_NAME = "app-key.pem"
+LEGACY_KEY_FILE = "/run/secrets/github_app_key"
+
+
 class SettingsError(ValueError):
     pass
 
@@ -52,7 +64,9 @@ class Settings:
     poll_s: int = 60
     app_id: str = ""
     installation_id: str = ""
-    private_key_file: str = "/run/secrets/github_app_key"
+    private_key_file: str = LEGACY_KEY_FILE
+    # "file" when GITHUB_APP_PRIVATE_KEY_FILE names the key, "setting" when it comes from GITHUB_APP_PRIVATE_KEY.
+    private_key_source: str = "file"
     region: str = "us-east"
     proxy_port: int = 8765
     service_port: int = 8000
@@ -168,6 +182,8 @@ def from_mapping(data: dict[str, str]) -> Settings:
     task_type = _text(data, "WORKER_TASK_TYPE", DEFAULT_TASK_TYPE) or DEFAULT_TASK_TYPE
     if not re.fullmatch(r"[a-z0-9._]{1,64}", task_type):
         raise SettingsError("WORKER_TASK_TYPE must be an existing Tank policy name")
+    state_dir = _text(data, "WORKER_STATE_DIR", "/var/lib/workers") or "/var/lib/workers"
+    key_file, key_source = _key_location(data, state_dir)
     return Settings(
         max_tasks=_int(data, "WORKER_MAX_TASKS", 1, minimum=1, maximum=3),
         task_cpus=_float(data, "WORKER_TASK_CPUS", 2),
@@ -181,13 +197,52 @@ def from_mapping(data: dict[str, str]) -> Settings:
         poll_s=_int(data, "WORKER_POLL_SECONDS", 60, minimum=15, maximum=3600),
         app_id=_text(data, "GITHUB_APP_ID"),
         installation_id=_text(data, "GITHUB_APP_INSTALLATION_ID"),
-        private_key_file=_text(data, "GITHUB_APP_PRIVATE_KEY_FILE", "/run/secrets/github_app_key"),
+        private_key_file=key_file,
+        private_key_source=key_source,
         region=region,
         proxy_port=_int(data, "WORKER_PROXY_PORT", 8765, minimum=1024, maximum=65535),
         service_port=_int(data, "WORKER_PORT", 8000, minimum=1024, maximum=65535),
-        state_dir=_text(data, "WORKER_STATE_DIR", "/var/lib/workers") or "/var/lib/workers",
+        state_dir=state_dir,
     )
 
 
+def private_key_path(state_dir: str) -> str:
+    return str(Path(state_dir) / KEY_DIR / KEY_NAME)
+
+
+def _key_location(data: dict[str, str], state_dir: str) -> tuple[str, str]:
+    """GITHUB_APP_PRIVATE_KEY_FILE wins when set. Otherwise the GITHUB_APP_PRIVATE_KEY setting."""
+    from workers.github_app import PrivateKeyRejected, private_key_from_setting
+
+    named = _text(data, "GITHUB_APP_PRIVATE_KEY_FILE")
+    if named:
+        return named, "file"
+    setting = str(data.get("GITHUB_APP_PRIVATE_KEY") or "")
+    if not setting.strip():
+        return LEGACY_KEY_FILE, "file"
+    try:
+        private_key_from_setting(setting)
+    except PrivateKeyRejected as exc:
+        raise SettingsError(str(exc)) from None
+    return private_key_path(state_dir), "setting"
+
+
+def stage_private_key(settings: Settings, data: dict[str, str]) -> None:
+    """Write the key from the setting to the service's private file. Never logged."""
+    from workers.github_app import PrivateKeyRejected, private_key_from_setting, write_private_key
+
+    if settings.private_key_source != "setting":
+        return
+    try:
+        write_private_key(private_key_from_setting(str(data.get("GITHUB_APP_PRIVATE_KEY") or "")), settings.private_key_file)
+    except PrivateKeyRejected as exc:
+        raise SettingsError(str(exc)) from None
+
+
 def from_env() -> Settings:
-    return from_mapping(dict(os.environ))
+    data = dict(os.environ)
+    settings = from_mapping(data)
+    stage_private_key(settings, data)
+    # Child processes (podman and the task runner) do not inherit the key.
+    os.environ.pop("GITHUB_APP_PRIVATE_KEY", None)
+    return settings
