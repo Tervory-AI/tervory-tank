@@ -28,7 +28,7 @@ def test_product_pages_use_the_pairing_and_rows_stay_in_inter():
     css = _text(APP / "globals.css")
     shell = _text(APP / "shell.tsx")
     assert "system-ui" not in css
-    assert 'className="product"' in shell
+    assert "app-shell product" in shell
     assert "font-size: 17px" in css
     assert "font-weight: 400" in css
     assert ".product h1, .product h2, .product h3" in css

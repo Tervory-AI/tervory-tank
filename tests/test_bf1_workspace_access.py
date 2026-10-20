@@ -84,12 +84,12 @@ def test_page_address_is_skala():
     assert (APP / "api" / "skala" / "route.ts").is_file()
 
 
-def test_product_header_skips_sign_in_sign_up_and_onboarding():
+def test_product_header_skips_sign_in_and_sign_up():
     assert "OrganizationSwitcher" not in LAYOUT
     body = SHELL.split("export function Shell", 1)[1]
-    assert body.index("if (usesOwnShell(pathname)) return") < body.index("<header")
-    assert body.index("<header") < body.index("<OrganizationSwitcher")
-    assert "headerLinks(founder)" in SHELL
+    assert body.index("if (usesOwnShell(pathname)) return") < body.index("OrganizationSwitcher")
+    assert "headerLinks(founder)" not in SHELL
+    assert 'aria-controls="squad-popout"' in SHELL or 'aria-controls="squad-popout"' in _text(APP / "squad-links.tsx")
     for rel in (
         "sign-in/layout.tsx",
         "sign-in/[[...sign-in]]/page.tsx",

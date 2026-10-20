@@ -65,7 +65,10 @@ def test_page_matches_the_app_frame():
     assert "transferLibrarySkill" in (PAGE / "pipeline-actions.ts").read_text(encoding="utf-8")
     assert "publish" not in (PAGE / "pipeline-actions.ts").read_text(encoding="utf-8")
     nav = (ROOT / "workspace" / "app" / "product-nav.ts").read_text(encoding="utf-8")
-    assert '"/skala"' not in nav.split("OWN_SHELL", 1)[1]
+    own = nav.split("const OWN_SHELL = ", 1)[1].split(";", 1)[0]
+    assert '"/skala"' not in own
+    routes = nav.split("export const SHELL_ROUTES", 1)[1].split("];", 1)[0]
+    assert '"/skala"' in routes
 
 
 def test_plugins_use_skala_vault_and_the_library_is_separate():
