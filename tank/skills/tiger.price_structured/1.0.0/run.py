@@ -50,6 +50,7 @@ def canonical_price(raw: Any) -> str | None:
     else:
         return None
     text = text.replace("\xa0", "").replace(" ", "")
+    text = re.sub(r"^(?:US\$|[$£€])|[$£€]$", "", text)
     if not re.fullmatch(r"\d{1,15}(?:[.,]\d{1,15})*", text):
         return None
     if not text or text in {"-", ".", ",", "-."}:
@@ -196,7 +197,7 @@ def _offer_price(offer: dict) -> str | None:
     if "aggregateoffer" in _type_names(offer):
         low, high = canonical_price(offer.get("lowPrice")), canonical_price(offer.get("highPrice"))
         return low if low is not None and low == high else None
-    return canonical_price(offer.get("price")) or _spec_price(offer)
+    return _spec_price(offer) or canonical_price(offer.get("price"))
 
 
 def _offer_nodes(raw: Any) -> list[dict]:
