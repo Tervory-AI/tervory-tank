@@ -41,4 +41,8 @@ async def run(payload: dict, ctx: Any) -> dict:
             task_type="rig.fit_suggest",
             max_tokens=80,
         )
-    return {"fits": fits, "explanation": code.one_sentence(text)}
+    sentence = code.one_sentence(text)
+    return {
+        "fits": fits,
+        "explanation": code.ground_explanation(sentence, data.get("products") or [], fits),
+    }

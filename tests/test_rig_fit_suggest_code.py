@@ -19,6 +19,7 @@ sys.path.insert(0, str(ROOT / "agents" / "_chassis"))
 
 import skala  # noqa: E402
 from rigbox.catalogue import families_from, load_folder  # noqa: E402
+from rigbox.logic import approved as room_approved  # noqa: E402
 
 PACKAGE = ROOT / "tank" / "skills" / "rig.fit_suggest" / "1.1.0"
 CATALOGUES = ROOT / "agents" / "rig" / "catalogues"
@@ -33,6 +34,7 @@ def _load(path: Path, name: str):
 
 
 suggest = _load(PACKAGE / "run.py", "rig_fit_suggest_11")
+fit_code = _load(PACKAGE / "code.py", "rig_fit_suggest_code_11")
 previous = _load(ROOT / "tank" / "skills" / "rig.fit_suggest" / "1.0.0" / "ground.py", "rig_fit_suggest_10")
 
 
@@ -204,6 +206,22 @@ async def test_code_matches_or_beats_the_model_on_catalogue_lists() -> None:
         json.dumps({"fits": gold[0]["expected"]}),
     )
     assert _score(gold[0]["expected"], matched["fits"]) == 1.0
+
+
+def test_approval_matches_the_room_and_the_sentence_is_capped() -> None:
+    samples = [
+        {"source": "suggested", "approved": False},
+        {"source": "suggested"},
+        {"source": "suggested", "approved": True},
+        {"source": "import", "approved": False},
+        {"source": "import", "approved": True},
+        {},
+    ]
+    for row in samples:
+        assert fit_code._approved(row) is room_approved(row)
+    long = "word " * 80
+    assert len(fit_code.one_sentence(long)) == 200
+    assert fit_code.one_sentence("The shade fits the lamp. " + long) == "The shade fits the lamp."
 
 
 def test_previous_version_is_untouched() -> None:

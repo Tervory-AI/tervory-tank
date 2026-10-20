@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
+
+_FALLBACK = "These parts are listed as compatible in the catalogue."
 
 
 def supported_fits(payload: dict[str, Any]) -> list[dict[str, Any]]:
@@ -55,14 +58,53 @@ def supported_fits(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def one_sentence(text: str) -> str:
-    """The first sentence only. A JSON reply is not an explanation."""
+    """The first sentence only. A JSON reply is not an explanation.
+
+    A mark ends a sentence only when whitespace or the end of the text follows
+    it. A dot inside a number or in ``e.g.`` does not. The result is at most
+    200 characters.
+    """
     cleaned = " ".join(str(text or "").split())
     if not cleaned or cleaned[0] in "{[":
         return ""
+    end = len(cleaned)
     for index, char in enumerate(cleaned):
-        if char in ".!?":
-            return cleaned[: index + 1]
-    return cleaned
+        if char not in ".!?":
+            continue
+        nxt = cleaned[index + 1] if index + 1 < len(cleaned) else ""
+        if nxt and not nxt.isspace():
+            continue
+        if char == "." and _keeps_dot(cleaned, index):
+            continue
+        end = index + 1
+        break
+    return cleaned[:end][:200]
+
+
+def ground_explanation(sentence: str, products: list[Any], fits: list[dict[str, Any]]) -> str:
+    """Replace a sentence that names a product the fit list does not return."""
+    if not sentence:
+        return ""
+    allowed: set[str] = set()
+    for fit in fits:
+        for key in ("part_sku", "fits_sku"):
+            token = str(fit.get(key) or "").strip()
+            if token:
+                allowed.add(token.casefold())
+    for product in _rows(products):
+        sku = _sku(product)
+        if sku and sku.casefold() in allowed:
+            name = str(product.get("name") or "").strip()
+            if name:
+                allowed.add(name.casefold())
+    for product in _rows(products):
+        sku = _sku(product)
+        name = str(product.get("name") or "").strip()
+        if sku and sku.casefold() not in allowed and _mentions(sentence, sku):
+            return _FALLBACK
+        if name and name.casefold() not in allowed and _mentions(sentence, name):
+            return _FALLBACK
+    return sentence
 
 
 def _label(
@@ -81,6 +123,8 @@ def _label(
         return None
     if fits_family and fits_family not in families:
         return None
+    if not _approved(raw):
+        return None
     rule = raw.get("rule") if isinstance(raw.get("rule"), dict) else {}
     return {
         "part_sku": part,
@@ -88,6 +132,29 @@ def _label(
         "fits_family": fits_family or None,
         "rule": dict(rule),
     }
+
+
+def _approved(fit: dict[str, Any]) -> bool:
+    """Same rule as the room: a suggestion counts only after a person accepts it."""
+    source = str(fit.get("source") or "import")
+    if source == "suggested":
+        return bool(fit.get("approved"))
+    if fit.get("approved") is False:
+        return False
+    return True
+
+
+def _keeps_dot(text: str, index: int) -> bool:
+    nxt = text[index + 1] if index + 1 < len(text) else ""
+    prev = text[index - 1] if index else ""
+    if nxt.isdigit() or (prev.isdigit() and nxt.isdigit()):
+        return True
+    return text[max(0, index - 3) : index + 1].lower() == "e.g."
+
+
+def _mentions(text: str, token: str) -> bool:
+    pattern = rf"(?<![A-Za-z0-9]){re.escape(token)}(?![A-Za-z0-9])"
+    return re.search(pattern, text, re.IGNORECASE) is not None
 
 
 def _rows(value: Any) -> list[dict[str, Any]]:
