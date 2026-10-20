@@ -291,7 +291,9 @@ export function setCandidate(taskType: string, candidateModel: string | null, sh
   });
 }
 export function promoteCandidate(taskType: string, by: string) {
-  return tank<{ ok: true; model: string }>(`/v1/graduation/${encodeURIComponent(taskType)}/promote`, { method: "POST", body: JSON.stringify({ by }) });
+  return tank<{ ok: true; model: string }>(`/v1/graduation/${encodeURIComponent(taskType)}/promote`, {
+    method: "POST", headers: { "X-Tervory-Admin": by }, body: JSON.stringify({ by }),
+  });
 }
 export function rollbackModel(taskType: string, by: string) {
   return tank<{ ok: true; model: string }>(`/v1/graduation/${encodeURIComponent(taskType)}/rollback`, { method: "POST", body: JSON.stringify({ by }) });
