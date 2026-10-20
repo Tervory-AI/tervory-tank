@@ -20,6 +20,7 @@ from chassis.jobs import JobContext
 from chassis.logs import log_line
 from scanlib.orchestrate import scan_job
 from verify.routes import attach as attach_verification
+from gold_sources import attach as attach_gold
 
 AGENT = os.environ.get("AGENT_NAME", "radix")
 # Platform tenant. The heartbeat is the box checking itself, not a client's work.
@@ -68,3 +69,4 @@ app = create_app(
 )
 
 attach_verification(app)
+attach_gold(app)
