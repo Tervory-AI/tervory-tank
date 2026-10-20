@@ -920,7 +920,7 @@ async def _link_converted_card(pool: Any, ladder: Any, model: Any, worked: dict[
     try:
         await link_card(pool, ladder, model, worked, region=region)
     except Exception:
-        log.warning("converted rule card could not be built")
+        log.warning("converted rule card could not be built", exc_info=True)
 
 
 async def run_scheduled(conn: Any, *, region: str) -> None:

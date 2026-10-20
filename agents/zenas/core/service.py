@@ -307,11 +307,12 @@ async def build_rule_card(
     as_at: str | None = None,
     client_facts: str = "",
     provider: str = "luna",
+    scope_text: str = "",
 ) -> dict[str, Any]:
     _home, refused = await _use_home(ladder, tenant_id=tenant_id, home_region=home_region, box_region=box_region)
     if refused:
         return refused
-    gate = await _gate(tank, tenant_id=tenant_id, text=question, jurisdiction=jurisdiction)
+    gate = await _gate(tank, tenant_id=tenant_id, text=scope_text or question, jurisdiction=jurisdiction)
     if gate["stopped"]:
         reason = str((gate.get("scope") or {}).get("reason") or "Not in scope.")
         return _refuse(reason, scope=gate.get("scope"))
