@@ -67,3 +67,82 @@ def test_existing_room_skill_namespaces():
     assert training.valid_auto_candidate(example(skill_id='market.series_fetch'), 'market_lab', 'us-east')
     assert training.valid_auto_candidate(example(skill_id='scan.secrets'), 'radix', 'us-east')
     assert not training.valid_auto_candidate(example(skill_id='scan.secrets'), 'base', 'us-east')
+
+
+@pytest.mark.parametrize('skill,room', [('market.series_fetch', 'market_lab'), ('scan.secrets', 'radix'), ('ffl.ingest', 'base')])
+def test_package_ownership_not_prefix(skill, room):
+    assert training.valid_auto_candidate(example(skill_id=skill), room, 'us-east')
+    assert not training.valid_auto_candidate(example(skill_id=skill), 'tiger', 'us-east')
+    assert not training.valid_auto_candidate(example(skill_id=skill + '.unknown'), room, 'us-east')
+
+
+@pytest.mark.parametrize('raw', ['', '0', '-1', 'nan', '1.5', 'Infinity', 'no', '9' * 5000])
+def test_bad_cap_falls_back_once(monkeypatch, caplog, raw):
+    monkeypatch.setenv('GOLD_AUTO_MAX', raw)
+    assert training.gold_auto_max() == 200
+    assert sum('Invalid GOLD_AUTO_MAX' in record.message for record in caplog.records) == 1
+
+
+def test_positive_and_absent_cap(monkeypatch, caplog):
+    monkeypatch.delenv('GOLD_AUTO_MAX', raising=False)
+    assert training.gold_auto_max() == 200
+    monkeypatch.setenv('GOLD_AUTO_MAX', '12')
+    assert training.gold_auto_max() == 12
+    assert not caplog.records
+
+
+@pytest.mark.asyncio
+async def test_bad_rows_savepoint_and_later_rooms(database, monkeypatch):
+    import json
+    pool, _ = database
+    monkeypatch.setattr(training, 'ROOMS', ('base', 'market_lab', 'radix'))
+    for room in training.ROOMS:
+        monkeypatch.setenv('TANK_KEY_' + room.upper(), secrets.token_urlsafe(20))
+    bad = [example(input={'value': value}) for value in ('\x00', float('nan'), float('inf'), -float('inf'))]
+    bad += [example(input=[]), example(expected='wrong'), example(label_source='\x00')]
+    bad += [example(**{field: {'large': 'é' * 40000}}) for field in ('input', 'expected')]
+    rows = [example(input={'n': 1})] + bad + [example(input={'n': 2}, skill_id='ffl.ingest')]
+    real_client = httpx.AsyncClient
+    def respond(req):
+        payload = rows if req.url.host == 'agent-base' else [example(skill_id='market.series_fetch' if req.url.host == 'agent-market-lab' else 'scan.secrets')]
+        # Deliberately malformed JSON numbers are accepted by Python's decoder;
+        # row serialization must reject them without rejecting healthy siblings.
+        return httpx.Response(200, content=json.dumps(payload).encode())
+    monkeypatch.setattr(training.httpx, 'AsyncClient', lambda **kw: real_client(transport=httpx.MockTransport(respond), **kw))
+    stats = await training.collect_room_gold(date(2026, 10, 20))
+    assert stats['rejected'] == len(bad)
+    assert stats['inserted'] == 4 and stats['unavailable'] == 0
+    async with pool.acquire() as conn:
+        saved = await conn.fetch('SELECT skill_id FROM tank.gold_examples')
+        assert {r['skill_id'] for r in saved} == {'base.find_site', 'ffl.ingest', 'market.series_fetch', 'scan.secrets'}
+
+
+@pytest.mark.asyncio
+async def test_stream_body_cap_continues_to_next_room(monkeypatch):
+    monkeypatch.setattr(training, 'ROOMS', ('base', 'radix'))
+    for room in training.ROOMS:
+        monkeypatch.setenv('TANK_KEY_' + room.upper(), secrets.token_urlsafe(20))
+    monkeypatch.setattr(training, 'runtime', lambda: SimpleNamespace(box_region=lambda: 'us-east'))
+    seen = []
+    chunks = []
+    class Stream(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            for n in range(100):
+                chunks.append(n)
+                yield b' ' * 65536
+    def respond(req):
+        seen.append(req.url.host)
+        return httpx.Response(200, stream=Stream()) if req.url.host == 'agent-base' else httpx.Response(404)
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(training.httpx, 'AsyncClient', lambda **kw: real_client(transport=httpx.MockTransport(respond), **kw))
+    stats = await training.collect_room_gold(date(2026, 10, 20))
+    assert stats['rejected_responses'] == 1
+    assert seen == ['agent-base', 'agent-radix'] and len(chunks) == 81
+
+
+def test_row_size_byte_boundary():
+    import json
+    overhead = len(json.dumps({'v': ''}, ensure_ascii=False, sort_keys=True).encode())
+    training.candidate_json({'v': 'x' * (65536 - overhead)})
+    with pytest.raises(ValueError):
+        training.candidate_json({'v': 'x' * (65537 - overhead)})
