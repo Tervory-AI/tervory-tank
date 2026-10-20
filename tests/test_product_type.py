@@ -12,16 +12,28 @@ def _text(path: Path) -> str:
 
 
 def test_product_shell_loads_the_admin_faces():
+    fonts = _text(APP / "fonts" / "index.ts")
     layout = _text(APP / "layout.tsx")
     admin = _text(APP / "admin" / "layout.tsx")
+    assert 'from "next/font/local"' in fonts
+    assert 'from "next/font/google"' not in layout
+    assert 'from "next/font/google"' not in admin
     for line in (
-        'Jost({ subsets: ["latin"], weight: "300", variable: "--font-jost", display: "swap" })',
-        'Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" })',
-        'JetBrains_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--font-mono", display: "swap" })',
+        'src: "./Jost-300-latin.woff2"',
+        'weight: "300"',
+        'variable: "--font-jost"',
+        'display: "swap"',
+        'src: "./Inter-latin.woff2"',
+        'weight: "100 900"',
+        'variable: "--font-inter"',
+        'path: "./JetBrainsMono-latin.woff2", weight: "400"',
+        'path: "./JetBrainsMono-latin.woff2", weight: "500"',
+        'variable: "--font-mono"',
     ):
-        assert line in layout
-        assert line in admin
-    assert "jost.variable" in layout and "inter.variable" in layout and "mono.variable" in layout
+        assert line in fonts
+    for page in (layout, admin):
+        assert 'from "./fonts"' in page or 'from "../fonts"' in page
+        assert "jost.variable" in page and "inter.variable" in page and "mono.variable" in page
 
 
 def test_product_pages_use_the_pairing_and_rows_stay_in_inter():
