@@ -40,7 +40,10 @@ The secret text is not a column. It is masked out of the summary, the rows, and 
 
 `GET /gold/candidates?limit=200` requires the room's `X-Tank-Key` (`TANK_KEY`).
 It returns a deterministic array of `{skill_id, input, expected, label_source,
-region, public}`. Limits are 1–200; the default is 200. The fixed set contains
+label_family, region, public}`. Every row's family is `radix:fixture:v1:{skill}`.
+Fixtures do not change by month, so one spot check covers that skill's fixture
+rule. A row marked synthetic (a wrong answer made on purpose) uses a separate
+family whose name contains `synthetic`. Limits are 1–200; the default is 200. The fixed set contains
 13 examples in US rooms and 8 scanner examples in ZA rooms; requests do not
 pad or duplicate the set. Consumers should deduplicate repeated pulls.
 

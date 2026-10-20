@@ -97,6 +97,28 @@ def snapshot(root: Path, tenant: str, page_id: str) -> dict[str, Any]:
             "html": page["html"], "css": page.get("css", ""), "frame_hash": digest(frame), "page_hash": digest(page)}
 
 
+def _month(value: Any) -> str | None:
+    if value is None or isinstance(value, bool):
+        return None
+    text = value.isoformat() if hasattr(value, "isoformat") else str(value).strip()
+    if len(text) < 7 or text[4] != "-" or not (text[:4].isdigit() and text[5:7].isdigit()):
+        return None
+    if not 1 <= int(text[5:7]) <= 12:
+        return None
+    return text[:7]
+
+
+def page_family(approved_at: Any, *, synthetic: bool = False) -> str | None:
+    """One family per approval month. A planted wrong page is its own family."""
+    month = _month(approved_at)
+    if month is None:
+        return None
+    family = f"founder-approved-page:{month}"
+    if synthetic:
+        return family.replace(":", "-synthetic:", 1)
+    return family
+
+
 def matches(row: dict[str, Any], approval: Any) -> bool:
     return (row["frame_hash"] == approval["frame_hash"] and row["page_hash"] == approval["page_hash"]
             and row["figma_file_id"] == approval["figma_file_id"]
@@ -194,9 +216,17 @@ def mount(app: Any) -> None:
                 continue
             if not matches(row, approval):
                 continue
+            try:
+                approved_at = approval["approved_at"]
+            except (KeyError, IndexError, TypeError):
+                continue
+            family = page_family(approved_at, synthetic=row.get("synthetic") is True)
+            if family is None:
+                continue
             for skill in ("tisan.figma", "tisan.scaffold"):
                 result.append({"skill_id": skill, "input": row["frame"], "expected": row["page_structure"],
                                "label_source": "auto:founder-approved-page:" + row["page_hash"],
+                               "label_family": family,
                                "region": row["region"], "public": row.get("public") is True and str(tenant_id) == PLATFORM_TENANT})
                 if len(result) == cap:
                     return result
