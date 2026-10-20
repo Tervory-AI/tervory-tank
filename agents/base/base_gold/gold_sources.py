@@ -102,14 +102,15 @@ def _examples(
 ) -> list[dict[str, Any]]:
     if (
         snapshot.get("tenant_id") != PLATFORM_TENANT or snapshot.get("public") is not True
-        or snapshot.get("region") != region or snapshot.get("record_kind") != "business"
+        or snapshot.get("region") != region
     ):
         return []
     source = catalogue[snapshot["source_id"]]
     if source["region"] != region:
         return []
-    if not source.get("public_licensees") and snapshot.get("entity_type") not in (
-        "corporation", "llc", "registered_company",
+    if not source.get("public_licensees") and (
+        snapshot.get("record_kind") != "business"
+        or snapshot.get("entity_type") not in ("corporation", "llc", "registered_company")
     ):
         return []
     official, site = snapshot["official"], snapshot["site"]
@@ -189,11 +190,18 @@ def _negative(
     official = snapshot["official"]
     for other in verified:
         target, site = other["official"], other["site"]
+        number = re.match(r"^\s*(\d+)\b", official["address"])
+        other_number = re.match(r"^\s*(\d+)\b", target["address"])
+        address_differs = (
+            official["zip"][:5] != target["zip"][:5]
+            or _text(official["state"]) != _text(target["state"])
+            or bool(number and other_number and int(number[1]) != int(other_number[1]))
+        )
         if (
             target["id"] == official["id"]
             or _host(site["website"]) == _host(snapshot["site"]["website"])
             or not all(_text(target[key]) == _text(site.get(key)) for key in ("address", "city", "state", "zip"))
-            or _text(official["address"]) == _text(target["address"])
+            or not address_differs
             or _phone(official["phone"]) == _phone(target["phone"])
             or not site.get("exclusive_contacts")
         ):

@@ -127,6 +127,16 @@ async def test_no_negative_when_observed_contacts_are_ambiguous():
     assert all(label["expected"]["checks"]["phone_matches_site"] for label in labels if label["skill_id"] == "base.verify")
 
 
+@pytest.mark.asyncio
+async def test_address_spelling_difference_is_not_a_negative():
+    rows = await joined()
+    for number, row in enumerate(rows):
+        address = "10 Main St" if number % 2 else "10 Main Street"
+        row["official"]["address"] = row["site"]["address"] = address
+    labels = candidates(rows, region="us-east", today=TODAY)
+    assert all(label["expected"]["checks"]["phone_matches_site"] for label in labels if label["skill_id"] == "base.verify")
+
+
 def test_observations_come_only_from_scraped_pages():
     html = '<script type="application/ld+json">' + json.dumps({
         "@type": "PostalAddress", "streetAddress": "10 Home Lane",

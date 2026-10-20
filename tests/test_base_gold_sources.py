@@ -57,7 +57,6 @@ def test_four_public_candidates_and_deduplication():
     (None, "public", False),
     (None, "public", "true"),
     (None, "tenant_id", "00000000-0000-0000-0000-000000000099"),
-    (None, "record_kind", "person"),
     (None, "region", "za"),
     (None, "source_id", "unreviewed-source"),
     ("official", "active", False),
@@ -130,6 +129,7 @@ def test_find_site_is_discovery_not_an_input_echo():
 def test_atf_individual_and_home_premises_stay_public():
     row = evidence()
     row["entity_type"] = "sole_proprietor"
+    row["record_kind"] = "person"
     row["official"]["name"] = "Published Licensee"
     row["official"]["address"] = row["site"]["address"] = "10 Home Lane"
     assert len(produce([row])) == 4
