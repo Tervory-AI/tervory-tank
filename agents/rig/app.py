@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 import os
@@ -13,8 +14,9 @@ from chassis.app import create_app
 from chassis.db import ensure_schedules, schema_for
 from chassis.jobs import JobContext
 from chassis.logs import log_line
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException, Query
 
+from gold_sources import candidates
 from rigbox.api import mount
 from rigbox.page_route import mount_page
 from rigbox.service import Service, WebhookHandoff
@@ -114,6 +116,19 @@ def _close_public_surface(application: FastAPI) -> None:
 
 _close_public_surface(app)
 mount_page(app)
+
+
+@app.get("/gold/candidates")
+async def gold_candidates(
+    limit: int = Query(default=200, ge=1, le=200),
+    x_tank_key: str = Header(default=""),
+) -> list[dict[str, Any]]:
+    """Room key only. Catalogue compatibility lists, marked public."""
+    key = os.environ.get("TANK_KEY", "")
+    if not key or not x_tank_key or not hmac.compare_digest(key, x_tank_key):
+        raise HTTPException(status_code=401, detail="room key required")
+    root = Path(os.environ.get("CATALOGUE_DIR", str(Path(__file__).resolve().parent / "catalogues")))
+    return candidates(limit, region=os.environ.get("TANK_REGION", "us-east"), root=root)
 
 _inner = app.router.lifespan_context
 
