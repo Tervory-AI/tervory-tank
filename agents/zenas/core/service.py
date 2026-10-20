@@ -14,7 +14,6 @@ from typing import Any
 from agents.zenas.core.engine import (
     CHEAP_CALL_USD,
     IDENTIFIER_REFUSED,
-    LAW_ONLY,
     TOP_CALL_USD,
     card_from_proposal,
     cite_check,
