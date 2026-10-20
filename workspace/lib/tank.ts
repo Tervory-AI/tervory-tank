@@ -667,3 +667,22 @@ export function trainingGraduation(identity: {userId: string; tenantId: string; 
     "x-tervory-user": identity.userId, "x-tervory-tenant": identity.tenantId, "x-tervory-role": identity.role,
   }});
 }
+
+export type TisanGoldPage = {
+  page_id: string; tenant_id: string; figma_file_id: string; figma_frame_id: string;
+  built_page_path: string; frame_hash: string; page_hash: string;
+  frame: Record<string, unknown>; page_structure: Record<string, unknown>; html: string; css: string;
+};
+
+export function tisanGoldPages(tenantId: string, userId: string): Promise<TisanGoldPage[]> {
+  return tank<TisanGoldPage[]>(`/v1/tisan/gold/pages?tenant_id=${encodeURIComponent(tenantId)}`, {
+    method: "GET", headers: { "X-Tervory-Admin": userId },
+  });
+}
+
+export function approveTisanGold(tenantId: string, userId: string, pageId: string, frameHash: string, pageHash: string) {
+  return tank<{ approved: boolean }>("/v1/tisan/gold/approve", {
+    method: "POST", headers: { "X-Tervory-Admin": userId },
+    body: JSON.stringify({ tenant_id: tenantId, page_id: pageId, frame_hash: frameHash, page_hash: pageHash }),
+  });
+}

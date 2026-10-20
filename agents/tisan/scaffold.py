@@ -513,6 +513,12 @@ async def execute(
         if env_dts.is_file():
             generated = '/// <reference path="./.next/types/routes.d.ts" />\n'
             env_dts.write_text(env_dts.read_text(encoding="utf-8").replace(generated, "", 1), encoding="utf-8")
+        if payload.get("figma") and checks and all(item["ok"] for item in checks) and not detail:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("tisan_review_store", Path(__file__).with_name("review_store.py"))
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            module.save(root, project, tenant, brief["slug"], number, payload["figma"])
         files = pack(project, folder / f"{number}.tar.gz")
     manifest = _manifest(
         brief,
