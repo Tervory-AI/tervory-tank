@@ -657,3 +657,13 @@ export function markBillingEventHandled(eventId: string): Promise<{ handled: boo
     body: JSON.stringify({ event_id: eventId }),
   });
 }
+
+export type TrainingGraduation = {
+  task_type: string; model: string; gold_count: number; candidate: string | null;
+  heldout_score: number | null; current_cost: number | null; candidate_cost: number | null; can_promote: boolean;
+};
+export function trainingGraduation(identity: {userId: string; tenantId: string; role: string}) {
+  return tank<TrainingGraduation[]>("/v1/training/graduation", {method: "GET", headers: {
+    "x-tervory-user": identity.userId, "x-tervory-tenant": identity.tenantId, "x-tervory-role": identity.role,
+  }});
+}

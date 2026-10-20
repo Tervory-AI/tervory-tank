@@ -2863,3 +2863,11 @@ app.include_router(__import__("admin").router)
 
 app.include_router(__import__("gold").router)
 app.include_router(__import__("training").router)
+
+
+@app.get("/v1/training/graduation")
+async def training_graduation(actor=Depends(__import__("gold").require_reviewer)):
+    if not actor.founder:
+        raise HTTPException(404, "not found")
+    async with pool().acquire() as conn:
+        return await graduate.training_table(conn, actor.tenant, box_region())

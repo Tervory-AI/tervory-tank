@@ -768,3 +768,8 @@ CREATE INDEX IF NOT EXISTS gold_auto_source ON tank.gold_examples
     (tenant_id,region,agent,label_source,intake_day) WHERE auto_label;
 
 ALTER TABLE tank.gold_examples ADD COLUMN IF NOT EXISTS auto_approved boolean NOT NULL DEFAULT false;
+
+-- Explicit model holdout evidence; never substitute offline screening scores.
+ALTER TABLE tank.gold_scores ADD COLUMN IF NOT EXISTS task_type text;
+ALTER TABLE tank.gold_scores ADD COLUMN IF NOT EXISTS candidate_model text;
+ALTER TABLE tank.gold_scores ADD COLUMN IF NOT EXISTS cost_per_call numeric(14,8);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { SquadLinks } from "../squad-links";
 import { searchTank, VAULT_LINE } from "./records";
 import { MODEL_KEY_LINE, modelsMatching, pipelineTo, SQUAD_LINE, squadsMatching, type ModelRow } from "./squads";
@@ -110,11 +110,13 @@ function AskTank() {
 
 export function TankView({
   workspaceName,
+  graduation,
   models,
   modelsUnavailable = false,
   workers = { available: false, tasks: [] },
 }: {
   workspaceName: string | null;
+  graduation?: ReactNode;
   models: ModelRow[];
   modelsUnavailable?: boolean;
   workers?: WorkersFeed;
@@ -265,6 +267,7 @@ export function TankView({
               )}
             </section>
           ) : null}
+          {!searching ? graduation : null}
           {!searching ? <WorkersPanel feed={workers} /> : null}
         </div>
       </div>
