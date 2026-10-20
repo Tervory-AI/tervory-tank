@@ -16,11 +16,13 @@ import io
 import json
 import lzma
 import os
+import queue
 import re
 import sys
 import threading
 import time
 import urllib.parse
+import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 from collections import Counter
@@ -61,6 +63,14 @@ LIST_PREFIXES = (
     "bulk-data/schema-",
 )
 _READER_THREAD = "cl-bulk-reader"
+SOCKET_TIMEOUT = 60
+HEARTBEAT_SECONDS = 30
+STALL_SECONDS = 300
+
+
+class BulkStalled(TimeoutError):
+    def __init__(self, detail: str = "") -> None:
+        super().__init__(f"stalled; resumable on next Load{'; ' + detail if detail else ''}")
 
 
 def bulk_cap() -> int:
@@ -250,7 +260,7 @@ def _iter_http_rows(url: str, stop: threading.Event) -> Iterator[list[str]]:
         url,
         headers={"User-Agent": USER_AGENT, "Accept-Encoding": "identity"},
     )
-    response = urllib.request.urlopen(request, timeout=120)  # noqa: S310
+    response = urllib.request.urlopen(request, timeout=SOCKET_TIMEOUT)  # noqa: S310
     stream = _decompress(response, url)
     text = io.TextIOWrapper(stream, encoding="utf-8", newline="")
     try:
@@ -269,7 +279,7 @@ def _iter_http_lines(url: str, stop: threading.Event) -> Iterator[str]:
         url,
         headers={"User-Agent": USER_AGENT, "Accept-Encoding": "identity"},
     )
-    response = urllib.request.urlopen(request, timeout=120)  # noqa: S310
+    response = urllib.request.urlopen(request, timeout=SOCKET_TIMEOUT)  # noqa: S310
     stream = _decompress(response, url)
     text = io.TextIOWrapper(stream, encoding="utf-8", newline="")
     try:
@@ -282,19 +292,10 @@ def _iter_http_lines(url: str, stop: threading.Event) -> Iterator[str]:
         response.close()
 
 
-async def _try_put(queue: asyncio.Queue, item: object) -> bool:
-    try:
-        queue.put_nowait(item)
-    except asyncio.QueueFull:
-        return False
-    return True
-
-
 async def _aiter_thread(worker, stop: threading.Event) -> AsyncIterator[object]:
     """Pull rows off a thread so the room's event loop keeps answering."""
-    loop = asyncio.get_running_loop()
-    queue: asyncio.Queue = asyncio.Queue(maxsize=32)
-    done = object()
+    pending: queue.Queue = queue.Queue(maxsize=32)
+    finished = threading.Event()
     errors: list[BaseException] = []
 
     def run() -> None:
@@ -303,36 +304,41 @@ async def _aiter_thread(worker, stop: threading.Event) -> AsyncIterator[object]:
             for item in worker():
                 if stop.is_set():
                     break
-                placed = False
                 while not stop.is_set():
-                    future = asyncio.run_coroutine_threadsafe(_try_put(queue, item), loop)
                     try:
-                        placed = bool(future.result(timeout=2))
-                    except TimeoutError:
-                        continue
-                    if placed:
+                        pending.put(item, timeout=0.1)
                         break
-                    time.sleep(0.05)
-                if not placed:
-                    break
+                    except queue.Full:
+                        continue
         except Exception as exc:  # noqa: BLE001
             errors.append(exc)
         finally:
-            asyncio.run_coroutine_threadsafe(_try_put(queue, done), loop).result(timeout=30)
+            finished.set()
 
     thread = threading.Thread(target=run, name=_READER_THREAD, daemon=True)
     thread.start()
+    last_row = time.monotonic()
     try:
         while True:
-            item = await queue.get()
-            if item is done:
-                break
+            try:
+                item = pending.get_nowait()
+            except queue.Empty:
+                if finished.is_set():
+                    break
+                if time.monotonic() - last_row >= STALL_SECONDS:
+                    raise BulkStalled()
+                await asyncio.sleep(0.01)
+                continue
+            last_row = time.monotonic()
             yield item
     finally:
         stop.set()
-        while thread.is_alive():
-            await asyncio.sleep(0.01)
+        await asyncio.to_thread(thread.join, 0.2)
     if errors:
+        if isinstance(errors[0], TimeoutError) or (
+            isinstance(errors[0], urllib.error.URLError) and isinstance(errors[0].reason, TimeoutError)
+        ):
+            raise BulkStalled() from errors[0]
         raise errors[0]
 
 
@@ -484,9 +490,14 @@ class _Progress:
         self.cases_kept = 0
         self.skips: Counter[str] = Counter()
         self._since_flush = 0
+        self.started = time.monotonic()
+        self.lock = asyncio.Lock()
 
     def line(self) -> str:
-        return progress_line(self.day, self.file or "starting", self.rows_read, self.cases_kept, self.skips)
+        rate = self.rows_read / max(time.monotonic() - self.started, 0.001)
+        return progress_line(self.day, self.file or "starting", self.rows_read, self.cases_kept, self.skips).replace(
+            "; cases kept", f"; {rate:.1f} rows/second; cases kept"
+        )
 
     async def note(self, force: bool = False) -> None:
         self._since_flush += 1
@@ -497,15 +508,16 @@ class _Progress:
         if conn is None:
             return
         try:
-            await conn.execute(
-                """
-                UPDATE zenas_pool.updates
-                SET detail = $1
-                WHERE source_id = $2 AND last_status = 'running'
-                """,
-                self.line(),
-                SOURCE_ID,
-            )
+            async with self.lock:
+                await asyncio.wait_for(conn.execute(
+                    """
+                    UPDATE zenas_pool.updates
+                    SET detail = $1
+                    WHERE source_id = $2 AND last_status = 'running'
+                    """,
+                    self.line(),
+                    SOURCE_ID,
+                ), timeout=10)
         except Exception:
             self.conn = None
 
@@ -823,7 +835,29 @@ async def load_bulk(http_get, *, resume: str = "", state: BulkState | None = Non
         return BulkResult([], done.render(api), Counter(), snapshot.day, "done", 0, 0)
 
     conn = await _open_db()
-    progress = _Progress(conn, snapshot.day)
+    progress_conn = await _open_db()
+    progress = _Progress(progress_conn, snapshot.day)
+    starting_opinion_id = state.last_opinion_id
+    owner = asyncio.current_task()
+    stalled = False
+
+    async def heartbeat() -> None:
+        nonlocal stalled
+        previous = progress.rows_read
+        changed = time.monotonic()
+        while True:
+            await asyncio.sleep(HEARTBEAT_SECONDS)
+            if progress.rows_read != previous:
+                previous = progress.rows_read
+                changed = time.monotonic()
+            elif time.monotonic() - changed >= STALL_SECONDS:
+                stalled = True
+                if owner is not None:
+                    owner.cancel()
+                return
+            await progress.note(force=True)
+
+    pulse = asyncio.create_task(heartbeat())
     try:
         if cursor and _past(cursor, "dockets") and not state.dockets:
             await _load_ids(conn, state)
@@ -876,7 +910,19 @@ async def load_bulk(http_get, *, resume: str = "", state: BulkState | None = Non
             state.files_done.add(kind)
         rendered = BulkCursor(snapshot.day, "done").render(api)
         return BulkResult([], rendered, progress.skips, snapshot.day, "done", progress.rows_read, progress.cases_kept)
+    except asyncio.CancelledError:
+        state.last_opinion_id = starting_opinion_id
+        if stalled:
+            raise BulkStalled(progress.line()) from None
+        raise
+    except TimeoutError:
+        state.last_opinion_id = starting_opinion_id
+        raise BulkStalled(progress.line()) from None
     finally:
+        pulse.cancel()
+        await asyncio.gather(pulse, return_exceptions=True)
+        if progress_conn is not None:
+            await progress_conn.close()
         if conn is not None:
             try:
                 await conn.close()

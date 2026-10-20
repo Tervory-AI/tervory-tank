@@ -13,6 +13,7 @@ from collections import Counter
 from datetime import date, datetime, timezone
 
 from agents.zenas.pool.adapters import get_adapter
+from agents.zenas.pool.adapters.courtlistener_bulk import BulkStalled
 from agents.zenas.pool.catalogue import sources_for_region
 from agents.zenas.pool.config import current_region
 from agents.zenas.pool.embed import Embedder, NoOpEmbedder, NoOpVectorIndex, VectorIndex
@@ -210,6 +211,13 @@ async def load_source(
             detail=f"{exc}; the next Load retries",
             documents=await store.instrument_count(source.source_id),
             when=when,
+        )
+        return False
+    except BulkStalled as exc:
+        await store.record_source(source)
+        await store.record_run(
+            source.source_id, status="stalled", detail=str(exc),
+            documents=await store.instrument_count(source.source_id), when=when,
         )
         return False
     except (FetchNotConfigured, LicenceError) as exc:
