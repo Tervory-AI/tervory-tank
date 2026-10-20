@@ -1,0 +1,15 @@
+# Ferry leaves through this Tor client. Not a relay and not an exit.
+# SOCKS is on every interface inside the container. Compose does not publish it.
+Log notice stdout
+RunAsDaemon 0
+DataDirectory /var/lib/tor
+ClientOnly 1
+SocksPort 0.0.0.0:9050
+SocksPolicy accept 127.0.0.0/8
+SocksPolicy accept 10.0.0.0/8
+SocksPolicy accept 172.16.0.0/12
+SocksPolicy accept 192.168.0.0/16
+SocksPolicy accept6 [::1]/128
+SocksPolicy accept6 [fc00::]/7
+SocksPolicy reject *
+SocksPolicy reject6 *

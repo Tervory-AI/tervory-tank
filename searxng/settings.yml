@@ -21,10 +21,17 @@ ui:
   static_use_hash: true
 
 outgoing:
-  request_timeout: 6.0
-  max_request_timeout: 12.0
+  # Engine requests leave through Ferry. Ferry leaves through Tor.
+  # socks5h so Ferry resolves the names. Timeouts sit above the old 6s / 12s.
+  request_timeout: 15.0
+  max_request_timeout: 30.0
+  extra_proxy_timeout: 10
   pool_connections: 100
   pool_maxsize: 20
+  using_tor_proxy: true
+  proxies:
+    all://:
+      - socks5h://Ferry:9050
 
 engines:
   - name: google
