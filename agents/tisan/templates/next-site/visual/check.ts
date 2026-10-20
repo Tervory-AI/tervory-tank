@@ -15,6 +15,7 @@ export type Frame = {
     box: { x: number; y: number; width: number; height: number };
     text?: string;
     asset?: "image" | "logo";
+    brandFile?: keyof typeof brandHashes;
     colours: Partial<Record<"color" | "backgroundColor" | "borderTopColor", string>>;
   }[];
 };
@@ -69,6 +70,8 @@ function validateFrameData(raw: unknown, requirePair: boolean): Frame[] {
         element.box.height <= 0 ||
         (element.text !== undefined && typeof element.text !== "string") ||
         (element.asset !== undefined && !["image", "logo"].includes(element.asset)) ||
+        (element.asset === "logo" &&
+          (!element.brandFile || !Object.hasOwn(brandHashes, element.brandFile))) ||
         !element.colours
       )
         throw new Error("frame data incomplete");
@@ -169,9 +172,8 @@ export async function scoreFrame(page: Page, frame: Frame) {
         kind: "asset",
         passed:
           bytes !== null &&
-          Object.values(brandHashes).includes(
+          brandHashes[element.brandFile!] ===
             createHash("sha256").update(Buffer.from(bytes)).digest("hex"),
-          ),
       });
     }
     if (!element.asset && element.text !== undefined)

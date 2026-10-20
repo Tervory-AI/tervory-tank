@@ -42,7 +42,18 @@ for the founder review; the reader retains it without redrawing the frame.
 
 Image fills and logo instances are atomic elements (`asset: "image"` or
 `asset: "logo"`): score their position and size, without text or paint checks
-inside them. Logos additionally require a local image whose SHA-256 matches an
+inside them. Logos additionally require a local image whose SHA-256 matches the recorded
 exact PNG in `workspace/public/brand/`. Inline redraws and altered files fail.
 `brand-hashes.json` records those hashes; a repository test detects drift.
 Other unsupported paints still leave the frame incomplete.
+
+Each captured frame retains its own route. Record `page` (or Tisan shared-plugin
+`page`) explicitly, or name frames `Home — 375`, `Home — 1440`, `About — 375`, etc.
+Desktop/mobile-only names use the enclosing canvas page name. Missing page
+identity is incomplete. Selection uses the requested frame's source page before
+mapping it to the built route; multiple frames at either width are ambiguous
+and refused, even when one is the requested frame.
+
+Every logo must record `brandFile` (for example `tervory-logo-on-white.png`), also
+accepted from Tisan shared-plugin data. The checker requires that particular
+file's hash. A different original brand file is still the wrong logo and fails.

@@ -417,6 +417,23 @@ def _document_from_nodes(payload: dict[str, Any], node_id: str) -> tuple[dict[st
     return node["document"], name
 
 
+def visual_page(frame: dict[str, Any], document: dict[str, Any]) -> str | None:
+    """Use a recorded route or the page name preceding a responsive frame suffix."""
+    route = frame.get("page") or frame.get("sharedPluginData", {}).get("tisan", {}).get("page")
+    if isinstance(route, str) and re.fullmatch(r"/(?:[a-z0-9/-]*)", route):
+        return route
+    name = re.split(r"\s+[—–|]\s+", str(frame.get("name", "")))[0].strip().lower()
+    if name in {"desktop", "mobile", "tablet"}:
+        name = re.split(r"\s+[—–|]\s+", str(document.get("name", "")))[0].strip().lower()
+    if name in {"desktop", "mobile", "tablet"}:
+        return None
+    if name in {"home", "landing"}:
+        return "/"
+    if re.fullmatch(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*", name):
+        return "/" + name
+    return None
+
+
 def visual_frames(document: dict[str, Any], variables_payload: dict[str, Any] | None) -> list[dict[str, Any]]:
     """Keep measured geometry/text and bound colours; never derive them from a built page.
 
@@ -434,7 +451,8 @@ def visual_frames(document: dict[str, Any], variables_payload: dict[str, Any] | 
         origin = frame.get("absoluteBoundingBox", {})
         tokens: dict[str, str] = {}
         elements: list[dict[str, Any]] = []
-        incomplete = False
+        page = visual_page(frame, document)
+        incomplete = page is None
 
         def visit(node: dict[str, Any]) -> None:
             nonlocal incomplete
@@ -477,6 +495,11 @@ def visual_frames(document: dict[str, Any], variables_payload: dict[str, Any] | 
                                "width": box["width"], "height": box["height"]}, "colours": colours}
             if logo or image:
                 element["asset"] = "logo" if logo else "image"
+            if logo:
+                brand_file = node.get("brandFile") or node.get("sharedPluginData", {}).get("tisan", {}).get("brandFile")
+                element["brandFile"] = brand_file
+                if not isinstance(brand_file, str) or not re.fullmatch(r"[a-z0-9-]+\.png", brand_file):
+                    incomplete = True
             if node.get("type") == "TEXT" and not (logo or image):
                 if not isinstance(node.get("characters"), str):
                     incomplete = True
@@ -488,7 +511,7 @@ def visual_frames(document: dict[str, Any], variables_payload: dict[str, Any] | 
                     visit(child)
 
         visit(frame)
-        result.append({"page": "/", "frameId": frame.get("id"), "width": origin.get("width"),
+        result.append({"page": page, "frameId": frame.get("id"), "width": origin.get("width"),
                        "height": origin.get("height"), "tokens": tokens, "elements": elements,
                        **({"incomplete": True} if incomplete else {})})
     return result

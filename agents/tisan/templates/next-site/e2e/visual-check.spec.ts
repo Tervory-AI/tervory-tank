@@ -98,6 +98,7 @@ for (const width of [375, 1440] as const) {
           box: { x: 16, y: 16, width: 186, height: 34 },
           colours: {},
           asset: "logo",
+          brandFile: "tervory-logo-on-white.png",
         },
         {
           nodeId: "heading",
@@ -109,6 +110,8 @@ for (const width of [375, 1440] as const) {
       ],
     };
     expect((await scoreFrame(page, frame)).passed).toBe(true);
+    body = readFileSync("visual/assets/tisan-on-dark.png");
+    expect((await scoreFrame(page, frame)).scores.asset).toBe(0);
     body = Buffer.concat([original, Buffer.from("modified")]);
     expect((await scoreFrame(page, frame)).scores.asset).toBe(0);
     frame.elements[0].asset = "image";

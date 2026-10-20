@@ -300,7 +300,9 @@ def test_visual_frames_select_requested_page_and_widths() -> None:
               {"frameId": "1:4", "page": "/about", "width": 375},
               {"frameId": "1:5", "page": "/", "width": 390},
               {"frameId": "1:6", "page": "/", "width": 1440}]
-    assert scaffold.select_visual_frames({"visual": frames}, "1:1", "/") == frames[:2]
+    with pytest.raises(scaffold.ScaffoldError, match="frame data incomplete"):
+        scaffold.select_visual_frames({"visual": frames}, "1:1", "/")
+    assert scaffold.select_visual_frames({"visual": frames[:-1]}, "1:1", "/") == frames[:2]
     assert scaffold.select_visual_frames({"visual": frames}, "0:1", "/about") == frames[2:4]
 
 
@@ -312,3 +314,25 @@ def test_logo_allowlist_matches_exact_repository_assets() -> None:
 
     copied = TEMPLATE / "visual/assets/tervory-logo-on-white.png"
     assert hashlib.sha256(copied.read_bytes()).hexdigest() == hashes[copied.name]
+
+
+def test_saved_canvas_reader_output_selects_real_page_and_rejects_duplicates():
+    spec = importlib.util.spec_from_file_location("tisan_canvas_reader", ROOT / "agents/tisan/figma.py")
+    figma = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(figma)
+    scaffold = _load()
+    saved = json.loads((ROOT / "tests/fixtures/tisan-multipage-canvas.json").read_text())
+    frames = figma.visual_frames(saved["document"], saved["variables"])
+    assert [frame["page"] for frame in frames] == ["/", "/", "/about", "/about"]
+    assert all(not frame.get("incomplete") for frame in frames)
+    assert all(frame["elements"][2]["brandFile"] == "tervory-logo-on-white.png" for frame in frames)
+    # Target route can differ; membership still comes from the requested source frame.
+    selected = scaffold.select_visual_frames({"visual": frames}, "3:1", "/")
+    assert [frame["frameId"] for frame in selected] == ["3:1", "4:1"]
+    assert [frame["frameId"] for frame in scaffold.select_visual_frames({"visual": frames}, "1:1", "/")] == ["1:1", "2:1"]
+    for index in (2, 3):
+        duplicate = json.loads(json.dumps(saved["document"]["children"][index]))
+        duplicate["id"] = "9:1"
+        canvas = {**saved["document"], "children": saved["document"]["children"] + [duplicate]}
+        with pytest.raises(scaffold.ScaffoldError, match="frame data incomplete"):
+            scaffold.select_visual_frames({"visual": figma.visual_frames(canvas, saved["variables"])}, "3:1", "/about")

@@ -466,12 +466,16 @@ def select_visual_frames(reading: dict[str, Any], node_id: str, page: str) -> li
         raise ScaffoldError("frame data incomplete")
     frames = [frame for frame in frames if isinstance(frame, dict)]
     requested = [frame for frame in frames if frame.get("frameId") == node_id]
-    widths = {frame.get("width") for frame in requested}
-    selected = requested + [frame for frame in frames
-                            if frame.get("frameId") != node_id
-                            and frame.get("page") == page
-                            and frame.get("width") in (375, 1440)
-                            and frame.get("width") not in widths]
+    if len(requested) > 1:
+        raise ScaffoldError("frame data incomplete")
+    source_page = requested[0].get("page") if requested else page
+    if not isinstance(source_page, str) or not source_page.startswith("/"):
+        raise ScaffoldError("frame data incomplete")
+    selected = [frame for frame in frames if frame.get("page") == source_page
+                and frame.get("width") in (375, 1440)]
+    for width in (375, 1440):
+        if sum(frame.get("width") == width for frame in selected) > 1:
+            raise ScaffoldError("frame data incomplete")
     return [{**frame, "page": page} for frame in selected]
 
 
