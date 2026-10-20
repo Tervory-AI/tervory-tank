@@ -264,6 +264,9 @@ async def load_source(
     count = await store.instrument_count(source.source_id)
     status = "ok"
     detail = load_detail(inserted, skips)
+    progress = getattr(adapter, "progress_line", "")
+    if source.source_id == "courtlistener" and progress:
+        detail = f"{progress}; inserted {inserted}"
     if note.get("status") == "rate_limited":
         status = "rate_limited"
         pages = int(note.get("pages") or 0)

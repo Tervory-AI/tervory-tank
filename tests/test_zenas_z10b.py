@@ -3,6 +3,7 @@ import threading
 import time
 import sys
 from pathlib import Path
+from datetime import date, datetime, timezone
 
 import pytest
 
@@ -85,3 +86,36 @@ async def test_heartbeat_marks_a_hung_load_stalled_and_keeps_resume(monkeypatch)
     assert len(notes) >= 2
     assert state.last_opinion_id == 42
     assert not state.files_done
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("nightly", [False, True])
+async def test_stalled_status_and_saved_checkpoint_survive_both_load_paths(monkeypatch, nightly):
+    from agents.zenas.pool.bulk import load_wave
+    from agents.zenas.pool.catalogue import CATALOGUE
+    from agents.zenas.pool.embed import NoOpEmbedder, NoOpVectorIndex
+    from agents.zenas.pool.nightly import courtlistener_night
+    from agents.zenas.pool.store import MemoryStore
+
+    async def stalled(*args, **kwargs):
+        raise bulk.BulkStalled("rows read 19533; 0.0 rows/second")
+
+    async def no_network(*args, **kwargs):
+        raise AssertionError("network called")
+
+    monkeypatch.setattr(bulk, "load_bulk", stalled)
+    source = next(item for item in CATALOGUE if item.source_id == "courtlistener")
+    store = MemoryStore(home_region="us-east")
+    checkpoint = "cl-bulk:2026-01-01:opinions:42"
+    await store.set_checkpoint("courtlistener", checkpoint, 0)
+    if nightly:
+        await courtlistener_night(
+            store, source, http_get=no_network, on=date(2026, 1, 2),
+            when=datetime(2026, 1, 2, tzinfo=timezone.utc),
+            embedder=NoOpEmbedder(), index=NoOpVectorIndex(), region="us-east",
+        )
+    else:
+        await load_wave(store, region="us-east", live=True, only=[source], http_get=no_network)
+    assert store.runs["courtlistener"].last_status == "stalled"
+    assert "resumable" in store.runs["courtlistener"].detail
+    assert await store.get_checkpoint("courtlistener") == checkpoint
