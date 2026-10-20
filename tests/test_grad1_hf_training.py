@@ -75,3 +75,42 @@ async def test_actual_export_payload_cannot_contain_private_rows(database, monke
     result = await training.export_once()
     assert result['exported'] == 1
     assert [r['input'] for r in captured] == [{'n': 0}]
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('submit,cap,expected_jobs', [(False,'50',0), (True,'50',1), (True,'1',0)])
+async def test_launcher_estimates_before_any_submission_and_passes_secrets_only(monkeypatch, capsys, submit, cap, expected_jobs):
+    import secrets
+    import sys
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    token = secrets.token_urlsafe(24)
+    monkeypatch.setenv('HF_TOKEN', token)
+    monkeypatch.setenv('HF_ORG', 'fixture')
+    monkeypatch.setenv('HF_TRAIN_MAX_USD', cap)
+    monkeypatch.setenv('TANK_REGION', 'us-east')
+    monkeypatch.setenv('DATABASE_URL', 'postgresql://fixture.invalid/fixture')
+    jobs, repos = [], []
+    def launch(script, **kwargs):
+        assert kwargs['timeout'] == 7200
+        assert kwargs['secrets'] == {'HF_TOKEN': token}
+        assert token not in str(kwargs['env'])
+        assert 'DATABASE_URL' not in kwargs['secrets']
+        assert Path(script).name == 'train.py'
+        jobs.append(kwargs)
+        return SimpleNamespace(id='fixture-job')
+    api = SimpleNamespace(list_jobs_hardware=lambda: [SimpleNamespace(name='a10g-small',unit_label='minute',unit_cost_micro_usd=16667)],
+                          create_repo=lambda **kw: repos.append(kw), model_info=lambda repo: SimpleNamespace(private=True), run_uv_job=launch)
+    monkeypatch.setitem(sys.modules, 'huggingface_hub', SimpleNamespace(HfApi=lambda **kw: api))
+    import asyncpg
+    conn = SimpleNamespace(execute=AsyncMock(), close=AsyncMock())
+    monkeypatch.setattr(asyncpg, 'connect', AsyncMock(return_value=conn))
+    args = SimpleNamespace(receipt=None, minutes=120, submit=submit, day='2026-10-20')
+    if cap == '1':
+        with pytest.raises(ValueError):
+            await load('run').run(args)
+    else:
+        await load('run').run(args)
+    assert len(jobs) == expected_jobs
+    assert len(repos) == expected_jobs
+    assert all(r['private'] is True for r in repos)
+    assert token not in capsys.readouterr().out
