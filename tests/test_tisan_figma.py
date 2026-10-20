@@ -423,7 +423,7 @@ def test_visual_frame_data_is_retained_without_inventing_missing_measurements() 
 
 def test_rest_frame_retains_measured_boxes_text_and_bound_colours() -> None:
     figma = _load()
-    document = {"type": "FRAME", "id": "1:1", "absoluteBoundingBox": {"x": 100, "y": 200, "width": 375, "height": 900},
+    document = {"type": "FRAME", "name": "Home — 375", "id": "1:1", "absoluteBoundingBox": {"x": 100, "y": 200, "width": 375, "height": 900},
                 "children": [{"type": "TEXT", "id": "1:2", "characters": "Recorded text",
                               "absoluteBoundingBox": {"x": 116, "y": 232, "width": 200, "height": 40},
                               "fills": [{"type": "SOLID"}], "boundVariables": {"fills": [{"id": "ink"}]}}]}
@@ -449,3 +449,43 @@ async def test_saved_reading_keeps_visual_evidence(tmp_path: Path, monkeypatch: 
     saved = json.loads((tmp_path / "data" / result["stored"]).read_text())
     assert saved["visual"] == [raw["frames"][0]["visual"]]
     assert saved["frame_data"][0]["visual"]["incomplete"] is True
+    assert saved["visual_status"] == "frame data incomplete"
+
+
+def test_saved_landing_logos_and_image_fills_are_geometry_only() -> None:
+    figma = _load()
+    raw = json.loads(FIXTURE.read_text())
+    logos = [use for use in raw["uses"] if use["name"].startswith("Logo")]
+    assert len(logos) == 4
+    # The saved capture has component sizes, but no positions: synthetic positions
+    # exercise extraction only, never become a recorded landing-page baseline.
+    size = raw["components"][1]["variants"][0]
+    for use in logos:
+        node = {**use, "type": "INSTANCE", "fills": [{"type": "IMAGE"}],
+                "absoluteBoundingBox": {"x": 0, "y": 0, "width": size["width"], "height": size["height"]},
+                "children": [{"type": "VECTOR", "fills": [{"type": "SOLID"}]}]}
+        frame = {"type": "FRAME", "name": "Home — 1440", "id": "2:11", "absoluteBoundingBox":
+                 {"x": 0, "y": 0, "width": 1440, "height": 900}, "children": [node]}
+        visual = figma.visual_frames(frame, None)[0]
+        assert not visual.get("incomplete")
+        assert visual["elements"][1]["asset"] == "logo"
+        assert visual["elements"][1]["brandFile"] == use["brandFile"]
+        node.pop("brandFile")
+        assert figma.visual_frames(frame, None)[0]["incomplete"]
+        node["brandFile"] = use["brandFile"]
+        assert visual["elements"][1]["colours"] == {}
+        assert len(visual["elements"]) == 2
+        node["name"] = "Photo"
+        assert figma.visual_frames(frame, None)[0]["elements"][1]["asset"] == "image"
+        node["fills"] = [{"type": "GRADIENT_LINEAR"}]
+        assert figma.visual_frames(frame, None)[0]["incomplete"]
+
+
+def test_any_incomplete_visual_sets_reading_status() -> None:
+    figma = _load()
+    raw = json.loads(FIXTURE.read_text())
+    for frame in raw["frames"]:
+        frame["visual"] = {"frameId": frame["id"], "incomplete": False}
+    assert figma.compile_reading(figma.normalise_fixture(raw, "0:1"))["visual_status"] == "recorded"
+    raw["frames"][1]["visual"]["incomplete"] = True
+    assert figma.compile_reading(figma.normalise_fixture(raw, "0:1"))["visual_status"] == "frame data incomplete"
