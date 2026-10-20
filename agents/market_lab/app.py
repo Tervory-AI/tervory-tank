@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 import os
 
+from fastapi import Header, Query
+
 from chassis.app import create_app
 from chassis.jobs import JobContext
 
@@ -149,3 +151,21 @@ app = create_app(
     },
     schedules=_schedules(),
 )
+
+
+@app.get("/gold/candidates")
+async def gold_candidates(
+    limit: int = Query(200, ge=1, le=200),
+    x_tank_key: str | None = Header(None),
+) -> list[dict]:
+    import hmac
+    from fastapi import HTTPException
+    from gold_sources import candidates
+
+    key = os.environ.get("TANK_KEY", "")
+    if not key or not x_tank_key or not hmac.compare_digest(key, x_tank_key):
+        raise HTTPException(status_code=401, detail="Room key required")
+    async with _ledger() as ledger:
+        series = await ledger.series_for(HEARTBEAT_TENANT)
+        points = await ledger.points_for(HEARTBEAT_TENANT)
+    return candidates(series, points, region=os.environ.get("TANK_REGION", "us-east"), limit=limit)
