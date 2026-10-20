@@ -25,7 +25,8 @@ Neither raw input nor the final profile can fill this observation. Website
 evidence must be at most 30 days old and originate from the website's own host.
 A row qualifies if its published phone **or** full premises address independently
 appears in that evidence. Address matching is conservative; uncertain variants
-are skipped.
+are skipped. Hosts excluded by `base.find_site` and the FFL profile, including
+their subdomains, cannot supply observations for a public row.
 
 The builder atomically replaces `/data/gold/us-east/official-matches.jsonl` with
 up to 200 matches. It does not require a hand-written matches file. Missing
@@ -63,6 +64,10 @@ projection after independently checking the scrape. Raw scrape text stays local.
 - `base.normalize` and `base.resolve` use official-list fields only.
 
 The list name, download URL and snapshot date are in every `label_source`.
+Synthetic negatives start with ` · synthetic pairing: site of published licence <id>`
+and carry `synthetic: true`. Every candidate has `label_family`: ATF matches use
+`atf-ffl:YYYY-MM`, and ATF negatives use `atf-ffl-synthetic:YYYY-MM`, using the
+published snapshot month so Tank can spot-check these families separately.
 Duplicates are removed. Everything remains a candidate for Tank's spot checks,
 never automatically approved or promoted. Tests use labelled synthetic data;
 no live download or website request runs in CI.
