@@ -12,10 +12,23 @@ python jobs/train/run.py --receipt /private/path/final-hf-bill.json
 
 The first command only quotes live A10G-small pricing. Submission sets a hard
 runtime timeout and creates a versioned private model repository. There are no
-automatic retries. Qwen3-4B (Apache 2.0) is trained with TRL and LoRA across the
+automatic retries. Submission holds database advisory lock 871228, refuses any
+unreconciled platform training job, and saves a pending reservation before
+contacting HF. The reservation is replaced with the HF job id after submission.
+A second submission is refused until the previous job's actual bill is reconciled.
+If submission fails or its outcome is uncertain, the pending reservation remains:
+check HF Jobs and reconcile the reservation with the actual HF job before retrying;
+do not clear it merely to bypass the spending guard. Qwen3-4B (Apache 2.0) is trained with TRL and LoRA across the
 available task types in that day's private `tervory-public-<agent>` snapshots.
 Only explicit public platform examples are exported; client, inactive and gold
-holdout rows are excluded. ZA rows remain local. Legacy datasets are never read.
+holdout rows are excluded. Each box exports only its own region: public ZA
+examples go to `snapshots/za/`, and public US examples to `snapshots/us-east/`.
+The training job reads both snapshots. ZA client matters remain local.
+
+Before using the new exports, check the organisation's legacy `tervory-<agent>`
+datasets on Hugging Face and delete them. They may contain rows exported before
+these privacy checks. The job reads only `tervory-public-<agent>` datasets; it
+does not clean up or read the legacy datasets.
 
 The job checks the privacy of every dataset and the destination, validates every
 row before constructing the trainer, deduplicates by input, and reserves a

@@ -419,15 +419,16 @@ async def confirm_tiger(observation_id: uuid.UUID, actor: Reviewer = Depends(req
 
 
 def exportable(row: dict[str, Any]) -> bool:
-    return (row.get("region") == "us-east" and row.get("holdout") is False and row.get("active") is True
+    return (row.get("region") in ("us-east", "za") and row.get("region") == runtime().box_region()
+            and row.get("holdout") is False and row.get("active") is True
             and row.get("public") is True and row.get("client_matter") is False
             and row.get("tenant_id") == PLATFORM_TENANT)
 
 
 async def upload_dataset(client: httpx.AsyncClient, org: str, agent: str, day: str, rows: list[dict], region: str = "us-east") -> None:
     # Validate again at the network boundary, before any request is sent.
-    if region != "us-east" or any(
-        row.get("scope") != "platform" or "tenant_id" in row
+    if region not in ("us-east", "za") or region != runtime().box_region() or any(
+        row.get("scope") != "platform" or "tenant_id" in row or row.get("region") != region
         or not exportable({**row, "tenant_id": PLATFORM_TENANT}) for row in rows
     ):
         raise ValueError("Unsafe training export")
@@ -459,8 +460,8 @@ async def export_once(*, day: date | None = None) -> dict[str, Any]:
     if not token or not org:
         return {"status": "skipped", "reason": "not configured"}
     region = runtime().box_region()
-    if region != "us-east":
-        return {"status": "skipped", "reason": "region stays local"}
+    if region not in ("us-east", "za"):
+        return {"status": "skipped", "reason": "unknown region"}
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,95}", org):
         return {"status": "skipped", "reason": "invalid organisation"}
     day = day or datetime.now(timezone.utc).date()

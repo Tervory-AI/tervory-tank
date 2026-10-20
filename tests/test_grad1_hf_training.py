@@ -28,12 +28,14 @@ def test_accepts_capped_estimate():
 
 @pytest.mark.parametrize('change', [{'tenant_id': uuid.uuid4()}, {'public': False}, {'client_matter': True},
                                     {'region': 'za'}, {'holdout': True}, {'active': False}])
-def test_private_or_za_never_exports(change):
+def test_private_or_cross_region_never_exports(change, monkeypatch):
+    from types import SimpleNamespace
+    monkeypatch.setattr(training, "runtime", lambda: SimpleNamespace(box_region=lambda: "us-east"))
     row = dict(tenant_id=PLATFORM_TENANT, public=True, client_matter=False, region='us-east', holdout=False, active=True)
     assert training.exportable(row)
     assert not training.exportable(row | change)
 
-@pytest.mark.parametrize('change', [{'scope': 'client'}, {'public': False}, {'public': None}, {'holdout': True}, {'holdout': None}, {'client_matter': True}, {'region': 'za'}, {'tenant_id': 'any'}])
+@pytest.mark.parametrize('change', [{'scope': 'client'}, {'public': False}, {'public': None}, {'holdout': True}, {'holdout': None}, {'client_matter': True}, {'region': 'unknown'}, {'tenant_id': 'any'}])
 def test_training_aborts_if_export_contains_one_private_row(change):
     row = dict(public=True, client_matter=False, scope='platform', region='us-east', holdout=False,
                active=True, task_type='base.fixture', input={}, output={})
@@ -102,7 +104,7 @@ async def test_launcher_estimates_before_any_submission_and_passes_secrets_only(
                           create_repo=lambda **kw: repos.append(kw), model_info=lambda repo: SimpleNamespace(private=True), run_uv_job=launch)
     monkeypatch.setitem(sys.modules, 'huggingface_hub', SimpleNamespace(HfApi=lambda **kw: api))
     import asyncpg
-    conn = SimpleNamespace(execute=AsyncMock(), close=AsyncMock())
+    conn = SimpleNamespace(execute=AsyncMock(), fetchval=AsyncMock(return_value=False), close=AsyncMock())
     monkeypatch.setattr(asyncpg, 'connect', AsyncMock(return_value=conn))
     args = SimpleNamespace(receipt=None, minutes=120, submit=submit, day='2026-10-20')
     if cap == '1':
@@ -119,7 +121,9 @@ async def test_launcher_estimates_before_any_submission_and_passes_secrets_only(
 @pytest.mark.asyncio
 @pytest.mark.parametrize('change', [{'public': False}, {'public': None}, {'holdout': True}, {'holdout': None},
                                     {'scope': 'client'}, {'tenant_id': 'private'}, {'region': 'za'}])
-async def test_upload_rejects_unsafe_rows_before_network(change):
+async def test_upload_rejects_unsafe_rows_before_network(change, monkeypatch):
+    from types import SimpleNamespace
+    monkeypatch.setattr(training, "runtime", lambda: SimpleNamespace(box_region=lambda: "us-east"))
     from unittest.mock import AsyncMock
     client = AsyncMock()
     row = dict(public=True, holdout=False, active=True, client_matter=False, scope='platform',
@@ -166,3 +170,114 @@ async def test_legacy_ledger_and_package_pairs_stay_private_after_upgrade(databa
     assert result['exported'] == 2
     assert {row['input']['public_source'] for row in captured} == {'ledger', 'package'}
     assert all(row['public'] is True and row['holdout'] is False and row['input']['held'] is False for row in captured)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failed_submission', [False, True])
+async def test_reservation_blocks_second_submission_even_after_hf_error(database, monkeypatch, failed_submission):
+    import asyncpg
+    import secrets
+    import sys
+    from types import SimpleNamespace
+    from test_train1 import URL
+    pool, _ = database
+    async with pool.acquire() as conn:
+        dbname = await conn.fetchval('SELECT current_database()')
+    real_connect = asyncpg.connect
+    async def connect(_url):
+        return await real_connect(URL, database=dbname)
+    monkeypatch.setattr(asyncpg, 'connect', connect)
+    for name, value in {'HF_TOKEN': secrets.token_urlsafe(24), 'HF_ORG': 'fixture',
+                        'TANK_REGION': 'us-east', 'DATABASE_URL': URL}.items():
+        monkeypatch.setenv(name, value)
+    jobs = []
+    def submit(*args, **kwargs):
+        jobs.append(kwargs)
+        if failed_submission:
+            raise RuntimeError('Uncertain submission')
+        return SimpleNamespace(id='fixture-job')
+    api = SimpleNamespace(list_jobs_hardware=lambda: [SimpleNamespace(name='a10g-small', unit_label='minute', unit_cost_micro_usd=16667)],
+                          create_repo=lambda **kw: None, model_info=lambda repo: SimpleNamespace(private=True), run_uv_job=submit)
+    monkeypatch.setitem(sys.modules, 'huggingface_hub', SimpleNamespace(HfApi=lambda **kw: api))
+    args = SimpleNamespace(receipt=None, minutes=120, submit=True, day='2026-10-20')
+    if failed_submission:
+        with pytest.raises(RuntimeError, match='Uncertain submission'):
+            await load('run').run(args)
+    else:
+        await load('run').run(args)
+    async with pool.acquire() as conn:
+        rows = await conn.fetch('SELECT * FROM tank.training_jobs')
+        assert len(rows) == 1 and rows[0]['ledger_id'] is None and rows[0]['estimated_usd'] > 0
+        assert rows[0]['id'].startswith('pending-') if failed_submission else rows[0]['id'] == 'fixture-job'
+        assert await conn.fetchval('SELECT pg_try_advisory_lock(871228)') is True
+        await conn.execute('SELECT pg_advisory_unlock(871228)')
+    with pytest.raises(ValueError, match='Reconcile the previous training job'):
+        await load('run').run(args)
+    assert len(jobs) == 1
+
+
+@pytest.mark.asyncio
+async def test_public_za_decided_case_exports_but_client_matter_does_not(database, monkeypatch):
+    import base64
+    import gold
+    import httpx
+    import json
+    import secrets
+    pool, rt = database
+    rt.box_region = lambda: 'za'
+    monkeypatch.setenv('HF_TOKEN', secrets.token_urlsafe(24))
+    monkeypatch.setenv('HF_ORG', 'fixture')
+    monkeypatch.setattr(gold, 'is_holdout', lambda *args: False)
+    async with pool.acquire() as conn:
+        await conn.execute((ROOT / 'agents/zenas/schema.sql').read_text())
+        case = await conn.fetchval("INSERT INTO agent_zenas.worked_matters(region,source,jurisdiction,material_type) VALUES ('za','case','za','public_record') RETURNING id")
+        await conn.execute("INSERT INTO agent_zenas.training_pairs(region,source,worked_id,request) VALUES ('za','case',$1,'Public ZA decision')", case)
+        await training.collect_zenas(conn, None)
+        await training.save_pair(conn, tenant=uuid.uuid4(), agent='zenas', task='zenas.reasoning',
+            value={'text': 'Client matter'}, output={}, approved_by='fixture', source='zenas', ref='client',
+            public=True, client_matter=True)
+    captured = []
+    def respond(request):
+        if request.url.path.endswith('/commit/main'):
+            ops = [json.loads(line) for line in request.content.splitlines()]
+            file = ops[1]['value']
+            assert file['path'].startswith('snapshots/za/')
+            captured.extend(json.loads(line) for line in base64.b64decode(file['content']).splitlines())
+        return httpx.Response(200, json={'private': True})
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(training.httpx, 'AsyncClient', lambda **kw: real_client(transport=httpx.MockTransport(respond), **kw))
+    assert (await training.export_once())['exported'] == 1
+    assert captured[0]['input'] == {'text': 'Public ZA decision'}
+    assert captured[0]['region'] == 'za'
+    load('train').validate_rows(captured)
+
+
+@pytest.mark.parametrize("missing_us", [True, False])
+def test_trainer_reads_both_regions_even_when_us_snapshot_is_missing(monkeypatch, tmp_path, missing_us):
+    import json
+    import sys
+    from types import SimpleNamespace
+    class MissingRepo(Exception):
+        pass
+    class MissingEntry(Exception):
+        pass
+    seen = []
+    def info(dataset):
+        if not dataset.endswith('-zenas'):
+            raise MissingRepo()
+        return SimpleNamespace(private=True, sha='pinned')
+    def download(dataset, filename, **kwargs):
+        seen.append(filename)
+        assert kwargs['revision'] == 'pinned'
+        if '/us-east/' in filename and missing_us:
+            raise MissingEntry()
+        region = filename.split('/')[1]
+        path = tmp_path / 'za.jsonl'
+        path.write_text(json.dumps(dict(public=True, client_matter=False, scope='platform', region=region,
+                                       holdout=False, active=True, task_type='zenas.reasoning', input={}, output={})))
+        return str(path)
+    monkeypatch.setitem(sys.modules, 'huggingface_hub', SimpleNamespace(hf_hub_download=download))
+    monkeypatch.setitem(sys.modules, 'huggingface_hub.errors', SimpleNamespace(RepositoryNotFoundError=MissingRepo, EntryNotFoundError=MissingEntry))
+    rows = load('train').load_snapshots(SimpleNamespace(dataset_info=info), 'fixture', '2026-10-20')
+    assert seen == ['snapshots/us-east/2026-10-20.jsonl', 'snapshots/za/2026-10-20.jsonl']
+    assert [row['region'] for row in rows] == (['za'] if missing_us else ['us-east', 'za'])

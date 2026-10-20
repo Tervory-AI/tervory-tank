@@ -304,12 +304,13 @@ async def test_export_za_preserves_identifiers_excludes_holdout_and_inactive_pri
     real_client = httpx.AsyncClient
     monkeypatch.setattr(training.httpx, "AsyncClient", lambda **kwargs: real_client(transport=httpx.MockTransport(handler), **kwargs))
     result = await training.export_once()
-    assert result == {"status": "skipped", "reason": "region stays local"}
+    assert result == {"status": "complete", "exported": 0}
     assert requests == []
 
 
 @pytest.mark.asyncio
-async def test_refuse_existing_public_dataset():
+async def test_refuse_existing_public_dataset(monkeypatch):
+    monkeypatch.setattr(training, "runtime", lambda: SimpleNamespace(box_region=lambda: "us-east"))
     async def handler(request):
         if request.method == "GET":
             return httpx.Response(200, json={"private": False})

@@ -53,7 +53,7 @@ async def run(args) -> None:
     import asyncpg
     from huggingface_hub import HfApi
     if os.environ.get('TANK_REGION', 'us-east') != 'us-east':
-        raise ValueError('ZA training stays local')
+        raise ValueError('Submit and reconcile training from the US box')
     org = validate_name(os.environ['HF_ORG'])
     api = HfApi(token=os.environ['HF_TOKEN'])
     if args.receipt:
@@ -79,22 +79,32 @@ async def run(args) -> None:
     print(f'Maximum estimated compute cost: USD {amount:.4f}')
     if not args.submit:
         return
-    # Versioned private output. Never expose the database or Tank key to HF.
-    repo = f'{org}/tervory-squad-{uuid.uuid4().hex}'
-    api.create_repo(repo_id=repo, private=True, repo_type='model')
-    if api.model_info(repo).private is not True:
-        raise ValueError('Output repository must be private')
     conn = await asyncpg.connect(os.environ['DATABASE_URL'])
     try:
-        job = api.run_uv_job(str(Path(__file__).with_name('train.py')), namespace=org,
-                            flavor='a10g-small', timeout=args.minutes * 60,
-                            env={'HF_ORG': org, 'TRAIN_DAY': args.day, 'OUTPUT_REPO': repo},
-                            secrets={'HF_TOKEN': os.environ['HF_TOKEN']})
-        await conn.execute('INSERT INTO tank.training_jobs(id,tenant_id,region,model_repo,estimated_usd) VALUES ($1,$2,$3,$4,$5)',
-                           job.id, PLATFORM, 'us-east', repo, amount)
-        print(f'Training job: {job.id}')
+        await conn.execute('SELECT pg_advisory_lock(871228)')
+        try:
+            if await conn.fetchval('SELECT EXISTS (SELECT 1 FROM tank.training_jobs WHERE tenant_id=$1 AND ledger_id IS NULL)', PLATFORM):
+                raise ValueError('Reconcile the previous training job before submitting another')
+            repo = f'{org}/tervory-squad-{uuid.uuid4().hex}'
+            pending = f'pending-{uuid.uuid4().hex}'
+            # Autocommit the reservation before contacting HF. An uncertain submit
+            # must remain blocking, even after an exception or process crash.
+            await conn.execute('INSERT INTO tank.training_jobs(id,tenant_id,region,model_repo,estimated_usd) VALUES ($1,$2,$3,$4,$5)',
+                               pending, PLATFORM, 'us-east', repo, amount)
+            api.create_repo(repo_id=repo, private=True, repo_type='model')
+            if api.model_info(repo).private is not True:
+                raise ValueError('Output repository must be private')
+            job = api.run_uv_job(str(Path(__file__).with_name('train.py')), namespace=org,
+                                flavor='a10g-small', timeout=args.minutes * 60,
+                                env={'HF_ORG': org, 'TRAIN_DAY': args.day, 'OUTPUT_REPO': repo},
+                                secrets={'HF_TOKEN': os.environ['HF_TOKEN']})
+            await conn.execute('UPDATE tank.training_jobs SET id=$1 WHERE id=$2 AND tenant_id=$3', job.id, pending, PLATFORM)
+            print(f'Training job: {job.id}')
+        finally:
+            await conn.execute('SELECT pg_advisory_unlock(871228)')
     finally:
         await conn.close()
+
 
 
 if __name__ == '__main__':

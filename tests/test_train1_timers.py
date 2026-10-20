@@ -33,7 +33,9 @@ def test_utc_schedule_boundaries(operation, now, expected):
     ('unknown', False, True, False), ('za', True, True, False),
     ('us-east', False, False, False),
 ])
-def test_export_eligibility_only_checks_region_holdout_active(region, holdout, active, expected):
+def test_export_eligibility_only_checks_region_holdout_active(region, holdout, active, expected, monkeypatch):
+    from types import SimpleNamespace
+    monkeypatch.setattr(training, "runtime", lambda: SimpleNamespace(box_region=lambda: "us-east"))
     # No content/detector needed: reviewed names and email addresses are retained.
     assert training.exportable(dict(region=region, holdout=holdout, active=active, public=True, client_matter=False, tenant_id=gold.PLATFORM_TENANT)) is expected
 
