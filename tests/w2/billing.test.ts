@@ -59,10 +59,16 @@ function tankClaimStandIn() {
       if (existing && existing.handled === false) rows.delete(eventId);
       return json({ released: Boolean(existing && existing.handled === false) });
     }
+    if (url.endsWith("/v1/billing/events/handled")) {
+      const existing = rows.get(eventId);
+      if (existing) existing.handled = true;
+      return json({ handled: Boolean(existing) });
+    }
     throw new Error("unexpected tank call");
   };
   return {
     calls,
+    rows,
     restore() {
       globalThis.fetch = previous;
     },
@@ -377,6 +383,11 @@ test("Stripe's own event fixture is signed with Stripe's helper and applied once
     assert.ok(claims.every((call) => call.body.includes(fixture.id) && call.body.includes(fixture.type)));
     assert.ok(claims.every((call) => !call.body.includes(WEBHOOK_SECRET)));
     assert.equal(standin.calls.some((call) => call.url.endsWith("/v1/billing/events/release")), false);
+    const handled = standin.calls.filter((call) => call.url.endsWith("/v1/billing/events/handled"));
+    assert.equal(handled.length, 1);
+    assert.equal(handled[0].method, "POST");
+    assert.equal(handled[0].hasKey, true);
+    assert.equal(handled[0].body.includes(WEBHOOK_SECRET), false);
     assert.equal(JSON.stringify(first).includes(WEBHOOK_SECRET), false);
     assert.equal(JSON.stringify(second).includes("2000"), false);
     assert.equal(JSON.stringify(second).includes(fixture.id), false);
@@ -483,6 +494,11 @@ test("a failed webhook releases the event id so Stripe's retry runs once", async
     assert.equal(releases.length, 1);
     assert.equal(releases[0].method, "POST");
     assert.equal(releases[0].hasKey, true);
+    const handled = standin.calls.filter((call) => call.url.endsWith("/v1/billing/events/handled"));
+    assert.equal(handled.length, 1);
+    const releaseAt = standin.calls.findIndex((call) => call.url.endsWith("/v1/billing/events/release"));
+    const handledAt = standin.calls.findIndex((call) => call.url.endsWith("/v1/billing/events/handled"));
+    assert.equal(releaseAt < handledAt, true);
   } finally {
     standin.restore();
   }
@@ -532,6 +548,95 @@ test("when Tank cannot be reached the webhook answers 500 and does not apply the
       assert.equal(JSON.stringify(result).includes("ECONNREFUSED"), false);
       assert.equal(JSON.stringify(result).includes("unavailable"), false);
     }
+  } finally {
+    globalThis.fetch = previous;
+  }
+});
+
+test("after a successful event, release does not delete it and a redelivery is a duplicate", async () => {
+  const fixture = JSON.parse(STRIPE_EVENT) as { id: string; type: string };
+  const header = signed(STRIPE_EVENT);
+  const seen: string[] = [];
+  const standin = tankClaimStandIn();
+  const store = tankWebhookStore();
+  try {
+    const first = await receiveStripeWebhook({
+      rawBody: STRIPE_EVENT,
+      signature: header,
+      secret: WEBHOOK_SECRET,
+      store,
+      effect: (event) => {
+        seen.push(event.id);
+      },
+    });
+    await store.release(fixture.id);
+    const again = await receiveStripeWebhook({
+      rawBody: STRIPE_EVENT,
+      signature: header,
+      secret: WEBHOOK_SECRET,
+      store: tankWebhookStore(),
+      effect: (event) => {
+        seen.push(event.id);
+      },
+    });
+    assert.deepEqual(first, { status: 200, body: { received: true } });
+    assert.deepEqual(again, { status: 200, body: { received: true, duplicate: true } });
+    assert.deepEqual(seen, [fixture.id]);
+    assert.equal(standin.rows.get(fixture.id)?.handled, true);
+    assert.equal(JSON.stringify(again).includes(fixture.id), false);
+    assert.equal(JSON.stringify(again).includes(WEBHOOK_SECRET), false);
+  } finally {
+    standin.restore();
+  }
+});
+
+test("when marking the event handled fails, the webhook answers 500 and the retry does not run the effect", async () => {
+  const header = signed(STRIPE_EVENT);
+  let applied = 0;
+  const previous = globalThis.fetch;
+  const rows = new Map<string, boolean>();
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    const body = typeof init?.body === "string" ? init.body : "";
+    const eventId = (JSON.parse(body) as { event_id?: string }).event_id ?? "";
+    if (url.endsWith("/v1/billing/events/claim")) {
+      if (rows.has(eventId)) return json({ first: false });
+      rows.set(eventId, false);
+      return json({ first: true });
+    }
+    if (url.endsWith("/v1/billing/events/handled")) return json({ error: "unavailable" }, 503);
+    if (url.endsWith("/v1/billing/events/release")) {
+      rows.delete(eventId);
+      return json({ released: true });
+    }
+    throw new Error("unexpected tank call");
+  };
+  try {
+    const failed = await receiveStripeWebhook({
+      rawBody: STRIPE_EVENT,
+      signature: header,
+      secret: WEBHOOK_SECRET,
+      store: tankWebhookStore(),
+      effect: () => {
+        applied += 1;
+      },
+    });
+    const retry = await receiveStripeWebhook({
+      rawBody: STRIPE_EVENT,
+      signature: header,
+      secret: WEBHOOK_SECRET,
+      store: tankWebhookStore(),
+      effect: () => {
+        applied += 1;
+      },
+    });
+    assert.equal(failed.status, 500);
+    assert.equal(failed.body.received, undefined);
+    assert.deepEqual(retry, { status: 200, body: { received: true, duplicate: true } });
+    assert.equal(applied, 1);
+    assert.equal(rows.size, 1);
+    assert.equal(JSON.stringify(failed).includes(WEBHOOK_SECRET), false);
+    assert.equal(JSON.stringify(failed).includes("unavailable"), false);
   } finally {
     globalThis.fetch = previous;
   }

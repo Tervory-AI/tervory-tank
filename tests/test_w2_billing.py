@@ -57,6 +57,7 @@ def test_billing_screen_stays_in_the_workspace() -> None:
     assert 'from "../../lib/tank"' in webhook
     assert "claimBillingEvent" in webhook
     assert "releaseBillingEvent" in webhook
+    assert "markBillingEventHandled" in webhook
     assert "store" not in route
     assert "STRIPE_WEBHOOK_SECRET" in route
     assert "/api/billing/webhook" in middleware

@@ -33,6 +33,11 @@ APPENDIX = "\n-- Workspace billing webhook. One row per Stripe event id.\n"
 AGENTS = ("base", "tiger", "market_lab", "zenas", "rig", "radix", "tisan")
 AGENT_KEY = "agent-key-billing-fixture"
 EVENT_ID = "evt_fixture"
+BILLING_ROUTES = (
+    "/v1/billing/events/claim",
+    "/v1/billing/events/release",
+    "/v1/billing/events/handled",
+)
 
 
 def _local_database_url() -> str:
@@ -214,15 +219,15 @@ def _routes() -> dict[str, object]:
     found: dict[str, object] = {}
     for route in main.app.routes:
         path = getattr(route, "path", "")
-        if path in {"/v1/billing/events/claim", "/v1/billing/events/release"}:
+        if path in BILLING_ROUTES:
             found[path] = route
     return found
 
 
 @pytest.mark.asyncio
-async def test_agent_key_is_refused_on_both_billing_routes(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_agent_key_is_refused_on_billing_event_routes(monkeypatch: pytest.MonkeyPatch) -> None:
     routes = _routes()
-    assert set(routes) == {"/v1/billing/events/claim", "/v1/billing/events/release"}
+    assert set(routes) == set(BILLING_ROUTES)
     for route in routes.values():
         names = [getattr(dep.call, "__name__", "") for dep in route.dependant.dependencies]
         assert "require_key" in names
@@ -233,7 +238,7 @@ async def test_agent_key_is_refused_on_both_billing_routes(monkeypatch: pytest.M
     monkeypatch.setenv("TANK_KEY_TIGER", AGENT_KEY)
     transport = httpx.ASGITransport(app=main.app)
     async with httpx.AsyncClient(transport=transport, base_url="http://tank") as client:
-        for path in ("/v1/billing/events/claim", "/v1/billing/events/release"):
+        for path in BILLING_ROUTES:
             body = {"event_id": EVENT_ID, "type": "plan.created"}
             refused = await client.post(path, headers={"x-tank-key": AGENT_KEY}, json=body)
             assert refused.status_code == 403
@@ -268,7 +273,7 @@ async def test_claim_is_first_once_and_release_deletes_an_unhandled_claim(monkey
             async with httpx.AsyncClient(transport=transport, base_url="http://tank") as client:
                 headers = {"x-tank-key": main.TANK_API_KEY}
                 agent_headers = {"x-tank-key": AGENT_KEY}
-                for path in ("/v1/billing/events/claim", "/v1/billing/events/release"):
+                for path in BILLING_ROUTES:
                     refused = await client.post(
                         path,
                         headers=agent_headers,
@@ -315,11 +320,13 @@ async def test_claim_is_first_once_and_release_deletes_an_unhandled_claim(monkey
                     json={"event_id": EVENT_ID, "type": "plan.created"},
                 )
                 assert retried.json() == {"first": True}
-                async with pool.acquire() as check:
-                    await check.execute(
-                        "UPDATE tank.billing_events SET handled = true WHERE event_id = $1",
-                        EVENT_ID,
-                    )
+                marked = await client.post(
+                    "/v1/billing/events/handled",
+                    headers=headers,
+                    json={"event_id": EVENT_ID},
+                )
+                assert marked.status_code == 200
+                assert marked.json() == {"handled": True}
                 kept = await client.post(
                     "/v1/billing/events/release",
                     headers=headers,

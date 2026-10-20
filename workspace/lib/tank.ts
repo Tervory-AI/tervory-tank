@@ -650,3 +650,10 @@ export function releaseBillingEvent(eventId: string): Promise<{ released: boolea
     body: JSON.stringify({ event_id: eventId }),
   });
 }
+
+export function markBillingEventHandled(eventId: string): Promise<{ handled: boolean }> {
+  return tank<{ handled: boolean }>("/v1/billing/events/handled", {
+    method: "POST",
+    body: JSON.stringify({ event_id: eventId }),
+  });
+}

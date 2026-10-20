@@ -2783,6 +2783,10 @@ class BillingEventRelease(BaseModel):
     event_id: str = Field(min_length=1, max_length=255)
 
 
+class BillingEventHandled(BaseModel):
+    event_id: str = Field(min_length=1, max_length=255)
+
+
 def _billing_text(value: str, label: str) -> str:
     text = value.strip()
     if not text or any(ord(ch) < 32 or ord(ch) == 127 for ch in text):
@@ -2832,6 +2836,27 @@ async def release_billing_event(body: BillingEventRelease) -> dict[str, bool]:
     except Exception:
         raise HTTPException(status_code=500, detail="Billing event could not be released.") from None
     return {"released": result == "DELETE 1"}
+
+
+@app.post("/v1/billing/events/handled", dependencies=[Depends(require_key)])
+async def mark_billing_event_handled(body: BillingEventHandled) -> dict[str, bool]:
+    """Mark a stored claim handled so a later release leaves it in place."""
+    event_id = _billing_text(body.event_id, "event_id")
+    try:
+        async with pool().acquire() as conn:
+            result = await conn.execute(
+                """
+                UPDATE tank.billing_events
+                SET handled = true
+                WHERE event_id = $1
+                """,
+                event_id,
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Billing event could not be marked handled.") from None
+    return {"handled": result == "UPDATE 1"}
 
 
 app.include_router(__import__("admin").router)

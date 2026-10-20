@@ -3,7 +3,7 @@
 // The claim lives in Tank, so a second Workspace process sees it too.
 
 import Stripe from "stripe";
-import { claimBillingEvent, releaseBillingEvent } from "../../lib/tank";
+import { claimBillingEvent, markBillingEventHandled, releaseBillingEvent } from "../../lib/tank";
 
 export type WebhookEffect = (event: { id: string; type: string }) => void | Promise<void>;
 
@@ -12,6 +12,8 @@ export type WebhookStore = {
   claim(eventId: string, eventType: string): Promise<boolean>;
   /** Drop a claim when handling failed, so Stripe's retry can run once. */
   release(eventId: string): Promise<void>;
+  /** Keep a successful claim so a later release cannot drop it. */
+  handled(eventId: string): Promise<void>;
 };
 
 /** One claim store. State is in Tank, not in this process. */
@@ -26,6 +28,9 @@ export function tankWebhookStore(): WebhookStore {
     },
     async release(eventId: string) {
       await releaseBillingEvent(eventId);
+    },
+    async handled(eventId: string) {
+      await markBillingEventHandled(eventId);
     },
   };
 }
@@ -83,6 +88,12 @@ export async function receiveStripeWebhook(input: {
     } catch {
       return { status: 500, body: { error: "Billing webhook could not be recorded." } };
     }
+    return { status: 500, body: { error: "Billing webhook could not be recorded." } };
+  }
+
+  try {
+    await store.handled(eventId);
+  } catch {
     return { status: 500, body: { error: "Billing webhook could not be recorded." } };
   }
 
