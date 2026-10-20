@@ -244,7 +244,7 @@ async def collect_room_gold(day: date) -> None:
                     )
                     from gold import settle_auto_source
                     await settle_auto_source(conn, {"tenant_id": PLATFORM_TENANT, "region": region,
-                                                   "skill_id": row["skill_id"], "label_source": source})
+                                                   "skill_id": row["skill_id"], "source": "room_auto"})
 
 @asynccontextmanager
 async def lifespan(_app):

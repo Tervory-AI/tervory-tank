@@ -169,10 +169,10 @@ def source_verdict(statuses: list[str]) -> str:
 async def settle_auto_source(conn, row: dict[str, Any]) -> str:
     """Only ten original spot checks can release a source; never self-certify."""
     from training import pair_from_gold
-    args = (row["tenant_id"], row["region"], row["skill_id"], row["label_source"])
+    args = (row["tenant_id"], row["region"], row["skill_id"], row["source"])
     sample = await conn.fetch(
         """SELECT status FROM tank.gold_examples WHERE tenant_id=$1 AND region=$2
-        AND skill_id=$3 AND label_source=$4 AND auto_label ORDER BY created_at,id LIMIT 10""", *args,
+        AND skill_id=$3 AND source=$4 AND auto_label ORDER BY created_at,id LIMIT 10""", *args,
     )
     verdict = source_verdict([r["status"] for r in sample])
     if verdict == "pending":
@@ -180,18 +180,18 @@ async def settle_auto_source(conn, row: dict[str, Any]) -> str:
     if verdict == "review":
         await conn.execute(
             """UPDATE tank.gold_examples SET status='rejected',note='Source needs code review'
-            WHERE tenant_id=$1 AND region=$2 AND skill_id=$3 AND label_source=$4
+            WHERE tenant_id=$1 AND region=$2 AND skill_id=$3 AND source=$4
             AND auto_label AND status='candidate'""", *args,
         )
         return verdict
     await conn.execute(
         """UPDATE tank.gold_examples SET status='checked',auto_approved=true,checked_by=coalesce(checked_by,'source spot check'),checked_at=coalesce(checked_at,now())
-        WHERE tenant_id=$1 AND region=$2 AND skill_id=$3 AND label_source=$4
+        WHERE tenant_id=$1 AND region=$2 AND skill_id=$3 AND source=$4
         AND auto_label AND status IN ('candidate','checked')""", *args,
     )
     rows = await conn.fetch(
         """SELECT * FROM tank.gold_examples WHERE tenant_id=$1 AND region=$2
-        AND skill_id=$3 AND label_source=$4 AND auto_label AND status='checked'""", *args,
+        AND skill_id=$3 AND source=$4 AND auto_label AND status='checked'""", *args,
     )
     for checked in rows:
         await pair_from_gold(conn, dict(checked))
@@ -201,12 +201,12 @@ async def settle_auto_source(conn, row: dict[str, Any]) -> str:
 async def sample_queue(conn, actor: Reviewer, agent: str, skill: str) -> list[dict]:
     rows = await conn.fetch(
         """WITH ranked AS (
-          SELECT *,row_number() OVER (PARTITION BY skill_id,label_source ORDER BY created_at,id) AS sample_n
+          SELECT *,row_number() OVER (PARTITION BY skill_id,source ORDER BY created_at,id) AS sample_n
           FROM tank.gold_examples WHERE tenant_id=$1 AND region=$2 AND agent=$3 AND skill_id=$4
         ), waiting AS (
           SELECT * FROM ranked WHERE status='candidate' AND (NOT auto_label OR sample_n<=10)
         ) SELECT id,input,expected,source,label_source,auto_label FROM waiting
-        WHERE NOT auto_label OR label_source=(SELECT label_source FROM waiting WHERE auto_label
+        WHERE NOT auto_label OR source=(SELECT source FROM waiting WHERE auto_label
           ORDER BY created_at,id LIMIT 1)
         ORDER BY id""", actor.tenant, runtime().box_region(), agent, skill,
     )
@@ -252,8 +252,8 @@ async def check(example_id: uuid.UUID, body: Verdict,
         if row["auto_label"]:
             sample = await conn.fetch(
                 """SELECT id FROM tank.gold_examples WHERE tenant_id=$1 AND region=$2
-                AND skill_id=$3 AND label_source=$4 AND auto_label ORDER BY created_at,id LIMIT 10""",
-                actor.tenant, row["region"], row["skill_id"], row["label_source"],
+                AND skill_id=$3 AND source=$4 AND auto_label ORDER BY created_at,id LIMIT 10""",
+                actor.tenant, row["region"], row["skill_id"], row["source"],
             )
             if example_id not in {r["id"] for r in sample}:
                 raise HTTPException(409, "Review the source sample first.")

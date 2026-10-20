@@ -22,7 +22,7 @@ async def test_queue_and_release(database, wrong):
         for n in range(20):
             await conn.execute("""INSERT INTO tank.gold_examples
                 (tenant_id,region,skill_id,agent,input,expected,source,source_ref,input_hash,auto_label,label_source,public)
-                VALUES ($1,'us-east','base.fixture','base',$2::jsonb,'{}','room_auto',$3,$3,true,'fixture source',true)""",
+                VALUES ($1,'us-east','base.fixture','base',$2::jsonb,'{}','room_auto',$3,$3,true,$3,true)""",
                 tenant, gold.encoded({'n': n}), str(n))
         queue = await gold.sample_queue(conn, actor, 'base', 'base.fixture')
         assert len(queue) == 10
