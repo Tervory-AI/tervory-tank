@@ -19,6 +19,8 @@ services:
       TANK_KEY: ${TANK_KEY_TISAN:-}
       HERMES_URL: http://hermes:8000
       DATA_DIR: /data
+      TERVORY_ADMIN_USER_IDS: ${TERVORY_ADMIN_USER_IDS:-}
+      TANK_REGION: ${TANK_REGION:-us-east}
     volumes:
       - agent_tisan_data:/data
     networks:

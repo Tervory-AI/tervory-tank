@@ -26,6 +26,7 @@ from agents.zenas.core.engine import (
     quote_in_source,
 )
 from agents.zenas.core.release_mask import material_type_for_pool
+from agents.zenas.core.pointers import PointerError, judgment_text, resolve_answer
 from agents.zenas.core.selftest import box_jurisdiction, is_holdout
 
 log = logging.getLogger("zenas.convert")
@@ -345,10 +346,12 @@ async def _judgment(pool: Any, case: dict[str, Any]) -> str:
     return str(row["text"] or "")
 
 
-def parse_worked(raw: str) -> dict[str, Any]:
+def parse_worked(raw: str, text: str | None = None) -> dict[str, Any]:
     """Facts, question, elements, holding. The policy shape is accepted too."""
     data = parse_json_object(raw)
-    facts = _fold(str(data.get("facts") or data.get("narrative") or ""))
+    if text is not None:
+        data = resolve_answer(data, text)
+    facts = str(data.get("facts") or "").strip() if "facts_pointer" in data else _fold(str(data.get("facts") or data.get("narrative") or ""))
     question = _fold(str(data.get("question") or ""))
     holding = _fold(str(data.get("holding") or data.get("outcome") or ""))
     raw_elements = data.get("elements")
@@ -387,6 +390,12 @@ def parse_worked(raw: str) -> dict[str, Any]:
         "holding": holding,
         "citations": citations,
         "features": features,
+        "pointed": "facts_pointer" in data,
+        "has_pointers": "facts_pointer" in data or any(
+            isinstance(item, dict) and "quote_pointer" in item
+            for field in ("elements", "element_findings", "citations")
+            for item in (data.get(field) or [])
+        ),
     }
 
 
@@ -744,12 +753,16 @@ async def convert_cases(
     cap = convert_limit()
     cases = await _list_cases(pool, jurisdiction)
     pending: list[dict[str, Any]] = []
+    repaired = 0
     for case in cases:
         if len(pending) >= cap:
             break
         existing = await ladder.worked_for_doc(region=box, pool_doc_id=case["document_id"])
         if existing is None:
             pending.append(case)
+        elif not existing.get("rule_card_ids") and repaired < cap and not criminal_case(case):
+            await _link_converted_card(pool, ladder, model, existing, region=box)
+            repaired += 1
     for case in pending:
         if case["jurisdiction"] != jurisdiction:
             continue
@@ -794,7 +807,15 @@ async def convert_cases(
             )
             continue
         try:
-            parsed = parse_worked(content)
+            resolved_text = judgment_text(text)
+            parsed = parse_worked(content, resolved_text)
+        except PointerError:
+            await _remember_failure(
+                ladder, region=box, pool_doc_id=case["document_id"],
+                reason="pointer did not resolve", answer=content,
+                finish_reason=finish, tokens_in=tokens_in, tokens_out=tokens_out,
+            )
+            continue
         except (ValueError, TypeError):
             await _remember_failure(
                 ladder,
@@ -807,7 +828,7 @@ async def convert_cases(
                 tokens_out=tokens_out,
             )
             continue
-        if facts_too_short(str(parsed.get("facts") or "")):
+        if (parsed["pointed"] and len(parsed["facts"]) < _MIN_FACTS_CHARS) or facts_too_short(parsed["facts"]):
             await _remember_failure(
                 ladder,
                 region=box,
@@ -822,7 +843,7 @@ async def convert_cases(
         passages = [
             {
                 "citation": case["citation"],
-                "text": text,
+                "text": resolved_text if parsed["has_pointers"] else fold_for_quote(text),
                 "doc_id": case["document_id"],
                 "version_id": case["version_id"],
                 "status": "in_force",
@@ -880,6 +901,7 @@ async def convert_cases(
             }
         )
         await ladder.clear_convert_failure(region=box, pool_doc_id=case["document_id"])
+        await _link_converted_card(pool, ladder, model, worked, region=box)
         if not held:
             await ladder.add_pair(
                 {
@@ -907,6 +929,15 @@ async def convert_cases(
             }
         )
     return await conversion_report(pool, ladder, region=box)
+
+
+async def _link_converted_card(pool: Any, ladder: Any, model: Any, worked: dict[str, Any], *, region: str) -> None:
+    from agents.zenas.core.converted_cards import link_card
+
+    try:
+        await link_card(pool, ladder, model, worked, region=region)
+    except Exception:
+        log.warning("converted rule card could not be built", exc_info=True)
 
 
 async def run_scheduled(conn: Any, *, region: str) -> None:

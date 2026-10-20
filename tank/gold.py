@@ -86,7 +86,7 @@ async def require_job(x_tank_key: str = Header(default="")) -> None:
 
 async def add_candidate(conn, *, tenant: uuid.UUID, skill: str, agent: str,
                         value: Any, expected: Any, source: str, ref: str,
-                        tolerance: str = "exact") -> uuid.UUID:
+                        tolerance: str = "exact", holdout: bool = False) -> uuid.UUID:
     return await conn.fetchval(
         """INSERT INTO tank.gold_examples
         (tenant_id,region,skill_id,agent,input,expected,source,source_ref,input_hash,holdout,tolerance)
@@ -94,7 +94,7 @@ async def add_candidate(conn, *, tenant: uuid.UUID, skill: str, agent: str,
         ON CONFLICT (tenant_id,region,skill_id,source,source_ref)
         DO UPDATE SET source_ref=EXCLUDED.source_ref RETURNING id""",
         tenant, runtime().box_region(), skill, agent, encoded(value), encoded(expected),
-        source, ref, input_hash(value), is_holdout(tenant, skill, value), tolerance,
+        source, ref, input_hash(value), holdout or is_holdout(tenant, skill, value), tolerance,
     )
 
 
@@ -166,32 +166,50 @@ def source_verdict(statuses: list[str]) -> str:
     return "passed" if statuses.count("checked") >= 9 else "review"
 
 
+# Separate explicit families from exact-source fallbacks, even if their text matches.
+FAMILY_SQL = "CASE WHEN label_family IS NULL THEN 'source:' || label_source ELSE 'family:' || label_family END"
+
+
+def label_family(row: dict[str, Any]) -> str | None:
+    if row.get("label_family") is not None:
+        return row["label_family"]
+    source = row.get("label_source")
+    return source
+
+
+def label_group(row: dict[str, Any]) -> str | None:
+    value = label_family(row)
+    if value is None:
+        return None
+    return ("family:" if row.get("label_family") is not None else "source:") + value
+
+
 async def settle_auto_source(conn, row: dict[str, Any]) -> str:
-    """Only ten original spot checks can release a source; never self-certify."""
+    """Only ten original spot checks can release a label family."""
     from training import pair_from_gold
-    args = (row["tenant_id"], row["region"], row["skill_id"], row["source"])
+    args = (row["tenant_id"], row["region"], row["skill_id"], row["source"], label_group(row))
     sample = await conn.fetch(
-        """SELECT status FROM tank.gold_examples WHERE tenant_id=$1 AND region=$2
-        AND skill_id=$3 AND source=$4 AND auto_label ORDER BY created_at,id LIMIT 10""", *args,
+        f"""SELECT status FROM tank.gold_examples WHERE tenant_id=$1 AND region=$2
+        AND skill_id=$3 AND source=$4 AND {FAMILY_SQL} IS NOT DISTINCT FROM $5 AND auto_label ORDER BY created_at,id LIMIT 10""", *args,
     )
     verdict = source_verdict([r["status"] for r in sample])
     if verdict == "pending":
         return verdict
     if verdict == "review":
         await conn.execute(
-            """UPDATE tank.gold_examples SET status='rejected',note='Source needs code review'
-            WHERE tenant_id=$1 AND region=$2 AND skill_id=$3 AND source=$4
+            f"""UPDATE tank.gold_examples SET status='rejected',note='Source needs code review'
+            WHERE tenant_id=$1 AND region=$2 AND skill_id=$3 AND source=$4 AND {FAMILY_SQL} IS NOT DISTINCT FROM $5
             AND auto_label AND status='candidate'""", *args,
         )
         return verdict
     await conn.execute(
-        """UPDATE tank.gold_examples SET status='checked',auto_approved=true,checked_by=coalesce(checked_by,'source spot check'),checked_at=coalesce(checked_at,now())
-        WHERE tenant_id=$1 AND region=$2 AND skill_id=$3 AND source=$4
+        f"""UPDATE tank.gold_examples SET status='checked',auto_approved=true,checked_by=coalesce(checked_by,'source spot check'),checked_at=coalesce(checked_at,now())
+        WHERE tenant_id=$1 AND region=$2 AND skill_id=$3 AND source=$4 AND {FAMILY_SQL} IS NOT DISTINCT FROM $5
         AND auto_label AND status IN ('candidate','checked')""", *args,
     )
     rows = await conn.fetch(
-        """SELECT * FROM tank.gold_examples WHERE tenant_id=$1 AND region=$2
-        AND skill_id=$3 AND source=$4 AND auto_label AND status='checked'""", *args,
+        f"""SELECT * FROM tank.gold_examples WHERE tenant_id=$1 AND region=$2
+        AND skill_id=$3 AND source=$4 AND {FAMILY_SQL} IS NOT DISTINCT FROM $5 AND auto_label AND status='checked'""", *args,
     )
     for checked in rows:
         await pair_from_gold(conn, dict(checked))
@@ -200,14 +218,15 @@ async def settle_auto_source(conn, row: dict[str, Any]) -> str:
 
 async def sample_queue(conn, actor: Reviewer, agent: str, skill: str) -> list[dict]:
     rows = await conn.fetch(
-        """WITH ranked AS (
-          SELECT *,row_number() OVER (PARTITION BY skill_id,source ORDER BY created_at,id) AS sample_n
+        f"""WITH ranked AS (
+          SELECT *,{FAMILY_SQL} AS family,
+          row_number() OVER (PARTITION BY skill_id,source,{FAMILY_SQL},auto_label ORDER BY created_at,id) AS sample_n
           FROM tank.gold_examples WHERE tenant_id=$1 AND region=$2 AND agent=$3 AND skill_id=$4
         ), waiting AS (
           SELECT * FROM ranked WHERE status='candidate' AND (NOT auto_label OR sample_n<=10)
-        ) SELECT id,input,expected,source,label_source,auto_label FROM waiting
-        WHERE NOT auto_label OR source=(SELECT source FROM waiting WHERE auto_label
-          ORDER BY created_at,id LIMIT 1)
+        ) SELECT id,input,expected,source,label_source,label_family,auto_label FROM waiting
+        WHERE NOT auto_label OR (source,family) IS NOT DISTINCT FROM
+          (SELECT ROW(source,family) FROM waiting WHERE auto_label ORDER BY created_at,id LIMIT 1)
         ORDER BY id""", actor.tenant, runtime().box_region(), agent, skill,
     )
     return [dict(row) for row in rows]
@@ -251,9 +270,9 @@ async def check(example_id: uuid.UUID, body: Verdict,
             raise HTTPException(422, "A corrected JSON answer is required.")
         if row["auto_label"]:
             sample = await conn.fetch(
-                """SELECT id FROM tank.gold_examples WHERE tenant_id=$1 AND region=$2
-                AND skill_id=$3 AND source=$4 AND auto_label ORDER BY created_at,id LIMIT 10""",
-                actor.tenant, row["region"], row["skill_id"], row["source"],
+                f"""SELECT id FROM tank.gold_examples WHERE tenant_id=$1 AND region=$2
+                AND skill_id=$3 AND source=$4 AND {FAMILY_SQL} IS NOT DISTINCT FROM $5 AND auto_label ORDER BY created_at,id LIMIT 10""",
+                actor.tenant, row["region"], row["skill_id"], row["source"], label_group(dict(row)),
             )
             if example_id not in {r["id"] for r in sample}:
                 raise HTTPException(409, "Review the source sample first.")
@@ -266,7 +285,7 @@ async def check(example_id: uuid.UUID, body: Verdict,
             )
             await add_candidate(conn, tenant=actor.tenant, skill=row["skill_id"], agent=row["agent"],
                                 value=obj(row["input"]), expected=expected, source="correction",
-                                ref=str(example_id), tolerance=row["tolerance"])
+                                ref=str(example_id), tolerance=row["tolerance"], holdout=row["holdout"])
         else:
             updated = await conn.fetchrow(
                 """UPDATE tank.gold_examples SET status='checked',checked_by=$3,checked_at=now(),note=$4

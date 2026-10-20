@@ -8,6 +8,7 @@ RUN pip install --no-cache-dir -r requirements.txt \
 COPY _chassis/chassis /app/chassis
 COPY rig/rigbox /app/rigbox
 COPY rig/app.py /app/app.py
+COPY rig/gold_sources.py /app/gold_sources.py
 COPY rig/schema.sql /app/schema.sql
 COPY rig/english-20k.txt /app/english-20k.txt
 COPY rig/shopping.txt /app/shopping.txt

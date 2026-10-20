@@ -1,6 +1,83 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { contextReport, loadContextReport, PLATFORM_TENANT } from "./context-report";
+
+test("unlabelled records count credits but never accuracy", () => {
+  const record = { profile: {}, passes: {
+    context_dev: { status: "candidate", credits: 10, fields: { website: "https://example.com" } },
+    context_dev_checked: { checked: false, expected: {} },
+  } } as unknown as BaseRecord;
+  const report = contextReport([record]);
+  assert.equal(report.records, 1);
+  assert.equal(report.noTruth, 1);
+  assert.equal(report.creditsUsed, 10);
+  assert.equal(report.creditsPerRecord, 10);
+  assert.deepEqual(report.fields, []);
+});
+
+test("official phone and address truth score even when vendor fields are absent", () => {
+  const record = { profile: {
+    phone: { value: "(617) 555-0100" }, address: { value: "10 Main St" },
+    city: { value: "Boston" }, state: { value: "MA" }, zip: { value: "02110" },
+  }, passes: {
+    context_dev: { status: "candidate", credits: 10, fields: {} },
+    context_dev_checked: { checked: true, expected: { phone: "+1 6175550100", address: "10 Main St, Boston, MA, 02110" } },
+  } } as unknown as BaseRecord;
+  const report = contextReport([record]);
+  assert.equal(report.noTruth, 0);
+  assert.equal(report.fields.length, 2);
+  assert.ok(report.fields.every((field) => field.checked === 1 && field.baseCorrect === 1 && field.contextCorrect === 0));
+});
+import type { BaseRecord } from "@/lib/tank";
 import { approvedSkills, batchStatus, buildModel, refreshedLabel, shortDate, type BatchIn, type SkillIn } from "./model";
+
+test("trial report reads only platform records", async () => {
+  const calls: string[] = [];
+  await loadContextReport(async (tenantId, options) => {
+    calls.push(tenantId);
+    assert.equal(options.limit, 200);
+    assert.notEqual(tenantId, "client-tenant");
+    return [];
+  });
+  assert.deepEqual(calls, [PLATFORM_TENANT]);
+});
+
+test("credit cap reached is shown without counting an uncalled record as a charge", () => {
+  const row = { passes: { context_dev: { status: "credit_limit", message: "credit cap reached" } } } as unknown as BaseRecord;
+  const report = contextReport([row]);
+  assert.equal(report.creditCapReached, true);
+  assert.equal(report.records, 0);
+  assert.equal(report.unknownCharges, 0);
+});
+
+test("trial accuracy uses checked answers, includes missing answers and unknown charges", () => {
+  const record = {
+    profile: { website: { value: "https://example.com" } },
+    passes: {
+      context_dev: { status: "candidate", fields: { website: "https://wrong.example" }, credits: 10 },
+      context_dev_checked: { checked: true, expected: { website: "https://example.com", name: "Example" } },
+    },
+  } as unknown as BaseRecord;
+  const unchecked = { ...record, passes: { context_dev: { status: "failed", credits: null } } } as unknown as BaseRecord;
+  const report = contextReport([record, unchecked]);
+  assert.equal(report.records, 2);
+  assert.equal(report.creditsPerRecord, null);
+  assert.equal(report.unknownCharges, 1);
+  assert.deepEqual(report.fields[0], { field: "website", checked: 1, baseCorrect: 1, contextCorrect: 0 });
+  assert.equal(report.fields[1].contextCorrect, 0);
+  assert.equal(contextReport([record]).creditsPerRecord, 10);
+});
+
+test("social comparison accepts source formats with the same checked links", () => {
+  const row = {
+    profile: { socials: { value: { linkedin: "https://www.linkedin.com/company/example/" } } },
+    passes: {
+      context_dev: { status: "candidate", credits: 10, fields: { socials: [{ url: "https://linkedin.com/company/example" }] } },
+      context_dev_checked: { checked: true, expected: { socials: ["https://linkedin.com/company/example"] } },
+    },
+  } as unknown as BaseRecord;
+  assert.deepEqual(contextReport([row]).fields, [{ field: "socials", checked: 1, baseCorrect: 1, contextCorrect: 1 }]);
+});
 
 const batch = (over: Partial<BatchIn>): BatchIn => ({
   batch: "ATF FFL list Sep 2026 · HI",

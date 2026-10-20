@@ -40,6 +40,8 @@ async def save_pair(conn, *, tenant: uuid.UUID, agent: str, task: str, value: An
 
 
 async def pair_from_gold(conn, row: dict[str, Any]) -> None:
+    if row["holdout"] or (row.get("auto_label") and not row.get("auto_approved")):
+        return
     await save_pair(conn, tenant=row["tenant_id"], agent=row["agent"], task=row["skill_id"],
                     value=obj(row["input"]), output=obj(row["expected"]), approved_by=row["checked_by"],
                     source="gold", ref=str(row["id"]), gold_id=row["id"], holdout=row["holdout"],
@@ -205,7 +207,7 @@ def skill_owners() -> dict[str, set[str]]:
 
 def valid_auto_candidate(row: Any, room: str, region: str,
                          owners: dict[str, set[str]] | None = None) -> bool:
-    """Only known packages owned by this authenticated room may label rows."""
+    """Accept room-owned public labels with an optional nonempty label_family."""
     owners = skill_owners() if owners is None else owners
     return (isinstance(row, dict) and row.get("public") is True
             and row.get("client_matter", False) is False
@@ -215,13 +217,15 @@ def valid_auto_candidate(row: Any, room: str, region: str,
             and owners.get(row["skill_id"]) == {room}
             and isinstance(row.get("label_source"), str)
             and 0 < len(row["label_source"]) <= 500
+            and (row.get("label_family") is None or
+                 (isinstance(row["label_family"], str) and bool(row["label_family"].strip()) and len(row["label_family"]) <= 500))
             and isinstance(row.get("input"), dict) and isinstance(row.get("expected"), dict))
 
 
 def candidate_json(value: dict) -> str:
     text = json.dumps(value, ensure_ascii=False, allow_nan=False, sort_keys=True)
     if len(text.encode("utf-8")) > GOLD_ROW_MAX_BYTES:
-        raise ValueError("Candidate field exceeds size limit")
+        raise ValueError("Candidate row exceeds size limit")
     return text
 
 
@@ -269,6 +273,7 @@ async def collect_room_gold(day: date) -> dict[str, int]:
                             async with conn.transaction():
                                 if not valid_auto_candidate(row, room, region, owners):
                                     raise ValueError("Invalid candidate")
+                                candidate_json(row)
                                 value = candidate_json(row["input"])
                                 expected = candidate_json(row["expected"])
                                 source = row["label_source"]
@@ -284,16 +289,18 @@ async def collect_room_gold(day: date) -> dict[str, int]:
                                 result = await conn.execute(
                                     """INSERT INTO tank.gold_examples
                                     (tenant_id,region,skill_id,agent,input,expected,source,source_ref,
-                                     input_hash,holdout,auto_label,label_source,public,intake_day)
-                                    VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,'room_auto',$7,$8,$9,true,$10,true,$11)
+                                     input_hash,holdout,auto_label,label_source,public,intake_day,label_family)
+                                    VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,'room_auto',$7,$8,$9,true,$10,true,$11,$12)
                                     ON CONFLICT (tenant_id,region,skill_id,source,source_ref) DO NOTHING""",
                                     PLATFORM_TENANT, region, row["skill_id"], room, value, expected,
                                     input_hash([source, row["input"], row["expected"]]), input_hash(row["input"]),
-                                    is_holdout(PLATFORM_TENANT, row["skill_id"], row["input"]), source, day,
+                                    row.get("holdout") is True or is_holdout(PLATFORM_TENANT, row["skill_id"], row["input"]), source, day,
+                                    row.get("label_family"),
                                 )
                                 from gold import settle_auto_source
                                 await settle_auto_source(conn, {"tenant_id": PLATFORM_TENANT, "region": region,
-                                                               "skill_id": row["skill_id"], "source": "room_auto"})
+                                                               "skill_id": row["skill_id"], "source": "room_auto",
+                                                               "label_source": source, "label_family": row.get("label_family")})
                             stats["inserted" if result == "INSERT 0 1" else "duplicates"] += 1
                         except Exception:
                             # No exception text: it may contain private data or credentials.

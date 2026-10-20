@@ -119,7 +119,7 @@ export function GoldView({ founder }: { founder: boolean }) {
       })}
     </div></section>
     <section className="gold-review" aria-labelledby="review-title"><div className="gold-review-heading"><div><p className="gold-eyebrow">ONE EXAMPLE AT A TIME</p><h2 id="review-title">Sample queue</h2></div>
-      <p className="gold-meta">Ten machine-labelled examples per skill, plus every judgement example.<br />A source counts after 9 of 10 checks agree.</p></div>
+      <p className="gold-meta">Ten machine-labelled examples per source for each skill, plus every judgement example.<br />A source counts after 9 of 10 checks agree.</p></div>
       <nav aria-label="Skills closest to 100" className="gold-filters">
         {summary?.skills.filter(s => s.candidates > 0).map(s => <button key={s.skill_id} disabled={busy}
           onClick={() => { setAgent(s.agent); setSkill(s.skill_id); setAfter(""); }}>
