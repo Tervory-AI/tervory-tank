@@ -240,6 +240,9 @@ async def collect_room_gold(day: date) -> None:
                         is_holdout(PLATFORM_TENANT, row["skill_id"], row["input"]),
                         source, day,
                     )
+                    from gold import settle_auto_source
+                    await settle_auto_source(conn, {"tenant_id": PLATFORM_TENANT, "region": region,
+                                                   "skill_id": row["skill_id"], "label_source": source})
 
 @asynccontextmanager
 async def lifespan(_app):

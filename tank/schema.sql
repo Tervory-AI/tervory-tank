@@ -766,3 +766,5 @@ ALTER TABLE tank.gold_examples ADD COLUMN IF NOT EXISTS public boolean NOT NULL 
 ALTER TABLE tank.gold_examples ADD COLUMN IF NOT EXISTS intake_day date;
 CREATE INDEX IF NOT EXISTS gold_auto_source ON tank.gold_examples
     (tenant_id,region,agent,label_source,intake_day) WHERE auto_label;
+
+ALTER TABLE tank.gold_examples ADD COLUMN IF NOT EXISTS auto_approved boolean NOT NULL DEFAULT false;
