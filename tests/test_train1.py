@@ -121,7 +121,7 @@ async def test_import_review_correction_and_tenant_seal(database):
         checked = await conn.fetchrow("SELECT * FROM tank.gold_examples WHERE id=$1", one)
         pair = await conn.fetchrow("SELECT * FROM tank.training_pairs WHERE gold_id=$1", one)
         assert checked["status"] == "checked"
-        assert pair["holdout"] == checked["holdout"]
+        assert pair is None if checked["holdout"] else pair["holdout"] is False
         wrong = await candidate(conn, gold.PLATFORM_TENANT, {"case": "wrong"})
     await gold.check(wrong, gold.Verdict(action="wrong", correction={"answer": "corrected"}), founder)
     async with pool.acquire() as conn:

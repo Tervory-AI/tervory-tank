@@ -9,6 +9,8 @@ COPY _chassis/chassis /app/chassis
 COPY tisan/app.py /app/app.py
 COPY tisan/scaffold.py /app/scaffold.py
 COPY tisan/figma.py /app/figma.py
+COPY tisan/gold_sources.py /app/gold_sources.py
+COPY tisan/review_store.py /app/review_store.py
 COPY tisan/fixtures /app/fixtures
 COPY tisan/templates /app/templates
 # Node is for the scaffold checks. Dependencies are cached here so a run needs no network.

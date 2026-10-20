@@ -148,6 +148,7 @@
     {
       "id": "8:122",
       "name": "Logo / navy",
+      "brandFile": "tervory-logo-on-white.png",
       "page": "Desktop — 1440",
       "section": "Nav"
     },
@@ -232,12 +233,14 @@
     {
       "id": "8:136",
       "name": "Logo / white",
+      "brandFile": "tervory-logo-reversed.png",
       "page": "Desktop — 1440",
       "section": "Footer"
     },
     {
       "id": "8:150",
       "name": "Logo / navy",
+      "brandFile": "tervory-logo-on-white.png",
       "page": "Mobile — 390",
       "section": "Nav"
     },
@@ -316,6 +319,7 @@
     {
       "id": "8:164",
       "name": "Logo / white",
+      "brandFile": "tervory-logo-reversed.png",
       "page": "Mobile — 390",
       "section": "Footer"
     }

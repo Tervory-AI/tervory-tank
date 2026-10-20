@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hmac
+import importlib.util
 import json
 import logging
 import os
@@ -13,7 +15,7 @@ from chassis.app import create_app
 from chassis.db import ensure_schedules, schema_for
 from chassis.jobs import JobContext
 from chassis.logs import log_line
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException, Query
 
 from rigbox.api import mount
 from rigbox.page_route import mount_page
@@ -114,6 +116,44 @@ def _close_public_surface(application: FastAPI) -> None:
 
 _close_public_surface(app)
 mount_page(app)
+
+
+@app.get("/gold/candidates")
+async def gold_candidates(
+    limit: int = Query(default=200, ge=1, le=200),
+    x_tank_key: str = Header(default=""),
+) -> list[dict[str, Any]]:
+    """Room key only. Catalogue compatibility lists, marked public."""
+    key = os.environ.get("TANK_KEY", "")
+    # compare_digest on str rejects some headers with TypeError. Bytes compare
+    # instead, so a bad or non-ASCII header is 401.
+    try:
+        matches = bool(key) and bool(x_tank_key) and hmac.compare_digest(key.encode(), x_tank_key.encode())
+    except (AttributeError, TypeError, UnicodeError):
+        matches = False
+    if not matches:
+        raise HTTPException(status_code=401, detail="room key required")
+    root = Path(os.environ.get("CATALOGUE_DIR", str(Path(__file__).resolve().parent / "catalogues")))
+    return _gold_candidates()(limit, region=os.environ.get("TANK_REGION", "us-east"), root=root)
+
+
+def _gold_candidates():
+    """Load this room's gold module by file, not by the shared import name.
+
+    Other rooms also ship a module called gold_sources. Importing by name
+    picks up whichever room a test put on the path first.
+    """
+    cached = getattr(_gold_candidates, "fn", None)
+    if cached is not None:
+        return cached
+    path = Path(__file__).resolve().parent / "gold_sources.py"
+    spec = importlib.util.spec_from_file_location("rig_room_gold_sources", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("rig gold sources are missing")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    _gold_candidates.fn = module.candidates
+    return module.candidates
 
 _inner = app.router.lifespan_context
 
