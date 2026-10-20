@@ -79,3 +79,37 @@ runtime dependency is added. No logo is drawn or replaced.
 - Deploy the starter site when a saved page has no privacy notice, or loads a script or frame from another site without a cookie notice.
 - Hold model keys. Every model call goes through Tank.
 - Push to a client's repo without that tenant's approval recorded.
+
+## Gold approvals and candidates
+
+A successful scaffold job can include `figma: {file_key, node_id, page}` (`page`
+is home/about/contact/privacy). Save the Figma reading first. The checked static
+HTML, CSS and page structure are retained under the tenant's builds directory;
+a stable per-page review reference is saved under `/data/reviews/<tenant>/`.
+Rebuilding the page replaces that reference and invalidates its previous approval.
+No approval is seeded.
+
+The Tisan page loads platform pages and the active organization’s pages beside
+sandboxed built-page previews. Approval scope is limited to those two tenants.
+Only signed-in founders in `TERVORY_ADMIN_USER_IDS` can use **Approve as gold**.
+The server action derives the tenant and user from Clerk, calls Tank through
+`workspace/lib/tank.ts`, and Tank verifies the Workspace key and founder again
+before forwarding to the fixed Tisan corridor. The room also requires its own
+key and the same founder allowlist. Configure the existing founder-id setting
+on the Tisan room; it is now passed through its compose file.
+
+The additive, idempotent `agent_tisan.page_approvals` table is created at room
+startup. It stores tenant, file/frame ids, saved frame hash, built page path and
+hash, founder user id and approval time. Approval rejects a stale review (409).
+`GET /gold/candidates?limit=N` is room-key only. It returns the requested six
+fields for both skills only while both hashes and source identities still match.
+`tenant_id` defaults to the platform tenant; supply the tenant explicitly for
+private records. Every database read/write is tenant scoped. Private builds
+remain `public: false`; no client page becomes exportable by approval alone.
+The response is capped by GOLD_AUTO_MAX (default 200), with nightly scheduling
+and deduplication owned by the collector. Nothing here trains or promotes a model.
+
+No approved examples are seeded. Incomplete existing frames remain incomplete;
+the visual-check PR adds full frame evidence and refuses missing measurements.
+The review iframe blocks scripts and external assets, and the raw frame evidence
+is also available. Never put credentials in generated pages or saved frames.
