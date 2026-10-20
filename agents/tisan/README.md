@@ -64,28 +64,33 @@ The recorded page has no spacing variables, no font family, weight, or line heig
 - Hold model keys. Every model call goes through Tank.
 - Push to a client's repo without that tenant's approval recorded.
 
-## Gold candidates
+## Gold approvals and candidates
 
-`GET /gold/candidates?limit=200` requires this room's `X-Tank-Key` header
-(`TANK_KEY`). It returns at most `min(limit, GOLD_AUTO_MAX, 200)` examples,
-labelled `auto:founder-approved-page:<content digest>`. It never marks examples
-checked or changes a skill. Limits outside 1–200 are rejected.
+A successful scaffold job can include `figma: {file_key, node_id, page}` (`page`
+is home/about/contact/privacy). Save the Figma reading first. The checked static
+HTML, CSS and page structure are retained under the tenant's builds directory;
+a review reference is saved under `/data/reviews/<tenant>/`. No approval is seeded.
 
-The trusted approval process places JSON records in
-`/data/gold/approved-pages/`; jobs cannot submit approval records through this
-endpoint. Each record contains `tenant_id` (the platform tenant), `region`,
-`non_client: true`, `public` (explicit boolean), `built: true`, `frame` (the
-recorded frame data), `page_structure` (the actual approved built page), and
-`approval` with `role: "founder"`, `status: "approved"`, an evidence `reference`,
-`frame_sha256` and `page_sha256`. Hashes use `gold_sources.digest` (canonical
-JSON). Changing either payload invalidates approval. Only same-region,
-platform-owned, non-client records qualify, including non-public examples;
-Tank must retain the returned public flag when deciding export eligibility.
-Never place credentials in either payload. Approval metadata is not returned.
+The Tisan page loads these saved frames beside sandboxed built-page previews.
+Only signed-in founders in `TERVORY_ADMIN_USER_IDS` can use **Approve as gold**.
+The server action derives the tenant and user from Clerk, calls Tank through
+`workspace/lib/tank.ts`, and Tank verifies the Workspace key and founder again
+before forwarding to the fixed Tisan corridor. The room also requires its own
+key and the same founder allowlist. Configure the existing founder-id setting
+on the Tisan room; it is now passed through its compose file.
 
-Each eligible pair labels both `tisan.figma` and `tisan.scaffold`. Duplicate
-pairs are suppressed. This is a repeatable read; the collector owns nightly
-scheduling and idempotent import. The cap is per response, not a persisted
-nightly counter. No approved pages are seeded: the existing Figma recording
-has no founder approval evidence or built page structure. Until those records
-are supplied, the endpoint correctly returns an empty list.
+The additive, idempotent `agent_tisan.page_approvals` table is created at room
+startup. It stores tenant, file/frame ids, saved frame hash, built page path and
+hash, founder user id and approval time. Approval rejects a stale review (409).
+`GET /gold/candidates?limit=N` is room-key only. It returns the requested six
+fields for both skills only while both hashes and source identities still match.
+`tenant_id` defaults to the platform tenant; supply the tenant explicitly for
+private records. Every database read/write is tenant scoped. Private builds
+remain `public: false`; no client page becomes exportable by approval alone.
+The response is capped by GOLD_AUTO_MAX (default 200), with nightly scheduling
+and deduplication owned by the collector. Nothing here trains or promotes a model.
+
+No approved examples are seeded. Incomplete existing frames remain incomplete;
+the visual-check PR adds full frame evidence and refuses missing measurements.
+The review iframe blocks scripts and external assets, and the raw frame evidence
+is also available. Never put credentials in generated pages or saved frames.
