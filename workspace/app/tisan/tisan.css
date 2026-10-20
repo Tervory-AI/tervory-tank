@@ -895,3 +895,11 @@ main:has(.tisan) {
   .citations li { grid-template-columns: 20px 1fr; }
   .citations li .text { grid-column: 2; justify-self: start; }
 }
+
+.tisan .gold-review { margin: 24px; padding: 24px; border: 1px solid #B8BFD0; color: #001840; background: #F4F6FB; }
+.tisan .gold-review article { margin-top: 24px; }
+.tisan .gold-review button { border: 1px solid #001840; padding: 10px 16px; background: white; color: #001840; }
+.tisan .gold-comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.tisan .gold-comparison > div { min-width: 0; }
+.tisan .gold-comparison pre, .tisan .gold-comparison iframe { width: 100%; height: 400px; overflow: auto; border: 1px solid #B8BFD0; background: white; }
+@media (max-width: 700px) { .tisan .gold-comparison { grid-template-columns: 1fr; } }

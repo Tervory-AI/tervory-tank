@@ -479,6 +479,31 @@ async def execute(
     with tempfile.TemporaryDirectory(prefix="tisan-") as tmp:
         project = Path(tmp) / "project"
         write_project(brief, project)
+        if "figma" in payload:
+            source = payload["figma"]
+            if not isinstance(source, dict):
+                raise ScaffoldError("frame data incomplete")
+            file_key, node_id = source.get("file_key", ""), source.get("node_id", "")
+            if not re.fullmatch(r"[A-Za-z0-9]{22,128}", file_key) or not re.fullmatch(r"\d+:\d+", node_id):
+                raise ScaffoldError("frame data incomplete")
+            reading_path = root / "readings" / tenant / file_key / (node_id.replace(":", "-") + ".json")
+            try:
+                reading = json.loads(reading_path.read_text())
+            except (OSError, ValueError):
+                raise ScaffoldError("frame data incomplete") from None
+            # Validation is performed by the browser gate, against the saved evidence.
+            # Empty/incomplete measurements cause that gate to fail; never derive a baseline from the page.
+            visual_dir = project / "visual"
+            visual_dir.mkdir(exist_ok=True)
+            target_page = source.get("page", "home")
+            if target_page not in brief["pages"]:
+                raise ScaffoldError("frame data incomplete")
+            target_path = "/" if target_page == "home" else f"/{target_page}"
+            measurements = reading.get("visual", [])
+            if not isinstance(measurements, list):
+                raise ScaffoldError("frame data incomplete")
+            measurements = [{**frame, "page": target_path} for frame in measurements if isinstance(frame, dict)]
+            (visual_dir / "frames.json").write_text(json.dumps(measurements))
         if run_checks_now:
             checks, detail = await run_checks(project)
         else:
@@ -488,6 +513,12 @@ async def execute(
         if env_dts.is_file():
             generated = '/// <reference path="./.next/types/routes.d.ts" />\n'
             env_dts.write_text(env_dts.read_text(encoding="utf-8").replace(generated, "", 1), encoding="utf-8")
+        if payload.get("figma") and checks and all(item["ok"] for item in checks) and not detail:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("tisan_review_store", Path(__file__).with_name("review_store.py"))
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            module.save(root, project, tenant, brief["slug"], number, payload["figma"])
         files = pack(project, folder / f"{number}.tar.gz")
     manifest = _manifest(
         brief,
