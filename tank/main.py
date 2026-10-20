@@ -2916,3 +2916,27 @@ app.include_router(__import__("admin").router)
 
 app.include_router(__import__("gold").router)
 app.include_router(__import__("training").router)
+
+
+@app.api_route("/v1/tisan/gold/{action}", methods=["GET", "POST"],
+               dependencies=[Depends(__import__("admin").require_admin)])
+async def tisan_gold_proxy(action: str, request: Request) -> Response:
+    """Founder-only fixed corridor for reviewing and approving saved Tisan pages."""
+    if (request.method, action) not in {("GET", "pages"), ("POST", "approve")}:
+        raise HTTPException(status_code=404, detail="not found")
+    key = os.environ.get("TANK_KEY_TISAN", "")
+    if _http is None or not key:
+        raise HTTPException(status_code=503, detail="Tisan room is unavailable")
+    raw = await request.body()
+    if len(raw) > 8192:
+        raise HTTPException(status_code=413, detail="request too large")
+    try:
+        response = await _http.request(
+            request.method, f"http://agent-tisan:8000/gold/{action}",
+            params=list(request.query_params.multi_items()), content=raw or None,
+            headers={"X-Tank-Key": key, "X-Tervory-Admin": request.headers.get("x-tervory-admin", ""),
+                     "Content-Type": "application/json"}, timeout=30,
+        )
+    except httpx.HTTPError:
+        raise HTTPException(status_code=503, detail="Tisan room is unavailable") from None
+    return Response(content=response.content, status_code=response.status_code, media_type="application/json")
