@@ -56,3 +56,22 @@ async def test_billed_receipt_is_recorded_once_and_estimate_is_not_spend(databas
             await mod.record_receipt(conn, 'fixture', Decimal('3'))
         with pytest.raises(ValueError):
             await mod.record_receipt(conn, 'unknown', Decimal('3'))
+
+@pytest.mark.asyncio
+async def test_actual_export_payload_cannot_contain_private_rows(database, monkeypatch):
+    import secrets
+    pool, _ = database
+    monkeypatch.setenv('HF_TOKEN', secrets.token_urlsafe(24))
+    monkeypatch.setenv('HF_ORG', 'fixture')
+    async with pool.acquire() as conn:
+        for n, (tenant, public, client) in enumerate([(PLATFORM_TENANT, True, False), (PLATFORM_TENANT, False, False), (uuid.uuid4(), True, False), (PLATFORM_TENANT, True, True)]):
+            await training.save_pair(conn, tenant=tenant, agent='base', task='base.fixture', value={'n': n}, output={'ok': True},
+                                     approved_by='fixture', source='gold', ref=str(n), public=public, client_matter=client)
+    captured = []
+    async def upload(client, org, agent, day, rows, region):
+        load('train').validate_rows(rows)  # Any forbidden row fails the export test.
+        captured.extend(rows)
+    monkeypatch.setattr(training, 'upload_dataset', upload)
+    result = await training.export_once()
+    assert result['exported'] == 1
+    assert [r['input'] for r in captured] == [{'n': 0}]
