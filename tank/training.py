@@ -178,9 +178,11 @@ ROOMS = ("base", "tiger", "market_lab", "rig", "zenas", "radix", "tisan")
 def valid_auto_candidate(row: Any, room: str, region: str) -> bool:
     """Fail closed on provenance and region before anything is persisted."""
     return (isinstance(row, dict) and row.get("public") is True
+            and row.get("client_matter", False) is False
+            and row.get("tenant_id") in (None, str(PLATFORM_TENANT))
             and region in ("us-east", "za") and row.get("region") == region
             and isinstance(row.get("skill_id"), str)
-            and row["skill_id"].startswith(room + ".")
+            and row["skill_id"].startswith({"market_lab": ("market.",), "radix": ("radix.", "scan.")}.get(room, (room + ".",)))
             and isinstance(row.get("label_source"), str)
             and 0 < len(row["label_source"]) <= 500
             and "input" in row and "expected" in row)
@@ -222,9 +224,9 @@ async def collect_room_gold(day: date) -> None:
                     source = row["label_source"]
                     used = await conn.fetchval(
                         """SELECT count(*) FROM tank.gold_examples
-                        WHERE tenant_id=$1 AND region=$2 AND agent=$3 AND label_source=$4
-                        AND auto_label AND intake_day=$5""",
-                        PLATFORM_TENANT, region, room, source, day,
+                        WHERE tenant_id=$1 AND region=$2 AND agent=$3
+                        AND auto_label AND intake_day=$4""",
+                        PLATFORM_TENANT, region, room, day,
                     )
                     if used >= limit:
                         continue
