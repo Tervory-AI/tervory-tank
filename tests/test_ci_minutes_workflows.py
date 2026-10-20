@@ -217,6 +217,8 @@ def test_room_changes_keep_safety_without_unrelated_room_tests(room):
                      "test_zenas_pool_schema_postgres.py", "test_radix_business_schema.py"):
         assert f"tests/{required}" in scope["tests"]
     assert any(room in path for path in scope["tests"])
+    if room == "radix":
+        assert "agents/radix/tests/test_live_scan.py" in scope["tests"]
     for other in ("rig", "tiger", "zenas", "tisan"):
         if other != room:
             assert f"tests/test_{other}_page.py" not in scope["tests"]
@@ -227,7 +229,7 @@ def test_room_changes_keep_safety_without_unrelated_room_tests(room):
                                   ".github/workflows/ci.yml", "tests/test_rig.py", "docker-compose.yml"])
 def test_shared_or_unknown_paths_run_everything(path):
     assert _scope_module().select(["agents/rig/app.py", path]) == {
-        "run": True, "full": True, "tisan": True, "tests": ["tests"]}
+        "run": True, "full": True, "tisan": True, "tests": ["."]}
 
 
 def test_multiple_rooms_select_union():

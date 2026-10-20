@@ -41,7 +41,7 @@ def select(paths: list[str]) -> dict:
         for room in rooms:
             tests.update(str(p.relative_to(ROOT)) for p in (ROOT / "agents" / room).rglob("test_*.py"))
     return {"run": bool(code), "full": full, "tisan": full or "tisan" in rooms,
-            "tests": ["tests"] if full else sorted(tests)}
+            "tests": ["."] if full else sorted(tests)}
 
 
 def changed_paths() -> list[str]:
