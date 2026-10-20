@@ -1,34 +1,21 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
 import { SquadLinks } from "../squad-links";
+import { caseRecord, type EvalResult } from "./record";
 import {
-  LIBRARY_OFF_MESSAGE,
-  PLUGIN_TABS,
-  NEED_FILE,
-  NEED_KEY,
-  NEED_LINK,
-  NEED_MCP,
-  VAULT_OFF_MESSAGE,
-  type ConnectionMeta,
-  type LibraryPanel,
-  type PluginPanel,
-  type PluginTab,
-  type SecretMeta,
-} from "./plugins";
-import { transferToAgent } from "./pipeline-actions";
-import { TANK_WAITS, TRANSFER_WAITS, type PipelineDestination } from "./pipelines";
-import {
-  addSkalaConnection,
-  addSkalaLink,
-  removeSkalaConnection,
-  removeSkalaFile,
-  removeSkalaLink,
-  removeSkalaSecret,
-  saveSkalaKey,
-  uploadSkalaFiles,
-} from "./plugin-actions";
+  agentChoices,
+  applyApproval,
+  applyEval,
+  confirmApprove,
+  costLabel,
+  scoreDate,
+  scoreLabel,
+  STATES,
+  versionAction,
+  visibleLibrary,
+  type LibrarySkill,
+} from "./library";
 
 const TOP_LINKS = [
   { href: "/ledger", label: "Dashboard" },
@@ -41,8 +28,10 @@ const BOTTOM_LINKS = [
   { href: "/", label: "Support" },
 ] as const;
 
-type Section = "library" | "plugins";
-type Turn = { who: "You" | "Skala"; text: string };
+const SKALA_LOGO = { src: "/brand/skala-on-dark.png", width: 185, height: 44 };
+const SKALA_MARK = { src: "/brand/skala-on-dark.png", width: 168, height: 40 };
+
+type Notice = { tone: "ok" | "err"; text: string };
 
 function SearchIcon() {
   return (
@@ -53,25 +42,47 @@ function SearchIcon() {
   );
 }
 
+async function readSkills(): Promise<LibrarySkill[] | null> {
+  const response = await fetch("/api/skala");
+  if (!response.ok) return null;
+  const data: unknown = await response.json().catch(() => null);
+  if (!Array.isArray(data)) return null;
+  return data as LibrarySkill[];
+}
+
 export function SkalaApp({
   accountName,
-  plugins,
-  library,
-  destinations,
+  skills: initialSkills,
+  loadError,
 }: {
   accountName: string | null;
-  plugins: PluginPanel;
-  library: LibraryPanel;
-  destinations: PipelineDestination[];
+  skills: LibrarySkill[];
+  loadError: string | null;
 }) {
-  const [section, setSection] = useState<Section>("library");
-  const [tab, setTab] = useState<PluginTab>("API keys");
+  const [skills, setSkills] = useState(initialSkills);
   const [menu, setMenu] = useState(false);
+  const [narrow, setNarrow] = useState(false);
   const [query, setQuery] = useState("");
-  const [askDraft, setAskDraft] = useState("");
-  const [thread, setThread] = useState<Turn[]>([]);
+  const [agentId, setAgentId] = useState("");
+  const [state, setState] = useState("");
+  const [notice, setNotice] = useState<Notice | null>(loadError ? { tone: "err", text: loadError } : null);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [pending, setPending] = useState<LibrarySkill | null>(null);
+  const [record, setRecord] = useState<{ key: string; result: EvalResult } | null>(null);
   const searchId = useId();
+  const agentFilterId = useId();
+  const stateFilterId = useId();
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
   const account = accountName?.trim() || "Your account";
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 800px)");
+    const apply = () => setNarrow(media.matches);
+    apply();
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
+  }, []);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -81,42 +92,113 @@ export function SkalaApp({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  function show(next: Section) {
-    setMenu(false);
-    setSection(next);
+  useEffect(() => {
+    if (menu && narrow) closeRef.current?.focus();
+  }, [menu, narrow]);
+
+  function openApprove(skill: LibrarySkill) {
+    setPending(skill);
   }
 
-  function sendAsk(event: FormEvent) {
-    event.preventDefault();
-    const text = askDraft.trim();
-    if (!text) return;
-    setAskDraft("");
-    setThread((current) => [
-      ...current,
-      { who: "You", text },
-      { who: "Skala", text: "Skala cannot answer from this page yet. Search the library, or transfer a skill from Pipelines. Nothing was run." },
-    ]);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog || !pending || dialog.open) return;
+    dialog.showModal();
+  }, [pending]);
+
+  function closeApprove() {
+    dialogRef.current?.close();
+    setPending(null);
   }
 
-  const needle = query.trim().toLowerCase();
-  const skills = library.enabled
-    ? library.skills.filter((skill) => {
-        if (!needle) return true;
-        return [skill.skill_id, skill.version, skill.agent, skill.description].join(" ").toLowerCase().includes(needle);
-      })
-    : [];
+  async function refreshAfter(next: LibrarySkill[]) {
+    setSkills(next);
+    const live = await readSkills();
+    if (live) setSkills(live);
+  }
+
+  async function run(skill: LibrarySkill, action: "evals" | "approve" | "retire") {
+    const key = `${skill.id}@${skill.version}:${action}`;
+    setBusyKey(key);
+    setNotice(null);
+    try {
+      const response = await fetch("/api/skala", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: skill.id, version: skill.version, action }),
+      });
+      const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+      if (response.status === 404) {
+        setNotice({ tone: "err", text: "That action was refused. Sign in as a founder and try again." });
+        return;
+      }
+      if (response.status === 403) {
+        setNotice({ tone: "err", text: "That action was refused. Reload the page and try again." });
+        return;
+      }
+      if (!response.ok || !payload) {
+        setNotice({ tone: "err", text: failureText(action, response.status) });
+        return;
+      }
+      if (action === "approve") {
+        await refreshAfter(applyApproval(skills, skill.id, skill.version));
+        setNotice({ tone: "ok", text: `${skill.id} ${skill.version} is approved. The previous approved version is retired.` });
+        closeApprove();
+        return;
+      }
+      if (action === "retire") {
+        await refreshAfter(skills.map((row) => (
+          row.id === skill.id && row.version === skill.version ? { ...row, state: "retired" } : row
+        )));
+        setNotice({ tone: "ok", text: `${skill.id} ${skill.version} is retired.` });
+        return;
+      }
+      const result = payload as Partial<EvalResult>;
+      if (typeof result.score !== "number" || typeof result.state !== "string" || !result.details) {
+        setNotice({ tone: "err", text: "Evals could not be run. Reload the page and try again." });
+        return;
+      }
+      const evalResult = result as EvalResult;
+      const at = new Date().toISOString();
+      await refreshAfter(applyEval(skills, skill.id, skill.version, evalResult.score, evalResult.state, at));
+      setRecord({ key: `${skill.id}@${skill.version}`, result: evalResult });
+      const passed = evalResult.gate === "passed";
+      setNotice({
+        tone: passed ? "ok" : "err",
+        text: passed
+          ? `${skill.id} ${skill.version} passed and is now ${evalResult.state}.`
+          : `${skill.id} ${skill.version} did not pass. It stays ${evalResult.state}. Review the cases below.`,
+      });
+    } catch {
+      setNotice({ tone: "err", text: "The library could not be reached. Try again in a moment." });
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  const groups = visibleLibrary(skills, query, agentId, state);
+  const filtered = Boolean(query.trim() || agentId || state);
+  const panelHidden = narrow && !menu;
 
   return (
     <div className={menu ? "skala menu-open" : "skala"}>
       <header className="sk-top">
-        <img src="/brand/skala-on-dark.png" alt="Skala" width={140} height={33} />
-        <button type="button" className="sk-menu" onClick={() => setMenu(true)}>Menu</button>
+        <img src={SKALA_MARK.src} alt="Skala" width={SKALA_MARK.width} height={SKALA_MARK.height} />
+        <button
+          type="button"
+          className="sk-menu"
+          aria-expanded={menu}
+          aria-controls="sk-panel"
+          onClick={() => setMenu((open) => !open)}
+        >
+          {menu ? "Close" : "Menu"}
+        </button>
       </header>
       <button className="sk-dim" type="button" hidden={!menu} aria-label="Close menu" onClick={() => setMenu(false)} />
-      <aside className="sk-panel" aria-label="Skala">
-        <img className="sk-logo" src="/brand/skala-on-dark.png" alt="Skala" width={186} height={44} />
-        <button className="sk-close" type="button" onClick={() => setMenu(false)}>Close</button>
-        <nav className="sk-nav" aria-label="Account">
+      <aside id="sk-panel" className="sk-panel" aria-label="Skala" aria-hidden={panelHidden || undefined} inert={panelHidden ? true : undefined}>
+        <img className="sk-logo" src={SKALA_LOGO.src} alt="Skala" width={SKALA_LOGO.width} height={SKALA_LOGO.height} />
+        <button ref={closeRef} className="sk-close" type="button" onClick={() => setMenu(false)}>Close</button>
+        <nav className="sk-nav" aria-label="Account" onClick={() => setMenu(false)}>
           <p className="sk-account">{account}</p>
           {TOP_LINKS.map((link) => (
             <a key={link.label} href={link.href}>{link.label}</a>
@@ -124,15 +206,14 @@ export function SkalaApp({
         </nav>
         <SquadLinks className="sk-nav squad-nav" />
         <div className="sk-rule" />
-        <nav className="sk-nav" aria-label="Library and Plugins">
-          <button type="button" className={section === "library" ? "on" : ""} onClick={() => show("library")}>Library</button>
-          <button type="button" className={section === "plugins" ? "on" : ""} onClick={() => show("plugins")}>Plugins</button>
+        <nav className="sk-nav" aria-label="Library">
+          <button type="button" className="on" aria-current="page" onClick={() => setMenu(false)}>Library</button>
         </nav>
         <div className="sk-spacer" />
         <div className="sk-rule" />
         <div className="sk-foot">
           <img className="sk-tervory" src="/brand/tervory-logo-reversed.png" alt="Tervory" width={186} height={34} />
-          <nav className="sk-nav" aria-label="Workspace">
+          <nav className="sk-nav" aria-label="Workspace" onClick={() => setMenu(false)}>
             {BOTTOM_LINKS.map((link) => (
               <a key={link.label} href={link.href}>{link.label}</a>
             ))}
@@ -142,354 +223,140 @@ export function SkalaApp({
 
       <div className="sk-main" data-scroll-root>
         <div className="sk-body">
-          {section === "plugins" ? (
-            <PluginsPanel plugins={plugins} tab={tab} onTab={setTab} />
+          <header className="sk-header">
+            <div>
+              <h1>Skala</h1>
+              <p>Every skill, with its versions and scores.</p>
+            </div>
+            <a className="sk-examples" href="/skala/gold">Check examples</a>
+          </header>
+
+          <form className="sk-search" role="search" onSubmit={(event: FormEvent) => event.preventDefault()}>
+            <SearchIcon />
+            <label className="sk-sr" htmlFor={searchId}>Search skills</label>
+            <input
+              id={searchId}
+              type="search"
+              value={query}
+              placeholder="Search skills"
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </form>
+
+          <div className="sk-filters">
+            <label htmlFor={agentFilterId}>
+              Agent
+              <select id={agentFilterId} value={agentId} onChange={(event) => setAgentId(event.target.value)}>
+                <option value="">All agents</option>
+                {agentChoices(skills).map((choice) => (
+                  <option key={choice.id} value={choice.id}>{choice.label}</option>
+                ))}
+              </select>
+            </label>
+            <label htmlFor={stateFilterId}>
+              State
+              <select id={stateFilterId} value={state} onChange={(event) => setState(event.target.value)}>
+                <option value="">All states</option>
+                {STATES.map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {notice ? <p className={notice.tone === "err" ? "sk-err" : "sk-note"} role={notice.tone === "err" ? "alert" : "status"}>{notice.text}</p> : null}
+
+          {loadError ? null : groups.length === 0 ? (
+            <p className="sk-empty">{query.trim() ? "Nothing matches that search." : filtered ? "Nothing matches those filters." : "No skills yet."}</p>
           ) : (
-            <>
-              <header className="sk-header">
-                <div>
-                  <h1>Skala</h1>
-                  <p>Search the skills library, or ask Skala a question.</p>
-                </div>
-                <form className="sk-search" role="search" onSubmit={(event) => event.preventDefault()}>
-                  <SearchIcon />
-                  <label className="sk-sr" htmlFor={searchId}>Search the library</label>
-                  <input
-                    id={searchId}
-                    type="search"
-                    value={query}
-                    placeholder="Search the library"
-                    onChange={(event) => setQuery(event.target.value)}
-                  />
-                </form>
-              </header>
-
-              <section className="sk-ask" aria-label="Ask Skala">
-                <h2>Ask Skala</h2>
-                {thread.length > 0 && (
-                  <div className="sk-thread">
-                    {thread.map((turn, index) => (
-                      <div key={`${turn.who}-${index}`} className="sk-turn">
-                        <p className="sk-who">{turn.who}</p>
-                        <p>{turn.text}</p>
-                        {turn.who === "Skala" ? (
-                          <div className="sk-sources">
-                            <p>Sources</p>
-                            <p>No sources for this answer.</p>
-                          </div>
-                        ) : null}
+            <div className="sk-library">
+              {groups.map((group) => (
+                <section key={group.id} className="sk-group" aria-label={group.label}>
+                  <div className="sk-group-head">
+                    {group.logo ? (
+                      <div className="sk-group-mark">
+                        <img src={group.logo} alt="" width={group.logoWidth} height={group.logoHeight} />
                       </div>
-                    ))}
+                    ) : null}
+                    <h2>{group.label}</h2>
                   </div>
-                )}
-                <form onSubmit={sendAsk}>
-                  <label className="sk-sr" htmlFor="ask-skala">Ask Skala</label>
-                  <input
-                    id="ask-skala"
-                    value={askDraft}
-                    placeholder="Ask Skala"
-                    onChange={(event) => setAskDraft(event.target.value)}
-                  />
-                  <button type="submit" className="primary">Send</button>
-                </form>
-              </section>
-
-              {library.enabled ? (
-                skills.length > 0 ? (
                   <ul className="sk-skills">
-                    {skills.map((skill) => (
-                      <li key={`${skill.skill_id}@${skill.version}`}>
-                        <strong>{skill.skill_id}</strong>
-                        <span>{skill.version}</span>
-                        <span>{skill.description}</span>
+                    {group.skills.map((skill) => (
+                      <li key={skill.id} className="sk-skill">
+                        <h3>{skill.id}</h3>
+                        <p>{skill.description}</p>
+                        <ul className="sk-versions">
+                          {skill.versions.map((version) => {
+                            const action = versionAction(version);
+                            const key = `${version.id}@${version.version}`;
+                            const shown = record?.key === key ? caseRecord(record.result) : null;
+                            return (
+                              <li key={key} className="sk-version">
+                                <span className="sk-meta">{version.version}</span>
+                                <span className={version.state === "approved" ? "sk-state approved" : "sk-state"}>{version.state}</span>
+                                <span className="sk-meta">{scoreLabel(version.last_eval_score)}</span>
+                                {scoreDate(version.last_eval_at) ? <span className="sk-meta">{scoreDate(version.last_eval_at)}</span> : null}
+                                <span className="sk-meta">{costLabel(version)}</span>
+                                {!version.present && version.state !== "approved" ? <span className="sk-gone">This version is no longer in the folder.</span> : null}
+                                {action === "evals" ? (
+                                  <button type="button" disabled={busyKey !== null} onClick={() => run(version, "evals")}>
+                                    {busyKey === `${key}:evals` ? "Running evals…" : "Run evals"}
+                                  </button>
+                                ) : null}
+                                {action === "approve" ? (
+                                  <button type="button" className="primary" disabled={busyKey !== null} onClick={() => openApprove(version)}>
+                                    Approve
+                                  </button>
+                                ) : null}
+                                {action === "retire" ? (
+                                  <button type="button" disabled={busyKey !== null} onClick={() => run(version, "retire")}>
+                                    {busyKey === `${key}:retire` ? "Retiring…" : "Retire"}
+                                  </button>
+                                ) : null}
+                                {shown?.ok ? (
+                                  <div className="sk-cases">
+                                    <p>Cases</p>
+                                    {shown.cases.map((line) => (
+                                      <article key={line.key}>
+                                        <p>{line.name} · {line.passed ? "passed" : "failed"}</p>
+                                        <p>Goal</p>
+                                        <pre>{line.goal}</pre>
+                                        <p>Result</p>
+                                        <pre>{line.result}</pre>
+                                      </article>
+                                    ))}
+                                  </div>
+                                ) : shown ? <p className="sk-err">{shown.message} Run evals again.</p> : null}
+                              </li>
+                            );
+                          })}
+                        </ul>
                       </li>
                     ))}
                   </ul>
-                ) : (
-                  <p className="sk-off">{needle ? "Nothing in the library matches that." : "The library is empty."}</p>
-                )
-              ) : (
-                <p className="sk-off">{library.message || LIBRARY_OFF_MESSAGE}</p>
-              )}
-
-              <Pipelines destinations={destinations} skills={library.enabled ? library.skills : []} />
-            </>
+                </section>
+              ))}
+            </div>
           )}
         </div>
       </div>
+
+      <dialog ref={dialogRef} className="sk-dialog" aria-labelledby="approve-title" onClose={() => setPending(null)}>
+        <h2 id="approve-title">{pending ? confirmApprove(pending.id, pending.version) : "Approve this version?"}</h2>
+        <div className="sk-dialog-actions">
+          <button type="button" className="primary" disabled={!pending || busyKey !== null} onClick={() => pending && run(pending, "approve")}>
+            {pending && busyKey === `${pending.id}@${pending.version}:approve` ? "Approving…" : "Approve"}
+          </button>
+          <button type="button" onClick={closeApprove}>Cancel</button>
+        </div>
+      </dialog>
     </div>
   );
 }
 
-function standing(agent: PipelineDestination): string {
-  if (agent.squad === "tank") return TANK_WAITS;
-  if (agent.waits || !agent.enabled) return TRANSFER_WAITS;
-  return "This vault is on. A transfer copies into it and leaves the library as it is.";
-}
-
-function Pipelines({
-  destinations,
-  skills,
-}: {
-  destinations: PipelineDestination[];
-  skills: { skill_id: string; version: string }[];
-}) {
-  const [skillKey, setSkillKey] = useState(skills[0] ? `${skills[0].skill_id}@${skills[0].version}` : "");
-  const [note, setNote] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState<string | null>(null);
-
-  async function send(squad: string) {
-    const [skillId, version] = skillKey.split("@");
-    setBusy(squad);
-    try {
-      const result = await transferToAgent(squad, skillId ?? "", version ?? "");
-      setNote((current) => ({ ...current, [squad]: result.message }));
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  return (
-    <section className="sk-pipes" aria-label="Pipelines">
-      <div>
-        <h2>Pipelines</h2>
-        <p>A skill in the library can move into an agent&apos;s own vault. The library is left as it is.</p>
-      </div>
-      {skills.length > 0 ? (
-        <label className="sk-pick">
-          Skill
-          <select value={skillKey} onChange={(event) => setSkillKey(event.target.value)}>
-            {skills.map((skill) => (
-              <option key={`${skill.skill_id}@${skill.version}`} value={`${skill.skill_id}@${skill.version}`}>
-                {skill.skill_id} {skill.version}
-              </option>
-            ))}
-          </select>
-        </label>
-      ) : null}
-      <div className="sk-grid">
-        {destinations.map((agent) => (
-          <article key={agent.squad} className="sk-card">
-            <div className="sk-mark">
-              <img src={agent.logo} alt="" />
-            </div>
-            <div className="sk-card-body">
-              <h3>{agent.label}</h3>
-              <p className="sk-pipe" aria-label={`Pipeline to ${agent.label}`}>
-                <span>Library</span>
-                <i />
-                <span>{agent.label}</span>
-              </p>
-              <p className="sk-off">{note[agent.squad] || standing(agent)}</p>
-              <button type="button" className="sk-transfer" disabled={busy !== null} onClick={() => send(agent.squad)}>
-                {busy === agent.squad ? "Sending…" : "Transfer"}
-              </button>
-            </div>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function PluginsPanel({
-  plugins,
-  tab,
-  onTab,
-}: {
-  plugins: PluginPanel;
-  tab: PluginTab;
-  onTab: (tab: PluginTab) => void;
-}) {
-  const router = useRouter();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [note, setNote] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function finish(result: { ok: boolean; message: string }) {
-    setNote(result.message);
-    if (result.ok) router.refresh();
-  }
-
-  async function onSaveKey(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!plugins.enabled || busy) return;
-    const form = event.currentTarget;
-    const name = form.querySelector<HTMLInputElement>("input[name=key-name]")?.value ?? "";
-    const purpose = form.querySelector<HTMLInputElement>("input[name=purpose]")?.value ?? "";
-    const value = form.querySelector<HTMLInputElement>("input[type=password]")?.value ?? "";
-    form.reset();
-    if (!name.trim() || !value.trim()) {
-      setNote(NEED_KEY);
-      return;
-    }
-    setBusy(true);
-    try {
-      await finish(await saveSkalaKey(name, value, purpose));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function onFiles(list: FileList | null) {
-    if (!plugins.enabled || busy) return;
-    const files = list ? Array.from(list) : [];
-    if (fileRef.current) fileRef.current.value = "";
-    if (!files.length) {
-      setNote(NEED_FILE);
-      return;
-    }
-    const body = new FormData();
-    for (const file of files) body.append("file", file);
-    setBusy(true);
-    try {
-      await finish(await uploadSkalaFiles(body));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function onAddLink(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!plugins.enabled || busy) return;
-    const form = event.currentTarget;
-    const url = form.querySelector<HTMLInputElement>("input[name=link]")?.value.trim() ?? "";
-    const label = form.querySelector<HTMLInputElement>("input[name=label]")?.value.trim() ?? "";
-    form.reset();
-    if (!url) {
-      setNote(NEED_LINK);
-      return;
-    }
-    setBusy(true);
-    try {
-      await finish(await addSkalaLink(url, label, "weekly"));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function onAddConnection(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!plugins.enabled || busy) return;
-    const form = event.currentTarget;
-    const name = form.querySelector<HTMLInputElement>("input[name=connection-name]")?.value.trim() ?? "";
-    const url = form.querySelector<HTMLInputElement>("input[name=server]")?.value.trim() ?? "";
-    const token = form.querySelector<HTMLInputElement>("input[type=password]")?.value ?? "";
-    form.reset();
-    if (!name || !url) {
-      setNote(NEED_MCP);
-      return;
-    }
-    setBusy(true);
-    try {
-      await finish(await addSkalaConnection(name, url, token.trim() ? "token" : "provider", token));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <section className="sk-plugins" aria-label="Plugins">
-      <header className="sk-header">
-        <div>
-          <h1>Plugins</h1>
-          <p>API keys, files, source links, and connections.</p>
-        </div>
-      </header>
-      <div className="sk-tabs" role="tablist">
-        {PLUGIN_TABS.map((name) => (
-          <button key={name} type="button" role="tab" aria-selected={name === tab} className={name === tab ? "on" : ""} onClick={() => { setNote(""); onTab(name); }}>
-            {name}
-          </button>
-        ))}
-      </div>
-      {note ? <p className="sk-note">{note}</p> : null}
-      {!plugins.enabled ? (
-        <p className="sk-off">{plugins.message || VAULT_OFF_MESSAGE}</p>
-      ) : tab === "API keys" ? (
-        <div>
-          <ul className="sk-plist">
-            {plugins.secrets.map((row) => (
-              <SecretRow key={row.name} row={row} busy={busy} onRemove={() => { setBusy(true); removeSkalaSecret(row.name).then(finish).finally(() => setBusy(false)); }} />
-            ))}
-          </ul>
-          <form className="sk-form" onSubmit={onSaveKey}>
-            <input name="key-name" aria-label="Key name" placeholder="Key name" />
-            <input name="purpose" aria-label="What this key is for" placeholder="What this key is for" />
-            <input type="password" aria-label="Key" placeholder="Key" autoComplete="off" />
-            <button type="submit" className="primary" disabled={busy}>Save key</button>
-          </form>
-        </div>
-      ) : tab === "Files" ? (
-        <div>
-          <ul className="sk-plist">
-            {plugins.files.map((file) => (
-              <li key={file.id}>
-                <strong>{file.name}</strong>
-                <span>{file.status}</span>
-                <button type="button" className="text" disabled={busy} onClick={() => { setBusy(true); removeSkalaFile(file.id).then(finish).finally(() => setBusy(false)); }}>Remove</button>
-              </li>
-            ))}
-          </ul>
-          <form className="sk-form" onSubmit={(event) => { event.preventDefault(); onFiles(fileRef.current?.files ?? null); }}>
-            <input ref={fileRef} type="file" name="file" accept=".csv,.xlsx,.pdf,text/csv,application/pdf" multiple aria-label="Choose files" />
-            <button type="submit" className="primary" disabled={busy}>Choose files</button>
-          </form>
-        </div>
-      ) : tab === "Source links" ? (
-        <div>
-          <ul className="sk-plist">
-            {plugins.links.map((link) => (
-              <li key={link.id}>
-                <strong>{link.label}</strong>
-                <span>{link.url}</span>
-                <button type="button" className="text" disabled={busy} onClick={() => { setBusy(true); removeSkalaLink(link.id).then(finish).finally(() => setBusy(false)); }}>Remove</button>
-              </li>
-            ))}
-          </ul>
-          <form className="sk-form" onSubmit={onAddLink}>
-            <input name="label" aria-label="Link label" placeholder="Label" />
-            <input name="link" aria-label="Link" placeholder="https://" />
-            <button type="submit" className="primary" disabled={busy}>Add link</button>
-          </form>
-        </div>
-      ) : (
-        <div>
-          <ul className="sk-plist">
-            {plugins.connections.map((item) => (
-              <ConnectionRow key={item.id} item={item} busy={busy} onRemove={() => { setBusy(true); removeSkalaConnection(item.id).then(finish).finally(() => setBusy(false)); }} />
-            ))}
-          </ul>
-          <form className="sk-form" onSubmit={onAddConnection}>
-            <input name="connection-name" aria-label="Connection name" placeholder="Name" />
-            <input name="server" aria-label="Server URL" placeholder="https://" />
-            <input type="password" aria-label="Token" placeholder="Token, if this connection uses one" autoComplete="off" />
-            <button type="submit" className="primary" disabled={busy}>Add connection</button>
-          </form>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function SecretRow({ row, busy, onRemove }: { row: SecretMeta; busy: boolean; onRemove: () => void }) {
-  return (
-    <li>
-      <strong>{row.name}</strong>
-      <span>{row.purpose}</span>
-      <span className="sk-mask">{row.mask || "••••••••"}</span>
-      <button type="button" className="text" disabled={busy} onClick={onRemove}>Remove</button>
-    </li>
-  );
-}
-
-function ConnectionRow({ item, busy, onRemove }: { item: ConnectionMeta; busy: boolean; onRemove: () => void }) {
-  return (
-    <li>
-      <strong>{item.name}</strong>
-      <span>{item.serverUrl}</span>
-      <span>{item.hasToken ? "••••••••" : item.status}</span>
-      <button type="button" className="text" disabled={busy} onClick={onRemove}>Remove</button>
-    </li>
-  );
+function failureText(action: "evals" | "approve" | "retire", status: number): string {
+  if (action === "approve" && status === 409) return "That version is not in staging. Run evals until it is, then approve it.";
+  if (action === "evals") return "Evals could not be run. Reload the page and try again.";
+  if (action === "approve") return "Approve could not be saved. Reload the page and try again.";
+  return "Retire could not be saved. Reload the page and try again.";
 }
