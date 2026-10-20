@@ -4,7 +4,7 @@
 
 **Depends on Z12** (court weight, citation trail, made-up-case gate). Parts 1, 3 and 6 can start now; the judge's authority checks use Z12 functions once merged (stub them behind the same interface until then).
 
-**Files you may change:** new `agents/zenas/core/moot/` (problem, session, judge, feedback), `agents/zenas/app.py` (moot routes only), `agents/zenas/schema.sql` (additive), `tank/` policy seed rows for the new task types only, new `workspace/app/zenas/moot/` (pages and components), `workspace/lib/tank.ts` (moot calls only), tests. Do not change other Zenas behaviour.
+**Files you may change:** new `agents/zenas/core/moot/` (problem, session, judge, feedback), `agents/zenas/app.py` (moot routes only), `agents/zenas/schema.sql` (additive), new `tank/moot/` (the LiveKit Agents judge worker and its Dockerfile), `tank/` policy seed rows for the new task types only, `docker-compose.yml` (add the LiveKit server, Redis use and egress services only), `.env.example` (variable NAMES only), new `workspace/app/zenas/moot/` (pages and components), `workspace/lib/tank.ts` (moot calls only), tests. Do not change other Zenas behaviour.
 
 ## 1. The moot problem (from a real case)
 - The founder picks a decided **civil** SA appeal from the library (ConCourt, SCA, full bench or High Court appeal). Criminal cases are not offered.
@@ -31,6 +31,19 @@
 - **How fast:** a question starts playing within 3 seconds of the pause. Text appears on screen as it speaks.
 - **At the end:** an ex tempore judgment out loud and in writing. It gives the order and the reasons, and cites only verified authorities with paragraphs. Then a "What the court actually held" reveal from the real judgment.
 - **Model calls** go through Tank with new task types `moot.stt`, `moot.judge` and `moot.tts`. The provider choice sits in the policy table. Everything goes on the ledger under the session's tenant.
+
+## 2b. The stack (chosen 20 Oct 2026, 12:50 PT, from the research in the project doc `zenas/MOOT-1-oss-research.md`)
+Use these. Do not add other paid services or providers; that is the founder's decision.
+- **Media and rooms: [LiveKit server](https://docs.livekit.io/transport/self-hosting/) (Apache-2.0), self-hosted in Docker** with Redis and one [egress](https://docs.livekit.io/transport/self-hosting/egress.md) worker. One room per session. Each counsel microphone is a participant. **Track egress** records one audio file per microphone. The clean-feed URL is recorded by web egress. Remote and practice sessions use the same room.
+- **The judge is a [LiveKit Agents](https://pypi.org/project/livekit-agents/) worker (Python, Apache-2.0)** that joins the room as a participant. It runs as a Tank-owned container (`tank/moot/`), because it is the only service that streams audio to a model. It reads STT/TTS/LLM keys from Coolify's environment panel, never from code, and writes every call to the ledger under the session's tenant with the task types `moot.stt`, `moot.judge`, `moot.tts`. The provider for each task type sits in the policy table.
+- **Pause and interruption:** [Silero VAD](https://pypi.org/project/silero-vad/) (MIT) with the silence length set to 1.5 s (adjustable), plus an end-of-turn model so counsel is not cut mid-sentence (LiveKit's turn detector, or [Smart Turn v3](https://github.com/pipecat-ai/smart-turn), BSD-2). The citation interrupt is our own code: match partial transcripts against the library and call the judge's speak-now path with interruptions off. Counsel cannot talk over the judge.
+- **Streaming speech-to-text:** a hosted provider through the policy table for the first term (Deepgram Nova-3 or AssemblyAI; both accept a custom vocabulary, which is loaded with the bundle's case names and Latin terms). Self-host later behind the same interface with [WhisperLiveKit](https://pypi.org/project/whisperlivekit/) running Whisper large-v3 (the best open model on South African English). One stream per microphone, so no live diarisation.
+- **Voice:** hosted through the policy table for the first term. Self-host fallback is [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) (Apache-2.0, CPU, British presets `bm_george` and `bm_fable`), which speaks the OpenAI audio API so it drops into Tank. Never a voice-cloning model, never F5-TTS, Fish Speech or XTTS (non-commercial weights). The founder picks the final voice from a shortlist the worker can switch between.
+- **Screens and captions:** our own Next.js routes fed by one WebSocket from FastAPI. Captions come from STT partials. Each screen works as an OBS Browser Source at 1920x1080.
+- **Recording and alignment:** ffmpeg plus [WhisperX](https://pypi.org/project/whisperx/) (BSD-2) for word time codes on the uploaded studio video; a sync tone at the start of every session; both transcripts matched to find the offset.
+- **Feedback PDF:** [WeasyPrint](https://pypi.org/project/weasyprint) from the same HTML as the feedback page.
+- **The judge prompt must be adversarial.** Research on AI moot judges (Princeton, 2026) found they agree too easily and ask too few hypotheticals. The judge is instructed to press, to disagree, and to put hypotheticals, and the "hardness" setting in section 2 scales that. Tests include a weak submission that the judge must not accept.
+- **Licences:** anything GPL or AGPL runs in its own container over HTTP and is never imported. Models under attribution licences get a credits line on the admin page.
 
 ## 3. The session page (`/zenas/moot`)
 - **Roles:** presiding judge (AI), counsel for the appellant, counsel for the respondent, and an operator (the founder).
@@ -65,7 +78,7 @@ Founder: "not a cartoon... make it professional. That also wows the USA."
 - **A session is either SA or US.** Procedure, forms of address and voice follow that country.
   - SA: "My Lady/My Lord", "M'Lord", heads of argument, SA appeal practice.
   - US: "Your Honor", "May it please the Court", a federal appellate argument with a fixed time per side, and questions from the bench throughout.
-- **US sessions use the US library** (CourtListener appellate opinions, statutes) and run on the Boston box. SA sessions run on the ZA box.
+- **US sessions use the US library** (CourtListener appellate opinions, statutes) and run on the Boston box. SA sessions run on the ZA box. Each box runs its own LiveKit server.
 - **US binding rules come from a US rules file**, in the same shape as Z12's SA file, seeded as draft:
   - the Supreme Court binds everything;
   - a circuit binds its district courts and later panels of that circuit;
