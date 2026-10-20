@@ -7,6 +7,8 @@ import importlib.util
 import json
 import logging
 import os
+import re
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -15,11 +17,12 @@ from chassis.app import create_app
 from chassis.db import ensure_schedules, schema_for
 from chassis.jobs import JobContext
 from chassis.logs import log_line
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 
 from rigbox.api import mount
 from rigbox.page_route import mount_page
-from rigbox.service import Service, WebhookHandoff
+from rigbox.service import RigError, Service, WebhookHandoff
 from rigbox.store import PgStore
 
 AGENT = os.environ.get("AGENT_NAME", "rig")
@@ -154,6 +157,173 @@ def _gold_candidates():
     spec.loader.exec_module(module)
     _gold_candidates.fn = module.candidates
     return module.candidates
+
+
+# Room-key reads for Tank. Shopper routes stay on X-Rig-Key and are unchanged.
+# A request without the room key falls through to those routes. These handlers
+# do not write quotes, fits, or keys, and they never put a key in the response.
+_ROOM_ID = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+_ROOM_DROP = frozenset({
+    "key", "keys", "key_hash", "secret", "password", "token", "webhook", "email", "origins",
+})
+
+
+def _room_key_ok(request: Request) -> bool:
+    key = os.environ.get("TANK_KEY", "")
+    presented = request.headers.get("x-tank-key") or ""
+    try:
+        return bool(key) and bool(presented) and hmac.compare_digest(key.encode(), presented.encode())
+    except (AttributeError, TypeError, UnicodeError):
+        return False
+
+
+def _room_error(status: int, code: str, message: str) -> JSONResponse:
+    return JSONResponse(status_code=status, content={"error": {"code": code, "message": message}})
+
+
+def _room_tenant(values: list[str]) -> tuple[str | None, JSONResponse | None]:
+    named = [value.strip() for value in values if value.strip()]
+    if not named:
+        return None, _room_error(400, "tenant", "tenant_id is required")
+    parsed: list[str] = []
+    for value in named:
+        try:
+            parsed.append(str(uuid.UUID(value)))
+        except ValueError:
+            return None, _room_error(400, "tenant", "tenant_id is required")
+    if any(item != parsed[0] for item in parsed):
+        return None, _room_error(403, "tenant", "tenant mismatch")
+    return parsed[0], None
+
+
+def _query_tenants(request: Request) -> list[str]:
+    return [value for key, value in request.query_params.multi_items() if key == "tenant_id"]
+
+
+def _public_body(value: Any) -> Any:
+    """Drop key material. Counts and shopper fields stay."""
+    if isinstance(value, list):
+        return [_public_body(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+    kept: dict[str, Any] = {}
+    for key, item in value.items():
+        name = str(key).lower()
+        if name in _ROOM_DROP or "secret" in name or name.endswith("_key"):
+            continue
+        kept[str(key)] = _public_body(item)
+    return kept
+
+
+def _rig_service(request: Request) -> Any:
+    service = getattr(request.app.state, "rig", None)
+    if service is None:
+        raise RigError("unavailable", "Rig is not ready.", 503)
+    return service
+
+
+async def _json_object(request: Request) -> tuple[dict[str, Any] | None, JSONResponse | None]:
+    raw = await request.body()
+    if len(raw) > 8192:
+        return None, _room_error(413, "invalid", "The request is not valid.")
+    if not raw:
+        return {}, None
+    try:
+        body = json.loads(raw)
+    except json.JSONDecodeError:
+        return None, _room_error(422, "invalid", "The request is not valid.")
+    if not isinstance(body, dict):
+        return None, _room_error(422, "invalid", "The request is not valid.")
+    return body, None
+
+
+async def _catalogue_counts(request: Request) -> JSONResponse:
+    """Product and fit counts for the caller's catalogue. No keys."""
+    try:
+        service = _rig_service(request)
+    except RigError as exc:
+        return _room_error(exc.status, exc.code, exc.message)
+    tenant_id, error = _room_tenant(_query_tenants(request))
+    if error is not None or tenant_id is None:
+        return error or _room_error(400, "tenant", "tenant_id is required")
+    products = await service.store.products(tenant_id)
+    fits = await service.store.fits(tenant_id)
+    return JSONResponse({"products": len(products), "fits": len(fits)})
+
+
+async def _room_read(request: Request, kind: str) -> JSONResponse:
+    try:
+        service = _rig_service(request)
+    except RigError as exc:
+        return _room_error(exc.status, exc.code, exc.message)
+    body: dict[str, Any] = {}
+    if request.method == "POST":
+        body, error = await _json_object(request)
+        if error is not None or body is None:
+            return error or _room_error(422, "invalid", "The request is not valid.")
+    named = _query_tenants(request)
+    if body.get("tenant_id") not in (None, ""):
+        named.append(str(body.get("tenant_id")))
+    tenant_id, error = _room_tenant(named)
+    if error is not None or tenant_id is None:
+        return error or _room_error(400, "tenant", "tenant_id is required")
+    try:
+        if kind == "search":
+            raw_limit = request.query_params.get("limit")
+            limit = int(raw_limit) if raw_limit and raw_limit.isdigit() else None
+            result = await service.search(tenant_id, request.query_params.get("q") or "", limit)
+        elif kind == "product":
+            result = await service.product(tenant_id, request.url.path.rsplit("/", 1)[-1])
+        elif kind == "graph":
+            result = await service.graph(tenant_id, request.url.path.rsplit("/", 1)[-1])
+        elif kind == "compare":
+            ids = body.get("product_ids")
+            if not isinstance(ids, list):
+                return _room_error(422, "invalid", "The request is not valid.")
+            result = await service.compare(tenant_id, [str(item) for item in ids])
+        elif kind == "ask":
+            product_id = str(body.get("product_id") or "")
+            question = body.get("question") if isinstance(body.get("question"), str) else ""
+            setup = body.get("setup") if isinstance(body.get("setup"), dict) else None
+            # service.ask calls Tank /v1/route with task type rig.ask when a model is needed.
+            result = await service.ask(tenant_id, product_id, question, setup)
+        else:
+            return _room_error(404, "not_found", "No such route.")
+    except RigError as exc:
+        return _room_error(exc.status, exc.code, exc.message)
+    if not isinstance(result, dict):
+        return _room_error(502, "unavailable", "Rig did not answer.")
+    return JSONResponse(_public_body(result))
+
+
+def _room_read_kind(method: str, path: str) -> str | None:
+    if method == "GET" and path == "/catalogues":
+        return "catalogues"
+    if method == "GET" and path == "/v1/rig/search":
+        return "search"
+    if method == "GET":
+        prefix, _, item = path.rpartition("/")
+        if prefix in {"/v1/rig/products", "/v1/rig/graph"} and _ROOM_ID.fullmatch(item):
+            return "product" if prefix.endswith("products") else "graph"
+    if method == "POST" and path == "/v1/rig/compare":
+        return "compare"
+    if method == "POST" and path == "/v1/rig/ask":
+        return "ask"
+    return None
+
+
+@app.middleware("http")
+async def rig_room_reads(request: Request, call_next):
+    """Serve Tank's read with the room key. Shopper calls fall through."""
+    kind = _room_read_kind(request.method.upper(), request.url.path)
+    if kind is None or not _room_key_ok(request):
+        if kind == "catalogues":
+            return JSONResponse(status_code=401, content={"detail": "room key required"})
+        return await call_next(request)
+    if kind == "catalogues":
+        return await _catalogue_counts(request)
+    return await _room_read(request, kind)
+
 
 _inner = app.router.lifespan_context
 

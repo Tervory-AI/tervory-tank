@@ -21,6 +21,12 @@ Endpoints
   GET  /v1/base/records?tenant_id=       proxy: enriched records, newest first
   GET  /v1/policy                        the routing policy rows
   PUT  /v1/policy/{task_type}            change a policy row (no deploy needed)
+  GET  /v1/rig/search                    proxy: one tenant's catalogue search
+  GET  /v1/rig/graph/{id}                proxy: fit graph for one product
+  POST /v1/rig/compare                   proxy: prices for a selection already made
+  POST /v1/rig/ask                       proxy: a catalogue question (model call is /v1/route)
+  GET  /v1/rig/products/{id}             proxy: one product
+  GET  /v1/rig/catalogues                proxy: product and fit counts for one catalogue
 
 Build Pack v2, "Tank — the centrepiece". Batch queue, cache, evals and graduation
 are later build-order steps and are not in this file yet.
@@ -2972,3 +2978,210 @@ async def tisan_gold_proxy(action: str, request: Request) -> Response:
     except httpx.HTTPError:
         raise HTTPException(status_code=503, detail="Tisan room is unavailable") from None
     return Response(content=response.content, status_code=response.status_code, media_type="application/json")
+
+
+# ---------- Rig: the room owns the catalogues; Tank only proxies reads ----------
+# The Workspace is not on Rig's corridor. These routes check the caller's tenant,
+# forward to the Rig room with TANK_KEY_RIG, and return the room's JSON.
+# Ask is the paid call. The room sends it back through POST /v1/route (task type
+# rig.ask), which loads policy and writes the ledger. This proxy does not call a
+# model and does not write a second ledger row. No shopper key is sent or stored.
+
+RIG_AGENT_URL = "http://agent-rig:8000"
+_RIG_ID = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+_RIG_SECRET_TEXT = re.compile(r"rk_(?:pub|adm)_[A-Za-z0-9_]+|sk-[A-Za-z0-9_-]{8,}")
+_RIG_DROP = frozenset({
+    "key", "keys", "key_hash", "secret", "password", "token", "webhook", "email", "origins",
+})
+_RIG_DOWN = "Rig did not answer."
+
+
+def _rig_tenant(request: Request, body: dict[str, Any] | None = None) -> uuid.UUID:
+    """The tenant this call is for. Query and body must name the same one."""
+    named = [value.strip() for key, value in request.query_params.multi_items() if key == "tenant_id" and value.strip()]
+    if body is not None and body.get("tenant_id") not in (None, ""):
+        named.append(str(body["tenant_id"]).strip())
+    if not named:
+        raise HTTPException(status_code=400, detail="tenant_id is required")
+    parsed: list[uuid.UUID] = []
+    for item in named:
+        try:
+            parsed.append(uuid.UUID(item))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="tenant_id is not a valid id") from None
+    if any(item != parsed[0] for item in parsed):
+        raise HTTPException(status_code=403, detail="tenant mismatch")
+    return parsed[0]
+
+
+def _rig_limit(value: str | None) -> int:
+    try:
+        number = int(value) if value else 12
+    except ValueError:
+        return 12
+    if number < 1:
+        return 1
+    if number > 50:
+        return 50
+    return number
+
+
+def _rig_foreign(value: Any, tenant_id: uuid.UUID) -> bool:
+    """True when a payload names a tenant other than the caller."""
+    if isinstance(value, list):
+        return any(_rig_foreign(item, tenant_id) for item in value)
+    if not isinstance(value, dict):
+        return False
+    if "tenant_id" in value and not _same_tenant(value.get("tenant_id"), tenant_id):
+        return True
+    return any(_rig_foreign(item, tenant_id) for item in value.values())
+
+
+def _rig_scrub(value: Any) -> Any:
+    """Drop key material before a room payload leaves Tank."""
+    if isinstance(value, list):
+        return [_rig_scrub(item) for item in value]
+    if isinstance(value, str):
+        return _RIG_SECRET_TEXT.sub("", value)
+    if not isinstance(value, dict):
+        return value
+    kept: dict[str, Any] = {}
+    for key, item in value.items():
+        name = str(key).lower()
+        if name in _RIG_DROP or "secret" in name or name.endswith("_key"):
+            continue
+        kept[str(key)] = _rig_scrub(item)
+    return kept
+
+
+async def _rig_body(request: Request) -> dict[str, Any]:
+    raw = await request.body()
+    if len(raw) > 8192:
+        raise HTTPException(status_code=413, detail="request too large")
+    if not raw:
+        return {}
+    try:
+        body = json.loads(raw)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="body must be json") from None
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="body must be an object")
+    return body
+
+
+async def _rig_call(method: str, path: str, params: list[tuple[str, str]], content: bytes | None, *, timeout: float) -> Any:
+    key = os.environ.get("TANK_KEY_RIG", "").strip()
+    if _http is None or not key:
+        raise HTTPException(status_code=502, detail=_RIG_DOWN)
+    headers = {"X-Tank-Key": key, "Accept": "application/json"}
+    if content is not None:
+        headers["Content-Type"] = "application/json"
+    try:
+        return await _http.request(
+            method,
+            RIG_AGENT_URL + path,
+            params=params,
+            content=content,
+            headers=headers,
+            timeout=timeout,
+            follow_redirects=False,
+        )
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail=_RIG_DOWN) from None
+
+
+def _rig_response(resp: Any, tenant_id: uuid.UUID) -> Response:
+    raw = resp.content or b""
+    if not raw or len(raw) > 1_000_000:
+        raise HTTPException(status_code=502, detail=_RIG_DOWN)
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=502, detail=_RIG_DOWN) from None
+    if _rig_foreign(payload, tenant_id):
+        raise HTTPException(status_code=403, detail="tenant mismatch")
+    try:
+        encoded = json.dumps(_rig_scrub(payload)).encode()
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=502, detail=_RIG_DOWN) from None
+    return Response(content=encoded, status_code=resp.status_code, media_type="application/json")
+
+
+def _rig_id(value: str) -> str:
+    if not _RIG_ID.fullmatch(value):
+        raise HTTPException(status_code=400, detail="bad id")
+    return value
+
+
+@app.get("/v1/rig/search", dependencies=[Depends(require_key)])
+async def rig_search(request: Request) -> Response:
+    tenant_id = _rig_tenant(request)
+    params = [
+        ("tenant_id", str(tenant_id)),
+        ("q", (request.query_params.get("q") or "").strip()[:200]),
+        ("limit", str(_rig_limit(request.query_params.get("limit")))),
+    ]
+    return _rig_response(await _rig_call("GET", "/v1/rig/search", params, None, timeout=30), tenant_id)
+
+
+@app.get("/v1/rig/graph/{product_id}", dependencies=[Depends(require_key)])
+async def rig_graph(product_id: str, request: Request) -> Response:
+    item = _rig_id(product_id)
+    tenant_id = _rig_tenant(request)
+    params = [("tenant_id", str(tenant_id))]
+    return _rig_response(await _rig_call("GET", f"/v1/rig/graph/{item}", params, None, timeout=30), tenant_id)
+
+
+@app.get("/v1/rig/products/{product_id}", dependencies=[Depends(require_key)])
+async def rig_product(product_id: str, request: Request) -> Response:
+    item = _rig_id(product_id)
+    tenant_id = _rig_tenant(request)
+    params = [("tenant_id", str(tenant_id))]
+    return _rig_response(await _rig_call("GET", f"/v1/rig/products/{item}", params, None, timeout=30), tenant_id)
+
+
+@app.post("/v1/rig/compare", dependencies=[Depends(require_key)])
+async def rig_compare(request: Request) -> Response:
+    body = await _rig_body(request)
+    tenant_id = _rig_tenant(request, body)
+    ids = body.get("product_ids")
+    if not isinstance(ids, list) or not ids or len(ids) > 24:
+        raise HTTPException(status_code=400, detail="bad id")
+    clean = [_rig_id(item) for item in ids if isinstance(item, str)]
+    if len(clean) != len(ids):
+        raise HTTPException(status_code=400, detail="bad id")
+    payload = json.dumps({"product_ids": clean}).encode()
+    resp = await _rig_call("POST", "/v1/rig/compare", [("tenant_id", str(tenant_id))], payload, timeout=30)
+    return _rig_response(resp, tenant_id)
+
+
+@app.post("/v1/rig/ask", dependencies=[Depends(require_key)])
+async def rig_ask(request: Request) -> Response:
+    """Forward the question. The room's model call is POST /v1/route, task type rig.ask.
+
+    run_route loads that task's policy row and writes the ledger. A question the
+    catalogue cannot answer does not call a model. This handler does not.
+    """
+    body = await _rig_body(request)
+    tenant_id = _rig_tenant(request, body)
+    product_id = body.get("product_id")
+    if not isinstance(product_id, str):
+        raise HTTPException(status_code=400, detail="bad id")
+    question = body.get("question")
+    forwarded: dict[str, Any] = {
+        "product_id": _rig_id(product_id),
+        "question": question.strip()[:500] if isinstance(question, str) else "",
+    }
+    if isinstance(body.get("setup"), dict):
+        forwarded["setup"] = body["setup"]
+    payload = json.dumps(forwarded).encode()
+    resp = await _rig_call("POST", "/v1/rig/ask", [("tenant_id", str(tenant_id))], payload, timeout=150)
+    return _rig_response(resp, tenant_id)
+
+
+@app.get("/v1/rig/catalogues", dependencies=[Depends(require_key)])
+async def rig_catalogues(request: Request) -> Response:
+    """Product and fit counts for the caller's catalogue."""
+    tenant_id = _rig_tenant(request)
+    resp = await _rig_call("GET", "/catalogues", [("tenant_id", str(tenant_id))], None, timeout=30)
+    return _rig_response(resp, tenant_id)
