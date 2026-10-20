@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { approveSkill, listSkills, retireSkill, runSkillEvals, trySkill } from "@/lib/tank";
 import { rejectUnlessFounder } from "@/app/review/access";
+import { tankRefusal } from "@/app/skala/library";
 import { currentTenant } from "@/lib/tenant";
 
 export const runtime = "nodejs";
@@ -54,6 +55,8 @@ export async function POST(req: Request) {
     if (action === "retire") return NextResponse.json(await retireSkill(id, version, userId));
     return NextResponse.json({ error: "unknown action" }, { status: 400 });
   } catch (err) {
+    const refused = err instanceof Error ? tankRefusal(err.message) : null;
+    if (refused) return NextResponse.json({ error: refused.error }, { status: refused.status });
     return NextResponse.json({ error: err instanceof Error ? err.message : "Tank unavailable" }, { status: 502 });
   }
 }

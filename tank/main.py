@@ -255,9 +255,19 @@ _CONVERT_HEAD = (
     "Read this judgment as published. Copy the facts in the court's own words, "
     "as a continuous passage from the judgment. Name the question, the elements, "
     "and the holding. Cite only this case. Every quote must appear in the judgment "
-    "word for word. Reply with JSON only:\n"
+    "word for word. For each issue the court decided, give the question, the order "
+    "in the court's own words, and pointers to the reasoning. Do not shorten the "
+    "reasoning and do not put a length cap on it. Mark likely ratio only on the "
+    "exact words the decision rests on, and always label that marking likely. "
+    "Mark obiter only where the court's own words show it "
+    "(obiter, it is unnecessary to decide, I express no view). "
+    "Keep each minority or dissent separate, labelled, and do not merge it into "
+    "the majority. Reply with JSON only:\n"
     '{"facts":"","question":"","elements":[{"element_id":"","finding":"met|not_met|unclear","quote":""}],'
-    '"holding":"","citations":[{"citation":"","quote":""}]}\n\n'
+    '"holding":"","citations":[{"citation":"","quote":""}],'
+    '"issues":[{"question":"","reasoning_pointer":{"paragraphs":[]},"order":"",'
+    '"likely_ratio_pointer":{"paragraphs":[]},"obiter_pointer":{"paragraphs":[]},'
+    '"minority":[{"judge":"","pointer":{"paragraphs":[]}}]}]}\n\n'
     "Citation: "
 )
 _FACTS_PREFIX = (
@@ -2157,6 +2167,9 @@ async def approve_skill(skill_id: str, version: str, body: Approval) -> dict[str
         state = await conn.fetchval("SELECT state FROM tank.skills WHERE id=$1 AND version=$2", skill_id, version)
         if state != "staging":
             raise HTTPException(status_code=409, detail=f"state is {state!r}; run evals until it reaches staging first")
+        blocked = await skala.zenas_approval_refusal(conn, skill_id, region=box_region())
+        if blocked:
+            raise HTTPException(status_code=409, detail=blocked)
         async with conn.transaction():
             await conn.execute(
                 "UPDATE tank.skills SET state='retired', updated_at=now() WHERE id=$1 AND state='approved' AND version<>$2",
