@@ -17,7 +17,7 @@ def example(**changes):
                 label_source='registry fixture', region='us-east', public=True) | changes
 
 
-@pytest.mark.parametrize('changes', [{'public': False}, {'public': 'true'}, {'region': 'za'},
+@pytest.mark.parametrize('changes', [{'public': False}, {'client_matter': True}, {'tenant_id': 'client'}, {'public': 'true'}, {'region': 'za'},
                                      {'skill_id': 'zenas.retrieve'}, {'label_source': ''}])
 def test_reject_unsafe_candidates(changes):
     assert not training.valid_auto_candidate(example(**changes), 'base', 'us-east')
@@ -50,7 +50,7 @@ async def test_cap_dedup_and_no_automatic_approval(database, monkeypatch):
     monkeypatch.setattr(training, 'ROOMS', ('base',))
     monkeypatch.setenv('TANK_KEY_BASE', secrets.token_urlsafe(20))
     monkeypatch.setenv('GOLD_AUTO_MAX', '2')
-    rows = [example(input={'n': n}) for n in range(5)] + [example(region='za')]
+    rows = [example(input={'n': n}, label_source=f'citation {n}') for n in range(5)] + [example(region='za')]
     real_client = httpx.AsyncClient
     monkeypatch.setattr(training.httpx, 'AsyncClient', lambda **kw: real_client(
         transport=httpx.MockTransport(lambda req: httpx.Response(200, json=rows)), **kw))
@@ -61,3 +61,9 @@ async def test_cap_dedup_and_no_automatic_approval(database, monkeypatch):
         assert len(saved) == 2
         assert all(r['auto_label'] and r['public'] and r['status'] == 'candidate' and r['region'] == 'us-east' for r in saved)
         assert await conn.fetchval('SELECT count(*) FROM tank.training_pairs') == 0
+
+
+def test_existing_room_skill_namespaces():
+    assert training.valid_auto_candidate(example(skill_id='market.series_fetch'), 'market_lab', 'us-east')
+    assert training.valid_auto_candidate(example(skill_id='scan.secrets'), 'radix', 'us-east')
+    assert not training.valid_auto_candidate(example(skill_id='scan.secrets'), 'base', 'us-east')
