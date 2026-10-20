@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from chassis.app import create_app
 from chassis.jobs import JobContext
 from base_gold.gold_sources import read_candidates
+from base_gold.build import nightly
 from pipeline import order_states, state_of
 from room import (
     SQL_BATCHES_BY_TENANT,
@@ -57,16 +58,33 @@ async def ping(ctx: JobContext) -> dict:
     return result
 
 
+async def gold_nightly(ctx: JobContext) -> dict:
+    if ctx.tenant_id != HEARTBEAT_TENANT:
+        raise ValueError("gold build requires the platform tenant")
+    try:
+        return await nightly(app.state.pool, app.state.http, _skills())
+    except Exception:
+        log.warning("official gold build deferred; source unavailable")
+        raise RuntimeError("official gold build deferred; source unavailable") from None
+
+
 app = create_app(
     agent=AGENT,
-    handlers={"ping": ping},
+    handlers={"ping": ping, "gold.nightly": gold_nightly},
+    job_timeouts={"gold.nightly": 3600},
     schedules=[
         {
             "tenant_id": HEARTBEAT_TENANT,
             "cron": "*/5 * * * *",
             "kind": "ping",
             "input": {"heartbeat": True},
-        }
+        },
+        {
+            "tenant_id": HEARTBEAT_TENANT,
+            "cron": "15 1 * * *",
+            "kind": "gold.nightly",
+            "input": {},
+        },
     ],
 )
 

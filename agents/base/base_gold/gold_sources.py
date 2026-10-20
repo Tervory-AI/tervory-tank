@@ -75,6 +75,8 @@ def candidates(
     catalogue = source_catalogue() if catalogue is None else catalogue
     output: list[dict[str, Any]] = []
     seen: set[str] = set()
+    verified: list[dict[str, Any]] = []
+    snapshots = list(snapshots)
     for snapshot in snapshots:
         try:
             examples = _examples(snapshot, region, today, catalogue)
@@ -86,9 +88,13 @@ def candidates(
                 continue
             seen.add(identity)
             output.append(example)
-            if len(output) == limit:
-                return output
-    return output
+            if example["skill_id"] == "base.verify":
+                verified.append(snapshot)
+                if len(verified) % 3 == 0:
+                    negative = _negative(snapshot, verified, region, today, catalogue)
+                    if negative:
+                        output.append(negative)
+    return output[:limit]
 
 
 def _examples(
@@ -97,11 +103,14 @@ def _examples(
     if (
         snapshot.get("tenant_id") != PLATFORM_TENANT or snapshot.get("public") is not True
         or snapshot.get("region") != region or snapshot.get("record_kind") != "business"
-        or snapshot.get("entity_type") not in ("corporation", "llc", "registered_company")
     ):
         return []
     source = catalogue[snapshot["source_id"]]
     if source["region"] != region:
+        return []
+    if not source.get("public_licensees") and snapshot.get("entity_type") not in (
+        "corporation", "llc", "registered_company",
+    ):
         return []
     official, site = snapshot["official"], snapshot["site"]
     source_url = urlsplit(official["source_url"])
@@ -118,16 +127,16 @@ def _examples(
     website = site["website"]
     if not _host(website) or _host(website) != _host(site["source_url"]):
         return []
-    if official.get("website") and _host(official["website"]) != _host(website):
-        return []
     fields = ("name", "address", "city", "state", "zip")
-    if any(not _text(official.get(key)) or _text(official[key]) != _text(site.get(key)) for key in fields):
+    if any(not _text(official.get(key)) for key in fields):
         return []
     phone = _phone(official["phone"])
-    if not phone or phone != _phone(site["phone"]) or not official.get("id"):
+    phone_matches = bool(phone and phone == _phone(site.get("phone")))
+    address_matches = all(_text(official[key]) == _text(site.get(key)) for key in fields[1:])
+    if not (phone_matches or address_matches) or not official.get("id"):
         return []
     name_key = _name_key(official["name"])
-    if not name_key or not re.fullmatch(r"[A-Z]{2}", official["state"]) or not re.fullmatch(r"\d{5}", official["zip"]):
+    if not name_key or not re.fullmatch(r"[A-Z]{2}", official["state"]) or not re.fullmatch(r"\d{5}(?:-?\d{4})?", official["zip"]):
         return []
     raw = {key: " ".join(str(official[key]).split()) for key in fields}
     raw["phone"] = phone
@@ -147,16 +156,14 @@ def _examples(
         "state": {"value": official["state"]},
         "registry_match": {"value": official["id"]},
         "website": {"value": website},
-        "phones": {"value": [phone]},
+        "phones": {"value": [phone] if phone_matches else []},
     }
     cases = [
-        ("base.find_site", {**raw, "website": website}, {
-            "website": {
-                "value": website.rstrip("/") if urlsplit(website).path in ("", "/") else website,
-                "source": "input:verified", "confidence": 85,
-            },
+        ("base.find_site", {key: raw[key] for key in fields}, {
+            "website": {"value": website.rstrip("/")},
         }),
-        ("base.verify", {"raw": raw, "profile": profile}, {"checks": {"phone_matches_site": True}}),
+        *([("base.verify", {"raw": raw, "profile": profile}, {"checks": {"phone_matches_site": True}})]
+          if phone_matches else []),
         ("base.normalize", raw, {
             "match_key": f"{name_key}|{raw['city'].lower()}|{raw['state'].lower()}",
         }),
@@ -169,9 +176,51 @@ def _examples(
             "skill_id": skill, "input": value, "expected": expected,
             "label_source": f"{source['label']} · {official['source_url']} · {official['observed_on']}",
             "region": region, "public": True,
+            **({"needs_network": True} if skill == "base.find_site" else {}),
         }
         for skill, value, expected in cases
     ]
+
+
+def _negative(
+    snapshot: dict[str, Any], verified: list[dict[str, Any]], region: str,
+    today: date, catalogue: dict[str, dict[str, Any]],
+) -> dict[str, Any] | None:
+    official = snapshot["official"]
+    for other in verified:
+        target, site = other["official"], other["site"]
+        if (
+            target["id"] == official["id"]
+            or _host(site["website"]) == _host(snapshot["site"]["website"])
+            or not all(_text(target[key]) == _text(site.get(key)) for key in ("address", "city", "state", "zip"))
+            or _text(official["address"]) == _text(target["address"])
+            or _phone(official["phone"]) == _phone(target["phone"])
+            or not site.get("exclusive_contacts")
+        ):
+            continue
+        positive = next(
+            item for item in _examples(snapshot, region, today, catalogue) if item["skill_id"] == "base.verify"
+        )
+        return {
+            **positive,
+            "input": {
+                "raw": positive["input"]["raw"],
+                "profile": {
+                    "website": {"value": site["website"]},
+                    "phones": {"value": [_phone(target["phone"])]},
+                    "address": {"value": target["address"]},
+                    "city": {"value": target["city"]},
+                    "state": {"value": target["state"]},
+                    "zip": {"value": target["zip"]},
+                },
+            },
+            "expected": {"checks": {"phone_matches_site": False}},
+            "label_source": (
+                positive["label_source"] + f" · mismatch against published licence {target['id']}"
+                + f" · {catalogue[other['source_id']]['label']} · {target['source_url']} · {target['observed_on']}"
+            ),
+        }
+    return None
 
 
 def read_candidates(*, limit: int, region: str) -> list[dict[str, Any]]:

@@ -3,8 +3,9 @@
     "id": "atf-active",
     "label": "ATF Federal Firearms Licensees — active licences",
     "region": "us-east",
+    "public_licensees": true,
     "hosts": ["atf.gov"],
-    "path_prefixes": ["/firearms/listing-federal-firearms-licensees", "/resource-center/docs/"]
+    "path_prefixes": ["/firearms/listing-federal-firearms-licensees", "/firearms/tools-and-services-firearms-industry/federal-firearms-listings", "/resource-center/docs/", "/firearms/docs/"]
   },
   {
     "id": "ca-business-registry",

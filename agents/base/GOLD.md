@@ -5,58 +5,64 @@
 accepts a tenant or region from the request. The current Base compose is US-only.
 The generic reader also supports `za`; no US source can produce ZA candidates.
 
-## Evidence input
+## Nightly evidence builder
 
-The room reads `/data/gold/<TANK_REGION>/official-matches.jsonl`. Missing evidence
-returns an empty list. Nothing is fabricated and this endpoint does not crawl,
-run a model, approve a skill or mark gold as checked.
+Base registers `gold.nightly` at 01:15 UTC for PLATFORM_TENANT. It reads only
+completed platform records with independent `passes.2b.gold_observation` evidence.
+It downloads the recent complete monthly ATF list, respecting robots.txt,
+same-host redirects, size limits and challenge pages. A denial or challenge is
+logged without source data and stops that build; it is never bypassed.
 
-Each line is a matched pair of **independent** saved observations:
+The builder joins the published licence ID to the ATF rows Base already ingests,
+then maps the official row through the approved `ffl.ingest` skill over Tank's
+API. No models or new paid services are used. Only current-list members with a
+valid, unexpired licence qualify. The snapshot month is taken from the published
+file name, not the download time. Official snapshots must be at most 90 days old.
 
-- `tenant_id`: the platform tenant UUID, `region`, `public: true`,
-  `record_kind: "business"`, `entity_type` (corporation, LLC or registered company),
-  `source_id` matching a checked-in engine catalogue entry.
-- `official`: `id`, `source_url`, `observed_on` (ISO date), `valid_until` (ISO date),
-  `active: true`, `name`, `address`, `city`, two-letter `state`, five-digit `zip`,
-  `phone`, and optionally `website`.
-- `site`: `source_url`, `website`, `observed_on`, `status: 200`, `blocked: false`,
-  and independently extracted `name`, `address`, `city`, `state`, `zip`, `phone`.
+During Base's normal scrape pass, the room now retains the scraper's phones,
+visible text and structured postal addresses separately from the merged profile.
+Neither raw input nor the final profile can fill this observation. Website
+evidence must be at most 30 days old and originate from the website's own host.
+A row qualifies if its published phone **or** full premises address independently
+appears in that evidence. Address matching is conservative; uncertain variants
+are skipped.
 
-Only the trusted ingestion process/operator may write this file; it is not an
-upload format or an API parameter. Publish with an atomic file replacement.
-Keep the original official-list download and website evidence beside it for
-review. Never fill the website observation by copying official-list fields.
-The schema is demonstrated with **synthetic** evidence in the tests, not asserted
-to be a real record. The legacy Base profile is not sufficient evidence: its
-address can originate from the input, and it does not retain an independent
-website address. No existing tenant upload is automatically relabelled.
+The builder atomically replaces `/data/gold/us-east/official-matches.jsonl` with
+up to 200 matches. It does not require a hand-written matches file. Missing
+independent observations produce an empty file. Old profiles are not retroactively
+claimed as independent evidence; future Base scrapes populate observations.
+The job uses a database advisory lock, and all record reads are platform-scoped.
+It never reads another room's database or US data from a ZA room.
 
-The endpoint rejects private/client rows and individual licence holders. Only
-explicitly public business evidence enters this first export. It projects a
-small business-field allowlist, dropping arbitrary fields and people data.
-Official evidence must still be active, unexpired and no older than 90 days;
-the website observation must be no older than 30 days and have the same host.
-Names and full addresses must agree after whitespace/case normalization; phone
-formatting can differ. This deliberately rejects uncertain abbreviation matches.
-ATF and state-registry source names/host rules live in the FFL engine catalogue.
-A state registry without a phone cannot qualify by itself.
+## Public fields
+
+Per the founder's ruling, ATF licensee names, premises addresses (including
+home-based premises), phones and licence IDs remain public, including individual
+and sole-proprietor licences. The official row is projected only from published
+ATF columns. Unmatched website phones, personal/social accounts, emails and
+client fields are never added to public rows. The website URL is retained as
+the requested discovery answer/evidence, not as an official-list field.
+Only matching published phone/address values are copied into the public evidence
+projection after independently checking the scrape. Raw scrape text stays local.
 
 ## Labels
 
-Each eligible pair yields `base.find_site`, `base.verify`, `base.normalize`,
-and `base.resolve`, subject to the requested limit. The official source name,
-URL and observation date are retained in `label_source`. Duplicate examples are
-removed. All labels remain **candidates** for Tank's spot-check workflow.
+- `base.find_site`: input is only the list's business/licensee name and premises
+  address; expected is the independently matched website. It has
+  `needs_network: true` and is excluded from offline skill-output contract tests.
+- `base.verify`: positive phone matches use the existing skill's
+  `checks.phone_matches_site: true`. Address-only discoveries do not pretend to
+  prove a phone match.
+- Roughly one in four verification examples is negative: after three positives,
+  the builder pairs an official record with another observed website whose
+  sole observed phone and sole structured address belong to a different
+  published licence, and both disagree with the first record. Expected is
+  `checks.phone_matches_site: false`. Both source names/snapshot dates are kept.
+  Ambiguous or missing contacts never become negative labels; sparse evidence
+  may yield fewer negatives. No invented phone or non-list personal contact is used.
+- `base.normalize` and `base.resolve` use official-list fields only.
 
-These are positive site-hint, phone-verification, normalization-key and
-single-entry resolution examples. They do not prove open-web discovery accuracy,
-fuzzy-address matching or ambiguous entity resolution. Human-reviewed negatives
-and trap cases remain necessary.
-
-## Operational follow-up
-
-No valid real evidence snapshots are shipped in this repository. Claude must
-populate the local evidence file from official lists and independent website
-observations before the endpoint returns real candidates. It is empty until
-then. The shared nightly collector must call this endpoint with Base's room key;
-adding/changing that collector is outside this task's file list.
+The list name, download URL and snapshot date are in every `label_source`.
+Duplicates are removed. Everything remains a candidate for Tank's spot checks,
+never automatically approved or promoted. Tests use labelled synthetic data;
+no live download or website request runs in CI.

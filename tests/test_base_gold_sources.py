@@ -44,7 +44,9 @@ def test_four_public_candidates_and_deduplication():
         "base.find_site", "base.verify", "base.normalize", "base.resolve",
     ]
     for row in rows:
-        assert set(row) == {"skill_id", "input", "expected", "label_source", "region", "public"}
+        assert set(row) == {"skill_id", "input", "expected", "label_source", "region", "public"} | (
+            {"needs_network"} if row["skill_id"] == "base.find_site" else set()
+        )
         assert row["public"] is True and row["region"] == "us-east"
         assert "ATF Federal Firearms Licensees" in row["label_source"]
     assert len(produce([evidence()], limit=1)) == 1
@@ -56,7 +58,6 @@ def test_four_public_candidates_and_deduplication():
     (None, "public", "true"),
     (None, "tenant_id", "00000000-0000-0000-0000-000000000099"),
     (None, "record_kind", "person"),
-    (None, "entity_type", "sole_proprietor"),
     (None, "region", "za"),
     (None, "source_id", "unreviewed-source"),
     ("official", "active", False),
@@ -64,12 +65,7 @@ def test_four_public_candidates_and_deduplication():
     ("official", "observed_on", "2026-01-01"),
     ("official", "source_url", "https://atf.gov.evil.example/firearms/listing-federal-firearms-licensees"),
     ("official", "source_url", "https://atf.gov/irrelevant"),
-    ("official", "website", "https://another.example"),
     ("site", "source_url", "https://directory.example/example-business"),
-    ("site", "phone", "6175550199"),
-    ("site", "address", "11 Main Street"),
-    ("site", "zip", "02111"),
-    ("site", "name", "Another Business"),
     ("site", "observed_on", "2026-08-01"),
     ("site", "observed_on", "2026-12-01"),
     ("site", "blocked", True),
@@ -87,7 +83,7 @@ def test_missing_or_malformed_data_never_becomes_gold():
         row = evidence()
         row[section] = None
         assert produce([row]) == []
-    for field in ("name", "address", "city", "state", "zip", "phone"):
+    for field in ("name", "address", "city", "state", "zip"):
         row = evidence()
         row["site"][field] = row["official"][field] = ""
         assert produce([row]) == []
@@ -113,12 +109,44 @@ def test_state_registry_names_its_own_source():
 
 
 def test_labels_match_existing_offline_skill_contracts():
-    for candidate in produce([evidence()])[1:]:
+    for candidate in produce([evidence()]):
+        if candidate.get("needs_network"):
+            continue
         skill = candidate["skill_id"]
         module = load(f"gold_test_{skill}", ROOT / f"tank/skills/{skill}/1.0.0/run.py")
         result = asyncio.run(module.run(copy.deepcopy(candidate["input"]), None))
         for key, expected in candidate["expected"].items():
             assert result[key] == expected
+
+
+def test_find_site_is_discovery_not_an_input_echo():
+    candidate = produce([evidence()])[0]
+    assert candidate["needs_network"] is True
+    assert set(candidate["input"]) == {"name", "address", "city", "state", "zip"}
+    assert candidate["expected"] == {"website": {"value": "https://example.com"}}
+    assert "example.com" not in json.dumps(candidate["input"])
+
+
+def test_atf_individual_and_home_premises_stay_public():
+    row = evidence()
+    row["entity_type"] = "sole_proprietor"
+    row["official"]["name"] = "Published Licensee"
+    row["official"]["address"] = row["site"]["address"] = "10 Home Lane"
+    assert len(produce([row])) == 4
+    assert all(candidate["public"] for candidate in produce([row]))
+    row["source_id"] = "ca-business-registry"
+    row["official"]["source_url"] = "https://bizfileonline.sos.ca.gov/search/business"
+    assert produce([row]) == []
+
+
+def test_phone_or_address_independently_suffices():
+    row = evidence()
+    row["site"]["phone"] = "6175550199"
+    rows = produce([row])
+    assert {item["skill_id"] for item in rows} == {"base.find_site", "base.normalize", "base.resolve"}
+    assert "6175550199" not in json.dumps(rows)
+    row["site"]["address"] = "Another address"
+    assert produce([row]) == []
 
 
 def test_limit_is_global_and_bounded():
