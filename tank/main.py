@@ -1636,7 +1636,8 @@ async def set_candidate(task_type: str, body: CandidateBody) -> dict[str, Any]:
     return {"ok": True}
 
 
-@app.post("/v1/graduation/{task_type}/promote", dependencies=[Depends(require_key)])
+@app.post("/v1/graduation/{task_type}/promote",
+          dependencies=[Depends(require_key), Depends(__import__("admin").require_admin)])
 async def promote(task_type: str, body: PromoteBody) -> dict[str, Any]:
     """Promote only when the shadow bar is cleared. The previous model stays for rollback."""
     move = await _move_task(task_type, by=body.by or "founder", automatic=False)
@@ -2939,6 +2940,14 @@ app.include_router(__import__("admin").router)
 
 app.include_router(__import__("gold").router)
 app.include_router(__import__("training").router)
+
+
+@app.get("/v1/training/graduation")
+async def training_graduation(actor=Depends(__import__("gold").require_reviewer)):
+    if not actor.founder:
+        raise HTTPException(404, "not found")
+    async with pool().acquire() as conn:
+        return await graduate.training_table(conn, actor.tenant, box_region())
 
 
 @app.api_route("/v1/tisan/gold/{action}", methods=["GET", "POST"],

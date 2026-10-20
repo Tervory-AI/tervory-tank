@@ -650,3 +650,10 @@ body:has(.tk) main {
     grid-template-columns: 1fr;
   }
 }
+
+.tank-graduation { margin: 24px 0; padding: 24px; color: #001840; background: #F4F6FB; min-width: 0; }
+.tank-graduation h2 { font-weight: 300; }
+.tank-graduation-scroll { overflow-x: auto; max-width: 100%; }
+.tank-graduation table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.tank-graduation th, .tank-graduation td { border-bottom: 1px solid #B8BFD0; padding: 12px; text-align: left; }
+.tank-graduation button { color: #001840; background: white; border: 1px solid #B8BFD0; padding: 8px; }
