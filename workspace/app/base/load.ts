@@ -1,4 +1,5 @@
-import { baseBatches, listSkills } from "@/lib/tank";
+import { baseBatches, baseRecords, listSkills } from "@/lib/tank";
+import { contextReport, type ContextReport } from "./context-report";
 import { currentTenant } from "@/lib/tenant";
 import { buildModel, type BatchIn, type PageModel, type SkillIn } from "./model";
 
@@ -6,9 +7,15 @@ import { buildModel, type BatchIn, type PageModel, type SkillIn } from "./model"
 export async function loadBase(): Promise<PageModel> {
   let batches: BatchIn[] | null = null;
   let skills: SkillIn[] | null = null;
+  let contextTrial: ContextReport | null = null;
   try {
     const { tenantId } = await currentTenant();
     batches = await baseBatches(tenantId);
+    try {
+      contextTrial = contextReport(await baseRecords(tenantId, { limit: 200 }));
+    } catch {
+      contextTrial = null;
+    }
   } catch {
     batches = null;
   }
@@ -17,5 +24,5 @@ export async function loadBase(): Promise<PageModel> {
   } catch {
     skills = null;
   }
-  return buildModel({ batches, skills, now: new Date() });
+  return { ...buildModel({ batches, skills, now: new Date() }), contextTrial };
 }

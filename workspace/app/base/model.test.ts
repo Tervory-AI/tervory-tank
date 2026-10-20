@@ -1,6 +1,26 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { contextReport } from "./context-report";
+import type { BaseRecord } from "@/lib/tank";
 import { approvedSkills, batchStatus, buildModel, refreshedLabel, shortDate, type BatchIn, type SkillIn } from "./model";
+
+test("trial accuracy uses checked answers, includes missing answers and unknown charges", () => {
+  const record = {
+    profile: { website: { value: "https://example.com" } },
+    passes: {
+      context_dev: { status: "candidate", fields: { website: "https://wrong.example" }, credits: 10 },
+      context_dev_checked: { checked: true, expected: { website: "https://example.com", name: "Example" } },
+    },
+  } as unknown as BaseRecord;
+  const unchecked = { ...record, passes: { context_dev: { status: "failed", credits: null } } } as unknown as BaseRecord;
+  const report = contextReport([record, unchecked]);
+  assert.equal(report.records, 2);
+  assert.equal(report.creditsPerRecord, null);
+  assert.equal(report.unknownCharges, 1);
+  assert.deepEqual(report.fields[0], { field: "website", checked: 1, baseCorrect: 1, contextCorrect: 0 });
+  assert.equal(report.fields[1].contextCorrect, 0);
+  assert.equal(contextReport([record]).creditsPerRecord, 10);
+});
 
 const batch = (over: Partial<BatchIn>): BatchIn => ({
   batch: "ATF FFL list Sep 2026 · HI",

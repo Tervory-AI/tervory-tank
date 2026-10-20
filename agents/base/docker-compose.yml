@@ -21,6 +21,8 @@ services:
       SEARXNG_URL: http://searxng:8080
       HERMES_URL: http://hermes:8000
       DATA_DIR: /data
+      CONTEXT_DEV_API_KEY: ${CONTEXT_DEV_API_KEY:-}
+      CONTEXT_DEV_MAX_CREDITS: ${CONTEXT_DEV_MAX_CREDITS:-500}
     volumes:
       - agent_base_data:/data
     networks:
