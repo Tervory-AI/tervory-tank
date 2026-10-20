@@ -251,3 +251,16 @@ def test_real_judgment_repeated_or_backwards_numbering_refuses_both_pointer_form
     for pointer in ({"paragraphs": [6]}, {"first": " ".join(words[:8]), "last": " ".join(words[-8:])}):
         with pytest.raises(PointerError, match="pointer did not resolve"):
             resolve_pointer(pointer, text)
+
+
+@pytest.mark.parametrize("text", [
+    "...section 12[4] of the Act, read with section\n4 of the Regulations, the notice was valid.\n",
+    "evicted.[3]\n\n3 months later the occupier returned.\n",
+])
+def test_lowercase_numbered_continuations_are_not_footnote_headers(text):
+    assert judgment_text(text) == text
+
+
+def test_capitalized_reference_after_inline_mark_is_a_footnote():
+    text = "...Wolmarans.[3] He argued\n3 Wolmarans v Gaul 2019 (1) SA 1 (SCA).\n"
+    assert judgment_text(text) == "...Wolmarans.[3] He argued\n"

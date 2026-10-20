@@ -12,7 +12,7 @@ from agents.zenas.core.engine import fold_for_quote
 _COURT_CODE = r"(?:ZA[A-Z]+|SCA|CC)\b"
 _MARK = re.compile(r"\[(\d+)\](?!\s*" + _COURT_CODE + ")")
 _PARAGRAPH = re.compile(r"(?m)^[ \t]*(?:\[(\d+)\]|(\d+)\.)(?!\s*" + _COURT_CODE + r")[ \t]*(?:\n|(?=\S))")
-_NOTE = re.compile(r"^[ \t]*(?:Footnote[ \t]+)?(\d+)(?::|[ \t]+)[ \t]*(?!\.)")
+_NOTE = re.compile(r"^[ \t]*(?:Footnote[ \t]+)?(\d+)(?::|[ \t]+)[ \t]*(?=[A-Z(\"'‘“])")
 _MONTH = r"(?:January|February|March|April|May|June|July|August|September|October|November|December)\b"
 _DATE = re.compile(r"^\s*(?:[12]\d{3}\b|(?:\d+\s+)?" + _MONTH + ")")
 
