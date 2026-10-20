@@ -154,9 +154,11 @@ async def test_schema_and_durable_trial(monkeypatch, upgrade):
                 assert len(calls) == 2
                 assert answer["results"][2]["status"] == "credit_limit"
                 assert answer["message"] == "credit cap reached"
+                assert answer["records_sent"] == 1
                 assert len(answer["results"]) == 3
                 exact_cap = await run_trial(base_pool, http, str(tenant), str(run), selected[:2])
                 assert exact_cap["message"] == "credit cap reached"
+                assert exact_cap["records_sent"] == 0
                 assert exact_cap["results"][-1]["credit_cap_reached"] is True
                 capped = await conn.fetchval(
                     "SELECT passes->'context_dev' FROM agent_base.records WHERE tenant_id=$1 AND id=$2", tenant, ids[2],

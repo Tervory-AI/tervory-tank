@@ -4,6 +4,8 @@ export const PLATFORM_TENANT = "00000000-0000-0000-0000-000000000001";
 
 export type ContextReport = {
   records: number;
+  creditsUsed: number;
+  noTruth: number;
   creditsPerRecord: number | null;
   unknownCharges: number;
   creditCapReached: boolean;
@@ -38,11 +40,13 @@ function socialUrls(value: unknown): string[] {
 }
 
 function fieldValue(field: string, value: unknown): string {
+  if (field === "phone") return String(value ?? "").replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
+  if (field === "address") return comparable(value).replace(/[^\w ]/g, " ").replace(/\s+/g, " ").trim();
   return field === "socials" ? JSON.stringify([...new Set(socialUrls(value))].sort()) : comparable(value);
 }
 
-export function contextReport(records: BaseRecord[]): ContextReport {
-  const report: ContextReport = { records: 0, creditsPerRecord: null, unknownCharges: 0, creditCapReached: false, fields: [] };
+export function contextReport(records: Pick<BaseRecord, "profile" | "passes">[]): ContextReport {
+  const report: ContextReport = { records: 0, creditsUsed: 0, noTruth: 0, creditsPerRecord: null, unknownCharges: 0, creditCapReached: false, fields: [] };
   const fields = new Map<string, ContextReport["fields"][number]>();
   let credits = 0;
   for (const record of records) {
@@ -53,18 +57,27 @@ export function contextReport(records: BaseRecord[]): ContextReport {
     if (typeof trial.credits === "number" && Number.isFinite(trial.credits) && trial.credits >= 0) credits += trial.credits;
     else report.unknownCharges++;
     const review = record.passes.context_dev_checked;
-    if (review?.checked !== true || !review.expected || typeof review.expected !== "object" || Array.isArray(review.expected)) continue;
+    if (review?.checked !== true || !review.expected || typeof review.expected !== "object" || Array.isArray(review.expected) || !Object.keys(review.expected).length) {
+      report.noTruth++;
+      continue;
+    }
     const candidate = trial.fields && typeof trial.fields === "object" ? trial.fields as Record<string, unknown> : {};
     for (const [field, expected] of Object.entries(review.expected)) {
-      if (!["name", "website", "description", "socials"].includes(field)) continue;
+      if (!["name", "website", "description", "socials", "phone", "address"].includes(field)) continue;
       const row = fields.get(field) ?? { field, checked: 0, baseCorrect: 0, contextCorrect: 0 };
       row.checked++;
-      row.baseCorrect += Number(fieldValue(field, record.profile[field]?.value) === fieldValue(field, expected));
+      const baseValue = field === "phone"
+        ? record.profile.phone?.value ?? (record.profile.phones?.value as unknown[] | undefined)?.[0]
+        : field === "address"
+          ? ["address", "city", "state", "zip"].map((key) => record.profile[key]?.value ?? "").filter(Boolean).join(", ")
+          : record.profile[field]?.value;
+      row.baseCorrect += Number(fieldValue(field, baseValue) === fieldValue(field, expected));
       row.contextCorrect += Number(fieldValue(field, candidate[field]) === fieldValue(field, expected));
       fields.set(field, row);
     }
   }
   report.fields = [...fields.values()];
+  report.creditsUsed = credits;
   report.creditsPerRecord = report.records && !report.unknownCharges ? credits / report.records : null;
   return report;
 }
