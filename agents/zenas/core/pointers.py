@@ -33,7 +33,7 @@ def judgment_text(text: str) -> str:
             pending.remove(int(note.group(1)))
             skipping = True
             continue
-        if skipping and line.strip() and not protected:
+        if skipping and line.strip() and not protected and note is None:
             continue
         skipping = False
         for mark in _MARK.finditer(line):

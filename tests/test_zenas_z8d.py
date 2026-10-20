@@ -100,6 +100,13 @@ def test_footnote_blocks_stop_before_wrapped_dates_and_numbered_paragraphs(conti
     assert "reference that" not in judgment_text(text)
 
 
+def test_an_adjacent_unmarked_note_is_not_deleted_with_a_marked_note():
+    text = FACTS + "[15]\n15 A marked reference.\n16 An unmarked reference.\nIts continuation.\n"
+    cleaned = judgment_text(text)
+    assert "15 A marked reference" not in cleaned
+    assert cleaned.endswith("16 An unmarked reference.\nIts continuation.\n")
+
+
 @pytest.mark.parametrize("mark", ["[2019] ZASCA", "[999] ZACC", "[12] ZAGPJHC", "[1000]", "[2019]\nZASCA"])
 def test_citation_years_and_court_codes_are_not_footnote_marks(mark):
     number = mark.split("]")[0][1:]
