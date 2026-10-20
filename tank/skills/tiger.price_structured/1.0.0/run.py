@@ -310,7 +310,7 @@ def _micro_items(html: str, page_url: str) -> list[dict]:
     items: list[dict] = []
     for product in tree.css("[itemscope]"):
         itemtype = (product.attributes or {}).get("itemtype") or ""
-        if "schema.org/Product" not in itemtype and not itemtype.endswith("Product"):
+        if not any(t in {"https://schema.org/Product", "http://schema.org/Product"} for t in itemtype.split()):
             continue
         if _nearest_scope(product) is not None and "Product" in ((_nearest_scope(product).attributes or {}).get("itemtype") or ""):
             continue
@@ -323,6 +323,14 @@ def _micro_items(html: str, page_url: str) -> list[dict]:
                 continue
             scope = _nearest_scope(el)
             if scope is None:
+                continue
+            owner = scope
+            while owner is not None and owner.mem_id != product_id:
+                owner_type = (owner.attributes or {}).get("itemtype") or ""
+                if any(t in {"https://schema.org/Product", "http://schema.org/Product"} for t in owner_type.split()):
+                    break
+                owner = _nearest_scope(owner)
+            if owner is None or owner.mem_id != product_id:
                 continue
             scope_type = (scope.attributes or {}).get("itemtype") or ""
             value = _prop_value(el)

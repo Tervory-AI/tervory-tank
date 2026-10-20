@@ -41,3 +41,16 @@ def test_package_is_code_and_does_not_approve_itself():
     assert manifest['eval_threshold'] == 1.0
     assert manifest.get('status') != 'approved'
     assert (PACKAGE / 'CHANGELOG.md').is_file()
+
+
+def test_microdata_does_not_borrow_nested_product_price():
+    spec = importlib.util.spec_from_file_location('structured_scopes', PACKAGE / 'run.py')
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    html = '''<div itemscope itemtype="https://schema.org/Product">
+    <b itemprop="name">Main</b>
+    <div itemscope itemtype="https://schema.org/Product"><b itemprop="name">Related</b>
+    <div itemscope itemtype="https://schema.org/Offer"><meta itemprop="price" content="8"></div>
+    </div></div>'''
+    assert mod.extract(html)['items'] == []
+    assert mod.extract('<div itemscope itemtype="FakeProduct"><span itemprop="price">9</span></div>')['items'] == []
