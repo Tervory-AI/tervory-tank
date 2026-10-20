@@ -22,6 +22,9 @@ submit selected public businesses to Base's internal `POST /context-dev/trial`
 with its room key in `X-Tank-Key`. The body contains `tenant_id`, `run_id` (a
 completed Base batch UUID), and `records`, an array of up to 50 entries:
 
+Only `PLATFORM_TENANT` is accepted; client tenants receive 403 before any
+records are processed. The Base page comparison reads platform trial records only.
+
 ```json
 {
   "record_id": "the selected completed record UUID",
@@ -40,19 +43,24 @@ Neither environment setting starts calls automatically.
 Base durably reserves 10 credits in its own `context_dev_calls` table before
 each provider request. A batch lock and persisted reservations enforce the cap
 across processes and restarts. Failed attempts retain their reservation.
+When another lookup cannot fit, processing stops and returns `credit cap reached`.
+The saved cap marker displays the same notice on the Base page.
 
 Every attempted lookup is delivered through Tank's `POST /v1/ledger/vendor`,
 with agent `base`, task type `base.context_dev`, vendor `context.dev`, actual
-reported credit units and zero dollars. Missing charges remain NULL with an
-unverified outcome. Tank scopes these events to PLATFORM_TENANT. The Base key can
-write only for Base; the Workspace key cannot use this route. Stable call IDs
+reported credit units and zero dollars. Missing or invalid charges use the reserved
+10-credit exposure with an unverified outcome, not a claim of a verified charge;
+the original candidate credits remain unchanged. Tank requires positive units
+at most 1000 and zero dollars. Tank scopes these events to PLATFORM_TENANT.
+The Base key can write only for Base with a `base.` task type; the Workspace key
+cannot use this route. Stable call IDs
 make delivery retries append-only and idempotent.
 
 Base's durable outbox retries ledger delivery on its heartbeat or the next trial.
 A crash without a stored response becomes an unknown-charge event, not another
 paid request. Candidates are saved in `passes.context_dev` after Tank acknowledges
 the ledger entry, alongside Base's unchanged profile. The Base page reads this
-slot for comparisons across its latest 200 displayed records.
+slot for comparisons across the latest 200 platform records.
 Checked answers belong in `passes.context_dev_checked` as
 `{"checked": true, "expected": {"website": "...", "name": "..."}}`, written by a
 trusted review process, never copied from provider output or raw upload fields.

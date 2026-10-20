@@ -2043,7 +2043,7 @@ class VendorCall(BaseModel):
     agent: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
     task_type: str = Field(pattern=r"^[a-z][a-z0-9_.-]{0,119}$")
     vendor: str = Field(pattern=r"^[a-z][a-z0-9_.-]{0,79}$")
-    units: Decimal | None = Field(ge=0, max_digits=18, decimal_places=6)
+    units: Decimal = Field(gt=0, le=1000, max_digits=18, decimal_places=6)
     cost_usd: Decimal = Field(default=Decimal("0"), ge=0, max_digits=12, decimal_places=6)
     outcome: Literal["delivered", "failed", "unverified"]
     region: Literal["us-east", "za"]
@@ -2053,14 +2053,14 @@ class VendorCall(BaseModel):
 async def vendor_ledger(body: VendorCall, agent: str | None = Depends(require_key)) -> dict[str, Any]:
     if agent is None or agent == HOMES_PRINCIPAL or agent != body.agent:
         raise HTTPException(status_code=403, detail="an agent may record only its own vendor calls")
+    if not body.task_type.startswith(f"{agent}."):
+        raise HTTPException(status_code=403, detail="task type must belong to the calling agent")
     if body.tenant_id != PLATFORM_TENANT:
         raise HTTPException(status_code=403, detail="vendor calls belong to the platform tenant")
     if body.region != box_region():
         raise HTTPException(status_code=403, detail="vendor call region must match this Tank")
-    if body.units is not None and body.cost_usd != 0:
+    if body.cost_usd != 0:
         raise HTTPException(status_code=422, detail="credit calls must have zero dollar cost")
-    if body.units is None and body.cost_usd == 0 and body.outcome != "unverified":
-        raise HTTPException(status_code=422, detail="an unknown charge must be unverified")
     async with pool().acquire() as conn:
         inserted = await conn.fetchval(
             """

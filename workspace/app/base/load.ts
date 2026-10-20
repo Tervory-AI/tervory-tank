@@ -1,5 +1,5 @@
 import { baseBatches, baseRecords, listSkills } from "@/lib/tank";
-import { contextReport, type ContextReport } from "./context-report";
+import { loadContextReport, type ContextReport } from "./context-report";
 import { currentTenant } from "@/lib/tenant";
 import { buildModel, type BatchIn, type PageModel, type SkillIn } from "./model";
 
@@ -12,7 +12,7 @@ export async function loadBase(): Promise<PageModel> {
     const { tenantId } = await currentTenant();
     batches = await baseBatches(tenantId);
     try {
-      contextTrial = contextReport(await baseRecords(tenantId, { limit: 200 }));
+      contextTrial = await loadContextReport(baseRecords);
     } catch {
       contextTrial = null;
     }

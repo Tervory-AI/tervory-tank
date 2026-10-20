@@ -18,7 +18,7 @@ from chassis.jobs import JobContext
 from pipeline import order_states, state_of
 from sources.context_dev import lookup_body
 from sources.trial import run_trial
-from sources.vendor_ledger import flush_pending
+from sources.vendor_ledger import PLATFORM_TENANT, flush_pending
 from room import (
     SQL_BATCHES_BY_TENANT,
     SQL_RECORDS_BY_TENANT,
@@ -103,6 +103,8 @@ async def context_trial(body: ContextTrial, x_tank_key: str = Header(default="")
     key = os.environ.get("TANK_KEY", "")
     if not key or not hmac.compare_digest(key.encode(), x_tank_key.encode()):
         raise HTTPException(status_code=401, detail="Base room key required")
+    if body.tenant_id != uuid.UUID(PLATFORM_TENANT):
+        raise HTTPException(status_code=403, detail="company trials require the platform tenant")
     records = [record.model_dump(mode="json") for record in body.records]
     for record in records:
         try:

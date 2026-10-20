@@ -51,6 +51,7 @@ def test_budget_and_ledger(monkeypatch):
             client = adapter.ContextDev(http, ledger, tenant_id=TENANT, run_id=RUN)
             results = await asyncio.gather(*(client.lookup(name="Example") for _ in range(4)))
             assert [row["status"] for row in results] == ["candidate", "candidate", "credit_limit", "credit_limit"]
+            assert results[2]["message"] == "credit cap reached"
             assert results[0]["fields"] == {"name": "Example", "website": "https://example.com"}
     asyncio.run(run())
     assert len(requests) == 2

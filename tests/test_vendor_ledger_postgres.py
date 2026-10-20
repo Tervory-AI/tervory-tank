@@ -43,7 +43,7 @@ async def test_schema_and_durable_trial(monkeypatch, upgrade):
         for line in additions:
             before = before.replace(line + "\n", "")
         legacy = uuid.uuid4()
-        tenant, run = uuid.uuid4(), uuid.uuid4()
+        tenant, run = uuid.UUID("00000000-0000-0000-0000-000000000001"), uuid.uuid4()
         if upgrade:
             await conn.execute(before)
             for agent in ("base", "tiger", "market_lab", "rig", "tisan", "radix", "zenas"):
@@ -86,7 +86,7 @@ async def test_schema_and_durable_trial(monkeypatch, upgrade):
         await conn.execute(
             "INSERT INTO agent_base.tasks(id,tenant_id,title,status) VALUES($1,$2,'trial','done')", run, tenant,
         )
-        ids = [uuid.uuid4() for _ in range(3)]
+        ids = [uuid.uuid4() for _ in range(4)]
         for record in ids:
             await conn.execute(
                 "INSERT INTO agent_base.records(id,tenant_id,task_id,raw,profile,status) "
@@ -131,6 +131,20 @@ async def test_schema_and_durable_trial(monkeypatch, upgrade):
                 with pytest.raises(ValueError):
                     await run_trial(base_pool, http, str(uuid.uuid4()), str(run), selected)
                 assert calls == []
+                client_tenant, client_run, client_record = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+                await conn.execute(
+                    "INSERT INTO agent_base.tasks(id,tenant_id,title,status) VALUES($1,$2,'client','done')",
+                    client_run, client_tenant,
+                )
+                await conn.execute(
+                    "INSERT INTO agent_base.records(id,tenant_id,task_id,raw,status) VALUES($1,$2,$3,'{}','done')",
+                    client_record, client_tenant, client_run,
+                )
+                with pytest.raises(ValueError, match="record not found"):
+                    await run_trial(base_pool, http, str(tenant), str(run), [
+                        {"record_id": str(client_record), "domain": "stripe.com"},
+                    ])
+                assert calls == []
                 with pytest.raises(RuntimeError, match="ledger unavailable"):
                     await run_trial(base_pool, http, str(tenant), str(run), selected[:1])
                 assert len(calls) == 1
@@ -139,6 +153,15 @@ async def test_schema_and_durable_trial(monkeypatch, upgrade):
                 answer = await run_trial(base_pool, http, str(tenant), str(run), selected)
                 assert len(calls) == 2
                 assert answer["results"][2]["status"] == "credit_limit"
+                assert answer["message"] == "credit cap reached"
+                assert len(answer["results"]) == 3
+                exact_cap = await run_trial(base_pool, http, str(tenant), str(run), selected[:2])
+                assert exact_cap["message"] == "credit cap reached"
+                assert exact_cap["results"][-1]["credit_cap_reached"] is True
+                capped = await conn.fetchval(
+                    "SELECT passes->'context_dev' FROM agent_base.records WHERE tenant_id=$1 AND id=$2", tenant, ids[2],
+                )
+                assert json.loads(capped)["credit_cap_reached"] is True
                 await run_trial(base_pool, http, str(tenant), str(run), selected)
                 assert len(calls) == 2
                 assert len(posted) == 2
@@ -170,9 +193,9 @@ async def test_schema_and_durable_trial(monkeypatch, upgrade):
                         {"call_id": str(uuid.uuid4()), "record_id": str(ids[2]), "reserved_credits": 10}, 20,
                     )
                 await flush_pending(base_pool, http)
-                recovered = await run_trial(base_pool, http, str(tenant), str(other_run), selected[2:])
+                recovered = await run_trial(base_pool, http, str(tenant), str(other_run), selected[2:3])
                 assert recovered["results"][0]["status"] == "unknown"
-                assert posted[-1]["units"] is None
+                assert posted[-1]["units"] == 10
                 assert posted[-1]["outcome"] == "unverified"
                 assert len(calls) == 2
             finally:

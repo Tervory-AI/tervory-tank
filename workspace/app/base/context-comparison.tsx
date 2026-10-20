@@ -5,6 +5,7 @@ export function ContextComparison({ report }: { report?: ContextReport | null })
     <section className="bcp-section" id="context-trial">
       <h2>Company data trial</h2>
       <p className="bcp-copy">Context.dev suggestions stay beside Base’s answers. Only checked answers count toward accuracy.</p>
+      {report?.creditCapReached && <p role="status">credit cap reached</p>}
       {!report ? <p>Comparison could not load.</p> : !report.records ? (
         <p>No trial results yet. Selected public businesses can be compared once the trial key is set.</p>
       ) : (

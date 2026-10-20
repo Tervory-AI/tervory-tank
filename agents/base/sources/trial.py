@@ -6,12 +6,14 @@ import json
 import uuid
 from typing import Any
 
-from sources.context_dev import ContextDev
-from sources.vendor_ledger import SCHEMA, TankVendorLedger, decoded
+from sources.context_dev import BRAND_CREDITS, ContextDev
+from sources.vendor_ledger import PLATFORM_TENANT, SCHEMA, TankVendorLedger, decoded
 
 
 async def run_trial(pool: Any, http: Any, tenant_id: str, run_id: str, records: list[dict[str, Any]]) -> dict[str, Any]:
     tenant, run = uuid.UUID(tenant_id), uuid.UUID(run_id)
+    if tenant != uuid.UUID(PLATFORM_TENANT):
+        raise ValueError("company trials require the platform tenant")
     lock = f"context-trial:{tenant}:{run}"
     async with pool.acquire() as conn:
         await conn.execute(SCHEMA)
@@ -36,7 +38,8 @@ async def run_trial(pool: Any, http: Any, tenant_id: str, run_id: str, records: 
             results = []
             uncertain = await conn.fetchval(
                 "SELECT 1 FROM agent_base.context_dev_calls WHERE tenant_id=$1 AND run_id=$2 "
-                "AND (result->'credits'='null'::jsonb OR (result->>'credits')::numeric > reserved_credits) LIMIT 1",
+                "AND (result->'credits'='null'::jsonb OR (result->>'credits')::numeric <= 0 "
+                "OR (result->>'credits')::numeric > reserved_credits) LIMIT 1",
                 tenant, run,
             )
             adapter.stopped = uncertain == 1
@@ -59,6 +62,21 @@ async def run_trial(pool: Any, http: Any, tenant_id: str, run_id: str, records: 
                         json.dumps({"checked": True, "expected": checked}),
                     )
                 results.append({"record_id": record["record_id"], **result})
+                if result["status"] == "credit_limit":
+                    break
+            spent = await conn.fetchval(
+                "SELECT coalesce(sum(reserved_credits),0) FROM agent_base.context_dev_calls "
+                "WHERE tenant_id=$1 AND run_id=$2", tenant, run,
+            )
+            if results and (results[-1]["status"] == "credit_limit" or spent + BRAND_CREDITS > adapter.max_credits):
+                results[-1]["credit_cap_reached"] = True
+                await conn.execute(
+                    "UPDATE agent_base.records SET passes=jsonb_set(passes,'{context_dev}',$4::jsonb) "
+                    "WHERE tenant_id=$1 AND task_id=$2 AND id=$3",
+                    tenant, run, uuid.UUID(results[-1]["record_id"]),
+                    json.dumps({key: value for key, value in results[-1].items() if key != "record_id"}),
+                )
+                return {"run_id": run_id, "results": results, "status": "credit_limit", "message": "credit cap reached"}
             return {"run_id": run_id, "results": results}
         finally:
             await conn.execute("SELECT pg_advisory_unlock(hashtextextended($1,0))", lock)

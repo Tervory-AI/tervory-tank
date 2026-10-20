@@ -45,9 +45,15 @@ async def test_vendor_route_uses_real_key_auth_and_platform_scope(monkeypatch):
             ({"tenant_id": str(uuid.uuid4())}, 403), ({"region": "za"}, 403),
             ({"units": -1}, 422), ({"units": "NaN"}, 422), ({"cost_usd": 1}, 422),
             ({"units": None}, 422), ({"outcome": "anything"}, 422),
+            ({"units": 0}, 422), ({"units": 1001}, 422),
+            ({"units": "Infinity"}, 422), ({"units": None, "outcome": "unverified"}, 422),
+            ({"task_type": "tiger.context_dev"}, 403), ({"task_type": "base_other.call"}, 403),
+            ({"task_type": "base"}, 403),
         ]:
             response = await client.post("/v1/ledger/vendor", json={**body, **changes}, headers={"X-Tank-Key": "base-test"})
             assert response.status_code == status
+        missing_units = {key: value for key, value in body.items() if key != "units"}
+        assert (await client.post("/v1/ledger/vendor", json=missing_units, headers={"X-Tank-Key": "base-test"})).status_code == 422
         conn.fetchval.assert_not_called()
         response = await client.post("/v1/ledger/vendor", json=body, headers={"X-Tank-Key": "base-test"})
         assert response.status_code == 200 and response.json()["ledger_id"] == str(call_id)
@@ -63,8 +69,13 @@ async def test_vendor_route_uses_real_key_auth_and_platform_scope(monkeypatch):
         conn.fetchval.side_effect = None
         conn.fetchval.return_value = call_id
         response = await client.post(
-            "/v1/ledger/vendor", json={**body, "units": None, "outcome": "unverified"},
+            "/v1/ledger/vendor", json={**body, "units": 1000, "outcome": "unverified"},
             headers={"X-Tank-Key": "base-test"},
+        )
+        assert response.status_code == 200
+        response = await client.post(
+            "/v1/ledger/vendor", json={**body, "agent": "tiger", "task_type": "tiger.vendor", "units": 0.5},
+            headers={"X-Tank-Key": "tiger-test"},
         )
         assert response.status_code == 200
         assert (await client.get("/v1/ledger/summary", headers={"X-Tank-Key": "base-test"})).status_code == 403

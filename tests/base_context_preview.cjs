@@ -14,7 +14,7 @@ const compiled = ts.transpileModule(source, {
 const component = { exports: {} };
 new Function("require", "module", "exports", compiled)(workspaceRequire, component, component.exports);
 const report = {
-  records: 20, creditsPerRecord: 10, unknownCharges: 0,
+  records: 20, creditsPerRecord: 10, unknownCharges: 0, creditCapReached: true,
   fields: [
     { field: "website", checked: 10, baseCorrect: 9, contextCorrect: 8 },
     { field: "name", checked: 10, baseCorrect: 10, contextCorrect: 9 },

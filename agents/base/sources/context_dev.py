@@ -115,7 +115,7 @@ class ContextDev:
             return {"status": "not_configured", "fields": {}}
         async with self.lock:
             if self.stopped or self.reserved + BRAND_CREDITS > self.max_credits:
-                return {"status": "credit_limit", "fields": {}}
+                return {"status": "credit_limit", "message": "credit cap reached", "fields": {}}
             event = {
                 "tenant_id": self.tenant_id, "run_id": self.run_id,
                 "call_id": str(uuid.uuid4()), "agent": "base",
@@ -125,7 +125,8 @@ class ContextDev:
             try:
                 reservation = await self.ledger.reserve(event, self.max_credits)
             except CreditLimit:
-                return {"status": "credit_limit", "fields": {}}
+                self.stopped = True
+                return {"status": "credit_limit", "message": "credit cap reached", "fields": {}}
             self.reserved += BRAND_CREDITS
             result: dict[str, Any] = {"status": "unknown", "fields": {}, "credits": None}
             try:
@@ -148,7 +149,7 @@ class ContextDev:
                 result["status"] = "transport_error"
             finally:
                 credits = result["credits"]
-                if credits is None or credits > BRAND_CREDITS:
+                if credits is None or credits <= 0 or credits > BRAND_CREDITS:
                     self.stopped = True
                 try:
                     await self.ledger.settle(reservation, {**event, **result})

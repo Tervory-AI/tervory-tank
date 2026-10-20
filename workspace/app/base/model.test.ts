@@ -1,8 +1,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { contextReport } from "./context-report";
+import { contextReport, loadContextReport, PLATFORM_TENANT } from "./context-report";
 import type { BaseRecord } from "@/lib/tank";
 import { approvedSkills, batchStatus, buildModel, refreshedLabel, shortDate, type BatchIn, type SkillIn } from "./model";
+
+test("trial report reads only platform records", async () => {
+  const calls: string[] = [];
+  await loadContextReport(async (tenantId, options) => {
+    calls.push(tenantId);
+    assert.equal(options.limit, 200);
+    assert.notEqual(tenantId, "client-tenant");
+    return [];
+  });
+  assert.deepEqual(calls, [PLATFORM_TENANT]);
+});
+
+test("credit cap reached is shown without counting an uncalled record as a charge", () => {
+  const row = { passes: { context_dev: { status: "credit_limit", message: "credit cap reached" } } } as unknown as BaseRecord;
+  const report = contextReport([row]);
+  assert.equal(report.creditCapReached, true);
+  assert.equal(report.records, 0);
+  assert.equal(report.unknownCharges, 0);
+});
 
 test("trial accuracy uses checked answers, includes missing answers and unknown charges", () => {
   const record = {

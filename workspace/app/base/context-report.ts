@@ -1,11 +1,20 @@
 import type { BaseRecord } from "@/lib/tank";
 
+export const PLATFORM_TENANT = "00000000-0000-0000-0000-000000000001";
+
 export type ContextReport = {
   records: number;
   creditsPerRecord: number | null;
   unknownCharges: number;
+  creditCapReached: boolean;
   fields: { field: string; checked: number; baseCorrect: number; contextCorrect: number }[];
 };
+
+export async function loadContextReport(
+  read: (tenantId: string, options: { limit: number }) => Promise<BaseRecord[]>,
+): Promise<ContextReport> {
+  return contextReport(await read(PLATFORM_TENANT, { limit: 200 }));
+}
 
 function comparable(value: unknown): string {
   if (Array.isArray(value)) return JSON.stringify(value.map(comparable).sort());
@@ -33,11 +42,12 @@ function fieldValue(field: string, value: unknown): string {
 }
 
 export function contextReport(records: BaseRecord[]): ContextReport {
-  const report: ContextReport = { records: 0, creditsPerRecord: null, unknownCharges: 0, fields: [] };
+  const report: ContextReport = { records: 0, creditsPerRecord: null, unknownCharges: 0, creditCapReached: false, fields: [] };
   const fields = new Map<string, ContextReport["fields"][number]>();
   let credits = 0;
   for (const record of records) {
     const trial = record.passes.context_dev;
+    if (trial?.status === "credit_limit" || trial?.credit_cap_reached === true) report.creditCapReached = true;
     if (!trial || !["candidate", "failed", "transport_error", "unknown"].includes(String(trial.status))) continue;
     report.records++;
     if (typeof trial.credits === "number" && Number.isFinite(trial.credits) && trial.credits >= 0) credits += trial.credits;

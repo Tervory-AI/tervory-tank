@@ -33,6 +33,8 @@ class TankVendorLedger:
     def __init__(self, conn: Any, http: Any, *, tenant_id: str, run_id: str) -> None:
         self.conn, self.http = conn, http
         self.tenant_id, self.run_id = uuid.UUID(tenant_id), uuid.UUID(run_id)
+        if self.tenant_id != uuid.UUID(PLATFORM_TENANT):
+            raise ValueError("company trials require the platform tenant")
 
     async def reserve(self, event: dict[str, Any], max_credits: int) -> str:
         async with self.conn.transaction():
@@ -72,21 +74,23 @@ class TankVendorLedger:
 
     async def flush(self) -> None:
         rows = await self.conn.fetch(
-            "SELECT call_id,record_id,region,result FROM agent_base.context_dev_calls "
+            "SELECT call_id,record_id,region,result,reserved_credits FROM agent_base.context_dev_calls "
             "WHERE tenant_id=$1 AND run_id=$2 AND posted=false AND result IS NOT NULL",
             self.tenant_id, self.run_id,
         )
         for row in rows:
             result = decoded(row["result"])
             credits = result.get("credits")
-            outcome = "unverified" if credits is None else "delivered" if result["status"] == "candidate" else "failed"
+            verified_units = isinstance(credits, (int, float)) and 0 < credits <= 1000
+            outcome = "unverified" if not verified_units else "delivered" if result["status"] == "candidate" else "failed"
             response = await self.http.post(
                 os.environ.get("TANK_URL", "http://tank:8000").rstrip("/") + "/v1/ledger/vendor",
                 headers={"X-Tank-Key": os.environ.get("TANK_KEY", "")},
                 json={
                     "id": str(row["call_id"]), "tenant_id": PLATFORM_TENANT,
                     "agent": "base", "task_type": "base.context_dev", "vendor": "context.dev",
-                    "units": credits, "cost_usd": 0, "outcome": outcome, "region": row["region"],
+                    "units": credits if verified_units else row["reserved_credits"],
+                    "cost_usd": 0, "outcome": outcome, "region": row["region"],
                 },
                 timeout=30, follow_redirects=False,
             )
@@ -121,7 +125,8 @@ async def flush_pending(pool: Any, http: Any) -> None:
     async with pool.acquire() as conn:
         await conn.execute(SCHEMA)
         runs = await conn.fetch(
-            "SELECT DISTINCT tenant_id,run_id FROM agent_base.context_dev_calls WHERE posted=false LIMIT 200"
+            "SELECT DISTINCT tenant_id,run_id FROM agent_base.context_dev_calls "
+            "WHERE tenant_id=$1 AND posted=false LIMIT 200", uuid.UUID(PLATFORM_TENANT),
         )
         for row in runs:
             lock = f"context-trial:{row['tenant_id']}:{row['run_id']}"
