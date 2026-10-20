@@ -459,6 +459,26 @@ def _manifest(
     }
 
 
+def select_visual_frames(reading: dict[str, Any], node_id: str, page: str) -> list[dict[str, Any]]:
+    """Select the requested frame and its page's measured responsive counterparts."""
+    frames = reading.get("visual", [])
+    if not isinstance(frames, list):
+        raise ScaffoldError("frame data incomplete")
+    frames = [frame for frame in frames if isinstance(frame, dict)]
+    requested = [frame for frame in frames if frame.get("frameId") == node_id]
+    if len(requested) > 1:
+        raise ScaffoldError("frame data incomplete")
+    source_page = requested[0].get("page") if requested else page
+    if not isinstance(source_page, str) or not source_page.startswith("/"):
+        raise ScaffoldError("frame data incomplete")
+    selected = [frame for frame in frames if frame.get("page") == source_page
+                and frame.get("width") in (375, 1440)]
+    for width in (375, 1440):
+        if sum(frame.get("width") == width for frame in selected) > 1:
+            raise ScaffoldError("frame data incomplete")
+    return [{**frame, "page": page} for frame in selected]
+
+
 async def execute(
     payload: dict[str, Any],
     tenant_id: str,
@@ -499,10 +519,7 @@ async def execute(
             if target_page not in brief["pages"]:
                 raise ScaffoldError("frame data incomplete")
             target_path = "/" if target_page == "home" else f"/{target_page}"
-            measurements = reading.get("visual", [])
-            if not isinstance(measurements, list):
-                raise ScaffoldError("frame data incomplete")
-            measurements = [{**frame, "page": target_path} for frame in measurements if isinstance(frame, dict)]
+            measurements = select_visual_frames(reading, node_id, target_path)
             (visual_dir / "frames.json").write_text(json.dumps(measurements))
         if run_checks_now:
             checks, detail = await run_checks(project)
