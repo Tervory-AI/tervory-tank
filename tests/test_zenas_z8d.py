@@ -50,3 +50,18 @@ def test_word_boundaries_ambiguity_and_reversed_pointers():
     with pytest.raises(PointerError):
         resolve_pointer({"paragraphs": [True]}, "[1] text")
     assert judgment_text("[1] Facts.\nFootnote 1: Reference.\n\n[2] Holding.") == "[1] Facts.\n\n\n[2] Holding."
+
+
+def test_interleaved_numbered_footnote_is_not_part_of_facts():
+    text = (
+        "[24] The supplier delivered the goods.[15]\n"
+        "15 A reference to the delivery record.\n"
+        "A continuation of that footnote.\n\n"
+        "The buyer accepted them.\n\n"
+        "[25] Payment was due."
+    )
+    cleaned = judgment_text(text)
+    facts = resolve_pointer({"paragraphs": [24]}, cleaned)
+    assert "reference" not in facts and "continuation" not in facts
+    assert "delivered the goods." in facts and "buyer accepted" in facts
+    assert resolve_pointer({"paragraphs": [25]}, cleaned) == "Payment was due."

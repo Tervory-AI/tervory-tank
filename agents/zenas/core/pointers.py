@@ -13,6 +13,15 @@ class PointerError(ValueError):
 
 
 def judgment_text(text: str) -> str:
+    references = set(re.findall(r"(?<=\S)\[(\d+)\]", text))
+    for number in references:
+        text = re.sub(
+            rf"(?ms)^[ \t]*{re.escape(number)}[.)]?[ \t]+[^\n]+"
+            rf"(?:\n(?![ \t]*(?:\n|\[\d+\]))[^\n]+)*",
+            "",
+            text,
+        )
+    text = re.sub(r"(?<=\S)\[\d+\]", "", text)
     text = re.sub(r"(?is)<footnote\b[^>]*>.*?</footnote>", "", text)
     text = re.sub(r"(?is)<aside\b[^>]*>.*?</aside>", "", text)
     text = re.sub(r"(?m)^[ \t]*(?:Footnote\s+\d+[:.]?|\d+\s+See\b)[^\n]*(?:\n[ \t]+[^\n]+)*", "", text)
