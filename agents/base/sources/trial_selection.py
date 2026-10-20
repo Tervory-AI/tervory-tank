@@ -37,7 +37,7 @@ def official_truth() -> dict[str, dict[str, Any]]:
                 truth[official["id"]] = {
                     "checked_answers": {
                         "website": found["expected"]["website"]["value"],
-                        "phone": official["phone"],
+                        **({"phone": official["phone"]} if str(official.get("phone") or "").strip() else {}),
                         "address": ", ".join(str(official[key]) for key in ("address", "city", "state", "zip")),
                     },
                     "label_source": found["label_source"],

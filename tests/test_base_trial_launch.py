@@ -139,6 +139,9 @@ def test_optional_gold_validator_supplies_only_official_truth(monkeypatch, tmp_p
         "website": "https://example.com", "phone": "6175550100", "address": "10 Main St, Boston, MA, 02110",
     }
     assert selected[0]["label_source"] == "ATF active licences · 2026-10-20"
+    snapshot["official"]["phone"] = ""
+    path.write_text(json.dumps(snapshot) + "\n")
+    assert "phone" not in trial_selection.official_truth()["list-1"]["checked_answers"]
     snapshot["official"]["active"] = False
     path.write_text(json.dumps(snapshot) + "\n")
     assert trial_selection.official_truth() == {}
