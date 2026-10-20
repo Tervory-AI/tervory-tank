@@ -50,7 +50,7 @@ export default async function PricesPage({ searchParams }: { searchParams: Promi
       <div className="head">
         <picture>
           <source srcSet="/brand/tervory-logo-reversed.png" media="(prefers-color-scheme: dark)" />
-          <img src="/brand/tervory-logo-on-white.png" alt="Tervory" />
+          <img src="/brand/tervory-logo.png" alt="Tervory" />
         </picture>
         <h1>Prices{orgName ? ` · ${orgName}` : ""}</h1>
       </div>

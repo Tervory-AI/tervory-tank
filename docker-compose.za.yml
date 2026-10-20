@@ -120,6 +120,9 @@ services:
       LITELLM_URL: http://litellm:4000
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       TANK_API_KEY: ${TANK_API_KEY}
+      HF_TOKEN: ${HF_TOKEN:-}
+      HF_ORG: ${HF_ORG:-}
+      TRAINING_JOB_KEY: ${TRAINING_JOB_KEY:-}
       TERVORY_ADMIN_USER_IDS: ${TERVORY_ADMIN_USER_IDS:-}
       # Homes-only key: POST /v1/zenas/tenants with home za, nothing else.
       TANK_HOMES_KEY: ${TANK_HOMES_KEY:-}

@@ -1,0 +1,62 @@
+name: Squad training
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: squad-training-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install -r tank/requirements.txt -r tank/requirements-dev.txt
+      - run: ruff check tank tests --select E9,F --per-file-ignores 'tank/skills/base.socials/1.0.0/run.py:F401'
+      - run: pytest -q
+        env:
+          PYTHONPATH: tank
+          TRAINING_SCHEMA_DATABASE_URL: postgresql://postgres@localhost:5432/postgres
+          POOL_SCHEMA_DATABASE_URL: postgresql://postgres@localhost:5432/postgres
+          ZENAS_SCHEMA_DATABASE_URL: postgresql://postgres@localhost:5432/postgres
+      - working-directory: workspace
+        run: |
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-package-lock --no-audit --no-fund; fi
+          npx next build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA==
+          CLERK_SECRET_KEY: sk_test_dummy
+
+      - name: Browser review checks
+        run: |
+          npm install --prefix "$RUNNER_TEMP/train1-browser" --no-audit --no-fund playwright@1.64.1 esbuild@0.28.2
+          "$RUNNER_TEMP/train1-browser/node_modules/.bin/playwright" install --with-deps chromium
+          node tests/test_train1_page.mjs
+          node tests/test_train1_api.mjs
+        env:
+          TRAIN1_ESBUILD_PATH: ${{ runner.temp }}/train1-browser/node_modules/esbuild
+          TRAIN1_PLAYWRIGHT_PATH: ${{ runner.temp }}/train1-browser/node_modules/playwright
+          TRAIN1_SCREENSHOT_DIR: ${{ runner.temp }}/train1-screenshots
+      - uses: actions/upload-artifact@v4
+        with:
+          name: squad-training-screenshots
+          path: ${{ runner.temp }}/train1-screenshots

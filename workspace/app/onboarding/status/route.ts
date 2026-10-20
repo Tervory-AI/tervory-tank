@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { baseBatches } from "@/lib/tank";
 import { activeTenant } from "@/lib/tenant";
+import { isFounder } from "@/lib/admin";
+import { auth } from "@clerk/nextjs/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,6 +11,9 @@ export const dynamic = "force-dynamic";
 // A missing organization also needs onboarding. If Tank is down, leave the home page alone.
 export async function GET() {
   try {
+    // Founders run the squad, not the client sign-up flow.
+    const { userId } = await auth();
+    if (isFounder(userId)) return NextResponse.json({ needs: false });
     const tenant = await activeTenant();
     if (!tenant) return NextResponse.json({ needs: true });
     const batches = await baseBatches(tenant.tenantId);

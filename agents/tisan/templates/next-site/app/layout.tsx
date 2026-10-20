@@ -18,7 +18,7 @@ function Logo() {
   return (
     // The logo host is chosen per site, so this stays a plain image.
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={site.logoUrl} alt={`${site.name} logo`} className="h-8 w-auto" />
+    <img src={site.logoUrl} alt={`${site.name} logo`} width={32} height={32} className="h-8 w-8" />
   );
 }
 
@@ -33,22 +33,30 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           Skip to content
         </a>
         <header className="border-b border-line">
-          <nav aria-label="Primary" className="flex items-center gap-6 px-6 py-4">
+          <nav
+            aria-label="Primary"
+            className="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 py-3 sm:px-6"
+          >
             <Logo />
             <p className="font-heading text-lg">{site.name}</p>
-            <ul className="flex gap-4">
+            <ul className="flex flex-wrap items-center gap-1">
               {site.pages.map((page) => (
                 <li key={page.href}>
-                  <a href={page.href}>{page.label}</a>
+                  <a
+                    className="inline-flex min-h-12 min-w-12 items-center justify-center px-3"
+                    href={page.href}
+                  >
+                    {page.label}
+                  </a>
                 </li>
               ))}
             </ul>
           </nav>
         </header>
-        <main id="content" className="px-6 py-8">
+        <main id="content" className="px-4 py-8 sm:px-6">
           {children}
         </main>
-        <footer className="border-t border-line px-6 py-4">
+        <footer className="border-t border-line px-4 py-4 sm:px-6">
           <p>{site.name}</p>
         </footer>
       </body>

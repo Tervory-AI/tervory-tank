@@ -76,6 +76,11 @@ button.ghost { background: transparent; color: var(--fg); border-color: var(--li
 .score { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .bar { flex: 1; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; } .fill { display: block; height: 100%; }
 .muted { color: var(--muted); }
+
+/* Squad list in the left panel. Light type on the navy panel. */
+nav.squad-nav { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+nav.squad-nav a { color: #f4f6fb; text-decoration: none; font-size: 14px; line-height: 1.4; padding: 4px 8px; }
+nav.squad-nav a[aria-current="page"] { color: #fff; font-weight: 600; }
 @media (max-width: 820px) {
   .row-main { grid-template-columns: 1fr 64px 84px; } .row-desc, .score { display: none; }
 }
@@ -84,3 +89,54 @@ button.ghost { background: transparent; color: var(--fg); border-color: var(--li
 .ladder-name { display: flex; flex-direction: column; min-width: 0; } .ladder-cand { display: flex; flex-direction: column; min-width: 0; }
 .ladder-cand select { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--fg); font: inherit; font-size: 13px; }
 @media (max-width: 820px) { .ladder-row { grid-template-columns: 1fr; } }
+
+/* Squad pages share one mobile pattern: full-width search and chat, 44px taps, no sideways scroll. */
+@media (max-width: 800px) {
+  .bcp, .tiger, .tisan, .rig, .ml, .rx, .zn, .skala, .tk { overflow-x: hidden; max-width: 100vw; }
+  .tiger.menu-open .panel,
+  .tisan.menu-open .panel,
+  .rig.menu-open .panel,
+  .ml-panel.open,
+  .zn-panel.open,
+  .skala.menu-open .sk-panel,
+  .tk-panel.open,
+  .bcp-panel.open,
+  .rx-menu-dialog[open] { overflow-y: auto; }
+  nav.squad-nav a,
+  .bcp button, .bcp nav a, .bcp .bcp-menu, .bcp .bcp-close,
+  .tiger button, .tiger a.nav, .tiger .menu,
+  .tisan button, .tisan a, .tisan .menu,
+  .rig button, .rig a.nav, .rig .menu,
+  .ml button, .ml a.ml-link, .ml .ml-navbtn,
+  .rx button, .rx a, .rx-mobile-bar button,
+  .zn button, .zn a, .zn-menu, .zn-close,
+  .skala button, .sk-nav a, .sk-menu, .sk-close,
+  .tk button, .tk-nav a, .tk button.tk-menu, .tk button.tk-close,
+  .bcp input, .bcp textarea,
+  .tiger input, .tiger textarea,
+  .tisan input, .tisan textarea,
+  .rig input, .rig textarea,
+  .ml input, .ml textarea,
+  .rx input, .rx textarea, .rx select,
+  .zn input, .zn textarea,
+  .skala input, .skala textarea,
+  .tk input, .tk textarea {
+    min-height: 44px !important;
+    min-width: 44px;
+    box-sizing: border-box;
+  }
+  .zn-menu, .bcp-menu, .sk-menu, .tk-menu, .tiger .menu, .tisan .menu, .rig .menu, .ml-menu, .rx-mobile-bar button {
+    min-width: 44px;
+  }
+  .bcp-search-bar, .bcp-search-bar input, .bcp-composer, .bcp-composer textarea,
+  .tiger .search, .tiger .search input, .tiger .composer, .tiger .composer input,
+  .ml-search, .ml-search input, .ml-composer, .ml-composer input,
+  .tk-search, .tk-search input, .tk-composer, .tk-composer input,
+  .zn-search, .zn-search input, .zn-composer, .zn-composer textarea,
+  .rx-record-search input, .rx-request-form, .rx-request-form textarea,
+  .sk-search, .sk-search input, .sk-ask input {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+}
