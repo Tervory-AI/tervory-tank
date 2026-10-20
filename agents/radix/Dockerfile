@@ -37,6 +37,8 @@ RUN apt-get update \
     && chown agent:agent /data /opt/osv
 COPY _chassis/chassis /app/chassis
 COPY radix/app.py /app/app.py
+COPY radix/gold_sources.py /app/gold_sources.py
+COPY radix/evals/gold /app/evals/gold
 COPY radix/net.py /app/net.py
 COPY radix/live.py /app/live.py
 COPY radix/egress.py /app/egress.py
