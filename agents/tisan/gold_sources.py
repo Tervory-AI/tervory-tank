@@ -46,7 +46,7 @@ def snapshot(root: Path, tenant: str, page_id: str) -> dict[str, Any]:
     if not re.fullmatch(r"[a-z0-9-]{1,100}", page_id):
         raise ValueError("invalid page id")
     row = json.loads((root / "reviews" / tenant / f"{page_id}.json").read_text())
-    if row["tenant_id"] != tenant or row["region"] != os.environ.get("TANK_REGION", "us-east"):
+    if row["tenant_id"] != tenant or row["region"] not in {"za", "us-east"} or row["region"] != os.environ.get("TANK_REGION", "us-east"):
         raise ValueError("artifact scope mismatch")
     # Resolve only this tenant's artifacts, even if a metadata file is malformed.
     frame_root = root / "readings" / tenant

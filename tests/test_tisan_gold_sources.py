@@ -155,6 +155,17 @@ def test_scaffold_review_saves_built_page_without_approval(tmp_path):
     (tmp_path / "builds" / TENANT / "example").mkdir(parents=True)
     store.save(tmp_path, project, TENANT, "example", 1, {"file_key": file_id, "node_id": "2:11"})
     row = gold.snapshot(tmp_path, TENANT, "example-1-home")
-    assert row["page_structure"]["nodes"] == [{"tag": "h1", "attrs": {}}, {"text": "Example"}]
+    assert row["page_structure"]["nodes"] == [{"tag": "h1", "attrs": {}, "children": [{"text": "Example"}]}]
     assert row["public"] is False
     assert "approval" not in row
+
+
+def test_approved_structure_keeps_dom_hierarchy():
+    spec = importlib.util.spec_from_file_location("tisan_review_tree", ROOT / "agents/tisan/review_store.py")
+    store = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(store)
+    parser = store.Structure()
+    parser.feed('<main><section><h1>Title</h1><p>Copy</p></section><footer>End</footer></main>')
+    main = parser.nodes[0]
+    assert [node["tag"] for node in main["children"]] == ["section", "footer"]
+    assert [node["tag"] for node in main["children"][0]["children"]] == ["h1", "p"]

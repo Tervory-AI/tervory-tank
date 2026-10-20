@@ -8,24 +8,40 @@ from typing import Any
 
 
 class Structure(HTMLParser):
+    """Retain DOM hierarchy and text without executable script contents."""
+    VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
+
     def __init__(self) -> None:
         super().__init__()
         self.nodes: list[dict[str, Any]] = []
+        self.stack: list[dict[str, Any]] = []
         self.hidden = 0
+
+    def append(self, node: dict[str, Any]) -> None:
+        (self.stack[-1]["children"] if self.stack else self.nodes).append(node)
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag in {"script", "style"}:
             self.hidden += 1
         if not self.hidden:
-            self.nodes.append({"tag": tag, "attrs": dict(attrs)})
+            node = {"tag": tag, "attrs": dict(attrs), "children": []}
+            self.append(node)
+            if tag not in self.VOID:
+                self.stack.append(node)
 
     def handle_endtag(self, tag: str) -> None:
         if tag in {"script", "style"} and self.hidden:
             self.hidden -= 1
+            return
+        if not self.hidden:
+            for index in range(len(self.stack) - 1, -1, -1):
+                if self.stack[index]["tag"] == tag:
+                    del self.stack[index:]
+                    break
 
     def handle_data(self, data: str) -> None:
         if not self.hidden and data.strip():
-            self.nodes.append({"text": data.strip()})
+            self.append({"text": data.strip()})
 
 
 def save(root: Path, project: Path, tenant: str, slug: str, build: int, source: dict[str, Any]) -> None:
