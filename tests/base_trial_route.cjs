@@ -58,4 +58,17 @@ mocks["./context-report"] = load("workspace/app/base/context-report.ts");
   assert.ok(founder.includes("Run Context.dev trial"));
   assert.ok(founder.includes("no truth yet"));
   assert.ok(founder.includes("Credits used: 20.00"));
+  mocks.react = {
+    ...React,
+    useState: (initial) => React.useState(initial === null ? {
+      records: 0, creditsUsed: 0, noTruth: 0, creditsPerRecord: null,
+      unknownCharges: 0, creditCapReached: true, fields: [],
+    } : initial),
+  };
+  const cappedComponent = load("workspace/app/base/context-comparison.tsx").ContextComparison;
+  const capped = renderToStaticMarkup(React.createElement(cappedComponent, { report, canRunTrial: true }));
+  assert.ok(capped.includes("This press: records sent: 0"));
+  assert.ok(capped.includes("Credits used: 0.00"));
+  assert.ok(capped.includes("credit cap reached"));
+  assert.ok(!capped.includes("No trial results yet"));
 })().catch((error) => { console.error(error); process.exitCode = 1; });

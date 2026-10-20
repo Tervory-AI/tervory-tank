@@ -30,7 +30,7 @@ export function ContextComparison({ report: storedReport, canRunTrial = false }:
       {canRunTrial && <button type="button" className="bcp-secondary" disabled={pending} onClick={run}>{pending ? "Running trial…" : "Run Context.dev trial"}</button>}
       {message && <p role="status">{message}</p>}
       {report?.creditCapReached && <p role="status">credit cap reached</p>}
-      {!report ? <p>Comparison could not load.</p> : !report.records ? (
+      {!report ? <p>Comparison could not load.</p> : !report.records && !latestReport ? (
         <p>No trial results yet. Selected public businesses can be compared once the trial key is set.</p>
       ) : (
         <>
