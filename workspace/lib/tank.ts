@@ -171,6 +171,8 @@ export type Skill = {
   approved_by: string | null;
   approved_at: string | null;
   present: boolean;
+  calls_30d?: number;
+  avg_cost_usd?: number | string | null;
 };
 
 export type EvalResult = {

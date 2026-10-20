@@ -43,6 +43,14 @@ def test_page_has_no_vault_off_state_or_transfer_button():
     library = (PAGE / "library.ts").read_text(encoding="utf-8")
     assert "Approve ${id} ${version}?" in library
     assert "no model" in library
+    assert "uses a model · ${formatCallCost(avg)}/call (30 days)" in library
+    assert "uses a model · no calls yet" in library
+    css = (PAGE / "skala.css").read_text(encoding="utf-8")
+    primary = css.split(".skala .primary", 1)[1].split("}", 1)[0].lower()
+    approved = css.split(".sk-state.approved", 1)[1].split("}", 1)[0].lower()
+    assert "#e80008" in primary
+    assert "#e80008" not in approved
+    assert "background" in approved
 
 
 def test_library_page_uses_the_skills_list_and_official_logos():

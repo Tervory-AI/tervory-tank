@@ -389,9 +389,9 @@ body:has(.skala) main {
 }
 
 .sk-state.approved {
-  background: #e80008;
-  border-color: #e80008;
-  color: #fff;
+  background: #e4ebf7;
+  border-color: #8aa0c8;
+  color: #001840;
 }
 
 .sk-gone { color: #3d4a66; font-size: 14px; }

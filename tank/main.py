@@ -8,7 +8,7 @@ Endpoints
   GET  /v1/tasks/{id}?tenant_id=         one task
   POST /v1/ledger/{id}/feedback          a person's verdict on an answer: accepted | rejected
   GET  /v1/ledger/summary                spend by model and rung for a tenant (the client's ledger view)
-  GET  /v1/skala                        Skala registry: every package and its state
+  GET  /v1/skala                        Skala registry: every package, its state, and 30-day call cost
   POST /v1/skala/{id}/{ver}/evals       run a package's golden cases; candidate -> staging on pass
   POST /v1/skala/{id}/{ver}/approve     human sign-off; previous approved version retires
   POST /v1/skala/{id}/{ver}/retire      take a version out of service
@@ -59,6 +59,7 @@ from pydantic import BaseModel, Field
 
 import graduate
 import skala
+import skill_costs
 
 log = logging.getLogger("tank")
 
@@ -2102,9 +2103,11 @@ async def vendor_ledger(body: VendorCall, agent: str | None = Depends(require_ke
 
 @app.get("/v1/skala", dependencies=[Depends(require_key)])
 async def list_skills() -> list[dict[str, Any]]:
+    """Every skill, plus the platform tenant's average cost per call on this box over 30 days."""
     async with pool().acquire() as conn:
         rows = await conn.fetch("SELECT * FROM tank.skills ORDER BY agent, id, version")
-    return [dict(r) for r in rows]
+        costs = await skill_costs.fetch_call_costs(conn, PLATFORM_TENANT, box_region())
+    return skill_costs.attach_call_costs([dict(r) for r in rows], costs)
 
 
 class EvalRun(BaseModel):
