@@ -24,18 +24,22 @@ class PointerError(ValueError):
 def judgment_text(text: str) -> str:
     pending: set[int] = set()
     kept: list[str] = []
-    skipping = False
     lines = text.splitlines(keepends=True)
     for index, line in enumerate(lines):
         protected = bool(_PARAGRAPH.match(line) or re.match(r"^\s*\d+\.", line) or _DATE.match(line))
+        # Plain-text wrapping carries no proof that the next line belongs to a
+        # footnote. Delete only its marked header, never arbitrary continuations.
         note = _NOTE.match(line) if not protected else None
+        previous = lines[index - 1] if index else ""
+        boundary = not previous.strip() or bool(note and any(
+            mark.group(1) == note.group(1) and previous[:mark.start()].strip()
+            for mark in _MARK.finditer(previous)
+        ))
+        if not boundary:
+            note = None
         if note and int(note.group(1)) in pending:
             pending.remove(int(note.group(1)))
-            skipping = True
             continue
-        if skipping and line.strip() and not protected and note is None:
-            continue
-        skipping = False
         for mark in _MARK.finditer(line):
             following = line[mark.end():] + (lines[index + 1] if index + 1 < len(lines) else "")
             if int(mark.group(1)) < 1000 and line[:mark.start()].strip() and not re.match(r"\s*" + _COURT_CODE, following):
@@ -89,6 +93,10 @@ def _passage(text: str) -> str:
 def resolve_pointer(pointer: Any, text: str) -> str:
     if not isinstance(pointer, dict):
         raise PointerError("pointer did not resolve")
+    matches = list(_PARAGRAPH.finditer(text))
+    numbers = [int(match.group(1) or match.group(2)) for match in matches]
+    if any(previous >= current for previous, current in zip(numbers, numbers[1:])):
+        raise PointerError("pointer did not resolve")
     paragraphs = pointer.get("paragraphs")
     if paragraphs is not None:
         if not isinstance(paragraphs, list) or not 1 <= len(paragraphs) <= 8:
@@ -97,7 +105,6 @@ def resolve_pointer(pointer: Any, text: str) -> str:
             previous >= current for previous, current in zip(paragraphs, paragraphs[1:])
         ):
             raise PointerError("pointer did not resolve")
-        matches = list(_PARAGRAPH.finditer(text))
         found: dict[int, list[str]] = {}
         for index, match in enumerate(matches):
             end = matches[index + 1].start() if index + 1 < len(matches) else len(text)

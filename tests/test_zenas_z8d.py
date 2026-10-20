@@ -67,7 +67,8 @@ def test_interleaved_numbered_footnote_is_not_part_of_facts():
     )
     cleaned = judgment_text(text)
     facts = resolve_pointer({"paragraphs": [24]}, cleaned)
-    assert "reference" not in facts and "continuation" not in facts
+    assert "delivery record" not in facts
+    assert "A continuation of that footnote." in facts
     assert "delivered the goods." in facts and "buyer accepted" in facts
     assert resolve_pointer({"paragraphs": [25]}, cleaned) == HOLDING
 
@@ -89,7 +90,8 @@ def test_only_later_matching_footnote_blocks_are_deleted():
     cleaned = judgment_text(text)
     assert cleaned.startswith(before)
     assert original.rstrip() in cleaned
-    assert "later reference" not in cleaned and "Wrapped reference" not in cleaned
+    assert "later reference" not in cleaned
+    assert "Wrapped reference text." in cleaned
     assert "unmarked reference" in cleaned
 
 
@@ -194,7 +196,7 @@ async def test_legacy_answers_cite_check_raw_judgment(monkeypatch):
     pool = Pool(Doc(text, doc_id="civil", citation="Civil 1", title="Supplier v Buyer", source_id="saflii"))
     result = await convert_cases(pool, LadderMemory(), Answer(json.dumps(body)), region="za")
     assert result["converted"] == 1
-    assert seen == [text]
+    assert seen == [fold_for_quote(text)]
 
 
 @pytest.mark.asyncio
@@ -214,3 +216,38 @@ async def test_pointer_conversion_stores_exact_court_text_not_narrative():
     worked = await ladder.worked_for_doc(region="za", pool_doc_id="civil")
     assert worked["fact_pattern"]["facts"] == passage
     assert worked["fact_pattern"]["narrative"] == passage
+
+
+@pytest.mark.parametrize("line", ["in favour of Wolmarans in order to assist it with the purchase and refurbishment of", "2013 to 23 August 2013 between Tufh and Wolmarans.", "November 2019 Wolmarans’ municipal account in respect of rates, water,"])
+def test_marked_note_does_not_consume_real_wrapped_judgment_lines(line):
+    real = (FIXTURES / "wolmarans.txt").read_text()
+    assert line in real
+    text = real.replace(line, "Footnote 17: Reference only.\n" + line, 1)
+    text = "A preceding reference mark[17]\n\n" + text
+    # Put the note at a block boundary; its unlabelled continuation remains court text.
+    text = text.replace("Footnote 17:", "\nFootnote 17:")
+    cleaned = judgment_text(text)
+    assert "Reference only." not in cleaned
+    assert line in cleaned
+
+
+def test_numbered_wrapped_line_is_not_a_late_footnote():
+    text = "A reference[12]\n\n[15] The court allowed\n12 days for payment before execution could proceed.\n"
+    assert judgment_text(text) == text
+
+
+def test_anchor_slice_keeps_intermediate_paragraph_numbers():
+    text = (FIXTURES / "wolmarans.txt").read_text().strip()
+    words = fold_for_quote(text).split()
+    result = resolve_pointer({"first": " ".join(words[:8]), "last": " ".join(words[-8:])}, text)
+    assert result == text[len("[6] "):]
+    assert "[15]" in result
+
+
+@pytest.mark.parametrize("numbers", [(6, 6), (15, 6)])
+def test_real_judgment_repeated_or_backwards_numbering_refuses_both_pointer_forms(numbers):
+    text = (FIXTURES / "wolmarans.txt").read_text().replace("[6]", f"[{numbers[0]}]").replace("[15]", f"[{numbers[1]}]")
+    words = fold_for_quote(text).split()
+    for pointer in ({"paragraphs": [6]}, {"first": " ".join(words[:8]), "last": " ".join(words[-8:])}):
+        with pytest.raises(PointerError, match="pointer did not resolve"):
+            resolve_pointer(pointer, text)

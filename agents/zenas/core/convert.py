@@ -843,7 +843,7 @@ async def convert_cases(
         passages = [
             {
                 "citation": case["citation"],
-                "text": resolved_text if parsed["has_pointers"] else text,
+                "text": resolved_text if parsed["has_pointers"] else fold_for_quote(text),
                 "doc_id": case["document_id"],
                 "version_id": case["version_id"],
                 "status": "in_force",
