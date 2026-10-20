@@ -447,6 +447,7 @@ class BulkResult:
     file_label: str
     rows_read: int
     cases_kept: int
+    detail: str = ""
 
 
 def _case_payload(docket: DocketKept, cluster: ClusterKept, text: str) -> dict:
@@ -906,10 +907,11 @@ async def load_bulk(http_get, *, resume: str = "", state: BulkState | None = Non
                     progress.file,
                     progress.rows_read,
                     progress.cases_kept,
+                    progress.line(),
                 )
             state.files_done.add(kind)
         rendered = BulkCursor(snapshot.day, "done").render(api)
-        return BulkResult([], rendered, progress.skips, snapshot.day, "done", progress.rows_read, progress.cases_kept)
+        return BulkResult([], rendered, progress.skips, snapshot.day, "done", progress.rows_read, progress.cases_kept, progress.line())
     except asyncio.CancelledError:
         state.last_opinion_id = starting_opinion_id
         if stalled:
