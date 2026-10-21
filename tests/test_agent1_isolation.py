@@ -180,3 +180,34 @@ async def test_pipeline_defers_paid_calls_until_recovery_finishes(monkeypatch):
             assert (await client.post("/brain/pipeline", headers=headers, json={**payload, "finish": True})).status_code == 409
     finally:
         module.active.pop((tenant, task))
+
+
+@pytest.mark.asyncio
+async def test_rerun_replaces_thinking_subtotal_without_double_counting(monkeypatch):
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    module = sys.modules["base_brain"]
+    tenant, task = uuid.uuid4(), uuid.uuid4()
+    receipt = {"tenant_id": str(tenant), "task_id": str(task), "status": "done",
+               "model_receipts": [{"ledger_id": str(uuid.uuid4()), "cost_usd": 0.15}]}
+    monkeypatch.setenv("BASE_BRAIN_URL", "http://base-brain")
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *args):
+            pass
+        async def post(self, *args, **kwargs):
+            return SimpleNamespace(status_code=200, json=lambda: receipt)
+    class Pool:
+        @asynccontextmanager
+        async def acquire(self):
+            yield self
+        async def execute(self, sql, *args):
+            assert args[:2] == (tenant, task)
+    monkeypatch.setattr(module.httpx, "AsyncClient", Client)
+    cfg = {"tenant_id": str(tenant), "batch": "public", "count": 1, "model_spend": 0.4, "brain_spend": 0.1}
+    await module.drive_batch(Pool(), SimpleNamespace(_headers=lambda: {}), task, cfg, None)
+    assert cfg["model_spend"] == pytest.approx(0.45)
+    assert cfg["brain_spend"] == 0.15

@@ -53,8 +53,11 @@ async def drive_batch(pool, skills, task_id, cfg, call):
             raise RuntimeError("Brain receipt scope mismatch")
         cfg["brain_receipt"] = receipt
         cost = sum(float(r["cost_usd"]) for r in receipt.get("model_receipts", []))
+        previous_brain_cost = float(cfg.get("brain_spend") or 0)
         cfg["brain_spend"] = cost
-        cfg["model_spend"] = float(cfg.get("model_spend") or 0) + cost
+        # Tank returns every thinking receipt for this task, including an earlier
+        # attempt. Replace that subtotal on rerun rather than charging it twice.
+        cfg["model_spend"] = float(cfg.get("model_spend") or 0) - previous_brain_cost + cost
         failed = receipt.get("status") != "done"
         async with pool.acquire() as conn:
             await conn.execute(
