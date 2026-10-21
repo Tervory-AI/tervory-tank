@@ -225,7 +225,8 @@ if args[:2] == ["ps", "-q"]:
     print("\n".join(data["containers"]))
 elif args[:1] == ["inspect"]:
     c = data["containers"][args[-1]]
-    print("|".join([c["uuid"], c["resource"], c["service"], c["uuid"], "/" + c["name"],
+    # Raw Compose mode sets no coolify.resourceName, so a fixture may leave it empty.
+    print("|".join([c["uuid"], c.get("resource", ""), c["service"], c.get("project", c["uuid"]), "/" + c["name"],
                     "".join(n + " " for n in sorted(c["networks"]))]))
 elif args[:2] == ["network", "inspect"]:
     print("true" if data["networks"][args[-1]] else "false")
@@ -262,6 +263,69 @@ def test_seal_check_refuses_to_pass_when_it_sees_nothing(tmp_path: Path) -> None
     result = run_seal_check(tmp_path, "empty.json")
     assert result.returncode == 2
     assert "nothing was checked" in result.stderr
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash")
+def test_seal_check_finds_raw_compose_rooms_by_label_not_container_name(tmp_path: Path) -> None:
+    # Live Boston after Raw Compose: Base and Radix containers are <uuid>-<service>-1
+    # with no coolify.resourceName; Tank and Tiger keep normal-mode names.
+    result = run_seal_check(tmp_path, "raw_sealed.json")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.splitlines() == [
+        "tervory-tankmain-tankuuid (tankuuid): not a room, skipped",
+        "agent-base (baseuuid): sealed",
+        "agent-radix (radixuuid): sealed",
+        "agent-tiger (tigeruuid): no sealed containers",
+    ]
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash")
+def test_seal_check_reports_leaks_in_raw_compose_rooms(tmp_path: Path) -> None:
+    result = run_seal_check(tmp_path, "raw_leaking.json")
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert result.stdout.splitlines() == [
+        "tervory-tankmain-tankuuid (tankuuid): not a room, skipped",
+        "agent-base (baseuuid): LEAK: baseuuid-base-sandbox-1 on baseuuid",
+        "agent-radix (radixuuid): sealed",
+    ]
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash")
+def test_seal_check_fails_when_an_expected_room_is_missing(tmp_path: Path) -> None:
+    result = run_seal_check(tmp_path, "missing_radix.json")
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert result.stdout.splitlines() == [
+        "tervory-tankmain-tankuuid (tankuuid): not a room, skipped",
+        "agent-base (baseuuid): sealed",
+        "agent-tiger (tigeruuid): no sealed containers",
+        "agent-radix: NOT FOUND",
+    ]
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash")
+def test_seal_check_never_passes_when_only_the_hub_is_running(tmp_path: Path) -> None:
+    result = run_seal_check(tmp_path, "no_rooms.json")
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert result.stdout.splitlines() == [
+        "tervory-tankmain-tankuuid (tankuuid): not a room, skipped",
+        "agent-base: NOT FOUND",
+        "agent-radix: NOT FOUND",
+    ]
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash")
+def test_seal_check_fails_an_expected_room_with_nothing_sealed(tmp_path: Path) -> None:
+    result = run_seal_check(tmp_path, "base_not_sealed.json")
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert "agent-base (baseuuid): NOT SEALED: no container on an internal network" in result.stdout.splitlines()
+    assert "agent-radix (radixuuid): sealed" in result.stdout.splitlines()
+
+
+def test_seal_check_does_not_parse_container_names() -> None:
+    script = SEAL_CHECK.read_text(encoding="utf-8").split("set -uo pipefail", 1)[1]
+    # Room identity comes from labels; the container name is only printed in a LEAK line.
+    assert not re.search(r'\$\{name[#%/]', script.replace("${name#/}", ""))
+    assert "coolify.applicationUuid" in script and "com.docker.compose.service" in script
 
 
 def test_seal_check_is_read_only() -> None:
