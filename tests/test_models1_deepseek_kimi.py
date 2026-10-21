@@ -1,4 +1,4 @@
-"""MODELS-1: DeepSeek and Kimi join both rosters as a candidate cheap rung.
+"""MODELS-1: DeepSeek and Kimi join both rosters as bench models without policy changes.
 
 Founder decision, 18 Oct 2026 21:25 PT: the ban on China-hosted providers is removed.
 They are treated like OpenAI, Google and xAI: the tenant allow-list still applies, and the
@@ -31,7 +31,6 @@ SCHEMA = (ROOT / "tank" / "schema.sql").read_text(encoding="utf-8")
 NEW = {"deepseek-flash", "deepseek-pro", "kimi"}
 SA_ID = "8001015009087"
 TENANT = "22222222-2222-2222-2222-222222222222"
-BATCH_ROWS = {"zenas.selftest", "market.research", "base.extract", "base.business_data"}
 
 
 def _config(region: str) -> dict:
@@ -43,11 +42,6 @@ def _prices(region: str) -> dict[str, float]:
         m["model_name"]: m["model_info"]["input_cost_per_token"] + m["model_info"]["output_cost_per_token"]
         for m in _config(region)["model_list"]
     }
-
-
-def _block() -> str:
-    start = SCHEMA.index("MODELS-1 (18 Oct 2026)")
-    return SCHEMA[start:]
 
 
 @pytest.mark.parametrize("region", sorted(ROSTERS))
@@ -68,8 +62,8 @@ def test_both_rosters_list_deepseek_and_kimi_with_sourced_prices(region: str) ->
         assert "hosted_in" not in info, name
     # Price page and fetch date sit next to the prices.
     assert "api-docs.deepseek.com/quick_start/pricing" in raw
-    assert "platform.moonshot.ai/docs/pricing/chat" in raw
-    assert raw.count("fetched 18 Oct 2026") >= 2
+    assert "platform.kimi.ai/docs/pricing/chat" in raw
+    assert raw.count("checked 2026-10-21") >= 3
     assert "deliberately absent" not in raw
 
 
@@ -84,8 +78,8 @@ def test_no_task_changes_route_on_merge(region: str) -> None:
     """No fallback chain names a new model, so a failing provider never spills onto one."""
     for entry in _config(region)["litellm_settings"]["fallbacks"]:
         for primary, chain in entry.items():
-            assert primary not in NEW
-            assert not NEW & set(chain), primary
+            if primary not in NEW:
+                assert not NEW & set(chain), primary
 
 
 def test_policy_never_serves_a_new_model_from_the_repo() -> None:
@@ -93,24 +87,9 @@ def test_policy_never_serves_a_new_model_from_the_repo() -> None:
     seeded = set(re.findall(r"\('[a-z0-9_.]+',\s*\d+,\s*'([a-z0-9-]+)'", SCHEMA))
     assert not seeded & NEW
     assert not re.search(r"SET\s+(previous_model\s*=\s*model,\s*)?model\s*=\s*'(deepseek|kimi)", SCHEMA, re.I)
-    block = _block()
-    assert re.search(r"SET candidate_model = 'deepseek-flash', shadow_rate = 1", block)
-    assert not re.search(r"SET[^;]*\bmodel\s*=\s*'", block.replace("candidate_model", "candidate"))
+    assert "2026-10-18-models-1-cheap-rung" not in SCHEMA
+    assert not re.search(r"candidate_model\s*=\s*'(deepseek|kimi)", SCHEMA, re.I)
 
-
-def test_the_candidate_is_the_cheapest_new_model_and_only_where_it_is_cheaper() -> None:
-    prices = _prices("us")
-    assert min(NEW, key=prices.__getitem__) == "deepseek-flash"
-    block = _block()
-    rows = set(re.findall(r"'([a-z]+\.[a-z_]+)'", block.split("model IN")[0]))
-    assert BATCH_ROWS <= rows
-    listed = re.findall(r"model IN \(([^)]*)\)", block)
-    assert len(listed) == 2 and listed[0] == listed[1]
-    pricier = set(re.findall(r"'([a-z0-9-]+)'", listed[0]))
-    expected = {name for name, price in prices.items() if price > prices["deepseek-flash"]}
-    assert pricier == expected
-    assert "candidate_model IS NULL" in block
-    assert "2026-10-18-models-1-cheap-rung" in block
 
 
 def test_a_candidate_takes_over_only_after_matching_on_held_out_cases() -> None:
@@ -119,6 +98,7 @@ def test_a_candidate_takes_over_only_after_matching_on_held_out_cases() -> None:
         "model": "grok-top",
         "candidate_model": "deepseek-flash",
         "shadow_rate": 1,
+        "auto_promote": False,
         "eval_threshold": 0.97,
         "min_shadow_samples": 30,
         "max_reject_rate": 0.05,
@@ -128,7 +108,10 @@ def test_a_candidate_takes_over_only_after_matching_on_held_out_cases() -> None:
     assert early.action == "hold" and early.policy["model"] == "grok-top"
     missed = graduate.apply(policy, graduate.Evidence(samples=40, agreement=0.80), now)
     assert missed.action == "hold" and missed.policy["model"] == "grok-top"
-    cleared = graduate.apply(policy, graduate.Evidence(samples=40, agreement=0.99), now)
+    evidence = graduate.Evidence(samples=40, agreement=0.99)
+    waiting = graduate.apply(policy, evidence, now)
+    assert waiting.action == "hold" and waiting.policy["model"] == "grok-top"
+    cleared = graduate.promote_if_proven(policy, evidence, now, automatic=False)
     assert cleared.action == "promote"
     assert cleared.policy["model"] == "deepseek-flash"
     assert cleared.policy["previous_model"] == "grok-top"

@@ -88,10 +88,9 @@ model_list:
 
   # ---------- DeepSeek (API key) ----------
   # MODELS-1, 18 Oct 2026: the founder lifted the ban on China-hosted providers.
-  # Candidates only: no fallback chain names DeepSeek or Kimi, so nothing routes here on merge.
-  # A task moves to one only through graduation: screened on the task's held-out eval cases,
-  # then shadowed until agreement clears the task's bar (tank/graduate.py proven_reason).
-  # Prices fetched 18 Oct 2026 from https://api-docs.deepseek.com/quick_start/pricing
+  # Bench entries only: no existing fallback chain enters a new model on merge.
+  # Policy activation and founder promotion remain outside this roster change.
+  # Prices checked 2026-10-21 from https://api-docs.deepseek.com/quick_start/pricing/
   # (cache-miss input, PEAK rate; off-peak is half). deepseek-flash serves DeepSeek-V4.1-Flash-1017,
   # deepseek-v4-pro serves DeepSeek-V4-Pro-0813.
   - model_name: deepseek-flash  # chat model (non-thinking and thinking modes)
@@ -102,6 +101,8 @@ model_list:
       input_cost_per_token: 0.0000003
       output_cost_per_token: 0.0000012
 
+  # Price checked 2026-10-21: https://api-docs.deepseek.com/quick_start/pricing/
+  # USD per MTok: $1.32 input / $3.96 output at peak, half off-peak.
   - model_name: deepseek-pro    # reasoning model
     litellm_params:
       model: deepseek/deepseek-v4-pro
@@ -111,8 +112,9 @@ model_list:
       output_cost_per_token: 0.00000396
 
   # ---------- Moonshot Kimi (API key) ----------
-  # Price fetched 18 Oct 2026 from https://platform.moonshot.ai/docs/pricing/chat (K3 series,
-  # input price without a cache hit; cache writes and cached input are billed separately).
+  # Price checked 2026-10-21: https://platform.kimi.ai/ (K3 price card)
+  # Rules: https://platform.kimi.ai/docs/pricing/chat (formerly platform.moonshot.ai).
+  # USD per MTok: $3 input / $15 output; cache writes and hits are separate items.
   - model_name: kimi
     litellm_params:
       model: moonshot/kimi-k3
@@ -146,6 +148,77 @@ model_list:
       input_cost_per_token: 0.000004
       output_cost_per_token: 0.00002
 
+  # ---------- MODELS-2: additional current flagship and cheaper text models ----------
+  # Price checked 2026-10-21: https://developers.openai.com/api/docs/pricing
+  # USD per MTok: input $2, output $10. Standard tier, short context; existing sol alias is unchanged.
+  - model_name: sol-next
+    litellm_params:
+      model: openai/gpt-6.1-sol
+      api_key: os.environ/OPENAI_API_KEY
+    model_info:
+      input_cost_per_token: 0.0000020000
+      output_cost_per_token: 0.0000100000
+
+  # Price checked 2026-10-21: https://platform.claude.com/docs/en/about-claude/pricing
+  # USD per MTok: input $10, output $50. Public flagship; Mythos requires separate verified access and is not listed.
+  - model_name: fable
+    litellm_params:
+      model: anthropic/claude-fable-5-1
+      api_key: os.environ/ANTHROPIC_API_KEY
+    model_info:
+      input_cost_per_token: 0.0000100000
+      output_cost_per_token: 0.0000500000
+
+  # Price checked 2026-10-21: https://ai.google.dev/gemini-api/docs/pricing
+  # USD per MTok: input $0.25, output $1.5. Paid standard tier, text/image/video input; audio input is $0.50/MTok.
+  - model_name: flash-lite-31
+    litellm_params:
+      model: gemini/gemini-3.1-flash-lite
+      api_key: os.environ/GEMINI_API_KEY
+    model_info:
+      input_cost_per_token: 0.0000002500
+      output_cost_per_token: 0.0000015000
+
+  # Price checked 2026-10-21: https://platform.kimi.ai/
+  # USD per MTok: input $0.95, output $4. Provider price cards; pricing rules: https://platform.kimi.ai/docs/pricing/chat
+  - model_name: kimi-code
+    litellm_params:
+      model: moonshot/kimi-k2.7-code
+      api_key: os.environ/MOONSHOT_API_KEY
+    model_info:
+      input_cost_per_token: 0.0000009500
+      output_cost_per_token: 0.0000040000
+
+  # Price checked 2026-10-21: https://platform.kimi.ai/
+  # USD per MTok: input $0.95, output $4. Provider price cards; pricing rules: https://platform.kimi.ai/docs/pricing/chat
+  - model_name: kimi-lite
+    litellm_params:
+      model: moonshot/kimi-k2.6
+      api_key: os.environ/MOONSHOT_API_KEY
+    model_info:
+      input_cost_per_token: 0.0000009500
+      output_cost_per_token: 0.0000040000
+
+  # Price checked 2026-10-21: https://docs.x.ai/developers/pricing
+  # USD per MTok: input $2, output $6. Standard short context; at >=200k input tokens all tokens cost $4/$12 per MTok.
+  - model_name: grok-46
+    litellm_params:
+      model: xai/grok-4.6
+      api_key: os.environ/XAI_API_KEY
+    model_info:
+      input_cost_per_token: 0.0000020000
+      output_cost_per_token: 0.0000060000
+
+  # Price checked 2026-10-21: https://docs.x.ai/developers/pricing
+  # USD per MTok: input $2, output $6. Standard short context; at >=200k input tokens all tokens cost $4/$12 per MTok.
+  - model_name: grok-45
+    litellm_params:
+      model: xai/grok-4.5
+      api_key: os.environ/XAI_API_KEY
+    model_info:
+      input_cost_per_token: 0.0000020000
+      output_cost_per_token: 0.0000060000
+
 litellm_settings:
   drop_params: true
   set_verbose: false
@@ -165,6 +238,18 @@ litellm_settings:
     - sol: ["argon", "sonnet"]
     - argon: ["sonnet"]
     - opus: ["astra"]
+
+    # New bench entries have their own fallbacks; existing chains never enter the bench.
+    - deepseek-flash: ["luna", "haiku", "flash-lite", "grok", "flash"]
+    - deepseek-pro: ["luna", "haiku", "flash-lite", "grok", "flash", "grok-top", "sol"]
+    - kimi: ["grok-top", "sol", "argon", "sonnet"]
+    - sol-next: ["grok-top", "sol", "argon", "sonnet"]
+    - fable: ["opus", "astra"]
+    - flash-lite-31: ["luna", "haiku", "flash-lite", "grok", "flash"]
+    - kimi-code: ["grok-build", "grok-top", "sol", "sonnet"]
+    - kimi-lite: ["luna", "haiku", "flash-lite", "grok", "flash"]
+    - grok-46: ["grok-top", "sol", "argon", "sonnet"]
+    - grok-45: ["grok-top", "sol", "argon", "sonnet"]
 
 router_settings:
   allowed_fails: 1          # one refusal (no credit / bad key) and that model is skipped...
