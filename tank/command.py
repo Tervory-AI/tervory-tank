@@ -370,11 +370,12 @@ async def turn(thread_id: uuid.UUID, body: Turn, actor: Actor = Depends(identity
         state["messages"].append({"message_id": str(uuid.uuid4()), "role": "user", "content": body.text,
                                   "attachments": [a.model_dump() for a in body.attachments]})
         # A reply is attached to the existing build, never a second build.
-        await conn.execute(
-            "INSERT INTO tank.command_followups(build_id,tenant_id,followup_text) "
-            "SELECT build_id,tenant_id,$3 FROM tank.command_builds WHERE thread_id=$1 AND tenant_id=$2 "
-            "AND status IN ('queued','running','awaiting_review')", thread_id, actor.tenant_id, body.text,
-        )
+        if actor.founder:
+            await conn.execute(
+                "INSERT INTO tank.command_followups(build_id,tenant_id,followup_text) "
+                "SELECT build_id,tenant_id,$3 FROM tank.command_builds WHERE thread_id=$1 AND tenant_id=$2 "
+                "AND status IN ('queued','running','awaiting_review')", thread_id, actor.tenant_id, body.text,
+            )
         await step(conn, row, state, {"step_id": turn_id, "label": "Preparing answer", "actor": "Tervory", "status": "running"})
         messages = [{"role": m["role"], "content": m["content"] + "".join(
             "\nAttachment " + a["name"] + ":\n" + a["text"] for a in m.get("attachments", []))} for m in state["messages"][-40:]]

@@ -257,3 +257,16 @@ async def test_failed_paid_turn_keeps_ledger_receipt(api, monkeypatch):
     assert 'private upstream text' not in reply.text
     detail = (await client.get(f'/v1/command/threads/{thread}')).json()
     assert detail['thread']['spent_usd'] == 0.01
+
+
+@pytest.mark.asyncio
+async def test_revoked_founder_cannot_send_implicit_worker_followup(api, monkeypatch):
+    client, pool = api
+    thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
+    card = (await client.post('/v1/command/build', json={'thread_id': thread, 'brief_markdown': 'Build'})).json()
+    await client.post(f"/v1/command/cards/{card['card_id']}", json={'action': 'confirm'})
+    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', '')
+    monkeypatch.setattr(command, 'route_turn', AsyncMock(side_effect=HTTPException(503, 'paused')))
+    await client.post(f'/v1/command/threads/{thread}/turn', json={'text': 'Change the build'})
+    async with pool.acquire() as conn:
+        assert await conn.fetchval('SELECT count(*) FROM tank.command_followups') == 0
