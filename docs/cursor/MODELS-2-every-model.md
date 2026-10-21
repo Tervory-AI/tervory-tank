@@ -8,7 +8,7 @@
 
 1. **The roster on both boxes** (`litellm/config.yaml`, `litellm/config.za.yaml`).
    - Add:
-     - **DeepSeek:** current chat and reasoning models;
+     - **DeepSeek:** current chat and reasoning models, including **DeepSeek-V4.1-Flash** (served by DeepSeek's newly open-sourced DeepInfer engine, 20 Oct 2026);
      - **Moonshot Kimi:** current model;
      - **Perplexity:** Sonar models (search-grounded answers with citations);
      - any current flagship or cheap model from the existing providers (OpenAI, Anthropic, Google, xAI) that is not yet listed.
