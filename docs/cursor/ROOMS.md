@@ -28,7 +28,7 @@ The founder does nothing for a new room except merge. Public rooms (Rig) also ne
 - Hex passwords only (`openssl rand -hex 24`), never logged.
 - Main-compose changes are additive: add networks/env lines; do not change existing services otherwise.
 
-## Ghost (GHOST-1; draft integration)
+## Ghost (GHOST-1 phase 1)
 
 Ghost's corridor is `tervory-gw-ghost`. Only Tank and Postgres join it from
 the main stack. The separate `agents/ghost/docker-compose.yml` resource has
@@ -41,9 +41,9 @@ Shared Hermes is **not** attached to this corridor.
 The Ghost DB role is reserved by room setup, but its password is not passed
 to either Ghost container. Incident state and deterministic recall use SQLite
 on Ghost's private `/data` volume. This is not the Hermes Agent brain: adoption
-of the AGENT-1 adapter and Ghost's own memory service remains a prerequisite.
-BUCKET-1 must supply its isolated `tervory-ghost` bucket integration; a volume
-is not presented as an R2 bucket.
+of the AGENT-1 adapter and Ghost's own memory service belongs to GHOST-2.
+BUCKET-1 must supply its isolated `tervory-ghost` bucket integration in GHOST-2;
+a volume is not presented as an R2 bucket.
 
 Tank endpoints:
 - Founder Workspace identity only: `GET /v1/ghost/incidents`,
@@ -57,21 +57,28 @@ Tank endpoints:
   It must observe failed/crashed state, pass the observed revision to the
   executor, record every call, and never retry pending or uncertain requests.
 
-**Not deploy-ready:** `app.state.ghost_recovery_backend` has no production
+**Recovery disabled in phase 1:** `app.state.ghost_recovery_backend` has no production
 implementation. Its contract is `observe(target) -> {state, revision}` and
 `execute(action, target, revision, request_id) -> 'queued'`. The executor must
 atomically compare the observed revision, enforce the same action/target
 allowlist, and rerun the exact failed revision (not today's main). No backend,
 Coolify credential or external service has been fabricated. Missing integration
 returns 503 with a Tank ledger receipt and makes no production change.
+`COOLIFY_TOKEN_GHOST_ACTIONS` is documented by name only for GHOST-2: a Coolify
+token with read and deploy permissions, retained by Tank, never Ghost. It is
+not wired into any service in phase 1.
 
-Other prerequisites: read-only Workspace/Tank log-pattern, deploy, main-CI and
+GHOST-2 follows the AGENT-1, BUCKET-1 and COMMAND-1 C merges. It adds read-only Workspace/Tank log-pattern, deploy, main-CI and
 Radix finding feeds; founder-approved worker dispatch; AGENT-1 brain/sandbox;
 BUCKET-1 storage. These are visible as disconnected in `/admin/ghost`. The
 current watcher covers fixed public-site health/latency/DNS/certificates/headers
 and room health. It cannot claim full monitoring coverage until the feeds exist.
 
-After the founder merges and Claude connects the prerequisites: run the existing
+Private `ghost.incident` candidates join the shared training intake and founder
+review list with the monthly `ghost:incident:YYYY-MM` family. They retain
+`public=false`; intake does not approve them or export them to public training.
+
+After the founder merges and the operator deploys phase 1: run the existing
 `room-setup room=ghost`, check corridor isolation, and open `/admin/ghost` as the
 founder. Press Look, verify step IDs against `tank.ledger` for `PLATFORM_TENANT`,
 and inject a failing health fixture in a nonproduction room to inspect its brief.
