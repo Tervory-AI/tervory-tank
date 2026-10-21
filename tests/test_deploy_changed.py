@@ -73,7 +73,7 @@ def test_a_failed_main_deploy_does_not_touch_the_sa_stack(monkeypatch: pytest.Mo
     monkeypatch.setattr(mod, "deploy", deploy)
     monkeypatch.setattr(mod, "wait_for", lambda uuid, name, timeout_s=900: True)
     assert mod.main() == 1
-    assert order == ["main", "agent-zenas"]
+    assert order == ["main"]
 
 
 def test_a_failed_sa_deploy_skips_za_rooms_but_deploys_boston_rooms(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -132,7 +132,7 @@ def test_a_missing_sa_app_still_deploys_boston_rooms(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(mod, "deploy", deploy)
     monkeypatch.setattr(mod, "wait_for", lambda uuid, name, timeout_s=900: True)
     assert mod.main() == 1
-    assert order == ["main"]
+    assert order == ["main", "agent-zenas"]
 
 
 def test_a_room_only_change_does_not_deploy_the_sa_stack(monkeypatch: pytest.MonkeyPatch) -> None:
