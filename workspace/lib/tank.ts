@@ -785,6 +785,6 @@ export function switchProvenModel(userId: string, taskType: string): Promise<{ o
   });
 }
 
-export function readDashboardCandidates(userId: string): Promise<{ task_type: string; candidate_model: string | null; n: number; agreement: number | null; min_shadow_samples?: number }[]> {
+export function readDashboardCandidates(userId: string): Promise<{ task_type: string; candidate_model: string | null; n: number; agreement: number | null; min_shadow_samples?: number; eligible: boolean; prim_cost?: number | null; cand_cost?: number | null }[]> {
   return tank("/v1/graduation", { method: "GET", headers: { "x-tervory-admin": userId } });
 }

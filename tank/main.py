@@ -1031,7 +1031,7 @@ async def run_route(
 
 
 async def _llm(model: str, messages: list[dict[str, str]], max_tokens: int) -> tuple[str, float]:
-    await __import__("controls").refuse_paid(task="judge/shadow/bench", path="_llm")
+    await __import__("controls").refuse_paid(path="_llm")
     async with httpx.AsyncClient(timeout=120) as client:
         r = await client.post(
             f"{LITELLM_URL}/v1/chat/completions",

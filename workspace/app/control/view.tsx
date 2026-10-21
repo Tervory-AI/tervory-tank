@@ -15,7 +15,7 @@ export function Card({ label, value, note, values, green }: { label: string; val
 const agents = ["Base", "Tiger", "Market Lab", "Rig", "Tisan", "Radix", "Zenas"];
 export type FounderView = {
   data: DashboardRead | null; signups: Signups | null; paying: number | null;
-  paused: boolean | null; errors: string[]; models: { task_type: string; candidate_model: string | null; n: number; agreement: number | null; min_shadow_samples?: number }[];
+  paused: boolean | null; errors: string[]; models: { task_type: string; candidate_model: string | null; n: number; agreement: number | null; min_shadow_samples?: number; eligible: boolean; prim_cost?: number | null; cand_cost?: number | null }[];
   refused: { task: string; path: string; at: string }[];
 };
 export function FounderDashboard({ view }: { view: FounderView }) {
@@ -39,7 +39,7 @@ export function FounderDashboard({ view }: { view: FounderView }) {
       <section className="dash-card"><h2>Case study · AmmoSync on Base</h2><div className="dash-case-charts"><div><p className="dash-label">Verified records by state</p><div className="dash-chart-space"><p className="dash-empty">AmmoSync’s data source is not linked.</p></div></div><div><p className="dash-label">Cost per verified record</p><div className="dash-chart-space"><p className="dash-empty">No measured Apollo comparison yet.</p></div></div></div><p className="dash-empty">Headline numbers will appear when records and their costs can be attributed to this case study.</p><div className="dash-case-actions"><button className="dash-button" disabled>Run next state · AGENT-1</button><button className="dash-button" disabled>Export case study · no source</button></div></section>
       <section className="dash-card"><h2>Needs you</h2>
         <div className="dash-row"><span>{data ? `${data.skills?.length ?? 0} skills awaiting review` : "Skill reviews unavailable"}</span><button className="dash-button" disabled>Approve all ready · SKALA-2</button></div>
-        {view.models.filter(row => row.candidate_model && row.n >= (row.min_shadow_samples ?? 30) && row.agreement != null).map(row => <div className="dash-row" key={row.task_type}><span>{row.task_type} · {row.n} comparisons · {Math.round(Number(row.agreement) * 100)}% agreement</span><ControlActions taskType={row.task_type} /></div>)}
+        {view.models.filter(row => row.candidate_model && row.eligible && row.prim_cost != null && row.cand_cost != null && row.cand_cost < row.prim_cost).map(row => <div className="dash-row" key={row.task_type}><span>{row.task_type} · {row.n} comparisons · {Math.round(Number(row.agreement) * 100)}% agreement</span><ControlActions taskType={row.task_type} /></div>)}
         <div className="dash-row"><span>Paid steps</span><span className="dash-note">No pending-action source connected</span></div>
         <div className="dash-row"><span>Daily check</span><a className="dash-button" href="/skala/gold">Open checks</a></div>
         <div className="dash-row"><span>Ghost issues unavailable</span><button className="dash-button" disabled>Look · GHOST-1</button><button className="dash-button" disabled>Let it fix · GHOST-1</button></div>

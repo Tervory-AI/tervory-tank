@@ -4,6 +4,7 @@ from __future__ import annotations
 import uuid
 import logging
 from datetime import datetime, timezone
+from contextvars import ContextVar
 
 import httpx
 from typing import Any
@@ -16,6 +17,7 @@ from admin import require_admin
 PLATFORM = uuid.UUID('00000000-0000-0000-0000-000000000001')
 log = logging.getLogger('tank.controls')
 PAID_TOOL_HOSTS = frozenset({'api.search.brave.com'})
+_task: ContextVar[str | None] = ContextVar('paid_work_task', default=None)
 
 router = APIRouter(prefix='/v1/controls', dependencies=[Depends(require_admin)])
 
@@ -37,10 +39,13 @@ async def paid_paused() -> bool:
         ))
 
 
-async def refuse_paid(*, paid: bool = True, task: str = "unknown", path: str = "route") -> None:
+async def refuse_paid(*, paid: bool = True, task: str | None = None, path: str = "route") -> None:
     """Free work never reads control state. Paid work fails closed on read failure."""
+    if task is not None:
+        _task.set(task)
     if not paid:
         return
+    task = task or _task.get() or "internal.model (task unavailable)"
     reason = "paid work is paused"
     try:
         paused = await paid_paused()
@@ -50,7 +55,7 @@ async def refuse_paid(*, paid: bool = True, task: str = "unknown", path: str = "
     if not paused:
         return
     # Safe identifiers only: never log a request URL, query, prompt or credentials.
-    task = task[:120]
+    task = " ".join(task.split())[:120]
     path = path[:120]
     at = datetime.now(timezone.utc).isoformat()
     log.warning("paid_refused task=%s path=%s at=%s", task, path, at)
@@ -70,7 +75,7 @@ async def refuse_paid(*, paid: bool = True, task: str = "unknown", path: str = "
 async def paid_host_hook(request: httpx.Request) -> None:
     host = request.url.host.lower()
     if host in PAID_TOOL_HOSTS:
-        await refuse_paid(path=f"HTTP host:{host}", task="unattributed skill HTTP request")
+        await refuse_paid(path=f"HTTP host:{host}", task=_task.get() or "base.find_site (HTTP client has no run ID)")
 
 
 @router.get('')

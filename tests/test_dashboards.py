@@ -204,3 +204,77 @@ async def test_resume_restores_paid_gateway(conn, monkeypatch):
     monkeypatch.setattr(main.httpx, 'AsyncClient', lambda **kw: real_client(transport=httpx.MockTransport(gateway), **kw))
     content, cost = await main._llm('offline-test-model', [{'role': 'user', 'content': 'test'}], 10)
     assert content == 'ok' and cost == 0 and len(calls) == 1
+
+@pytest.mark.asyncio
+async def test_http_hook_stops_paid_transport_without_stopping_public_sources(conn):
+    conn.value = True
+    calls = []
+    async def transport(request):
+        calls.append(request.url.host)
+        return httpx.Response(200, json={})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(transport), event_hooks={'request': [controls.paid_host_hook]}) as client:
+        with pytest.raises(HTTPException):
+            await client.get('https://api.search.brave.com/res/v1/web/search')
+        assert (await client.get('https://example.org/public')).status_code == 200
+    assert calls == ['example.org']
+
+
+def test_frontend_access_sources_and_banned_copy():
+    import subprocess
+    if not (ROOT / 'workspace/node_modules/typescript').exists():
+        pytest.skip('workspace dependencies are required for the offline component render')
+    subprocess.run(['node', 'tests/dashboards-ui.cjs'], cwd=ROOT, check=True, capture_output=True, text=True)
+
+
+@pytest.mark.asyncio
+async def test_control_schema_empty_database_reapply_and_real_audit(monkeypatch):
+    import asyncpg
+    from urllib.parse import urlsplit, urlunsplit
+    source = os.environ.get('POOL_SCHEMA_DATABASE_URL')
+    if not source:
+        pytest.skip('CI PostgreSQL service is required')
+    name = 'dash_' + uuid.uuid4().hex
+    admin = await asyncpg.connect(source)
+    await admin.execute(f'CREATE DATABASE {name}')
+    parts = urlsplit(source)
+    url = urlunsplit((parts.scheme, parts.netloc, '/' + name, parts.query, parts.fragment))
+    pool = None
+    try:
+        pool = await asyncpg.create_pool(url, min_size=1, max_size=2)
+        ddl = (ROOT / 'tank/schema.sql').read_text().split('-- DASH-1:', 1)[1]
+        ddl = '-- DASH-1:' + ddl
+        async with pool.acquire() as connection:
+            await connection.execute('CREATE SCHEMA tank')
+            await connection.execute(ddl)
+            await connection.execute(ddl)
+        monkeypatch.setattr(controls, 'db', lambda: pool)
+        await controls.set_pause(controls.Pause(paused=True), 'founder-fixture')
+        await controls.set_pause(controls.Pause(paused=False), 'founder-fixture')
+        async with pool.acquire() as connection:
+            rows = await connection.fetch('SELECT * FROM tank.control_log ORDER BY at,id')
+            assert len(rows) == 2
+            assert rows[0]['old_value'] is False and rows[0]['new_value'] is True
+            assert rows[1]['old_value'] is True and rows[1]['new_value'] is False
+            assert all(row['by_user'] == 'founder-fixture' and row['at'] is not None for row in rows)
+    finally:
+        if pool:
+            await pool.close()
+        await admin.execute(f'DROP DATABASE {name}')
+        await admin.close()
+
+@pytest.mark.asyncio
+async def test_existing_switch_audit_records_who_old_new(conn):
+    import graduate
+    before = {'task_type': 'base.extract', 'model': 'previous-model'}
+    move = graduate.Move('promote', {'model': 'proven-candidate', 'rung': 1, 'semantic_cache': False})
+    await main._apply_move(conn, move, before, 'founder-fixture')
+    logs = [(sql, args) for sql, args in conn.writes if 'tank.policy_log' in sql]
+    assert len(logs) == 1
+    assert logs[0][1][:4] == ('base.extract', 'previous-model', 'proven-candidate', 'founder-fixture')
+
+
+def test_existing_switch_route_refuses_non_founder(monkeypatch):
+    monkeypatch.setenv('TANK_API_KEY', 'test')
+    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder-fixture')
+    client = TestClient(main.app)
+    assert client.post('/v1/graduation/base.extract/promote', headers={'x-tank-key':'test', 'x-tervory-admin':'other-user'}, json={}).status_code == 404
