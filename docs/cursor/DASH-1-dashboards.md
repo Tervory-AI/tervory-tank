@@ -12,10 +12,10 @@
 - tests.
 
 ## Founder control panel (`/control`, founders only)
-- **Top:** a health pill (from Sentinel) and **Pause all paid work**. The pause flips a Tank switch that refuses paid calls and paid tools until it is turned back on.
+- **Top:** a health pill (from Ghost) and **Pause all paid work**. The pause flips a Tank switch that refuses paid calls and paid tools until it is turned back on.
 - **Key numbers with sparklines:** sign-ups (Clerk), paying clients (Stripe), work done today and the share done by code (ledger), spent this month against the budget, saved this month (ledger baseline).
 - **Case study, AmmoSync on Base:** verified records by state (bar), cost per verified record over time against Apollo (line), headline numbers, and the "Run next state" and "Export case study" buttons.
-- **Needs you:** every pending action, each with its buttons: skill approvals ("Approve all ready" from SKALA-2), paid steps, proven cheaper models (Switch), the gold check (Start), Sentinel issues (Look / Let it fix).
+- **Needs you:** every pending action, each with its buttons: skill approvals ("Approve all ready" from SKALA-2), paid steps, proven cheaper models (Switch), the gold check (Start), Ghost issues (Look / Let it fix).
 - **Squad:** each agent's status, what it is doing now, and Pause/Start, per region.
 - **Latest sign-ups:** name, company, country and plan, with a link to all.
 - **Controls:** shadow checks, overnight batches, paid tools without asking, squad builds Tervory, daily budget, server load, storage used.

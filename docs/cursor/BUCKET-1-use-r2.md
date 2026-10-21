@@ -12,7 +12,7 @@
 - `jobs/train/`;
 - tests.
 
-1. **One bucket per agent, shared with no one.** Each room gets a storage client for **its own bucket only**, through a scoped R2 token per bucket. Add `tervory-rig`, `tervory-zenas` and `tervory-sentinel` (the founder creates them). Tank keeps `tervory-uploads` for files people upload in the window.
+1. **One bucket per agent, shared with no one.** Each room gets a storage client for **its own bucket only**, through a scoped R2 token per bucket. Add `tervory-rig`, `tervory-zenas` and `tervory-ghost` (the founder creates them). Tank keeps `tervory-uploads` for files people upload in the window.
 2. **What goes in:**
    - test datasets: the full ATF list snapshots, the CourtListener bulk slices, SA judgment PDFs as fetched;
    - agents' working files and browser artefacts (screenshots of what they read);
