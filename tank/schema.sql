@@ -825,3 +825,170 @@ CREATE TABLE IF NOT EXISTS tank.training_snapshot_batches (
     batch_id text NOT NULL,
     PRIMARY KEY (tenant_id, region, day, agent, batch_id)
 );
+
+-- CORE-1: disable existing automation once; preserve later founder choices.
+ALTER TABLE tank.policy ALTER COLUMN auto_promote SET DEFAULT false;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM tank.policy_log WHERE detail->>'id'='2026-10-21-core1-auto-off') THEN
+    UPDATE tank.policy SET auto_promote=false WHERE auto_promote;
+    INSERT INTO tank.policy_log(task_type,action,by_user,detail)
+    VALUES('*','switch','tank','{"id":"2026-10-21-core1-auto-off","marker":true}'::jsonb);
+  END IF;
+END $$;
+
+-- CORE-1 price snapshots and savings. Unknown prices stay null, never invented.
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS baseline_model text;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS baseline_model text;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS baseline_cost_usd numeric(18,8);
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS baseline_status text NOT NULL DEFAULT 'pending';
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS baseline_priced_at timestamptz;
+CREATE TABLE IF NOT EXISTS tank.proof_prices (
+    model text PRIMARY KEY, family text NOT NULL,
+    input_usd numeric(20,12) NOT NULL CHECK (input_usd>=0),
+    output_usd numeric(20,12) NOT NULL CHECK (output_usd>=0),
+    active boolean NOT NULL DEFAULT true, updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE OR REPLACE FUNCTION tank.price_receipt() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE chosen text; price tank.proof_prices%ROWTYPE;
+BEGIN
+    -- Research can retain tokens with a placeholder zero when cost is unknown.
+    -- Vendor fees are actual spend only: there is no comparable token baseline.
+    IF to_jsonb(NEW)->>'research_cost_status'='unknown'
+       OR NEW.model LIKE 'vendor:%' OR to_jsonb(NEW)->>'vendor' IS NOT NULL THEN
+      NEW.baseline_model := NULL;
+      NEW.baseline_cost_usd := NULL;
+      NEW.baseline_priced_at := NULL;
+      NEW.baseline_status := 'unpriced';
+      RETURN NEW;
+    END IF;
+    IF NEW.baseline_status <> 'pending' THEN RETURN NEW; END IF;
+    SELECT coalesce(p.baseline_model,(SELECT b.model FROM tank.proof_prices a
+      JOIN tank.proof_prices b ON b.family=a.family AND b.active WHERE a.model=p.model
+      ORDER BY b.input_usd+b.output_usd DESC,b.model LIMIT 1)) INTO chosen FROM tank.policy p
+      WHERE p.task_type=NEW.task_type AND (p.tenant_id=NEW.tenant_id OR p.tenant_id IS NULL)
+      ORDER BY p.tenant_id NULLS LAST LIMIT 1;
+    NEW.baseline_model := coalesce(chosen,NEW.model);
+    SELECT * INTO price FROM tank.proof_prices WHERE model=NEW.baseline_model;
+    IF FOUND THEN
+      NEW.baseline_cost_usd := NEW.tokens_in*price.input_usd + NEW.tokens_out*price.output_usd;
+      NEW.baseline_status := 'measured';
+      NEW.baseline_priced_at := price.updated_at;
+    ELSIF NEW.tokens_in=0 AND NEW.tokens_out=0 THEN
+      NEW.baseline_cost_usd := 0;
+      NEW.baseline_status := 'no_tokens';
+    END IF;
+    RETURN NEW;
+END $$;
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='core1_price_receipt'
+                   AND tgrelid='tank.ledger'::regclass) THEN
+      CREATE TRIGGER core1_price_receipt BEFORE INSERT ON tank.ledger
+        FOR EACH ROW EXECUTE FUNCTION tank.price_receipt();
+    END IF;
+END $$;
+
+-- Bench state is independent of the existing monthly candidate search.
+ALTER TABLE tank.search_state ADD COLUMN IF NOT EXISTS bench_roster_fingerprint text;
+ALTER TABLE tank.search_state ADD COLUMN IF NOT EXISTS bench_price_fingerprint text;
+ALTER TABLE tank.search_state ADD COLUMN IF NOT EXISTS bench_at timestamptz;
+ALTER TABLE tank.search_state ADD COLUMN IF NOT EXISTS bench_status text;
+ALTER TABLE tank.search_state ADD COLUMN IF NOT EXISTS bench_error text;
+ALTER TABLE tank.route_evidence ADD COLUMN IF NOT EXISTS bench_run_id uuid;
+ALTER TABLE tank.route_evidence ADD COLUMN IF NOT EXISTS bench_score numeric(8,6);
+ALTER TABLE tank.route_evidence ADD COLUMN IF NOT EXISTS bench_cost_per_call numeric(18,8);
+ALTER TABLE tank.route_evidence ADD COLUMN IF NOT EXISTS bench_n integer NOT NULL DEFAULT 0;
+ALTER TABLE tank.route_evidence ADD COLUMN IF NOT EXISTS bench_at timestamptz;
+CREATE TABLE IF NOT EXISTS tank.bench_runs (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid NOT NULL,
+    region text NOT NULL, task_type text NOT NULL, model text NOT NULL,
+    comparison_model text NOT NULL, suite_hash text NOT NULL, expected_n integer NOT NULL,
+    score numeric(8,6), cost_per_call numeric(18,8),
+    status text NOT NULL DEFAULT 'running', error text,
+    started_at timestamptz NOT NULL DEFAULT now(), finished_at timestamptz
+);
+CREATE TABLE IF NOT EXISTS tank.bench_calls (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(), run_id uuid NOT NULL REFERENCES tank.bench_runs(id),
+    tenant_id uuid NOT NULL, region text NOT NULL, day date NOT NULL,
+    case_ref text NOT NULL, case_kind text NOT NULL, ledger_id uuid REFERENCES tank.ledger(id),
+    reserved_usd numeric(18,8) NOT NULL, charged_usd numeric(18,8), score numeric(8,6),
+    status text NOT NULL DEFAULT 'reserved', created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS bench_budget ON tank.bench_calls (tenant_id,region,day);
+CREATE INDEX IF NOT EXISTS bench_task_history ON tank.bench_runs (tenant_id,region,task_type,started_at DESC);
+
+-- The existing hourly rollup rebuilds route_evidence from scratch. Reattach
+-- benchmark receipts on insert; historical runs remain immutable in bench_runs.
+CREATE OR REPLACE FUNCTION tank.restore_bench_evidence() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE recent tank.bench_runs%ROWTYPE;
+BEGIN
+    IF NEW.rung <> 1 THEN RETURN NEW; END IF;
+    SELECT * INTO recent FROM tank.bench_runs
+      WHERE tenant_id='00000000-0000-0000-0000-000000000001'::uuid
+        AND task_type=NEW.task_type AND model=NEW.model AND status='complete'
+      ORDER BY finished_at DESC,id DESC LIMIT 1;
+    IF FOUND THEN
+      NEW.bench_run_id := recent.id;
+      NEW.bench_score := recent.score;
+      NEW.bench_cost_per_call := recent.cost_per_call;
+      NEW.bench_n := recent.expected_n;
+      NEW.bench_at := recent.finished_at;
+    END IF;
+    RETURN NEW;
+END $$;
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='core1_restore_bench'
+                   AND tgrelid='tank.route_evidence'::regclass) THEN
+      CREATE TRIGGER core1_restore_bench BEFORE INSERT ON tank.route_evidence
+        FOR EACH ROW EXECUTE FUNCTION tank.restore_bench_evidence();
+    END IF;
+END $$;
+-- Bounded savings backfill and receipt navigation.
+CREATE INDEX IF NOT EXISTS ledger_baseline_pending ON tank.ledger(tenant_id,region) WHERE baseline_status='pending';
+CREATE INDEX IF NOT EXISTS ledger_baseline_unpriced ON tank.ledger(region,id) WHERE baseline_status='unpriced';
+CREATE INDEX IF NOT EXISTS ledger_proof_receipts ON tank.ledger(region,ts DESC,id DESC)
+    WHERE agent NOT IN ('bench','shadow') AND task_type NOT LIKE '%#shadow';
+
+-- DASH-1: founder controls and immutable audit history, local to this box.
+CREATE TABLE IF NOT EXISTS tank.controls (
+    tenant_id uuid NOT NULL,
+    name text NOT NULL CHECK (name = 'paid_paused'),
+    value boolean NOT NULL,
+    updated_by text NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, name)
+);
+CREATE TABLE IF NOT EXISTS tank.control_log (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    name text NOT NULL,
+    by_user text NOT NULL,
+    old_value boolean NOT NULL,
+    new_value boolean NOT NULL,
+    at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE tank.control_log ADD COLUMN IF NOT EXISTS task text;
+ALTER TABLE tank.control_log ADD COLUMN IF NOT EXISTS path text;
+CREATE INDEX IF NOT EXISTS control_log_tenant_at ON tank.control_log (tenant_id, at DESC);
+
+-- MODELS-2: provider tool charges are expenses, scoped to the platform price book.
+-- Checked 2026-10-21: https://docs.perplexity.ai/docs/getting-started/pricing
+-- Presets fast/low/medium/high use Fast Search ($0.001/invocation); fetch is $0.0005.
+-- UUIDs make re-applying the schema a no-op without changing any policy row.
+INSERT INTO tank.price_book (id, tenant_id, outcome_type, unit_price, currency, effective_from, note)
+VALUES
+ ('66000000-0000-4000-8000-000000000001','00000000-0000-0000-0000-000000000001',
+  'perplexity.search.fast',0.001,'USD','2026-10-21T00:00:00Z',
+  'Provider expense per invocation; https://docs.perplexity.ai/docs/getting-started/pricing checked 2026-10-21'),
+ ('66000000-0000-4000-8000-000000000002','00000000-0000-0000-0000-000000000001',
+  'perplexity.fetch',0.0005,'USD','2026-10-21T00:00:00Z',
+  'Provider expense per invocation; https://docs.perplexity.ai/docs/getting-started/pricing checked 2026-10-21')
+ON CONFLICT (id) DO NOTHING;
+
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS token_cost_usd numeric(20,10);
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS search_fee_usd numeric(20,10);
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS fetch_fee_usd numeric(20,10);
+-- Retain the exact provider total alongside the existing six-decimal summary cost.
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS provider_cost_usd numeric(20,10);
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS research_sources jsonb;
+-- Unknown charges on failed calls require reconciliation; they are never called free.
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS research_cost_status text;

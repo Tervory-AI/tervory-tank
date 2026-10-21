@@ -115,11 +115,16 @@ def main() -> int:
         if not deploy(MAIN_APP, "main") or not wait_for(MAIN_APP, "main"):
             print("::error title=stopped::main did not deploy; rooms were not touched")
             return 1
+    za_ok = True
+    if want_main:
         za_uuid = by_name.get(SA_APP)
         if not za_uuid or not deploy(za_uuid, SA_APP) or not wait_for(za_uuid, SA_APP):
-            print("::error title=stopped::tervory-tank-za did not deploy; rooms were not touched")
-            return 1
-    ok = True
+            # The ZA box failing (for example a power outage there) must not hold back
+            # Boston's rooms. ZA rooms wait until tervory-tank-za deploys again.
+            za_ok = False
+            print("::error title=za not deployed::tervory-tank-za did not deploy; ZA rooms skipped, Boston rooms continue")
+            targets = {n: u for n, u in targets.items() if not n.endswith("-za")}
+    ok = za_ok
     for name, uuid in sorted(targets.items()):
         ok = deploy(uuid, name) and ok
     for name, uuid in sorted(targets.items()):

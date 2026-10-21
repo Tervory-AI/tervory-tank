@@ -79,7 +79,6 @@ ZA_HOME_MESSAGE = "needs the South Africa region"
 US_HOME_MESSAGE = "needs the United States region"
 IDENTIFIER_REFUSAL = "A personal identifier cannot be sent to a provider outside South Africa."
 ALLOW_REFUSAL = "This provider is not on the tenant's allow-list."
-_CHINA_PROVIDERS = frozenset({"deepseek", "moonshot", "kimi"})
 _pii_detect = None
 _skill_home: contextvars.ContextVar[str | None] = contextvars.ContextVar("zenas_skill_home", default=None)
 
@@ -195,9 +194,6 @@ def sa_hosted_models() -> frozenset[str]:
             info = item.get("model_info") or {}
             if str(info.get("hosted_in") or "").lower() != ZA_REGION:
                 continue
-            provider = str((item.get("litellm_params") or {}).get("model") or "").split("/", 1)[0].lower()
-            if provider in _CHINA_PROVIDERS:
-                continue
             name = str(item.get("model_name") or "").strip()
             if name:
                 names.add(name)
@@ -224,11 +220,6 @@ def tenant_allowlist(tenant_id: str) -> frozenset[str] | None:
     if not isinstance(names, list):
         return frozenset()
     return frozenset(str(item).strip() for item in names if str(item).strip())
-
-
-def _china_model(model: str) -> bool:
-    head = model.split("/", 1)[0].lower()
-    return head in _CHINA_PROVIDERS or model.lower() in _CHINA_PROVIDERS
 
 
 # Same ids as agents/zenas/core/release_mask.py COURT_SOURCES. Tank's image
@@ -376,8 +367,6 @@ def model_call_refusal(
         if model is not None and allow is not None and model not in allow:
             return ALLOW_REFUSAL
         return None
-    if model is not None and _china_model(model):
-        return ALLOW_REFUSAL
     hosted = sa_hosted_models()
     if prompt_has_identifier(text) and not public_record:
         permitted = hosted if allow is None else hosted & allow
@@ -672,7 +661,7 @@ async def _startup() -> None:
             "WHERE status IN ('queued','running') AND task_type <> 'base.enrich'"
         )
     global _http, _packages
-    _http = httpx.AsyncClient(headers={"User-Agent": "TervoryBase/0.1 (+https://tervory.com)"}, timeout=15)
+    _http = httpx.AsyncClient(headers={"User-Agent": "TervoryBase/0.1 (+https://tervory.com)"}, timeout=15, event_hooks={"request": [__import__("controls").paid_host_hook]})
     global _redis
     try:
         _redis = aioredis.from_url(REDIS_URL, decode_responses=True, socket_connect_timeout=2)
@@ -931,6 +920,7 @@ async def run_route(
             return RouteResponse(ledger_id=ledger_id, model=model, rung=4, content=cached["content"],
                                  tokens_in=0, tokens_out=0, cost_usd=0.0, latency_ms=0)
 
+    await __import__("controls").refuse_paid(paid=True, task=req.task_type, path="route")
     started = time.perf_counter()
     try:
         async with httpx.AsyncClient(timeout=120) as client:
@@ -1030,6 +1020,7 @@ async def run_route(
 
 
 async def _llm(model: str, messages: list[dict[str, str]], max_tokens: int) -> tuple[str, float]:
+    await __import__("controls").refuse_paid(path="_llm")
     async with httpx.AsyncClient(timeout=120) as client:
         r = await client.post(
             f"{LITELLM_URL}/v1/chat/completions",
@@ -3084,10 +3075,14 @@ async def mark_billing_event_handled(body: BillingEventHandled) -> dict[str, boo
 
 
 app.include_router(__import__("admin").router)
+app.include_router(__import__("controls").router)
+app.include_router(__import__("dashboards").router)
 
 app.include_router(__import__("gold").router)
 app.include_router(__import__("training").router)
 app.include_router(__import__("storage").router)
+app.include_router(__import__("bench").router)
+app.include_router(__import__("proof").router)
 
 
 @app.get("/v1/training/graduation")
@@ -3397,3 +3392,6 @@ async def market_quarantine_act(
     except Exception:
         raise HTTPException(status_code=502, detail=_MARKET_DOWN) from None
     return {**payload, "models": models}
+
+# MODELS-2: research stays in its own module; generic routing is unchanged.
+__import__("research").register(app, globals())
