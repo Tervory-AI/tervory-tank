@@ -93,6 +93,11 @@ HF. A failed R2 archive prevents any HF call. A failed HF operation can leave
 a valid R2 snapshot. This is an explicit command; it does not replace Tank's
 existing automated exporter in `tank/training.py`.
 
+`jobs/train/Dockerfile.backup` builds a dedicated worker image from the repository
+root, with PostgreSQL client tools and age installed. It includes no model or
+HF dependencies and runs as an unprivileged user. Building that image does not
+deploy or schedule it.
+
 The backup worker requires `pg_dump`, `age`, `DATABASE_URL`, and the public
 `R2_BACKUP_RECIPIENT`. The private age identity must stay outside the worker.
 It pipes `pg_dump` directly into age; only ciphertext is written to a private
