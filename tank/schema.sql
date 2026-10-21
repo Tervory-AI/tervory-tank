@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS tank.transcripts (
     ledger_id       uuid PRIMARY KEY,
     tenant_id       uuid NOT NULL,
     task_type       text NOT NULL,
-    messages        jsonb NOT NULL,           -- as sent (system prompt excluded; it lives in policy)
+    messages        jsonb NOT NULL,           -- as sent; agent chat includes its policy system prompt
     content         text NOT NULL,
     created_at      timestamptz NOT NULL DEFAULT now()
 );
@@ -947,6 +947,45 @@ CREATE INDEX IF NOT EXISTS ledger_baseline_pending ON tank.ledger(tenant_id,regi
 CREATE INDEX IF NOT EXISTS ledger_baseline_unpriced ON tank.ledger(region,id) WHERE baseline_status='unpriced';
 CREATE INDEX IF NOT EXISTS ledger_proof_receipts ON tank.ledger(region,ts DESC,id DESC)
     WHERE agent NOT IN ('bench','shadow') AND task_type NOT LIKE '%#shadow';
+
+-- AGENT-1: Base pilot. Copy the current general-purpose serving route once;
+-- no existing route changes, automatic promotion or new provider is introduced.
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS baseline_model text;
+DO $$
+BEGIN
+    -- Serialize this one-time seed across concurrent Tank starts. Preserve an
+    -- existing brain policy, including any founder-selected serving model.
+    PERFORM pg_advisory_xact_lock(hashtextextended('agent.base.think.seed',0));
+    IF NOT EXISTS (SELECT 1 FROM tank.policy WHERE task_type='agent.base.think' AND tenant_id IS NULL) THEN
+        INSERT INTO tank.policy (task_type,rung,model,priority,cache_scope,max_tokens_out,baseline_model,auto_promote)
+        SELECT 'agent.base.think',rung,model,'standard','none',4096,model,false
+        FROM tank.policy WHERE task_type='tier0.answer' AND tenant_id IS NULL;
+    END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS tank.agent_receipts (
+    ledger_id uuid PRIMARY KEY REFERENCES tank.ledger(id),
+    tenant_id uuid NOT NULL,
+    room text NOT NULL,
+    receipt jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS agent_receipts_tenant ON tank.agent_receipts (tenant_id,created_at);
+
+-- Source is immutable. The ordinary tank.skills row owns candidate/staging/
+-- approved/retired state, and only the existing eval and approval routes change it.
+CREATE TABLE IF NOT EXISTS tank.agent_skill_submissions (
+    skill_id text NOT NULL,
+    version text NOT NULL,
+    tenant_id uuid NOT NULL,
+    region text NOT NULL,
+    submitted_by_room text NOT NULL,
+    package jsonb NOT NULL,
+    sha256 text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (skill_id,version),
+    FOREIGN KEY (skill_id,version) REFERENCES tank.skills(id,version)
+);
 
 -- DASH-1: founder controls and immutable audit history, local to this box.
 CREATE TABLE IF NOT EXISTS tank.controls (

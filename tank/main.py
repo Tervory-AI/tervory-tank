@@ -2418,6 +2418,8 @@ async def _run_one_skill(
     ctx = make_ctx(pkg, body.tenant_id, preview=body.preview)
     if caller:
         ctx.agent = caller
+    if caller == "base":
+        await __import__("agent_skills").guard_base_run(__import__("sys").modules[__name__], pkg, body, ctx)
     out = await skala.run_skill(pkg, body.input, ctx)
     out["_cost_usd"] = round(ctx.cost_usd, 6)
     return out
@@ -3059,6 +3061,7 @@ app.include_router(__import__("training").router)
 app.include_router(__import__("storage").router)
 app.include_router(__import__("bench").router)
 app.include_router(__import__("proof").router)
+app.include_router(__import__("agent_skills").build_router(__import__("sys").modules[__name__]))
 
 
 @app.get("/v1/training/graduation")
