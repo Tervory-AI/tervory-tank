@@ -3,7 +3,7 @@ import os
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
@@ -137,11 +137,12 @@ async def test_llm_refuses_before_gateway_for_all_purposes(conn, monkeypatch, pu
 
 
 @pytest.mark.asyncio
-async def test_main_call_stops_after_cache_miss_and_cache_still_runs(conn, monkeypatch):
+@pytest.mark.parametrize("rung", [1, 2])
+async def test_main_call_stops_after_cache_miss_and_cache_still_runs(conn, monkeypatch, rung):
     monkeypatch.setattr(main, 'pool', lambda: conn)
     monkeypatch.setattr(main, 'load_policy', AsyncMock(return_value={
         'model': 'offline-test-model', 'priority': 'standard', 'system_prompt': None,
-        'max_tokens_out': 100, 'rung': 1, 'cache_scope': 'tenant',
+        'max_tokens_out': 100, 'rung': rung, 'cache_scope': 'tenant',
     }))
     monkeypatch.setattr(main, 'zenas_pool_prompt', AsyncMock(return_value=False))
     monkeypatch.setattr(main, 'model_call_refusal', lambda *a, **kw: None)
@@ -149,9 +150,12 @@ async def test_main_call_stops_after_cache_miss_and_cache_still_runs(conn, monke
     cache = SimpleNamespace(get=AsyncMock(return_value=None))
     monkeypatch.setattr(main, '_redis', cache)
     conn.value = True
+    gateway = Mock(side_effect=AssertionError('paused call reached the gateway'))
+    monkeypatch.setattr(main.httpx, 'AsyncClient', gateway)
     request = main.RouteRequest(tenant_id=TENANT, messages=[main.Message(role='user', content='Hello')])
     with pytest.raises(HTTPException, match='paid work is paused'):
         await main.run_route(request)
+    gateway.assert_not_called()
     cache.get.return_value = '{"content":"already answered"}'
     result = await main.run_route(request)
     assert result.content == 'already answered' and result.rung == 4 and result.cost_usd == 0
@@ -191,7 +195,7 @@ def test_readonly_controls_have_no_write_path(client):
 def test_only_approved_narrow_main_hooks_and_no_approved_skill_edits():
     source = (ROOT / 'tank/main.py').read_text()
     assert 'event_hooks={"request": [__import__("controls").paid_host_hook]}' in source
-    assert 'refuse_paid(paid=policy["rung"] == 1' in source
+    assert 'refuse_paid(paid=True, task=req.task_type, path="route")' in source
 
 @pytest.mark.asyncio
 async def test_resume_restores_paid_gateway(conn, monkeypatch):

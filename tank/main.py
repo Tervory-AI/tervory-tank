@@ -931,7 +931,7 @@ async def run_route(
             return RouteResponse(ledger_id=ledger_id, model=model, rung=4, content=cached["content"],
                                  tokens_in=0, tokens_out=0, cost_usd=0.0, latency_ms=0)
 
-    await __import__("controls").refuse_paid(paid=policy["rung"] == 1, task=req.task_type, path="route")
+    await __import__("controls").refuse_paid(paid=True, task=req.task_type, path="route")
     started = time.perf_counter()
     try:
         async with httpx.AsyncClient(timeout=120) as client:
