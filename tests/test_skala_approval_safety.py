@@ -229,3 +229,18 @@ async def test_zenas_gate_blocks_bulk_and_individual(database, tmp_path, monkeyp
         await skala.change_version(database, pkg, "founder", "approve", region="za")
     preview = await skala.bulk_preview(database, {(pkg.id, pkg.version): pkg}, "founder", region="za")
     assert preview["items"] == []
+
+
+def test_founder_api_confirmation_and_origin_checks():
+    import subprocess
+    result = subprocess.run(["node", str(ROOT / "tests/skala_api.cjs")], capture_output=True, text=True, cwd=ROOT)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.asyncio
+async def test_missing_zenas_tables_refuse_without_hiding_other_skills(database, tmp_path):
+    pkg = package(tmp_path, skill="zenas.example")
+    await seed(database, pkg)
+    async with database.acquire() as conn:
+        evidence = await skala.review_evidence(conn, pkg, region="za")
+    assert "unavailable on this box" in evidence["reason"]

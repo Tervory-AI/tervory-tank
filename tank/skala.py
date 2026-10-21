@@ -246,6 +246,10 @@ async def zenas_approval_refusal(conn: Any, skill_id: str, *, region: str) -> st
     """The sentence Skala shows when this box has not passed the made-up-case test."""
     if not str(skill_id or "").startswith("zenas."):
         return None
+    if conn is not None and hasattr(conn, "fetchval"):
+        exists = await conn.fetchval("SELECT to_regclass('agent_zenas.selftest_runs')")
+        if exists is None:
+            return "This Zenas skill stays unapproved. The made-up-case test is unavailable on this box."
     box = "za" if str(region or "").strip().lower() == "za" else "us-east"
     area = ""
     if conn is not None and hasattr(conn, "fetchrow"):

@@ -14,14 +14,14 @@ const { chromium } = require(process.env.SKALA_PLAYWRIGHT_PATH || "playwright");
 const shots = join(root, "tests/screenshots/skala-2");
 await mkdir(shots, { recursive: true });
 const brand = join(root, "workspace/public/brand");
-const jost = join(root, "workspace/.next/static/media/eb5d6e6e339da62d-s.p.woff2");
+const jost = join(root, "workspace/app/fonts/Jost-300-latin.woff2");
 
 const fixture = [
   { id: "base.find_site", version: "1.8.0", agent: "base", rung: 3, task_type: null, description: "Finds a business website from the name and the city.", state: "staging", last_eval_score: 1, last_eval_at: "2026-10-21T00:00:00Z", present: true },
   { id: "base.learned.example", version: "1.0.0", agent: "base", rung: 3, task_type: null, description: "Room-authored candidate awaiting source review.", state: "staging", last_eval_score: 1, last_eval_at: "2026-10-21T00:00:00Z", present: true },
   { id: "base.find_site", version: "1.7.0", agent: "base", rung: 3, task_type: null, description: "Finds a business website from the name and the city.", state: "approved", last_eval_score: 0.96, last_eval_at: "2026-10-12T00:00:00Z", present: true },
   { id: "base.find_site", approved_at: "2026-09-01T00:00:00Z", version: "1.6.0", agent: "base", rung: 3, task_type: null, description: "Finds a business website from the name and the city.", state: "retired", last_eval_score: 0.91, last_eval_at: "2026-09-02T00:00:00Z", present: true },
-  { id: "base.extract", version: "2.0.0", agent: "base", rung: 3, task_type: null, description: "Reads a business page and returns what they sell.", model: true, runs: 3, state: "staging", last_eval_score: 0.98, last_eval_at: "2026-10-18T00:00:00Z", present: true },
+  { id: "base.extract", version: "2.0.0", agent: "base", rung: 1, task_type: "base.extract", description: "Reads a business page and returns what they sell.", model: true, runs: 3, state: "staging", last_eval_score: 0.98, last_eval_at: "2026-10-18T00:00:00Z", present: true },
   { id: "base.normalize", version: "1.0.0", agent: "base", rung: 3, task_type: null, description: "Cleans a raw business record into canonical fields.", state: "candidate", last_eval_score: null, last_eval_at: null, present: true },
   { id: "tiger.price_extract", version: "1.1.0", agent: "tiger", rung: 3, task_type: null, description: "Reads the prices a page actually shows.", state: "approved", last_eval_score: 1, last_eval_at: "2026-10-01T00:00:00Z", present: true },
   { id: "market.research", version: "1.1.0", agent: "market_lab", rung: 3, task_type: "market.research", description: "A short answer, each claim with a source.", state: "candidate", last_eval_score: null, last_eval_at: null, present: true, calls_30d: 0, avg_cost_usd: null },
@@ -105,7 +105,7 @@ try {
   await page.getByRole("heading", { name: "base.find_site" }).waitFor();
   await page.getByText("no model").first().waitFor();
   await page.getByText("uses a model · $0.0031/call (30 days)").waitFor();
-  await page.getByText("uses a model · no calls yet").waitFor();
+  await page.getByText("uses a model · no calls yet").first().waitFor();
   const colours = await page.evaluate(() => {
     const badge = document.querySelector(".sk-state.approved");
     const button = document.querySelector("button.primary");
@@ -145,7 +145,7 @@ try {
     }
   }
 
-  await page.getByText("uses a model · $0.0031/call (30 days)").scrollIntoViewIfNeeded();
+  await page.evaluate(() => { document.querySelector("[data-scroll-root]").scrollTop = 0; });
   await page.screenshot({ path: join(shots, "skala-1440.png") });
   await page.evaluate(() => {
     const root = document.querySelector("[data-scroll-root]");
@@ -173,7 +173,9 @@ try {
   assert.ok(mobile.pageOverflow <= 1, `mobile overflow ${mobile.pageOverflow}`);
   assert.ok(mobile.boxOverflow <= 1, `mobile library overflow ${mobile.boxOverflow}`);
   assert.ok(mobile.searchWidth >= mobile.inner - 40, `search width ${mobile.searchWidth}`);
+  await page.getByLabel("Search skills").fill("base.find_site");
   await page.screenshot({ path: join(shots, "skala-375.png") });
+  await page.getByLabel("Search skills").fill("");
 
   await page.getByLabel("Search skills").fill("price");
   await page.getByRole("heading", { name: "tiger.price_extract" }).waitFor();
@@ -194,10 +196,16 @@ try {
   const bulk = page.getByRole("dialog", {name: "Confirm ready versions"});
   await bulk.getByText("base.find_site · 1.8.0").waitFor();
   assert.equal(await bulk.getByText("base.learned.example").count(), 0);
+  await page.screenshot({ path: join(shots, "bulk-375.png") });
+  await page.setViewportSize({width: 1440, height: 1000});
+  await page.screenshot({ path: join(shots, "bulk-1440.png") });
   await bulk.getByRole("button", {name: "Confirm listed approvals"}).click();
   assert.ok(actions.some(a => a.action === "bulk-confirm" && a.token === "preview-test" && a.confirmed === true));
   await page.getByRole("heading", {name: "base.learned.example", exact:true}).locator("..").getByRole("button", {name:"Approve",exact:true}).click();
   await page.getByText("# END OF FULL SOURCE", {exact:false}).waitFor();
+  await page.screenshot({ path: join(shots, "source-review-1440.png") });
+  await page.setViewportSize({width: 375, height: 812});
+  await page.screenshot({ path: join(shots, "source-review-375.png") });
   await page.getByRole("dialog").getByRole("button", {name:"Approve",exact:true}).click();
   assert.ok(actions.some(a => a.action === "approve" && a.review_token === "source-test" && a.confirmed === true));
   if (process.env.SKALA_AXE_PATH) {

@@ -34,12 +34,12 @@ export function ApproveAllReady({ onApproved, className }: { onApproved?: () => 
   return <div className="sk-bulk">
     <button className={className} type="button" disabled={busy} onClick={() => request(false)}>{busy ? "Checking…" : "Approve all ready"}</button>
     {message ? <p role="status">{message}</p> : null}
-    <dialog ref={dialog} className="sk-dialog" aria-label="Confirm ready versions">
+    <dialog ref={dialog} className="sk-dialog" style={{maxWidth: "min(850px, calc(100vw - 32px))", boxSizing: "border-box", border: "1px solid #B8BFD0", borderRadius: 8, padding: 24, color: "#001840"}} aria-label="Confirm ready versions">
       <h2>Approve these versions?</h2>
       <p>Room-authored skills need individual source review and are excluded.</p>
-      {preview?.items.length ? <ul className="sk-bulk-list">{preview.items.map(item => <li key={item.id}>{item.id} · {item.version}</li>)}</ul> : <p>No versions are ready.</p>}
-      <button type="button" disabled={busy || !preview?.items.length} onClick={() => request(true)}>Confirm listed approvals</button>{" "}
-      <button type="button" disabled={busy} onClick={() => { dialog.current?.close(); setPreview(null); }}>Cancel</button>
+      {preview?.items.length ? <ul className="sk-bulk-list" style={{maxHeight: "45vh", overflow: "auto", overflowWrap: "anywhere"}}>{preview.items.map(item => <li key={item.id}>{item.id} · {item.version}</li>)}</ul> : <p>No versions are ready.</p>}
+      <button className={className ?? "primary"} type="button" disabled={busy || !preview?.items.length} onClick={() => request(true)}>Confirm listed approvals</button>{" "}
+      <button className={className} type="button" disabled={busy} onClick={() => { dialog.current?.close(); setPreview(null); }}>Cancel</button>
     </dialog>
   </div>;
 }

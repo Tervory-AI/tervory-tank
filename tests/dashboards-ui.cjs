@@ -66,7 +66,7 @@ async function render() {
   const {FounderDashboard} = require('../workspace/app/control/view.tsx');
   const view={data:fixture,signups:{total:1,recent:[{id:'user',name:'Alex Example',company:'Example Company',country:'United States',plan:'Trial',createdAt:Date.UTC(2026,9,21)}],days:[]},paying:0,paused:false,models:[],refused:[],errors:[]};
   const control=renderToStaticMarkup(React.createElement(FounderDashboard,{view}));
-  for (const label of ['SKALA-2','GHOST-1','AGENT-1','BATCH-1']) assert(control.includes(label));
+  for (const label of ['Approve all ready','GHOST-1','AGENT-1','BATCH-1']) assert(control.includes(label));
   const {signupSource,payingSource}=require('../workspace/app/control/sources.ts');
   process.env.STRIPE_SECRET_KEY='sk_test_dummy';
   assert.equal(await payingSource(),2);
