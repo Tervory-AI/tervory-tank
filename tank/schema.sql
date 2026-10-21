@@ -834,10 +834,11 @@ BEGIN
     -- Serialize this one-time seed across concurrent Tank starts. Preserve an
     -- existing brain policy, including any founder-selected serving model.
     PERFORM pg_advisory_xact_lock(hashtextextended('agent.base.think.seed',0));
-    INSERT INTO tank.policy (task_type,rung,model,priority,cache_scope,max_tokens_out,baseline_model,auto_promote)
-    SELECT 'agent.base.think',rung,model,'standard','none',4096,model,false
-    FROM tank.policy WHERE task_type='tier0.answer' AND tenant_id IS NULL
-      AND NOT EXISTS (SELECT 1 FROM tank.policy WHERE task_type='agent.base.think' AND tenant_id IS NULL);
+    IF NOT EXISTS (SELECT 1 FROM tank.policy WHERE task_type='agent.base.think' AND tenant_id IS NULL) THEN
+        INSERT INTO tank.policy (task_type,rung,model,priority,cache_scope,max_tokens_out,baseline_model,auto_promote)
+        SELECT 'agent.base.think',rung,model,'standard','none',4096,model,false
+        FROM tank.policy WHERE task_type='tier0.answer' AND tenant_id IS NULL;
+    END IF;
 END $$;
 
 CREATE TABLE IF NOT EXISTS tank.agent_receipts (
