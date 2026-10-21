@@ -30,9 +30,18 @@ async function tank<T>(path: string, init: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-export type RosterModel = { name: string };
+export type RosterModel = {
+  name: string;
+  providerModel: string;
+  inputPerM: number | null;
+  outputPerM: number | null;
+};
 
-/** Names on the roster Tank already loads. No key and no missing-key flag. */
+function priceOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+/** The roster LiteLLM serves, cheapest first, with USD per million tokens. No key and no missing-key flag. */
 export async function listRoster(): Promise<RosterModel[]> {
   const rows = await tank<unknown>("/v1/models", { method: "GET" });
   if (!Array.isArray(rows)) return [];
@@ -42,7 +51,12 @@ export async function listRoster(): Promise<RosterModel[]> {
     const record = row as Record<string, unknown>;
     const name = typeof record.name === "string" ? record.name.trim() : "";
     if (!name) continue;
-    models.push({ name });
+    models.push({
+      name,
+      providerModel: typeof record.provider_model === "string" ? record.provider_model : "",
+      inputPerM: priceOrNull(record.input_usd_per_m),
+      outputPerM: priceOrNull(record.output_usd_per_m),
+    });
   }
   return models;
 }

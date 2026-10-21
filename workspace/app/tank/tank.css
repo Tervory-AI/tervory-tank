@@ -490,6 +490,30 @@ body:has(.tk) main {
   font-size: 14px;
 }
 
+.tk-model-provider {
+  flex: 1;
+  color: #3d4a66;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.tk-model-price {
+  font-family: var(--font-mono), "JetBrains Mono", ui-monospace, monospace;
+  font-size: 13px;
+  color: #001840;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .tk-models li {
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
+  .tk-model-price {
+    white-space: normal;
+  }
+}
+
 .tk-workers {
   background: #fff;
   border: 1px solid #b8bfd0;
