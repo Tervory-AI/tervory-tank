@@ -44,6 +44,8 @@ vm.runInNewContext(compiled,{exports:moduleObject.exports,module:moduleObject,re
     if(name==='next/navigation')return {notFound(){throw Error('404');}};
     if(name==='./savings-founder')return {FounderSavingsPanel:async()=>{throw Error('offline');}};
     if(name==='./server')return {readProof:async()=>{throw Error('should not run');}};
+    if(name==='@/lib/tank')return {moaEvidence:async()=>{throw Error('should not run');}};
+    if(name==='../moa/view')return {};
     if(name==='./view'||name.endsWith('.css'))return {};
     throw Error(name);
   }});
