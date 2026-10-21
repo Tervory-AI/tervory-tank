@@ -19,7 +19,9 @@ from pathlib import Path
 # GitHub caps an App JWT at 10 minutes. The installation token GitHub returns lasts one hour.
 JWT_TTL_S = 9 * 60
 TOKEN_MAX_S = 60 * 60
-TOKEN_RE = re.compile(r"ghs_[A-Za-z0-9_]{4,200}")
+# GitHub installation tokens are opaque and longer than they used to be (about 390 characters
+# today), and they can contain "-" and ".". Keep the ghs_ prefix and a hard length cap.
+TOKEN_RE = re.compile(r"ghs_[A-Za-z0-9_.-]{4,1000}")
 
 # Contents write and pull-request write do not include a merge permission of their own.
 # Merging is refused in code, and branch protection on main is what blocks a push there.
@@ -28,6 +30,9 @@ APP_PERMISSIONS = {
     "pull_requests": "write",
     "issues": "write",
 }
+
+# GitHub always adds metadata read to an installation token. Only that exact value is allowed.
+IMPLICIT_PERMISSIONS = {"metadata": "read"}
 
 
 class TokenRejected(RuntimeError):
@@ -151,9 +156,13 @@ def assert_token_response(body: dict[str, object]) -> str:
     assert_installation_token(token)
     permissions = body.get("permissions") or APP_PERMISSIONS
     if isinstance(permissions, dict):
-        extra = set(permissions) - set(APP_PERMISSIONS)
-        if extra or "administration" in permissions:
+        if "administration" in permissions:
             raise TokenRejected()
+        for name, value in permissions.items():
+            if name in APP_PERMISSIONS:
+                continue
+            if IMPLICIT_PERMISSIONS.get(name) != value:
+                raise TokenRejected()
     return token
 
 

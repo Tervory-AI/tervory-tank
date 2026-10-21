@@ -76,7 +76,7 @@ The worker reads the section "Files you may change". Paths in backticks are allo
 7. Branch protection on `main`: require a pull request, do not allow the app to bypass, and do not give the app a direct push or the right to merge.
 8. Coolify, new app from `docker-compose.workers.yml`, name `tervory-workers`. Boston destination. Not the ZA server.
 9. Set `TANK_DOCKER_NETWORK` to the Docker network the Tank service is already on, so `http://tank:8000` resolves.
-10. Set `GITHUB_APP_PRIVATE_KEY_FILE` to the private-key path on that server. Compose mounts it at `/run/secrets/github_app_key`. Set `GITHUB_APP_ID` and `GITHUB_APP_INSTALLATION_ID`.
+10. Set `GITHUB_APP_PRIVATE_KEY` to the private key's content (the multiline PEM) as a Coolify setting. Compose passes it as environment; the service keeps it in memory-backed storage. No file on the server is needed. Set `GITHUB_APP_ID` and `GITHUB_APP_INSTALLATION_ID`.
 11. Create `TANK_KEY_WORKERS` with `openssl rand -hex 32`. Set the same value on Tank and on this app. Never commit it.
 12. Boston settings: `WORKER_LINK=internal`, `WORKER_MAX_TASKS=1`, `WORKER_TASK_CPUS=2`, `WORKER_TASK_MEMORY=4g`, `WORKER_TASK_TIMEOUT_MINUTES=90`, `WORKER_SERVICE_MEMORY=6g`. The service needs more memory than one task because the task runs inside it.
 13. The app needs `/dev/fuse` (already in the compose file) so rootless podman can start task containers. The task process is an unprivileged user. The firewall is installed first, then privileges are dropped.

@@ -634,3 +634,42 @@ async def test_merge_url_is_refused() -> None:
     with pytest.raises(GitHubError):
         await github._send("GET", "https://evil.example/repos", TOKEN)
     await github.client.aclose()
+
+
+def _long_token() -> str:
+    # Shape of a real installation token today: ghs_ prefix, about 390 characters, with - and .
+    body = ("AbC1_-x." * 60)[:386]
+    token = "ghs_" + body
+    assert len(token) == 390 and "-" in token and "." in token
+    return token
+
+
+def test_installation_token_accepts_current_github_shape():
+    from workers.github_app import assert_token_response
+
+    token = _long_token()
+    assert_installation_token(token)
+    body = {"token": token, "permissions": {**APP_PERMISSIONS, "metadata": "read"}}
+    assert assert_token_response(body) == token
+
+
+def test_installation_token_shape_still_refused():
+    for bad in (_long_token() + "\n", "ghs_abc\ndef", "ghs_abcd\r", "ghs_" + "a" * 1001, "ghs_ab", "gho_" + "a" * 40, "ghs_abc def"):
+        with pytest.raises(TokenRejected):
+            assert_installation_token(bad)
+
+
+def test_token_response_permissions():
+    from workers.github_app import assert_token_response
+
+    token = _long_token()
+    for permissions in (
+        {**APP_PERMISSIONS, "metadata": "write"},
+        {**APP_PERMISSIONS, "metadata": "read", "administration": "read"},
+        {**APP_PERMISSIONS, "administration": "write"},
+        {**APP_PERMISSIONS, "workflows": "write"},
+        {**APP_PERMISSIONS, "metadata": "read", "secrets": "read"},
+    ):
+        with pytest.raises(TokenRejected):
+            assert_token_response({"token": token, "permissions": permissions})
+    assert assert_token_response({"token": token, "permissions": dict(APP_PERMISSIONS)}) == token
