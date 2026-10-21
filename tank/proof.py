@@ -22,6 +22,9 @@ from gold import runtime
 
 @asynccontextmanager
 async def baseline_lifespan(app):
+    from savings_defaults import initialize
+    async with runtime().pool().acquire() as conn:
+        await initialize(conn)
     async def work():
         while True:
             await asyncio.sleep(1)
@@ -362,8 +365,8 @@ async def savings_snapshot(tenant: uuid.UUID | None, end: datetime | None = None
             {SAVINGS_TOTALS}, sum(sum(standard_cost_usd-cost_usd)) OVER (ORDER BY (ts AT TIME ZONE 'UTC')::date) AS cumulative
             FROM eligible GROUP BY (ts AT TIME ZONE 'UTC')::date ORDER BY day""", *args)]
         members = [dict(r) for r in await conn.fetch(cte+f'SELECT member,{SAVINGS_TOTALS} FROM eligible GROUP BY member ORDER BY member', *args)]
-        revision = await conn.fetchrow('SELECT count(*) AS n,max(finished_at) AS last FROM tank.tasks WHERE ($1::uuid IS NULL OR tenant_id=$1) AND finished_at IS NOT NULL', tenant)
-        data = dict(as_of=end, total=decorate_savings(total), month=decorate_savings(month), daily=[decorate_savings(d) for d in daily], members=[decorate_savings(m) for m in members], revision=f"{revision['n']}:{revision['last']}")
+        revision = await conn.fetchval('SELECT coalesce(sum(revision),0) FROM tank.savings_revisions WHERE ($1::uuid IS NULL OR tenant_id=$1)', tenant)
+        data = dict(as_of=end, total=decorate_savings(total), month=decorate_savings(month), daily=[decorate_savings(d) for d in daily], members=[decorate_savings(m) for m in members], revision=str(revision))
         if founder:
             # No payment amount is stored in billing_events. A price-book rate is
             # not proof of payment, so neither paid nor margin can be inferred.
@@ -442,6 +445,21 @@ async def savings_export(format: str, end: datetime, tenant_id: uuid.UUID | None
                     headers={'Content-Disposition': f'attachment; filename="client-savings.{format}"', 'Cache-Control':'no-store'})
 
 
+@router.get('/savings/client-copy/{format}')
+async def savings_client_copy(format: str, end: datetime, tenant_id: uuid.UUID,
+                              page: int = Query(default=0, ge=0, le=100000)) -> Response:
+    from fastapi import HTTPException
+    from savings_export import csv_copy, pdf_copy
+    if format not in ('csv','pdf'):
+        raise HTTPException(404,'not found')
+    # Required UUID: never an all-client aggregate or founder population.
+    report=client_payload(await savings_snapshot(tenant_id,end))
+    evidence=client_payload(await savings_rows(tenant_id,end,page))
+    content=csv_copy(report,evidence) if format=='csv' else pdf_copy(report,evidence)
+    return Response(content,media_type='text/csv' if format=='csv' else 'application/pdf',
+        headers={'Content-Disposition':f'attachment; filename="your-savings.{format}"','Cache-Control':'no-store'})
+
+
 # Registered separately: no founder dependency and no optional/all-tenant scope.
 from dashboards import workspace_only
 client_router = APIRouter(prefix='/v1/client-savings', dependencies=[Depends(workspace_only)])
@@ -467,11 +485,8 @@ _CLIENT_PENDING: dict = {}
 @client_router.get('/revision')
 async def client_savings_revision(tenant_id: uuid.UUID) -> dict:
     async with runtime().pool().acquire() as conn:
-        row = await conn.fetchrow("""SELECT
-            (SELECT concat(count(*),':',max(finished_at)) FROM tank.tasks WHERE tenant_id=$1) AS jobs,
-            (SELECT concat(count(*),':',max(baseline_priced_at),':',max(ts)) FROM tank.ledger WHERE tenant_id=$1 AND region=$2) AS comparisons,
-            (SELECT concat(count(*),':',max(s.created_at)) FROM tank.shadow s JOIN tank.ledger l ON l.id=s.ledger_id AND l.tenant_id=s.tenant_id WHERE s.tenant_id=$1 AND l.region=$2) AS quality""",tenant_id,runtime().box_region())
-    return {'revision':datetime.now(timezone.utc).date().isoformat()+':'+':'.join(row.values())}
+        revision = await conn.fetchval('SELECT revision FROM tank.savings_revisions WHERE tenant_id=$1',tenant_id)
+    return {'revision':datetime.now(timezone.utc).date().isoformat()+':'+str(revision or 0)}
 
 
 @client_router.get('')
@@ -504,12 +519,29 @@ async def client_savings_rows(tenant_id: uuid.UUID, end: datetime,
     return client_payload(await savings_rows(tenant_id, end, page, start, until, member, free_only))
 
 
+async def check_recent_receipts(conn) -> int:
+    """Bounded inbox reconciliation, including late commits after an override."""
+    region=runtime().box_region()
+    tenant=await conn.fetchval('SELECT tenant_id FROM tank.baseline_receipt_checks WHERE region=$1 ORDER BY tenant_id LIMIT 1',region)
+    if tenant is None:
+        return 0
+    rows=await conn.fetch("""SELECT ledger_id FROM tank.baseline_receipt_checks
+        WHERE tenant_id=$1 AND region=$2 ORDER BY ledger_id LIMIT 5000 FOR UPDATE SKIP LOCKED""",tenant,region)
+    ids=[r['ledger_id'] for r in rows]
+    # No setting locks. A concurrent later override has its own durable request.
+    await conn.execute("""UPDATE tank.ledger l SET comparison_revision=s.revision
+        FROM tank.baseline_settings s WHERE l.tenant_id=$1 AND l.region=$2
+        AND l.id=ANY($3::uuid[]) AND s.task_type=l.task_type AND l.comparison_revision<s.revision""",tenant,region,ids)
+    await conn.execute('DELETE FROM tank.baseline_receipt_checks WHERE tenant_id=$1 AND region=$2 AND ledger_id=ANY($3::uuid[])',tenant,region,ids)
+    return len(ids)
+
+
 # Founder choices are durable requests; the worker can resume after interruption.
 async def baseline_batch() -> int:
     async with runtime().pool().acquire() as conn, conn.transaction():
         change = await conn.fetchrow("SELECT * FROM tank.baseline_changes WHERE status IN ('pending','running') ORDER BY created_at,id LIMIT 1 FOR UPDATE SKIP LOCKED")
         if not change:
-            return 0
+            return await check_recent_receipts(conn)
         setting=await conn.fetchrow('SELECT * FROM tank.baseline_settings WHERE task_type=$1 FOR SHARE',change['task_type'])
         if setting and setting['revision']!=change['revision']:
             await conn.execute("UPDATE tank.baseline_changes SET status='superseded' WHERE id=$1",change['id'])

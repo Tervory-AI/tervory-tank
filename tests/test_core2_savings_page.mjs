@@ -29,7 +29,7 @@ const js=bundle.outputFiles.find(f=>f.path.endsWith('.js')).text, css=bundle.out
 const server=createServer(async(req,res)=>{if(req.url==='/bundle.js'){res.setHeader('content-type','text/javascript');res.end(js);return;}if(req.url.startsWith('/brand/')){try{res.setHeader('content-type','image/png');res.end(await fs.readFile(path.join(root,'workspace/public',req.url)));}catch{res.writeHead(404);res.end();}return;}
 res.end(`<html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;font-family:Arial}*{box-sizing:border-box}${css}</style></head><body><div id="root"></div><script type="module" src="/bundle.js"></script></body></html>`);});
 await new Promise(r=>server.listen(0,'127.0.0.1',r));
-const browser=await chromium.launch({executablePath:process.env.CORE2_CHROMIUM||'/usr/bin/chromium',headless:true,args:['--no-sandbox']});
+const browser=await chromium.launch({executablePath:process.env.CORE2_CHROMIUM,headless:true,args:['--no-sandbox']});
 try {
  const page=await browser.newPage();page.setDefaultTimeout(10000);const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.clock.install();await page.goto(`http://127.0.0.1:${server.address().port}/client`);
@@ -51,10 +51,11 @@ try {
  await page.screenshot({path:path.join(out,'client-drawer-375.png'),fullPage:true});
  await page.keyboard.press('Escape');assert.equal(await drawer.isVisible(),false);
  const before=await page.evaluate(()=>window.__reportReads);await page.clock.runFor(60010);assert((await page.evaluate(()=>window.__reportReads))>before);
- const after=await page.evaluate(()=>window.__reportReads);await page.evaluate(()=>window.__revision=1);await page.clock.runFor(5010);assert((await page.evaluate(()=>window.__reportReads))>after);
+ const after=await page.evaluate(()=>window.__reportReads);await page.evaluate(()=>window.__revision=1);await page.clock.runFor(5010);assert.equal(await page.evaluate(()=>window.__reportReads),after);await page.clock.runFor(15000);assert((await page.evaluate(()=>window.__reportReads))>after);
  await page.goto(`http://127.0.0.1:${server.address().port}/founder?selected`);
  await page.getByRole('heading',{name:'Client savings',exact:true}).waitFor();assert.equal(await page.locator('.savings-set').count(),1);
  assert.equal(await page.getByLabel('Client',{exact:true}).inputValue(),'client-fixture');
+ for(const format of ['CSV','PDF']){const url=new URL(await page.getByRole('link',{name:`Client copy ${format}`,exact:true}).getAttribute('href'),'http://fixture');assert.equal(url.searchParams.get('copy'),'client');assert.equal(url.searchParams.get('tenant_id'),'client-fixture');}
  await page.getByText('Baseline settings · founder only',{exact:true}).click();
  await page.getByLabel('Baseline for Find a business',{exact:true}).selectOption('astra');await page.getByRole('button',{name:'Save baseline and re-price',exact:true}).click();
  await page.getByText(/21 rows re-priced/).waitFor();
@@ -64,7 +65,8 @@ try {
  await page.getByRole('button',{name:'Inspect excluded rows',exact:true}).last().click();await page.getByRole('dialog').getByText(/receipt-fixture/).waitFor();assert.equal(await page.evaluate(()=>window.__tenant),'client-fixture');await page.keyboard.press('Escape');
  await page.getByRole('button',{name:'Browse evidence and export pages',exact:true}).last().click();await page.getByRole('dialog').getByRole('button',{name:'Next',exact:true}).click();
  const link=page.getByRole('dialog').getByRole('link',{name:'Export this page as CSV'});await page.waitForFunction(()=>window.__filters.page===1);const query=new URL(await link.getAttribute('href'),'http://fixture');assert.equal(query.searchParams.get('page'),'1');assert.equal(query.searchParams.get('tenant_id'),'client-fixture');
- await page.goto(`http://127.0.0.1:${server.address().port}/founder`);await page.getByRole('heading',{name:'Client savings',exact:true}).waitFor();assert.equal(await page.getByLabel('Client',{exact:true}).inputValue(),'all');
+ const clientLink=new URL(await page.getByRole('dialog').getByRole('link',{name:'Client copy of this page as CSV',exact:true}).getAttribute('href'),'http://fixture');assert.equal(clientLink.searchParams.get('page'),'1');assert.equal(clientLink.searchParams.get('copy'),'client');
+ await page.goto(`http://127.0.0.1:${server.address().port}/founder`);await page.getByRole('heading',{name:'Client savings',exact:true}).waitFor();assert.equal(await page.getByLabel('Client',{exact:true}).inputValue(),'all');assert.equal(await page.getByRole('link',{name:'Client copy CSV',exact:true}).count(),0);
  const options=await page.getByLabel('Client',{exact:true}).locator('option').allTextContents();assert.deepEqual(options,['Everything','All clients','Tervory (platform)','Example client']);
  for(const [tenant,title] of [['clients','All clients'],['00000000-0000-0000-0000-000000000001','Tervory (platform)']]){await page.goto(`http://127.0.0.1:${server.address().port}/founder?tenant_id=${tenant}`);await page.locator('.savings-set').getByRole('heading',{name:title,exact:true}).waitFor();}
  await page.goto(`http://127.0.0.1:${server.address().port}/client?tiny`);

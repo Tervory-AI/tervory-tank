@@ -22,9 +22,10 @@ function Margin({ data }: { data: FounderSavings }) {
 function ClientSet({ data, title }: { data: FounderSavings; title: string }) {
   const load = readFounderSavingsRows.bind(null, data.tenant_id);
   const query = new URLSearchParams({tenant_id:data.tenant_id,end:data.as_of});
-  return <><SavingsSet data={data} title={title} loadRows={load}/><nav className="savings-exports" aria-label={`${title} savings exports`}><a href={`/tank/proof/savings-export?${query}&format=csv`}>Savings CSV</a><a href={`/tank/proof/savings-export?${query}&format=pdf`}>Savings PDF</a></nav>
+  return <><SavingsSet data={data} title={title} loadRows={load}/><nav className="savings-exports" aria-label={`${title} savings exports`}><a href={`/tank/proof/savings-export?${query}&format=csv`}>Founder CSV</a><a href={`/tank/proof/savings-export?${query}&format=pdf`}>Founder PDF</a>{!["all","clients","00000000-0000-0000-0000-000000000001"].includes(data.tenant_id) && <><a href={`/tank/proof/savings-export?${query}&format=csv&copy=client`}>Client copy CSV</a><a href={`/tank/proof/savings-export?${query}&format=pdf&copy=client`}>Client copy PDF</a></>}</nav>
+    <p>Client copies contain the five graphs and job rows, using the dashboard wording. Founder copies include the internal detail.</p>
     <p>Exports include all graph totals and the first 100 matching evidence rows. Use Browse evidence to export further pages with the same totals and cutoff.</p>
-    <EvidenceButton label="Browse evidence and export pages" filters={{end:data.as_of}} loadRows={load} founder exportBase={`/tank/proof/savings-export?${query}`}/>
+    <EvidenceButton label="Browse evidence and export pages" filters={{end:data.as_of}} loadRows={load} founder exportBase={`/tank/proof/savings-export?${query}`} clientExportBase={!["all","clients","00000000-0000-0000-0000-000000000001"].includes(data.tenant_id) ? `/tank/proof/savings-export?${query}&copy=client` : undefined}/>
     <Margin data={data}/><section><h2>Rows left out of client savings</h2>{!data.excluded.length ? <p>No excluded rows.</p> : <><ul>{data.excluded.map(r => <li key={r.excluded_reason}><EvidenceButton label={`${r.excluded_reason}: ${r.count}`} filters={{end:data.as_of,population:"excluded"}} loadRows={load} founder/></li>)}</ul><EvidenceButton label="Inspect excluded rows" filters={{end:data.as_of,population:"excluded"}} loadRows={load} founder/></>}</section></>;
 }
 export async function FounderSavingsPanel({ tenant }: { tenant?: string }) {

@@ -159,23 +159,28 @@ async def test_schema_repeat_region_boundary_and_worker_lifespan(database,monkey
 
 
 @pytest.mark.asyncio
-async def test_override_waits_for_inflight_receipt_before_queue_can_complete(database,monkeypatch):
+async def test_unlocked_receipt_committed_after_override_is_eventually_repriced(database,monkeypatch):
     pool,rt=database;monkeypatch.setattr(proof,'runtime',lambda:rt)
-    tenant=await fixture(pool)
+    await fixture(pool)
+    # Different tenant proves task-wide writes never wait on the receipt; the
+    # per-tenant revision counter deliberately serializes its own tenant only.
+    tenant=uuid.uuid4()
     async with pool.acquire() as conn:
         tx=conn.transaction();await tx.start()
-        await conn.execute("""INSERT INTO tank.ledger(tenant_id,agent,task_type,model,tokens_in,cost_usd)
-            VALUES($1,'base','baseline.fixture','luna',100,.1)""",tenant)
-        changing=asyncio.create_task(proof.change_baseline(proof.BaselineChoice(task='baseline.fixture',model='astra'),'founder-fixture'))
         try:
-            await asyncio.sleep(.05)
-            assert not changing.done()
+            row_id=await conn.fetchval("""INSERT INTO tank.ledger(tenant_id,agent,task_type,model,tokens_in,cost_usd)
+                VALUES($1,'base','baseline.fixture','luna',100,.1) RETURNING id""",tenant)
+            await asyncio.wait_for(proof.change_baseline(proof.BaselineChoice(task='baseline.fixture',model='astra'),'founder-fixture'),2)
+            while await asyncio.wait_for(proof.baseline_batch(),2): pass
+            assert await pool.fetchval("SELECT status FROM tank.baseline_changes WHERE task_type='baseline.fixture'")=='complete'
+            assert await conn.fetchval('SELECT baseline_model FROM tank.ledger WHERE id=$1',row_id)=='sol'
         finally:
             await tx.commit()
-        await changing
     while await proof.baseline_batch(): pass
-    assert await pool.fetchval("SELECT rows_updated FROM tank.baseline_changes WHERE task_type='baseline.fixture'")==2
-    assert await pool.fetchval("SELECT count(*) FROM tank.ledger WHERE tenant_id=$1 AND baseline_model='astra'",tenant)==2
+    row=await pool.fetchrow('SELECT * FROM tank.ledger WHERE id=$1 AND tenant_id=$2',row_id,tenant)
+    assert row['baseline_model']=='astra' and row['baseline_status']=='re-priced'
+    assert await pool.fetchval('SELECT reason FROM tank.comparison_history WHERE ledger_id=$1 AND tenant_id=$2',row_id,tenant)=='task override'
+    assert await pool.fetchval('SELECT count(*) FROM tank.baseline_receipt_checks')==0
 
 
 def test_json_amounts_never_use_scientific_notation():
@@ -252,3 +257,68 @@ async def test_legacy_migration_is_guarded_and_clears_unused_policy(database,mon
     assert await pool.fetchval('SELECT count(*) FROM tank.baseline_changes')==1
     assert await pool.fetchval('SELECT baseline_model FROM tank.policy')=='legacy-sentinel'
     assert await pool.fetchval("SELECT count(*) FROM tank.policy_log WHERE detail->>'id'='2026-10-21-core2-baselines'")==1
+
+
+@pytest.mark.asyncio
+async def test_base_receipt_uses_answered_provider_standard_and_task_override(database,monkeypatch):
+    from types import SimpleNamespace
+    import agent_skills
+    import graduate
+    pool,rt=database
+    monkeypatch.setattr(agent_skills.controls,'db',lambda:pool)
+    await fixture(pool)
+    async def policy(task,tenant):
+        return {'model':'luna','baseline_model':None,'rung':1,'priority':'standard','max_tokens_out':100}
+    async def roster():
+        return [{'model_name':name,'litellm_params':{'model':provider},'model_info':{
+            'input_cost_per_token':price,'output_cost_per_token':price}}
+            for name,provider,price in [('luna','openai/gpt-luna',.001),('sol','openai/gpt-sol',.003),
+                ('astra','openai/gpt-astra',.01),('haiku','anthropic/claude-haiku',.001),('sonnet','anthropic/claude-sonnet',.003)]]
+    tank=SimpleNamespace(pool=lambda:pool,load_policy=policy,_roster_models=roster,
+        model_call_refusal=lambda *a,**kw:None,graduate=graduate,LITELLM_URL='http://gateway.invalid',LITELLM_MASTER_KEY='fixture')
+    original=httpx.AsyncClient
+    answered='luna'
+    def gateway(request):
+        return httpx.Response(200,headers={'x-litellm-response-cost':'.01','x-litellm-model-group':answered},json={
+            'usage':{'prompt_tokens':10,'completion_tokens':5},
+            'choices':[{'message':{'role':'assistant','content':'done'}}]})
+    monkeypatch.setattr(agent_skills.httpx,'AsyncClient',lambda **kw:original(transport=httpx.MockTransport(gateway),**kw))
+    tenant=uuid.uuid4()
+    body=agent_skills.Chat(messages=[{'role':'user','content':'fixture'}])
+    for expected,price in [('sol',.045),('astra',.15),('sonnet',.045),('astra',None)]:
+        result=await agent_skills.complete(tank,body,tenant,None,'us-east')
+        receipt=result['receipt']
+        assert receipt['baseline_model']==expected
+        if price is None:
+            assert receipt['baseline_cost_usd'] is None and receipt['saving_usd'] is None
+        else:
+            assert receipt['baseline_cost_usd']==pytest.approx(price)
+            assert receipt['saving_usd']==pytest.approx(price-.01)
+        stored=await pool.fetchval('SELECT receipt FROM tank.agent_receipts WHERE tenant_id=$1 AND ledger_id=$2',tenant,uuid.UUID(receipt['ledger_id']))
+        import json
+        assert json.loads(stored)==receipt
+        if expected=='sol':
+            await pool.execute("INSERT INTO tank.baseline_settings(task_type,override_model) VALUES('agent.base.think','astra') ON CONFLICT(task_type) DO UPDATE SET override_model='astra'")
+        elif expected=='astra' and price is not None:
+            await pool.execute("UPDATE tank.baseline_settings SET override_model=NULL WHERE task_type='agent.base.think'")
+            answered='haiku'
+        elif expected=='sonnet':
+            await pool.execute("UPDATE tank.baseline_settings SET override_model='astra' WHERE task_type='agent.base.think'")
+
+
+@pytest.mark.asyncio
+async def test_upgrade_preserves_defaults_before_new_router_startup(database):
+    pool,_=database
+    # Simulate the old immutable function on a box still accepting receipts from
+    # another replica. Schema apply must preserve all six standards atomically.
+    await pool.execute('TRUNCATE tank.provider_standards')
+    await pool.execute("""CREATE OR REPLACE FUNCTION tank.standard_model_for(family text) RETURNS text
+        LANGUAGE sql IMMUTABLE AS $$ SELECT CASE split_part(family,'/',1)
+        WHEN 'openai' THEN 'sol' WHEN 'anthropic' THEN 'sonnet' WHEN 'gemini' THEN 'argon'
+        WHEN 'xai' THEN 'grok-top' WHEN 'moonshot' THEN 'kimi' WHEN 'deepseek' THEN 'deepseek-pro' END $$""")
+    await pool.execute((Path(__file__).resolve().parents[1]/'tank/schema.sql').read_text())
+    from savings_defaults import STANDARDS
+    actual={r['provider']:r['model'] for r in await pool.fetch('SELECT * FROM tank.provider_standards')}
+    assert actual==STANDARDS
+    await fixture(pool)
+    assert await pool.fetchval("SELECT standard_model FROM tank.ledger LIMIT 1")=='sol'
