@@ -1,0 +1,7 @@
+Run in the cloud only, on your own cloud machine. Never use my computer. Work without asking me: the brief, docs/cursor/CONTEXT.md and AGENTS.md are your answers; list your choices under "Decisions I made" in the PR. Stop only for a secret value, a paid service or key the brief does not name, an irreversible production action, or a conflict with a hard rule.
+
+Repo Tervory-AI/tervory-tank. Branch from the latest main. Read AGENTS.md and docs/cursor/CONTEXT.md, then docs/cursor/SEAL-1-coolify-network.md and do all of it.
+
+Coolify attaches its own internet-facing app network to every compose service that has no network_mode. That puts Base's sandbox and browser, and probably Radix, straight onto the internet. Make the Base and Radix compose files deploy correctly in Coolify's Raw Compose mode, which deploys the file exactly as written. Add a CI test that simulates Coolify's normal mode and fails on any sealed service that would leak. Add a read-only ops/seal-check.sh that proves the live networks. Remove the Tank key from base-browser.
+
+Other lanes are running at the same time. Stay inside the brief's "Files you may change". No secrets in code, URLs, logs or tests. One branch, one PR, never push to main. Do not merge: the founder merges after review. Open a draft PR early so CI runs; mark it ready and write "ready for review" only when every check is green. End the PR with how to prove it live after deploy: the exact seal-check.sh command and the output that means sealed.
