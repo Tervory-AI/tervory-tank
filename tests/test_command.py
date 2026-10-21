@@ -674,3 +674,29 @@ async def test_savings_adapter_uses_proof_and_keeps_unknown_values_pending(runti
 def test_rig_approved_question_cannot_be_silently_truncated(runtime):
     with pytest.raises(HTTPException):
         command.validate_action(command.PlannedAction(tool='rig.ask', arguments={'product_id': 'fixture', 'question': 'x' * 501}), command.Actor(TENANT, 'founder', True))
+
+
+@pytest.mark.asyncio
+async def test_turn_failure_without_evidence_cannot_look_free(api, monkeypatch):
+    client, pool = api
+    thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
+    monkeypatch.setattr(command, 'route_turn', AsyncMock(side_effect=TimeoutError('No attributable ledger ID')))
+    reply = await client.post(f'/v1/command/threads/{thread}/turn', json={'text': 'Try the work'})
+    assert 'event: error' in reply.text and '"cost_usd": null' in reply.text
+    data = (await client.get(f'/v1/command/threads/{thread}')).json()
+    assert data['receipts'] == []
+    assert data['thread']['spent_usd'] is None and data['thread']['receipt_status'] == 'pending'
+    assert data['steps'][-1]['receipt_status'] == 'pending'
+    other = (await client.post('/v1/command/threads', json={})).json()['thread_id']
+    monkeypatch.setattr(command, 'route_turn', AsyncMock(side_effect=HTTPException(503, 'paid work is paused')))
+    await client.post(f'/v1/command/threads/{other}/turn', json={'text': 'Try the work'})
+    data = (await client.get(f'/v1/command/threads/{other}')).json()
+    assert data['steps'][-1]['receipt_status'] == 'not_started'
+    assert data['receipts'] == []
+
+    missing = (await client.post('/v1/command/threads', json={})).json()['thread_id']
+    monkeypatch.setattr(command, 'route_turn', AsyncMock(return_value=SimpleNamespace(ledger_id=uuid.uuid4(), content='Answer with missing evidence')))
+    await client.post(f'/v1/command/threads/{missing}/turn', json={'text': 'Try the work'})
+    data = (await client.get(f'/v1/command/threads/{missing}')).json()
+    assert data['thread']['spent_usd'] is None
+    assert data['steps'][-1]['receipt_status'] == 'pending'

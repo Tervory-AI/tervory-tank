@@ -323,6 +323,7 @@ async def route_turn(actor: Actor, messages: list[dict]) -> Any:
 
 
 async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages: list[dict]) -> None:
+    answer = None
     try:
         async with asyncio.timeout(150):
             answer = await route_turn(actor, messages)
@@ -348,6 +349,7 @@ async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages
             # Failed paid calls may have a ledger row too. Preserve its actual
             # cost without exposing the upstream exception or inventing a row.
             detail = exc.detail if isinstance(exc, HTTPException) else None
+            receipt_known = False
             if isinstance(detail, dict) and detail.get("ledger_id"):
                 try:
                     ledger_id = uuid.UUID(str(detail["ledger_id"]))
@@ -357,9 +359,18 @@ async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages
                     try:
                         async with conn.transaction():
                             await record_receipts(conn, row, state, turn_id, [ledger_id])
+                        receipt_known = True
                     except HTTPException:
-                        await receipt_pending(conn, row, turn_id)
-            await step(conn, row, state, {"step_id": turn_id, "label": "Answer failed", "actor": "Tervory", "status": "failed"})
+                        pass
+            # These plain router refusals occur before a provider call. Other
+            # failures may have charged work but provide no attributable ID.
+            not_started = (answer is None and isinstance(exc, HTTPException) and isinstance(detail, str)
+                           and exc.status_code in {400, 401, 403, 404, 422, 503})
+            pending = not receipt_known and not not_started
+            if pending:
+                await receipt_pending(conn, row, turn_id)
+            await step(conn, row, state, {"step_id": turn_id, "label": "Answer failed", "actor": "Tervory", "status": "failed",
+                                          "receipt_status": "pending" if pending else "recorded" if receipt_known else "not_started"})
             await event(conn, row, "error", {"message": "The answer could not be completed. Check routing policy and service availability."})
             if state["active_turn"] == turn_id:
                 state["active_turn"] = None
