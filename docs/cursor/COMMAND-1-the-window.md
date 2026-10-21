@@ -64,3 +64,26 @@ CI green. Tests:
 - 375px and 1440px screenshots are in the PR.
 
 CI only runs on PRs: open one draft PR to run it, and mark it ready only when every check is green.
+
+## Build in three parallel lanes (added 20 Oct 18:55 PT)
+Three builders work at once. Each lane changes only its own files and codes against the contract below. Stubs and fixtures stand in for the other lanes until they land.
+
+| Lane | Files | Builds |
+|---|---|---|
+| **A, Tank** | `tank/command.py` (new), `tank/main.py` (`/v1/command/*` only), `tank/schema.sql` (additive), tests | Threads, turns, the orchestrator loop and tools, confirm cards, receipts |
+| **B, Workspace** | `workspace/app/page.tsx`, `workspace/app/chats/` (new), `workspace/lib/tank.ts` (command calls only), tests | Thread list, streaming chat, work panel, confirm cards, receipts, mobile |
+| **C, Workers** | `workers/` (`service.py`, `issues.py`, new `command_tasks.py`), tests | Take build tasks from Tank, report progress, continue on the same PR |
+
+### The contract (all JSON; the workspace calls Tank server-side with its own key and passes the signed-in user and tenant)
+- `POST /v1/command/threads` with `{title?}` returns `{thread_id}`. `GET /v1/command/threads` returns `[{thread_id, title, updated_at, spent_usd, saved_usd}]`. `GET /v1/command/threads/{id}` returns `{thread, messages[], steps[], cards[]}`. `PATCH` takes `{title}`.
+- `POST /v1/command/threads/{id}/turn` with `{text, attachments?[]}` returns a **Server-Sent Events** stream. Events:
+  - `token` `{text}`: answer text as it is written;
+  - `step` `{step_id, label, actor, status: planned|running|done|failed, link?}`: one line in the work panel, sent again whenever it changes;
+  - `card` `{card_id, kind: approve_skill|paid_run|build|retire|other, summary, cost_estimate_usd?}`: needs Confirm or Cancel;
+  - `receipt` `{rows: [{step_id, model or "code", tokens_in, tokens_out, cost_usd, baseline_model, baseline_cost_usd, saved_usd, ledger_id}], totals: {cost_usd, baseline_cost_usd, saved_usd}}`;
+  - `done` `{message_id}`;
+  - `error` `{message}`.
+- `POST /v1/command/cards/{card_id}` with `{action: confirm|cancel}`. On confirm the action runs and its result comes back as new `step` and `receipt` events on the thread's next stream, or by polling `GET /v1/command/threads/{id}`.
+- `GET /v1/command/threads/{id}/events?after=<seq>`: replays events for a returning viewer. Every event carries a `seq`.
+- **Builds:** on a confirmed `build` card, Tank creates a row in `tank.command_builds {build_id, thread_id, brief_markdown, status, pr_url, ci_status, review_status}`. Workers poll `GET /v1/command/builds/next` with the worker key (`TANK_KEY_WORKERS`), take one, and report through `POST /v1/command/builds/{build_id}/progress` `{status, step_label, pr_url?, ci_status?}`. Each progress report becomes a `step` event on the thread. A reply in the thread while a build is open is sent to the worker as `{followup_text}` on its next poll.
+- **Roles:** the founder (TERVORY_ADMIN_USER_IDS) gets every tool. A client gets only their own squad tools. Tank enforces this; the page only hides what Tank refuses.
