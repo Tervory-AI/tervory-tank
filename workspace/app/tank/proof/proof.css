@@ -26,3 +26,10 @@
 .proof a:focus-visible,.proof-scroll:focus-visible { outline:2px solid #001840; outline-offset:4px; }
 @media(max-width:600px) { .proof { padding:18px 12px; } .proof h1 { font-size:36px; } .proof-task { padding:18px; } }
 @media print { .proof nav { display:none; } .proof-scroll { overflow:visible; } }
+
+.proof-filters { display:flex; flex-wrap:wrap; gap:16px; margin:24px 0; align-items:flex-end; }
+.proof-filters label { display:grid; gap:6px; min-width:0; max-width:100%; font-size:13px; }
+.proof-filters input,.proof-filters select,.proof-filters button { box-sizing:border-box; max-width:100%; padding:10px; border:1px solid #B8BFD0; border-radius:4px; background:white; color:#001840; }
+.proof-filters select { width:300px; }
+.proof-filters button { background:#001840; color:white; cursor:pointer; }
+.proof-total { padding:20px 0; overflow-wrap:anywhere; }

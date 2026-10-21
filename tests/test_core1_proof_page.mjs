@@ -10,7 +10,7 @@ const {build}=require(process.env.CORE1_ESBUILD_PATH || 'esbuild');
 const {chromium}=require(process.env.CORE1_PLAYWRIGHT_PATH || 'playwright');
 const out=process.env.CORE1_SCREENSHOT_DIR || '/tmp/core1-proof-shots';
 await fs.mkdir(out,{recursive:true});
-const data={tenant_id:'00000000-0000-0000-0000-000000000001',region:'us-east',tasks:[
+const data={tenant_id:'all',tenants:['00000000-0000-0000-0000-000000000001','22222222-2222-2222-2222-222222222222'],all_tenant_total:{saved_usd:.56,calls:40,priced_calls:39,unpriced_calls:1},window:{start:null,end:'2026-10-21T12:00:00+00:00'},page:0,page_size:100,has_more:{ledger:true},receipt_page_total:{calls:1,saved_usd:.0038},region:'us-east',tasks:[
   {task_type:'base.extract',calls:40,priced_calls:39,actual_usd:.08,baseline_usd:.64,saved_usd:.56,backfilled_calls:12,unpriced_calls:1,code_calls:10,code_share:.25,shadow_pairs:[{primary_model:'astra',candidate_model:'luna',samples:30,agreement:.98,primary_cost_usd:.12,could_have_cost_usd:.02}]},
   {task_type:'tiger.price_read',calls:0,priced_calls:0,actual_usd:0,baseline_usd:0,saved_usd:0,backfilled_calls:0,unpriced_calls:0,code_calls:0,code_share:null,shadow_pairs:[]}],
   state:[{task_type:'base.extract',bench_at:'2026-10-21T00:00:00Z',bench_status:'complete',bench_error:null}],
@@ -27,11 +27,25 @@ await new Promise(r=>server.listen(0,'127.0.0.1',r));
 const browser=await chromium.launch({headless:true,...(process.env.CORE1_CHROMIUM ? {executablePath:process.env.CORE1_CHROMIUM} : {})});
 try { const page=await browser.newPage(); await page.goto(`http://127.0.0.1:${server.address().port}`);
   await page.getByRole('heading',{name:'Tank proof',exact:true}).waitFor();
-  assert.equal(await page.getByRole('link',{name:'$0.560000',exact:true}).getAttribute('href'),'/tank/proof?task=base.extract#receipts');
-  assert.equal(await page.getByRole('link',{name:'Export PDF'}).getAttribute('href'),'/tank/proof/export?format=pdf');
-  assert.equal(await page.getByRole('link',{name:'Export CSV'}).getAttribute('href'),'/tank/proof/export?format=csv');
+  const saved=page.locator('.proof-task').first().getByRole('link',{name:'$0.560000',exact:true});
+  const href=new URL(await saved.getAttribute('href'),'http://fixture');
+  assert.equal(href.searchParams.get('task'),'base.extract'); assert.equal(href.searchParams.get('tenant_id'),'all'); assert.equal(href.hash,'#receipts');
+  assert.equal(await page.getByLabel('Tenant',{exact:true}).inputValue(),'all');
+  for(const name of ['Export PDF','Export CSV']) {
+    const exported=new URL(await page.getByRole('link',{name}).getAttribute('href'),'http://fixture');
+    assert.equal(exported.searchParams.get('tenant_id'),'all'); assert.equal(exported.searchParams.get('end'),data.window.end);
+    assert.equal(exported.searchParams.get('page'),'0');
+  }
+  const next=new URL(await page.getByRole('link',{name:'Next page',exact:true}).first().getAttribute('href'),'http://fixture');
+  assert.equal(next.searchParams.get('page'),'1'); assert.equal(next.searchParams.get('end'),data.window.end);
   assert.equal(await page.getByText('No shadow pairs recorded yet.').count(),1);
   for(const width of [1440,375]) { await page.setViewportSize({width,height:900}); await page.screenshot({path:path.join(out,`proof-${width}.png`),fullPage:true}); assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)); }
-  await page.locator('a[href="#row-receipt-fixture"]').click(); assert.equal(await page.locator(':target').getAttribute('id'),'row-receipt-fixture');
+  await saved.click(); assert.equal(await page.locator(':target').getAttribute('id'),'receipts');
+  await page.getByLabel('Tenant',{exact:true}).selectOption(data.tenants[1]);
+  await page.getByLabel('Task',{exact:true}).fill('base.extract');
+  await page.getByLabel('From (UTC)',{exact:true}).fill('2026-10-01T00:00');
+  await page.getByRole('button',{name:'Apply filters'}).click();
+  const selected=new URL(page.url()); assert.equal(selected.searchParams.get('tenant_id'),data.tenants[1]);
+  assert.equal(selected.searchParams.get('task'),'base.extract'); assert.equal(selected.searchParams.get('start'),'2026-10-01T00:00');
   console.log('Proof fixtures: desktop/mobile, exports, empty evidence and receipt links passed.');
 } finally { await browser.close(); server.close(); }

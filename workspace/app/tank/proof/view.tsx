@@ -1,26 +1,52 @@
 export type EvidenceRow = Record<string, string | number | boolean | null>;
 type Pair = { primary_model: string; candidate_model: string; samples: number; agreement: number | null; primary_cost_usd: number; could_have_cost_usd: number };
 export type TaskProof = { task_type: string; calls: number; priced_calls: number; actual_usd: number; baseline_usd: number; saved_usd: number; backfilled_calls: number; unpriced_calls: number; code_calls: number; code_share: number | null; shadow_pairs: Pair[] };
-export type Proof = { tenant_id: string; region: string; tasks: TaskProof[]; ledger: EvidenceRow[]; shadows: EvidenceRow[]; runs: EvidenceRow[]; cases: EvidenceRow[]; promotions: EvidenceRow[]; policies: EvidenceRow[]; state: EvidenceRow[] };
+export type Proof = { tenants: string[]; all_tenant_total: { calls: number; saved_usd: number; priced_calls: number; unpriced_calls: number }; window: {start: string | null; end: string}; page: number; page_size: number; has_more: Record<string, boolean>; receipt_page_total: { calls: number; saved_usd: number }; tenant_id: string; region: string; tasks: TaskProof[]; ledger: EvidenceRow[]; shadows: EvidenceRow[]; runs: EvidenceRow[]; cases: EvidenceRow[]; promotions: EvidenceRow[]; policies: EvidenceRow[]; state: EvidenceRow[] };
 const usd = (n: number) => `$${Number(n).toFixed(6)}`;
 const percent = (n: number | null) => n === null ? "Not measured" : `${(Number(n) * 100).toFixed(1)}%`;
-const url = (task: string, section: string) => `/tank/proof?task=${encodeURIComponent(task)}#${section}`;
+
 
 function Evidence({ title, id, rows }: { title: string; id: string; rows: EvidenceRow[] }) {
   const keys = [...new Set(rows.flatMap(r => Object.keys(r)))];
   return <section id={id} className="proof-evidence"><h2>{title}</h2>
     {!rows.length ? <p>No rows recorded yet.</p> : <div className="proof-scroll" tabIndex={0} aria-label={`${title} table`}><table><thead><tr>{keys.map(key => <th key={key}>{key.replaceAll("_", " ")}</th>)}</tr></thead>
-      <tbody>{rows.map((row, index) => <tr key={String(row.id ?? index)} id={row.id ? `row-${row.id}` : undefined}>{keys.map(key => <td key={key}>{key === "ledger_id" && row[key] ? <a href={`#row-${row[key]}`}>{String(row[key])}</a> : key === "run_id" && row[key] ? <a href={`#row-${row[key]}`}>{String(row[key])}</a> : row[key] === null ? "—" : String(row[key] ?? "")}</td>)}</tr>)}</tbody></table></div>}
+      <tbody>{rows.map((row, index) => <tr key={String(row.id ?? index)} id={row.id ? `row-${row.id}` : undefined}>{keys.map(key => <td key={key}>{row[key] === null ? "—" : String(row[key] ?? "")}</td>)}</tr>)}</tbody></table></div>}
   </section>;
 }
 
 export function ProofView({ data, task }: { data: Proof; task?: string }) {
-  const query = task ? `&task=${encodeURIComponent(task)}` : "";
+  const filters = new URLSearchParams({ tenant_id: data.tenant_id, end: data.window.end });
+  if (data.window.start) filters.set("start", data.window.start);
+  if (task) filters.set("task", task);
+  const url = (selectedTask: string | undefined, section: string, page = 0) => {
+    const query = new URLSearchParams(filters);
+    if (selectedTask) query.set("task", selectedTask); else query.delete("task");
+    query.set("page", String(page));
+    return `/tank/proof?${query}#${section}`;
+  };
+  const query = `&${filters}&page=${data.page}`;
+  const allLink = `/tank/proof?tenant_id=all&end=${encodeURIComponent(data.window.end)}#receipts`;
+  const pagination = <nav aria-label="Evidence pages">
+    {data.page > 0 && <a href={url(task, "receipts", data.page - 1)}>Previous page</a>}
+    <span>Evidence page {data.page + 1} · up to {data.page_size} rows per table</span>
+    {Object.values(data.has_more).some(Boolean) && <a href={url(task, "receipts", data.page + 1)}>Next page</a>}
+  </nav>;
   return <article className="proof">
-    <header><div><a href="/tank">← Tank</a><p className="proof-kicker">Founder · {data.region} · platform evidence</p><h1>Tank proof</h1><p>What we tested, what it cost, and what we saved.</p></div>
+    <header><div><a href="/tank">← Tank</a><p className="proof-kicker">Founder · {data.region} · {data.tenant_id === "all" ? "all tenants" : data.tenant_id}</p><h1>Tank proof</h1><p>What we tested, what it cost, and what we saved.</p></div>
       <nav aria-label="Export evidence"><a href={`/tank/proof/export?format=csv${query}`}>Export CSV</a><a href={`/tank/proof/export?format=pdf${query}`}>Export PDF</a></nav></header>
     <aside>Savings compare the same tokens at baseline prices with actual spend. Backfilled rows use the price book available when filled. Unknown prices are excluded. Bench and shadow spend stay separate. Zero-token cache hits claim no token savings.</aside>
-    {task && <p><a href="/tank/proof">All tasks</a> / {task}</p>}
+    <section className="proof-total"><h2>All tenants · saved to date</h2>
+      <p><a href={allLink}>{usd(data.all_tenant_total.saved_usd)} · {data.all_tenant_total.calls} calls · {data.all_tenant_total.unpriced_calls} unpriced</a></p>
+      <p>On this box, through {data.window.end}. Negative savings remain visible.</p></section>
+    <form className="proof-filters" action="/tank/proof" method="get">
+      <label>Tenant<select aria-label="Tenant" name="tenant_id" defaultValue={data.tenant_id}><option value="all">All tenants</option>{data.tenants.map(id => <option key={id} value={id}>{id === "00000000-0000-0000-0000-000000000001" ? "Platform" : id}</option>)}</select></label>
+      <label>Task<input name="task" defaultValue={task ?? ""} placeholder="All tasks" /></label>
+      <label>From (UTC)<input type="datetime-local" name="start" defaultValue={data.window.start?.slice(0,16) ?? ""}/></label>
+      <label>Until (UTC, exclusive)<input type="datetime-local" name="end" defaultValue={data.window.end.slice(0,16)}/></label>
+      <button type="submit">Apply filters</button>
+    </form>
+    <p>Cards total all matching live receipts in the selected time window. Tables and exports contain the selected evidence page. Baselines below actual cost or from another model family are flagged on each receipt.</p>
+    {task && <p><a href={url(undefined, "receipts")}>All tasks</a> / {task}</p>}
     {!data.tasks.length && <p>No evidence recorded yet.</p>}
     <div className="proof-cards">{data.tasks.map(row => <section key={row.task_type} className="proof-task"><h2><a href={url(row.task_type, "receipts")}>{row.task_type}</a></h2>
       <dl><div><dt>Money saved</dt><dd><a href={url(row.task_type,"receipts")}>{usd(row.saved_usd)}</a></dd></div>
@@ -32,12 +58,15 @@ export function ProofView({ data, task }: { data: Proof; task?: string }) {
         <a href={url(row.task_type,"shadows")}>{pair.samples} pairs · {percent(pair.agreement)} agreement</a><p><a href={url(row.task_type,"shadows")}>Primary {usd(pair.primary_cost_usd)} · could have cost {usd(pair.could_have_cost_usd)}</a></p></div>)}
       {!row.shadow_pairs.length && <p>No shadow pairs recorded yet.</p>}
     </section>)}</div>
+    {pagination}
     <Evidence id="schedule" title="Benchmark status" rows={data.state}/>
     <Evidence id="policies" title="Current routes and baselines" rows={data.policies}/>
     <Evidence id="benchmarks" title="Tests and cost per call" rows={data.runs}/>
     <Evidence id="cases" title="Individual test receipts" rows={data.cases}/>
     <Evidence id="shadows" title="Shadow pairs" rows={data.shadows}/>
-    <Evidence id="promotions" title="Promotion history" rows={data.promotions}/>
-    <Evidence id="receipts" title="Ledger receipts" rows={data.ledger}/>
+    <Evidence id="promotions" title="Global promotion history" rows={data.promotions}/>
+    <section id="receipts"><h2>Live ledger receipts</h2><p>This page: {data.receipt_page_total.calls} calls · saved {usd(data.receipt_page_total.saved_usd)}. Sum pages to reconcile with the cards.</p>
+      <Evidence id="receipt-rows" title="Counted calls" rows={data.ledger}/></section>
+    {pagination}
   </article>;
 }

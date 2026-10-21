@@ -826,9 +826,15 @@ CREATE TABLE IF NOT EXISTS tank.training_snapshot_batches (
     PRIMARY KEY (tenant_id, region, day, agent, batch_id)
 );
 
--- CORE-1: promotions require the founder. Re-applying keeps automation off.
+-- CORE-1: disable existing automation once; preserve later founder choices.
 ALTER TABLE tank.policy ALTER COLUMN auto_promote SET DEFAULT false;
-UPDATE tank.policy SET auto_promote=false WHERE auto_promote;
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM tank.policy_log WHERE detail->>'id'='2026-10-21-core1-auto-off') THEN
+    UPDATE tank.policy SET auto_promote=false WHERE auto_promote;
+    INSERT INTO tank.policy_log(task_type,action,by_user,detail)
+    VALUES('*','switch','tank','{"id":"2026-10-21-core1-auto-off","marker":true}'::jsonb);
+  END IF;
+END $$;
 
 -- CORE-1 price snapshots and savings. Unknown prices stay null, never invented.
 ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS baseline_model text;
@@ -931,6 +937,12 @@ DO $$ BEGIN
         FOR EACH ROW EXECUTE FUNCTION tank.restore_bench_evidence();
     END IF;
 END $$;
+-- Bounded savings backfill and receipt navigation.
+CREATE INDEX IF NOT EXISTS ledger_baseline_pending ON tank.ledger(tenant_id,region) WHERE baseline_status='pending';
+CREATE INDEX IF NOT EXISTS ledger_baseline_unpriced ON tank.ledger(region,id) WHERE baseline_status='unpriced';
+CREATE INDEX IF NOT EXISTS ledger_proof_receipts ON tank.ledger(region,ts DESC,id DESC)
+    WHERE agent NOT IN ('bench','shadow') AND task_type NOT LIKE '%#shadow';
+
 -- DASH-1: founder controls and immutable audit history, local to this box.
 CREATE TABLE IF NOT EXISTS tank.controls (
     tenant_id uuid NOT NULL,

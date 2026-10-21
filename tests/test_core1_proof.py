@@ -16,7 +16,7 @@ import controls
 import graduate
 import proof
 from gold import PLATFORM_TENANT
-from test_train1 import database as _database
+from test_train1 import database as _database, URL
 
 database = _database
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,14 +28,15 @@ def roster():
             for name, price in [('expensive', .001), ('cheap', .0001)]]
 
 
-def test_proposes_only_cheaper_no_score_regression_against_candidate():
+def test_proposes_only_cheaper_no_score_regression_against_live():
     rows = [dict(model=name, score=score, cost_per_call=cost, status='complete')
-            for name, score, cost in [('live',.7,3),('candidate',.9,2),('bad',.8,.1),('good',.9,.5)]]
-    assert bench.choose_candidate(rows,'candidate','live') == 'good'
+            for name, score, cost in [('live',.9,3),('candidate',.7,2),('bad',.8,.1),('good',.9,.5)]]
+    assert bench.choose_candidate(rows,'live') == 'good'
     rows[-1]['status']='capped'
-    assert bench.choose_candidate(rows,'candidate','live') is None
-    rows[1]['status']='failed'
-    assert bench.choose_candidate(rows,'candidate','live') is None
+    assert bench.choose_candidate(rows,'live') is None
+    rows[-1]['status']='complete'
+    rows[0]['status']='failed'
+    assert bench.choose_candidate(rows,'live') is None
 
 
 def test_nightly_and_both_price_dimensions_trigger():
@@ -56,18 +57,6 @@ def test_nightly_and_both_price_dimensions_trigger():
 def test_automatic_promotion_missing_or_null_stays_off():
     for value in ({}, {'auto_promote':None}, {'auto_promote':False}):
         assert not graduate._wants_auto(value)
-
-
-def test_proof_arithmetic_includes_negative_savings_and_excludes_bench_cache_from_code():
-    base=dict(task_type='fixture',agent='base',cost_usd='.10',baseline_cost_usd='.25',baseline_status='measured',rung=1,cache_hit=False,outcome='delivered')
-    rows=[base,dict(base,cost_usd='.4',baseline_status='backfilled'),dict(base,agent='bench'),
-          dict(base,cost_usd=0,baseline_cost_usd=0,rung=3),dict(base,cost_usd=0,baseline_cost_usd=0,rung=4,cache_hit=True),
-          dict(base,baseline_cost_usd=None)]
-    row=proof.summarize(rows,[],[],[])[0]
-    assert row['saved_usd']==0
-    assert row['actual_usd']==Decimal('.5')
-    assert row['code_share']==.2 and row['code_calls']==1
-    assert row['unpriced_calls']==1 and row['backfilled_calls']==1
 
 
 @pytest.mark.asyncio
@@ -139,8 +128,11 @@ async def test_bench_runs_every_model_records_scores_proposes_and_does_not_switc
     async def models(): return roster()
     rt._roster_models=models
     rt.LITELLM_MASTER_KEY="fixture-only"
+    async with pool.acquire() as conn:
+        rt.DATABASE_URL=URL.rsplit('/',1)[0]+'/'+await conn.fetchval('SELECT current_database()')
     called=[]
     async def call(model,messages,max_tokens):
+        assert pool.get_idle_size() == pool.get_size(), 'No request-pool connection may be held during a model call'
         called.append(model)
         return dict(model=model,content='{"answer":"yes"}',tokens_in=100,tokens_out=20,
                     cost=Decimal('.012') if model=='cheap' else Decimal('.12'),ok=True)
@@ -151,7 +143,7 @@ async def test_bench_runs_every_model_records_scores_proposes_and_does_not_switc
         await conn.execute("""INSERT INTO tank.evals(task_type,input,expected) VALUES('fixture','{"text":"test"}','{"answer":"yes"}')""")
         await conn.execute("""INSERT INTO tank.evals(task_type,tenant_id,input,expected) VALUES('fixture',$1,'{}','{}')""",uuid.uuid4())
     await bench.tick()
-    assert called==['cheap','expensive']
+    assert called==['expensive','cheap']
     async with pool.acquire() as conn:
         row=await conn.fetchrow("SELECT * FROM tank.policy WHERE task_type='fixture'")
         assert row['model']=='expensive' and row['candidate_model']=='cheap' and not row['auto_promote']
@@ -159,7 +151,7 @@ async def test_bench_runs_every_model_records_scores_proposes_and_does_not_switc
         assert await conn.fetchval("SELECT count(*) FROM tank.ledger WHERE tenant_id=$1 AND agent='bench'",PLATFORM_TENANT)==2
         assert await conn.fetchval("SELECT count(*) FROM tank.bench_calls WHERE tenant_id=$1 AND status='complete'",PLATFORM_TENANT)==2
     await bench.tick()
-    assert called==['cheap','expensive'] # no replay before next night or roster change
+    assert called==['expensive','cheap'] # no replay before next night or roster change
 
 
 @pytest.mark.asyncio
@@ -188,7 +180,7 @@ async def test_bench_cap_prevents_network_and_partial_proposals(database,monkeyp
     policy={'task_type':'fixture','model':'expensive','max_tokens_out':100}
     cases=[{'ref':'one','kind':'eval','input':'x','expected':'x'}]
     async with pool.acquire() as conn:
-        result=await bench.bench_model(conn,policy,'cheap',cases,bench.price_book(roster()),'us-east',Decimal('0'),'expensive')
+        result=await bench.bench_model(pool,policy,'cheap',cases,bench.price_book(roster()),'us-east',Decimal('0'),'expensive')
         assert result['status']=='capped' and result['score'] is None
         assert await conn.fetchval('SELECT count(*) FROM tank.ledger WHERE tenant_id=$1',PLATFORM_TENANT)==0
 
@@ -236,16 +228,18 @@ async def test_unknown_response_cost_keeps_reservation_and_blocks_proposal(datab
     monkeypatch.setattr(bench,'call_model',unknown)
     policy={'task_type':'fixture','model':'expensive','max_tokens_out':100}
     async with pool.acquire() as conn:
-        result=await bench.bench_model(conn,policy,'cheap',[{'ref':'one','kind':'eval','input':'x','expected':'x'}],
+        result=await bench.bench_model(pool,policy,'cheap',[{'ref':'one','kind':'eval','input':'x','expected':'x'}],
                                       bench.price_book(roster()),'us-east',Decimal('5'),'expensive')
         assert result['status']=='failed' and result['score'] is None
         row=await conn.fetchrow('SELECT * FROM tank.bench_calls WHERE tenant_id=$1',PLATFORM_TENANT)
         assert row['charged_usd'] is None and row['reserved_usd']>0 and row['status']=='unverified'
-        assert await conn.fetchval('SELECT outcome FROM tank.ledger WHERE tenant_id=$1',PLATFORM_TENANT)=='unverified'
+        assert row['ledger_id'] is None
+        assert await conn.fetchval('SELECT count(*) FROM tank.ledger WHERE tenant_id=$1',PLATFORM_TENANT)==0
 
 
 @pytest.mark.asyncio
-async def test_founder_pause_stops_bench_before_reservation_and_network(database,monkeypatch):
+@pytest.mark.parametrize('price',[0,.0001])
+async def test_founder_pause_stops_bench_before_reservation_and_network(database,monkeypatch,price):
     pool,rt=database
     monkeypatch.setattr(controls,'db',lambda:pool)
     monkeypatch.setattr(bench,'runtime',lambda:rt)
@@ -258,9 +252,122 @@ async def test_founder_pause_stops_bench_before_reservation_and_network(database
     async with pool.acquire() as conn:
         await conn.execute("""INSERT INTO tank.controls(tenant_id,name,value,updated_by)
             VALUES($1,'paid_paused',true,'fixture')""",PLATFORM_TENANT)
-        result=await bench.bench_model(conn,policy,'cheap',[{'ref':'one','kind':'eval','input':'x','expected':'x'}],
-                                      bench.price_book(roster()),'us-east',Decimal('5'),'expensive')
+        book=bench.price_book(roster())
+        book['cheap']['input']=book['cheap']['output']=Decimal(str(price))
+        result=await bench.bench_model(pool,policy,'cheap',[{'ref':'one','kind':'eval','input':'x','expected':'x'}],
+                                      book,'us-east',Decimal('5'),'expensive')
         assert result['status']=='paused' and not called
         assert await conn.fetchval('SELECT count(*) FROM tank.bench_calls WHERE tenant_id=$1',PLATFORM_TENANT)==0
         assert await conn.fetchval('SELECT count(*) FROM tank.ledger WHERE tenant_id=$1',PLATFORM_TENANT)==0
         assert await conn.fetchval("SELECT count(*) FROM tank.control_log WHERE tenant_id=$1 AND task='fixture' AND path='bench'",PLATFORM_TENANT)==1
+
+
+@pytest.mark.asyncio
+async def test_schema_migration_runs_once_preserving_founder_choice(database):
+    pool,_=database
+    async with pool.acquire() as conn:
+        await conn.execute("DELETE FROM tank.policy_log WHERE detail->>'id'='2026-10-21-core1-auto-off'")
+        await conn.execute("INSERT INTO tank.policy(task_type,model,auto_promote) VALUES('fixture','cheap',true)")
+        await conn.execute((ROOT/'tank/schema.sql').read_text())
+        assert not await conn.fetchval("SELECT auto_promote FROM tank.policy WHERE task_type='fixture'")
+        await conn.execute("UPDATE tank.policy SET auto_promote=true WHERE task_type='fixture'")
+        await conn.execute((ROOT/'tank/schema.sql').read_text())
+        assert await conn.fetchval("SELECT auto_promote FROM tank.policy WHERE task_type='fixture'")
+        assert await conn.fetchval("SELECT count(*) FROM tank.policy_log WHERE detail->>'id'='2026-10-21-core1-auto-off'")==1
+
+
+@pytest.mark.asyncio
+async def test_backfill_batches_once_daily_and_retries_unpriced_on_price_change(database):
+    pool,_=database
+    await pool.execute("""INSERT INTO tank.ledger(tenant_id,agent,task_type,model,tokens_in,cost_usd)
+        SELECT $1,'base','fixture','cheap',100,.01 FROM generate_series(1,5001)""",PLATFORM_TENANT)
+    book=bench.price_book(roster())
+    async with pool.acquire() as conn:
+        await bench.sync_prices(conn,book)
+    await bench.scheduled_backfill(pool,'us-east','first')
+    assert await pool.fetchval("SELECT count(*) FROM tank.ledger WHERE baseline_status='backfilled'")==5001
+    unknown=await pool.fetchval("""INSERT INTO tank.ledger(tenant_id,agent,task_type,model,tokens_in,cost_usd)
+        VALUES($1,'base','unknown','missing',100,.01) RETURNING id""",PLATFORM_TENANT)
+    await bench.scheduled_backfill(pool,'us-east','first')
+    assert await pool.fetchval('SELECT baseline_status FROM tank.ledger WHERE id=$1',unknown)=='pending'
+    await pool.execute("UPDATE tank.search_state SET bench_at=now()-interval '1 day' WHERE task_type='@backfill:us-east'")
+    await bench.scheduled_backfill(pool,'us-east','first')
+    assert await pool.fetchval('SELECT baseline_status FROM tank.ledger WHERE id=$1',unknown)=='unpriced'
+    # Daily retry must not keep locking unpriceable historical rows.
+    await pool.execute("UPDATE tank.search_state SET bench_at=now()-interval '1 day' WHERE task_type='@backfill:us-east'")
+    await bench.scheduled_backfill(pool,'us-east','first')
+    assert await pool.fetchval('SELECT baseline_status FROM tank.ledger WHERE id=$1',unknown)=='unpriced'
+    book['missing']=book['cheap']
+    async with pool.acquire() as conn:
+        await bench.sync_prices(conn,book)
+    await bench.scheduled_backfill(pool,'us-east','changed')
+    assert await pool.fetchval('SELECT baseline_status FROM tank.ledger WHERE id=$1',unknown)=='backfilled'
+
+
+@pytest.mark.asyncio
+async def test_proof_sql_totals_match_paged_rows_scopes_windows_flags_and_exports(database,monkeypatch):
+    pool,rt=database
+    monkeypatch.setattr(proof,'runtime',lambda:rt)
+    other=uuid.uuid4()
+    start=datetime(2026,1,1,tzinfo=timezone.utc); end=start+timedelta(days=1)
+    await pool.execute("INSERT INTO tank.proof_prices(model,family,input_usd,output_usd) VALUES('cheap','family-a',.001,.001),('baseline','family-b',.001,.001)")
+    # Explicit historic snapshots, including negative savings. 205 rows require 3 pages.
+    await pool.execute("""INSERT INTO tank.ledger(tenant_id,region,ts,agent,task_type,model,cost_usd,baseline_model,baseline_cost_usd,baseline_status)
+        SELECT $1,'us-east',$2,'base','fixture','cheap',.4,'baseline',.25,'backfilled' FROM generate_series(1,205)""",PLATFORM_TENANT,start)
+    for tenant,region,agent,task,ts in [(other,'us-east','base','fixture',start),
+            (PLATFORM_TENANT,'za','base','fixture',start),(PLATFORM_TENANT,'us-east','bench','fixture',start),
+            (PLATFORM_TENANT,'us-east','shadow','fixture',start),(PLATFORM_TENANT,'us-east','base','fixture#shadow',start),
+            (PLATFORM_TENANT,'us-east','base','different',start),(PLATFORM_TENANT,'us-east','base','fixture',end)]:
+        await pool.execute("""INSERT INTO tank.ledger(tenant_id,region,agent,task_type,ts,model,cost_usd,baseline_cost_usd,baseline_status)
+            VALUES($1,$2,$3,$4,$5,'cheap',.1,.25,'measured')""",tenant,region,agent,task,ts)
+    pages=[await proof.snapshot(PLATFORM_TENANT,'fixture',start,end,n) for n in range(3)]
+    rows=[r for page in pages for r in page['ledger']]
+    assert len(rows)==len({r['id'] for r in rows})==205
+    assert [len(p['ledger']) for p in pages]==[100,100,5]
+    assert [p['has_more']['ledger'] for p in pages]==[True,True,False]
+    assert all(p['tasks'][0]['saved_usd']==-30.75 and p['tasks'][0]['calls']==205 for p in pages)
+    assert sum(Decimal(str(r['saved_usd'])) for r in rows)==Decimal('-30.75')
+    assert all(r['baseline_below_actual'] and r['baseline_family_mismatch'] for r in rows)
+    assert all(r['agent']=='base' and r['tenant_id']==str(PLATFORM_TENANT) for r in rows)
+    all_data=await proof.snapshot(None,'fixture',start,end)
+    assert all_data['tasks'][0]['calls']==206 and all_data['tasks'][0]['saved_usd']==-30.6
+    assert all_data['all_tenant_total']['calls']==207 and all_data['all_tenant_total']['saved_usd']==-30.45
+    assert set(all_data['tenants'])=={str(PLATFORM_TENANT),str(other)}
+    assert (await proof.snapshot(other,'fixture',start,end))['tasks'][0]['calls']==1
+    csv=proof.csv_export(pages[0]); pdf=''.join(p.extract_text() for p in PdfReader(BytesIO(proof.pdf_export(pages[0]))).pages)
+    assert rows[0]['id'] in csv and rows[0]['id'] in pdf
+    assert rows[-1]['id'] not in csv and rows[-1]['id'] not in pdf
+    assert 'receipt_page_total' in csv and 'selected page' in pdf
+
+
+@pytest.mark.asyncio
+async def test_bench_cost_is_separate_from_econ_and_dashboard_call_counts(database):
+    import admin
+    import dashboards
+    pool,_=database
+    await pool.execute("""INSERT INTO tank.ledger(tenant_id,agent,task_type,model,cost_usd)
+        VALUES($1,'base','fixture','cheap',.1),($1,'bench','fixture','cheap',.2)""",PLATFORM_TENANT)
+    async with pool.acquire() as conn:
+        rows=await conn.fetch(admin._CALL_SELECT+' GROUP BY 1,2,3,4,5,6')
+        assert sum(r['calls'] for r in rows)==1 and sum(r['cost'] for r in rows)==Decimal('.3')
+        report=await dashboards.measurements(conn,PLATFORM_TENANT)
+        assert sum(r['calls'] for r in report['daily'])==1
+        assert sum(r['delivered'] for r in report['daily'])==1
+        assert sum(r['spent'] for r in report['daily'])==.3
+        fixture=admin.aggregate_calls([dict(r) for r in await conn.fetch('SELECT * FROM tank.ledger')])
+        assert sum(r['calls'] for r in fixture.values())==1
+        assert sum(r['cost'] for r in fixture.values())==pytest.approx(.3)
+
+
+@pytest.mark.asyncio
+async def test_sql_code_share_excludes_cache_and_counts_unpriced_separately(database,monkeypatch):
+    pool,rt=database
+    monkeypatch.setattr(proof,'runtime',lambda:rt)
+    for rung,cache,cost,baseline in [(3,False,0,0),(3,True,0,0),(1,False,.1,None)]:
+        await pool.execute("""INSERT INTO tank.ledger(tenant_id,agent,task_type,model,rung,cache_hit,cost_usd,baseline_cost_usd,baseline_status)
+            VALUES($1,'base','fixture','cheap',$2,$3,$4,$5,'unpriced')""",PLATFORM_TENANT,rung,cache,cost,baseline)
+    data=await proof.snapshot(PLATFORM_TENANT,'fixture')
+    row=data['tasks'][0]
+    assert row['code_calls']==1 and row['calls']==3 and row['code_share']==1/3
+    assert row['priced_calls']==2 and row['unpriced_calls']==1
+    assert row['actual_usd']==row['baseline_usd']==row['saved_usd']==0

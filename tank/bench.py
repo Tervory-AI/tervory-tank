@@ -20,6 +20,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 import httpx
+import asyncpg
 
 import graduate
 import controls
@@ -59,12 +60,12 @@ def due(state: dict | None, now: datetime, roster: str, prices: str) -> bool:
     )
 
 
-def choose_candidate(results: list[dict], comparison: str, serving: str) -> str | None:
+def choose_candidate(results: list[dict], serving: str) -> str | None:
     complete = {r['model']: r for r in results if r['status'] == 'complete'}
-    current = complete.get(comparison)
+    current = complete.get(serving)
     if not current:
         return None
-    eligible = [r for r in complete.values() if r['model'] not in (comparison, serving)
+    eligible = [r for r in complete.values() if r['model'] != serving
                 and r['score'] >= current['score'] and r['cost_per_call'] < current['cost_per_call']]
     return min(eligible, key=lambda r: (r['cost_per_call'], r['model']))['model'] if eligible else None
 
@@ -104,20 +105,48 @@ async def sync_prices(conn, book: dict) -> None:
 async def backfill(conn, tenant: uuid.UUID, region: str) -> None:
     # A current price-book estimate, explicitly marked; never rewrites a receipt
     # already priced at call time. Tenant policies override platform defaults.
-    await conn.execute('''WITH pending AS (
+    while True:
+        changed = await conn.execute('''WITH pending AS (
         SELECT l.id,coalesce((SELECT coalesce(p.baseline_model,(SELECT b.model FROM tank.proof_prices a
           JOIN tank.proof_prices b ON b.family=a.family AND b.active WHERE a.model=p.model
           ORDER BY b.input_usd+b.output_usd DESC,b.model LIMIT 1)) FROM tank.policy p
           WHERE p.task_type=l.task_type AND (p.tenant_id=l.tenant_id OR p.tenant_id IS NULL)
           ORDER BY p.tenant_id NULLS LAST LIMIT 1),l.model) AS baseline
-        FROM tank.ledger l WHERE l.tenant_id=$1 AND l.region=$2 AND l.baseline_status='pending'
+        FROM tank.ledger l WHERE l.tenant_id=$1 AND l.region=$2 AND l.baseline_status='pending' ORDER BY l.id LIMIT 5000 FOR UPDATE OF l SKIP LOCKED
     ) UPDATE tank.ledger l SET baseline_model=p.baseline,
         baseline_cost_usd=CASE WHEN l.vendor IS NOT NULL THEN l.cost_usd
           WHEN l.tokens_in=0 AND l.tokens_out=0 THEN 0 ELSE l.tokens_in*b.input_usd+l.tokens_out*b.output_usd END,
-        baseline_status='backfilled',baseline_priced_at=b.updated_at
+        baseline_status=CASE WHEN b.model IS NOT NULL OR l.vendor IS NOT NULL OR (l.tokens_in=0 AND l.tokens_out=0) THEN 'backfilled' ELSE 'unpriced' END,baseline_priced_at=b.updated_at
         FROM pending p LEFT JOIN tank.proof_prices b ON b.model=p.baseline
-        WHERE l.id=p.id AND l.tenant_id=$1 AND l.region=$2
-          AND (b.model IS NOT NULL OR l.vendor IS NOT NULL OR (l.tokens_in=0 AND l.tokens_out=0))''', tenant, region)
+        WHERE l.id=p.id AND l.tenant_id=$1 AND l.region=$2''', tenant, region)
+
+        if changed == 'UPDATE 0':
+            break
+
+
+async def scheduled_backfill(pool, region: str, price_fp: str) -> None:
+    state = await pool.fetchrow("SELECT * FROM tank.search_state WHERE task_type=$1", '@backfill:'+region)
+    now = datetime.now(timezone.utc)
+    if state and not due(dict(state), now, price_fp, price_fp):
+        return
+    if not state or state['bench_price_fingerprint'] != price_fp:
+        # Retry previously unavailable prices in bounded batches only on price change.
+        unpriced = await pool.fetch("SELECT DISTINCT tenant_id FROM tank.ledger WHERE region=$1 AND baseline_status='unpriced'", region)
+        for row in unpriced:
+            while True:
+                changed = await pool.execute("""WITH batch AS (
+                    SELECT id FROM tank.ledger WHERE tenant_id=$1 AND region=$2 AND baseline_status='unpriced'
+                    ORDER BY id LIMIT 5000 FOR UPDATE SKIP LOCKED)
+                    UPDATE tank.ledger l SET baseline_status='pending' FROM batch b
+                    WHERE l.id=b.id AND l.tenant_id=$1 AND l.region=$2""", row['tenant_id'], region)
+                if changed == 'UPDATE 0':
+                    break
+    tenants = await pool.fetch("SELECT DISTINCT tenant_id FROM tank.ledger WHERE region=$1 AND baseline_status='pending'", region)
+    for tenant in tenants:
+        await backfill(pool, tenant['tenant_id'], region)
+    await pool.execute("""INSERT INTO tank.search_state(task_type,bench_at,bench_roster_fingerprint,bench_price_fingerprint)
+        VALUES($1,now(),$2,$2) ON CONFLICT(task_type) DO UPDATE SET bench_at=now(),
+        bench_roster_fingerprint=$2,bench_price_fingerprint=$2""", '@backfill:'+region, price_fp)
 
 
 async def cases_for(conn, task: str, region: str) -> list[dict]:
@@ -170,23 +199,23 @@ async def call_model(model: str, messages: list[dict], max_tokens: int) -> dict:
             'cost': cost, 'ok': response.is_success and bool(usage), 'http_status': response.status_code}
 
 
-async def bench_model(conn, policy: dict, model: str, cases: list[dict], book: dict, region: str, cap: Decimal, comparison: str) -> dict:
+async def bench_model(pool, policy: dict, model: str, cases: list[dict], book: dict, region: str, cap: Decimal, comparison: str) -> dict:
     suite_hash = hashlib.sha256(encoded({'cases': cases, 'system_prompt': policy.get('system_prompt'),
         'max_tokens_out': policy['max_tokens_out'], 'tolerance': policy.get('number_tolerance')}).encode()).hexdigest()
-    run_id = await conn.fetchval('''INSERT INTO tank.bench_runs(tenant_id,region,task_type,model,comparison_model,suite_hash,expected_n)
+    run_id = await pool.fetchval('''INSERT INTO tank.bench_runs(tenant_id,region,task_type,model,comparison_model,suite_hash,expected_n)
         VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id''', PLATFORM_TENANT, region, policy['task_type'], model, comparison, suite_hash, len(cases))
     status, error = 'complete', None
     scores, costs = [], []
     for case in cases:
         try:
-            await controls.refuse_paid(paid=book[model]['input']+book[model]['output'] > 0,
+            await controls.refuse_paid(paid=True,
                                        task=policy['task_type'], path='bench')
         except HTTPException:
             status, error = 'paused', 'Paid benchmark work is paused or pause state is unavailable.'
             break
         messages = messages_for(case['input'], policy.get('system_prompt'))
         ceiling = reserve_quote(messages, policy['max_tokens_out'], book)
-        call_id = await reserve(conn, run_id, region, case, ceiling, cap)
+        call_id = await reserve_call(pool, run_id, region, case, ceiling, cap)
         if call_id is None:
             status, error = 'capped', 'Daily bench budget exhausted.'
             break
@@ -197,13 +226,15 @@ async def bench_model(conn, policy: dict, model: str, cases: list[dict], book: d
         valid = result['ok'] and result['model'] == model and result['cost'] is not None and result['cost'] <= ceiling
         score = graduate.score_pair(case['expected'], result['content'], tolerance=float(policy.get('number_tolerance') or .01)) if valid else None
         # Even failures leave a receipt; unknown cost retains its budget reservation.
-        async with conn.transaction():
-            ledger_id = await conn.fetchval('''INSERT INTO tank.ledger
-                (tenant_id,region,agent,task_type,model,tokens_in,tokens_out,cost_usd,outcome,error,eval_score)
-                VALUES($1,$2,'bench',$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id''',
-                PLATFORM_TENANT, region, policy['task_type'], result['model'], result['tokens_in'], result['tokens_out'],
-                result['cost'] or Decimal(0), 'delivered' if valid else 'unverified',
-                None if valid else 'Bench call unverified; unknown spend remains reserved.', score)
+        async with pool.acquire() as conn, conn.transaction():
+            ledger_id = None
+            if result['cost'] is not None:
+                ledger_id = await conn.fetchval('''INSERT INTO tank.ledger
+                    (tenant_id,region,agent,task_type,model,tokens_in,tokens_out,cost_usd,outcome,error,eval_score)
+                    VALUES($1,$2,'bench',$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id''',
+                    PLATFORM_TENANT, region, policy['task_type'], result['model'], result['tokens_in'], result['tokens_out'],
+                    result['cost'], 'delivered' if valid else 'unverified',
+                    None if valid else 'Bench call unverified; unknown spend remains reserved.', score)
             await conn.execute('''UPDATE tank.bench_calls SET ledger_id=$2,charged_usd=$3,score=$4,status=$5
                 WHERE id=$1 AND tenant_id=$6 AND region=$7''', call_id, ledger_id, result['cost'], score,
                 'complete' if valid else 'unverified', PLATFORM_TENANT, region)
@@ -214,14 +245,19 @@ async def bench_model(conn, policy: dict, model: str, cases: list[dict], book: d
         costs.append(result['cost'])
     score = sum(scores)/len(scores) if scores and status == 'complete' else None
     cost = sum(costs)/len(costs) if costs and status == 'complete' else None
-    await conn.execute('''UPDATE tank.bench_runs SET score=$2,cost_per_call=$3,status=$4,error=$5,finished_at=now()
+    await pool.execute('''UPDATE tank.bench_runs SET score=$2,cost_per_call=$3,status=$4,error=$5,finished_at=now()
         WHERE id=$1 AND tenant_id=$6 AND region=$7''', run_id, score, cost, status, error, PLATFORM_TENANT, region)
     if status == 'complete':
-        await conn.execute('''INSERT INTO tank.route_evidence(task_type,model,rung,bench_run_id,bench_score,bench_cost_per_call,bench_n,bench_at)
+        await pool.execute('''INSERT INTO tank.route_evidence(task_type,model,rung,bench_run_id,bench_score,bench_cost_per_call,bench_n,bench_at)
             VALUES($1,$2,1,$3,$4,$5,$6,now()) ON CONFLICT(task_type,model,rung) DO UPDATE SET
             bench_run_id=$3,bench_score=$4,bench_cost_per_call=$5,bench_n=$6,bench_at=now()''',
             policy['task_type'], model, run_id, score, cost, len(scores))
     return {'model': model, 'score': score, 'cost_per_call': cost, 'status': status}
+
+
+async def reserve_call(pool, *args):
+    async with pool.acquire() as conn:
+        return await reserve(conn, *args)
 
 
 async def tick() -> None:
@@ -232,21 +268,22 @@ async def tick() -> None:
     if not rt.LITELLM_MASTER_KEY:
         raise RuntimeError('LiteLLM connection is not configured')
     region = rt.box_region()
-    async with rt.pool().acquire() as conn:
-        if not await conn.fetchval('SELECT pg_try_advisory_lock($1)', LOCK_ID):
+    lock = await asyncpg.connect(rt.DATABASE_URL)
+    try:
+        conn = rt.pool()
+        if not await lock.fetchval('SELECT pg_try_advisory_lock($1)', LOCK_ID):
             return
         try:
             roster = await rt._roster_models()
             book = price_book(roster)
             if not book:
                 raise RuntimeError('No priced roster available; bench unchanged')
-            await sync_prices(conn, book)
+            async with conn.acquire() as connection:
+                await sync_prices(connection, book)
             # Explicit tenant scopes: no client rows are used as platform examples.
-            tenants = await conn.fetch('SELECT DISTINCT tenant_id FROM tank.ledger WHERE region=$1', region)
-            for tenant in tenants:
-                await backfill(conn, tenant['tenant_id'], region)
             roster_fp, price_fp = fingerprints(book)
             roster_fp = hashlib.sha256(encoded(sorted(roster, key=lambda r: r['model_name'])).encode()).hexdigest()
+            await scheduled_backfill(conn, region, price_fp)
             policies = await conn.fetch("SELECT * FROM tank.policy WHERE tenant_id IS NULL AND rung IN (1,2) ORDER BY task_type")
             for row in policies:
                 policy = dict(row)
@@ -254,7 +291,7 @@ async def tick() -> None:
                 if state and state['bench_status'] != 'paused' and not due(dict(state), datetime.now(timezone.utc), roster_fp, price_fp):
                     continue
                 cases = await cases_for(conn, policy['task_type'], region)
-                comparison = policy.get('candidate_model') or policy['model']
+                comparison = policy['model']
                 results = []
                 if cases:
                     # Unknown prices cannot be budgeted safely; retain an explicit
@@ -267,26 +304,28 @@ async def tick() -> None:
                                 PLATFORM_TENANT, region, policy['task_type'], entry['model_name'], comparison,
                                 hashlib.sha256(encoded(cases).encode()).hexdigest(), len(cases))
                             results.append({'model': entry['model_name'], 'status': 'failed'})
-                    for model in sorted(book, key=lambda m: (book[m]['input']+book[m]['output'], m)):
+                    for model in sorted(book, key=lambda m: (m != policy['model'], book[m]['input']+book[m]['output'], m)):
                         result = await bench_model(conn, policy, model, cases, book, region, cap, comparison)
                         results.append(result)
                         if result['status'] in ('capped', 'paused'):
                             break
-                proposal = None if any(r['status']=='paused' for r in results) else choose_candidate(results, comparison, policy['model'])
+                proposal = None if any(r['status']=='paused' for r in results) else choose_candidate(results, policy['model'])
                 status = 'no_cases' if not cases else 'paused' if any(r['status']=='paused' for r in results) else 'capped' if any(r['status']=='capped' for r in results) else 'failed' if any(r['status']=='failed' for r in results) else 'complete'
-                async with conn.transaction():
+                async with conn.acquire() as transaction, transaction.transaction():
                     if proposal:
                         # Compare-and-set: never overwrite a concurrent founder choice.
-                        await conn.execute('''UPDATE tank.policy SET candidate_model=$2,auto_promote=false,updated_at=now()
+                        await transaction.execute('''UPDATE tank.policy SET candidate_model=$2,auto_promote=false,updated_at=now()
                             WHERE task_type=$1 AND tenant_id IS NULL AND model=$3 AND candidate_model IS NOT DISTINCT FROM $4''',
                             policy['task_type'], proposal, policy['model'], policy.get('candidate_model'))
-                    await conn.execute('''INSERT INTO tank.search_state(task_type,bench_roster_fingerprint,bench_price_fingerprint,bench_at,bench_status,bench_error)
+                    await transaction.execute('''INSERT INTO tank.search_state(task_type,bench_roster_fingerprint,bench_price_fingerprint,bench_at,bench_status,bench_error)
                         VALUES($1,$2,$3,now(),$4,$5) ON CONFLICT(task_type) DO UPDATE SET
                         bench_roster_fingerprint=$2,bench_price_fingerprint=$3,bench_at=now(),bench_status=$4,bench_error=$5''',
                         policy['task_type'], roster_fp, price_fp, status,
                         'See benchmark receipts.' if status in ('failed','capped','paused') else 'No platform evals or held-out gold.' if status=='no_cases' else None)
         finally:
-            await conn.execute('SELECT pg_advisory_unlock($1)', LOCK_ID)
+            await lock.execute('SELECT pg_advisory_unlock($1)', LOCK_ID)
+    finally:
+        await lock.close()
 
 
 async def worker_status(error: str | None) -> None:
