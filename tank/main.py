@@ -826,10 +826,17 @@ def _choice_answer(data: dict[str, Any]) -> tuple[str, str]:
     return _content_text(message.get("content")), str(choice.get("finish_reason") or "")
 
 
+# Shared by Command and future MoA seats. Extend this single allowlist when
+# another task is explicitly authorized; never change policy to pin one call.
+MODEL_OVERRIDE_TASK_TYPES = frozenset({"command.turn"})
+
+
 async def run_route(
     req: RouteRequest,
     task_id: uuid.UUID | None = None,
     caller: str | None = None,
+    *,
+    model_override: str | None = None,
 ) -> RouteResponse:
     """Pick the model from policy, call it through LiteLLM, write the ledger row.
     Used directly by /v1/route and in the background by tasks."""
@@ -855,8 +862,13 @@ async def run_route(
     if early:
         raise HTTPException(status_code=403, detail=early)
 
+    if model_override is not None:
+        if req.task_type not in MODEL_OVERRIDE_TASK_TYPES:
+            raise HTTPException(status_code=403, detail="Model override is not enabled for this task type")
+        if model_override not in {row["name"] for row in await list_models()}:
+            raise HTTPException(status_code=422, detail="Model is not on the roster")
     policy = await load_policy(req.task_type, req.tenant_id)
-    model = policy["model"]
+    model = model_override if model_override is not None else policy["model"]
     # skill: and cache: are not model names. Do not send them to LiteLLM.
     if graduate.router_cannot_serve(model):
         raise HTTPException(status_code=400, detail=graduate.ROUTER_BLOCK)

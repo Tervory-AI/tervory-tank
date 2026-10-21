@@ -98,10 +98,10 @@ async def test_auto_turn_uses_existing_router(runtime):
 
 
 @pytest.mark.asyncio
-async def test_pin_fails_explicitly_before_any_write(runtime):
+async def test_unknown_pin_fails_explicitly_before_any_write(runtime):
     runtime.list_models = AsyncMock(return_value=[{'name': 'fixture-model'}])
     actor = command.Actor(TENANT, 'client', False)
-    for name, status in [('missing', 422), ('fixture-model', 409)]:
+    for name, status in [('missing', 422)]:
         with pytest.raises(HTTPException) as error:
             await command.turn(uuid.uuid4(), command.Turn(text='Hi', model=name), actor)
         assert error.value.status_code == status
@@ -700,3 +700,139 @@ async def test_turn_failure_without_evidence_cannot_look_free(api, monkeypatch):
     data = (await client.get(f'/v1/command/threads/{missing}')).json()
     assert data['thread']['spent_usd'] is None
     assert data['steps'][-1]['receipt_status'] == 'pending'
+
+
+@pytest.mark.asyncio
+async def test_pinned_turn_passes_shared_hook_without_changing_request(runtime):
+    runtime.Message = lambda **kw: kw
+    runtime.RouteRequest = lambda **kw: SimpleNamespace(**kw)
+    runtime.run_route = AsyncMock(return_value='answer')
+    actor = command.Actor(TENANT, 'client', False)
+    assert await command.route_turn(actor, [{'role': 'user', 'content': 'Hello'}], model='fixture-pin') == 'answer'
+    runtime.run_route.assert_awaited_once()
+    assert runtime.run_route.call_args.kwargs == {'model_override': 'fixture-pin'}
+    assert runtime.run_route.call_args.args[0].task_type == 'command.turn'
+
+
+@pytest.mark.asyncio
+async def test_pinned_turn_receipt_uses_actual_model_and_pending_auto(api, runtime, monkeypatch):
+    client, pool = api
+    runtime.list_models = AsyncMock(return_value=[{'name': 'fixture-pin'}])
+    thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
+    ledger_id = uuid.uuid4()
+    async with pool.acquire() as conn:
+        await conn.execute("INSERT INTO tank.ledger(id,tenant_id,agent,task_type,model,tokens_in,tokens_out,cost_usd) VALUES($1,$2,'orchestrator','command.turn','fixture-actual',10,20,0.02)", ledger_id, TENANT)
+    route = AsyncMock(return_value=SimpleNamespace(ledger_id=ledger_id, content='Pinned answer'))
+    monkeypatch.setattr(command, 'route_turn', route)
+    reply = await client.post(f'/v1/command/threads/{thread}/turn', json={'text': 'Hello', 'model': 'fixture-pin'})
+    assert reply.status_code == 200 and 'event: done' in reply.text
+    route.assert_awaited_once()
+    assert route.call_args.kwargs == {'model': 'fixture-pin'}
+    data = (await client.get(f'/v1/command/threads/{thread}')).json()
+    receipt = data['receipts'][0]
+    assert receipt['model'] == 'fixture-actual'  # the ledger wins over the requested pin
+    assert receipt['requested_model'] == 'fixture-pin'
+    assert receipt['auto_cost_usd'] is None and receipt['auto_cost_status'] == 'pending'
+    assert receipt['cost_usd'] == 0.02
+    assert data['steps'][-1]['requested_model'] == 'fixture-pin'
+    assert data['messages'][0]['model'] == 'fixture-pin'
+
+
+@pytest.fixture
+def shared_router(monkeypatch):
+    from contextlib import asynccontextmanager
+    monkeypatch.setenv('DATABASE_URL', 'postgresql://localhost/unused')
+    monkeypatch.setenv('TANK_REGION', 'us-east')
+    monkeypatch.delenv('TANK_PROVIDER_ALLOW', raising=False)
+    import main as tank
+    policy = {'model': 'fixture-auto', 'priority': 'standard', 'rung': 1, 'system_prompt': 'Policy prompt',
+              'max_tokens_out': 32, 'cache_scope': 'tenant', 'candidate_model': None, 'shadow_rate': 0}
+    conn = SimpleNamespace(execute=AsyncMock(), fetchval=AsyncMock(return_value=False))
+
+    @asynccontextmanager
+    async def acquire():
+        yield conn
+
+    monkeypatch.setattr(tank, 'pool', lambda: SimpleNamespace(acquire=acquire))
+    monkeypatch.setattr(tank, 'load_policy', AsyncMock(return_value=policy))
+    monkeypatch.setattr(tank, 'list_models', AsyncMock(return_value=[{'name': 'fixture-pin'}, {'name': 'fixture-auto'}]))
+    monkeypatch.setattr(tank, '_redis', None)
+    calls = []
+
+    class Gateway:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def post(self, url, **kwargs):
+            calls.append(kwargs['json'])
+            return httpx.Response(200, json={'choices': [{'message': {'content': 'Measured answer'}}],
+                                             'usage': {'prompt_tokens': 10, 'completion_tokens': 20}},
+                                  headers={'x-litellm-response-cost': '0.02', 'x-litellm-model-group': kwargs['json']['model']})
+
+    monkeypatch.setattr(tank.httpx, 'AsyncClient', Gateway)
+    req = tank.RouteRequest(tenant_id=TENANT, agent='orchestrator', task_type='command.turn', home_region='us-east',
+                            max_tokens=1000, messages=[tank.Message(role='user', content='Hello')])
+    return tank, conn, calls, policy, req
+
+
+@pytest.mark.asyncio
+async def test_shared_pin_keeps_policy_limits_and_records_actual_ledger(shared_router):
+    tank, conn, calls, policy, req = shared_router
+    before = dict(policy)
+    answer = await tank.run_route(req, model_override='fixture-pin')
+    assert len(calls) == 1 and calls[0]['model'] == 'fixture-pin'
+    assert calls[0]['max_tokens'] == 32 and calls[0]['messages'][0]['content'] == 'Policy prompt'
+    assert policy == before and answer.model == 'fixture-pin' and answer.cost_usd == 0.02
+    ledger = [call.args for call in conn.execute.call_args_list if 'INSERT INTO tank.ledger' in call.args[0]]
+    assert len(ledger) == 1 and ledger[0][2] == TENANT and ledger[0][8] == 'fixture-pin'
+    assert ledger[0][10:13] == (10, 20, 0.02)
+    assert not any('UPDATE tank.policy' in call.args[0] for call in conn.execute.call_args_list)
+    tank.list_models.reset_mock()
+    auto = await tank.run_route(req)
+    assert auto.model == 'fixture-auto' and calls[-1]['model'] == 'fixture-auto'
+    tank.list_models.assert_not_awaited()  # ordinary routing is unchanged
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('refusal,status', [('task', 403), ('roster', 422), ('provider', 403), ('pause', 503), ('region', 403)])
+async def test_shared_pin_cannot_bypass_existing_guards(shared_router, monkeypatch, refusal, status):
+    tank, conn, calls, policy, req = shared_router
+    model = 'fixture-pin'
+    if refusal == 'task':
+        req.task_type = 'moa.proposer'  # future seats are not authorized yet
+    elif refusal == 'roster':
+        model = 'missing'
+    elif refusal == 'provider':
+        monkeypatch.setenv('TANK_PROVIDER_ALLOW', json.dumps({str(TENANT): ['fixture-auto']}))
+    elif refusal == 'pause':
+        conn.fetchval.return_value = True
+    elif refusal == 'region':
+        req.home_region = 'za'
+    with pytest.raises(HTTPException) as error:
+        await tank.run_route(req, model_override=model)
+    assert error.value.status_code == status
+    assert calls == []
+    assert not any('INSERT INTO tank.ledger' in call.args[0] for call in conn.execute.call_args_list)
+    assert policy['model'] == 'fixture-auto'
+
+
+@pytest.mark.asyncio
+async def test_shared_pin_uses_model_specific_cache_identity(shared_router, monkeypatch):
+    tank, conn, calls, policy, req = shared_router
+    cache = SimpleNamespace(get=AsyncMock(return_value=None), set=AsyncMock())
+    monkeypatch.setattr(tank, '_redis', cache)
+    await tank.run_route(req)
+    await tank.run_route(req, model_override='fixture-pin')
+    keys = [call.args[0] for call in cache.get.call_args_list]
+    assert keys[0] != keys[1] and str(TENANT) in keys[1]
+    cache.get.return_value = json.dumps({'content': 'Cached pinned answer'})
+    answer = await tank.run_route(req, model_override='fixture-pin')
+    assert cache.get.call_args.args[0] == keys[1]
+    assert len(calls) == 2 and answer.rung == 4 and answer.model == 'fixture-pin'
+    assert answer.cost_usd == 0 and answer.content == 'Cached pinned answer'
