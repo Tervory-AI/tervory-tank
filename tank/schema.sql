@@ -829,3 +829,78 @@ CREATE TABLE IF NOT EXISTS tank.training_snapshot_batches (
 -- CORE-1: promotions require the founder. Re-applying keeps automation off.
 ALTER TABLE tank.policy ALTER COLUMN auto_promote SET DEFAULT false;
 UPDATE tank.policy SET auto_promote=false WHERE auto_promote;
+
+-- CORE-1 price snapshots and savings. Unknown prices stay null, never invented.
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS baseline_model text;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS baseline_model text;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS baseline_cost_usd numeric(18,8);
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS baseline_status text NOT NULL DEFAULT 'pending';
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS baseline_priced_at timestamptz;
+CREATE TABLE IF NOT EXISTS tank.proof_prices (
+    model text PRIMARY KEY, family text NOT NULL,
+    input_usd numeric(20,12) NOT NULL CHECK (input_usd>=0),
+    output_usd numeric(20,12) NOT NULL CHECK (output_usd>=0),
+    active boolean NOT NULL DEFAULT true, updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE OR REPLACE FUNCTION tank.price_receipt() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE chosen text; price tank.proof_prices%ROWTYPE;
+BEGIN
+    IF NEW.baseline_status <> 'pending' THEN RETURN NEW; END IF;
+    SELECT coalesce(p.baseline_model,(SELECT b.model FROM tank.proof_prices a
+      JOIN tank.proof_prices b ON b.family=a.family AND b.active WHERE a.model=p.model
+      ORDER BY b.input_usd+b.output_usd DESC,b.model LIMIT 1)) INTO chosen FROM tank.policy p
+      WHERE p.task_type=NEW.task_type AND (p.tenant_id=NEW.tenant_id OR p.tenant_id IS NULL)
+      ORDER BY p.tenant_id NULLS LAST LIMIT 1;
+    NEW.baseline_model := coalesce(chosen,NEW.model);
+    IF NEW.vendor IS NOT NULL THEN
+      NEW.baseline_cost_usd := NEW.cost_usd;
+      NEW.baseline_status := 'not_model';
+    ELSE
+      SELECT * INTO price FROM tank.proof_prices WHERE model=NEW.baseline_model;
+      IF FOUND THEN
+        NEW.baseline_cost_usd := NEW.tokens_in*price.input_usd + NEW.tokens_out*price.output_usd;
+        NEW.baseline_status := 'measured';
+        NEW.baseline_priced_at := price.updated_at;
+      ELSIF NEW.tokens_in=0 AND NEW.tokens_out=0 THEN
+        NEW.baseline_cost_usd := 0;
+        NEW.baseline_status := 'no_tokens';
+      END IF;
+    END IF;
+    RETURN NEW;
+END $$;
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='core1_price_receipt'
+                   AND tgrelid='tank.ledger'::regclass) THEN
+      CREATE TRIGGER core1_price_receipt BEFORE INSERT ON tank.ledger
+        FOR EACH ROW EXECUTE FUNCTION tank.price_receipt();
+    END IF;
+END $$;
+
+-- Bench state is independent of the existing monthly candidate search.
+ALTER TABLE tank.search_state ADD COLUMN IF NOT EXISTS bench_roster_fingerprint text;
+ALTER TABLE tank.search_state ADD COLUMN IF NOT EXISTS bench_price_fingerprint text;
+ALTER TABLE tank.search_state ADD COLUMN IF NOT EXISTS bench_at timestamptz;
+ALTER TABLE tank.search_state ADD COLUMN IF NOT EXISTS bench_status text;
+ALTER TABLE tank.search_state ADD COLUMN IF NOT EXISTS bench_error text;
+ALTER TABLE tank.route_evidence ADD COLUMN IF NOT EXISTS bench_run_id uuid;
+ALTER TABLE tank.route_evidence ADD COLUMN IF NOT EXISTS bench_score numeric(8,6);
+ALTER TABLE tank.route_evidence ADD COLUMN IF NOT EXISTS bench_cost_per_call numeric(18,8);
+ALTER TABLE tank.route_evidence ADD COLUMN IF NOT EXISTS bench_n integer NOT NULL DEFAULT 0;
+ALTER TABLE tank.route_evidence ADD COLUMN IF NOT EXISTS bench_at timestamptz;
+CREATE TABLE IF NOT EXISTS tank.bench_runs (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid NOT NULL,
+    region text NOT NULL, task_type text NOT NULL, model text NOT NULL,
+    comparison_model text NOT NULL, suite_hash text NOT NULL, expected_n integer NOT NULL,
+    score numeric(8,6), cost_per_call numeric(18,8),
+    status text NOT NULL DEFAULT 'running', error text,
+    started_at timestamptz NOT NULL DEFAULT now(), finished_at timestamptz
+);
+CREATE TABLE IF NOT EXISTS tank.bench_calls (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(), run_id uuid NOT NULL REFERENCES tank.bench_runs(id),
+    tenant_id uuid NOT NULL, region text NOT NULL, day date NOT NULL,
+    case_ref text NOT NULL, case_kind text NOT NULL, ledger_id uuid REFERENCES tank.ledger(id),
+    reserved_usd numeric(18,8) NOT NULL, charged_usd numeric(18,8), score numeric(8,6),
+    status text NOT NULL DEFAULT 'reserved', created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS bench_budget ON tank.bench_calls (tenant_id,region,day);
+CREATE INDEX IF NOT EXISTS bench_task_history ON tank.bench_runs (tenant_id,region,task_type,started_at DESC);

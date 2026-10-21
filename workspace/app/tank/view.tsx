@@ -3,7 +3,7 @@
 import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { SquadLinks } from "../squad-links";
 import { searchTank, VAULT_LINE } from "./records";
-import { MODEL_KEY_LINE, modelsMatching, priceLine, SQUAD_LINE, squadsMatching, type ModelRow } from "./squads";
+import { MODEL_KEY_LINE, modelsMatching, priceLine, type ModelRow } from "./squads";
 import type { WorkersFeed } from "./workers";
 import { WorkersPanel } from "./workers-panel";
 
@@ -127,10 +127,9 @@ export function TankView({
   const [plugins, setPlugins] = useState(false);
   const accountName = workspaceName?.trim() || "Your account";
   const hits = searchTank(query);
-  const squads = squadsMatching(query);
   const shownModels = modelsMatching(query, models);
   const searching = query.trim().length > 0;
-  const noHits = searching && hits.length === 0 && squads.length === 0 && shownModels.length === 0;
+  const noHits = searching && hits.length === 0 && shownModels.length === 0;
 
   function closeMenu() {
     setMenu(false);
@@ -229,24 +228,6 @@ export function TankView({
           <p className={plugins ? "tk-vault on" : "tk-vault"} id="plugins">
             {VAULT_LINE}
           </p>
-          {squads.length ? (
-            <section className="tk-section" aria-label="Boxes">
-              <h2>Boxes</h2>
-              <div className="tk-boxes">
-                {squads.map((squad) => (
-                  <article className="tk-box" key={squad.id}>
-                    <div className="tk-mark">
-                      <img src={squad.logo} alt="" />
-                    </div>
-                    <div className="tk-box-body">
-                      <h3>{squad.name}</h3>
-                    </div>
-                  </article>
-                ))}
-              </div>
-              <p className="tk-vault">{SQUAD_LINE}</p>
-            </section>
-          ) : null}
           {!searching || shownModels.length || modelsUnavailable ? (
             <section className="tk-section" aria-label="Models">
               <h2>Models</h2>

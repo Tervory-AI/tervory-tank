@@ -19,6 +19,7 @@ function reviewCell(row: GraduationRow) {
 export function GraduationPanel({rows}: {rows: GraduationRow[] | null}) {
   return <section className="tank-graduation" aria-labelledby="graduation-title">
     <h2 id="graduation-title">Graduation</h2>
+    <p><a href="/tank/proof">View cost and quality proof</a></p>
     <p>100 checked examples, then a held-out check: code first, a cheaper roster model next, then our own model. Promotion requires your click and passing live checks.</p>
     {rows === null ? <p>Graduation evidence is unavailable.</p> : <div className="tank-graduation-scroll"><table>
       <thead><tr>{["Task", "Current model", "Gold / 100", "Best candidate", "Held-out score", "Now / call", "Candidate / call", "Review"].map(h => <th key={h}>{h}</th>)}</tr></thead>
