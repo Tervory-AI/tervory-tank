@@ -103,6 +103,10 @@ class GitHub:
         url = f"{API}/repos/{self.repo}/issues/{number}/comments"
         await self._send("POST", url, token, {"body": body})
 
+    async def add_label(self, token: str, number: int, label: str) -> None:
+        url = f"{API}/repos/{self.repo}/issues/{number}/labels"
+        await self._send("POST", url, token, {"labels": [label]})
+
     async def open_pulls(self, token: str, branch: str) -> list[dict[str, Any]]:
         owner = self.repo.split("/", 1)[0]
         url = f"{API}/repos/{self.repo}/pulls?state=open&head={owner}:{branch}&per_page=20"

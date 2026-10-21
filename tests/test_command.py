@@ -1107,3 +1107,20 @@ async def test_route_seat_is_durable_in_every_ledger_insert(shared_router, comma
     assert row['route_seat'] == seat and row['task_type'] == task
     assert row['outcome'] == ('failed' if mode in {'transport', 'provider'} else 'delivered')
     assert row['rung'] == (4 if mode == 'cache' else 1)
+
+
+@pytest.mark.asyncio
+async def test_moa_case_ref_separates_bench_samples_without_changing_seat(shared_router, monkeypatch):
+    tank, conn, calls, policy, req = shared_router
+    entries = {}
+    async def get(key): return entries.get(key)
+    async def put(key, value, **kwargs): entries[key] = value
+    monkeypatch.setattr(tank, '_redis', SimpleNamespace(get=get, set=put))
+    req.task_type = 'command.turn#moa.writer'
+    for case in ('first', 'second'):
+        req.case_ref = case
+        assert (await tank.run_route(req, model_override='fixture-auto')).rung == 1
+        assert (await tank.run_route(req, model_override='fixture-auto')).rung == 4
+    assert len(entries) == 2 and len(calls) == 2
+    ledger = [c.args for c in conn.execute.call_args_list if 'INSERT INTO tank.ledger' in c.args[0]]
+    assert all(row[-1] == 'writer' for row in ledger)

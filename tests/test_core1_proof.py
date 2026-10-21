@@ -127,7 +127,12 @@ async def test_receipts_backfill_schema_repeat_and_median(database,monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_bench_runs_every_model_records_scores_proposes_and_does_not_switch(database,monkeypatch):
+@pytest.mark.parametrize('moa_fails', [False, True])
+async def test_bench_runs_every_model_records_scores_proposes_and_does_not_switch(database,monkeypatch,caplog,moa_fails):
+    if moa_fails:
+        import moa
+        async def broken(*args): raise RuntimeError('MoA fixture failure')
+        monkeypatch.setattr(moa, 'bench_task', broken)
     pool,rt=database
     monkeypatch.setattr(controls,'db',lambda:pool)
     monkeypatch.setattr(bench,'runtime',lambda:rt)
@@ -158,6 +163,8 @@ async def test_bench_runs_every_model_records_scores_proposes_and_does_not_switc
         assert await conn.fetchval("SELECT count(*) FROM tank.bench_calls WHERE tenant_id=$1 AND status='complete'",PLATFORM_TENANT)==2
     await bench.tick()
     assert called==['expensive','cheap'] # no replay before next night or roster change
+    if moa_fails:
+        assert 'continuing CORE-1 bench' in caplog.text
 
 
 @pytest.mark.asyncio
