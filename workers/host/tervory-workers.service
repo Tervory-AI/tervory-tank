@@ -16,6 +16,11 @@ Environment=WORKER_STATE_DIR=%t/tervory-workers
 RuntimeDirectory=tervory-workers
 RuntimeDirectoryMode=0700
 WorkingDirectory=/srv/tervory-workers/app
+# NoNewPrivileges=yes blocks the setuid newuidmap/newgidmap that rootless podman needs to create
+# its user namespace ("newuidmap: write to uid_map failed"). The "+" step runs without that
+# restriction and only starts podman's pause process (the user namespace, 231072:65536).
+# The service itself keeps NoNewPrivileges=yes and podman joins that namespace without newuidmap.
+ExecStartPre=+/usr/bin/podman unshare /bin/true
 ExecStart=/srv/tervory-workers/venv/bin/python -m workers.service
 Restart=on-failure
 RestartSec=15

@@ -151,7 +151,7 @@ Per-task token files are staged under `$XDG_RUNTIME_DIR/tervory-workers`, which 
 ### Security model
 
 - **Host user:** an unprivileged user with no sudo and no docker group, so it cannot reach the Docker daemon or root.
-- **Unit:** `NoNewPrivileges=yes` and `UMask=0077`. It restarts on failure and is wanted by `default.target`.
+- **Unit:** `NoNewPrivileges=yes` and `UMask=0077`. It restarts on failure and is wanted by `default.target`. `NoNewPrivileges=yes` blocks the setuid `newuidmap` that rootless podman needs to create its user namespace. So the unit has `ExecStartPre=+/usr/bin/podman unshare /bin/true`, which runs without that restriction and only starts podman's pause process. The service keeps `NoNewPrivileges=yes` and joins that namespace. On Boston this was checked with `NoNewPrivs: 1` in the service and the 231072:65536 mapping inside podman. If the pause process is reset (`podman system migrate`), restart the unit.
 - **Tasks:** rootless podman, so container root is the unprivileged host user, and the task process drops to UID 1001 inside after the firewall is installed. It runs with `--cap-drop ALL`, `NET_ADMIN` only, `no-new-privileges` and `--read-only`.
 - **Network:** slirp4netns gives each task its own user-mode network. `allow_host_loopback=true` makes the host's loopback reachable as `10.0.2.2`. The in-task firewall (nftables, drop by default) allows only DNS to the slirp resolver, GitHub, PyPI and npm on 443, and Tank at `10.0.2.2:8100`. Every other host-loopback port (Coolify, other previews) is dropped. The firewall is installed by container root before privileges drop, and the task user cannot change it.
 - **Tank:** reachable only on `127.0.0.1:8100` on the host. It is never published on a public address.
@@ -162,7 +162,7 @@ All of these run as root:
 
 - Unit status: `runuser -u tervory-workers -- env XDG_RUNTIME_DIR=/run/user/$(id -u tervory-workers) systemctl --user status tervory-workers`
 - Logs: the same with `journalctl --user -u tervory-workers -n 100`. The logs are redacted, so look for `task image build failed`, `podman info failed` or `poll failed`.
-- `podman info failed` or `cannot set up namespace`: check `/etc/subuid` and `/etc/subgid`, then the AppArmor `podman` profile (`aa-status | grep podman`), then run `install.sh` again.
+- `podman info failed` or `cannot set up namespace` / `newuidmap: write to uid_map failed`: restart the unit first, because its `ExecStartPre=+` recreates the pause process. Then check `/etc/subuid` and `/etc/subgid`, then the AppArmor `podman` profile (`aa-status | grep podman`), then run `install.sh` again.
 - `cgroup controllers not delegated`: check `/sys/fs/cgroup/user.slice/user-<uid>.slice/user@<uid>.service/cgroup.controllers`. It must list `cpu memory pids`.
 - Tank unreachable: `curl -s http://127.0.0.1:8100/health` on the host. If nothing answers, Tank has not been redeployed with the `127.0.0.1:8100:8000` port yet.
 

@@ -249,6 +249,7 @@ def test_user_unit_matches_the_tngo_preview_pattern() -> None:
         "EnvironmentFile=/etc/tervory-workers/worker.env",
         "ExecStart=/srv/tervory-workers/venv/bin/python -m workers.service",
         "Environment=WORKER_STATE_DIR=%t/tervory-workers",
+        "ExecStartPre=+/usr/bin/podman unshare /bin/true",
     ):
         assert line in unit.splitlines()
     assert "User=" not in unit
