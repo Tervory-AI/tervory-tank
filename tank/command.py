@@ -14,7 +14,7 @@ import re
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -653,6 +653,7 @@ class QuestionArgs(Body):
 
 
 class RigAskArgs(QuestionArgs):
+    question: str = Field(min_length=1, max_length=500)
     product_id: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9_.:-]+$")
 
 
@@ -735,7 +736,7 @@ ADAPTERS = {
     "skala.approve": Adapter("POST", "/v1/skala/{skill_id}/{version}/approve", SkillVersionArgs, "Approve a skill version", False, "approve_skill"),
     "skala.retire": Adapter("POST", "/v1/skala/{skill_id}/{version}/retire", SkillVersionArgs, "Retire a skill version", False, "retire"),
     "ledger.receipts": Adapter("GET", "/v1/proof", ProofArgs, "Read ledger receipts"),
-    "ledger.savings": Adapter("GET", "/v1/ledger/summary", SavingsArgs, "Read recorded costs and savings"),
+    "ledger.savings": Adapter("GET", "/v1/proof", SavingsArgs, "Read recorded costs and savings"),
 }
 
 
@@ -829,6 +830,9 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
         args.update(created_by=actor.user_id, user_id=actor.user_id)
     elif action.tool == "market_lab.research":
         args["home_region"] = box_region()
+    if action.tool == "ledger.savings":
+        end = datetime.now(timezone.utc)
+        args = {"start": (end - timedelta(days=args["days"])).isoformat(), "end": end.isoformat()}
     if adapter.method == "GET":
         return adapter.method, path, {**args, **scope}, None
     return adapter.method, path, scope, {**args, **scope}
@@ -861,6 +865,20 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
         # totals. This command's view remains scoped to the chosen tenant.
         result = {"tenant_id": str(actor.tenant_id), "ledger": rows, "page": result.get("page"),
                   "has_more": result.get("has_more", {}).get("ledger", False)}
+    elif action.tool == "ledger.savings" and 200 <= response.status_code < 300:
+        if str(result.get("tenant_id")) != str(actor.tenant_id):
+            raise ValueError("Savings view returned a foreign tenant")
+        tasks = []
+        for task in result.get("tasks", []):
+            costs_pending = task["unknown_cost_calls"] > 0
+            baseline_pending = task["unpriced_calls"] > 0
+            tasks.append({"task_type": task["task_type"], "calls": task["calls"],
+                          "actual_usd": None if costs_pending else task["actual_usd"],
+                          "recorded_actual_usd": task["actual_usd"],
+                          "baseline_usd": None if baseline_pending else task["baseline_usd"],
+                          "saved_usd": None if costs_pending or baseline_pending else task["saved_usd"],
+                          "receipt_status": "pending" if costs_pending or baseline_pending else "recorded"})
+        result = {"tenant_id": str(actor.tenant_id), "tasks": tasks, "window": result.get("window")}
     return response.status_code, result
 
 

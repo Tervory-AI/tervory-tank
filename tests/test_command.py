@@ -647,3 +647,30 @@ def test_scan_adapter_preserves_packaged_skill_input(runtime):
         'name': 'Example', 'slug': 'example', 'brand': {'colours': {}}}), actor)
     assert 'pages' not in scaffold['input']  # preserve the existing route's default pages
     assert command.ADAPTERS['tisan.scaffold'].paid is False  # current scaffold is pure code
+
+
+@pytest.mark.asyncio
+async def test_savings_adapter_uses_proof_and_keeps_unknown_values_pending(runtime):
+    runtime.app = FastAPI()
+    received = []
+
+    @runtime.app.get('/v1/proof')
+    async def existing_proof(request: Request):
+        received.append(dict(request.query_params))
+        return {'tenant_id': str(TENANT), 'all_tenant_total': {'actual_usd': 999}, 'tasks': [
+            {'task_type': 'known', 'calls': 1, 'actual_usd': 0.02, 'baseline_usd': 0.05, 'saved_usd': 0.03, 'unknown_cost_calls': 0, 'unpriced_calls': 0},
+            {'task_type': 'unknown', 'calls': 1, 'actual_usd': 0, 'baseline_usd': 0, 'saved_usd': 0, 'unknown_cost_calls': 1, 'unpriced_calls': 1},
+        ]}
+
+    status, data = await command.dispatch_action(command.PlannedAction(tool='ledger.savings', arguments={'days': 7}), command.Actor(TENANT, 'founder', True))
+    assert status == 200 and received[0]['tenant_id'] == str(TENANT)
+    assert 'start' in received[0] and 'end' in received[0] and 'days' not in received[0]
+    assert 'all_tenant_total' not in data
+    assert data['tasks'][0]['saved_usd'] == 0.03
+    assert data['tasks'][1]['saved_usd'] is None and data['tasks'][1]['actual_usd'] is None
+    assert data['tasks'][1]['receipt_status'] == 'pending'
+
+
+def test_rig_approved_question_cannot_be_silently_truncated(runtime):
+    with pytest.raises(HTTPException):
+        command.validate_action(command.PlannedAction(tool='rig.ask', arguments={'product_id': 'fixture', 'question': 'x' * 501}), command.Actor(TENANT, 'founder', True))
