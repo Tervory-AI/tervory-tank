@@ -32,6 +32,10 @@ async def test_schema_export_submission_and_existing_run_guard(monkeypatch, tmp_
             await conn.execute(sql)
             await conn.execute(sql)
             assert await conn.fetchval("SELECT count(*) FROM tank.policy WHERE task_type='agent.base.think'") == 1
+            assert await conn.fetchval("SELECT auto_promote FROM tank.policy WHERE task_type='agent.base.think'") is False
+            await conn.execute("UPDATE tank.policy SET baseline_model='founder-selected' WHERE task_type='agent.base.think'")
+            await conn.execute(sql)
+            assert await conn.fetchval("SELECT baseline_model FROM tank.policy WHERE task_type='agent.base.think'") == "founder-selected"
         monkeypatch.setenv("DATABASE_URL", url)
         monkeypatch.setenv("LITELLM_MASTER_KEY", uuid.uuid4().hex)
         monkeypatch.setenv("TANK_API_KEY", uuid.uuid4().hex)
