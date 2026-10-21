@@ -26,6 +26,7 @@ from pydantic import BaseModel, ConfigDict, Field
 PRESETS = {f"research-{name}": name for name in ("fast", "low", "medium", "high")}
 TASK = "market.research"
 PRICE_DATE = "2026-10-21"
+FEE_TOLERANCE = Decimal("1e-9")
 FEE_TYPES = {"search_web": "perplexity.search.fast", "fetch_url": "perplexity.fetch"}
 MARKER = re.compile(r"\[([a-z_]+):(\d+)\]")
 
@@ -88,7 +89,7 @@ def receipt_costs(data: dict[str, Any], rates: dict[str, Decimal]) -> dict[str, 
             fees = {tool: amount(details.get(tool, 0)) for tool in FEE_TYPES}
             basis = "provider breakdown"
         if cost.get("tool_calls_cost") is not None:
-            if amount(cost["tool_calls_cost"]) != sum(fees.values()):
+            if abs(amount(cost["tool_calls_cost"]) - sum(fees.values())) > FEE_TOLERANCE:
                 raise ValueError("tool charges disagree with price book")
     token_cost = total - sum(fees.values())
     if token_cost < 0:
@@ -192,8 +193,9 @@ def register(app: Any, runtime: dict[str, Any]) -> None:
 
     async def record(req: ResearchRequest, model: str, box: str, data: dict[str, Any],
                      elapsed: int, costs: dict[str, Any] | None, sources: list[dict[str, str]],
-                     error: str | None) -> uuid.UUID:
+                     error: str | None) -> dict[str, uuid.UUID]:
         ledger_id = uuid.uuid4()
+        ledger_ids = {"model": ledger_id}
         try:
             total: Decimal | None = provider_total(data)
         except (ValueError, AttributeError):
@@ -203,20 +205,38 @@ def register(app: Any, runtime: dict[str, Any]) -> None:
             value = usage.get(key)
             return value if isinstance(value, int) and not isinstance(value, bool) and 0 <= value < 2**31 else 0
         async with runtime["pool"]().acquire() as conn:
-            await conn.execute(
-                """INSERT INTO tank.ledger
-                   (id,tenant_id,region,agent,task_type,rung,model,tokens_in,tokens_out,
-                    cost_usd,latency_ms,outcome,error,token_cost_usd,search_fee_usd,
-                    fetch_fee_usd,provider_cost_usd,research_sources,research_cost_status)
-                   VALUES ($1,$2,$3,'market_lab','market.research',1,$4,$5,$6,$7,$8,$9,$10,
-                           $11,$12,$13,$14,$15::jsonb,$16)""",
-                ledger_id, req.tenant_id, box, model, tokens("input_tokens"), tokens("output_tokens"),
-                total if total is not None else Decimal(0), elapsed, "failed" if error else "delivered", error,
-                costs["token_cost_usd"] if costs else None, costs["search_fee_usd"] if costs else None,
-                costs["fetch_fee_usd"] if costs else None, total, json.dumps(sources),
-                "itemized" if costs else "unitemized" if total is not None else "unknown",
-            )
-        return ledger_id
+            async with conn.transaction():
+                await conn.execute(
+                    """INSERT INTO tank.ledger
+                       (id,tenant_id,region,agent,task_type,rung,model,tokens_in,tokens_out,
+                        cost_usd,latency_ms,outcome,error,token_cost_usd,search_fee_usd,
+                        fetch_fee_usd,provider_cost_usd,research_sources,research_cost_status)
+                       VALUES ($1,$2,$3,'market_lab','market.research',1,$4,$5,$6,$7,$8,$9,$10,
+                               $11,$12,$13,$14,$15::jsonb,$16)""",
+                    ledger_id, req.tenant_id, box, model, tokens("input_tokens"), tokens("output_tokens"),
+                    costs["token_cost_usd"] if costs else total if total is not None else Decimal(0),
+                    elapsed, "failed" if error else "delivered", error,
+                    costs["token_cost_usd"] if costs else None, costs["search_fee_usd"] if costs else None,
+                    costs["fetch_fee_usd"] if costs else None, total, json.dumps(sources),
+                    "itemized" if costs else "unitemized" if total is not None else "unknown",
+                )
+                if costs:
+                    for kind, tool in (("search", "search_web"), ("fetch", "fetch_url")):
+                        fee = costs[f"{kind}_fee_usd"]
+                        if kind == "fetch" and not fee:
+                            continue
+                        vendor = f"perplexity.{kind}"
+                        ledger_ids[kind] = uuid.uuid4()
+                        await conn.execute(
+                            """INSERT INTO tank.ledger
+                               (id,tenant_id,region,agent,task_type,rung,model,vendor,units,
+                                cost_usd,outcome,error)
+                               VALUES ($1,$2,$3,'market_lab','market.research',1,$4,$5,$6,$7,$8,$9)""",
+                            ledger_ids[kind], req.tenant_id, box, f"vendor:{vendor}", vendor,
+                            Decimal(costs["tool_calls"].get(tool, 0)), fee,
+                            "failed" if error else "delivered", error,
+                        )
+        return ledger_ids
 
     @router.post("/status", dependencies=[Depends(authenticate)])
     async def status(req: ResearchRequest) -> dict[str, Any]:
@@ -230,7 +250,7 @@ def register(app: Any, runtime: dict[str, Any]) -> None:
         prices = await rates()  # Fail before spending if the fee schedule is unavailable.
         payload = {"model": model, "input": req.question,
                    "max_output_tokens": policy["max_tokens_out"], "stream": False,
-                   "fallbacks": []}  # No cross-preset escape from the tenant's allow-list.
+                   "fallbacks": [], "disable_fallbacks": True}
         if policy.get("system_prompt"):
             payload["instructions"] = policy["system_prompt"]
         started = time.perf_counter()
@@ -257,10 +277,15 @@ def register(app: Any, runtime: dict[str, Any]) -> None:
             # Never echo provider error bodies, prompts, credentials or response URLs.
             error = "Research failed or its sources and costs could not be verified."
         elapsed = int((time.perf_counter() - started) * 1000)
-        ledger_id = await record(req, model, box, data, elapsed, costs, sources, error)
+        ledger_ids = await record(req, model, box, data, elapsed, costs, sources, error)
+        ledger_id = ledger_ids["model"]
+        wire_ids = {kind: str(value) for kind, value in ledger_ids.items()}
         if error:
-            raise HTTPException(status_code=502, detail={"ledger_id": str(ledger_id), "message": error})
-        wire_receipt = json.loads(json.dumps({**costs, "sources": sources}, default=float))
+            raise HTTPException(status_code=502, detail={"ledger_id": str(ledger_id),
+                                                        "ledger_ids": wire_ids, "message": error})
+        wire_receipt = json.loads(json.dumps({**costs, "sources": sources,
+                                             "ledger_ids": wire_ids},
+                                            default=float))
         return {"ledger_id": str(ledger_id), "model": model, "preset": PRESETS[model],
                 "content": content, "sources": sources, "cost_usd": float(costs["cost_usd"]),
                 "receipt": wire_receipt}

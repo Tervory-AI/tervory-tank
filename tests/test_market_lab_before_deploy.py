@@ -15,9 +15,12 @@ import json
 import sqlite3
 import subprocess
 import sys
+from types import SimpleNamespace
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "agents" / "market_lab"))
@@ -236,6 +239,27 @@ def test_research_with_no_passages_makes_no_model_call_and_costs_nothing(monkeyp
             assert answer == {"answer": "no sources yet", "citations": [], "cost_usd": 0}
 
     asyncio.run(check())
+
+
+@pytest.mark.parametrize("question,key", [("", "test-room"), ("   ", "test-room"),
+                                         ("Public question", None), ("Public question", "  ")])
+def test_empty_or_unconfigured_research_keeps_no_sources_without_tank(monkeypatch, question, key):
+    sys.path.insert(0, str(ROOT / "agents" / "_chassis"))
+    from core import research_adapter
+
+    if key is None:
+        monkeypatch.delenv("TANK_KEY", raising=False)
+    else:
+        monkeypatch.setenv("TANK_KEY", key)
+
+    def no_network(**_):
+        raise AssertionError("empty or unconfigured research contacted Tank")
+
+    monkeypatch.setattr(research_adapter.httpx, "AsyncClient", no_network)
+    research = _load_named("market_lab_no_research_config", ROOT / "agents/market_lab/app.py").research
+    ctx = SimpleNamespace(input={"question": question}, tenant_id="00000000-0000-0000-0000-000000000001")
+    assert asyncio.run(research(ctx)) == {"answer": "no sources yet", "citations": [], "cost_usd": 0}
+    assert asyncio.run(research_adapter.research_if_promoted(ctx.tenant_id, question)) is None
 
 
 def test_research_drops_a_source_the_model_made_up() -> None:

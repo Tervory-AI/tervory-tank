@@ -8,9 +8,9 @@ import httpx
 
 
 async def research_if_promoted(tenant_id: str, question: str) -> dict[str, Any] | None:
-    key = os.environ.get("TANK_KEY", "")
-    if not key:
-        raise RuntimeError("tank key is not set")
+    key = os.environ.get("TANK_KEY", "").strip()
+    if not question.strip() or not key:
+        return None  # Empty or unconfigured research retains the free no-sources answer.
     base = os.environ.get("TANK_URL", "http://tank:8000").rstrip("/")
     body = {"tenant_id": tenant_id, "question": question,
             "home_region": os.environ.get("TANK_REGION", "us-east")}

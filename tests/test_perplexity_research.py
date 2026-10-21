@@ -5,6 +5,7 @@ import copy
 import importlib.util
 import json
 import os
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -30,7 +31,7 @@ RATES = {"search_web": Decimal("0.001"), "fetch_url": Decimal("0.0005")}
 
 
 def response_fixture():
-    # Shape retained by LiteLLM 1.107.0 ResponsesAPIResponse; IDs are deliberately
+    # Shape retained by LiteLLM 1.106.0 ResponsesAPIResponse; IDs are deliberately
     # out of order, so array positions cannot accidentally masquerade as markers.
     return {
         "status": "completed", "preset": "low@2026-10-16.0",
@@ -85,6 +86,20 @@ def test_reported_total_is_never_double_charged(normalized):
     assert sum(line["cost_usd"] for line in costs["lines"]) == costs["cost_usd"]
 
 
+@pytest.mark.parametrize("fee", ["0.0025000000001", "0.0024999999999", "0.002500001"])
+def test_provider_fee_rounding_is_tolerated(fee):
+    data = response_fixture()
+    data["usage"]["cost"] = {"total_cost": "0.0067", "tool_calls_cost": fee}
+    assert research.receipt_costs(data, RATES)["cost_usd"] == Decimal("0.0067")
+
+
+def test_substantive_provider_fee_mismatch_is_refused():
+    data = response_fixture()
+    data["usage"]["cost"] = {"total_cost": "0.0067", "tool_calls_cost": "0.002500002"}
+    with pytest.raises(ValueError, match="disagree"):
+        research.receipt_costs(data, RATES)
+
+
 @pytest.mark.parametrize("cost", [None, -1, "NaN", "Infinity", True, {}, {"total_cost": 1, "currency": "EUR"}])
 def test_absent_or_invalid_cost_is_not_reported_as_free(cost):
     data = response_fixture()
@@ -104,6 +119,22 @@ class Connection:
     def __init__(self):
         self.writes = []
         self.price_reads = []
+        self.transactions = 0
+        self.in_transaction = False
+        self.reject_vendor = None
+
+    @asynccontextmanager
+    async def transaction(self):
+        start = len(self.writes)
+        self.transactions += 1
+        self.in_transaction = True
+        try:
+            yield
+        except Exception:
+            del self.writes[start:]
+            raise
+        finally:
+            self.in_transaction = False
 
     async def __aenter__(self):
         return self
@@ -116,6 +147,10 @@ class Connection:
         return [{"outcome_type": research.FEE_TYPES[tool], "unit_price": rate} for tool, rate in RATES.items()]
 
     async def execute(self, query, *args):
+        if "tank.ledger" in query:
+            assert self.in_transaction
+            if args[3] == self.reject_vendor:
+                raise RuntimeError("vendor insert failed")
         self.writes.append((query, args))
 
 
@@ -190,16 +225,56 @@ async def test_gateway_only_and_itemized_ledger_receipt(harness):
     assert url == "http://litellm:4000/v1/responses"
     assert request["json"]["model"] == "research-low"
     assert request["json"]["fallbacks"] == []
+    assert request["json"]["disable_fallbacks"] is True
     assert "models" not in request["json"] and "tools" not in request["json"]
     assert request["headers"] == {"Authorization": "Bearer test-gateway"}
     query, row = harness.conn.writes[0]
     assert "INSERT INTO tank.ledger" in query
     assert row[1] == TENANT
-    assert row[6] == row[13] == Decimal("0.0067")
+    assert row[6] == Decimal("0.0042")
+    assert row[13] == Decimal("0.0067")
     assert row[10:13] == (Decimal("0.0042"), Decimal("0.002"), Decimal("0.0005"))
     assert json.loads(row[14]) == body["sources"]
     assert row[15] == "itemized"
+    assert harness.conn.transactions == 1
+    assert len(harness.conn.writes) == 3
+    search, fetch = [args for _, args in harness.conn.writes[1:]]
+    assert search[1] == fetch[1] == TENANT
+    assert search[3:7] == ("vendor:perplexity.search", "perplexity.search", Decimal(2), Decimal("0.002"))
+    assert fetch[3:7] == ("vendor:perplexity.fetch", "perplexity.fetch", Decimal(1), Decimal("0.0005"))
+    assert sum(args[6] for _, args in harness.conn.writes) == row[13]
+    assert body["receipt"]["ledger_ids"] == {"model": str(row[0]), "search": str(search[0]), "fetch": str(fetch[0])}
     assert harness.conn.price_reads[0][1][0] == main.PLATFORM_TENANT
+
+
+@pytest.mark.asyncio
+async def test_no_fetch_fee_omits_fetch_row(harness):
+    harness.data["usage"]["tool_calls_details"].pop("fetch_url")
+    response = await call(harness)
+    assert response.status_code == 200
+    assert len(harness.conn.writes) == 2
+    assert sum(row[6] for _, row in harness.conn.writes) == Decimal("0.0067")
+    assert set(response.json()["receipt"]["ledger_ids"]) == {"model", "search"}
+
+
+@pytest.mark.asyncio
+async def test_vendor_insert_failure_rolls_back_entire_charge(harness):
+    harness.conn.reject_vendor = "vendor:perplexity.fetch"
+    with pytest.raises(RuntimeError, match="vendor insert failed"):
+        await call(harness)
+    assert harness.conn.transactions == 1
+    assert not harness.conn.writes
+
+
+@pytest.mark.asyncio
+async def test_unitemized_cost_keeps_one_total_row(harness):
+    harness.data["usage"].pop("tool_calls_details")
+    response = await call(harness)
+    assert response.status_code == 502
+    assert len(harness.conn.writes) == 1
+    row = harness.conn.writes[0][1]
+    assert row[6] == row[13] == Decimal("0.0067")
+    assert row[15] == "unitemized"
 
 
 @pytest.mark.asyncio
@@ -246,7 +321,7 @@ async def test_invalid_evidence_still_books_reported_cost(harness):
     harness.data["output"] = []
     result = await call(harness)
     assert result.status_code == 502
-    assert harness.conn.writes[0][1][6] == Decimal("0.0067")
+    assert sum(row[6] for _, row in harness.conn.writes) == Decimal("0.0067")
     assert harness.conn.writes[0][1][8] == "failed"
 
 
@@ -315,8 +390,10 @@ async def test_schema_applies_twice_and_preserves_policy(harness):
     name = "models2_" + uuid.uuid4().hex
     await admin.execute(f'CREATE DATABASE "{name}"')
     conn = None
+    pool = None
     try:
-        conn = await asyncpg.connect(url.rsplit("/", 1)[0] + "/" + name)
+        database_url = url.rsplit("/", 1)[0] + "/" + name
+        conn = await asyncpg.connect(database_url)
         schema = (ROOT / "tank/schema.sql").read_text()
         # Start with the schema that existed before this additive migration.
         await conn.execute(schema.split("-- MODELS-2: provider tool charges", 1)[0])
@@ -329,19 +406,40 @@ async def test_schema_applies_twice_and_preserves_policy(harness):
         assert {r["outcome_type"]: r["unit_price"] for r in rows} == {
             "perplexity.search.fast": Decimal("0.001"), "perplexity.fetch": Decimal("0.0005")}
         assert len(rows) == 2
-        # Execute the route's captured INSERT against PostgreSQL to validate its
-        # columns and exact Decimal accounting, not just the fake connection.
+        # Exercise the real route transaction against PostgreSQL, including the
+        # model/vendor split and rollback if a later fee insert fails.
+        pool = await asyncpg.create_pool(database_url, min_size=1, max_size=1)
+        harness.runtime["pool"] = lambda: pool
         response = await call(harness)
         assert response.status_code == 200
-        query, args = harness.conn.writes[0]
-        await conn.execute(query, *args)
-        booked = await conn.fetchrow("SELECT * FROM tank.ledger WHERE tenant_id=$1 AND id=$2", TENANT, args[0])
+        ids = [uuid.UUID(value) for value in response.json()["receipt"]["ledger_ids"].values()]
+        rows = await conn.fetch("SELECT * FROM tank.ledger WHERE tenant_id=$1 AND id=ANY($2::uuid[])", TENANT, ids)
+        by_model = {row["model"]: row for row in rows}
+        booked = by_model["research-low"]
         assert booked["search_fee_usd"] == Decimal("0.002")
         assert booked["token_cost_usd"] == Decimal("0.0042")
         assert booked["fetch_fee_usd"] == Decimal("0.0005")
-        assert booked["provider_cost_usd"] == booked["cost_usd"] == Decimal("0.0067")
+        assert booked["cost_usd"] == Decimal("0.0042")
+        assert sum(row["cost_usd"] for row in rows) == booked["provider_cost_usd"] == Decimal("0.0067")
+        assert by_model["vendor:perplexity.search"]["units"] == 2
+        assert by_model["vendor:perplexity.fetch"]["units"] == 1
         assert json.loads(booked["research_sources"]) == response.json()["sources"]
+        await conn.execute("""CREATE FUNCTION reject_fetch() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN
+                IF NEW.model = 'vendor:perplexity.fetch' THEN
+                    RAISE EXCEPTION 'fixture fetch insert failed';
+                END IF;
+                RETURN NEW;
+            END; $$;
+            CREATE TRIGGER reject_fetch BEFORE INSERT ON tank.ledger
+            FOR EACH ROW EXECUTE FUNCTION reject_fetch();""")
+        before_count = await conn.fetchval("SELECT count(*) FROM tank.ledger WHERE tenant_id=$1", TENANT)
+        with pytest.raises(asyncpg.RaiseError, match="fixture fetch insert failed"):
+            await call(harness)
+        assert await conn.fetchval("SELECT count(*) FROM tank.ledger WHERE tenant_id=$1", TENANT) == before_count
     finally:
+        if pool:
+            await pool.close()
         if conn:
             await conn.close()
         await admin.execute(f'DROP DATABASE "{name}"')
