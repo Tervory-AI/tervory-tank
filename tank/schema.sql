@@ -1301,6 +1301,97 @@ CREATE TABLE IF NOT EXISTS tank.workers_controls (
     updated_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, name)
 );
+-- ACCESS-1: private connections, official feeds and human checks. Additive and replay-safe.
+CREATE TABLE IF NOT EXISTS tank.access_sites (
+    tenant_id uuid NOT NULL,
+    site text NOT NULL,
+    terms text NOT NULL DEFAULT 'unknown' CHECK (terms IN ('yes','no','unknown')),
+    rotation_days integer NOT NULL DEFAULT 90 CHECK (rotation_days BETWEEN 1 AND 365),
+    login_config jsonb NOT NULL DEFAULT '{}'::jsonb,
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,site)
+);
+CREATE TABLE IF NOT EXISTS tank.access_connections (
+    tenant_id uuid NOT NULL,
+    room text NOT NULL CHECK (room IN ('base','tiger')),
+    site text NOT NULL,
+    sealed text,
+    version uuid NOT NULL DEFAULT gen_random_uuid(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    revoked boolean NOT NULL DEFAULT false,
+    clear_pending boolean NOT NULL DEFAULT false,
+    PRIMARY KEY (tenant_id,room,site)
+);
+CREATE TABLE IF NOT EXISTS tank.access_receipts (
+    tenant_id uuid NOT NULL,
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    room text NOT NULL,
+    site text NOT NULL,
+    actor text NOT NULL,
+    action text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    duration_ms bigint NOT NULL DEFAULT 0,
+    row_count integer,
+    PRIMARY KEY (tenant_id,id)
+);
+CREATE TABLE IF NOT EXISTS tank.access_queue (
+    tenant_id uuid NOT NULL,
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    room text NOT NULL CHECK (room IN ('base','tiger')),
+    site text NOT NULL,
+    reason text NOT NULL,
+    status text NOT NULL DEFAULT 'waiting' CHECK (status IN ('waiting','handling','done','revoked')),
+    browser_handle uuid,
+    task_id uuid,
+    handler text,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    started_at timestamptz,
+    finished_at timestamptz,
+    PRIMARY KEY (tenant_id,id)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS access_queue_open_site
+    ON tank.access_queue(tenant_id,room,site) WHERE status IN ('waiting','handling');
+CREATE TABLE IF NOT EXISTS tank.access_nonces (
+    tenant_id uuid NOT NULL,
+    nonce uuid NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,nonce)
+);
+CREATE TABLE IF NOT EXISTS tank.access_feed_batches (
+    tenant_id uuid NOT NULL,
+    id uuid NOT NULL,
+    distributor text NOT NULL,
+    site text NOT NULL,
+    source text NOT NULL,
+    fetched_at timestamptz NOT NULL DEFAULT now(),
+    row_count integer NOT NULL,
+    PRIMARY KEY (tenant_id,id)
+);
+CREATE TABLE IF NOT EXISTS tank.access_feed_rows (
+    tenant_id uuid NOT NULL,
+    distributor text NOT NULL,
+    site text NOT NULL,
+    sku text NOT NULL,
+    upc text NOT NULL DEFAULT '',
+    data jsonb NOT NULL,
+    batch_id uuid NOT NULL,
+    PRIMARY KEY (tenant_id,distributor,site,sku),
+    FOREIGN KEY (tenant_id,batch_id) REFERENCES tank.access_feed_batches(tenant_id,id)
+);
+CREATE INDEX IF NOT EXISTS access_feed_upc ON tank.access_feed_rows(tenant_id,site,upc);
+CREATE TABLE IF NOT EXISTS tank.access_feed_connections (
+    tenant_id uuid NOT NULL,
+    distributor text NOT NULL,
+    site text NOT NULL,
+    sealed text NOT NULL,
+    PRIMARY KEY (tenant_id,distributor,site)
+);
+CREATE TABLE IF NOT EXISTS tank.access_feed_links (
+    tenant_id uuid NOT NULL,
+    url text NOT NULL,
+    sku text NOT NULL,
+    PRIMARY KEY (tenant_id,url)
+);
 
 -- CORE-2b: constant-time client revision reads, local to this box. No history scan
 -- on startup: an absent counter is revision zero until the next committed change.

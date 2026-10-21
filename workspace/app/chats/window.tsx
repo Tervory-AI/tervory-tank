@@ -246,6 +246,7 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
     <aside className="cw-sidebar" id="cw-sidebar" aria-label="Chats and navigation" inert={work ? true : undefined}>
       <div className="cw-brand"><img src="/brand/tervory-logo-reversed.png" alt="Tervory" /><button className="cw-mobile-only" ref={menuClose} onClick={closeMenu}>Close</button></div>
       <a className="cw-account" href="/onboarding">{account}</a>
+      <a href="/access?section=checks">Needs a person</a>
       <nav aria-label="Workspace"><a href={founder ? "/control" : "/"}>Dashboard</a><a href="/matters">Projects</a><a href="/chats" aria-current="page">Chats</a>{founder ? <SquadLinks active founder /> : SQUAD_MEMBERS.filter(member => !member.founderOnly && availableTools.some(tool => tool.startsWith(`${member.href.slice(1).replace(/-/g, "_")}.`))).map(member => <a key={member.href} href={member.href}>{member.label}</a>)}</nav>
       <p className="cw-eyebrow">CHATS</p><button className="cw-new" disabled={busy || sending || !!cardBusy} onClick={() => void newThread()}>+ New chat</button>
       <input type="search" aria-label="Search chats" placeholder="Search chats" value={query} onChange={event => setQuery(event.target.value)} />

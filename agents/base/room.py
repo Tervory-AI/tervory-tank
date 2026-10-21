@@ -193,7 +193,7 @@ class SkillClient:
         return version if isinstance(version, str) and version else None
 
     def bind(self, versions: dict[str, str], preview: bool, tenant_id: str) -> SkillCall:
-        async def call(skill_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        async def direct(skill_id: str, payload: dict[str, Any]) -> dict[str, Any]:
             response = await self._http.post(
                 f"{self._base}/v1/skala/{skill_id}/run",
                 json={
@@ -206,6 +206,17 @@ class SkillClient:
                 timeout=300,
             )
             return await self._read(response)
+
+        async def call(skill_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+            if skill_id == "base.scrape_site":
+                from access_sources import scrape_with_archives
+                return await scrape_with_archives(lambda: direct(skill_id, payload), self._http, self._base,
+                                                  self._headers(), tenant_id, payload)
+            if skill_id == "base.socials":
+                from access_sources import public_business_pages
+                return await public_business_pages(lambda: direct(skill_id, payload), self._http, self._base,
+                                                   self._headers(), tenant_id, payload)
+            return await direct(skill_id, payload)
 
         return call
 

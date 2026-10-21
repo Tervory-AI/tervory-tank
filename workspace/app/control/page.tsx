@@ -1,3 +1,4 @@
+import { AccessQueueNotice } from "../access/queue-notice";
 import { auth } from "@clerk/nextjs/server";
 import { notFound } from "next/navigation";
 import { isFounder } from "@/lib/admin";
@@ -19,7 +20,7 @@ export default async function ControlPage() {
   const clients = await squadClients(0);
   const selectedClient = clients.clients[0]?.id ?? "";
   const access = selectedClient ? await squadState(selectedClient) : null;
-  return <FounderDashboard squads={<ClientSquads initial={clients} selectedClient={selectedClient} initialState={access} />} view={{
+  return <FounderDashboard squads={<><AccessQueueNotice /><ClientSquads initial={clients} selectedClient={selectedClient} initialState={access} /></>} view={{
     data: data.status === "fulfilled" ? data.value : null,
     signups: signups.status === "fulfilled" ? signups.value : null,
     paying: paying.status === "fulfilled" ? paying.value : null,

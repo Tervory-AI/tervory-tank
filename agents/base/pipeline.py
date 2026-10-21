@@ -320,6 +320,11 @@ async def enrich_one(
             scr = await call("base.scrape_site", {"website": url})
             cost += cost_of(scr)
             src = "site"
+            if scr.get("archived"):
+                profile["archived_site"] = {"value": {"text": scr.get("text", ""), "date": scr.get("archive_date"),
+                    "archive": scr.get("archive_source")}, "source": "archived, dated", "confidence": 40}
+                # Historical facts stay dated; never label them current or use them as gold.
+                scr["text"] = ""
             if scr.get("emails"):
                 profile["emails"] = {"value": scr["emails"][:5], "source": src, "confidence": 80}
             if scr.get("phones"):
@@ -333,8 +338,9 @@ async def enrich_one(
                 "pages": len(scr.get("pages") or []),
                 "error": scr.get("error"),
                 "via": scr.get("via"),
+                **{key: scr[key] for key in ("archive_date", "archive_source", "access_error") if scr.get(key)},
             }
-            observed = observation(url, scr)
+            observed = None if scr.get("archived") else observation(url, scr)
             if observed:
                 passes["2b"]["gold_observation"] = observed
             if (scr.get("text") or "") and len(scr["text"]) >= 40:
@@ -407,13 +413,16 @@ async def enrich_one(
 
         soc = await call("base.socials", {"socials": val(profile, "socials", {})})
         cost += cost_of(soc)
+        if soc.get("official_business_pages"):
+            profile["public_business_pages"] = {"value": soc["official_business_pages"], "source": "Meta official API", "confidence": 85}
         if soc.get("count"):
             profile["socials_profiles"] = {
                 "value": {"profiles": soc["profiles"], "count": soc["count"], "presence": soc["presence"]},
                 "source": "site",
                 "confidence": int(soc["confidence"]),
             }
-        passes["4"] = {"skill": named("base.socials", soc), "ms": soc.get("_ms"), "count": soc.get("count")}
+        passes["4"] = {"skill": named("base.socials", soc), "ms": soc.get("_ms"), "count": soc.get("count"),
+                       **({"access_error": soc["access_error"]} if soc.get("access_error") else {})}
 
         eng_prof: dict[str, Any] = {}
         if engine and engine_in:

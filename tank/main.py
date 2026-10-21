@@ -3398,3 +3398,6 @@ __import__("research").register(app, globals())
 
 # COMMAND-1A: conversation routes live in their own module.
 app.include_router(__import__("command").router)
+
+# ACCESS-1: scoped connections and browser-only credential handoff.
+app.include_router(__import__("access").router)

@@ -113,8 +113,10 @@ services:
     mem_limit: 2g
     cpus: 0.5
     shm_size: 256m
-    # No Tank key: this container runs untrusted web pages. It accepts work only
-    # from base-browser-gateway, which holds the key and talks to Tank.
+    # No Tank key: only the gateway can send work to this sealed browser.
+    environment:
+      ACCESS_ROOM: base
+      ACCESS_BROWSER_KEY_BASE: ${ACCESS_BROWSER_KEY_BASE}
     volumes:
       - base_browser_data:/browser-data
     networks: [browser]
@@ -136,6 +138,8 @@ services:
     environment:
       TANK_KEY: ${TANK_KEY_BASE:-}
       TANK_REGION: us-east
+      ACCESS_ROOM: base
+      BROWSER_HOST: base-browser
     networks: [gw, browser]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health', timeout=3)"]
