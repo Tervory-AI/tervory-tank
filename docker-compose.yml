@@ -195,6 +195,9 @@ services:
         GIT_SHA: ${GIT_SHA:-}
     restart: unless-stopped
     environment:
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID_UPLOADS: ${R2_ACCESS_KEY_ID_UPLOADS:-}
+      R2_SECRET_ACCESS_KEY_UPLOADS: ${R2_SECRET_ACCESS_KEY_UPLOADS:-}
       DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
       REDIS_URL: redis://redis:6379/0
       LITELLM_URL: http://litellm:4000
@@ -241,6 +244,42 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
+
+  # Boston only. Not started by normal compose up / Coolify deployment.
+  # Founder configures the public recipient and explicitly enables this profile.
+  r2-backup:
+    profiles: ["r2-backup"]
+    build:
+      context: .
+      dockerfile: jobs/train/Dockerfile.backup
+    restart: "no"
+    mem_limit: 512m
+    cpus: 0.5
+    read_only: true
+    volumes:
+      - r2_backup_spool:/tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      TANK_REGION: us-east
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID_UPLOADS: ${R2_ACCESS_KEY_ID_UPLOADS:-}
+      R2_SECRET_ACCESS_KEY_UPLOADS: ${R2_SECRET_ACCESS_KEY_UPLOADS:-}
+      R2_BACKUP_RECIPIENT: ${R2_BACKUP_RECIPIENT:-}
+    # Offline readiness only; completed backups are proved by their R2 manifests.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.path.insert(0, 'jobs/train'); from backup import dump_configuration; dump_configuration()"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - default
 
   # One shot. Creates agent_<name> roles, then exits. Tank does not wait on it
   # and does not mount this code. restart on-failure retries a failed run only.
@@ -350,6 +389,7 @@ services:
       start_period: 15s
 
 volumes:
+  r2_backup_spool:
   pgdata:
   redisdata:
   qdrantdata:

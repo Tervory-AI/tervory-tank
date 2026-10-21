@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import secrets
 import socket
 import sys
 import threading
@@ -22,6 +23,7 @@ PUBLIC = "8.8.8.8"
 
 @pytest.fixture(autouse=True)
 def no_real_dial(monkeypatch):
+    monkeypatch.setenv("R2_ACCOUNT_ID", secrets.token_hex(16))
     real_lookup = socket.getaddrinfo
 
     def lookup(host, *args, **kwargs):
@@ -63,7 +65,7 @@ def _connect(host: str = "lokd.co.za", port: int = 443) -> bytes:
     return f"CONNECT {host}:{port} HTTP/1.1\r\nHost: {host}:{port}\r\n\r\n".encode()
 
 
-def test_policy_file_is_only_lokd():
+def test_policy_file_has_only_approved_destinations():
     egress.load_policy(RADIX / "egress-policy.json")
     assert net.ROOM_PROXY == egress.ROOM_PROXY == "http://egress-proxy:8080"
 
