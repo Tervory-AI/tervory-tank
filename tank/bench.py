@@ -80,11 +80,11 @@ def messages_for(value: Any, system: str | None) -> list[dict]:
     return ([{'role': 'system', 'content': system}] if system else []) + messages
 
 
-def reserve_quote(messages: list[dict], max_tokens: int, book: dict) -> Decimal:
-    # UTF-8 bytes bound text token counts; allowance covers chat framing. Use the
-    # highest rates, so a gateway fallback cannot evade the daily reservation.
+def reserve_quote(messages: list[dict], max_tokens: int, price: dict) -> Decimal:
+    # UTF-8 bytes bound text token counts; allowance covers chat framing.
+    # Calls disable gateway fallbacks and reject a mismatched returned model.
     upper_input = len(encoded(messages).encode('utf-8')) + 1024
-    return max(p['input'] for p in book.values()) * upper_input + max(p['output'] for p in book.values()) * max_tokens
+    return price['input'] * upper_input + price['output'] * max_tokens
 
 
 async def sync_prices(conn, book: dict) -> None:
@@ -107,16 +107,17 @@ async def backfill(conn, tenant: uuid.UUID, region: str) -> None:
     # already priced at call time. Tenant policies override platform defaults.
     while True:
         changed = await conn.execute('''WITH pending AS (
-        SELECT l.id,coalesce((SELECT coalesce(p.baseline_model,(SELECT b.model FROM tank.proof_prices a
+        SELECT l.id,(to_jsonb(l)->>'research_cost_status'='unknown' OR l.model LIKE 'vendor:%' OR l.vendor IS NOT NULL) IS TRUE AS no_baseline,coalesce((SELECT coalesce(p.baseline_model,(SELECT b.model FROM tank.proof_prices a
           JOIN tank.proof_prices b ON b.family=a.family AND b.active WHERE a.model=p.model
           ORDER BY b.input_usd+b.output_usd DESC,b.model LIMIT 1)) FROM tank.policy p
           WHERE p.task_type=l.task_type AND (p.tenant_id=l.tenant_id OR p.tenant_id IS NULL)
           ORDER BY p.tenant_id NULLS LAST LIMIT 1),l.model) AS baseline
         FROM tank.ledger l WHERE l.tenant_id=$1 AND l.region=$2 AND l.baseline_status='pending' ORDER BY l.id LIMIT 5000 FOR UPDATE OF l SKIP LOCKED
-    ) UPDATE tank.ledger l SET baseline_model=p.baseline,
-        baseline_cost_usd=CASE WHEN l.vendor IS NOT NULL THEN l.cost_usd
+    ) UPDATE tank.ledger l SET baseline_model=CASE WHEN p.no_baseline THEN NULL ELSE p.baseline END,
+        baseline_cost_usd=CASE WHEN p.no_baseline THEN NULL
           WHEN l.tokens_in=0 AND l.tokens_out=0 THEN 0 ELSE l.tokens_in*b.input_usd+l.tokens_out*b.output_usd END,
-        baseline_status=CASE WHEN b.model IS NOT NULL OR l.vendor IS NOT NULL OR (l.tokens_in=0 AND l.tokens_out=0) THEN 'backfilled' ELSE 'unpriced' END,baseline_priced_at=b.updated_at
+        baseline_status=CASE WHEN p.no_baseline THEN 'unpriced' WHEN b.model IS NOT NULL OR (l.tokens_in=0 AND l.tokens_out=0) THEN 'backfilled' ELSE 'unpriced' END,
+        baseline_priced_at=CASE WHEN p.no_baseline THEN NULL ELSE b.updated_at END
         FROM pending p LEFT JOIN tank.proof_prices b ON b.model=p.baseline
         WHERE l.id=p.id AND l.tenant_id=$1 AND l.region=$2''', tenant, region)
 
@@ -214,7 +215,7 @@ async def bench_model(pool, policy: dict, model: str, cases: list[dict], book: d
             status, error = 'paused', 'Paid benchmark work is paused or pause state is unavailable.'
             break
         messages = messages_for(case['input'], policy.get('system_prompt'))
-        ceiling = reserve_quote(messages, policy['max_tokens_out'], book)
+        ceiling = reserve_quote(messages, policy['max_tokens_out'], book[model])
         call_id = await reserve_call(pool, run_id, region, case, ceiling, cap)
         if call_id is None:
             status, error = 'capped', 'Daily bench budget exhausted.'
@@ -260,7 +261,12 @@ async def reserve_call(pool, *args):
         return await reserve(conn, *args)
 
 
-async def tick() -> None:
+async def tick() -> str | None:
+    # Read only: a long pause must not emit one run/audit row per task per tick.
+    # Per-call checks below still catch a pause enabled while a tick is running.
+    async with asyncio.timeout(controls.STATE_TIMEOUT_S):
+        if await controls.paid_paused():
+            return 'paused'
     rt = runtime()
     cap = Decimal(os.environ.get('TANK_BENCH_MAX_USD') or '5')
     if not cap.is_finite() or cap < 0:
@@ -322,24 +328,27 @@ async def tick() -> None:
                         bench_roster_fingerprint=$2,bench_price_fingerprint=$3,bench_at=now(),bench_status=$4,bench_error=$5''',
                         policy['task_type'], roster_fp, price_fp, status,
                         'See benchmark receipts.' if status in ('failed','capped','paused') else 'No platform evals or held-out gold.' if status=='no_cases' else None)
+                if status == 'paused':
+                    return 'paused'
         finally:
             await lock.execute('SELECT pg_advisory_unlock($1)', LOCK_ID)
     finally:
         await lock.close()
 
 
-async def worker_status(error: str | None) -> None:
+async def worker_status(error: str | None, status: str = 'running') -> None:
     async with runtime().pool().acquire() as conn:
         await conn.execute("""INSERT INTO tank.search_state(task_type,bench_status,bench_error)
-            VALUES('@bench',$1,$2) ON CONFLICT(task_type) DO UPDATE SET bench_status=$1,bench_error=$2""",
-            'unavailable' if error else 'running', error)
+            VALUES('@bench',$1,$2) ON CONFLICT(task_type) DO UPDATE SET bench_status=$1,bench_error=$2
+            WHERE (tank.search_state.bench_status,tank.search_state.bench_error) IS DISTINCT FROM ($1,$2)""",
+            'unavailable' if error else status, error)
 
 
 async def loop() -> None:
     while True:
         try:
-            await tick()
-            await worker_status(None)
+            status = await tick()
+            await worker_status(None, status or 'running')
         except Exception as exc:
             log.error('Bench unavailable (%s); retrying in five minutes', type(exc).__name__)
             with suppress(Exception):

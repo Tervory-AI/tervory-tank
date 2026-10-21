@@ -1,4 +1,7 @@
 import "server-only";
+import { clerkClient } from "@clerk/nextjs/server";
+import { tenantIdFor } from "@/lib/tenant";
+import { resolveTenantNames } from "./tenant-names";
 import { goldIdentity } from "../../skala/gold/access";
 import { notFound } from "next/navigation";
 import type { Proof } from "./view";
@@ -23,5 +26,10 @@ export async function proofResponse(filters: ProofFilters = {}, format?: "csv" |
 }
 
 export async function readProof(filters: ProofFilters = {}): Promise<Proof> {
-  return (await proofResponse(filters)).json();
+  const data: Proof = await (await proofResponse(filters)).json();
+  const names = await resolveTenantNames(data.tenants, async params => {
+    const client = await clerkClient();
+    return client.organizations.getOrganizationList(params);
+  }, tenantIdFor);
+  return { ...data, ...names };
 }

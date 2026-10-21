@@ -370,4 +370,84 @@ async def test_sql_code_share_excludes_cache_and_counts_unpriced_separately(data
     row=data['tasks'][0]
     assert row['code_calls']==1 and row['calls']==3 and row['code_share']==1/3
     assert row['priced_calls']==2 and row['unpriced_calls']==1
-    assert row['actual_usd']==row['baseline_usd']==row['saved_usd']==0
+    assert row['actual_usd']==.1 # known spend remains visible without a baseline
+    assert row['compared_actual_usd']==row['baseline_usd']==row['saved_usd']==0
+
+
+@pytest.mark.asyncio
+async def test_research_unknown_and_vendor_fees_never_claim_baseline_savings(database,monkeypatch):
+    pool,rt=database
+    monkeypatch.setattr(proof,'runtime',lambda:rt)
+    async with pool.acquire() as conn:
+        await bench.sync_prices(conn,bench.price_book(roster()))
+        await conn.execute("UPDATE tank.policy SET model='cheap',baseline_model='expensive' WHERE task_type='market.research' AND tenant_id IS NULL")
+        ids=[]
+        for model,vendor,cost_status,cost in [('cheap',None,'unknown',0),
+                ('vendor:search',None,None,2),('vendor:fetch','fetch',None,3),('cheap','other',None,2)]:
+            row=await conn.fetchrow("""INSERT INTO tank.ledger
+                (tenant_id,agent,task_type,model,vendor,research_cost_status,tokens_in,tokens_out,cost_usd)
+                VALUES($1,'market_lab','market.research',$2,$3,$4,100,20,$5) RETURNING *""",PLATFORM_TENANT,model,vendor,cost_status,cost)
+            ids.append(row['id'])
+            assert row['baseline_cost_usd'] is None and row['baseline_model'] is None and row['baseline_status']=='unpriced'
+        await conn.execute("""INSERT INTO tank.ledger
+            (tenant_id,agent,task_type,model,research_cost_status,tokens_in,tokens_out,cost_usd)
+            VALUES($1,'market_lab','market.research','cheap','itemized',100,20,.01)""",PLATFORM_TENANT)
+        # Simulate receipts predating the pricing trigger, then apply the backfill.
+        await conn.execute("UPDATE tank.ledger SET baseline_status='pending' WHERE id=ANY($1::uuid[])",ids)
+        await bench.backfill(conn,PLATFORM_TENANT,'us-east')
+        rows=await conn.fetch('SELECT * FROM tank.ledger WHERE id=ANY($1::uuid[])',ids)
+        assert all(r['baseline_cost_usd'] is None and r['baseline_status']=='unpriced' for r in rows)
+        await conn.execute((ROOT/'tank/schema.sql').read_text())
+    data=await proof.snapshot(PLATFORM_TENANT,'market.research')
+    row=data['tasks'][0]
+    assert row['actual_usd']==7.01 and row['compared_actual_usd']==.01
+    assert row['baseline_usd']==.12 and row['saved_usd']==.11
+    assert row['unknown_cost_calls']==1 and row['unpriced_calls']==4
+    unknown=next(r for r in data['ledger'] if r['research_cost_status']=='unknown')
+    assert unknown['cost_usd'] is None and unknown['saved_usd'] is None
+    assert sum(Decimal(str(r['cost_usd'] or 0)) for r in data['ledger'])==Decimal('7.01')
+
+
+@pytest.mark.asyncio
+async def test_paused_ticks_do_not_create_runs_audits_or_reservations_and_resume(database,monkeypatch):
+    pool,rt=database
+    monkeypatch.setattr(controls,'db',lambda:pool)
+    monkeypatch.setattr(bench,'runtime',lambda:rt)
+    async def forbidden(): raise AssertionError('A paused tick must not fetch the roster')
+    rt._roster_models=forbidden
+    await pool.execute("INSERT INTO tank.controls(tenant_id,name,value,updated_by) VALUES($1,'paid_paused',true,'fixture')",PLATFORM_TENANT)
+    for _ in range(3):
+        status=await bench.tick()
+        assert status=='paused'
+        await bench.worker_status(None,status)
+    for table in ('bench_runs','bench_calls','control_log'):
+        assert await pool.fetchval('SELECT count(*) FROM tank.'+table)==0
+    assert await pool.fetchval("SELECT bench_status FROM tank.search_state WHERE task_type='@bench'")=='paused'
+    await pool.execute("UPDATE tank.controls SET value=false WHERE tenant_id=$1 AND name='paid_paused'",PLATFORM_TENANT)
+    # No secret is needed for this test: reaching validation proves unpause resumes work.
+    rt.LITELLM_MASTER_KEY=''
+    with pytest.raises(RuntimeError,match='not configured'):
+        await bench.tick()
+
+
+def test_quote_uses_requested_model_rates_not_expensive_roster_peers():
+    book=bench.price_book(roster())
+    book['huge']={'input':Decimal('10'),'output':Decimal('20'),'family':'expensive'}
+    messages=bench.messages_for('one short case',None)
+    quote=bench.reserve_quote(messages,100,book['cheap'])
+    assert Decimal(0)<quote<Decimal('.2')
+    assert bench.reserve_quote(messages,100,book['huge'])>Decimal('5')
+
+
+def test_csv_negative_numbers_remain_numeric_while_text_formulas_are_escaped():
+    import csv
+    data=dict(tenant_id=str(PLATFORM_TENANT),region='us-east',**{k:[] for k in ['tasks','ledger','shadows','runs','cases','promotions','policies','state']})
+    data['ledger']=[dict(id='one',saved_usd=Decimal('-.25'),cost_usd=-2,task_type='=HYPERLINK("bad")',model='-formula')]
+    values={r['field']:r['value'] for r in csv.DictReader(proof.csv_export(data).splitlines()) if r['section']=='ledger'}
+    assert values['saved_usd']=='-0.25' and values['cost_usd']=='-2'
+    assert values['task_type'].startswith("'=") and values['model']=="'-formula"
+
+
+def test_tenant_name_resolution_uses_organisation_names():
+    import subprocess
+    subprocess.run(['node','tests/core1-tenant-names.cjs'],cwd=ROOT,check=True,capture_output=True,text=True)

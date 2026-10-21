@@ -851,6 +851,16 @@ CREATE TABLE IF NOT EXISTS tank.proof_prices (
 CREATE OR REPLACE FUNCTION tank.price_receipt() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE chosen text; price tank.proof_prices%ROWTYPE;
 BEGIN
+    -- Research can retain tokens with a placeholder zero when cost is unknown.
+    -- Vendor fees are actual spend only: there is no comparable token baseline.
+    IF to_jsonb(NEW)->>'research_cost_status'='unknown'
+       OR NEW.model LIKE 'vendor:%' OR to_jsonb(NEW)->>'vendor' IS NOT NULL THEN
+      NEW.baseline_model := NULL;
+      NEW.baseline_cost_usd := NULL;
+      NEW.baseline_priced_at := NULL;
+      NEW.baseline_status := 'unpriced';
+      RETURN NEW;
+    END IF;
     IF NEW.baseline_status <> 'pending' THEN RETURN NEW; END IF;
     SELECT coalesce(p.baseline_model,(SELECT b.model FROM tank.proof_prices a
       JOIN tank.proof_prices b ON b.family=a.family AND b.active WHERE a.model=p.model
@@ -858,19 +868,14 @@ BEGIN
       WHERE p.task_type=NEW.task_type AND (p.tenant_id=NEW.tenant_id OR p.tenant_id IS NULL)
       ORDER BY p.tenant_id NULLS LAST LIMIT 1;
     NEW.baseline_model := coalesce(chosen,NEW.model);
-    IF to_jsonb(NEW)->>'vendor' IS NOT NULL THEN
-      NEW.baseline_cost_usd := NEW.cost_usd;
-      NEW.baseline_status := 'not_model';
-    ELSE
-      SELECT * INTO price FROM tank.proof_prices WHERE model=NEW.baseline_model;
-      IF FOUND THEN
-        NEW.baseline_cost_usd := NEW.tokens_in*price.input_usd + NEW.tokens_out*price.output_usd;
-        NEW.baseline_status := 'measured';
-        NEW.baseline_priced_at := price.updated_at;
-      ELSIF NEW.tokens_in=0 AND NEW.tokens_out=0 THEN
-        NEW.baseline_cost_usd := 0;
-        NEW.baseline_status := 'no_tokens';
-      END IF;
+    SELECT * INTO price FROM tank.proof_prices WHERE model=NEW.baseline_model;
+    IF FOUND THEN
+      NEW.baseline_cost_usd := NEW.tokens_in*price.input_usd + NEW.tokens_out*price.output_usd;
+      NEW.baseline_status := 'measured';
+      NEW.baseline_priced_at := price.updated_at;
+    ELSIF NEW.tokens_in=0 AND NEW.tokens_out=0 THEN
+      NEW.baseline_cost_usd := 0;
+      NEW.baseline_status := 'no_tokens';
     END IF;
     RETURN NEW;
 END $$;
@@ -964,3 +969,26 @@ CREATE TABLE IF NOT EXISTS tank.control_log (
 ALTER TABLE tank.control_log ADD COLUMN IF NOT EXISTS task text;
 ALTER TABLE tank.control_log ADD COLUMN IF NOT EXISTS path text;
 CREATE INDEX IF NOT EXISTS control_log_tenant_at ON tank.control_log (tenant_id, at DESC);
+
+-- MODELS-2: provider tool charges are expenses, scoped to the platform price book.
+-- Checked 2026-10-21: https://docs.perplexity.ai/docs/getting-started/pricing
+-- Presets fast/low/medium/high use Fast Search ($0.001/invocation); fetch is $0.0005.
+-- UUIDs make re-applying the schema a no-op without changing any policy row.
+INSERT INTO tank.price_book (id, tenant_id, outcome_type, unit_price, currency, effective_from, note)
+VALUES
+ ('66000000-0000-4000-8000-000000000001','00000000-0000-0000-0000-000000000001',
+  'perplexity.search.fast',0.001,'USD','2026-10-21T00:00:00Z',
+  'Provider expense per invocation; https://docs.perplexity.ai/docs/getting-started/pricing checked 2026-10-21'),
+ ('66000000-0000-4000-8000-000000000002','00000000-0000-0000-0000-000000000001',
+  'perplexity.fetch',0.0005,'USD','2026-10-21T00:00:00Z',
+  'Provider expense per invocation; https://docs.perplexity.ai/docs/getting-started/pricing checked 2026-10-21')
+ON CONFLICT (id) DO NOTHING;
+
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS token_cost_usd numeric(20,10);
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS search_fee_usd numeric(20,10);
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS fetch_fee_usd numeric(20,10);
+-- Retain the exact provider total alongside the existing six-decimal summary cost.
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS provider_cost_usd numeric(20,10);
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS research_sources jsonb;
+-- Unknown charges on failed calls require reconciliation; they are never called free.
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS research_cost_status text;

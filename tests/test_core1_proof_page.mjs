@@ -10,9 +10,9 @@ const {build}=require(process.env.CORE1_ESBUILD_PATH || 'esbuild');
 const {chromium}=require(process.env.CORE1_PLAYWRIGHT_PATH || 'playwright');
 const out=process.env.CORE1_SCREENSHOT_DIR || '/tmp/core1-proof-shots';
 await fs.mkdir(out,{recursive:true});
-const data={tenant_id:'all',tenants:['00000000-0000-0000-0000-000000000001','22222222-2222-2222-2222-222222222222'],all_tenant_total:{saved_usd:.56,calls:40,priced_calls:39,unpriced_calls:1},window:{start:null,end:'2026-10-21T12:00:00+00:00'},page:0,page_size:100,has_more:{ledger:true},receipt_page_total:{calls:1,saved_usd:.0038},region:'us-east',tasks:[
-  {task_type:'base.extract',calls:40,priced_calls:39,actual_usd:.08,baseline_usd:.64,saved_usd:.56,backfilled_calls:12,unpriced_calls:1,code_calls:10,code_share:.25,shadow_pairs:[{primary_model:'astra',candidate_model:'luna',samples:30,agreement:.98,primary_cost_usd:.12,could_have_cost_usd:.02}]},
-  {task_type:'tiger.price_read',calls:0,priced_calls:0,actual_usd:0,baseline_usd:0,saved_usd:0,backfilled_calls:0,unpriced_calls:0,code_calls:0,code_share:null,shadow_pairs:[]}],
+const data={tenant_id:'all',tenant_names:{'00000000-0000-0000-0000-000000000001':'Tervory','22222222-2222-2222-2222-222222222222':'AmmoSync'},tenant_names_note:null,tenants:['00000000-0000-0000-0000-000000000001','22222222-2222-2222-2222-222222222222'],all_tenant_total:{saved_usd:.56,calls:40,priced_calls:39,unpriced_calls:1},window:{start:null,end:'2026-10-21T12:00:00+00:00'},page:0,page_size:100,has_more:{ledger:true},receipt_page_total:{calls:1,saved_usd:.0038},region:'us-east',tasks:[
+  {task_type:'base.extract',calls:40,priced_calls:39,actual_usd:.08,compared_actual_usd:.08,unknown_cost_calls:0,baseline_usd:.64,saved_usd:.56,backfilled_calls:12,unpriced_calls:1,code_calls:10,code_share:.25,shadow_pairs:[{primary_model:'astra',candidate_model:'luna',samples:30,agreement:.98,primary_cost_usd:.12,could_have_cost_usd:.02}]},
+  {task_type:'tiger.price_read',calls:0,priced_calls:0,actual_usd:0,compared_actual_usd:0,unknown_cost_calls:0,baseline_usd:0,saved_usd:0,backfilled_calls:0,unpriced_calls:0,code_calls:0,code_share:null,shadow_pairs:[]}],
   state:[{task_type:'base.extract',bench_at:'2026-10-21T00:00:00Z',bench_status:'complete',bench_error:null}],
   policies:[{task_type:'base.extract',model:'astra',candidate_model:'luna',baseline_model:'astra',auto_promote:false}],
   runs:[{id:'run-fixture',task_type:'base.extract',model:'luna',comparison_model:'astra',expected_n:100,score:.98,cost_per_call:.0002,status:'complete'}],
@@ -31,6 +31,7 @@ try { const page=await browser.newPage(); await page.goto(`http://127.0.0.1:${se
   const href=new URL(await saved.getAttribute('href'),'http://fixture');
   assert.equal(href.searchParams.get('task'),'base.extract'); assert.equal(href.searchParams.get('tenant_id'),'all'); assert.equal(href.hash,'#receipts');
   assert.equal(await page.getByLabel('Tenant',{exact:true}).inputValue(),'all');
+  assert.equal(await page.getByLabel('Tenant',{exact:true}).textContent(),'All tenantsTervoryAmmoSync');
   for(const name of ['Export PDF','Export CSV']) {
     const exported=new URL(await page.getByRole('link',{name}).getAttribute('href'),'http://fixture');
     assert.equal(exported.searchParams.get('tenant_id'),'all'); assert.equal(exported.searchParams.get('end'),data.window.end);

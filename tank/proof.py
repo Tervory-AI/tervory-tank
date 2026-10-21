@@ -29,12 +29,14 @@ SCOPE = "($1::uuid IS NULL OR tenant_id=$1) AND region=$2 AND ($3::text IS NULL 
 WINDOW = "($4::timestamptz IS NULL OR ts >= $4) AND ts < $5"
 TOTALS = """count(*)::int AS calls,
     count(baseline_cost_usd)::int AS priced_calls,
-    coalesce(sum(cost_usd) FILTER (WHERE baseline_cost_usd IS NOT NULL),0) AS actual_usd,
+    coalesce(sum(cost_usd) FILTER (WHERE research_cost_status IS DISTINCT FROM 'unknown'),0) AS actual_usd,
+    coalesce(sum(cost_usd) FILTER (WHERE baseline_cost_usd IS NOT NULL),0) AS compared_actual_usd,
+    count(*) FILTER (WHERE research_cost_status='unknown')::int AS unknown_cost_calls,
     coalesce(sum(baseline_cost_usd),0) AS baseline_usd,
     coalesce(sum(baseline_cost_usd-cost_usd),0) AS saved_usd,
     count(*) FILTER (WHERE baseline_status='backfilled' AND baseline_cost_usd IS NOT NULL)::int AS backfilled_calls,
     count(*) FILTER (WHERE baseline_cost_usd IS NULL)::int AS unpriced_calls,
-    count(*) FILTER (WHERE rung=3 AND NOT cache_hit AND cost_usd=0 AND outcome='delivered')::int AS code_calls"""
+    count(*) FILTER (WHERE rung=3 AND NOT cache_hit AND cost_usd=0 AND outcome='delivered' AND research_cost_status IS DISTINCT FROM 'unknown')::int AS code_calls"""
 PAGE_SIZE = 100
 
 
@@ -59,7 +61,7 @@ async def snapshot(tenant: uuid.UUID | None, task: str | None = None,
         all_total = dict(await conn.fetchrow(f"SELECT {TOTALS} FROM tank.ledger WHERE region=$1 AND ts < $2 AND {LIVE}", region, end))
         tenants = [str(r['tenant_id']) for r in await conn.fetch('SELECT DISTINCT tenant_id FROM tank.ledger WHERE region=$1 ORDER BY tenant_id', region)]
         ledger = [dict(r) for r in await conn.fetch(f"""SELECT l.id,l.tenant_id,l.ts,l.task_type,l.agent,l.model,l.rung,l.tokens_in,l.tokens_out,
-            l.cost_usd,l.baseline_model,l.baseline_cost_usd,l.baseline_status,l.baseline_priced_at,l.cache_hit,l.outcome,
+            CASE WHEN l.research_cost_status='unknown' THEN NULL ELSE l.cost_usd END AS cost_usd,l.research_cost_status,l.baseline_model,l.baseline_cost_usd,l.baseline_status,l.baseline_priced_at,l.cache_hit,l.outcome,
             l.baseline_cost_usd-l.cost_usd AS saved_usd,
             l.baseline_cost_usd < l.cost_usd AS baseline_below_actual,
             (SELECT a.family<>b.family FROM tank.proof_prices a,tank.proof_prices b
@@ -97,7 +99,7 @@ async def snapshot(tenant: uuid.UUID | None, task: str | None = None,
             WHERE ($1::text IS NULL OR task_type=$1) ORDER BY task_type""", task)]
     by_task = {r['task_type']: r for r in tasks}
     for name in sorted({r['task_type'] for group in (comparisons,runs,policies) for r in group} - by_task.keys()):
-        row = dict(task_type=name, calls=0, priced_calls=0,actual_usd=0,baseline_usd=0,saved_usd=0,backfilled_calls=0,unpriced_calls=0,code_calls=0)
+        row = dict(task_type=name, calls=0, priced_calls=0,actual_usd=0,compared_actual_usd=0,unknown_cost_calls=0,baseline_usd=0,saved_usd=0,backfilled_calls=0,unpriced_calls=0,code_calls=0)
         tasks.append(row)
     for row in tasks:
         row['code_share'] = row['code_calls']/row['calls'] if row['calls'] else None
@@ -128,8 +130,8 @@ def csv_export(data: dict) -> str:
                 if isinstance(value, (list,dict)):
                     value = json.dumps(value, sort_keys=True)
                 # Spreadsheet formula injection protection for all text cells.
-                cells = [section, row.get('tenant_id',data['tenant_id']), data['region'], row.get('task_type',''), row.get('id',''), key, '' if value is None else str(value)]
-                writer.writerow(["'"+str(v) if str(v).startswith(('=','+','-','@','\t','\r')) else v for v in cells])
+                cells = [section, row.get('tenant_id',data['tenant_id']), data['region'], row.get('task_type',''), row.get('id',''), key, '' if value is None else value]
+                writer.writerow(["'"+v if isinstance(v,str) and v.startswith(('=','+','-','@','\t','\r')) else v for v in cells])
     return stream.getvalue()
 
 
