@@ -374,9 +374,9 @@ def aggregate_calls(ledger_rows: list[dict[str, Any]]) -> dict[Key, dict[str, fl
             continue
         key = (day, tenant, str(row["agent"]), task, int(row["rung"]), model)
         slot = out.setdefault(key, _empty_call())
-        slot["calls"] += int(row.get("calls") or 1)
+        slot["calls"] += 0 if row["agent"] == "bench" else int(row.get("calls") or 1)
         slot["cost"] += cost
-        if row.get("cache_hit"):
+        if row.get("cache_hit") and row["agent"] != "bench":
             slot["cache_hits"] += int(row.get("calls") or 1)
     return out
 
@@ -839,9 +839,9 @@ SELECT
     task_type,
     CASE WHEN task_type LIKE '%#shadow' THEN 1 ELSE rung END AS rung,
     model,
-    count(*) FILTER (WHERE task_type NOT LIKE '%#shadow')::int AS calls,
+    count(*) FILTER (WHERE task_type NOT LIKE '%#shadow' AND agent <> 'bench')::int AS calls,
     coalesce(sum(cost_usd), 0) AS cost,
-    count(*) FILTER (WHERE cache_hit AND task_type NOT LIKE '%#shadow')::int AS cache_hits
+    count(*) FILTER (WHERE cache_hit AND agent <> 'bench' AND task_type NOT LIKE '%#shadow')::int AS cache_hits
 FROM tank.ledger
 """
 
