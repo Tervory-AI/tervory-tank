@@ -9,7 +9,6 @@ No network, Docker or secrets are needed.
 """
 from __future__ import annotations
 
-import json
 import os
 import re
 import shutil
