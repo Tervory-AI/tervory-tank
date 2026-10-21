@@ -326,3 +326,27 @@ async def test_partial_screenshot_write_never_becomes_uploadable(tmp_path, monke
     result = await evidence.stage(tmp_path, directory, 'task', html='Readable', page=Page())
     assert result['status'] == 'pending_upload' and result['screenshot_error']
     assert {path.suffix for path in (directory / 'evidence').iterdir()} == {'.html'}
+
+
+@pytest.mark.parametrize(('url', 'expected'), [
+    ('https://shop.example/private/report.pdf', False),
+    ('https://shop.example/public/report.pdf', True),
+    ('https://shop.example/private/report.pdf?download=1', True),
+    ('https://shop.example/locked/a', False),
+    ('https://shop.example/%6Cock%65d/a', False),
+    ('https://shop.example/same', True),
+])
+def test_robots_wildcards_longest_match_allow_ties_and_escaped_paths(url, expected):
+    policy = robots.Policy()
+    policy.parse(['User-agent: *', 'Disallow: /*.pdf$', 'Allow: /public/*.pdf$',
+                  'Disallow: /locked/', 'Disallow: /same', 'Allow: /same'])
+    assert policy.can_fetch('TervoryBase', url) is expected
+
+
+def test_robots_combines_matching_agent_groups_and_ignores_other_agents():
+    policy = robots.Policy()
+    policy.parse(['User-agent: *', 'Disallow: /', 'User-agent: TervoryBase',
+                  'Disallow: /private', 'User-agent: tervorybase', 'Disallow: /other'])
+    assert not policy.can_fetch('TervoryBase', 'https://shop.example/private')
+    assert not policy.can_fetch('TervoryBase', 'https://shop.example/other')
+    assert policy.can_fetch('TervoryBase', 'https://shop.example/public')

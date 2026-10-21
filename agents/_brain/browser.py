@@ -191,7 +191,7 @@ async def render(body: Page, x_tank_key: str = Header(default=""), x_tenant_id: 
             try:
                 context = await browser.new_context(storage_state=str(storage) if storage.exists() else None,
                     proxy={"server": "http://base-browser-gateway:3128"},
-                    service_workers="block", accept_downloads=False)
+                    service_workers="block", accept_downloads=False, user_agent="TervoryBase/1.0 (+https://tervory.com)")
                 denied: set[str] = set()
                 await require_allowed(context, body.url, min(body.max_ms, 10000))
 
