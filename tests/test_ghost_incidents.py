@@ -113,6 +113,31 @@ def test_only_the_two_safe_actions_are_allowed():
     authorize_action("rerun_failed_deploy", "workspace", "failed")
 
 
+def test_volume_and_gold_cannot_be_relabelled_into_another_region(tmp_path):
+    path = tmp_path / "region.sqlite3"
+    store = Store(path, "us-east")
+    with pytest.raises(ValueError):
+        candidates(store, "za")
+    store.close()
+    with pytest.raises(ValueError):
+        Store(path, "za")
+
+
+@pytest.mark.asyncio
+async def test_wrong_probe_evidence_is_not_used_as_diagnosis(room):
+    room.probes.reproduce.return_value = Observation(target="radix", signal="health", failing=True)
+    item = await room.look(Look(target="workspace"))
+    assert item["state"] == "blocked" and "brief" not in item
+
+
+def test_browser_rejects_private_dns_answers(monkeypatch):
+    import socket
+    from agents.ghost.probes import public_addresses
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **k: [(None, None, None, None, ("127.0.0.1", 443))])
+    with pytest.raises(ValueError):
+        public_addresses("app.tervory.com")
+
+
 @pytest.mark.asyncio
 async def test_persistence_and_gold_do_not_depend_on_process_memory(tmp_path):
     path = tmp_path / "state.sqlite3"
