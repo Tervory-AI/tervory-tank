@@ -55,6 +55,7 @@
 - **Run in the cloud only, never on the founder's computer.** Use your cloud or background agent, with its own cloud machine. Do not clone the repo, install packages, run builds, run tests or start servers on the founder's laptop. If you are running locally, stop and say so. CI runs the tests; Claude checks production through Coolify.
 - Branch from the latest `main`, and stay inside your brief's "Files you may change".
 - **Standing approval:** when you add a new module under `tank/`, also add its file name to the `COPY` line in `tank/Dockerfile`. Nothing else in that file changes. If another lane changed the same line, keep both names when you merge `main`.
+- **Standing approval:** you may add server-side helpers and types to `workspace/lib/tank.ts` for your own lane's Tank routes only. Don't change existing helpers.
 - Put new logic in new modules. In shared files (`tank/main.py`, `tank/schema.sql`), add only route registrations and additive schema, to keep merge conflicts small with other lanes running in parallel.
 - **CI only runs on PRs.** Open one draft PR to run it, and mark it ready only when every check is green.
 - One PR per lane. Never push to `main`. Do not merge: the founder merges after Claude's review.
