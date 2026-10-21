@@ -31,7 +31,7 @@
    - Hermes Agent's own session memory lives on the room's volume.
    - Nothing crosses rooms, tenants or regions.
 5. **Its own computer:** Hermes Agent's Docker sandbox backend runs inside the room, with no internet except the room's allowed hosts. Every run writes to the room's own volume only.
-6. **Its own browser:** a separate browser profile per room from the shared browser service. Cookies, storage and history are never shared between rooms. Human checks (captchas) are recorded, never solved.
+6. **Its own browser, shared with no one:** each room runs its own browser container (Chromium with Playwright, plus OCR where needed) on its own corridor, with its own volume for cookies, storage and history. No room uses another room's browser; Base stops borrowing Tiger's. Human checks (captchas) are recorded, never solved.
 7. **Receipts:** each agent task shows its steps (recall, skills used, model calls with cost and baseline, browser and sandbox actions) and feeds the COMMAND-1 work panel when called from the window.
 8. **Pilot Base:** keep today's code pipeline as the default. The brain plans and runs it, and handles the records the pipeline cannot finish, before any paid step.
 
@@ -42,6 +42,7 @@ CI green. Tests:
 - an unapproved self-made skill is not loaded;
 - recall happens before work and returns only that tenant's memories;
 - the sandbox cannot reach a disallowed host;
-- two rooms' browser profiles share no cookies.
+- each room's browser is its own container and cannot be reached from another room;
+- Base no longer calls Tiger's browser.
 
 Then a recorded Base run on a small ATF state, with its receipt, linked in the PR.
