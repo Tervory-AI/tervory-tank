@@ -336,6 +336,7 @@ async def browser_rpc(room: str, request: Request):
         row, state = await browser_policy(conn, tenant, room, site)
         result = {"state": state, "version": str(row["version"]) if row else None}
         if state == "allowed":
+            vault.key()  # A missing/invalid encryption setting must fail closed even for existing cookies.
             result["config"] = json.loads(row["login_config"]) if isinstance(row["login_config"], str) else row["login_config"]
         if action == "release":
             if state != "allowed":

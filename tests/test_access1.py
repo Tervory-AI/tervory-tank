@@ -368,3 +368,9 @@ async def test_held_page_keeps_one_of_four_browser_slots(monkeypatch):
 def test_cookie_files_do_not_cross_http_https_origins(monkeypatch, tmp_path):
     monkeypatch.setenv("BROWSER_DATA_DIR", str(tmp_path)); tenant = str(uuid.uuid4())
     assert browser.storage_for(tenant, "https://dealer.example") != browser.storage_for(tenant, "http://dealer.example")
+
+
+def test_private_cookies_cannot_be_reused_in_an_unconfigured_public_browser(monkeypatch, tmp_path):
+    monkeypatch.setenv("BROWSER_DATA_DIR", str(tmp_path)); tenant = str(uuid.uuid4()); site = "https://dealer.example"
+    private = browser.storage_for(tenant, site, authenticated=True); private.write_text("{}")
+    assert not browser.storage_for(tenant, site).exists()

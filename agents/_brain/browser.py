@@ -138,6 +138,7 @@ async def visit(body, tenant, task, origin):
     secure = bool(os.environ.get("ACCESS_BROWSER_KEY"))
     policy = await access_rpc(tenant, origin, "policy") if secure else {"state": "public"}
     private = policy["state"] != "public"
+    if private: storage = storage_for(tenant, origin, authenticated=True)
     social = any(host == name or host.endswith("." + name) for name in ("facebook.com", "instagram.com", "fb.com", "fb.me"))
     if social: storage.unlink(missing_ok=True)
     if private and policy["state"] != "allowed":
@@ -185,7 +186,9 @@ async def visit(body, tenant, task, origin):
                 try:
                     public_url(route.request.url)
                     target = site_origin(route.request.url)
-                    if social and route.request.method not in {"GET", "HEAD", "OPTIONS"}:
+                    target_host = urlsplit(route.request.url).hostname or ""
+                    target_social = any(target_host == name or target_host.endswith("." + name) for name in ("facebook.com", "instagram.com", "fb.com", "fb.me"))
+                    if target_social and (navigation["human"] or route.request.method not in {"GET", "HEAD", "OPTIONS"}):
                         raise ValueError("Social pages are anonymous and read-only")
                     if private and target != origin:
                         raise ValueError("Authenticated requests stay on the owning site")
@@ -344,11 +347,11 @@ async def access_rpc(tenant, site, action, **values):
         raise HTTPException(503, "Secure connections are unavailable.") from None
 
 
-def storage_for(tenant, site):
+def storage_for(tenant, site, *, authenticated=False):
     host, _ = public_url(site)
     directory = tenant_dir(Path(os.environ.get("BROWSER_DATA_DIR", "/browser-data")), tenant) / "sites"
     directory.mkdir(exist_ok=True)
-    return directory / (hashlib.sha256(site.encode()).hexdigest() + ".json")
+    return directory / (hashlib.sha256(site.encode()).hexdigest() + (".auth.json" if authenticated else ".json"))
 
 
 # Bound to a tenant/site and one actual Playwright page, never a debug socket.
@@ -509,6 +512,7 @@ async def access_control(request: Request):
             for handle, item in list(held.items()):
                 if item.tenant == tenant and item.site == site: await dispose(handle, save=False)
             storage_for(tenant, site).unlink(missing_ok=True)
+            storage_for(tenant, site, authenticated=True).unlink(missing_ok=True)
             result = {"cleared": True}
         elif body["action"] == "live":
             item = held.get(body["handle"])
