@@ -192,8 +192,9 @@ class Launcher:
 
     async def run(self, settings: Settings, task: WorkerIssue, token: str) -> Outcome:
         if not self._built:
-            code, _ = await self.runner(build_argv(), timeout_s=60 * 60)
+            code, build_out = await self.runner(build_argv(), timeout_s=60 * 60)
             if code != 0:
+                log.warning("task image build failed (exit %s). Last podman lines:\n%s", code, podman_tail(build_out))
                 raise RuntimeError("task image build failed")
             self._built = True
         info_code, info_out = await self.runner(["podman", "info", "--format", "json"], timeout_s=60)
@@ -226,9 +227,16 @@ class Launcher:
             shutil.rmtree(secret_dir, ignore_errors=True)
         outcome = parse_result(output)
         if outcome is None:
+            log.warning("task container exit %s. Last podman lines:\n%s", code, podman_tail(output))
             raise RuntimeError("the container ended without a result" if code == 0 else "the container failed")
         outcome.runtime = outcome.runtime or runtime
         return outcome
+
+
+def podman_tail(output: str | None, lines: int = 20) -> str:
+    """The last lines of podman's output, redacted, for the log."""
+    tail = (output or "").rstrip().splitlines()[-lines:]
+    return redact("\n".join(tail)) or "(no output)"
 
 
 def tank_hosts(settings: Settings) -> list[tuple[str, str]]:

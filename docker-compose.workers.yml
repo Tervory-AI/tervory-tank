@@ -13,6 +13,9 @@ services:
     restart: unless-stopped
     mem_limit: ${WORKER_SERVICE_MEMORY:-6g}
     cpus: ${WORKER_SERVICE_CPUS:-3}
+    # Hard limits for the whole service. Task containers run with cgroups disabled,
+    # so these outer limits are what cap a task's memory, CPU and processes.
+    pids_limit: 1024
     devices:
       - /dev/fuse
     security_opt:

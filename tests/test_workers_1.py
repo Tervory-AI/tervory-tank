@@ -253,8 +253,10 @@ def test_fresh_podman_container_is_sealed() -> None:
     assert "--privileged" not in argv
     assert "host" != argv[argv.index("--network") + 1]
     assert "docker.sock" not in " ".join(argv)
-    assert "--cpus" in argv and argv[argv.index("--cpus") + 1] == "2"
-    assert argv[argv.index("--memory") + 1] == "4g"
+    # Cgroups are disabled inside the outer container, so no inner limits.
+    assert "--cgroups=disabled" in argv
+    for flag in ("--cpus", "--memory", "--pids-limit"):
+        assert flag not in argv
     assert "--read-only" in argv
     assert "tervory-worker-task:1" in argv
     assert "--add-host" in argv and "tank:10.0.1.8" in argv

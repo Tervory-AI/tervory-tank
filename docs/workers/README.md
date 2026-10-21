@@ -15,7 +15,7 @@ Anything else with that label gets one comment and is left alone. Pull requests 
 
 ## The sealed computer
 
-Each task is a new rootless podman container (`podman run --rm`). It is not privileged and it does not join the host network. Limits come from settings. The Boston defaults are 2 CPU, 4 GB, and 90 minutes. If podman has the gVisor runtime (`runsc`), the container uses it. Otherwise it uses the ordinary runtime.
+Each task is a new rootless podman container (`podman run --rm`). It is not privileged and it does not join the host network. The task image is built with `podman build --isolation=chroot`, and the task runs with `--cgroups=disabled`, because the tervory-workers container is not privileged and cannot write cgroups. So the resource limits now come from the outer container: the compose limits on the tervory-workers service (`mem_limit` from `WORKER_SERVICE_MEMORY`, default 6g; `cpus` from `WORKER_SERVICE_CPUS`, default 3; `pids_limit: 1024`). The task still runs with `--cap-drop ALL` (only `NET_ADMIN` added), `no-new-privileges`, and `--read-only` with tmpfs mounts. The task timeout is still 90 minutes. If podman has the gVisor runtime (`runsc`), the container uses it. Otherwise it uses the ordinary runtime.
 
 Inside the image: a clone of `Tervory-AI/tervory-tank` (cloned at run time, not baked in), Python, Node 22, Chromium installed with Playwright, and Aider. The container installs a firewall before the clone. If the firewall does not install, the task stops.
 
