@@ -80,6 +80,8 @@ const snapshot = {thread:{thread_id:'one',title:'Tank test-model',updated_at:'20
   }
   assert.equal(contract.canConfirm({status:'unknown',retry_safe:true}),false);assert.equal(contract.canConfirm({status:'failed',retry_safe:true}),true);
   assert.equal(presentation.visibleCard({kind:'paid_run',tool:'skala.evals'},false),false);
+  const savings=presentation.presentCard({card_id:'savings',kind:'other',summary:'Savings',result:{tenant_id:'not-public',tasks:[{task_type:'fixture',calls:2,actual_usd:null,recorded_actual_usd:.01,baseline_usd:null,saved_usd:null,receipt_status:'pending',private_data:'not-public'}]}},true);
+  assert(savings.results.some(item=>item.label==='Tasks 1 · Cost'&&item.value==='Unavailable'));assert(savings.results.some(item=>item.label==='Tasks 1 · Cost status'&&item.value==='pending'));assert(!JSON.stringify(savings).includes('not-public'));assert(!JSON.stringify(savings).includes('$0.00'));
   const binaryId='00000000-0000-4000-8000-000000000001';
   const rawRequest=(target,bytes,origin='https://workspace.invalid')=>route.POST(new Request('https://workspace.invalid/chats/api/'+target,{method:'POST',headers:{origin,'content-type':'application/octet-stream','x-tervory-squad':'all','x-tervory-user':'forged'},body:bytes}),{params:Promise.resolve({path:target.split('?')[0].split('/')})});
   upstream=()=>Response.json({attachment_id:binaryId,size:4,model_readable:false});

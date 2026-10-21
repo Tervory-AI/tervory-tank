@@ -22,7 +22,7 @@ The official repository logo replaces the wireframe's text logo, as required by 
 
 ## Lane A integration
 
-Inspected Lane A PR #224 at `6cedeb2ca40759abc07f64f32aa429064317cdb9` (newer than requested `74fd6d6e`) without merging or editing its files. The proxy sends the same-box Workspace key and server-derived user/tenant identity. Browser identity and squad headers are never authority.
+Inspected Lane A PR #224 at `6cedeb2ca40759abc07f64f32aa429064317cdb9` (newer than requested `74fd6d6e`) without merging or editing its files. Also checked the compatible `c56880b5f21c8f9260e38bb7333737daa6e0c0f7` follow-up: per-task savings results are projected as bounded named fields, retaining pending/null amounts. The proxy sends the same-box Workspace key and server-derived user/tenant identity. Browser identity and squad headers are never authority.
 
 - Inline UTF-8 text remains `{name,text}` (200,000 characters). Other formats upload as raw bytes to `threads/{id}/attachments?name=…`; turns send only `{attachment_id}`. Both direct and existing message-file download URLs work. The UI caps a selection at five files/5 MiB; the proxy caps each upload at 5 MiB and preserves A's 20-file/20-MiB thread limit. A checks user, tenant and same-thread reference ownership. Binary content is stored only, explicitly disclosed as unreadable by this text router. Downloads force attachment disposition, octet-stream, no-store and nosniff.
 - Empty pending receipts retain `status` and `step_id`; saved step/card markers restore them after reload. Cost and baseline pending states remain visible, null totals stay unknown, and SSE evidence deltas preserve earlier rows. Work receipts cannot overwrite an unrelated streaming answer.

@@ -1,4 +1,4 @@
-import { safeLink, type Card, type CardDetail, type Receipt, type Snapshot, type Thread } from "./contract";
+import { dollars, safeLink, type Card, type CardDetail, type Receipt, type Snapshot, type Thread } from "./contract";
 export function clientText(text: string, modelNames: string[] = []): string {
   let result = text;
   for (const name of [...modelNames].sort((a, b) => b.length - a.length)) {
@@ -19,6 +19,7 @@ export function presentCard(card: Card, founder: boolean, models: string[] = [])
     const source = input as Record<string, unknown>;
     return Object.entries(fields).flatMap(([key, label]) => {
       const value = source[key];
+      if (key.endsWith("_usd") && (value === null || typeof value === "number")) return [{ label, value: dollars(value) }];
       if (!["string", "number", "boolean"].includes(typeof value)) return [];
       if (/url$|^link$/.test(key)) {
         try { const url = new URL(String(value)); if (!["https:", "http:"].includes(url.protocol) || url.username || url.password) return []; return [{ label, value: clean(url.href), href: safeLink(url.href) }]; } catch { return []; }
@@ -33,11 +34,16 @@ export function presentCard(card: Card, founder: boolean, models: string[] = [])
     if (Array.isArray(list)) targets.push({ label, value: key === "records" ? String(list.length) : clean(list.map(item => typeof item === "string" ? item : item?.path ?? "File").join(", ").slice(0, 2000)) });
   }
   if (typeof args.text === "string") targets.push({ label: "Document", value: `${args.text.length.toLocaleString("en-US")} characters` });
-  const results = details(card.result, { ok: "Success", success: "Success", status: "Status", message: "Message", answer_md: "Answer", summary: "Summary", answer: "Answer", text: "Response", title: "Title", name: "Name", url: "Result", pr_url: "Review", link: "Result", count: "Count", total: "Total", job_id: "Job", build_id: "Build", matter_id: "Matter", watch_id: "Watch" });
-  if (Array.isArray(card.result)) results.push({ label: "Results", value: `${card.result.length} items` });
-  if (card.result && typeof card.result === "object") for (const key of ["items", "results", "records", "pages", "findings"]) {
+  const resultFields = { ok: "Success", success: "Success", status: "Status", message: "Message", answer_md: "Answer", summary: "Summary", answer: "Answer", text: "Response", title: "Title", name: "Name", url: "Result", pr_url: "Review", link: "Result", count: "Count", total: "Total", n: "Count", queued: "Queued", batch: "Batch", job_id: "Job", build_id: "Build", matter_id: "Matter", watch_id: "Watch", task_type: "Task", calls: "Calls", actual_usd: "Cost", cost_usd: "Cost", baseline_usd: "Would have cost", baseline_cost_usd: "Would have cost", saved_usd: "Saved", receipt_status: "Cost status", ...(founder ? { model: "Model", ledger_id: "Ledger entry" } : {}) };
+  const results = details(card.result, resultFields);
+  const collection = (label: string, list: unknown[]) => {
+    results.push({ label, value: `${list.length} items${list.length > 5 ? " (first 5 shown)" : ""}` });
+    list.slice(0, 5).forEach((item, index) => results.push(...details(item, resultFields).map(detail => ({ ...detail, label: `${label} ${index + 1} · ${detail.label}` }))));
+  };
+  if (Array.isArray(card.result)) collection("Results", card.result);
+  if (card.result && typeof card.result === "object") for (const key of ["items", "results", "records", "pages", "findings", "tasks", "ledger"]) {
     const list = (card.result as Record<string, unknown>)[key];
-    if (Array.isArray(list)) results.push({ label: key[0].toUpperCase() + key.slice(1), value: `${list.length} items` });
+    if (Array.isArray(list)) collection(key[0].toUpperCase() + key.slice(1), list);
   }
   return { card_id: card.card_id, kind: card.kind, summary: clean(card.summary), status: card.status, cost_estimate_usd: card.cost_estimate_usd, retry_safe: card.retry_safe === true, receipt_status: card.receipt_status,
     targets, results, error: card.error ? clean(card.error) : undefined };
