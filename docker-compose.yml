@@ -268,6 +268,13 @@ services:
       R2_ACCESS_KEY_ID_UPLOADS: ${R2_ACCESS_KEY_ID_UPLOADS:-}
       R2_SECRET_ACCESS_KEY_UPLOADS: ${R2_SECRET_ACCESS_KEY_UPLOADS:-}
       R2_BACKUP_RECIPIENT: ${R2_BACKUP_RECIPIENT:-}
+    # Offline readiness only; completed backups are proved by their R2 manifests.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.path.insert(0, 'jobs/train'); from backup import dump_configuration; dump_configuration()"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     depends_on:
       postgres:
         condition: service_healthy
