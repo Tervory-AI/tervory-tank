@@ -19,6 +19,7 @@ from typing import Any, Literal
 from urllib.parse import urlsplit
 
 import httpx
+import controls
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -225,6 +226,7 @@ def register(app: Any, runtime: dict[str, Any]) -> None:
     @router.post("", dependencies=[Depends(authenticate)])
     async def research(req: ResearchRequest) -> dict[str, Any]:
         policy, model, box = await allowed(req)
+        await controls.refuse_paid(task=TASK, path="research")
         prices = await rates()  # Fail before spending if the fee schedule is unavailable.
         payload = {"model": model, "input": req.question,
                    "max_output_tokens": policy["max_tokens_out"], "stream": False,

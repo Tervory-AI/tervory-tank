@@ -141,6 +141,12 @@ def harness(monkeypatch):
     state = SimpleNamespace(conn=conn, policy=policy, runtime=runtime, seen=seen,
                             data=response_fixture(), code=200, exception=None)
 
+    async def unpaused():
+        return False
+
+    monkeypatch.setattr(research.controls, "paid_paused", unpaused)
+    monkeypatch.setattr(research.controls, "db", runtime["pool"])
+
     class Gateway:
         def __init__(self, **_):
             pass
@@ -242,6 +248,21 @@ async def test_invalid_evidence_still_books_reported_cost(harness):
     assert result.status_code == 502
     assert harness.conn.writes[0][1][6] == Decimal("0.0067")
     assert harness.conn.writes[0][1][8] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_founder_paid_pause_blocks_research_and_records_refusal(harness, monkeypatch):
+    async def paused():
+        return True
+
+    monkeypatch.setattr(research.controls, "paid_paused", paused)
+    result = await call(harness)
+    assert result.status_code == 503
+    assert not harness.seen and not harness.conn.price_reads
+    assert len(harness.conn.writes) == 1
+    query, args = harness.conn.writes[0]
+    assert "tank.control_log" in query and "paid_refused" in query
+    assert args[1:] == (research.TASK, "research")
 
 
 @pytest.mark.asyncio

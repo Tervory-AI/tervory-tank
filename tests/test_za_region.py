@@ -396,7 +396,9 @@ class _Conn:
             "cache_scope": "none",
         }
 
-    async def fetchval(self, *_args: object, **_kwargs: object) -> str:
+    async def fetchval(self, sql: str, *_args: object, **_kwargs: object) -> str | bool:
+        if "tank.controls" in sql:
+            return False  # Paid work is enabled in this routing fixture.
         return "candidate"
 
     async def execute(self, *_args: object, **_kwargs: object) -> str:
@@ -572,6 +574,10 @@ class _CourtPool:
             "system_prompt": None,
             "cache_scope": "none",
         }
+
+    async def fetchval(self, sql: str, *_args: object) -> bool:
+        assert "tank.controls" in sql
+        return False
 
     async def execute(self, *_args: object, **_kwargs: object) -> str:
         return "INSERT 0 1"

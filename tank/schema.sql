@@ -826,6 +826,28 @@ CREATE TABLE IF NOT EXISTS tank.training_snapshot_batches (
     PRIMARY KEY (tenant_id, region, day, agent, batch_id)
 );
 
+-- DASH-1: founder controls and immutable audit history, local to this box.
+CREATE TABLE IF NOT EXISTS tank.controls (
+    tenant_id uuid NOT NULL,
+    name text NOT NULL CHECK (name = 'paid_paused'),
+    value boolean NOT NULL,
+    updated_by text NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, name)
+);
+CREATE TABLE IF NOT EXISTS tank.control_log (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    name text NOT NULL,
+    by_user text NOT NULL,
+    old_value boolean NOT NULL,
+    new_value boolean NOT NULL,
+    at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE tank.control_log ADD COLUMN IF NOT EXISTS task text;
+ALTER TABLE tank.control_log ADD COLUMN IF NOT EXISTS path text;
+CREATE INDEX IF NOT EXISTS control_log_tenant_at ON tank.control_log (tenant_id, at DESC);
+
 -- MODELS-2: provider tool charges are expenses, scoped to the platform price book.
 -- Checked 2026-10-21: https://docs.perplexity.ai/docs/getting-started/pricing
 -- Presets fast/low/medium/high use Fast Search ($0.001/invocation); fetch is $0.0005.
