@@ -122,3 +122,24 @@ def test_r2_tunnel_reaches_only_pinned_address(r2_host):
     finally:
         server.close()
     assert calls == [('1.1.1.1', 443)]
+
+
+def test_real_storage_transport_resolves_only_room_proxy(monkeypatch, r2_host):
+    calls = []
+    def resolve(host, *args, **kwargs):
+        calls.append(host)
+        assert host in ('egress-proxy', b'egress-proxy')
+        raise OSError('test proxy unavailable')
+    monkeypatch.setattr(socket, 'getaddrinfo', resolve)
+    async def scenario():
+        store = Storage('radix', environ={'R2_ACCOUNT_ID': r2_host.split('.')[0],
+                        'R2_ACCESS_KEY_ID_RADIX': secrets.token_hex(16),
+                        'R2_SECRET_ACCESS_KEY_RADIX': secrets.token_hex(32),
+                        'RADIX_EGRESS_PROXY': 'http://egress-proxy:8080'})
+        try:
+            with pytest.raises(StorageError, match='unreachable'):
+                await store.usage()
+        finally:
+            await store.close()
+    asyncio.run(scenario())
+    assert calls

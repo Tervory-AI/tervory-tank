@@ -307,13 +307,13 @@ def test_missing_backup_recipient_does_not_start_process_or_create_file(tmp_path
 
 
 def test_backup_children_receive_only_needed_credentials(monkeypatch):
-    password = secrets.token_hex(16)
-    monkeypatch.setenv('DATABASE_URL', f'postgresql://agent_base:{password}@postgres:5432/tervory')
+    generated_credential = secrets.token_hex(16)
+    monkeypatch.setenv('DATABASE_URL', f'postgresql://agent_base:{generated_credential}@postgres:5432/tervory')
     monkeypatch.setenv('R2_SECRET_ACCESS_KEY_BASE', secrets.token_hex(32))
     monkeypatch.setenv('HF_TOKEN', secrets.token_hex(32))
     monkeypatch.setenv('TANK_KEY', secrets.token_hex(32))
     env = backup.backup_environment()
-    assert env['PGPASSWORD'] == password
+    assert env['PGPASSWORD'] == generated_credential
     assert env['PGHOST'] == 'postgres'
     assert not ({'DATABASE_URL', 'R2_SECRET_ACCESS_KEY_BASE', 'HF_TOKEN', 'TANK_KEY'} & env.keys())
     assert not any(key.startswith('PG') for key in backup.tool_environment())
