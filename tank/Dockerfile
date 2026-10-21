@@ -2,7 +2,7 @@ FROM python:3.12-slim
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY main.py skala.py skill_costs.py admin.py graduate.py gold.py training.py controls.py dashboards.py research.py bench.py proof.py agent_skills.py cl100k_base.tiktoken cl100k_base.LICENSE storage.py ghost_routes.py command.py workers_status.py schema.sql ./
+COPY main.py skala.py skill_costs.py admin.py graduate.py gold.py training.py controls.py dashboards.py research.py bench.py proof.py savings_defaults.py savings_export.py agent_skills.py cl100k_base.tiktoken cl100k_base.LICENSE storage.py ghost_routes.py command.py workers_status.py schema.sql ./
 COPY skills ./skills
 RUN useradd -m tank && chown -R tank /app
 # Baked at image build. Coolify passes SOURCE_COMMIT. A local build can pass GIT_SHA.

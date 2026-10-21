@@ -181,3 +181,36 @@ jobs:
           # key must decode to "<host>$"). This dummy decodes to dummy.clerk.accounts.dev$.
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA==
           CLERK_SECRET_KEY: sk_test_dummy
+
+  savings-page:
+    needs: [changes]
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.full == 'true' }}
+    # Chromium system dependencies need sudo; keep this job on GitHub hosted runners.
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install workspace and browser test packages
+        run: |
+          if [ -f workspace/package-lock.json ]; then
+            npm --prefix workspace ci --no-audit --no-fund
+          else
+            npm --prefix workspace install --no-package-lock --no-audit --no-fund
+          fi
+          npm install --prefix "$RUNNER_TEMP/core2-browser" --no-audit --no-fund esbuild@0.28.2 playwright@1.64.1
+          "$RUNNER_TEMP/core2-browser/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Check savings pages at 375px and 1440px
+        run: |
+          CORE2_ESBUILD_PATH="$RUNNER_TEMP/core2-browser/node_modules/esbuild" \
+          CORE2_PLAYWRIGHT_PATH="$RUNNER_TEMP/core2-browser/node_modules/playwright" \
+          CORE2_SCREENSHOT_DIR="$RUNNER_TEMP/core2-screenshots" \
+          node tests/test_core2_savings_page.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: savings-page-screenshots
+          path: ${{ runner.temp }}/core2-screenshots
+          if-no-files-found: warn

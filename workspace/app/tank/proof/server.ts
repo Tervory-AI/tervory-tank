@@ -8,7 +8,7 @@ import type { Proof } from "./view";
 
 export type ProofFilters = { tenant_id?: string; task?: string; start?: string; end?: string; page?: string };
 
-export async function proofResponse(filters: ProofFilters & { until?: string; member?: string; population?: string; free_only?: string } = {}, format?: "csv" | "pdf", endpoint: "" | "/savings" | "/savings/rows" | "/savings/export/csv" | "/savings/export/pdf" | "/baselines" = "", init: RequestInit = {}) {
+export async function proofResponse(filters: ProofFilters & { until?: string; member?: string; population?: string; free_only?: string } = {}, format?: "csv" | "pdf", endpoint: "" | "/savings" | "/savings/rows" | "/savings/export/csv" | "/savings/export/pdf" | "/savings/client-copy/csv" | "/savings/client-copy/pdf" | "/baselines" = "", init: RequestInit = {}) {
   const identity = await goldIdentity("platform");
   if (identity.role !== "founder") notFound();
   const query = new URLSearchParams();

@@ -20,7 +20,7 @@ function Lines({ points, cumulative = false, names }: { points: Savings["daily"]
   </svg><div className="savings-axis"><span>{points[0]?.day ?? "No work yet"}</span><span>{dollars(max)} · {names}</span><span>{points.at(-1)?.day}</span></div></>;
 }
 
-export function EvidenceButton({ label, filters, loadRows, founder = false, client = false, exportBase }: { label: string; filters: RowFilter; loadRows: Loader; founder?: boolean; client?: boolean; exportBase?: string }) {
+export function EvidenceButton({ label, filters, loadRows, founder = false, client = false, exportBase, clientExportBase }: { label: string; filters: RowFilter; loadRows: Loader; founder?: boolean; client?: boolean; exportBase?: string; clientExportBase?: string }) {
   const dialog = useRef<HTMLDialogElement>(null), trigger = useRef<HTMLButtonElement>(null);
   const [data,setData] = useState<SavingsRows | null>(null), [error,setError] = useState(false), [busy,setBusy] = useState(false);
   const heading = useId();
@@ -45,6 +45,7 @@ export function EvidenceButton({ label, filters, loadRows, founder = false, clie
           {founder && r.id && <p className="savings-internal">{r.id} · {r.model} · {r.excluded_reason ?? "Included in recorded costs"}</p>}
         </article>)}
         <nav aria-label="Work pages"><button disabled={!data.page || busy} onClick={() => void load(data.page-1)}>Previous</button><span>Page {data.page+1}</span><button disabled={!data.has_more || busy} onClick={() => void load(data.page+1)}>Next</button></nav>
+        {clientExportBase && <p><a href={`${clientExportBase}&page=${data.page}&format=csv`}>Client copy of this page as CSV</a> · <a href={`${clientExportBase}&page=${data.page}&format=pdf`}>Client copy of this page as PDF</a></p>}
         {exportBase && <p><a href={`${exportBase}&page=${data.page}&format=csv`}>Export this page as CSV</a> · <a href={`${exportBase}&page=${data.page}&format=pdf`}>Export this page as PDF</a></p>}
       </>}
     </dialog></>;
@@ -92,7 +93,7 @@ export function SavingsLive({ initial, loadReport, loadRevision, loadRows }: { i
     async function refresh() { if(running) return; running=true; try {const next=await loadReport();if(!disposed){setData(next);setError(false);}} catch {if(!disposed)setError(true);} finally {running=false;} }
     async function checkJobs() { try {const next=await loadRevision(); if(revision!==undefined && revision!==next.revision) await refresh();revision=next.revision;} catch {if(!disposed)setError(true);} }
     void checkJobs();
-    const periodic=setInterval(refresh,60000), jobs=setInterval(checkJobs,5000);
+    const periodic=setInterval(refresh,60000), jobs=setInterval(checkJobs,20000);
     const focus=() => {void refresh();}; window.addEventListener("focus",focus);
     return () => {disposed=true;clearInterval(periodic);clearInterval(jobs);window.removeEventListener("focus",focus);};
   },[loadReport,loadRevision,initial?.revision]);
