@@ -1,13 +1,14 @@
 // COMMAND-1 Lane A wire contract; server-free so streaming can be tested offline.
 export type Money = number | null;
 export type Totals = { cost_usd: Money; baseline_cost_usd: Money; saved_usd: Money; auto_cost_usd?: Money };
-export type ReceiptRow = Totals & { step_id: string; model?: string; baseline_model?: string; tokens_in?: number; tokens_out?: number; ledger_id: string };
-export type Receipt = { rows: ReceiptRow[]; totals: Totals };
-export type Attachment = { name: string; content_type: string; text?: string; attachment_id?: string; size?: number };
+export type ReceiptRow = Totals & { step_id: string; model?: string; baseline_model?: string; tokens_in?: number; tokens_out?: number; ledger_id: string; cost_status?: string; baseline_status?: string };
+export type Receipt = { rows: ReceiptRow[]; totals: Totals; status?: string; step_id?: string };
+export type Attachment = { name: string; content_type: string; text?: string; attachment_id?: string; size?: number; model_readable?: boolean };
 export type Message = { message_id: string; role: "user" | "assistant"; content: string; receipt?: Receipt; attachments?: Attachment[] };
-export type Step = { step_id: string; label: string; actor: string; status: "planned" | "running" | "done" | "failed"; link?: string };
-export type Card = { card_id: string; kind: "approve_skill" | "paid_run" | "build" | "retire" | "other"; summary: string; cost_estimate_usd?: Money; status?: string };
-export type Thread = { thread_id: string; title: string; updated_at: string; spent_usd: Money; saved_usd: Money };
+export type Step = { step_id: string; label: string; actor: string; status: "planned" | "running" | "done" | "failed"; link?: string; receipt_status?: string };
+export type CardDetail = { label: string; value: string; href?: string };
+export type Card = { card_id: string; kind: "approve_skill" | "paid_run" | "build" | "retire" | "other"; summary: string; cost_estimate_usd?: Money; status?: string; tool?: string; arguments?: Record<string, unknown>; result?: unknown; retry_safe?: boolean; error?: string; receipt_status?: string; targets?: CardDetail[]; results?: CardDetail[] };
+export type Thread = { thread_id: string; title: string; updated_at: string; spent_usd: Money; saved_usd: Money; receipt_status?: string };
 export type Snapshot = { thread: Thread; messages: Message[]; steps: Step[]; cards: Card[]; seq?: number; receipts?: ReceiptRow[]; job_receipts?: Receipt[] };
 export type ModelOption = { value: string; label: string; inputPerM: Money; outputPerM: Money };
 export type Event = { type: string; data: Record<string, unknown>; seq?: number };
@@ -47,15 +48,50 @@ export function upsert<T>(rows: T[], row: T, key: keyof T): T[] {
   return rows.some(item => item[key] === row[key]) ? rows.map(item => item[key] === row[key] ? row : item) : [...rows, row];
 }
 
-/** Lane A persists receipt rows separately, keyed to the answer by step_id. */
+export function receiptFor(rows: ReceiptRow[], step_id?: string, pending = false): Receipt {
+  const sum = (key: "cost_usd" | "baseline_cost_usd" | "saved_usd") => !pending && rows.length && rows.every(row => typeof row[key] === "number") ? rows.reduce((total, row) => total + row[key]!, 0) : null;
+  return { step_id, rows, status: pending || !rows.length || rows.some(row => row.cost_usd === null) ? "pending" : "recorded", totals: { cost_usd: sum("cost_usd"), baseline_cost_usd: sum("baseline_cost_usd"), saved_usd: sum("saved_usd") } };
+}
+/** Reconstruct durable empty receipts from the step/card markers, without inventing zero. */
 export function normalizeSnapshot(snapshot: Snapshot): Snapshot {
-  const rows = snapshot.receipts ?? [];
-  const sum = (items: ReceiptRow[], key: "cost_usd" | "baseline_cost_usd" | "saved_usd") => items.every(row => typeof row[key] === "number") ? items.reduce((total, row) => total + row[key]!, 0) : null;
-  const receiptFor = (items: ReceiptRow[]): Receipt => ({ rows: items, totals: { cost_usd: sum(items, "cost_usd"), baseline_cost_usd: sum(items, "baseline_cost_usd"), saved_usd: sum(items, "saved_usd") } });
+  const groups = new Map<string, Receipt>();
+  for (const receipt of snapshot.job_receipts ?? []) if (receipt.step_id) groups.set(receipt.step_id, receipt);
+  for (const row of snapshot.receipts ?? []) {
+    const rows = groups.get(row.step_id)?.rows ?? [];
+    groups.set(row.step_id, receiptFor(upsert(rows, row, "ledger_id"), row.step_id));
+  }
+  const pending = new Set([
+    ...snapshot.steps.filter(step => step.receipt_status === "pending").map(step => step.step_id),
+    ...snapshot.cards.filter(card => card.receipt_status === "pending" || ["executing", "unknown"].includes(card.status ?? "")).map(card => card.card_id),
+  ]);
+  for (const id of pending) groups.set(id, receiptFor(groups.get(id)?.rows ?? [], id, true));
   const messages = snapshot.messages.map(message => {
-    const matches = rows.filter(row => row.step_id === message.message_id);
-    return { ...message, receipt: message.receipt ?? (matches.length ? receiptFor(matches) : undefined) };
+    const receipt = groups.get(message.message_id) ?? message.receipt;
+    groups.delete(message.message_id);
+    return { ...message, receipt };
   });
-  const attached = new Set(messages.flatMap(message => message.receipt?.rows.map(row => row.ledger_id) ?? []));
-  return { ...snapshot, messages, job_receipts: snapshot.job_receipts ?? rows.filter(row => !attached.has(row.ledger_id)).map(row => receiptFor([row])) };
+  return { ...snapshot, thread: pending.size ? { ...snapshot.thread, receipt_status: "pending", spent_usd: null, saved_usd: null } : snapshot.thread, messages, job_receipts: [...groups.values(), ...(snapshot.job_receipts ?? []).filter(receipt => !receipt.step_id)] };
+}
+/** A work receipt must never be attached to whichever answer happens to be streaming. */
+export function applyReceipt(snapshot: Snapshot, receipt: Receipt, answerId: string): Snapshot {
+  const ids = receipt.step_id ? [receipt.step_id] : [...new Set(receipt.rows.map(row => row.step_id))];
+  if (!ids.length) return snapshot;
+  let next = snapshot;
+  for (const id of ids) {
+    const isAnswer = snapshot.steps.some(step => step.step_id === id && step.actor === "Tervory") && !snapshot.cards.some(card => card.card_id === id);
+    const messageId = snapshot.messages.some(message => message.message_id === id) ? id : isAnswer ? answerId : undefined;
+    const previous = messageId ? next.messages.find(message => message.message_id === messageId)?.receipt : next.job_receipts?.find(item => item.step_id === id);
+    const incoming = receipt.rows.filter(row => row.step_id === id);
+    const rows = incoming.reduce((all, row) => upsert(all, row, "ledger_id"), previous?.rows ?? []);
+    // Receipt events are row deltas, so keep earlier evidence for the same step.
+    const part = receiptFor(rows, id, receipt.status === "pending");
+    if (ids.length === 1 && !previous?.rows.length) part.totals = receipt.totals;
+    if (messageId) next = { ...next, messages: next.messages.map(message => message.message_id === messageId ? { ...message, receipt: part } : message) };
+    else next = { ...next, job_receipts: upsert(next.job_receipts ?? [], part, "step_id") };
+  }
+  if (receipt.status === "pending") next = { ...next, thread: { ...next.thread, receipt_status: "pending", spent_usd: null, saved_usd: null } };
+  return next;
+}
+export function canConfirm(card: Card): boolean {
+  return ["pending", "awaiting_confirmation"].includes(card.status ?? "pending") || (card.status === "failed" && card.retry_safe === true);
 }

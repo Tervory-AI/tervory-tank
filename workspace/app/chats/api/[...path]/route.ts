@@ -1,13 +1,33 @@
 import { activeTenant } from "@/lib/tenant";
 import { isFounder } from "@/lib/admin";
-import { commandRequest, listRoster } from "@/lib/tank";
+import { commandRequest, CommandRequestError, listRoster } from "@/lib/tank";
 import { modelValue } from "../../models";
-import { clientText, presentReceipt, presentSnapshot, presentThread, visibleCard } from "../../presentation";
+import { clientText, presentCard, presentReceipt, presentSnapshot, presentThread, visibleCard } from "../../presentation";
 import { normalizeSnapshot, readEvents, type Card, type Receipt, type Snapshot, type Thread } from "../../contract";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 type Context = { params: Promise<{ path: string[] }> };
 const json = (data: unknown, status = 200) => Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
+const attachmentId = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+const filename = (value: unknown): value is string => typeof value === "string" && value.length > 0 && value.length <= 200 && !/[\\/\x00-\x1f\x7f]/.test(value) && ![".", ".."].includes(value);
+const disposition = (name: string) => `attachment; filename*=UTF-8''${encodeURIComponent(name).replace(/['()*]/g, char => `%${char.charCodeAt(0).toString(16)}`)}`;
+function download(upstream: Response, name?: string) {
+  // Forward no cookies, redirects, inline media types or unvalidated headers.
+  const header = upstream.headers.get("content-disposition") ?? "";
+  const safe = /^attachment; filename\*=UTF-8''[a-zA-Z0-9!#$&+.^_`|~%\-]*$/.test(header) ? header : disposition("download");
+  return new Response(upstream.body, { headers: { "Content-Type": "application/octet-stream", "Content-Disposition": name ? disposition(name) : safe, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
+}
+async function boundedBody(request: Request, limit: number): Promise<Uint8Array> {
+  const reader = request.body?.getReader();
+  if (!reader) return new Uint8Array();
+  const chunks: Uint8Array[] = []; let size = 0;
+  try {
+    while (true) { const { value, done } = await reader.read(); if (done) break; size += value.length; if (size > limit) throw new CommandRequestError(413, "attachment_limit", "Attach files no larger than 5 MB."); chunks.push(value); }
+  } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+  const bytes = new Uint8Array(size); let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+  return bytes;
+}
 async function handle(request: Request, context: Context): Promise<Response> {
   try {
     if (request.method !== "GET" && request.headers.get("origin") !== new URL(request.url).origin) return json({ error: "This request must come from your workspace." }, 403);
@@ -22,8 +42,18 @@ async function handle(request: Request, context: Context): Promise<Response> {
     if (fileRequest) {
       const snapshot: Snapshot = await (await commandRequest(identity, `threads/${path[1]}`, { signal: request.signal })).json();
       const file = snapshot.messages.find(message => message.message_id === path[3])?.attachments?.[Number(path[4])];
-      if (!file || typeof file.text !== "string") return json({ error: "This file is unavailable." }, 404);
-      return new Response(file.text, { headers: { "Content-Type": "text/plain; charset=utf-8", "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(file.name).replace(/['()*]/g, char => `%${char.charCodeAt(0).toString(16)}`)}`, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
+      if (!file) return json({ error: "This file is unavailable." }, 404);
+      if (file.attachment_id && attachmentId(file.attachment_id)) return download(await commandRequest(identity, `attachments/${file.attachment_id}`, { signal: request.signal }), file.name);
+      if (typeof file.text !== "string") return json({ error: "This file is unavailable." }, 404);
+      return new Response(file.text, { headers: { "Content-Type": "text/plain; charset=utf-8", "Content-Disposition": disposition(file.name), "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
+    }
+    if (path.length === 2 && path[0] === "attachments" && attachmentId(path[1]) && method === "GET") return download(await commandRequest(identity, target, { signal: request.signal }));
+    if (/^threads\/[\w-]+\/attachments$/.test(target) && method === "POST") {
+      const name = new URL(request.url).searchParams.get("name");
+      if (!filename(name)) return json({ error: "Use a filename of 1 to 200 characters without slashes or control characters." }, 400);
+      const bytes = await boundedBody(request, 5 * 1024 * 1024);
+      const result = await (await commandRequest(identity, `${target}?${new URLSearchParams({ name })}`, { method, body: bytes as BodyInit, headers: { "content-type": "application/octet-stream" }, signal: request.signal })).json();
+      return json({ attachment_id: result.attachment_id, name, size: result.size, model_readable: result.model_readable === true });
     }
     const valid = (target === "threads" && ["GET", "POST"].includes(method))
       || (/^threads\/[\w-]+$/.test(target) && ["GET", "PATCH"].includes(method))
@@ -46,8 +76,8 @@ async function handle(request: Request, context: Context): Promise<Response> {
         const model = !input.model || input.model === "auto" ? "auto" : roster.find(row => modelValue(row.name) === input.model)?.name;
         if (!model) return json({ error: "That option is no longer available. Choose another." }, 400);
         const attachments = input.attachments ?? [];
-        if (!Array.isArray(attachments) || attachments.length > 5 || attachments.some(file => !file || typeof file.name !== "string" || !file.name || file.name.length > 200 || typeof file.text !== "string" || file.text.length > 200000 || file.text.includes("\0"))) return json({ error: "Attach text files with no more than 200,000 characters each." }, 400);
-        body = { text: input.text.trim(), model, attachments: attachments.map(file => ({ name: file.name, text: file.text })) };
+        if (!Array.isArray(attachments) || attachments.length > 5 || attachments.some(file => !file || (file.attachment_id !== undefined ? !attachmentId(file.attachment_id) : !filename(file.name) || typeof file.text !== "string" || file.text.length > 200000 || file.text.includes("\0")))) return json({ error: "Attach up to five stored files or text files of no more than 200,000 characters each." }, 400);
+        body = { text: input.text.trim(), model, attachments: attachments.map(file => file.attachment_id ? { attachment_id: file.attachment_id } : { name: file.name, text: file.text }) };
       } else {
         if (input.title !== undefined && (typeof input.title !== "string" || !input.title.trim() || input.title.length > 160)) return json({ error: "Use a chat name of 1 to 160 characters." }, 400);
         body = input.title ? { title: input.title.trim() } : {};
@@ -83,8 +113,9 @@ async function handle(request: Request, context: Context): Promise<Response> {
                 if (["done", "receipt", "error"].includes(event.type)) flush();
                 if (event.type === "receipt") data = presentReceipt(event.data as unknown as Receipt, false);
                 if (event.type === "step") data = { ...event.data, label: clientText(String(event.data.label), names), actor: clientText(String(event.data.actor), names) };
-                if (event.type === "card") { if (!visibleCard(event.data as unknown as Card, false)) return; data = { ...event.data, summary: clientText(String(event.data.summary), names) }; }
+                if (event.type === "card") { if (!visibleCard(event.data as unknown as Card, false)) return; data = presentCard(event.data as unknown as Card, false, names); }
               }
+              if (founder && event.type === "card") data = presentCard(event.data as unknown as Card, true, names);
               if (["token", "step", "card", "receipt", "done", "error"].includes(event.type)) emit(event.type, data, event.seq);
             });
             flush();
@@ -98,9 +129,10 @@ async function handle(request: Request, context: Context): Promise<Response> {
     const result = await upstream.json();
     if (method === "GET" && target === "threads") return json((result as Thread[]).map(row => presentThread(row, founder, names)));
     if (method === "GET" && path.length === 2 && path[0] === "threads") return json(presentSnapshot(normalizeSnapshot(result as Snapshot), founder, names));
+    if (target.startsWith("cards/")) return json(visibleCard(result as Card, founder) ? presentCard(result as Card, founder, names) : { ok: true });
     // Writes only acknowledge success; authoritative state is refreshed from the thread.
     return json(target === "threads" && method === "POST" ? { thread_id: result.thread_id } : { ok: true });
-  } catch { return json({ error: "This request could not be completed. Reload the chat before trying again." }, 502); }
+  } catch (error) { if (error instanceof CommandRequestError) return json({ error: error.message, code: error.code }, error.status); return json({ error: "This request could not be completed. Reload the chat before trying again." }, 502); }
 }
 export const GET = handle;
 export const POST = handle;

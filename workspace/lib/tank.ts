@@ -837,19 +837,33 @@ export async function setCommandSquad(userId: string, tenantId: string, agent: s
 }
 
 // ---- COMMAND-1: same-box conversations; caller identity is server-owned. ----
+export class CommandRequestError extends Error {
+  constructor(public status: number, public code: string, message: string) { super(message); }
+}
 export async function commandRequest(identity: { tenantId: string; userId: string }, path: string, init: RequestInit = {}): Promise<Response> {
   if (!TANK_API_KEY) throw new Error("The conversation service is not configured.");
   const url = new URL(`/v1/command/${path}`, TANK_URL);
   url.searchParams.set("tenant_id", identity.tenantId);
   url.searchParams.set("user_id", identity.userId);
   const headers = new Headers(init.headers);
-  headers.set("content-type", "application/json");
+  if (!headers.has("content-type")) headers.set("content-type", "application/json");
   headers.set("x-tank-key", TANK_API_KEY);
   headers.set("x-tervory-user", identity.userId);
   headers.set("x-tervory-tenant", identity.tenantId);
   headers.set("x-tervory-admin", identity.userId);
-  const body = init.body;
-  const response = await fetch(url, { ...init, body, headers, cache: "no-store", redirect: "error" });
-  if (!response.ok) { await response.body?.cancel(); throw new Error("The conversation service could not complete this request. Please reload before trying again."); }
+  // activeTenant provides identity, not squad entitlements. No verified grant
+  // source exists in this lane. Never turn caller headers into tool authority.
+  headers.delete("x-tervory-squad");
+  const response = await fetch(url, { ...init, headers, cache: "no-store", redirect: "error" });
+  if (!response.ok) {
+    const detail = await response.json().then(body => body.detail).catch(() => undefined);
+    if (response.status === 409 && detail === "Pinned models await a router capability; choose Auto") throw new CommandRequestError(409, "pin_pending", "Choosing a specific answer option is not supported yet. Choose Auto to continue.");
+    if (response.status === 422 && detail === "Model is not on the roster") throw new CommandRequestError(422, "pin_unavailable", "That answer option is no longer available. Choose Auto to continue.");
+    if (response.status === 409 && detail === "An answer is already running in this thread") throw new CommandRequestError(409, "answer_running", "An answer is already running. Wait for it to finish before sending again.");
+    if (response.status === 403) throw new CommandRequestError(403, "access_denied", "Access to this action has not been verified for your account. No new permission has been granted.");
+    if (response.status === 404) throw new CommandRequestError(404, "not_found", "This item is unavailable.");
+    if (response.status === 413) throw new CommandRequestError(413, "attachment_limit", "The file or this chat's storage limit has been reached (5 MB per file, 20 files and 20 MB per chat).");
+    throw new CommandRequestError(502, "request_failed", "This request could not be completed. Reload the chat before trying again.");
+  }
   return response;
 }

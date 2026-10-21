@@ -3,14 +3,14 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { SquadLinks } from "../squad-links";
 import { clientText, visibleCard } from "./presentation";
-import { dollars, readEvents, safeLink, upsert, type Attachment, type Card, type Message, type ModelOption, type Receipt, type Snapshot, type Step, type Thread } from "./contract";
+import { applyReceipt, canConfirm, dollars, readEvents, safeLink, upsert, type Attachment, type Card, type Message, type ModelOption, type Receipt, type Snapshot, type Step, type Thread } from "./contract";
 import doneDot from "./assets/done.svg";
 import attentionDot from "./assets/attention.svg";
 import plannedDot from "./assets/planned.svg";
 import "./window.css";
 
 async function api(path: string, init: RequestInit = {}) {
-  const response = await fetch(`/chats/api/${path}`, { ...init, headers: { "Content-Type": "application/json" }, cache: "no-store" });
+  const response = await fetch(`/chats/api/${path}`, { ...init, headers: { "Content-Type": "application/json", ...init.headers }, cache: "no-store" });
   if (!response.ok) { const body = await response.json().catch(() => ({})); throw new Error(body.error ?? "Your request could not be completed."); }
   return response;
 }
@@ -19,13 +19,14 @@ const statusAsset = (status: Step["status"]) => { const asset = status === "done
 const statusLabel = { planned: "Planned", running: "Running", done: "Done", failed: "Failed" };
 
 function CostReceipt({ receipt, founder, threadId, messageId }: { receipt: Receipt; founder: boolean; threadId: string; messageId: string }) {
-  const rows = <div className="cw-receipt-rows">{receipt.rows.map((row, index) => <a className="cw-receipt-row" key={`${row.ledger_id}-${index}`} href={`/chats/evidence/${encodeURIComponent(threadId)}/${encodeURIComponent(row.ledger_id)}`}>
+  const pending = receipt.status === "pending";
+  const rows = <div className="cw-receipt-rows">{pending && <p className="cw-note">Cost pending. Totals remain unavailable until the work is accounted for.</p>}{receipt.rows.map((row, index) => <a className="cw-receipt-row" key={`${row.ledger_id}-${index}`} href={`/chats/evidence/${encodeURIComponent(threadId)}/${encodeURIComponent(row.ledger_id)}`}>
     <span>{founder ? row.step_id : `Step ${index + 1}`}</span>
     {founder && <span>{row.model === "code" ? "code (no model)" : row.model}<small>{row.tokens_in ?? "—"} in · {row.tokens_out ?? "—"} out</small></span>}
-    <span>Cost {dollars(row.cost_usd)}</span><span>{founder && row.baseline_model ? `${row.baseline_model} ` : "Would have cost "}{dollars(row.baseline_cost_usd)}</span><span className="cw-saving">Saved {dollars(row.saved_usd)}</span>
+    <span>Cost {dollars(row.cost_usd)}</span><span>{founder && row.baseline_model ? `${row.baseline_model} ` : "Would have cost "}{dollars(row.baseline_cost_usd)}</span><span className="cw-saving">Saved {dollars(row.saved_usd)}{row.baseline_status === "baseline pending" && <small>Comparison pending</small>}</span>
     {founder && <small>{row.ledger_id}</small>}
   </a>)}<a className="cw-receipt-total" href={`/chats/evidence/${encodeURIComponent(threadId)}`}><span>Total</span><span>Cost {dollars(receipt.totals.cost_usd)}</span><span>Would have cost {dollars(receipt.totals.baseline_cost_usd)}</span><span>Saved {dollars(receipt.totals.saved_usd)}</span>{receipt.totals.auto_cost_usd !== undefined && <span>Auto would have cost {dollars(receipt.totals.auto_cost_usd)}</span>}</a></div>;
-  return <section className="cw-receipt" id={`cost-${messageId}`} aria-label="Answer cost"><div className="cw-receipt-desktop"><header><strong>Receipt</strong><small>Each step links to its cost details</small></header>{rows}</div><details className="cw-receipt-mobile"><summary>Receipt · {dollars(receipt.totals.cost_usd)} · would have cost {dollars(receipt.totals.baseline_cost_usd)} · saved {dollars(receipt.totals.saved_usd)}</summary>{rows}</details></section>;
+  return <section className="cw-receipt" id={`cost-${messageId}`} aria-label="Answer cost"><div className="cw-receipt-desktop"><header><strong>Receipt{pending ? " · Cost pending" : ""}</strong><small>Each step links to its cost details</small></header>{rows}</div><details className="cw-receipt-mobile"><summary>Receipt{pending ? " · Cost pending" : ""} · {dollars(receipt.totals.cost_usd)} · would have cost {dollars(receipt.totals.baseline_cost_usd)} · saved {dollars(receipt.totals.saved_usd)}</summary>{rows}</details></section>;
 }
 
 export function CommandWindow({ initialThreads, models, founder, account, initialError = "" }: { initialThreads: Thread[]; models: ModelOption[]; founder: boolean; account: string; initialError?: string }) {
@@ -47,6 +48,7 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
   const generation = useRef(0);
   const streamAbort = useRef<AbortController | null>(null);
   const sendingRef = useRef(false);
+  const uncertainCards = useRef(new Set<string>());
   const active = useRef<string | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const workButton = useRef<HTMLButtonElement>(null);
@@ -59,10 +61,16 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
   async function load(id: string, version = generation.current) {
     const next = await (await api(`threads/${encodeURIComponent(id)}`)).json() as Snapshot;
     if (generation.current !== version || active.current !== id) return;
+    next.cards = next.cards.map(card => {
+      if (!uncertainCards.current.has(card.card_id)) return card;
+      if (["pending", "awaiting_confirmation"].includes(card.status ?? "pending")) return { ...card, status: "unknown", retry_safe: false, error: "Confirmation could not be verified. Do not repeat this action until its outcome is checked." };
+      uncertainCards.current.delete(card.card_id); return card;
+    });
     setSnapshot(next); setThreads(rows => upsert(rows, next.thread, "thread_id"));
   }
   async function choose(id: string) {
-    if (sendingRef.current) return;
+    if (sendingRef.current || cardBusy) return;
+    setAttachments([]);
     const version = ++generation.current;
     active.current = id; setSelected(id); setSnapshot(null); setBusy(true); setError(""); setMenu(false); setRenaming(false);
     window.history.replaceState(null, "", `/chats?thread=${encodeURIComponent(id)}`);
@@ -97,39 +105,63 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
   function closeMenu() { setMenu(false); requestAnimationFrame(() => menuButton.current?.focus()); }
 
   async function newThread() {
-    if (busy || sendingRef.current) return;
+    if (busy || cardBusy || sendingRef.current) return;
     setBusy(true); setError("");
     try { const created = await (await api("threads", { method: "POST", body: "{}" })).json(); await refreshThreads(); await choose(created.thread_id); setText(""); setAttachments([]); }
     catch (err) { setError(problem(err)); } finally { setBusy(false); }
   }
   async function rename(event: FormEvent) {
-    event.preventDefault(); if (!selected || busy) return;
+    event.preventDefault(); if (!selected || busy || cardBusy) return;
     ++generation.current; setBusy(true); setError("");
     try { await api(`threads/${selected}`, { method: "PATCH", body: JSON.stringify({ title }) }); await load(selected); await refreshThreads(); setRenaming(false); }
     catch (err) { setError(problem(err)); } finally { setBusy(false); }
   }
   async function decide(card: Card, action: "confirm" | "cancel") {
-    if (cardBusy || !selected || sendingRef.current) return;
+    if (cardBusy || !selected || sendingRef.current || !canConfirm(card)) return;
+    const id = selected;
     ++generation.current; setCardBusy(card.card_id); setError("");
-    try { await api(`cards/${encodeURIComponent(card.card_id)}`, { method: "POST", body: JSON.stringify({ action }) }); await load(selected); }
-    catch (err) { setError(problem(err)); } finally { setCardBusy(null); }
+    if (action === "confirm") {
+      uncertainCards.current.add(card.card_id);
+      setSnapshot(current => current && ({ ...current, cards: upsert(current.cards, { ...card, status: "executing", retry_safe: false }, "card_id") }));
+    }
+    try {
+      const saved = await (await api(`cards/${encodeURIComponent(card.card_id)}`, { method: "POST", body: JSON.stringify({ action }) })).json() as Card;
+      if (saved.card_id === card.card_id && saved.status) {
+        uncertainCards.current.delete(card.card_id);
+        setSnapshot(current => current && ({ ...current, cards: upsert(current.cards, saved, "card_id") }));
+      }
+      await load(id);
+    } catch (err) {
+      if (uncertainCards.current.has(card.card_id)) setSnapshot(current => current && ({ ...current, cards: upsert(current.cards, { ...card, status: "unknown", retry_safe: false, error: "Confirmation could not be verified. Do not repeat this action until its outcome is checked." }, "card_id") }));
+      setError(problem(err));
+    } finally { setCardBusy(null); }
   }
   async function attach(files: FileList | null) {
-    if (!files) return;
+    if (!files || !selected || busy) return;
     const combinedSize = attachments.reduce((n, file) => n + (file.size ?? 0), 0) + Array.from(files).reduce((n, file) => n + file.size, 0);
     if (attachments.length + files.length > 5 || combinedSize > 5 * 1024 * 1024) { setError("Attach up to five files, totaling no more than 5 MB."); return; }
-    setBusy(true);
+    const id = selected; const version = generation.current;
+    setBusy(true); setError("");
     try {
-      const additions = await Promise.all(Array.from(files).map(async file => {
-        const text = new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer());
-        if (text.length > 200000 || text.includes("\0")) throw new Error("Attach UTF-8 text files with no more than 200,000 characters each.");
-        return { name: file.name, content_type: file.type || "text/plain", size: file.size, text };
-      }));
-      setAttachments(current => [...current, ...additions]);
-    } catch (err) { setError(problem(err)); } finally { setBusy(false); }
+      // Sequential uploads keep successful files usable if a later file fails.
+      for (const file of Array.from(files)) {
+        let addition: Attachment;
+        const isText = file.type.startsWith("text/") || /\.(txt|md|csv|tsv|json|xml|html|log|yaml|yml)$/i.test(file.name);
+        if (isText) {
+          const text = new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer());
+          if (text.length > 200000 || text.includes("\0")) throw new Error("Attach UTF-8 text files with no more than 200,000 characters each.");
+          addition = { name: file.name, content_type: file.type || "text/plain", size: file.size, text, model_readable: true };
+        } else {
+          const saved = await (await api(`threads/${id}/attachments?${new URLSearchParams({ name: file.name })}`, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file })).json();
+          addition = { name: saved.name, content_type: file.type || "application/octet-stream", size: saved.size, attachment_id: saved.attachment_id, model_readable: saved.model_readable === true };
+        }
+        if (generation.current !== version || active.current !== id) return;
+        setAttachments(current => [...current, addition]);
+      }
+    } catch (err) { if (generation.current === version) setError(problem(err)); } finally { setBusy(false); }
   }
   async function send(event: FormEvent) {
-    event.preventDefault(); if (!text.trim() || sendingRef.current || busy || !snapshot || !selected) return;
+    event.preventDefault(); if (!text.trim() || sendingRef.current || busy || cardBusy || !snapshot || !selected) return;
     const id = selected; const requestText = text; const files = attachments;
     sendingRef.current = true; setSending(true); setError("");
     // Invalidate any snapshot already in flight before the new stream starts.
@@ -151,7 +183,8 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
           if (!current) return current;
           if (event.type === "step") return { ...current, steps: upsert(current.steps, data as unknown as Step, "step_id") };
           if (event.type === "card" && visibleCard(data as unknown as Card, founder)) return { ...current, cards: upsert(current.cards, data as unknown as Card, "card_id") };
-          if (event.type === "token" || event.type === "receipt") return { ...current, messages: current.messages.map(message => message.message_id !== localId ? message : { ...message, ...(event.type === "token" ? { content: message.content + String(data.text ?? "") } : { receipt: data as unknown as Receipt }) }) };
+          if (event.type === "receipt") return applyReceipt(current, data as unknown as Receipt, localId);
+          if (event.type === "token") return { ...current, messages: current.messages.map(message => message.message_id !== localId ? message : { ...message, ...(event.type === "token" ? { content: message.content + String(data.text ?? "") } : { receipt: data as unknown as Receipt }) }) };
           return current;
         });
       });
@@ -164,9 +197,20 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
 
   const done = snapshot?.steps.filter(step => step.status === "done").length ?? 0;
   const steps = snapshot?.steps ?? [];
-  const cards = snapshot?.cards.filter(card => visibleCard(card, founder) && (!card.status || ["pending", "awaiting_confirmation"].includes(card.status))) ?? [];
+  const cards = snapshot?.cards.filter(card => visibleCard(card, founder)) ?? [];
   const lastAnswer = snapshot?.messages.filter(message => message.role === "assistant").at(-1)?.message_id;
-  const confirmation = cards.map(card => <section className="cw-confirm" key={card.card_id}><strong className="cw-eyebrow">NEEDS YOUR OK</strong><p>{clean(card.summary)}</p>{card.cost_estimate_usd !== undefined && <p className="cw-meta">Estimated {dollars(card.cost_estimate_usd)}</p>}<p className="cw-note">Nothing runs until you confirm.</p><div className="cw-actions"><button className="cw-primary" disabled={!!cardBusy || sending} onClick={() => void decide(card, "confirm")}>{cardBusy === card.card_id ? "Saving…" : "Confirm"}</button><button disabled={!!cardBusy || sending} onClick={() => void decide(card, "cancel")}>Cancel</button></div></section>);
+  const cardLabels: Record<string, string> = { pending: "NEEDS YOUR OK", awaiting_confirmation: "NEEDS YOUR OK", executing: "RUNNING", unknown: "OUTCOME UNKNOWN", failed: "FAILED", confirmed: "CONFIRMED", cancelled: "CANCELLED" };
+  const confirmation = cards.map(card => <section className="cw-confirm" key={card.card_id} data-status={card.status ?? "pending"}><strong className="cw-eyebrow">{cardLabels[card.status ?? "pending"] ?? "STATUS UNAVAILABLE"}</strong><p>{clean(card.summary)}</p>
+    {!!card.targets?.length && <dl className="cw-card-details">{card.targets.map((target, index) => <div key={index}><dt>{target.label}</dt><dd>{safeLink(target.href) ? <a href={safeLink(target.href)} target="_blank" rel="noreferrer">{clean(target.value)}</a> : clean(target.value)}</dd></div>)}</dl>}
+    {card.cost_estimate_usd !== undefined && <p className="cw-meta">Estimated {dollars(card.cost_estimate_usd)}</p>}
+    {!!card.results?.length && <dl className="cw-card-details" aria-label="Action result">{card.results.map((result, index) => <div key={index}><dt>{result.label}</dt><dd>{safeLink(result.href) ? <a href={safeLink(result.href)} target="_blank" rel="noreferrer">{clean(result.value)}</a> : clean(result.value)}</dd></div>)}</dl>}
+    {card.error && ["failed", "unknown"].includes(card.status ?? "") && <p className="cw-note">{clean(card.error)}</p>}
+    {card.status === "unknown" && <p className="cw-note">Do not repeat this action until its outcome is checked. Retrying is disabled.</p>}
+    {card.status === "executing" && <p className="cw-note">The action is running. Its result will appear here.</p>}
+    {card.status === "failed" && !card.retry_safe && <p className="cw-note">This action cannot safely be retried.</p>}
+    {card.receipt_status === "pending" && <p className="cw-note">Cost pending.</p>}
+    {canConfirm(card) && <><p className="cw-note">{card.status === "failed" ? "The service verified that the action did not start. You can confirm a safe retry." : "Nothing runs until you confirm."}</p><div className="cw-actions"><button className="cw-primary" disabled={!!cardBusy || sending || busy} onClick={() => void decide(card, "confirm")}>{cardBusy === card.card_id ? "Saving…" : card.status === "failed" ? "Retry safely" : "Confirm"}</button><button disabled={!!cardBusy || sending || busy} onClick={() => void decide(card, "cancel")}>Cancel</button></div></>}
+  </section>);
   return <div className={`command-window${menu ? " cw-menu-open" : ""}${work ? " cw-work-open" : ""}`} onKeyDown={event => { if (event.key === "Escape") { if (work) closeWork(); if (menu) closeMenu(); } }}>
     <a className="cw-skip" href="#cw-message">Skip to message</a>
     <header className="cw-mobile-top"><img src="/brand/tervory-logo-reversed.png" alt="Tervory" /><button ref={menuButton} aria-expanded={menu} aria-controls="cw-sidebar" onClick={() => setMenu(true)}>Menu</button></header>
@@ -174,22 +218,22 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
       <div className="cw-brand"><img src="/brand/tervory-logo-reversed.png" alt="Tervory" /><button className="cw-mobile-only" ref={menuClose} onClick={closeMenu}>Close</button></div>
       <a className="cw-account" href="/onboarding">{account}</a>
       <nav aria-label="Workspace">{founder && <a href="/control">Dashboard</a>}<a href="/matters">Projects</a><a href="/chats" aria-current="page">Chats</a><SquadLinks active founder={founder} /></nav>
-      <p className="cw-eyebrow">CHATS</p><button className="cw-new" disabled={busy || sending} onClick={() => void newThread()}>+ New chat</button>
+      <p className="cw-eyebrow">CHATS</p><button className="cw-new" disabled={busy || sending || !!cardBusy} onClick={() => void newThread()}>+ New chat</button>
       <input type="search" aria-label="Search chats" placeholder="Search chats" value={query} onChange={event => setQuery(event.target.value)} />
-      <div className="cw-threads">{threads.filter(thread => thread.title.toLowerCase().includes(query.toLowerCase())).map(thread => <button key={thread.thread_id} className={selected === thread.thread_id ? "selected" : ""} disabled={sending} aria-current={selected === thread.thread_id ? "page" : undefined} onClick={() => void choose(thread.thread_id)}><span>{clean(thread.title)}</span><small>Spent {dollars(thread.spent_usd)} · saved {dollars(thread.saved_usd)}</small></button>)}{!threads.length && <p className="cw-note">Your saved chats will appear here.</p>}</div>
+      <div className="cw-threads">{threads.filter(thread => thread.title.toLowerCase().includes(query.toLowerCase())).map(thread => <button key={thread.thread_id} className={selected === thread.thread_id ? "selected" : ""} disabled={sending || busy || !!cardBusy} aria-current={selected === thread.thread_id ? "page" : undefined} onClick={() => void choose(thread.thread_id)}><span>{clean(thread.title)}</span><small>Spent {dollars(thread.spent_usd)} · saved {dollars(thread.saved_usd)}</small></button>)}{!threads.length && <p className="cw-note">Your saved chats will appear here.</p>}</div>
       <nav className="cw-bottom-nav">{founder && <a href="/ledger">Ledger</a>}<a href="/billing">Billing</a><a href="/data">Files</a><a href="/onboarding">Settings</a></nav>
     </aside>
     <main className="cw-chat" inert={menu || work ? true : undefined}>
-      <header className="cw-thread-header"><div><h1>{snapshot ? clean(snapshot.thread.title) : selected ? "Loading chat…" : "A new conversation"}</h1>{snapshot && <button className="cw-rename" disabled={sending || busy} onClick={() => { setTitle(snapshot.thread.title); setRenaming(true); }}>Rename</button>}</div><button className="cw-work-tab" ref={workButton} onClick={() => setWork(true)} aria-expanded={work}>Work {done}/{steps.length}</button><div className="cw-totals"><a href={selected ? `/chats/evidence/${encodeURIComponent(selected)}` : "#cw-costs"}>Spent {dollars(snapshot?.thread.spent_usd)}</a><a className="cw-saving" href={selected ? `/chats/evidence/${encodeURIComponent(selected)}` : "#cw-costs"}>Saved {dollars(snapshot?.thread.saved_usd)}</a></div></header>
+      <header className="cw-thread-header"><div><h1>{snapshot ? clean(snapshot.thread.title) : selected ? "Loading chat…" : "A new conversation"}</h1>{snapshot && <button className="cw-rename" disabled={sending || busy || !!cardBusy} onClick={() => { setTitle(snapshot.thread.title); setRenaming(true); }}>Rename</button>}</div><button className="cw-work-tab" ref={workButton} onClick={() => setWork(true)} aria-expanded={work}>Work {done}/{steps.length}</button><div className="cw-totals">{snapshot?.thread.receipt_status === "pending" && <span>Cost pending</span>}<a href={selected ? `/chats/evidence/${encodeURIComponent(selected)}` : "#cw-costs"}>Spent {dollars(snapshot?.thread.spent_usd)}</a><a className="cw-saving" href={selected ? `/chats/evidence/${encodeURIComponent(selected)}` : "#cw-costs"}>Saved {dollars(snapshot?.thread.saved_usd)}</a></div></header>
       {renaming && <form className="cw-rename-form" onSubmit={rename}><label>Chat name<input autoFocus value={title} maxLength={160} required onChange={event => setTitle(event.target.value)} /></label><button disabled={busy}>Save</button><button type="button" onClick={() => setRenaming(false)}>Cancel</button></form>}
       {error && <div className="cw-error" role="alert">{error}<button disabled={sending || busy} onClick={() => { setError(""); void (selected ? load(selected) : refreshThreads()).catch(err => setError(problem(err))); }}>Reload</button></div>}
       <div className="cw-messages" aria-label="Conversation" aria-busy={sending || busy}>
         {!selected && <section className="cw-empty"><h2>What would you like to do?</h2><p>Start a chat to ask a question or give your team some work. Your conversation and progress stay together.</p><button disabled={busy} onClick={() => void newThread()}>Start a new chat</button></section>}
         <span id="cw-costs" className="cw-anchor" />
-        {snapshot?.messages.map(message => <article key={message.message_id} className={`cw-message cw-${message.role}`}><div className="cw-message-text">{clean(message.content) || (sending && message.role === "assistant" ? "Working…" : "")}</div>{message.attachments?.length ? <ul className="cw-files">{message.attachments.map((file, i) => <li key={i}>{message.message_id.startsWith("pending-") ? clean(file.name) : <a href={`/chats/api/threads/${encodeURIComponent(selected!)}/files/${encodeURIComponent(message.message_id)}/${i}`} download>{clean(file.name)}</a>}</li>)}</ul> : null}{message.role === "assistant" && (message.receipt ? <CostReceipt receipt={message.receipt} founder={founder} threadId={selected!} messageId={message.message_id} /> : <p className="cw-note">{sending ? "Cost details arrive when this answer is complete." : "Cost details are not available for this answer."}</p>)}{message.message_id === lastAnswer && confirmation}</article>)}
-        {!lastAnswer && confirmation}{snapshot?.job_receipts?.map((receipt, index) => <section key={index}><h2>Work cost</h2><CostReceipt receipt={receipt} founder={founder} threadId={selected!} messageId={`work-${index}`} /></section>)}<div ref={bottom} />
+        {snapshot?.messages.map(message => <article key={message.message_id} className={`cw-message cw-${message.role}`}><div className="cw-message-text">{clean(message.content) || (sending && message.role === "assistant" ? "Working…" : "")}</div>{message.attachments?.length ? <ul className="cw-files">{message.attachments.map((file, i) => <li key={i}>{message.message_id.startsWith("pending-") ? clean(file.name) : <a href={`/chats/api/threads/${encodeURIComponent(selected!)}/files/${encodeURIComponent(message.message_id)}/${i}`} download>{clean(file.name)}</a>}{file.model_readable === false && <small> Stored only · cannot be read in this chat</small>}</li>)}</ul> : null}{message.role === "assistant" && (message.receipt ? <CostReceipt receipt={message.receipt} founder={founder} threadId={selected!} messageId={message.message_id} /> : <p className="cw-note">{sending ? "Cost details arrive when this answer is complete." : "Cost details are not available for this answer."}</p>)}{message.message_id === lastAnswer && confirmation}</article>)}
+        {!lastAnswer && confirmation}{snapshot?.job_receipts?.map((receipt, index) => <section key={index}><h2>Work cost</h2>{receipt.step_id && <p className="cw-note">{clean(steps.find(step => step.step_id === receipt.step_id)?.label ?? cards.find(card => card.card_id === receipt.step_id)?.summary ?? (founder ? receipt.step_id : "Saved work"))}</p>}<CostReceipt receipt={receipt} founder={founder} threadId={selected!} messageId={`work-${index}`} /></section>)}<div ref={bottom} />
       </div>
-      <form className="cw-composer" onSubmit={send}><div className="cw-input"><textarea id="cw-message" aria-label="Message Tervory" placeholder="Ask Tervory, or describe a change to build…" maxLength={20000} value={text} disabled={!snapshot || sending} onChange={event => setText(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><label className="cw-attach" title="Attach UTF-8 text files, up to 200,000 characters each">Attach<input type="file" accept="text/*,.txt,.md,.csv,.tsv,.json,.xml,.html,.log,.yaml,.yml" multiple aria-label="Attach files" disabled={!snapshot || busy || sending} onChange={event => { void attach(event.target.files); event.currentTarget.value = ""; }} /></label><button className="cw-send" disabled={!snapshot || !text.trim() || sending || busy}>{sending ? "Sending…" : "Send"}</button></div><div className="cw-composer-meta"><label>{founder ? "Model" : "Answer option"}<select aria-label={founder ? "Model" : "Answer option"} value={model} disabled={sending} onChange={event => setModel(event.target.value)}><option value="auto">Auto</option>{models.map(option => <option key={option.value} value={option.value}>{option.label} · {dollars(option.inputPerM)} in / {dollars(option.outputPerM)} out per million tokens</option>)}</select></label><small>Auto chooses the cheapest proven option. Attach UTF-8 text files.</small></div>{!!attachments.length && <ul className="cw-files">{attachments.map((file, i) => <li key={i}>{clean(file.name)} <button type="button" aria-label={`Remove ${file.name}`} disabled={sending} onClick={() => setAttachments(files => files.filter((_, index) => index !== i))}>×</button></li>)}</ul>}</form>
+      <form className="cw-composer" onSubmit={send}><div className="cw-input"><textarea id="cw-message" aria-label="Message Tervory" placeholder="Ask Tervory, or describe a change to build…" maxLength={20000} value={text} disabled={!snapshot || sending} onChange={event => setText(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><label className="cw-attach" title="Text can be read; other formats are stored for download only">Attach<input type="file" multiple aria-label="Attach files" disabled={!snapshot || busy || sending} onChange={event => { void attach(event.target.files); event.currentTarget.value = ""; }} /></label><button className="cw-send" disabled={!snapshot || !text.trim() || sending || busy || !!cardBusy}>{sending ? "Sending…" : "Send"}</button></div><div className="cw-composer-meta"><label>{founder ? "Model" : "Answer option"}<select aria-label={founder ? "Model" : "Answer option"} value={model} disabled={sending} onChange={event => setModel(event.target.value)}><option value="auto">Auto</option>{models.map(option => <option key={option.value} value={option.value}>{option.label} · {dollars(option.inputPerM)} in / {dollars(option.outputPerM)} out per million tokens</option>)}</select></label><small>Auto chooses the cheapest proven option. Text can be read; other formats are stored only.</small></div>{!!attachments.length && <ul className="cw-files">{attachments.map((file, i) => <li key={i}>{clean(file.name)}{file.model_readable === false && <small> Stored only · cannot be read in this chat</small>} <button type="button" aria-label={`Remove ${file.name}`} disabled={sending} onClick={() => setAttachments(files => files.filter((_, index) => index !== i))}>×</button></li>)}</ul>}</form>
     </main>
     <aside className="cw-work" aria-label="Work" inert={menu ? true : undefined}><header><h2>Work</h2><span className="cw-meta">{done} of {steps.length} done</span><button className="cw-mobile-only" ref={workClose} aria-label="Close work" onClick={closeWork}>×</button></header>{!steps.length && <p className="cw-note">The steps for this chat will appear here when work begins.</p>}<ol>{steps.map(step => <li className={`cw-step cw-step-${step.status}`} key={step.step_id}><img className="cw-status-dot" src={statusAsset(step.status)} alt="" /><div><strong>{clean(step.label)}</strong><small>{clean(step.actor)}</small>{safeLink(step.link) && <a href={safeLink(step.link)} target="_blank" rel="noreferrer">Open result</a>}</div><span className="cw-step-state">{statusLabel[step.status]}</span></li>)}</ol><p className="cw-live" role="status">{sending ? "Receiving your answer…" : busy ? "Loading…" : "Progress is saved with this chat."}</p></aside>
   </div>;
