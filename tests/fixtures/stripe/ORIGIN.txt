@@ -1,0 +1,3 @@
+event.json is resources.event from stripe-mock embedded/openapi/fixtures3.json
+https://github.com/stripe/stripe-mock/blob/master/embedded/openapi/fixtures3.json
+Stripe's stripe-mock is MIT licensed. This file is the published fixture, unchanged in content.

@@ -126,8 +126,111 @@ def keys_match(left: str, right: str) -> bool:
     return a.startswith(b + " ") or b.startswith(a + " ")
 
 
+def _cite_plain(citation: str) -> str:
+    text = " ".join((citation or "").casefold().split())
+    return text.strip(" .")
+
+
+def same_case_citation(left: str, right: str) -> bool:
+    """True when both strings name the same case, including a docket form.
+
+    'CAC 212' is the same citation as 'CAC212' and 'CAC 212.'. A different
+    case is not. An empty string is not a citation.
+    """
+    a = _cite_plain(left)
+    b = _cite_plain(right)
+    if not a or not b:
+        return False
+    if a == b or keys_match(left, right):
+        return True
+    squeezed_a = re.sub(r"[^a-z0-9]", "", a)
+    squeezed_b = re.sub(r"[^a-z0-9]", "", b)
+    return bool(squeezed_a) and squeezed_a == squeezed_b
+
+
+def citation_hits(citation: str, passages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Passages this citation resolves to.
+
+    The case's own pool citation resolves to that row. A citation the answer
+    adds still has to match a passage.
+    """
+    found: list[dict[str, Any]] = []
+    for item in passages:
+        stored = str(item.get("citation") or "")
+        if keys_match(stored, citation) or same_case_citation(stored, citation):
+            found.append(item)
+    return found
+
+
 def _fold_space(text: str) -> str:
     return " ".join((text or "").split())
+
+
+# PDF extraction and a model's copy of it disagree on these characters.
+# Folding them does not change a word: a paraphrase still fails the quote check.
+_QUOTE_CHARS = str.maketrans(
+    {
+        "\u2018": "'",
+        "\u2019": "'",
+        "\u201a": "'",
+        "\u201b": "'",
+        "\u201c": " ",
+        "\u201d": " ",
+        "\u201e": " ",
+        "\u201f": " ",
+        "\u00ab": " ",
+        "\u00bb": " ",
+        '"': " ",
+        "\u2010": "-",
+        "\u2011": "-",
+        "\u2012": "-",
+        "\u2013": "-",
+        "\u2014": "-",
+        "\u2015": "-",
+        "\u2212": "-",
+        "\u00ad": None,
+        "\u00a0": " ",
+        "\u200b": None,
+        "\ufeff": None,
+        "\u00b9": None,
+        "\u00b2": None,
+        "\u00b3": None,
+        "\u2070": None,
+        "\u2071": None,
+        "\u2074": None,
+        "\u2075": None,
+        "\u2076": None,
+        "\u2077": None,
+        "\u2078": None,
+        "\u2079": None,
+        "\u2020": None,
+        "\u2021": None,
+    }
+)
+_HYPHEN_BREAK = re.compile(r"(?<=[A-Za-z])-\s+(?=[A-Za-z])")
+_HYPHEN_WORD = re.compile(r"(?<=[A-Za-z])-(?=[A-Za-z])")
+_PARA_NO = re.compile(r"\[\d{1,4}\]")
+_LINE_NO = re.compile(r"(?m)^\s*\d{1,4}\.\s+")
+_FOOT_STAR = re.compile(r"(?<=[A-Za-z])\*+")
+
+
+def fold_for_quote(text: str) -> str:
+    """Fold PDF noise so a verbatim quote can be found. Words stay words."""
+    raw = (text or "").translate(_QUOTE_CHARS)
+    raw = _PARA_NO.sub(" ", raw)
+    raw = _LINE_NO.sub(" ", raw)
+    raw = _FOOT_STAR.sub("", raw)
+    raw = _HYPHEN_BREAK.sub("", raw)
+    raw = _HYPHEN_WORD.sub("", raw)
+    return " ".join(raw.split())
+
+
+def quote_in_source(quote: str, source: str) -> bool:
+    """True when the quote is in the source after PDF folding. A paraphrase is not."""
+    folded = fold_for_quote(quote)
+    if not folded:
+        return False
+    return folded in fold_for_quote(source)
 
 
 def _detect_candidates() -> list[Path]:
@@ -343,11 +446,12 @@ def cite_check(statements: list[dict[str, Any]], passages: list[dict[str, Any]])
     results: list[dict[str, Any]] = []
     for statement in statements:
         citation = str(statement.get("citation") or "")
-        quote = _fold_space(str(statement.get("quote") or ""))
-        hits = [item for item in passages if keys_match(str(item.get("citation") or ""), citation)]
+        quote = str(statement.get("quote") or "")
+        folded = fold_for_quote(quote)
+        hits = citation_hits(citation, passages)
         matched = None
         for hit in hits:
-            if quote and quote in _fold_space(str(hit.get("text") or "")):
+            if folded and quote_in_source(quote, str(hit.get("text") or "")):
                 if str(hit.get("status") or "") != "superseded":
                     matched = hit
                     break
@@ -355,7 +459,7 @@ def cite_check(statements: list[dict[str, Any]], passages: list[dict[str, Any]])
         superseded = bool(matched) and str(matched.get("status") or "") == "superseded"
         if matched is None:
             superseded = bool(hits) and all(str(hit.get("status") or "") == "superseded" for hit in hits)
-        quote_match = matched is not None and not superseded and bool(quote)
+        quote_match = matched is not None and not superseded and bool(folded)
         resolved = matched is not None and not superseded
         results.append(
             {

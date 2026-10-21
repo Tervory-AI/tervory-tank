@@ -14,7 +14,6 @@ from typing import Any
 from agents.zenas.core.engine import (
     CHEAP_CALL_USD,
     IDENTIFIER_REFUSED,
-    LAW_ONLY,
     TOP_CALL_USD,
     card_from_proposal,
     cite_check,
@@ -43,7 +42,11 @@ from agents.zenas.core.matters import consider
 from agents.zenas.core.review import review_positions
 from agents.zenas.core.review_switch import card_servable, review_required
 from agents.zenas.core.scope_rules import NOT_YET, REFUSED, classify, ruled
+from agents.zenas.core.precedent import draft_label, drop_unverified_cases, rules_are_draft
 from agents.zenas.core.selftest import is_holdout
+
+# Whole passages, best first. A passage is never sliced to fit.
+_PASSAGE_BUDGET = 8000
 
 _RULE_PROMPT = """Build a rule card from these passages only. Reply with JSON:
 {{"elements":[{{"id":"","test":"","citation":"","quote":""}}],"exceptions":[],"defences":[],"remedies":[],"decision_table":[]}}
@@ -69,6 +72,29 @@ Keep every citation that is already there.
 
 {text}
 """
+
+
+def passages_for_model(passages: list[dict[str, Any]], *, budget: int = _PASSAGE_BUDGET) -> tuple[list[dict[str, Any]], int]:
+    """As many whole passages as fit, in the order given. The first is kept even when it is long."""
+    kept: list[dict[str, Any]] = []
+    for index, passage in enumerate(passages):
+        trial = kept + [passage]
+        if kept and len(json.dumps(trial)) > budget:
+            return kept, len(passages) - index
+        kept.append(passage)
+        if len(json.dumps(kept)) > budget:
+            return kept, len(passages) - index - 1
+    return kept, 0
+
+
+def rule_card_prompt(question: str, passages: list[dict[str, Any]]) -> str:
+    kept, left_out = passages_for_model(passages)
+    body = json.dumps(kept)
+    if left_out == 1:
+        body += "\n1 passage was left out. Each passage above is whole."
+    elif left_out:
+        body += f"\n{left_out} passages were left out. Each passage above is whole."
+    return _RULE_PROMPT.format(question=question, passages=body)
 
 
 def _refuse(reason: str, **extra: Any) -> dict[str, Any]:
@@ -170,6 +196,7 @@ def _public_card(card: dict[str, Any]) -> dict[str, Any]:
         "status": "active" if card.get("active") and card.get("status") == "draft" else card.get("status"),
         "active": bool(card.get("active")),
         "approved_by": card.get("approved_by"),
+        "reviewer_kind": card.get("reviewer_kind") or "",
         "model_used": card.get("model_used"),
         "cost_usd": float(card.get("cost_usd") or 0),
         "decision_table": card.get("decision_table") or [],
@@ -307,11 +334,12 @@ async def build_rule_card(
     as_at: str | None = None,
     client_facts: str = "",
     provider: str = "luna",
+    scope_text: str = "",
 ) -> dict[str, Any]:
     _home, refused = await _use_home(ladder, tenant_id=tenant_id, home_region=home_region, box_region=box_region)
     if refused:
         return refused
-    gate = await _gate(tank, tenant_id=tenant_id, text=question, jurisdiction=jurisdiction)
+    gate = await _gate(tank, tenant_id=tenant_id, text=scope_text or question, jurisdiction=jurisdiction)
     if gate["stopped"]:
         reason = str((gate.get("scope") or {}).get("reason") or "Not in scope.")
         return _refuse(reason, scope=gate.get("scope"))
@@ -331,7 +359,7 @@ async def build_rule_card(
         )
         return {"ok": True, "rule_card": _public_card(existing), "reused": True, "cost_usd": 0, "model_calls": 0}
     adapter = ModelAdapter(model) if model is not None else None
-    prompt = _RULE_PROMPT.format(question=question, passages=json.dumps(passages)[:8000])
+    prompt = rule_card_prompt(question, passages)
     called = await _masked_call(
         adapter,
         prompt,
@@ -403,13 +431,18 @@ async def approve_rule_card(
     jurisdiction: str,
     passages: list[dict[str, Any]],
     changes: str = "",
+    reviewer_kind: str = "reviewer",
 ) -> dict[str, Any]:
     del jurisdiction
     _home, refused = await _use_home(ladder, tenant_id=tenant_id, home_region=home_region, box_region=box_region)
     if refused:
         return refused
-    if not reviewer or not admission_no:
+    from agents.zenas.core.matters import sign_off_identity
+
+    identity = sign_off_identity(reviewer_kind=reviewer_kind, admission_no=admission_no)
+    if not reviewer or identity is None:
         return _refuse("approval needs a reviewer and an admission number")
+    kind, number = identity
     card = await ladder.get_rule_card(card_id, region=_box(box_region), tenant_id=tenant_id)
     if card is None:
         return _refuse("no such rule card")
@@ -430,7 +463,8 @@ async def approve_rule_card(
         region=_box(box_region),
         status="lawyer_approved",
         approved_by=reviewer,
-        admission_no=admission_no,
+        admission_no=number,
+        reviewer_kind=kind,
         edit_count=edit_count,
     )
     return {"ok": True, "rule_card": _public_card(saved or card), "cite": checked}
@@ -475,6 +509,45 @@ async def read_rule_card(
     return {"ok": True, "rule_card": _public_card(card)}
 
 
+# Tank refuses a body that is not this wrapper plus the pool row. Keep the two equal.
+FACTS_PROMPT_PREFIX = (
+    "Read this judgment as published. Reply with JSON only: "
+    '{"features":{},"narrative":"","element_findings":[{"element_id":"","finding":"met|not_met|unclear","reasoning":"","basis":[]}],"outcome":""}\n\n'
+)
+# Same sentence as Tank's IDENTIFIER_REFUSAL. A body judgment is not a pool read.
+BODY_TEXT_REFUSED = "A personal identifier cannot be sent to a provider outside South Africa."
+
+
+def judgment_from_pool_row(
+    body_judgment: str,
+    body_source_id: str,
+    row: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Use the pool row. The body's judgment and source_id are not the source.
+
+    A judgment in the body that is not the stored text is refused. An empty
+    body uses the row. A missing court row does not fall back to the body.
+    """
+    del body_source_id
+    text = str((row or {}).get("text") or "")
+    source = str((row or {}).get("source_id") or "")
+    from agents.zenas.core.release_mask import material_type_for_pool
+
+    supplied = str(body_judgment or "").strip()
+    if material_type_for_pool(source) != "public_record" or not text.strip():
+        if supplied:
+            return {"ok": False, "reason": BODY_TEXT_REFUSED}
+        return {"ok": False, "shared": False, "reason": "material type is unknown"}
+    if supplied and supplied != text.strip():
+        return {"ok": False, "reason": BODY_TEXT_REFUSED}
+    return {
+        "ok": True,
+        "judgment": text,
+        "source_id": source,
+        "citation": str((row or {}).get("citation") or ""),
+    }
+
+
 async def extract_case_facts(
     ladder: Any,
     model: Any,
@@ -498,7 +571,8 @@ async def extract_case_facts(
         return refused
     from agents.zenas.core.release_mask import log_withheld, material_type_for_pool
 
-    if material_type_for_pool(source_id) != "public_record":
+    material = material_type_for_pool(source_id)
+    if material != "public_record":
         log_withheld("material type is unknown")
         return {"ok": False, "shared": False, "reason": "material type is unknown"}
     kind = ruled(judgment)
@@ -514,11 +588,7 @@ async def extract_case_facts(
     if model is None:
         return _refuse("no model is configured")
     adapter = ModelAdapter(model)
-    prompt = (
-        "Read this judgment as published. Reply with JSON only: "
-        '{"features":{},"narrative":"","element_findings":[{"element_id":"","finding":"met|not_met|unclear","reasoning":"","basis":[]}],"outcome":""}\n\n'
-        + judgment
-    )
+    prompt = FACTS_PROMPT_PREFIX + judgment
     result = await adapter.complete(
         [{"role": "user", "content": prompt}],
         task_type="zenas.case_facts",
@@ -537,7 +607,7 @@ async def extract_case_facts(
             "region": box,
             "tenant_id": None,
             "source": "case",
-            "material_type": "public_record",
+            "material_type": material,
             "jurisdiction": jurisdiction,
             "area": "",
             "rule_card_ids": rule_card_ids or [],
@@ -923,6 +993,7 @@ async def release_matter(
     as_at: str | None = None,
     area: str = "",
     tank: Any = None,
+    reviewer_kind: str = "reviewer",
 ) -> dict[str, Any]:
     _home, refused = await _use_home(matters, tenant_id=tenant_id, home_region=home_region, box_region=box_region)
     if refused:
@@ -942,6 +1013,7 @@ async def release_matter(
         admission_no=admission_no,
         decision="released",
         changes=lawyer_edits,
+        reviewer_kind=reviewer_kind,
     )
     if not review.get("ok"):
         return review
@@ -1185,8 +1257,9 @@ async def add_approved_clause(
     admission_no: str,
     fallback_positions: list[str] | None = None,
     notes: str = "",
+    reviewer_kind: str = "reviewer",
 ) -> dict[str, Any]:
-    """The library stays empty until a lawyer names the clause and an admission number."""
+    """The library stays empty until a lawyer names the clause. A founder may omit the admission number."""
     _home, refused = await _use_home(store, tenant_id=tenant_id, home_region=home_region, box_region=box_region)
     if refused:
         return refused
@@ -1196,8 +1269,12 @@ async def add_approved_clause(
         return _refuse("that clause is not part of this template")
     if jurisdiction not in ("us", "za", "both"):
         return _refuse("jurisdiction must be us, za, or both")
-    if not str(approved_by or "").strip() or not str(admission_no or "").strip():
+    from agents.zenas.core.matters import sign_off_identity
+
+    identity = sign_off_identity(reviewer_kind=reviewer_kind, admission_no=admission_no)
+    if not str(approved_by or "").strip() or identity is None:
         return _refuse("a clause needs the approving lawyer and admission number")
+    who, number = identity
     if not str(text or "").strip():
         return _refuse("a clause needs text")
     if pii_detect(text).get("matches"):
@@ -1212,7 +1289,8 @@ async def add_approved_clause(
             "fallback_positions": list(fallback_positions or []),
             "notes": notes,
             "approved_by": approved_by.strip(),
-            "admission_no": admission_no.strip(),
+            "admission_no": number,
+            "reviewer_kind": who,
         }
     )
     return {"ok": True, "clause": saved}
@@ -1565,6 +1643,25 @@ async def answer_question(
     if fresh is None:
         return _refuse("could not verify", delivered=False)
     memo = compose_memo(fresh, applied["elements"])
+    known_names: list[str] = []
+    for item in passages:
+        for key in ("citation", "text", "title", "name"):
+            value = " ".join(str(item.get(key) or "").split())
+            if value:
+                known_names.append(value)
+    if isinstance(features, dict):
+        client_matter = " ".join(str(features.get("client_matter") or "").split())
+        if client_matter:
+            known_names.append(client_matter)
+    if matter_id:
+        matter_row = await store.get_matter(str(tenant_id), str(matter_id))
+        if matter_row is not None:
+            title = " ".join(str(matter_row.get("title") or "").split())
+            if title:
+                known_names.append(title)
+    memo["text"] = drop_unverified_cases(str(memo.get("text") or ""), known_names)
+    if str(jurisdiction or "") == "za" and rules_are_draft():
+        memo["text"] = f"{memo['text']}\n{draft_label()}".strip()
     statements = [
         {"citation": element.get("citation"), "quote": element.get("quote")}
         for element in fresh.get("elements") or []

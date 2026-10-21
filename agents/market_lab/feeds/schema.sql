@@ -68,3 +68,51 @@ CREATE TABLE IF NOT EXISTS market_lab.fetch_runs (
 CREATE INDEX IF NOT EXISTS points_series_idx ON market_lab.points (series_id);
 CREATE INDEX IF NOT EXISTS events_source_idx ON market_lab.events (source_id, date);
 CREATE INDEX IF NOT EXISTS fetch_runs_source_idx ON market_lab.fetch_runs (source_id, started);
+
+-- Provenance and quarantine. Existing rows keep their numbers. New writes fill these.
+ALTER TABLE market_lab.series ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT '';
+ALTER TABLE market_lab.series ADD COLUMN IF NOT EXISTS region TEXT NOT NULL DEFAULT '';
+ALTER TABLE market_lab.series ADD COLUMN IF NOT EXISTS jump_limit REAL NOT NULL DEFAULT 10;
+
+ALTER TABLE market_lab.points ADD COLUMN IF NOT EXISTS source_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE market_lab.points ADD COLUMN IF NOT EXISTS region TEXT NOT NULL DEFAULT '';
+ALTER TABLE market_lab.points ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT '';
+ALTER TABLE market_lab.points ADD COLUMN IF NOT EXISTS unit TEXT NOT NULL DEFAULT '';
+ALTER TABLE market_lab.points ADD COLUMN IF NOT EXISTS batch_id TEXT NOT NULL DEFAULT '';
+
+CREATE TABLE IF NOT EXISTS market_lab.batches (
+    id TEXT PRIMARY KEY,
+    source_id TEXT NOT NULL,
+    series_id TEXT NOT NULL,
+    region TEXT NOT NULL,
+    currency TEXT NOT NULL,
+    unit TEXT NOT NULL,
+    fetched_at TEXT NOT NULL,
+    status TEXT NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    jump_limit REAL NOT NULL DEFAULT 10,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS market_lab.batch_points (
+    batch_id TEXT NOT NULL,
+    series_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    value TEXT NOT NULL,
+    source_id TEXT NOT NULL,
+    fetched_at TEXT NOT NULL,
+    region TEXT NOT NULL,
+    currency TEXT NOT NULL,
+    unit TEXT NOT NULL,
+    revision TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (batch_id, series_id, date, revision)
+);
+
+CREATE TABLE IF NOT EXISTS market_lab.official_values (
+    series_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    value TEXT NOT NULL,
+    PRIMARY KEY (series_id, date)
+);
+
+CREATE INDEX IF NOT EXISTS batches_status_idx ON market_lab.batches (status, series_id);

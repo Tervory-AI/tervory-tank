@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { founderDenial, isListedFounder } from "../workspace/app/review/founder.ts";
-import { headerLinks, usesOwnShell } from "../workspace/app/product-nav.ts";
+import { sidebarLabels, squadMembers, usesOwnShell } from "../workspace/app/product-nav.ts";
 
 test("a customer call is rejected", () => {
   const denied = founderDenial("user_customer", "user_founder, user_other");
@@ -21,20 +21,27 @@ test("a blank list and a missing user are rejected", () => {
   assert.equal(isListedFounder("user_nope", "user_founder"), false);
 });
 
-test("the product header says Skala and the address is /skala", () => {
-  const customer = headerLinks(false).map((link) => link.label);
-  const founder = headerLinks(true).map((link) => link.label);
-  assert.deepEqual(customer, ["Chat", "Tasks", "Data", "Ledger", "Base", "Tiger", "Market Lab", "Rig", "Tisan", "Radix", "Zenas", "Skala", "Tank"]);
-  assert.deepEqual(founder, ["Chat", "Tasks", "Data", "Skala", "Ledger", "Tank", "Base", "Tiger", "Market Lab", "Rig", "Tisan", "Radix", "Zenas"]);
-  assert.equal(headerLinks(true).find((link) => link.label === "Skala")?.href, "/skala");
-  assert.equal(headerLinks(true).find((link) => link.label === "Tank")?.href, "/tank");
+test("the sidebar keeps Billing, and Skala and Tank stay in the founder squad list", () => {
+  const customer = sidebarLabels("/ledger", false, false);
+  const founder = sidebarLabels("/ledger", true, false);
+  assert.equal(customer.includes("Billing"), true);
+  assert.equal(customer.includes("Skala"), false);
+  assert.equal(customer.includes("Tank"), false);
+  assert.equal(founder.includes("Skala"), false);
+  assert.equal(founder.includes("Tank"), false);
+  assert.equal(squadMembers(true).find((member) => member.label === "Skala")?.href, "/skala");
+  assert.equal(squadMembers(true).find((member) => member.label === "Tank")?.href, "/tank");
+  assert.equal(squadMembers(false).some((member) => member.label === "Skala"), false);
+  assert.equal(squadMembers(false).some((member) => member.label === "Tank"), false);
+  assert.ok(customer.indexOf("Dashboard") < customer.indexOf("Squad"));
+  assert.ok(customer.indexOf("Squad") < customer.indexOf("Ledger"));
 });
 
-test("sign-in, sign-up, onboarding, and the squad frames use their own shell", () => {
-  for (const path of ["/sign-in", "/sign-in/", "/sign-in/factor-one", "/sign-up", "/sign-up/verify", "/onboarding", "/onboarding/", "/base", "/tiger", "/market-lab", "/market-lab/", "/rig", "/tisan", "/radix", "/zenas"]) {
+test("sign-in and sign-up skip the shell; every signed-in page uses it", () => {
+  for (const path of ["/sign-in", "/sign-in/", "/sign-in/factor-one", "/sign-up", "/sign-up/verify"]) {
     assert.equal(usesOwnShell(path), true, path);
   }
-  for (const path of ["/", "/tasks", "/data", "/skala", "/ledger", "/tank", "/admin", "/review"]) {
+  for (const path of ["/", "/tasks", "/data", "/skala", "/ledger", "/billing", "/tank", "/admin", "/review", "/onboarding", "/onboarding/", "/base", "/tiger", "/market-lab", "/market-lab/", "/rig", "/tisan", "/radix", "/zenas", "/prices", "/matters"]) {
     assert.equal(usesOwnShell(path), false, path);
   }
 });

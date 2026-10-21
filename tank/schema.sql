@@ -751,38 +751,77 @@ INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_toke
    'You compare a held-out case with the ladder result. Reply with JSON only. Do not add facts the court did not state.')
 ON CONFLICT DO NOTHING;
 
--- ---------- MODELS-1 (18 Oct 2026): DeepSeek and Kimi as a candidate cheap rung ----------
--- Founder decision: the ban on China-hosted providers is removed. deepseek-flash is the cheapest
--- new roster model (litellm/config.yaml). It becomes the CANDIDATE on the batch rows below, never
--- the serving model: policy.model is not touched, so no task changes route on merge. It serves a
--- task only after the existing graduation rule clears it on held-out cases (enough shadow
--- samples, agreement at eval_threshold, field floors, client rejections; tank/graduate.py).
--- Only rows with no candidate yet, served by a model priced above deepseek-flash, are filled, so a
--- cheaper serving model (luna, haiku) or an operator's own candidate is left alone.
--- One-time and logged, like the switches above.
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM tank.policy_log
-    WHERE action = 'switch' AND detail->>'id' = '2026-10-18-models-1-cheap-rung'
-  ) THEN
-    INSERT INTO tank.policy_log (task_type, action, from_model, to_model, by_user, detail)
-    SELECT task_type, 'candidate', model, 'deepseek-flash', 'tank',
-           '{"id": "2026-10-18-models-1-cheap-rung", "shadow_rate": 1}'::jsonb
-    FROM tank.policy
-    WHERE tenant_id IS NULL AND candidate_model IS NULL
-      AND task_type IN ('zenas.selftest', 'market.research', 'base.extract', 'base.business_data')
-      AND model IN ('flash-lite', 'grok-build', 'grok', 'flash', 'deepseek-pro', 'grok-top',
-                    'sol', 'argon', 'sonnet', 'kimi', 'opus', 'astra');
+-- Workspace billing webhook. One row per Stripe event id.
+CREATE TABLE IF NOT EXISTS tank.billing_events (
+    event_id text PRIMARY KEY,
+    type text,
+    received_at timestamptz,
+    handled boolean DEFAULT false
+);
 
-    UPDATE tank.policy SET candidate_model = 'deepseek-flash', shadow_rate = 1, updated_at = now()
-    WHERE tenant_id IS NULL AND candidate_model IS NULL
-      AND task_type IN ('zenas.selftest', 'market.research', 'base.extract', 'base.business_data')
-      AND model IN ('flash-lite', 'grok-build', 'grok', 'flash', 'deepseek-pro', 'grok-top',
-                    'sol', 'argon', 'sonnet', 'kimi', 'opus', 'astra');
+-- GRAD-1: machine labels remain candidates until a source passes review.
+ALTER TABLE tank.gold_examples ADD COLUMN IF NOT EXISTS auto_label boolean NOT NULL DEFAULT false;
+ALTER TABLE tank.gold_examples ADD COLUMN IF NOT EXISTS label_source text;
+ALTER TABLE tank.gold_examples ADD COLUMN IF NOT EXISTS public boolean NOT NULL DEFAULT false;
+ALTER TABLE tank.gold_examples ADD COLUMN IF NOT EXISTS intake_day date;
+CREATE INDEX IF NOT EXISTS gold_auto_source ON tank.gold_examples
+    (tenant_id,region,agent,label_source,intake_day) WHERE auto_label;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS vendor        text;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS units         numeric;
 
-    INSERT INTO tank.policy_log (task_type, action, by_user, detail)
-    VALUES ('*', 'switch', 'tank', '{"id": "2026-10-18-models-1-cheap-rung", "marker": true}'::jsonb);
-  END IF;
-END
-$$;
+ALTER TABLE tank.gold_examples ADD COLUMN IF NOT EXISTS auto_approved boolean NOT NULL DEFAULT false;
+ALTER TABLE tank.gold_examples ADD COLUMN IF NOT EXISTS label_family text;
+
+-- Explicit model holdout evidence; never substitute offline screening scores.
+ALTER TABLE tank.gold_scores ADD COLUMN IF NOT EXISTS task_type text;
+ALTER TABLE tank.gold_scores ADD COLUMN IF NOT EXISTS candidate_model text;
+ALTER TABLE tank.gold_scores ADD COLUMN IF NOT EXISTS cost_per_call numeric(14,8);
+
+-- Export provenance defaults to private; legacy rows require explicit review.
+ALTER TABLE tank.training_pairs ADD COLUMN IF NOT EXISTS public boolean NOT NULL DEFAULT false;
+CREATE TABLE IF NOT EXISTS tank.training_jobs (
+    id text PRIMARY KEY,
+    tenant_id uuid NOT NULL,
+    region text NOT NULL,
+    model_repo text NOT NULL,
+    estimated_usd numeric(12,6) NOT NULL,
+    actual_usd numeric(12,6),
+    ledger_id uuid UNIQUE REFERENCES tank.ledger(id),
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- A training row keeps the batch it came from. A removed batch retires its gold
+-- and marks every model trained on it.
+ALTER TABLE tank.gold_examples ADD COLUMN IF NOT EXISTS batch_id text;
+ALTER TABLE tank.gold_examples ADD COLUMN IF NOT EXISTS currency text;
+ALTER TABLE tank.gold_examples ADD COLUMN IF NOT EXISTS unit text;
+ALTER TABLE tank.gold_examples ADD COLUMN IF NOT EXISTS quarantine text;
+
+ALTER TABLE tank.training_pairs ADD COLUMN IF NOT EXISTS batch_id text;
+ALTER TABLE tank.training_pairs ADD COLUMN IF NOT EXISTS currency text;
+ALTER TABLE tank.training_pairs ADD COLUMN IF NOT EXISTS unit text;
+
+CREATE TABLE IF NOT EXISTS tank.removed_batches (
+    tenant_id uuid NOT NULL,
+    batch_id text NOT NULL,
+    removed_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, batch_id)
+);
+
+CREATE TABLE IF NOT EXISTS tank.training_job_batches (
+    tenant_id uuid NOT NULL,
+    job_id text NOT NULL,
+    model_repo text NOT NULL,
+    batch_id text NOT NULL,
+    region text NOT NULL,
+    PRIMARY KEY (tenant_id, job_id, batch_id)
+);
+
+CREATE TABLE IF NOT EXISTS tank.training_snapshot_batches (
+    tenant_id uuid NOT NULL,
+    region text NOT NULL,
+    day date NOT NULL,
+    agent text NOT NULL,
+    batch_id text NOT NULL,
+    PRIMARY KEY (tenant_id, region, day, agent, batch_id)
+);

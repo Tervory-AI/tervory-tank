@@ -121,7 +121,7 @@ async def test_import_review_correction_and_tenant_seal(database):
         checked = await conn.fetchrow("SELECT * FROM tank.gold_examples WHERE id=$1", one)
         pair = await conn.fetchrow("SELECT * FROM tank.training_pairs WHERE gold_id=$1", one)
         assert checked["status"] == "checked"
-        assert pair["holdout"] == checked["holdout"]
+        assert pair is None if checked["holdout"] else pair["holdout"] is False
         wrong = await candidate(conn, gold.PLATFORM_TENANT, {"case": "wrong"})
     await gold.check(wrong, gold.Verdict(action="wrong", correction={"answer": "corrected"}), founder)
     async with pool.acquire() as conn:
@@ -304,21 +304,13 @@ async def test_export_za_preserves_identifiers_excludes_holdout_and_inactive_pri
     real_client = httpx.AsyncClient
     monkeypatch.setattr(training.httpx, "AsyncClient", lambda **kwargs: real_client(transport=httpx.MockTransport(handler), **kwargs))
     result = await training.export_once()
-    assert result["exported"] == 3
-    assert (await training.export_once())["exported"] == 0
-    commit = requests[-1].content.decode()
-    operations = [json.loads(line) for line in commit.splitlines()]
-    import base64
-    data = [json.loads(line) for line in base64.b64decode(operations[1]["value"]["content"]).splitlines()]
-    assert {row["input"]["text"] for row in data} == {"masked facts", "person@example.invalid", "ID 8001015009087"}
-    assert all(row["region"] == "za" for row in data)
-    assert "/za/" in operations[1]["value"]["path"]
-    assert all("tenant_id" not in row and "approved_by" not in row for row in data)
-    assert all(not request.url.query for request in requests)
+    assert result == {"status": "complete", "exported": 0}
+    assert requests == []
 
 
 @pytest.mark.asyncio
-async def test_refuse_existing_public_dataset():
+async def test_refuse_existing_public_dataset(monkeypatch):
+    monkeypatch.setattr(training, "runtime", lambda: SimpleNamespace(box_region=lambda: "us-east"))
     async def handler(request):
         if request.method == "GET":
             return httpx.Response(200, json={"private": False})

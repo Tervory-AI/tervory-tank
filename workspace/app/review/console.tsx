@@ -87,28 +87,16 @@ export function ReviewConsole({
           <div className="zr-side">
             <div className="zr-side-head">
               <p className="zr-kicker">AREAS OF LAW</p>
-              <span>49 · Show all</span>
             </div>
+            <p className="zr-item">No areas of law yet.</p>
             <div className="zr-side-head">
               <p className="zr-kicker">DIARY</p>
-              <span>View all</span>
             </div>
-            <div className="zr-skel" aria-hidden="true">
-              <span />
-              <span><i /><i /></span>
-            </div>
+            <p className="zr-item">No diary entries yet.</p>
             <div className="zr-side-head">
               <p className="zr-kicker">UPCOMING COURT DATES</p>
-              <span>View all</span>
             </div>
-            <div className="zr-skel" aria-hidden="true">
-              <span />
-              <span><i /><i /></span>
-            </div>
-            <div className="zr-skel" aria-hidden="true">
-              <span />
-              <span><i /><i /></span>
-            </div>
+            <p className="zr-item">No court dates yet.</p>
           </div>
         </div>
         <div className="zr-panel-foot">
@@ -148,7 +136,6 @@ export function ReviewConsole({
         </article>
         <ReviewDesk items={items} note={note} />
         <p className="fine">Zenas prepares drafts and research for review by a licensed lawyer.</p>
-        <span className="zr-bot">Chat bot, to be named</span>
       </div>
     </div>
   );

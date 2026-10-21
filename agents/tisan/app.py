@@ -95,3 +95,36 @@ app = create_app(
         }
     ],
 )
+
+# Room-only export of previously approved frame/page pairs.
+_load_beside({}, "tisan_gold_sources", "gold_sources.py").mount(app)
+
+
+from fastapi import Header, HTTPException
+from pydantic import BaseModel, Field
+from uuid import UUID
+import hmac
+
+
+class EvalCase(BaseModel):
+    skill_id: str
+    version: str = Field(pattern=r"^\d+\.\d+\.\d+$")
+    tenant_id: UUID
+    input: dict[str, Any]
+
+
+@app.post("/evals/run")
+async def eval_case(body: EvalCase, x_tank_key: str = Header(default="")) -> dict:
+    key = os.environ.get("TANK_KEY", "")
+    if not key or not hmac.compare_digest(key, x_tank_key):
+        raise HTTPException(401, "room key required")
+    if body.skill_id == "tisan.figma":
+        module = _load_beside(_figma_cache(), "tisan_figma", "figma.py")
+    elif body.skill_id == "tisan.scaffold":
+        module = _scaffold_module()
+    else:
+        raise HTTPException(404, "unknown eval skill")
+    try:
+        return await module.execute(body.input, str(body.tenant_id))
+    except ValueError:
+        return {"refused": True, "error": "invalid eval input"}

@@ -11,6 +11,8 @@ COPY tiger/watch.py /app/watch.py
 COPY tiger/change_alert.py /app/change_alert.py
 COPY tiger/page_guard.py /app/page_guard.py
 COPY tiger/feedback.py /app/feedback.py
+COPY tiger/gold_sources.py /app/gold_sources.py
+COPY tiger/gold /app/gold
 USER agent
 ENV AGENT_NAME=tiger \
     DATA_DIR=/data \

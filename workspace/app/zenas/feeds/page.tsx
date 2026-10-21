@@ -2,7 +2,7 @@ import { auth } from "@clerk/nextjs/server";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { isFounder } from "@/lib/admin";
-import { publicFeeds, publicScores, type PublicScore, type PublicSource } from "@/app/api/zenas/feeds/public";
+import { emptyConvert, publicConvert, publicFeeds, publicScores, type PublicConvert, type PublicScore, type PublicSource } from "@/app/api/zenas/feeds/public";
 import { homeRegion, zenasIn, type Region } from "@/app/api/zenas/tank";
 import { FeedSwitch } from "./board";
 import "./feeds.css";
@@ -13,11 +13,13 @@ async function readBox(region: Region): Promise<{
   sources: PublicSource[];
   scores: PublicScore[];
   review: "on" | "off";
+  convert: PublicConvert;
   note: string;
 }> {
   let sources: PublicSource[] = [];
   let scores: PublicScore[] = [];
   let review: "on" | "off" = "off";
+  let convert: PublicConvert = emptyConvert(region);
   let note = "";
   try {
     const feeds = await zenasIn(region, `pool/status?home_region=${region}`, { method: "GET" });
@@ -42,7 +44,13 @@ async function readBox(region: Region): Promise<{
   } catch {
     review = "off";
   }
-  return { sources, scores, review, note };
+  try {
+    const cases = await zenasIn(region, `cases/convert?home_region=${region}`, { method: "GET" });
+    if (cases && cases.ok) convert = publicConvert(await cases.json());
+  } catch {
+    convert = emptyConvert(region);
+  }
+  return { sources, scores, review, convert, note };
 }
 
 export default async function ZenasFeedsPage() {
@@ -57,7 +65,7 @@ export default async function ZenasFeedsPage() {
         <div>
           <picture>
             <source srcSet="/brand/tervory-logo-reversed.png" media="(prefers-color-scheme: dark)" />
-            <img src="/brand/tervory-logo-on-white.png" alt="Tervory" />
+            <img src="/brand/tervory-logo.png" alt="Tervory" />
           </picture>
           <h1>Zenas feeds</h1>
         </div>
@@ -69,6 +77,7 @@ export default async function ZenasFeedsPage() {
           initialSources={box.sources}
           initialScores={box.scores}
           initialReview={box.review}
+          initialConvert={box.convert}
           note={box.note}
         />
       </main>

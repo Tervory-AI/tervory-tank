@@ -21,14 +21,26 @@ export function pipelineTo(name: string): string {
   return `Pipeline to ${name}`;
 }
 
-export type ModelRow = { name: string };
+export type ModelRow = {
+  name: string;
+  providerModel?: string;
+  inputPerM?: number | null;
+  outputPerM?: number | null;
+};
+
+/** "$0.10 in · $0.50 out per 1M tokens", or "no price" when the roster has none. */
+export function priceLine(inputPerM: number | null | undefined, outputPerM: number | null | undefined): string {
+  if (typeof inputPerM !== "number" || typeof outputPerM !== "number") return "no price";
+  const money = (value: number) => `$${value.toFixed(2)}`;
+  return `${money(inputPerM)} in · ${money(outputPerM)} out per 1M tokens`;
+}
 
 export const MODEL_KEY_LINE = "The key is held by LiteLLM.";
 
 export function modelsMatching(query: string, rows: readonly ModelRow[]): ModelRow[] {
   const needle = query.trim().toLowerCase();
   if (!needle) return [...rows];
-  return rows.filter((row) => row.name.toLowerCase().includes(needle));
+  return rows.filter((row) => `${row.name} ${row.providerModel ?? ""}`.toLowerCase().includes(needle));
 }
 
 export function squadsMatching(query: string, squads: readonly Squad[] = SQUADS): Squad[] {

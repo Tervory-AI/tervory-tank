@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from collections import Counter
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from agents.zenas.pool.adapters import get_adapter
 from agents.zenas.pool.catalogue import sources_for_region
 from agents.zenas.pool.config import current_region
 from agents.zenas.pool.embed import Embedder, NoOpEmbedder, NoOpVectorIndex, VectorIndex
+from agents.zenas.pool.http import RateLimited
 from agents.zenas.pool.ingest import ingest_snapshot
 from agents.zenas.pool.licence import FetchNotConfigured, LicenceError, refusal_reason
 from agents.zenas.pool.region import RegionError, assert_source_region, bind_store
@@ -19,6 +21,9 @@ from agents.zenas.pool.status import pool_status
 from agents.zenas.pool.store import Store
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
+# Official statute feeds. Load now uses fetch_bulk through the pool loader.
+# Nightly uses the same resume cursor and writes the feeds sentence itself.
+_OFFICIAL_STATUTES = frozenset({"govza-acts", "govza-regulations"})
 
 
 def packaged_snapshots(region: str) -> dict[str, list[bytes]]:
@@ -52,6 +57,7 @@ async def run_nightly(
     http_get=None,
     embedder: Embedder | None = None,
     index: VectorIndex | None = None,
+    only: list[str] | None = None,
 ) -> dict:
     """Update every source configured for this region.
 
@@ -67,7 +73,11 @@ async def run_nightly(
     index = index or NoOpVectorIndex()
     getter = http_get or urllib_get
 
-    for source in sources_for_region(region):
+    sources = sources_for_region(region)
+    if only is not None:
+        wanted = set(only)
+        sources = [source for source in sources if source.source_id in wanted]
+    for source in sources:
         try:
             assert_source_region(source, region)
             await _update_source(
@@ -103,6 +113,18 @@ async def _update_source(
     region: str,
 ) -> None:
     assert_source_region(source, region)
+    if snapshots is None and live and source.source_id == "courtlistener" and region == "us-east":
+        await courtlistener_night(
+            store,
+            source,
+            on=on,
+            when=when,
+            http_get=http_get,
+            embedder=embedder,
+            index=index,
+            region=region,
+        )
+        return
     reason = refusal_reason(source)
     if reason:
         await ingest_snapshot(store, source, [], on=on, region=region)
@@ -114,9 +136,32 @@ async def _update_source(
             when=when,
         )
         return
+    if snapshots is None and live and source.source_id in _OFFICIAL_STATUTES:
+        await _update_official(
+            store,
+            source,
+            on=on,
+            when=when,
+            http_get=http_get,
+            embedder=embedder,
+            index=index,
+            region=region,
+        )
+        return
     blobs: list[bytes] | None
     if snapshots is not None:
         blobs = list(snapshots.get(source.source_id, []))
+    elif live and await _live_archive(
+        store,
+        source,
+        on=on,
+        when=when,
+        http_get=http_get,
+        embedder=embedder,
+        index=index,
+        region=region,
+    ):
+        return
     elif live:
         try:
             blobs = await get_adapter(source).fetch(http_get)
@@ -157,6 +202,325 @@ async def _update_source(
         source.source_id,
         status="ok",
         detail=f"inserted {inserted}",
+        documents=count,
+        when=when,
+    )
+
+
+async def courtlistener_night(
+    store: Store,
+    source,
+    *,
+    on: date,
+    when: datetime,
+    http_get,
+    embedder: Embedder,
+    index: VectorIndex,
+    region: str,
+    budget=None,
+    clock=None,
+) -> None:
+    """Finish the bulk snapshot, then ask the API only for later opinions.
+
+    Boston only. The bulk files need no key. The token is a header on the
+    update requests. A 429 keeps the cursor. Rows already stored are skipped
+    by hash inside ingest.
+    """
+    from agents.zenas.pool.adapters.courtlistener_bulk import (
+        BulkStalled,
+        BulkState,
+        join_cursor,
+        load_bulk,
+        progress_line,
+        snapshot_day,
+        snapshot_is_done,
+        split_cursor,
+    )
+    from agents.zenas.pool.bulk import load_detail
+
+    if region != "us-east":
+        return
+    adapter = get_adapter(source)
+    resume = await store.get_checkpoint(source.source_id)
+    bulk_resume, api_resume = split_cursor(resume)
+    state = getattr(adapter, "_bulk_state", None)
+    parsed_day = snapshot_day(bulk_resume)
+    if not isinstance(state, BulkState) or not parsed_day or state.day != parsed_day:
+        state = BulkState()
+    adapter._bulk_state = state
+    skips: Counter[str] = Counter()
+    inserted = 0
+    line = ""
+    day = snapshot_day(bulk_resume)
+
+    if not snapshot_is_done(bulk_resume):
+        try:
+            result = await load_bulk(http_get, resume=resume, state=state)
+        except BulkStalled as exc:
+            await store.record_source(source)
+            await store.record_run(
+                source.source_id, status="stalled", detail=str(exc),
+                documents=await store.instrument_count(source.source_id), when=when,
+            )
+            return
+        except (FetchNotConfigured, LicenceError) as exc:
+            await store.record_source(source)
+            await store.record_run(
+                source.source_id,
+                status="not_configured",
+                detail=str(exc),
+                documents=await store.instrument_count(source.source_id),
+                when=when,
+            )
+            return
+        for blob in result.blobs:
+            inserted += await ingest_snapshot(
+                store,
+                source,
+                [blob],
+                on=on,
+                embedder=embedder,
+                index=index,
+                region=region,
+                skips=skips,
+            )
+        skips.update(result.skips)
+        line = result.detail or progress_line(result.snapshot, result.file_label, result.rows_read, result.cases_kept, result.skips)
+        day = result.snapshot or day
+        if not snapshot_is_done(result.cursor):
+            await store.set_checkpoint(source.source_id, result.cursor, await store.stored_bytes())
+            await store.record_source(source)
+            await store.record_run(
+                source.source_id,
+                status="ok",
+                detail=line,
+                documents=await store.instrument_count(source.source_id),
+                when=when,
+            )
+            return
+        _bulk_done, api_resume = split_cursor(result.cursor)
+
+    since = date.fromisoformat(day) if day else None
+    done_cursor = f"cl-bulk:{day}:done" if day else ""
+    try:
+        blobs, api_cursor = await adapter.fetch_updates(
+            http_get,
+            since=since,
+            resume=api_resume,
+            budget=budget,
+            clock=clock,
+        )
+    except RateLimited as exc:
+        await store.set_checkpoint(source.source_id, join_cursor(done_cursor, api_resume), await store.stored_bytes())
+        await store.record_source(source)
+        await store.record_run(
+            source.source_id,
+            status="rate_limited",
+            detail=str(exc),
+            documents=await store.instrument_count(source.source_id),
+            when=when,
+        )
+        return
+    except (FetchNotConfigured, LicenceError) as exc:
+        await store.set_checkpoint(source.source_id, done_cursor, await store.stored_bytes())
+        await store.record_source(source)
+        detail = f"{line}; {exc}" if line else str(exc)
+        await store.record_run(
+            source.source_id,
+            status="ok" if line else "not_configured",
+            detail=detail,
+            documents=await store.instrument_count(source.source_id),
+            when=when,
+        )
+        return
+    for blob in blobs:
+        inserted += await ingest_snapshot(
+            store,
+            source,
+            [blob],
+            on=on,
+            embedder=embedder,
+            index=index,
+            region=region,
+            skips=skips,
+        )
+    note = adapter.load_note() if hasattr(adapter, "load_note") else {}
+    skips.update(note.get("skips") or {})
+    await store.set_checkpoint(
+        source.source_id,
+        join_cursor(done_cursor, api_cursor),
+        await store.stored_bytes(),
+    )
+    await store.record_source(source)
+    detail = load_detail(inserted, skips)
+    if line:
+        detail = f"{line}; {detail}"
+    status = "ok"
+    if note.get("status") == "budget":
+        status = "budget"
+        phrase = str(note.get("message") or "")
+        detail = f"{line}; {phrase}" if line else phrase
+    elif note.get("status") == "rate_limited":
+        status = "rate_limited"
+        detail = f"{note.get('message') or 'HTTP 429'}; the next Load resumes; {detail}"
+    await store.record_run(
+        source.source_id,
+        status=status,
+        detail=detail,
+        documents=await store.instrument_count(source.source_id),
+        when=when,
+    )
+
+
+async def _live_archive(
+    store: Store,
+    source,
+    *,
+    on: date,
+    when: datetime,
+    http_get,
+    embedder: Embedder,
+    index: VectorIndex,
+    region: str,
+) -> bool:
+    """Resume a ZA court archive. Other sources keep the ordinary live fetch.
+
+    bulk.py imports urllib_get from this module, so this does not call back into bulk.
+    """
+    from agents.zenas.pool.adapters.za_archive import ZA_ARCHIVE_SOURCES, feed_detail
+    from agents.zenas.pool.http import RateLimited
+
+    if source.source_id not in ZA_ARCHIVE_SOURCES:
+        return False
+    adapter = get_adapter(source)
+    if not hasattr(adapter, "fetch_bulk"):
+        return False
+    try:
+        resume = await store.get_checkpoint(source.source_id)
+        if resume.startswith("snap:"):
+            resume = ""
+        blobs, cursor = await adapter.fetch_bulk(http_get, resume=resume)
+    except RateLimited as exc:
+        await store.record_source(source)
+        await store.record_run(
+            source.source_id,
+            status="rate_limited",
+            detail=f"{exc}; the next Load retries",
+            documents=await store.instrument_count(source.source_id),
+            when=when,
+        )
+        return True
+    except (FetchNotConfigured, LicenceError) as exc:
+        await store.record_source(source)
+        await store.record_run(
+            source.source_id,
+            status="not_configured",
+            detail=str(exc),
+            documents=await store.instrument_count(source.source_id),
+            when=when,
+        )
+        return True
+    note: dict = {}
+    load_note = getattr(adapter, "load_note", None)
+    if callable(load_note):
+        try:
+            loaded = load_note()
+        except Exception:  # noqa: BLE001 — a note never fails the night
+            loaded = {}
+        if isinstance(loaded, dict):
+            note = loaded
+    skips: Counter[str] = Counter(note.get("skips") or {})
+    if blobs:
+        inserted = await ingest_snapshot(
+            store,
+            source,
+            list(blobs),
+            on=on,
+            embedder=embedder,
+            index=index,
+            region=region,
+            skips=skips,
+        )
+    else:
+        inserted = 0
+        await store.record_source(source)
+    if cursor:
+        await store.set_checkpoint(source.source_id, cursor, await store.stored_bytes())
+    elif resume:
+        await store.set_checkpoint(source.source_id, "", await store.stored_bytes())
+    count = await store.instrument_count(source.source_id)
+    await store.record_run(
+        source.source_id,
+        status="ok",
+        detail=feed_detail(inserted, skips),
+        documents=count,
+        when=when,
+    )
+    return True
+
+
+async def _update_official(
+    store: Store,
+    source,
+    *,
+    on: date,
+    when: datetime,
+    http_get,
+    embedder: Embedder,
+    index: VectorIndex,
+    region: str,
+) -> None:
+    """Resume the gov.za walk and record Acts loaded, amendments, and errors."""
+    adapter = get_adapter(source)
+    resume = await store.get_checkpoint(source.source_id)
+    if resume.startswith("snap:"):
+        resume = ""
+    try:
+        blobs, cursor = await adapter.fetch_bulk(http_get, resume=resume)
+    except RateLimited as exc:
+        await store.record_source(source)
+        await store.record_run(
+            source.source_id,
+            status="rate_limited",
+            detail=str(exc),
+            documents=await store.instrument_count(source.source_id),
+            when=when,
+        )
+        return
+    except (FetchNotConfigured, LicenceError) as exc:
+        await store.record_source(source)
+        await store.record_run(
+            source.source_id,
+            status="not_configured",
+            detail=str(exc),
+            documents=0,
+            when=when,
+        )
+        return
+    inserted = 0
+    if blobs:
+        inserted = await ingest_snapshot(
+            store,
+            source,
+            list(blobs),
+            on=on,
+            embedder=embedder,
+            index=index,
+            region=region,
+        )
+    else:
+        await store.record_source(source)
+    detail = adapter.feeds_detail()
+    errors = int(getattr(adapter.report, "errors", 0) or 0)
+    if not blobs and errors == 0:
+        detail = f"{detail}; unchanged"
+    status = "error" if errors and inserted == 0 else "ok"
+    await store.set_checkpoint(source.source_id, cursor, await store.stored_bytes())
+    count = await store.instrument_count(source.source_id)
+    await store.record_run(
+        source.source_id,
+        status=status,
+        detail=detail,
         documents=count,
         when=when,
     )
@@ -205,6 +569,12 @@ async def _main() -> None:
             )
         else:
             report = await run_nightly(store, live=True)
+        try:
+            from agents.zenas.core.convert import run_scheduled as convert_scheduled
+
+            await convert_scheduled(conn, region=current_region())
+        except Exception:
+            pass
         try:
             from agents.zenas.core.selftest import run_scheduled
 

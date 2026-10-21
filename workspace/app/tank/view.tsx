@@ -1,9 +1,11 @@
 "use client";
 
-import { useId, useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { SquadLinks } from "../squad-links";
 import { searchTank, VAULT_LINE } from "./records";
-import { MODEL_KEY_LINE, modelsMatching, pipelineTo, SQUAD_LINE, squadsMatching, type ModelRow } from "./squads";
+import { MODEL_KEY_LINE, modelsMatching, pipelineTo, priceLine, SQUAD_LINE, squadsMatching, type ModelRow } from "./squads";
+import type { WorkersFeed } from "./workers";
+import { WorkersPanel } from "./workers-panel";
 
 // Dashboard, Projects, Settings, and Support have no pages yet.
 // These point at the nearest existing workspace routes.
@@ -108,12 +110,16 @@ function AskTank() {
 
 export function TankView({
   workspaceName,
+  graduation,
   models,
   modelsUnavailable = false,
+  workers = { available: false, tasks: [] },
 }: {
   workspaceName: string | null;
+  graduation?: ReactNode;
   models: ModelRow[];
   modelsUnavailable?: boolean;
+  workers?: WorkersFeed;
 }) {
   const searchId = useId();
   const [menu, setMenu] = useState(false);
@@ -253,6 +259,8 @@ export function TankView({
                   {shownModels.map((model) => (
                     <li key={model.name}>
                       <span className="tk-model-name">{model.name}</span>
+                      {model.providerModel ? <span className="tk-model-provider">{model.providerModel}</span> : null}
+                      <span className="tk-model-price">{priceLine(model.inputPerM, model.outputPerM)}</span>
                     </li>
                   ))}
                 </ul>
@@ -261,6 +269,8 @@ export function TankView({
               )}
             </section>
           ) : null}
+          {!searching ? graduation : null}
+          {!searching ? <WorkersPanel feed={workers} /> : null}
         </div>
       </div>
     </div>

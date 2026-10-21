@@ -1311,3 +1311,6 @@ body:has(.bcp) main {
     flex: 1 1 auto;
   }
 }
+.bcp-context-cols {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}

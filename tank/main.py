@@ -8,7 +8,7 @@ Endpoints
   GET  /v1/tasks/{id}?tenant_id=         one task
   POST /v1/ledger/{id}/feedback          a person's verdict on an answer: accepted | rejected
   GET  /v1/ledger/summary                spend by model and rung for a tenant (the client's ledger view)
-  GET  /v1/skala                        Skala registry: every package and its state
+  GET  /v1/skala                        Skala registry: every package, its state, and 30-day call cost
   POST /v1/skala/{id}/{ver}/evals       run a package's golden cases; candidate -> staging on pass
   POST /v1/skala/{id}/{ver}/approve     human sign-off; previous approved version retires
   POST /v1/skala/{id}/{ver}/retire      take a version out of service
@@ -21,6 +21,17 @@ Endpoints
   GET  /v1/base/records?tenant_id=       proxy: enriched records, newest first
   GET  /v1/policy                        the routing policy rows
   PUT  /v1/policy/{task_type}            change a policy row (no deploy needed)
+  GET  /v1/models                       the roster LiteLLM serves, with USD per million tokens
+  GET  /v1/rig/search                    proxy: one tenant's catalogue search
+  GET  /v1/rig/graph/{id}                proxy: fit graph for one product
+  POST /v1/rig/compare                   proxy: prices for a selection already made
+  POST /v1/rig/ask                       proxy: a catalogue question (model call is /v1/route)
+  GET  /v1/rig/products/{id}             proxy: one product
+  GET  /v1/rig/catalogues                proxy: product and fit counts for one catalogue
+  GET  /v1/market/quarantine             founder: batches waiting in Market Lab
+  POST /v1/market/quarantine/{batch}/release   founder: let a held batch into the pool
+  POST /v1/market/quarantine/{batch}/reject    founder: keep a held batch out
+  POST /v1/market/quarantine/{batch}/remove    founder: drop a batch and mark it removed
 
 Build Pack v2, "Tank — the centrepiece". Batch queue, cache, evals and graduation
 are later build-order steps and are not in this file yet.
@@ -39,6 +50,7 @@ import os
 import time
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
@@ -52,6 +64,7 @@ from pydantic import BaseModel, Field
 
 import graduate
 import skala
+import skill_costs
 
 log = logging.getLogger("tank")
 
@@ -209,22 +222,153 @@ def tenant_allowlist(tenant_id: str) -> frozenset[str] | None:
     return frozenset(str(item).strip() for item in names if str(item).strip())
 
 
-def model_call_refusal(text: str, model: str | None, *, box: str, tenant_id: str) -> str | None:
+# Same ids as agents/zenas/core/release_mask.py COURT_SOURCES. Tank's image
+# does not include that package. A test checks the two sets stay equal.
+# Legislation sources are not in this set.
+_COURT_SOURCES = frozenset(
+    {
+        "courtlistener",
+        "cap",
+        "saflii",
+        "govza-gazette",
+        "concourt",
+        "sca",
+        "cac",
+        "comptrib",
+        "sars-taxcourt",
+        "landcourt",
+        "ocj-highcourt",
+        "labour-court",
+        "labour-appeal",
+        "special-tribunal",
+    }
+)
+# require_key returns this for TANK_KEY_ZENAS. The request body cannot set it.
+_ZENAS_CALLER = "zenas"
+# The two prompts Zenas builds after it has read the pool. Anything else is
+# not that read. Convert's head is agents/zenas/core/convert.py _PROMPT_HEAD.
+_CONVERT_HEAD = (
+    "Read this judgment as published. Copy the facts in the court's own words, "
+    "as a continuous passage from the judgment. Name the question, the elements, "
+    "and the holding. Cite only this case. Every quote must appear in the judgment "
+    "word for word. For each issue the court decided, give the question, the order "
+    "in the court's own words, and pointers to the reasoning. Do not shorten the "
+    "reasoning and do not put a length cap on it. Mark likely ratio only on the "
+    "exact words the decision rests on, and always label that marking likely. "
+    "Mark obiter only where the court's own words show it "
+    "(obiter, it is unnecessary to decide, I express no view). "
+    "Keep each minority or dissent separate, labelled, and do not merge it into "
+    "the majority. Reply with JSON only:\n"
+    '{"facts":"","question":"","elements":[{"element_id":"","finding":"met|not_met|unclear","quote":""}],'
+    '"holding":"","citations":[{"citation":"","quote":""}],'
+    '"issues":[{"question":"","reasoning_pointer":{"paragraphs":[]},"order":"",'
+    '"likely_ratio_pointer":{"paragraphs":[]},"obiter_pointer":{"paragraphs":[]},'
+    '"minority":[{"judge":"","pointer":{"paragraphs":[]}}]}]}\n\n'
+    "Citation: "
+)
+_FACTS_PREFIX = (
+    "Read this judgment as published. Reply with JSON only: "
+    '{"features":{},"narrative":"","element_findings":[{"element_id":"","finding":"met|not_met|unclear","reasoning":"","basis":[]}],"outcome":""}\n\n'
+)
+_POOL_MATCH_SQL = """
+SELECT source_id, text, citation
+FROM zenas_pool.documents
+WHERE kind = 'case'
+  AND effective_to IS NULL
+  AND status IS DISTINCT FROM 'superseded'
+  AND source_id = ANY($2::text[])
+  AND char_length(text) >= 40
+  AND char_length($1) >= char_length(text)
+  AND right($1::text, char_length(text)) = text
+""".strip()
+
+
+def _zenas_pool_prefix(prefix: str, citation: str) -> bool:
+    """True when the text before the stored judgment is that row's own wrapper.
+
+    The citation is the one stored on the row. A caller cannot fill that
+    line with other text.
+    """
+    if prefix == _FACTS_PREFIX:
+        return True
+    return bool(citation) and prefix == _CONVERT_HEAD + citation + "\n\n"
+
+
+def _pool_read_candidate(text: str, *, caller: str | None, task_type: str | None, skill: str | None) -> bool:
+    """The three names a caller can try to set. The database check is still ahead."""
+    return caller == _ZENAS_CALLER and (task_type or "") == "zenas.case_facts" and not skill and bool(text)
+
+
+async def zenas_pool_prompt(
+    text: str,
+    *,
+    caller: str | None,
+    task_type: str | None,
+    skill: str | None,
+) -> bool:
+    """Whether this prompt is a judgment Tank just read from the pool.
+
+    The caller cannot vouch for this. Tank loads zenas_pool.documents itself
+    and accepts the prompt only when all of these are true: require_key
+    returned the Zenas room (TANK_KEY_ZENAS), the task is zenas.case_facts,
+    the call is not a Skala run, the prompt ends with a stored case whose
+    source_id is in the court list, and the text before that case is either
+    the facts wrapper or the convert wrapper plus that row's own citation.
+    An added sentence, a different citation, a different wrapper, or a body
+    field does not match a row, so the identifier rule still applies.
+    """
+    if not _pool_read_candidate(text, caller=caller, task_type=task_type, skill=skill):
+        return False
+    if not prompt_has_identifier(text):
+        return False
+    try:
+        async with pool().acquire() as conn:
+            rows = await conn.fetch(_POOL_MATCH_SQL, text, list(_COURT_SOURCES))
+    except Exception:  # noqa: BLE001 — a failed read is not proof, and the text is not logged
+        return False
+    for row in rows:
+        judgment = str(row["text"] or "")
+        source = str(row["source_id"] or "")
+        citation = str(row["citation"] or "")
+        if source not in _COURT_SOURCES or len(judgment) < 40 or not text.endswith(judgment):
+            continue
+        if _zenas_pool_prefix(text[: -len(judgment)], citation):
+            return True
+    return False
+
+
+def model_call_refusal(
+    text: str,
+    model: str | None,
+    *,
+    box: str,
+    tenant_id: str,
+    task_type: str | None = None,
+    caller: str | None = None,
+    skill: str | None = None,
+    pool_read: bool = False,
+) -> str | None:
     """Whether this model call must be refused before anything is stored or sent.
 
     In za, a prompt that still contains an identifier is refused unless the
     model runs in South Africa and the tenant's allow-list includes it.
-    model=None asks the early question: is there any permitted SA model at all?
-    Pure-code skills do not call this.
+    The identifier rule is skipped only when caller is the Zenas room key,
+    the task is zenas.case_facts, this is not a Skala run, and pool_read is
+    true. pool_read is true only after zenas_pool_prompt has matched the
+    text to a court row. China-provider and allow-list refusals still apply.
+    The Workspace key, every other room key, and a task name alone do not
+    skip the rule. model=None asks the early question: is there any
+    permitted SA model at all? Pure-code skills do not call this.
     """
     here = normalize_box(box)
     allow = tenant_allowlist(tenant_id)
+    public_record = _pool_read_candidate(text, caller=caller, task_type=task_type, skill=skill) and pool_read
     if here != ZA_REGION:
         if model is not None and allow is not None and model not in allow:
             return ALLOW_REFUSAL
         return None
     hosted = sa_hosted_models()
-    if prompt_has_identifier(text):
+    if prompt_has_identifier(text) and not public_record:
         permitted = hosted if allow is None else hosted & allow
         if model is None:
             return None if permitted else IDENTIFIER_REFUSAL
@@ -245,30 +389,104 @@ _agent_keys_synced = False
 
 
 HOMES_PRINCIPAL = "founder-homes"
-_HOMES_DENIED = "This homes key can only set a za tenant's home."
+_HOMES_DENIED = "This homes key cannot call that."
+_HOMES_LOAD = re.compile(r"^/v1/zenas/pool/sources/([A-Za-z0-9._-]{1,80})/load$")
+_HOMES_FEEDS = frozenset({"/v1/zenas/selftest", "/v1/zenas/review-switch", "/v1/zenas/cases/convert"})
 
 
-async def _homes_key_scope(request: Request) -> None:
-    """TANK_HOMES_KEY (ZA Tank only) may call POST /v1/zenas/tenants with home za, nothing else.
+def _explicit_home_is_za(query_home: str | None, parsed: dict | None) -> bool:
+    """True only when every stated home is za and at least one home is stated."""
+    if query_home is not None and query_home != ZA_REGION:
+        return False
+    body_home = None
+    if isinstance(parsed, dict) and "home_region" in parsed:
+        body_home = parsed.get("home_region")
+        if body_home != ZA_REGION:
+            return False
+    return query_home == ZA_REGION or body_home == ZA_REGION
 
-    The Boston Workspace holds this key to set ZA tenant homes. It never holds
-    the ZA TANK_API_KEY. Anything else with this key is refused before a route runs.
-    """
-    if box_region() != "za":
-        raise HTTPException(status_code=403, detail=_HOMES_DENIED)
-    if request.method != "POST" or request.url.path.rstrip("/") != "/v1/zenas/tenants":
-        raise HTTPException(status_code=403, detail=_HOMES_DENIED)
+
+async def _homes_tenant_body(request: Request) -> None:
+    """POST /v1/zenas/tenants may name a tenant and home_region=za, nothing else."""
     query_home = request.query_params.get("home_region")
-    if query_home is not None and query_home != "za":
+    if query_home is not None and query_home != ZA_REGION:
         raise HTTPException(status_code=403, detail=_HOMES_DENIED)
     try:
         parsed = json.loads(await request.body() or b"null")
     except (json.JSONDecodeError, UnicodeDecodeError):
         parsed = None
-    if not isinstance(parsed, dict) or parsed.get("home_region") != "za":
+    if not isinstance(parsed, dict) or parsed.get("home_region") != ZA_REGION:
         raise HTTPException(status_code=403, detail=_HOMES_DENIED)
     if set(parsed) - {"tenant_id", "home_region"}:
         raise HTTPException(status_code=403, detail=_HOMES_DENIED)
+
+
+async def _homes_founder_feed(request: Request, path: str) -> bool:
+    """ZA founder feeds: status, one load, self-test, review switch, case conversion. Home must be za.
+
+    Returns False when the path is not one of those routes. A matching route
+    with the wrong home, a body, or extra fields is refused here. Allowed
+    bodies are the fields those routes already take (source, review). They
+    carry no document, matter, or client text.
+    """
+    method = request.method
+    load = _HOMES_LOAD.fullmatch(path)
+    allowed = (
+        (method == "GET" and path == "/v1/zenas/pool/status")
+        or (method == "POST" and load is not None)
+        or (method in {"GET", "POST"} and path in _HOMES_FEEDS)
+    )
+    if not allowed:
+        return False
+    raw = await request.body()
+    parsed: dict | None = None
+    if method == "GET":
+        if raw:
+            raise HTTPException(status_code=403, detail=_HOMES_DENIED)
+    elif raw:
+        try:
+            loaded = json.loads(raw)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            raise HTTPException(status_code=403, detail=_HOMES_DENIED) from None
+        if not isinstance(loaded, dict):
+            raise HTTPException(status_code=403, detail=_HOMES_DENIED)
+        parsed = loaded
+    if path in {"/v1/zenas/selftest", "/v1/zenas/cases/convert"}:
+        if parsed and set(parsed) - {"home_region"}:
+            raise HTTPException(status_code=403, detail=_HOMES_DENIED)
+    elif path == "/v1/zenas/review-switch":
+        if method == "POST" and (
+            not parsed or set(parsed) - {"home_region", "review"} or parsed.get("review") not in {"on", "off"}
+        ):
+            raise HTTPException(status_code=403, detail=_HOMES_DENIED)
+    elif load is not None and parsed:
+        if set(parsed) - {"home_region", "source"}:
+            raise HTTPException(status_code=403, detail=_HOMES_DENIED)
+        if "source" in parsed and parsed.get("source") != load.group(1):
+            raise HTTPException(status_code=403, detail=_HOMES_DENIED)
+    if not _explicit_home_is_za(request.query_params.get("home_region"), parsed):
+        raise HTTPException(status_code=403, detail=_HOMES_DENIED)
+    return True
+
+
+async def _homes_key_scope(request: Request) -> None:
+    """TANK_HOMES_KEY on the ZA Tank only.
+
+    It may set a za tenant's home. It may also read pool status, load one
+    source, read or run the self-test, read or set the review switch, and read
+    or run case conversion, each only with home_region=za. Those routes return names, counts, dates,
+    errors and scores. Documents, matters and client data stay refused.
+    The Boston Workspace holds this key. It never holds the ZA TANK_API_KEY.
+    """
+    if box_region() != ZA_REGION:
+        raise HTTPException(status_code=403, detail=_HOMES_DENIED)
+    path = request.url.path.rstrip("/")
+    if request.method == "POST" and path == "/v1/zenas/tenants":
+        await _homes_tenant_body(request)
+        return
+    if await _homes_founder_feed(request, path):
+        return
+    raise HTTPException(status_code=403, detail=_HOMES_DENIED)
 
 
 async def require_key(request: Request, x_tank_key: str = Header(default="")) -> str | None:
@@ -351,7 +569,8 @@ async def require_key(request: Request, x_tank_key: str = Header(default="")) ->
         raise HTTPException(status_code=401, detail="missing or invalid X-Tank-Key")
     path = request.url.path
     skill_run = path.startswith("/v1/skala/") and path.endswith("/run") and path.count("/") == 4
-    if path not in {"/health", "/v1/route"} and not skill_run:
+    vendor_write = request.method == "POST" and path == "/v1/ledger/vendor"
+    if path not in {"/health", "/v1/route"} and not skill_run and not vendor_write:
         raise HTTPException(status_code=403, detail="This agent key cannot call that.")
     return matched
 
@@ -384,6 +603,7 @@ class RouteResponse(BaseModel):
     tokens_out: int
     cost_usd: float
     latency_ms: int
+    finish_reason: str = ""
 
 
 class PolicyRow(BaseModel):
@@ -543,7 +763,74 @@ async def put_policy(task_type: str, body: PolicyRow) -> dict[str, Any]:
 
 # ---------- the one call ----------
 
-async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> RouteResponse:
+# Roster names that are Gemini. Gemini 3 Flash thinks at high unless told otherwise,
+# and those thought tokens come out of max_tokens.
+_GEMINI_MODELS = frozenset({"flash", "flash-lite", "argon"})
+_JSON_OBJECT_MODELS = _GEMINI_MODELS | frozenset(
+    {"luna", "sol", "astra", "grok", "grok-top", "grok-build"}
+)
+
+
+def _gemini_model(model: str) -> bool:
+    name = (model or "").strip().lower()
+    return name in _GEMINI_MODELS or "gemini" in name
+
+
+def _json_object_model(model: str) -> bool:
+    name = (model or "").strip().lower()
+    if name in _JSON_OBJECT_MODELS or _gemini_model(name):
+        return True
+    return name.startswith("gpt") or name.startswith("openai/") or "grok" in name
+
+
+def case_facts_generation(model: str) -> dict[str, Any]:
+    """JSON output, and low thinking for Gemini, for zenas.case_facts only.
+
+    Gemini 3 Flash defaults to high thinking. Thought tokens come out of
+    max_tokens, so the answer comes back empty. reasoning_effort low is what
+    LiteLLM maps to thinking_level low on Gemini 3, and to a small thinking
+    budget on Gemini 2.5. A thinking budget on its own does not set that
+    level on Gemini 3, so it is not sent. JSON mode goes only to models that
+    support a JSON object.
+    """
+    body: dict[str, Any] = {}
+    if _json_object_model(model):
+        body["response_format"] = {"type": "json_object"}
+    if _gemini_model(model):
+        body["reasoning_effort"] = "low"
+    return body
+
+
+def _content_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                parts.append(str(item.get("text") or ""))
+        return "".join(parts)
+    return ""
+
+
+def _choice_answer(data: dict[str, Any]) -> tuple[str, str]:
+    choices = data.get("choices") or [{}]
+    choice = choices[0] if isinstance(choices, list) and choices else {}
+    if not isinstance(choice, dict):
+        return "", ""
+    message = choice.get("message") or {}
+    if not isinstance(message, dict):
+        message = {}
+    return _content_text(message.get("content")), str(choice.get("finish_reason") or "")
+
+
+async def run_route(
+    req: RouteRequest,
+    task_id: uuid.UUID | None = None,
+    caller: str | None = None,
+) -> RouteResponse:
     """Pick the model from policy, call it through LiteLLM, write the ledger row.
     Used directly by /v1/route and in the background by tasks."""
     box = box_region()
@@ -552,7 +839,19 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
         # Empty, unknown, or the other region's text is not written.
         raise HTTPException(status_code=403, detail=foreign)
     client_text = "\n".join(m.content for m in req.messages)
-    early = model_call_refusal(client_text, None, box=box, tenant_id=str(req.tenant_id))
+    pool_read = await zenas_pool_prompt(
+        client_text, caller=caller, task_type=req.task_type, skill=req.skill
+    )
+    early = model_call_refusal(
+        client_text,
+        None,
+        box=box,
+        tenant_id=str(req.tenant_id),
+        task_type=req.task_type,
+        caller=caller,
+        skill=req.skill,
+        pool_read=pool_read,
+    )
     if early:
         raise HTTPException(status_code=403, detail=early)
 
@@ -566,10 +865,26 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
     messages = [m.model_dump() for m in req.messages]
     if policy["system_prompt"]:
         messages = [{"role": "system", "content": policy["system_prompt"]}, *messages]
+    if req.task_type == "zenas.case_facts" and any(str(message.get("content", "")).startswith(_CONVERT_HEAD) for message in messages):
+        messages.insert(0, {"role": "system", "content": (
+            "For this judgment conversion use facts_pointer and element quote_pointer objects instead of copying text. "
+            "Each pointer is {\"paragraphs\":[1,2]} or {\"first\":\"first eight words\",\"last\":\"last eight words\"}. "
+            "Select at least 200 characters of facts. Return question, holding, elements and citations as JSON."
+        )})
     max_tokens = min(req.max_tokens or policy["max_tokens_out"], policy["max_tokens_out"])
+    generation = case_facts_generation(model) if req.task_type == "zenas.case_facts" else {}
     sent = "\n".join(str(item.get("content") or "") for item in messages)
     holds_identifier = prompt_has_identifier(sent)
-    blocked = model_call_refusal(sent, model, box=box, tenant_id=str(req.tenant_id))
+    blocked = model_call_refusal(
+        sent,
+        model,
+        box=box,
+        tenant_id=str(req.tenant_id),
+        task_type=req.task_type,
+        caller=caller,
+        skill=req.skill,
+        pool_read=pool_read,
+    )
     if blocked:
         raise HTTPException(status_code=403, detail=blocked)
 
@@ -579,7 +894,10 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
     cache_key = None
     if not holds_identifier and _redis is not None and policy.get("cache_scope") in ("tenant", "platform"):
         scope = str(req.tenant_id) if policy["cache_scope"] == "tenant" else "platform"
-        digest = hashlib.sha256(json.dumps([req.task_type, model, max_tokens, messages], sort_keys=True).encode()).hexdigest()
+        digest_parts: list[Any] = [req.task_type, model, max_tokens, messages]
+        if generation:
+            digest_parts.append(generation)
+        digest = hashlib.sha256(json.dumps(digest_parts, sort_keys=True).encode()).hexdigest()
         cache_key = f"tank:cache:{scope}:{digest}"
         try:
             hit = await _redis.get(cache_key)
@@ -608,7 +926,7 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
             r = await client.post(
                 f"{LITELLM_URL}/v1/chat/completions",
                 headers={"Authorization": f"Bearer {LITELLM_MASTER_KEY}"},
-                json={"model": model, "messages": messages, "max_tokens": max_tokens},
+                json={"model": model, "messages": messages, "max_tokens": max_tokens, **generation},
             )
     except httpx.HTTPError as exc:
         # The gateway never answered. Still a call on the books, so the failure rate is honest.
@@ -649,8 +967,9 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
     # roster model that actually answered, so spend is booked to the right provider.
     answered = r.headers.get("x-litellm-model-group") or model
     content = ""
+    finish_reason = ""
     if outcome == "delivered":
-        content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "") or ""
+        content, finish_reason = _choice_answer(data)
 
     ledger_id = uuid.uuid4()
     async with pool().acquire() as conn:
@@ -695,6 +1014,7 @@ async def run_route(req: RouteRequest, task_id: uuid.UUID | None = None) -> Rout
     return RouteResponse(
         ledger_id=ledger_id, model=answered, rung=policy["rung"], content=content,
         tokens_in=tokens_in, tokens_out=tokens_out, cost_usd=cost_usd, latency_ms=latency_ms,
+        finish_reason=finish_reason,
     )
 
 
@@ -733,6 +1053,106 @@ def _price_quotes() -> list[graduate.Quote]:
     if not path.is_file():
         return []
     return graduate.load_price_roster(path)
+
+
+# The roster LiteLLM actually serves. The Tank image has no copy of litellm/config.yaml,
+# so the file roster above is empty in production; LiteLLM's own /model/info is the source.
+_ROSTER_TTL_S = 300
+_roster_cache: tuple[float, list[dict[str, Any]]] | None = None
+
+
+def _roster_row(item: Any) -> dict[str, Any] | None:
+    """One served model in roster shape: name, provider model and prices only, never a key."""
+    if not isinstance(item, dict):
+        return None
+    name = str(item.get("model_name") or "").strip()
+    if not name:
+        return None
+    params = item.get("litellm_params") if isinstance(item.get("litellm_params"), dict) else {}
+    info = item.get("model_info") if isinstance(item.get("model_info"), dict) else {}
+
+    def price(key: str) -> float | None:
+        value = info.get(key)
+        if value is None:
+            value = params.get(key)
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        return number if number >= 0 else None
+
+    return {
+        "model_name": name,
+        "litellm_params": {"model": str(params.get("model") or "")},
+        "model_info": {
+            "input_cost_per_token": price("input_cost_per_token"),
+            "output_cost_per_token": price("output_cost_per_token"),
+        },
+    }
+
+
+async def _roster_models() -> list[dict[str, Any]]:
+    """Models LiteLLM serves, with per-token prices, cached five minutes. The file roster is the fallback."""
+    global _roster_cache
+    now = time.time()
+    if _roster_cache is not None and now - _roster_cache[0] < _ROSTER_TTL_S:
+        return _roster_cache[1]
+    rows: list[dict[str, Any]] = []
+    if _http is not None and hasattr(_http, "get"):
+        try:
+            response = await _http.get(
+                f"{LITELLM_URL}/model/info",
+                headers={"Authorization": f"Bearer {LITELLM_MASTER_KEY}"},
+                timeout=10,
+            )
+            if response.status_code == 200:
+                payload = response.json()
+                data = payload.get("data") if isinstance(payload, dict) else None
+                seen: set[str] = set()
+                for item in data or []:
+                    row = _roster_row(item)
+                    if row is not None and row["model_name"] not in seen:
+                        seen.add(row["model_name"])
+                        rows.append(row)
+        except Exception:  # noqa: BLE001 - a missing or odd LiteLLM answer falls back to the file roster
+            rows = []
+    if rows:
+        _roster_cache = (now, rows)  # only LiteLLM's live answer is cached
+        return rows
+    path = _roster_path()
+    if not path.is_file():
+        return []
+    import yaml
+
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return [row for row in (_roster_row(item) for item in raw.get("model_list") or []) if row]
+
+
+async def _live_price_quotes() -> list[graduate.Quote]:
+    """Price quotes for the cheapest-model search, from the served roster."""
+    rows = await _roster_models()
+    return graduate.quotes_from_roster(
+        [{**row, "model_info": {key: (value or 0) for key, value in row["model_info"].items()}} for row in rows]
+    )
+
+
+def _per_million(value: Any) -> float | None:
+    return round(float(value) * 1_000_000, 4) if isinstance(value, (int, float)) else None
+
+
+@app.get("/v1/models", dependencies=[Depends(require_key)])
+async def list_models() -> list[dict[str, Any]]:
+    """The served roster for the Tank page: name, provider model, USD per million tokens. No keys."""
+    out = [
+        {
+            "name": row["model_name"],
+            "provider_model": row["litellm_params"]["model"],
+            "input_usd_per_m": _per_million(row["model_info"].get("input_cost_per_token")),
+            "output_usd_per_m": _per_million(row["model_info"].get("output_cost_per_token")),
+        }
+        for row in await _roster_models()
+    ]
+    return sorted(out, key=lambda m: ((m["input_usd_per_m"] or 0) + (m["output_usd_per_m"] or 0), m["name"]))
 
 
 async def _shadow_budget_open(task_type: str) -> bool:
@@ -1214,7 +1634,7 @@ async def graduation(
             """
         )
         code_quotes = await _code_quotes(conn)
-    price_quotes = _price_quotes()
+    price_quotes = await _live_price_quotes()
     roster_fp, price_fp = graduate.fingerprints([*price_quotes, *code_quotes])
     by_rank: dict[str, list[Any]] = {}
     for rank in ranks:
@@ -1327,7 +1747,8 @@ async def set_candidate(task_type: str, body: CandidateBody) -> dict[str, Any]:
     return {"ok": True}
 
 
-@app.post("/v1/graduation/{task_type}/promote", dependencies=[Depends(require_key)])
+@app.post("/v1/graduation/{task_type}/promote",
+          dependencies=[Depends(require_key), Depends(__import__("admin").require_admin)])
 async def promote(task_type: str, body: PromoteBody) -> dict[str, Any]:
     """Promote only when the shadow bar is cleared. The previous model stays for rollback."""
     move = await _move_task(task_type, by=body.by or "founder", automatic=False)
@@ -1395,7 +1816,7 @@ async def search_task(task_type: str, body: SearchBody | None = None) -> dict[st
         if policy is None:
             raise HTTPException(status_code=404, detail="no such platform policy")
         code_quotes = await _code_quotes(conn)
-        price_quotes = _price_quotes()
+        price_quotes = await _live_price_quotes()
         roster = [*price_quotes, *code_quotes]
         roster_fp, price_fp = graduate.fingerprints(roster)
         state = await conn.fetchrow("SELECT * FROM tank.search_state WHERE task_type=$1", task_type)
@@ -1544,7 +1965,7 @@ async def search_task(task_type: str, body: SearchBody | None = None) -> dict[st
 async def route(req: RouteRequest, caller: str | None = Depends(require_key)) -> RouteResponse:
     if caller:
         req = req.model_copy(update={"agent": caller})
-    return await run_route(req)
+    return await run_route(req, caller=caller)
 
 
 # ---------- tasks: the board ----------
@@ -1590,7 +2011,9 @@ async def create_task(body: TaskCreate) -> dict[str, Any]:
     if foreign:
         raise HTTPException(status_code=403, detail=foreign)
     text = "\n".join(m.content for m in body.messages)
-    early = model_call_refusal(text, None, box=box, tenant_id=str(body.tenant_id))
+    early = model_call_refusal(
+        text, None, box=box, tenant_id=str(body.tenant_id), task_type=body.task_type
+    )
     if early:
         raise HTTPException(status_code=403, detail=early)
     # Fail fast on a bad task_type rather than queueing a task that can only fail.
@@ -1731,15 +2154,87 @@ def make_ctx(pkg: skala.SkillPackage, tenant_id: uuid.UUID, task_id: uuid.UUID |
 PLATFORM_TENANT = uuid.UUID("00000000-0000-0000-0000-000000000001")
 
 
+class VendorCall(BaseModel):
+    model_config = {"extra": "forbid"}
+    id: uuid.UUID = Field(default_factory=uuid.uuid4)
+    tenant_id: uuid.UUID = PLATFORM_TENANT
+    agent: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
+    task_type: str = Field(pattern=r"^[a-z][a-z0-9_.-]{0,119}$")
+    vendor: str = Field(pattern=r"^[a-z][a-z0-9_.-]{0,79}$")
+    units: Decimal = Field(gt=0, le=1000, max_digits=18, decimal_places=6)
+    cost_usd: Decimal = Field(default=Decimal("0"), ge=0, max_digits=12, decimal_places=6)
+    outcome: Literal["delivered", "failed", "unverified"]
+    region: Literal["us-east", "za"]
+
+
+@app.post("/v1/ledger/vendor")
+async def vendor_ledger(body: VendorCall, agent: str | None = Depends(require_key)) -> dict[str, Any]:
+    if agent is None or agent == HOMES_PRINCIPAL or agent != body.agent:
+        raise HTTPException(status_code=403, detail="an agent may record only its own vendor calls")
+    if not body.task_type.startswith(f"{agent}."):
+        raise HTTPException(status_code=403, detail="task type must belong to the calling agent")
+    if body.tenant_id != PLATFORM_TENANT:
+        raise HTTPException(status_code=403, detail="vendor calls belong to the platform tenant")
+    if body.region != box_region():
+        raise HTTPException(status_code=403, detail="vendor call region must match this Tank")
+    if body.cost_usd != 0:
+        raise HTTPException(status_code=422, detail="credit calls must have zero dollar cost")
+    async with pool().acquire() as conn:
+        inserted = await conn.fetchval(
+            """
+            INSERT INTO tank.ledger
+                (id, tenant_id, region, agent, task_type, model, vendor, units, cost_usd, outcome, rung)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,1)
+            ON CONFLICT (id) DO NOTHING RETURNING id
+            """,
+            body.id, PLATFORM_TENANT, body.region, agent, body.task_type,
+            f"vendor:{body.vendor}", body.vendor, body.units, body.cost_usd, body.outcome,
+        )
+        if inserted is None:
+            same = await conn.fetchval(
+                """
+                SELECT 1 FROM tank.ledger WHERE id=$1 AND tenant_id=$2 AND region=$3
+                  AND agent=$4 AND task_type=$5 AND vendor=$6
+                  AND units IS NOT DISTINCT FROM $7::numeric AND cost_usd=$8 AND outcome=$9
+                """,
+                body.id, PLATFORM_TENANT, body.region, agent, body.task_type,
+                body.vendor, body.units, body.cost_usd, body.outcome,
+            )
+            if same != 1:
+                raise HTTPException(status_code=409, detail="vendor call id already used")
+    return {"ledger_id": str(body.id), "recorded": True}
+
+
 @app.get("/v1/skala", dependencies=[Depends(require_key)])
 async def list_skills() -> list[dict[str, Any]]:
+    """Every skill, plus the platform tenant's average cost per call on this box over 30 days."""
     async with pool().acquire() as conn:
         rows = await conn.fetch("SELECT * FROM tank.skills ORDER BY agent, id, version")
-    return [dict(r) for r in rows]
+        costs = await skill_costs.fetch_call_costs(conn, PLATFORM_TENANT, box_region())
+    return skill_costs.attach_call_costs([dict(r) for r in rows], costs)
 
 
 class EvalRun(BaseModel):
     by: str | None = None
+
+
+async def run_room_eval(pkg: skala.SkillPackage, payload: dict[str, Any], ctx: skala.SkillContext) -> dict[str, Any]:
+    key = os.environ.get("TANK_KEY_TISAN", "")
+    if pkg.id not in {"tisan.figma", "tisan.scaffold"} or not key or _http is None:
+        raise RuntimeError("eval room is unavailable")
+    response = await _http.post(
+        "http://agent-tisan:8000/evals/run",
+        headers={"X-Tank-Key": key},
+        json={"skill_id": pkg.id, "version": pkg.version, "tenant_id": str(ctx.tenant_id), "input": payload},
+        timeout=660,
+        follow_redirects=False,
+    )
+    if response.status_code != 200:
+        raise RuntimeError("eval room refused the case")
+    result = response.json()
+    if not isinstance(result, dict):
+        raise RuntimeError("invalid eval room result")
+    return result
 
 
 @app.post("/v1/skala/{skill_id}/{version}/evals", dependencies=[Depends(require_key)])
@@ -1750,8 +2245,9 @@ async def run_skill_evals(skill_id: str, version: str, body: EvalRun | None = No
     here = box_region()
     result = await skala.run_evals(
         pkg, lambda: make_ctx(pkg, PLATFORM_TENANT, preview=True, home_region=here),
+        execute=run_room_eval if pkg.id in {"tisan.figma", "tisan.scaffold"} else None,
     )
-    passed_gate = result["score"] >= pkg.eval_threshold
+    passed_gate = result["score"] >= pkg.eval_threshold and result["eligible"]
     async with pool().acquire() as conn:
         await conn.execute(
             "INSERT INTO tank.skill_evals (skill_id, version, score, passed, total, cost_usd, details, ran_by) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8)",
@@ -1785,6 +2281,9 @@ async def approve_skill(skill_id: str, version: str, body: Approval) -> dict[str
         state = await conn.fetchval("SELECT state FROM tank.skills WHERE id=$1 AND version=$2", skill_id, version)
         if state != "staging":
             raise HTTPException(status_code=409, detail=f"state is {state!r}; run evals until it reaches staging first")
+        blocked = await skala.zenas_approval_refusal(conn, skill_id, region=box_region())
+        if blocked:
+            raise HTTPException(status_code=409, detail=blocked)
         async with conn.transaction():
             await conn.execute(
                 "UPDATE tank.skills SET state='retired', updated_at=now() WHERE id=$1 AND state='approved' AND version<>$2",
@@ -1899,6 +2398,23 @@ BASE_AGENT_URL = os.environ.get("BASE_AGENT_URL", "http://agent-base:8000")
 _BASE_ROUTES = {"run", "retry", "rerun", "batches", "engines", "records"}
 
 
+@app.post("/v1/base/context-dev/trial", dependencies=[Depends(__import__("admin").require_admin)])
+async def base_context_trial() -> Response:
+    key = os.environ.get("TANK_KEY_BASE", "")
+    if _http is None or not key:
+        raise HTTPException(status_code=503, detail="Base trial is unavailable")
+    try:
+        response = await _http.post(
+            BASE_AGENT_URL.rstrip("/") + "/context-dev/trial",
+            json={"tenant_id": str(PLATFORM_TENANT)},
+            headers={"X-Tank-Key": key},
+            timeout=3600, follow_redirects=False,
+        )
+    except httpx.HTTPError:
+        raise HTTPException(status_code=503, detail="Trial interrupted; refresh results before trying again") from None
+    return Response(content=response.content, status_code=response.status_code, media_type="application/json")
+
+
 @app.api_route("/v1/base/{path:path}", methods=["GET", "POST"], dependencies=[Depends(require_key)])
 async def base_proxy(path: str, request: Request) -> Response:
     """Forward /v1/base/* to the Base room. The Workspace key is checked here and not sent on."""
@@ -1929,7 +2445,7 @@ async def base_proxy(path: str, request: Request) -> Response:
 
 _LOCAL_ZENAS_HOSTS = frozenset({"agent-zenas", "localhost", "127.0.0.1"})
 _ZENAS_PATH = re.compile(
-    r"^(consents|matters|pool|pool/status|health|review|rule-cards|worked|matches|training-pairs|drafts|tenants)$"
+    r"^(consents|matters|pool|pool/status|health|review|selftest|review-switch|cases/convert|rule-cards|worked|matches|training-pairs|drafts|tenants)$"
     r"|^(matters|documents|rule-cards|worked)/[0-9a-fA-F-]{36}$"
     r"|^matters/[0-9a-fA-F-]{36}/documents$"
     r"|^documents/[0-9a-fA-F-]{36}/reviews$"
@@ -1962,10 +2478,41 @@ def zenas_upstream(path: str) -> str:
     return raw.rstrip("/") + "/" + cleaned
 
 
+# A load detail is one short operational line. A judgment does not belong in it.
+_DETAIL_LIMIT = 240
+_URL = re.compile(r"https?://[^\s\"'<>]+", re.IGNORECASE)
+_SK_SECRET = re.compile(r"sk-[A-Za-z0-9_-]{8,}")
+# Same marks the pool refuses to fetch. An env var name such as
+# COURTLISTENER_API_TOKEN has no '=' and stays.
+_KEYED_URL_MARKS = ("api_key=", "token=", "password=", "secret=", "?key=", "&key=")
+
+
+def _scrub_public_text(text: str) -> str:
+    """Remove keyed URLs and sk- secrets. Other words stay."""
+
+    def drop_url(match: re.Match[str]) -> str:
+        url = match.group(0)
+        lowered = url.lower()
+        if any(mark in lowered for mark in _KEYED_URL_MARKS):
+            return ""
+        return url
+
+    cleaned = _SK_SECRET.sub("", _URL.sub(drop_url, text))
+    if cleaned == text:
+        return text
+    return " ".join(cleaned.split())
+
+
 def public_feed(value: Any) -> Any:
-    """Drop key material from a pool status payload. key_name and key_set stay."""
+    """Drop key material from a pool status payload. key_name and key_set stay.
+
+    Each source's last_status and a short detail stay, so the feeds page can
+    show why a load failed. A URL that carries a key does not.
+    """
     if isinstance(value, list):
         return [public_feed(item) for item in value]
+    if isinstance(value, str):
+        return _scrub_public_text(value)
     if not isinstance(value, dict):
         return value
     kept: dict[str, Any] = {}
@@ -1974,6 +2521,13 @@ def public_feed(value: Any) -> Any:
         if lowered not in {"key_name", "key_set"} and "key" in lowered:
             continue
         if any(part in lowered for part in ("secret", "password", "token")):
+            continue
+        if lowered == "detail":
+            text = item if isinstance(item, str) else ""
+            kept[key] = _scrub_public_text(text)[:_DETAIL_LIMIT]
+            continue
+        if lowered == "last_status":
+            kept[key] = _scrub_public_text(item) if isinstance(item, str) else item
             continue
         kept[key] = public_feed(item)
     return kept
@@ -2366,7 +2920,468 @@ async def tiger_alerts(request: Request) -> Response:
     return _tiger_response(resp, tenant_id)
 
 
+# ---------- workers panel (read only) ----------
+
+_WORKER_STATUS = re.compile(r"^[a-z_]{1,32}$")
+_WORKER_PR = re.compile(r"^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/[0-9]{1,9}$")
+_WORKERS_MAX_ROWS = 50
+_WORKERS_MAX_BYTES = 256 * 1024
+
+
+def _worker_number(value: Any, *, digits: int) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    number = float(value)
+    if number != number or number < 0 or number > 1e9:
+        return None
+    return round(number, digits)
+
+
+def _worker_row(raw: Any) -> dict[str, Any] | None:
+    """Keep the panel's columns only, as plain values. Anything else in a row is dropped."""
+    if not isinstance(raw, dict):
+        return None
+    issue = raw.get("issue")
+    if isinstance(issue, bool) or not isinstance(issue, int) or issue <= 0:
+        return None
+    status = str(raw.get("status") or "").strip().lower()
+    pr_url = raw.get("pr_url")
+    brief = raw.get("brief")
+    return {
+        "issue": issue,
+        "brief": brief.strip()[:200] if isinstance(brief, str) else "",
+        "status": status if _WORKER_STATUS.fullmatch(status) else "unknown",
+        "pr_url": pr_url if isinstance(pr_url, str) and _WORKER_PR.fullmatch(pr_url) else None,
+        "minutes": _worker_number(raw.get("minutes"), digits=2),
+        "cost_usd": _worker_number(raw.get("cost_usd"), digits=6),
+    }
+
+
+@app.get("/v1/workers", dependencies=[Depends(require_key)])
+async def workers_panel() -> dict[str, Any]:
+    """Recent worker tasks for the Tank page. Reads the workers service's /workers page as
+    JSON (/workers.json, the same rows). Read only: no ledger row, no write, no key."""
+    base = (os.environ.get("WORKERS_URL", "").strip() or "http://workers:8000").rstrip("/")
+    parsed = urlparse(base)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+        return {"available": False, "tasks": []}
+    try:
+        if _http is not None:
+            resp = await _http.get(f"{base}/workers.json", timeout=5, follow_redirects=False)
+        else:
+            async with httpx.AsyncClient(timeout=5) as client:
+                resp = await client.get(f"{base}/workers.json", follow_redirects=False)
+    except httpx.HTTPError:
+        return {"available": False, "tasks": []}
+    if resp.status_code != 200 or len(resp.content) > _WORKERS_MAX_BYTES:
+        return {"available": False, "tasks": []}
+    try:
+        rows = resp.json()
+    except ValueError:
+        return {"available": False, "tasks": []}
+    if not isinstance(rows, list):
+        return {"available": False, "tasks": []}
+    tasks = [row for row in (_worker_row(item) for item in rows[:_WORKERS_MAX_ROWS]) if row is not None]
+    return {"available": True, "tasks": tasks}
+
+
+# ---------- billing events (Workspace key only) ----------
+
+class BillingEventClaim(BaseModel):
+    event_id: str = Field(min_length=1, max_length=255)
+    type: str = Field(min_length=1, max_length=255)
+
+
+class BillingEventRelease(BaseModel):
+    event_id: str = Field(min_length=1, max_length=255)
+
+
+class BillingEventHandled(BaseModel):
+    event_id: str = Field(min_length=1, max_length=255)
+
+
+def _billing_text(value: str, label: str) -> str:
+    text = value.strip()
+    if not text or any(ord(ch) < 32 or ord(ch) == 127 for ch in text):
+        raise HTTPException(status_code=400, detail=f"{label} is required")
+    return text
+
+
+@app.post("/v1/billing/events/claim", dependencies=[Depends(require_key)])
+async def claim_billing_event(body: BillingEventClaim) -> dict[str, bool]:
+    """Store a Stripe event id once. The first caller gets first=true."""
+    event_id = _billing_text(body.event_id, "event_id")
+    event_type = _billing_text(body.type, "type")
+    try:
+        async with pool().acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                INSERT INTO tank.billing_events (event_id, type, received_at)
+                VALUES ($1, $2, now())
+                ON CONFLICT (event_id) DO NOTHING
+                RETURNING event_id
+                """,
+                event_id,
+                event_type,
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Billing event could not be stored.") from None
+    return {"first": row is not None}
+
+
+@app.post("/v1/billing/events/release", dependencies=[Depends(require_key)])
+async def release_billing_event(body: BillingEventRelease) -> dict[str, bool]:
+    """Delete an unhandled claim so Stripe's retry can run."""
+    event_id = _billing_text(body.event_id, "event_id")
+    try:
+        async with pool().acquire() as conn:
+            result = await conn.execute(
+                """
+                DELETE FROM tank.billing_events
+                WHERE event_id = $1 AND handled IS NOT TRUE
+                """,
+                event_id,
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Billing event could not be released.") from None
+    return {"released": result == "DELETE 1"}
+
+
+@app.post("/v1/billing/events/handled", dependencies=[Depends(require_key)])
+async def mark_billing_event_handled(body: BillingEventHandled) -> dict[str, bool]:
+    """Mark a stored claim handled so a later release leaves it in place."""
+    event_id = _billing_text(body.event_id, "event_id")
+    try:
+        async with pool().acquire() as conn:
+            result = await conn.execute(
+                """
+                UPDATE tank.billing_events
+                SET handled = true
+                WHERE event_id = $1
+                """,
+                event_id,
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=500, detail="Billing event could not be marked handled.") from None
+    return {"handled": result == "UPDATE 1"}
+
+
 app.include_router(__import__("admin").router)
 
 app.include_router(__import__("gold").router)
 app.include_router(__import__("training").router)
+
+
+@app.get("/v1/training/graduation")
+async def training_graduation(actor=Depends(__import__("gold").require_reviewer)):
+    if not actor.founder:
+        raise HTTPException(404, "not found")
+    async with pool().acquire() as conn:
+        return await graduate.training_table(conn, actor.tenant, box_region())
+
+
+@app.api_route("/v1/tisan/gold/{action}", methods=["GET", "POST"],
+               dependencies=[Depends(__import__("admin").require_admin)])
+async def tisan_gold_proxy(action: str, request: Request) -> Response:
+    """Founder-only fixed corridor for reviewing and approving saved Tisan pages."""
+    if (request.method, action) not in {("GET", "pages"), ("POST", "approve")}:
+        raise HTTPException(status_code=404, detail="not found")
+    key = os.environ.get("TANK_KEY_TISAN", "")
+    if _http is None or not key:
+        raise HTTPException(status_code=503, detail="Tisan room is unavailable")
+    raw = await request.body()
+    if len(raw) > 8192:
+        raise HTTPException(status_code=413, detail="request too large")
+    try:
+        response = await _http.request(
+            request.method, f"http://agent-tisan:8000/gold/{action}",
+            params=list(request.query_params.multi_items()), content=raw or None,
+            headers={"X-Tank-Key": key, "X-Tervory-Admin": request.headers.get("x-tervory-admin", ""),
+                     "Content-Type": "application/json"}, timeout=30,
+        )
+    except httpx.HTTPError:
+        raise HTTPException(status_code=503, detail="Tisan room is unavailable") from None
+    return Response(content=response.content, status_code=response.status_code, media_type="application/json")
+
+
+# ---------- Rig: the room owns the catalogues; Tank only proxies reads ----------
+# The Workspace is not on Rig's corridor. These routes check the caller's tenant,
+# forward to the Rig room with TANK_KEY_RIG, and return the room's JSON.
+# Ask is the paid call. The room sends it back through POST /v1/route (task type
+# rig.ask), which loads policy and writes the ledger. This proxy does not call a
+# model and does not write a second ledger row. No shopper key is sent or stored.
+
+RIG_AGENT_URL = "http://agent-rig:8000"
+_RIG_ID = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+_RIG_SECRET_TEXT = re.compile(r"rk_(?:pub|adm)_[A-Za-z0-9_]+|sk-[A-Za-z0-9_-]{8,}")
+_RIG_DROP = frozenset({
+    "key", "keys", "key_hash", "secret", "password", "token", "webhook", "email", "origins",
+})
+_RIG_DOWN = "Rig did not answer."
+
+
+def _rig_tenant(request: Request, body: dict[str, Any] | None = None) -> uuid.UUID:
+    """The tenant this call is for. Query and body must name the same one."""
+    named = [value.strip() for key, value in request.query_params.multi_items() if key == "tenant_id" and value.strip()]
+    if body is not None and body.get("tenant_id") not in (None, ""):
+        named.append(str(body["tenant_id"]).strip())
+    if not named:
+        raise HTTPException(status_code=400, detail="tenant_id is required")
+    parsed: list[uuid.UUID] = []
+    for item in named:
+        try:
+            parsed.append(uuid.UUID(item))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="tenant_id is not a valid id") from None
+    if any(item != parsed[0] for item in parsed):
+        raise HTTPException(status_code=403, detail="tenant mismatch")
+    return parsed[0]
+
+
+def _rig_limit(value: str | None) -> int:
+    try:
+        number = int(value) if value else 12
+    except ValueError:
+        return 12
+    if number < 1:
+        return 1
+    if number > 50:
+        return 50
+    return number
+
+
+def _rig_foreign(value: Any, tenant_id: uuid.UUID) -> bool:
+    """True when a payload names a tenant other than the caller."""
+    if isinstance(value, list):
+        return any(_rig_foreign(item, tenant_id) for item in value)
+    if not isinstance(value, dict):
+        return False
+    if "tenant_id" in value and not _same_tenant(value.get("tenant_id"), tenant_id):
+        return True
+    return any(_rig_foreign(item, tenant_id) for item in value.values())
+
+
+def _rig_scrub(value: Any) -> Any:
+    """Drop key material before a room payload leaves Tank."""
+    if isinstance(value, list):
+        return [_rig_scrub(item) for item in value]
+    if isinstance(value, str):
+        return _RIG_SECRET_TEXT.sub("", value)
+    if not isinstance(value, dict):
+        return value
+    kept: dict[str, Any] = {}
+    for key, item in value.items():
+        name = str(key).lower()
+        if name in _RIG_DROP or "secret" in name or name.endswith("_key"):
+            continue
+        kept[str(key)] = _rig_scrub(item)
+    return kept
+
+
+async def _rig_body(request: Request) -> dict[str, Any]:
+    raw = await request.body()
+    if len(raw) > 8192:
+        raise HTTPException(status_code=413, detail="request too large")
+    if not raw:
+        return {}
+    try:
+        body = json.loads(raw)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="body must be json") from None
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="body must be an object")
+    return body
+
+
+async def _rig_call(method: str, path: str, params: list[tuple[str, str]], content: bytes | None, *, timeout: float) -> Any:
+    key = os.environ.get("TANK_KEY_RIG", "").strip()
+    if _http is None or not key:
+        raise HTTPException(status_code=502, detail=_RIG_DOWN)
+    headers = {"X-Tank-Key": key, "Accept": "application/json"}
+    if content is not None:
+        headers["Content-Type"] = "application/json"
+    try:
+        return await _http.request(
+            method,
+            RIG_AGENT_URL + path,
+            params=params,
+            content=content,
+            headers=headers,
+            timeout=timeout,
+            follow_redirects=False,
+        )
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail=_RIG_DOWN) from None
+
+
+def _rig_response(resp: Any, tenant_id: uuid.UUID) -> Response:
+    raw = resp.content or b""
+    if not raw or len(raw) > 1_000_000:
+        raise HTTPException(status_code=502, detail=_RIG_DOWN)
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=502, detail=_RIG_DOWN) from None
+    if _rig_foreign(payload, tenant_id):
+        raise HTTPException(status_code=403, detail="tenant mismatch")
+    try:
+        encoded = json.dumps(_rig_scrub(payload)).encode()
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=502, detail=_RIG_DOWN) from None
+    return Response(content=encoded, status_code=resp.status_code, media_type="application/json")
+
+
+def _rig_id(value: str) -> str:
+    if not _RIG_ID.fullmatch(value):
+        raise HTTPException(status_code=400, detail="bad id")
+    return value
+
+
+@app.get("/v1/rig/search", dependencies=[Depends(require_key)])
+async def rig_search(request: Request) -> Response:
+    tenant_id = _rig_tenant(request)
+    params = [
+        ("tenant_id", str(tenant_id)),
+        ("q", (request.query_params.get("q") or "").strip()[:200]),
+        ("limit", str(_rig_limit(request.query_params.get("limit")))),
+    ]
+    return _rig_response(await _rig_call("GET", "/v1/rig/search", params, None, timeout=30), tenant_id)
+
+
+@app.get("/v1/rig/graph/{product_id}", dependencies=[Depends(require_key)])
+async def rig_graph(product_id: str, request: Request) -> Response:
+    item = _rig_id(product_id)
+    tenant_id = _rig_tenant(request)
+    params = [("tenant_id", str(tenant_id))]
+    return _rig_response(await _rig_call("GET", f"/v1/rig/graph/{item}", params, None, timeout=30), tenant_id)
+
+
+@app.get("/v1/rig/products/{product_id}", dependencies=[Depends(require_key)])
+async def rig_product(product_id: str, request: Request) -> Response:
+    item = _rig_id(product_id)
+    tenant_id = _rig_tenant(request)
+    params = [("tenant_id", str(tenant_id))]
+    return _rig_response(await _rig_call("GET", f"/v1/rig/products/{item}", params, None, timeout=30), tenant_id)
+
+
+@app.post("/v1/rig/compare", dependencies=[Depends(require_key)])
+async def rig_compare(request: Request) -> Response:
+    body = await _rig_body(request)
+    tenant_id = _rig_tenant(request, body)
+    ids = body.get("product_ids")
+    if not isinstance(ids, list) or not ids or len(ids) > 24:
+        raise HTTPException(status_code=400, detail="bad id")
+    clean = [_rig_id(item) for item in ids if isinstance(item, str)]
+    if len(clean) != len(ids):
+        raise HTTPException(status_code=400, detail="bad id")
+    payload = json.dumps({"product_ids": clean}).encode()
+    resp = await _rig_call("POST", "/v1/rig/compare", [("tenant_id", str(tenant_id))], payload, timeout=30)
+    return _rig_response(resp, tenant_id)
+
+
+@app.post("/v1/rig/ask", dependencies=[Depends(require_key)])
+async def rig_ask(request: Request) -> Response:
+    """Forward the question. The room's model call is POST /v1/route, task type rig.ask.
+
+    run_route loads that task's policy row and writes the ledger. A question the
+    catalogue cannot answer does not call a model. This handler does not.
+    """
+    body = await _rig_body(request)
+    tenant_id = _rig_tenant(request, body)
+    product_id = body.get("product_id")
+    if not isinstance(product_id, str):
+        raise HTTPException(status_code=400, detail="bad id")
+    question = body.get("question")
+    forwarded: dict[str, Any] = {
+        "product_id": _rig_id(product_id),
+        "question": question.strip()[:500] if isinstance(question, str) else "",
+    }
+    if isinstance(body.get("setup"), dict):
+        forwarded["setup"] = body["setup"]
+    payload = json.dumps(forwarded).encode()
+    resp = await _rig_call("POST", "/v1/rig/ask", [("tenant_id", str(tenant_id))], payload, timeout=150)
+    return _rig_response(resp, tenant_id)
+
+
+@app.get("/v1/rig/catalogues", dependencies=[Depends(require_key)])
+async def rig_catalogues(request: Request) -> Response:
+    """Product and fit counts for the caller's catalogue."""
+    tenant_id = _rig_tenant(request)
+    resp = await _rig_call("GET", "/catalogues", [("tenant_id", str(tenant_id))], None, timeout=30)
+    return _rig_response(resp, tenant_id)
+
+
+# ---------- Market Lab quarantine: the room holds the batches; Tank only proxies ----------
+# The Workspace is not on the room corridor. These routes check the founder,
+# forward with TANK_KEY_MARKET_LAB, and return the room's JSON. Remove also
+# marks the batch removed in training lineage after the room accepts it.
+
+MARKET_AGENT_URL = "http://agent-market-lab:8000"
+_MARKET_BATCH = re.compile(r"^[A-Za-z0-9_.:-]{1,80}$")
+_MARKET_ACTIONS = frozenset({"release", "reject", "remove"})
+_MARKET_DOWN = "Market Lab did not answer."
+
+
+async def _market_call(method: str, path: str) -> Any:
+    key = os.environ.get("TANK_KEY_MARKET_LAB", "").strip()
+    if _http is None or not key:
+        raise HTTPException(status_code=502, detail=_MARKET_DOWN)
+    try:
+        return await _http.request(
+            method,
+            MARKET_AGENT_URL + path,
+            headers={"X-Tank-Key": key, "Accept": "application/json"},
+            timeout=30,
+            follow_redirects=False,
+        )
+    except httpx.HTTPError:
+        raise HTTPException(status_code=502, detail=_MARKET_DOWN) from None
+
+
+def _market_ok(resp: Any) -> dict[str, Any]:
+    if getattr(resp, "status_code", 0) < 200 or getattr(resp, "status_code", 0) >= 300:
+        raise HTTPException(status_code=502, detail=_MARKET_DOWN)
+    raw = getattr(resp, "content", b"") or b""
+    if not raw or len(raw) > 1_000_000:
+        raise HTTPException(status_code=502, detail=_MARKET_DOWN)
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=502, detail=_MARKET_DOWN) from None
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=502, detail=_MARKET_DOWN)
+    return payload
+
+
+@app.get("/v1/market/quarantine")
+async def market_quarantine_list(actor=Depends(__import__("gold").require_reviewer)) -> dict[str, Any]:
+    if not actor.founder:
+        raise HTTPException(status_code=404, detail="not found")
+    return _market_ok(await _market_call("GET", "/quarantine"))
+
+
+@app.post("/v1/market/quarantine/{batch_id}/{action}")
+async def market_quarantine_act(
+    batch_id: str,
+    action: str,
+    actor=Depends(__import__("gold").require_reviewer),
+) -> dict[str, Any]:
+    if not actor.founder or action not in _MARKET_ACTIONS or _MARKET_BATCH.fullmatch(batch_id) is None:
+        raise HTTPException(status_code=404, detail="not found")
+    payload = _market_ok(await _market_call("POST", f"/quarantine/{batch_id}/{action}"))
+    if action != "remove":
+        return payload
+    try:
+        async with pool().acquire() as conn:
+            models = await __import__("training").retire_batch(conn, actor.tenant, batch_id)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=502, detail=_MARKET_DOWN) from None
+    return {**payload, "models": models}

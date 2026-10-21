@@ -36,6 +36,33 @@ The secret text is not a column. It is masked out of the summary, the rows, and 
 2. `scan.dependencies` — npm and Python packages against the baked OSV data. Reports package, version, advisory id, severity, and the fixed version.
 3. `scan.static` — Semgrep with the vendored rules. Looks for SQL built by string formatting.
 
+## Gold candidates
+
+`GET /gold/candidates?limit=200` requires the room's `X-Tank-Key` (`TANK_KEY`).
+It returns a deterministic array of `{skill_id, input, expected, label_source,
+label_family, region, public}`. Every row's family is `radix:fixture:v1:{skill}`.
+Fixtures do not change by month, so one spot check covers that skill's fixture
+rule. A row marked synthetic (a wrong answer made on purpose) uses a separate
+family whose name contains `synthetic`. Limits are 1–200; the default is 200. The fixed set contains
+13 examples in US rooms and 8 scanner examples in ZA rooms; requests do not
+pad or duplicate the set. Consumers should deduplicate repeated pulls.
+
+Only the image's synthetic fixtures are read. No database, Tank call, model,
+scanner subprocess, or outside request is used. Known scanner findings and
+clean cases label `scan.*`; saved business evidence labels all five `radix.*`
+skills. These remain candidates for review, not checked training examples.
+Business fixtures retain their US region and are omitted in ZA. All examples
+are public synthetic material; client uploads are never a source. See
+`evals/gold/README.md` for provenance. No outbound scan or host approval is added.
+
+## GDPR / POPIA notice check
+
+`comply.gdpr` reads a saved HTML page. It does not fetch the page, follow a link, or open a socket. It looks for a link to a privacy notice under GDPR or South Africa’s Protection of Personal Information Act (POPIA), as applicable. A South African site’s POPIA notice is accepted by its label or link; the notice page itself does not need to link to itself. If the page loads a script or frame from another site, it also looks for a cookie notice on that same page. A missing notice is medium. It does not block a deploy. It is not a job on the service, and the code scan still runs only the three skills above.
+
+This is a notice-presence check, not a finding of legal compliance under either law. The `comply.gdpr` tool id is retained for compatibility.
+
+A saved page is not a live site. This check does not open `https://lokd.co.za`. Data retention, a right-to-erasure control, a POPIA information-officer check, card-data rules, and a full accessibility audit are not this check. Those need another page, a browser, or a live fetch.
+
 ## What Radix never does
 
 - Scan a target the tenant has not registered and proven it owns (DNS TXT or a file token). That check is a later skill.

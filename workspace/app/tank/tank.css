@@ -490,6 +490,80 @@ body:has(.tk) main {
   font-size: 14px;
 }
 
+.tk-model-provider {
+  flex: 1;
+  color: #3d4a66;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.tk-model-price {
+  font-family: var(--font-mono), "JetBrains Mono", ui-monospace, monospace;
+  font-size: 13px;
+  color: #001840;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .tk-models li {
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
+  .tk-model-price {
+    white-space: normal;
+  }
+}
+
+.tk-workers {
+  background: #fff;
+  border: 1px solid #b8bfd0;
+  border-radius: 12px;
+  overflow-x: auto;
+}
+
+.tk-workers table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  color: #001840;
+}
+
+.tk-workers th,
+.tk-workers td {
+  padding: 12px 20px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.tk-workers th {
+  color: #6b7590;
+  font-weight: 500;
+}
+
+.tk-workers tbody tr {
+  border-top: 1px solid #b8bfd0;
+}
+
+.tk-workers a {
+  color: #001840;
+}
+
+.tk-wk-issue {
+  display: block;
+  font-family: var(--font-mono), "JetBrains Mono", ui-monospace, monospace;
+}
+
+.tk-wk-brief {
+  display: block;
+  color: #6b7590;
+  font-size: 13px;
+}
+
+.tk-wk-num {
+  font-family: var(--font-mono), "JetBrains Mono", ui-monospace, monospace;
+  white-space: nowrap;
+}
+
 @media (max-width: 1100px) {
   .tk-body {
     padding: 40px 32px 48px;
@@ -600,3 +674,10 @@ body:has(.tk) main {
     grid-template-columns: 1fr;
   }
 }
+
+.tank-graduation { margin: 24px 0; padding: 24px; color: #001840; background: #F4F6FB; min-width: 0; }
+.tank-graduation h2 { font-weight: 300; }
+.tank-graduation-scroll { overflow-x: auto; max-width: 100%; }
+.tank-graduation table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.tank-graduation th, .tank-graduation td { border-bottom: 1px solid #B8BFD0; padding: 12px; text-align: left; }
+.tank-graduation button { color: #001840; background: white; border: 1px solid #B8BFD0; padding: 8px; }

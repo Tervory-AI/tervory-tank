@@ -26,6 +26,7 @@ from agents.zenas.pool.adapters.govinfo import FrapAdapter as GovFrap  # noqa: E
 from agents.zenas.pool.adapters.govinfo import FrcpAdapter, FreAdapter  # noqa: E402
 from agents.zenas.pool.adapters.states import DelawareAdapter, TexasAdapter  # noqa: E402
 from agents.zenas.pool.adapters.uncitral import CisgAdapter, ModelLawAdapter  # noqa: E402
+from agents.zenas.pool.blobs import text_payloads  # noqa: E402
 from agents.zenas.pool.catalogue import CATALOGUE  # noqa: E402
 from agents.zenas.pool.http import BACKOFF_SECONDS, urllib_get  # noqa: E402
 
@@ -109,6 +110,79 @@ def test_saved_responses_parse_to_many_documents() -> None:
     assert counts["uncitral-model-law"] >= 10
     # The numbers are the saved-response document counts for the report.
     assert counts == counts
+
+
+def test_ecfr_bulk_requests_only_parts_the_structure_lists(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Live title 15 on 19 Oct 2026: part 731 is reserved and the full XML 404s.
+
+    The structure endpoint lists 730 and 732 and does not list 731. The saved
+    structure is that shape. The saved 19 CFR 141 XML is the full-endpoint body.
+    """
+    import agents.zenas.pool.adapters.ecfr as ecfr
+
+    structure = (ROOT / "tests" / "fixtures" / "ecfr" / "title-15-structure.json").read_bytes()
+    saved_xml = (SAVED / "ecfr" / "19-cfr-141.xml").read_bytes()
+    monkeypatch.setattr(ecfr, "ECFR_TARGETS", (("15", range(730, 775)),))
+    seen: list[str] = []
+
+    titles = (ROOT / "tests" / "fixtures" / "ecfr" / "titles.json").read_bytes()
+
+    async def get(url: str, headers: dict) -> bytes:
+        seen.append(url)
+        assert headers["User-Agent"].startswith("TervoryZenasPool")
+        if url.endswith("/titles.json"):
+            assert headers["Accept"] == "application/json"
+            return titles
+        if "/structure/" in url:
+            assert headers["Accept"] == "application/json"
+            return structure
+        assert headers["Accept"] == "application/xml"
+        return saved_xml
+
+    blobs, cursor = asyncio.run(EcfrAdapter().fetch_bulk(get))
+    assert cursor == ""
+    assert len(blobs) == 3
+    # Each title is asked for at its own latest issue (saved titles.json, 19 Oct 2026).
+    assert any(url.endswith("/structure/2026-09-24/title-15.json") for url in seen)
+    assert any("part=730" in url for url in seen)
+    assert any("part=732" in url for url in seen)
+    assert any("part=747" in url for url in seen)
+    assert not any("part=731" in url for url in seen)
+    assert not any("part=1" in url for url in seen)
+    assert all(url.startswith("https://www.ecfr.gov/") for url in seen)
+    assert len(EcfrAdapter().parse(blobs[0], _source("ecfr"))) >= 10
+
+
+def _uncitral_from_saved_ebook(adapter, path: Path) -> list:
+    pdf = path.read_bytes()
+
+    async def get(url: str, headers: dict) -> bytes:
+        assert url == adapter.url
+        assert headers["Accept"] == "application/pdf"
+        assert url.startswith("https://uncitral.un.org/")
+        return pdf
+
+    blobs, cursor = asyncio.run(adapter.fetch_bulk(get))
+    assert cursor == ""
+    assert len(blobs) == 1
+    assert not blobs[0].startswith(b"%PDF")
+    kept = text_payloads(blobs[0])
+    assert kept == blobs
+    return adapter.parse(kept[0], _source(adapter.source_id))
+
+
+def test_uncitral_cisg_saved_ebook_becomes_article_text() -> None:
+    docs = _uncitral_from_saved_ebook(CisgAdapter(), SAVED / "uncitral-cisg" / "19-09951.pdf")
+    assert len(docs) >= 10
+    assert docs[0].citation.startswith("CISG art.")
+    assert all(doc.text.strip() for doc in docs)
+
+
+def test_uncitral_model_law_saved_ebook_becomes_article_text() -> None:
+    docs = _uncitral_from_saved_ebook(ModelLawAdapter(), SAVED / "uncitral-model-law" / "19-09955.pdf")
+    assert len(docs) >= 10
+    assert docs[0].citation.startswith("UNCITRAL Model Law art.")
+    assert all(doc.text.strip() for doc in docs)
 
 
 def test_loader_headers_and_federal_register_parts() -> None:
@@ -381,6 +455,43 @@ async def test_selftest_scores_and_regions_do_not_cross() -> None:
     )
     assert facts["holdout"] is True
     assert facts["training_pair_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_a_holdout_case_without_a_rule_card_is_an_error_not_a_zero_score() -> None:
+    assert is_holdout("id-1") is True
+    ladder = LadderMemory()
+    await ladder.add_worked(
+        {
+            "region": "us-east",
+            "tenant_id": None,
+            "source": "case",
+            "material_type": "public_record",
+            "jurisdiction": "us",
+            "area": "",
+            "rule_card_ids": [],
+            "fact_pattern": {
+                "features": {},
+                "facts": "The court stated the sale was complete.",
+                "question": "Was the sale complete?",
+            },
+            "element_findings": [],
+            "outcome": "met",
+            "pool_doc_id": "id-1",
+            "holdout": True,
+        }
+    )
+    result = await run_selftest(ladder, region="us-east")
+    hold = [
+        run
+        for run in result["runs"]
+        if run["kind"] == "holdout" and run["cases"] and not str(run["area"]).startswith("Made-up")
+    ]
+    assert len(hold) == 1
+    assert hold[0]["error"] is True
+    assert hold[0]["label"] == "error"
+    assert hold[0]["reason"] == "no rule card"
+    assert "The court stated" not in json.dumps(hold[0])
 
 
 def test_feeds_page_uses_the_region_link_and_strips_documents() -> None:

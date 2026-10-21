@@ -779,3 +779,151 @@ async def answer(model: str, payload: dict[str, Any], *, llm: Any, run_code: Any
         return CallResult(content=content, model_calls=0, cost_usd=0.0, rung=rung)
     content, cost = await llm(model, payload)
     return CallResult(content=str(content), model_calls=1, cost_usd=float(cost), rung=1)
+
+
+HOLD_REGIONS = ("us-east", "za")
+
+
+def heldout_score_for(scores: list[dict], *, region: str, skill: str, candidate: str | None) -> float | None:
+    if not candidate:
+        return None
+    parsed = parse_skill(candidate)
+    found = None
+    for row in scores:
+        if str(row.get("region") or "") != region or row.get("final_check") is False:
+            continue
+        if parsed:
+            if row.get("skill_id") == parsed[0] and str(row.get("version")) == parsed[1]:
+                found = row.get("score")
+        elif row.get("candidate_model") == candidate and (
+            (row.get("task_type") or row.get("skill_id")) == skill or row.get("skill_id") == skill
+        ):
+            found = row.get("score")
+    if found is None:
+        return None
+    return float(found)
+
+
+def skills_served(candidate: str, ranks: list[dict], scores: list[dict]) -> set[str]:
+    skills: set[str] = set()
+    for rank in ranks:
+        if rank.get("candidate") == candidate and rank.get("task_type"):
+            skills.add(str(rank["task_type"]))
+    parsed = parse_skill(candidate)
+    if parsed:
+        skills.add(parsed[0])
+    for row in scores:
+        if row.get("candidate_model") == candidate:
+            skill = row.get("task_type") or row.get("skill_id")
+            if skill:
+                skills.add(str(skill))
+    return skills
+
+
+def promotion_block(*, candidate: str | None, current_model: str | None, skills: set[str] | list[str],
+                    scores: list[dict], removed_models: set[str]) -> str | None:
+    """A candidate is promotable only when it is no worse on both regions, for every skill."""
+    if not candidate:
+        return "missing held-out score"
+    if candidate in removed_models:
+        return "trained on removed data"
+    served = set(skills)
+    if not served:
+        return "missing held-out score"
+    for skill in sorted(served):
+        for region in HOLD_REGIONS:
+            cand = heldout_score_for(scores, region=region, skill=skill, candidate=candidate)
+            current = heldout_score_for(scores, region=region, skill=skill, candidate=current_model)
+            if cand is None:
+                return "missing held-out score"
+            if current is not None and cand < current:
+                return "dropped"
+    return None
+
+
+def training_candidate(policy: dict, candidates: list[dict], gold_count: int) -> dict | None:
+    """Display a held-out winner only; screening/shadow scores are not holdout scores."""
+    if gold_count < 100:
+        return None
+    eligible = [c for c in candidates if c.get('gold_count', gold_count) >= 100 and c.get('heldout_n', 0) > 0
+                and c.get('heldout_score') is not None
+                and float(c['heldout_score']) >= float(policy['eval_threshold'])
+                and c.get('kind') in ('code', 'model', 'owned')
+                and (c['kind'] != 'model' or c.get('cheaper') is True)]
+    return min(eligible, key=lambda c: ({'code': 0, 'model': 1, 'owned': 2}[c['kind']],
+                                       c.get('cost_per_call') if c.get('cost_per_call') is not None else float('inf'),
+                                       c['candidate']), default=None)
+
+
+async def training_table(conn, tenant, region: str) -> list[dict]:
+    policies = await conn.fetch("""SELECT task_type,model,candidate_model,eval_threshold,auto_promote
+        FROM tank.policy WHERE tenant_id IS NULL AND task_type<>'tank.judge' ORDER BY task_type""")
+    ranks = await conn.fetch('SELECT * FROM tank.graduation_rank')
+    skills = await conn.fetch("SELECT id,version,task_type,state,present FROM tank.skills")
+    gold = await conn.fetch("""SELECT skill_id,count(DISTINCT input_hash) AS n FROM tank.gold_examples
+        WHERE tenant_id=$1 AND region=$2 AND status='checked' AND (NOT auto_label OR auto_approved)
+        GROUP BY skill_id""", tenant, region)
+    scores = await conn.fetch("""SELECT DISTINCT ON (region,skill_id,version,task_type,candidate_model) * FROM tank.gold_scores
+        WHERE tenant_id=$1 AND region IN ('us-east','za') AND final_check
+        ORDER BY region,skill_id,version,task_type,candidate_model,ran_at DESC,id DESC""", tenant)
+    removed_rows = await conn.fetch("""SELECT DISTINCT b.model_repo FROM tank.training_job_batches b
+        JOIN tank.removed_batches r ON r.tenant_id=b.tenant_id AND r.batch_id=b.batch_id
+        WHERE b.tenant_id=$1""", tenant)
+    removed_models = {row["model_repo"] for row in removed_rows}
+    costs = await conn.fetch("""SELECT task_type,model,avg(cost_usd) AS cost FROM tank.ledger
+        WHERE tenant_id=$1 AND region=$2 AND ts>now()-interval '30 days' AND NOT cache_hit
+        GROUP BY task_type,model""", tenant, region)
+    counts = {r['skill_id']: r['n'] for r in gold}
+    prices = {(r['task_type'], r['model']): float(r['cost']) for r in costs}
+    rank_rows = [dict(rank) for rank in ranks]
+    score_rows = [dict(score) for score in scores]
+    result = []
+    for policy in policies:
+        task = policy['task_type']
+        current_cost = prices.get((task, policy['model']))
+        mapped = {task} | {s['id'] for s in skills if s['task_type'] == task}
+        task_ranks = [dict(r) for r in rank_rows if r['task_type'] == task]
+        region_scores = [row for row in score_rows if row.get('region') == region]
+        for rank in task_ranks:
+            parsed = parse_skill(rank['candidate'])
+            if parsed:
+                mapped.add(parsed[0])
+                approved = any(s['id'] == parsed[0] and s['version'] == parsed[1]
+                               and s['state'] == 'approved' and s['present'] and not s['task_type'] for s in skills)
+                evidence = next((s for s in region_scores if s['skill_id'] == parsed[0] and s['version'] == parsed[1]), None)
+                rank.update(gold_count=counts.get(parsed[0], 0), heldout_score=float(evidence['score']) if approved and evidence else None,
+                            heldout_n=evidence['n'] if approved and evidence else 0, cost_per_call=0.0)
+            else:
+                # Model evaluations explicitly name the task and model in the score store.
+                evidence = next((s for s in region_scores if s.get('task_type') == task
+                                 and s.get('candidate_model') == rank['candidate']), None)
+                rank.update(heldout_score=float(evidence['score']) if evidence else None,
+                            heldout_n=evidence['n'] if evidence else 0,
+                            cost_per_call=float(evidence['cost_per_call']) if evidence and evidence.get('cost_per_call') is not None else None)
+                rank['cheaper'] = (rank['cost_per_call'] is not None and current_cost is not None
+                                   and rank['cost_per_call'] < current_cost)
+        count = max((counts.get(skill, 0) for skill in mapped), default=0)
+        best = training_candidate(dict(policy), task_ranks, count)
+        shown = best['candidate'] if best else policy['candidate_model']
+        trained = bool(shown and shown in removed_models)
+        can_promote = bool(best and best['candidate'] == policy['candidate_model']
+                           and not router_cannot_serve(best['candidate']) and not policy['auto_promote'])
+        blocked = 'trained on removed data' if trained else None
+        if can_promote:
+            served = skills_served(best['candidate'], rank_rows, score_rows)
+            served.add(task)
+            blocked = promotion_block(candidate=best['candidate'], current_model=policy['model'],
+                                      skills=served, scores=score_rows, removed_models=removed_models)
+            can_promote = blocked is None
+        by_region = {}
+        if best:
+            for name in HOLD_REGIONS:
+                by_region[name] = heldout_score_for(score_rows, region=name, skill=task, candidate=best['candidate'])
+        result.append({'task_type': task, 'model': policy['model'], 'gold_count': count,
+                       'candidate': best['candidate'] if best else None,
+                       'heldout_score': best['heldout_score'] if best else None,
+                       'heldout_by_region': by_region,
+                       'current_cost': current_cost, 'candidate_cost': best['cost_per_call'] if best else None,
+                       'can_promote': can_promote, 'trained_on_removed': trained,
+                       'blocked_reason': blocked})
+    return result

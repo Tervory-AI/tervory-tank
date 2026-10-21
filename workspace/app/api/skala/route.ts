@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { approveSkill, listSkills, retireSkill, runSkillEvals, trySkill } from "@/lib/tank";
 import { rejectUnlessFounder } from "@/app/review/access";
+import { tankRefusal } from "@/app/skala/library";
 import { currentTenant } from "@/lib/tenant";
 
 export const runtime = "nodejs";
@@ -23,9 +24,23 @@ export async function GET() {
   }
 }
 
+function refuseCrossOrigin(req: Request): NextResponse | null {
+  // Coolify terminates HTTPS before Next. Compare hosts, not the internal URL's
+  // protocol; a browser cannot override Host to forge a same-origin request.
+  let originHost = "";
+  try { originHost = new URL(req.headers.get("origin") ?? "").host; } catch { /* Refuse below. */ }
+  const host = req.headers.get("host") ?? new URL(req.url).host;
+  if (!originHost || originHost !== host) {
+    return NextResponse.json({ error: "Request refused." }, { status: 403 });
+  }
+  return null;
+}
+
 export async function POST(req: Request) {
   const denied = await deny();
   if (denied) return denied;
+  const crossOrigin = refuseCrossOrigin(req);
+  if (crossOrigin) return crossOrigin;
   const body = (await req.json().catch(() => null)) as { id?: string; version?: string; action?: string; input?: Record<string, unknown> } | null;
   const { id, version, action } = body ?? {};
   if (!id || !version || !action) return NextResponse.json({ error: "id, version, action required" }, { status: 400 });
@@ -40,6 +55,8 @@ export async function POST(req: Request) {
     if (action === "retire") return NextResponse.json(await retireSkill(id, version, userId));
     return NextResponse.json({ error: "unknown action" }, { status: 400 });
   } catch (err) {
+    const refused = err instanceof Error ? tankRefusal(err.message) : null;
+    if (refused) return NextResponse.json({ error: refused.error }, { status: refused.status });
     return NextResponse.json({ error: err instanceof Error ? err.message : "Tank unavailable" }, { status: 502 });
   }
 }

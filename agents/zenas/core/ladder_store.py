@@ -89,6 +89,7 @@ class LadderMemory:
         self.notes: list[dict[str, Any]] = []
         self.tenants: list[dict[str, Any]] = []
         self.selftests: list[dict[str, Any]] = []
+        self.failures: list[dict[str, Any]] = []
         self.review_mode: str | None = None
 
     async def get_tenant(self, tenant_id: str) -> dict[str, Any] | None:
@@ -198,6 +199,18 @@ class LadderMemory:
                 return row
         return None
 
+    async def link_worked_card(self, *, region: str, worked_id: str, card_id: str, area: str) -> bool:
+        for row in self.worked:
+            if (
+                row["id"] == worked_id and row["region"] == _region(region)
+                and row.get("source") == "case" and row.get("material_type") == "public_record"
+                and row.get("tenant_id") is None
+            ):
+                row["rule_card_ids"] = [card_id]
+                row["area"] = area
+                return True
+        return False
+
     async def visible_worked(self, *, region: str, tenant_id: str, sharing: str) -> list[dict[str, Any]]:
         box = _region(region)
         return [row for row in self.worked if _row_is_visible(row, region=box, tenant_id=tenant_id, sharing=sharing)]
@@ -215,6 +228,44 @@ class LadderMemory:
             if row.get("source") == "case" and row.get("holdout"):
                 found.append(dict(row))
         return found
+
+    async def case_tally(self, *, region: str, jurisdiction: str) -> dict[str, int]:
+        box = _region(region)
+        rows = [
+            row
+            for row in self.worked
+            if row.get("region") == box and row.get("source") == "case" and row.get("jurisdiction") == jurisdiction
+        ]
+        return {"converted": len(rows), "held_out": sum(1 for row in rows if row.get("holdout"))}
+
+    async def record_convert_failure(self, *, region: str, pool_doc_id: str, reason: str) -> None:
+        box = _region(region)
+        for row in self.failures:
+            if row["region"] == box and row["pool_doc_id"] == pool_doc_id:
+                row["reason"] = reason
+                return
+        self.failures.append({"region": box, "pool_doc_id": pool_doc_id, "reason": reason})
+
+    async def clear_convert_failure(self, *, region: str, pool_doc_id: str) -> None:
+        box = _region(region)
+        self.failures = [
+            row for row in self.failures if not (row["region"] == box and row["pool_doc_id"] == pool_doc_id)
+        ]
+
+    async def convert_failure_count(self, *, region: str) -> int:
+        box = _region(region)
+        return sum(1 for row in self.failures if row["region"] == box)
+
+    async def convert_failure_reasons(self, *, region: str) -> list[dict[str, Any]]:
+        box = _region(region)
+        counts: dict[str, int] = {}
+        for row in self.failures:
+            if row["region"] != box:
+                continue
+            reason = str(row.get("reason") or "")
+            counts[reason] = counts.get(reason, 0) + 1
+        ordered = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+        return [{"reason": reason, "count": count} for reason, count in ordered]
 
     async def set_review(self, *, region: str, review: str) -> None:
         self.review_mode = "on" if review == "on" else "off"
@@ -392,7 +443,7 @@ class PgLadder:
     async def set_status(self, card_id: str, *, region: str, status: str, **fields: Any) -> dict[str, Any] | None:
         sets = ["status = $3"]
         args: list[Any] = [_region(region), _as_uuid(card_id), status]
-        for name in ("approved_by", "admission_no", "edit_count"):
+        for name in ("approved_by", "admission_no", "edit_count", "reviewer_kind"):
             if name in fields:
                 args.append(fields[name])
                 sets.append(f"{name} = ${len(args)}")
@@ -469,6 +520,18 @@ class PgLadder:
             return None
         return _row_worked(dict(row))
 
+    async def link_worked_card(self, *, region: str, worked_id: str, card_id: str, area: str) -> bool:
+        async with self.pool.acquire() as conn:
+            result = await conn.execute(
+                """
+                UPDATE agent_zenas.worked_matters SET rule_card_ids = $3::jsonb, area = $4
+                WHERE region = $1 AND id = $2 AND tenant_id IS NULL
+                  AND source = 'case' AND material_type = 'public_record'
+                """,
+                _region(region), _as_uuid(worked_id), json.dumps([card_id]), area,
+            )
+        return result == "UPDATE 1"
+
     async def visible_worked(self, *, region: str, tenant_id: str, sharing: str) -> list[dict[str, Any]]:
         if sharing == "region":
             sql = """
@@ -515,6 +578,51 @@ class PgLadder:
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(sql, _region(region), jurisdiction)
         return [_row_worked(dict(row)) for row in rows]
+
+    async def case_tally(self, *, region: str, jurisdiction: str) -> dict[str, int]:
+        sql = """
+        SELECT
+          count(*) FILTER (WHERE source = 'case' AND jurisdiction = $2) AS converted,
+          count(*) FILTER (WHERE source = 'case' AND jurisdiction = $2 AND holdout IS TRUE) AS held_out
+        FROM agent_zenas.worked_matters
+        WHERE region = $1
+        """.strip()
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(sql, _region(region), jurisdiction)
+        return {"converted": int(row["converted"] or 0), "held_out": int(row["held_out"] or 0)}
+
+    async def record_convert_failure(self, *, region: str, pool_doc_id: str, reason: str) -> None:
+        sql = """
+        INSERT INTO agent_zenas.convert_failures (region, pool_doc_id, reason)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (region, pool_doc_id) DO UPDATE
+          SET reason = EXCLUDED.reason, created_at = now()
+        """.strip()
+        async with self.pool.acquire() as conn:
+            await conn.execute(sql, _region(region), pool_doc_id, reason)
+
+    async def clear_convert_failure(self, *, region: str, pool_doc_id: str) -> None:
+        sql = "DELETE FROM agent_zenas.convert_failures WHERE region = $1 AND pool_doc_id = $2"
+        async with self.pool.acquire() as conn:
+            await conn.execute(sql, _region(region), pool_doc_id)
+
+    async def convert_failure_count(self, *, region: str) -> int:
+        sql = "SELECT count(*) FROM agent_zenas.convert_failures WHERE region = $1"
+        async with self.pool.acquire() as conn:
+            value = await conn.fetchval(sql, _region(region))
+        return int(value or 0)
+
+    async def convert_failure_reasons(self, *, region: str) -> list[dict[str, Any]]:
+        sql = """
+        SELECT reason, count(*) AS count
+        FROM agent_zenas.convert_failures
+        WHERE region = $1
+        GROUP BY reason
+        ORDER BY count(*) DESC, reason
+        """.strip()
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(sql, _region(region))
+        return [{"reason": str(row["reason"] or ""), "count": int(row["count"] or 0)} for row in rows]
 
     async def set_review(self, *, region: str, review: str) -> None:
         mode = "on" if review == "on" else "off"

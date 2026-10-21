@@ -125,12 +125,34 @@ services:
       retries: 10
       start_period: 20s
 
+  # Ferry. SearXNG sends engine requests here. Ferry leaves through Tor.
+  # SOCKS stays on the stack network. No host port.
+  # A forward proxy on this same server is not here: the engines would still see Boston.
+  # The image tag is lowercase because Docker rejects a capital letter in a repository name.
+  Ferry:
+    image: ferry
+    build: ./tor
+    restart: unless-stopped
+    networks:
+      - default
+    expose:
+      - "9050"
+    healthcheck:
+      test: ["CMD-SHELL", "set -o pipefail; curl -fsS --socks5-hostname 127.0.0.1:9050 --max-time 20 https://check.torproject.org/api/ip | grep -Eq '\"IsTor\"[[:space:]]*:[[:space:]]*true'"]
+      interval: 20s
+      timeout: 25s
+      retries: 15
+      start_period: 60s
+
   searxng:
     build: ./searxng
     restart: unless-stopped
     environment:
       SEARXNG_SECRET: ${SEARXNG_SECRET:-change-me-in-coolify}
       SEARXNG_BASE_URL: http://searxng:8080/
+    depends_on:
+      Ferry:
+        condition: service_healthy
     networks:
       - default
       - tervory-gw-base
@@ -141,7 +163,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 10
-      start_period: 20s
+      start_period: 45s
 
   tiger:
     build: ./tiger
@@ -190,6 +212,7 @@ services:
       TANK_KEY_ZENAS: ${TANK_KEY_ZENAS:-}
       TANK_KEY_BASE: ${TANK_KEY_BASE:-}
       TANK_KEY_RIG: ${TANK_KEY_RIG:-}
+      TANK_KEY_WORKERS: ${TANK_KEY_WORKERS:-}
       TANK_REGION: ${TANK_REGION:-us-east}
       BASE_AGENT_URL: http://agent-base:8000
       SEARXNG_URL: http://searxng:8080
@@ -261,6 +284,10 @@ services:
       TERVORY_TENANT_ALIASES: ${TERVORY_TENANT_ALIASES:-}
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+      # W-2 billing. Empty until set in Coolify; the billing page then says pricing is being finalised.
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PLAN_PRICE_IDS: ${STRIPE_PLAN_PRICE_IDS:-}
     depends_on:
       - tank
     # Coolify attaches the public domain to this service (port 3000).

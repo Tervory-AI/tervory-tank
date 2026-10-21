@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
+import json
 import os
 import re
 import uuid
@@ -19,30 +20,126 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 
 from gold import (PLATFORM_TENANT, Reviewer, add_candidate, encoded, input_hash,
-                  obj, require_job, require_reviewer, runtime)
+                  obj, require_job, require_reviewer, runtime, is_holdout)
 
 log = logging.getLogger("tank.training")
+
+
+def market_row(row: dict[str, Any]) -> bool:
+    agent = str(row.get("agent") or "")
+    skill = str(row.get("skill_id") or row.get("task_type") or "")
+    return agent == "market_lab" or skill.startswith("market.")
+
+
+def _walk(value: Any):
+    if isinstance(value, dict):
+        yield value
+        for item in value.values():
+            yield from _walk(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _walk(item)
+
+
+def _numeric(value: Any) -> bool:
+    if isinstance(value, bool) or value is None:
+        return False
+    if isinstance(value, (int, float)):
+        return True
+    text = str(value).strip().replace(",", "")
+    if not text:
+        return False
+    try:
+        float(text)
+    except ValueError:
+        return False
+    return True
+
+
+def carries_regional_fact(row: dict[str, Any]) -> bool:
+    """A price, a series value, or a currency has to stay labelled."""
+    for blob in (row.get("input"), row.get("expected"), row.get("output")):
+        for node in _walk(blob):
+            if _text_present(node.get("currency")):
+                return True
+            if "price" in node and _numeric(node.get("price")):
+                return True
+            if "value" in node and _numeric(node.get("value")) and ("date" in node or "unit" in node):
+                return True
+    return False
+
+
+def _text_present(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def regional_labels(row: dict[str, Any]) -> tuple[str, str]:
+    currency = str(row.get("currency") or "").strip()
+    unit = str(row.get("unit") or "").strip()
+    for blob in (row.get("input"), row.get("expected"), row.get("output")):
+        for node in _walk(blob):
+            if not currency:
+                currency = str(node.get("currency") or "").strip()
+            if not unit:
+                unit = str(node.get("unit") or "").strip()
+    return currency, unit
+
+
+def admits_market_candidate(row: dict[str, Any]) -> bool:
+    """A market row enters gold only after its batch has passed quarantine."""
+    if not market_row(row):
+        return True
+    if row.get("quarantine") != "passed" or not str(row.get("batch_id") or "").strip():
+        return False
+    if row.get("region") not in ("us-east", "za"):
+        return False
+    currency, unit = regional_labels(row)
+    return bool(currency and unit)
+
+
+def admits_training(row: dict[str, Any]) -> bool:
+    """Spot check and quarantine both have to pass before a regional row is trained."""
+    if market_row(row) and not admits_market_candidate(row):
+        return False
+    if market_row(row) and row.get("status") not in (None, "checked"):
+        return False
+    currency, unit = regional_labels(row)
+    if carries_regional_fact(row) and not (currency and unit):
+        return False
+    return True
 
 
 async def save_pair(conn, *, tenant: uuid.UUID, agent: str, task: str, value: Any,
                     output: Any, approved_by: str, source: str, ref: str,
                     gold_id: uuid.UUID | None = None, holdout: bool = False,
-                    client_matter: bool = False) -> None:
+                    client_matter: bool = False, public: bool = False,
+                    region: str | None = None, batch_id: str | None = None,
+                    currency: str | None = None, unit: str | None = None) -> None:
+    stored_region = region if region in ("us-east", "za") else runtime().box_region()
     await conn.execute(
         """INSERT INTO tank.training_pairs
-        (tenant_id,agent,task_type,region,input,output,approved_by,source,source_ref,gold_id,holdout,client_matter)
-        VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,$8,$9,$10,$11,$12)
+        (tenant_id,agent,task_type,region,input,output,approved_by,source,source_ref,gold_id,holdout,client_matter,public,batch_id,currency,unit)
+        VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
         ON CONFLICT (tenant_id,region,source,source_ref) DO NOTHING""",
-        tenant, agent, task, runtime().box_region(), encoded(value), encoded(output),
-        approved_by, source, ref, gold_id, holdout, client_matter,
+        tenant, agent, task, stored_region, encoded(value), encoded(output),
+        approved_by, source, ref, gold_id, holdout, client_matter, public,
+        batch_id or None, currency or None, unit or None,
     )
 
 
 async def pair_from_gold(conn, row: dict[str, Any]) -> None:
+    if row["holdout"] or (row.get("auto_label") and not row.get("auto_approved")):
+        return
+    if not admits_training(row):
+        return
+    currency, unit = regional_labels(row)
     await save_pair(conn, tenant=row["tenant_id"], agent=row["agent"], task=row["skill_id"],
                     value=obj(row["input"]), output=obj(row["expected"]), approved_by=row["checked_by"],
                     source="gold", ref=str(row["id"]), gold_id=row["id"], holdout=row["holdout"],
-                    client_matter=row["agent"] == "zenas" and row["tenant_id"] != PLATFORM_TENANT)
+                    client_matter=row["tenant_id"] != PLATFORM_TENANT,
+                    public=row.get("public") is True and row["tenant_id"] == PLATFORM_TENANT,
+                    region=row.get("region"), batch_id=row.get("batch_id"),
+                    currency=currency or None, unit=unit or None)
 
 
 async def collect_ledger(conn, tenant: uuid.UUID) -> None:
@@ -118,7 +215,8 @@ async def collect_zenas(conn, tenant: uuid.UUID | None) -> None:
         await save_pair(conn, tenant=scope, agent="zenas", task=skill, value=value, output=output,
                         approved_by=row["reviewer"] or "decided case", source="zenas", ref=str(row["id"]),
                         gold_id=gold_id, holdout=is_holdout(scope, skill, value),
-                        client_matter=row["source"] == "released")
+                        client_matter=row["source"] == "released",
+                        public=row["source"] == "case" and tenant is None)
 
 
 async def collect_fits(conn, tenant: uuid.UUID) -> None:
@@ -171,10 +269,152 @@ async def collect_once() -> None:
             await conn.execute("SELECT pg_advisory_unlock(871222)")
 
 
+
+ROOMS = ("base", "tiger", "market_lab", "rig", "zenas", "radix", "tisan")
+
+
+GOLD_RESPONSE_MAX_BYTES = 5 * 1024 * 1024
+GOLD_ROW_MAX_BYTES = 64 * 1024
+
+
+def gold_auto_max() -> int:
+    raw = os.environ.get("GOLD_AUTO_MAX")
+    if raw is None:
+        return 200
+    try:
+        value = int(raw)
+        if value > 0:
+            return value
+    except ValueError:
+        pass
+    log.warning("Invalid GOLD_AUTO_MAX; using 200")
+    return 200
+
+
+def skill_owners() -> dict[str, set[str]]:
+    from skala import load_packages
+
+    owners: dict[str, set[str]] = {}
+    for package in load_packages().values():
+        owners.setdefault(package.id, set()).add(package.agent)
+    return owners
+
+
+def valid_auto_candidate(row: Any, room: str, region: str,
+                         owners: dict[str, set[str]] | None = None) -> bool:
+    """Accept room-owned public labels with an optional nonempty label_family."""
+    owners = skill_owners() if owners is None else owners
+    return (isinstance(row, dict) and row.get("public") is True
+            and row.get("client_matter", False) is False
+            and row.get("tenant_id") in (None, str(PLATFORM_TENANT))
+            and region in ("us-east", "za") and row.get("region") == region
+            and isinstance(row.get("skill_id"), str)
+            and owners.get(row["skill_id"]) == {room}
+            and isinstance(row.get("label_source"), str)
+            and 0 < len(row["label_source"]) <= 500
+            and (row.get("label_family") is None or
+                 (isinstance(row["label_family"], str) and bool(row["label_family"].strip()) and len(row["label_family"]) <= 500))
+            and isinstance(row.get("input"), dict) and isinstance(row.get("expected"), dict))
+
+
+def candidate_json(value: dict) -> str:
+    text = json.dumps(value, ensure_ascii=False, allow_nan=False, sort_keys=True)
+    if len(text.encode("utf-8")) > GOLD_ROW_MAX_BYTES:
+        raise ValueError("Candidate row exceeds size limit")
+    return text
+
+
+async def collect_room_gold(day: date) -> dict[str, int]:
+    stats = dict(inserted=0, rejected=0, capped=0, duplicates=0, rejected_responses=0, unavailable=0)
+    region = runtime().box_region()
+    if region not in ("us-east", "za"):
+        return stats
+    limit = gold_auto_max()
+    owners = skill_owners()
+    async with httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
+        for room in ROOMS:
+            key = os.environ.get(f"TANK_KEY_{room.upper()}", "")
+            if not key:
+                continue
+            host = "agent-" + room.replace("_", "-")
+            try:
+                # Stream decoded bytes, so a compressed or chunked response is also capped.
+                async with client.stream("GET", f"http://{host}:8000/gold/candidates",
+                                         params={"limit": min(limit, 200)},
+                                         headers={"X-Tank-Key": key}) as response:
+                    if response.status_code in (404, 405, 501):
+                        continue
+                    response.raise_for_status()
+                    body = bytearray()
+                    async for chunk in response.aiter_bytes(chunk_size=65536):
+                        if len(body) + len(chunk) > GOLD_RESPONSE_MAX_BYTES:
+                            raise ValueError("Room response exceeds size limit")
+                        body.extend(chunk)
+                    rows = json.loads(body)
+                    if not isinstance(rows, list):
+                        raise ValueError("Room response must be a list")
+            except (httpx.HTTPError, ValueError, RecursionError):
+                stats["rejected_responses"] += 1
+                log.warning("Room gold response rejected: %s", room)
+                continue
+            stats["rejected"] += max(0, len(rows) - 200)
+            try:
+                async with runtime().pool().acquire() as conn, conn.transaction():
+                    await conn.execute("SELECT pg_advisory_xact_lock(871226)")
+                    for row in rows[:200]:
+                        try:
+                            # Nested transaction is a PostgreSQL savepoint. Catch outside
+                            # it so a JSON/database error cannot poison the next insertion.
+                            async with conn.transaction():
+                                if not valid_auto_candidate(row, room, region, owners):
+                                    raise ValueError("Invalid candidate")
+                                if not admits_market_candidate(row):
+                                    raise ValueError("Invalid candidate")
+                                candidate_json(row)
+                                value = candidate_json(row["input"])
+                                expected = candidate_json(row["expected"])
+                                source = row["label_source"]
+                                used = await conn.fetchval(
+                                    """SELECT count(*) FROM tank.gold_examples
+                                    WHERE tenant_id=$1 AND region=$2 AND agent=$3
+                                    AND auto_label AND intake_day=$4""",
+                                    PLATFORM_TENANT, region, room, day,
+                                )
+                                if used >= limit:
+                                    stats["capped"] += 1
+                                    continue
+                                result = await conn.execute(
+                                    """INSERT INTO tank.gold_examples
+                                    (tenant_id,region,skill_id,agent,input,expected,source,source_ref,
+                                     input_hash,holdout,auto_label,label_source,public,intake_day,label_family,
+                                     batch_id,currency,unit,quarantine)
+                                    VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,'room_auto',$7,$8,$9,true,$10,true,$11,$12,$13,$14,$15,$16)
+                                    ON CONFLICT (tenant_id,region,skill_id,source,source_ref) DO NOTHING""",
+                                    PLATFORM_TENANT, region, row["skill_id"], room, value, expected,
+                                    input_hash([source, row["input"], row["expected"]]), input_hash(row["input"]),
+                                    row.get("holdout") is True or is_holdout(PLATFORM_TENANT, row["skill_id"], row["input"]), source, day,
+                                    row.get("label_family"), row.get("batch_id"), row.get("currency"),
+                                    row.get("unit"), row.get("quarantine"),
+                                )
+                                from gold import settle_auto_source
+                                await settle_auto_source(conn, {"tenant_id": PLATFORM_TENANT, "region": region,
+                                                               "skill_id": row["skill_id"], "source": "room_auto",
+                                                               "label_source": source, "label_family": row.get("label_family")})
+                            stats["inserted" if result == "INSERT 0 1" else "duplicates"] += 1
+                        except Exception:
+                            # No exception text: it may contain private data or credentials.
+                            stats["rejected"] += 1
+            except Exception:
+                stats["unavailable"] += 1
+                log.warning("Room gold storage unavailable: %s", room)
+    log.info("Room gold intake counts: %s", stats)
+    return stats
+
 @asynccontextmanager
 async def lifespan(_app):
     tasks = [asyncio.create_task(collector_loop()),
              asyncio.create_task(schedule_loop("export")),
+             asyncio.create_task(schedule_loop("gold")),
              asyncio.create_task(schedule_loop("retest"))]
     try:
         yield
@@ -200,7 +440,7 @@ async def collector_loop() -> None:
 def scheduled_slot(operation: str, now: datetime) -> datetime:
     """Most recent UTC boundary; a restart catches up once, never a backlog."""
     now = now.astimezone(timezone.utc)
-    if operation == "export":
+    if operation in ("export", "gold"):
         slot = now.replace(hour=2, minute=0, second=0, microsecond=0)
         return slot if slot <= now else slot - timedelta(days=1)
     if operation != "retest":
@@ -217,7 +457,7 @@ async def scheduled_once(operation: str, now: datetime | None = None) -> None:
         return
     # A separate session lock per operation covers the completion check and work
     # across workers. The existing platform audit log needs no schema change.
-    lock = 871224 if operation == "export" else 871225
+    lock = {"export": 871224, "retest": 871225, "gold": 871227}[operation]
     marker = encoded({"tenant_id": str(PLATFORM_TENANT), "region": region,
                       "operation": operation, "slot": slot.isoformat()})
     async with runtime().pool().acquire() as conn:
@@ -229,7 +469,9 @@ async def scheduled_once(operation: str, now: datetime | None = None) -> None:
                 AND action='complete' AND detail=$1::jsonb LIMIT 1""", marker,
             ):
                 return
-            if operation == "export":
+            if operation == "gold":
+                await collect_room_gold(slot.date())
+            elif operation == "export":
                 await collect_once()
                 result = await export_once(day=slot.date())
                 if result["status"] != "complete":
@@ -278,11 +520,20 @@ async def confirm_tiger(observation_id: uuid.UUID, actor: Reviewer = Depends(req
 
 
 def exportable(row: dict[str, Any]) -> bool:
-    return row["region"] in ("us-east", "za") and not row["holdout"] and bool(row["active"])
+    return (row.get("region") in ("us-east", "za") and row.get("region") == runtime().box_region()
+            and row.get("holdout") is False and row.get("active") is True
+            and row.get("public") is True and row.get("client_matter") is False
+            and row.get("tenant_id") == PLATFORM_TENANT)
 
 
 async def upload_dataset(client: httpx.AsyncClient, org: str, agent: str, day: str, rows: list[dict], region: str = "us-east") -> None:
-    name = f"tervory-{agent}"
+    # Validate again at the network boundary, before any request is sent.
+    if region not in ("us-east", "za") or region != runtime().box_region() or any(
+        row.get("scope") != "platform" or "tenant_id" in row or row.get("region") != region
+        or not exportable({**row, "tenant_id": PLATFORM_TENANT}) for row in rows
+    ):
+        raise ValueError("Unsafe training export")
+    name = f"tervory-public-{agent}"
     created = await client.post("https://huggingface.co/api/repos/create",
                                 json={"type": "dataset", "name": name, "organization": org, "private": True})
     if created.status_code not in (200, 201, 409):
@@ -331,24 +582,39 @@ async def export_once(*, day: date | None = None) -> dict[str, Any]:
                         continue
                     payload = []
                     scopes = await conn.fetch(
-                        "SELECT DISTINCT tenant_id FROM tank.training_pairs WHERE region=$2 AND agent=$1", agent, region,
+                        "SELECT DISTINCT tenant_id FROM tank.training_pairs WHERE region=$2 AND agent=$1 AND tenant_id=$3 AND public AND NOT client_matter", agent, region, PLATFORM_TENANT,
                     )
                     for scope in scopes:
                         rows = await conn.fetch(
                             """SELECT p.* FROM tank.training_pairs p
-                            WHERE p.tenant_id=$1 AND p.region=$3 AND p.agent=$2 AND p.active AND NOT p.holdout
+                            WHERE p.tenant_id=$1 AND p.region=$3 AND p.agent=$2 AND p.active AND NOT p.holdout AND p.public AND NOT p.client_matter
                             AND NOT EXISTS (SELECT 1 FROM tank.gold_examples g WHERE g.tenant_id=p.tenant_id
                               AND g.region=p.region AND g.input=p.input AND (g.holdout OR (g.status='rejected' AND g.id=p.gold_id)))""",
                             scope["tenant_id"], agent, region,
                         )
                         for row in rows:
-                            if exportable(dict(row)):
+                            if exportable(dict(row)) and not await _batch_removed(conn, scope["tenant_id"], row["batch_id"]):
                                 # No tenant, reviewer identity or matter reference leaves the box.
-                                payload.append({"region": region, "task_type": row["task_type"], "input": obj(row["input"]),
-                                                "output": obj(row["output"])})
+                                item = {"region": region, "public": True, "client_matter": False,
+                                        "scope": "platform", "holdout": False, "active": True, "task_type": row["task_type"], "input": obj(row["input"]),
+                                        "output": obj(row["output"])}
+                                if row["batch_id"]:
+                                    item["batch_id"] = row["batch_id"]
+                                if row["currency"]:
+                                    item["currency"] = row["currency"]
+                                if row["unit"]:
+                                    item["unit"] = row["unit"]
+                                payload.append(item)
                     if not payload:
                         continue
                     await upload_dataset(client, org, agent, day.isoformat(), payload, region)
+                    for item in payload:
+                        if item.get("batch_id"):
+                            await conn.execute(
+                                """INSERT INTO tank.training_snapshot_batches(tenant_id,region,day,agent,batch_id)
+                                VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING""",
+                                PLATFORM_TENANT, region, day, agent, item["batch_id"],
+                            )
                     await conn.execute(
                         """INSERT INTO tank.training_exports(region,day,agent) VALUES ($3,$1,$2)
                         ON CONFLICT DO NOTHING""", day, agent, region,
@@ -357,6 +623,77 @@ async def export_once(*, day: date | None = None) -> dict[str, Any]:
         finally:
             await conn.execute("SELECT pg_advisory_unlock(871223)")
     return {"status": "complete", "exported": exported}
+
+
+async def _batch_removed(conn, tenant: uuid.UUID, batch_id: str | None) -> bool:
+    if not batch_id:
+        return False
+    return bool(await conn.fetchval(
+        "SELECT 1 FROM tank.removed_batches WHERE tenant_id=$1 AND batch_id=$2", tenant, batch_id,
+    ))
+
+
+async def models_trained_on(conn, tenant: uuid.UUID, batch_id: str) -> list[str]:
+    rows = await conn.fetch(
+        """SELECT DISTINCT model_repo FROM tank.training_job_batches
+        WHERE tenant_id=$1 AND batch_id=$2 ORDER BY model_repo""",
+        tenant, batch_id,
+    )
+    return [row["model_repo"] for row in rows]
+
+
+async def retire_batch(conn, tenant: uuid.UUID, batch_id: str) -> list[str]:
+    """Drop a batch from training and name every model that already used it."""
+    await conn.execute(
+        """INSERT INTO tank.removed_batches (tenant_id, batch_id) VALUES ($1, $2)
+        ON CONFLICT DO NOTHING""",
+        tenant, batch_id,
+    )
+    await conn.execute(
+        """UPDATE tank.gold_examples SET status='rejected', note='Batch removed'
+        WHERE tenant_id=$1 AND batch_id=$2 AND status <> 'rejected'""",
+        tenant, batch_id,
+    )
+    await conn.execute(
+        """UPDATE tank.training_pairs SET active=false
+        WHERE tenant_id=$1 AND batch_id=$2""",
+        tenant, batch_id,
+    )
+    return await models_trained_on(conn, tenant, batch_id)
+
+
+async def record_job_batches(conn, *, tenant: uuid.UUID, job_id: str, model_repo: str, day: date) -> None:
+    rows = await conn.fetch(
+        """SELECT DISTINCT batch_id, region FROM tank.training_snapshot_batches
+        WHERE tenant_id=$1 AND day=$2""",
+        tenant, day,
+    )
+    for row in rows:
+        await conn.execute(
+            """INSERT INTO tank.training_job_batches (tenant_id, job_id, model_repo, batch_id, region)
+            VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING""",
+            tenant, job_id, model_repo, row["batch_id"], row["region"],
+        )
+
+
+_BATCH_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,80}$")
+
+
+@router.get("/batches/{batch_id}/models")
+async def list_batch_models(batch_id: str, actor: Reviewer = Depends(require_reviewer)) -> dict[str, Any]:
+    if not actor.founder or _BATCH_ID.fullmatch(batch_id) is None:
+        raise HTTPException(404, "not found")
+    async with runtime().pool().acquire() as conn:
+        return {"models": await models_trained_on(conn, actor.tenant, batch_id)}
+
+
+@router.post("/batches/{batch_id}/remove")
+async def remove_training_batch(batch_id: str, actor: Reviewer = Depends(require_reviewer)) -> dict[str, Any]:
+    if not actor.founder or _BATCH_ID.fullmatch(batch_id) is None:
+        raise HTTPException(404, "not found")
+    async with runtime().pool().acquire() as conn:
+        models = await retire_batch(conn, actor.tenant, batch_id)
+    return {"removed": True, "models": models}
 
 
 @router.post("/jobs/export", dependencies=[Depends(require_job)])

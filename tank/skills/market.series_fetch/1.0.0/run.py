@@ -8,24 +8,15 @@ from typing import Any
 
 
 def _load() -> Any:
-    here = Path(__file__).resolve()
-    names = (
-        "agents/market_lab/core/pure.py",
-        "skills/market.series_fetch/1.0.0/pure.py",
-        "market.series_fetch/1.0.0/pure.py",
-    )
-    for parent in here.parents:
-        for name in names:
-            path = parent / name
-            if not path.is_file():
-                continue
-            spec = importlib.util.spec_from_file_location("market_lab_pure", path)
-            if spec is None or spec.loader is None:
-                continue
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            return module
-    raise RuntimeError("market lab logic is missing")
+    # Resolve the code shipped with this candidate, including its feeds bundle.
+    # Repository-only fallbacks hide missing dependencies in Tank's image.
+    path = Path(__file__).with_name("pure.py")
+    spec = importlib.util.spec_from_file_location("market_lab_pure", path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("market lab logic is missing")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 async def _read_fred(payload: dict[str, Any], ctx: Any) -> dict[str, Any]:

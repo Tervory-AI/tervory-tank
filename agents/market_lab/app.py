@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import hmac
 import logging
 import os
 
 from chassis.app import create_app
 from chassis.jobs import JobContext
+from fastapi import Header, HTTPException, Query
 
 from core.jobs import (
     perform_opportunities,
@@ -125,6 +127,14 @@ class _ledger:
             await self.conn.close()
 
 
+def _room_key_ok(header: str) -> bool:
+    key = os.environ.get("TANK_KEY", "")
+    try:
+        return bool(key) and bool(header) and hmac.compare_digest(key.encode(), header.encode())
+    except (AttributeError, TypeError, UnicodeError):
+        return False
+
+
 def _schedules() -> list[dict]:
     rows = [
         {
@@ -149,3 +159,93 @@ app = create_app(
     },
     schedules=_schedules(),
 )
+
+
+@app.get("/gold/candidates")
+async def gold_candidates(
+    limit: int = Query(default=200, ge=1, le=200),
+    x_tank_key: str = Header(default=""),
+) -> list[dict]:
+    """Room key only. Public feeds on this box's region."""
+    if not _room_key_ok(x_tank_key):
+        raise HTTPException(status_code=401, detail="room key required")
+    try:
+        from gold_sources import read_candidates
+    except ImportError:
+        raise HTTPException(status_code=503, detail="gold evidence unavailable") from None
+    try:
+        return await read_candidates(limit=limit, region=os.environ.get("TANK_REGION", "us-east"))
+    except Exception as exc:  # noqa: BLE001 — class name only; the message can carry the database URL
+        log.warning("gold candidates failed (%s)", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="gold evidence unavailable") from None
+
+
+def _batch_view(record: dict) -> dict:
+    return {
+        "id": record.get("id") or "",
+        "series_id": record.get("series_id") or "",
+        "source": record.get("source") or "",
+        "region": record.get("region") or "",
+        "currency": record.get("currency") or "",
+        "unit": record.get("unit") or "",
+        "fetched_at": record.get("fetched_at") or "",
+        "status": record.get("status") or "",
+        "reason": record.get("reason") or "",
+    }
+
+
+@app.get("/quarantine")
+async def quarantine_list(x_tank_key: str = Header(default="")) -> dict:
+    if not _room_key_ok(x_tank_key):
+        raise HTTPException(status_code=401, detail="room key required")
+    try:
+        async with _ledger() as ledger:
+            rows = await ledger.conn.fetch(
+                """
+                SELECT id, series_id, source, fetched_at, region, currency, unit, status, reason
+                FROM agent_market_lab.batches
+                WHERE tenant_id = $1 AND status IN ('held', 'pooled', 'rejected', 'removed')
+                ORDER BY created_at, id
+                """,
+                __import__("uuid").UUID(HEARTBEAT_TENANT),
+            )
+    except Exception as exc:  # noqa: BLE001 — class name only; the message can carry the database URL
+        log.warning("quarantine list failed (%s)", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="quarantine unavailable") from None
+    return {"batches": [_batch_view(dict(row)) for row in rows]}
+
+
+async def _batch_action(batch_id: str, action: str, x_tank_key: str) -> dict:
+    if not _room_key_ok(x_tank_key):
+        raise HTTPException(status_code=401, detail="room key required")
+    if not batch_id or len(batch_id) > 80:
+        raise HTTPException(status_code=404, detail="not found")
+    try:
+        async with _ledger() as ledger:
+            if action == "release":
+                record = await ledger.release_batch(HEARTBEAT_TENANT, batch_id)
+            elif action == "reject":
+                record = await ledger.reject_batch(HEARTBEAT_TENANT, batch_id)
+            else:
+                record = await ledger.remove_batch(HEARTBEAT_TENANT, batch_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail="batch was not changed") from exc
+    except Exception as exc:  # noqa: BLE001 — class name only; the message can carry the database URL
+        log.warning("quarantine action failed (%s)", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="quarantine unavailable") from None
+    return _batch_view(record)
+
+
+@app.post("/quarantine/{batch_id}/release")
+async def quarantine_release(batch_id: str, x_tank_key: str = Header(default="")) -> dict:
+    return await _batch_action(batch_id, "release", x_tank_key)
+
+
+@app.post("/quarantine/{batch_id}/reject")
+async def quarantine_reject(batch_id: str, x_tank_key: str = Header(default="")) -> dict:
+    return await _batch_action(batch_id, "reject", x_tank_key)
+
+
+@app.post("/quarantine/{batch_id}/remove")
+async def quarantine_remove(batch_id: str, x_tank_key: str = Header(default="")) -> dict:
+    return await _batch_action(batch_id, "remove", x_tank_key)

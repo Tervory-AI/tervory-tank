@@ -30,9 +30,18 @@ async function tank<T>(path: string, init: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-export type RosterModel = { name: string };
+export type RosterModel = {
+  name: string;
+  providerModel: string;
+  inputPerM: number | null;
+  outputPerM: number | null;
+};
 
-/** Names on the roster Tank already loads. No key and no missing-key flag. */
+function priceOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+/** The roster LiteLLM serves, cheapest first, with USD per million tokens. No key and no missing-key flag. */
 export async function listRoster(): Promise<RosterModel[]> {
   const rows = await tank<unknown>("/v1/models", { method: "GET" });
   if (!Array.isArray(rows)) return [];
@@ -42,7 +51,12 @@ export async function listRoster(): Promise<RosterModel[]> {
     const record = row as Record<string, unknown>;
     const name = typeof record.name === "string" ? record.name.trim() : "";
     if (!name) continue;
-    models.push({ name });
+    models.push({
+      name,
+      providerModel: typeof record.provider_model === "string" ? record.provider_model : "",
+      inputPerM: priceOrNull(record.input_usd_per_m),
+      outputPerM: priceOrNull(record.output_usd_per_m),
+    });
   }
   return models;
 }
@@ -171,6 +185,8 @@ export type Skill = {
   approved_by: string | null;
   approved_at: string | null;
   present: boolean;
+  calls_30d?: number;
+  avg_cost_usd?: number | string | null;
 };
 
 export type EvalResult = {
@@ -241,6 +257,13 @@ export function baseRun(
 export function baseEngines(): Promise<string[]> {
   return tank<string[]>("/v1/base/engines", { method: "GET" });
 }
+export function runContextTrial(userId: string): Promise<{
+  records_sent: number; message?: string; comparison_records?: Pick<BaseRecord, "profile" | "passes">[];
+}> {
+  return tank("/v1/base/context-dev/trial", {
+    method: "POST", headers: { "x-tervory-admin": userId },
+  });
+}
 export function baseRecords(tenantId: string, opts: { taskId?: string; batch?: string; limit?: number; offset?: number } = {}): Promise<BaseRecord[]> {
   const q = new URLSearchParams({ tenant_id: tenantId, limit: String(opts.limit ?? 200), offset: String(opts.offset ?? 0) });
   if (opts.taskId) q.set("task_id", opts.taskId);
@@ -284,7 +307,9 @@ export function setCandidate(taskType: string, candidateModel: string | null, sh
   });
 }
 export function promoteCandidate(taskType: string, by: string) {
-  return tank<{ ok: true; model: string }>(`/v1/graduation/${encodeURIComponent(taskType)}/promote`, { method: "POST", body: JSON.stringify({ by }) });
+  return tank<{ ok: true; model: string }>(`/v1/graduation/${encodeURIComponent(taskType)}/promote`, {
+    method: "POST", headers: { "X-Tervory-Admin": by }, body: JSON.stringify({ by }),
+  });
 }
 export function rollbackModel(taskType: string, by: string) {
   return tank<{ ok: true; model: string }>(`/v1/graduation/${encodeURIComponent(taskType)}/rollback`, { method: "POST", body: JSON.stringify({ by }) });
@@ -634,4 +659,95 @@ export function finalGoldCheck(identity: { userId: string; tenantId: string; rol
   return tank(`/v1/gold/final/${encodeURIComponent(skill)}/${encodeURIComponent(version)}`, { method: "POST", headers: {
     "x-tervory-user": identity.userId, "x-tervory-tenant": identity.tenantId, "x-tervory-role": identity.role,
   } });
+}
+
+// Stripe event ids. The Workspace key is the only caller. A repeat claim is first: false.
+export function claimBillingEvent(eventId: string, type: string): Promise<{ first: boolean }> {
+  return tank<{ first: boolean }>("/v1/billing/events/claim", {
+    method: "POST",
+    body: JSON.stringify({ event_id: eventId, type }),
+  });
+}
+
+export function releaseBillingEvent(eventId: string): Promise<{ released: boolean }> {
+  return tank<{ released: boolean }>("/v1/billing/events/release", {
+    method: "POST",
+    body: JSON.stringify({ event_id: eventId }),
+  });
+}
+
+export function markBillingEventHandled(eventId: string): Promise<{ handled: boolean }> {
+  return tank<{ handled: boolean }>("/v1/billing/events/handled", {
+    method: "POST",
+    body: JSON.stringify({ event_id: eventId }),
+  });
+}
+
+export type TrainingGraduation = {
+  task_type: string; model: string; gold_count: number; candidate: string | null;
+  heldout_score: number | null; current_cost: number | null; candidate_cost: number | null; can_promote: boolean;
+};
+export function trainingGraduation(identity: {userId: string; tenantId: string; role: string}) {
+  return tank<TrainingGraduation[]>("/v1/training/graduation", {method: "GET", headers: {
+    "x-tervory-user": identity.userId, "x-tervory-tenant": identity.tenantId, "x-tervory-role": identity.role,
+  }});
+}
+
+export type TisanGoldPage = {
+  page_id: string; tenant_id: string; figma_file_id: string; figma_frame_id: string;
+  built_page_path: string; frame_hash: string; page_hash: string;
+  frame: Record<string, unknown>; page_structure: Record<string, unknown>; html: string; css: string;
+};
+
+export function tisanGoldPages(tenantId: string, userId: string): Promise<TisanGoldPage[]> {
+  return tank<TisanGoldPage[]>(`/v1/tisan/gold/pages?tenant_id=${encodeURIComponent(tenantId)}`, {
+    method: "GET", headers: { "X-Tervory-Admin": userId },
+  });
+}
+
+export function approveTisanGold(tenantId: string, userId: string, pageId: string, frameHash: string, pageHash: string) {
+  return tank<{ approved: boolean }>("/v1/tisan/gold/approve", {
+    method: "POST", headers: { "X-Tervory-Admin": userId },
+    body: JSON.stringify({ tenant_id: tenantId, page_id: pageId, frame_hash: frameHash, page_hash: pageHash }),
+  });
+}
+
+export type RigCatalogueCounts = { products: number; fits: number };
+
+function wholeCount(value: unknown): number | null {
+  const count = typeof value === "number" ? value : Number(value);
+  if (!Number.isInteger(count) || count < 0) return null;
+  return count;
+}
+
+/** Product and fit totals for this tenant, from the Rig room through Tank. Null when Rig does not answer. */
+export async function rigCatalogueCounts(tenantId: string): Promise<RigCatalogueCounts | null> {
+  if (!tenantId) return null;
+  try {
+    const row = await tank<{ products?: unknown; fits?: unknown }>(
+      `/v1/rig/catalogues?tenant_id=${encodeURIComponent(tenantId)}`,
+      { method: "GET" },
+    );
+    const products = wholeCount(row.products);
+    const fits = wholeCount(row.fits);
+    if (products === null || fits === null) return null;
+    return { products, fits };
+  } catch {
+    return null;
+  }
+}
+
+/** Read-only Rig room calls. The Workspace key stays here; a shopper key never does. */
+export function rigProxy(
+  pathname: string,
+  tenantId: string,
+  init: { method?: "GET" | "POST"; query?: Record<string, string>; body?: unknown } = {},
+): Promise<Record<string, unknown>> {
+  const params = new URLSearchParams({ tenant_id: tenantId });
+  for (const [key, value] of Object.entries(init.query ?? {})) params.set(key, value);
+  const path = `${pathname}?${params.toString()}`;
+  if ((init.method ?? "GET") === "POST") {
+    return tank<Record<string, unknown>>(path, { method: "POST", body: JSON.stringify(init.body ?? {}) });
+  }
+  return tank<Record<string, unknown>>(path, { method: "GET" });
 }

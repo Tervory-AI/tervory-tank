@@ -61,6 +61,10 @@ CREATE TABLE IF NOT EXISTS agent_zenas.reviews (
 CREATE INDEX IF NOT EXISTS reviews_tenant_document_idx
     ON agent_zenas.reviews (tenant_id, document_id, ts DESC);
 
+ALTER TABLE agent_zenas.reviews ADD COLUMN IF NOT EXISTS reviewer_kind text;
+
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_namespace n ON n.oid = c.connamespace WHERE c.conname = 'reviews_reviewer_kind_chk' AND n.nspname = 'agent_zenas') THEN ALTER TABLE agent_zenas.reviews ADD CONSTRAINT reviews_reviewer_kind_chk CHECK (reviewer_kind IS NULL OR reviewer_kind IN ('reviewer', 'founder')); END IF; END $$;
+
 CREATE TABLE IF NOT EXISTS agent_zenas.consents (
     id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id        uuid NOT NULL,
@@ -119,6 +123,10 @@ CREATE TABLE IF NOT EXISTS agent_zenas.rule_cards (
 
 CREATE INDEX IF NOT EXISTS rule_cards_lookup_idx
     ON agent_zenas.rule_cards (region, jurisdiction, question_key, status);
+
+ALTER TABLE agent_zenas.rule_cards ADD COLUMN IF NOT EXISTS reviewer_kind text;
+
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_namespace n ON n.oid = c.connamespace WHERE c.conname = 'rule_cards_reviewer_kind_chk' AND n.nspname = 'agent_zenas') THEN ALTER TABLE agent_zenas.rule_cards ADD CONSTRAINT rule_cards_reviewer_kind_chk CHECK (reviewer_kind IS NULL OR reviewer_kind IN ('reviewer', 'founder')); END IF; END $$;
 
 CREATE TABLE IF NOT EXISTS agent_zenas.worked_matters (
     id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -226,6 +234,10 @@ CREATE TABLE IF NOT EXISTS agent_zenas.clauses (
 CREATE INDEX IF NOT EXISTS clauses_lookup_idx
     ON agent_zenas.clauses (region, template, jurisdiction, kind);
 
+ALTER TABLE agent_zenas.clauses ADD COLUMN IF NOT EXISTS reviewer_kind text;
+
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_namespace n ON n.oid = c.connamespace WHERE c.conname = 'clauses_reviewer_kind_chk' AND n.nspname = 'agent_zenas') THEN ALTER TABLE agent_zenas.clauses ADD CONSTRAINT clauses_reviewer_kind_chk CHECK (reviewer_kind IS NULL OR reviewer_kind IN ('reviewer', 'founder')); END IF; END $$;
+
 -- A tenant's preferred positions. Another tenant's playbook is not readable here.
 CREATE TABLE IF NOT EXISTS agent_zenas.playbooks (
     id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -297,6 +309,9 @@ ALTER TABLE agent_zenas.golden_cases ADD COLUMN IF NOT EXISTS correction text;
 ALTER TABLE agent_zenas.golden_cases ADD COLUMN IF NOT EXISTS corrected_by text;
 ALTER TABLE agent_zenas.golden_cases ADD COLUMN IF NOT EXISTS admission_no text;
 ALTER TABLE agent_zenas.golden_cases ADD COLUMN IF NOT EXISTS corrected_at timestamptz;
+ALTER TABLE agent_zenas.golden_cases ADD COLUMN IF NOT EXISTS reviewer_kind text;
+
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_namespace n ON n.oid = c.connamespace WHERE c.conname = 'golden_cases_reviewer_kind_chk' AND n.nspname = 'agent_zenas') THEN ALTER TABLE agent_zenas.golden_cases ADD CONSTRAINT golden_cases_reviewer_kind_chk CHECK (reviewer_kind IS NULL OR reviewer_kind IN ('reviewer', 'founder')); END IF; END $$;
 
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint c JOIN pg_namespace n ON n.oid = c.connamespace WHERE c.conname = 'golden_cases_jurisdiction_chk' AND n.nspname = 'agent_zenas') THEN ALTER TABLE agent_zenas.golden_cases ADD CONSTRAINT golden_cases_jurisdiction_chk CHECK (jurisdiction IN ('us', 'za')); END IF; END $$;
 
@@ -469,3 +484,33 @@ CREATE TABLE IF NOT EXISTS agent_zenas.selftest_runs (
     CONSTRAINT selftest_region_chk CHECK (region IN ('us-east', 'za')),
     CONSTRAINT selftest_kind_chk CHECK (kind IN ('holdout', 'legalbench'))
 );
+
+-- Z8. A cite-check failure is logged and retried the next night.
+-- answer_excerpt is the model's own answer on a public judgment (at most
+-- 1,500 characters), for the founder debug view. Client text is never stored.
+-- quote_part names which quote failed (facts, element N, citation N).
+-- quote_excerpt is the first 120 characters of that quote.
+CREATE TABLE IF NOT EXISTS agent_zenas.convert_failures (
+    id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    region         text NOT NULL,
+    pool_doc_id    text NOT NULL,
+    reason         text NOT NULL DEFAULT '',
+    created_at     timestamptz NOT NULL DEFAULT now(),
+    answer_excerpt text NOT NULL DEFAULT '',
+    finish_reason  text NOT NULL DEFAULT '',
+    tokens_in      integer NOT NULL DEFAULT 0,
+    tokens_out     integer NOT NULL DEFAULT 0,
+    quote_part     text NOT NULL DEFAULT '',
+    quote_excerpt  text NOT NULL DEFAULT '',
+    CONSTRAINT convert_failures_region_chk CHECK (region IN ('us-east', 'za'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS convert_failures_doc_idx
+    ON agent_zenas.convert_failures (region, pool_doc_id);
+
+ALTER TABLE agent_zenas.convert_failures ADD COLUMN IF NOT EXISTS answer_excerpt text NOT NULL DEFAULT '';
+ALTER TABLE agent_zenas.convert_failures ADD COLUMN IF NOT EXISTS finish_reason text NOT NULL DEFAULT '';
+ALTER TABLE agent_zenas.convert_failures ADD COLUMN IF NOT EXISTS tokens_in integer NOT NULL DEFAULT 0;
+ALTER TABLE agent_zenas.convert_failures ADD COLUMN IF NOT EXISTS tokens_out integer NOT NULL DEFAULT 0;
+ALTER TABLE agent_zenas.convert_failures ADD COLUMN IF NOT EXISTS quote_part text NOT NULL DEFAULT '';
+ALTER TABLE agent_zenas.convert_failures ADD COLUMN IF NOT EXISTS quote_excerpt text NOT NULL DEFAULT '';

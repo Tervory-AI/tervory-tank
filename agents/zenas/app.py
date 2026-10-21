@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import hmac
 import os
 import sys
 from contextlib import asynccontextmanager
@@ -23,13 +24,14 @@ _CHASSIS = _ROOT / "agents" / "_chassis"
 if _CHASSIS.is_dir() and str(_CHASSIS) not in sys.path:
     sys.path.insert(0, str(_CHASSIS))
 
+from agents.zenas.pool.api import interrupt_abandoned_loads  # noqa: E402
 from agents.zenas.pool.api import register_routes as register_pool_routes  # noqa: E402
 from agents.zenas.pool.catalogue import CATALOGUE  # noqa: E402
 from agents.zenas.pool.region import RegionError, assert_box_region  # noqa: E402
 from agents.zenas.pool.store import PostgresStore  # noqa: E402
 from chassis.app import create_app  # noqa: E402
 from chassis.jobs import JobContext  # noqa: E402
-from fastapi import HTTPException  # noqa: E402
+from fastapi import HTTPException, Header, Query  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
 
 from agents.zenas.core.ladder_store import PgLadder  # noqa: E402
@@ -49,7 +51,9 @@ from agents.zenas.core.service import (  # noqa: E402
     build_rule_card,
     check_citations,
     draft_contract,
+    BODY_TEXT_REFUSED,
     extract_case_facts,
+    judgment_from_pool_row,
     ladder_metrics,
     mark_stale,
     match_matters,
@@ -61,8 +65,10 @@ from agents.zenas.core.service import (  # noqa: E402
     review_queue,
     write_memo,
 )
+from agents.zenas.core.convert import begin_convert, conversion_report, convert_cases, convert_running  # noqa: E402
 from agents.zenas.core.selftest import list_scores, run_selftest  # noqa: E402
 from agents.zenas.core.store import PgStore, register_home  # noqa: E402
+from agents.zenas.gold_sources import candidates as gold_candidates  # noqa: E402
 
 AGENT = os.environ.get("AGENT_NAME", "zenas")
 HEARTBEAT_TENANT = "00000000-0000-0000-0000-000000000001"
@@ -190,6 +196,17 @@ app = create_app(
 )
 
 
+@app.get("/gold/candidates")
+async def get_gold_candidates(
+    limit: int = Query(default=200, ge=0, le=200),
+    x_tank_key: str = Header(default=""),
+) -> list[dict[str, Any]]:
+    expected = os.environ.get("TANK_KEY", "")
+    if not expected or not hmac.compare_digest(x_tank_key.encode(), expected.encode()):
+        raise HTTPException(status_code=401, detail="room key required")
+    return await gold_candidates(app.state.pool, region=_box_region(), limit=limit)
+
+
 class ConsentIn(BaseModel):
     tenant_id: UUID
     home_region: str
@@ -221,9 +238,10 @@ class ReviewIn(BaseModel):
     tenant_id: UUID
     reviewer: str
     jurisdiction: str
-    admission_no: str
+    admission_no: str = ""
     decision: str
     changes: str = ""
+    reviewer_kind: str = "reviewer"
 
 
 @app.get("/pool")
@@ -248,6 +266,29 @@ async def _pool_store():
 
 # Feeds switchboard: pool status and "Load now" per source (Tank proxies /v1/zenas/pool/*).
 register_pool_routes(app, _pool_store, _box_region)
+
+_inner_lifespan = app.router.lifespan_context
+
+
+@asynccontextmanager
+async def _room_lifespan(application):
+    """After the chassis pool is up, a load still marked running was cut off."""
+    async with _inner_lifespan(application):
+        raw = os.environ.get("TANK_REGION", "").strip().lower()
+        try:
+            assert_box_region(raw or None)
+        except RegionError:
+            yield
+            return
+        try:
+            async with _pool_store() as store:
+                await interrupt_abandoned_loads(store)
+        except Exception as exc:
+            log.warning("could not mark interrupted loads: %s", type(exc).__name__)
+        yield
+
+
+app.router.lifespan_context = _room_lifespan
 
 
 @app.post("/consents", status_code=201)
@@ -324,6 +365,7 @@ async def post_review(document_id: UUID, body: ReviewIn) -> dict[str, Any]:
         admission_no=body.admission_no,
         decision=body.decision,
         changes=body.changes,
+        reviewer_kind=body.reviewer_kind,
     )
     _fail(result)
     return result
@@ -364,10 +406,11 @@ class ApproveCardIn(BaseModel):
     tenant_id: UUID
     home_region: str
     reviewer: str
-    admission_no: str
+    admission_no: str = ""
     jurisdiction: str
     passages: list[Any] = Field(default_factory=list)
     changes: str = ""
+    reviewer_kind: str = "reviewer"
 
 
 class StaleIn(BaseModel):
@@ -427,7 +470,8 @@ class ReleaseIn(BaseModel):
     home_region: str
     document_id: UUID
     reviewer: str
-    admission_no: str
+    admission_no: str = ""
+    reviewer_kind: str = "reviewer"
     jurisdiction: str
     rule_card_ids: list[str] = Field(default_factory=list)
     features: dict[str, Any] = Field(default_factory=dict)
@@ -528,6 +572,7 @@ async def post_approve_card(card_id: UUID, body: ApproveCardIn) -> dict[str, Any
         jurisdiction=body.jurisdiction,
         passages=body.passages,
         changes=body.changes,
+        reviewer_kind=body.reviewer_kind,
     )
     _fail(result)
     return result
@@ -546,8 +591,34 @@ async def post_stale(body: StaleIn) -> dict[str, Any]:
     return result
 
 
+_POOL_CASE_SQL = """
+SELECT source_id, text, citation
+FROM zenas_pool.documents
+WHERE document_id = $1
+  AND kind = 'case'
+  AND effective_to IS NULL
+  AND status IS DISTINCT FROM 'superseded'
+ORDER BY version_id DESC
+LIMIT 1
+""".strip()
+
+
+async def _pool_case_row(pool_doc_id: str) -> dict[str, Any] | None:
+    """The pool's own row. The request body is not consulted."""
+    async with app.state.pool.acquire() as conn:
+        row = await conn.fetchrow(_POOL_CASE_SQL, pool_doc_id)
+    if row is None:
+        return None
+    return {"source_id": str(row["source_id"] or ""), "text": str(row["text"] or ""), "citation": str(row["citation"] or "")}
+
+
 @app.post("/cases/facts")
 async def post_case_facts(body: CaseFactsIn) -> dict[str, Any]:
+    loaded = judgment_from_pool_row(body.judgment, body.source_id, await _pool_case_row(body.pool_doc_id))
+    if not loaded.get("ok"):
+        if loaded.get("reason") == BODY_TEXT_REFUSED:
+            raise HTTPException(status_code=403, detail=BODY_TEXT_REFUSED)
+        _fail(loaded)
     result = await extract_case_facts(
         await _ready(),
         _model(str(body.tenant_id)),
@@ -557,9 +628,9 @@ async def post_case_facts(body: CaseFactsIn) -> dict[str, Any]:
         jurisdiction=body.jurisdiction,
         pool_doc_id=body.pool_doc_id,
         pool_version_id=body.pool_version_id,
-        citation=body.citation,
-        source_id=body.source_id,
-        judgment=body.judgment,
+        citation=str(loaded.get("citation") or ""),
+        source_id=str(loaded.get("source_id") or ""),
+        judgment=str(loaded.get("judgment") or ""),
         rule_card_ids=body.rule_card_ids,
         as_at=body.as_at,
         provider=body.provider,
@@ -659,6 +730,7 @@ async def post_release(matter_id: UUID, body: ReleaseIn) -> dict[str, Any]:
         document_id=str(body.document_id),
         reviewer=body.reviewer,
         admission_no=body.admission_no,
+        reviewer_kind=body.reviewer_kind,
         jurisdiction=body.jurisdiction,
         rule_card_ids=body.rule_card_ids,
         features=body.features,
@@ -703,7 +775,8 @@ class ClauseIn(BaseModel):
     kind: str
     text: str
     approved_by: str
-    admission_no: str
+    admission_no: str = ""
+    reviewer_kind: str = "reviewer"
     fallback_positions: list[str] = Field(default_factory=list)
     notes: str = ""
 
@@ -723,6 +796,7 @@ async def post_clause(body: ClauseIn) -> dict[str, Any]:
         text=body.text,
         approved_by=body.approved_by,
         admission_no=body.admission_no,
+        reviewer_kind=body.reviewer_kind,
         fallback_positions=body.fallback_positions,
         notes=body.notes,
     )
@@ -893,6 +967,44 @@ async def post_review_switch(body: ReviewSwitchIn) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail="review is on or off")
     await ladder.set_review(region=box, review=body.review)
     return {"ok": True, "region": box, "review": body.review}
+
+
+class ConvertIn(BaseModel):
+    home_region: str
+
+
+@app.get("/cases/convert")
+async def get_cases_convert(home_region: str) -> dict[str, Any]:
+    """Counts for this region: decided cases loaded, converted, held out, failed."""
+    box = _box_region()
+    if home_region != box:
+        raise HTTPException(status_code=403, detail="wrong region")
+    ladder = await _ready()
+    async with _pool_store() as pool:
+        report = await conversion_report(pool, ladder, region=box)
+    report["running"] = convert_running(box)
+    return report
+
+
+@app.post("/cases/convert")
+async def post_cases_convert(body: ConvertIn) -> dict[str, Any]:
+    """Start this region's conversion and return at once. The other region's cases are not read."""
+    box = _box_region()
+    if body.home_region != box:
+        raise HTTPException(status_code=403, detail="wrong region")
+
+    async def runner() -> None:
+        ladder = await _ready()
+        async with _pool_store() as pool:
+            await convert_cases(pool, ladder, _model(HEARTBEAT_TENANT), region=box)
+
+    started = await begin_convert(box, runner)
+    ladder = await _ready()
+    async with _pool_store() as pool:
+        report = await conversion_report(pool, ladder, region=box)
+    report["running"] = bool(started["running"])
+    report["status"] = started["status"]
+    return report
 
 
 @app.get("/selftest")

@@ -76,7 +76,22 @@ async def perform_refresh(
                     "engine": engine,
                 },
             )
-            stamped = [{**point, "fetched_at": fetched_at} for point in item["points"]]
+            batch_id = str(uuid.uuid4())
+            region = os.environ.get("TANK_REGION", "us-east")
+            if region not in {"us-east", "za"}:
+                region = "us-east"
+            stamped = [
+                {
+                    **point,
+                    "fetched_at": fetched_at,
+                    "source": item["source"],
+                    "region": region,
+                    "currency": "none",
+                    "unit": supply.get("unit") or "count",
+                    "batch_id": batch_id,
+                }
+                for point in item["points"]
+            ]
             stored_rows += await _call(
                 ledger.save_points,
                 f"{tenant_id}:{series_id}",

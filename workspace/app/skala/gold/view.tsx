@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 type Skill = { agent: string; skill_id: string; checked: number; target: number; holdout: number; candidates: number; last_score: number | null; trend: number | null; ran_at: string | null };
 type Summary = { skills: Skill[]; pairs: Record<string, number>; region: string };
-type Example = { id: string; input: unknown; expected: Record<string, unknown>; source: string };
+type Example = { id: string; input: unknown; expected: Record<string, unknown>; source: string; auto_label?: boolean; label_source?: string };
 const agents = ["tank", "base", "tiger", "market_lab", "zenas", "radix", "tisan", "rig"];
 const names: Record<string, string> = { tank: "Tank", base: "Base", tiger: "Tiger", market_lab: "Market Lab", zenas: "Zenas", radix: "Radix", tisan: "Tisan", rig: "RIG" };
 const pct = (n: number | null) => n === null ? "Not tested" : `${(n * 100).toFixed(1)}%`;
@@ -118,8 +118,14 @@ export function GoldView({ founder }: { founder: boolean }) {
         </article>;
       })}
     </div></section>
-    <section className="gold-review" aria-labelledby="review-title"><div className="gold-review-heading"><div><p className="gold-eyebrow">ONE EXAMPLE AT A TIME</p><h2 id="review-title">Check an answer</h2></div>
-      <p className="gold-meta">Target: 100 checked examples per skill.<br />20% are held back for a final check.</p></div>
+    <section className="gold-review" aria-labelledby="review-title"><div className="gold-review-heading"><div><p className="gold-eyebrow">ONE EXAMPLE AT A TIME</p><h2 id="review-title">Sample queue</h2></div>
+      <p className="gold-meta">Ten machine-labelled examples per source for each skill, plus every judgement example.<br />A source counts after 9 of 10 checks agree.</p></div>
+      <nav aria-label="Skills closest to 100" className="gold-filters">
+        {summary?.skills.filter(s => s.candidates > 0).map(s => <button key={s.skill_id} disabled={busy}
+          onClick={() => { setAgent(s.agent); setSkill(s.skill_id); setAfter(""); }}>
+          {s.skill_id} · {s.checked}/100
+        </button>)}
+      </nav>
       <div className="gold-filters"><label>Agent<select value={agent} disabled={busy} onChange={e => { setAgent(e.target.value); setSkill(""); setAfter(""); }}>
         {(founder ? agents : ["zenas"]).map(name => <option key={name} value={name}>{names[name]}</option>)}</select></label>
         <label>Skill<select value={skill} disabled={busy || !skills.length} onChange={e => { setSkill(e.target.value); setAfter(""); }}>
@@ -136,7 +142,7 @@ export function GoldView({ founder }: { founder: boolean }) {
           <button disabled={busy} onClick={() => void submit("wrong")}>{correcting ? "Save correction" : "Wrong"} {!correcting && <kbd>W</kbd>}</button>
           <button disabled={busy} onClick={() => void submit("skip")}>Skip <kbd>S</kbd></button>
           {correcting && <button disabled={busy} onClick={() => setCorrecting(false)}>Cancel correction</button>}
-          <span className="gold-meta">{busy ? "Saving…" : `Source: ${example.source.replaceAll("_", " ")}`}</span></div>
+          <span className="gold-meta">{busy ? "Saving…" : `${agent === "zenas" ? "Lawyer check · " : ""}Source: ${example.label_source ?? example.source.replaceAll("_", " ")}`}</span></div>
       </> : <div className="gold-empty"><h3>{after ? "You’ve reached the end of this queue." : "No examples waiting for this skill."}</h3>
         <p>{after ? "Skipped examples are still available when you start again." : "Existing skill examples and accepted work appear here as they arrive."}</p>
         {after && <button onClick={() => setAfter("")}>Review skipped examples</button>}</div>}

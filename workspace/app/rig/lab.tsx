@@ -49,17 +49,35 @@ function CompactSearch({ onSearch }: { onSearch: (query: string) => void }) {
   );
 }
 
+export function CatalogueNumbers({ products, fits }: { products: number | null; fits: number | null }) {
+  if (products === null || fits === null) {
+    return <p className="intro">Rig did not answer. Try again in a few minutes.</p>;
+  }
+  return (
+    <section className="counts" aria-label="Counts">
+      <article className="count">
+        <b>{products}</b>
+        <strong>Products</strong>
+        <p className="fine">In this account&apos;s catalogue.</p>
+      </article>
+      <article className="count">
+        <b>{fits}</b>
+        <strong>Approved fits</strong>
+        <p className="fine">Parts confirmed to fit a product.</p>
+      </article>
+    </section>
+  );
+}
+
 export function Lab({
   accountName,
   products,
   fits,
-  live,
   plugins,
 }: {
   accountName: string;
-  products: number;
-  fits: number;
-  live: boolean;
+  products: number | null;
+  fits: number | null;
   plugins: PluginPanel;
 }) {
   const [tab, setTab] = useState<TabId>("search");
@@ -168,55 +186,7 @@ export function Lab({
                 Open live search
               </a>
             </header>
-            <section className="counts" aria-label="Counts">
-              <article className="count">
-                <b>{live ? "Up" : "Down"}</b>
-                <strong>rig.tervory.com</strong>
-                <p className="fine">{live ? "The live search page is running." : "The live search page did not answer."}</p>
-              </article>
-              <article className="count">
-                <b>{products}</b>
-                <strong>Products</strong>
-                <p className="fine">In the Staccato demo catalogue.</p>
-              </article>
-              <article className="count">
-                <b>{fits}</b>
-                <strong>Approved fits</strong>
-                <p className="fine">Parts confirmed to fit a pistol.</p>
-              </article>
-            </section>
-            <section className="block">
-              <h2>Live now</h2>
-              <p className="intro">What shoppers see on rig.tervory.com today.</p>
-              <div className="cards">
-                <article className="card">
-                  <div className="card-top">
-                    <h3>Live site</h3>
-                    <Pill on={live}>{live ? "Up" : "Down"}</Pill>
-                  </div>
-                  <p>rig.tervory.com, Tervory skin. Searches the Staccato demo catalogue.</p>
-                  <p className="meta">Version 81bda21 · live since 3:57 PM PT</p>
-                </article>
-                <article className="card">
-                  <div className="card-top">
-                    <h3>Search checks</h3>
-                    <Pill>Passed</Pill>
-                  </div>
-                  <p className="big">
-                    5 of 5 <span>checks passed</span>
-                  </p>
-                  <p className="meta">Right product in the top 3, “I don't know” for things we don't stock, under 300 ms.</p>
-                </article>
-                <article className="card">
-                  <div className="card-top">
-                    <h3>Distributor feeds</h3>
-                    <Pill on={false}>Off</Pill>
-                  </div>
-                  <p>Rig uses stand-in products for now. Real feeds go on once the search is proven.</p>
-                  <p className="meta">Needs Zenas's OK to turn on</p>
-                </article>
-              </div>
-            </section>
+            <CatalogueNumbers products={products} fits={fits} />
             <section className="block">
               <h2>What's built</h2>
               <p className="intro">Stage R4 is finished and live.</p>
@@ -257,90 +227,17 @@ export function Lab({
             <header className="head">
               <div className="titles">
                 <h1>Catalogues</h1>
-                <p className="lede">The product lists Rig searches. Everything here is stand-in data for now.</p>
+                <p className="lede">The product lists Rig searches.</p>
               </div>
               <CompactSearch onSearch={searchFrom} />
             </header>
-            <section className="counts">
-              <article className="count">
-                <b>3</b>
-                <strong>Catalogues</strong>
-                <p className="fine">Loaded and searchable.</p>
-              </article>
-              <article className="count">
-                <b>{products}</b>
-                <strong>Products on the live page</strong>
-                <p className="fine">From the Staccato demo catalogue.</p>
-              </article>
-              <article className="count">
-                <b>0</b>
-                <strong>Distributor feeds on</strong>
-                <p className="fine">Real feeds stay off until the search is proven.</p>
-              </article>
-            </section>
-            <section className="block">
-              <h2>Loaded catalogues</h2>
-              <p className="intro">Each shop's products stay in their own catalogue. Results never mix between shops.</p>
-              <div className="sheet">
-                <table className="catalogues">
-                  <thead>
-                    <tr>
-                      <th>Catalogue</th>
-                      <th>Products</th>
-                      <th>Fits</th>
-                      <th>Prices</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>
-                        <strong>Staccato demo</strong>
-                        <p>Staccato pistols and parts from a stand-in distributor sheet.</p>
-                      </td>
-                      <td className="num">{products}</td>
-                      <td className="num">{fits}</td>
-                      <td>Retailer price, plus 2 demo shops for the market average</td>
-                      <td><Pill>On the live page</Pill></td>
-                    </tr>
-                    <tr>
-                      <td>
-                        <strong>Rifle test set</strong>
-                        <p>A rifle, a scope and rings. Used by the automatic search checks.</p>
-                      </td>
-                      <td className="num">3</td>
-                      <td className="num">3</td>
-                      <td>Retailer price only</td>
-                      <td><Pill on={false}>Tests only</Pill></td>
-                    </tr>
-                    <tr>
-                      <td>
-                        <strong>Second shop test set</strong>
-                        <p>Non-gun products from a second shop. Proves results never cross between shops.</p>
-                      </td>
-                      <td className="num">2</td>
-                      <td className="num">1</td>
-                      <td>Retailer price only</td>
-                      <td><Pill on={false}>Tests only</Pill></td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </section>
-            <section className="block">
-              <h2>Distributor feeds</h2>
-              <p className="intro">Real product feeds stay off until the search is proven.</p>
-              <article className="card">
-                <div className="card-top">
-                  <h3>Distributor product feeds</h3>
-                  <Pill on={false}>Off</Pill>
-                </div>
-                <p>Rig is tested on stand-in products only, never on the real feeds. Feeds are connected once the search is proven and Zenas says yes. Their keys go in the Plugins tab.</p>
-                <button type="button" className="text more" onClick={() => setPluginsOpen(true)}>
-                  Open Plugins →
-                </button>
-              </article>
-            </section>
+            <CatalogueNumbers products={products} fits={fits} />
+            {products !== null && fits !== null ? (
+              <section className="block">
+                <h2>This account</h2>
+                <p className="intro">Counts come from the Rig room. Shops stay separate.</p>
+              </section>
+            ) : null}
             <footer className="foot">
               <p>Stand-in products only. Prices are demo figures.</p>
               <p className="small">Market average prices are shown once a shopper's selection is final.</p>
@@ -384,9 +281,9 @@ export function Lab({
                 <p className="fine">Suggested fits not yet decided.</p>
               </article>
               <article className="count">
-                <b>{fits}</b>
+                <b>{fits === null ? "—" : fits}</b>
                 <strong>Approved</strong>
-                <p className="fine">Showing to shoppers now.</p>
+                <p className="fine">{fits === null ? "Rig did not answer. Try again in a few minutes." : "Showing to shoppers now."}</p>
               </article>
               <article className="count">
                 <b>{decided.filter((row) => !row.on).length}</b>
