@@ -3,11 +3,11 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import type { AccessPanel, AccessQueueItem } from "@/lib/tank";
 
-export function AccessView({ founder, account, selected, name, panel, queue, error }: { founder: boolean; account: string; selected: string; name: string; panel: AccessPanel | null; queue: AccessQueueItem[]; error: string }) {
+export function AccessView({ founder, account, selected, name, panel, queue, error, initialSection = "connections" }: { founder: boolean; account: string; selected: string; name: string; panel: AccessPanel | null; queue: AccessQueueItem[]; error: string; initialSection?: "connections" | "checks" }) {
   const router = useRouter();
   const [message, setMessage] = useState(error);
   const [busy, setBusy] = useState(false);
-  const [tab, setTab] = useState("connections");
+  const [tab, setTab] = useState<string>(initialSection);
   async function post(path: string, body: unknown) {
     setBusy(true); setMessage("");
     try {

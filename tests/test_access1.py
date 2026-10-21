@@ -25,7 +25,6 @@ ROOT = Path(__file__).resolve().parents[1]
 def keys(monkeypatch):
     for name in ("TANK_VAULT_KEY", "ACCESS_BROWSER_KEY_BASE", "ACCESS_BROWSER_KEY_TIGER"):
         monkeypatch.setenv(name, base64.urlsafe_b64encode(os.urandom(32)).decode())
-    monkeypatch.setenv("ACCESS_BROWSER_KEY", os.environ["ACCESS_BROWSER_KEY_BASE"])
     monkeypatch.setenv("ACCESS_ROOM", "base")
 
 
@@ -230,13 +229,22 @@ async def test_private_feed_dns_is_refused_before_request(monkeypatch):
 
 def test_separate_browser_keys_and_volumes_are_not_in_brains():
     import yaml
+    main = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
+    for name, service in main["services"].items():
+        env = service.get("environment", {})
+        assert ("TANK_VAULT_KEY" in env) == (name == "tank")
+        assert ("ACCESS_BROWSER_KEY_BASE" in env) == (name == "tank")
+        assert ("ACCESS_BROWSER_KEY_TIGER" in env) == (name == "tank")
     for room in ("base", "tiger"):
         compose = yaml.safe_load((ROOT / f"agents/{room}/docker-compose.yml").read_text())
         browser_service = compose["services"][room + "-browser"]
         assert browser_service["networks"] == ["browser"]
         assert compose["networks"]["browser"]["internal"] is True
         for name, service in compose["services"].items():
-            assert ("ACCESS_BROWSER_KEY" in service.get("environment", {})) == (name == room + "-browser")
+            env = service.get("environment", {})
+            assert ("ACCESS_BROWSER_KEY_" + room.upper() in env) == (name == room + "-browser")
+            assert "TANK_VAULT_KEY" not in env
+            assert "ACCESS_BROWSER_KEY" not in env
             if name != room + "-browser": assert not any("browser_data" in v for v in service.get("volumes", []))
 
 
@@ -303,6 +311,21 @@ async def test_private_site_never_sent_to_archives(app, monkeypatch):
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=server), base_url="http://test") as client:
         response = await client.post("/v1/access/archives", json={"tenant_id": str(actor.tenant_id), "url": row["site"] + "/inventory"})
     assert response.status_code == 200 and response.json()["found"] is False
+
+
+@pytest.mark.asyncio
+async def test_http_public_site_can_use_dated_archive(app, monkeypatch):
+    server, _, actor = app
+    server.dependency_overrides[access.room_identity] = lambda: "base"
+    async def get(url, **kwargs):
+        if "wayback/available" in url:
+            return json.dumps({"archived_snapshots": {"closest": {"available": True, "timestamp": "20200101120000"}}}).encode(), {}
+        assert url.startswith("https://web.archive.org/")
+        return b"<p>Public archived page</p>", {}
+    monkeypatch.setattr(access, "public_get", get)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=server), base_url="http://test") as client:
+        response = await client.post("/v1/access/archives", json={"tenant_id": str(actor.tenant_id), "url": "http://public.example/about"})
+    assert response.status_code == 200 and response.json()["archived"] is True
 
 
 @pytest.mark.asyncio
@@ -374,3 +397,34 @@ def test_private_cookies_cannot_be_reused_in_an_unconfigured_public_browser(monk
     monkeypatch.setenv("BROWSER_DATA_DIR", str(tmp_path)); tenant = str(uuid.uuid4()); site = "https://dealer.example"
     private = browser.storage_for(tenant, site, authenticated=True); private.write_text("{}")
     assert not browser.storage_for(tenant, site).exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("same_page", [True, False])
+async def test_handed_back_content_is_only_returned_for_its_requested_page(keys, monkeypatch, tmp_path, same_page):
+    import sys
+    tenant = str(uuid.uuid4()); site = "https://dealer.example"; handle = str(uuid.uuid4())
+    monkeypatch.setenv("BROWSER_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(browser, "public_url", lambda url: ("dealer.example", 443))
+    async def rpc(*args, **kwargs): return {"state": "public"}
+    monkeypatch.setattr(browser, "access_rpc", rpc)
+    async def content(): return "Only the original product"
+    item = browser.LivePage(tenant, site, SimpleNamespace(content=content), None, None, None,
+                           tmp_path / "cookies", site + "/original", "", {}, ready=True)
+    monkeypatch.setattr(browser, "held", {handle: item})
+    disposed = []
+    async def dispose(value): disposed.append(value); browser.held.pop(value)
+    monkeypatch.setattr(browser, "dispose", dispose)
+    class NewPageRequested(Exception): pass
+    def launch(): raise NewPageRequested()
+    monkeypatch.setitem(sys.modules, "playwright.async_api", SimpleNamespace(async_playwright=launch))
+    @asynccontextmanager
+    async def slot(*args): yield {}
+    monkeypatch.setattr(browser, "render_slot", slot)
+    body = browser.Page(url=site + ("/original" if same_page else "/another"))
+    if same_page:
+        result = await browser.visit(body, tenant, "", site)
+        assert result["html"] == "Only the original product" and result["human_handled"]
+    else:
+        with pytest.raises(NewPageRequested): await browser.visit(body, tenant, "", site)
+    assert disposed == [handle]

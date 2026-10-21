@@ -9,3 +9,6 @@ selectolax==0.3.27
 redis==5.2.1
 # Offline BPE input budgeting for the Base agent chat route.
 tiktoken==0.14.0
+
+# ACCESS-1 authenticated encryption for the credential vault and browser channel.
+cryptography==50.0.2

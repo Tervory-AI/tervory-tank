@@ -110,7 +110,7 @@ services:
       TANK_KEY: ${TANK_KEY_BASE:-}
       TANK_REGION: us-east
       ACCESS_ROOM: base
-      ACCESS_BROWSER_KEY: ${ACCESS_BROWSER_KEY_BASE:-}
+      ACCESS_BROWSER_KEY_BASE: ${ACCESS_BROWSER_KEY_BASE}
     volumes:
       - base_browser_data:/browser-data
     networks: [browser]

@@ -120,7 +120,7 @@ async def render(body: Page, x_tank_key: str = Header(default=""), x_tenant_id: 
         site = site_origin(body.url)
     except (ValueError, OSError):
         raise HTTPException(403, "Private or internal web address refused.") from None
-    if os.environ.get("ACCESS_BROWSER_KEY"):
+    if access_configured():
         async with access_locks.setdefault((tenant, site), asyncio.Lock()):
             task = asyncio.current_task()
             active_visits[(tenant, site)] = task
@@ -135,7 +135,7 @@ async def visit(body, tenant, task, origin):
     host, _ = public_url(body.url)
     directory = tenant_dir(Path(os.environ.get("BROWSER_DATA_DIR", "/browser-data")), tenant)
     storage = storage_for(tenant, origin)
-    secure = bool(os.environ.get("ACCESS_BROWSER_KEY"))
+    secure = access_configured()
     policy = await access_rpc(tenant, origin, "policy") if secure else {"state": "public"}
     private = policy["state"] != "public"
     if private: storage = storage_for(tenant, origin, authenticated=True)
@@ -155,6 +155,11 @@ async def visit(body, tenant, task, origin):
         if item.tenant == tenant and item.site == origin:
             if not item.ready:
                 return {"ok": False, "challenge": True, "needs_person": "needs a person", "html": ""}
+            if item.url != body.url:
+                # Keep the handed-back session, but never use another page's
+                # content as the answer to this URL.
+                await dispose(handle)
+                continue
             # Consume the page the person handed back, in the same live context.
             html = "" if private else await item.page.content()
             result = {"ok": True, "challenge": False, "html": html[:600000], "url": origin,
@@ -299,9 +304,13 @@ def access_room():
     return room
 
 
+def access_configured():
+    return bool(os.environ.get("ACCESS_BROWSER_KEY_" + access_room().upper()))
+
+
 def access_key():
     try:
-        raw = base64.urlsafe_b64decode(os.environ.get("ACCESS_BROWSER_KEY", ""))
+        raw = base64.urlsafe_b64decode(os.environ.get("ACCESS_BROWSER_KEY_" + access_room().upper(), ""))
         if len(raw) != 32: raise ValueError()
         return raw
     except ValueError:

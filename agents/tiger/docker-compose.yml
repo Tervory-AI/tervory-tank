@@ -49,7 +49,7 @@ services:
       TANK_KEY: ${TANK_KEY_TIGER:-}
       TANK_REGION: us-east
       ACCESS_ROOM: tiger
-      ACCESS_BROWSER_KEY: ${ACCESS_BROWSER_KEY_TIGER:-}
+      ACCESS_BROWSER_KEY_TIGER: ${ACCESS_BROWSER_KEY_TIGER}
       ACCESS_GATEWAY_URL: http://tiger-browser-gateway:3000
       BROWSER_PROXY_URL: http://tiger-browser-gateway:3128
     volumes: [tiger_browser_data:/browser-data]

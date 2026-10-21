@@ -1,3 +1,4 @@
+import { AccessQueueNotice } from "../access/queue-notice";
 import { redirect } from "next/navigation";
 import { activeTenant } from "@/lib/tenant";
 import { isFounder } from "@/lib/admin";
@@ -18,5 +19,5 @@ export default async function ChatsPage() {
   if (threadResult.status === "fulfilled") threads = threadResult.value.map(thread => presentThread(thread));
   else errors.push("Your chats could not be loaded. Please try again.");
   if (toolsResult.status === "rejected") errors.push("Tool access could not be loaded. Chat is still available.");
-  return <CommandWindow initialThreads={threads} initialTools={toolsResult.status === "fulfilled" ? toolsResult.value : []} models={models} founder={founder} account={tenant.orgName} initialError={errors.join(" ")} />;
+  return <><AccessQueueNotice /><CommandWindow initialThreads={threads} initialTools={toolsResult.status === "fulfilled" ? toolsResult.value : []} models={models} founder={founder} account={tenant.orgName} initialError={errors.join(" ")} /></>;
 }

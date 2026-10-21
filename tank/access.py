@@ -626,7 +626,7 @@ class PublicSource(Body):
 @router.post("/archives")
 async def archived_page(request: Request, room: str = Depends(room_identity)):
     body = await parse(request, PublicSource)
-    site = origin(body.url)
+    site = origin(body.url, https=False)
     # Never send logged-in URLs or private portal data to an archive service.
     async with db().acquire() as conn:
         connected = await conn.fetchval("SELECT 1 FROM tank.access_connections WHERE tenant_id=$1 AND room=$2 AND site=$3", body.tenant_id, room, site)

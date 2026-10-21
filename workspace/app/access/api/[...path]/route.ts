@@ -2,9 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { accessRequest } from "@/lib/tank";
 import { accessIdentity } from "../../identity";
 const paths = new Set(["credentials", "revoke", "sites", "feeds/import", "feeds/connect", "feeds/refresh", "feeds/link"]);
+// Coolify terminates HTTPS before Next. Preserve the browser's host check
+// without comparing the internal HTTP scheme with the external HTTPS origin.
+function sameHost(request: NextRequest) {
+  try { return new URL(request.headers.get("origin") ?? "").host === (request.headers.get("host") ?? request.nextUrl.host); }
+  catch { return false; }
+}
 export async function POST(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
-  const origin = request.headers.get("origin");
-  if (!origin || origin !== request.nextUrl.origin) return NextResponse.json({ error: "Request refused." }, { status: 403 });
+  if (!sameHost(request)) return NextResponse.json({ error: "Request refused." }, { status: 403 });
   const path = (await context.params).path.join("/");
   if (!paths.has(path) && !/^queue\/[0-9a-f-]{36}$/.test(path)) return NextResponse.json({ error: "Not found." }, { status: 404 });
   // Do not echo payloads, error bodies or credential values, even on bad JSON.

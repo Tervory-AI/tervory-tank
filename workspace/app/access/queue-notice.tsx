@@ -19,7 +19,6 @@ export function AccessQueueNotice() {
     return () => { active = false; clearInterval(timer); };
   }, []);
   return <aside aria-live="polite" style={{ padding: "10px 18px", borderBottom: "1px solid #B8BFD0", background: "#F4F6FB", color: "#001840", fontSize: 12 }}>
-    <a href="/access" style={{ color: "inherit" }}>{unavailable ? "Human checks could not be loaded" : items.length ? `Needs a person · ${items.length}` : "Connections · no human checks waiting"}</a>
-    {items.length > 0 && <span> — {items.slice(0,3).map(item => new URL(item.site).hostname).join(", ")}</span>}
+    <a href="/access?section=checks" style={{ color: "inherit" }}>{unavailable ? "Human checks could not be loaded" : `Needs a person · ${items.length}`}</a>
   </aside>;
 }

@@ -6,16 +6,14 @@ allows automated login. Use a dedicated read-only dealer user created by its
 account owner, never their personal account. The client enters it in Connections.
 Authenticator enrollment requires the owner's explicit device-enrollment checkbox.
 
-## Deployment wiring awaiting scope approval
+## Approved deployment wiring
 
-The task's allowed-file list excludes production dependencies, the main Compose
-file and the window/control entrypoints. The exact proposed additions are in
-`tests/fixtures/access-1/pending-scope.patch`; they have **not** been applied.
-Until approved and applied, Tank's production image lacks cryptography and its
-Compose service lacks the variables below. The API fails closed; this draft must
-not be treated as deployable. `/access` works in development/CI where cryptography
-is installed. The queue notice component and endpoint exist but are not mounted
-in `/control` or `/chats` until that patch is approved.
+The owner approved four narrow additions: pinned cryptography in Tank's production
+requirements, ACCESS-1 environment names on the main Compose Tank service, a small
+queue notice on `/control`, and a queue link in `/chats`. All four are applied.
+The links open `/access?section=checks` directly. The existing chats API and its
+origin check are unchanged. The operator still provisions the keys below in
+Coolify; missing settings fail closed without accepting credentials.
 
 ## Keys and isolation
 
@@ -23,8 +21,8 @@ Provision in Coolify, never chat or Git:
 
 - `TANK_VAULT_KEY`: URL-safe base64 encoding of 32 random bytes, on Tank only.
 - `ACCESS_BROWSER_KEY_BASE` / `ACCESS_BROWSER_KEY_TIGER`: independent keys in the
-  same format. Each is on Tank and its one owning browser, exposed inside the
-  browser as `ACCESS_BROWSER_KEY`. Neither brain, gateway nor sandbox receives it.
+  same format. Each keeps its room-specific name on Tank and its one owning
+  browser. Neither brain, gateway nor sandbox receives it.
 - The existing room `TANK_KEY` authenticates browser render/control routing. It
   cannot decrypt a browser RPC or authorize live input by itself.
 
