@@ -825,3 +825,7 @@ CREATE TABLE IF NOT EXISTS tank.training_snapshot_batches (
     batch_id text NOT NULL,
     PRIMARY KEY (tenant_id, region, day, agent, batch_id)
 );
+
+-- CORE-1: promotions require the founder. Re-applying keeps automation off.
+ALTER TABLE tank.policy ALTER COLUMN auto_promote SET DEFAULT false;
+UPDATE tank.policy SET auto_promote=false WHERE auto_promote;

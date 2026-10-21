@@ -3,7 +3,7 @@
 import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { SquadLinks } from "../squad-links";
 import { searchTank, VAULT_LINE } from "./records";
-import { MODEL_KEY_LINE, modelsMatching, pipelineTo, priceLine, SQUAD_LINE, squadsMatching, type ModelRow } from "./squads";
+import { MODEL_KEY_LINE, modelsMatching, priceLine, SQUAD_LINE, squadsMatching, type ModelRow } from "./squads";
 import type { WorkersFeed } from "./workers";
 import { WorkersPanel } from "./workers-panel";
 
@@ -240,7 +240,6 @@ export function TankView({
                     </div>
                     <div className="tk-box-body">
                       <h3>{squad.name}</h3>
-                      <p className="tk-pipe">{pipelineTo(squad.name)}</p>
                     </div>
                   </article>
                 ))}
