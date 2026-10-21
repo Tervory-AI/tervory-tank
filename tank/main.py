@@ -2128,6 +2128,25 @@ class EvalRun(BaseModel):
     by: str | None = None
 
 
+async def run_room_eval(pkg: skala.SkillPackage, payload: dict[str, Any], ctx: skala.SkillContext) -> dict[str, Any]:
+    key = os.environ.get("TANK_KEY_TISAN", "")
+    if pkg.id not in {"tisan.figma", "tisan.scaffold"} or not key or _http is None:
+        raise RuntimeError("eval room is unavailable")
+    response = await _http.post(
+        "http://agent-tisan:8000/evals/run",
+        headers={"X-Tank-Key": key},
+        json={"skill_id": pkg.id, "version": pkg.version, "tenant_id": str(ctx.tenant_id), "input": payload},
+        timeout=660,
+        follow_redirects=False,
+    )
+    if response.status_code != 200:
+        raise RuntimeError("eval room refused the case")
+    result = response.json()
+    if not isinstance(result, dict):
+        raise RuntimeError("invalid eval room result")
+    return result
+
+
 @app.post("/v1/skala/{skill_id}/{version}/evals", dependencies=[Depends(require_key)])
 async def run_skill_evals(skill_id: str, version: str, body: EvalRun | None = None) -> dict[str, Any]:
     pkg = get_package(skill_id, version)
@@ -2136,8 +2155,9 @@ async def run_skill_evals(skill_id: str, version: str, body: EvalRun | None = No
     here = box_region()
     result = await skala.run_evals(
         pkg, lambda: make_ctx(pkg, PLATFORM_TENANT, preview=True, home_region=here),
+        execute=run_room_eval if pkg.id in {"tisan.figma", "tisan.scaffold"} else None,
     )
-    passed_gate = result["score"] >= pkg.eval_threshold
+    passed_gate = result["score"] >= pkg.eval_threshold and result["eligible"]
     async with pool().acquire() as conn:
         await conn.execute(
             "INSERT INTO tank.skill_evals (skill_id, version, score, passed, total, cost_usd, details, ran_by) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8)",

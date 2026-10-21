@@ -508,7 +508,8 @@ async def test_evals_pass_for_a_skill_that_calls_a_model(tmp_path, monkeypatch: 
     result = await main.run_skill_evals("demo.echo", "1.0.0", None)
     assert result["passed"] == 1
     assert result["total"] == 1
-    assert result["gate"] == "passed"
+    assert result["gate"] == "failed"
+    assert result["eligible"] is False
     preview = main.make_ctx(pkg, uuid.uuid4(), preview=True)
     await preview.model([{"role": "user", "content": "hi"}], task_type="tier0.answer")
     assert homes == ["us-east", "us-east"]
@@ -880,5 +881,4 @@ async def test_cases_facts_refuses_judgment_text_from_the_body(monkeypatch: pyte
     loaded = await zapp.post_case_facts(gone.model_copy(update={"judgment": "", "source_id": "concourt"}))
     assert loaded["ok"] is True
     assert used == [{"judgment": court_text, "source_id": "sca"}]
-
 

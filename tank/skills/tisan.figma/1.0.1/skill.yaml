@@ -1,0 +1,24 @@
+id: tisan.figma
+version: 1.0.1
+agent: tisan
+rung: 3
+task_type: tisan.figma
+description: >
+  Read one Figma page into named colour, type, and spacing tokens, a Tailwind
+  theme, and a component manifest. Conflicting values and missing states are
+  listed. Nothing missing is invented.
+input:
+  type: object
+  properties:
+    file_key: {type: string}
+    node_id: {type: string}
+output:
+  type: object
+  properties:
+    css: {type: string}
+    tailwind: {type: string}
+    tokens: {type: object}
+    components: {type: array}
+    conflicts: {type: array}
+    gaps: {type: array}
+eval_threshold: 1.0
