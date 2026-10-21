@@ -450,3 +450,64 @@ def test_fix_modes_skips_symlinks(tmp_path):
     updater.fix_modes(tree)
     assert oct((tree / "sub/a.py").stat().st_mode & 0o777) == oct(0o644)
     assert oct(outside.stat().st_mode & 0o777) == oct(0o600)
+
+
+# ---------- Claude re-review 5604142464 (same pass B, C) ----------
+
+
+def test_b_pending_is_written_before_the_busy_check(tmp_path, monkeypatch):
+    origin, srv, settings = _origin_with_host_install(tmp_path)
+    seen: list[bool] = []
+
+    def busy(port: int) -> bool:
+        seen.append((srv / "UPDATE_PENDING").exists())
+        return False
+
+    monkeypatch.setattr(updater, "busy", busy)
+    plan = updater.update(settings, "ghs_" + "x" * 30, srv=srv, cache=tmp_path / "cache", restart=False, remote=str(origin))
+    assert plan.action == "update"
+    # Checked twice (before staging and just before the swap), the flag already there both times.
+    assert seen == [True, True]
+    assert not (srv / "UPDATE_PENDING").exists()
+
+
+def test_b_busy_is_rechecked_just_before_the_swap(tmp_path, monkeypatch):
+    origin, srv, settings = _origin_with_host_install(tmp_path)
+    answers = iter([False, True])
+    monkeypatch.setattr(updater, "busy", lambda port: next(answers))
+    plan = updater.update(settings, "ghs_" + "x" * 30, srv=srv, cache=tmp_path / "cache", restart=False, remote=str(origin))
+    assert plan == updater.Plan("skip", "task running")
+    assert (srv / "app/workers/a.py").read_text() == "A = 'deployed'\n"
+    assert not (srv / "app.new").exists()
+    assert (srv / "UPDATE_PENDING").exists()
+
+
+def test_c_stale_pending_is_cleared_on_a_refused_fast_forward(tmp_path, monkeypatch):
+    origin, srv, settings = _origin_with_host_install(tmp_path)
+    cache = tmp_path / "cache"
+    token = "ghs_" + "x" * 30
+    monkeypatch.setattr(updater, "busy", lambda port: False)
+    assert updater.update(settings, token, srv=srv, cache=cache, restart=False, remote=str(origin)).action == "update"
+    (srv / "UPDATE_PENDING").write_text("stale\n")
+    _git(origin, "checkout", "-q", "--orphan", "rewrite")
+    (origin / "workers/a.py").write_text("A = 'rewritten'\n")
+    _git(origin, "add", "-A")
+    _git(origin, "commit", "-qm", "rewritten main")
+    _git(origin, "branch", "-q", "-M", "rewrite", "main")
+    plan = updater.update(settings, token, srv=srv, cache=cache, restart=False, remote=str(origin))
+    assert plan == updater.Plan("skip", "main did not fast-forward")
+    assert not (srv / "UPDATE_PENDING").exists()
+
+
+def test_c_stale_pending_is_cleared_when_the_update_fails(tmp_path, monkeypatch):
+    origin, srv, settings = _origin_with_host_install(tmp_path)
+    monkeypatch.setattr(updater, "busy", lambda port: False)
+
+    def broken(root):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(updater, "fix_modes", broken)
+    with pytest.raises(OSError, match="disk full"):
+        updater.update(settings, "ghs_" + "x" * 30, srv=srv, cache=tmp_path / "cache", restart=False, remote=str(origin))
+    assert not (srv / "UPDATE_PENDING").exists()
+    assert (srv / "app/workers/a.py").read_text() == "A = 'deployed'\n"

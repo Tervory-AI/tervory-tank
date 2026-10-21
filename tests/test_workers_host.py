@@ -357,3 +357,72 @@ def test_firewall_calls_nft_by_absolute_path() -> None:
     finally:
         egress_apply.subprocess.run = original  # type: ignore[assignment]
     assert seen == [["/usr/sbin/nft", "-f", "-"]]
+
+
+# ---------- Claude re-review 5604142464 (same pass A, E, F) ----------
+
+
+def test_a_sealed_guard_requires_exact_privileges() -> None:
+    from workers import podman_run
+
+    argv = _argv()
+    assert podman_run.sealed_privileges(argv)
+
+    def without(flag: str, value: str | None = None) -> list[str]:
+        out = list(argv)
+        i = out.index(flag) if value is None else next(j for j, a in enumerate(out) if a == flag and out[j + 1] == value)
+        del out[i : i + (1 if value is None else 2)]
+        return out
+
+    assert not podman_run.sealed_privileges(without("--cap-drop", "ALL"))
+    assert not podman_run.sealed_privileges(without("--cap-add", "SETGID"))
+    assert not podman_run.sealed_privileges(argv + ["--cap-add", "SYS_ADMIN"])
+    assert not podman_run.sealed_privileges(argv + ["--cap-add=SYS_ADMIN"])
+    assert not podman_run.sealed_privileges(argv + ["--cap-drop", "NET_RAW"])
+    assert not podman_run.sealed_privileges(without("--security-opt", "no-new-privileges"))
+    assert not podman_run.sealed_privileges(without("--read-only"))
+    assert not podman_run.sealed_privileges(argv + ["--read-only=false"])
+
+
+def test_a_task_argv_refuses_an_unsealed_privilege_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    from workers import podman_run
+
+    monkeypatch.setattr(podman_run, "SEALED_CAP_ADDS", frozenset({"NET_ADMIN"}))
+    with pytest.raises(RuntimeError, match="not sealed"):
+        _argv()
+
+
+def test_e_install_runs_as_user_in_a_new_session() -> None:
+    script = (HOST / "install.sh").read_text()
+    body = script[script.index("as_user() {") :]
+    body = body[: body.index("\n}\n")]
+    assert "runuser -u \"$WORKER_USER\" -- setsid -w env -i" in body
+
+
+def test_f_secret_dir_is_removed_when_staging_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from workers import service
+
+    async def runner(argv: list[str], *, timeout_s: int, kill: list[str] | None = None) -> tuple[int, str]:
+        if argv[1] == "info":
+            return 0, '{"host": {"ociRuntime": {"name": "crun"}}}'
+        raise AssertionError("no container may start when staging failed")
+
+    def broken_stage(directory: Path, *, token: str, tank_key: str) -> None:
+        directory.mkdir(parents=True)
+        (directory / "token").write_text("partial")
+        raise RuntimeError("disk full")
+
+    class Task:
+        number = 7
+        brief = "docs/cursor/EXAMPLE.md"
+        branch = "worker/EXAMPLE-7"
+        title = "Fix the line"
+
+    monkeypatch.setattr(service, "stage", broken_stage)
+    monkeypatch.setenv("TANK_KEY_WORKERS", "tank-key-example")
+    monkeypatch.delenv("TANK_KEY_FILE", raising=False)
+    launcher = Launcher(runner)  # type: ignore[arg-type]
+    launcher._built = True
+    with pytest.raises(RuntimeError, match="disk full"):
+        asyncio.run(launcher.run(_settings(state_dir=str(tmp_path)), Task(), "t"))  # type: ignore[arg-type]
+    assert list(tmp_path.iterdir()) == []

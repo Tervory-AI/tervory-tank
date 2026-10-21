@@ -6,8 +6,10 @@
    Same tree: nothing to do. Different: update, unless main does not have the host install
    yet (workers/host/tervory-workers.service), so an older main never replaces this code.
    main must move forward: a non-fast-forward main (force-push) is refused, never applied.
-3. While a task is running (the service's /health says busy), leave UPDATE_PENDING next to the
-   code so the service takes no new task, and try again next time. Never kill a task.
+3. Write UPDATE_PENDING next to the code first, so the service takes no new task, then check
+   busy. While a task is running (the service's /health says busy), keep it and try again next
+   time. Busy is checked again just before the swap. Never kill a task. Every other outcome
+   (refused fast-forward, skip, error, done) clears UPDATE_PENDING.
 4. Extract workers/ at main into app.new, fix modes, refresh the venv if requirements changed,
    swap it in, write COMMIT and WORKERS_TREE, restart tervory-workers.service.
 Each update logs one line: old -> new commit. No secrets are logged.
@@ -109,6 +111,20 @@ def read(path: Path) -> str:
 
 
 def update(settings: Settings, token: str, *, srv: Path, cache: Path, restart: bool = True, remote: str | None = None) -> Plan:
+    pending = srv / PENDING
+    keep_pending = False
+    try:
+        plan, keep_pending = _update(settings, token, srv=srv, cache=cache, restart=restart, remote=remote, pending=pending)
+        return plan
+    finally:
+        # UPDATE_PENDING only stays while an update really waits for a running task. Refused
+        # fast-forwards, skips, errors and finished updates all clear it, so the service never
+        # stays stuck taking no new task.
+        if not keep_pending:
+            pending.unlink(missing_ok=True)
+
+
+def _update(settings: Settings, token: str, *, srv: Path, cache: Path, restart: bool, remote: str | None, pending: Path) -> tuple[Plan, bool]:
     env = git_env(token)
     if not (cache / ".git").is_dir():
         cache.mkdir(parents=True, exist_ok=True)
@@ -119,27 +135,26 @@ def update(settings: Settings, token: str, *, srv: Path, cache: Path, restart: b
     fetched = git(cache, "fetch", "-q", "--no-tags", "--filter=blob:none", "origin", f"refs/heads/{BRANCH}:refs/remotes/origin/{BRANCH}", env=env, check=False)
     if fetched.returncode != 0:
         log.warning("workers update refused: main did not fast-forward (or fetch failed): %s", redact(fetched.stderr.strip())[-200:])
-        return Plan("skip", "main did not fast-forward")
+        return Plan("skip", "main did not fast-forward"), False
     new = git(cache, "rev-parse", f"refs/remotes/origin/{BRANCH}", env=env).stdout.strip()
     if before and before != new and git(cache, "merge-base", "--is-ancestor", before, new, env=env, check=False).returncode != 0:
         log.warning("workers update refused: main %s is not a fast-forward of %s", new[:12], before[:12])
-        return Plan("skip", "main did not fast-forward")
+        return Plan("skip", "main did not fast-forward"), False
     new_tree = git(cache, "rev-parse", f"{new}:workers", env=env).stdout.strip()
     has_marker = git(cache, "cat-file", "-e", f"{new}:{MARKER}", env=env, check=False).returncode == 0
     app = srv / "app"
     old = read(app / "COMMIT") or "unknown"
     plan = decide(deployed_tree=read(app / "WORKERS_TREE"), new_tree=new_tree, has_marker=has_marker)
-    pending = srv / PENDING
     if plan.action != "update":
-        pending.unlink(missing_ok=True)
         if plan.action == "skip":
             log.info("workers update skipped: %s (deployed %s, main %s)", plan.reason, old[:12], new[:12])
-        return plan
+        return plan, False
+    # Written before the busy check: the service sees this file and takes no new task, so no task
+    # can start between "not busy" and the swap.
+    pending.write_text(new + "\n", encoding="utf-8")
     if busy(settings.service_port):
-        # The service sees this file and takes no new task until the update is done.
-        pending.write_text(new + "\n", encoding="utf-8")
         log.info("workers update pending: a task is running; no new task until it is applied (deployed %s, main %s)", old[:12], new[:12])
-        return Plan("skip", "task running")
+        return Plan("skip", "task running"), True
     stage = srv / "app.new"
     shutil.rmtree(stage, ignore_errors=True)
     stage.mkdir()
@@ -156,6 +171,11 @@ def update(settings: Settings, token: str, *, srv: Path, cache: Path, restart: b
     if read(venv / ".requirements.sha256") != want:
         subprocess.run([str(venv / "bin/pip"), "install", "-q", "--disable-pip-version-check", "-r", str(requirements)], check=True)
         (venv / ".requirements.sha256").write_text(want + "\n", encoding="utf-8")
+    # Re-check just before the swap: never replace the code under a running task.
+    if busy(settings.service_port):
+        shutil.rmtree(stage, ignore_errors=True)
+        log.info("workers update pending: a task started before the swap; trying again next time (deployed %s, main %s)", old[:12], new[:12])
+        return Plan("skip", "task running"), True
     previous = srv / "app.old"
     shutil.rmtree(previous, ignore_errors=True)
     if app.exists():
@@ -166,7 +186,7 @@ def update(settings: Settings, token: str, *, srv: Path, cache: Path, restart: b
     log.info("workers updated: %s -> %s", old[:12], new[:12])
     if restart:
         subprocess.run(["systemctl", "--user", "restart", SERVICE], check=True)
-    return plan
+    return plan, False
 
 
 async def _token(settings: Settings) -> str:

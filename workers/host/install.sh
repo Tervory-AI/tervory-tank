@@ -221,7 +221,9 @@ deploy_code() {
 as_user() {
   local uid
   uid=$(id -u "$WORKER_USER")
-  (cd / && runuser -u "$WORKER_USER" -- env -i \
+  # setsid -w: a new session with no controlling terminal, so nothing run as the user can
+  # push keystrokes into root's terminal (TIOCSTI). -w waits and passes the exit status through.
+  (cd / && runuser -u "$WORKER_USER" -- setsid -w env -i \
     HOME="$(getent passwd "$WORKER_USER" | cut -d: -f6)" USER="$WORKER_USER" LOGNAME="$WORKER_USER" \
     PATH=/usr/local/bin:/usr/bin:/bin XDG_RUNTIME_DIR="/run/user/$uid" \
     DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$uid/bus" "$@")

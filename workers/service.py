@@ -223,8 +223,9 @@ class Launcher:
             raise RuntimeError("TANK_KEY_WORKERS is not set")
         name = container_name(task.number)
         secret_dir = Path(settings.state_dir) / name
-        stage(secret_dir, token=token, tank_key=key)
         try:
+            # Inside the try: a partly written secret dir is removed even when staging fails.
+            stage(secret_dir, token=token, tank_key=key)
             argv = task_argv(
                 settings,
                 name=name,

@@ -171,7 +171,37 @@ def task_argv(
     network = argv[argv.index("--network") + 1]
     if not network.startswith("slirp4netns:") or "--privileged" in argv or "--network=host" in joined or "docker.sock" in joined:
         raise RuntimeError("task container is not sealed")
+    if not sealed_privileges(argv):
+        raise RuntimeError("task container is not sealed")
     return argv
+
+
+SEALED_CAP_ADDS = frozenset({"NET_ADMIN", "SETUID", "SETGID"})
+
+
+def _values(argv: list[str], flag: str) -> list[str]:
+    """Every value given to a flag, as "--flag value" or "--flag=value"."""
+    out: list[str] = []
+    for i, arg in enumerate(argv):
+        if arg == flag:
+            out.append(argv[i + 1] if i + 1 < len(argv) else "")
+        elif arg.startswith(flag + "="):
+            out.append(arg[len(flag) + 1 :])
+    return out
+
+
+def sealed_privileges(argv: list[str]) -> bool:
+    """Exactly --cap-drop ALL, cap-adds equal to {NET_ADMIN, SETUID, SETGID}, no-new-privileges, --read-only."""
+    drops = _values(argv, "--cap-drop")
+    adds = _values(argv, "--cap-add")
+    return (
+        drops == ["ALL"]
+        and len(adds) == len(SEALED_CAP_ADDS)
+        and set(adds) == SEALED_CAP_ADDS
+        and "no-new-privileges" in _values(argv, "--security-opt")
+        and argv.count("--read-only") == 1
+        and not any(a.startswith("--read-only=") for a in argv)
+    )
 
 
 def kill_argv(name: str) -> list[str]:
