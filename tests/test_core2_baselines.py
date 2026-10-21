@@ -176,3 +176,10 @@ async def test_override_waits_for_inflight_receipt_before_queue_can_complete(dat
     while await proof.baseline_batch(): pass
     assert await pool.fetchval("SELECT rows_updated FROM tank.baseline_changes WHERE task_type='baseline.fixture'")==2
     assert await pool.fetchval("SELECT count(*) FROM tank.ledger WHERE tenant_id=$1 AND baseline_model='astra'",tenant)==2
+
+
+def test_json_amounts_never_use_scientific_notation():
+    # Graph integer sums and dollar labels consume fixed decimal strings, including
+    # a day containing only free work and the smallest stored token comparison.
+    assert proof.savings_encoded({'zero':Decimal('0E-8'),'small':Decimal('1E-8')}) == {
+        'zero':'0.00000000','small':'0.00000001'}

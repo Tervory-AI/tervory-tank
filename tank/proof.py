@@ -323,7 +323,7 @@ def decorate_savings(row: dict) -> dict:
 
 def savings_encoded(value: Any) -> Any:
     # Decimal strings preserve the receipt precision through JSON and exports.
-    return jsonable_encoder(value, custom_encoder={Decimal: str})
+    return jsonable_encoder(value, custom_encoder={Decimal: lambda value: format(value,'f')})
 
 
 def savings_end(end: datetime | None) -> datetime:
