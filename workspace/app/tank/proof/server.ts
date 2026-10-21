@@ -8,16 +8,16 @@ import type { Proof } from "./view";
 
 export type ProofFilters = { tenant_id?: string; task?: string; start?: string; end?: string; page?: string };
 
-export async function proofResponse(filters: ProofFilters = {}, format?: "csv" | "pdf") {
+export async function proofResponse(filters: ProofFilters & { until?: string; member?: string; population?: string; free_only?: string } = {}, format?: "csv" | "pdf", endpoint: "" | "/savings" | "/savings/rows" | "/savings/export/csv" | "/savings/export/pdf" = "") {
   const identity = await goldIdentity("platform");
   if (identity.role !== "founder") notFound();
   const query = new URLSearchParams();
-  for (const key of ["tenant_id", "task", "start", "end", "page"] as const) {
+  for (const key of ["tenant_id", "task", "start", "end", "page", "until", "member", "population", "free_only"] as const) {
     const value = filters[key];
     if (!value || (key === "tenant_id" && value === "all")) continue;
     query.set(key, (key === "start" || key === "end") && !/(Z|[+-]\d\d:\d\d)$/.test(value) ? `${value}Z` : value);
   }
-  const response = await fetch(`${process.env.TANK_URL ?? "http://tank:8000"}/v1/proof${format ? `/export/${format}` : ""}?${query}`, {
+  const response = await fetch(`${process.env.TANK_URL ?? "http://tank:8000"}/v1/proof${endpoint}${format ? `/export/${format}` : ""}?${query}`, {
     cache: "no-store",
     headers: { "x-tank-key": process.env.TANK_API_KEY ?? "", "x-tervory-admin": identity.userId },
   });

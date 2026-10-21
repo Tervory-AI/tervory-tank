@@ -992,3 +992,7 @@ ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS provider_cost_usd numeric(20,10
 ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS research_sources jsonb;
 -- Unknown charges on failed calls require reconciliation; they are never called free.
 ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS research_cost_status text;
+
+-- CORE-2: bounded evidence joins and the client job-completion watermark.
+CREATE INDEX IF NOT EXISTS tasks_tenant_ledger ON tank.tasks(tenant_id,ledger_id) WHERE ledger_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS tasks_tenant_finished ON tank.tasks(tenant_id,finished_at DESC) WHERE finished_at IS NOT NULL;
