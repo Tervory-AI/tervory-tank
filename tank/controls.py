@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import uuid
+import asyncio
 import logging
 from datetime import datetime, timezone
 from contextvars import ContextVar
@@ -16,6 +17,8 @@ from admin import require_admin
 
 PLATFORM = uuid.UUID('00000000-0000-0000-0000-000000000001')
 log = logging.getLogger('tank.controls')
+STATE_TIMEOUT_S = 2.0
+AUDIT_TIMEOUT_S = 1.0
 PAID_TOOL_HOSTS = frozenset({'api.search.brave.com'})
 _task: ContextVar[str | None] = ContextVar('paid_work_task', default=None)
 
@@ -48,7 +51,8 @@ async def refuse_paid(*, paid: bool = True, task: str | None = None, path: str =
     task = task or _task.get() or "internal.model (task unavailable)"
     reason = "paid work is paused"
     try:
-        paused = await paid_paused()
+        async with asyncio.timeout(STATE_TIMEOUT_S):
+            paused = await paid_paused()
     except Exception:
         paused = True
         reason = "paid work is paused: pause state unavailable"
@@ -60,12 +64,13 @@ async def refuse_paid(*, paid: bool = True, task: str | None = None, path: str =
     at = datetime.now(timezone.utc).isoformat()
     log.warning("paid_refused task=%s path=%s at=%s", task, path, at)
     try:
-        async with db().acquire() as conn:
-            await conn.execute(
-                """INSERT INTO tank.control_log
-                (tenant_id,name,by_user,old_value,new_value,task,path)
-                VALUES ($1,'paid_refused','system',true,true,$2,$3)""", PLATFORM, task, path,
-            )
+        async with asyncio.timeout(AUDIT_TIMEOUT_S):
+            async with db().acquire() as conn:
+                await conn.execute(
+                    """INSERT INTO tank.control_log
+                    (tenant_id,name,by_user,old_value,new_value,task,path)
+                    VALUES ($1,'paid_refused','system',true,true,$2,$3)""", PLATFORM, task, path,
+                )
     except Exception:
         # Database outage must not turn a refusal into permission.
         log.error("paid_refusal_audit_unavailable task=%s path=%s at=%s", task, path, at)

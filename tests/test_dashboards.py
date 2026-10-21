@@ -278,3 +278,14 @@ def test_existing_switch_route_refuses_non_founder(monkeypatch):
     monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder-fixture')
     client = TestClient(main.app)
     assert client.post('/v1/graduation/base.extract/promote', headers={'x-tank-key':'test', 'x-tervory-admin':'other-user'}, json={}).status_code == 404
+
+@pytest.mark.asyncio
+async def test_unresponsive_state_is_bounded_and_fails_closed(conn, monkeypatch):
+    import asyncio
+    async def unreadable():
+        await asyncio.Event().wait()
+    monkeypatch.setattr(controls, 'paid_paused', unreadable)
+    monkeypatch.setattr(controls, 'STATE_TIMEOUT_S', .01)
+    with pytest.raises(HTTPException, match='pause state unavailable'):
+        await controls.refuse_paid(task='offline.timeout')
+    await controls.refuse_paid(paid=False)
