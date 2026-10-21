@@ -104,7 +104,7 @@ async function handle(request: Request, context: Context): Promise<Response> {
           try {
             await readEvents(upstream.body!, event => {
               let data: unknown = event.data;
-              if (event.type === "error") data = { message: "The response was interrupted. Reopen this chat before sending again." };
+              if (event.type === "error" && !founder) data = { message: "The response was interrupted. Reopen this chat before sending again." };
               if (!founder) {
                 if (event.type === "receipt") data = presentReceipt(event.data as unknown as Receipt, false);
                 if (event.type === "step") data = { ...event.data, label: clientLabel(String(event.data.label), names), actor: clientLabel(String(event.data.actor), names) };

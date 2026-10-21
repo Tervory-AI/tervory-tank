@@ -1275,3 +1275,10 @@ CREATE TABLE IF NOT EXISTS tank.workers_controls (
     updated_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, name)
 );
+
+-- ---------- 21 Oct 2026: the window's turns need a platform policy ----------
+-- command.turn had no row, so every turn in /chats failed with "no policy".
+-- Tank's planning message supplies the system prompt; the founder promotes later.
+INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_tokens_out, system_prompt) VALUES
+  ('command.turn', 1, 'luna', 'urgent', 'none', 2048, NULL)
+ON CONFLICT DO NOTHING;
