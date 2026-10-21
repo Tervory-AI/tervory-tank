@@ -9,3 +9,6 @@ selectolax==0.3.27
 redis==5.2.1
 # Offline BPE input budgeting for the Base agent chat route.
 tiktoken==0.14.0
+-c constraints-langgraph.txt
+# Per-node timeouts and jittered retries for MOA-1.
+langgraph==1.2.16
