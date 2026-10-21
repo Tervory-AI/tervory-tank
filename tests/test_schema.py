@@ -65,8 +65,12 @@ def _idempotent(statement: str) -> bool:
         return False
     kind = head.group(1).upper()
     if kind == "CREATE":
+        if re.match(r"^CREATE\s+OR\s+REPLACE\s+FUNCTION\b", statement, re.IGNORECASE):
+            return True  # Same signature/body replaces itself; exercised twice on Postgres.
         return re.search(r"\bIF\s+NOT\s+EXISTS\b", statement, re.IGNORECASE) is not None
     if kind == "ALTER":
+        if re.fullmatch(r"ALTER\s+TABLE\s+tank\.policy\s+ALTER\s+COLUMN\s+auto_promote\s+SET\s+DEFAULT\s+false", statement, re.IGNORECASE):
+            return True  # CORE-1 explicitly changes this default, without changing the column.
         return re.search(r"\bADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\b", statement, re.IGNORECASE) is not None
     if kind == "INSERT":
         return re.search(r"\bON\s+CONFLICT\b", statement, re.IGNORECASE) is not None
@@ -85,3 +89,10 @@ def test_schema_statements_are_idempotent() -> None:
         if not _idempotent(statement):
             bad.append(f"not idempotent-shaped: {statement[:120]}")
     assert not bad, "\n".join(bad)
+
+
+def test_idempotence_shapes_still_reject_unprotected_ddl():
+    assert not _idempotent("ALTER TABLE tank.policy ALTER COLUMN model TYPE integer")
+    assert not _idempotent("CREATE FUNCTION tank.unsafe() RETURNS void LANGUAGE sql AS 'SELECT 1'")
+    assert not _idempotent("CREATE TABLE tank.unsafe (id integer)")
+    assert not _idempotent("ALTER TABLE tank.policy ADD COLUMN unsafe text")
