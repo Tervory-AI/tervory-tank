@@ -40,7 +40,7 @@ export function FounderDashboard({ view, squads }: { view: FounderView; squads?:
   const spent = data ? daily.reduce((sum, row) => sum + Number(row.spent), 0) : null;
   const code = day && day.delivered > 0 ? `${Math.round(day.code / day.delivered * 100)}% by code` : "No completed calls today.";
   return <div className="dashboard-root dash-control">
-    <header className="dash-top"><img className="dash-brand" src="/brand/tervory-logo-on-white.png" alt="Tervory" /><h1>Control panel</h1><span className="dash-health">Health unavailable · GHOST-1</span><ControlActions paused={view.paused} /></header>
+    <header className="dash-top"><img className="dash-brand" src="/brand/tervory-logo.png" alt="Tervory" /><h1>Control panel</h1><span className="dash-health">Health unavailable · GHOST-1</span><ControlActions paused={view.paused} /></header>
     {view.errors.length > 0 && <p role="alert" className="dash-problem">{view.errors.join(" ")}</p>}
     <div className="dash-kpis">
       <Card label="Sign-ups" value={signups?.total ?? "—"} note={signups ? "From Clerk" : "Clerk unavailable"} values={signups?.days.map(day => day.value)} />
