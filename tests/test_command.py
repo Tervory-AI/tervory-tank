@@ -35,7 +35,14 @@ def runtime(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_identity_roles_and_region(runtime):
+async def test_identity_roles_and_region(runtime, monkeypatch):
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def acquire():
+        yield SimpleNamespace(fetch=AsyncMock(return_value=[{'agent': 'tiger'}]))
+
+    monkeypatch.setattr(command, 'db', lambda: SimpleNamespace(acquire=acquire))
     headers = {'x-tank-key': runtime.TANK_API_KEY, 'x-tervory-tenant': str(TENANT),
                'x-tervory-user': 'client', 'x-tervory-squad': 'tiger'}
     actor = await command.identity(request(**headers))
@@ -745,6 +752,8 @@ async def test_pinned_turn_receipt_uses_actual_model_and_pending_auto(api, runti
 def shared_router(monkeypatch):
     from contextlib import asynccontextmanager
     monkeypatch.setenv('DATABASE_URL', 'postgresql://localhost/unused')
+    monkeypatch.setenv('LITELLM_MASTER_KEY', 'dummy-router-key')
+    monkeypatch.setenv('TANK_API_KEY', 'dummy-workspace-key')
     monkeypatch.setenv('TANK_REGION', 'us-east')
     monkeypatch.delenv('TANK_PROVIDER_ALLOW', raising=False)
     import main as tank
@@ -839,3 +848,109 @@ async def test_shared_pin_uses_model_specific_cache_identity(shared_router, monk
     assert cache.get.call_args.args[0] == keys[1]
     assert len(calls) == 2 and answer.rung == 4 and answer.model == 'fixture-pin'
     assert answer.cost_usd == 0 and answer.content == 'Cached pinned answer'
+
+
+@pytest.mark.asyncio
+async def test_tenant_squad_grants_are_founder_only_isolated_and_logged(api, monkeypatch):
+    import asyncio
+    client, pool = api
+    client_headers = {'x-tervory-user': 'client', 'x-tervory-squad': 'base,tiger,zenas'}
+    assert (await client.get('/v1/command/tools', headers=client_headers)).json() == []
+    for method, path, body in [('get', '/v1/command/squads', None), ('get', '/v1/command/squads/log', None),
+                                ('put', '/v1/command/squads/tiger', {'enabled': True})]:
+        result = await client.request(method, path, headers=client_headers, json=body)
+        assert result.status_code == 403
+    replies = await asyncio.gather(*[client.put('/v1/command/squads/tiger', json={'enabled': True}) for _ in range(2)])
+    assert sorted(r.json()['changed'] for r in replies) == [False, True]
+    log = (await client.get('/v1/command/squads/log')).json()
+    assert len(log) == 1 and log[0]['changed_by'] == 'founder' and log[0]['enabled'] is True
+    grants = (await client.get('/v1/command/squads')).json()
+    assert len(grants) == 7
+    assert next(g for g in grants if g['agent'] == 'tiger')['enabled_by'] == 'founder'
+    assert (await client.get('/v1/command/tools', headers=client_headers)).json() == ['tiger.read', 'tiger.watch']
+    assert (await client.get('/v1/command/tools', headers={**client_headers, 'x-tervory-tenant': str(OTHER)})).json() == []
+    assert (await client.get('/v1/command/squads/log', headers={'x-tervory-tenant': str(OTHER)})).json() == []
+    assert (await client.put('/v1/command/squads/worker', json={'enabled': True})).status_code == 422
+    await client.put('/v1/command/squads/tiger', json={'enabled': False})
+    await client.put('/v1/command/squads/tiger', json={'enabled': False})
+    assert (await client.get('/v1/command/tools', headers=client_headers)).json() == []
+    log = (await client.get('/v1/command/squads/log')).json()
+    assert [row['enabled'] for row in log] == [False, True]
+    # Empty grants still allow chat; a model cannot grant access via its plan.
+    ledger_id = await seed_ledger(pool)
+    monkeypatch.setattr(command, 'route_turn', AsyncMock(return_value=SimpleNamespace(ledger_id=ledger_id, content='Chat is available')))
+    thread = (await client.post('/v1/command/threads', headers=client_headers, json={})).json()['thread_id']
+    response = await client.post(f'/v1/command/threads/{thread}/turn', headers=client_headers, json={'text': 'Hello'})
+    assert 'Chat is available' in response.text and 'event: done' in response.text
+
+
+@pytest.mark.asyncio
+async def test_revoked_squad_blocks_saved_card_and_dispatch(api, monkeypatch, runtime):
+    client, pool = api
+    headers = {'x-tervory-user': 'client', 'x-tervory-squad': 'tiger'}
+    await client.put('/v1/command/squads/tiger', json={'enabled': True})
+    ledger_id = await seed_ledger(pool)
+    plan = {'text': 'Please confirm', 'actions': [{'tool': 'tiger.watch', 'arguments': {'url': 'https://example.test/product'}}]}
+    monkeypatch.setattr(command, 'route_turn', AsyncMock(return_value=SimpleNamespace(ledger_id=ledger_id, content=json.dumps(plan))))
+    thread = (await client.post('/v1/command/threads', headers=headers, json={})).json()['thread_id']
+    await client.post(f'/v1/command/threads/{thread}/turn', headers=headers, json={'text': 'Watch this product'})
+    data = (await client.get(f'/v1/command/threads/{thread}', headers=headers)).json()
+    card_id = data['cards'][0]['card_id']
+    await client.put('/v1/command/squads/tiger', json={'enabled': False})
+    assert (await client.post(f'/v1/command/cards/{card_id}', headers=headers, json={'action': 'confirm'})).status_code == 403
+    # Even a stale Actor carrying the former grant cannot dispatch.
+    runtime.app = client._transport.app
+    with pytest.raises(HTTPException) as error:
+        await command.dispatch_action(command.PlannedAction(**plan['actions'][0]), command.Actor(TENANT, 'client', False, frozenset({'tiger'})))
+    assert error.value.status_code == 403
+    assert (await client.post(f'/v1/command/cards/{card_id}', headers=headers, json={'action': 'cancel'})).json()['status'] == 'cancelled'
+
+
+@pytest.mark.asyncio
+async def test_squad_audit_failure_rolls_back_permission(api):
+    client, pool = api
+    async with pool.acquire() as conn:
+        await conn.execute("ALTER TABLE tank.tenant_squad_log ADD CONSTRAINT fixture_refuse_audit CHECK (false)")
+    with pytest.raises(asyncpg.CheckViolationError):
+        await client.put('/v1/command/squads/tiger', json={'enabled': True})
+    assert not any(g['enabled'] for g in (await client.get('/v1/command/squads')).json())
+
+
+@pytest.mark.asyncio
+async def test_auto_comparison_prices_same_tokens_with_frozen_tenant_policy(api, runtime, monkeypatch):
+    client, pool = api
+    runtime.list_models = AsyncMock(return_value=[{'name': 'fixture-pin'}])
+    async with pool.acquire() as conn:
+        await conn.execute("INSERT INTO tank.proof_prices(model,family,input_usd,output_usd) VALUES('fixture-auto','fixture',0.001,0.002),('fixture-platform','fixture',0.5,0.5)")
+        await conn.execute("INSERT INTO tank.policy(tenant_id,task_type,model) VALUES(NULL,'command.turn','fixture-platform'),($1,'command.turn','fixture-auto')", TENANT)
+    ledger_id = await seed_ledger(pool)
+
+    async def answer(actor, messages, model=None):
+        assert model == 'fixture-pin'
+        # A price or policy edit during the call must not rewrite its comparison.
+        async with pool.acquire() as conn:
+            await conn.execute("UPDATE tank.proof_prices SET input_usd=5 WHERE model='fixture-auto'")
+            await conn.execute("UPDATE tank.policy SET model='fixture-platform' WHERE tenant_id=$1 AND task_type='command.turn'", TENANT)
+        return SimpleNamespace(ledger_id=ledger_id, content='Measured answer')
+
+    route = AsyncMock(side_effect=answer)
+    monkeypatch.setattr(command, 'route_turn', route)
+    thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
+    reply = await client.post(f'/v1/command/threads/{thread}/turn', json={'text': 'Hello', 'model': 'fixture-pin'})
+    assert 'event: done' in reply.text
+    route.assert_awaited_once()
+    data = (await client.get(f'/v1/command/threads/{thread}')).json()
+    receipt = data['receipts'][0]
+    assert receipt['auto_model'] == 'fixture-auto'
+    assert receipt['auto_cost_usd'] == pytest.approx(10 * 0.001 + 20 * 0.002)
+    assert receipt['auto_cost_status'] == 'priced' and receipt['auto_priced_at']
+    assert 'same tokens' in receipt['auto_cost_label'] and 'not a separate model run' in receipt['auto_cost_basis']
+    assert receipt['cost_usd'] == 0.02
+    replay = await client.get(f'/v1/command/threads/{thread}/events')
+    assert '"auto_cost_usd": 0.05' in replay.text
+    async with pool.acquire() as conn:
+        other = await command.auto_price_snapshot(conn, OTHER)
+        assert other['model'] == 'fixture-platform'
+        await conn.execute("UPDATE tank.proof_prices SET active=false WHERE model='fixture-platform'")
+        missing = await command.auto_price_snapshot(conn, OTHER)
+        assert missing['model'] == 'fixture-platform' and missing['input_usd'] is None

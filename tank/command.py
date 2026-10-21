@@ -15,6 +15,7 @@ import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -78,8 +79,7 @@ async def identity(request: Request) -> Actor:
     if home != box_region():
         raise HTTPException(403, "This conversation must stay on its home box")
     admins = {s.strip() for s in os.environ.get("TERVORY_ADMIN_USER_IDS", "").split(",") if s.strip()}
-    squads = frozenset(s.strip() for s in request.headers.get("x-tervory-squad", "").split(",")) & SQUADS
-    return Actor(tenant_id, user, user in admins, squads)
+    return await authorized_actor(Actor(tenant_id, user, user in admins))
 
 
 async def worker(request: Request) -> None:
@@ -127,6 +127,10 @@ class Turn(Body):
 
 class CardAction(Body):
     action: Literal["confirm", "cancel"]
+
+
+class SquadAccess(Body):
+    enabled: bool
 
 
 class Build(Body):
@@ -233,6 +237,51 @@ async def tools(actor: Actor = Depends(identity)) -> list[str]:
     return allowed_tools(actor)
 
 
+def require_founder(actor: Actor) -> None:
+    if not current_actor(actor).founder:
+        raise HTTPException(403, "Founder access required")
+
+
+@router.get("/squads")
+async def list_squads(actor: Actor = Depends(identity)) -> list[dict]:
+    require_founder(actor)
+    async with db().acquire() as conn:
+        rows = await conn.fetch("SELECT agent,enabled_by,enabled_at FROM tank.tenant_squad WHERE tenant_id=$1", actor.tenant_id)
+    enabled = {row["agent"]: dict(row) for row in rows}
+    return [{"agent": agent, "enabled": agent in enabled, "enabled_by": enabled.get(agent, {}).get("enabled_by"),
+             "enabled_at": enabled.get(agent, {}).get("enabled_at")} for agent in sorted(SQUADS)]
+
+
+@router.put("/squads/{agent}")
+async def set_squad(agent: str, body: SquadAccess, actor: Actor = Depends(identity)) -> dict:
+    require_founder(actor)
+    if agent not in SQUADS:
+        raise HTTPException(422, "Unknown squad member")
+    async with db().acquire() as conn, conn.transaction():
+        await conn.execute("SELECT pg_advisory_xact_lock(hashtext($1),hashtext($2))", str(actor.tenant_id), agent)
+        require_founder(actor)
+        if body.enabled:
+            changed = await conn.fetchval(
+                "INSERT INTO tank.tenant_squad(tenant_id,agent,enabled_by) VALUES($1,$2,$3) "
+                "ON CONFLICT (tenant_id,agent) DO NOTHING RETURNING agent", actor.tenant_id, agent, actor.user_id)
+        else:
+            changed = await conn.fetchval("DELETE FROM tank.tenant_squad WHERE tenant_id=$1 AND agent=$2 RETURNING agent",
+                                           actor.tenant_id, agent)
+        if changed:
+            await conn.execute("INSERT INTO tank.tenant_squad_log(tenant_id,agent,enabled,changed_by) VALUES($1,$2,$3,$4)",
+                               actor.tenant_id, agent, body.enabled, actor.user_id)
+    return {"agent": agent, "enabled": body.enabled, "changed": bool(changed)}
+
+
+@router.get("/squads/log")
+async def squad_log(limit: int = Query(default=20, ge=1, le=100), actor: Actor = Depends(identity)) -> list[dict]:
+    require_founder(actor)
+    async with db().acquire() as conn:
+        rows = await conn.fetch("SELECT id,agent,enabled,changed_by,changed_at FROM tank.tenant_squad_log "
+                                "WHERE tenant_id=$1 ORDER BY id DESC LIMIT $2", actor.tenant_id, limit)
+    return [dict(row) for row in rows]
+
+
 @router.post("/threads")
 async def create_thread(body: NewThread, actor: Actor = Depends(identity)) -> dict:
     thread_id = uuid.uuid4()
@@ -323,6 +372,20 @@ async def route_turn(actor: Actor, messages: list[dict], model: str | None = Non
                                        home_region=box_region(), messages=[Message(**m) for m in messages]), **override)
 
 
+async def auto_price_snapshot(conn: Any, tenant_id: uuid.UUID) -> dict:
+    # Freeze the policy model and price book at acceptance, before paid work.
+    # This is a same-token comparison, not another model execution.
+    row = await conn.fetchrow(
+        "SELECT p.model,q.input_usd,q.output_usd,q.updated_at FROM tank.policy p "
+        "LEFT JOIN tank.proof_prices q ON q.model=p.model AND q.active "
+        "WHERE p.task_type='command.turn' AND (p.tenant_id=$1 OR p.tenant_id IS NULL) "
+        "ORDER BY p.tenant_id NULLS LAST LIMIT 1", tenant_id)
+    return {"model": row["model"] if row else None,
+            "input_usd": str(row["input_usd"]) if row and row["input_usd"] is not None else None,
+            "output_usd": str(row["output_usd"]) if row and row["output_usd"] is not None else None,
+            "priced_at": row["updated_at"].isoformat() if row and row["updated_at"] else None}
+
+
 async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages: list[dict], model: str | None = None) -> None:
     answer = None
     try:
@@ -331,7 +394,7 @@ async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages
         async with editing(thread_id, actor) as (conn, row, state):
             await record_receipts(conn, row, state, turn_id, [answer.ledger_id])
             try:
-                plan = parse_plan(answer.content, current_actor(actor))
+                plan = parse_plan(answer.content, await authorized_actor(actor, conn))
             except (ValueError, HTTPException):
                 plan = ActionPlan(text="The proposed action plan was invalid. No action was started.")
                 await event(conn, row, "error", {"message": plan.text})
@@ -408,8 +471,9 @@ async def turn(thread_id: uuid.UUID, body: Turn, actor: Actor = Depends(identity
                 "SELECT build_id,tenant_id,$3 FROM tank.command_builds WHERE thread_id=$1 AND tenant_id=$2 "
                 "AND status IN ('queued','running','awaiting_review')", thread_id, actor.tenant_id, body.text,
             )
+        comparison = await auto_price_snapshot(conn, actor.tenant_id) if body.model not in (None, "auto") else None
         await step(conn, row, state, {"step_id": turn_id, "label": "Preparing answer", "actor": "Tervory", "status": "running",
-                                      "requested_model": body.model or "auto"})
+                                      "requested_model": body.model or "auto", "auto_comparison": comparison})
         messages = message_context(state["messages"])
         results = [{"tool": c.get("tool"), "result": c["result"]} for c in state["cards"].values()
                    if c.get("status") == "confirmed" and "result" in c][-4:]
@@ -475,7 +539,7 @@ async def card_action(card_id: uuid.UUID, body: CardAction, actor: Actor = Depen
             # Support previously saved build cards without changing their meaning.
             payload = card["payload"]
             action = PlannedAction(**payload) if "tool" in payload else PlannedAction(tool="worker.build", arguments=payload)
-            action = validate_action(action, current_actor(actor))
+            action = validate_action(action, await authorized_actor(actor, conn))
             if action.tool == "worker.build":
                 open_build = await conn.fetchval(
                     "SELECT build_id FROM tank.command_builds WHERE thread_id=$1 AND tenant_id=$2 "
@@ -824,6 +888,17 @@ def current_actor(actor: Actor) -> Actor:
     return Actor(actor.tenant_id, actor.user_id, actor.user_id in admins, actor.squads)
 
 
+async def authorized_actor(actor: Actor, conn: Any = None) -> Actor:
+    actor = current_actor(actor)
+    if actor.founder:
+        return actor
+    if conn is None:
+        async with db().acquire() as connection:
+            return await authorized_actor(actor, connection)
+    rows = await conn.fetch("SELECT agent FROM tank.tenant_squad WHERE tenant_id=$1", actor.tenant_id)
+    return Actor(actor.tenant_id, actor.user_id, False, frozenset(row["agent"] for row in rows) & SQUADS)
+
+
 def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict, dict | None]:
     from main import box_region
     action = validate_action(action, current_actor(actor))
@@ -860,6 +935,7 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
     """
     import httpx
     from main import app, TANK_API_KEY
+    actor = await authorized_actor(actor)
     method, path, params, body = adapter_request(action, actor)
     headers = {"X-Tank-Key": TANK_API_KEY, "X-Tervory-User": actor.user_id,
                "X-Tervory-Tenant": str(actor.tenant_id)}
@@ -946,7 +1022,15 @@ async def record_receipts(conn: Any, row: dict, state: dict, step_id: str, ids: 
         receipt = receipt_row(by_id[str(ledger_id)], step_id)
         requested_model = state["steps"].get(step_id, {}).get("requested_model")
         if requested_model not in (None, "auto"):
-            receipt.update(requested_model=requested_model, auto_cost_usd=None, auto_cost_status="pending")
+            price = state["steps"].get(step_id, {}).get("auto_comparison") or {}
+            priced = receipt["cost_usd"] is not None and all(price.get(k) is not None for k in ("model", "input_usd", "output_usd"))
+            auto_cost = (Decimal(str(receipt["tokens_in"])) * Decimal(price["input_usd"])
+                         + Decimal(str(receipt["tokens_out"])) * Decimal(price["output_usd"])) if priced else None
+            receipt.update(requested_model=requested_model, auto_model=price.get("model"),
+                           auto_cost_usd=float(auto_cost) if auto_cost is not None else None,
+                           auto_cost_status="priced" if priced else "pending", auto_priced_at=price.get("priced_at"),
+                           auto_cost_label="What Auto would have cost (same tokens at policy model prices)",
+                           auto_cost_basis="Same recorded tokens, priced from the price book at turn acceptance; not a separate model run.")
         existing = next((r for r in state["receipts"] if r["ledger_id"] == str(ledger_id)), None)
         if existing and existing["step_id"] != step_id:
             raise HTTPException(409, "Ledger evidence already belongs to another step")
@@ -985,7 +1069,8 @@ async def refresh_action_receipts(thread_id: uuid.UUID, actor: Actor, card_id: s
 async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action: PlannedAction) -> dict:
     attempted = False
     try:
-        action = validate_action(action, current_actor(actor))
+        actor = await authorized_actor(actor)
+        action = validate_action(action, actor)
         adapter = ADAPTERS[action.tool]
         if adapter.paid:
             from controls import refuse_paid

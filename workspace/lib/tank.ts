@@ -815,3 +815,23 @@ export function switchProvenModel(userId: string, taskType: string): Promise<{ o
 export function readDashboardCandidates(userId: string): Promise<{ task_type: string; candidate_model: string | null; n: number; agreement: number | null; min_shadow_samples?: number; eligible: boolean; prim_cost?: number | null; cand_cost?: number | null }[]> {
   return tank("/v1/graduation", { method: "GET", headers: { "x-tervory-admin": userId } });
 }
+
+// COMMAND-1A: founder-managed client squad grants on this box.
+export type CommandSquadGrant = { agent: string; enabled: boolean; enabled_by: string | null; enabled_at: string | null };
+export type CommandSquadChange = { id: number; agent: string; enabled: boolean; changed_by: string; changed_at: string };
+function commandSquadHeaders(userId: string, tenantId: string) {
+  return { "X-Tervory-User": userId, "X-Tervory-Tenant": tenantId };
+}
+export async function readCommandSquads(userId: string, tenantId: string) {
+  const headers = commandSquadHeaders(userId, tenantId);
+  const [grants, log] = await Promise.all([
+    tank<CommandSquadGrant[]>("/v1/command/squads", { method: "GET", headers }),
+    tank<CommandSquadChange[]>("/v1/command/squads/log", { method: "GET", headers }),
+  ]);
+  return { grants, log };
+}
+export async function setCommandSquad(userId: string, tenantId: string, agent: string, enabled: boolean) {
+  return tank<{ agent: string; enabled: boolean; changed: boolean }>(`/v1/command/squads/${encodeURIComponent(agent)}`, {
+    method: "PUT", headers: commandSquadHeaders(userId, tenantId), body: JSON.stringify({ enabled }),
+  });
+}
