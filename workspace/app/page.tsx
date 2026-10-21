@@ -10,11 +10,7 @@ async function ask(form: FormData) {
   if (!request) return;
   const tenant = await activeTenant();
   if (!tenant) redirect("/onboarding");
-  let failed = false;
-  try { await createTask(tenant.tenantId, tenant.userId, request.slice(0, 160), "tier0.answer", [{ role: "user", content: request.slice(0, 20000) }]); }
-  catch { failed = true; }
-  if (failed) redirect("/?error=request");
-  redirect("/tasks");
+  redirect(`/chats?${new URLSearchParams({ ask: request.slice(0, 20000) })}`);
 }
 const team = [
   { name: "Base", slug: "base", job: "Business lists" },
