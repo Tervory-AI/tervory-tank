@@ -835,3 +835,21 @@ export async function setCommandSquad(userId: string, tenantId: string, agent: s
     method: "PUT", headers: commandSquadHeaders(userId, tenantId), body: JSON.stringify({ enabled }),
   });
 }
+
+// ---- COMMAND-1: same-box conversations; caller identity is server-owned. ----
+export async function commandRequest(identity: { tenantId: string; userId: string }, path: string, init: RequestInit = {}): Promise<Response> {
+  if (!TANK_API_KEY) throw new Error("The conversation service is not configured.");
+  const url = new URL(`/v1/command/${path}`, TANK_URL);
+  url.searchParams.set("tenant_id", identity.tenantId);
+  url.searchParams.set("user_id", identity.userId);
+  const headers = new Headers(init.headers);
+  headers.set("content-type", "application/json");
+  headers.set("x-tank-key", TANK_API_KEY);
+  headers.set("x-tervory-user", identity.userId);
+  headers.set("x-tervory-admin", identity.userId);
+  let body = init.body;
+  if (typeof body === "string") body = JSON.stringify({ ...JSON.parse(body), tenant_id: identity.tenantId, user_id: identity.userId });
+  const response = await fetch(url, { ...init, body, headers, cache: "no-store", redirect: "error" });
+  if (!response.ok) { await response.body?.cancel(); throw new Error("The conversation service could not complete this request. Please reload before trying again."); }
+  return response;
+}
