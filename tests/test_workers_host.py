@@ -282,3 +282,48 @@ def test_next_free_subid_follows_existing_ranges(tmp_path: Path) -> None:
     assert subprocess.run(["bash", "-c", clash], capture_output=True, text=True).stdout.strip() == "overlap"
     free = f'source "{HOST / "install.sh"}"; subid_overlaps 231072 65536 tervory-workers "{subuid}" "{subgid}" || echo free'
     assert subprocess.run(["bash", "-c", free], capture_output=True, text=True).stdout.strip() == "free"
+
+
+def test_unit_has_the_review_limits_and_nothing_that_breaks_rootless_podman() -> None:
+    lines = (HOST / "tervory-workers.service").read_text(encoding="utf-8").splitlines()
+    for line in ("MemoryMax=6G", "CPUQuota=300%", "TasksMax=2048", "LockPersonality=yes", "RestrictRealtime=yes", "SystemCallArchitectures=native"):
+        assert line in lines
+    for option in ("ProtectSystem=", "ProtectHome=", "PrivateTmp=", "PrivateUsers="):
+        assert not any(line.startswith(option) for line in lines)
+
+
+def test_install_never_runs_or_writes_as_root_inside_the_user_tree() -> None:
+    text = (HOST / "install.sh").read_text(encoding="utf-8")
+    body = text.split("deploy_code() {", 1)[1].split("\n}\n", 1)[0]
+    # venv and pip run as the user; the code is unpacked by tar running as the user.
+    assert 'as_user python3 -m venv "$VENV_DIR"' in body
+    assert 'as_user "$VENV_DIR/bin/pip" install' in body
+    assert "| as_user tar -C \"$stage\"" in body
+    for line in body.splitlines():
+        line = line.strip()
+        if line.startswith("#") or not line:
+            continue
+        if "$VENV_DIR/bin/pip" in line or "python3 -m venv" in line:
+            assert "as_user" in line, line
+        assert not line.startswith(("chown", "chmod", "cp ", "rm ", "mv ", "mkdir")), line
+    assert "chown -R" not in body
+    units = text.split("install_unit() {", 1)[1].split("\n}\n", 1)[0]
+    assert 'as_user tee "$unit_dir/' in units and "install -o" not in units
+    assert "python3 -I -" in text and "python3 - " not in text
+
+
+def test_task_secrets_are_readable_by_the_task_user_only_through_a_0700_parent(tmp_path: Path) -> None:
+    from workers.secrets_io import replace_token, stage
+
+    parent = tmp_path / "state"
+    parent.mkdir(mode=0o700)
+    directory = parent / "task-1"
+    stage(directory, token="ghs_" + "A" * 36, tank_key="tank-key-example")
+    assert oct(directory.stat().st_mode & 0o777) == oct(0o711)
+    for name in ("token",):
+        assert oct((directory / name).stat().st_mode & 0o777) == oct(0o444)
+    replace_token(directory, "ghs_" + "B" * 36)
+    assert (directory / "token").read_text(encoding="utf-8") == "ghs_" + "B" * 36
+    assert oct((directory / "token").stat().st_mode & 0o777) == oct(0o444)
+    assert oct(parent.stat().st_mode & 0o777) == oct(0o700)
+    assert not (ROOT / "workers/Dockerfile").exists()

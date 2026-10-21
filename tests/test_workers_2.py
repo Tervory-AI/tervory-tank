@@ -173,7 +173,8 @@ def test_storage_is_additive_and_main_only_registers_routes():
     main = (ROOT / "tank/main.py").read_text()
     assert 'app.include_router(__import__("workers_status").router)' in main
     assert 'app.include_router(__import__("workers_status").founder_router)' in main
-    assert main.count("workers_status") == 2
+    assert main.count("include_router(__import__(\"workers_status\")") == 2
+    assert 'return await __import__("workers_status").panel()' in main
     assert "workers_status.py" in (ROOT / "tank/Dockerfile").read_text()
 
 
@@ -366,3 +367,86 @@ def test_control_tile_is_wired():
     assert "/v1/controls/workers-paused" in workers and "/v1/controls/workers" in workers
     assert "workersPauseAction" in (control / "actions.ts").read_text()
     assert uuid.UUID(str(controls.PLATFORM))
+
+
+# ---------- Claude review on 39b67d0 (same pass) ----------
+
+
+def _origin_with_host_install(tmp_path: Path) -> tuple[Path, Path, Settings]:
+    origin = tmp_path / "origin"
+    (origin / "workers/host").mkdir(parents=True)
+    _git(tmp_path, "init", "-q", "-b", "main", str(origin))
+    (origin / "workers/requirements.txt").write_text("httpx\n")
+    (origin / "workers/host/tervory-workers.service").write_text("[Service]\n")
+    (origin / "workers/a.py").write_text("A = 1\n")
+    _git(origin, "add", "-A")
+    _git(origin, "commit", "-qm", "main")
+    srv = tmp_path / "srv"
+    (srv / "app/workers").mkdir(parents=True)
+    (srv / "app/workers/a.py").write_text("A = 'deployed'\n")
+    (srv / "app/WORKERS_TREE").write_text("e" * 40 + "\n")
+    (srv / "venv/bin").mkdir(parents=True)
+    import hashlib
+
+    (srv / "venv/.requirements.sha256").write_text(hashlib.sha256(b"httpx\n").hexdigest() + "\n")
+    return origin, srv, Settings(service_port=_free_port())
+
+
+def test_updater_refuses_a_non_fast_forward_main(tmp_path):
+    origin, srv, settings = _origin_with_host_install(tmp_path)
+    cache = tmp_path / "cache"
+    token = "ghs_" + "x" * 30
+    assert updater.update(settings, token, srv=srv, cache=cache, restart=False, remote=str(origin)).action == "update"
+    deployed = (srv / "app/workers/a.py").read_text()
+    # Someone force-pushes main to an unrelated history.
+    _git(origin, "checkout", "-q", "--orphan", "rewrite")
+    (origin / "workers/a.py").write_text("A = 'rewritten'\n")
+    _git(origin, "add", "-A")
+    _git(origin, "commit", "-qm", "rewritten main")
+    _git(origin, "branch", "-q", "-M", "rewrite", "main")
+    plan = updater.update(settings, token, srv=srv, cache=cache, restart=False, remote=str(origin))
+    assert plan == updater.Plan("skip", "main did not fast-forward")
+    assert (srv / "app/workers/a.py").read_text() == deployed
+    source = (ROOT / "workers/updater.py").read_text()
+    assert '"+refs/heads/' not in source and "merge-base" in source
+
+
+def test_update_pending_stops_new_tasks_until_applied(tmp_path, monkeypatch):
+    origin, srv, settings = _origin_with_host_install(tmp_path)
+    cache = tmp_path / "cache"
+    token = "ghs_" + "x" * 30
+    monkeypatch.setattr(updater, "busy", lambda port: True)
+    plan = updater.update(settings, token, srv=srv, cache=cache, restart=False, remote=str(origin))
+    assert plan == updater.Plan("skip", "task running")
+    assert (srv / "UPDATE_PENDING").exists()
+    # The service, whose code lives in srv/app, takes no new task while the flag is there.
+    pause = _Pause(False)
+    service = Service(_settings(srv / "app"), _GitHub(), object(), pause)  # type: ignore[arg-type]
+    service._run = lambda task: asyncio.sleep(0)  # type: ignore[method-assign]
+    asyncio.run(service.poll_once("t"))
+    assert service.inflight == set()
+    monkeypatch.setattr(updater, "busy", lambda port: False)
+    assert updater.update(settings, token, srv=srv, cache=cache, restart=False, remote=str(origin)).action == "update"
+    assert not (srv / "UPDATE_PENDING").exists()
+
+    async def go() -> None:
+        await service.poll_once("t")
+        await asyncio.gather(*service.jobs)
+
+    asyncio.run(go())
+    assert service.inflight == {211}
+
+
+def test_fix_modes_skips_symlinks(tmp_path):
+    outside = tmp_path / "outside"
+    outside.write_text("secret\n")
+    outside.chmod(0o600)
+    tree = tmp_path / "tree"
+    (tree / "sub").mkdir(parents=True)
+    (tree / "sub/a.py").write_text("A = 1\n")
+    (tree / "sub/a.py").chmod(0o600)
+    (tree / "link").symlink_to(outside)
+    (tree / "dirlink").symlink_to(tmp_path)
+    updater.fix_modes(tree)
+    assert oct((tree / "sub/a.py").stat().st_mode & 0o777) == oct(0o644)
+    assert oct(outside.stat().st_mode & 0o777) == oct(0o600)

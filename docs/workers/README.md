@@ -67,7 +67,7 @@ The pull request is opened as a draft. When the checks on that commit are green,
 
 ## What you can see
 
-Every model call is a row in Tank's ledger (agent `workers`, with the cost Tank returns). The ledger has no column for a pull-request link or a duration, and this brief does not change the ledger or the Tank page. The workers service serves a read-only Workers panel on `127.0.0.1:$WORKER_PORT` only (default 8110 on the host, `GET /workers` and `GET /workers.json`) with the issue, brief, status, pull-request link, minutes, and model cost. Nothing else can reach that port. Tank's own Workers panel (`WORKERS_URL`, default `http://workers:8000`) cannot reach the host loopback from inside Docker, so until a follow-up gives it a route, it shows "not available". The same facts are commented on the issue.
+Every model call is a row in Tank's ledger (agent `workers`, with the cost Tank returns). The ledger has no column for a pull-request link or a duration, and this brief does not change the ledger or the Tank page. The workers service serves a read-only Workers panel on `127.0.0.1:$WORKER_PORT` only (default 8110 on the host, `GET /workers` and `GET /workers.json`) with the issue, brief, status, pull-request link, minutes, and model cost. Nothing else can reach that port. Tank's own Workers panel (`GET /v1/workers`) reads the heartbeat table `tank.workers_heartbeat` (see [Heartbeat](#heartbeat-pause-and-the-control-tile)): it is available while the worker checks in and shows the issue it is on. There is no `WORKERS_URL` any more. The same facts are commented on the issue.
 
 A follow-up that is allowed to edit the Tank page can show this panel there. This change does not.
 
@@ -112,8 +112,8 @@ What it does:
 4. Enables lingering (`loginctl enable-linger`) so the user's systemd manager runs without a login. This is the same pattern as `tngo-preview.service`.
 5. Checks AppArmor. Ubuntu sets `kernel.apparmor_restrict_unprivileged_userns=1`, so rootless podman depends on the `podman` profile in `/etc/apparmor.d`. The script makes sure it is loaded.
 6. Creates `/etc/tervory-workers` (owner root, group `tervory-workers`, mode `0750`). It copies the template to `worker.env` only if `worker.env` is missing, and sets `worker.env` and `github-app.pem` to owner root, group `tervory-workers`, mode `0640`. It prints the names (never the values) that are still empty.
-7. Copies `workers/` to `/srv/tervory-workers/app`, with `COMMIT` and `WORKERS_TREE` (the git commit, and the tree of `workers/`), and builds the venv in `/srv/tervory-workers/venv`. Both are owned by `tervory-workers` so the auto-update timer can replace them. Use `--commit`/`--tree` when the source is a tarball, not a git checkout.
-8. Installs the units (`tervory-workers.service`, `tervory-workers-update.service`, `tervory-workers-update.timer`) to `~tervory-workers/.config/systemd/user/`. Then, as the user, it checks `podman info`: rootless, cgroups v2 with `cpu`, `memory` and `pids` delegated, an OCI runtime, slirp4netns, and podman 5.x (podman 6 removed slirp4netns). It fails loudly if any is missing.
+7. Copies `workers/` to `/srv/tervory-workers/app`, with `COMMIT` and `WORKERS_TREE` (the git commit, and the tree of `workers/`), and builds the venv in `/srv/tervory-workers/venv`. Both are owned by `tervory-workers` so the auto-update timer can replace them. Because that user controls the tree, root never runs or writes anything inside it: `tar`, `python3 -m venv` and `pip install` all run as `tervory-workers` (root only pipes the source to `tar` on stdin), so code planted by a bad requirement or a compromised worker is never run as root. Use `--commit`/`--tree` when the source is a tarball, not a git checkout.
+8. Installs the units (`tervory-workers.service`, `tervory-workers-update.service`, `tervory-workers-update.timer`) to `~tervory-workers/.config/systemd/user/`, written by the user from stdin. Then, as the user, it checks `podman info` (parsed with `python3 -I`): rootless, cgroups v2 with `cpu`, `memory` and `pids` delegated, an OCI runtime, slirp4netns, and podman 5.x (podman 6 removed slirp4netns). It fails loudly if any is missing.
 9. Enables and restarts the service and enables the update timer, unless `--no-start` is given.
 
 To update by hand, run `install.sh` again from a newer checkout. It replaces the code, reinstalls the venv only when `workers/requirements.txt` changed, and restarts the unit.
@@ -125,12 +125,16 @@ To update by hand, run `install.sh` again from a newer checkout. It replaces the
 1. It mints a GitHub App installation token and fetches `main` into `~/.cache/tervory-workers/repo` (blobless). The token reaches git only through `GIT_CONFIG_*` environment variables, never in argv, a URL or a log.
 2. It compares the tree of `workers/` on `main` with the deployed `WORKERS_TREE`. If they are the same, it does nothing. Squash merges are fine, because it compares trees, not commits.
 3. If `main` does not have `workers/host/tervory-workers.service` yet (an older main from before this design), it skips and logs it, so the host code is never replaced by the Docker-era code.
-4. If a task is running (`/health` says `busy`), it waits for the next run. It never kills a task.
-5. Otherwise it extracts `workers/` at `main`, sets modes to 0755/0644, refreshes the venv if `requirements.txt` changed, swaps the directory, writes `COMMIT` and `WORKERS_TREE`, and restarts `tervory-workers.service`.
+4. If a task is running (`/health` says `busy`), it writes `/srv/tervory-workers/UPDATE_PENDING` and waits for the next run. While that file exists the service takes no new task, so a busy queue cannot hold an update back for ever. It never kills a task. The file is removed once the update is applied, or when no update is needed.
+5. Otherwise it extracts `workers/` at `main`, sets modes to 0755/0644 (symlinks are skipped), refreshes the venv if `requirements.txt` changed, swaps the directory, writes `COMMIT` and `WORKERS_TREE`, and restarts `tervory-workers.service`.
 
 Each update logs one line, for example `workers updated: 4c30622a1b2c -> 9f1e0d3c4b5a`. See `journalctl --user -u tervory-workers-update`. No secrets are logged.
 
 Because the code is owned by `tervory-workers` so it can update itself, the service could change its own code. That gives it nothing new, since it already runs as that user. Task containers never mount the code directory.
+
+Main only moves forward. The updater fetches without `+` in the refspec and checks `git merge-base --is-ancestor`, so a force-pushed (non-fast-forward) `main` is refused and logged, never applied.
+
+**Unit changes need root.** The updater replaces only `workers/` code and the venv. It cannot change the installed unit files (`~tervory-workers/.config/systemd/user/*.service`, `*.timer`), the env file or apt packages. When a pull request on `main` changes anything in `workers/host/` (the unit files, `install.sh`, `worker.env.example`), re-run `sudo bash workers/host/install.sh` from a checkout of that commit on Boston.
 
 ### Heartbeat, pause and the /control tile
 
@@ -146,12 +150,12 @@ All three need Tank redeployed with this PR, for the new routes, the tables and 
 
 The names are `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID`, `TANK_KEY_WORKERS`, `GITHUB_APP_PRIVATE_KEY_FILE=/etc/tervory-workers/github-app.pem`, `TANK_URL=http://127.0.0.1:8100` and `WORKER_LINK=loopback`, plus the non-secret `WORKER_*` settings in the template. Never paste a value into chat, logs or GitHub.
 
-Per-task token files are staged under `$XDG_RUNTIME_DIR/tervory-workers`, which is `/run/user/<uid>`. That is memory-backed and `0700` (`RuntimeDirectory=` in the unit). The App key is never mounted into a task.
+Per-task token files are staged under `$XDG_RUNTIME_DIR/tervory-workers`, which is `/run/user/<uid>`. That is memory-backed and `0700` (`RuntimeDirectory=` in the unit). Each task gets its own directory inside it, mode `0711`, with the files `0444`. The task process runs as UID 1001 inside the container, which is not the owner of those files, so it needs that read access. That is safe because nothing else on the host can get past the `0700` parent. The App key is never mounted into a task.
 
 ### Security model
 
 - **Host user:** an unprivileged user with no sudo and no docker group, so it cannot reach the Docker daemon or root.
-- **Unit:** `NoNewPrivileges=yes` and `UMask=0077`. It restarts on failure and is wanted by `default.target`. `NoNewPrivileges=yes` blocks the setuid `newuidmap` that rootless podman needs to create its user namespace. So the unit has `ExecStartPre=+/usr/bin/podman unshare /bin/true`, which runs without that restriction and only starts podman's pause process. The service keeps `NoNewPrivileges=yes` and joins that namespace. On Boston this was checked with `NoNewPrivs: 1` in the service and the 231072:65536 mapping inside podman. If the pause process is reset (`podman system migrate`), restart the unit.
+- **Unit:** `NoNewPrivileges=yes`, `UMask=0077`, `MemoryMax=6G`, `CPUQuota=300%`, `TasksMax=2048`, `LockPersonality=yes`, `RestrictRealtime=yes` and `SystemCallArchitectures=native`. Do not add `ProtectSystem`, `ProtectHome`, `PrivateTmp` or `PrivateUsers`: they break rootless podman. It restarts on failure and is wanted by `default.target`. `NoNewPrivileges=yes` blocks the setuid `newuidmap` that rootless podman needs to create its user namespace. So the unit has `ExecStartPre=+/usr/bin/podman unshare /bin/true`, which runs without that restriction and only starts podman's pause process. The service keeps `NoNewPrivileges=yes` and joins that namespace. On Boston this was checked with `NoNewPrivs: 1` in the service and the 231072:65536 mapping inside podman. If the pause process is reset (`podman system migrate`), restart the unit.
 - **Tasks:** rootless podman, so container root is the unprivileged host user, and the task process drops to UID 1001 inside after the firewall is installed. It runs with `--cap-drop ALL`, `NET_ADMIN` only, `no-new-privileges` and `--read-only`.
 - **Network:** slirp4netns gives each task its own user-mode network. `allow_host_loopback=true` makes the host's loopback reachable as `10.0.2.2`. The in-task firewall (nftables, drop by default) allows only DNS to the slirp resolver, GitHub, PyPI and npm on 443, and Tank at `10.0.2.2:8100`. Every other host-loopback port (Coolify, other previews) is dropped. The firewall is installed by container root before privileges drop, and the task user cannot change it.
 - **Tank:** reachable only on `127.0.0.1:8100` on the host. It is never published on a public address.
