@@ -23,6 +23,7 @@ from chassis.jobs import JobContext, timeout_for
 from chassis.logs import log_line
 from chassis.memory import MemoryClient
 from chassis.tank import TankClient
+from chassis.storage_api import storage_router
 from chassis.worker import job_loop, schedule_loop
 
 
@@ -94,6 +95,7 @@ def create_app(
             await pool.close()
 
     app = FastAPI(title=f"Tervory agent {agent}", version="0.1.0", lifespan=lifespan)
+    app.include_router(storage_router(agent))
     app.state.agent = agent
     app.state.handlers = handlers
     app.state.job_timeouts = timeouts

@@ -375,9 +375,9 @@ def _rolled_back(policy: dict[str, Any], reason: str) -> dict[str, Any]:
 
 
 def _wants_auto(policy: dict[str, Any]) -> bool:
-    value = policy.get("auto_promote", True)
+    value = policy.get("auto_promote", False)
     if value is None:
-        return True
+        return False
     return bool(value)
 
 
@@ -516,6 +516,10 @@ def quotes_from_roster(models: list[dict[str, Any]]) -> list[Quote]:
     quotes: list[Quote] = []
     for model in models:
         info = model.get("model_info") or {}
+        provider_model = str((model.get("litellm_params") or {}).get("model") or "")
+        # Perplexity presets use the dedicated research route, never generic chat/shadow.
+        if provider_model.startswith("perplexity/preset/"):
+            continue
         price = float(info.get("input_cost_per_token") or 0) + float(info.get("output_cost_per_token") or 0)
         quotes.append(Quote(name=str(model["model_name"]), price=price, funds=True, kind="model"))
     return quotes
@@ -870,8 +874,9 @@ async def training_table(conn, tenant, region: str) -> list[dict]:
         JOIN tank.removed_batches r ON r.tenant_id=b.tenant_id AND r.batch_id=b.batch_id
         WHERE b.tenant_id=$1""", tenant)
     removed_models = {row["model_repo"] for row in removed_rows}
-    costs = await conn.fetch("""SELECT task_type,model,avg(cost_usd) AS cost FROM tank.ledger
+    costs = await conn.fetch("""SELECT task_type,model,percentile_cont(0.5) WITHIN GROUP (ORDER BY cost_usd) AS cost FROM tank.ledger
         WHERE tenant_id=$1 AND region=$2 AND ts>now()-interval '30 days' AND NOT cache_hit
+        AND agent NOT IN ('bench','shadow') AND outcome='delivered'
         GROUP BY task_type,model""", tenant, region)
     counts = {r['skill_id']: r['n'] for r in gold}
     prices = {(r['task_type'], r['model']): float(r['cost']) for r in costs}

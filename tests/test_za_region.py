@@ -102,7 +102,7 @@ def test_za_compose_names_no_us_host_and_does_not_replicate() -> None:
     assert "external: true" not in lowered
     addresses = set(re.findall(r"\b\d{1,3}(?:\.\d{1,3}){3}\b", COMPOSE))
     assert addresses <= {"127.0.0.1"}
-    for banned in ("workspace", "searxng", "agent-base", "agent-tiger", "agent-rig", "deepseek", "moonshot"):
+    for banned in ("workspace", "searxng", "agent-base", "agent-tiger", "agent-rig"):
         assert banned not in lowered
 
 
@@ -115,10 +115,18 @@ def test_za_roster_matches_the_funded_models_and_has_no_sa_model_yet() -> None:
     assert "model_name: za-local" in raw
     assert "hosted_in: za" in raw
     for item in ZA_CONFIG["model_list"]:
-        provider = item["litellm_params"]["model"].split("/", 1)[0]
-        assert provider not in {"deepseek", "moonshot"}
         assert "api_base" not in item["litellm_params"]
+        assert "hosted_in" not in (item.get("model_info") or {}), item["model_name"]
     assert main.sa_hosted_models() == frozenset()
+
+
+def test_za_litellm_gets_the_deepseek_and_moonshot_keys_like_boston() -> None:
+    """MODELS-1: same key names as the Boston LiteLLM service, and still only on LiteLLM."""
+    za_env = _parsed()["services"]["litellm"]["environment"]
+    boston = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
+    boston_env = boston["services"]["litellm"]["environment"]
+    for key in ("DEEPSEEK_API_KEY", "MOONSHOT_API_KEY"):
+        assert za_env[key] == boston_env[key] == "${" + key + ":-}"
 
 
 def test_home_region_refusal_both_ways() -> None:
@@ -168,6 +176,9 @@ def test_sa_hosted_model_may_see_an_identifier_and_the_allow_list_can_narrow_it(
     assert main.model_call_refusal(text, "za-local", box="za", tenant_id=TENANT) == main.IDENTIFIER_REFUSAL
     assert main.model_call_refusal("No identifier here.", "luna", box="za", tenant_id=TENANT) is None
     assert main.model_call_refusal("No identifier here.", "haiku", box="za", tenant_id=TENANT) == main.ALLOW_REFUSAL
+    # The allow-list, not a provider ban, is what keeps a tenant off DeepSeek and Kimi.
+    assert main.model_call_refusal("No identifier here.", "deepseek-flash", box="za", tenant_id=TENANT) == main.ALLOW_REFUSAL
+    assert main.model_call_refusal("No identifier here.", "kimi", box="za", tenant_id=TENANT) == main.ALLOW_REFUSAL
     assert main.model_call_refusal("No identifier here.", "deepseek/chat", box="za", tenant_id=TENANT) == main.ALLOW_REFUSAL
     identified = f"ID {SA_ID}"
     # Without a proven pool read the identifier rule answers first.
