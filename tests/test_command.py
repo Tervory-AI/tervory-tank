@@ -27,10 +27,10 @@ def request(**headers):
 
 @pytest.fixture
 def runtime(monkeypatch):
-    runtime = SimpleNamespace(TANK_API_KEY='fixture-workspace-key', box_region=lambda: 'us-east')
+    runtime = SimpleNamespace(TANK_API_KEY='dummy-workspace-key', box_region=lambda: 'us-east')
     monkeypatch.setitem(sys.modules, 'main', runtime)
     monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder')
-    monkeypatch.setenv('TANK_KEY_WORKERS', 'fixture-worker-key')
+    monkeypatch.setenv('TANK_KEY_WORKERS', 'dummy-worker-key')
     return runtime
 
 
@@ -51,7 +51,7 @@ async def test_identity_roles_and_region(runtime):
     with pytest.raises(HTTPException) as refused:
         await command.identity(request(**headers))
     assert refused.value.status_code == 403
-    headers['x-tank-key'] = 'fixture-worker-key'
+    headers['x-tank-key'] = 'dummy-worker-key'
     with pytest.raises(HTTPException) as refused:
         await command.identity(request(**headers))
     assert refused.value.status_code == 401
@@ -61,7 +61,7 @@ async def test_identity_roles_and_region(runtime):
 async def test_worker_key_is_separate(runtime):
     with pytest.raises(HTTPException):
         await command.worker(request(**{'x-tank-key': runtime.TANK_API_KEY}))
-    await command.worker(request(**{'x-tank-key': 'fixture-worker-key'}))
+    await command.worker(request(**{'x-tank-key': 'dummy-worker-key'}))
 
 
 def test_receipts_never_invent_baseline():
@@ -176,7 +176,7 @@ async def test_confirm_cancel_worker_progress_followups(api):
     build_id = replies[0].json()['build_id']
     assert replies[1].json()['build_id'] == build_id
     assert (await client.post(route, json={'action': 'cancel'})).status_code == 409
-    workers = {'x-tank-key': 'fixture-worker-key'}
+    workers = {'x-tank-key': 'dummy-worker-key'}
     assert (await client.get('/v1/command/builds/next')).status_code == 401
     claims = await asyncio.gather(*[client.get('/v1/command/builds/next', headers=workers) for _ in range(2)])
     assert sum(r.json() is not None for r in claims) == 1
