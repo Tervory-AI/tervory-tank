@@ -87,7 +87,7 @@ async def test_same_site_waits_a_few_seconds(visitor,monkeypatch):
     visitor.gate.set()
     now=[100.0];waits=[]
     async def sleep(seconds): waits.append(seconds);now[0]+=seconds
-    monkeypatch.setattr(browser,'time',SimpleNamespace(monotonic=lambda:now[0],time=lambda:100,time_ns=lambda:100))
+    monkeypatch.setattr(browser,'time',SimpleNamespace(monotonic=lambda:now[0],time=lambda:100,time_ns=lambda:100,perf_counter=lambda:100))
     monkeypatch.setattr(browser,'asyncio',SimpleNamespace(sleep=sleep,Lock=asyncio.Lock,timeout=asyncio.timeout))
     await visitor.visit('https://www.business.example')
     await visitor.visit('https://business.example/about')

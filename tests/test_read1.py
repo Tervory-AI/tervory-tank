@@ -71,3 +71,100 @@ async def test_pdf_reader_extracts_annotations(monkeypatch):
     report = read_page(result['url'], text=result['text'], links=result['links'], title=result['title'])
     assert report['facts']['title'] == 'Shop document'
     assert report['links'][0]['url'] == 'https://shop.example/contact'
+
+
+@pytest.mark.asyncio
+async def test_rendered_css_visibility_and_pilot():
+    """Opt-in when Chromium/Playwright are present; no network or model calls."""
+    import shutil
+    if not shutil.which('chromium'):
+        pytest.skip('Cloud Chromium is not installed')
+    api = pytest.importorskip('playwright.async_api')
+    html = '<html><head><style>.concealed {display:none}.invisible {visibility:hidden}.transparent {opacity:0}</style><script>' + 'setup();' * 2000 + '</script></head><body><h1>Shop</h1><div style="display:contents"><p>Visible contents</p></div><p class="invisible">css-invisible</p><p class="transparent">css-transparent</p><p class="concealed">hidden@example.com</p><div aria-hidden="true">hidden aria</div><a href="https://shop.example/contact">Contact</a><p>555-123-4567 visible@example.com</p></body></html>'
+    async with api.async_playwright() as playwright:
+        chromium = await playwright.chromium.launch(executable_path=shutil.which('chromium'), args=['--no-sandbox'])
+        try:
+            page = await chromium.new_page()
+            await page.set_content(html)
+            source = await browser.rendered_source(page)
+            report = read_page('https://shop.example', source)
+        finally:
+            await chromium.close()
+    before = json.dumps({'html': html, 'links': [{'text': 'Contact', 'url': 'https://shop.example/contact'}]})[:7000]
+    after = model_page(report)
+    assert 'visible@example.com' not in before and '/contact' not in before
+    assert 'visible@example.com' in after and '/contact' in after
+    assert 'hidden@example.com' not in after and 'hidden aria' not in after
+    assert 'css-invisible' not in after and 'css-transparent' not in after
+    assert 'Visible contents' in after
+    assert len(after) <= 8000
+    assert report['extraction_ms'] >= 0
+
+
+def test_runner_records_reading_counters_and_extraction_receipts(tmp_path, monkeypatch):
+    import sys
+    import types
+    import uuid
+    tenant, task, record = (str(uuid.uuid4()) for _ in range(3))
+    (tmp_path / 'request.json').write_text(json.dumps({'tenant_id': tenant, 'task_id': task, 'batch': 'pilot', 'count': 1, 'memories': []}))
+    monkeypatch.setenv('HERMES_HOME', str(tmp_path / 'home'))
+    monkeypatch.setenv('TANK_KEY', uuid.uuid4().hex)
+    handlers = {}
+    registry = types.ModuleType('tools.registry')
+    registry.registry = SimpleNamespace(register=lambda **kw: handlers.update({kw['name']: kw['handler']}))
+    monkeypatch.setitem(sys.modules, 'tools.registry', registry)
+    state = types.ModuleType('hermes_state')
+    state.SessionDB = lambda *a: None
+    monkeypatch.setitem(sys.modules, 'hermes_state', state)
+    pipeline_calls = []
+    class Client:
+        def __init__(self, **kwargs): pass
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def request(self, method, url, **kwargs):
+            if url.endswith('/skills'):
+                value = {'tenant_id': tenant, 'room': 'base', 'region': 'us-east', 'skills': []}
+            elif url.endswith('/render'):
+                report = read_page(kwargs['json']['url'], '<a href="/contact">Contact</a><p>info@example.com</p>')
+                value = {'page': report, 'evidence': {'id': 'fixture'}}
+            elif url.endswith('/pipeline'):
+                pipeline_calls.append(kwargs['json']['finish'])
+                value = {'pipeline_status': 'done', 'unresolved': [{'id': record}]}
+            elif url.endswith('/retry'):
+                value = {'pipeline_status': 'done', 'unresolved': []}
+            elif url.endswith('/receipts'):
+                value = {'receipts': []}
+            else:
+                raise AssertionError(url)
+            return SimpleNamespace(status_code=200, json=lambda: value)
+    monkeypatch.setattr(runner.httpx, 'Client', Client)
+    agent_module = types.ModuleType('run_agent')
+    class Agent:
+        def __init__(self, **kwargs): pass
+        def run_conversation(self, *args, **kwargs):
+            handlers['pipeline_run']({})
+            first = handlers['browser']({'url': 'https://shop.example/'})
+            assert list(json.loads(first)) == ['facts', 'links', 'contact_details', 'text']
+            handlers['browser']({'url': 'https://shop.example/contact'})
+            handlers['retry_record']({'record_id': record, 'website': 'https://shop.example/'})
+            return {'final_response': 'Finished'}
+    agent_module.AIAgent = Agent
+    monkeypatch.setitem(sys.modules, 'run_agent', agent_module)
+    runner.run(tmp_path)
+    receipt = json.loads((tmp_path / 'receipt.json').read_text())
+    assert receipt['reading'] == {'pages_read': 2, 'links_followed': 1, 'contact_details_per_page': [1, 1], 'sites_resolved': 1}
+    pages = [step for step in receipt['steps'] if step['action'] == 'browser']
+    assert all(step['extraction_ms'] >= 0 and step['evidence']['id'] == 'fixture' for step in pages)
+    assert pipeline_calls == [False, True]
+
+
+
+def test_local_business_precedes_organization_and_contact_budget():
+    html = '<script type="application/ld+json">{"@graph":[{"@type":"Organization","name":"Parent"},{"@type":"LocalBusiness","name":"Branch"}]}</script><p>info@example.com</p>'
+    html += ''.join(f'<a href="https://shop.example/contact/{i}/' + 'x' * 1500 + '">Contact</a>' for i in range(30))
+    report = read_page('https://shop.example', html)
+    assert report['contact_details'][0]['value'] == 'Branch'
+    encoded = model_page(report)
+    assert len(encoded) <= 8000
+    assert json.loads(encoded)['contact_details']
+    assert json.loads(encoded)['links']

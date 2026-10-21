@@ -12,7 +12,7 @@ SOCIAL = re.compile(r'(?:^|\.)(?:facebook|instagram|linkedin|twitter|x|youtube|t
 
 
 class Parser(HTMLParser):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.stack = []
         self.text = []
@@ -25,7 +25,7 @@ class Parser(HTMLParser):
         self.anchor = None
         self.script = None
 
-    def handle_starttag(self, tag, attrs):
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         a = dict(attrs)
         hidden = bool(self.stack and self.stack[-1][1]) or tag in {'style', 'script', 'head', 'template', 'noscript'} or 'hidden' in a or a.get('aria-hidden') == 'true' or bool(re.search(r'display\s*:\s*none|visibility\s*:\s*hidden', a.get('style', ''), re.I))
         if tag == 'html':
@@ -44,7 +44,7 @@ class Parser(HTMLParser):
         if tag not in {'meta', 'link', 'br', 'hr', 'img', 'input', 'source', 'wbr', 'area', 'base', 'embed', 'param', 'track'}:
             self.stack.append((tag, hidden))
 
-    def handle_endtag(self, tag):
+    def handle_endtag(self, tag: str) -> None:
         if tag == 'script' and self.script is not None:
             try:
                 self.jsonld.append(json.loads(''.join(self.script)))
@@ -59,7 +59,7 @@ class Parser(HTMLParser):
                 self.props = [(index, depth) for index, depth in self.props if depth <= len(self.stack)]
                 break
 
-    def handle_data(self, data):
+    def handle_data(self, data: str) -> None:
         if self.script is not None:
             self.script.append(data)
         if any(t == 'title' for t, _ in self.stack):
@@ -83,13 +83,15 @@ def read_page(url: str, html: str = '', *, text: str | None = None, links: list 
     details = []
     seen = set()
 
-    def add(kind, value, source):
+    def add(kind: str, value: object, source: str) -> None:
         value = re.sub(r'\s+', ' ', str(value)).strip()
         if value and (kind, value) not in seen:
             seen.add((kind, value))
             details.append({'kind': kind, 'value': value[:500], 'source': source})
 
-    def structured(node):
+    entities = []
+
+    def structured(node: object) -> None:
         if isinstance(node, list):
             for item in node:
                 structured(item)
@@ -97,20 +99,23 @@ def read_page(url: str, html: str = '', *, text: str | None = None, links: list 
             types = node.get('@type', [])
             types = [types] if isinstance(types, str) else types
             if any(t in {'LocalBusiness', 'Store', 'Organization'} or str(t).endswith('Store') for t in types):
-                for field in ('name', 'address', 'telephone', 'email', 'openingHours', 'openingHoursSpecification', 'geo'):
-                    if node.get(field):
-                        add(field, json.dumps(node[field], ensure_ascii=False) if isinstance(node[field], (dict, list)) else node[field], 'json-ld')
+                entities.append((all(t == 'Organization' for t in types), node))
             for value in node.values():
                 if isinstance(value, (list, dict)):
                     structured(value)
     for node in parser.jsonld:
         structured(node)
+    for _, node in sorted(entities, key=lambda item: item[0]):
+        for field in ('name', 'address', 'telephone', 'email', 'openingHours', 'openingHoursSpecification', 'geo'):
+            if node.get(field):
+                add(field, json.dumps(node[field], ensure_ascii=False) if isinstance(node[field], (dict, list)) else node[field], 'json-ld')
     for prop, content, parts in parser.structured:
         if prop in {'name', 'streetAddress', 'addressLocality', 'addressRegion', 'postalCode', 'telephone', 'email', 'openingHours', 'latitude', 'longitude'}:
             add(prop, content or ''.join(parts), 'microdata')
     ranked = []
     urls = set()
-    for item in [*parser.links, *(links or [])]:
+    text_links = [{'text': value, 'url': value} for value in re.findall(r'https?://[^\s<>]+', text or '')]
+    for item in [*parser.links, *(links or []), *text_links]:
         target = urljoin(url, item.get('url', ''))
         parsed = urlsplit(target)
         label = re.sub(r'\s+', ' ', item.get('text', '')).strip()
@@ -145,6 +150,13 @@ def model_page(report: dict, budget: int = 8000) -> str:
     """Preserve section order and valid JSON, trimming text before evidence."""
     value = {key: report.get(key, default) for key, default in [('facts', {}), ('links', []), ('contact_details', []), ('text', '')]}
     value = json.loads(json.dumps(value))
+    # Bound high-priority sections independently so long URLs cannot crowd
+    # every contact detail and the entire visible excerpt out of the report.
+    value['facts']['title'] = str(value['facts'].get('title', ''))[:300]
+    while len(json.dumps(value['links'], ensure_ascii=False)) > 3000:
+        value['links'].pop()
+    while len(json.dumps(value['contact_details'], ensure_ascii=False)) > 2200:
+        value['contact_details'].pop()
     encode = lambda: json.dumps(value, ensure_ascii=False)
     while len(encode()) > budget:
         if value['text']:

@@ -100,7 +100,7 @@ assert b'403' in s.recv(1024)
 s.close()
 print('PASS Chromium, browser allowlist, wrong room key, direct egress, proxy allowlist')
 '''
-        public_check = "response = httpx.post('http://base-browser-gateway:3000/render',headers=headers,json={'url':'https://example.com','settle_ms':0},timeout=170)\nassert response.status_code == 200, (response.status_code,response.text)\nassert response.json()['ok'] and 'Example Domain' in response.json()['html'], response.text\n"
+        public_check = "response = httpx.post('http://base-browser-gateway:3000/render',headers=headers,json={'url':'https://example.com','settle_ms':0},timeout=170)\nassert response.status_code == 200, (response.status_code,response.text)\nassert response.json()['ok'] and 'Example Domain' in response.json()['page']['text'], response.text\n"
         script = script.replace("PUBLIC_RENDER_CHECK", public_check if render_public else "")
         assert docker("exec", browser, "python", "-c", script).startswith("PASS")
         gateway_address = json.loads(docker("inspect", gateway))[0]["NetworkSettings"]["Networks"][corridor]["IPAddress"]

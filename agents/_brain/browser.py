@@ -102,6 +102,19 @@ async def read_pdf(context, url: str, timeout: int) -> dict:
     raise ValueError("Too many document redirects")
 
 
+async def rendered_source(page) -> str:
+    """Mark computed CSS invisibility while keeping structured data available."""
+    return await page.evaluate("""() => {
+                        const copy = document.documentElement.cloneNode(true);
+                        const originals = [document.documentElement, ...document.documentElement.querySelectorAll('*')];
+                        const clones = [copy, ...copy.querySelectorAll('*')];
+                        originals.forEach((el, i) => {
+                            if (!el.closest('head') && el.tagName !== 'SCRIPT' && !el.checkVisibility({checkOpacity:true,checkVisibilityCSS:true}) && getComputedStyle(el).display !== 'contents') clones[i].setAttribute('hidden', '');
+                        });
+                        return copy.outerHTML;
+                    }""")
+
+
 @app.get("/health")
 async def health():
     return {"ok": True, "room": "base"}
@@ -177,7 +190,7 @@ async def render(body: Page, x_tank_key: str = Header(default=""), x_tenant_id: 
                         links = []
                         if not challenge:
                             for item in await page.locator("a[href]").evaluate_all(
-                                "els => els.filter(e => e.checkVisibility()).map(e => ({text:e.innerText.slice(0,120),url:e.href}))"):
+                                "els => els.filter(e => e.checkVisibility({checkOpacity:true,checkVisibilityCSS:true})).map(e => ({text:e.innerText.slice(0,120),url:e.href}))"):
                                 try:
                                     public_url(item["url"])
                                 except ValueError:
@@ -197,24 +210,19 @@ async def render(body: Page, x_tank_key: str = Header(default=""), x_tenant_id: 
                     await page.screenshot(path=str(evidence / (identity + ".png")), full_page=True)
                 # The rendered DOM removes CSS-hidden content before parsing; raw
                 # HTML remains exclusively in this room's tenant evidence directory.
+                extraction_started = time.perf_counter()
                 source = result.get("html", "")
                 if result.get("content_type") != "application/pdf":
-                    source = await page.evaluate("""() => {
-                        const copy = document.documentElement.cloneNode(true);
-                        const originals = [document.documentElement, ...document.documentElement.querySelectorAll('*')];
-                        const clones = [copy, ...copy.querySelectorAll('*')];
-                        originals.forEach((el, i) => {
-                            if (!el.closest('head') && el.tagName !== 'SCRIPT' && !el.checkVisibility()) clones[i].setAttribute('hidden', '');
-                        });
-                        return copy.outerHTML;
-                    }""")
+                    source = await rendered_source(page)
                 result["page"] = read_page(result.get("url", body.url), source,
                     text=result.get("text"), title=result.get("title", ""), links=result.get("links"), status=result.get("status"),
                     challenge=bool(result.get("challenge")))
-                result["page"]["extraction_ms"] += result.pop("pdf_extraction_ms", 0)
+                result["page"]["facts"]["age_gate"] |= bool(result.get("age_confirmation"))
+                result["page"]["extraction_ms"] = round((time.perf_counter() - extraction_started) * 1000 + result.pop("pdf_extraction_ms", 0), 3)
                 result["evidence"] = {"id": identity, "storage": "room tenant evidence"}
                 result.pop("html", None)
                 result.pop("text", None)
+                result.pop("links", None)
                 return result
             except Exception:
                 raise HTTPException(503, "Base browser could not read this page; no result is claimed.") from None
