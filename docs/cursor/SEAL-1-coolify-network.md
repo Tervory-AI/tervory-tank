@@ -8,7 +8,8 @@
   - `base-sandbox` is on `<app uuid>` (internal=false) as well as `_sandbox` (internal=true);
   - `base-browser` is on `<app uuid>` (internal=false) as well as `_browser` (internal=true).
 - **So both can reach the internet directly,** and they can also reach every other Base service on that network (`agent-base`, `base-brain`, the gateway) without going through the corridor.
-- **Radix is very likely the same:** `agent-radix` should reach only `tervory-gw-radix` (internal) and `proxy-link` (internal). If Coolify also puts it on its app network, it has direct internet and the egress proxy is bypassed.
+- **Radix is fine today:** checked live on 21 Oct, all three of its networks are internal=true, including Coolify's. Keep it in the CI test so it stays that way.
+- **Hand fix in place (Grok, 21 Oct 12:09 PT):** Coolify's network was disconnected from base-sandbox and base-browser, and the sandbox now gets "Network is unreachable". The next agent-base redeploy will undo this until SEAL-1 lands.
 
 ## The fix: raw compose for sealed rooms
 In Coolify's **Raw Compose Deployment** mode, the compose file is deployed as written. Coolify adds only its labels; no networks and no `env_file` (`ApplicationDeploymentJob`, `oldRawParser`).
