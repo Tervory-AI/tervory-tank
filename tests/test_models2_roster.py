@@ -95,8 +95,11 @@ def test_tenant_allowlist_applies_to_every_new_entry(box, model, monkeypatch):
 
 def test_no_new_serving_or_candidate_policy_is_seeded():
     schema = (ROOT / "tank/schema.sql").read_text()
+    # CORE-2 names provider standards for arithmetic, not live policy activation.
+    policies = "\n".join(re.findall(r"(?:INSERT\s+INTO|UPDATE)\s+tank\.policy\b[^;]*;", schema, re.I | re.S))
+    assert policies
     for name in NEW:
-        assert not re.search(r"['\"]" + re.escape(name) + r"['\"]", schema)
+        assert not re.search(r"['\"]" + re.escape(name) + r"['\"]", policies)
     assert "2026-10-18-models-1-cheap-rung" not in schema
 
 

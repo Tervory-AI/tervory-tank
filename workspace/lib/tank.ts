@@ -876,3 +876,11 @@ export async function commandTools(identity: { tenantId: string; userId: string 
   if (!Array.isArray(result) || !result.every(tool => typeof tool === "string" && /^[a-z_]+\.[a-z_]+$/.test(tool))) throw new Error("Tool access could not be loaded.");
   return result;
 }
+
+/** CORE-2 only: server-resolved identity wins over every caller query field. */
+export function readClientSavings<T>(tenantId: string, endpoint: "" | "/rows" | "/revision" = "", query: Record<string,string> = {}): Promise<T> {
+  const params = new URLSearchParams();
+  for (const name of ["end","start","until","member","free_only","page"]) if(query[name]) params.set(name,query[name]);
+  params.set("tenant_id",tenantId);
+  return tank<T>(`/v1/client-savings${endpoint}?${params}`,{method:"GET"});
+}

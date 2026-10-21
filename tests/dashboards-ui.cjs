@@ -15,6 +15,9 @@ const fixture = {
   daily: [{day:'2026-10-20',calls:4,code:2,delivered:3,spent:0.12}, {day:'2026-10-21',calls:9,code:5,delivered:8,spent:0.24}],
   recent: [{id:'job-fixture',title:'Business list',status:'done'}], skills: [], squad: [], shadow_policies: 0, batch_policies: 0,
 };
+const savingsTotal={standards:['sonnet'],tops:['opus'],spent:'1',would_have_cost:'4',saved:'3',work_count:1,jobs_count:1,free_count:0,top_cost:'8',top_spent:'1',top_saved:'7',top_count:1,quality_pending:true};
+const savings={as_of:'2026-10-21T12:00:00Z',revision:'1',total:savingsTotal,month:savingsTotal,daily:[{...savingsTotal,day:'2026-10-20',cumulative:'3'}],members:[{...savingsTotal,member:'Base'}]};
+async function rigProxy(){if(sourceError)throw Error('unavailable');return savings;}
 Module._load = function (name, parent, isMain) {
   if (name === 'server-only') return {};
   if (name === 'stripe') return class StripeFixture {
@@ -33,6 +36,7 @@ Module._load = function (name, parent, isMain) {
   if (name === '@/lib/admin') return {isFounder: id => id === 'founder-fixture'};
   if (name === '@/lib/tenant') return {activeTenant: async()=>({tenantId:'fixture',orgName:'Example Company',userId:'client-fixture'})};
   if (name === '@/lib/tank') return {
+    rigProxy, readClientSavings:async(tenant,endpoint,query)=>rigProxy('/v1/client-savings'+endpoint,tenant,{query}),
     readClientDashboard: async()=>{if(sourceError)throw Error('unavailable');return fixture},
     readFounderDashboard: async()=>fixture, readPaidPause:async()=>({paid_paused:false,refused:[]}),
     readDashboardCandidates:async()=>[], setPaidPause:async()=>({}),switchProvenModel:async()=>({ok:true}),
@@ -58,6 +62,8 @@ async function render() {
   for (const word of ['Skala','Tank','ledger','receipt IDs','haiku','sonnet','eval','gold','shadow','retire','rung','tenant','region box']) {
     assert(!new RegExp(`\\b${word}\\b`,'i').test(visible),`banned client copy: ${word}`);
   }
+  require('./client-copy.cjs')(visible);
+  assert(visible.includes('Saved by team member') && visible.includes('the standard model') && !visible.includes('savings could not'));
   assert(visible.includes('Jobs done this month') && visible.includes('Business list'));
   sourceError=true;
   const unavailable=renderToStaticMarkup(await ClientPage({searchParams:Promise.resolve({})}));
