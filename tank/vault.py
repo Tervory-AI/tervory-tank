@@ -25,7 +25,10 @@ def key(name: str = "TANK_VAULT_KEY") -> bytes:
 
 
 def seal(value: dict, context: str, *, key_name: str = "TANK_VAULT_KEY") -> str:
-    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    except ImportError:
+        raise HTTPException(503, "Secure connections are not installed on this server.") from None
     nonce = os.urandom(12)
     data = json.dumps(value, separators=(",", ":")).encode()
     encrypted = AESGCM(key(key_name)).encrypt(nonce, data, context.encode())
@@ -33,7 +36,10 @@ def seal(value: dict, context: str, *, key_name: str = "TANK_VAULT_KEY") -> str:
 
 
 def open_seal(value: str, context: str, *, key_name: str = "TANK_VAULT_KEY") -> dict:
-    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    try:
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    except ImportError:
+        raise HTTPException(503, "Secure connections are not installed on this server.") from None
     try:
         raw = base64.urlsafe_b64decode(value)
         data = AESGCM(key(key_name)).decrypt(raw[:12], raw[12:], context.encode())

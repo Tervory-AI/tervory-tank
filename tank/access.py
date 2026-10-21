@@ -15,6 +15,7 @@ import re
 import socket
 import uuid
 from datetime import datetime, timedelta, timezone
+from contextlib import asynccontextmanager
 from decimal import Decimal, InvalidOperation
 from typing import Literal
 from urllib.parse import urlsplit
@@ -26,7 +27,39 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError
 import vault
 from command import Actor, identity, key_matches
 
-router = APIRouter(prefix="/v1/access")
+async def rotation_reminders():
+    # Each inserted reminder retains the credential row's tenant. No credential
+    # or client data is read into application memory by this maintenance job.
+    async with db().acquire() as conn:
+        await conn.execute("""INSERT INTO tank.access_queue(tenant_id,room,site,reason)
+            SELECT c.tenant_id,c.room,c.site,'rotation_due' FROM tank.access_connections c
+            LEFT JOIN tank.access_sites p ON p.tenant_id=$1 AND p.site=c.site
+            WHERE NOT c.revoked AND c.updated_at + make_interval(days => COALESCE(p.rotation_days,90)) <= now()
+            ON CONFLICT (tenant_id,room,site) WHERE status IN ('waiting','handling') DO NOTHING""", PLATFORM)
+
+
+async def reminder_loop():
+    import logging
+    while True:
+        await asyncio.sleep(3600)
+        try:
+            await rotation_reminders()
+        except Exception:
+            logging.getLogger(__name__).warning("Connection renewal reminders are unavailable.")
+
+
+@asynccontextmanager
+async def access_lifespan(app):
+    from contextlib import suppress
+    task = asyncio.create_task(reminder_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with suppress(asyncio.CancelledError): await task
+
+
+router = APIRouter(prefix="/v1/access", lifespan=access_lifespan)
 PLATFORM = uuid.UUID("00000000-0000-0000-0000-000000000001")
 ROOMS = {"base": "http://base-browser-gateway:3000", "tiger": "http://tiger-browser-gateway:3000"}
 SOCIAL = ("facebook.com", "instagram.com", "fb.com", "fb.me")
@@ -97,6 +130,8 @@ class SitePolicy(Body):
     password_selector: str = Field(default='input[type="password"]', max_length=200)
     submit_selector: str = Field(default='button[type="submit"]', max_length=200)
     success_selector: str = Field(default='a[href*="logout"]', max_length=200)
+    price_selector: str = Field(default="", max_length=200)
+    quantity_selector: str = Field(default="", max_length=200)
     totp_selector: str = Field(default='input[autocomplete="one-time-code"]', max_length=200)
 
 
@@ -131,7 +166,7 @@ async def enqueue(conn, tenant, room: str, site: str, reason: str, handle=None, 
     row = await conn.fetchrow("""INSERT INTO tank.access_queue(tenant_id,room,site,reason,browser_handle,task_id)
         VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT (tenant_id,room,site) WHERE status IN ('waiting','handling')
         DO UPDATE SET reason=EXCLUDED.reason,browser_handle=EXCLUDED.browser_handle,
-        task_id=COALESCE(EXCLUDED.task_id,tank.access_queue.task_id) RETURNING id""",
+        task_id=COALESCE(EXCLUDED.task_id,tank.access_queue.task_id),status='waiting',handler=NULL,started_at=NULL RETURNING id""",
         tenant, room, site, reason, handle, task)
     return str(row["id"])
 
@@ -201,6 +236,19 @@ async def clear_session(tenant, room, site):
         await receipt(conn, tenant, room, site, "browser", "logout")
 
 
+@asynccontextmanager
+async def connection_change(tenant, room, site):
+    # Serialize rotate/revoke across Tank workers without holding a row lock
+    # while the browser calls back for its current policy.
+    name = f"{tenant}:{room}:{site}"
+    async with db().acquire() as conn:
+        await conn.execute("SELECT pg_advisory_lock(hashtextextended($1,0))", name)
+        try:
+            yield
+        finally:
+            await conn.execute("SELECT pg_advisory_unlock(hashtextextended($1,0))", name)
+
+
 @router.post("/credentials")
 async def credentials(request: Request, actor: Actor = Depends(identity)):
     body = await parse(request, Credential)
@@ -216,18 +264,19 @@ async def credentials(request: Request, actor: Actor = Depends(identity)):
         except Exception:
             raise HTTPException(422, "Check the authenticator enrollment.") from None
     encrypted = vault.seal(secret, vault.context(actor.tenant_id, body.room, site, "login"))
-    # Disable the old generation before clearing its cookies. A failed clear is
-    # visible and leaves login denied; no old session is silently reused.
-    async with db().acquire() as conn:
-        await conn.execute("""INSERT INTO tank.access_connections(tenant_id,room,site,sealed,revoked,clear_pending)
-            VALUES($1,$2,$3,NULL,true,true) ON CONFLICT(tenant_id,room,site)
-            DO UPDATE SET sealed=NULL,revoked=true,clear_pending=true,version=gen_random_uuid()""", actor.tenant_id, body.room, site)
-    await clear_session(actor.tenant_id, body.room, site)
-    async with db().acquire() as conn:
-        await conn.execute("""UPDATE tank.access_connections SET sealed=$4,revoked=false,updated_at=now(),version=gen_random_uuid()
-            WHERE tenant_id=$1 AND room=$2 AND site=$3""", actor.tenant_id, body.room, site, encrypted)
-        await receipt(conn, actor.tenant_id, body.room, site, actor.user_id, "credential_updated")
-    return {"ok": True}
+    async with connection_change(actor.tenant_id, body.room, site):
+        # Disable the old generation before clearing its cookies. A failed clear is
+        # visible and leaves login denied; no old session is silently reused.
+        async with db().acquire() as conn:
+            await conn.execute("""INSERT INTO tank.access_connections(tenant_id,room,site,sealed,revoked,clear_pending)
+                VALUES($1,$2,$3,NULL,true,true) ON CONFLICT(tenant_id,room,site)
+                DO UPDATE SET sealed=NULL,revoked=true,clear_pending=true,version=gen_random_uuid()""", actor.tenant_id, body.room, site)
+        await clear_session(actor.tenant_id, body.room, site)
+        async with db().acquire() as conn:
+            await conn.execute("""UPDATE tank.access_connections SET sealed=$4,revoked=false,updated_at=now(),version=gen_random_uuid()
+                WHERE tenant_id=$1 AND room=$2 AND site=$3""", actor.tenant_id, body.room, site, encrypted)
+            await receipt(conn, actor.tenant_id, body.room, site, actor.user_id, "credential_updated")
+        return {"ok": True}
 
 
 @router.post("/revoke")
@@ -235,14 +284,15 @@ async def revoke(request: Request, actor: Actor = Depends(identity)):
     body = await parse(request, Connection)
     permit_room(actor, body.room)
     site = site_name(body.site)
-    async with db().acquire() as conn:
-        await conn.execute("""UPDATE tank.access_connections SET sealed=NULL,revoked=true,clear_pending=true,
-            version=gen_random_uuid() WHERE tenant_id=$1 AND room=$2 AND site=$3""", actor.tenant_id, body.room, site)
-        await conn.execute("""UPDATE tank.access_queue SET status='revoked' WHERE tenant_id=$1 AND room=$2
-            AND site=$3 AND status IN ('waiting','handling')""", actor.tenant_id, body.room, site)
-        await receipt(conn, actor.tenant_id, body.room, site, actor.user_id, "revoked")
-    await clear_session(actor.tenant_id, body.room, site)
-    return {"ok": True, "credential_deleted": True, "session_deleted": True}
+    async with connection_change(actor.tenant_id, body.room, site):
+        async with db().acquire() as conn:
+            await conn.execute("""UPDATE tank.access_connections SET sealed=NULL,revoked=true,clear_pending=true,
+                version=gen_random_uuid() WHERE tenant_id=$1 AND room=$2 AND site=$3""", actor.tenant_id, body.room, site)
+            await conn.execute("""UPDATE tank.access_queue SET status='revoked' WHERE tenant_id=$1 AND room=$2
+                AND site=$3 AND status IN ('waiting','handling')""", actor.tenant_id, body.room, site)
+            await receipt(conn, actor.tenant_id, body.room, site, actor.user_id, "revoked")
+        await clear_session(actor.tenant_id, body.room, site)
+        return {"ok": True, "credential_deleted": True, "session_deleted": True}
 
 
 class Sealed(Body):
@@ -286,6 +336,8 @@ async def browser_rpc(room: str, request: Request):
         await conn.execute("DELETE FROM tank.access_nonces WHERE tenant_id=$1 AND created_at < now()-interval '5 minutes'", tenant)
         row, state = await browser_policy(conn, tenant, room, site)
         result = {"state": state, "version": str(row["version"]) if row else None}
+        if state == "allowed":
+            result["config"] = json.loads(row["login_config"]) if isinstance(row["login_config"], str) else row["login_config"]
         if action == "release":
             if state != "allowed":
                 await receipt(conn, tenant, room, site, "browser", "login_refused")
@@ -305,6 +357,8 @@ async def browser_rpc(room: str, request: Request):
             if event not in {"logged_in", "login_failed", "logout", "live_expired"}:
                 raise HTTPException(422, "Invalid browser event.")
             await receipt(conn, tenant, room, site, "browser", event)
+            if event == "live_expired":
+                await conn.execute("UPDATE tank.access_queue SET browser_handle=NULL,handler=NULL,status='waiting' WHERE tenant_id=$1 AND room=$2 AND site=$3 AND status IN ('waiting','handling')", tenant, room, site)
         elif action != "policy":
             raise HTTPException(422, "Unknown browser operation.")
     return vault.envelope(room, "response", {**result, "request_nonce": str(nonce)})
@@ -321,6 +375,7 @@ async def queue(actor: Actor = Depends(identity)):
 
 
 class HumanAction(Body):
+    tenant_id: uuid.UUID
     action: Literal["open", "frame", "click", "key", "text", "scroll", "hand_back"]
     x: int = Field(default=0, ge=0, le=1280)
     y: int = Field(default=0, ge=0, le=900)
@@ -336,7 +391,7 @@ async def human_action(item_id: uuid.UUID, request: Request, actor: Actor = Depe
     body = await parse(request, HumanAction)
     async with db().acquire() as conn:
         async with conn.transaction():
-            row = await conn.fetchrow("SELECT * FROM tank.access_queue WHERE id=$1 AND status IN ('waiting','handling') FOR UPDATE", item_id)
+            row = await conn.fetchrow("SELECT * FROM tank.access_queue WHERE id=$1 AND tenant_id=$2 AND status IN ('waiting','handling') FOR UPDATE", item_id, body.tenant_id)
             if not row or not row["browser_handle"]:
                 raise HTTPException(409, "Retry the page after the connection or site terms are updated.")
             if row["handler"] and row["handler"] != actor.user_id:
@@ -345,7 +400,7 @@ async def human_action(item_id: uuid.UUID, request: Request, actor: Actor = Depe
                 raise HTTPException(409, "Open the live view first.")
             await conn.execute("UPDATE tank.access_queue SET handler=$2,status='handling',started_at=COALESCE(started_at,now()) WHERE id=$1 AND tenant_id=$3", item_id, actor.user_id, row["tenant_id"])
     result = await control(row["room"], {"action": "live", "tenant_id": str(row["tenant_id"]), "site": row["site"],
-        "handle": str(row["browser_handle"]), "input": {**body.model_dump(exclude={"text"}), "text": body.text.get_secret_value()}})
+        "handle": str(row["browser_handle"]), "input": {**body.model_dump(exclude={"text", "tenant_id"}), "text": body.text.get_secret_value()}})
     if body.action == "hand_back":
         if not result.get("ready"):
             raise HTTPException(409, "The page still needs a person.")
@@ -432,12 +487,108 @@ def parse_feed(body: FeedImport) -> list[dict]:
 async def import_feed(request: Request, actor: Actor = Depends(identity)):
     permit_room(actor, "tiger")
     body = await parse(request, FeedImport, 8_020_000)
-    site = site_name(body.site)
+    site_name(body.site)
     try:
         rows = parse_feed(body)
     except (ValueError, TypeError, KeyError, InvalidOperation):
         raise HTTPException(422, "The feed could not be read. Check its format and column mapping.") from None
-    batch = uuid.uuid4()
+    return await save_feed(actor, body, rows)
+
+
+@router.get("/feeds/price")
+async def feed_price(tenant_id: uuid.UUID, site: str, sku: str = "", upc: str = "", url: str = "", room: str = Depends(room_identity)):
+    if room != "tiger" or (not sku and not upc and not url):
+        raise HTTPException(422, "Tiger must name the product identifier.")
+    async with db().acquire() as conn:
+        if url:
+            if origin(url) != site_name(site): raise HTTPException(422, "Product site differs.")
+            sku = await conn.fetchval("SELECT sku FROM tank.access_feed_links WHERE tenant_id=$1 AND url=$2", tenant_id, url) or ""
+        row = await conn.fetchrow("""SELECT r.data,b.source,b.fetched_at,b.row_count,b.distributor,b.id FROM tank.access_feed_rows r
+            JOIN tank.access_feed_batches b ON b.tenant_id=r.tenant_id AND b.id=r.batch_id
+            WHERE r.tenant_id=$1 AND r.site=$2 AND (($3<>'' AND r.sku=$3) OR ($4<>'' AND r.upc=$4))
+            ORDER BY b.fetched_at DESC LIMIT 1""", tenant_id, site_name(site), sku, upc)
+    if not row: return {"found": False}
+    data = json.loads(row["data"]) if isinstance(row["data"], str) else row["data"]
+    return {"found": True, "item": data, "receipt": {k: row[k] for k in ("source", "fetched_at", "row_count", "distributor", "id")}}
+
+
+async def public_get(url: str, *, headers=None, limit=2_000_000) -> tuple[bytes, dict]:
+    """Resolve, validate all answers, pin the connection, retain TLS hostname.
+
+    No environment proxy, credentials in URLs, automatic redirects or localhost
+    fallback. The caller owns any authentication headers and the destination.
+    """
+    origin(url)
+    p = urlsplit(url)
+    answers = await asyncio.get_running_loop().getaddrinfo(p.hostname, 443, type=socket.SOCK_STREAM)
+    addresses = list(dict.fromkeys(answer[4][0] for answer in answers))
+    if not addresses or any(not ipaddress.ip_address(a).is_global or ipaddress.ip_address(a).is_multicast for a in addresses):
+        raise ValueError("Private address refused")
+    target = httpx.URL(url).copy_with(host=addresses[0])
+    async with httpx.AsyncClient(timeout=25, trust_env=False, follow_redirects=False) as client:
+        async with client.stream("GET", target, headers={**(headers or {}), "Host": p.hostname},
+                                 extensions={"sni_hostname": p.hostname}) as response:
+            if response.status_code != 200 and response.status_code != 206: raise ValueError("Source unavailable")
+            data = bytearray()
+            async for chunk in response.aiter_bytes():
+                data.extend(chunk)
+                if len(data) > limit: raise ValueError("Source too large")
+            return bytes(data), dict(response.headers)
+
+
+class FeedConnection(Body):
+    distributor: Literal["zanders", "sports_south", "rsr", "jerrys"]
+    site: str = Field(max_length=240)
+    endpoint: str = Field(max_length=1000)
+    token: SecretStr = Field(default=SecretStr(""), max_length=2048)
+    format: Literal["csv", "tsv", "json", "edi846"]
+    columns: dict[str, str] = Field(default_factory=dict, max_length=5)
+    official_read_only: Literal[True]
+
+
+@router.post("/feeds/connect")
+async def connect_feed(request: Request, actor: Actor = Depends(identity)):
+    permit_room(actor, "tiger")
+    body = await parse(request, FeedConnection)
+    site = site_name(body.site)
+    if origin(body.endpoint) != site or urlsplit(body.endpoint).query or urlsplit(body.endpoint).fragment:
+        raise HTTPException(422, "Use a same-site read-only HTTPS feed endpoint, without a query or credentials.")
+    config = {**body.model_dump(exclude={"token"}), "token": body.token.get_secret_value()}
+    encrypted = vault.seal(config, vault.context(actor.tenant_id, "tiger", site, "feed:" + body.distributor))
+    async with db().acquire() as conn:
+        await conn.execute("""INSERT INTO tank.access_feed_connections(tenant_id,distributor,site,sealed)
+            VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,distributor,site) DO UPDATE SET sealed=$4""",
+            actor.tenant_id, body.distributor, site, encrypted)
+    return {"ok": True}
+
+
+class FeedRefresh(Body):
+    distributor: Literal["zanders", "sports_south", "rsr", "jerrys"]
+    site: str = Field(max_length=240)
+
+
+@router.post("/feeds/refresh")
+async def refresh_feed(request: Request, actor: Actor = Depends(identity)):
+    permit_room(actor, "tiger")
+    body = await parse(request, FeedRefresh)
+    site = site_name(body.site)
+    async with db().acquire() as conn:
+        row = await conn.fetchrow("SELECT sealed FROM tank.access_feed_connections WHERE tenant_id=$1 AND distributor=$2 AND site=$3", actor.tenant_id, body.distributor, site)
+    if not row: raise HTTPException(409, "Connect the official feed first.")
+    config = vault.open_seal(row["sealed"], vault.context(actor.tenant_id, "tiger", site, "feed:" + body.distributor))
+    try:
+        headers = {"Authorization": "Bearer " + config["token"]} if config["token"] else {}
+        raw, _ = await public_get(config["endpoint"], headers=headers, limit=8_000_000)
+        parsed = FeedImport(distributor=body.distributor, site=site, source="dealer_api", format=config["format"],
+                            contents=SecretStr(raw.decode()), columns=config["columns"])
+        rows = parse_feed(parsed)
+    except Exception:
+        raise HTTPException(503, "The official feed could not be refreshed. Existing data was kept.") from None
+    return await save_feed(actor, parsed, rows)
+
+
+async def save_feed(actor, body, rows):
+    site, batch = site_name(body.site), uuid.uuid4()
     async with db().acquire() as conn:
         async with conn.transaction():
             await conn.execute("""INSERT INTO tank.access_feed_batches(tenant_id,id,distributor,site,source,row_count)
@@ -449,15 +600,121 @@ async def import_feed(request: Request, actor: Actor = Depends(identity)):
     return {"batch_id": str(batch), "row_count": len(rows)}
 
 
-@router.get("/feeds/price")
-async def feed_price(tenant_id: uuid.UUID, site: str, sku: str = "", upc: str = "", room: str = Depends(room_identity)):
-    if room != "tiger" or (not sku and not upc):
-        raise HTTPException(422, "Tiger must name the product identifier.")
+class FeedLink(Body):
+    url: str = Field(max_length=2048)
+    sku: str = Field(min_length=1, max_length=120)
+
+
+@router.post("/feeds/link")
+async def link_feed(request: Request, actor: Actor = Depends(identity)):
+    permit_room(actor, "tiger")
+    body = await parse(request, FeedLink)
+    origin(body.url)
+    if urlsplit(body.url).query or urlsplit(body.url).fragment:
+        raise HTTPException(422, "Use the product page address without a query or fragment.")
     async with db().acquire() as conn:
-        row = await conn.fetchrow("""SELECT r.data,b.source,b.fetched_at,b.row_count,b.distributor,b.id FROM tank.access_feed_rows r
-            JOIN tank.access_feed_batches b ON b.tenant_id=r.tenant_id AND b.id=r.batch_id
-            WHERE r.tenant_id=$1 AND r.site=$2 AND (($3<>'' AND r.sku=$3) OR ($4<>'' AND r.upc=$4))
-            ORDER BY b.fetched_at DESC LIMIT 1""", tenant_id, site_name(site), sku, upc)
-    if not row: return {"found": False}
-    data = json.loads(row["data"]) if isinstance(row["data"], str) else row["data"]
-    return {"found": True, "item": data, "receipt": {k: row[k] for k in ("source", "fetched_at", "row_count", "distributor", "id")}}
+        await conn.execute("""INSERT INTO tank.access_feed_links(tenant_id,url,sku) VALUES($1,$2,$3)
+            ON CONFLICT(tenant_id,url) DO UPDATE SET sku=$3""", actor.tenant_id, body.url, body.sku)
+    return {"ok": True}
+
+
+class PublicSource(Body):
+    tenant_id: uuid.UUID
+    url: str = Field(max_length=2048)
+
+
+@router.post("/archives")
+async def archived_page(request: Request, room: str = Depends(room_identity)):
+    body = await parse(request, PublicSource)
+    site = origin(body.url)
+    # Never send logged-in URLs or private portal data to an archive service.
+    async with db().acquire() as conn:
+        connected = await conn.fetchval("SELECT 1 FROM tank.access_connections WHERE tenant_id=$1 AND room=$2 AND site=$3", body.tenant_id, room, site)
+    if connected or urlsplit(body.url).query or urlsplit(body.url).fragment or is_social(site):
+        return {"found": False, "next": "existing_paid_rung"}
+    from urllib.parse import urlencode
+    failures = []
+    try:
+        raw, _ = await public_get("https://archive.org/wayback/available?" + urlencode({"url": body.url}))
+        snapshot = json.loads(raw).get("archived_snapshots", {}).get("closest", {})
+        stamp = snapshot.get("timestamp", "")
+        if snapshot.get("available") and re.fullmatch(r"\d{14}", stamp):
+            # Construct the URL ourselves; never trust a server-provided host.
+            url = "https://web.archive.org/web/" + stamp + "id_/" + body.url
+            html, _ = await public_get(url)
+            async with db().acquire() as conn:
+                await receipt(conn, body.tenant_id, room, site, "room", "wayback_archived")
+            return {"found": True, "archived": True, "label": "archived, dated", "date": stamp,
+                    "source": "Wayback Machine", "html": html.decode(errors="replace")[:600000]}
+    except Exception:
+        failures.append("Wayback Machine")
+    try:
+        # Discover the current index, instead of freezing a crawl release.
+        raw, _ = await public_get("https://index.commoncrawl.org/collinfo.json")
+        indexes = json.loads(raw)
+        index = indexes[0]["id"]
+        if not re.fullmatch(r"CC-MAIN-\d{4}-\d{2}", index): raise ValueError()
+        raw, _ = await public_get("https://index.commoncrawl.org/" + index + "-index?" + urlencode({"url": body.url, "output": "json", "filter": "status:200", "collapse": "urlkey"}))
+        rows = [json.loads(line) for line in raw.decode().splitlines() if line.strip()]
+        entry = max(rows, key=lambda r: r.get("timestamp", ""))
+        filename = entry["filename"]
+        if not re.fullmatch(r"crawl-data/CC-MAIN-[A-Za-z0-9/._-]+\.warc\.gz", filename) or ".." in filename: raise ValueError()
+        start, size = int(entry["offset"]), int(entry["length"])
+        if start < 0 or not 0 < size <= 2_000_000: raise ValueError()
+        compressed, _ = await public_get("https://data.commoncrawl.org/" + filename, headers={"Range": f"bytes={start}-{start+size-1}"})
+        import gzip
+        with gzip.GzipFile(fileobj=io.BytesIO(compressed)) as stream:
+            data = stream.read(2_000_001)
+        if len(data) > 2_000_000: raise ValueError()
+        warc, http = data.split(b"\r\n\r\n", 1)
+        if (b"WARC-Target-URI: " + body.url.encode()) not in warc: raise ValueError()
+        _, html = http.split(b"\r\n\r\n", 1)
+        async with db().acquire() as conn:
+            await receipt(conn, body.tenant_id, room, site, "room", "common_crawl_archived")
+        return {"found": True, "archived": True, "label": "archived, dated", "date": entry["timestamp"],
+                "source": "Common Crawl", "html": html.decode(errors="replace")[:600000]}
+    except Exception:
+        failures.append("Common Crawl")
+    return {"found": False, "unavailable": failures, "next": "existing_paid_rung"}
+
+
+class SocialPage(Body):
+    tenant_id: uuid.UUID
+    platform: Literal["facebook", "instagram"]
+    business_id: str = Field(pattern=r"^[A-Za-z0-9._-]{1,100}$")
+    business_username: str = Field(default="", pattern=r"^[A-Za-z0-9._]{0,60}$")
+
+
+@router.post("/social")
+async def social_page(request: Request, room: str = Depends(room_identity)):
+    body = await parse(request, SocialPage)
+    if room != "base": raise HTTPException(403, "Only Base reads business pages.")
+    if not os.environ.get("META_APP_ID") or os.environ.get("META_APP_REVIEW_APPROVED") != "true":
+        return {"enabled": False, "source": "search_results"}
+    version = os.environ.get("META_GRAPH_VERSION", "")
+    token = os.environ.get("META_ACCESS_TOKEN", "")
+    if not token or not re.fullmatch(r"v\d+\.\d+", version):
+        raise HTTPException(503, "The approved business-page API is not configured.")
+    from urllib.parse import urlencode
+    business_id = body.business_id
+    fields = "id,name,category,website,link"
+    if body.platform == "instagram":
+        business_id = os.environ.get("META_IG_BUSINESS_ID", "")
+        if not business_id.isdigit(): raise HTTPException(503, "The approved Instagram business account is not configured.")
+        if not body.business_username: raise HTTPException(422, "A business username is required.")
+        fields = "business_discovery.username(" + body.business_username + "){username,name,website,biography}"
+    try:
+        raw, _ = await public_get("https://graph.facebook.com/" + version + "/" + business_id + "?" + urlencode({"fields": fields}),
+                                  headers={"Authorization": "Bearer " + token}, limit=100000)
+        data = json.loads(raw)
+        if body.platform == "facebook":
+            if not data.get("category"): raise ValueError()
+            result = {k: data.get(k) for k in ("id", "name", "category", "website", "link")}
+        else:
+            data = data["business_discovery"]
+            result = {k: data.get(k) for k in ("username", "name", "website", "biography")}
+    except Exception:
+        raise HTTPException(503, "The public business page could not be read; use search evidence.") from None
+    async with db().acquire() as conn:
+        await receipt(conn, body.tenant_id, room, "https://graph.facebook.com", "room", "public_business_api")
+    return {"enabled": True, "source": "Meta official API", "page": result}

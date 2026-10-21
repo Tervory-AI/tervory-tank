@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import socket
 from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
 
 import httpx
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request, Response
 
 from brain.security import authenticate, public_destination, public_url, scope
 
@@ -69,7 +70,7 @@ async def tunnel(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> 
 def browser_interface() -> str:
     # The UDP route lookup does not send a packet. It selects only the gateway's
     # interface on the browser network, never its Base corridor interface.
-    address = socket.gethostbyname("base-browser")
+    address = socket.gethostbyname(os.environ.get("BROWSER_HOST", "base-browser"))
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
         sock.connect((address, 3000))
         return sock.getsockname()[0]
@@ -98,7 +99,7 @@ async def render(body: dict, x_tank_key: str = Header(default=""), x_tenant_id: 
     try:
         public_url(body.get("url", ""))
         async with httpx.AsyncClient(timeout=300) as client:
-            response = await client.post("http://base-browser:3000/render", json=body, headers={
+            response = await client.post("http://" + os.environ.get("BROWSER_HOST", "base-browser") + ":3000/render", json=body, headers={
                 "X-Tank-Key": x_tank_key, "X-Tenant-ID": tenant, "X-Home-Region": x_home_region, "X-Task-ID": x_task_id})
         if response.status_code != 200:
             raise HTTPException(response.status_code, "Base browser refused the request.")
@@ -107,3 +108,40 @@ async def render(body: dict, x_tank_key: str = Header(default=""), x_tenant_id: 
         raise HTTPException(403, "Private or unsupported web address.") from None
     except httpx.HTTPError:
         raise HTTPException(503, "Base browser is unavailable.") from None
+
+
+@app.post("/access/browser")
+async def browser_access(request: Request):
+    # This listener also has a corridor interface. Only the browser-network
+    # peer may send opaque credential RPCs; room/brain containers are refused.
+    addresses = {entry[4][0] for entry in await asyncio.get_running_loop().getaddrinfo(
+        os.environ.get("BROWSER_HOST", "base-browser"), 3000, type=socket.SOCK_STREAM)}
+    if not request.client or request.client.host not in addresses:
+        raise HTTPException(403, "Browser corridor required.")
+    raw = await request.body()
+    if len(raw) > 24000: raise HTTPException(413, "Request too large.")
+    room = os.environ.get("ACCESS_ROOM", "base")
+    if room not in {"base", "tiger"}: raise HTTPException(503, "Room is not configured.")
+    try:
+        async with httpx.AsyncClient(timeout=20, trust_env=False) as client:
+            response = await client.post("http://tank:8000/v1/access/browser/" + room,
+                                         content=raw, headers={"content-type": "application/json"})
+        if response.status_code != 200: raise ValueError()
+        return Response(response.content, media_type="application/json", headers={"Cache-Control": "no-store"})
+    except (httpx.HTTPError, ValueError):
+        raise HTTPException(503, "Secure connection unavailable.") from None
+
+
+@app.post("/access/control")
+async def access_control(request: Request, x_tank_key: str = Header(default="")):
+    authenticate(x_tank_key)
+    raw = await request.body()
+    if len(raw) > 20000: raise HTTPException(413, "Request too large.")
+    try:
+        async with httpx.AsyncClient(timeout=30, trust_env=False) as client:
+            response = await client.post("http://" + os.environ.get("BROWSER_HOST", "base-browser") + ":3000/access/control",
+                                         content=raw, headers={"content-type": "application/json"})
+        if response.status_code != 200: raise ValueError()
+        return Response(response.content, media_type="application/json", headers={"Cache-Control": "no-store"})
+    except (httpx.HTTPError, ValueError):
+        raise HTTPException(503, "Live view unavailable.") from None

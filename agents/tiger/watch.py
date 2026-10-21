@@ -892,6 +892,19 @@ def _save_png(files: Any, tenant_id: str, png_base64: str | None, stamp: datetim
     return str(files.save_file(tenant_id, name, raw))
 
 
+async def external_observation(store, tenant_id, watch, item, method, receipt, clock):
+    url = watch["url"]
+    quantity = item.get("quantity")
+    availability = ("in_stock" if Decimal(str(quantity)) > 0 else "out_of_stock") if quantity is not None else None
+    current = await store.add_observation(_obs(tenant_id, url, clock(), item.get("price"), item.get("currency"),
+        availability, method, json.dumps({"method": method, "receipt": receipt}, default=str)))
+    previous = await store.previous_observation(tenant_id, url, current["id"])
+    found = alerts_for(previous, current, watch.get("threshold") or 0)
+    saved = [await store.add_alert({"tenant_id": tenant_id, "url": url, "ts": clock(), **alert}) for alert in found]
+    return {"status": "observed", "url": url, "method": method, "price": item.get("price"),
+            "stock": availability, "alerts": saved, "observation": current, "receipt": receipt}
+
+
 async def run_check(
     store: Any,
     tenant_id: str,
@@ -904,11 +917,16 @@ async def run_check(
     limiter: DomainLimiter,
     files: Any = None,
     now: Any = None,
+    feed: Any = None,
 ) -> dict[str, Any]:
     clock = now or (lambda: datetime.now(timezone.utc))
     url = watch["url"]
     if str(watch.get("tenant_id")) != str(tenant_id):
         return {"status": "skipped", "url": url, "alerts": []}
+    if feed is not None:
+        official = await feed(str(tenant_id), url)
+        if official.get("found"):
+            return await external_observation(store, tenant_id, watch, official["item"], "official_feed", official["receipt"], clock)
     host = host_of(url)
     await limiter.wait(host)
     try:
@@ -924,6 +942,9 @@ async def run_check(
     if page.get("challenge"):
         row = await store.add_observation(_obs(tenant_id, url, clock(), None, None, None, "blocked", "blocked"))
         return {"status": "blocked", "url": url, "alerts": [], "observation": row}
+    if page.get("portal_item"):
+        return await external_observation(store, tenant_id, watch, page["portal_item"], "private_portal",
+            {"source": "client_connection", "fetched_at": clock().isoformat(), "private": True}, clock)
     html = page.get("html") or ""
     if not page.get("ok") or not html:
         detail = str(page.get("error") or "unread")[:300]

@@ -876,3 +876,19 @@ export async function commandTools(identity: { tenantId: string; userId: string 
   if (!Array.isArray(result) || !result.every(tool => typeof tool === "string" && /^[a-z_]+\.[a-z_]+$/.test(tool))) throw new Error("Tool access could not be loaded.");
   return result;
 }
+
+// ACCESS-1: identity is always supplied by the authenticated Workspace server.
+export type AccessIdentity = { tenantId: string; userId: string };
+export type AccessConnection = { room: string; site: string; terms: string; revoked: boolean; clear_pending: boolean; overdue: boolean; rotate_by: string; rotation_days: number };
+export type AccessQueueItem = { id: string; tenant_id: string; room: string; site: string; reason: string; status: string; created_at: string; live_available: boolean };
+export type AccessPanel = { connections: AccessConnection[]; policies: { site: string; terms: string; rotation_days: number }[]; feeds: { distributor: string; site: string; source: string; fetched_at: string; row_count: number }[]; meta_enabled: boolean };
+export async function accessRequest<T>(actor: AccessIdentity, path: string, body?: unknown): Promise<T> {
+  const response = await fetch(`${TANK_URL}/v1/access/${path}`, {
+    method: body === undefined ? "GET" : "POST", cache: "no-store",
+    headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY,
+      "x-tervory-user": actor.userId, "x-tervory-tenant": actor.tenantId },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  if (!response.ok) throw new Error("The connection request could not be completed. Check the settings or try again.");
+  return response.json() as Promise<T>;
+}

@@ -21,7 +21,7 @@ services:
       DATABASE_URL: postgresql://agent_tiger:${AGENT_DB_PASSWORD_TIGER}@postgres:5432/${POSTGRES_DB:-tervory}
       TANK_URL: http://tank:8000
       TANK_KEY: ${TANK_KEY_TIGER:-}
-      TIGER_URL: http://tiger:3000
+      TIGER_URL: http://tiger-browser-gateway:3000
       HERMES_URL: http://hermes:8000
       DATA_DIR: /data
       DOMAIN_INTERVAL_S: "10"
@@ -37,10 +37,59 @@ services:
     expose:
       - "8000"
 
+  tiger-browser:
+    build:
+      context: ../..
+      dockerfile: agents/base/Dockerfile.browser
+    restart: unless-stopped
+    mem_limit: 2g
+    cpus: 0.5
+    shm_size: 256m
+    environment:
+      TANK_KEY: ${TANK_KEY_TIGER:-}
+      TANK_REGION: us-east
+      ACCESS_ROOM: tiger
+      ACCESS_BROWSER_KEY: ${ACCESS_BROWSER_KEY_TIGER:-}
+      ACCESS_GATEWAY_URL: http://tiger-browser-gateway:3000
+      BROWSER_PROXY_URL: http://tiger-browser-gateway:3128
+    volumes: [tiger_browser_data:/browser-data]
+    networks: [browser]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  tiger-browser-gateway:
+    build:
+      context: ../..
+      dockerfile: agents/base/Dockerfile.gateway
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.25
+    environment:
+      TANK_KEY: ${TANK_KEY_TIGER:-}
+      TANK_REGION: us-east
+      ACCESS_ROOM: tiger
+      BROWSER_HOST: tiger-browser
+    networks: [gw, browser]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
 volumes:
   agent_tiger_data:
+  tiger_browser_data:
 
 networks:
+  browser:
+    internal: true
   gw:
     external: true
     name: tervory-gw-tiger

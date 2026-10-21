@@ -1230,3 +1230,16 @@ CREATE TABLE IF NOT EXISTS tank.access_feed_rows (
     FOREIGN KEY (tenant_id,batch_id) REFERENCES tank.access_feed_batches(tenant_id,id)
 );
 CREATE INDEX IF NOT EXISTS access_feed_upc ON tank.access_feed_rows(tenant_id,site,upc);
+CREATE TABLE IF NOT EXISTS tank.access_feed_connections (
+    tenant_id uuid NOT NULL,
+    distributor text NOT NULL,
+    site text NOT NULL,
+    sealed text NOT NULL,
+    PRIMARY KEY (tenant_id,distributor,site)
+);
+CREATE TABLE IF NOT EXISTS tank.access_feed_links (
+    tenant_id uuid NOT NULL,
+    url text NOT NULL,
+    sku text NOT NULL,
+    PRIMARY KEY (tenant_id,url)
+);
