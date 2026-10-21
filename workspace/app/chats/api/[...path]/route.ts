@@ -1,8 +1,8 @@
 import { activeTenant } from "@/lib/tenant";
 import { isFounder } from "@/lib/admin";
-import { commandRequest, CommandRequestError, listRoster } from "@/lib/tank";
+import { commandRequest, commandTools, CommandRequestError, listRoster } from "@/lib/tank";
 import { modelValue } from "../../models";
-import { clientText, presentCard, presentReceipt, presentSnapshot, presentThread, visibleCard } from "../../presentation";
+import { clientLabel, presentCard, presentReceipt, presentSnapshot, presentThread, visibleCard } from "../../presentation";
 import { normalizeSnapshot, readEvents, type Card, type Receipt, type Snapshot, type Thread } from "../../contract";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -38,6 +38,7 @@ async function handle(request: Request, context: Context): Promise<Response> {
     if (path.some(part => !/^[a-zA-Z0-9_-]+$/.test(part))) return json({ error: "Unknown request." }, 404);
     const target = path.join("/");
     const method = request.method;
+    if (target === "tools" && method === "GET") return json(await commandTools(identity));
     const fileRequest = /^threads\/[\w-]+\/files\/[\w-]+\/\d+$/.test(target) && method === "GET";
     if (fileRequest) {
       const snapshot: Snapshot = await (await commandRequest(identity, `threads/${path[1]}`, { signal: request.signal })).json();
@@ -73,11 +74,12 @@ async function handle(request: Request, context: Context): Promise<Response> {
         body = { action: input.action };
       } else if (target.endsWith("/turn")) {
         if (typeof input.text !== "string" || !input.text.trim() || input.text.length > 20000) return json({ error: "Write a message of up to 20,000 characters." }, 400);
+        if (!founder && input.model && input.model !== "auto") return json({ error: "Your account uses Auto." }, 403);
         const model = !input.model || input.model === "auto" ? "auto" : roster.find(row => modelValue(row.name) === input.model)?.name;
         if (!model) return json({ error: "That option is no longer available. Choose another." }, 400);
         const attachments = input.attachments ?? [];
         if (!Array.isArray(attachments) || attachments.length > 5 || attachments.some(file => !file || (file.attachment_id !== undefined ? !attachmentId(file.attachment_id) : !filename(file.name) || typeof file.text !== "string" || file.text.length > 200000 || file.text.includes("\0")))) return json({ error: "Attach up to five stored files or text files of no more than 200,000 characters each." }, 400);
-        body = { text: input.text.trim(), model, attachments: attachments.map(file => file.attachment_id ? { attachment_id: file.attachment_id } : { name: file.name, text: file.text }) };
+        body = { text: input.text, model, attachments: attachments.map(file => file.attachment_id ? { attachment_id: file.attachment_id } : { name: file.name, text: file.text }) };
       } else {
         if (input.title !== undefined && (typeof input.title !== "string" || !input.title.trim() || input.title.length > 160)) return json({ error: "Use a chat name of 1 to 160 characters." }, 400);
         body = input.title ? { title: input.title.trim() } : {};
@@ -95,30 +97,19 @@ async function handle(request: Request, context: Context): Promise<Response> {
       const encoder = new TextEncoder();
       const stream = new ReadableStream<Uint8Array>({
         async start(controller) {
-          let pendingText = "";
           const emit = (type: string, data: unknown, seq?: number) => controller.enqueue(encoder.encode(`${seq === undefined ? "" : `id: ${seq}\n`}event: ${type}\ndata: ${JSON.stringify(data)}\n\n`));
-          const flush = () => { if (pendingText) { emit("token", { text: clientText(pendingText, names) }); pendingText = ""; } };
           try {
             await readEvents(upstream.body!, event => {
               let data: unknown = event.data;
               if (event.type === "error") data = { message: "The response was interrupted. Reopen this chat before sending again." };
               if (!founder) {
-                if (event.type === "token") {
-                  pendingText += String(event.data.text ?? "");
-                  // Retain an unfinished sentence so names split across chunks cannot leak.
-                  const end = Math.max(pendingText.lastIndexOf("\n"), pendingText.lastIndexOf(". "));
-                  if (end >= 0) { emit("token", { text: clientText(pendingText.slice(0, end + 1), names) }, event.seq); pendingText = pendingText.slice(end + 1); }
-                  return;
-                }
-                if (["done", "receipt", "error"].includes(event.type)) flush();
                 if (event.type === "receipt") data = presentReceipt(event.data as unknown as Receipt, false);
-                if (event.type === "step") data = { ...event.data, label: clientText(String(event.data.label), names), actor: clientText(String(event.data.actor), names) };
+                if (event.type === "step") data = { ...event.data, label: clientLabel(String(event.data.label), names), actor: clientLabel(String(event.data.actor), names) };
                 if (event.type === "card") { if (!visibleCard(event.data as unknown as Card, false)) return; data = presentCard(event.data as unknown as Card, false, names); }
               }
               if (founder && event.type === "card") data = presentCard(event.data as unknown as Card, true, names);
               if (["token", "step", "card", "receipt", "done", "error"].includes(event.type)) emit(event.type, data, event.seq);
             });
-            flush();
           } catch { emit("error", { message: "The response was interrupted. Reopen this chat before sending again." }); }
           finally { controller.close(); }
         },
@@ -127,7 +118,7 @@ async function handle(request: Request, context: Context): Promise<Response> {
     }
     if (upstream.status === 204) return json({ ok: true });
     const result = await upstream.json();
-    if (method === "GET" && target === "threads") return json((result as Thread[]).map(row => presentThread(row, founder, names)));
+    if (method === "GET" && target === "threads") return json((result as Thread[]).map(row => presentThread(row)));
     if (method === "GET" && path.length === 2 && path[0] === "threads") return json(presentSnapshot(normalizeSnapshot(result as Snapshot), founder, names));
     if (target.startsWith("cards/")) return json(visibleCard(result as Card, founder) ? presentCard(result as Card, founder, names) : { ok: true });
     // Writes only acknowledge success; authoritative state is refreshed from the thread.

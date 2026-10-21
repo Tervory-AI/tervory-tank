@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { SquadLinks } from "../squad-links";
-import { clientText, visibleCard } from "./presentation";
+import { SquadLinks, SQUAD_MEMBERS } from "../squad-links";
+import { clientLabel, visibleCard } from "./presentation";
 import { applyReceipt, canConfirm, dollars, readEvents, safeLink, upsert, type Attachment, type Card, type Message, type ModelOption, type Receipt, type Snapshot, type Step, type Thread } from "./contract";
 import doneDot from "./assets/done.svg";
 import attentionDot from "./assets/attention.svg";
@@ -29,7 +29,9 @@ function CostReceipt({ receipt, founder, threadId, messageId }: { receipt: Recei
   return <section className="cw-receipt" id={`cost-${messageId}`} aria-label="Answer cost"><div className="cw-receipt-desktop"><header><strong>Receipt{pending ? " · Cost pending" : ""}</strong><small>Each step links to its cost details</small></header>{rows}</div><details className="cw-receipt-mobile"><summary>Receipt{pending ? " · Cost pending" : ""} · {dollars(receipt.totals.cost_usd)} · would have cost {dollars(receipt.totals.baseline_cost_usd)} · saved {dollars(receipt.totals.saved_usd)}</summary>{rows}</details></section>;
 }
 
-export function CommandWindow({ initialThreads, models, founder, account, initialError = "" }: { initialThreads: Thread[]; models: ModelOption[]; founder: boolean; account: string; initialError?: string }) {
+export function CommandWindow({ initialThreads, models, founder, account, initialTools = [], initialError = "" }: { initialThreads: Thread[]; models: ModelOption[]; founder: boolean; account: string; initialTools?: string[]; initialError?: string }) {
+  const [availableTools, setAvailableTools] = useState(initialTools);
+  const [pendingAsk, setPendingAsk] = useState("");
   const [threads, setThreads] = useState(initialThreads);
   const [selected, setSelected] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
@@ -55,7 +57,7 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
   const workClose = useRef<HTMLButtonElement>(null);
   const menuButton = useRef<HTMLButtonElement>(null);
   const menuClose = useRef<HTMLButtonElement>(null);
-  const clean = (value: string) => founder ? value : clientText(value);
+  const clean = (value: string) => founder ? value : clientLabel(value);
 
   function rememberUncertain(cardId: string, uncertain: boolean) {
     if (uncertain) uncertainCards.current.add(cardId); else uncertainCards.current.delete(cardId);
@@ -74,6 +76,13 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
       if (["pending", "awaiting_confirmation"].includes(card.status ?? "pending")) return { ...card, status: "unknown", retry_safe: false, error: "Confirmation could not be verified. Do not repeat this action until its outcome is checked." };
       rememberUncertain(card.card_id, false); return card;
     });
+    if (!founder) {
+      let tools: string[] = [];
+      try { tools = await (await api("tools")).json() as string[]; }
+      catch { if (generation.current === version) setError("Tool access could not be loaded. Chat is still available."); }
+      if (generation.current !== version || active.current !== id) return;
+      setAvailableTools(tools);
+    }
     setSnapshot(next); setThreads(rows => upsert(rows, next.thread, "thread_id"));
   }
   async function choose(id: string) {
@@ -86,8 +95,13 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
     finally { if (version === generation.current) setBusy(false); }
   }
   useEffect(() => {
-    const id = new URL(window.location.href).searchParams.get("thread");
-    if (id) void choose(id);
+    const params = new URL(window.location.href).searchParams;
+    const ask = params.get("ask")?.slice(0, 20000);
+    if (ask?.trim()) {
+      // Consume before creating work so Strict Mode or reload cannot resend it.
+      window.history.replaceState(null, "", "/chats");
+      void newThread(ask);
+    } else { const id = params.get("thread"); if (id) void choose(id); }
     return () => { generation.current++; streamAbort.current?.abort(); };
     // A saved URL is loaded once; subsequent changes use choose to reject stale reads.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -106,16 +120,23 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
     return () => { stopped = true; clearTimeout(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, sending, busy, cardBusy]);
+  useEffect(() => {
+    if (!pendingAsk || !snapshot || busy || sendingRef.current) return;
+    const firstMessage = pendingAsk; setPendingAsk("");
+    void send(undefined, firstMessage);
+    // The consumed dashboard prompt is sent once, never retried automatically.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAsk, snapshot, busy]);
   useEffect(() => { bottom.current?.scrollIntoView({ block: "end" }); }, [snapshot?.messages.length, sending]);
   useEffect(() => { if (work) workClose.current?.focus(); }, [work]);
   useEffect(() => { if (menu) menuClose.current?.focus(); }, [menu]);
   function closeWork() { setWork(false); requestAnimationFrame(() => workButton.current?.focus()); }
   function closeMenu() { setMenu(false); requestAnimationFrame(() => menuButton.current?.focus()); }
 
-  async function newThread() {
+  async function newThread(firstMessage?: string) {
     if (busy || cardBusy || sendingRef.current) return;
     setBusy(true); setError("");
-    try { const created = await (await api("threads", { method: "POST", body: "{}" })).json(); await refreshThreads(); await choose(created.thread_id); setText(""); setAttachments([]); }
+    try { const created = await (await api("threads", { method: "POST", body: "{}" })).json(); await refreshThreads(); await choose(created.thread_id); setText(firstMessage ?? ""); setAttachments([]); if (firstMessage) setPendingAsk(firstMessage); }
     catch (err) { setError(problem(err)); } finally { setBusy(false); }
   }
   async function rename(event: FormEvent) {
@@ -125,7 +146,7 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
     catch (err) { setError(problem(err)); } finally { setBusy(false); }
   }
   async function decide(card: Card, action: "confirm" | "cancel") {
-    if (cardBusy || !selected || sendingRef.current || !canConfirm(card)) return;
+    if (cardBusy || !selected || sendingRef.current || !canConfirm(card) || (!founder && (!card.tool || !availableTools.includes(card.tool)))) return;
     const id = selected;
     ++generation.current; setCardBusy(card.card_id); setError("");
     if (action === "confirm") {
@@ -168,9 +189,9 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
       }
     } catch (err) { if (generation.current === version) setError(problem(err)); } finally { setBusy(false); }
   }
-  async function send(event: FormEvent) {
-    event.preventDefault(); if (!text.trim() || sendingRef.current || busy || cardBusy || !snapshot || !selected) return;
-    const id = selected; const requestText = text; const files = attachments;
+  async function send(event?: FormEvent, firstMessage?: string) {
+    event?.preventDefault(); const requestText = firstMessage ?? text; if (!requestText.trim() || sendingRef.current || busy || cardBusy || !snapshot || !selected) return;
+    const id = selected; const files = attachments;
     sendingRef.current = true; setSending(true); setError("");
     // Invalidate any snapshot already in flight before the new stream starts.
     const version = ++generation.current;
@@ -178,7 +199,7 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
     const localId = `pending-${Date.now()}`; let completed = false; let lastSeq = -1;
     setSnapshot(current => current && ({ ...current, messages: [...current.messages, { message_id: `${localId}-user`, role: "user", content: requestText, attachments: files }, { message_id: localId, role: "assistant", content: "" }] }));
     try {
-      const response = await api(`threads/${id}/turn`, { method: "POST", body: JSON.stringify({ text: requestText, model, attachments: files }), signal: controller.signal });
+      const response = await api(`threads/${id}/turn`, { method: "POST", body: JSON.stringify({ text: requestText, model: founder ? model : "auto", attachments: files }), signal: controller.signal });
       if (!response.body || !response.headers.get("content-type")?.includes("text/event-stream")) throw new Error("The live response is unavailable. Reopen this chat before sending again.");
       setText(""); setAttachments([]);
       await readEvents(response.body, event => {
@@ -209,15 +230,15 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
   const lastAnswer = snapshot?.messages.filter(message => message.role === "assistant").at(-1)?.message_id;
   const cardLabels: Record<string, string> = { pending: "NEEDS YOUR OK", awaiting_confirmation: "NEEDS YOUR OK", executing: "RUNNING", unknown: "OUTCOME UNKNOWN", failed: "FAILED", confirmed: "CONFIRMED", cancelled: "CANCELLED" };
   const confirmation = cards.map(card => <section className="cw-confirm" key={card.card_id} data-status={card.status ?? "pending"}><strong className="cw-eyebrow">{cardLabels[card.status ?? "pending"] ?? "STATUS UNAVAILABLE"}</strong><p>{clean(card.summary)}</p>
-    {!!card.targets?.length && <dl className="cw-card-details">{card.targets.map((target, index) => <div key={index}><dt>{target.label}</dt><dd>{safeLink(target.href) ? <a href={safeLink(target.href)} target="_blank" rel="noreferrer">{clean(target.value)}</a> : clean(target.value)}</dd></div>)}</dl>}
+    {!!card.targets?.length && <dl className="cw-card-details">{card.targets.map((target, index) => <div key={index}><dt>{target.label}</dt><dd>{safeLink(target.href) ? <a href={safeLink(target.href)} target="_blank" rel="noreferrer">{target.value}</a> : target.value}</dd></div>)}</dl>}
     {card.cost_estimate_usd !== undefined && <p className="cw-meta">Estimated {dollars(card.cost_estimate_usd)}</p>}
-    {!!card.results?.length && <dl className="cw-card-details" aria-label="Action result">{card.results.map((result, index) => <div key={index}><dt>{result.label}</dt><dd>{safeLink(result.href) ? <a href={safeLink(result.href)} target="_blank" rel="noreferrer">{clean(result.value)}</a> : clean(result.value)}</dd></div>)}</dl>}
+    {!!card.results?.length && <dl className="cw-card-details" aria-label="Action result">{card.results.map((result, index) => <div key={index}><dt>{result.label}</dt><dd>{safeLink(result.href) ? <a href={safeLink(result.href)} target="_blank" rel="noreferrer">{result.value}</a> : result.value}</dd></div>)}</dl>}
     {card.error && ["failed", "unknown"].includes(card.status ?? "") && <p className="cw-note">{clean(card.error)}</p>}
     {card.status === "unknown" && <p className="cw-note">Do not repeat this action until its outcome is checked. Retrying is disabled.</p>}
     {card.status === "executing" && <p className="cw-note">The action is running. Its result will appear here.</p>}
     {card.status === "failed" && !card.retry_safe && <p className="cw-note">This action cannot safely be retried.</p>}
     {card.receipt_status === "pending" && <p className="cw-note">Cost pending.</p>}
-    {canConfirm(card) && <><p className="cw-note">{card.status === "failed" ? "The service verified that the action did not start. You can confirm a safe retry." : "Nothing runs until you confirm."}</p><div className="cw-actions"><button className="cw-primary" disabled={!!cardBusy || sending || busy} onClick={() => void decide(card, "confirm")}>{cardBusy === card.card_id ? "Saving…" : card.status === "failed" ? "Retry safely" : "Confirm"}</button><button disabled={!!cardBusy || sending || busy} onClick={() => void decide(card, "cancel")}>Cancel</button></div></>}
+    {canConfirm(card) && (founder || (card.tool && availableTools.includes(card.tool))) && <><p className="cw-note">{card.status === "failed" ? "The service verified that the action did not start. You can confirm a safe retry." : "Nothing runs until you confirm."}</p><div className="cw-actions"><button className="cw-primary" disabled={!!cardBusy || sending || busy} onClick={() => void decide(card, "confirm")}>{cardBusy === card.card_id ? "Saving…" : card.status === "failed" ? "Retry safely" : "Confirm"}</button><button disabled={!!cardBusy || sending || busy} onClick={() => void decide(card, "cancel")}>Cancel</button></div></>}
   </section>);
   return <div className={`command-window${menu ? " cw-menu-open" : ""}${work ? " cw-work-open" : ""}`} onKeyDown={event => { if (event.key === "Escape") { if (work) closeWork(); if (menu) closeMenu(); } }}>
     <a className="cw-skip" href="#cw-message">Skip to message</a>
@@ -225,23 +246,23 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
     <aside className="cw-sidebar" id="cw-sidebar" aria-label="Chats and navigation" inert={work ? true : undefined}>
       <div className="cw-brand"><img src="/brand/tervory-logo-reversed.png" alt="Tervory" /><button className="cw-mobile-only" ref={menuClose} onClick={closeMenu}>Close</button></div>
       <a className="cw-account" href="/onboarding">{account}</a>
-      <nav aria-label="Workspace">{founder && <a href="/control">Dashboard</a>}<a href="/matters">Projects</a><a href="/chats" aria-current="page">Chats</a><SquadLinks active founder={founder} /></nav>
+      <nav aria-label="Workspace"><a href={founder ? "/control" : "/"}>Dashboard</a><a href="/matters">Projects</a><a href="/chats" aria-current="page">Chats</a>{founder ? <SquadLinks active founder /> : SQUAD_MEMBERS.filter(member => !member.founderOnly && availableTools.some(tool => tool.startsWith(`${member.href.slice(1).replace(/-/g, "_")}.`))).map(member => <a key={member.href} href={member.href}>{member.label}</a>)}</nav>
       <p className="cw-eyebrow">CHATS</p><button className="cw-new" disabled={busy || sending || !!cardBusy} onClick={() => void newThread()}>+ New chat</button>
       <input type="search" aria-label="Search chats" placeholder="Search chats" value={query} onChange={event => setQuery(event.target.value)} />
-      <div className="cw-threads">{threads.filter(thread => thread.title.toLowerCase().includes(query.toLowerCase())).map(thread => <button key={thread.thread_id} className={selected === thread.thread_id ? "selected" : ""} disabled={sending || busy || !!cardBusy} aria-current={selected === thread.thread_id ? "page" : undefined} onClick={() => void choose(thread.thread_id)}><span>{clean(thread.title)}</span><small>Spent {dollars(thread.spent_usd)} · saved {dollars(thread.saved_usd)}</small></button>)}{!threads.length && <p className="cw-note">Your saved chats will appear here.</p>}</div>
+      <div className="cw-threads">{threads.filter(thread => thread.title.toLowerCase().includes(query.toLowerCase())).map(thread => <button key={thread.thread_id} className={selected === thread.thread_id ? "selected" : ""} disabled={sending || busy || !!cardBusy} aria-current={selected === thread.thread_id ? "page" : undefined} onClick={() => void choose(thread.thread_id)}><span>{thread.title}</span><small>Spent {dollars(thread.spent_usd)} · saved {dollars(thread.saved_usd)}</small></button>)}{!threads.length && <p className="cw-note">Your saved chats will appear here.</p>}</div>
       <nav className="cw-bottom-nav">{founder && <a href="/ledger">Ledger</a>}<a href="/billing">Billing</a><a href="/data">Files</a><a href="/onboarding">Settings</a></nav>
     </aside>
     <main className="cw-chat" inert={menu || work ? true : undefined}>
-      <header className="cw-thread-header"><div><h1>{snapshot ? clean(snapshot.thread.title) : selected ? "Loading chat…" : "A new conversation"}</h1>{snapshot && <button className="cw-rename" disabled={sending || busy || !!cardBusy} onClick={() => { setTitle(snapshot.thread.title); setRenaming(true); }}>Rename</button>}</div><button className="cw-work-tab" ref={workButton} onClick={() => setWork(true)} aria-expanded={work}>Work {done}/{steps.length}</button><div className="cw-totals">{snapshot?.thread.receipt_status === "pending" && <span>Cost pending</span>}<a href={selected ? `/chats/evidence/${encodeURIComponent(selected)}` : "#cw-costs"}>Spent {dollars(snapshot?.thread.spent_usd)}</a><a className="cw-saving" href={selected ? `/chats/evidence/${encodeURIComponent(selected)}` : "#cw-costs"}>Saved {dollars(snapshot?.thread.saved_usd)}</a></div></header>
+      <header className="cw-thread-header"><div><h1>{snapshot ? snapshot.thread.title : selected ? "Loading chat…" : "A new conversation"}</h1>{snapshot && <button className="cw-rename" disabled={sending || busy || !!cardBusy} onClick={() => { setTitle(snapshot.thread.title); setRenaming(true); }}>Rename</button>}</div><button className="cw-work-tab" ref={workButton} onClick={() => setWork(true)} aria-expanded={work}>Work {done}/{steps.length}</button><div className="cw-totals">{snapshot?.thread.receipt_status === "pending" && <span>Cost pending</span>}<a href={selected ? `/chats/evidence/${encodeURIComponent(selected)}` : "#cw-costs"}>Spent {dollars(snapshot?.thread.spent_usd)}</a><a className="cw-saving" href={selected ? `/chats/evidence/${encodeURIComponent(selected)}` : "#cw-costs"}>Saved {dollars(snapshot?.thread.saved_usd)}</a></div></header>
       {renaming && <form className="cw-rename-form" onSubmit={rename}><label>Chat name<input autoFocus value={title} maxLength={160} required onChange={event => setTitle(event.target.value)} /></label><button disabled={busy}>Save</button><button type="button" onClick={() => setRenaming(false)}>Cancel</button></form>}
       {error && <div className="cw-error" role="alert">{error}<button disabled={sending || busy} onClick={() => { setError(""); void (selected ? load(selected) : refreshThreads()).catch(err => setError(problem(err))); }}>Reload</button></div>}
       <div className="cw-messages" aria-label="Conversation" aria-busy={sending || busy}>
         {!selected && <section className="cw-empty"><h2>What would you like to do?</h2><p>Start a chat to ask a question or give your team some work. Your conversation and progress stay together.</p><button disabled={busy} onClick={() => void newThread()}>Start a new chat</button></section>}
         <span id="cw-costs" className="cw-anchor" />
-        {snapshot?.messages.map(message => <article key={message.message_id} className={`cw-message cw-${message.role}`}><div className="cw-message-text">{clean(message.content) || (sending && message.role === "assistant" ? "Working…" : "")}</div>{message.attachments?.length ? <ul className="cw-files">{message.attachments.map((file, i) => <li key={i}>{message.message_id.startsWith("pending-") ? clean(file.name) : <a href={`/chats/api/threads/${encodeURIComponent(selected!)}/files/${encodeURIComponent(message.message_id)}/${i}`} download>{clean(file.name)}</a>}{file.model_readable === false && <small> Stored only · cannot be read in this chat</small>}</li>)}</ul> : null}{message.role === "assistant" && (message.receipt ? <CostReceipt receipt={message.receipt} founder={founder} threadId={selected!} messageId={message.message_id} /> : <p className="cw-note">{sending ? "Cost details arrive when this answer is complete." : "Cost details are not available for this answer."}</p>)}{message.message_id === lastAnswer && confirmation}</article>)}
+        {snapshot?.messages.map(message => <article key={message.message_id} className={`cw-message cw-${message.role}`}><div className="cw-message-text">{message.content || (sending && message.role === "assistant" ? "Working…" : "")}</div>{message.attachments?.length ? <ul className="cw-files">{message.attachments.map((file, i) => <li key={i}>{message.message_id.startsWith("pending-") ? file.name : <a href={`/chats/api/threads/${encodeURIComponent(selected!)}/files/${encodeURIComponent(message.message_id)}/${i}`} download>{file.name}</a>}{file.model_readable === false && <small> Stored only · cannot be read in this chat</small>}</li>)}</ul> : null}{message.role === "assistant" && (message.receipt ? <CostReceipt receipt={message.receipt} founder={founder} threadId={selected!} messageId={message.message_id} /> : <p className="cw-note">{sending ? "Cost details arrive when this answer is complete." : "Cost details are not available for this answer."}</p>)}{message.message_id === lastAnswer && confirmation}</article>)}
         {!lastAnswer && confirmation}{snapshot?.job_receipts?.map((receipt, index) => <section key={index}><h2>Work cost</h2>{receipt.step_id && <p className="cw-note">{clean(steps.find(step => step.step_id === receipt.step_id)?.label ?? cards.find(card => card.card_id === receipt.step_id)?.summary ?? (founder ? receipt.step_id : "Saved work"))}</p>}<CostReceipt receipt={receipt} founder={founder} threadId={selected!} messageId={`work-${index}`} /></section>)}<div ref={bottom} />
       </div>
-      <form className="cw-composer" onSubmit={send}><div className="cw-input"><textarea id="cw-message" aria-label="Message Tervory" placeholder="Ask Tervory, or describe a change to build…" maxLength={20000} value={text} disabled={!snapshot || sending} onChange={event => setText(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><label className="cw-attach" title="Text can be read; other formats are stored for download only">Attach<input type="file" multiple aria-label="Attach files" disabled={!snapshot || busy || sending} onChange={event => { void attach(event.target.files); event.currentTarget.value = ""; }} /></label><button className="cw-send" disabled={!snapshot || !text.trim() || sending || busy || !!cardBusy}>{sending ? "Sending…" : "Send"}</button></div><div className="cw-composer-meta"><label>{founder ? "Model" : "Answer option"}<select aria-label={founder ? "Model" : "Answer option"} value={model} disabled={sending} onChange={event => setModel(event.target.value)}><option value="auto">Auto</option>{models.map(option => <option key={option.value} value={option.value}>{option.label} · {dollars(option.inputPerM)} in / {dollars(option.outputPerM)} out per million tokens</option>)}</select></label><small>Auto chooses the cheapest proven option. Text can be read; other formats are stored only.</small></div>{!!attachments.length && <ul className="cw-files">{attachments.map((file, i) => <li key={i}>{clean(file.name)}{file.model_readable === false && <small> Stored only · cannot be read in this chat</small>} <button type="button" aria-label={`Remove ${file.name}`} disabled={sending} onClick={() => setAttachments(files => files.filter((_, index) => index !== i))}>×</button></li>)}</ul>}</form>
+      <form className="cw-composer" onSubmit={send}><div className="cw-input"><textarea id="cw-message" aria-label="Message Tervory" placeholder="Ask Tervory, or describe a change to build…" maxLength={20000} value={text} disabled={!snapshot || sending} onChange={event => setText(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><label className="cw-attach" title="Text can be read; other formats are stored for download only">Attach<input type="file" multiple aria-label="Attach files" disabled={!snapshot || busy || sending} onChange={event => { void attach(event.target.files); event.currentTarget.value = ""; }} /></label><button className="cw-send" disabled={!snapshot || !text.trim() || sending || busy || !!cardBusy}>{sending ? "Sending…" : "Send"}</button></div><div className="cw-composer-meta"><label>{founder ? "Model" : "Answer option"}<select aria-label={founder ? "Model" : "Answer option"} value={model} disabled={sending} onChange={event => setModel(event.target.value)}><option value="auto">Auto</option>{(founder ? models : []).map(option => <option key={option.value} value={option.value}>{option.label} · {dollars(option.inputPerM)} in / {dollars(option.outputPerM)} out per million tokens</option>)}</select></label><small>Auto chooses the cheapest proven option. Text can be read; other formats are stored only.</small></div>{!!attachments.length && <ul className="cw-files">{attachments.map((file, i) => <li key={i}>{file.name}{file.model_readable === false && <small> Stored only · cannot be read in this chat</small>} <button type="button" aria-label={`Remove ${file.name}`} disabled={sending} onClick={() => setAttachments(files => files.filter((_, index) => index !== i))}>×</button></li>)}</ul>}</form>
     </main>
     <aside className="cw-work" aria-label="Work" inert={menu ? true : undefined}><header><h2>Work</h2><span className="cw-meta">{done} of {steps.length} done</span><button className="cw-mobile-only" ref={workClose} aria-label="Close work" onClick={closeWork}>×</button></header>{!steps.length && <p className="cw-note">The steps for this chat will appear here when work begins.</p>}<ol>{steps.map(step => <li className={`cw-step cw-step-${step.status}`} key={step.step_id}><img className="cw-status-dot" src={statusAsset(step.status)} alt="" /><div><strong>{clean(step.label)}</strong><small>{clean(step.actor)}</small>{safeLink(step.link) && <a href={safeLink(step.link)} target="_blank" rel="noreferrer">Open result</a>}</div><span className="cw-step-state">{statusLabel[step.status]}</span></li>)}</ol><p className="cw-live" role="status">{sending ? "Receiving your answer…" : busy ? "Loading…" : "Progress is saved with this chat."}</p></aside>
   </div>;

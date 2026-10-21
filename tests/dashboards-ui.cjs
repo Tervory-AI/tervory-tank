@@ -33,13 +33,11 @@ Module._load = function (name, parent, isMain) {
   if (name === '@/lib/admin') return {isFounder: id => id === 'founder-fixture'};
   if (name === '@/lib/tenant') return {activeTenant: async()=>({tenantId:'fixture',orgName:'Example Company',userId:'client-fixture'})};
   if (name === '@/lib/tank') return {
-    commandRequest: async()=>{if(sourceError)throw Error('unavailable');return Response.json([{thread_id:'fixture-thread',title:'Business list',updated_at:'2026-10-21',spent_usd:0,saved_usd:null}])},
-    listRoster:async()=>[{name:'haiku',providerModel:'haiku',inputPerM:.1,outputPerM:.5}],
     readClientDashboard: async()=>{if(sourceError)throw Error('unavailable');return fixture},
     readFounderDashboard: async()=>fixture, readPaidPause:async()=>({paid_paused:false,refused:[]}),
     readDashboardCandidates:async()=>[], setPaidPause:async()=>({}),switchProvenModel:async()=>({ok:true}),
   };
-  if (name === 'next/navigation') return {usePathname:()=>'/chats',notFound:()=>{throw Error('404')},redirect:()=>{throw Error('redirect')}};
+  if (name === 'next/navigation') return {notFound:()=>{throw Error('404')},redirect:()=>{throw Error('redirect')}};
   if (name === 'next/cache') return {revalidatePath:()=>{}};
   return original.call(this, name, parent, isMain);
 };
@@ -48,7 +46,6 @@ for (const ext of ['.ts','.tsx']) require.extensions[ext] = (module, filename) =
   module._compile(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true,target:ts.ScriptTarget.ES2022}}).outputText,filename);
 };
 require.extensions['.css'] = ()=>{};
-require.extensions['.svg'] = (module,filename)=>{module.exports={src:'/fixture.svg'}};
 
 async function render() {
   const ClientPage = require('../workspace/app/page.tsx').default;
@@ -61,10 +58,10 @@ async function render() {
   for (const word of ['Skala','Tank','ledger','receipt IDs','haiku','sonnet','eval','gold','shadow','retire','rung','tenant','region box']) {
     assert(!new RegExp(`\\b${word}\\b`,'i').test(visible),`banned client copy: ${word}`);
   }
-  assert(visible.includes('A new conversation') && visible.includes('Business list') && visible.includes('Option 1'));
+  assert(visible.includes('Jobs done this month') && visible.includes('Business list'));
   sourceError=true;
   const unavailable=renderToStaticMarkup(await ClientPage({searchParams:Promise.resolve({})}));
-  assert(unavailable.includes('Your chats could not be loaded'));
+  assert(unavailable.includes('Your activity could not be loaded'));
   sourceError=false;
   const {FounderDashboard} = require('../workspace/app/control/view.tsx');
   const view={data:fixture,signups:{total:1,recent:[{id:'user',name:'Alex Example',company:'Example Company',country:'United States',plan:'Trial',createdAt:Date.UTC(2026,9,21)}],days:[]},paying:0,paused:false,models:[],refused:[],errors:[]};
@@ -78,7 +75,7 @@ async function render() {
   assert.equal((await signupSource()).total,2);
   assert.equal((await signupSource()).recent[0].name,'Alex Example');
   const dir=path.join(root,'tests/artifacts/dash-1');fs.mkdirSync(dir,{recursive:true});
-  const css=fs.readFileSync(path.join(root,'workspace/app/globals.css'),'utf8') + fs.readFileSync(path.join(root,'workspace/app/control/dashboard.css'),'utf8') + fs.readFileSync(path.join(root,'workspace/app/chats/window.css'),'utf8');
+  const css=fs.readFileSync(path.join(root,'workspace/app/globals.css'),'utf8') + fs.readFileSync(path.join(root,'workspace/app/control/dashboard.css'),'utf8');
   const fonts=`@font-face{font-family:Jost;src:url('/fonts/Jost-300-latin.woff2')}@font-face{font-family:Inter;src:url('/fonts/Inter-latin.woff2')}@font-face{font-family:Mono;src:url('/fonts/JetBrainsMono-latin.woff2')}html,body{margin:0}:root{--font-jost:Jost;--font-inter:Inter;--font-mono:Mono}`;
   for (const [name,html] of [['client',client],['founder',control]]) fs.writeFileSync(path.join(dir,`${name}.html`),`<!doctype html><html lang="en"><meta charset="utf-8"><title>DASH-1 offline fixture · ${name}</title><style>${fonts}${css}</style><body><div class="app-shell product"><aside class="shell-side">Shared shell (must be hidden)</aside><div class="shell-main"><main>${html}</main></div></div></body></html>`);
   console.log('Dashboard rendering, non-founder gate, source fixtures and client copy checks passed.');

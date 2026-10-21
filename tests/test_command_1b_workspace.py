@@ -11,3 +11,11 @@ def test_command_window_contract():
         cwd=ROOT, capture_output=True, text=True, check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_command_page_boundaries():
+    result = subprocess.run(
+        ["node", str(ROOT / "tests/command_1b_pages.cjs")],
+        cwd=ROOT, capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

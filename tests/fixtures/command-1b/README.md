@@ -1,6 +1,6 @@
 # COMMAND-1B evidence
 
-The screenshots render the real `CommandWindow` component with recorded, synthetic HTTP responses, local brand files and local fonts in cloud Chromium. No screenshot claims a live paid run or production result.
+The screenshots render the actual `CommandWindow` with synthetic HTTP responses, local brand files and local fonts in cloud Chromium. They do not claim a production or paid run.
 
 | Approved Figma | Implementation |
 | --- | --- |
@@ -8,33 +8,39 @@ The screenshots render the real `CommandWindow` component with recorded, synthet
 | ![Mobile chat frame 4:84](figma-mobile.png) | ![375px window](window-375.png) |
 | ![Mobile work frame 4:114](figma-work.png) | ![375px work](work-375.png) |
 
-[Client view at 375px](client-375.png). Reference: https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=3-2
+[Client Auto-only view with unchanged conversation/result text](client-auto-375.png), [action states at 1440px](compatibility-1440.png), [pending costs after reload](pending-375.png), and [stored-only attachment with a founder pin error](attachments-375.png).
 
-The official repository logo replaces the wireframe's text logo, as required by AGENTS.md. Search, rename, header totals, attach and model selection are implemented in addition to the wireframe. The fixture has four completed steps out of six and one pending paid action. Founder receipts include tokens and entry IDs; clients receive plain cost fields and numbered model options with the same roster prices. Missing amounts are shown as unavailable.
+Reference: https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=3-2
 
-## Reproduce in a cloud environment
+## Review corrections
 
-- Install Workspace's existing dependencies without adding a lockfile.
-- `node tests/command_1b_contract.cjs` checks the actual Next route and Tank helper with mocked identity/network: trusted headers, CSRF, path allowlist, pinned model lookup, raw and text attachments/downloads, upload limits, reference-only turns, unsupported pin errors, split UTF-8/SSE frames, pending receipt reconstruction, client projection and explicit failures. The pytest wrapper runs this in CI.
-- `node tests/dashboards-ui.cjs` retains the founder dashboard checks and updates the root-page assertions to the window.
-- Install `esbuild` and `playwright` in a temporary folder; point `COMMAND_TEST_TOOLS` at that folder's `node_modules`. Run `node tests/command_1b_browser.cjs` with cloud Chromium at `/usr/bin/chromium`. No production URL, credential or model is used.
-- The browser harness uses the actual Squad control and checks mobile focus/escape, no horizontal overflow, search/rename/new chat, explicit cancel, failed/unknown confirmations without blind retry, safe retry only when explicitly permitted, visible targets/results, unsupported pins, text/binary attachments and downloads, visible token streaming, duplicate-event rejection, persisted reload and client-safe labels.
+Applied https://github.com/Tervory-AI/tervory-tank/pull/225#issuecomment-6321562587:
 
-## Lane A integration
+- `/` is DASH-1's dashboard exactly as on main, except its ask action redirects to `/chats?ask=<text>`. `/chats` consumes that prompt once, creates one thread and sends its first message. Reload does not send again. Dashboard links return clients to `/` and founders to `/control`.
+- `tests/dashboards-ui.cjs` is restored unchanged from main and still tests DASH-1. Page-boundary tests live separately in `command_1b_pages.cjs`.
+- User/answer text, thread titles, filenames, target arguments and result text are preserved. Only generated interface labels (steps, actors, card titles) and model metadata are filtered for clients. Streaming token text is forwarded unchanged.
+- Command identity is carried only in server-derived headers, with no `tenant_id` or `user_id` query parameters. Browser squad assertions are stripped.
+- Clients receive Auto only, enforced in server page props, the picker, outgoing turns and the proxy. Founders retain roster choices and prices.
 
-Inspected Lane A PR #224 at `6cedeb2ca40759abc07f64f32aa429064317cdb9` (newer than requested `74fd6d6e`) without merging or editing its files. Also checked the compatible `c56880b5f21c8f9260e38bb7333737daa6e0c0f7` follow-up: per-task savings results are projected as bounded named fields, retaining pending/null amounts. The proxy sends the same-box Workspace key and server-derived user/tenant identity. Browser identity and squad headers are never authority.
+## Merged Lane A integration
 
-- Inline UTF-8 text remains `{name,text}` (200,000 characters). Other formats upload as raw bytes to `threads/{id}/attachments?name=…`; turns send only `{attachment_id}`. Both direct and existing message-file download URLs work. The UI caps a selection at five files/5 MiB; the proxy caps each upload at 5 MiB and preserves A's 20-file/20-MiB thread limit. A checks user, tenant and same-thread reference ownership. Binary content is stored only, explicitly disclosed as unreadable by this text router. Downloads force attachment disposition, octet-stream, no-store and nosniff.
-- Empty pending receipts retain `status` and `step_id`; saved step/card markers restore them after reload. Cost and baseline pending states remain visible, null totals stay unknown, and SSE evidence deltas preserve earlier rows. Work receipts cannot overwrite an unrelated streaming answer.
-- Action cards retain pending, executing, unknown, failed, confirmed and cancelled states. Allowlisted target fields and results appear without raw payload dumps. Founder-only tools are filtered by tool as well as card kind. Unknown outcomes cannot be retried; only an explicit `failed` + `retry_safe: true` allows a retry. A lost confirmation stays uncertain even if a subsequent snapshot still says pending, including a full reload in the same browser session. Browser storage only restricts retry; it never grants permission.
-- Roster pins are sent unchanged to A; its pending-capability/unsupported error is shown clearly with an instruction to choose Auto. There is no silent fallback or claimed pin support.
+Inspected main `7f938d4e8fb439454b9394cc918f307eaaee468d`, which includes #224. Lane A resolves the founder-controlled `tank.tenant_squad` table during authentication and rechecks authorization before dispatch. `/v1/command/tools` returns that identity's allowed tools. The same-box helper reads this catalogue; client navigation and confirmation controls use it. An empty list means chat only; a failed catalogue read disables tool controls while retaining chat and a visible error. No browser value creates a grant. Founder grant administration remains Lane A's existing `/control/squads` surface.
 
-**Remaining integration dependency:** No verified server-owned per-user/organization squad entitlement source exists in the inspected Workspace. `activeTenant` returns identity only; `vaultFetch`'s caller-supplied squad is routing context, not a grant. The command helper strips `X-Tervory-Squad` instead of trusting browser values or granting every squad. Client tool execution remains denied by A until the owning access lane supplies an authoritative source. No new authority, backend capability or paid route was invented. PR #225 stays draft for this dependency.
+Text attachments remain `{name,text}` (200,000 characters); binary formats use bounded raw uploads and `{attachment_id}` turn references. Both direct and saved message-file download URLs retain ownership checks and attachment-only/no-store/nosniff headers. Binary content is labelled stored only, unreadable by the text router. Selection limits remain five files/5 MiB; A enforces the per-thread 20-file/20-MiB limit.
 
-Additional actual-component compatibility screenshots: [1440px action states/targets/results](compatibility-1440.png) , [375px pending costs after reload](pending-375.png), and [375px stored files/pending pin](attachments-375.png). These are synthetic fixtures, not production execution evidence.
+Pending receipt status and step IDs survive projection and reload. Empty costs remain unknown, comparison-pending states remain visible, and SSE deltas retain earlier evidence. Cards retain targets, results, execution/error states, and conservative retry behavior. Unknown outcomes never offer retry; a failed card requires explicit `retry_safe: true`. Lost confirmations remain uncertain across browser-session reloads.
+
+## Cloud reproduction
+
+- `node tests/command_1b_contract.cjs`: actual helper/proxy with mocked authentication and network, including exact text, Auto enforcement, trusted identity, tool catalogue/denial, CSRF, files, SSE, pending receipts and safe retries.
+- `node tests/command_1b_pages.cjs`: real dashboard ask action, client/founder model props, and enabled/empty/unavailable tool catalogue behavior. Both command scripts run through the pytest wrapper in CI.
+- `node tests/dashboards-ui.cjs`: unchanged DASH-1 dashboard coverage.
+- With `esbuild` and `playwright` in a temporary cloud directory, set `COMMAND_TEST_TOOLS` to its `node_modules` and run `node tests/command_1b_browser.cjs`. It uses cloud Chromium at `/usr/bin/chromium`; no production endpoint or credential is used. It checks mobile/desktop layout, focus, navigation, files, streams, confirmations, Auto-only clients, tool grants and the one-time dashboard handoff.
 
 ## Live proof after founder deployment
 
-After Lane A is available on the same box, open `/chats` (also `/`), create a thread and send both a UTF-8 note and a binary file. Confirm the stored-only disclosure, reload, and download both. Rename/search the thread. A different user or organization must receive no file/thread/evidence data, and an attachment from a different thread must be rejected.
+Open `/` and verify DASH-1's dashboard. Submit “Explain gold prices & Tank evaluation?” in the ask box: one new `/chats` thread must contain the exact first message and unaltered answer. Reload must not resend it. Dashboard links must return clients to `/` and founders to `/control`.
 
-Match header and answer cost links under `/chats/evidence/{thread}` to the thread's `tank.command_events` and tenant-scoped `tank.ledger` rows. Empty pending step/card costs must survive reload as unavailable, and pending baselines must remain labelled. As an authorized founder, confirm and cancel separate cards and observe targets, execution/results/errors and the Work panel. An unknown action must have no retry; a failed action may offer retry only with explicit `retry_safe: true` from A. Verify a pin rejection asks for Auto without a second request. Client tool execution must remain denied until the separate entitlement dependency is resolved. Check the same flows at 375px and 1440px; non-founders see numbered options, plain cost details and no founder tools.
+With a client account, inspect Auto-only selection and rejection of a forged pinned turn. The founder can enable a squad in Lane A's existing controls; the corresponding `/chats` tool controls become available from `/v1/command/tools`. An empty list exposes no command tool controls. Revocation must be enforced by A even if a browser retains an old catalogue.
+
+Send text and binary attachments, reload and download both; other users/organizations and cross-thread references must be denied. Compare `/chats/evidence/{thread}` with the same thread's events and tenant-scoped cost rows. Pending costs remain unavailable. Confirm/cancel separate cards, inspect results, and verify unknown outcomes offer no retry. Check the flows at 375px and 1440px.

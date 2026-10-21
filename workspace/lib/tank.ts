@@ -845,16 +845,16 @@ export class CommandRequestError extends Error {
 export async function commandRequest(identity: { tenantId: string; userId: string }, path: string, init: RequestInit = {}): Promise<Response> {
   if (!TANK_API_KEY) throw new Error("The conversation service is not configured.");
   const url = new URL(`/v1/command/${path}`, TANK_URL);
-  url.searchParams.set("tenant_id", identity.tenantId);
-  url.searchParams.set("user_id", identity.userId);
+  url.searchParams.delete("tenant_id");
+  url.searchParams.delete("user_id");
   const headers = new Headers(init.headers);
   if (!headers.has("content-type")) headers.set("content-type", "application/json");
   headers.set("x-tank-key", TANK_API_KEY);
   headers.set("x-tervory-user", identity.userId);
   headers.set("x-tervory-tenant", identity.tenantId);
   headers.set("x-tervory-admin", identity.userId);
-  // activeTenant provides identity, not squad entitlements. No verified grant
-  // source exists in this lane. Never turn caller headers into tool authority.
+  // Lane A resolves tenant_squad from the database on each authenticated call.
+  // Never turn a caller header into tool authority.
   headers.delete("x-tervory-squad");
   const response = await fetch(url, { ...init, headers, cache: "no-store", redirect: "error" });
   if (!response.ok) {
@@ -868,4 +868,11 @@ export async function commandRequest(identity: { tenantId: string; userId: strin
     throw new CommandRequestError(502, "request_failed", "This request could not be completed. Reload the chat before trying again.");
   }
   return response;
+}
+
+/** Lane A derives this catalogue from the founder-controlled tenant_squad list. */
+export async function commandTools(identity: { tenantId: string; userId: string }): Promise<string[]> {
+  const result: unknown = await (await commandRequest(identity, "tools")).json();
+  if (!Array.isArray(result) || !result.every(tool => typeof tool === "string" && /^[a-z_]+\.[a-z_]+$/.test(tool))) throw new Error("Tool access could not be loaded.");
+  return result;
 }
