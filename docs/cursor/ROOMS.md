@@ -30,36 +30,43 @@ The founder does nothing for a new room except merge. Public rooms (Rig) also ne
 
 ## Base brain pilot (AGENT-1)
 
-Base retains its room, database login and gateway. Its Compose resource adds
-`base-brain` (pinned Nous Hermes Agent), `base-sandbox` (a private rootless Docker
-daemon), `base-browser` (Chromium), and `base-browser-gateway`. These services
-belong exclusively to Base. The daemon and browser are on separate **internal**
-networks. Only the brain joins the daemon network; only the browser gateway
-joins the browser network. No host ports or host Docker socket are exposed.
-The daemon uses a privileged sidecar to provide nested rootless containers; it
-mounts only Base's data volumes. Each execution mounts only that run's work
-directory, with a read-only root and no network. Allowed public HTTPS browsing
-goes through the exact-host proxy, which rejects private and metadata addresses.
+Base retains its room, database login and corridor. Its Compose resource adds
+`base-brain` (pinned Nous Hermes Agent), `base-sandbox` (an unprivileged WASI exec
+service), `base-browser` (Chromium) and `base-browser-gateway`. Only Base's brain
+joins the sandbox's internal network. Only the gateway joins the browser's
+internal network. No host ports, host Docker socket, nested daemon, privileged
+container, added capabilities or shared host PID/network namespace are allowed.
 
-Base's Skala context points browser requests to its authenticated gateway, not
-Tiger. The legacy Tiger attachment in the main compose is unchanged by this
-lane; Base does not call it. Other room deployments stay on the existing pattern.
+The executor has a read-only root and tmpfs. Only one run workspace is exposed
+to its CPython/WASI command, with no sockets, credentials, native shell or other
+run files. Outputs return to Base's own volume. Browser cookies/history are
+separate per tenant. Four sites may run in parallel with a few seconds between
+same-site pages. Public HTTP(S) sites and PDFs are permitted; private/internal
+addresses are blocked and DNS/redirects are re-checked. The CONNECT proxy binds
+only to the browser-network interface. Captchas/bot checks are **needs a person**;
+only simple age-confirmation buttons outside forms may be clicked.
 
-Before this pilot takes real jobs, use
+Base's Skala context uses its own gateway. Tiger no longer joins
+`tervory-gw-base`; Tank reaches Tiger through `tervory-gw-tiger`. Other room
+deployments retain their existing browser pattern until their own migration.
+
+Before taking real jobs, run
 `python agents/base/check_brain_isolation.py ROOM BRAIN SANDBOX BROWSER GATEWAY`
-on the authorized cloud host. This is Base's deployment gate: the generic
-`agents/check_isolation.sh` describes the earlier single-container topology
-and deliberately has not been changed for other rooms. The Base gate verifies
-all five health checks, exact private-network membership, no host mounts/ports,
-no provider keys, the existing database permission boundary, and denied direct
-egress. Run the opt-in container tests in [Base's runbook](../../agents/base/BRAIN.md)
-to also exercise the real Hermes sandbox and cross-room browser refusal.
+on the authorized cloud host. It checks all five health states, exact network
+membership, no host mounts/ports/provider keys, privilege/capability/PID/network
+settings, Base's database role, denied egress, isolated scratch execution and
+browser-only proxy reachability. The generic single-container gate stays
+unchanged for other rooms. See [Base's runbook](../../agents/base/BRAIN.md).
+
+Brain tasks and pipeline phases use authenticated start-then-poll endpoints.
+When the brain fails before starting pipeline work, Base cancels it and runs
+today's pipeline, retaining a fallback receipt. Work already started is retained.
 
 Receipts are available to the work panel through the existing tenant-scoped
 `GET /v1/base/batches?tenant_id=...` response: each batch has `brain_tasks`, with
 task ID, status and full receipt. The receipt includes recall/remember, approved
 skills, model ledger IDs with cost and baseline, and browser/sandbox actions.
-No Workspace file or COMMAND-1 UI is changed in this lane.
+The Base import screen hides unapproved preview; COMMAND-1 consumes this receipt contract.
 
 ## Regions
 

@@ -49,40 +49,59 @@ def test_real_private_browser_and_other_room_boundary():
             docker("network", "create", "--internal", network)
         docker("volume", "create", volume)
         docker("run", "-d", "--name", browser, "--network", private, "--network-alias", "base-browser",
-               "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "-e", "TANK_KEY", "-e", "BASE_ALLOWED_HOSTS=www.atf.gov",
+               "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "-e", "TANK_KEY",
                "-v", volume + ":/browser-data", "-v", str(ROOT / "agents/_brain") + ":/app/brain:ro",
                "tervory-agent1-browser:cloud", env=env)
         docker("run", "-d", "--name", gateway, "--network", private, "--network-alias", "base-browser-gateway",
-               "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "-e", "TANK_KEY", "-e", "BASE_ALLOWED_HOSTS=www.atf.gov",
+               "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "-e", "TANK_KEY",
                "tervory-agent1-gateway:cloud", env=env)
         docker("network", "connect", corridor, gateway)
         ready(browser, ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health')"])
         ready(gateway, ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health')"])
         script = '''import asyncio, os, socket, uuid, httpx
 from playwright.async_api import async_playwright
+from brain.browser import confirm_age, human_check
 async def run():
     async with async_playwright() as p:
         browser = await p.chromium.launch(executable_path='/usr/bin/chromium', headless=True)
-        page = await browser.new_page()
-        await page.set_content('<h1>Cloud Chromium proof</h1>')
-        assert await page.title() == ''
-        assert await page.locator('h1').inner_text() == 'Cloud Chromium proof'
+        context = await browser.new_context()
+        await context.route('**/*',lambda route: route.fulfill(content_type='text/html',body="""<h1>Age verification: over 21</h1><button type="button" onclick="document.cookie='age=ok;path=/';this.remove()">I am over 21</button><a href="/about">About</a><div style="height:2000px"></div>"""))
+        page = await context.new_page()
+        await page.goto('https://dealer.example.test')
+        assert await confirm_age(page,await page.content())
+        assert (await context.cookies())[0]['name']=='age'
+        await page.evaluate('window.scrollBy(0,900)')
+        assert await page.evaluate('window.scrollY')>0
+        assert (await page.locator('a').get_attribute('href'))=='/about'
+        await context.storage_state(path='/browser-data/fixture-storage.json')
+        await context.close()
+        context=await browser.new_context(storage_state='/browser-data/fixture-storage.json')
+        assert (await context.cookies())[0]['value']=='ok'
+        page=await context.new_page()
+        await page.set_content('<div class="g-recaptcha">verify you are human</div><button type="button">I am over 21</button>')
+        assert human_check(await page.content())
+        assert not await confirm_age(page,await page.content())
+        await context.close()
         await browser.close()
 asyncio.run(run())
 headers = {'X-Tank-Key': os.environ['TANK_KEY'], 'X-Tenant-ID': str(uuid.uuid4()), 'X-Home-Region': 'us-east'}
-assert httpx.post('http://127.0.0.1:3000/render',headers=headers,json={'url':'https://disallowed.example'}).status_code == 403
+assert httpx.post('http://127.0.0.1:3000/render',headers=headers,json={'url':'https://169.254.169.254'}).status_code == 403
 headers['X-Tank-Key'] = uuid.uuid4().hex
 assert httpx.post('http://127.0.0.1:3000/render',headers=headers,json={'url':'https://www.atf.gov'}).status_code == 401
 s = socket.socket(); s.settimeout(2)
 assert s.connect_ex(('1.1.1.1',443)) != 0
 s.close()
 s = socket.create_connection(('base-browser-gateway',3128),2)
-s.sendall(b'CONNECT disallowed.example:443 HTTP/1.1\\r\\nHost: disallowed.example\\r\\n\\r\\n')
+s.sendall(b'CONNECT 169.254.169.254:443 HTTP/1.1\\r\\nHost: 169.254.169.254\\r\\n\\r\\n')
 assert b'403' in s.recv(1024)
 s.close()
 print('PASS Chromium, browser allowlist, wrong room key, direct egress, proxy allowlist')
 '''
         assert docker("exec", browser, "python", "-c", script).startswith("PASS")
+        gateway_address = json.loads(docker("inspect", gateway))[0]["NetworkSettings"]["Networks"][corridor]["IPAddress"]
+        corridor_probe = "import socket,urllib.request,sys; urllib.request.urlopen('http://'+sys.argv[1]+':3000/health'); s=socket.socket(); s.settimeout(2); assert s.connect_ex((sys.argv[1],3128)) != 0; print('PASS proxy is browser-only')"
+        assert docker("run","--rm","--network",corridor,"--cap-drop","ALL","tervory-agent1-browser:cloud",
+            "python","-c",corridor_probe,gateway_address).startswith("PASS")
         address = json.loads(docker("inspect", browser))[0]["NetworkSettings"]["Networks"][private]["IPAddress"]
         probe = '''import socket, sys
 try:
@@ -103,35 +122,60 @@ print('PASS other room cannot resolve or connect to Base browser')
             subprocess.run(["docker", "network", "rm", network], capture_output=True)
 
 
-def test_actual_hermes_docker_backend_is_offline_and_uses_own_volume():
-    prefix = "agent1-sandbox-test-" + uuid.uuid4().hex[:10]
-    network, daemon, volume = prefix + "-net", prefix + "-daemon", prefix + "-data"
+def test_unprivileged_sibling_exec_is_offline_and_separates_runs():
+    prefix = "agent1-exec-test-" + uuid.uuid4().hex[:10]
+    network, sandbox = prefix + "-net", prefix + "-sandbox"
     try:
         docker("network", "create", "--internal", network)
-        docker("volume", "create", volume)
-        docker("run", "-d", "--name", daemon, "--network", network, "--network-alias", "base-sandbox", "--privileged",
-               "-v", volume + ":/data", "tervory-agent1-sandbox:cloud")
-        ready(daemon, ["test", "-f", "/tmp/base-sandbox-ready"])
-        script = r'''import json, os
+        docker("run", "-d", "--name", sandbox, "--network", network, "--network-alias", "base-sandbox",
+               "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--read-only", "--pids-limit", "64",
+               "--memory", "512m", "--cpus", "0.5", "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=32m",
+               "--tmpfs", "/work:rw,nosuid,nodev,size=128m,uid=1000,gid=1000,mode=0700", "tervory-agent1-sandbox:cloud")
+        ready(sandbox, ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health')"])
+        docker("exec", sandbox, "python", "-c", "from pathlib import Path; p=Path('/work/private-other'); p.mkdir(); (p/'proof').write_text('not-for-this-run')")
+        script = r'''import base64, json, urllib.request, urllib.error, uuid
+first, second, task = str(uuid.uuid4()), str(uuid.uuid4()), str(uuid.uuid4())
+def run(tenant, command, files=None):
+ body=json.dumps({'tenant_id':tenant,'task_id':task,'command':command,'files':files or {}}).encode()
+ request=urllib.request.Request('http://base-sandbox:8002/exec',data=body,headers={'Content-Type':'application/json'})
+ return json.load(urllib.request.urlopen(request,timeout=35))
+command = """python - <<'CODE'
+import os
 from pathlib import Path
-Path('/data/proof').mkdir(exist_ok=True)
-os.environ.update(TERMINAL_ENV='docker', TERMINAL_DOCKER_IMAGE='tervory-base-sandbox:python3.12',
-    TERMINAL_DOCKER_IMAGE_PINNED='1', TERMINAL_DOCKER_NETWORK='false', TERMINAL_DOCKER_PERSIST_ACROSS_PROCESSES='false',
-    TERMINAL_DOCKER_FORWARD_ENV='[]', TERMINAL_DOCKER_VOLUMES='["/data/proof:/workspace"]',
-    TERMINAL_DOCKER_EXTRA_ARGS='["--read-only","--pids-limit","128"]', TERMINAL_CWD='/workspace',
-    TERMINAL_DOCKER_MOUNT_CWD_TO_WORKSPACE='false', HERMES_HOME='/tmp/hermes-proof')
-from tools.terminal_tool import terminal_tool
-command = "python -c 'import os,socket; from pathlib import Path; s=socket.socket(); s.settimeout(2); assert s.connect_ex((\"1.1.1.1\",443)) != 0; assert not any(k in os.environ for k in (\"TANK_KEY\",\"OPENAI_API_KEY\",\"DOCKER_HOST\")); Path(\"/workspace/proof\").write_text(\"offline\"); print(\"OFFLINE\")'"
-result = json.loads(terminal_tool(command=command, timeout=30, task_id='cloud-proof'))
-assert result.get('exit_code') == 0, result
-assert 'OFFLINE' in result['output']
-assert Path('/data/proof/proof').read_text() == 'offline'
-print('PASS actual Hermes Docker tool, denied egress, no forwarded credentials, Base-only work mount')
+assert not any(k in os.environ for k in ('TANK_KEY','OPENAI_API_KEY','DOCKER_HOST','DATABASE_URL'))
+try:
+ import socket
+ socket.socket()
+except (ImportError, OSError): pass
+else: raise AssertionError('network available')
+try: Path('/proc/1/environ').read_bytes()
+except OSError: pass
+else: raise AssertionError('service environment readable')
+try: Path('/python/lib/untrusted-write').write_text('no')
+except OSError: pass
+else: raise AssertionError('root writable')
+Path('proof').write_text('private-work')
+print('OFFLINE')
+CODE"""
+result=run(first,command)
+assert result['exit_code']==0 and 'OFFLINE' in result['output'], result
+assert base64.b64decode(result['files']['proof'])==b'private-work'
+command="python -c \"from pathlib import Path; p=Path('/work/private-other/proof'); blocked=False\ntry: p.read_bytes()\nexcept OSError: blocked=True\nassert blocked; print('TENANT ISOLATED')\""
+result=run(second,command)
+assert result['exit_code']==0 and 'TENANT ISOLATED' in result['output'], result
+try: run(first,'true',{'../escape':base64.b64encode(b'bad').decode()})
+except urllib.error.HTTPError as refused: assert refused.code==422
+else: raise AssertionError('traversal accepted')
+print('PASS sibling exec, denied network, no credentials, read-only root, WASI tenant workspaces')
 '''
-        output = docker("run", "--rm", "--network", network, "-v", volume + ":/data",
-                        "-e", "DOCKER_HOST=tcp://base-sandbox:2375", "tervory-agent1-brain:cloud", "python", "-c", script)
-        assert "PASS actual Hermes Docker tool" in output
+        output = docker("run", "--rm", "--network", network, "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+                        "tervory-agent1-brain:cloud", "python", "-c", script)
+        assert "PASS sibling exec" in output
+        info=json.loads(docker("inspect",sandbox))[0]
+        assert not info['HostConfig']['Privileged'] and not info['HostConfig'].get('CapAdd')
+        assert info['HostConfig']['ReadonlyRootfs'] and 'ALL' in info['HostConfig']['CapDrop']
+        assert info['HostConfig']['PidMode'] in ('','private')
+        assert info['HostConfig']['NetworkMode']==network
     finally:
-        subprocess.run(["docker", "rm", "-fv", daemon], capture_output=True)
-        subprocess.run(["docker", "volume", "rm", volume], capture_output=True)
+        subprocess.run(["docker", "rm", "-fv", sandbox], capture_output=True)
         subprocess.run(["docker", "network", "rm", network], capture_output=True)

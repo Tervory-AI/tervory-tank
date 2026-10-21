@@ -312,8 +312,10 @@ def test_room_is_wired_and_client_queries_are_tenant_scoped() -> None:
     corridor = "tervory-gw-base"
     assert "external" not in compose["networks"][corridor]
     assert compose["networks"][corridor]["name"] == corridor
-    for name in ("tank", "postgres", "hermes", "tiger", "searxng"):
+    for name in ("tank", "postgres", "hermes", "searxng"):
         assert corridor in services[name]["networks"]
+    assert corridor not in services["tiger"]["networks"]
+    assert "tervory-gw-tiger" in services["tiger"]["networks"]
     for name in ("redis", "qdrant", "litellm", "workspace", "agent-roles"):
         assert corridor not in (services[name].get("networks") or [])
     assert services["tank"]["environment"]["TANK_KEY_BASE"] == "${TANK_KEY_BASE:-}"

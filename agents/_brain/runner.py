@@ -7,11 +7,14 @@ the only shell tool executes in Hermes' Docker backend with network disabled.
 from __future__ import annotations
 
 import json
+import base64
+import time
 import os
 import re
 import shutil
 import sys
 import uuid
+from urllib.parse import urlsplit
 from pathlib import Path
 
 import httpx
@@ -55,10 +58,10 @@ def run(work: Path) -> None:
     def save():
         (work / "receipt.json").write_text(json.dumps(receipt, indent=2))
 
-    with httpx.Client(timeout=900, headers=headers, follow_redirects=False) as client:
+    with httpx.Client(timeout=300, headers=headers, follow_redirects=False) as client:
         def api(method: str, url: str, **kwargs):
             response = client.request(method, url, **kwargs)
-            if response.status_code not in (200, 201):
+            if response.status_code not in (200, 201, 202):
                 raise RuntimeError("Room tool failed (HTTP %d)" % response.status_code)
             return response.json()
 
@@ -74,19 +77,28 @@ def run(work: Path) -> None:
             "compression": {"enabled": False}, "skills": {"auto_load": []},
             "tools": {"tool_search": {"enabled": "off"}},
             "auxiliary": {"title_generation": {"enabled": False, "model_upgrade_enabled": False}},
-            "terminal": {"backend": "docker"}, "memory": {"memory_enabled": False, "user_profile_enabled": False},
+            "memory": {"memory_enabled": False, "user_profile_enabled": False},
         }))
         sandbox_work = work / "work"
         sandbox_work.mkdir(exist_ok=True)
-        os.environ.update(TERMINAL_ENV="docker", TERMINAL_DOCKER_IMAGE="tervory-base-sandbox:python3.12",
-            TERMINAL_DOCKER_IMAGE_PINNED="1", TERMINAL_DOCKER_NETWORK="false",
-            TERMINAL_DOCKER_PERSIST_ACROSS_PROCESSES="false", TERMINAL_DOCKER_FORWARD_ENV="[]",
-            TERMINAL_DOCKER_VOLUMES=json.dumps([str(sandbox_work) + ":/workspace"]),
-            TERMINAL_DOCKER_EXTRA_ARGS=json.dumps(["--read-only", "--pids-limit", "128"]),
-            TERMINAL_CWD="/workspace", TERMINAL_CONTAINER_CPU="0.5", TERMINAL_CONTAINER_MEMORY="512",
-            TERMINAL_DOCKER_MOUNT_CWD_TO_WORKSPACE="false", TERMINAL_TIMEOUT="30")
         from tools.registry import registry
-        from tools.terminal_tool import terminal_tool
+
+        def pipeline_api(finish=False):
+            url = os.environ.get("BASE_ROOM_URL", "http://agent-base:8000") + "/brain/pipeline"
+            payload = {"tenant_id": tenant, "task_id": task, "finish": finish}
+            try:
+                result = api("POST", url, json=payload)
+            except httpx.TransportError:
+                result = api("GET", url, params=payload)
+            # A state-sized batch may take hours, but no HTTP request waits for
+            # the whole batch. Lost start responses can safely be polled again.
+            deadline = time.monotonic() + 86400
+            while result.get("pipeline_status") in {"queued", "running"}:
+                if time.monotonic() > deadline:
+                    raise RuntimeError("Pipeline polling deadline reached")
+                time.sleep(2)
+                result = api("GET", url, params=payload)
+            return result
 
         def dispatch(name: str, args: dict):
             nonlocal pipeline_done, pipeline_status
@@ -99,8 +111,7 @@ def run(work: Path) -> None:
                 if name == "pipeline_run":
                     if pipeline_done:
                         raise RuntimeError("The pipeline already ran")
-                    result = api("POST", os.environ.get("BASE_ROOM_URL", "http://agent-base:8000") + "/brain/pipeline",
-                                 json={"tenant_id": tenant, "task_id": task})
+                    result = pipeline_api()
                     pipeline_done = True
                     pipeline_status = result["pipeline_status"]
                 elif name == "skala_run":
@@ -112,15 +123,35 @@ def run(work: Path) -> None:
                         "preview": False, "home_region": "us-east"})
                     step["skill"] = "@".join(identity)
                 elif name == "browser":
+                    parsed = urlsplit(args["url"])
+                    step["source"] = parsed.scheme + "://" + (parsed.hostname or "refused") + parsed.path
                     result = api("POST", os.environ.get("BASE_BROWSER_URL", "http://base-browser-gateway:3000") + "/render", json={"url": args["url"]})
                     step["human_check"] = bool(result.get("challenge"))
-                    step["source"] = args["url"].split("?", 1)[0].split("#", 1)[0]
+                    if result.get("challenge"):
+                        step["needs_person"] = "needs a person"
                     if result.get("challenge"):
                         result = {"human_check": True, "message": "Human check recorded. Do not solve or bypass it."}
                 elif name == "sandbox":
-                    result = terminal_tool(command=args["command"], timeout=30, task_id=task)
-                    if isinstance(result, str):
-                        result = json.loads(result)
+                    inputs = {}
+                    total = 0
+                    for path in sorted(sandbox_work.rglob("*")):
+                        if not path.is_file() or path.is_symlink() or not path.resolve().is_relative_to(sandbox_work.resolve()):
+                            continue
+                        if path.stat().st_size > 256000:
+                            continue
+                        total += path.stat().st_size
+                        if total > 2_000_000 or len(inputs) >= 32:
+                            break
+                        inputs[str(path.relative_to(sandbox_work))] = base64.b64encode(path.read_bytes()).decode()
+                    result = api("POST", os.environ.get("BASE_SANDBOX_URL", "http://base-sandbox:8002") + "/exec",
+                        json={"tenant_id": tenant, "task_id": task, "command": args["command"], "files": inputs})
+                    for name, encoded in result.pop("files", {}).items():
+                        destination = sandbox_work / name
+                        if Path(name).is_absolute() or destination.is_symlink() or not destination.resolve().is_relative_to(sandbox_work.resolve()):
+                            raise RuntimeError("Invalid sandbox output path")
+                        destination.parent.mkdir(parents=True, exist_ok=True)
+                        destination.write_bytes(base64.b64decode(encoded, validate=True))
+                    step["backend"] = "sibling-exec"
                     step["network"] = "none"
                     step["exit_code"] = result.get("exit_code")
                     if result.get("exit_code") != 0:
@@ -134,8 +165,15 @@ def run(work: Path) -> None:
                     if record_id in retried or len(retried) >= 10:
                         raise RuntimeError("Recovery limit reached")
                     retried.add(record_id)
-                    result = api("POST", os.environ.get("BASE_ROOM_URL", "http://agent-base:8000") + "/brain/retry", json={
-                        "tenant_id": tenant, "task_id": task, "record_id": record_id, "website": args["website"]})
+                    retry_url = os.environ.get("BASE_ROOM_URL", "http://agent-base:8000") + "/brain/retry"
+                    retry_scope = {"tenant_id": tenant, "task_id": task, "record_id": record_id}
+                    result = api("POST", retry_url, json={**retry_scope, "website": args["website"]})
+                    deadline = time.monotonic() + 86400
+                    while result.get("pipeline_status") in {"queued", "running"}:
+                        if time.monotonic() > deadline:
+                            raise RuntimeError("Retry polling deadline reached")
+                        time.sleep(2)
+                        result = api("GET", retry_url, params=retry_scope)
                     pipeline_status = result["pipeline_status"]
                 else:
                     raise RuntimeError("Unknown tool")
@@ -155,7 +193,7 @@ def run(work: Path) -> None:
             "pipeline_run": ("Run Base's existing code pipeline before attempting recovery.", {}),
             "skala_run": ("Run an exported, approved Base skill through Skala.", {"skill_id": {"type": "string"}, "version": {"type": "string"}, "input": {"type": "object"}}),
             "browser": ("Read an allowed public HTTPS page. Human checks are recorded, never solved.", {"url": {"type": "string"}}),
-            "sandbox": ("Run code in Base's private Docker sandbox. No network and no credentials.", {"command": {"type": "string"}}),
+            "sandbox": ("Run Python scratch code in Base's private WASI sibling. Use python -c or a Python heredoc. No host shell, network or credentials.", {"command": {"type": "string"}}),
             "retry_record": ("Retry one unresolved record through the existing pipeline with a sourced website hint.", {"record_id": {"type": "string"}, "website": {"type": "string"}}),
             "candidate_submit": ("Submit a new skill version as a candidate; it cannot run until evals and founder approval.", {
                 "skill_id": {"type": "string"}, "version": {"type": "string"}, "description": {"type": "string"},
@@ -172,7 +210,7 @@ def run(work: Path) -> None:
             enabled_toolsets=["base_room"], max_iterations=16, max_tokens=4096, session_id=task,
             session_db=SessionDB(home / "state.db"), skip_context_files=True, skip_memory=True,
             skip_background_review=True, load_soul_identity=False, quiet_mode=True, save_trajectories=False,
-            fallback_model=None, run_budget_seconds=1500,
+            fallback_model=None, run_budget_seconds=86400,
             request_overrides={"extra_headers": {k: v for k, v in headers.items() if k != "X-Tank-Key"}})
         try:
             result = agent.run_conversation(
@@ -189,8 +227,7 @@ def run(work: Path) -> None:
                 save()
                 raise RuntimeError("Hermes did not complete the pipeline")
             receipt["summary"] = str(result.get("final_response") or "Base pipeline finished.")[:6000]
-            continued = api("POST", os.environ.get("BASE_ROOM_URL", "http://agent-base:8000") + "/brain/pipeline",
-                            json={"tenant_id": tenant, "task_id": task, "finish": True})
+            continued = pipeline_api(finish=True)
             receipt["steps"].append({"action": "pipeline_continue", "status": continued["pipeline_status"],
                                      "summary": continued.get("summary"), "cost_usd": continued.get("cost_usd", 0)})
             save()

@@ -54,12 +54,12 @@ async def run_task(body: Run) -> dict:
             (work / "request.json").write_text(json.dumps(request))
             env = {key: value for key, value in os.environ.items() if key in {
                 "PATH", "PYTHONPATH", "LANG", "TANK_URL", "TANK_KEY", "TANK_REGION", "BASE_ROOM_URL",
-                "BASE_BROWSER_URL", "DATA_DIR", "DOCKER_HOST", "HERMES_BUNDLED_SKILLS", "HERMES_OPTIONAL_SKILLS"}}
+                "BASE_BROWSER_URL", "DATA_DIR", "BASE_SANDBOX_URL", "HERMES_BUNDLED_SKILLS", "HERMES_OPTIONAL_SKILLS"}}
             env.update(HERMES_HOME=str(root / "hermes"), PYTHONUNBUFFERED="1")
             process = await asyncio.create_subprocess_exec(sys.executable, "-m", "brain.runner", str(work),
                 env=env, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
             try:
-                await asyncio.wait_for(process.wait(), timeout=1800)
+                await asyncio.wait_for(process.wait(), timeout=86400)
             except (asyncio.TimeoutError, asyncio.CancelledError):
                 process.kill()
                 await process.wait()
@@ -74,6 +74,10 @@ async def run_task(body: Run) -> dict:
             if process.returncode != 0:
                 raise RuntimeError("Base's brain could not finish; inspect the task receipt")
             receipt["status"] = "done"
+        except asyncio.CancelledError:
+            receipt["status"] = "cancelled"
+            failure = "Brain task cancelled; default pipeline continues."
+            raise
         except Exception:
             receipt["status"] = "failed"
             failure = "Base's brain could not finish; the existing pipeline result is retained."
@@ -99,12 +103,53 @@ async def health():
     return {"ok": True, "room": "base", "hermes_version": "0.22.2"}
 
 
-@app.post("/tasks")
-async def task(body: Run, x_tank_key: str = Header(default="")):
-    authenticate(x_tank_key)
-    scope(str(body.tenant_id), body.home_region)
+jobs: dict[tuple[str, str], asyncio.Task] = {}
+
+
+async def perform(body: Run) -> dict:
     async with gate:
         try:
             return await run_task(body)
         except Exception:
-            raise HTTPException(503, "Base's brain prerequisites are unavailable; no task was started.") from None
+            return {"tenant_id": str(body.tenant_id), "task_id": str(body.task_id), "room": "base", "status": "failed",
+                "steps": [], "model_receipts": [], "error": "Brain prerequisites unavailable before pipeline work."}
+
+
+@app.post("/tasks", status_code=202)
+async def task(body: Run, x_tank_key: str = Header(default="")):
+    authenticate(x_tank_key)
+    tenant = scope(str(body.tenant_id), body.home_region)
+    identity = (tenant, str(body.task_id))
+    current = jobs.get(identity)
+    if current is None or current.done():
+        jobs[identity] = asyncio.create_task(perform(body))
+    return {"tenant_id": tenant, "task_id": str(body.task_id), "status": "running"}
+
+
+@app.get("/tasks/{task_id}")
+async def poll_task(task_id: uuid.UUID, tenant_id: uuid.UUID, home_region: str = "us-east",
+                    x_tank_key: str = Header(default="")):
+    from fastapi.responses import JSONResponse
+    authenticate(x_tank_key)
+    tenant = scope(str(tenant_id), home_region)
+    job = jobs.get((tenant, str(task_id)))
+    if job is None:
+        raise HTTPException(503, "Brain task is unavailable; retained pipeline work is unchanged.")
+    if not job.done():
+        return JSONResponse({"tenant_id": tenant, "task_id": str(task_id), "status": "running"}, status_code=202)
+    if job.cancelled():
+        return {"tenant_id": tenant, "task_id": str(task_id), "room": "base", "status": "cancelled", "steps": [], "model_receipts": []}
+    return job.result()
+
+
+@app.delete("/tasks/{task_id}")
+async def cancel_task(task_id: uuid.UUID, tenant_id: uuid.UUID, home_region: str = "us-east",
+                      x_tank_key: str = Header(default="")):
+    authenticate(x_tank_key)
+    tenant = scope(str(tenant_id), home_region)
+    job = jobs.get((tenant, str(task_id)))
+    cancelled = bool(job and not job.done())
+    if cancelled:
+        job.cancel()
+        await asyncio.gather(job, return_exceptions=True)
+    return {"cancelled": cancelled}

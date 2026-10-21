@@ -6,10 +6,21 @@ python agents/base/check_brain_isolation.py ROOM BRAIN SANDBOX BROWSER GATEWAY
 import json
 import subprocess
 import sys
+import shlex
 
 
 def docker(*args):
     return subprocess.check_output(["docker", *args], text=True)
+
+
+def sandbox_probe_script():
+    scratch = "blocked=False\ntry:\n import socket\n socket.socket()\nexcept (ImportError,OSError): blocked=True\nassert blocked\nfrom pathlib import Path\nPath('proof').write_text('offline')\nprint('OFFLINE')"
+    sandbox_check = "import json,urllib.request,uuid\ncommand=" + repr("python -c " + shlex.quote(scratch)) + "\n" + """body = json.dumps({'tenant_id':str(uuid.uuid4()),'task_id':str(uuid.uuid4()),'command':command}).encode()
+request = urllib.request.Request('http://base-sandbox:8002/exec',data=body,headers={'Content-Type':'application/json'})
+result = json.load(urllib.request.urlopen(request,timeout=35))
+assert result['exit_code']==0 and 'OFFLINE' in result['output'], result
+"""
+    return sandbox_check
 
 
 def main(names):
@@ -19,10 +30,20 @@ def main(names):
     rows = [room, brain, sandbox, browser, gateway]
     for row in rows:
         assert row["State"].get("Health", {}).get("Status") == "healthy", "service is not healthy"
+        config = row["HostConfig"]
+        assert not config.get("Privileged"), "privileged room service"
+        assert not config.get("CapAdd"), "room service adds capabilities"
+        assert config.get("NetworkMode") != "host" and not str(config.get("NetworkMode", "")).startswith("container:"), "shared host/container network"
+        assert config.get("PidMode", "") in {"", "private"}, "shared PID namespace"
         assert not row["HostConfig"]["PortBindings"], "room service publishes a host port"
-        assert all(m["Type"] == "volume" for m in row["Mounts"]), "unexpected host mount"
+        assert all(m["Type"] == "volume" or (m["Type"] == "tmpfs" and m["Destination"] in {"/tmp", "/work"}) for m in row["Mounts"]), "unexpected host mount"
         keys = {v.split("=", 1)[0] for v in row["Config"]["Env"]}
         assert not keys & {"OPENAI_API_KEY", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "LITELLM_MASTER_KEY"}, "model key in room"
+    assert sandbox["HostConfig"].get("ReadonlyRootfs"), "sandbox root must be read-only"
+    assert "ALL" in sandbox["HostConfig"].get("CapDrop", []), "sandbox must drop all capabilities"
+    assert any("no-new-privileges" in option for option in sandbox["HostConfig"].get("SecurityOpt", [])), "sandbox can gain privileges"
+    assert not any(m["Type"] == "volume" for m in sandbox["Mounts"]), "sandbox must not mount room/session data"
+    assert "/work" in sandbox["HostConfig"].get("Tmpfs", {}), "sandbox lacks isolated tmpfs work"
     memberships = [set(row["NetworkSettings"]["Networks"]) for row in rows]
     assert memberships[0] == {"tervory-gw-base"}, "room corridor mismatch"
     sandbox_net, = memberships[2]
@@ -41,7 +62,7 @@ def main(names):
             continue
         peer = json.loads(docker("inspect", identity))[0]
         service = peer["Config"].get("Labels", {}).get("com.docker.compose.service")
-        assert service in {"tank", "postgres", "hermes", "searxng", "tiger"}, "unexpected corridor neighbour"
+        assert service in {"tank", "postgres", "hermes", "searxng"}, "unexpected corridor neighbour"
     room_script = '''import asyncio, os, asyncpg
 async def run():
     conn = await asyncpg.connect(os.environ['DATABASE_URL'])
@@ -59,8 +80,11 @@ asyncio.run(run())
 '''
     docker("exec", names[0], "python", "-c", room_script)
     proof = "import socket; s=socket.socket(); s.settimeout(3); assert s.connect_ex(('1.1.1.1',443)) != 0"
-    docker("exec", names[2], "docker", "run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL",
-           "tervory-base-sandbox:python3.12", "python", "-c", proof)
+    sandbox_check = sandbox_probe_script()
+    docker("exec", names[1], "python", "-c", sandbox_check)
+    gateway_address = gateway["NetworkSettings"]["Networks"]["tervory-gw-base"]["IPAddress"]
+    docker("exec", names[1], "python", "-c", "import socket; s=socket.socket(); s.settimeout(3); assert s.connect_ex(('" + gateway_address + "',3128)) != 0")
+    docker("exec", names[2], "python", "-c", proof)
     docker("exec", names[3], "python", "-c", proof)
     print("PASS Base topology, private tools, volumes, keys, database role and denied direct egress")
 

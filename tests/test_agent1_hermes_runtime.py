@@ -45,7 +45,7 @@ def test_actual_hermes_calls_pipeline_via_tank_with_receipts(tmp_path, monkeypat
     async def roster():
         return [{"model_name": "policy", "model_info": {"input_cost_per_token": 0, "output_cost_per_token": 0}}]
     tank = SimpleNamespace(pool=lambda: pool, load_policy=policy, _roster_models=roster,
-        graduate=SimpleNamespace(router_cannot_serve=lambda m: False), LITELLM_MASTER_KEY=uuid.uuid4().hex)
+        model_call_refusal=lambda *a, **kw: None, graduate=SimpleNamespace(router_cannot_serve=lambda m: False), LITELLM_MASTER_KEY=uuid.uuid4().hex)
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
@@ -102,7 +102,7 @@ def test_actual_hermes_calls_pipeline_via_tank_with_receipts(tmp_path, monkeypat
                         "choices": [{"index": 0, "message": message, "finish_reason": "stop" if done else "tool_calls"}],
                         "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}}, extra={"x-litellm-response-cost": "0"})
                 elif self.path == "/brain/pipeline":
-                    assert body in ({"tenant_id": tenant, "task_id": task}, {"tenant_id": tenant, "task_id": task, "finish": True})
+                    assert body in ({"tenant_id": tenant, "task_id": task, "finish": False}, {"tenant_id": tenant, "task_id": task, "finish": True})
                     self.reply({"pipeline_status": "done", "summary": "Cloud fixture processed", "unresolved": [], "cost_usd": 0})
                 else:
                     raise AssertionError("Unexpected POST " + self.path)

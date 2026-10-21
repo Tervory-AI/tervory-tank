@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import json
 import math
+import logging
 import os
 import re
 import time
@@ -22,6 +23,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+log = logging.getLogger("tank.agent_skills")
 ROOM = "base"
 SUBMISSIONS = Path("/tmp/tervory-agent-skills")
 LEDGER_SQL = """
@@ -86,6 +88,17 @@ def validate_chat(body: Chat) -> None:
                 for p in content
             ):
                 raise HTTPException(422, "The Base pilot accepts text only.")
+        calls = message.get("tool_calls")
+        if calls is not None:
+            if not isinstance(calls, list) or len(calls) > 64:
+                raise HTTPException(422, "Invalid tool calls.")
+            for call in calls:
+                if not isinstance(call, dict) or not isinstance(call.get("id"), str) or not isinstance(call.get("function"), dict):
+                    raise HTTPException(422, "Invalid tool call.")
+                function = call["function"]
+                if not isinstance(function.get("name"), str) or not isinstance(function.get("arguments"), str):
+                    raise HTTPException(422, "Invalid tool function.")
+
 
 
 def amount(value: Any) -> float:
@@ -116,16 +129,47 @@ async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | N
     model = policy["model"]
     if tank.graduate.router_cannot_serve(model):
         raise HTTPException(409, "The brain needs a model policy.")
-    messages = list(body.messages)
+    # Keep only OpenAI text and tool fields. Extra SDK/provider fields never
+    # become instructions, reasoning settings or alternate routing parameters.
+    messages = []
+    for source in body.messages:
+        message = {"role": source["role"], "content": source.get("content")}
+        if isinstance(message["content"], list):
+            message["content"] = [{"type": "text", "text": part["text"]} for part in message["content"]]
+        if source.get("tool_call_id"):
+            message["tool_call_id"] = str(source["tool_call_id"])
+        if source.get("tool_calls"):
+            message["tool_calls"] = [{"id": item["id"], "type": "function", "function": {
+                "name": item["function"]["name"], "arguments": item["function"]["arguments"]}}
+                for item in source["tool_calls"]]
+        messages.append(message)
     if policy.get("system_prompt"):
         messages.insert(0, {"role": "system", "content": policy["system_prompt"]})
+    text = []
+    for message in messages:
+        content = message.get("content")
+        text.append(content if isinstance(content, str) else "\n".join(part["text"] for part in content or []))
+        text.extend(call["function"]["arguments"] for call in message.get("tool_calls", []))
+    refusal = tank.model_call_refusal("\n".join(text), model,
+        box=region, tenant_id=str(tenant), task_type="agent.base.think", caller=ROOM)
+    if refusal:
+        raise HTTPException(403, refusal)
     # Policy chooses the route; a model name in an SDK request cannot override it.
-    payload = body.model_dump(exclude_none=True, exclude={"model", "stream", "stream_options", "max_completion_tokens", "user"})
+    payload = body.model_dump(exclude_none=True, exclude={"model", "stream", "stream_options", "max_completion_tokens", "user", "reasoning_effort"})
     payload.update(model=model, messages=messages, stream=False,
                    max_tokens=min(body.max_tokens or body.max_completion_tokens or policy["max_tokens_out"], policy["max_tokens_out"]))
+    # UTF-8 bytes plus chat framing conservatively bound text/tool token input
+    # without depending on one provider's tokenizer. Reject before any paid call.
+    upper_input = len(json.dumps(payload, ensure_ascii=False).encode()) + 16 * len(messages)
+    if upper_input > min(int(policy.get("max_tokens_in") or 48000), 48000):
+        raise HTTPException(413, "Conversation exceeds Base's input-token budget.")
+    roster = await tank._roster_models()
+    if baseline_cost(roster, model, 1, 1) is None:
+        raise HTTPException(503, "Base's policy model needs roster prices before it can be called.")
     ledger_id = uuid.uuid4()
     started = time.perf_counter()
     outcome, error, cost = "failed", "Model gateway unavailable.", 0.0
+    cost_status = "not_billed"
     tokens_in = tokens_out = 0
     answered = model
     data: dict[str, Any] = {}
@@ -135,14 +179,34 @@ async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | N
                 tank.LITELLM_URL + "/v1/chat/completions", json=payload,
                 headers={"Authorization": "Bearer " + tank.LITELLM_MASTER_KEY},
             )
+        try:
+            cost = amount(response.headers.get("x-litellm-response-cost"))
+            cost_status = "reported"
+        except ValueError:
+            pass
         if response.status_code == 200:
+            answered = response.headers.get("x-litellm-model-group") or model
+            # A billed but malformed response must still retain its reported
+            # spend. If usage is also missing, reserve a clearly labelled upper
+            # bound instead of logging the successful upstream call as free.
+            tokens_in, tokens_out = upper_input, payload["max_tokens"]
+            if cost_status != "reported":
+                cost = baseline_cost(roster, model, tokens_in, tokens_out)
+                cost_status = "estimated_upper_bound"
             data = response.json()
             usage = data["usage"]
-            tokens_in, tokens_out = int(usage["prompt_tokens"]), int(usage["completion_tokens"])
-            if tokens_in < 0 or tokens_out < 0 or not isinstance(data["choices"][0]["message"], dict):
+            observed_in, observed_out = int(usage["prompt_tokens"]), int(usage["completion_tokens"])
+            if observed_in < 0 or observed_out < 0:
+                raise ValueError("Malformed model usage")
+            tokens_in, tokens_out = observed_in, observed_out
+            if cost_status != "reported":
+                estimate = baseline_cost(roster, answered, tokens_in, tokens_out)
+                if estimate is None:
+                    estimate = baseline_cost(roster, model, tokens_in, tokens_out)
+                assert estimate is not None
+                cost, cost_status = estimate, "estimated"
+            if not isinstance(data["choices"][0]["message"], dict):
                 raise ValueError("Malformed model response")
-            cost = amount(response.headers.get("x-litellm-response-cost"))
-            answered = response.headers.get("x-litellm-model-group") or model
             outcome, error = "delivered", None
         else:
             error = "Model gateway refused the call (HTTP %d)." % response.status_code
@@ -151,18 +215,23 @@ async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | N
         error = "Model gateway failed or returned an incomplete receipt."
     latency = int((time.perf_counter() - started) * 1000)
     baseline = policy.get("baseline_model") or model
-    baseline_usd = baseline_cost(await tank._roster_models(), baseline, tokens_in, tokens_out)
+    baseline_usd = baseline_cost(roster, baseline, tokens_in, tokens_out)
     receipt = {
         "ledger_id": str(ledger_id), "tenant_id": str(tenant), "task_id": str(task) if task else None,
         "room": ROOM, "task_type": "agent.base.think", "region": region, "model": answered,
-        "cost_usd": cost, "baseline_model": baseline, "baseline_cost_usd": baseline_usd,
-        "saving_usd": None if baseline_usd is None else baseline_usd - cost,
+        "cost_usd": cost, "cost_status": cost_status, "baseline_model": baseline, "baseline_cost_usd": baseline_usd,
+        "saving_usd": None if baseline_usd is None or cost is None else baseline_usd - cost,
         "tokens_in": tokens_in, "tokens_out": tokens_out, "latency_ms": latency, "outcome": outcome,
     }
     async with tank.pool().acquire() as conn:
         async with conn.transaction():
             await conn.execute(LEDGER_SQL, ledger_id, tenant, region, policy["rung"], answered, policy["priority"],
                                tokens_in, tokens_out, cost, latency, outcome, task, error)
+            await conn.execute(
+                "INSERT INTO tank.transcripts (ledger_id,tenant_id,task_type,messages,content) "
+                "VALUES ($1,$2,'agent.base.think',$3::jsonb,$4)", ledger_id, tenant, json.dumps(messages),
+                json.dumps(data.get("choices", [])) if data else "Model call failed.",
+            )
             await conn.execute(
                 "INSERT INTO tank.agent_receipts (ledger_id,tenant_id,room,receipt) VALUES ($1,$2,'base',$3::jsonb)",
                 ledger_id, tenant, json.dumps(receipt),
@@ -290,16 +359,33 @@ async def submit(tank: Any, body: Candidate) -> dict:
 
 
 async def restore(tank: Any) -> None:
-    """Run after normal startup registration; state remains owned by Skala."""
-    async with tank.pool().acquire() as conn:
-        rows = await conn.fetch("SELECT * FROM tank.agent_skill_submissions WHERE submitted_by_room='base' AND region=$1", tank.box_region())
-        for row in rows:
-            identity = (row["skill_id"], row["version"])
-            if identity in tank._packages:
-                raise RuntimeError("Submitted skill collides with a Git package")
-            files = json.loads(row["package"]) if isinstance(row["package"], str) else row["package"]
-            tank._packages[identity] = materialize(tank, *identity, files, row["sha256"])
-            await conn.execute("UPDATE tank.skills SET present=true WHERE id=$1 AND version=$2", *identity)
+    """Unavailable or corrupt submissions never prevent Tank from booting."""
+    try:
+        async with tank.pool().acquire() as conn:
+            rows = await conn.fetch("SELECT * FROM tank.agent_skill_submissions WHERE submitted_by_room='base' AND region=$1", tank.box_region())
+            for row in rows:
+                identity = (row["skill_id"], row["version"])
+                try:
+                    existing = tank._packages.get(identity)
+                    expected = SUBMISSIONS / row["sha256"] / identity[0] / identity[1]
+                    if existing is not None and existing.path != expected:
+                        raise RuntimeError("Submitted skill collides with a Git package")
+                    files = json.loads(row["package"]) if isinstance(row["package"], str) else row["package"]
+                    package = materialize(tank, *identity, files, row["sha256"])
+                    await conn.execute("UPDATE tank.skills SET present=true WHERE id=$1 AND version=$2", *identity)
+                    tank._packages[identity] = package
+                except Exception:
+                    # No raw package text, SQL errors or paths in logs.
+                    log.warning("Base submission restore failed; version unavailable")
+                    await conn.execute("UPDATE tank.skills SET present=false WHERE id=$1 AND version=$2", *identity)
+    except Exception:
+        log.warning("Base submission restore unavailable; Tank will continue booting")
+        try:
+            async with tank.pool().acquire() as conn:
+                await conn.execute("UPDATE tank.skills SET present=false WHERE (id,version) IN "
+                    "(SELECT skill_id,version FROM tank.agent_skill_submissions WHERE submitted_by_room='base')")
+        except Exception:
+            log.warning("Base submission availability update deferred")
 
 
 async def export_skills(tank: Any, tenant: uuid.UUID, region: str) -> dict:
@@ -340,6 +426,10 @@ class BaseSkillHTTP:
 
     async def post(self, url: str, **kwargs):
         if url == "http://base-browser-gateway:3000/render":
+            kwargs["timeout"] = 300
+            payload = dict(kwargs.get("json") or {})
+            payload["max_ms"] = max(int(payload.get("max_ms") or 0), 90000)
+            kwargs["json"] = payload
             kwargs["headers"] = {"X-Tank-Key": os.environ.get("TANK_KEY_BASE", ""),
                                  "X-Tenant-ID": str(self.tenant), "X-Home-Region": "us-east"}
             if self.task:

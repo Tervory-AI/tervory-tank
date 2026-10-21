@@ -2,178 +2,148 @@
 
 PR: https://github.com/Tervory-AI/tervory-tank/pull/216
 
-Nous Research Hermes Agent **v0.22.2** is pinned to release commit
-`d923a5eb487a17c0a68801bba9ef0f56c81040a8`.
-Its [MIT licence](https://github.com/NousResearch/hermes-agent/blob/d923a5eb487a17c0a68801bba9ef0f56c81040a8/LICENSE)
-is retained at `/opt/hermes/LICENSE`. The brain image uses Python 3.14, required
-by this upstream release. Source is installed as upstream's editable package;
-bundled skills and optional skills are removed. No model credential is present.
+Nous Research Hermes Agent **v0.22.2** is pinned to
+`d923a5eb487a17c0a68801bba9ef0f56c81040a8`. Its [MIT licence](https://github.com/NousResearch/hermes-agent/blob/d923a5eb487a17c0a68801bba9ef0f56c81040a8/LICENSE)
+is retained in the image. The brain uses Python 3.14 and has no provider key.
 
-## Task flow
+## Task flow and fallback
 
-1. The existing Base worker pins approved versions and calls its brain service.
-2. The service recalls Base memories for the tenant before starting work. A
-   wrong-tenant response or memory outage fails visibly. Each task gets a fresh
-   process; session state and approved skills live under that tenant's directory.
-3. Hermes plans through Tank, then calls the existing code pipeline. During this
-   first pass, Tank defers model enrichment and withholds paid-service keys from
-   the skill context. The original approved packages are unchanged.
-4. Hermes can recover unresolved records using the private browser, offline
-   Docker sandbox and approved Skala skills. Recovery retries are bounded. It
-   cannot load a candidate it submits. Human checks are recorded, never solved.
-5. After recovery, the existing pipeline continues automatically with its existing
-   paid rungs for unresolved or deferred records. The thinking calls themselves
-   are policy-routed model calls and are charged; the free-first order applies to
-   enrichment and paid search, not to Hermes' planning.
-6. The service remembers the result and source references, then completes the
-   receipt. A failed remember marks the task failed while retaining work.
+1. Base pins approved Skala versions and starts its brain with `POST /tasks`.
+   The start returns immediately; Base polls the authenticated tenant-scoped
+   `GET /tasks/{task_id}`. Every HTTP request is short; the task has a one-day
+   deadline. No HTTP connection stays open for a whole state.
+2. The brain recalls Base's memory for this tenant before work. Each task gets
+   a fresh agent process and a tenant-scoped home/session directory.
+3. Hermes calls `pipeline_run`, which starts Base's existing pipeline with
+   `POST /brain/pipeline` and polls `GET /brain/pipeline`. The first pass defers
+   paid enrichment/search. Starts are idempotent; polling cannot rerun work.
+4. Recovery uses approved Skala skills, Base's browser, and its private Python
+   scratch service. A candidate cannot be loaded or run. Retry URLs are checked
+   for private/internal DNS addresses before any record changes.
+5. Existing paid rungs continue automatically after free recovery. The task
+   remembers the result and sources before publishing its final receipt.
+6. If the brain is down, paused, refused or fails before starting the pipeline,
+   Base cancels its job, closes the late-callback gate and runs today's pipeline.
+   A fallback receipt explains this. Existing results are retained if the brain
+   fails after pipeline work started. Thinking costs are not counted twice.
 
-## Tank and Skala boundary
+## Model and Skala boundary
 
-All new endpoint logic is in `tank/agent_skills.py`. `tank/main.py` contains route
-registration and the explicitly approved narrow guard on its existing Skala run
-path. Tank's image copies the new module. Schema is additive and reapplies safely.
+New logic stays in `tank/agent_skills.py`. Main registers routes and calls its
+narrow guard in the existing `/v1/skala/{id}/run` path. Approved packages and
+Skala's eval/approval lifecycle are unchanged.
 
-- `POST /v1/agents/base/chat/completions`: Bearer or X-Tank-Key authentication,
-  `X-Tenant-ID`, `X-Task-ID`, `X-Home-Region: us-east`. Request model names cannot
-  override policy. Text/tool calls and buffered SSE are supported. The ledger and
-  receipt transaction commits before a successful completion is returned.
-- `GET /v1/agents/base/skills?tenant_id=...&home_region=us-east`: approved, present
-  Base versions only, with agentskills.io `SKILL.md` files. Authored versions are
-  restricted to their submitting tenant and region.
-- `POST /v1/agents/base/skills/candidates`: immutable new `base.learned.*` version,
-  always candidate, with submitting room/tenant/region recorded. Source is durable
-  in Postgres and reconstructed after restart. No update, replacement or approval
-  operation exists here. Existing Skala evals and founder approval remain required.
-- `POST /v1/skala/{id}/run`: the only execution path. Base's key can run only its
-  own approved versions, never preview or another tenant's authored version.
-- `GET /v1/agents/base/receipts?tenant_id=...&task_id=...`: thinking receipts with
-  ledger IDs, model cost, policy baseline and savings. An unavailable baseline is
-  null, never an invented saving. The new routes refuse every other room's key.
+- `POST /v1/agents/base/chat/completions`: Base room key plus tenant/task/region
+  headers. Policy chooses the model and output cap. The paid-work pause and
+  `model_call_refusal` run before LiteLLM. Unknown SDK message fields and requested
+  reasoning effort are removed. A conservative UTF-8 input-token bound caps the
+  complete prompt and tools before spending.
+- Every gateway call writes a ledger row, transcript and scoped receipt in one
+  transaction. Missing cost headers use roster token prices and are marked
+  estimated. Missing usage on a malformed billed response gets an explicit
+  estimated upper bound. A policy model without prices is refused before calling.
+  An unknown baseline stays null. No automatic promotion is enabled.
+- `GET /v1/agents/base/skills?tenant_id=...&home_region=us-east` exports only
+  present approved Base versions in agentskills.io format. Room-authored versions
+  are tenant/region scoped. Only `SKILL.md` instructions/schemas are installed.
+- `POST /v1/agents/base/skills/candidates` only creates a new immutable candidate.
+  It cannot approve, replace, edit or promote a version. Corrupt/unavailable
+  restored versions are logged and marked absent without preventing Tank boot.
+- Base uses the existing Skala run route, and only its own approved versions.
+  Every other room's key is refused on the new endpoints.
 
-The initial `agent.base.think` policy copies the current platform `tier0.answer`
-model once. It does not alter any existing route or select a new provider. The
-new policy has no cache or automatic promotion. Existing policy edits survive
-schema reapplication. The founder paid-work pause also gates thinking calls and fails closed when its
-state is unavailable. Failed gateway responses are sanitized and recorded as
-failed; missing accounting never produces a successful completion.
+Candidate evals still execute source inside Tank's process. The founder must
+read a learned candidate's `run.py` before running its existing evals. Moving
+room-authored evals into their sandbox is a separate follow-up.
 
-The full task receipt is stored in `agent_base.tasks.input.brain_receipt` and on
-Base's volume. The existing `GET /v1/base/batches?tenant_id=...` Tank proxy adds
-`brain_tasks`: task ID, status, error and receipt. This is the COMMAND-1 work-panel
-integration contract; no window UI is changed here. Existing skill model ledger
-rows also receive the Base task ID.
+## Public browser
 
-## Private tools
+Both pipeline renders and the brain use Base's real Chromium container, cookie
+volume and history. Tiger is absent from Base's network. Any public HTTP(S) site
+is permitted; there is no host allowlist. Private, loopback, metadata, multicast
+and internal DNS addresses are refused. Requests and redirects are re-checked,
+and the proxy connects only to the checked IP. CONNECT listens only on the
+browser-network interface, never the Base corridor interface.
 
-Base has its own browser volume, tenant-separated storage and history, and a
-private browser network. The gateway permits only exact configured HTTPS hosts
-on port 443 and rejects private, loopback and metadata DNS answers. Redirects and
-subresources are checked too. The default hosts are `www.atf.gov,atf.gov`;
-additional public hosts are an operator setting in `BASE_ALLOWED_HOSTS`. No
-wildcards, credentials or custom ports are accepted. The current pipeline uses
-HTML; OCR is not invoked without an image-reading requirement.
+The visitor supports JavaScript, scrolling, public links and PDFs. Cookies
+persist per tenant/site. Same-site pages wait a few seconds, while four sites
+can run in parallel. Slow pages have a generous timeout. No identity masking or
+proxy rotation is used. Captchas, bot checks and login requirements are recorded
+as **needs a person**. The only automated click is a narrowly identified simple
+age-confirmation button outside a form. No forms, accounts or logins are used.
 
-The sandbox daemon is a privileged **Base-only sidecar**, running rootless Docker
-inside an isolated namespace. It has neither the host Docker socket nor host
-filesystem mounts. Its only exposed API is on Base's internal sandbox network,
-reachable only by the brain. Each execution has a read-only root, no network,
-no forwarded environment credentials and only the current run's work directory.
-The Python execution image is imported from a bundled rootfs, so runtime startup
-needs no internet. The sidecar's Compose CPU/memory limit bounds all its children;
-inner cgroup limits depend on host support. No other room joins either private
-network. Base's browser adapter points to its gateway, never Tiger.
+## Unprivileged sibling scratch service
 
-## Cloud verification
+`base-sandbox` has `cap_drop: ALL`, `no-new-privileges`, a read-only root, bounded
+CPU/memory/PIDs and tmpfs. It joins only the internal sandbox network with Base's
+brain. It has no key, host path, brain/session volume, Docker socket or daemon.
 
-The standard CI tests cover route authentication, policy enforcement, tool-call
-preservation, durable receipts, real Postgres schema reapplication, candidate
-immutability, existing eval/approval integration, tenant isolation, memory order,
-free recovery before paid continuation, and the work-panel receipt contract.
+The small exec API runs **Python scratch commands through CPython/WASI**. It
+accepts `python -c` or a Python heredoc, not host shell commands. Wasmtime exposes
+only the current run directory as writable and Python's standard library as
+read-only. No sockets, native subprocesses, host environment or other run paths
+are available. Outputs are explicitly copied back into Base's run volume; the
+executor removes its temporary directory. Memory, fuel, output size and wall
+clock time are bounded. This works without special host namespace privileges.
 
-Managed-cloud checkpoint on 21 October 2026: **34 focused tests passed**, including
-the unchanged Dockerfile and billing regressions, Base room tests and real
-Postgres checks. The actual pinned Hermes protocol test passed (two model calls
-and two receipts), the real Chromium isolation test passed, and the actual Hermes
-Docker backend test passed (denied internet, no forwarded key, own work volume).
-These component checks use synthetic fixtures. The owner-approved integrated
-sandbox pilot below replaces the pre-merge live run; CI links are in the PR.
+Wasmtime **49.0.0** is pinned. CPython/WASI **3.13.11**, WASI SDK 24, is pinned to
+asset SHA-256 `e99a617738ade87cd263aa46cace7173faa91b5de994499c83e49d132c40bb77`.
+The [release](https://github.com/brettcannon/cpython-wasi-build/releases/tag/v3.13.11)
+comes from the CPython core maintainer's WASI build project. Its PSF licence and
+Wasmtime's Apache-2.0 licence remain in the image. Standard-library-only scratch
+work is intentional; package installs and native shell programs are unavailable.
 
-Opt-in checks run actual containers without model/provider credentials. Build
-`agents/base/Dockerfile.{brain,browser,gateway,sandbox}` with repository-root build
-context, tagging each image `tervory-agent1-<name>:cloud`, then run:
+## Receipts and cloud verification
+
+The full receipt is in `agent_base.tasks.input.brain_receipt` and Base's run
+volume. `GET /v1/base/batches?tenant_id=...` exposes matching `brain_tasks` to the
+work panel. Thinking receipts are also available through the scoped Tank route
+`GET /v1/agents/base/receipts?tenant_id=...&task_id=...`.
+
+The [recording](pilot/recording.json), [receipt](pilot/receipt.json), and
+[fallback proof](pilot/fallback.json) use two synthetic Delaware ATF-format rows,
+a generated throwaway Base key, recorded LiteLLM answers/prices and recorded
+missing-site responses. Tank, its ledger/transcripts, the Base pipeline, pinned
+Hermes agent, memory HTTP API, Chromium and the WASI executor are real. Memory
+uses the existing in-memory test store with deterministic embeddings and a
+second-tenant decoy. Actual provider spend is zero. This is the owner-approved
+replacement for the pre-merge live run.
+
+Build `Dockerfile.{brain,browser,gateway,sandbox}` with repository-root context,
+tagging each `tervory-agent1-<name>:cloud`, and run in a managed cloud sandbox:
 
 ```sh
-AGENT1_HERMES_IMAGE=tervory-agent1-brain:cloud pytest -q tests/test_agent1_hermes_runtime.py
 AGENT1_CONTAINER_IMAGES=1 pytest -q tests/test_agent1_container_runtime.py
-```
-
-The Hermes protocol check runs the pinned AIAgent against a synthetic model and
-the real Tank adapter. It verifies two model calls, two scoped receipts, the
-restricted six-tool list and pipeline continuation. This is **not a live ATF
-pilot**. Container checks exercise actual Chromium, cross-room refusal and the
-actual Hermes Docker backend. They remove only their randomly named resources.
-
-## Recorded sandbox pilot
-
-The owner requested an offline replacement for the pre-merge live pilot: run Tank
-from this branch with recorded LiteLLM answers, a generated throwaway Base room
-key and a small ATF-format fixture. No production key, endpoint or model is used.
-
-- [Input fixture](pilot/atf-fixture.json): two synthetic Delaware rows.
-- [Recording](pilot/recording.json): actual HTTP calls, room-key validation booleans,
-  recorded model answers, Postgres ledger rows, approved export, loaded skill
-  folders, resulting records and private container identities.
-- [Complete receipt](pilot/receipt.json): recall, approved skills, default pipeline,
-  browser refusal, sandbox action, continuation, thinking costs and remember.
-
-The real Tank app and existing Base pipeline run against a newly created test
-Postgres database. The real Hermes memory API uses its in-memory test store and
-deterministic local embeddings; it includes a second-tenant decoy. Site requests
-return recorded missing-site responses. The pinned upstream agent, its room
-service, Chromium and rootless Docker backend execute normally. Only the test
-database has seeded approved registry entries; source packages remain unchanged.
-LiteLLM prices are synthetic accounting values, not billed spend. Actual model
-spend is zero. An expected browser refusal is retained as a failed tool step;
-it is not represented as a successful public-page fetch.
-
-To reproduce in a managed cloud sandbox, build the four images above, provide a
-throwaway Postgres admin DSN in `POOL_SCHEMA_DATABASE_URL`, and run:
-
-```sh
+AGENT1_HERMES_IMAGE=tervory-agent1-brain:cloud pytest -q tests/test_agent1_hermes_runtime.py
 AGENT1_PILOT=1 AGENT1_PILOT_OUTPUT=/tmp/base-pilot pytest -q -s tests/test_agent1_pilot.py
 ```
 
-The harness generates temporary keys, records no credentials, and removes only
-its randomly named containers, volumes, networks and database on completion.
+The pilot also needs `POOL_SCHEMA_DATABASE_URL` for a throwaway Postgres server.
+It removes only its own database, containers, volumes and networks. The container
+checks exercise real JavaScript/age clicks/cookie persistence, human-check
+refusal, private egress and browser-only proxy binding, plus isolated WASI work.
 
 ## How Claude runs the live pilot
 
 **live ATF run: done by Claude on Boston after merge**
 
-This is the assigned post-merge handoff, not a claim that the live run has already
-occurred. This lane does not merge or deploy.
+This is the assigned post-merge handoff. The live run has not occurred here.
 
-1. After founder merge and authorized Boston deployment, verify the existing
-   Base room key, database role and Hermes connection are configured. Run
+1. After founder merge and authorized Boston deployment, verify existing Base
+   credentials, database and Hermes access. Run
    `python agents/base/check_brain_isolation.py ROOM BRAIN SANDBOX BROWSER GATEWAY`
-   with the five deployed container names. Require every isolation check to pass.
-2. Save a current official ATF state file containing only Delaware rows, retaining
-   its original ATF columns. Record its source URL, snapshot date and row count.
-   Use the authorized tenant and US region. Browser visits are limited to the
-   exact configured `BASE_ALLOWED_HOSTS`; a refusal must remain in the receipt.
-3. Open `https://app.tervory.com/data`, name the batch with state and snapshot date,
-   upload that CSV/TSV, select **FFL engine**, uncheck **preview (allow unapproved
-   skill versions)** and click **Run Base**. The existing server-side equivalent
-   is `POST /v1/base/run` with `tenant_id`, `batch`, `records`, `engine: "ffl"`,
-   `preview: false`, `split_by_state: false`. Keep keys server-side.
-4. Record the returned task ID. Inspect the batch on `/data` and Base's results on
-   `/base`. Read `GET /v1/base/batches?tenant_id=...` through Tank and save the
-   matching `brain_tasks[].receipt`, along with source/snapshot/count/task ID and
-   outcome. The full receipt also lives in `agent_base.tasks.input.brain_receipt`.
-5. Confirm recall is first and tenant-scoped; loaded skills match Skala's approved
-   Base export; default pipeline and free recovery precede continuation; browser
-   actions use Base's volume and container; human checks are recorded; remember
-   is last. Join `tank.ledger` to `tank.agent_receipts` on `ledger_id`, filtering
-   both tenant and task, and verify each thinking call's model, cost, baseline and
-   outcome. Attach the complete live receipt to PR #216 after the run.
+   with the deployed names. Require every check to pass.
+2. Save a current official Delaware ATF state file, preserving ATF columns. Record
+   source URL, snapshot date and row count.
+3. Open `https://app.tervory.com/data`, name the batch, upload the CSV/TSV, select
+   **FFL engine** and click **Run Base**. Preview is hidden and always false.
+   Server-side equivalent: `POST /v1/base/run` with tenant, batch, records,
+   `engine:"ffl"`, `preview:false`, `split_by_state:false`. Keep keys server-side.
+4. Record the task ID. Inspect `/data` and `/base`, then save its
+   `brain_tasks[].receipt` from `GET /v1/base/batches?tenant_id=...`.
+5. Verify tenant-scoped recall first, approved skills, default pipeline/free
+   recovery before continuation, private browser actions and remember last.
+   Verify a brain outage still processes the default pipeline with a fallback
+   receipt. Join ledger, transcripts and agent receipts by ledger ID, filtering
+   tenant and task, to check model, cost/estimate status and baseline. Attach the
+   complete live receipt and source/snapshot/count/outcome to PR #216.
