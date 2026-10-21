@@ -3400,3 +3400,6 @@ async def market_quarantine_act(
     except Exception:
         raise HTTPException(status_code=502, detail=_MARKET_DOWN) from None
     return {**payload, "models": models}
+
+# COMMAND-1A: conversation routes live in their own module.
+app.include_router(__import__("command").router)
