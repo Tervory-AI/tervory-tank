@@ -57,14 +57,22 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
   const menuClose = useRef<HTMLButtonElement>(null);
   const clean = (value: string) => founder ? value : clientText(value);
 
+  function rememberUncertain(cardId: string, uncertain: boolean) {
+    if (uncertain) uncertainCards.current.add(cardId); else uncertainCards.current.delete(cardId);
+    try { if (uncertain) sessionStorage.setItem(`command-uncertain:${cardId}`, "1"); else sessionStorage.removeItem(`command-uncertain:${cardId}`); } catch { /* Memory still protects this mounted window if storage is unavailable. */ }
+  }
+  function isUncertain(cardId: string) {
+    try { if (sessionStorage.getItem(`command-uncertain:${cardId}`) === "1") uncertainCards.current.add(cardId); } catch { /* Use the in-memory guard. */ }
+    return uncertainCards.current.has(cardId);
+  }
   async function refreshThreads() { const rows = await (await api("threads")).json() as Thread[]; setThreads(rows); }
   async function load(id: string, version = generation.current) {
     const next = await (await api(`threads/${encodeURIComponent(id)}`)).json() as Snapshot;
     if (generation.current !== version || active.current !== id) return;
     next.cards = next.cards.map(card => {
-      if (!uncertainCards.current.has(card.card_id)) return card;
+      if (!isUncertain(card.card_id)) return card;
       if (["pending", "awaiting_confirmation"].includes(card.status ?? "pending")) return { ...card, status: "unknown", retry_safe: false, error: "Confirmation could not be verified. Do not repeat this action until its outcome is checked." };
-      uncertainCards.current.delete(card.card_id); return card;
+      rememberUncertain(card.card_id, false); return card;
     });
     setSnapshot(next); setThreads(rows => upsert(rows, next.thread, "thread_id"));
   }
@@ -121,13 +129,13 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
     const id = selected;
     ++generation.current; setCardBusy(card.card_id); setError("");
     if (action === "confirm") {
-      uncertainCards.current.add(card.card_id);
+      rememberUncertain(card.card_id, true);
       setSnapshot(current => current && ({ ...current, cards: upsert(current.cards, { ...card, status: "executing", retry_safe: false }, "card_id") }));
     }
     try {
       const saved = await (await api(`cards/${encodeURIComponent(card.card_id)}`, { method: "POST", body: JSON.stringify({ action }) })).json() as Card;
-      if (saved.card_id === card.card_id && saved.status) {
-        uncertainCards.current.delete(card.card_id);
+      if (saved.card_id === card.card_id && saved.status && !["pending", "awaiting_confirmation"].includes(saved.status)) {
+        rememberUncertain(card.card_id, false);
         setSnapshot(current => current && ({ ...current, cards: upsert(current.cards, saved, "card_id") }));
       }
       await load(id);
