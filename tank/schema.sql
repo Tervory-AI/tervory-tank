@@ -919,3 +919,26 @@ CREATE TABLE IF NOT EXISTS tank.command_followups (
     created_at timestamptz NOT NULL DEFAULT now(),
     FOREIGN KEY (build_id,tenant_id) REFERENCES tank.command_builds(build_id,tenant_id)
 );
+
+-- Explicit receipt provenance: a row is attributed once, never by tenant/time heuristics.
+CREATE TABLE IF NOT EXISTS tank.command_receipt_links (
+    tenant_id uuid NOT NULL,
+    ledger_id uuid NOT NULL REFERENCES tank.ledger(id),
+    thread_id uuid NOT NULL,
+    step_id text NOT NULL,
+    PRIMARY KEY (tenant_id,ledger_id),
+    FOREIGN KEY (thread_id,tenant_id) REFERENCES tank.command_threads(thread_id,tenant_id)
+);
+-- Bounded attachments remain on this box and are served only as downloads.
+CREATE TABLE IF NOT EXISTS tank.command_attachments (
+    attachment_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    thread_id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    user_id text NOT NULL,
+    name text NOT NULL,
+    sha256 text NOT NULL,
+    content bytea NOT NULL CHECK (octet_length(content)<=5242880),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    FOREIGN KEY (thread_id,tenant_id) REFERENCES tank.command_threads(thread_id,tenant_id)
+);
+CREATE INDEX IF NOT EXISTS command_attachments_owner ON tank.command_attachments(tenant_id,user_id,thread_id);
