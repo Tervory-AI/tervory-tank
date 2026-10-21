@@ -2924,67 +2924,12 @@ async def tiger_alerts(request: Request) -> Response:
 
 # ---------- workers panel (read only) ----------
 
-_WORKER_STATUS = re.compile(r"^[a-z_]{1,32}$")
-_WORKER_PR = re.compile(r"^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/[0-9]{1,9}$")
-_WORKERS_MAX_ROWS = 50
-_WORKERS_MAX_BYTES = 256 * 1024
-
-
-def _worker_number(value: Any, *, digits: int) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    number = float(value)
-    if number != number or number < 0 or number > 1e9:
-        return None
-    return round(number, digits)
-
-
-def _worker_row(raw: Any) -> dict[str, Any] | None:
-    """Keep the panel's columns only, as plain values. Anything else in a row is dropped."""
-    if not isinstance(raw, dict):
-        return None
-    issue = raw.get("issue")
-    if isinstance(issue, bool) or not isinstance(issue, int) or issue <= 0:
-        return None
-    status = str(raw.get("status") or "").strip().lower()
-    pr_url = raw.get("pr_url")
-    brief = raw.get("brief")
-    return {
-        "issue": issue,
-        "brief": brief.strip()[:200] if isinstance(brief, str) else "",
-        "status": status if _WORKER_STATUS.fullmatch(status) else "unknown",
-        "pr_url": pr_url if isinstance(pr_url, str) and _WORKER_PR.fullmatch(pr_url) else None,
-        "minutes": _worker_number(raw.get("minutes"), digits=2),
-        "cost_usd": _worker_number(raw.get("cost_usd"), digits=6),
-    }
-
 
 @app.get("/v1/workers", dependencies=[Depends(require_key)])
 async def workers_panel() -> dict[str, Any]:
-    """Recent worker tasks for the Tank page. Reads the workers service's /workers page as
-    JSON (/workers.json, the same rows). Read only: no ledger row, no write, no key."""
-    base = (os.environ.get("WORKERS_URL", "").strip() or "http://workers:8000").rstrip("/")
-    parsed = urlparse(base)
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
-        return {"available": False, "tasks": []}
-    try:
-        if _http is not None:
-            resp = await _http.get(f"{base}/workers.json", timeout=5, follow_redirects=False)
-        else:
-            async with httpx.AsyncClient(timeout=5) as client:
-                resp = await client.get(f"{base}/workers.json", follow_redirects=False)
-    except httpx.HTTPError:
-        return {"available": False, "tasks": []}
-    if resp.status_code != 200 or len(resp.content) > _WORKERS_MAX_BYTES:
-        return {"available": False, "tasks": []}
-    try:
-        rows = resp.json()
-    except ValueError:
-        return {"available": False, "tasks": []}
-    if not isinstance(rows, list):
-        return {"available": False, "tasks": []}
-    tasks = [row for row in (_worker_row(item) for item in rows[:_WORKERS_MAX_ROWS]) if row is not None]
-    return {"available": True, "tasks": tasks}
+    """Worker status for the Tank page, from the host workers' heartbeat (WORKERS-2).
+    Read only: no write, no outbound call. See workers_status.panel."""
+    return await __import__("workers_status").panel()
 
 
 # ---------- billing events (Workspace key only) ----------

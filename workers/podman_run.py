@@ -10,7 +10,8 @@ from urllib.parse import urlsplit, urlunsplit
 from workers.settings import Settings
 
 TASK_IMAGE = "tervory-worker-task:1"
-# The host install copies the code here (workers/host/install.sh). Root-owned, read-only to the service.
+# workers/host/install.sh and the auto-updater put the code here. Owned by tervory-workers;
+# task containers never mount it.
 DEFAULT_CODE_DIR = "/srv/tervory-workers/app"
 _NAME = re.compile(r"^tervory-worker-[0-9]+-[0-9a-f]{8}$")
 

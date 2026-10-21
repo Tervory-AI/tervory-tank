@@ -144,3 +144,22 @@ async def workers_tile() -> dict[str, Any]:
             "SELECT worker,state,issue,commit,last_error,seen_at FROM tank.workers_heartbeat ORDER BY seen_at DESC LIMIT 1"
         )
     return {"workers_paused": await workers_paused(), "worker": view(row), "stale_after_s": STALE_AFTER_S}
+
+
+async def panel() -> dict[str, Any]:
+    """GET /v1/workers (the Tank page panel), from tank.workers_heartbeat instead of the old
+    http://workers:8000. Available only while the worker checks in; one row for its current issue."""
+    try:
+        async with db().acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT worker,state,issue,commit,last_error,seen_at FROM tank.workers_heartbeat ORDER BY seen_at DESC LIMIT 1"
+            )
+    except Exception:
+        return {"available": False, "tasks": []}
+    beat = view(row)
+    if beat is None or not beat["checking_in"]:
+        return {"available": False, "tasks": []}
+    tasks = []
+    if beat["issue"]:
+        tasks.append({"issue": beat["issue"], "brief": "", "status": "running", "pr_url": None, "minutes": None, "cost_usd": None})
+    return {"available": True, "tasks": tasks}
