@@ -276,7 +276,7 @@ async def test_screenshots_do_not_extend_two_minute_human_permission(portal, mon
     async def action(name):
         payload = browser.pack("control", {"action": "live", "tenant_id": str(actor.tenant_id), "site": item.site,
             "handle": handle, "input": {"action": name, "x": 10, "y": 10}})
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=browser.app), base_url="http://browser") as client:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=browser.app, client=("10.0.27.3", 40000)), base_url="http://browser") as client:
             response = await client.post("/access/control", json=payload)
         assert response.status_code == 200
     await action("open")
@@ -303,7 +303,7 @@ async def test_dismiss_closes_the_owning_browser_handle_and_status_detects_resta
     page.html = "verify you are human"
     await page.read(actor.tenant_id)
     handle, item = next(iter(browser.held.items()))
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=browser.app), base_url="http://browser") as client:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=browser.app, client=("10.0.27.3", 40000)), base_url="http://browser") as client:
         async def action(name, tenant):
             response = await client.post("/access/control", json=browser.pack("control", {"action": name,
                 "tenant_id": str(tenant), "site": item.site, "handle": handle}))
@@ -315,3 +315,32 @@ async def test_dismiss_closes_the_owning_browser_handle_and_status_detects_resta
         await action("dismiss", actor.tenant_id)
         assert handle not in browser.held
         assert not (await action("status", actor.tenant_id))["available"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("room", ["base", "tiger"])
+async def test_sealed_browser_resolves_only_its_own_gateway_and_render_never_forwards_key(monkeypatch, room):
+    from brain import browser_gateway
+    room_key = uuid.uuid4().hex
+    tenant, task = str(uuid.uuid4()), str(uuid.uuid4())
+    monkeypatch.setenv("TANK_KEY", room_key)
+    monkeypatch.setenv("TANK_REGION", "us-east")
+    monkeypatch.setenv("BROWSER_HOST", room + "-browser")
+    monkeypatch.setenv("ACCESS_GATEWAY_URL", "http://" + room + "-browser-gateway:3000")
+    async def resolve(host, port, **kwargs):
+        assert host == room + "-browser-gateway" and port == 3000
+        return [(2, 1, 6, "", ("10.0.27.3", port))]
+    monkeypatch.setattr(asyncio.get_running_loop(), "getaddrinfo", resolve)
+    assert await browser.gateway_addresses() == {"10.0.27.3"}
+
+    class Client:
+        def __init__(self, **kwargs): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def post(self, url, *, json, headers):
+            assert url == "http://" + room + "-browser:3000/render"
+            assert headers == {"X-Tenant-ID": tenant, "X-Home-Region": "us-east", "X-Task-ID": task}
+            assert room_key not in str((url, json, headers))
+            return httpx.Response(200, json={"ok": True})
+    monkeypatch.setattr(browser_gateway.httpx, "AsyncClient", Client)
+    assert await browser_gateway.render({"url": "https://example.com"}, room_key, tenant, "us-east", task) == {"ok": True}

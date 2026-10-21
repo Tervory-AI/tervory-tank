@@ -15,6 +15,12 @@ The links open `/access?section=checks` directly. The existing chats API and its
 origin check are unchanged. The operator still provisions the keys below in
 Coolify; missing settings fail closed without accepting credentials.
 
+Both Base and Tiger must use Raw Compose Deployment (SEAL-1) so Coolify cannot
+attach an outbound network to their sealed browsers. Base retains the live volume
+names from main. Before deploying Tiger, set `TIGER_DATA_VOLUME` to its existing
+`/data` volume name; it is external and is never recreated. Its new, separate
+browser volume is `tervory-tiger-browser-data`. No volume name is guessed.
+
 ## Keys and isolation
 
 Provision in Coolify, never chat or Git:
@@ -23,8 +29,10 @@ Provision in Coolify, never chat or Git:
 - `ACCESS_BROWSER_KEY_BASE` / `ACCESS_BROWSER_KEY_TIGER`: independent keys in the
   same format. Each keeps its room-specific name on Tank and its one owning
   browser. Neither brain, gateway nor sandbox receives it.
-- The existing room `TANK_KEY` authenticates browser render/control routing. It
-  cannot decrypt a browser RPC or authorize live input by itself.
+- The existing room `TANK_KEY` stays on the gateway and authenticates render/control
+  routing. It is never held by or forwarded to either browser. A browser accepts
+  requests only from its owning gateway peer; the key cannot decrypt a browser
+  RPC or authorize live input by itself.
 
 Tank encrypts credentials with AES-GCM and tenant/room/site/purpose binding. The
 browser sends encrypted, expiring, replay-protected RPCs through its gateway;

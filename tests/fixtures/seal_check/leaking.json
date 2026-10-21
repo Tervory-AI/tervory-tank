@@ -1,0 +1,79 @@
+{
+ "containers": {
+  "b3": {
+   "uuid": "baseuuid",
+   "resource": "agent-base",
+   "service": "base-sandbox",
+   "name": "base-sandbox-baseuuid",
+   "networks": [
+    "baseuuid",
+    "baseuuid_sandbox"
+   ]
+  },
+  "b4": {
+   "uuid": "baseuuid",
+   "resource": "agent-base",
+   "service": "base-browser",
+   "name": "base-browser-baseuuid",
+   "networks": [
+    "baseuuid",
+    "baseuuid_browser"
+   ]
+  },
+  "b2": {
+   "uuid": "baseuuid",
+   "resource": "agent-base",
+   "service": "base-brain",
+   "name": "base-brain-baseuuid",
+   "networks": [
+    "baseuuid",
+    "tervory-gw-base",
+    "baseuuid_sandbox"
+   ]
+  },
+  "b5": {
+   "uuid": "baseuuid",
+   "resource": "agent-base",
+   "service": "base-browser-gateway",
+   "name": "base-browser-gateway-baseuuid",
+   "networks": [
+    "tervory-gw-base",
+    "baseuuid_browser"
+   ]
+  },
+  "r1": {
+   "uuid": "radixuuid",
+   "resource": "agent-radix",
+   "service": "agent-radix",
+   "name": "agent-radix-radixuuid",
+   "networks": [
+    "radixuuid",
+    "tervory-gw-radix",
+    "radixuuid_proxy-link"
+   ]
+  },
+  "r2": {
+   "uuid": "radixuuid",
+   "resource": "agent-radix",
+   "service": "egress-proxy",
+   "name": "egress-proxy-radixuuid",
+   "networks": [
+    "radixuuid_proxy-link",
+    "radixuuid_egress"
+   ]
+  }
+ },
+ "networks": {
+  "tankuuid": false,
+  "tervory-gw-base": false,
+  "tervory-gw-radix": true,
+  "baseuuid": false,
+  "baseuuid_sandbox": true,
+  "baseuuid_browser": true,
+  "radixuuid": false,
+  "radixuuid_proxy-link": true,
+  "radixuuid_egress": false,
+  "tigeruuid": false,
+  "tervory-gw-tiger": false
+ }
+}

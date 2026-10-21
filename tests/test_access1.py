@@ -26,6 +26,8 @@ def keys(monkeypatch):
     for name in ("TANK_VAULT_KEY", "ACCESS_BROWSER_KEY_BASE", "ACCESS_BROWSER_KEY_TIGER"):
         monkeypatch.setenv(name, base64.urlsafe_b64encode(os.urandom(32)).decode())
     monkeypatch.setenv("ACCESS_ROOM", "base")
+    async def gateway_addresses(): return {"10.0.27.3"}
+    monkeypatch.setattr(browser, "gateway_addresses", gateway_addresses)
 
 
 def make_connection(tenant, room="base", site="https://dealer.example", **fields):
@@ -153,7 +155,7 @@ async def test_revoke_removes_credential_and_only_own_session(app, monkeypatch, 
     own = browser.storage_for(str(actor.tenant_id), row["site"]); own.write_text("{}")
     other = browser.storage_for(str(uuid.uuid4()), row["site"]); other.write_text("{}")
     async def control(room, data):
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=browser.app), base_url="http://browser") as client:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=browser.app, client=("10.0.27.3", 40000)), base_url="http://browser") as client:
             response = await client.post("/access/control", json=vault.envelope(room, "control", data))
         assert response.status_code == 200
         return vault.open_envelope(room, "result", response.json())
@@ -268,7 +270,7 @@ async def test_hand_back_preserves_same_live_page(keys, monkeypatch, tmp_path):
     monkeypatch.setattr(browser, "held", {handle: item}); monkeypatch.setattr(browser, "access_locks", {})
     payload = vault.envelope("base", "control", {"action": "live", "tenant_id": tenant, "site": site, "handle": handle,
                                                 "input": {"action": "hand_back"}})
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=browser.app), base_url="http://browser") as client:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=browser.app, client=("10.0.27.3", 40000)), base_url="http://browser") as client:
         response = await client.post("/access/control", json=payload)
     assert response.status_code == 200 and vault.open_envelope("base", "result", response.json())["ready"]
     assert browser.held[handle] is item and item.ready and events == ["cookies saved"]
@@ -287,7 +289,7 @@ async def test_gateway_refuses_brain_or_other_room_peer(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_live_control_refuses_ordinary_room_key_and_replay(keys):
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=browser.app), base_url="http://browser") as client:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=browser.app, client=("10.0.27.3", 40000)), base_url="http://browser") as client:
         response = await client.post("/access/control", json={"action": "live"}, headers={"X-Tank-Key": uuid.uuid4().hex})
     assert response.status_code == 403
 
@@ -373,7 +375,7 @@ async def test_revocation_cancels_an_active_visit_before_removing_cookie(keys, m
     task = asyncio.create_task(visit()); await asyncio.sleep(0)
     monkeypatch.setattr(browser, "active_visits", {(tenant, site): task})
     monkeypatch.setattr(browser, "held", {}); monkeypatch.setattr(browser, "access_locks", {})
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=browser.app), base_url="http://browser") as client:
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=browser.app, client=("10.0.27.3", 40000)), base_url="http://browser") as client:
         response = await client.post("/access/control", json=vault.envelope("base", "control", {"tenant_id": tenant, "site": site, "action": "revoke"}))
     assert response.status_code == 200 and stopped.is_set() and not cookie.exists()
 

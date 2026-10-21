@@ -1,7 +1,7 @@
-# Tiger. Deploy this file as its own Coolify resource.
-# Build context is agents/ (the parent of this file), because the chassis lives there.
-# The only network is the external gateway. Coolify's own network for this resource
-# contains just this service, so it cannot see the main stack.
+# coolify: raw compose
+# Tiger. Enable Raw Compose Deployment so Coolify cannot add an outbound network
+# to the sealed browser. Environment and networks are explicit on each service.
+# TIGER_DATA_VOLUME must name the existing live /data volume before deployment.
 
 services:
   agent-tiger:
@@ -46,8 +46,6 @@ services:
     cpus: 0.5
     shm_size: 256m
     environment:
-      TANK_KEY: ${TANK_KEY_TIGER:-}
-      TANK_REGION: us-east
       ACCESS_ROOM: tiger
       ACCESS_BROWSER_KEY_TIGER: ${ACCESS_BROWSER_KEY_TIGER}
       ACCESS_GATEWAY_URL: http://tiger-browser-gateway:3000
@@ -85,7 +83,10 @@ services:
 
 volumes:
   agent_tiger_data:
+    external: true
+    name: ${TIGER_DATA_VOLUME:?Set the existing Tiger data volume name}
   tiger_browser_data:
+    name: tervory-tiger-browser-data
 
 networks:
   browser:

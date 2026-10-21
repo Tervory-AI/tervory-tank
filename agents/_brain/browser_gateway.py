@@ -99,8 +99,9 @@ async def render(body: dict, x_tank_key: str = Header(default=""), x_tenant_id: 
     try:
         public_url(body.get("url", ""))
         async with httpx.AsyncClient(timeout=300) as client:
+            # The browser holds no Tank key, so the key is never forwarded to it.
             response = await client.post("http://" + os.environ.get("BROWSER_HOST", "base-browser") + ":3000/render", json=body, headers={
-                "X-Tank-Key": x_tank_key, "X-Tenant-ID": tenant, "X-Home-Region": x_home_region, "X-Task-ID": x_task_id})
+                "X-Tenant-ID": tenant, "X-Home-Region": x_home_region, "X-Task-ID": x_task_id})
         if response.status_code != 200:
             raise HTTPException(response.status_code, "Base browser refused the request.")
         return response.json()

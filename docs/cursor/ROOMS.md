@@ -28,6 +28,15 @@ The founder does nothing for a new room except merge. Public rooms (Rig) also ne
 - Hex passwords only (`openssl rand -hex 24`), never logged.
 - Main-compose changes are additive: add networks/env lines; do not change existing services otherwise.
 
+## Sealed rooms (SEAL-1, 21 Oct 2026)
+A **sealed** service is one declared only on internal networks: Base's `base-sandbox` and `base-browser`, and `agent-radix`.
+- **Why raw compose.** In its normal mode Coolify adds its own app network to every service without `network_mode`. That network is not internal, so a sealed service would reach the internet and every other service in the app. In **Raw Compose Deployment** mode Coolify deploys the file as written and adds only its labels.
+- **The marker.** A compose file with a sealed service starts with `# coolify: raw compose`. Base and Radix do. `tests/test_room_seal.py` simulates normal mode on every `agents/*/docker-compose*.yml` and fails if a sealed service would leak in a file without the marker, or if a service on an internal network declares `ports:`.
+- **A raw file needs nothing from Coolify:** every variable comes through explicit `environment:` interpolation (no `env_file`), every service names its networks, no `ports:`, and each volume is `external` with its live name, so the data survives the switch.
+- **Founder step, once per room:** Coolify > the app > **Advanced** > turn on **Raw Compose Deployment**, then redeploy. This setting is not available through Coolify's API.
+- **Proof after every deploy of Base or Radix:** on the host, `bash ops/seal-check.sh` (read-only). It prints one line per room and must say `sealed` for agent-base and agent-radix and exit 0. `LEAK: <container> on <network>` and exit 1 mean a sealed container is on a non-internal network. Declared corridors are allowed: agent-base, base-brain and base-browser-gateway on `tervory-gw-base`; egress-proxy on `egress`.
+- **The browser holds no Tank key.** `base-browser` runs untrusted pages; it accepts work only from `base-browser-gateway`'s address, and only the gateway talks to Tank.
+
 ## Base brain pilot (AGENT-1)
 
 Base retains its room, database login and corridor. Its Compose resource adds

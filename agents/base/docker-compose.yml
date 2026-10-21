@@ -1,9 +1,16 @@
-# Base. Deploy this file as its own Coolify resource.
+# coolify: raw compose
+# Base. Deploy this file as its own Coolify resource, with Raw Compose Deployment
+# turned on (Coolify > app > Advanced). Raw mode deploys this file exactly as
+# written: Coolify adds only its labels, no app network and no env_file. In normal
+# mode Coolify would attach its own internet-facing network to every service,
+# including the sealed sandbox and browser (SEAL-1). tests/test_room_seal.py fails
+# if this marker is removed while a sealed service is in the file.
 # Build context is the repo root, because the chassis (agents/_chassis) and the engine data files
 # (tank/skills/*.profile/*/data) both live outside this folder.
 # The room retains its external gateway. Its brain and browser gateway join that
 # corridor; the sandbox exec service and browser each stay on a separate internal net.
-
+# Every variable reaches a service through explicit environment: interpolation.
+# No service publishes ports.
 services:
   agent-base:
     build:
@@ -106,9 +113,8 @@ services:
     mem_limit: 2g
     cpus: 0.5
     shm_size: 256m
+    # No Tank key: only the gateway can send work to this sealed browser.
     environment:
-      TANK_KEY: ${TANK_KEY_BASE:-}
-      TANK_REGION: us-east
       ACCESS_ROOM: base
       ACCESS_BROWSER_KEY_BASE: ${ACCESS_BROWSER_KEY_BASE}
     volumes:
@@ -143,10 +149,19 @@ services:
     security_opt: ["no-new-privileges:true"]
     cap_drop: [ALL]
 
+# The same volumes the room used before the raw-compose switch, by their live
+# names, so the data survives. external: compose reuses them and never recreates
+# them. On a new server, create them once first: docker volume create <name>
 volumes:
   agent_base_data:
+    external: true
+    name: r8aprclj8nooe9keywrp9dmb_agent-base-data
   base_brain_data:
+    external: true
+    name: r8aprclj8nooe9keywrp9dmb_base-brain-data
   base_browser_data:
+    external: true
+    name: r8aprclj8nooe9keywrp9dmb_base-browser-data
 
 networks:
   sandbox:
