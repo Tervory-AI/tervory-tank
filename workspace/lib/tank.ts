@@ -836,6 +836,47 @@ export async function setCommandSquad(userId: string, tenantId: string, agent: s
   });
 }
 
+// ---- COMMAND-1: same-box conversations; caller identity is server-owned. ----
+export class CommandRequestError extends Error {
+  status: number;
+  code: string;
+  constructor(status: number, code: string, message: string) { super(message); this.status = status; this.code = code; }
+}
+export async function commandRequest(identity: { tenantId: string; userId: string }, path: string, init: RequestInit = {}): Promise<Response> {
+  if (!TANK_API_KEY) throw new Error("The conversation service is not configured.");
+  const url = new URL(`/v1/command/${path}`, TANK_URL);
+  url.searchParams.delete("tenant_id");
+  url.searchParams.delete("user_id");
+  const headers = new Headers(init.headers);
+  if (!headers.has("content-type")) headers.set("content-type", "application/json");
+  headers.set("x-tank-key", TANK_API_KEY);
+  headers.set("x-tervory-user", identity.userId);
+  headers.set("x-tervory-tenant", identity.tenantId);
+  headers.set("x-tervory-admin", identity.userId);
+  // Lane A resolves tenant_squad from the database on each authenticated call.
+  // Never turn a caller header into tool authority.
+  headers.delete("x-tervory-squad");
+  const response = await fetch(url, { ...init, headers, cache: "no-store", redirect: "error" });
+  if (!response.ok) {
+    const detail = await response.json().then(body => body.detail).catch(() => undefined);
+    if (response.status === 409 && detail === "Pinned models await a router capability; choose Auto") throw new CommandRequestError(409, "pin_pending", "Choosing a specific answer option is not supported yet. Choose Auto to continue.");
+    if (response.status === 422 && detail === "Model is not on the roster") throw new CommandRequestError(422, "pin_unavailable", "That answer option is no longer available. Choose Auto to continue.");
+    if (response.status === 409 && detail === "An answer is already running in this thread") throw new CommandRequestError(409, "answer_running", "An answer is already running. Wait for it to finish before sending again.");
+    if (response.status === 403) throw new CommandRequestError(403, "access_denied", "Access to this action has not been verified for your account. No new permission has been granted.");
+    if (response.status === 404) throw new CommandRequestError(404, "not_found", "This item is unavailable.");
+    if (response.status === 413) throw new CommandRequestError(413, "attachment_limit", "The file or this chat's storage limit has been reached (5 MB per file, 20 files and 20 MB per chat).");
+    throw new CommandRequestError(502, "request_failed", "This request could not be completed. Reload the chat before trying again.");
+  }
+  return response;
+}
+
+/** Lane A derives this catalogue from the founder-controlled tenant_squad list. */
+export async function commandTools(identity: { tenantId: string; userId: string }): Promise<string[]> {
+  const result: unknown = await (await commandRequest(identity, "tools")).json();
+  if (!Array.isArray(result) || !result.every(tool => typeof tool === "string" && /^[a-z_]+\.[a-z_]+$/.test(tool))) throw new Error("Tool access could not be loaded.");
+  return result;
+}
+
 /** CORE-2 only: server-resolved identity wins over every caller query field. */
 export function readClientSavings<T>(tenantId: string, endpoint: "" | "/rows" | "/revision" = "", query: Record<string,string> = {}): Promise<T> {
   const params = new URLSearchParams();
