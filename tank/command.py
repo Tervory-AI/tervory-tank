@@ -561,7 +561,8 @@ async def progress(build_id: uuid.UUID, body: Progress) -> dict:
                    "review_status": body.review_status or current["review_status"]}
         if body.ledger_ids:
             await record_receipts(conn, row, state, str(build_id), body.ledger_ids)
-        known = any(r["step_id"] == str(build_id) for r in state["receipts"])
+        build_rows = [r for r in state["receipts"] if r["step_id"] == str(build_id)]
+        known = bool(build_rows) and all(r["cost_usd"] is not None for r in build_rows)
         payload["receipt_status"] = "recorded" if known else "pending"
         if body.status in {"done", "failed"} and not known:
             await receipt_pending(conn, row, str(build_id))
@@ -905,7 +906,8 @@ async def record_receipts(conn: Any, row: dict, state: dict, step_id: str, ids: 
             state["receipts"].append(receipt)
             added.append(receipt)
     if added:
-        await event(conn, row, "receipt", {"rows": added, "totals": totals(added), "status": "recorded"})
+        status = "recorded" if all(r["cost_usd"] is not None for r in added) else "pending"
+        await event(conn, row, "receipt", {"rows": added, "totals": totals(added), "status": status})
     return added
 
 
@@ -921,7 +923,8 @@ async def refresh_action_receipts(thread_id: uuid.UUID, actor: Actor, card_id: s
         card = state["cards"][card_id]
         ids = [uuid.UUID(x) for x in card.get("evidence_ids", [])]
         await record_receipts(conn, row, state, card_id, ids)
-        card["receipt_status"] = "recorded" if ids else "pending"
+        complete = bool(ids) and all(r["cost_usd"] is not None for r in state["receipts"] if r["step_id"] == card_id)
+        card["receipt_status"] = "recorded" if complete else "pending"
         if not ids:
             await receipt_pending(conn, row, card_id)
         if card_id in state["steps"]:

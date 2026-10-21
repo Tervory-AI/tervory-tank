@@ -565,3 +565,25 @@ def test_url_arguments_reject_embedded_credentials(runtime):
     actor = command.Actor(TENANT, 'founder', True)
     with pytest.raises(HTTPException):
         command.validate_action(command.PlannedAction(tool='tiger.watch', arguments={'url': 'https://dummy:dummy@example.com/item'}), actor)
+
+
+@pytest.mark.asyncio
+async def test_unknown_ledger_cost_can_refresh_without_reexecuting_action(api, monkeypatch):
+    client, pool = api
+    ledger = await seed_ledger(pool, cost=0)
+    async with pool.acquire() as conn:
+        await conn.execute("UPDATE tank.ledger SET research_cost_status='unknown' WHERE id=$1", ledger)
+    dispatch = AsyncMock(return_value=(200, {'ledger_id': str(ledger)}))
+    monkeypatch.setattr(command, 'dispatch_action', dispatch)
+    thread, data = await planned_turn(client, pool, monkeypatch, [{'tool': 'skala.list', 'arguments': {}}])
+    route = f"/v1/command/cards/{data['cards'][0]['card_id']}"
+    assert (await client.post(route, json={'action': 'confirm'})).json()['receipt_status'] == 'pending'
+    assert (await client.get(f'/v1/command/threads/{thread}')).json()['thread']['spent_usd'] is None
+    # Simulate the upstream cost-reconciliation owner supplying actual evidence.
+    async with pool.acquire() as conn:
+        await conn.execute("UPDATE tank.ledger SET cost_usd=0.04,research_cost_status='itemized' WHERE id=$1", ledger)
+    assert (await client.post(route, json={'action': 'confirm'})).json()['receipt_status'] == 'recorded'
+    data = (await client.get(f'/v1/command/threads/{thread}')).json()
+    assert data['thread']['spent_usd'] == 0.06
+    assert sum(r['ledger_id'] == str(ledger) for r in data['receipts']) == 1
+    dispatch.assert_awaited_once()
