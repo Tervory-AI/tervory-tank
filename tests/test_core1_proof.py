@@ -12,6 +12,7 @@ import pytest
 from pypdf import PdfReader
 
 import bench
+import controls
 import graduate
 import proof
 from gold import PLATFORM_TENANT
@@ -97,6 +98,7 @@ def test_exports_complete_safe_and_pdf_is_readable():
 @pytest.mark.asyncio
 async def test_receipts_backfill_schema_repeat_and_median(database,monkeypatch):
     pool,rt=database
+    monkeypatch.setattr(controls,'db',lambda:pool)
     monkeypatch.setattr(bench,'runtime',lambda:rt)
     monkeypatch.setattr(proof,'runtime',lambda:rt)
     async with pool.acquire() as conn:
@@ -132,6 +134,7 @@ async def test_receipts_backfill_schema_repeat_and_median(database,monkeypatch):
 @pytest.mark.asyncio
 async def test_bench_runs_every_model_records_scores_proposes_and_does_not_switch(database,monkeypatch):
     pool,rt=database
+    monkeypatch.setattr(controls,'db',lambda:pool)
     monkeypatch.setattr(bench,'runtime',lambda:rt)
     async def models(): return roster()
     rt._roster_models=models
@@ -178,6 +181,7 @@ async def test_reservation_cap_survives_unknown_spend_and_concurrent_requests(da
 @pytest.mark.asyncio
 async def test_bench_cap_prevents_network_and_partial_proposals(database,monkeypatch):
     pool,rt=database
+    monkeypatch.setattr(controls,'db',lambda:pool)
     monkeypatch.setattr(bench,'runtime',lambda:rt)
     async def forbidden(*args): raise AssertionError('No funds reserved')
     monkeypatch.setattr(bench,'call_model',forbidden)
@@ -208,6 +212,7 @@ async def test_hourly_rollup_rebuild_preserves_bench_evidence(database):
 @pytest.mark.asyncio
 async def test_heldout_examples_are_platform_and_box_scoped(database,monkeypatch):
     pool,rt=database
+    monkeypatch.setattr(controls,'db',lambda:pool)
     monkeypatch.setattr(bench,'runtime',lambda:rt)
     async with pool.acquire() as conn:
         for tenant,region,held,status in [(PLATFORM_TENANT,'us-east',True,'checked'),
@@ -224,6 +229,7 @@ async def test_heldout_examples_are_platform_and_box_scoped(database,monkeypatch
 @pytest.mark.asyncio
 async def test_unknown_response_cost_keeps_reservation_and_blocks_proposal(database,monkeypatch):
     pool,rt=database
+    monkeypatch.setattr(controls,'db',lambda:pool)
     monkeypatch.setattr(bench,'runtime',lambda:rt)
     async def unknown(*args):
         return dict(model='cheap',content='x',tokens_in=100,tokens_out=10,cost=None,ok=True)
@@ -236,3 +242,25 @@ async def test_unknown_response_cost_keeps_reservation_and_blocks_proposal(datab
         row=await conn.fetchrow('SELECT * FROM tank.bench_calls WHERE tenant_id=$1',PLATFORM_TENANT)
         assert row['charged_usd'] is None and row['reserved_usd']>0 and row['status']=='unverified'
         assert await conn.fetchval('SELECT outcome FROM tank.ledger WHERE tenant_id=$1',PLATFORM_TENANT)=='unverified'
+
+
+@pytest.mark.asyncio
+async def test_founder_pause_stops_bench_before_reservation_and_network(database,monkeypatch):
+    pool,rt=database
+    monkeypatch.setattr(controls,'db',lambda:pool)
+    monkeypatch.setattr(bench,'runtime',lambda:rt)
+    called=[]
+    async def forbidden(*args):
+        called.append(True)
+        raise AssertionError('A paused bench must not call a provider')
+    monkeypatch.setattr(bench,'call_model',forbidden)
+    policy={'task_type':'fixture','model':'expensive','max_tokens_out':100}
+    async with pool.acquire() as conn:
+        await conn.execute("""INSERT INTO tank.controls(tenant_id,name,value,updated_by)
+            VALUES($1,'paid_paused',true,'fixture')""",PLATFORM_TENANT)
+        result=await bench.bench_model(conn,policy,'cheap',[{'ref':'one','kind':'eval','input':'x','expected':'x'}],
+                                      bench.price_book(roster()),'us-east',Decimal('5'),'expensive')
+        assert result['status']=='paused' and not called
+        assert await conn.fetchval('SELECT count(*) FROM tank.bench_calls WHERE tenant_id=$1',PLATFORM_TENANT)==0
+        assert await conn.fetchval('SELECT count(*) FROM tank.ledger WHERE tenant_id=$1',PLATFORM_TENANT)==0
+        assert await conn.fetchval("SELECT count(*) FROM tank.control_log WHERE tenant_id=$1 AND task='fixture' AND path='bench'",PLATFORM_TENANT)==1

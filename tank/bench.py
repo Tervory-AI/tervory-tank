@@ -18,10 +18,11 @@ import re
 import uuid
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 import httpx
 
 import graduate
+import controls
 from gold import PLATFORM_TENANT, encoded, obj, runtime
 
 log = logging.getLogger(__name__)
@@ -177,6 +178,12 @@ async def bench_model(conn, policy: dict, model: str, cases: list[dict], book: d
     status, error = 'complete', None
     scores, costs = [], []
     for case in cases:
+        try:
+            await controls.refuse_paid(paid=book[model]['input']+book[model]['output'] > 0,
+                                       task=policy['task_type'], path='bench')
+        except HTTPException:
+            status, error = 'paused', 'Paid benchmark work is paused or pause state is unavailable.'
+            break
         messages = messages_for(case['input'], policy.get('system_prompt'))
         ceiling = reserve_quote(messages, policy['max_tokens_out'], book)
         call_id = await reserve(conn, run_id, region, case, ceiling, cap)
@@ -244,7 +251,7 @@ async def tick() -> None:
             for row in policies:
                 policy = dict(row)
                 state = await conn.fetchrow('SELECT * FROM tank.search_state WHERE task_type=$1', policy['task_type'])
-                if not due(dict(state) if state else None, datetime.now(timezone.utc), roster_fp, price_fp):
+                if state and state['bench_status'] != 'paused' and not due(dict(state), datetime.now(timezone.utc), roster_fp, price_fp):
                     continue
                 cases = await cases_for(conn, policy['task_type'], region)
                 comparison = policy.get('candidate_model') or policy['model']
@@ -263,10 +270,10 @@ async def tick() -> None:
                     for model in sorted(book, key=lambda m: (book[m]['input']+book[m]['output'], m)):
                         result = await bench_model(conn, policy, model, cases, book, region, cap, comparison)
                         results.append(result)
-                        if result['status'] == 'capped':
+                        if result['status'] in ('capped', 'paused'):
                             break
-                proposal = choose_candidate(results, comparison, policy['model'])
-                status = 'no_cases' if not cases else 'capped' if any(r['status']=='capped' for r in results) else 'failed' if any(r['status']=='failed' for r in results) else 'complete'
+                proposal = None if any(r['status']=='paused' for r in results) else choose_candidate(results, comparison, policy['model'])
+                status = 'no_cases' if not cases else 'paused' if any(r['status']=='paused' for r in results) else 'capped' if any(r['status']=='capped' for r in results) else 'failed' if any(r['status']=='failed' for r in results) else 'complete'
                 async with conn.transaction():
                     if proposal:
                         # Compare-and-set: never overwrite a concurrent founder choice.
@@ -277,7 +284,7 @@ async def tick() -> None:
                         VALUES($1,$2,$3,now(),$4,$5) ON CONFLICT(task_type) DO UPDATE SET
                         bench_roster_fingerprint=$2,bench_price_fingerprint=$3,bench_at=now(),bench_status=$4,bench_error=$5''',
                         policy['task_type'], roster_fp, price_fp, status,
-                        'See benchmark receipts.' if status in ('failed','capped') else 'No platform evals or held-out gold.' if status=='no_cases' else None)
+                        'See benchmark receipts.' if status in ('failed','capped','paused') else 'No platform evals or held-out gold.' if status=='no_cases' else None)
         finally:
             await conn.execute('SELECT pg_advisory_unlock($1)', LOCK_ID)
 
