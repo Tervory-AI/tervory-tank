@@ -7,7 +7,9 @@ FROM docker:28.4.0-dind-rootless
 USER root
 RUN mkdir -p /data && chown 1000:1000 /data
 COPY --from=rootfs /tmp/base-python.tar /opt/base-python.tar
+RUN chmod a+r /opt/base-python.tar
 COPY agents/base/sandbox-start.sh /usr/local/bin/base-sandbox-start
 RUN chmod 755 /usr/local/bin/base-sandbox-start
 USER rootless
+ENV DOCKER_HOST=unix:///run/user/1000/docker.sock
 ENTRYPOINT ["base-sandbox-start"]

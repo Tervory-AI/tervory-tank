@@ -28,6 +28,39 @@ The founder does nothing for a new room except merge. Public rooms (Rig) also ne
 - Hex passwords only (`openssl rand -hex 24`), never logged.
 - Main-compose changes are additive: add networks/env lines; do not change existing services otherwise.
 
+## Base brain pilot (AGENT-1)
+
+Base retains its room, database login and gateway. Its Compose resource adds
+`base-brain` (pinned Nous Hermes Agent), `base-sandbox` (a private rootless Docker
+daemon), `base-browser` (Chromium), and `base-browser-gateway`. These services
+belong exclusively to Base. The daemon and browser are on separate **internal**
+networks. Only the brain joins the daemon network; only the browser gateway
+joins the browser network. No host ports or host Docker socket are exposed.
+The daemon uses a privileged sidecar to provide nested rootless containers; it
+mounts only Base's data volumes. Each execution mounts only that run's work
+directory, with a read-only root and no network. Allowed public HTTPS browsing
+goes through the exact-host proxy, which rejects private and metadata addresses.
+
+Base's Skala context points browser requests to its authenticated gateway, not
+Tiger. The legacy Tiger attachment in the main compose is unchanged by this
+lane; Base does not call it. Other room deployments stay on the existing pattern.
+
+Before this pilot takes real jobs, use
+`python agents/base/check_brain_isolation.py ROOM BRAIN SANDBOX BROWSER GATEWAY`
+on the authorized cloud host. This is Base's deployment gate: the generic
+`agents/check_isolation.sh` describes the earlier single-container topology
+and deliberately has not been changed for other rooms. The Base gate verifies
+all five health checks, exact private-network membership, no host mounts/ports,
+no provider keys, the existing database permission boundary, and denied direct
+egress. Run the opt-in container tests in [Base's runbook](../../agents/base/BRAIN.md)
+to also exercise the real Hermes sandbox and cross-room browser refusal.
+
+Receipts are available to the work panel through the existing tenant-scoped
+`GET /v1/base/batches?tenant_id=...` response: each batch has `brain_tasks`, with
+task ID, status and full receipt. The receipt includes recall/remember, approved
+skills, model ledger IDs with cost and baseline, and browser/sandbox actions.
+No Workspace file or COMMAND-1 UI is changed in this lane.
+
 ## Regions
 
 South African clients and South African law stay in South Africa. United States clients stay in the United States. Same code, deployed twice. The region is `TANK_REGION`: `za` or `us-east`. It is not a fork.

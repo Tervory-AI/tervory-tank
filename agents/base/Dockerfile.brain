@@ -1,6 +1,6 @@
 FROM python:3.14-slim
 ARG HERMES_COMMIT=d923a5eb487a17c0a68801bba9ef0f56c81040a8
-RUN apt-get update && apt-get install -y --no-install-recommends git docker.io ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends git docker-cli ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && git init /opt/hermes && cd /opt/hermes \
     && git remote add origin https://github.com/NousResearch/hermes-agent.git \
@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git docker.io c
 # The upstream MIT LICENSE is retained in /opt/hermes/LICENSE.
 WORKDIR /app
 COPY agents/_brain /app/brain
+RUN chmod -R a+rX /app/brain
 ENV PYTHONPATH=/opt/hermes:/app \
     HERMES_BUNDLED_SKILLS=/opt/empty-skills \
     HERMES_OPTIONAL_SKILLS=/opt/empty-skills \

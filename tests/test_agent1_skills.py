@@ -90,10 +90,39 @@ async def test_schema_export_submission_and_existing_run_guard(monkeypatch, tmp_
         evaluated = await tank.run_skill_evals("base.learned.echo", "1.0.0")
         assert evaluated["state"] == "staging"
         await tank.approve_skill("base.learned.echo", "1.0.0", tank.Approval(by="test-founder"))
+        # Free recovery removes paid capabilities without modifying approved code.
+        from fastapi import HTTPException
+        pkg = packages[("base.learned.echo", "1.0.0")]
+        ctx = tank.make_ctx(pkg, tenant)
+        ctx.env["BRAVE_API_KEY"] = uuid.uuid4().hex
+        task = uuid.uuid4()
+        free = tank.SkillRun(tenant_id=tenant, input={"_base_brain_free": True, "_base_brain_task": str(task)}, version="1.0.0")
+        await agent_skills.guard_base_run(tank, pkg, free, ctx)
+        assert free.input == {} and ctx.task_id == task
+        assert "BRAVE_API_KEY" not in ctx.env
+        with pytest.raises(HTTPException, match="deferred"):
+            await ctx.model([], "base.extract")
         assert "base.learned.echo" in [s["id"] for s in (await agent_skills.export_skills(tank, tenant, "us-east"))["skills"]]
         assert "base.learned.echo" not in [s["id"] for s in (await agent_skills.export_skills(tank, other, "us-east"))["skills"]]
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=tank.app), base_url="http://tank") as client:
+            allowed = await client.post("/v1/skala/base.learned.echo/run", headers=headers,
+                json={"tenant_id": str(tenant), "input": {"name": "public field"}, "version": "1.0.0"})
+            assert allowed.status_code == 200 and allowed.json()["name"] == "public field"
+            refused = await client.post("/v1/skala/base.learned.echo/run", headers=headers,
+                json={"tenant_id": str(other), "input": {}, "version": "1.0.0"})
+            assert refused.status_code == 403
+            hijack = await client.post("/v1/agents/base/skills/candidates", headers=headers,
+                json={**body, "tenant_id": str(other), "version": "1.1.0"})
+            assert hijack.status_code == 403
+            async with pool.acquire() as conn:
+                approved_before = await conn.fetchrow("SELECT * FROM tank.skills WHERE id='base.learned.echo' AND version='1.0.0'")
+            newer = await client.post("/v1/agents/base/skills/candidates", headers=headers, json={**body, "version": "1.1.0"})
+            assert newer.status_code == 201 and newer.json()["state"] == "candidate"
+            async with pool.acquire() as conn:
+                assert approved_before == await conn.fetchrow("SELECT * FROM tank.skills WHERE id='base.learned.echo' AND version='1.0.0'")
         # Reconstruct source after a restart; preserve the founder's approved state.
         packages.pop(("base.learned.echo", "1.0.0"))
+        packages.pop(("base.learned.echo", "1.1.0"))
         await agent_skills.restore(tank)
         assert await tank.skill_state("base.learned.echo", "1.0.0") == "approved"
     finally:

@@ -1,8 +1,8 @@
 # Base. Deploy this file as its own Coolify resource.
 # Build context is the repo root, because the chassis (agents/_chassis) and the engine data files
 # (tank/skills/*.profile/*/data) both live outside this folder.
-# The only network is the external gateway. Coolify's own network for this resource
-# contains just this service, so it cannot see the main stack.
+# The room retains its external gateway. Its brain and browser gateway join that
+# corridor; the sandbox daemon and browser each stay on a separate internal net.
 
 services:
   agent-base:
@@ -83,7 +83,7 @@ services:
       - base_sandbox_data:/home/rootless/.local/share/docker
     networks: [sandbox]
     healthcheck:
-      test: ["CMD-SHELL", "test -f /tmp/base-sandbox-ready && docker info >/dev/null"]
+      test: ["CMD-SHELL", "test -f /tmp/base-sandbox-ready && docker info >/dev/null && docker version >/dev/null"]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -123,6 +123,11 @@ services:
       TANK_REGION: us-east
       BASE_ALLOWED_HOSTS: ${BASE_ALLOWED_HOSTS:-www.atf.gov,atf.gov}
     networks: [gw, browser]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
     security_opt: ["no-new-privileges:true"]
     cap_drop: [ALL]
 

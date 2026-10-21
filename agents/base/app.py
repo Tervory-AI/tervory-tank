@@ -264,6 +264,8 @@ def _http_skill(exc: SkillError) -> HTTPException:
 @app.post("/v1/base/run", status_code=202)
 async def base_run(body: BaseRun) -> dict[str, Any]:
     """Queue a batch. With split_by_state, one batch per state, smallest first."""
+    if body.preview and os.environ.get("BASE_BRAIN_URL"):
+        raise HTTPException(403, "Base's brain may use only approved skills.")
     await ensure_worker()
     skills = _skills()
     try:
@@ -319,6 +321,8 @@ async def base_retry(body: BaseRetry) -> dict[str, Any]:
 
 @app.post("/v1/base/rerun")
 async def base_rerun(body: BaseRerun) -> dict[str, Any]:
+    if body.preview and os.environ.get("BASE_BRAIN_URL"):
+        raise HTTPException(403, "Base's brain may use only approved skills.")
     await ensure_worker()
     async with app.state.pool.acquire() as conn:
         if body.flag == "model_skipped":
@@ -382,7 +386,11 @@ async def base_rerun(body: BaseRerun) -> dict[str, Any]:
 async def base_batches(tenant_id: uuid.UUID) -> list[dict[str, Any]]:
     async with app.state.pool.acquire() as conn:
         rows = await conn.fetch(SQL_BATCHES_BY_TENANT, tenant_id)
-    return [dict(row) for row in rows]
+        receipts = {}
+        if os.environ.get("BASE_BRAIN_URL"):
+            from base_brain import batch_receipts
+            receipts = await batch_receipts(conn, tenant_id)
+    return [{**dict(row), "brain_tasks": receipts.get(row["batch"], [])} for row in rows]
 
 
 @app.get("/v1/base/engines")

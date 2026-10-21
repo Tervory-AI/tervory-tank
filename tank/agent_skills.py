@@ -353,6 +353,19 @@ async def guard_base_run(tank: Any, pkg: Any, body: Any, ctx: Any) -> None:
         owner = await conn.fetchrow("SELECT tenant_id,region FROM tank.agent_skill_submissions WHERE skill_id=$1 AND version=$2", pkg.id, pkg.version)
     if owner and (owner["tenant_id"] != body.tenant_id or owner["region"] != tank.box_region()):
         raise HTTPException(403, "This skill belongs to another tenant or region.")
+    task = body.input.pop("_base_brain_task", None)
+    if task is not None:
+        try:
+            ctx.task_id = uuid.UUID(str(task))
+        except ValueError:
+            raise HTTPException(422, "Invalid Base task id.") from None
+    if body.input.pop("_base_brain_free", False):
+        # The unchanged pipeline gets a free recovery pass before its existing
+        # paid rungs. This flag can only remove spending capability, never add it.
+        async def defer_model(**kwargs):
+            raise HTTPException(409, "Model enrichment deferred until free recovery finishes.")
+        ctx._model = defer_model
+        ctx.env = {k: v for k, v in ctx.env.items() if not k.endswith(("_KEY", "_TOKEN"))}
     ctx.env["TIGER_URL"] = "http://base-browser-gateway:3000"
     ctx.http = BaseSkillHTTP(ctx.http, body.tenant_id, ctx.task_id)
 

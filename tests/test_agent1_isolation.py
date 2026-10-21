@@ -107,3 +107,76 @@ async def test_foreign_memory_never_reaches_work(monkeypatch, tmp_path):
     monkeypatch.setattr(service, "memory", memory)
     with pytest.raises(RuntimeError, match="tenant boundary"):
         await service.run_task(service.Run(tenant_id=uuid.uuid4(), task_id=uuid.uuid4(), home_region="us-east", batch="public pilot", count=1))
+
+
+@pytest.mark.asyncio
+async def test_panel_receipt_query_is_tenant_scoped():
+    spec = importlib.util.spec_from_file_location("base_brain", ROOT / "agents/base/base_brain.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    tenant, task = uuid.uuid4(), uuid.uuid4()
+    receipt = {"tenant_id": str(tenant), "task_id": str(task), "steps": [{"action": "remember"}]}
+
+    class Connection:
+        async def fetch(self, sql, *args):
+            assert "WHERE tenant_id=$1" in sql and args == (tenant,)
+            return [{"id": task, "status": "done", "error": None, "batch": "public pilot", "receipt": json.dumps(receipt)}]
+
+    batches = await module.batch_receipts(Connection(), tenant)
+    assert batches["public pilot"][0]["receipt"] == receipt
+
+
+@pytest.mark.asyncio
+async def test_pipeline_defers_paid_calls_until_recovery_finishes(monkeypatch):
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    import httpx
+    from fastapi import FastAPI
+    module = sys.modules.get("base_brain")
+    if module is None:
+        spec = importlib.util.spec_from_file_location("base_brain", ROOT / "agents/base/base_brain.py")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+    tenant, task = uuid.uuid4(), uuid.uuid4()
+    key = uuid.uuid4().hex
+    monkeypatch.setenv("TANK_KEY", key)
+    calls = []
+
+    class Pool:
+        @asynccontextmanager
+        async def acquire(self):
+            yield self
+        async def execute(self, sql, *args):
+            assert args[:2] == (tenant, task)
+        async def fetch(self, sql, *args):
+            assert args == (tenant, task)
+            return []
+        async def fetchrow(self, sql, *args):
+            return {"status": "done", "result": "fixture"}
+
+    async def call(skill_id, payload):
+        calls.append(payload)
+        return {}
+
+    async def run(pool, task_id, cfg, callback):
+        await callback("base.normalize", {"name": "public"})
+
+    monkeypatch.setitem(sys.modules, "room", SimpleNamespace(_run_batch=run))
+    module.active[(tenant, task)] = module.ActiveBatch(Pool(), {}, call)
+    app = FastAPI()
+    module.register(app)
+    payload = {"tenant_id": str(tenant), "task_id": str(task)}
+    try:
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://base") as client:
+            headers = {"X-Tank-Key": key}
+            early = await client.post("/brain/pipeline", headers=headers, json={**payload, "finish": True})
+            assert early.status_code == 409 and calls == []
+            assert (await client.post("/brain/pipeline", headers=headers, json=payload)).status_code == 200
+            assert calls == [{"name": "public", "_base_brain_free": True}]
+            assert (await client.post("/brain/pipeline", headers=headers, json={**payload, "finish": True})).status_code == 200
+            assert calls[-1] == {"name": "public"}
+            assert (await client.post("/brain/pipeline", headers=headers, json={**payload, "finish": True})).status_code == 409
+    finally:
+        module.active.pop((tenant, task))

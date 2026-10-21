@@ -48,7 +48,7 @@ async def render(body: Page, x_tank_key: str = Header(default=""), x_tenant_id: 
     async with locks.setdefault(tenant, asyncio.Lock()):
         storage = directory / "storage.json"
         async with async_playwright() as playwright:
-            browser = await playwright.chromium.launch(headless=True, proxy={"server": "http://base-browser-gateway:3128"},
+            browser = await playwright.chromium.launch(headless=True, executable_path="/usr/bin/chromium", proxy={"server": "http://base-browser-gateway:3128"},
                 args=["--disable-quic", "--proxy-bypass-list=<-loopback>"])
             try:
                 context = await browser.new_context(storage_state=str(storage) if storage.exists() else None,
@@ -83,5 +83,7 @@ async def render(body: Page, x_tank_key: str = Header(default=""), x_tenant_id: 
                     history.write(json.dumps({"time": int(time.time()), "tenant_id": tenant, "task_id": x_task_id,
                         "action": "browser", "host": allowed_url(body.url, hosts), "human_check": challenge}) + "\n")
                 return result
+            except Exception:
+                raise HTTPException(503, "Base browser could not read this page.") from None
             finally:
                 await browser.close()

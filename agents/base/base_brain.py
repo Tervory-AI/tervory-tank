@@ -22,6 +22,7 @@ class ActiveBatch:
     call: Any
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     ran: bool = False
+    finished: bool = False
 
 
 active: dict[tuple[uuid.UUID, uuid.UUID], ActiveBatch] = {}
@@ -32,8 +33,14 @@ async def drive_batch(pool, skills, task_id, cfg, call):
     identity = (tenant, task_id)
     if cfg.get("preview"):
         raise RuntimeError("Base's brain may use only approved skills")
-    active[identity] = ActiveBatch(pool, cfg, call)
+    async def scoped_call(skill_id, payload):
+        return await call(skill_id, {**payload, "_base_brain_task": str(task_id)})
+    active[identity] = ActiveBatch(pool, cfg, scoped_call)
     try:
+        async with pool.acquire() as conn:
+            await conn.execute(
+                "UPDATE agent_base.tasks SET status='running',started_at=coalesce(started_at,now()),finished_at=NULL "
+                "WHERE tenant_id=$1 AND id=$2", tenant, task_id)
         async with httpx.AsyncClient(timeout=1900) as client:
             response = await client.post(os.environ["BASE_BRAIN_URL"] + "/tasks",
                 headers=skills._headers(), json={"tenant_id": str(tenant), "task_id": str(task_id),
@@ -63,6 +70,7 @@ async def drive_batch(pool, skills, task_id, cfg, call):
 class Task(BaseModel):
     tenant_id: uuid.UUID
     task_id: uuid.UUID
+    finish: bool = False
 
 
 class Retry(Task):
@@ -98,17 +106,61 @@ async def results(batch: ActiveBatch, body: Task) -> dict:
             "skills": batch.cfg.get("refs", {}), "cost_usd": batch.cfg.get("model_spend", 0)}
 
 
+async def pipeline_result(batch: ActiveBatch, body: Task) -> dict:
+    result = await results(batch, body)
+    # The code pipeline finished, but recall/recovery/remember still belong to
+    # this task. Publish terminal status only when the complete receipt arrives.
+    async with batch.pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE agent_base.tasks SET status='running',finished_at=NULL WHERE tenant_id=$1 AND id=$2",
+            body.tenant_id, body.task_id)
+    return result
+
+
+async def batch_receipts(conn, tenant: uuid.UUID) -> dict:
+    """Expose the receipt through the existing Tank-proxied batches response."""
+    rows = await conn.fetch(
+        "SELECT id,status,error,input->>'batch' AS batch,input->'brain_receipt' AS receipt "
+        "FROM agent_base.tasks WHERE tenant_id=$1 AND task_type='base.enrich' "
+        "ORDER BY created_at DESC LIMIT 200", tenant)
+    batches: dict[str, list] = {}
+    for row in rows:
+        receipt = row["receipt"]
+        if isinstance(receipt, str):
+            receipt = json.loads(receipt)
+        batches.setdefault(row["batch"], []).append({"task_id": str(row["id"]), "status": row["status"],
+                                                    "error": row["error"], "receipt": receipt})
+    return batches
+
+
+def free_call(batch: ActiveBatch):
+    async def call(skill_id, payload):
+        return await batch.call(skill_id, {**payload, "_base_brain_free": True})
+    return call
+
+
 def register(app):
     @app.post("/brain/pipeline")
     async def pipeline(body: Task, x_tank_key: str = Header(default="")):
         batch = selected(body, x_tank_key)
         from room import _run_batch
         async with batch.lock:
+            if body.finish:
+                if not batch.ran or batch.finished:
+                    raise HTTPException(409, "Free recovery must finish once before paid continuation.")
+                batch.finished = True
+                async with batch.pool.acquire() as conn:
+                    await conn.execute(
+                        "UPDATE agent_base.records SET status='queued',error=NULL WHERE tenant_id=$1 AND task_id=$2 "
+                        "AND (status<>'done' OR confidence<80 OR passes->'2c' ? 'skipped' OR passes->'5' ? 'skipped')",
+                        body.tenant_id, body.task_id)
+                await _run_batch(batch.pool, body.task_id, batch.cfg, batch.call)
+                return await pipeline_result(batch, body)
             if batch.ran:
                 raise HTTPException(409, "This pipeline already ran.")
             batch.ran = True
-            await _run_batch(batch.pool, body.task_id, batch.cfg, batch.call)
-            return await results(batch, body)
+            await _run_batch(batch.pool, body.task_id, batch.cfg, free_call(batch))
+            return await pipeline_result(batch, body)
 
     @app.post("/brain/retry")
     async def retry(body: Retry, x_tank_key: str = Header(default="")):
@@ -118,7 +170,7 @@ def register(app):
             raise HTTPException(422, "A public website URL without credentials is required.")
         from room import _run_batch
         async with batch.lock:
-            if not batch.ran:
+            if not batch.ran or batch.finished:
                 raise HTTPException(409, "The default pipeline must run first.")
             async with batch.pool.acquire() as conn:
                 changed = await conn.fetchval(
@@ -127,5 +179,5 @@ def register(app):
                     body.tenant_id, body.task_id, body.record_id, body.website)
             if changed is None:
                 raise HTTPException(404, "No unresolved record in this tenant's task.")
-            await _run_batch(batch.pool, body.task_id, batch.cfg, batch.call)
-            return await results(batch, body)
+            await _run_batch(batch.pool, body.task_id, batch.cfg, free_call(batch))
+            return await pipeline_result(batch, body)

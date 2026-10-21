@@ -829,10 +829,16 @@ CREATE TABLE IF NOT EXISTS tank.training_snapshot_batches (
 -- AGENT-1: Base pilot. Copy the current general-purpose serving route once;
 -- no existing route changes, automatic promotion or new provider is introduced.
 ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS baseline_model text;
-INSERT INTO tank.policy (task_type,rung,model,priority,cache_scope,max_tokens_out,baseline_model)
-SELECT 'agent.base.think',rung,model,'standard','none',4096,model
-FROM tank.policy WHERE task_type='tier0.answer' AND tenant_id IS NULL
-ON CONFLICT DO NOTHING;
+DO $$
+BEGIN
+    -- Serialize this one-time seed across concurrent Tank starts. Preserve an
+    -- existing brain policy, including any founder-selected serving model.
+    LOCK TABLE tank.policy IN SHARE ROW EXCLUSIVE MODE;
+    INSERT INTO tank.policy (task_type,rung,model,priority,cache_scope,max_tokens_out,baseline_model)
+    SELECT 'agent.base.think',rung,model,'standard','none',4096,model
+    FROM tank.policy WHERE task_type='tier0.answer' AND tenant_id IS NULL
+      AND NOT EXISTS (SELECT 1 FROM tank.policy WHERE task_type='agent.base.think' AND tenant_id IS NULL);
+END $$;
 
 CREATE TABLE IF NOT EXISTS tank.agent_receipts (
     ledger_id uuid PRIMARY KEY REFERENCES tank.ledger(id),
