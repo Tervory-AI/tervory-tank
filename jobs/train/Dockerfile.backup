@@ -8,8 +8,8 @@ RUN apt-get update \
     && pip install --no-cache-dir httpx==0.28.1 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 1000 backup-worker
-COPY agents/_chassis/chassis/__init__.py agents/_chassis/chassis/storage.py /app/agents/_chassis/chassis/
-COPY jobs/train/backup.py jobs/train/r2_archive.py /app/jobs/train/
+COPY --chown=backup-worker:backup-worker agents/_chassis/chassis/__init__.py agents/_chassis/chassis/storage.py /app/agents/_chassis/chassis/
+COPY --chown=backup-worker:backup-worker jobs/train/backup.py jobs/train/r2_archive.py /app/jobs/train/
 USER backup-worker
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 CMD ["python", "jobs/train/backup.py", "--owner", "uploads", "--nightly"]

@@ -96,7 +96,15 @@ existing automated exporter in `tank/training.py`.
 `jobs/train/Dockerfile.backup` builds a dedicated worker image from the repository
 root, with PostgreSQL client tools and age installed. It includes no model or
 HF dependencies and runs as an unprivileged user. Building that image does not
-deploy or schedule it.
+deploy or schedule it. To check encryption after building the image:
+
+```sh
+docker run --rm --network none -i tervory-bucket1-backup-test python - < jobs/train/check_backup_image.py
+```
+
+This uses real age encryption and decryption with a synthetic dump and a
+throwaway identity inside the disposable container; it contacts no database
+or bucket and prints no key.
 
 The backup worker requires `pg_dump`, `age`, `DATABASE_URL`, and the public
 `R2_BACKUP_RECIPIENT`. The private age identity must stay outside the worker.
