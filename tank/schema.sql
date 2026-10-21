@@ -1045,7 +1045,7 @@ BEGIN
     SELECT * INTO setting FROM tank.baseline_settings WHERE task_type=NEW.task_type FOR SHARE;
     NEW.comparison_revision := coalesce(setting.revision,1);
     -- Invalidate all comparisons when actual costs are unknown or are vendor fees.
-    IF NEW.research_cost_status='unknown' OR NEW.model LIKE 'vendor:%' OR NEW.vendor IS NOT NULL THEN
+    IF to_jsonb(NEW)->>'research_cost_status'='unknown' OR NEW.model LIKE 'vendor:%' OR to_jsonb(NEW)->>'vendor' IS NOT NULL THEN
       NEW.baseline_model:=NULL; NEW.baseline_cost_usd:=NULL;
       NEW.standard_model:=NULL; NEW.standard_cost_usd:=NULL;
       NEW.top_model:=NULL; NEW.top_cost_usd:=NULL; NEW.baseline_status:='unpriced';

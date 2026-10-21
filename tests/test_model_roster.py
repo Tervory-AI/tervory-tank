@@ -50,8 +50,12 @@ def test_fallbacks_run_cheapest_available_first() -> None:
 
 
 def test_policy_seeds_and_the_switch_name_roster_models() -> None:
-    seeded = set(re.findall(r"\('[a-z0-9_.]+',\s*\d+,\s*'([a-z0-9-]+)'", SCHEMA))
-    switched = set(re.findall(r"THEN '([a-z0-9-]+)'", SCHEMA)) | set(re.findall(r"ELSE '([a-z0-9-]+)'", SCHEMA))
+    # Only routing statements are policy switches; reporting CASE expressions
+    # also contain status strings and named cost comparisons.
+    policies = "\n".join(re.findall(r"(?:INSERT\s+INTO|UPDATE)\s+tank\.policy\b[^;]*;", SCHEMA, re.I | re.S))
+    assert policies
+    seeded = set(re.findall(r"\('[a-z0-9_.]+',\s*\d+,\s*'([a-z0-9-]+)'", policies))
+    switched = set(re.findall(r"THEN '([a-z0-9-]+)'", policies)) | set(re.findall(r"ELSE '([a-z0-9-]+)'", policies))
     assert seeded and switched
     assert seeded <= NAMES, seeded - NAMES
     assert switched <= NAMES, switched - NAMES
