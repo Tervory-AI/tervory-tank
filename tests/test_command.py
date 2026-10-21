@@ -224,3 +224,18 @@ async def test_auto_stream_matches_ledger_and_recovers_errors(api, monkeypatch):
     async with pool.acquire() as conn:
         state = json.loads(await conn.fetchval('SELECT state FROM tank.command_threads WHERE thread_id=$1', uuid.UUID(thread)))
     assert state['active_turn'] is None
+
+
+@pytest.mark.asyncio
+async def test_interrupted_turn_is_not_retried_and_new_turn_can_start(api, monkeypatch):
+    client, pool = api
+    thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
+    async with pool.acquire() as conn:
+        await conn.execute("UPDATE tank.command_threads SET state=state || $2::jsonb WHERE thread_id=$1",
+                           uuid.UUID(thread), json.dumps({'active_turn': 'interrupted', 'active_started_at': '2000-01-01T00:00:00+00:00'}))
+    route = AsyncMock(side_effect=HTTPException(503, 'paused'))
+    monkeypatch.setattr(command, 'route_turn', route)
+    reply = await client.post(f'/v1/command/threads/{thread}/turn', json={'text': 'New request'})
+    assert reply.status_code == 200
+    assert 'previous answer was interrupted' in reply.text
+    route.assert_awaited_once()  # Only the new request, never the stale request.

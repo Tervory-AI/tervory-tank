@@ -13,6 +13,7 @@ import os
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -302,7 +303,8 @@ async def route_turn(actor: Actor, messages: list[dict]) -> Any:
 
 async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages: list[dict]) -> None:
     try:
-        answer = await route_turn(actor, messages)
+        async with asyncio.timeout(150):
+            answer = await route_turn(actor, messages)
         async with editing(thread_id, actor) as (conn, row, state):
             ledger = await conn.fetchval("SELECT to_jsonb(l) FROM tank.ledger l WHERE id=$1 AND tenant_id=$2",
                                          answer.ledger_id, actor.tenant_id)
@@ -317,13 +319,15 @@ async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages
             await step(conn, row, state, {"step_id": turn_id, "label": "Answer ready", "actor": "Tervory", "status": "done"})
             await event(conn, row, "receipt", {"rows": [receipt], "totals": totals([receipt])})
             await event(conn, row, "done", {"message_id": turn_id})
-            state["active_turn"] = None
+            if state["active_turn"] == turn_id:
+                state["active_turn"] = None
     except (Exception, asyncio.CancelledError):
         # Never return raw provider exceptions, URLs, headers or prompts.
         async with editing(thread_id, actor) as (conn, row, state):
             await step(conn, row, state, {"step_id": turn_id, "label": "Answer failed", "actor": "Tervory", "status": "failed"})
             await event(conn, row, "error", {"message": "The answer could not be completed. Check routing policy and service availability."})
-            state["active_turn"] = None
+            if state["active_turn"] == turn_id:
+                state["active_turn"] = None
 
 
 @router.post("/threads/{thread_id}/turn")
@@ -336,9 +340,17 @@ async def turn(thread_id: uuid.UUID, body: Turn, actor: Actor = Depends(identity
     turn_id = str(uuid.uuid4())
     async with editing(thread_id, actor) as (conn, row, state):
         if state["active_turn"]:
-            raise HTTPException(409, "An answer is already running in this thread")
+            started = datetime.fromisoformat(state["active_started_at"])
+            if (datetime.now(timezone.utc) - started).total_seconds() < 180:
+                raise HTTPException(409, "An answer is already running in this thread")
+            # A process restart cannot leave a conversation permanently busy.
+            # Do not retry a possibly charged request automatically.
+            await step(conn, row, state, {"step_id": state["active_turn"], "label": "Answer interrupted",
+                                          "actor": "Tervory", "status": "failed"})
+            await event(conn, row, "error", {"message": "The previous answer was interrupted. It has not been retried."})
         after = row["seq"]
         state["active_turn"] = turn_id
+        state["active_started_at"] = datetime.now(timezone.utc).isoformat()
         state["messages"].append({"message_id": str(uuid.uuid4()), "role": "user", "content": body.text,
                                   "attachments": [a.model_dump() for a in body.attachments]})
         # A reply is attached to the existing build, never a second build.
@@ -414,14 +426,28 @@ async def next_build() -> dict | None:
         async with conn.transaction():
             # Workers are a platform principal. Claim one row across tenants;
             # all subsequent reads and writes use that row's tenant.
-            row = await conn.fetchrow(
-                "SELECT * FROM tank.command_builds WHERE status='queued' ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1"
+            build = await conn.fetchrow(
+                "SELECT b.* FROM tank.command_builds b JOIN tank.command_threads t "
+                "ON t.thread_id=b.thread_id AND t.tenant_id=b.tenant_id "
+                "WHERE b.status='queued' ORDER BY b.created_at LIMIT 1 FOR UPDATE OF t SKIP LOCKED"
             )
-            if row is None:
+            if build is None:
                 return None
-            await conn.execute("UPDATE tank.command_builds SET status='running',updated_at=now() WHERE build_id=$1 AND tenant_id=$2",
-                               row["build_id"], row["tenant_id"])
-            return {**dict(row), "status": "running"}
+            # Match the thread-then-build lock order used by progress/confirm.
+            row = await owned(conn, build["thread_id"], Actor(build["tenant_id"], build["user_id"], True), lock=True)
+            state = unpack(row["state"])
+            claimed = await conn.fetchval(
+                "UPDATE tank.command_builds SET status='running',updated_at=now() "
+                "WHERE build_id=$1 AND tenant_id=$2 AND status='queued' RETURNING build_id",
+                build["build_id"], build["tenant_id"],
+            )
+            if claimed is None:
+                return None
+            await step(conn, row, state, {"step_id": str(build["build_id"]), "label": "Build started",
+                                          "actor": "worker", "status": "running"})
+            await conn.execute("UPDATE tank.command_threads SET state=$3::jsonb,updated_at=now() WHERE thread_id=$1 AND tenant_id=$2",
+                               build["thread_id"], build["tenant_id"], dump(state))
+            return {**dict(build), "status": "running"}
 
 
 async def build_record(conn: Any, build_id: uuid.UUID) -> dict:
