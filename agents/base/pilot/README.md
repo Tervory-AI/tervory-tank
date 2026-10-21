@@ -1,6 +1,6 @@
 # Base sandbox pilot receipt
 
-Recorded in the managed cloud on 2026-10-21T13:40:40.883962+00:00. **Passed.**
+Recorded in the managed cloud on 2026-10-21T13:54:57.108825+00:00. **Passed.**
 This is the owner's replacement for the pre-merge live ATF run. No real model
 was called and no production key or endpoint was used.
 
@@ -13,8 +13,8 @@ was called and no production key or endpoint was used.
 
 | Proof | Recorded result |
 | --- | --- |
-| Task | `5bb3a961-cd84-4f94-bdd1-9fb6a09bd2cd` — done |
-| Tenant | `e13ad318-8bc6-4ff5-aa16-bb01bc09db7d` |
+| Task | `1b549a69-e9dc-49e1-92aa-fbeef1c248e5` — done |
+| Tenant | `9a933348-605f-481c-891d-f414327b57a6` |
 | Tank route | 4 POSTs to `/v1/agents/base/chat/completions`; all validated Base's generated room key and returned 200 |
 | Ledger | 4 persisted rows and 4 matching receipts, scoped to the same tenant and task |
 | Accounting | Synthetic cost $0.000560; synthetic baseline $0.001120; actual provider spend $0 |
@@ -31,12 +31,15 @@ succeed. Site results, LiteLLM answers/prices and the memory store/embeddings ar
 explicit fixture substitutions. Tank, the Base pipeline, the memory HTTP API,
 the pinned Hermes agent, Chromium and Docker execution are real.
 
-Source implementation: `a3581883de22028399c4123a5bc39734fcd503f5`. This recording was generated with
+Source implementation: `8a689fc670fe02c158e16efc0989c1bcac45006a`. This recording was generated with
 the accompanying test harness before its evidence commit. Tests: integrated
-pilot **1 passed in 51.83s**; final adapter/isolation checks **19 passed**.
+pilot **1 passed in 31.04s** after DASH integration; combined adapter/dashboard/schema
+checks **48 passed**; real Postgres schema, billing and submission checks **6 passed**.
+The thinking route also passes refusal tests for the founder paid pause and an
+unavailable control state.
 All pilot containers, volumes, networks and its throwaway database were removed.
 
 Evidence SHA-256:
 
-- `recording.json`: `24c14a264d1a1db10de7ff24bbf8e33ac23bcac8ec03e4caa70fe8f6bb203c85`
-- `receipt.json`: `86af948ceeb39fadd5a8cbab946b58be61c99455890eef1c7bbb21f102295c2f`
+- `recording.json`: `7cdd13f6325461136e8d7f50e26fa48baf3724e6e1ccf58e9969bcc5b8b02dab`
+- `receipt.json`: `44b3a3f08a188ddd2b75fce9507423f3958680d73b8168034bc26cb01426a70c`
