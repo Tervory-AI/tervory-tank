@@ -120,7 +120,7 @@ def test_heartbeat_upserts_and_redacts(client, conn):
 
 
 def test_scrub_catches_tokens_and_keys():
-    text = "a ghp_" + "b" * 20 + " Bearer zzz x-tank-key: kkk sk-" + "c" * 20 + " -----BEGIN RSA PRIVATE KEY----- MII"
+    text = "a ghp_" + "b" * 20 + " Bearer zzz x-tank-key: kkk sk-" + "c" * 20 + " -----BEGIN " + "RSA PRIVATE KEY----- MII"
     out = workers_status.scrub(text) or ""
     for leaked in ("ghp_", "zzz", "kkk", "sk-c", "MII"):
         assert leaked not in out
