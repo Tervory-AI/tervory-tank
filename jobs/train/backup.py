@@ -20,6 +20,11 @@ from urllib.parse import unquote, urlsplit
 from r2_archive import PLATFORM_TENANT, Storage, StorageError, archive_file
 
 
+def tool_environment() -> dict[str, str]:
+    """Subprocesses receive no model, Tank, HF or R2 credentials."""
+    return {key: os.environ[key] for key in ("PATH", "LANG", "LC_ALL", "TZ") if key in os.environ}
+
+
 def backup_environment() -> dict[str, str]:
     try:
         parsed = urlsplit(os.environ.get('DATABASE_URL', ''))
@@ -27,7 +32,8 @@ def backup_environment() -> dict[str, str]:
             raise ValueError('invalid database configuration')
         if parsed.query or parsed.fragment:
             raise ValueError('unsupported database options')
-        return {**os.environ, 'PGHOST': parsed.hostname, 'PGPORT': str(parsed.port or 5432),
+        tls = {key: os.environ[key] for key in ('PGSSLMODE', 'PGSSLROOTCERT', 'PGSSLCERT', 'PGSSLKEY') if key in os.environ}
+        return {**tool_environment(), **tls, 'PGHOST': parsed.hostname, 'PGPORT': str(parsed.port or 5432),
                 'PGUSER': unquote(parsed.username), 'PGPASSWORD': unquote(parsed.password or ''),
                 'PGDATABASE': unquote(parsed.path[1:])}
     except ValueError:
@@ -48,7 +54,7 @@ async def encrypted_dump(target: Path) -> None:
             encrypt = await asyncio.create_subprocess_exec(
                 'age', '--encrypt', '--recipient', recipient,
                 stdin=read_fd, stdout=output, stderr=asyncio.subprocess.DEVNULL,
-                env={k: v for k, v in os.environ.items() if not k.startswith(('PG', 'R2_', 'DATABASE_'))})
+                env=tool_environment())
             children.append(encrypt)
             os.close(read_fd)
             read_fd = -1
