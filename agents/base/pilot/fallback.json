@@ -1,11 +1,11 @@
 {
-  "task_id": "53ceffdd-2863-45b9-b84e-8582bbcc1422",
-  "tenant_id": "2237aeb0-cef2-4521-b0f1-878cb48ba38e",
+  "task_id": "b3459068-3845-4f22-b87f-b3ff2caa5b1d",
+  "tenant_id": "2d80a73b-106e-4367-ab52-2ff3c4f5ab9c",
   "status": "done",
   "processed": 2,
   "receipt": {
-    "tenant_id": "2237aeb0-cef2-4521-b0f1-878cb48ba38e",
-    "task_id": "53ceffdd-2863-45b9-b84e-8582bbcc1422",
+    "tenant_id": "2d80a73b-106e-4367-ab52-2ff3c4f5ab9c",
+    "task_id": "b3459068-3845-4f22-b87f-b3ff2caa5b1d",
     "room": "base",
     "model_receipts": [],
     "steps": [
@@ -28,7 +28,7 @@
     {
       "sequence": 66,
       "method": "DELETE",
-      "path": "/unavailable-brain/tasks/53ceffdd-2863-45b9-b84e-8582bbcc1422",
+      "path": "/unavailable-brain/tasks/b3459068-3845-4f22-b87f-b3ff2caa5b1d",
       "room_key_valid": true,
       "status": 404
     },

@@ -60,8 +60,11 @@ async def test_schema_empty_repeat_and_current_main_with_agent_roles(monkeypatch
     admin = await asyncpg.connect(URL)
     new = (ROOT / "tank/schema.sql").read_text()
     baseline = (ROOT / "tests/fixtures/train1-main-schema.sql").read_text()
-    # The fixture is the actual main schema before this additive change.
-    assert new.startswith(baseline)
+    # The historical fixture remains byte-identical. AGENT-1 corrected only
+    # this comment; normalize it here without allowing any DDL-prefix change.
+    historical = new.replace("as sent; agent chat includes its policy system prompt",
+        "as sent (system prompt excluded; it lives in policy)")
+    assert historical.startswith(baseline)
     for existing in (False, True):
         name = "train1_schema_" + uuid.uuid4().hex
         await admin.execute(f'CREATE DATABASE "{name}"')
