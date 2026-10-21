@@ -852,7 +852,7 @@ BEGIN
       WHERE p.task_type=NEW.task_type AND (p.tenant_id=NEW.tenant_id OR p.tenant_id IS NULL)
       ORDER BY p.tenant_id NULLS LAST LIMIT 1;
     NEW.baseline_model := coalesce(chosen,NEW.model);
-    IF NEW.vendor IS NOT NULL THEN
+    IF to_jsonb(NEW)->>'vendor' IS NOT NULL THEN
       NEW.baseline_cost_usd := NEW.cost_usd;
       NEW.baseline_status := 'not_model';
     ELSE
@@ -904,3 +904,30 @@ CREATE TABLE IF NOT EXISTS tank.bench_calls (
 );
 CREATE INDEX IF NOT EXISTS bench_budget ON tank.bench_calls (tenant_id,region,day);
 CREATE INDEX IF NOT EXISTS bench_task_history ON tank.bench_runs (tenant_id,region,task_type,started_at DESC);
+
+-- The existing hourly rollup rebuilds route_evidence from scratch. Reattach
+-- benchmark receipts on insert; historical runs remain immutable in bench_runs.
+CREATE OR REPLACE FUNCTION tank.restore_bench_evidence() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE recent tank.bench_runs%ROWTYPE;
+BEGIN
+    IF NEW.rung <> 1 THEN RETURN NEW; END IF;
+    SELECT * INTO recent FROM tank.bench_runs
+      WHERE tenant_id='00000000-0000-0000-0000-000000000001'::uuid
+        AND task_type=NEW.task_type AND model=NEW.model AND status='complete'
+      ORDER BY finished_at DESC,id DESC LIMIT 1;
+    IF FOUND THEN
+      NEW.bench_run_id := recent.id;
+      NEW.bench_score := recent.score;
+      NEW.bench_cost_per_call := recent.cost_per_call;
+      NEW.bench_n := recent.expected_n;
+      NEW.bench_at := recent.finished_at;
+    END IF;
+    RETURN NEW;
+END $$;
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='core1_restore_bench'
+                   AND tgrelid='tank.route_evidence'::regclass) THEN
+      CREATE TRIGGER core1_restore_bench BEFORE INSERT ON tank.route_evidence
+        FOR EACH ROW EXECUTE FUNCTION tank.restore_bench_evidence();
+    END IF;
+END $$;

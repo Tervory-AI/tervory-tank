@@ -135,6 +135,7 @@ async def test_bench_runs_every_model_records_scores_proposes_and_does_not_switc
     monkeypatch.setattr(bench,'runtime',lambda:rt)
     async def models(): return roster()
     rt._roster_models=models
+    rt.LITELLM_MASTER_KEY="fixture-only"
     called=[]
     async def call(model,messages,max_tokens):
         called.append(model)
@@ -186,3 +187,52 @@ async def test_bench_cap_prevents_network_and_partial_proposals(database,monkeyp
         result=await bench.bench_model(conn,policy,'cheap',cases,bench.price_book(roster()),'us-east',Decimal('0'),'expensive')
         assert result['status']=='capped' and result['score'] is None
         assert await conn.fetchval('SELECT count(*) FROM tank.ledger WHERE tenant_id=$1',PLATFORM_TENANT)==0
+
+
+@pytest.mark.asyncio
+async def test_hourly_rollup_rebuild_preserves_bench_evidence(database):
+    pool,_=database
+    async with pool.acquire() as conn:
+        run=await conn.fetchval("""INSERT INTO tank.bench_runs
+            (tenant_id,region,task_type,model,comparison_model,suite_hash,expected_n,status,score,cost_per_call,finished_at)
+            VALUES($1,'us-east','fixture','cheap','expensive','hash',3,'complete',.99,.012,now()) RETURNING id""",PLATFORM_TENANT)
+        for _ in range(2):
+            await conn.execute("DELETE FROM tank.route_evidence WHERE task_type='fixture'")
+            await conn.execute("INSERT INTO tank.route_evidence(task_type,model,rung,eval_score) VALUES('fixture','cheap',1,.8)")
+            row=await conn.fetchrow("SELECT * FROM tank.route_evidence WHERE task_type='fixture'")
+            assert row['bench_run_id']==run and row['bench_n']==3
+            assert row['bench_score']==Decimal('.99') and row['bench_cost_per_call']==Decimal('.012')
+            assert row['eval_score']==Decimal('.8') # rollup's independent measure remains intact
+
+
+@pytest.mark.asyncio
+async def test_heldout_examples_are_platform_and_box_scoped(database,monkeypatch):
+    pool,rt=database
+    monkeypatch.setattr(bench,'runtime',lambda:rt)
+    async with pool.acquire() as conn:
+        for tenant,region,held,status in [(PLATFORM_TENANT,'us-east',True,'checked'),
+                (PLATFORM_TENANT,'us-east',False,'checked'),(PLATFORM_TENANT,'za',True,'checked'),
+                (uuid.uuid4(),'us-east',True,'checked'),(PLATFORM_TENANT,'us-east',True,'candidate')]:
+            ref=str(uuid.uuid4())
+            await conn.execute("""INSERT INTO tank.gold_examples
+                (tenant_id,region,skill_id,agent,input,expected,source,source_ref,input_hash,status,holdout)
+                VALUES($1,$2,'fixture','base','{}','{}','package',$3,$3,$4,$5)""",tenant,region,ref,status,held)
+        cases=await bench.cases_for(conn,'fixture','us-east')
+        assert len(cases)==1 and cases[0]['kind']=='holdout'
+
+
+@pytest.mark.asyncio
+async def test_unknown_response_cost_keeps_reservation_and_blocks_proposal(database,monkeypatch):
+    pool,rt=database
+    monkeypatch.setattr(bench,'runtime',lambda:rt)
+    async def unknown(*args):
+        return dict(model='cheap',content='x',tokens_in=100,tokens_out=10,cost=None,ok=True)
+    monkeypatch.setattr(bench,'call_model',unknown)
+    policy={'task_type':'fixture','model':'expensive','max_tokens_out':100}
+    async with pool.acquire() as conn:
+        result=await bench.bench_model(conn,policy,'cheap',[{'ref':'one','kind':'eval','input':'x','expected':'x'}],
+                                      bench.price_book(roster()),'us-east',Decimal('5'),'expensive')
+        assert result['status']=='failed' and result['score'] is None
+        row=await conn.fetchrow('SELECT * FROM tank.bench_calls WHERE tenant_id=$1',PLATFORM_TENANT)
+        assert row['charged_usd'] is None and row['reserved_usd']>0 and row['status']=='unverified'
+        assert await conn.fetchval('SELECT outcome FROM tank.ledger WHERE tenant_id=$1',PLATFORM_TENANT)=='unverified'

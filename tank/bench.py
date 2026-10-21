@@ -222,6 +222,8 @@ async def tick() -> None:
     cap = Decimal(os.environ.get('TANK_BENCH_MAX_USD') or '5')
     if not cap.is_finite() or cap < 0:
         raise ValueError('TANK_BENCH_MAX_USD must be finite and nonnegative')
+    if not rt.LITELLM_MASTER_KEY:
+        raise RuntimeError('LiteLLM connection is not configured')
     region = rt.box_region()
     async with rt.pool().acquire() as conn:
         if not await conn.fetchval('SELECT pg_try_advisory_lock($1)', LOCK_ID):
@@ -237,7 +239,7 @@ async def tick() -> None:
             for tenant in tenants:
                 await backfill(conn, tenant['tenant_id'], region)
             roster_fp, price_fp = fingerprints(book)
-            roster_fp = hashlib.sha256(encoded(roster).encode()).hexdigest()
+            roster_fp = hashlib.sha256(encoded(sorted(roster, key=lambda r: r['model_name'])).encode()).hexdigest()
             policies = await conn.fetch("SELECT * FROM tank.policy WHERE tenant_id IS NULL AND rung IN (1,2) ORDER BY task_type")
             for row in policies:
                 policy = dict(row)
@@ -280,12 +282,22 @@ async def tick() -> None:
             await conn.execute('SELECT pg_advisory_unlock($1)', LOCK_ID)
 
 
+async def worker_status(error: str | None) -> None:
+    async with runtime().pool().acquire() as conn:
+        await conn.execute("""INSERT INTO tank.search_state(task_type,bench_status,bench_error)
+            VALUES('@bench',$1,$2) ON CONFLICT(task_type) DO UPDATE SET bench_status=$1,bench_error=$2""",
+            'unavailable' if error else 'running', error)
+
+
 async def loop() -> None:
     while True:
         try:
             await tick()
+            await worker_status(None)
         except Exception as exc:
             log.error('Bench unavailable (%s); retrying in five minutes', type(exc).__name__)
+            with suppress(Exception):
+                await worker_status('Benchmark unavailable. Check the LiteLLM connection, price roster and daily budget.')
         await asyncio.sleep(300)
 
 
