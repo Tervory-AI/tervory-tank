@@ -8,7 +8,7 @@ import type { Proof } from "./view";
 
 export type ProofFilters = { tenant_id?: string; task?: string; start?: string; end?: string; page?: string };
 
-export async function proofResponse(filters: ProofFilters & { until?: string; member?: string; population?: string; free_only?: string } = {}, format?: "csv" | "pdf", endpoint: "" | "/savings" | "/savings/rows" | "/savings/export/csv" | "/savings/export/pdf" = "") {
+export async function proofResponse(filters: ProofFilters & { until?: string; member?: string; population?: string; free_only?: string } = {}, format?: "csv" | "pdf", endpoint: "" | "/savings" | "/savings/rows" | "/savings/export/csv" | "/savings/export/pdf" | "/baselines" = "", init: RequestInit = {}) {
   const identity = await goldIdentity("platform");
   if (identity.role !== "founder") notFound();
   const query = new URLSearchParams();
@@ -18,8 +18,8 @@ export async function proofResponse(filters: ProofFilters & { until?: string; me
     query.set(key, (key === "start" || key === "end") && !/(Z|[+-]\d\d:\d\d)$/.test(value) ? `${value}Z` : value);
   }
   const response = await fetch(`${process.env.TANK_URL ?? "http://tank:8000"}/v1/proof${endpoint}${format ? `/export/${format}` : ""}?${query}`, {
-    cache: "no-store",
-    headers: { "x-tank-key": process.env.TANK_API_KEY ?? "", "x-tervory-admin": identity.userId },
+    ...init, cache: "no-store",
+    headers: { "content-type": "application/json", "x-tank-key": process.env.TANK_API_KEY ?? "", "x-tervory-admin": identity.userId },
   });
   if (!response.ok) throw new Error("Proof evidence is unavailable. Try again when Tank is reachable.");
   return response;

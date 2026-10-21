@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import csv
+import asyncio
+from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timezone
 from decimal import Decimal
 from io import StringIO
@@ -16,7 +18,30 @@ from fastapi.responses import Response
 from admin import require_admin
 from gold import runtime
 
-router = APIRouter(prefix='/v1/proof', dependencies=[Depends(require_admin)])
+@asynccontextmanager
+async def baseline_lifespan(app):
+    async def work():
+        while True:
+            await asyncio.sleep(1)
+            try:
+                await baseline_batch()
+            except Exception:
+                # The queue remains pending/running and retries; no model calls.
+                import logging
+                logging.getLogger(__name__).exception('Baseline repricing will retry')
+                with suppress(Exception):
+                    await runtime().pool().execute("UPDATE tank.baseline_changes SET error='Repricing unavailable; retrying.' WHERE id=(SELECT id FROM tank.baseline_changes WHERE status IN ('pending','running') ORDER BY created_at,id LIMIT 1)")
+                await asyncio.sleep(5)
+    worker = asyncio.create_task(work())
+    try:
+        yield
+    finally:
+        worker.cancel()
+        with suppress(asyncio.CancelledError):
+            await worker
+
+
+router = APIRouter(prefix='/v1/proof', dependencies=[Depends(require_admin)], lifespan=baseline_lifespan)
 
 
 def money(value: Any) -> Decimal:
@@ -28,16 +53,33 @@ LIVE = "agent NOT IN ('bench','shadow') AND task_type NOT LIKE '%#shadow'"
 SCOPE = "($1::uuid IS NULL OR tenant_id=$1) AND region=$2 AND ($3::text IS NULL OR task_type=$3)"
 WINDOW = "($4::timestamptz IS NULL OR ts >= $4) AND ts < $5"
 TOTALS = """count(*)::int AS calls,
-    count(baseline_cost_usd)::int AS priced_calls,
+    count(standard_cost_usd)::int AS priced_calls,
     coalesce(sum(cost_usd) FILTER (WHERE research_cost_status IS DISTINCT FROM 'unknown'),0) AS actual_usd,
-    coalesce(sum(cost_usd) FILTER (WHERE baseline_cost_usd IS NOT NULL),0) AS compared_actual_usd,
+    coalesce(sum(cost_usd) FILTER (WHERE standard_cost_usd IS NOT NULL),0) AS compared_actual_usd,
     count(*) FILTER (WHERE research_cost_status='unknown')::int AS unknown_cost_calls,
-    coalesce(sum(baseline_cost_usd),0) AS baseline_usd,
-    coalesce(sum(baseline_cost_usd-cost_usd),0) AS saved_usd,
-    count(*) FILTER (WHERE baseline_status='backfilled' AND baseline_cost_usd IS NOT NULL)::int AS backfilled_calls,
-    count(*) FILTER (WHERE baseline_cost_usd IS NULL)::int AS unpriced_calls,
-    count(*) FILTER (WHERE rung=3 AND NOT cache_hit AND cost_usd=0 AND outcome='delivered' AND research_cost_status IS DISTINCT FROM 'unknown')::int AS code_calls"""
+    coalesce(sum(standard_cost_usd),0) AS baseline_usd,
+    coalesce(sum(standard_cost_usd-cost_usd),0) AS saved_usd,
+    count(*) FILTER (WHERE baseline_status='backfilled' AND standard_cost_usd IS NOT NULL)::int AS backfilled_calls,
+    count(*) FILTER (WHERE standard_cost_usd IS NULL)::int AS unpriced_calls,
+    count(*) FILTER (WHERE rung=3 AND NOT cache_hit AND cost_usd=0 AND outcome='delivered' AND research_cost_status IS DISTINCT FROM 'unknown')::int AS code_calls,
+    bool_or(NOT EXISTS(SELECT 1 FROM tank.shadow sh JOIN tank.ledger sl ON sl.id=sh.ledger_id AND sl.tenant_id=sh.tenant_id
+      WHERE sh.tenant_id=receipts.tenant_id AND sh.task_type=receipts.task_type AND sl.region=receipts.region)) AS quality_pending,
+    array_remove(array_agg(DISTINCT standard_model),NULL) AS standards,
+    array_remove(array_agg(DISTINCT top_model),NULL) AS tops,
+    coalesce(sum(top_cost_usd-cost_usd) FILTER (WHERE top_cost_usd IS NOT NULL),0) AS top_saved_usd,
+    coalesce(sum(top_cost_usd),0) AS top_baseline_usd,
+    coalesce(sum(cost_usd) FILTER (WHERE top_cost_usd IS NOT NULL),0) AS top_actual_usd"""
 PAGE_SIZE = 100
+
+
+def receipt_source(tenant: str | None, region: str, end: str) -> str:
+    """SQL placeholders only; reconstruct the comparison at a report's cutoff."""
+    scope = f"({tenant}::uuid IS NULL OR raw.tenant_id={tenant}) AND " if tenant else ''
+    return f"""(SELECT r.* FROM tank.ledger raw LEFT JOIN LATERAL (SELECT comparison FROM tank.comparison_history h
+          WHERE h.ledger_id=raw.id AND h.tenant_id=raw.tenant_id AND h.region=raw.region
+            AND h.valid_from <= {end} AND h.valid_until > {end} ORDER BY h.valid_until LIMIT 1) h ON true
+        CROSS JOIN LATERAL jsonb_populate_record(NULL::tank.ledger,to_jsonb(raw)||coalesce(h.comparison,'{{}}'::jsonb)) r
+        WHERE {scope}raw.region={region} AND raw.ts < {end})"""
 
 
 async def snapshot(tenant: uuid.UUID | None, task: str | None = None,
@@ -57,16 +99,16 @@ async def snapshot(tenant: uuid.UUID | None, task: str | None = None,
     args = (tenant, region, task, start, end)
     where = f"{SCOPE} AND {WINDOW} AND {LIVE}"
     async with runtime().pool().acquire() as conn, conn.transaction(isolation='repeatable_read', readonly=True):
-        tasks = [dict(r) for r in await conn.fetch(f"SELECT task_type,{TOTALS} FROM tank.ledger WHERE {where} GROUP BY task_type ORDER BY task_type", *args)]
-        all_total = dict(await conn.fetchrow(f"SELECT {TOTALS} FROM tank.ledger WHERE region=$1 AND ts < $2 AND {LIVE}", region, end))
+        tasks = [dict(r) for r in await conn.fetch(f"SELECT task_type,{TOTALS} FROM {receipt_source('$1','$2','$5')} receipts WHERE {where} GROUP BY task_type ORDER BY task_type", *args)]
+        all_total = dict(await conn.fetchrow(f"SELECT {TOTALS} FROM {receipt_source(None,'$1','$2')} receipts WHERE region=$1 AND ts < $2 AND {LIVE}", region, end))
         tenants = [str(r['tenant_id']) for r in await conn.fetch('SELECT DISTINCT tenant_id FROM tank.ledger WHERE region=$1 ORDER BY tenant_id', region)]
         ledger = [dict(r) for r in await conn.fetch(f"""SELECT l.id,l.tenant_id,l.ts,l.task_type,l.agent,l.model,l.rung,l.tokens_in,l.tokens_out,
             CASE WHEN l.research_cost_status='unknown' THEN NULL ELSE l.cost_usd END AS cost_usd,l.research_cost_status,l.baseline_model,l.baseline_cost_usd,l.baseline_status,l.baseline_priced_at,l.cache_hit,l.outcome,
-            l.baseline_cost_usd-l.cost_usd AS saved_usd,
+            l.standard_cost_usd-l.cost_usd AS saved_usd, l.standard_model,l.standard_cost_usd,l.top_model,l.top_cost_usd,
             l.baseline_cost_usd < l.cost_usd AS baseline_below_actual,
             (SELECT a.family<>b.family FROM tank.proof_prices a,tank.proof_prices b
              WHERE a.model=l.model AND b.model=l.baseline_model) AS baseline_family_mismatch
-            FROM tank.ledger l WHERE {where} ORDER BY ts DESC,id DESC LIMIT $6 OFFSET $7""", *args, PAGE_SIZE+1, page*PAGE_SIZE)]
+            FROM {receipt_source('$1','$2','$5')} l WHERE {where} ORDER BY ts DESC,id DESC LIMIT $6 OFFSET $7""", *args, PAGE_SIZE+1, page*PAGE_SIZE)]
         shadow_from = """FROM tank.shadow s JOIN tank.ledger l ON l.id=s.ledger_id AND l.tenant_id=s.tenant_id
             WHERE ($1::uuid IS NULL OR s.tenant_id=$1) AND l.region=$2 AND ($3::text IS NULL OR s.task_type=$3)
             AND ($4::timestamptz IS NULL OR l.ts >= $4) AND l.ts < $5"""
@@ -88,15 +130,20 @@ async def snapshot(tenant: uuid.UUID | None, task: str | None = None,
             WHERE ($1::uuid IS NULL OR c.tenant_id=$1) AND c.region=$2 AND ($3::text IS NULL OR r.task_type=$3)
             AND ($4::timestamptz IS NULL OR c.created_at >= $4) AND c.created_at < $5
             ORDER BY c.created_at DESC,c.id DESC LIMIT $6 OFFSET $7""", *args, PAGE_SIZE+1, page*PAGE_SIZE)]
-        policies = [dict(r) for r in await conn.fetch("""SELECT tenant_id,task_type,model,candidate_model,baseline_model,auto_promote
-            FROM tank.policy WHERE ($1::uuid IS NULL OR tenant_id=$1 OR tenant_id IS NULL) AND ($2::text IS NULL OR task_type=$2)
-            ORDER BY task_type,tenant_id NULLS LAST""", tenant, task)]
+        policies = [dict(r) for r in await conn.fetch("""SELECT p.tenant_id,p.task_type,p.model,p.candidate_model,p.auto_promote,
+            coalesce(s.override_model,tank.standard_model_for(a.family)) AS baseline_model,
+            tank.standard_model_for(a.family) AS standard_model
+            FROM tank.policy p LEFT JOIN tank.baseline_settings s ON s.task_type=p.task_type
+            LEFT JOIN tank.proof_prices a ON a.model=p.model
+            WHERE ($1::uuid IS NULL OR p.tenant_id=$1 OR p.tenant_id IS NULL) AND ($2::text IS NULL OR p.task_type=$2)
+            ORDER BY p.task_type,p.tenant_id NULLS LAST""", tenant, task)]
         promotions = [dict(r) for r in await conn.fetch("""SELECT id,task_type,action,from_model,to_model,created_at
             FROM tank.policy_log WHERE action IN ('promote','rollback') AND ($1::text IS NULL OR task_type=$1)
             AND ($2::timestamptz IS NULL OR created_at >= $2) AND created_at < $3
             ORDER BY created_at DESC,id DESC LIMIT $4 OFFSET $5""", task, start, end, PAGE_SIZE+1, page*PAGE_SIZE)]
         state = [dict(r) for r in await conn.fetch("""SELECT task_type,bench_at,bench_status,bench_error FROM tank.search_state
             WHERE ($1::text IS NULL OR task_type=$1) ORDER BY task_type""", task)]
+    all_total['quality_note']='same work assumed; quality comparison pending' if all_total.get('quality_pending') else None
     by_task = {r['task_type']: r for r in tasks}
     for name in sorted({r['task_type'] for group in (comparisons,runs,policies) for r in group} - by_task.keys()):
         row = dict(task_type=name, calls=0, priced_calls=0,actual_usd=0,compared_actual_usd=0,unknown_cost_calls=0,baseline_usd=0,saved_usd=0,backfilled_calls=0,unpriced_calls=0,code_calls=0)
@@ -104,11 +151,13 @@ async def snapshot(tenant: uuid.UUID | None, task: str | None = None,
     for row in tasks:
         row['code_share'] = row['code_calls']/row['calls'] if row['calls'] else None
         row['shadow_pairs'] = [p for p in comparisons if p['task_type']==row['task_type']]
+        row.update(comparison_numbers(row['compared_actual_usd'],row['baseline_usd']))
+        row['quality_note']='same work assumed; quality comparison pending' if row.get('quality_pending',not row['shadow_pairs']) else None
     sections = dict(ledger=ledger,shadows=shadows,runs=runs,cases=cases,promotions=promotions)
     more = {name: len(rows)>PAGE_SIZE for name,rows in sections.items()}
     page_rows = ledger[:PAGE_SIZE]
-    return jsonable_encoder({'tenant_id': str(tenant) if tenant else 'all', 'region': region,
-        'tenants': tenants, 'all_tenant_total': all_total, 'tasks': tasks,
+    return jsonable_encoder({'headline': headline_text(all_total if tenant is None and task is None and start is None else {key:sum(money(t.get(key)) for t in tasks) for key in ['compared_actual_usd','baseline_usd','top_actual_usd','top_baseline_usd']} , sorted({n for t in tasks for n in (t.get('standards') or [])}), sorted({n for t in tasks for n in (t.get('tops') or [])})), 'tenant_id': str(tenant) if tenant else 'all', 'region': region,
+        'tenants': tenants, 'all_tenant_total': {**all_total, **comparison_numbers(all_total.get('compared_actual_usd'),all_total.get('baseline_usd'))}, 'tasks': tasks,
         **{name: rows[:PAGE_SIZE] for name,rows in sections.items()}, 'policies': policies, 'state': state,
         'window': {'start': start, 'end': end}, 'page': page, 'page_size': PAGE_SIZE, 'has_more': more,
         'receipt_page_total': {'calls':len(page_rows), 'saved_usd':sum((money(r['saved_usd']) for r in page_rows),Decimal(0))}})
@@ -139,8 +188,8 @@ def pdf_export(data: dict) -> bytes:
     """Small, dependency-free, paginated PDF containing totals and the selected evidence page."""
     import textwrap
     lines = ['Tervory | Tank proof', f"Region: {data['region']}  Tenant: {data['tenant_id']}",
-             'Savings = priced baseline - actual. Backfilled rows use the current price book.',
-             'Code excludes cache. Benchmark/shadow costs are separate from live savings.',
+             'Savings = named standard cost - actual. Percent saved = savings / standard cost; cheaper multiple = standard cost / actual.',
+             'Headline compares the named standard model; the named top-model comparison is separate.',
              'Totals cover the selected time window. Evidence contains the selected page only.']
     if data.get('description'):
         lines = ['Tervory | Client savings', f"Region: {data['region']}  Client: {data['tenant_id']}",
@@ -150,6 +199,8 @@ def pdf_export(data: dict) -> bytes:
         lines.append(section.upper())
         for row in ([{k:v for k,v in data.items() if k not in ('tasks','ledger','shadows','runs','cases','promotions','policies','state')}] if section=='metadata' else data[section]):
             lines.extend(textwrap.wrap(json.dumps(row, sort_keys=True), width=110) or [''])
+    if data.get('headline'):
+        lines[1:1]=textwrap.wrap(data['headline'],110)
     chunks = [lines[i:i+50] for i in range(0,len(lines),50)]
     objects = [b'<< /Type /Catalog /Pages 2 0 R >>', b'', b'<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>']
     pages = []
@@ -188,14 +239,17 @@ async def export(format: str, tenant_id: uuid.UUID | None = None, task: str | No
 # CORE-2: a single, conservative population powers graphs and their drill-downs.
 # A job link is required so every amount can be explained without exposing call IDs.
 # No-token tools/cache can prove zero cost without a model-family comparison.
-SAVINGS_CTE = """WITH linked AS (
+SAVINGS_CTE = "WITH receipts AS (SELECT * FROM "+receipt_source('$1','$2','$3')+" r"+"""), linked AS (
     SELECT l.*, t.id AS job_id, t.title AS job_title,
       (l.cost_usd=0 AND l.tokens_in=0 AND l.tokens_out=0
        AND (l.rung=3 OR l.cache_hit) AND l.outcome='delivered') AS free_work,
-      a.family AS actual_family, b.family AS baseline_family
-    FROM tank.ledger l
+      a.family AS actual_family, b.family AS baseline_family,
+      EXISTS(SELECT 1 FROM tank.shadow sh JOIN tank.ledger sl ON sl.id=sh.ledger_id AND sl.tenant_id=sh.tenant_id
+        WHERE sh.task_type=l.task_type AND sh.tenant_id=l.tenant_id AND sl.region=l.region AND sh.created_at<$3) AS quality_compared,
+      (l.top_cost_usd >= l.cost_usd AND (l.top_cost_usd=0 OR EXISTS(SELECT 1 FROM tank.proof_prices tp WHERE tp.model=l.top_model AND tp.family=a.family))) AS top_valid
+    FROM receipts l
     LEFT JOIN tank.proof_prices a ON a.model=l.model
-    LEFT JOIN tank.proof_prices b ON b.model=l.baseline_model
+    LEFT JOIN tank.proof_prices b ON b.model=l.standard_model
     LEFT JOIN LATERAL (SELECT id,title FROM tank.tasks t
       WHERE t.tenant_id=l.tenant_id AND t.status='done' AND t.finished_at < $3
         AND (t.id=l.task_id OR t.ledger_id=l.id)
@@ -206,13 +260,13 @@ SAVINGS_CTE = """WITH linked AS (
     SELECT *, CASE
       WHEN research_cost_status='unknown' THEN 'Unknown actual cost'
       WHEN vendor IS NOT NULL OR model LIKE 'vendor:%' THEN 'Fee without a comparable baseline'
-      WHEN baseline_cost_usd IS NULL OR baseline_status NOT IN ('measured','backfilled','no_tokens')
+      WHEN standard_cost_usd IS NULL OR baseline_status NOT IN ('measured','backfilled','no_tokens','re-priced')
         THEN 'Unknown baseline'
       WHEN baseline_priced_at > $3 THEN 'Comparison checked after this snapshot'
-      WHEN cost_usd < 0 OR baseline_cost_usd < cost_usd THEN 'Baseline below actual cost'
+      WHEN cost_usd < 0 OR standard_cost_usd < cost_usd THEN 'Baseline below actual cost'
       WHEN actual_family IS NOT NULL AND baseline_family IS NOT NULL AND actual_family<>baseline_family
         THEN 'Different model family'
-      WHEN NOT (free_work AND baseline_cost_usd=0) AND (actual_family IS NULL OR baseline_family IS NULL)
+      WHEN NOT (free_work AND standard_cost_usd=0) AND (actual_family IS NULL OR baseline_family IS NULL)
         THEN 'Unknown model family'
       WHEN outcome <> 'delivered' THEN 'Work not delivered'
       WHEN job_id IS NULL THEN 'No linked job'
@@ -224,9 +278,47 @@ SAVINGS_CTE = """WITH linked AS (
     FROM linked
 ), eligible AS (SELECT * FROM checked WHERE excluded_reason IS NULL) """
 SAVINGS_TOTALS = """count(*)::int AS work_count, count(DISTINCT job_id)::int AS jobs_count,
-    coalesce(sum(cost_usd),0) AS spent, coalesce(sum(baseline_cost_usd),0) AS would_have_cost,
-    coalesce(sum(baseline_cost_usd-cost_usd),0) AS saved,
-    count(*) FILTER (WHERE free_work)::int AS free_count"""
+    coalesce(sum(cost_usd),0) AS spent, coalesce(sum(standard_cost_usd),0) AS would_have_cost,
+    coalesce(sum(standard_cost_usd-cost_usd),0) AS saved,
+    count(*) FILTER (WHERE free_work)::int AS free_count,
+    array_remove(array_agg(DISTINCT standard_model),NULL) AS standards,
+    array_remove(array_agg(DISTINCT top_model) FILTER (WHERE top_valid),NULL) AS tops,
+    coalesce(sum(top_cost_usd) FILTER (WHERE top_valid),0) AS top_cost,
+    coalesce(sum(cost_usd) FILTER (WHERE top_valid),0) AS top_spent,
+    coalesce(sum(top_cost_usd-cost_usd) FILTER (WHERE top_valid),0) AS top_saved,
+    count(*) FILTER (WHERE top_valid)::int AS top_count,
+    bool_or(NOT quality_compared) AS quality_pending"""
+
+
+def headline_text(row: dict, standards: list | None = None, tops: list | None = None) -> str:
+    def phrase(actual, baseline):
+        numbers=comparison_numbers(actual,baseline)
+        if numbers['percent_cheaper'] is None:
+            return 'No measured saving'
+        if numbers['percent_cheaper'] < 0:
+            return f"{-numbers['percent_cheaper']:.1f}% more costly ({money(actual)/money(baseline):.2f}× the cost)"
+        multiple=f"{numbers['times_cheaper']:.2f}× cheaper" if numbers['times_cheaper'] is not None else 'no AI cost; multiple unavailable'
+        return f"{numbers['percent_cheaper']:.1f}% cheaper ({multiple})"
+    standard=', '.join(standards or row.get('standards') or []) or 'not yet identified'
+    top=', '.join(tops or row.get('tops') or []) or 'not yet identified'
+    return (f"{phrase(row.get('spent',row.get('compared_actual_usd')),row.get('would_have_cost',row.get('baseline_usd')))} than the standard model ({standard}). "
+            f"{phrase(row.get('top_spent',row.get('top_actual_usd')),row.get('top_cost',row.get('top_baseline_usd')))} vs the top model ({top}).")
+
+
+def comparison_numbers(actual: Any, baseline: Any) -> dict:
+    actual, baseline = money(actual), money(baseline)
+    return {'percent_cheaper': (baseline-actual)*100/baseline if baseline>0 else None,
+            'times_cheaper': baseline/actual if actual>0 and baseline>0 else None}
+
+
+def decorate_savings(row: dict) -> dict:
+    row['standards']=row.get('standards') or []
+    row['tops']=row.get('tops') or []
+    row.update(comparison_numbers(row['spent'],row['would_have_cost']))
+    row['top_comparison']=comparison_numbers(row['top_spent'],row['top_cost'])
+    row['quality_note']='same work assumed; quality comparison pending' if row.get('quality_pending') else None
+    row['headline']=headline_text(row)
+    return row
 
 
 def savings_encoded(value: Any) -> Any:
@@ -255,18 +347,18 @@ async def savings_snapshot(tenant: uuid.UUID | None, end: datetime | None = None
         month = dict(await conn.fetchrow(SAVINGS_CTE+f"SELECT {SAVINGS_TOTALS} FROM eligible WHERE ts >= $4",
                                         *args, end.replace(day=1,hour=0,minute=0,second=0,microsecond=0)))
         daily = [dict(r) for r in await conn.fetch(SAVINGS_CTE+f"""SELECT (ts AT TIME ZONE 'UTC')::date::text AS day,
-            {SAVINGS_TOTALS}, sum(sum(baseline_cost_usd-cost_usd)) OVER (ORDER BY (ts AT TIME ZONE 'UTC')::date) AS cumulative
+            {SAVINGS_TOTALS}, sum(sum(standard_cost_usd-cost_usd)) OVER (ORDER BY (ts AT TIME ZONE 'UTC')::date) AS cumulative
             FROM eligible GROUP BY (ts AT TIME ZONE 'UTC')::date ORDER BY day""", *args)]
         members = [dict(r) for r in await conn.fetch(SAVINGS_CTE+f'SELECT member,{SAVINGS_TOTALS} FROM eligible GROUP BY member ORDER BY member', *args)]
         revision = await conn.fetchrow('SELECT count(*) AS n,max(finished_at) AS last FROM tank.tasks WHERE ($1::uuid IS NULL OR tenant_id=$1) AND finished_at IS NOT NULL', tenant)
-        data = dict(as_of=end, total=total, month=month, daily=daily, members=members, revision=f"{revision['n']}:{revision['last']}")
+        data = dict(as_of=end, total=decorate_savings(total), month=decorate_savings(month), daily=[decorate_savings(d) for d in daily], members=[decorate_savings(m) for m in members], revision=f"{revision['n']}:{revision['last']}")
         if founder:
             # No payment amount is stored in billing_events. A price-book rate is
             # not proof of payment, so neither paid nor margin can be inferred.
             cost_totals = """coalesce(sum(cost_usd) FILTER (WHERE research_cost_status IS DISTINCT FROM 'unknown'),0) AS actual,
                 count(*) FILTER (WHERE research_cost_status='unknown')::int AS unknown_costs,
-                coalesce(sum(baseline_cost_usd),0) AS baseline,
-                count(*) FILTER (WHERE baseline_cost_usd IS NULL)::int AS unknown_baselines"""
+                coalesce(sum(standard_cost_usd),0) AS baseline, array_remove(array_agg(DISTINCT standard_model),NULL) AS standards,
+                count(*) FILTER (WHERE standard_cost_usd IS NULL)::int AS unknown_baselines"""
             costs = dict(await conn.fetchrow(SAVINGS_CTE+f'SELECT {cost_totals} FROM checked', *args))
             cost_days = [dict(r) for r in await conn.fetch(SAVINGS_CTE+f"SELECT (ts AT TIME ZONE 'UTC')::date::text AS day,{cost_totals} FROM checked GROUP BY (ts AT TIME ZONE 'UTC')::date ORDER BY day", *args)]
             tenants = [str(r['tenant_id']) for r in await conn.fetch("""SELECT DISTINCT tenant_id FROM tank.ledger WHERE region=$1
@@ -292,12 +384,17 @@ async def savings_rows(tenant: uuid.UUID | None, end: datetime, page: int = 0,
         total = dict(await conn.fetchrow(SAVINGS_CTE+f'SELECT {SAVINGS_TOTALS} '+where, *args))
         fields = """job_id,job_title,member,(ts AT TIME ZONE 'UTC')::date::text AS day,
             CASE WHEN research_cost_status='unknown' THEN NULL ELSE cost_usd END AS spent,
-            baseline_cost_usd AS would_have_cost,baseline_cost_usd-cost_usd AS saved,free_work"""
+            standard_cost_usd AS would_have_cost,standard_cost_usd-cost_usd AS saved,free_work,
+            standard_model AS standard_name,top_model AS top_name,
+            CASE WHEN top_valid THEN top_cost_usd ELSE NULL END AS top_cost,
+            CASE WHEN top_valid THEN top_cost_usd-cost_usd ELSE NULL END AS top_saved,
+            baseline_model AS selected_name,baseline_cost_usd AS selected_cost,quality_compared,
+            baseline_status AS comparison_status,baseline_priced_at AS compared_at"""
         if population != 'eligible':
             fields += ',id,tenant_id,model,baseline_model,baseline_status,excluded_reason'
         rows = [dict(r) for r in await conn.fetch(SAVINGS_CTE+'SELECT '+fields+' '+where+
                 ' ORDER BY ts DESC,id DESC LIMIT $8 OFFSET $9', *args, PAGE_SIZE+1, page*PAGE_SIZE)]
-    return savings_encoded(dict(rows=rows[:PAGE_SIZE], total=total, page=page, has_more=len(rows)>PAGE_SIZE, as_of=end))
+    return savings_encoded(dict(rows=rows[:PAGE_SIZE], total=decorate_savings(total), page=page, has_more=len(rows)>PAGE_SIZE, as_of=end))
 
 
 @router.get('/savings')
@@ -322,8 +419,8 @@ async def savings_export(format: str, end: datetime, tenant_id: uuid.UUID | None
     report = await savings_snapshot(tenant_id, end, founder=True)
     evidence = await savings_rows(tenant_id, end, page)
     # Reuse the bounded, formula-safe, dependency-free evidence exporters.
-    data = dict(tenant_id=report['tenant_id'], region=report['region'], as_of=report['as_of'],
-                description='Client savings: defensible linked work only. Totals cover all history; evidence is the selected page.',
+    data = dict(tenant_id=report['tenant_id'], region=report['region'], as_of=report['as_of'], headline=report['total']['headline'],
+                description='Headline: savings against the named standard model, percent cheaper and times cheaper. Second comparison: vs the named top model. Defensible linked work only; evidence is the selected page.',
                 page=page, has_more=evidence['has_more'], page_size=PAGE_SIZE,
                 tasks=[report['total'],dict(this_month=report['month']),dict(team_members=report['members']),dict(margin=report['margin'])],
                 ledger=evidence['rows'], shadows=[], runs=[], cases=[], promotions=[], policies=[], state=report['daily'])
@@ -355,3 +452,72 @@ async def client_savings_revision(tenant_id: uuid.UUID) -> dict:
     async with runtime().pool().acquire() as conn:
         row = await conn.fetchrow("SELECT count(*) AS n,max(finished_at) AS last FROM tank.tasks WHERE tenant_id=$1 AND finished_at IS NOT NULL", tenant_id)
     return {'revision': f"{row['n']}:{row['last']}"}
+
+
+# Founder choices are durable requests; the worker can resume after interruption.
+async def baseline_batch() -> int:
+    async with runtime().pool().acquire() as conn, conn.transaction():
+        change = await conn.fetchrow("SELECT * FROM tank.baseline_changes WHERE status IN ('pending','running') ORDER BY created_at,id LIMIT 1 FOR UPDATE SKIP LOCKED")
+        if not change:
+            return 0
+        setting=await conn.fetchrow('SELECT * FROM tank.baseline_settings WHERE task_type=$1 FOR SHARE',change['task_type'])
+        if setting and setting['revision']!=change['revision']:
+            await conn.execute("UPDATE tank.baseline_changes SET status='superseded' WHERE id=$1",change['id'])
+            return 1
+        tenant = await conn.fetchval("""SELECT tenant_id FROM tank.ledger WHERE task_type=$1 AND region=$2
+            AND comparison_revision<$3 ORDER BY tenant_id LIMIT 1""", change['task_type'], runtime().box_region(), change['revision'])
+        if tenant is None:
+            await conn.execute("UPDATE tank.baseline_changes SET status='complete',error=NULL WHERE id=$1",change['id'])
+            return 1
+        result = await conn.execute("""WITH batch AS (
+            SELECT id FROM tank.ledger WHERE tenant_id=$1 AND region=$2 AND task_type=$3 AND comparison_revision<$4
+            ORDER BY id LIMIT 5000 FOR UPDATE SKIP LOCKED)
+            UPDATE tank.ledger l SET comparison_revision=$4 FROM batch b
+            WHERE l.id=b.id AND l.tenant_id=$1 AND l.region=$2""", tenant,runtime().box_region(),change['task_type'],change['revision'])
+        count=int(result.split()[-1])
+        await conn.execute("UPDATE tank.baseline_changes SET status='running',rows_updated=rows_updated+$2,error=NULL WHERE id=$1",change['id'],count)
+        return count or 1
+
+
+@router.get('/baselines')
+async def baseline_options() -> dict:
+    async with runtime().pool().acquire() as conn:
+        tasks=await conn.fetch("""SELECT p.task_type,p.model,tank.standard_model_for(a.family) AS standard,
+            s.override_model,s.revision,s.updated_at,
+            (SELECT b.model FROM tank.proof_prices b WHERE b.family=a.family AND b.active ORDER BY b.input_usd+b.output_usd DESC,b.model LIMIT 1) AS top,
+            EXISTS(SELECT 1 FROM tank.shadow sh JOIN tank.ledger l ON l.id=sh.ledger_id AND l.tenant_id=sh.tenant_id
+              WHERE sh.task_type=p.task_type AND l.region=$1) AS quality_compared,
+            ARRAY(SELECT b.model FROM tank.proof_prices b WHERE b.family=a.family AND b.active ORDER BY b.model) AS choices
+            FROM tank.policy p LEFT JOIN tank.proof_prices a ON a.model=p.model
+            LEFT JOIN tank.baseline_settings s ON s.task_type=p.task_type WHERE p.tenant_id IS NULL ORDER BY p.task_type""", runtime().box_region())
+        changes=await conn.fetch('SELECT * FROM tank.baseline_changes ORDER BY created_at DESC LIMIT 100')
+    return savings_encoded(dict(tasks=[dict(r) for r in tasks],changes=[dict(r) for r in changes]))
+
+
+from pydantic import BaseModel, Field
+class BaselineChoice(BaseModel):
+    task: str = Field(min_length=1,max_length=200)
+    model: str | None = Field(default=None,max_length=200)
+
+
+@router.post('/baselines')
+async def change_baseline(choice: BaselineChoice, by: str = Depends(require_admin)) -> dict:
+    from fastapi import HTTPException
+    async with runtime().pool().acquire() as conn, conn.transaction():
+        policy=await conn.fetchrow('SELECT * FROM tank.policy WHERE task_type=$1 AND tenant_id IS NULL FOR UPDATE',choice.task)
+        if not policy:
+            raise HTTPException(404,'Task not found.')
+        if choice.model and not await conn.fetchval("""SELECT EXISTS(SELECT 1 FROM tank.proof_prices a,tank.proof_prices b
+            WHERE a.model=$1 AND b.model=$2 AND b.active AND a.family=b.family)""",policy['model'],choice.model):
+            raise HTTPException(422,'Choose an available model in the same family.')
+        old=await conn.fetchrow('SELECT * FROM tank.baseline_settings WHERE task_type=$1',choice.task)
+        if old and old['override_model']==choice.model:
+            return {'changed':False}
+        default=await conn.fetchval('SELECT tank.standard_model_for(family) FROM tank.proof_prices WHERE model=$1',policy['model'])
+        revision=(old['revision'] if old else 1)+1
+        await conn.execute("""INSERT INTO tank.baseline_settings(task_type,override_model,revision,updated_by)
+            VALUES($1,$2,$3,$4) ON CONFLICT(task_type) DO UPDATE SET override_model=$2,revision=$3,updated_by=$4,updated_at=now()""",
+            choice.task,choice.model,revision,by)
+        await conn.execute("""INSERT INTO tank.baseline_changes(task_type,old_model,new_model,by_user,revision)
+            VALUES($1,$2,$3,$4,$5)""",choice.task,(old['override_model'] if old else None) or default,choice.model or default,by,revision)
+    return {'changed':True,'revision':revision,'status':'pending'}

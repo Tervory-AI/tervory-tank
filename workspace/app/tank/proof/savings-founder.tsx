@@ -2,9 +2,11 @@ import { clerkClient } from "@clerk/nextjs/server";
 import { tenantIdFor, uuidFrom } from "@/lib/tenant";
 import { resolveTenantNames } from "./tenant-names";
 import { proofResponse } from "./server";
-import { readFounderSavingsRows } from "./savings-founder-actions";
+import { readFounderSavingsRows, readBaselineSettings } from "./savings-founder-actions";
 import { EvidenceButton, SavingsSet } from "./savings-set";
-import { dollars, type FounderSavings } from "./savings-types";
+import { dollars, baselineNames, type FounderSavings } from "./savings-types";
+
+import { BaselineControls } from "./baseline-controls";
 
 function Margin({ data }: { data: FounderSavings }) {
   const load = readFounderSavingsRows.bind(null, data.tenant_id);
@@ -12,9 +14,9 @@ function Margin({ data }: { data: FounderSavings }) {
   return <section className="savings-costs"><h2>Tervory’s margin · {data.tenant_id === "all" ? "all clients" : "selected client"}</h2>
     <p>Founder only. Payments have not been connected to verified amounts. Price-book rates alone do not prove what a client paid.</p>
     <dl><div><dt>Client paid</dt><dd>no billing data yet</dd></div><div><dt>Margin to date / percentage</dt><dd>no billing data yet</dd></div>
-      <div><dt>Recorded work cost to date</dt><dd>{evidence(dollars(data.margin.total.actual))}</dd></div><div><dt>Recorded baseline to date</dt><dd>{evidence(dollars(data.margin.total.baseline))}</dd></div></dl>
+      <div><dt>Recorded work cost to date</dt><dd>{evidence(`${dollars(data.margin.total.actual)} · standard ${baselineNames(data.margin.total.standards)} comparison`)}</dd></div><div><dt>Recorded baseline to date</dt><dd>{evidence(`${dollars(data.margin.total.baseline)} vs standard (${baselineNames(data.margin.total.standards)})`)}</dd></div></dl>
     <p>{evidence(`${data.margin.total.unknown_costs} unknown costs · ${data.margin.total.unknown_baselines} unavailable baselines`)}. These sums cover live work on this box, including fees and flagged comparisons; they do not represent complete costs when amounts are unknown.</p>
-    <details><summary>Daily costs and margin</summary><div className="savings-cost-days"><table><thead><tr><th>Day (UTC)</th><th>Paid</th><th>Actual cost</th><th>Baseline</th><th>Margin / %</th></tr></thead><tbody>{data.margin.daily.map(d => <tr key={d.day}><td>{d.day}</td><td>no billing data yet</td><td>{evidence(dollars(d.actual),`${d.day}T00:00:00Z`,new Date(Date.parse(d.day)+86400000).toISOString())}</td><td>{evidence(dollars(d.baseline),`${d.day}T00:00:00Z`,new Date(Date.parse(d.day)+86400000).toISOString())}</td><td>no billing data yet</td></tr>)}</tbody></table></div></details>
+    <details><summary>Daily costs and margin</summary><div className="savings-cost-days"><table><thead><tr><th>Day (UTC)</th><th>Paid</th><th>Actual cost</th><th>Baseline</th><th>Margin / %</th></tr></thead><tbody>{data.margin.daily.map(d => <tr key={d.day}><td>{d.day}</td><td>no billing data yet</td><td>{evidence(`${dollars(d.actual)} · standard ${baselineNames(d.standards)} comparison`,`${d.day}T00:00:00Z`,new Date(Date.parse(d.day)+86400000).toISOString())}</td><td>{evidence(`${dollars(d.baseline)} vs standard (${baselineNames(d.standards)})`,`${d.day}T00:00:00Z`,new Date(Date.parse(d.day)+86400000).toISOString())}</td><td>no billing data yet</td></tr>)}</tbody></table></div></details>
   </section>;
 }
 function ClientSet({ data, title }: { data: FounderSavings; title: string }) {
@@ -31,6 +33,7 @@ export async function FounderSavingsPanel({ tenant }: { tenant?: string }) {
   const selected = tenant && tenant!=="all" ? tenant : undefined;
   const one: FounderSavings | null = selected ? await (await proofResponse({tenant_id:selected,end:all.as_of},undefined,"/savings")).json() : null;
   return <article className="savings-founder"><a href="/tank">← Tank</a><p>Founder · {all.region}</p><h1>Client savings</h1><p>The same five graphs each client sees, using only defensible comparisons. Tervory is a separate choice below.</p>
+    <BaselineControls initial={await readBaselineSettings()}/>
     <ClientSet data={all} title="All clients"/>
     <form action="/tank/proof" method="get"><label>Client<select aria-label="Client" name="tenant_id" defaultValue={selected ?? "all"}><option value="all">Choose a client</option>{all.tenants.map(id => <option key={id} value={id}>{names.tenant_names[id]}</option>)}</select></label><button type="submit">Show client</button></form>
     {names.tenant_names_note && <p role="status">{names.tenant_names_note}</p>}

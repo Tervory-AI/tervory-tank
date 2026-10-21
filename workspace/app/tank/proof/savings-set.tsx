@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useId, useRef, useState } from "react";
-import { dollars, sumAmounts, type RowFilter, type Savings, type SavingsRows } from "./savings-types";
+import { dollars, sumAmounts, baselineNames, cheaper, type RowFilter, type Savings, type SavingsRows } from "./savings-types";
 import "./savings.css";
 
 type Loader = (filters: RowFilter) => Promise<SavingsRows>;
@@ -8,7 +8,7 @@ const pct = (part: number, whole: number) => whole ? `${(100 * part / whole).toF
 function monthStart(asOf: string, months = 1) {
   const d = new Date(asOf); return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - months + 1, 1)).toISOString();
 }
-function Lines({ points, cumulative = false }: { points: Savings["daily"]; cumulative?: boolean }) {
+function Lines({ points, cumulative = false, names }: { points: Savings["daily"]; cumulative?: boolean; names: string }) {
   const keys = cumulative ? ["cumulative"] as const : ["spent", "would_have_cost"] as const;
   const max = Math.max(...points.flatMap(p => keys.map(k => Number(p[k]))), 0.000001);
   const first = Date.parse(points[0]?.day ?? "2000-01-01"), last = Date.parse(points.at(-1)?.day ?? "2000-01-01");
@@ -17,7 +17,7 @@ function Lines({ points, cumulative = false }: { points: Savings["daily"]; cumul
     <path d="M12 12V150H588" fill="none" stroke="#B8BFD0"/>
     {[0.5,1].map(y => <path key={y} d={`M12 ${150-y*130}H588`} stroke="#E4E8F0"/>)}
     {keys.map((key,i) => <g key={key}><polyline fill="none" stroke={i ? "#7C89A3" : "#001840"} strokeWidth="3" strokeDasharray={i ? "7 5" : undefined} points={points.map(p => `${x(p.day)},${150-Number(p[key])/max*130}`).join(" ")}/>{points.length===1 && <circle cx={x(points[0].day)} cy={150-Number(points[0][key])/max*130} r="4" fill="#001840"/>}</g>)}
-  </svg><div className="savings-axis"><span>{points[0]?.day ?? "No work yet"}</span><span>{dollars(max === .000001 ? 0 : max)} at top</span><span>{points.at(-1)?.day}</span></div></>;
+  </svg><div className="savings-axis"><span>{points[0]?.day ?? "No work yet"}</span><span>{dollars(max === .000001 ? 0 : max)} · standard {names}</span><span>{points.at(-1)?.day}</span></div></>;
 }
 
 export function EvidenceButton({ label, filters, loadRows, founder = false, exportBase }: { label: string; filters: RowFilter; loadRows: Loader; founder?: boolean; exportBase?: string }) {
@@ -35,10 +35,13 @@ export function EvidenceButton({ label, filters, loadRows, founder = false, expo
       <header><h2 id={heading}>{founder ? "Evidence rows" : "Your work"}</h2><button onClick={() => dialog.current?.close()} aria-label="Close work details">Close</button></header>
       <p>Through {openedFilters.current.end.slice(0,19).replace("T"," ")} UTC. Each row is one step of work; a job may have several steps.</p>
       {busy && <p role="status">Loading your work…</p>}{error && <p role="alert">These details could not be loaded. <button onClick={() => void load()}>Try again</button></p>}
-      {data && <><p>{data.total.work_count} matching steps · saved {dollars(data.total.saved)}{data.total.free_count ? ` · ${data.total.free_count} at no AI cost` : ""}</p>
+      {data && <><p>{data.total.work_count} matching steps · saved {dollars(data.total.saved)} vs standard ({baselineNames(data.total.standards)}){data.total.free_count ? ` · ${data.total.free_count} at no AI cost` : ""}</p>
         {!data.rows.length && <p>No matching work yet.</p>}
         {data.rows.map((r,i) => <article className="savings-job" key={i}><h3>{r.job_title || (r.job_id ? "Completed work" : "Unlinked work")}</h3><p>{r.member} · {r.day}{r.free_work ? " · No AI cost" : ""}</p>
-          <dl><div><dt>Spent</dt><dd>{dollars(r.spent)}</dd></div><div><dt>Would have cost</dt><dd>{dollars(r.would_have_cost)}</dd></div><div><dt>Saved</dt><dd>{dollars(r.saved)}</dd></div></dl>
+          <dl><div><dt>Spent · standard {r.standard_name ?? "unknown"} comparison</dt><dd>{dollars(r.spent)}</dd></div><div><dt>Standard: {r.standard_name ?? "unknown"}</dt><dd>{dollars(r.would_have_cost)}</dd></div><div><dt>Saved vs standard: {r.standard_name ?? "unknown"}</dt><dd>{dollars(r.saved)}</dd></div><div><dt>Saved vs the top model: {r.top_name ?? "unknown"}</dt><dd>{dollars(r.top_saved)}</dd></div>
+            {r.selected_name && r.selected_name!==r.standard_name && <div><dt>Selected baseline: {r.selected_name}</dt><dd>{dollars(r.selected_cost)}</dd></div>}</dl>
+          {!r.quality_compared && <p>same work assumed; quality comparison pending</p>}
+          {founder && <p>{r.comparison_status} · {r.compared_at}</p>}
           {founder && r.id && <p className="savings-internal">{r.id} · {r.model} · {r.excluded_reason ?? "Included in recorded costs"}</p>}
         </article>)}
         <nav aria-label="Work pages"><button disabled={!data.page || busy} onClick={() => void load(data.page-1)}>Previous</button><span>Page {data.page+1}</span><button disabled={!data.has_more || busy} onClick={() => void load(data.page+1)}>Next</button></nav>
@@ -50,29 +53,33 @@ export function EvidenceButton({ label, filters, loadRows, founder = false, expo
 export function SavingsSet({ data, title, loadRows }: { data: Savings; title: string; loadRows: Loader }) {
   const [months,setMonths] = useState(1);
   const heading = useId();
+  const names = baselineNames(data.total.standards);
   const start = monthStart(data.as_of, months), month = monthStart(data.as_of);
   // Include quiet days so two-line graphs have honest daily spacing.
   const byDay = new Map(data.daily.map(p => [p.day,p]));
   const days: Savings["daily"] = [];
   for (let day = new Date(start); day <= new Date(data.as_of); day.setUTCDate(day.getUTCDate()+1)) {
     const key = day.toISOString().slice(0,10);
-    days.push(byDay.get(key) ?? {day:key,spent:"0",would_have_cost:"0",saved:"0",cumulative:"0",work_count:0,jobs_count:0,free_count:0});
+    days.push(byDay.get(key) ?? {day:key,spent:"0",would_have_cost:"0",saved:"0",cumulative:"0",work_count:0,jobs_count:0,free_count:0,standards:data.total.standards,tops:data.total.tops,top_cost:"0",top_spent:"0",top_saved:"0",top_count:0,quality_pending:false});
   }
   const number = (label: string, extra: Partial<RowFilter> = {}) => <EvidenceButton label={label} filters={{end:data.as_of,...extra}} loadRows={loadRows}/>;
   return <section className="savings-set" aria-labelledby={heading}>
     <header className="savings-heading"><div><p className="savings-eyebrow">Your savings</p><h2 id={heading}>{title}</h2></div><p>Updated {new Date(data.as_of).toISOString().slice(11,19)} UTC</p></header>
+    <div className="savings-headline"><strong>{number(`${cheaper(data.total.spent,data.total.would_have_cost)} than the standard model (${names})`)}</strong>
+      <p>{number(`${cheaper(data.total.top_spent,data.total.top_cost)} vs the top model (${baselineNames(data.total.tops)}) · ${dollars(data.total.top_saved)} saved`)} · {data.total.top_count} of {data.total.work_count} steps compared</p>
+      {data.total.quality_pending && <p>same work assumed; quality comparison pending</p>}</div>
     <p className="savings-note">Only work with a checked comparison and a linked job is included. All amounts are in US dollars. Open any amount to see the work behind it.</p>
     {!data.total.work_count && <p className="savings-empty">No comparable work yet. Your savings will appear here when a checked comparison is available.</p>}
     <div className="savings-grid">
       <section className="savings-card savings-wide"><div className="savings-card-top"><h3>Spent and would have cost</h3><label>Show<select aria-label="Show" value={months} onChange={e => setMonths(Number(e.target.value))}><option value={1}>This month</option><option value={3}>Last 3 months</option><option value={12}>Last 12 months</option></select></label></div>
-        <p className="savings-legend">Solid: spent · Dashed: would have cost</p><Lines points={days}/>
-        <p>{number(`Spent ${dollars(sumAmounts(days.map(p => p.spent)))}`,{start})} <span> / </span>{number(`Would have cost ${dollars(sumAmounts(days.map(p => p.would_have_cost)))}`,{start})}</p>
-        <details><summary>Daily amounts</summary><div className="savings-daily">{days.map(p => <div key={p.day}><span>{p.day}</span>{number(`${dollars(p.spent)} / ${dollars(p.would_have_cost)}`, {start:`${p.day}T00:00:00Z`,until:new Date(Date.parse(p.day)+86400000).toISOString()})}</div>)}</div></details>
+        <p className="savings-legend">Solid: spent · Dashed: would have cost</p><Lines points={days} names={names}/>
+        <p>{number(`Spent ${dollars(sumAmounts(days.map(p => p.spent)))} · standard ${names} comparison`,{start})} <span> / </span>{number(`Standard (${names}) would have cost ${dollars(sumAmounts(days.map(p => p.would_have_cost)))}`,{start})}</p>
+        <details><summary>Daily amounts</summary><div className="savings-daily">{days.map(p => <div key={p.day}><span>{p.day}</span>{number(`Spent ${dollars(p.spent)} / standard (${baselineNames(p.standards)}) ${dollars(p.would_have_cost)}`, {start:`${p.day}T00:00:00Z`,until:new Date(Date.parse(p.day)+86400000).toISOString()})}</div>)}</div></details>
       </section>
-      <section className="savings-card savings-wide"><h3>Saved to date</h3><p className="savings-big">{number(dollars(data.total.saved))}</p><Lines points={data.daily} cumulative/><p>{number(`${data.total.jobs_count} jobs · ${data.total.work_count} steps of work`)}</p></section>
-      <section className="savings-card"><h3>Saved this month</h3><p className="savings-big">{number(dollars(data.month.saved),{start:month})}</p><p>{number(pct(Number(data.month.saved),Number(data.month.would_have_cost)),{start:month})} of what it would have cost</p><meter min={0} max={1} value={Number(data.month.would_have_cost) ? Number(data.month.saved)/Number(data.month.would_have_cost) : 0} aria-label="Share saved this month"/></section>
+      <section className="savings-card savings-wide"><h3>Saved to date</h3><p className="savings-big">{number(`${dollars(data.total.saved)} vs standard (${names})`)}</p><Lines points={data.daily} cumulative names={names}/><p>{number(`${data.total.jobs_count} jobs · ${data.total.work_count} steps of work`)}</p></section>
+      <section className="savings-card"><h3>Saved this month</h3><p className="savings-big">{number(`${dollars(data.month.saved)} vs standard (${baselineNames(data.month.standards)})`,{start:month})}</p><p>{number(cheaper(data.month.spent,data.month.would_have_cost),{start:month})} of what it would have cost</p><meter min={0} max={1} value={Number(data.month.would_have_cost) ? Number(data.month.saved)/Number(data.month.would_have_cost) : 0} aria-label="Share saved this month"/></section>
       <section className="savings-card"><h3>Done at no AI cost</h3><p className="savings-big">{number(pct(data.total.free_count,data.total.work_count),{free_only:true})}</p><p>{number(`${data.total.free_count} of ${data.total.work_count} steps of work`)} done by our own tools or reused answers.</p><meter min={0} max={1} value={data.total.work_count ? data.total.free_count/data.total.work_count : 0} aria-label="Share done at no AI cost"/></section>
-      <section className="savings-card savings-wide"><h3>Saved by team member</h3>{!data.members.length && <p>No comparable work yet.</p>}{data.members.map(p => <div className="savings-member" key={p.member}><div><span>{p.member}</span>{number(dollars(p.saved),{member:p.member})}</div><div className="savings-bar" role="img" aria-label={`${p.member}: ${dollars(p.saved)} saved`}><span style={{width:`${Math.max(...data.members.map(m=>Number(m.saved))) ? Number(p.saved)/Math.max(...data.members.map(m=>Number(m.saved)))*100 : 0}%`}}/></div></div>)}</section>
+      <section className="savings-card savings-wide"><h3>Saved by team member</h3>{!data.members.length && <p>No comparable work yet.</p>}{data.members.map(p => <div className="savings-member" key={p.member}><div><span>{p.member}</span>{number(`${dollars(p.saved)} vs standard (${baselineNames(p.standards)})`,{member:p.member})}</div><div className="savings-bar" role="img" aria-label={`${p.member}: ${dollars(p.saved)} saved vs standard (${baselineNames(p.standards)})`}><span style={{width:`${Math.max(...data.members.map(m=>Number(m.saved))) ? Number(p.saved)/Math.max(...data.members.map(m=>Number(m.saved)))*100 : 0}%`}}/></div></div>)}</section>
     </div>
   </section>;
 }

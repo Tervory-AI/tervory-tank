@@ -54,3 +54,7 @@
 @media(max-width:700px) { .savings-grid { grid-template-columns:1fr; } .savings-card { padding:18px; } .savings-founder { padding:18px 12px; } .savings-costs { padding:16px; } .savings-costs dl { grid-template-columns:1fr; } .savings-big { font-size:23px; } }
 .savings-card meter::-webkit-meter-optimum-value { background:#001840; }
 .savings-card meter::-moz-meter-bar { background:#001840; }
+.savings-headline { border-left:3px solid #001840; padding:14px 18px; background:white; margin-top:20px; line-height:1.7; }
+.savings-headline strong { font-size:22px; font-weight:500; }
+.savings-big { font-size:clamp(18px,2vw,25px); }
+.savings-member>div:first-child { align-items:baseline; font-size:13px; }

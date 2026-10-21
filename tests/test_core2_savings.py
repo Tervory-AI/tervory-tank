@@ -35,6 +35,11 @@ async def seed(pool, tenant, *, count=1, day=None, model='cheap', cost='.1', bas
             VALUES($1,$2,$3,'fixture',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id""",
             tenant,day,agent,model,Decimal(cost),Decimal(baseline) if baseline is not None else None,
             baseline_model,status,region,rung,cache,job if linked else None,research,outcome))
+    # Historical fixture snapshots are explicit, independent of today's provider defaults.
+    await pool.execute("""UPDATE tank.ledger SET standard_model=$2,standard_cost_usd=$3,
+        top_model=$2,top_cost_usd=$3,baseline_model=$2,baseline_cost_usd=$3,
+        baseline_status=$4,baseline_priced_at=$5 WHERE id=ANY($1::uuid[])""",
+        ids,baseline_model,Decimal(baseline) if baseline is not None and research!='unknown' and not model.startswith('vendor:') else None,status,day)
     return ids, job
 
 

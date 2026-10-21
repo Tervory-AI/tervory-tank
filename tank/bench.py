@@ -96,31 +96,17 @@ async def sync_prices(conn, book: dict) -> None:
                 active=true,updated_at=CASE WHEN (tank.proof_prices.input_usd,tank.proof_prices.output_usd)
                 IS DISTINCT FROM ($3,$4) THEN now() ELSE tank.proof_prices.updated_at END''',
                 name, p['family'], p['input'], p['output'])
-        await conn.execute('''UPDATE tank.policy p SET baseline_model=(
-            SELECT b.model FROM tank.proof_prices a JOIN tank.proof_prices b ON b.family=a.family AND b.active
-            WHERE a.model=p.model ORDER BY b.input_usd+b.output_usd DESC,b.model LIMIT 1)
-            WHERE p.tenant_id IS NULL AND p.baseline_model IS NULL''')
+        # Price changes make unavailable comparisons eligible for a new backfill.
+        # Defaults come from tank.standard_model_for; prices never select the headline.
 
 
 async def backfill(conn, tenant: uuid.UUID, region: str) -> None:
-    # A current price-book estimate, explicitly marked; never rewrites a receipt
-    # already priced at call time. Tenant policies override platform defaults.
     while True:
-        changed = await conn.execute('''WITH pending AS (
-        SELECT l.id,(to_jsonb(l)->>'research_cost_status'='unknown' OR l.model LIKE 'vendor:%' OR l.vendor IS NOT NULL) IS TRUE AS no_baseline,coalesce((SELECT coalesce(p.baseline_model,(SELECT b.model FROM tank.proof_prices a
-          JOIN tank.proof_prices b ON b.family=a.family AND b.active WHERE a.model=p.model
-          ORDER BY b.input_usd+b.output_usd DESC,b.model LIMIT 1)) FROM tank.policy p
-          WHERE p.task_type=l.task_type AND (p.tenant_id=l.tenant_id OR p.tenant_id IS NULL)
-          ORDER BY p.tenant_id NULLS LAST LIMIT 1),l.model) AS baseline
-        FROM tank.ledger l WHERE l.tenant_id=$1 AND l.region=$2 AND l.baseline_status='pending' ORDER BY l.id LIMIT 5000 FOR UPDATE OF l SKIP LOCKED
-    ) UPDATE tank.ledger l SET baseline_model=CASE WHEN p.no_baseline THEN NULL ELSE p.baseline END,
-        baseline_cost_usd=CASE WHEN p.no_baseline THEN NULL
-          WHEN l.tokens_in=0 AND l.tokens_out=0 THEN 0 ELSE l.tokens_in*b.input_usd+l.tokens_out*b.output_usd END,
-        baseline_status=CASE WHEN p.no_baseline THEN 'unpriced' WHEN b.model IS NOT NULL OR (l.tokens_in=0 AND l.tokens_out=0) THEN 'backfilled' ELSE 'unpriced' END,
-        baseline_priced_at=CASE WHEN p.no_baseline THEN NULL ELSE b.updated_at END
-        FROM pending p LEFT JOIN tank.proof_prices b ON b.model=p.baseline
-        WHERE l.id=p.id AND l.tenant_id=$1 AND l.region=$2''', tenant, region)
-
+        changed = await conn.execute("""WITH pending AS (
+            SELECT id FROM tank.ledger WHERE tenant_id=$1 AND region=$2 AND baseline_status='pending'
+            ORDER BY id LIMIT 5000 FOR UPDATE SKIP LOCKED)
+            UPDATE tank.ledger l SET comparison_revision=l.comparison_revision
+            FROM pending p WHERE l.id=p.id AND l.tenant_id=$1 AND l.region=$2""", tenant, region)
         if changed == 'UPDATE 0':
             break
 
