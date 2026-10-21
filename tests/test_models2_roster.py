@@ -1,9 +1,14 @@
 """MODELS-2 bench inventory: both regions, sourced prices, and unchanged serving routes."""
 from pathlib import Path
 import re
+import os
 
 import pytest
 import yaml
+
+os.environ.setdefault("DATABASE_URL", "postgresql://x:y@localhost/z")
+os.environ.setdefault("LITELLM_MASTER_KEY", "test")
+os.environ.setdefault("TANK_API_KEY", "test")
 
 import main
 

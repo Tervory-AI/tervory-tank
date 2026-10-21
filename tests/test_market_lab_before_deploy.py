@@ -160,8 +160,8 @@ def _load_named(module_name: str, path: Path):
     return module
 
 
-def test_research_with_no_passages_makes_no_model_call_and_costs_nothing() -> None:
-    """Missing passages return 'no sources yet' at $0. The model is not asked."""
+def test_research_with_no_passages_makes_no_model_call_and_costs_nothing(monkeypatch) -> None:
+    """An unpromoted research rung still returns no sources at zero model cost."""
     skill_run = _load_named(
         "market_research_run_no_sources",
         ROOT / "tank" / "skills" / "market.research" / "1.0.0" / "run.py",
@@ -170,6 +170,12 @@ def test_research_with_no_passages_makes_no_model_call_and_costs_nothing() -> No
     if str(ROOT / "agents" / "market_lab") not in sys.path:
         sys.path.insert(0, str(ROOT / "agents" / "market_lab"))
     from chassis.jobs import JobContext  # noqa: E402
+    from core import research_adapter
+
+    async def unpromoted(*_args):
+        return None
+
+    monkeypatch.setattr(research_adapter, "research_if_promoted", unpromoted)
 
     research = _load_named(
         "market_lab_research_app",

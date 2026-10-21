@@ -3385,3 +3385,6 @@ async def market_quarantine_act(
     except Exception:
         raise HTTPException(status_code=502, detail=_MARKET_DOWN) from None
     return {**payload, "models": models}
+
+# MODELS-2: research stays in its own module; generic routing is unchanged.
+__import__("research").register(app, globals())

@@ -80,6 +80,11 @@ async def research(ctx: JobContext) -> dict:
     question = str(ctx.input.get("question") or "").strip()
     passages = ctx.input.get("passages")
     if not _has_source_passages(passages):
+        from core.research_adapter import research_if_promoted
+
+        result = await research_if_promoted(ctx.tenant_id, question)
+        if result is not None:
+            return result
         return {"answer": "no sources yet", "citations": [], "cost_usd": 0}
     async with _ledger() as ledger:
         answer = await perform_research(

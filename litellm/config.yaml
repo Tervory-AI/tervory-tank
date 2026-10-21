@@ -97,6 +97,8 @@ model_list:
     litellm_params:
       model: deepseek/deepseek-flash
       api_key: os.environ/DEEPSEEK_API_KEY
+      input_cost_per_token: 0.0000003
+      output_cost_per_token: 0.0000012
     model_info:
       input_cost_per_token: 0.0000003
       output_cost_per_token: 0.0000012
@@ -107,6 +109,8 @@ model_list:
     litellm_params:
       model: deepseek/deepseek-v4-pro
       api_key: os.environ/DEEPSEEK_API_KEY
+      input_cost_per_token: 0.00000132
+      output_cost_per_token: 0.00000396
     model_info:
       input_cost_per_token: 0.00000132
       output_cost_per_token: 0.00000396
@@ -119,6 +123,8 @@ model_list:
     litellm_params:
       model: moonshot/kimi-k3
       api_key: os.environ/MOONSHOT_API_KEY
+      input_cost_per_token: 0.000003
+      output_cost_per_token: 0.000015
     model_info:
       input_cost_per_token: 0.000003
       output_cost_per_token: 0.000015
@@ -155,6 +161,8 @@ model_list:
     litellm_params:
       model: openai/gpt-6.1-sol
       api_key: os.environ/OPENAI_API_KEY
+      input_cost_per_token: 0.0000020000
+      output_cost_per_token: 0.0000100000
     model_info:
       input_cost_per_token: 0.0000020000
       output_cost_per_token: 0.0000100000
@@ -165,6 +173,8 @@ model_list:
     litellm_params:
       model: anthropic/claude-fable-5-1
       api_key: os.environ/ANTHROPIC_API_KEY
+      input_cost_per_token: 0.0000100000
+      output_cost_per_token: 0.0000500000
     model_info:
       input_cost_per_token: 0.0000100000
       output_cost_per_token: 0.0000500000
@@ -175,6 +185,8 @@ model_list:
     litellm_params:
       model: gemini/gemini-3.1-flash-lite
       api_key: os.environ/GEMINI_API_KEY
+      input_cost_per_token: 0.0000002500
+      output_cost_per_token: 0.0000015000
     model_info:
       input_cost_per_token: 0.0000002500
       output_cost_per_token: 0.0000015000
@@ -185,6 +197,8 @@ model_list:
     litellm_params:
       model: moonshot/kimi-k2.7-code
       api_key: os.environ/MOONSHOT_API_KEY
+      input_cost_per_token: 0.0000009500
+      output_cost_per_token: 0.0000040000
     model_info:
       input_cost_per_token: 0.0000009500
       output_cost_per_token: 0.0000040000
@@ -195,6 +209,8 @@ model_list:
     litellm_params:
       model: moonshot/kimi-k2.6
       api_key: os.environ/MOONSHOT_API_KEY
+      input_cost_per_token: 0.0000009500
+      output_cost_per_token: 0.0000040000
     model_info:
       input_cost_per_token: 0.0000009500
       output_cost_per_token: 0.0000040000
@@ -205,6 +221,8 @@ model_list:
     litellm_params:
       model: xai/grok-4.6
       api_key: os.environ/XAI_API_KEY
+      input_cost_per_token: 0.0000020000
+      output_cost_per_token: 0.0000060000
     model_info:
       input_cost_per_token: 0.0000020000
       output_cost_per_token: 0.0000060000
@@ -215,9 +233,88 @@ model_list:
     litellm_params:
       model: xai/grok-4.5
       api_key: os.environ/XAI_API_KEY
+      input_cost_per_token: 0.0000020000
+      output_cost_per_token: 0.0000060000
     model_info:
       input_cost_per_token: 0.0000020000
       output_cost_per_token: 0.0000060000
+
+  # ---------- Perplexity research presets; founder promotion required ----------
+  # Price checked 2026-10-21: https://docs.perplexity.ai/docs/getting-started/pricing
+  # Token rates: https://docs.perplexity.ai/docs/agent-api/models
+  # Preset config: https://docs.perplexity.ai/docs/agent-api/presets
+  # Current short-context USD/MTok $0.2 input / $1 output (fast uses priority).
+  # Dynamic preset rates can change; receipt uses provider total, never this estimate.
+  # Fast Search $0.001/invocation; fetch_url $0.0005/invocation where used.
+  - model_name: research-fast
+    litellm_params:
+      model: perplexity/preset/fast
+      api_key: os.environ/PERPLEXITY_API_KEY
+      input_cost_per_token: 0.0000002000
+      output_cost_per_token: 0.0000010000
+    model_info:
+      mode: responses
+      research_only: true
+      input_cost_per_token: 0.0000002000
+      output_cost_per_token: 0.0000010000
+      search_fee_per_request: 0.001
+
+  # Price checked 2026-10-21: https://docs.perplexity.ai/docs/getting-started/pricing
+  # Token rates: https://docs.perplexity.ai/docs/agent-api/models
+  # Preset config: https://docs.perplexity.ai/docs/agent-api/presets
+  # Current short-context USD/MTok $0.1 input / $0.5 output (fast uses priority).
+  # Dynamic preset rates can change; receipt uses provider total, never this estimate.
+  # Fast Search $0.001/invocation; fetch_url $0.0005/invocation where used.
+  - model_name: research-low
+    litellm_params:
+      model: perplexity/preset/low
+      api_key: os.environ/PERPLEXITY_API_KEY
+      input_cost_per_token: 0.0000001000
+      output_cost_per_token: 0.0000005000
+    model_info:
+      mode: responses
+      research_only: true
+      input_cost_per_token: 0.0000001000
+      output_cost_per_token: 0.0000005000
+      search_fee_per_request: 0.001
+
+  # Price checked 2026-10-21: https://docs.perplexity.ai/docs/getting-started/pricing
+  # Token rates: https://docs.perplexity.ai/docs/agent-api/models
+  # Preset config: https://docs.perplexity.ai/docs/agent-api/presets
+  # Current short-context USD/MTok $0.1 input / $0.5 output (fast uses priority).
+  # Dynamic preset rates can change; receipt uses provider total, never this estimate.
+  # Fast Search $0.001/invocation; fetch_url $0.0005/invocation where used.
+  - model_name: research-medium
+    litellm_params:
+      model: perplexity/preset/medium
+      api_key: os.environ/PERPLEXITY_API_KEY
+      input_cost_per_token: 0.0000001000
+      output_cost_per_token: 0.0000005000
+    model_info:
+      mode: responses
+      research_only: true
+      input_cost_per_token: 0.0000001000
+      output_cost_per_token: 0.0000005000
+      search_fee_per_request: 0.001
+
+  # Price checked 2026-10-21: https://docs.perplexity.ai/docs/getting-started/pricing
+  # Token rates: https://docs.perplexity.ai/docs/agent-api/models
+  # Preset config: https://docs.perplexity.ai/docs/agent-api/presets
+  # Current short-context USD/MTok $2 input / $10 output (fast uses priority).
+  # Dynamic preset rates can change; receipt uses provider total, never this estimate.
+  # Fast Search $0.001/invocation; fetch_url $0.0005/invocation where used.
+  - model_name: research-high
+    litellm_params:
+      model: perplexity/preset/high
+      api_key: os.environ/PERPLEXITY_API_KEY
+      input_cost_per_token: 0.0000020000
+      output_cost_per_token: 0.0000100000
+    model_info:
+      mode: responses
+      research_only: true
+      input_cost_per_token: 0.0000020000
+      output_cost_per_token: 0.0000100000
+      search_fee_per_request: 0.001
 
 litellm_settings:
   drop_params: true
@@ -250,6 +347,13 @@ litellm_settings:
     - kimi-lite: ["luna", "haiku", "flash-lite", "grok", "flash"]
     - grok-46: ["grok-top", "sol", "argon", "sonnet"]
     - grok-45: ["grok-top", "sol", "argon", "sonnet"]
+
+    # Research falls back only within Perplexity presets. Tank disables these on
+    # /v1/research so a fallback cannot bypass the promoted preset or tenant allow-list.
+    - research-fast: ["research-low", "research-medium", "research-high"]
+    - research-low: ["research-medium", "research-fast", "research-high"]
+    - research-medium: ["research-low", "research-fast", "research-high"]
+    - research-high: ["research-low", "research-medium", "research-fast"]
 
 router_settings:
   allowed_fails: 1          # one refusal (no credit / bad key) and that model is skipped...
