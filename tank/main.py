@@ -79,7 +79,6 @@ ZA_HOME_MESSAGE = "needs the South Africa region"
 US_HOME_MESSAGE = "needs the United States region"
 IDENTIFIER_REFUSAL = "A personal identifier cannot be sent to a provider outside South Africa."
 ALLOW_REFUSAL = "This provider is not on the tenant's allow-list."
-_CHINA_PROVIDERS = frozenset({"deepseek", "moonshot", "kimi"})
 _pii_detect = None
 _skill_home: contextvars.ContextVar[str | None] = contextvars.ContextVar("zenas_skill_home", default=None)
 
@@ -195,9 +194,6 @@ def sa_hosted_models() -> frozenset[str]:
             info = item.get("model_info") or {}
             if str(info.get("hosted_in") or "").lower() != ZA_REGION:
                 continue
-            provider = str((item.get("litellm_params") or {}).get("model") or "").split("/", 1)[0].lower()
-            if provider in _CHINA_PROVIDERS:
-                continue
             name = str(item.get("model_name") or "").strip()
             if name:
                 names.add(name)
@@ -224,11 +220,6 @@ def tenant_allowlist(tenant_id: str) -> frozenset[str] | None:
     if not isinstance(names, list):
         return frozenset()
     return frozenset(str(item).strip() for item in names if str(item).strip())
-
-
-def _china_model(model: str) -> bool:
-    head = model.split("/", 1)[0].lower()
-    return head in _CHINA_PROVIDERS or model.lower() in _CHINA_PROVIDERS
 
 
 # Same ids as agents/zenas/core/release_mask.py COURT_SOURCES. Tank's image
@@ -376,8 +367,6 @@ def model_call_refusal(
         if model is not None and allow is not None and model not in allow:
             return ALLOW_REFUSAL
         return None
-    if model is not None and _china_model(model):
-        return ALLOW_REFUSAL
     hosted = sa_hosted_models()
     if prompt_has_identifier(text) and not public_record:
         permitted = hosted if allow is None else hosted & allow
@@ -3400,3 +3389,6 @@ async def market_quarantine_act(
     except Exception:
         raise HTTPException(status_code=502, detail=_MARKET_DOWN) from None
     return {**payload, "models": models}
+
+# MODELS-2: research stays in its own module; generic routing is unchanged.
+__import__("research").register(app, globals())

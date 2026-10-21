@@ -18,10 +18,19 @@ def test_every_model_has_a_price_and_a_key_from_the_environment() -> None:
         assert str(m["litellm_params"]["api_key"]).startswith("os.environ/"), m["model_name"]
 
 
-def test_no_china_hosted_provider_in_the_roster() -> None:
-    for m in CONFIG["model_list"]:
-        provider = m["litellm_params"]["model"].split("/", 1)[0]
-        assert provider not in {"deepseek", "moonshot"}, m["model_name"]
+def test_deepseek_and_kimi_are_in_the_roster_with_their_keys() -> None:
+    """MODELS-1 (18 Oct 2026): the China-provider ban is removed."""
+    by_name = {m["model_name"]: m for m in CONFIG["model_list"]}
+    expected = {
+        "deepseek-flash": ("deepseek", "os.environ/DEEPSEEK_API_KEY"),
+        "deepseek-pro": ("deepseek", "os.environ/DEEPSEEK_API_KEY"),
+        "kimi": ("moonshot", "os.environ/MOONSHOT_API_KEY"),
+    }
+    for name, (provider, key) in expected.items():
+        assert name in by_name, name
+        params = by_name[name]["litellm_params"]
+        assert params["model"].split("/", 1)[0] == provider, name
+        assert params["api_key"] == key, name
 
 
 def _price(name: str) -> float:

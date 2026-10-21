@@ -245,8 +245,11 @@ async def test_control_schema_empty_database_reapply_and_real_audit(monkeypatch)
     pool = None
     try:
         pool = await asyncpg.create_pool(url, min_size=1, max_size=2)
-        ddl = (ROOT / 'tank/schema.sql').read_text().split('-- DASH-1:', 1)[1]
-        ddl = '-- DASH-1:' + ddl
+        # Later additive migrations can depend on other Tank tables. This
+        # isolated control-table check should apply only its own statements.
+        statements = (ROOT / 'tank/schema.sql').read_text().split(';')
+        ddl = ';\n'.join(statement for statement in statements
+                         if 'tank.controls' in statement or 'tank.control_log' in statement) + ';'
         async with pool.acquire() as connection:
             await connection.execute('CREATE SCHEMA tank')
             await connection.execute(ddl)
