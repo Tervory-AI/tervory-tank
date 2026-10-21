@@ -391,8 +391,10 @@ async def turn(thread_id: uuid.UUID, body: Turn, actor: Actor = Depends(identity
                 raise HTTPException(409, "An answer is already running in this thread")
             # A process restart cannot leave a conversation permanently busy.
             # Do not retry a possibly charged request automatically.
-            await step(conn, row, state, {"step_id": state["active_turn"], "label": "Answer interrupted",
-                                          "actor": "Tervory", "status": "failed"})
+            await step(conn, row, state, {**state["steps"].get(state["active_turn"], {}),
+                                          "step_id": state["active_turn"], "label": "Answer interrupted",
+                                          "actor": "Tervory", "status": "failed", "receipt_status": "pending"})
+            await receipt_pending(conn, row, state["active_turn"])
             await event(conn, row, "error", {"message": "The previous answer was interrupted. It has not been retried."})
         after = row["seq"]
         state["active_turn"] = turn_id

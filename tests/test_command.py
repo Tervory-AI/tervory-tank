@@ -240,6 +240,9 @@ async def test_interrupted_turn_is_not_retried_and_new_turn_can_start(api, monke
     assert reply.status_code == 200
     assert 'previous answer was interrupted' in reply.text
     route.assert_awaited_once()  # Only the new request, never the stale request.
+    data = (await client.get(f'/v1/command/threads/{thread}')).json()
+    assert data['thread']['spent_usd'] is None and data['thread']['receipt_status'] == 'pending'
+    assert next(s for s in data['steps'] if s['step_id'] == 'interrupted')['receipt_status'] == 'pending'
 
 
 @pytest.mark.asyncio
