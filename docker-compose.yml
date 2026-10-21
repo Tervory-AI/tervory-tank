@@ -32,6 +32,7 @@ services:
       - tervory-gw-zenas
       - tervory-gw-base
       - tervory-gw-rig
+      - tervory-gw-ghost
 
   redis:
     image: redis:7
@@ -194,6 +195,9 @@ services:
         GIT_SHA: ${GIT_SHA:-}
     restart: unless-stopped
     environment:
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID_UPLOADS: ${R2_ACCESS_KEY_ID_UPLOADS:-}
+      R2_SECRET_ACCESS_KEY_UPLOADS: ${R2_SECRET_ACCESS_KEY_UPLOADS:-}
       DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
       REDIS_URL: redis://redis:6379/0
       LITELLM_URL: http://litellm:4000
@@ -211,6 +215,7 @@ services:
       TANK_KEY_ZENAS: ${TANK_KEY_ZENAS:-}
       TANK_KEY_BASE: ${TANK_KEY_BASE:-}
       TANK_KEY_RIG: ${TANK_KEY_RIG:-}
+      TANK_KEY_GHOST: ${TANK_KEY_GHOST:-}
       TANK_KEY_WORKERS: ${TANK_KEY_WORKERS:-}
       TANK_REGION: ${TANK_REGION:-us-east}
       BASE_AGENT_URL: http://agent-base:8000
@@ -232,6 +237,7 @@ services:
       - tervory-gw-zenas
       - tervory-gw-base
       - tervory-gw-rig
+      - tervory-gw-ghost
     expose:
       - "8000"
     healthcheck:
@@ -240,6 +246,42 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
+
+  # Boston only. Not started by normal compose up / Coolify deployment.
+  # Founder configures the public recipient and explicitly enables this profile.
+  r2-backup:
+    profiles: ["r2-backup"]
+    build:
+      context: .
+      dockerfile: jobs/train/Dockerfile.backup
+    restart: "no"
+    mem_limit: 512m
+    cpus: 0.5
+    read_only: true
+    volumes:
+      - r2_backup_spool:/tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      TANK_REGION: us-east
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID_UPLOADS: ${R2_ACCESS_KEY_ID_UPLOADS:-}
+      R2_SECRET_ACCESS_KEY_UPLOADS: ${R2_SECRET_ACCESS_KEY_UPLOADS:-}
+      R2_BACKUP_RECIPIENT: ${R2_BACKUP_RECIPIENT:-}
+    # Offline readiness only; completed backups are proved by their R2 manifests.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.path.insert(0, 'jobs/train'); from backup import dump_configuration; dump_configuration()"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - default
 
   # One shot. Creates agent_<name> roles, then exits. Tank does not wait on it
   # and does not mount this code. restart on-failure retries a failed run only.
@@ -260,6 +302,7 @@ services:
       AGENT_DB_PASSWORD_ZENAS: ${AGENT_DB_PASSWORD_ZENAS:-}
       AGENT_DB_PASSWORD_BASE: ${AGENT_DB_PASSWORD_BASE:-}
       AGENT_DB_PASSWORD_RIG: ${AGENT_DB_PASSWORD_RIG:-}
+      AGENT_DB_PASSWORD_GHOST: ${AGENT_DB_PASSWORD_GHOST:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -349,6 +392,7 @@ services:
       start_period: 15s
 
 volumes:
+  r2_backup_spool:
   pgdata:
   redisdata:
   qdrantdata:
@@ -391,3 +435,6 @@ networks:
   # Created by this stack on deploy (ROOMS.md). The Rig resource joins it as external.
   tervory-gw-rig:
     name: tervory-gw-rig
+  # Ghost alone uses this corridor; no other main-stack service joins it.
+  tervory-gw-ghost:
+    name: tervory-gw-ghost

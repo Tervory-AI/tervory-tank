@@ -1031,3 +1031,14 @@ ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS provider_cost_usd numeric(20,10
 ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS research_sources jsonb;
 -- Unknown charges on failed calls require reconciliation; they are never called free.
 ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS research_cost_status text;
+
+-- Ghost recovery idempotency; no production resource credentials or payloads.
+CREATE TABLE IF NOT EXISTS tank.ghost_recovery (
+    tenant_id uuid NOT NULL,
+    id uuid NOT NULL,
+    action text NOT NULL CHECK (action IN ('rerun_failed_deploy','restart_crashed_room')),
+    target text NOT NULL,
+    status text NOT NULL DEFAULT 'pending',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,id)
+);
