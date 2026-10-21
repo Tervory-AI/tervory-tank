@@ -13,6 +13,7 @@ services:
     cpus: 0.5
     environment:
       AGENT_NAME: rig
+      R2_BUCKET: tervory-rig
       DATABASE_URL: postgresql://agent_rig:${AGENT_DB_PASSWORD_RIG}@postgres:5432/${POSTGRES_DB:-tervory}
       TANK_URL: http://tank:8000
       TANK_KEY: ${TANK_KEY_RIG:-}

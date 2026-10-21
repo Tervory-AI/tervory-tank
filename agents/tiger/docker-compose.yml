@@ -13,6 +13,7 @@ services:
     cpus: 0.5
     environment:
       AGENT_NAME: tiger
+      R2_BUCKET: tervory-tiger
       TANK_REGION: ${TANK_REGION:-us-east}
       DATABASE_URL: postgresql://agent_tiger:${AGENT_DB_PASSWORD_TIGER}@postgres:5432/${POSTGRES_DB:-tervory}
       TANK_URL: http://tank:8000

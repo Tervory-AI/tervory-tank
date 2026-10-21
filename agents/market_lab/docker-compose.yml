@@ -13,6 +13,7 @@ services:
     cpus: 0.5
     environment:
       AGENT_NAME: market_lab
+      R2_BUCKET: tervory-market-lab
       DATABASE_URL: postgresql://agent_market_lab:${AGENT_DB_PASSWORD_MARKET_LAB}@postgres:5432/${POSTGRES_DB:-tervory}
       TANK_URL: http://tank:8000
       TANK_KEY: ${TANK_KEY_MARKET_LAB:-}
