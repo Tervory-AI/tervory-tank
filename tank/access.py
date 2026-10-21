@@ -71,12 +71,14 @@ def db():
     return pool()
 
 
-def origin(value: str, *, https: bool = True) -> str:
+def origin(value: str, *, https: bool = True, allow_nondefault_port: bool = False) -> str:
     try:
         p = urlsplit(value)
         host = (p.hostname or "").lower().rstrip(".")
+        port, default_port = p.port, 443 if p.scheme == "https" else 80
         if (p.scheme not in ({"https"} if https else {"https", "http"}) or not host
-                or p.username or p.password or p.port not in (None, 443 if p.scheme == "https" else 80)
+                or p.username or p.password or port == 0
+                or (port not in (None, default_port) and not allow_nondefault_port)
                 or host in {"localhost", "metadata.google.internal"}
                 or host.endswith((".localhost", ".local", ".internal"))):
             raise ValueError()
@@ -86,13 +88,14 @@ def origin(value: str, *, https: bool = True) -> str:
             address = None
         if address and (not address.is_global or address.is_multicast):
             raise ValueError()
-        return p.scheme + "://" + ("[" + host + "]" if ":" in host else host)
+        return p.scheme + "://" + ("[" + host + "]" if ":" in host else host) + (
+            ":" + str(port) if port not in (None, default_port) else "")
     except ValueError:
         raise HTTPException(422, "Use a public site address without credentials.") from None
 
 
-def site_name(value: str) -> str:
-    result = origin(value)
+def site_name(value: str, *, allow_nondefault_port: bool = False) -> str:
+    result = origin(value, allow_nondefault_port=allow_nondefault_port)
     parsed = urlsplit(value)
     if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
         raise HTTPException(422, "Use the site's HTTPS address without a path or query.")
@@ -435,7 +438,8 @@ async def human_action(item_id: uuid.UUID, request: Request, actor: Actor = Depe
                 if row["browser_handle"]:
                     await control(row["room"], {"action": "dismiss", "tenant_id": str(row["tenant_id"]),
                         "site": row["site"], "handle": str(row["browser_handle"])})
-                await resolve_checks(conn, row["tenant_id"], row["room"], row["site"])
+                await conn.execute("""UPDATE tank.access_queue SET status='done',finished_at=now(),browser_handle=NULL,
+                    handler=NULL,started_at=NULL WHERE tenant_id=$1 AND id=$2""", row["tenant_id"], item_id)
                 await receipt(conn, row["tenant_id"], row["room"], row["site"], actor.user_id, "dismissed")
                 return {"dismissed": True}
             if not row["browser_handle"]:
@@ -549,10 +553,15 @@ async def import_feed(request: Request, actor: Actor = Depends(identity)):
 async def feed_price(tenant_id: uuid.UUID, site: str, sku: str = "", upc: str = "", url: str = "", room: str = Depends(room_identity)):
     if room != "tiger" or (not sku and not upc and not url):
         raise HTTPException(422, "Tiger must name the product identifier.")
-    site = site_name(site)
+    site = site_name(site, allow_nondefault_port=bool(url))
+    if url:
+        if origin(url, allow_nondefault_port=True) != site:
+            raise HTTPException(422, "Product site differs.")
+        # Feeds can only be configured on default HTTPS ports. This is a miss,
+        # not a feed-service failure, so Tiger may continue its existing scrape.
+        if urlsplit(url).port not in (None, 443): return {"found": False}
     async with db().acquire() as conn:
         if url:
-            if origin(url) != site: raise HTTPException(422, "Product site differs.")
             sku = await conn.fetchval("SELECT sku FROM tank.access_feed_links WHERE tenant_id=$1 AND url=$2", tenant_id, url) or ""
         row = await conn.fetchrow("""SELECT r.data,b.source,b.fetched_at,b.row_count,b.distributor,b.id FROM tank.access_feed_rows r
             JOIN tank.access_feed_batches b ON b.tenant_id=r.tenant_id AND b.id=r.batch_id

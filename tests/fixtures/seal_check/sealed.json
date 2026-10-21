@@ -86,6 +86,25 @@
    "networks": [
     "tervory-gw-tiger"
    ]
+  },
+  "g2": {
+   "uuid": "tigeruuid",
+   "resource": "agent-tiger",
+   "service": "tiger-browser",
+   "name": "tiger-browser-tigeruuid",
+   "networks": [
+    "tigeruuid_browser"
+   ]
+  },
+  "g3": {
+   "uuid": "tigeruuid",
+   "resource": "agent-tiger",
+   "service": "tiger-browser-gateway",
+   "name": "tiger-browser-gateway-tigeruuid",
+   "networks": [
+    "tigeruuid_browser",
+    "tervory-gw-tiger"
+   ]
   }
  },
  "networks": {
@@ -99,6 +118,7 @@
   "radixuuid_proxy-link": true,
   "radixuuid_egress": false,
   "tigeruuid": false,
-  "tervory-gw-tiger": false
+  "tervory-gw-tiger": false,
+  "tigeruuid_browser": true
  }
 }

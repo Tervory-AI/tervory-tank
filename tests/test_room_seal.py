@@ -9,6 +9,7 @@ No network, Docker or secrets are needed.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -86,7 +87,7 @@ def test_no_room_service_would_leak_when_coolify_deploys_it(path: Path) -> None:
     assert leaks(path.read_text(encoding="utf-8")) == []
 
 
-@pytest.mark.parametrize("room", ["base", "radix"])
+@pytest.mark.parametrize("room", ["base", "radix", "tiger"])
 def test_sealed_rooms_are_marked_raw_compose(room: str) -> None:
     text = (ROOT / "agents" / room / "docker-compose.yml").read_text(encoding="utf-8")
     assert is_raw(text), f"agents/{room}/docker-compose.yml must start with {RAW_MARKER!r}"
@@ -94,6 +95,7 @@ def test_sealed_rooms_are_marked_raw_compose(room: str) -> None:
 
 @pytest.mark.parametrize("room, sealed", [
     ("base", {"base-sandbox", "base-browser"}),
+    ("tiger", {"tiger-browser"}),
     # Radix is sealed on the live host today; this keeps it so.
     ("radix", {"agent-radix"}),
 ])
@@ -243,7 +245,7 @@ def test_seal_check_reports_sealed_rooms(tmp_path: Path) -> None:
         "tervory-tankmain (tankuuid): not a room, skipped",
         "agent-base (baseuuid): sealed",
         "agent-radix (radixuuid): sealed",
-        "agent-tiger (tigeruuid): no sealed containers",
+        "agent-tiger (tigeruuid): sealed",
     ]
 
 
@@ -255,6 +257,7 @@ def test_seal_check_names_each_leaking_container_and_network(tmp_path: Path) -> 
         "agent-base (baseuuid): LEAK: base-sandbox-baseuuid on baseuuid; LEAK: base-browser-baseuuid on baseuuid;"
         " LEAK: base-brain-baseuuid on baseuuid",
         "agent-radix (radixuuid): LEAK: agent-radix-radixuuid on radixuuid",
+        "agent-tiger: NOT FOUND",
     ]
 
 
@@ -270,13 +273,33 @@ def test_seal_check_finds_raw_compose_rooms_by_label_not_container_name(tmp_path
     # Live Boston after Raw Compose: Base and Radix containers are <uuid>-<service>-1
     # with no coolify.resourceName; Tank and Tiger keep normal-mode names.
     result = run_seal_check(tmp_path, "raw_sealed.json")
-    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.returncode == 1, result.stdout + result.stderr
     assert result.stdout.splitlines() == [
         "tervory-tankmain-tankuuid (tankuuid): not a room, skipped",
         "agent-base (baseuuid): sealed",
         "agent-radix (radixuuid): sealed",
-        "agent-tiger (tigeruuid): no sealed containers",
+        "agent-tiger (tigeruuid): NOT SEALED: no container on an internal network",
     ]
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash")
+@pytest.mark.parametrize("leaking_service", [None, "tiger-browser", "tiger-browser-gateway", "agent-tiger"])
+def test_seal_check_raw_tiger_allows_only_its_gateway_corridor(tmp_path: Path, leaking_service: str | None) -> None:
+    data = json.loads((FIXTURES / "raw_tiger_sealed.json").read_text())
+    if leaking_service:
+        for container in data["containers"].values():
+            if container["service"] == leaking_service:
+                container["networks"].append("tigeruuid_browser" if leaking_service == "agent-tiger" else "tigeruuid")
+    fixture = tmp_path / "tiger.json"
+    fixture.write_text(json.dumps(data))
+    result = run_seal_check(tmp_path, str(fixture))
+    assert result.returncode == (1 if leaking_service else 0), result.stdout + result.stderr
+    if leaking_service:
+        network = "tervory-gw-tiger" if leaking_service == "agent-tiger" else "tigeruuid"
+        assert f"agent-tiger (tigeruuid): LEAK: tigeruuid-{leaking_service}-1 on {network}" in result.stdout
+    else:
+        assert "agent-tiger (tigeruuid): sealed" in result.stdout
+        assert "LEAK" not in result.stdout and "NOT FOUND" not in result.stdout
 
 
 @pytest.mark.skipif(shutil.which("bash") is None, reason="needs bash")
@@ -287,6 +310,7 @@ def test_seal_check_reports_leaks_in_raw_compose_rooms(tmp_path: Path) -> None:
         "tervory-tankmain-tankuuid (tankuuid): not a room, skipped",
         "agent-base (baseuuid): LEAK: baseuuid-base-sandbox-1 on baseuuid",
         "agent-radix (radixuuid): sealed",
+        "agent-tiger: NOT FOUND",
     ]
 
 
@@ -297,7 +321,7 @@ def test_seal_check_fails_when_an_expected_room_is_missing(tmp_path: Path) -> No
     assert result.stdout.splitlines() == [
         "tervory-tankmain-tankuuid (tankuuid): not a room, skipped",
         "agent-base (baseuuid): sealed",
-        "agent-tiger (tigeruuid): no sealed containers",
+        "agent-tiger (tigeruuid): NOT SEALED: no container on an internal network",
         "agent-radix: NOT FOUND",
     ]
 
@@ -310,6 +334,7 @@ def test_seal_check_never_passes_when_only_the_hub_is_running(tmp_path: Path) ->
         "tervory-tankmain-tankuuid (tankuuid): not a room, skipped",
         "agent-base: NOT FOUND",
         "agent-radix: NOT FOUND",
+        "agent-tiger: NOT FOUND",
     ]
 
 

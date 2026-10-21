@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SEAL-1 live check. Read-only: it runs only `docker ps`, `docker inspect` and
 # `docker network inspect`, and changes nothing. Run it on the host after every
-# deploy of Base or Radix:
+# deploy of Base, Tiger or Radix:
 #   bash ops/seal-check.sh
 #
 # For every running container labelled coolify.applicationUuid, it lists the
@@ -9,6 +9,7 @@
 # internal network must not also join a non-internal one, except the declared
 # corridor services (matched by compose service name):
 #   agent-base, base-brain and base-browser-gateway on tervory-gw-base;
+#   tiger-browser-gateway on tervory-gw-tiger;
 #   egress-proxy on egress (compose names it <project>_egress).
 #
 # Rooms are found by labels, never by container name. Coolify's normal mode names
@@ -23,7 +24,7 @@
 # Prints one line per room: "<room> (<uuid>): sealed" or
 # "<room> (<uuid>): LEAK: <container> on <network>" (several leaks are joined by "; ").
 # A room with no container on an internal network prints "no sealed containers".
-# The rooms that must be sealed (agent-base, agent-radix) can never be skipped:
+# The rooms that must be sealed (agent-base, agent-radix, agent-tiger) can never be skipped:
 # if one is missing it prints "<room>: NOT FOUND", and if one has no container on
 # an internal network it prints "<room> (<uuid>): NOT SEALED: no container on an
 # internal network". Both fail.
@@ -34,13 +35,14 @@ set -uo pipefail
 DOCKER="${DOCKER:-docker}"
 
 # Rooms whose compose files declare sealed services; each must be found and sealed.
-EXPECTED_SEALED=(agent-base agent-radix)
+EXPECTED_SEALED=(agent-base agent-radix agent-tiger)
 
 # service name -> the one non-internal network it may also join
 declare -A CORRIDOR=(
   [agent-base]="tervory-gw-base"
   [base-brain]="tervory-gw-base"
   [base-browser-gateway]="tervory-gw-base"
+  [tiger-browser-gateway]="tervory-gw-tiger"
   [egress-proxy]="egress"
 )
 

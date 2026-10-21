@@ -182,7 +182,8 @@ async def test_feed_price_normalizes_tigers_site(app, site):
 
 
 @pytest.mark.asyncio
-async def test_tiger_feed_client_normalized_watch_and_http_error(app, monkeypatch):
+@pytest.mark.parametrize("url", ["https://Example.com:443/product", "https://Example.com:8443/product", "https://example.com:444/product"])
+async def test_tiger_feed_client_normalized_watch_and_http_error(app, monkeypatch, url):
     server, db, actor = app
     server.dependency_overrides[access.room_identity] = lambda: "tiger"
     root = Path(__file__).resolve().parents[1]
@@ -190,10 +191,41 @@ async def test_tiger_feed_client_normalized_watch_and_http_error(app, monkeypatc
     module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=server), base_url="http://tank") as client:
         monkeypatch.setattr(module.app.state, "http", client, raising=False)
-        assert await module.official_feed(str(actor.tenant_id), "https://Example.com:443/product") == {"found": False}
+        assert await module.official_feed(str(actor.tenant_id), url) == {"found": False}
+        scraped = []
+        async def render(*args): scraped.append(args); return {"ok": False}
+        async def robots(*args): return ""
+        async def forbidden(*args): raise AssertionError("Unexpected extraction")
+        tenant = str(actor.tenant_id)
+        await run_check(MemoryStore(), tenant, {"tenant_id": tenant, "url": url}, "tiger", render,
+                        forbidden, forbidden, robots, DomainLimiter(0), feed=module.official_feed)
+        assert len(scraped) == 1
     async def unavailable(*args, **kwargs): return httpx.Response(503)
     monkeypatch.setattr(module.app.state, "http", SimpleNamespace(get=unavailable))
     with pytest.raises(RuntimeError): await module.official_feed(str(actor.tenant_id), "https://example.com/product")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("site,url", [
+    ("https://example.com:8443", "https://example.com:8443/item"),
+    ("https://example.com", "https://example.com:8443/item"),
+    ("https://127.0.0.1:8443", "https://127.0.0.1:8443/item"),
+    ("https://user:password@example.com:8443", "https://user:password@example.com:8443/item"),
+    ("https://example.com:70000", "https://example.com:70000/item"),
+])
+async def test_nondefault_port_feed_miss_keeps_validation_and_never_reads_default_port_data(app, monkeypatch, site, url):
+    server, db, actor = app
+    server.dependency_overrides[access.room_identity] = lambda: "tiger"
+    def forbidden(): raise AssertionError("Non-default port must not read feed data")
+    monkeypatch.setattr(access, "db", forbidden)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=server), base_url="http://tank") as client:
+        response = await client.get("/v1/access/feeds/price", params={"tenant_id": str(actor.tenant_id), "site": site, "url": url})
+    if site == "https://example.com:8443":
+        assert response.status_code == 200 and response.json() == {"found": False}
+    else:
+        assert response.status_code == 422
+    # Configuring credentials/feeds still rejects non-default ports.
+    with pytest.raises(HTTPException): access.site_name("https://example.com:8443")
 
 
 @pytest.mark.asyncio

@@ -50,7 +50,9 @@ No logged-in social browsing is permitted.
 Clients see only their own connections; only the founder receives the platform
 site-policy catalogue. Equivalent site hosts (case and default port) are
 normalized before feed lookup. A confirmed “no feed” permits scraping; an
-unavailable or malformed feed answer does not.
+unavailable or malformed feed answer does not. A watched public HTTPS URL on a
+non-default port has no configured feed and returns “not found”, preserving the
+existing scrape path and its network checks.
 
 ## Revoke, rotate and human checks
 
@@ -72,8 +74,9 @@ page/task using the existing room controls. Expired views must be reopened by a
 fresh room read. Terms/rotation checks have no live view until their settings are
 fixed. Handling records the authenticated operator and elapsed time.
 Credential updates close that connection's old checks. Site-policy updates close
-the affected terms/renewal checks. The founder can Dismiss any open check; a live
-view is closed without saving its session. If a browser restart loses a handling
+the affected terms/renewal checks. The founder can Dismiss any open check; only
+that queue row and its live view are cleared, without saving its session. Other
+checks for the same connection remain open. If a browser restart loses a handling
 view, refreshing the queue returns it to waiting and releases its previous handler.
 Only a click, key, text entry or scroll permits human form submission, for at most
 two minutes after the last such input. Opening or polling screenshots does not

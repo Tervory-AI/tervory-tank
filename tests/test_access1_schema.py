@@ -69,12 +69,19 @@ async def test_access_empty_schema_reapply_and_scoped_routes(monkeypatch):
                 assert not await conn.fetchval("SELECT 1 FROM tank.access_queue WHERE tenant_id=$1 AND site='https://dealer.example' AND status IN ('waiting','handling')", actor.tenant_id)
                 assert await conn.fetchval("SELECT status FROM tank.access_queue WHERE tenant_id=$1 AND id=$2", other, uuid.UUID(other_check)) == "waiting"
             # Only a founder can dismiss, including a settings-only check with no live view.
+            async with pool.acquire() as conn:
+                companion = uuid.UUID(await access.enqueue(conn, other, "base", "https://dealer.example", "human_login", uuid.uuid4()))
+                await conn.execute("UPDATE tank.access_queue SET status='handling',handler='another-person',started_at=now() WHERE tenant_id=$1 AND id=$2", other, companion)
+                untouched = dict(await conn.fetchrow("SELECT * FROM tank.access_queue WHERE tenant_id=$1 AND id=$2", other, companion))
             app.dependency_overrides[access.identity] = lambda: Actor(other, "client", False, frozenset({"base"}))
             response = await client.post("/v1/access/queue/" + other_check, json={"tenant_id": str(other), "action": "dismiss"})
             assert response.status_code == 403
             app.dependency_overrides[access.identity] = lambda: actor
             response = await client.post("/v1/access/queue/" + other_check, json={"tenant_id": str(other), "action": "dismiss"})
             assert response.status_code == 200 and response.json()["dismissed"]
+            async with pool.acquire() as conn:
+                assert await conn.fetchval("SELECT status FROM tank.access_queue WHERE tenant_id=$1 AND id=$2", other, uuid.UUID(other_check)) == "done"
+                assert dict(await conn.fetchrow("SELECT * FROM tank.access_queue WHERE tenant_id=$1 AND id=$2", other, companion)) == untouched
             # Browser restart loses handles. Queue refresh releases the old handler.
             async with pool.acquire() as conn:
                 stale = uuid.UUID(await access.enqueue(conn, actor.tenant_id, "base", "https://dealer.example", "captcha", uuid.uuid4()))
