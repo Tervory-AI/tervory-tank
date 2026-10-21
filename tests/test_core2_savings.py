@@ -150,9 +150,13 @@ async def test_authentication_and_no_client_all_scope(monkeypatch):
     monkeypatch.setenv('TERVORY_ADMIN_USER_IDS','fixture-founder')
     app=FastAPI(); app.include_router(proof.router); app.include_router(proof.client_router)
     called=[]
-    async def snap(tenant,end=None,founder=False):
+    async def snap(tenant,end=None,founder=False,**kwargs):
         called.append((tenant,founder)); return {'ok':True}
     monkeypatch.setattr(proof,'savings_snapshot',snap)
+    from types import SimpleNamespace
+    monkeypatch.setattr(proof,'runtime',lambda:SimpleNamespace(box_region=lambda:'us-east'))
+    async def revision(tenant): return {'revision':'fixture'}
+    monkeypatch.setattr(proof,'client_savings_revision',revision)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://test') as client:
         a=uuid.uuid4()
         assert (await client.get(f'/v1/client-savings?tenant_id={a}')).status_code==404
@@ -211,3 +215,65 @@ async def test_completed_jobs_and_late_backfills_obey_snapshot_cutoff(database,m
     await pool.execute((ROOT/'tank/schema.sql').read_text())
     await pool.execute((ROOT/'tank/schema.sql').read_text())
     assert await pool.fetchval('SELECT count(*) FROM tank.tasks WHERE tenant_id=$1',a)==1
+
+
+@pytest.mark.asyncio
+async def test_four_founder_populations_and_client_json_redaction(database,monkeypatch):
+    pool,rt=database;monkeypatch.setattr(proof,'runtime',lambda:rt)
+    await prices(pool)
+    platform=uuid.UUID('00000000-0000-0000-0000-000000000001');a,b=uuid.uuid4(),uuid.uuid4()
+    await seed(pool,platform,cost='1',baseline='10')
+    await seed(pool,a,cost='1',baseline='3')
+    await seed(pool,b,cost='2',baseline='4')
+    every=await proof.savings_snapshot(None,END,founder=True)
+    clients=await proof.savings_snapshot(None,END,founder=True,clients_only=True)
+    assert Decimal(every['total']['saved'])==13 and Decimal(clients['total']['saved'])==4
+    assert clients['tenant_id']=='clients'
+    rows=await proof.savings_rows(None,END,clients_only=True,founder=True)
+    assert rows['total']==clients['total'] and {r['tenant_id'] for r in rows['rows']}=={str(a),str(b)}
+    for tenant,saved in [(a,2),(b,2),(platform,9)]:
+        assert Decimal((await proof.savings_snapshot(tenant,END))['total']['saved'])==saved
+    legacy=await proof.snapshot(None,end=END,clients_only=True)
+    assert Decimal(str(legacy['all_tenant_total']['saved_usd']))==4
+    assert {r['tenant_id'] for r in legacy['ledger']}=={str(a),str(b)}
+    csv=(await proof.savings_export('csv',END,None,0,True)).body.decode()
+    assert str(platform) not in csv and str(a) in csv and str(b) in csv
+    key=secrets.token_urlsafe(32);monkeypatch.setenv('TANK_API_KEY',key)
+    app=FastAPI();app.include_router(proof.client_router)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://fixture') as client:
+        for suffix,query in [('',{}),('/rows',{'end':END.isoformat()})]:
+            response=await client.get('/v1/client-savings'+suffix,params={'tenant_id':str(a),**query},headers={'x-tank-key':key})
+            assert response.status_code==200
+            text=response.text
+            for forbidden in ['standard_name','top_name','selected_name','headline','standards','tops','comparison_status','compared_at','tenant_id','region','excluded_reason','expensive','cheap',str(b),str(platform)]:
+                assert '"'+forbidden+'"' not in text
+            assert Decimal(response.json()['total']['saved'])==2
+
+
+@pytest.mark.asyncio
+async def test_client_cache_reuses_revision_isolates_tenants_and_invalidates(database,monkeypatch):
+    import asyncio
+    pool,rt=database;monkeypatch.setattr(proof,'runtime',lambda:rt)
+    await prices(pool)
+    a,b=uuid.uuid4(),uuid.uuid4()
+    await seed(pool,a);await seed(pool,b,cost='1',baseline='4')
+    proof._CLIENT_CACHE.clear()
+    original=proof.savings_snapshot;calls=[]
+    async def counted(tenant,*args,**kwargs):
+        calls.append(tenant)
+        return await original(tenant,*args,**kwargs)
+    monkeypatch.setattr(proof,'savings_snapshot',counted)
+    reports=await asyncio.gather(*(proof.client_savings(a) for _ in range(4)))
+    assert len(calls)==1 and all(r==reports[0] for r in reports)
+    assert await proof.client_savings(a)==reports[0] and len(calls)==1
+    other=await proof.client_savings(b)
+    assert Decimal(other['total']['saved'])==3 and len(calls)==2
+    await seed(pool,a)
+    changed=await proof.client_savings(a)
+    assert changed['revision']!=reports[0]['revision'] and changed['total']['work_count']==2 and len(calls)==3
+    await pool.execute("UPDATE tank.ledger SET baseline_priced_at=now() WHERE tenant_id=$1",a)
+    assert (await proof.client_savings(a))['revision']!=changed['revision'] and len(calls)==4
+    clock=proof.time.monotonic
+    monkeypatch.setattr(proof.time,'monotonic',lambda:clock()+301)
+    await proof.client_savings(a)
+    assert len(calls)==5

@@ -11,7 +11,7 @@ import { BaselineControls } from "./baseline-controls";
 function Margin({ data }: { data: FounderSavings }) {
   const load = readFounderSavingsRows.bind(null, data.tenant_id);
   const evidence = (label: string, start?: string, until?: string) => <EvidenceButton label={label} filters={{end:data.as_of,population:"costs",start,until}} loadRows={load} founder/>;
-  return <section className="savings-costs"><h2>Tervory’s margin · {data.tenant_id === "all" ? "all clients" : "selected client"}</h2>
+  return <section className="savings-costs"><h2>Tervory’s margin · {data.tenant_id === "all" ? "everything" : data.tenant_id === "clients" ? "all clients" : "selected account"}</h2>
     <p>Founder only. Payments have not been connected to verified amounts. Price-book rates alone do not prove what a client paid.</p>
     <dl><div><dt>Client paid</dt><dd>no billing data yet</dd></div><div><dt>Margin to date / percentage</dt><dd>no billing data yet</dd></div>
       <div><dt>Recorded work cost to date</dt><dd>{evidence(`${dollars(data.margin.total.actual)} · standard ${baselineNames(data.margin.total.standards)} comparison`)}</dd></div><div><dt>Recorded baseline to date</dt><dd>{evidence(`${dollars(data.margin.total.baseline)} vs standard (${baselineNames(data.margin.total.standards)})`)}</dd></div></dl>
@@ -30,13 +30,12 @@ function ClientSet({ data, title }: { data: FounderSavings; title: string }) {
 export async function FounderSavingsPanel({ tenant }: { tenant?: string }) {
   const all: FounderSavings = await (await proofResponse({},undefined,"/savings")).json();
   const names = await resolveTenantNames(all.tenants, async params => (await clerkClient()).organizations.getOrganizationList(params), tenantIdFor, uuidFrom);
-  const selected = tenant && tenant!=="all" ? tenant : undefined;
-  const one: FounderSavings | null = selected ? await (await proofResponse({tenant_id:selected,end:all.as_of},undefined,"/savings")).json() : null;
-  return <article className="savings-founder"><a href="/tank">← Tank</a><p>Founder · {all.region}</p><h1>Client savings</h1><p>The same five graphs each client sees, using only defensible comparisons. Tervory is a separate choice below.</p>
+  const selected = tenant ?? "all";
+  const one: FounderSavings | null = selected!=="all" ? await (await proofResponse({tenant_id:selected,end:all.as_of},undefined,"/savings")).json() : null;
+  return <article className="savings-founder"><a href="/tank">← Tank</a><p>Founder · {all.region}</p><h1>Client savings</h1><p>Choose Everything, All clients, a named client, or Tervory. Graphs count defensible comparisons; all excluded rows and recorded costs remain available below.</p>
     <BaselineControls initial={await readBaselineSettings()}/>
-    <ClientSet data={all} title="All clients"/>
-    <form action="/tank/proof" method="get"><label>Client<select aria-label="Client" name="tenant_id" defaultValue={selected ?? "all"}><option value="all">Choose a client</option>{all.tenants.map(id => <option key={id} value={id}>{names.tenant_names[id]}</option>)}</select></label><button type="submit">Show client</button></form>
+    <form action="/tank/proof" method="get"><label>Client<select aria-label="Client" name="tenant_id" defaultValue={selected ?? "all"}><option value="all">Everything</option><option value="clients">All clients</option>{all.tenants.map(id => <option key={id} value={id}>{names.tenant_names[id]}</option>)}</select></label><button type="submit">Show client</button></form>
     {names.tenant_names_note && <p role="status">{names.tenant_names_note}</p>}
-    {one && <ClientSet data={one} title={names.tenant_names[one.tenant_id] ?? "Unlinked account"}/>}
+    <ClientSet data={one ?? all} title={selected==="all" ? "Everything" : selected==="clients" ? "All clients" : names.tenant_names[selected] ?? "Unlinked account"}/>
   </article>;
 }

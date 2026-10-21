@@ -91,6 +91,9 @@ async def sync_prices(conn, book: dict) -> None:
     async with conn.transaction():
         await conn.execute('UPDATE tank.proof_prices SET active=false WHERE active')
         for name, p in book.items():
+            await conn.execute("""INSERT INTO tank.baseline_price_changes(model,old_input,old_output,new_input,new_output)
+                SELECT $1,input_usd,output_usd,$2,$3 FROM tank.proof_prices WHERE model=$1
+                AND (input_usd,output_usd) IS DISTINCT FROM ($2,$3)""",name,p['input'],p['output'])
             await conn.execute('''INSERT INTO tank.proof_prices(model,family,input_usd,output_usd)
                 VALUES ($1,$2,$3,$4) ON CONFLICT(model) DO UPDATE SET family=$2,input_usd=$3,output_usd=$4,
                 active=true,updated_at=CASE WHEN (tank.proof_prices.input_usd,tank.proof_prices.output_usd)
@@ -118,11 +121,11 @@ async def scheduled_backfill(pool, region: str, price_fp: str) -> None:
         return
     if not state or state['bench_price_fingerprint'] != price_fp:
         # Retry previously unavailable prices in bounded batches only on price change.
-        unpriced = await pool.fetch("SELECT DISTINCT tenant_id FROM tank.ledger WHERE region=$1 AND baseline_status='unpriced'", region)
+        unpriced = await pool.fetch("SELECT DISTINCT tenant_id FROM tank.ledger WHERE region=$1 AND (baseline_status='unpriced' OR (standard_cost_usd IS NOT NULL AND top_cost_usd IS NULL AND baseline_status<>'pending'))", region)
         for row in unpriced:
             while True:
                 changed = await pool.execute("""WITH batch AS (
-                    SELECT id FROM tank.ledger WHERE tenant_id=$1 AND region=$2 AND baseline_status='unpriced'
+                    SELECT id FROM tank.ledger WHERE tenant_id=$1 AND region=$2 AND (baseline_status='unpriced' OR (standard_cost_usd IS NOT NULL AND top_cost_usd IS NULL AND baseline_status<>'pending'))
                     ORDER BY id LIMIT 5000 FOR UPDATE SKIP LOCKED)
                     UPDATE tank.ledger l SET baseline_status='pending' FROM batch b
                     WHERE l.id=b.id AND l.tenant_id=$1 AND l.region=$2""", row['tenant_id'], region)

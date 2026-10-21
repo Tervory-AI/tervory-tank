@@ -53,7 +53,7 @@ async def test_provider_defaults_and_no_expensive_fallback(database,monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_reprice_batches_audit_restart_history_and_override_not_headline(database,monkeypatch):
+async def test_reprice_batches_audit_restart_history_and_override_drives_headline(database,monkeypatch):
     pool,rt=database;monkeypatch.setattr(proof,'runtime',lambda:rt)
     tenant=await fixture(pool,5001)
     before=await proof.savings_snapshot(tenant)
@@ -70,10 +70,10 @@ async def test_reprice_batches_audit_restart_history_and_override_not_headline(d
     assert audit['by_user']=='founder-fixture' and audit['old_model']=='sol' and audit['new_model']=='astra'
     assert audit['rows_updated']==5001 and audit['status']=='complete'
     assert await pool.fetchval("SELECT count(*) FROM tank.ledger WHERE baseline_status='re-priced' AND baseline_priced_at>$1",cutoff)==5001
-    assert await pool.fetchval("SELECT count(*) FROM tank.ledger WHERE baseline_model='astra' AND standard_model='sol'")==5001
+    assert await pool.fetchval("SELECT count(*) FROM tank.ledger WHERE baseline_model='astra' AND standard_model='astra'")==5001
     after=await proof.savings_snapshot(tenant)
-    assert Decimal(after['total']['would_have_cost'])==Decimal('.4')*5001
-    assert after['total']['standards']==['sol'] and after['total']['tops']==['astra']
+    assert Decimal(after['total']['would_have_cost'])==Decimal('1')*5001
+    assert after['total']['standards']==['astra'] and after['total']['tops']==['astra']
     # Existing report totals/rows remain exact after repricing, not a changing mixture.
     frozen=await proof.savings_snapshot(tenant,cutoff)
     assert frozen['total']==before['total']
@@ -183,3 +183,72 @@ def test_json_amounts_never_use_scientific_notation():
     # a day containing only free work and the smallest stored token comparison.
     assert proof.savings_encoded({'zero':Decimal('0E-8'),'small':Decimal('1E-8')}) == {
         'zero':'0.00000000','small':'0.00000001'}
+
+
+@pytest.mark.asyncio
+async def test_successful_http_override_audits_actor_and_only_reprices_its_task(database,monkeypatch):
+    pool,rt=database;monkeypatch.setattr(proof,'runtime',lambda:rt)
+    tenant=await fixture(pool)
+    await pool.execute("INSERT INTO tank.policy(task_type,model) VALUES('other.task','luna')")
+    other=await pool.fetchval("""INSERT INTO tank.ledger(tenant_id,agent,task_type,model,tokens_in,cost_usd)
+        VALUES($1,'base','other.task','luna',100,.1) RETURNING id""",tenant)
+    import secrets
+    key=secrets.token_urlsafe(32)
+    monkeypatch.setenv('TANK_API_KEY',key);monkeypatch.setenv('TERVORY_ADMIN_USER_IDS','founder-fixture')
+    app=FastAPI();app.include_router(proof.router)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://fixture') as client:
+        response=await client.post('/v1/proof/baselines',headers={'x-tank-key':key,'x-tervory-admin':'founder-fixture'},json={'task':'baseline.fixture','model':'astra'})
+    assert response.status_code==200 and response.json()['changed']
+    while await proof.baseline_batch(): pass
+    assert await pool.fetchval('SELECT by_user FROM tank.baseline_changes')=='founder-fixture'
+    assert await pool.fetchval("SELECT standard_model FROM tank.ledger WHERE task_type='baseline.fixture'")=='astra'
+    assert await pool.fetchval('SELECT standard_model FROM tank.ledger WHERE id=$1',other)=='sol'
+    assert await pool.fetchval('SELECT reason FROM tank.comparison_history')=='task override'
+    report=await proof.savings_snapshot(tenant)
+    assert report['total']['standards']==['astra'] and Decimal(report['total']['would_have_cost'])==1
+
+
+@pytest.mark.asyncio
+async def test_price_refresh_has_separate_audit_and_retries_missing_top(database,monkeypatch):
+    import bench
+    pool,rt=database;monkeypatch.setattr(proof,'runtime',lambda:rt)
+    tenant=await fixture(pool)
+    await pool.execute('UPDATE tank.ledger SET top_model=NULL,top_cost_usd=NULL')
+    book={r['model']:{'family':r['family'],'input':r['input_usd'],'output':r['output_usd']} for r in await pool.fetch('SELECT * FROM tank.proof_prices')}
+    book['sol']['input']=book['sol']['output']=Decimal('.004')
+    async with pool.acquire() as conn:
+        await bench.sync_prices(conn,book)
+        await bench.sync_prices(conn,book)  # unchanged prices do not duplicate history
+    await bench.scheduled_backfill(pool,'us-east','changed')
+    row=await pool.fetchrow('SELECT * FROM tank.ledger WHERE tenant_id=$1',tenant)
+    assert row['standard_cost_usd']==Decimal('.4') and row['top_cost_usd']==1
+    assert await pool.fetchval('SELECT count(*) FROM tank.baseline_changes')==0
+    assert await pool.fetchval('SELECT count(*) FROM tank.baseline_price_changes')==1
+    audit=await pool.fetchrow('SELECT * FROM tank.baseline_price_changes')
+    assert audit['model']=='sol' and audit['old_input']==Decimal('.003') and audit['new_input']==Decimal('.004')
+    assert await pool.fetchval('SELECT reason FROM tank.comparison_history')=='price refresh'
+    await bench.scheduled_backfill(pool,'us-east','changed')
+    assert await pool.fetchval('SELECT count(*) FROM tank.comparison_history')==1
+
+
+@pytest.mark.asyncio
+async def test_legacy_migration_is_guarded_and_clears_unused_policy(database,monkeypatch):
+    pool,rt=database;monkeypatch.setattr(proof,'runtime',lambda:rt)
+    await fixture(pool)
+    await pool.execute("DELETE FROM tank.policy_log WHERE detail->>'id'='2026-10-21-core2-baselines'")
+    await pool.execute("UPDATE tank.policy SET baseline_model='astra'")
+    # Model the pre-CORE-2 receipt without firing the re-pricing trigger.
+    await pool.execute('ALTER TABLE tank.ledger DISABLE TRIGGER core2_reprice')
+    await pool.execute('UPDATE tank.ledger SET comparison_revision=0')
+    await pool.execute('ALTER TABLE tank.ledger ENABLE TRIGGER core2_reprice')
+    schema=(Path(__file__).resolve().parents[1]/'tank/schema.sql').read_text()
+    await pool.execute(schema)
+    assert await pool.fetchval('SELECT baseline_model FROM tank.policy') is None
+    assert await pool.fetchval('SELECT count(*) FROM tank.baseline_changes')==1
+    while await proof.baseline_batch(): pass
+    # A repeat must neither scan/queue history again nor repeat the cleanup.
+    await pool.execute("UPDATE tank.policy SET baseline_model='legacy-sentinel'")
+    await pool.execute(schema)
+    assert await pool.fetchval('SELECT count(*) FROM tank.baseline_changes')==1
+    assert await pool.fetchval('SELECT baseline_model FROM tank.policy')=='legacy-sentinel'
+    assert await pool.fetchval("SELECT count(*) FROM tank.policy_log WHERE detail->>'id'='2026-10-21-core2-baselines'")==1

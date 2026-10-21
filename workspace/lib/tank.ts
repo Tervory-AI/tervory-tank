@@ -835,3 +835,11 @@ export async function setCommandSquad(userId: string, tenantId: string, agent: s
     method: "PUT", headers: commandSquadHeaders(userId, tenantId), body: JSON.stringify({ enabled }),
   });
 }
+
+/** CORE-2 only: server-resolved identity wins over every caller query field. */
+export function readClientSavings<T>(tenantId: string, endpoint: "" | "/rows" | "/revision" = "", query: Record<string,string> = {}): Promise<T> {
+  const params = new URLSearchParams();
+  for (const name of ["end","start","until","member","free_only","page"]) if(query[name]) params.set(name,query[name]);
+  params.set("tenant_id",tenantId);
+  return tank<T>(`/v1/client-savings${endpoint}?${params}`,{method:"GET"});
+}

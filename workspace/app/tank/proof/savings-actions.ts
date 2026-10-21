@@ -1,15 +1,14 @@
 "use server";
 
 import { activeTenant } from "@/lib/tenant";
-import { rigProxy } from "@/lib/tank";
+import { readClientSavings as readSavings } from "@/lib/tank";
 import type { RowFilter, Savings, SavingsRows } from "./savings-types";
 
-// Reuse the existing server-only JSON transport in lib/tank.ts. Its path is
-// fixed here; neither tenant nor transport credentials come from the browser.
-async function read<T>(path: string, query: Record<string, string> = {}): Promise<T> {
+// Tenant and transport credentials come only from the server session.
+async function read<T>(path: "" | "/rows" | "/revision", query: Record<string, string> = {}): Promise<T> {
   const tenant = await activeTenant();
   if (!tenant) throw new Error("Please sign in to see your savings.");
-  try { return await rigProxy(`/v1/client-savings${path}`, tenant.tenantId, { query }) as unknown as T; }
+  try { return await readSavings<T>(tenant.tenantId,path,query); }
   catch { throw new Error("Your savings could not be loaded. Please try again."); }
 }
 export async function readClientSavings(): Promise<Savings> { return read(""); }

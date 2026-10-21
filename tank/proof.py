@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import csv
+import time
+from collections import OrderedDict
 import asyncio
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timezone
@@ -11,7 +13,7 @@ import json
 from typing import Any
 import uuid
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Header, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import Response
 
@@ -72,9 +74,11 @@ TOTALS = """count(*)::int AS calls,
 PAGE_SIZE = 100
 
 
-def receipt_source(tenant: str | None, region: str, end: str) -> str:
+def receipt_source(tenant: str | None, region: str, end: str, clients_only: bool = False) -> str:
     """SQL placeholders only; reconstruct the comparison at a report's cutoff."""
     scope = f"({tenant}::uuid IS NULL OR raw.tenant_id={tenant}) AND " if tenant else ''
+    if clients_only:
+        scope += "raw.tenant_id<>'00000000-0000-0000-0000-000000000001'::uuid AND "
     return f"""(SELECT r.* FROM tank.ledger raw LEFT JOIN LATERAL (SELECT comparison FROM tank.comparison_history h
           WHERE h.ledger_id=raw.id AND h.tenant_id=raw.tenant_id AND h.region=raw.region
             AND h.valid_from <= {end} AND h.valid_until > {end} ORDER BY h.valid_until LIMIT 1) h ON true
@@ -83,7 +87,7 @@ def receipt_source(tenant: str | None, region: str, end: str) -> str:
 
 
 async def snapshot(tenant: uuid.UUID | None, task: str | None = None,
-                   start: datetime | None = None, end: datetime | None = None, page: int = 0) -> dict:
+                   start: datetime | None = None, end: datetime | None = None, page: int = 0, clients_only: bool = False) -> dict:
     region = runtime().box_region()
     end = end or datetime.now(timezone.utc)
     if end.tzinfo is None:
@@ -99,19 +103,22 @@ async def snapshot(tenant: uuid.UUID | None, task: str | None = None,
     args = (tenant, region, task, start, end)
     where = f"{SCOPE} AND {WINDOW} AND {LIVE}"
     async with runtime().pool().acquire() as conn, conn.transaction(isolation='repeatable_read', readonly=True):
-        tasks = [dict(r) for r in await conn.fetch(f"SELECT task_type,{TOTALS} FROM {receipt_source('$1','$2','$5')} receipts WHERE {where} GROUP BY task_type ORDER BY task_type", *args)]
-        all_total = dict(await conn.fetchrow(f"SELECT {TOTALS} FROM {receipt_source(None,'$1','$2')} receipts WHERE region=$1 AND ts < $2 AND {LIVE}", region, end))
-        tenants = [str(r['tenant_id']) for r in await conn.fetch('SELECT DISTINCT tenant_id FROM tank.ledger WHERE region=$1 ORDER BY tenant_id', region)]
+        tasks = [dict(r) for r in await conn.fetch(f"SELECT task_type,{TOTALS} FROM {receipt_source('$1','$2','$5',clients_only)} receipts WHERE {where} GROUP BY task_type ORDER BY task_type", *args)]
+        all_total = dict(await conn.fetchrow(f"SELECT {TOTALS} FROM {receipt_source(None,'$1','$2',clients_only)} receipts WHERE region=$1 AND ts < $2 AND {LIVE}", region, end))
+        tenants = [str(r['tenant_id']) for r in await conn.fetch("SELECT DISTINCT tenant_id FROM tank.ledger WHERE region=$1 UNION SELECT '00000000-0000-0000-0000-000000000001'::uuid ORDER BY tenant_id", region)]
         ledger = [dict(r) for r in await conn.fetch(f"""SELECT l.id,l.tenant_id,l.ts,l.task_type,l.agent,l.model,l.rung,l.tokens_in,l.tokens_out,
             CASE WHEN l.research_cost_status='unknown' THEN NULL ELSE l.cost_usd END AS cost_usd,l.research_cost_status,l.baseline_model,l.baseline_cost_usd,l.baseline_status,l.baseline_priced_at,l.cache_hit,l.outcome,
             l.standard_cost_usd-l.cost_usd AS saved_usd, l.standard_model,l.standard_cost_usd,l.top_model,l.top_cost_usd,
             l.baseline_cost_usd < l.cost_usd AS baseline_below_actual,
             (SELECT a.family<>b.family FROM tank.proof_prices a,tank.proof_prices b
              WHERE a.model=l.model AND b.model=l.baseline_model) AS baseline_family_mismatch
-            FROM {receipt_source('$1','$2','$5')} l WHERE {where} ORDER BY ts DESC,id DESC LIMIT $6 OFFSET $7""", *args, PAGE_SIZE+1, page*PAGE_SIZE)]
+            FROM {receipt_source('$1','$2','$5',clients_only)} l WHERE {where} ORDER BY ts DESC,id DESC LIMIT $6 OFFSET $7""", *args, PAGE_SIZE+1, page*PAGE_SIZE)]
         shadow_from = """FROM tank.shadow s JOIN tank.ledger l ON l.id=s.ledger_id AND l.tenant_id=s.tenant_id
             WHERE ($1::uuid IS NULL OR s.tenant_id=$1) AND l.region=$2 AND ($3::text IS NULL OR s.task_type=$3)
             AND ($4::timestamptz IS NULL OR l.ts >= $4) AND l.ts < $5"""
+        if clients_only:
+            shadow_from += " AND s.tenant_id<>'00000000-0000-0000-0000-000000000001'::uuid"
+        client_scope = " AND tenant_id<>'00000000-0000-0000-0000-000000000001'::uuid" if clients_only else ''
         comparisons = [dict(r) for r in await conn.fetch("""SELECT s.task_type,s.primary_model,s.candidate_model,
             count(*)::int AS samples,avg(s.agreement) AS agreement,sum(s.primary_cost_usd) AS primary_cost_usd,
             sum(s.candidate_cost_usd) AS could_have_cost_usd """+shadow_from+" GROUP BY s.task_type,s.primary_model,s.candidate_model", *args)]
@@ -120,14 +127,14 @@ async def snapshot(tenant: uuid.UUID | None, task: str | None = None,
             " ORDER BY l.ts DESC,s.id DESC LIMIT $6 OFFSET $7", *args, PAGE_SIZE+1, page*PAGE_SIZE)]
         runs = [dict(r) for r in await conn.fetch(f"""SELECT id,tenant_id,task_type,model,comparison_model,suite_hash,expected_n,
             score,cost_per_call,status,error,started_at,finished_at FROM tank.bench_runs
-            WHERE {SCOPE} AND ($4::timestamptz IS NULL OR started_at >= $4) AND started_at < $5
+            WHERE {SCOPE}{client_scope} AND ($4::timestamptz IS NULL OR started_at >= $4) AND started_at < $5
             ORDER BY started_at DESC,id DESC LIMIT $6 OFFSET $7""", *args, PAGE_SIZE+1, page*PAGE_SIZE)]
-        cases = [dict(r) for r in await conn.fetch("""SELECT c.id,c.tenant_id,c.run_id,r.task_type,r.model,c.case_ref,c.case_kind,
+        cases = [dict(r) for r in await conn.fetch(f"""SELECT c.id,c.tenant_id,c.run_id,r.task_type,r.model,c.case_ref,c.case_kind,
             c.ledger_id,c.score,c.reserved_usd,c.charged_usd,c.status,c.created_at,
             l.cost_usd,l.tokens_in,l.tokens_out,l.outcome
             FROM tank.bench_calls c JOIN tank.bench_runs r ON r.id=c.run_id AND r.tenant_id=c.tenant_id AND r.region=c.region
             LEFT JOIN tank.ledger l ON l.id=c.ledger_id AND l.tenant_id=c.tenant_id AND l.region=c.region
-            WHERE ($1::uuid IS NULL OR c.tenant_id=$1) AND c.region=$2 AND ($3::text IS NULL OR r.task_type=$3)
+            WHERE ($1::uuid IS NULL OR c.tenant_id=$1) AND c.region=$2 {client_scope.replace('tenant_id','c.tenant_id')} AND ($3::text IS NULL OR r.task_type=$3)
             AND ($4::timestamptz IS NULL OR c.created_at >= $4) AND c.created_at < $5
             ORDER BY c.created_at DESC,c.id DESC LIMIT $6 OFFSET $7""", *args, PAGE_SIZE+1, page*PAGE_SIZE)]
         policies = [dict(r) for r in await conn.fetch("""SELECT p.tenant_id,p.task_type,p.model,p.candidate_model,p.auto_promote,
@@ -156,7 +163,7 @@ async def snapshot(tenant: uuid.UUID | None, task: str | None = None,
     sections = dict(ledger=ledger,shadows=shadows,runs=runs,cases=cases,promotions=promotions)
     more = {name: len(rows)>PAGE_SIZE for name,rows in sections.items()}
     page_rows = ledger[:PAGE_SIZE]
-    return jsonable_encoder({'headline': headline_text(all_total if tenant is None and task is None and start is None else {key:sum(money(t.get(key)) for t in tasks) for key in ['compared_actual_usd','baseline_usd','top_actual_usd','top_baseline_usd']} , sorted({n for t in tasks for n in (t.get('standards') or [])}), sorted({n for t in tasks for n in (t.get('tops') or [])})), 'tenant_id': str(tenant) if tenant else 'all', 'region': region,
+    return jsonable_encoder({'headline': headline_text(all_total if tenant is None and task is None and start is None else {key:sum(money(t.get(key)) for t in tasks) for key in ['compared_actual_usd','baseline_usd','top_actual_usd','top_baseline_usd']} , sorted({n for t in tasks for n in (t.get('standards') or [])}), sorted({n for t in tasks for n in (t.get('tops') or [])})), 'tenant_id': str(tenant) if tenant else ('clients' if clients_only else 'all'), 'region': region,
         'tenants': tenants, 'all_tenant_total': {**all_total, **comparison_numbers(all_total.get('compared_actual_usd'),all_total.get('baseline_usd'))}, 'tasks': tasks,
         **{name: rows[:PAGE_SIZE] for name,rows in sections.items()}, 'policies': policies, 'state': state,
         'window': {'start': start, 'end': end}, 'page': page, 'page_size': PAGE_SIZE, 'has_more': more,
@@ -165,8 +172,8 @@ async def snapshot(tenant: uuid.UUID | None, task: str | None = None,
 
 @router.get('')
 async def proof(tenant_id: uuid.UUID | None = None, task: str | None = Query(default=None, max_length=200),
-                start: datetime | None = None, end: datetime | None = None, page: int = Query(default=0, ge=0, le=100000)) -> dict:
-    return await snapshot(tenant_id, task, start, end, page)
+                start: datetime | None = None, end: datetime | None = None, page: int = Query(default=0, ge=0, le=100000), clients_only: bool = False) -> dict:
+    return await snapshot(tenant_id, task, start, end, page, clients_only)
 
 
 def csv_export(data: dict) -> str:
@@ -226,11 +233,11 @@ def pdf_export(data: dict) -> bytes:
 
 @router.get('/export/{format}')
 async def export(format: str, tenant_id: uuid.UUID | None = None, task: str | None = Query(default=None, max_length=200),
-                 start: datetime | None = None, end: datetime | None = None, page: int = Query(default=0, ge=0, le=100000)) -> Response:
+                 start: datetime | None = None, end: datetime | None = None, page: int = Query(default=0, ge=0, le=100000), clients_only: bool = False) -> Response:
     from fastapi import HTTPException
     if format not in ('csv','pdf'):
         raise HTTPException(404, 'not found')
-    data = await snapshot(tenant_id, task, start, end, page)
+    data = await snapshot(tenant_id, task, start, end, page, clients_only)
     content = csv_export(data) if format=='csv' else pdf_export(data)
     return Response(content, media_type='text/csv' if format=='csv' else 'application/pdf',
                     headers={'Content-Disposition': f'attachment; filename="tank-proof.{format}"', 'Cache-Control': 'no-store'})
@@ -239,7 +246,7 @@ async def export(format: str, tenant_id: uuid.UUID | None = None, task: str | No
 # CORE-2: a single, conservative population powers graphs and their drill-downs.
 # A job link is required so every amount can be explained without exposing call IDs.
 # No-token tools/cache can prove zero cost without a model-family comparison.
-SAVINGS_CTE = "WITH receipts AS (SELECT * FROM "+receipt_source('$1','$2','$3')+" r"+"""), linked AS (
+SAVINGS_BODY = """), linked AS (
     SELECT l.*, t.id AS job_id, t.title AS job_title,
       (l.cost_usd=0 AND l.tokens_in=0 AND l.tokens_out=0
        AND (l.rung=3 OR l.cache_hit) AND l.outcome='delivered') AS free_work,
@@ -277,6 +284,10 @@ SAVINGS_CTE = "WITH receipts AS (SELECT * FROM "+receipt_source('$1','$2','$3')+
         WHEN 'radix' THEN 'Radix' ELSE 'Other work' END AS member
     FROM linked
 ), eligible AS (SELECT * FROM checked WHERE excluded_reason IS NULL) """
+def savings_cte(clients_only: bool = False) -> str:
+    return "WITH receipts AS (SELECT * FROM "+receipt_source('$1','$2','$3',clients_only)+" r"+SAVINGS_BODY
+
+
 SAVINGS_TOTALS = """count(*)::int AS work_count, count(DISTINCT job_id)::int AS jobs_count,
     coalesce(sum(cost_usd),0) AS spent, coalesce(sum(standard_cost_usd),0) AS would_have_cost,
     coalesce(sum(standard_cost_usd-cost_usd),0) AS saved,
@@ -339,17 +350,18 @@ def savings_end(end: datetime | None) -> datetime:
 
 
 async def savings_snapshot(tenant: uuid.UUID | None, end: datetime | None = None,
-                           founder: bool = False) -> dict:
+                           founder: bool = False, clients_only: bool = False) -> dict:
+    cte = savings_cte(clients_only)
     end = savings_end(end)
     args = (tenant, runtime().box_region(), end)
     async with runtime().pool().acquire() as conn, conn.transaction(isolation='repeatable_read', readonly=True):
-        total = dict(await conn.fetchrow(SAVINGS_CTE+f'SELECT {SAVINGS_TOTALS} FROM eligible', *args))
-        month = dict(await conn.fetchrow(SAVINGS_CTE+f"SELECT {SAVINGS_TOTALS} FROM eligible WHERE ts >= $4",
+        total = dict(await conn.fetchrow(cte+f'SELECT {SAVINGS_TOTALS} FROM eligible', *args))
+        month = dict(await conn.fetchrow(cte+f"SELECT {SAVINGS_TOTALS} FROM eligible WHERE ts >= $4",
                                         *args, end.replace(day=1,hour=0,minute=0,second=0,microsecond=0)))
-        daily = [dict(r) for r in await conn.fetch(SAVINGS_CTE+f"""SELECT (ts AT TIME ZONE 'UTC')::date::text AS day,
+        daily = [dict(r) for r in await conn.fetch(cte+f"""SELECT (ts AT TIME ZONE 'UTC')::date::text AS day,
             {SAVINGS_TOTALS}, sum(sum(standard_cost_usd-cost_usd)) OVER (ORDER BY (ts AT TIME ZONE 'UTC')::date) AS cumulative
             FROM eligible GROUP BY (ts AT TIME ZONE 'UTC')::date ORDER BY day""", *args)]
-        members = [dict(r) for r in await conn.fetch(SAVINGS_CTE+f'SELECT member,{SAVINGS_TOTALS} FROM eligible GROUP BY member ORDER BY member', *args)]
+        members = [dict(r) for r in await conn.fetch(cte+f'SELECT member,{SAVINGS_TOTALS} FROM eligible GROUP BY member ORDER BY member', *args)]
         revision = await conn.fetchrow('SELECT count(*) AS n,max(finished_at) AS last FROM tank.tasks WHERE ($1::uuid IS NULL OR tenant_id=$1) AND finished_at IS NOT NULL', tenant)
         data = dict(as_of=end, total=decorate_savings(total), month=decorate_savings(month), daily=[decorate_savings(d) for d in daily], members=[decorate_savings(m) for m in members], revision=f"{revision['n']}:{revision['last']}")
         if founder:
@@ -359,12 +371,12 @@ async def savings_snapshot(tenant: uuid.UUID | None, end: datetime | None = None
                 count(*) FILTER (WHERE research_cost_status='unknown')::int AS unknown_costs,
                 coalesce(sum(standard_cost_usd),0) AS baseline, array_remove(array_agg(DISTINCT standard_model),NULL) AS standards,
                 count(*) FILTER (WHERE standard_cost_usd IS NULL)::int AS unknown_baselines"""
-            costs = dict(await conn.fetchrow(SAVINGS_CTE+f'SELECT {cost_totals} FROM checked', *args))
-            cost_days = [dict(r) for r in await conn.fetch(SAVINGS_CTE+f"SELECT (ts AT TIME ZONE 'UTC')::date::text AS day,{cost_totals} FROM checked GROUP BY (ts AT TIME ZONE 'UTC')::date ORDER BY day", *args)]
+            costs = dict(await conn.fetchrow(cte+f'SELECT {cost_totals} FROM checked', *args))
+            cost_days = [dict(r) for r in await conn.fetch(cte+f"SELECT (ts AT TIME ZONE 'UTC')::date::text AS day,{cost_totals} FROM checked GROUP BY (ts AT TIME ZONE 'UTC')::date ORDER BY day", *args)]
             tenants = [str(r['tenant_id']) for r in await conn.fetch("""SELECT DISTINCT tenant_id FROM tank.ledger WHERE region=$1
                 UNION SELECT $2::uuid ORDER BY tenant_id""", args[1], uuid.UUID('00000000-0000-0000-0000-000000000001'))]
-            excluded = [dict(r) for r in await conn.fetch(SAVINGS_CTE+'SELECT excluded_reason,count(*)::int AS count FROM checked WHERE excluded_reason IS NOT NULL GROUP BY excluded_reason ORDER BY excluded_reason', *args)]
-            data.update(tenant_id=str(tenant) if tenant else 'all', tenants=tenants, region=args[1], excluded=excluded,
+            excluded = [dict(r) for r in await conn.fetch(cte+'SELECT excluded_reason,count(*)::int AS count FROM checked WHERE excluded_reason IS NOT NULL GROUP BY excluded_reason ORDER BY excluded_reason', *args)]
+            data.update(tenant_id=str(tenant) if tenant else ('clients' if clients_only else 'all'), tenants=tenants, region=args[1], excluded=excluded,
                         margin=dict(status='no billing data yet', paid=None, margin=None, margin_percent=None,
                                     total=costs, daily=cost_days))
     return savings_encoded(data)
@@ -373,7 +385,8 @@ async def savings_snapshot(tenant: uuid.UUID | None, end: datetime | None = None
 async def savings_rows(tenant: uuid.UUID | None, end: datetime, page: int = 0,
                        start: datetime | None = None, until: datetime | None = None,
                        member: str | None = None, free_only: bool = False,
-                       population: str = 'eligible') -> dict:
+                       population: str = 'eligible', clients_only: bool = False, founder: bool = False) -> dict:
+    cte = savings_cte(clients_only)
     end = savings_end(end)
     # Population comes only from the founder-authorized endpoint, never SQL input.
     source = {'eligible':'eligible', 'excluded':'checked', 'costs':'checked'}[population]
@@ -381,7 +394,7 @@ async def savings_rows(tenant: uuid.UUID | None, end: datetime, page: int = 0,
     where = f"FROM {source} WHERE ($4::timestamptz IS NULL OR ts >= $4) AND ($5::timestamptz IS NULL OR ts < $5) AND ($6::text IS NULL OR member=$6) AND (NOT $7::boolean OR free_work){condition}"
     args = (tenant, runtime().box_region(), end, start, until, member, free_only)
     async with runtime().pool().acquire() as conn, conn.transaction(isolation='repeatable_read', readonly=True):
-        total = dict(await conn.fetchrow(SAVINGS_CTE+f'SELECT {SAVINGS_TOTALS} '+where, *args))
+        total = dict(await conn.fetchrow(cte+f'SELECT {SAVINGS_TOTALS} '+where, *args))
         fields = """job_id,job_title,member,(ts AT TIME ZONE 'UTC')::date::text AS day,
             CASE WHEN research_cost_status='unknown' THEN NULL ELSE cost_usd END AS spent,
             standard_cost_usd AS would_have_cost,standard_cost_usd-cost_usd AS saved,free_work,
@@ -390,34 +403,34 @@ async def savings_rows(tenant: uuid.UUID | None, end: datetime, page: int = 0,
             CASE WHEN top_valid THEN top_cost_usd-cost_usd ELSE NULL END AS top_saved,
             baseline_model AS selected_name,baseline_cost_usd AS selected_cost,quality_compared,
             baseline_status AS comparison_status,baseline_priced_at AS compared_at"""
-        if population != 'eligible':
+        if founder or population != 'eligible':
             fields += ',id,tenant_id,model,baseline_model,baseline_status,excluded_reason'
-        rows = [dict(r) for r in await conn.fetch(SAVINGS_CTE+'SELECT '+fields+' '+where+
+        rows = [dict(r) for r in await conn.fetch(cte+'SELECT '+fields+' '+where+
                 ' ORDER BY ts DESC,id DESC LIMIT $8 OFFSET $9', *args, PAGE_SIZE+1, page*PAGE_SIZE)]
     return savings_encoded(dict(rows=rows[:PAGE_SIZE], total=decorate_savings(total), page=page, has_more=len(rows)>PAGE_SIZE, as_of=end))
 
 
 @router.get('/savings')
-async def founder_savings(tenant_id: uuid.UUID | None = None, end: datetime | None = None) -> dict:
-    return await savings_snapshot(tenant_id, end, founder=True)
+async def founder_savings(tenant_id: uuid.UUID | None = None, end: datetime | None = None, clients_only: bool = False) -> dict:
+    return await savings_snapshot(tenant_id, end, founder=True, clients_only=clients_only)
 
 
 @router.get('/savings/rows')
 async def founder_savings_rows(end: datetime, tenant_id: uuid.UUID | None = None,
         page: int = Query(default=0, ge=0, le=100000), start: datetime | None = None,
         until: datetime | None = None, member: str | None = Query(default=None, max_length=80),
-        free_only: bool = False, population: str = Query(default='eligible', pattern='^(eligible|excluded|costs)$')) -> dict:
-    return await savings_rows(tenant_id, end, page, start, until, member, free_only, population)
+        free_only: bool = False, population: str = Query(default='eligible', pattern='^(eligible|excluded|costs)$'), clients_only: bool = False) -> dict:
+    return await savings_rows(tenant_id, end, page, start, until, member, free_only, population, clients_only, founder=True)
 
 
 @router.get('/savings/export/{format}')
 async def savings_export(format: str, end: datetime, tenant_id: uuid.UUID | None = None,
-                         page: int = Query(default=0, ge=0, le=100000)) -> Response:
+                         page: int = Query(default=0, ge=0, le=100000), clients_only: bool = False) -> Response:
     from fastapi import HTTPException
     if format not in ('csv', 'pdf'):
         raise HTTPException(404, 'not found')
-    report = await savings_snapshot(tenant_id, end, founder=True)
-    evidence = await savings_rows(tenant_id, end, page)
+    report = await savings_snapshot(tenant_id, end, founder=True, clients_only=clients_only)
+    evidence = await savings_rows(tenant_id, end, page, clients_only=clients_only, founder=True)
     # Reuse the bounded, formula-safe, dependency-free evidence exporters.
     data = dict(tenant_id=report['tenant_id'], region=report['region'], as_of=report['as_of'], headline=report['total']['headline'],
                 description='Headline: savings against the named standard model, percent cheaper and times cheaper. Second comparison: vs the named top model. Defensible linked work only; evidence is the selected page.',
@@ -434,24 +447,61 @@ from dashboards import workspace_only
 client_router = APIRouter(prefix='/v1/client-savings', dependencies=[Depends(workspace_only)])
 
 
+# Explicit projection keeps names, receipt metadata and founder-only comparisons
+# out of the client JSON, even if a shared report gains fields later.
+CLIENT_FIELDS = frozenset("as_of revision total month daily members rows page has_more spent would_have_cost saved work_count jobs_count free_count top_cost top_spent top_saved top_count quality_pending quality_note percent_cheaper times_cheaper top_comparison day member cumulative job_id job_title free_work quality_compared".split())
+
+
+def client_payload(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {k:client_payload(v) for k,v in value.items() if k in CLIENT_FIELDS}
+    if isinstance(value, list):
+        return [client_payload(v) for v in value]
+    return value
+
+
+_CLIENT_CACHE: OrderedDict = OrderedDict()
+_CLIENT_PENDING: dict = {}
+
+
+@client_router.get('/revision')
+async def client_savings_revision(tenant_id: uuid.UUID) -> dict:
+    async with runtime().pool().acquire() as conn:
+        row = await conn.fetchrow("""SELECT
+            (SELECT concat(count(*),':',max(finished_at)) FROM tank.tasks WHERE tenant_id=$1) AS jobs,
+            (SELECT concat(count(*),':',max(baseline_priced_at),':',max(ts)) FROM tank.ledger WHERE tenant_id=$1 AND region=$2) AS comparisons,
+            (SELECT concat(count(*),':',max(s.created_at)) FROM tank.shadow s JOIN tank.ledger l ON l.id=s.ledger_id AND l.tenant_id=s.tenant_id WHERE s.tenant_id=$1 AND l.region=$2) AS quality""",tenant_id,runtime().box_region())
+    return {'revision':datetime.now(timezone.utc).date().isoformat()+':'+':'.join(row.values())}
+
+
 @client_router.get('')
 async def client_savings(tenant_id: uuid.UUID) -> dict:
-    return await savings_snapshot(tenant_id)
+    revision=(await client_savings_revision(tenant_id))['revision']
+    key=(runtime().box_region(),str(tenant_id),revision)
+    cached=_CLIENT_CACHE.get(key)
+    if cached and time.monotonic()-cached[0]<300:
+        _CLIENT_CACHE.move_to_end(key)
+        return cached[1]
+    async def build():
+        data=client_payload(await savings_snapshot(tenant_id))
+        data['revision']=revision
+        _CLIENT_CACHE[key]=(time.monotonic(),data)
+        _CLIENT_CACHE.move_to_end(key)
+        while len(_CLIENT_CACHE)>128:
+            _CLIENT_CACHE.popitem(last=False)
+        return data
+    if key not in _CLIENT_PENDING:
+        task=asyncio.create_task(build())
+        _CLIENT_PENDING[key]=task
+        task.add_done_callback(lambda _: _CLIENT_PENDING.pop(key,None))
+    return await asyncio.shield(_CLIENT_PENDING[key])
 
 
 @client_router.get('/rows')
 async def client_savings_rows(tenant_id: uuid.UUID, end: datetime,
         page: int = Query(default=0, ge=0, le=100000), start: datetime | None = None,
         until: datetime | None = None, member: str | None = Query(default=None, max_length=80), free_only: bool = False) -> dict:
-    return await savings_rows(tenant_id, end, page, start, until, member, free_only)
-
-
-@client_router.get('/revision')
-async def client_savings_revision(tenant_id: uuid.UUID) -> dict:
-    # Poll a cheap job watermark, then refresh graphs as soon as a completion is observed.
-    async with runtime().pool().acquire() as conn:
-        row = await conn.fetchrow("SELECT count(*) AS n,max(finished_at) AS last FROM tank.tasks WHERE tenant_id=$1 AND finished_at IS NOT NULL", tenant_id)
-    return {'revision': f"{row['n']}:{row['last']}"}
+    return client_payload(await savings_rows(tenant_id, end, page, start, until, member, free_only))
 
 
 # Founder choices are durable requests; the worker can resume after interruption.
@@ -491,7 +541,8 @@ async def baseline_options() -> dict:
             FROM tank.policy p LEFT JOIN tank.proof_prices a ON a.model=p.model
             LEFT JOIN tank.baseline_settings s ON s.task_type=p.task_type WHERE p.tenant_id IS NULL ORDER BY p.task_type""", runtime().box_region())
         changes=await conn.fetch('SELECT * FROM tank.baseline_changes ORDER BY created_at DESC LIMIT 100')
-    return savings_encoded(dict(tasks=[dict(r) for r in tasks],changes=[dict(r) for r in changes]))
+        prices=await conn.fetch('SELECT * FROM tank.baseline_price_changes ORDER BY changed_at DESC,id DESC LIMIT 100')
+    return savings_encoded(dict(tasks=[dict(r) for r in tasks],changes=[dict(r) for r in changes],prices=[dict(r) for r in prices]))
 
 
 from pydantic import BaseModel, Field
@@ -500,8 +551,12 @@ class BaselineChoice(BaseModel):
     model: str | None = Field(default=None,max_length=200)
 
 
+async def baseline_actor(x_tervory_admin: str = Header(...), _=Depends(require_admin)) -> str:
+    return x_tervory_admin
+
+
 @router.post('/baselines')
-async def change_baseline(choice: BaselineChoice, by: str = Depends(require_admin)) -> dict:
+async def change_baseline(choice: BaselineChoice, by: str = Depends(baseline_actor)) -> dict:
     from fastapi import HTTPException
     async with runtime().pool().acquire() as conn, conn.transaction():
         policy=await conn.fetchrow('SELECT * FROM tank.policy WHERE task_type=$1 AND tenant_id IS NULL FOR UPDATE',choice.task)

@@ -26,22 +26,22 @@ export function ProofView({ data, task }: { data: Proof; task?: string }) {
     return `/tank/proof?${query}#${section}`;
   };
   const query = `&${filters}&page=${data.page}`;
-  const allLink = `/tank/proof?tenant_id=all&end=${encodeURIComponent(data.window.end)}#receipts`;
+  const allLink = `/tank/proof?tenant_id=${data.tenant_id==="clients" ? "clients" : "all"}&end=${encodeURIComponent(data.window.end)}#receipts`;
   const pagination = <nav aria-label="Evidence pages">
     {data.page > 0 && <a href={url(task, "receipts", data.page - 1)}>Previous page</a>}
     <span>Evidence page {data.page + 1} · up to {data.page_size} rows per table</span>
     {Object.values(data.has_more).some(Boolean) && <a href={url(task, "receipts", data.page + 1)}>Next page</a>}
   </nav>;
   return <article className="proof">
-    <header><div><a href="/tank">← Tank</a><p className="proof-kicker">Founder · {data.region} · {data.tenant_id === "all" ? "all tenants" : data.tenant_names[data.tenant_id] ?? "Unlinked account"}</p><h1>Tank proof</h1><p>What we tested, what it cost, and what we saved.</p></div>
+    <header><div><a href="/tank">← Tank</a><p className="proof-kicker">Founder · {data.region} · {data.tenant_id === "all" ? "Everything" : data.tenant_id === "clients" ? "All clients" : data.tenant_names[data.tenant_id] ?? "Unlinked account"}</p><h1>Tank proof</h1><p>What we tested, what it cost, and what we saved.</p></div>
       <nav aria-label="Export evidence"><a href={`/tank/proof/export?format=csv${query}`}>Export CSV</a><a href={`/tank/proof/export?format=pdf${query}`}>Export PDF</a></nav></header>
     <aside>Savings compare the same tokens at baseline prices with actual spend. Backfilled rows use the price book available when filled. Unknown costs and vendor fees have no token baseline and claim no savings. Known vendor fees count only as spend. Bench and shadow spend stay separate. Zero-token cache hits claim no token savings.</aside>
-    <section className="proof-total"><h2>All tenants · savings against the standard model ({baselineNames(data.all_tenant_total.standards)})</h2><p><a href={allLink}>{cheaper(data.all_tenant_total.compared_actual_usd??0,data.all_tenant_total.baseline_usd??0)} than the standard model</a></p><p><a href={allLink}>{cheaper(data.all_tenant_total.top_actual_usd??0,data.all_tenant_total.top_baseline_usd??0)} vs the top model ({baselineNames(data.all_tenant_total.tops)}) · {usd(data.all_tenant_total.top_saved_usd??0)} saved</a></p>
+    <section className="proof-total"><h2>{data.tenant_id==="clients" ? "All clients" : "Everything"} · savings against the standard model ({baselineNames(data.all_tenant_total.standards)})</h2><p><a href={allLink}>{cheaper(data.all_tenant_total.compared_actual_usd??0,data.all_tenant_total.baseline_usd??0)} than the standard model</a></p><p><a href={allLink}>{cheaper(data.all_tenant_total.top_actual_usd??0,data.all_tenant_total.top_baseline_usd??0)} vs the top model ({baselineNames(data.all_tenant_total.tops)}) · {usd(data.all_tenant_total.top_saved_usd??0)} saved</a></p>
       <p><a href={allLink}>{usd(data.all_tenant_total.saved_usd)} vs standard ({baselineNames(data.all_tenant_total.standards)}) · {data.all_tenant_total.calls} calls · {data.all_tenant_total.unpriced_calls} unpriced</a></p>
       {data.all_tenant_total.quality_note && <p>{data.all_tenant_total.quality_note}</p>}<p>On this box, through {data.window.end}. Negative savings remain visible.</p></section>
     {data.tenant_names_note && <p role="status">{data.tenant_names_note}</p>}
     <form className="proof-filters" action="/tank/proof" method="get">
-      <label>Tenant<select aria-label="Tenant" name="tenant_id" defaultValue={data.tenant_id}><option value="all">All tenants</option>{data.tenants.map(id => <option key={id} value={id}>{data.tenant_names[id]}</option>)}</select></label>
+      <label>Tenant<select aria-label="Tenant" name="tenant_id" defaultValue={data.tenant_id}><option value="all">Everything</option><option value="clients">All clients</option>{data.tenants.map(id => <option key={id} value={id}>{data.tenant_names[id]}</option>)}</select></label>
       <label>Task<input name="task" defaultValue={task ?? ""} placeholder="All tasks" /></label>
       <label>From (UTC)<input type="datetime-local" name="start" defaultValue={data.window.start?.slice(0,16) ?? ""}/></label>
       <label>Until (UTC, exclusive)<input type="datetime-local" name="end" defaultValue={data.window.end.slice(0,16)}/></label>
@@ -51,7 +51,7 @@ export function ProofView({ data, task }: { data: Proof; task?: string }) {
     {task && <p><a href={url(undefined, "receipts")}>All tasks</a> / {task}</p>}
     {!data.tasks.length && <p>No evidence recorded yet.</p>}
     <div className="proof-cards">{data.tasks.map(row => <section key={row.task_type} className="proof-task"><h2><a href={url(row.task_type, "receipts")}>{row.task_type}</a></h2>
-      <p><a href={url(row.task_type,"receipts")}>{cheaper(row.compared_actual_usd,row.baseline_usd)} than the standard model ({baselineNames(row.standards)})</a></p>
+      <p><a href={url(row.task_type,"receipts")}>{cheaper(row.compared_actual_usd,row.baseline_usd)} vs {baselineNames(row.standards)}</a></p>
       <p><a href={url(row.task_type,"receipts")}>{cheaper(row.top_actual_usd??0,row.top_baseline_usd??0)} vs the top model ({baselineNames(row.tops)}) · {usd(row.top_saved_usd??0)} saved</a></p>
       {row.quality_note && <p>{row.quality_note}</p>}
       <dl><div><dt>Money saved vs standard ({baselineNames(row.standards)})</dt><dd><a href={url(row.task_type,"receipts")}>{usd(row.saved_usd)}</a></dd></div>

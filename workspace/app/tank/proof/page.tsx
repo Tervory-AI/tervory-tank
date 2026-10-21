@@ -13,7 +13,8 @@ export default async function ProofPage({ searchParams }: { searchParams: Promis
   if (identity.role !== "founder") notFound();
   const filters = await searchParams;
   try {
-    return <><FounderSavingsPanel tenant={filters.tenant_id}/><ProofView data={await readProof(filters)} task={filters.task} /></>;
+    const savings = await FounderSavingsPanel({tenant:filters.tenant_id});
+    return <>{savings}<ProofView data={await readProof(filters)} task={filters.task} /></>;
   } catch {
     return <section className="proof"><h1>Tank proof</h1><p role="alert">Proof evidence is unavailable. Try again when Tank is reachable.</p><a href="/tank">Back to Tank</a></section>;
   }

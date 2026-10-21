@@ -15,6 +15,7 @@ export async function proofResponse(filters: ProofFilters & { until?: string; me
   for (const key of ["tenant_id", "task", "start", "end", "page", "until", "member", "population", "free_only"] as const) {
     const value = filters[key];
     if (!value || (key === "tenant_id" && value === "all")) continue;
+    if (key === "tenant_id" && value === "clients") { query.set("clients_only","true"); continue; }
     query.set(key, (key === "start" || key === "end") && !/(Z|[+-]\d\d:\d\d)$/.test(value) ? `${value}Z` : value);
   }
   const response = await fetch(`${process.env.TANK_URL ?? "http://tank:8000"}/v1/proof${endpoint}${format ? `/export/${format}` : ""}?${query}`, {

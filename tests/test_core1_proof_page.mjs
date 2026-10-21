@@ -33,7 +33,7 @@ try { const page=await browser.newPage(); await page.goto(`http://127.0.0.1:${se
   const href=new URL(await saved.getAttribute('href'),'http://fixture');
   assert.equal(href.searchParams.get('task'),'base.extract'); assert.equal(href.searchParams.get('tenant_id'),'all'); assert.equal(href.hash,'#receipts');
   assert.equal(await page.getByLabel('Tenant',{exact:true}).inputValue(),'all');
-  assert.equal(await page.getByLabel('Tenant',{exact:true}).textContent(),'All tenantsTervoryAmmoSync');
+  assert.equal(await page.getByLabel('Tenant',{exact:true}).textContent(),'EverythingAll clientsTervoryAmmoSync');
   for(const name of ['Export PDF','Export CSV']) {
     const exported=new URL(await page.getByRole('link',{name}).getAttribute('href'),'http://fixture');
     assert.equal(exported.searchParams.get('tenant_id'),'all'); assert.equal(exported.searchParams.get('end'),data.window.end);
