@@ -1109,7 +1109,7 @@ async def _roster_models() -> list[dict[str, Any]]:
     if _roster_cache is not None and now - _roster_cache[0] < _ROSTER_TTL_S:
         return _roster_cache[1]
     rows: list[dict[str, Any]] = []
-    if _http is not None:
+    if _http is not None and hasattr(_http, "get"):
         try:
             response = await _http.get(
                 f"{LITELLM_URL}/model/info",
@@ -1125,18 +1125,18 @@ async def _roster_models() -> list[dict[str, Any]]:
                     if row is not None and row["model_name"] not in seen:
                         seen.add(row["model_name"])
                         rows.append(row)
-        except (httpx.HTTPError, ValueError):
+        except Exception:  # noqa: BLE001 - a missing or odd LiteLLM answer falls back to the file roster
             rows = []
-    if not rows:
-        path = _roster_path()
-        if path.is_file():
-            import yaml
-
-            raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-            rows = [row for row in (_roster_row(item) for item in raw.get("model_list") or []) if row]
     if rows:
-        _roster_cache = (now, rows)
-    return rows
+        _roster_cache = (now, rows)  # only LiteLLM's live answer is cached
+        return rows
+    path = _roster_path()
+    if not path.is_file():
+        return []
+    import yaml
+
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return [row for row in (_roster_row(item) for item in raw.get("model_list") or []) if row]
 
 
 async def _live_price_quotes() -> list[graduate.Quote]:

@@ -7,6 +7,7 @@ import os
 from types import SimpleNamespace
 
 import httpx
+import pytest
 
 os.environ.setdefault("DATABASE_URL", "postgresql://x:y@localhost/z")
 os.environ.setdefault("LITELLM_MASTER_KEY", "test")
@@ -16,7 +17,7 @@ SERVED = {
     "data": [
         {
             "model_name": "sol",
-            "litellm_params": {"model": "openai/gpt-6-sol", "api_key": "sk-should-never-leave-tank"},
+            "litellm_params": {"model": "openai/gpt-6-sol", "api_key": "placeholder-value-never-returned"},
             "model_info": {"input_cost_per_token": 0.000002, "output_cost_per_token": 0.00001},
         },
         {
@@ -65,7 +66,7 @@ def test_models_route_lists_served_models_cheapest_first_without_keys() -> None:
                     "input_usd_per_m": 0.1, "output_usd_per_m": 0.5}
     mystery = next(row for row in rows if row["name"] == "mystery")
     assert mystery["input_usd_per_m"] is None and mystery["output_usd_per_m"] is None
-    assert "sk-should-never-leave-tank" not in repr(rows) and "api_key" not in repr(rows)
+    assert "placeholder-value-never-returned" not in repr(rows) and "api_key" not in repr(rows)
     url, headers = fake.calls[0]
     assert url.endswith("/model/info") and headers["Authorization"].startswith("Bearer ")
 
@@ -88,7 +89,7 @@ def test_roster_is_cached_and_feeds_the_price_search() -> None:
         tank._roster_cache = None
     assert len(fake.calls) == 1
     assert {quote.name for quote in quotes} == {"sol", "luna", "mystery"}
-    assert next(q for q in quotes if q.name == "luna").price == 0.0000006
+    assert next(q for q in quotes if q.name == "luna").price == pytest.approx(0.0000006)
 
 
 def test_litellm_down_falls_back_to_the_file_roster_or_nothing() -> None:
@@ -101,3 +102,4 @@ def test_litellm_down_falls_back_to_the_file_roster_or_nothing() -> None:
         tank._roster_cache = None
     assert isinstance(rows, list)
     assert all("api_key" not in repr(row) for row in rows)
+    assert tank._roster_cache is None  # a fallback answer is never cached
