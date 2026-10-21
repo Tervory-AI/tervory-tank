@@ -14,6 +14,7 @@ import {
   scoreLabel,
   versionAction,
   visibleLibrary,
+  versionSections,
   type LibrarySkill,
 } from "../workspace/app/skala/library.ts";
 
@@ -81,7 +82,7 @@ test("descriptions stay on one line and code skills say no model", () => {
 test("actions follow the version state", () => {
   assert.equal(versionAction({ state: "candidate", present: true }), "evals");
   assert.equal(versionAction({ state: "staging", present: true }), "approve");
-  assert.equal(versionAction({ state: "approved", present: true }), "retire");
+  assert.equal(versionAction({ state: "approved", present: true }), null);
   assert.equal(versionAction({ state: "retired", present: true }), null);
   assert.equal(versionAction({ state: "candidate", present: false }), null);
   assert.equal(confirmApprove("base.find_site", "1.7.0"), "Approve base.find_site 1.7.0?");
@@ -138,4 +139,17 @@ test("approving a zenas skill with no 50 of 50 shows the refusal on the row", ()
   assert.ok(row.includes("rowRefusal.text"));
   assert.ok(row.includes("approvalRowText") === false);
   assert.ok(view.includes("approvalRowText"));
+});
+
+test("one skill keeps approved and newest pending visible with collapsed history", () => {
+  const row = skill({id: "base.find_site", version: "1.7.0", agent: "base", state: "approved"});
+  const versions = [
+    {...row, version: "1.5.0", state: "candidate"},
+    {...row, version: "1.7.0", state: "approved"},
+    {...row, version: "1.8.0", state: "staging"},
+    {...row, version: "1.6.0", state: "retired"},
+  ];
+  const sections = versionSections(versions);
+  assert.deepEqual(sections.current.map(v => v.version), ["1.7.0", "1.8.0"]);
+  assert.deepEqual(sections.history.map(v => v.version), ["1.6.0", "1.5.0"]);
 });

@@ -303,6 +303,7 @@ def eval_properties(case: dict[str, Any], output: dict[str, Any], model_configur
 
 async def run_evals(pkg: SkillPackage, make_ctx: Callable[[], SkillContext],
                     execute: Callable[..., Awaitable[dict[str, Any]]] | None = None) -> dict[str, Any]:
+    source_fingerprint = package_hash(pkg)
     details: list[dict[str, Any]] = []
     passed = 0
     cost = 0.0
@@ -340,7 +341,7 @@ async def run_evals(pkg: SkillPackage, make_ctx: Callable[[], SkillContext],
             "goal": goal,
             "result": out,
             "case_hash": evidence_hash(case),
-            "package_hash": package_hash(pkg),
+            "package_hash": source_fingerprint,
             "used_model": getattr(ctx, "calls", 0) > 0,
         })
     total = len(pkg.cases)
@@ -453,7 +454,8 @@ async def review_evidence(conn: Any, pkg: SkillPackage, *, region: str) -> dict[
     reason = await zenas_approval_refusal(conn, pkg.id, region=region)
     reason = reason or (approval_reason(pkg, target, approved, runs, baseline) if target else "Version is missing.")
     return {"id": pkg.id, "version": pkg.version, "reason": reason,
-            "runs": passing_runs(pkg, runs), "room_authored": room_authored(pkg.id),
+            "runs": passing_runs(pkg, runs), "model": bool(pkg.task_type) or pkg.rung in {1, 2}
+            or any(d.get("used_model") for r in runs for d in eval_details(r)), "room_authored": room_authored(pkg.id),
             "fingerprint": evidence_hash([target, approved, runs, baseline, package_hash(pkg), reason])}
 
 

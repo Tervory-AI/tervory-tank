@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { rejectUnlessFounder } from "@/app/review/access";
-import { listSkills, type Skill } from "@/lib/tank";
+import { listSkills, skillApprovalStatus, type Skill } from "@/lib/tank";
 import { activeTenant } from "@/lib/tenant";
 import type { LibrarySkill } from "./library";
 import { SkalaApp } from "./view";
@@ -25,6 +25,7 @@ function asSkill(row: Skill): LibrarySkill {
     last_eval_score: row.last_eval_score,
     last_eval_at: row.last_eval_at,
     present: row.present !== false,
+    approved_at: row.approved_at,
     calls_30d: Number(row.calls_30d ?? 0),
     avg_cost_usd: row.avg_cost_usd ?? null,
   };
@@ -44,7 +45,8 @@ export default async function SkalaPage() {
   let skills: LibrarySkill[] = [];
   let loadError: string | null = null;
   try {
-    skills = (await listSkills()).map(asSkill);
+    const [rows, status] = await Promise.all([listSkills(), skillApprovalStatus()]);
+    skills = rows.map(row => ({...asSkill(row), ...status.find(s => s.id === row.id && s.version === row.version)}));
   } catch {
     loadError = "The library could not be loaded. Reload the page.";
   }

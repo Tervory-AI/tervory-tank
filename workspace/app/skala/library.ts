@@ -13,6 +13,7 @@ export type LibrarySkill = {
   present: boolean;
   approved_at?: string | null;
   runs?: number;
+  model?: boolean;
   reason?: string | null;
   calls_30d?: number | null;
   avg_cost_usd?: number | string | null;

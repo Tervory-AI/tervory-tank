@@ -788,3 +788,35 @@ export function switchProvenModel(userId: string, taskType: string): Promise<{ o
 export function readDashboardCandidates(userId: string): Promise<{ task_type: string; candidate_model: string | null; n: number; agreement: number | null; min_shadow_samples?: number; eligible: boolean; prim_cost?: number | null; cand_cost?: number | null }[]> {
   return tank("/v1/graduation", { method: "GET", headers: { "x-tervory-admin": userId } });
 }
+
+// SKALA-2 founder approval safety. Credentials remain in this server-only client.
+export type SkillApprovalStatus = {
+  id: string; version: string; reason: string | null; runs: number; model: boolean; room_authored: boolean;
+};
+export type SkillApprovalPreview = { token: string; items: SkillApprovalStatus[] };
+export function skillApprovalStatus(): Promise<SkillApprovalStatus[]> {
+  return tank<SkillApprovalStatus[]>("/v1/skala/approvals/status", { method: "GET" });
+}
+export function previewSkillApprovals(by: string): Promise<SkillApprovalPreview> {
+  return tank<SkillApprovalPreview>("/v1/skala/approvals/preview", { method: "POST", body: JSON.stringify({ by }) });
+}
+export function confirmSkillApprovals(by: string, token: string, confirmed: boolean) {
+  return tank<{ ok: boolean; approved: { id: string; version: string }[] }>("/v1/skala/approvals/confirm", {
+    method: "POST", body: JSON.stringify({ by, token, confirmed }),
+  });
+}
+export function reviewSkillSource(id: string, version: string, by: string) {
+  return tank<{ source: string; review_token: string }>(`/v1/skala/${encodeURIComponent(id)}/${encodeURIComponent(version)}/source-review`, {
+    method: "POST", body: JSON.stringify({ by }),
+  });
+}
+export function approveReviewedSkill(id: string, version: string, by: string, review_token: string, confirmed: boolean) {
+  return tank<{ ok: boolean }>(`/v1/skala/${encodeURIComponent(id)}/${encodeURIComponent(version)}/approve`, {
+    method: "POST", body: JSON.stringify({ by, review_token, confirmed }),
+  });
+}
+export function rollbackSkill(id: string, version: string, by: string, confirmed: boolean) {
+  return tank<{ ok: boolean }>(`/v1/skala/${encodeURIComponent(id)}/${encodeURIComponent(version)}/rollback`, {
+    method: "POST", body: JSON.stringify({ by, confirmed }),
+  });
+}

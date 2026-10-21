@@ -327,7 +327,7 @@ export function SkalaApp({
                                 <span className="sk-meta">{scoreLabel(version.last_eval_score)}</span>
                                 {scoreDate(version.last_eval_at) ? <span className="sk-meta">{scoreDate(version.last_eval_at)}</span> : null}
                                 <span className="sk-meta">{costLabel(version)}</span>
-                                {version.runs !== undefined ? <span className="sk-meta">{version.runs}/3 runs</span> : null}
+                                {version.model && version.runs !== undefined ? <span className="sk-meta">{version.runs}/3 runs</span> : null}
                                 {!version.present && version.state !== "approved" ? <span className="sk-gone">This version is no longer in the folder.</span> : null}
                                 {(version.state === "candidate" || version.state === "staging") && version.present ? (
                                   <button type="button" disabled={busyKey !== null} onClick={() => run(version, "evals")}>
@@ -339,7 +339,6 @@ export function SkalaApp({
                                     <button type="button" className="primary" disabled={busyKey !== null} onClick={() => openApprove(version)}>
                                       Approve
                                     </button>
-                                    {rowRefusal?.key === key ? <p className="sk-err sk-row-err" role="alert">{rowRefusal.text}</p> : null}
                                   </>
                                 ) : null}
                                 {version.state === "candidate" || version.state === "staging" ? (
@@ -351,6 +350,7 @@ export function SkalaApp({
                                   <button type="button" disabled={busyKey !== null} onClick={() => openApprove(version, "rollback")}>Roll back to {version.version}</button>
                                 ) : null}
                                 {version.state === "staging" && version.reason ? <p className="sk-row-err">{version.reason}</p> : null}
+                                    {rowRefusal?.key === key ? <p className="sk-err sk-row-err" role="alert">{rowRefusal.text}</p> : null}
                                 {shown?.ok ? (
                                   <div className="sk-cases">
                                     <p>Cases</p>
