@@ -173,6 +173,9 @@ ensure_secrets_dir() {
 }
 
 deploy_code() {
+  # Root never runs or writes anything inside /srv/tervory-workers: the user owns that tree (the
+  # auto-updater replaces it), so root would otherwise follow symlinks or run code it planted.
+  # Root only reads the source checkout and pipes it to tar running as the user.
   local commit=$1 tree=$2 src
   src=$(cd "$(script_dir)/../.." && pwd)
   [ -f "$src/workers/service.py" ] || die "run this from a checkout of tervory-tank"
@@ -183,34 +186,36 @@ deploy_code() {
   fi
   [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || commit=unknown
   [[ "$tree" =~ ^[0-9a-f]{40}$ ]] || tree=""
-  install -d -o "$WORKER_USER" -g "$WORKER_USER" -m 0755 "$SRV_DIR"
+  if [ ! -d "$SRV_DIR" ]; then
+    # Created once by root in root-owned /srv, then handed to the user. Never touched again by root.
+    install -d -o "$WORKER_USER" -g "$WORKER_USER" -m 0755 "$SRV_DIR"
+  fi
+  [ ! -L "$SRV_DIR" ] || die "$SRV_DIR must not be a symlink"
+  [ "$(stat -c %U "$SRV_DIR")" = "$WORKER_USER" ] || die "$SRV_DIR must be owned by $WORKER_USER"
   local stage="$SRV_DIR/app.new"
-  rm -rf "$stage"
-  install -d -m 0755 "$stage"
-  (cd "$src" && tar --exclude='__pycache__' --exclude='*.pyc' -cf - workers) | tar -C "$stage" --no-same-owner -xf -
-  echo "$commit" > "$stage/COMMIT"
-  echo "$tree" > "$stage/WORKERS_TREE"
-  find "$stage" -type d -exec chmod 0755 {} +
-  find "$stage" -type f -exec chmod 0644 {} +
-  find "$stage" -type f -name '*.sh' -exec chmod 0755 {} +
-  chown -R "$WORKER_USER:$WORKER_USER" "$stage"
-  rm -rf "$SRV_DIR/app.old"
-  [ ! -d "$APP_DIR" ] || mv "$APP_DIR" "$SRV_DIR/app.old"
-  mv "$stage" "$APP_DIR"
-  rm -rf "$SRV_DIR/app.old"
+  as_user rm -rf "$stage"
+  as_user mkdir -m 0755 "$stage"
+  (cd "$src" && tar --exclude='__pycache__' --exclude='*.pyc' -cf - workers) | as_user tar -C "$stage" --no-same-owner --no-same-permissions -xf -
+  printf '%s\n' "$commit" | as_user tee "$stage/COMMIT" >/dev/null
+  printf '%s\n' "$tree" | as_user tee "$stage/WORKERS_TREE" >/dev/null
+  as_user find "$stage" -type d -exec chmod 0755 {} +
+  as_user find "$stage" -type f -exec chmod 0644 {} +
+  as_user find "$stage" -type f -name '*.sh' -exec chmod 0755 {} +
+  as_user rm -rf "$SRV_DIR/app.old"
+  if [ -d "$APP_DIR" ]; then as_user mv "$APP_DIR" "$SRV_DIR/app.old"; fi
+  as_user mv "$stage" "$APP_DIR"
+  as_user rm -rf "$SRV_DIR/app.old"
   if [ ! -x "$VENV_DIR/bin/python" ]; then
-    python3 -m venv "$VENV_DIR"
+    as_user python3 -m venv "$VENV_DIR"
   fi
   local want have
-  want=$(sha256sum "$APP_DIR/workers/requirements.txt" | cut -d' ' -f1)
-  have=$(cat "$VENV_DIR/.requirements.sha256" 2>/dev/null || true)
+  want=$(as_user sha256sum "$APP_DIR/workers/requirements.txt" | cut -d' ' -f1)
+  have=$(as_user cat "$VENV_DIR/.requirements.sha256" 2>/dev/null || true)
   if [ "$want" != "$have" ]; then
-    "$VENV_DIR/bin/pip" install -q --disable-pip-version-check -r "$APP_DIR/workers/requirements.txt"
-    echo "$want" > "$VENV_DIR/.requirements.sha256"
+    as_user "$VENV_DIR/bin/pip" install -q --disable-pip-version-check -r "$APP_DIR/workers/requirements.txt"
+    printf '%s\n' "$want" | as_user tee "$VENV_DIR/.requirements.sha256" >/dev/null
   fi
-  chown -R "$WORKER_USER:$WORKER_USER" "$VENV_DIR"
-  chmod -R go-w "$VENV_DIR"
-  say "code in $APP_DIR (commit ${commit:0:12}), venv in $VENV_DIR"
+  say "code in $APP_DIR (commit ${commit:0:12}), venv in $VENV_DIR (both written as $WORKER_USER)"
 }
 
 as_user() {
@@ -223,13 +228,15 @@ as_user() {
 }
 
 install_unit() {
-  local home unit_dir
+  # Unit files go into the user's home through stdin to a process running as the user.
+  local home unit_dir unit
   home=$(getent passwd "$WORKER_USER" | cut -d: -f6)
   unit_dir="$home/.config/systemd/user"
   as_user mkdir -p "$unit_dir"
-  local unit
   for unit in "$UNIT_NAME" "${UPDATE_UNITS[@]}"; do
-    install -o "$WORKER_USER" -g "$WORKER_USER" -m 0644 "$(script_dir)/$unit" "$unit_dir/$unit"
+    as_user tee "$unit_dir/.$unit.new" >/dev/null < "$(script_dir)/$unit"
+    as_user chmod 0644 "$unit_dir/.$unit.new"
+    as_user mv -f "$unit_dir/.$unit.new" "$unit_dir/$unit"
   done
   as_user systemctl --user daemon-reload
 }
@@ -237,7 +244,7 @@ install_unit() {
 check_podman() {
   local info
   info=$(as_user podman info --format json) || die "podman info failed as $WORKER_USER"
-  python3 - "$info" <<'PY' || die "rootless podman is not usable as the worker user (see above)"
+  python3 -I - "$info" <<'PY' || die "rootless podman is not usable as the worker user (see above)"
 import json, sys
 info = json.loads(sys.argv[1])
 host = info.get("host", {})
