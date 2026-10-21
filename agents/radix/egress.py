@@ -1,6 +1,7 @@
 """Egress proxy for the Radix room.
 
-The only approved destination is lokd.co.za on port 443. The proxy resolves
+The approved destinations are lokd.co.za and this account's R2 host, on 443.
+Each has separate byte, duration, concurrency and rate limits. The proxy resolves
 that name, refuses any answer that is not a public address, and connects to
 the one address from that lookup. It does not resolve again. TLS stays between
 the caller and the site: this process tunnels bytes and does not change SNI.
@@ -14,6 +15,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import os
+import re
 import socket
 import ssl
 import sys
@@ -31,7 +33,24 @@ BOUNDS = {
     "max_response_bytes": 1_000_000,
     "max_duration_seconds": 20,
 }
+STORAGE_BOUNDS = {
+    "max_concurrent": 2,
+    "max_requests_per_minute": 120,
+    "max_response_bytes": 64 * 1024 * 1024,
+    "max_duration_seconds": 180,
+}
+R2_DESTINATION = {"host_from_env": "R2_ACCOUNT_ID", "suffix": ".r2.cloudflarestorage.com", "port": 443}
+
+
+def storage_host() -> str:
+    account = os.environ.get("R2_ACCOUNT_ID", "")
+    if re.fullmatch(r"[a-f0-9]{32}", account) is None:
+        raise PolicyError("R2_ACCOUNT_ID is missing or invalid")
+    return account + ".r2.cloudflarestorage.com"
+
+
 _POLICY_KEYS = {
+    "storage_limits",
     "version",
     "ownership",
     "destinations",
@@ -97,8 +116,11 @@ def load_policy(path: str | Path) -> None:
         raise PolicyError("egress policy refused")
     if data["version"] != 1 or data["ownership"] != "approved":
         raise PolicyError("egress policy refused")
-    if data["destinations"] != [{"host": APPROVED_HOST, "port": APPROVED_PORT}]:
+    if data["destinations"] != [{"host": APPROVED_HOST, "port": APPROVED_PORT}, R2_DESTINATION]:
         raise PolicyError("egress policy refused")
+    if data["storage_limits"] != STORAGE_BOUNDS:
+        raise PolicyError("egress policy refused")
+    storage_host()  # Refuse startup without the exact configured account.
     for key, value in BOUNDS.items():
         if data[key] != value:
             raise PolicyError("egress policy refused")
@@ -111,7 +133,12 @@ def env_revoked() -> bool:
 def system_resolve(host: str) -> str:
     """One lookup. Mixed or non-public answers are refused. The result is pinned."""
     if host != APPROVED_HOST:
-        raise ProxyError("destination not approved")
+        try:
+            approved_storage = storage_host()
+        except PolicyError:
+            raise ProxyError("destination not approved") from None
+        if host != approved_storage:
+            raise ProxyError("destination not approved")
     try:
         answers = socket.getaddrinfo(host, APPROVED_PORT, type=socket.SOCK_STREAM)
     except OSError as exc:
@@ -132,7 +159,7 @@ def connect_pinned(address: str, port: int) -> socket.socket:
     return socket.create_connection((address, port), timeout=10)
 
 
-def parse_connect_target(target: str) -> tuple[str, int] | None:
+def parse_connect_target(target: str, r2_host: str = "") -> tuple[str, int] | None:
     if not target or not target.isascii() or "@" in target or "\\" in target or " " in target:
         return None
     if target.startswith("["):
@@ -141,7 +168,7 @@ def parse_connect_target(target: str) -> tuple[str, int] | None:
         return None
     host, port_text = target.split(":", 1)
     host = host.lower().removesuffix(".")
-    if port_text != "443" or host != APPROVED_HOST:
+    if port_text != "443" or not host or host not in {APPROVED_HOST, r2_host}:
         return None
     return host, APPROVED_PORT
 
@@ -172,6 +199,12 @@ class Proxy:
         self._lock = threading.Lock()
         self._times: list[float] = []
         self._active = 0
+        try:
+            self._storage_host = storage_host()
+        except PolicyError:
+            self._storage_host = ""
+        self._storage_active = 0
+        self._storage_times: list[float] = []
 
     def handle(self, conn: socket.socket) -> None:
         try:
@@ -188,27 +221,33 @@ class Proxy:
                     b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n" + body
                 )
                 return
-            if len(parts) < 2 or parts[0] != "CONNECT" or parse_connect_target(parts[1]) is None:
+            target = parse_connect_target(parts[1], self._storage_host) if len(parts) >= 2 else None
+            if parts[0] != "CONNECT" or target is None:
                 self._refuse(conn)
                 return
-            if self._revoked or not self._admit():
+            is_storage = target[0] == self._storage_host
+            if self._revoked or not self._admit(is_storage):
                 self._refuse(conn)
                 return
             upstream: socket.socket | None = None
             try:
-                pinned = self._resolve(APPROVED_HOST)
+                pinned = self._resolve(target[0])
                 if not routable(pinned):
                     self._refuse(conn)
                     return
                 upstream = self._connect(pinned, APPROVED_PORT)
                 conn.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+                # Count bytes already read after CONNECT against the same upload cap.
+                limit = STORAGE_BOUNDS["max_response_bytes"] if is_storage else self._max_bytes
+                if len(rest) > limit:
+                    return
                 if rest:
-                    upstream.sendall(rest[: self._max_bytes])
-                self._relay(conn, upstream)
+                    upstream.sendall(rest)
+                self._relay(conn, upstream, is_storage, len(rest))
             except ProxyError:
                 self._refuse(conn)
             finally:
-                self._release()
+                self._release(is_storage)
                 if upstream is not None:
                     upstream.close()
         except OSError:
@@ -216,9 +255,17 @@ class Proxy:
         finally:
             conn.close()
 
-    def _admit(self) -> bool:
+    def _admit(self, storage: bool = False) -> bool:
         now = self._now()
         with self._lock:
+            if storage:
+                self._storage_times = [stamp for stamp in self._storage_times if now - stamp < 60]
+                if (len(self._storage_times) >= STORAGE_BOUNDS["max_requests_per_minute"]
+                        or self._storage_active >= STORAGE_BOUNDS["max_concurrent"]):
+                    return False
+                self._storage_times.append(now)
+                self._storage_active += 1
+                return True
             self._times = [stamp for stamp in self._times if now - stamp < 60]
             if len(self._times) >= self._max_per_minute or self._active >= self._max_concurrent:
                 return False
@@ -226,8 +273,11 @@ class Proxy:
             self._active += 1
             return True
 
-    def _release(self) -> None:
+    def _release(self, storage: bool = False) -> None:
         with self._lock:
+            if storage:
+                self._storage_active = max(0, self._storage_active - 1)
+                return
             self._active = max(0, self._active - 1)
 
     def _read_headers(self, conn: socket.socket) -> bytes | None:
@@ -262,12 +312,14 @@ class Proxy:
         except OSError:
             return b""
 
-    def _relay(self, client: socket.socket, upstream: socket.socket) -> None:
-        deadline = time.monotonic() + self._max_duration
+    def _relay(self, client: socket.socket, upstream: socket.socket, storage: bool = False, received: int = 0) -> None:
+        duration = STORAGE_BOUNDS["max_duration_seconds"] if storage else self._max_duration
+        limit = STORAGE_BOUNDS["max_response_bytes"] if storage else self._max_bytes
+        deadline = time.monotonic() + duration
         sent = 0
         client.settimeout(0.2)
         upstream.settimeout(0.2)
-        while time.monotonic() < deadline and sent < self._max_bytes:
+        while time.monotonic() < deadline and sent < limit:
             inbound = self._recv(client)
             if inbound is None:
                 inbound = b""
@@ -275,7 +327,11 @@ class Proxy:
                 return
             if inbound:
                 try:
-                    upstream.sendall(inbound[: self._max_bytes])
+                    if storage:
+                        if received + len(inbound) > limit:
+                            return
+                        received += len(inbound)
+                    upstream.sendall(inbound[:limit])
                 except OSError:
                     return
             outbound = self._recv(upstream)
@@ -283,7 +339,7 @@ class Proxy:
                 continue
             if outbound == b"":
                 return
-            room = self._max_bytes - sent
+            room = limit - sent
             outbound = outbound[:room]
             try:
                 client.sendall(outbound)

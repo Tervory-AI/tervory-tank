@@ -310,6 +310,8 @@ async def test_export_za_preserves_identifiers_excludes_holdout_and_inactive_pri
 
 @pytest.mark.asyncio
 async def test_refuse_existing_public_dataset(monkeypatch):
+    from unittest.mock import AsyncMock
+    monkeypatch.setattr(training, "archive_training_snapshot", AsyncMock())
     monkeypatch.setattr(training, "runtime", lambda: SimpleNamespace(box_region=lambda: "us-east"))
     async def handler(request):
         if request.method == "GET":
