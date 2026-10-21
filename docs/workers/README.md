@@ -106,7 +106,7 @@ sudo workers/host/install.sh --subid-start 231072
 
 What it does:
 
-1. Installs `podman`, `uidmap`, `slirp4netns`, `passt` and `python3-venv` from Ubuntu's own repos. It runs `apt-get install -s` first and aborts before any change if apt would install, remove or upgrade anything named `docker*`, `containerd*`, `runc`, `moby*` or `podman-docker`, or would remove any package. `needrestart` is told to list only, so no service (Docker included) is restarted. Already-installed packages are skipped.
+1. Installs `podman`, `crun`, `uidmap`, `slirp4netns`, `passt`, `dbus-user-session` and `python3-venv` from Ubuntu's own repos. It runs `apt-get install -s` first and aborts before any change if apt would install, remove or upgrade anything named `docker*`, `containerd*`, `runc`, `moby*` or `podman-docker`, or would remove any package. `needrestart` is told to list only, so no service (Docker included) is restarted. Already-installed packages are skipped.
 2. Creates the user `tervory-workers`: `nologin` shell, home `0700`, its own group only. It is not in `sudo` or `docker`, and it has no extra groups. The script stops if it finds any of those.
 3. Gives the user the next free 65536-wide subuid/subgid range after the existing ones (on Boston, after `ammosync 100000:65536` and `tngo 165536:65536`, that is `231072:65536`), or the range passed with `--subid-start`. A range that overlaps another user is refused.
 4. Enables lingering (`loginctl enable-linger`) so the user's systemd manager runs without a login. This is the same pattern as `tngo-preview.service`.

@@ -31,7 +31,8 @@ VENV_DIR="$SRV_DIR/venv"
 UNIT_NAME="tervory-workers.service"
 SUBID_COUNT=65536
 SUBID_FLOOR=100000
-APT_PACKAGES=(podman uidmap slirp4netns passt python3 python3-venv)
+# crun explicitly: podman accepts runc too, and Docker's containerd.io ships one. We want crun.
+APT_PACKAGES=(podman crun uidmap slirp4netns passt dbus-user-session python3 python3-venv)
 # Never let apt touch these. podman-docker replaces the docker CLI.
 APT_FORBIDDEN_RE='^(Inst|Remv|Purg|Conf) (docker[^ ]*|containerd[^ ]*|runc|moby[^ ]*|podman-docker)( |$)'
 SECRET_NAMES=(GITHUB_APP_ID GITHUB_APP_INSTALLATION_ID TANK_KEY_WORKERS)
