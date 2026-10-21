@@ -43,3 +43,57 @@ CI green. Tests:
 - the backfill marks rows;
 - proof page numbers match ledger rows;
 - `auto_promote` defaults to false.
+
+## 7. Client savings are compulsory (founder, 21 Oct, 07:19 PT)
+> "No one cares what we saved. They want what *they* saved."
+
+The proof is per client. Every client has one **savings graph set**. The founder sees every client's set on `/tank/proof`. Each client sees the **same set, for their own account only**, live on their dashboard (`/`).
+
+**The graph set (identical components in both places):**
+1. **Spent against "would have cost"**, per day: two lines. Ranges: this month, the last 3 months, the last 12 months.
+2. **Saved to date**: a cumulative line, with the total as the headline number.
+3. **Saved this month**: in money and as a percentage of "would have cost".
+4. **Done at no AI cost**: the share of work done by our own tools or cache, with no model call.
+5. **Saved by team member**: a bar per agent (Base, Tiger, Market Lab and so on), using the agent names already shown in "Your team".
+
+**Founder (`/tank/proof`):**
+- An **all-clients** set at the top.
+- Then **one set per client**, with a client picker. Tervory's own account is one entry in the picker, not the default.
+- **Tervory's margin (founder only, never on a client screen).** What we save is money for us. For all clients, and per client, show:
+  - what the client paid, from the price book and Stripe;
+  - what the work actually cost us;
+  - what it would have cost on the baseline;
+  - our margin: paid minus actual cost, in money and as a percentage, per day and to date.
+
+  Where a client's payments are not yet available, show "no billing data yet", never an estimate.
+- Every number links to its ledger rows. CSV and PDF export per client, so a client's set can be sent as their case study.
+
+**Client (`/`, their own dashboard):**
+- The same five graphs, for their account only. A client can never see another client's numbers: Tank scopes by the signed-in organisation, server-side.
+- **Live:** refreshes at least every 60 seconds, and when a job finishes.
+- Plain words only. The banned words still apply: no model names, no Tank, ledger, shadow or rung.
+- Tapping a number opens a drawer listing their own jobs, with what each cost, what it would have cost, and what they saved. No receipt IDs or model names.
+
+**Only defensible numbers reach a client:**
+- A row whose baseline is flagged (cheaper than actual, from a different family, or unknown) is left out of client totals.
+- It is shown to the founder on `/tank/proof` to fix.
+- A client total must always equal the sum of the rows behind it.
+
+**Files:** this section adds `workspace/app/page.tsx` (the savings section only; leave the rest of DASH-1's layout as it is) and a shared graph component under `workspace/app/tank/proof/`, used by both pages.
+
+**Tests:**
+- A client sees only their own set.
+- The founder sees all of them.
+- The client totals equal their rows.
+- Flagged rows are excluded from client totals but shown to the founder.
+- No banned words on the client graphs.
+- The margin view is founder-only and never appears on a client page.
+- Screenshots at 375px and 1440px.
+
+**Later (not this PR): a live ticker on tervory.com.** The founder wants the all-clients "saved to date" total on the public homepage. Build the totals so that a later lane can expose one aggregate-only figure:
+- money saved for all clients to date, plus the jobs count;
+- defensible rows only;
+- no client names or per-client figures;
+- cached, and safe to call publicly.
+
+Do not build the public endpoint now.

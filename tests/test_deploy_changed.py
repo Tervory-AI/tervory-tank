@@ -76,7 +76,7 @@ def test_a_failed_main_deploy_does_not_touch_the_sa_stack(monkeypatch: pytest.Mo
     assert order == ["main"]
 
 
-def test_a_failed_sa_deploy_does_not_touch_rooms(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_failed_sa_deploy_skips_za_rooms_but_deploys_boston_rooms(monkeypatch: pytest.MonkeyPatch) -> None:
     mod = _script(monkeypatch)
     order: list[tuple[str, str]] = []
     monkeypatch.setattr(mod, "changed_paths", lambda: ["docker-compose.yml", "agents/zenas/app.py"])
@@ -92,12 +92,15 @@ def test_a_failed_sa_deploy_does_not_touch_rooms(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr(mod, "deploy", deploy)
     monkeypatch.setattr(mod, "wait_for", wait_for)
-    assert mod.main() == 1
+    assert mod.main() == 1  # still reported as a failure, so the ZA outage stays visible
     assert order == [
         ("deploy", "main"),
         ("wait", "main"),
         ("deploy", "tervory-tank-za"),
+        ("deploy", "agent-zenas"),
+        ("wait", "agent-zenas"),
     ]
+    assert ("deploy", "agent-zenas-za") not in order
 
 
 def test_a_main_change_with_no_rooms_still_deploys_the_sa_stack(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -116,7 +119,7 @@ def test_a_main_change_with_no_rooms_still_deploys_the_sa_stack(monkeypatch: pyt
     assert order == ["main", "tervory-tank-za"]
 
 
-def test_a_missing_sa_app_stops_before_rooms(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_missing_sa_app_still_deploys_boston_rooms(monkeypatch: pytest.MonkeyPatch) -> None:
     mod = _script(monkeypatch)
     order: list[str] = []
     monkeypatch.setattr(mod, "changed_paths", lambda: ["tank/main.py", "agents/zenas/app.py"])
@@ -129,7 +132,7 @@ def test_a_missing_sa_app_stops_before_rooms(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(mod, "deploy", deploy)
     monkeypatch.setattr(mod, "wait_for", lambda uuid, name, timeout_s=900: True)
     assert mod.main() == 1
-    assert order == ["main"]
+    assert order == ["main", "agent-zenas"]
 
 
 def test_a_room_only_change_does_not_deploy_the_sa_stack(monkeypatch: pytest.MonkeyPatch) -> None:

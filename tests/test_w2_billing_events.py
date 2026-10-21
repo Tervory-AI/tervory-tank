@@ -60,7 +60,11 @@ def _schemas() -> tuple[str, str]:
     assert hashlib.sha256(main_sql.encode()).hexdigest() == MAIN_SCHEMA_SHA256
     assert "billing_events" not in main_sql
     assert "CREATE TABLE IF NOT EXISTS tank.billing_events" in sql[index:]
-    assert "ON CONFLICT" not in sql[index:]
+    # Later additive migrations may seed other tables idempotently. Keep this
+    # guard on billing statements, where schema application must not claim events.
+    billing_statements = [statement for statement in sql[index:].split(";")
+                          if "tank.billing_events" in statement]
+    assert all("ON CONFLICT" not in statement.upper() for statement in billing_statements)
     return main_sql, sql
 
 
