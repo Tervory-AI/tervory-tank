@@ -587,3 +587,44 @@ async def test_unknown_ledger_cost_can_refresh_without_reexecuting_action(api, m
     assert data['thread']['spent_usd'] == 0.06
     assert sum(r['ledger_id'] == str(ledger) for r in data['receipts']) == 1
     dispatch.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_core_baseline_fields_are_used_without_repricing(api, monkeypatch):
+    client, pool = api
+    async with pool.acquire() as conn:
+        await conn.execute("INSERT INTO tank.proof_prices(model,family,input_usd,output_usd) VALUES('fixture-model','fixture',0.001,0.002)")
+    ledger = await seed_ledger(pool, cost=0.02)
+    thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
+    monkeypatch.setattr(command, 'route_turn', AsyncMock(return_value=SimpleNamespace(ledger_id=ledger, content='Measured answer')))
+    await client.post(f'/v1/command/threads/{thread}/turn', json={'text': 'Hello'})
+    receipt = (await client.get(f'/v1/command/threads/{thread}')).json()['receipts'][0]
+    async with pool.acquire() as conn:
+        actual = await conn.fetchrow('SELECT baseline_model,baseline_cost_usd FROM tank.ledger WHERE id=$1', ledger)
+    assert receipt['baseline_model'] == actual['baseline_model']
+    assert receipt['baseline_cost_usd'] == float(actual['baseline_cost_usd']) == 0.05
+    assert receipt['saved_usd'] == pytest.approx(0.03)
+
+
+@pytest.mark.asyncio
+async def test_ledger_view_uses_existing_proof_route_and_scopes_output(api, runtime):
+    client, pool = api
+    runtime.app = client._transport.app
+    received = []
+    ledger_id = uuid.uuid4()
+
+    @runtime.app.get('/v1/proof')
+    async def existing_proof(request: Request):
+        received.append(dict(request.query_params))
+        assert request.headers['x-tervory-admin'] == 'founder'
+        return {'tenants': [str(OTHER)], 'all_tenant_total': {'actual_usd': 999},
+                'ledger': [{'id': str(ledger_id), 'tenant_id': str(TENANT), 'cost_usd': 0.02}],
+                'page': 0, 'has_more': {'ledger': False}}
+
+    actor = command.Actor(TENANT, 'founder', True)
+    status, result = await command.dispatch_action(command.PlannedAction(tool='ledger.receipts', arguments={}), actor)
+    assert status == 200
+    assert received == [{'page': '0', 'tenant_id': str(TENANT)}]
+    assert 'all_tenant_total' not in result and 'tenants' not in result
+    assert result['ledger'][0]['id'] == str(ledger_id)
+    assert command.explicit_ledger_ids(result) == []  # historical rows are not this read's cost

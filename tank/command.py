@@ -199,8 +199,8 @@ def receipt_row(ledger: dict, step_id: str) -> dict:
         "step_id": step_id, "model": ledger["model"],
         "tokens_in": ledger["tokens_in"], "tokens_out": ledger["tokens_out"],
         "cost_usd": cost, "ledger_id": str(ledger["id"]),
-        "baseline_model": baseline_model if not pending else None,
-        "baseline_cost_usd": float(baseline) if not pending else None,
+        "baseline_model": baseline_model,
+        "baseline_cost_usd": float(baseline) if baseline is not None else None,
         "saved_usd": float(baseline) - cost if not pending and cost is not None else None,
         "cost_status": "pending" if cost is None else "recorded",
         "baseline_status": "baseline pending" if pending else "recorded",
@@ -208,7 +208,7 @@ def receipt_row(ledger: dict, step_id: str) -> dict:
 
 
 def totals(rows: list[dict]) -> dict:
-    complete = all(r["baseline_cost_usd"] is not None and r["cost_usd"] is not None for r in rows)
+    complete = all(r["saved_usd"] is not None for r in rows)
     return {
         "cost_usd": sum(r["cost_usd"] for r in rows) if all(r["cost_usd"] is not None for r in rows) else None,
         "baseline_cost_usd": sum(r["baseline_cost_usd"] for r in rows) if complete else None,
@@ -697,6 +697,11 @@ class SavingsArgs(Body):
     days: int = Field(default=30, ge=1, le=365)
 
 
+class ProofArgs(Body):
+    task: str | None = Field(default=None, max_length=200)
+    page: int = Field(default=0, ge=0, le=1000)
+
+
 class BuildArgs(Body):
     brief_markdown: str = Field(min_length=1, max_length=30000)
 
@@ -729,6 +734,7 @@ ADAPTERS = {
     "skala.evals": Adapter("POST", "/v1/skala/{skill_id}/{version}/evals", SkillVersionArgs, "Run skill evaluations", True, "paid_run"),
     "skala.approve": Adapter("POST", "/v1/skala/{skill_id}/{version}/approve", SkillVersionArgs, "Approve a skill version", False, "approve_skill"),
     "skala.retire": Adapter("POST", "/v1/skala/{skill_id}/{version}/retire", SkillVersionArgs, "Retire a skill version", False, "retire"),
+    "ledger.receipts": Adapter("GET", "/v1/proof", ProofArgs, "Read ledger receipts"),
     "ledger.savings": Adapter("GET", "/v1/ledger/summary", SavingsArgs, "Read recorded costs and savings"),
 }
 
@@ -846,7 +852,16 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
         response = await client.request(method, path, params=params, json=body, headers=headers)
     if len(response.content) > 256000:
         raise ValueError("Tool response is too large; outcome needs reconciliation")
-    return response.status_code, response.json()
+    result = response.json()
+    if action.tool == "ledger.receipts" and 200 <= response.status_code < 300:
+        rows = result.get("ledger", [])
+        if not isinstance(rows, list) or any(str(row.get("tenant_id")) != str(actor.tenant_id) for row in rows):
+            raise ValueError("Receipt view returned a foreign tenant")
+        # The founder proof route also includes platform-wide navigation and
+        # totals. This command's view remains scoped to the chosen tenant.
+        result = {"tenant_id": str(actor.tenant_id), "ledger": rows, "page": result.get("page"),
+                  "has_more": result.get("has_more", {}).get("ledger", False)}
+    return response.status_code, result
 
 
 def explicit_ledger_ids(result: Any) -> list[uuid.UUID]:
