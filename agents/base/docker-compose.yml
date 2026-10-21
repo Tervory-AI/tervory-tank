@@ -14,6 +14,10 @@ services:
     cpus: 0.5
     environment:
       AGENT_NAME: base
+      R2_BUCKET: tervory-base
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID_BASE: ${R2_ACCESS_KEY_ID_BASE:-}
+      R2_SECRET_ACCESS_KEY_BASE: ${R2_SECRET_ACCESS_KEY_BASE:-}
       TANK_REGION: us-east
       DATABASE_URL: postgresql://agent_base:${AGENT_DB_PASSWORD_BASE}@postgres:5432/${POSTGRES_DB:-tervory}
       TANK_URL: http://tank:8000

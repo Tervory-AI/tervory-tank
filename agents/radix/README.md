@@ -8,11 +8,11 @@ Own Coolify resource. Base directory `/agents/radix`. Compose location `/docker-
 
 The corridor is `tervory-gw-radix`. It is an **internal** network, created on the server with `docker network create --internal tervory-gw-radix`. On that corridor Radix can reach Tank, Postgres, and Hermes. It has no direct route to the internet.
 
-The only other path is an internal link to `egress-proxy`. That proxy may open `lokd.co.za` on port 443. It refuses every other destination. The room compose is not a deploy.
+The only other path is an internal link to `egress-proxy`. That proxy may open `lokd.co.za` and exactly `<R2_ACCOUNT_ID>.r2.cloudflarestorage.com` on port 443. The account host is built and validated at startup. It refuses every other destination. The room compose is not a deploy.
 
 Login `agent_radix`. Schema `agent_radix`. Key `TANK_KEY_RADIX` on Tank and on Hermes. In the room compose, `RADIX_ALLOWED_HOSTS` is the literal `lokd.co.za`. An empty list still refuses every host.
 
-`agents/radix/net.py` is the only way Radix code makes an HTTP call outside Tank and Hermes. It refuses any host that is not on `RADIX_ALLOWED_HOSTS`. An empty list refuses every host. A real call dials `http://egress-proxy:8080` and no other proxy. The proxy, not the agent, opens the socket to `lokd.co.za` port 443. A scan of handed-over code does not call `net.py`.
+`agents/radix/net.py` guards site HTTP calls outside Tank and Hermes. The chassis storage client separately signs R2 requests and uses that same proxy, with only the RADIX pair and `tervory-radix`. It refuses any host that is not on `RADIX_ALLOWED_HOSTS`. An empty list refuses every host. A real call dials `http://egress-proxy:8080` and no other proxy. The proxy, not the agent, opens the socket to `lokd.co.za` port 443. A scan of handed-over code does not call `net.py`.
 
 ## Scan job
 
@@ -73,10 +73,10 @@ A saved page is not a live site. This check does not open `https://lokd.co.za`. 
 ## RX-2 preparation
 
 [RX-2 controlled egress preparation](RX2-egress-plan.md) records the host approval
-gate, the prepared HTTP checks, and the network tests still required. The only approved external name is `lokd.co.za` (HTTPS, port 443). The agent
+gate, the prepared HTTP checks, and the network tests still required. The approved external names are `lokd.co.za` and the exact account R2 host (HTTPS, port 443). The agent
 stays on the internal corridor plus a link that reaches only `egress-proxy`.
 `egress-proxy` is the only service with a path out, and it refuses every
-destination except that host and port. The room is not deployed by this change.
+destination except those two exact hosts and port. The room is not deployed by this change.
 
 ## First live check
 
@@ -99,3 +99,14 @@ Guard tests run in GitHub Actions with the repository's existing `pytest -q`
 command. A cloud worker can run them directly with
 `pytest -q agents/radix/tests/test_egress_guard.py`; do not run builds on the
 founder's laptop.
+
+## Storage corridor
+
+Explicit `/storage/objects/...` operations use the room key and a tenant UUID.
+No storage request is added to the handed-over-code scan. The R2 destination
+has separate limits: 2 concurrent tunnels, 120 per minute, 64 MiB in each
+direction per tunnel, and 180 seconds. The client caps an object at 32 MiB to
+leave room for TLS and HTTP overhead. `lokd.co.za` keeps its original 2
+concurrent / 6 per minute / 1,000,000 response bytes / 20 second limits.
+Missing account configuration refuses proxy startup; missing room credentials
+refuse storage before any request. The proxy never receives the R2 keys.
