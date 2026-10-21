@@ -1,6 +1,6 @@
 # Base Hermes pilot (AGENT-1)
 
-Draft PR: https://github.com/Tervory-AI/tervory-tank/pull/216
+PR: https://github.com/Tervory-AI/tervory-tank/pull/216
 
 Nous Research Hermes Agent **v0.22.2** is pinned to release commit
 `d923a5eb487a17c0a68801bba9ef0f56c81040a8`.
@@ -95,8 +95,8 @@ the unchanged Dockerfile and billing regressions, Base room tests and real
 Postgres checks. The actual pinned Hermes protocol test passed (two model calls
 and two receipts), the real Chromium isolation test passed, and the actual Hermes
 Docker backend test passed (denied internet, no forwarded key, own work volume).
-All use synthetic fixtures, not a substitute ATF pilot. CI status is linked in
-the PR for its current commit.
+These component checks use synthetic fixtures. The owner-approved integrated
+sandbox pilot below replaces the pre-merge live run; CI links are in the PR.
 
 Opt-in checks run actual containers without model/provider credentials. Build
 `agents/base/Dockerfile.{brain,browser,gateway,sandbox}` with repository-root build
@@ -113,26 +113,66 @@ restricted six-tool list and pipeline continuation. This is **not a live ATF
 pilot**. Container checks exercise actual Chromium, cross-room refusal and the
 actual Hermes Docker backend. They remove only their randomly named resources.
 
-## Live proof after authorized deployment
+## Recorded sandbox pilot
 
-No production deployment is performed by this lane. After founder review and an
-authorized deployment, run the five-container isolation gate documented in
-`docs/cursor/ROOMS.md` before taking real jobs. Existing `TANK_KEY_BASE` must be
-set in Tank and Base; existing Base database and Hermes access must work.
+The owner requested an offline replacement for the pre-merge live pilot: run Tank
+from this branch with recorded LiteLLM answers, a generated throwaway Base room
+key and a small ATF-format fixture. No production key, endpoint or model is used.
 
-Use the Base page to import one small state from the public ATF list (Delaware is
-a suitable bounded pilot), engine `ffl`, preview off. The equivalent existing
-route is `POST /v1/base/run`, with tenant ID, batch, public records and engine.
-Record the source URL, snapshot date, count, task ID, outcome and complete receipt.
-Read `GET /v1/base/batches?tenant_id=...` for `brain_tasks[].receipt`; verify recall
-first, recovery before paid continuation, remember last, and the policy-routed
-thinking ledger rows in `tank.ledger` joined to `tank.agent_receipts`. Query all
-rows with both tenant ID and task ID. Confirm the run's skills are approved and
-browser history is on Base's volume.
+- [Input fixture](pilot/atf-fixture.json): two synthetic Delaware rows.
+- [Recording](pilot/recording.json): actual HTTP calls, room-key validation booleans,
+  recorded model answers, Postgres ledger rows, approved export, loaded skill
+  folders, resulting records and private container identities.
+- [Complete receipt](pilot/receipt.json): recall, approved skills, default pipeline,
+  browser refusal, sandbox action, continuation, thinking costs and remember.
 
-The required live ATF run is **pending**: this managed cloud workspace has no
-existing Base room credential or nonproduction Tank endpoint running this branch.
-The operator has been asked once to inject the existing key through the cloud
-secret mechanism and provide that endpoint. Do not paste keys into chat or logs,
-create a new provider, deploy production, or substitute synthetic evidence for
-that live receipt. Keep the PR draft until the live proof and CI are complete.
+The real Tank app and existing Base pipeline run against a newly created test
+Postgres database. The real Hermes memory API uses its in-memory test store and
+deterministic local embeddings; it includes a second-tenant decoy. Site requests
+return recorded missing-site responses. The pinned upstream agent, its room
+service, Chromium and rootless Docker backend execute normally. Only the test
+database has seeded approved registry entries; source packages remain unchanged.
+LiteLLM prices are synthetic accounting values, not billed spend. Actual model
+spend is zero. An expected browser refusal is retained as a failed tool step;
+it is not represented as a successful public-page fetch.
+
+To reproduce in a managed cloud sandbox, build the four images above, provide a
+throwaway Postgres admin DSN in `POOL_SCHEMA_DATABASE_URL`, and run:
+
+```sh
+AGENT1_PILOT=1 AGENT1_PILOT_OUTPUT=/tmp/base-pilot pytest -q -s tests/test_agent1_pilot.py
+```
+
+The harness generates temporary keys, records no credentials, and removes only
+its randomly named containers, volumes, networks and database on completion.
+
+## How Claude runs the live pilot
+
+**live ATF run: done by Claude on Boston after merge**
+
+This is the assigned post-merge handoff, not a claim that the live run has already
+occurred. This lane does not merge or deploy.
+
+1. After founder merge and authorized Boston deployment, verify the existing
+   Base room key, database role and Hermes connection are configured. Run
+   `python agents/base/check_brain_isolation.py ROOM BRAIN SANDBOX BROWSER GATEWAY`
+   with the five deployed container names. Require every isolation check to pass.
+2. Save a current official ATF state file containing only Delaware rows, retaining
+   its original ATF columns. Record its source URL, snapshot date and row count.
+   Use the authorized tenant and US region. Browser visits are limited to the
+   exact configured `BASE_ALLOWED_HOSTS`; a refusal must remain in the receipt.
+3. Open `https://app.tervory.com/data`, name the batch with state and snapshot date,
+   upload that CSV/TSV, select **FFL engine**, uncheck **preview (allow unapproved
+   skill versions)** and click **Run Base**. The existing server-side equivalent
+   is `POST /v1/base/run` with `tenant_id`, `batch`, `records`, `engine: "ffl"`,
+   `preview: false`, `split_by_state: false`. Keep keys server-side.
+4. Record the returned task ID. Inspect the batch on `/data` and Base's results on
+   `/base`. Read `GET /v1/base/batches?tenant_id=...` through Tank and save the
+   matching `brain_tasks[].receipt`, along with source/snapshot/count/task ID and
+   outcome. The full receipt also lives in `agent_base.tasks.input.brain_receipt`.
+5. Confirm recall is first and tenant-scoped; loaded skills match Skala's approved
+   Base export; default pipeline and free recovery precede continuation; browser
+   actions use Base's volume and container; human checks are recorded; remember
+   is last. Join `tank.ledger` to `tank.agent_receipts` on `ledger_id`, filtering
+   both tenant and task, and verify each thinking call's model, cost, baseline and
+   outcome. Attach the complete live receipt to PR #216 after the run.

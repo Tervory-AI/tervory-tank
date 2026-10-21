@@ -1,0 +1,144 @@
+{
+  "task_id": "5bb3a961-cd84-4f94-bdd1-9fb6a09bd2cd",
+  "tenant_id": "e13ad318-8bc6-4ff5-aa16-bb01bc09db7d",
+  "room": "base",
+  "region": "us-east",
+  "status": "done",
+  "steps": [
+    {
+      "action": "recall",
+      "count": 1,
+      "memory_ids": [
+        "323445b7-7acd-4ac1-a705-a7b716b2cead"
+      ]
+    },
+    {
+      "action": "skills",
+      "approved": [
+        "base.business_data@2.0.0",
+        "base.contacts@1.1.0",
+        "base.extract@2.0.0",
+        "base.find_site@1.7.0",
+        "base.normalize@1.0.0",
+        "base.resolve@1.0.0",
+        "base.scrape_site@1.2.0",
+        "base.socials@1.0.1",
+        "base.verify@1.0.1",
+        "ffl.ingest@1.0.1",
+        "ffl.profile@1.1.0"
+      ]
+    },
+    {
+      "action": "pipeline_run",
+      "status": "done",
+      "summary": "2 enriched (0 ready), 0 failed, model spend $0.0000",
+      "skills": {
+        "base.normalize": "base.normalize@1.0.0",
+        "base.resolve": "base.resolve@1.0.0",
+        "base.find_site": "base.find_site@1.7.0",
+        "base.scrape_site": "base.scrape_site@1.2.0",
+        "base.extract": "base.extract@2.0.0",
+        "base.contacts": "base.contacts@1.1.0",
+        "base.socials": "base.socials@1.0.1",
+        "base.business_data": "base.business_data@2.0.0",
+        "base.verify": "base.verify@1.0.1",
+        "ffl.ingest": "ffl.ingest@1.0.1",
+        "ffl.profile": "ffl.profile@1.1.0"
+      },
+      "cost_usd": 0.0
+    },
+    {
+      "action": "browser",
+      "status": "failed"
+    },
+    {
+      "action": "sandbox",
+      "status": "done",
+      "network": "none",
+      "exit_code": 0
+    },
+    {
+      "action": "pipeline_continue",
+      "status": "done",
+      "summary": "2 enriched (0 ready), 0 failed, model spend $0.0000",
+      "cost_usd": 0.0
+    },
+    {
+      "action": "remember",
+      "memory_id": "b8d55f12-6695-4c95-b4ac-896b6441ba35",
+      "source": "base:task:5bb3a961-cd84-4f94-bdd1-9fb6a09bd2cd"
+    }
+  ],
+  "model_receipts": [
+    {
+      "room": "base",
+      "model": "fixture-recorded",
+      "region": "us-east",
+      "outcome": "delivered",
+      "task_id": "5bb3a961-cd84-4f94-bdd1-9fb6a09bd2cd",
+      "cost_usd": 0.00014,
+      "ledger_id": "37698021-f30a-4d42-bb40-26ef5ca260df",
+      "task_type": "agent.base.think",
+      "tenant_id": "e13ad318-8bc6-4ff5-aa16-bb01bc09db7d",
+      "tokens_in": 100,
+      "latency_ms": 10,
+      "saving_usd": 0.00014,
+      "tokens_out": 20,
+      "baseline_model": "fixture-baseline",
+      "baseline_cost_usd": 0.00028
+    },
+    {
+      "room": "base",
+      "model": "fixture-recorded",
+      "region": "us-east",
+      "outcome": "delivered",
+      "task_id": "5bb3a961-cd84-4f94-bdd1-9fb6a09bd2cd",
+      "cost_usd": 0.00014,
+      "ledger_id": "62da49ed-7f42-46ac-888b-b5d97f2963cc",
+      "task_type": "agent.base.think",
+      "tenant_id": "e13ad318-8bc6-4ff5-aa16-bb01bc09db7d",
+      "tokens_in": 100,
+      "latency_ms": 12,
+      "saving_usd": 0.00014,
+      "tokens_out": 20,
+      "baseline_model": "fixture-baseline",
+      "baseline_cost_usd": 0.00028
+    },
+    {
+      "room": "base",
+      "model": "fixture-recorded",
+      "region": "us-east",
+      "outcome": "delivered",
+      "task_id": "5bb3a961-cd84-4f94-bdd1-9fb6a09bd2cd",
+      "cost_usd": 0.00014,
+      "ledger_id": "29fc5b88-ee0b-4c70-be8b-c2af52c2ee9c",
+      "task_type": "agent.base.think",
+      "tenant_id": "e13ad318-8bc6-4ff5-aa16-bb01bc09db7d",
+      "tokens_in": 100,
+      "latency_ms": 16,
+      "saving_usd": 0.00014,
+      "tokens_out": 20,
+      "baseline_model": "fixture-baseline",
+      "baseline_cost_usd": 0.00028
+    },
+    {
+      "room": "base",
+      "model": "fixture-recorded",
+      "region": "us-east",
+      "outcome": "delivered",
+      "task_id": "5bb3a961-cd84-4f94-bdd1-9fb6a09bd2cd",
+      "cost_usd": 0.00014,
+      "ledger_id": "79e834ab-c28c-49a3-b48c-db04315877da",
+      "task_type": "agent.base.think",
+      "tenant_id": "e13ad318-8bc6-4ff5-aa16-bb01bc09db7d",
+      "tokens_in": 100,
+      "latency_ms": 12,
+      "saving_usd": 0.00014,
+      "tokens_out": 20,
+      "baseline_model": "fixture-baseline",
+      "baseline_cost_usd": 0.00028
+    }
+  ],
+  "summary": "Processed two synthetic Delaware ATF-format rows through Base's existing pipeline. No public websites were found in the recorded fixtures. Browser refusal and sandbox isolation were checked; no live data enrichment is claimed.",
+  "error": null
+}

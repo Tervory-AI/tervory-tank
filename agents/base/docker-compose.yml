@@ -99,7 +99,7 @@ services:
     environment:
       TANK_KEY: ${TANK_KEY_BASE:-}
       TANK_REGION: us-east
-      BASE_ALLOWED_HOSTS: ${BASE_ALLOWED_HOSTS:-www.atf.gov,atf.gov}
+      BASE_ALLOWED_HOSTS: ${BASE_ALLOWED_HOSTS-www.atf.gov,atf.gov}
     volumes:
       - base_browser_data:/browser-data
     networks: [browser]
@@ -121,7 +121,7 @@ services:
     environment:
       TANK_KEY: ${TANK_KEY_BASE:-}
       TANK_REGION: us-east
-      BASE_ALLOWED_HOSTS: ${BASE_ALLOWED_HOSTS:-www.atf.gov,atf.gov}
+      BASE_ALLOWED_HOSTS: ${BASE_ALLOWED_HOSTS-www.atf.gov,atf.gov}
     networks: [gw, browser]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health', timeout=3)"]
