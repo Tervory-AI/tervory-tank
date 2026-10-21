@@ -17,7 +17,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import httpx
-from storage import archive_training_snapshot
+from storage import StorageError, archive_training_snapshot
 from fastapi import APIRouter, Depends, HTTPException
 
 from gold import (PLATFORM_TENANT, Reviewer, add_candidate, encoded, input_hash,
@@ -569,6 +569,7 @@ async def export_once(*, day: date | None = None) -> dict[str, Any]:
         return {"status": "skipped", "reason": "invalid organisation"}
     day = day or datetime.now(timezone.utc).date()
     exported = 0
+    incomplete = False
     async with runtime().pool().acquire() as conn:
         if not await conn.fetchval("SELECT pg_try_advisory_lock(871223)"):
             return {"status": "skipped", "reason": "already running"}
@@ -609,7 +610,14 @@ async def export_once(*, day: date | None = None) -> dict[str, Any]:
                                 payload.append(item)
                     if not payload:
                         continue
-                    await upload_dataset(client, org, agent, day.isoformat(), payload, region)
+                    try:
+                        await upload_dataset(client, org, agent, day.isoformat(), payload, region)
+                    except StorageError:
+                        # Leave this agent unrecorded so the slot retries it,
+                        # while independent rooms can still finish their exports.
+                        incomplete = True
+                        log.warning("Training archive unavailable for agent: %s", agent)
+                        continue
                     for item in payload:
                         if item.get("batch_id"):
                             await conn.execute(
@@ -624,7 +632,7 @@ async def export_once(*, day: date | None = None) -> dict[str, Any]:
                     exported += len(payload)
         finally:
             await conn.execute("SELECT pg_advisory_unlock(871223)")
-    return {"status": "complete", "exported": exported}
+    return {"status": "incomplete" if incomplete else "complete", "exported": exported}
 
 
 async def _batch_removed(conn, tenant: uuid.UUID, batch_id: str | None) -> bool:

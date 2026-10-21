@@ -72,6 +72,10 @@ class Storage:
         self._secret = env.get(f'R2_SECRET_ACCESS_KEY_{suffix}', '')
         if not self._access or not self._secret:
             raise StorageError(f'R2 credentials for {suffix} are missing')
+        own_keys = {f'R2_ACCESS_KEY_ID_{suffix}', f'R2_SECRET_ACCESS_KEY_{suffix}'}
+        if any(name.startswith(('R2_ACCESS_KEY_ID_', 'R2_SECRET_ACCESS_KEY_'))
+               and name not in own_keys for name in env):
+            raise StorageError('Foreign R2 credentials are present in this process')
         if any(ord(c) < 33 or ord(c) > 126 for c in self._access + self._secret):
             raise StorageError('R2 credentials are invalid')
         self.region = env.get('TANK_REGION', 'us-east')

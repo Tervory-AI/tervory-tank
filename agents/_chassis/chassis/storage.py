@@ -68,6 +68,10 @@ class Storage:
         self._secret = env.get(f'R2_SECRET_ACCESS_KEY_{suffix}', '')
         if not self._access or not self._secret:
             raise StorageError(f'R2 credentials for {suffix} are missing')
+        own_keys = {f'R2_ACCESS_KEY_ID_{suffix}', f'R2_SECRET_ACCESS_KEY_{suffix}'}
+        if any(name.startswith(('R2_ACCESS_KEY_ID_', 'R2_SECRET_ACCESS_KEY_'))
+               and name not in own_keys for name in env):
+            raise StorageError('Foreign R2 credentials are present in this process')
         if any(ord(c) < 33 or ord(c) > 126 for c in self._access + self._secret):
             raise StorageError('R2 credentials are invalid')
         self.region = env.get('TANK_REGION', 'us-east')
@@ -78,7 +82,9 @@ class Storage:
             if env.get('RADIX_EGRESS_PROXY') != ROOM_PROXY:
                 raise StorageError('Radix storage requires the room egress proxy')
             proxy = ROOM_PROXY
-        self._http = httpx.AsyncClient(transport=transport, proxy=proxy if transport is None else None,
+        # Proxy byte/time caps apply per tunnel; never reuse a Radix tunnel.
+        limits = httpx.Limits(max_keepalive_connections=0) if owner == 'radix' else httpx.Limits()
+        self._http = httpx.AsyncClient(transport=transport, proxy=proxy if transport is None else None, limits=limits,
                                       timeout=180, trust_env=False, follow_redirects=False)
 
     @property

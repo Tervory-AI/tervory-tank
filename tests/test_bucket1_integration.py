@@ -214,3 +214,83 @@ def test_backup_nightly_configuration_fails_before_wait(monkeypatch):
     monkeypatch.setattr(asyncio, 'sleep', no_wait)
     with pytest.raises(chassis_storage.StorageError):
         run(backup.main('uploads', True))
+
+
+@pytest.mark.parametrize('failed_agent', ['base', 'tiger'])
+@pytest.mark.parametrize('region', ['us-east', 'za'])
+def test_export_storage_failure_isolated_and_retries_only_unfinished_agent(monkeypatch, failed_agent, region):
+    from contextlib import asynccontextmanager
+    from datetime import date
+    import gold
+    agents = ['base', 'tiger', 'zenas']
+    done, batches, archives, hf_agents = set(), set(), [], []
+    unavailable = {failed_agent}
+    monkeypatch.setenv('HF_TOKEN', secrets.token_hex(16))
+    monkeypatch.setenv('HF_ORG', 'fixture')
+    monkeypatch.setattr(gold, 'AGENTS', agents)
+
+    class Connection:
+        async def fetchval(self, query, *args):
+            if 'pg_try_advisory_lock' in query:
+                return True
+            if 'training_exports' in query:
+                return args[1] in done
+            if 'removed_batches' in query:
+                return False
+            pytest.fail('Unexpected database lookup')
+        async def fetch(self, query, *args):
+            if 'DISTINCT tenant_id' in query:
+                return [{'tenant_id': gold.PLATFORM_TENANT}]
+            agent = args[1]
+            return [{'tenant_id': gold.PLATFORM_TENANT, 'region': region,
+                     'holdout': False, 'active': True, 'public': True, 'client_matter': False,
+                     'task_type': agent + '.fixture', 'input': '{}', 'output': '{}',
+                     'batch_id': agent + '-batch', 'currency': None, 'unit': None}]
+        async def execute(self, query, *args):
+            if 'INSERT INTO tank.training_snapshot_batches' in query:
+                batches.add(args[3])
+            elif 'INSERT INTO tank.training_exports' in query:
+                done.add(args[1])
+    @asynccontextmanager
+    async def acquire():
+        yield Connection()
+    rt = SimpleNamespace(pool=lambda: SimpleNamespace(acquire=acquire), box_region=lambda: region)
+    monkeypatch.setattr(training, 'runtime', lambda: rt)
+    async def archive(agent, day, data, **kwargs):
+        archives.append(agent)
+        if agent in unavailable:
+            raise storage.StorageError('Missing storage configuration')
+    monkeypatch.setattr(training, 'archive_training_snapshot', archive)
+    def hf(request):
+        if request.url.path.endswith('/api/repos/create'):
+            agent = json.loads(request.content)['name'].removeprefix('tervory-public-')
+            assert archives[-1] == agent and agent not in unavailable
+            hf_agents.append(agent)
+        return httpx.Response(200, json={'private': True})
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(training.httpx, 'AsyncClient', lambda **kw: real_client(transport=httpx.MockTransport(hf), **kw))
+    async def scenario():
+        day = date(2026, 10, 21)
+        assert await training.export_once(day=day) == {'status': 'incomplete', 'exported': 2}
+        assert done == set(agents) - {failed_agent}
+        assert batches == done
+        assert hf_agents == [agent for agent in agents if agent != failed_agent]
+        assert archives == agents  # Failure never aborts the remaining agents.
+        unavailable.clear()
+        assert await training.export_once(day=day) == {'status': 'complete', 'exported': 1}
+        assert archives == agents + [failed_agent]
+        assert done == batches == set(agents)
+        assert hf_agents[-1] == failed_agent
+    run(scenario())
+
+
+def test_tank_refuses_foreign_pair_presence(monkeypatch):
+    env = {'R2_ACCOUNT_ID': secrets.token_hex(16),
+           'R2_ACCESS_KEY_ID_UPLOADS': secrets.token_hex(16),
+           'R2_SECRET_ACCESS_KEY_UPLOADS': secrets.token_hex(32),
+           'R2_SECRET_ACCESS_KEY_GHOST': ''}
+    def no_http(**kwargs):
+        pytest.fail('Mixed credentials must fail before HTTP')
+    monkeypatch.setattr(httpx, 'AsyncClient', no_http)
+    with pytest.raises(storage.StorageError, match='Foreign R2 credentials'):
+        storage.uploads(environ=env)

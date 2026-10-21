@@ -103,6 +103,7 @@ def test_storage_http_client_has_only_fixed_proxy(monkeypatch, r2_host):
     asyncio.run(scenario())
     assert calls[0]['proxy'] == 'http://egress-proxy:8080'
     assert calls[0]['trust_env'] is False
+    assert calls[0]['limits'].max_keepalive_connections == 0
     assert calls[0]['follow_redirects'] is False
 
 

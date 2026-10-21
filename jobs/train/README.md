@@ -87,14 +87,15 @@ reconstructs the encrypted `.age` file. Any decryption/restore verification is
 a separate founder-controlled operation. No private identity is generated,
 mounted or stored in this repository, its containers, or CI.
 
-`export_snapshot.py` validates public platform rows, writes R2 first and only
-then commits to an already-private Hugging Face dataset. It sends no R2 keys to
-HF. A failed R2 archive prevents any HF call. A failed HF operation can leave
-a valid R2 snapshot. This explicit command remains available separately. Tank's
-automatic exporter now archives the exact existing payload through its owning
-room before any HF request. Tank's own snapshots use UPLOADS. Row selection,
-format, schedule and paid routes are unchanged; an archive failure stops that
-export. A manifest is written last and read back before contacting HF.
+`export_snapshot.py` validates and archives public platform rows in the owning
+room's bucket only. It requires no Hugging Face credentials and never exports
+to HF. Tank remains the sole HF export path, including holdout, removed-batch
+checks and export records. Tank's automatic exporter archives the exact existing
+payload through its owning room before any HF request. Tank's own snapshots use
+UPLOADS. Row selection, format, schedule and paid routes are unchanged; an archive failure stops that
+agent's export while later agents continue. The slot remains incomplete and
+retries unrecorded agents. A manifest is written last and read back before
+contacting HF.
 
 `jobs/train/Dockerfile.backup` builds a dedicated worker image from the repository
 root, with PostgreSQL client tools and age installed. It includes no model or
@@ -131,12 +132,16 @@ quota. An unavailable bucket never appears as an empty bucket.
 ### Founder setup and proof after merge
 
 The main Boston compose declares `r2-backup` behind the `r2-backup` profile.
-Normal deployment leaves it off. It uses only the uploads pair, the existing
-Boston database login, and an encrypted-only spool volume. The founder must
+Normal deployment leaves it off. After deployment, confirm in Coolify and
+Compose profile/service status that `r2-backup` is not running. It uses only the
+uploads pair, the existing Boston database login, and an encrypted-only spool volume. The founder must
 set the public `R2_BACKUP_RECIPIENT` on the worker after merge, verify the
 recipient independently, then explicitly enable/deploy that worker. There is
 no private-key setting or mount. No backup service is added to the ZA stack;
-ZA backups remain a separate founder decision.
+ZA backups remain a separate founder decision. Before switching Boston backups
+on, the founder also decides whether to use a read-only `backup_reader` login
+and a separate backup bucket/token. This PR keeps the approved existing login
+and UPLOADS scope.
 
 Tank exposes `GET /v1/admin/storage/usage`, requiring both the Workspace
 `X-Tank-Key` and a founder `X-Tervory-Admin` identity, matching other admin
@@ -162,8 +167,9 @@ Room writes cross-check the source region and never proxy between boxes.
 After the public recipient is configured and the founder enables the Boston
 worker, run one backup, list its dated `backups/.../manifest.json`, reconstruct
 only the encrypted file and verify all SHA-256 hashes. Decryption is outside
-this worker and CI. In Radix, test the exact R2 host via the proxy, reject
-another account and direct sockets, then scan handed-over code with network
+this worker and CI. Before deploying Radix, set `R2_ACCOUNT_ID` on its proxy:
+startup refuses a missing account and would also cut off lokd.co.za. In Radix, test the exact R2
+host via the proxy, reject another account and direct sockets, then scan handed-over code with network
 calls trapped. Preserve the internal corridor. No production checks, merge,
 or deployment are performed by this PR.
 

@@ -91,7 +91,7 @@ def test_tank_reads_only_uploads_pair():
             reads.append(key)
             return super().get(key, *args)
     reads = []
-    env = Tracked(environment('uploads', **environment('ghost')))
+    env = Tracked(environment('uploads'))
     async def scenario():
         store = Storage('uploads', environ=env)
         await store.close()
@@ -238,7 +238,7 @@ def test_tank_adapter_only_has_uploads_credentials():
             reads.append(key)
             return super().get(key, *args)
     reads = []
-    env = Tracked(environment('uploads', **environment('ghost')))
+    env = Tracked(environment('uploads'))
     async def scenario():
         store = module.uploads(environ=env)
         await store.close()
@@ -271,7 +271,7 @@ def test_archive_restore_checks_hashes_before_replacing_file(tmp_path, monkeypat
     asyncio.run(scenario())
 
 
-def test_training_export_archives_before_hf(tmp_path, monkeypatch):
+def test_training_room_command_archives_without_hf(tmp_path, monkeypatch):
     import importlib.util
     import json
     from types import SimpleNamespace
@@ -284,29 +284,32 @@ def test_training_export_archives_before_hf(tmp_path, monkeypatch):
                      'input': {'public': 'example'}, 'output': {'ok': True}}) + '\n')
     bucket = Bucket('tervory-base')
     monkeypatch.setattr(export, 'Storage', lambda room: Storage(room, environ=environment(room), transport=httpx.MockTransport(bucket.handle)))
-    events = []
-    class API:
-        def __init__(self, **kwargs):
-            assert any(key.endswith('manifest.json') for key in bucket.data)
-            events.append('hf')
-        def dataset_info(self, repo):
-            return SimpleNamespace(private=True, sha='revision')
-        def upload_file(self, **kwargs):
-            assert kwargs['path_or_fileobj'].read() == source.read_bytes()
-            events.append('commit')
-    monkeypatch.setitem(sys.modules, 'huggingface_hub', SimpleNamespace(HfApi=API))
-    monkeypatch.setenv('HF_TOKEN', secrets.token_hex(16))
-    monkeypatch.setenv('HF_ORG', 'test-organization')
+    def no_hf(*args, **kwargs):
+        pytest.fail('A room archive must never use Hugging Face')
+    monkeypatch.setitem(sys.modules, 'huggingface_hub', SimpleNamespace(HfApi=no_hf))
+    monkeypatch.delenv('HF_TOKEN', raising=False)
+    monkeypatch.delenv('HF_ORG', raising=False)
     result = asyncio.run(export.export('base', source, '2026-10-21'))
     assert result['key'].endswith('manifest.json')
-    assert events == ['hf', 'commit']
+    archived = b''.join(value for key, value in bucket.data.items() if not key.endswith('manifest.json'))
+    assert archived == source.read_bytes()
     def unavailable(room):
         raise StorageError('Missing storage credentials')
     monkeypatch.setattr(export, 'Storage', unavailable)
-    events.clear()
     with pytest.raises(StorageError):
         asyncio.run(export.export('base', source, '2026-10-21'))
-    assert not events
+
+
+@pytest.mark.parametrize('owner', sorted(ROOMS | {'uploads'}))
+@pytest.mark.parametrize('prefix', ['R2_ACCESS_KEY_ID_', 'R2_SECRET_ACCESS_KEY_'])
+def test_foreign_credential_presence_refused_before_http(owner, prefix, monkeypatch):
+    wrong = 'TIGER' if owner != 'tiger' else 'BASE'
+    env = environment(owner, **{prefix + wrong: ''})
+    def no_http(**kwargs):
+        pytest.fail('Mixed credential owners must fail before constructing HTTP')
+    monkeypatch.setattr(httpx, 'AsyncClient', no_http)
+    with pytest.raises(StorageError, match='Foreign R2 credentials'):
+        Storage(owner, environ=env)
 
 
 def test_missing_backup_recipient_does_not_start_process_or_create_file(tmp_path, monkeypatch):
