@@ -168,3 +168,10 @@ def test_local_business_precedes_organization_and_contact_budget():
     assert len(encoded) <= 8000
     assert json.loads(encoded)['contact_details']
     assert json.loads(encoded)['links']
+
+
+
+def test_malformed_markup_is_ignored_without_losing_the_page():
+    report = read_page('https://shop.example', '<script type="application/ld+json">{"@type":null}</script><script type="application/ld+json">{"@type":[{}]}</script><a href="http://[broken">Bad URL</a><div style>Call +27 21 555 1234</div>')
+    assert report['links'] == []
+    assert any(detail['value'] == '+27 21 555 1234' for detail in report['contact_details'])

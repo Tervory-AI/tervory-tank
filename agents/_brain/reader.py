@@ -26,7 +26,7 @@ class Parser(HTMLParser):
         self.script = None
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        a = dict(attrs)
+        a = {key: value or "" for key, value in attrs}
         hidden = bool(self.stack and self.stack[-1][1]) or tag in {'style', 'script', 'head', 'template', 'noscript'} or 'hidden' in a or a.get('aria-hidden') == 'true' or bool(re.search(r'display\s*:\s*none|visibility\s*:\s*hidden', a.get('style', ''), re.I))
         if tag == 'html':
             self.language = a.get('lang', '')
@@ -97,7 +97,7 @@ def read_page(url: str, html: str = '', *, text: str | None = None, links: list 
                 structured(item)
         elif isinstance(node, dict):
             types = node.get('@type', [])
-            types = [types] if isinstance(types, str) else types
+            types = [types] if isinstance(types, str) else [item for item in types if isinstance(item, str)] if isinstance(types, list) else []
             if any(t in {'LocalBusiness', 'Store', 'Organization'} or str(t).endswith('Store') for t in types):
                 entities.append((all(t == 'Organization' for t in types), node))
             for value in node.values():
@@ -116,8 +116,11 @@ def read_page(url: str, html: str = '', *, text: str | None = None, links: list 
     urls = set()
     text_links = [{'text': value, 'url': value} for value in re.findall(r'https?://[^\s<>]+', text or '')]
     for item in [*parser.links, *(links or []), *text_links]:
-        target = urljoin(url, item.get('url', ''))
-        parsed = urlsplit(target)
+        try:
+            target = urljoin(url, item.get('url', ''))
+            parsed = urlsplit(target)
+        except ValueError:
+            continue
         label = re.sub(r'\s+', ' ', item.get('text', '')).strip()
         if parsed.scheme == 'mailto':
             add('email', parsed.path, 'link')
@@ -134,6 +137,9 @@ def read_page(url: str, html: str = '', *, text: str | None = None, links: list 
         add('email', value, 'visible text')
     for value in re.findall(r'(?<!\w)(?:\+\d{1,3}[ .-]?)?(?:\(\d{3}\)|\d{3})[ .-]\d{3}[ .-]\d{4}(?!\d)', visible):
         add('phone', value, 'visible text')
+    for value in re.findall(r'(?<!\w)\+\d[\d .()-]{6,22}\d', visible):
+        if 7 <= len(re.sub(r'\D', '', value)) <= 15:
+            add('phone', value, 'visible text')
     for value in re.findall(r'\b\d{1,6}\s+[\w .-]{2,70}\s(?:Street|St|Road|Rd|Avenue|Ave|Boulevard|Blvd|Drive|Dr|Lane|Ln|Way)\b[^\n]{0,80}', visible, re.I):
         add('address', value, 'visible text')
     for line in visible.splitlines():
