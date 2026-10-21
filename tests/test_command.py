@@ -628,3 +628,22 @@ async def test_ledger_view_uses_existing_proof_route_and_scopes_output(api, runt
     assert 'all_tenant_total' not in result and 'tenants' not in result
     assert result['ledger'][0]['id'] == str(ledger_id)
     assert command.explicit_ledger_ids(result) == []  # historical rows are not this read's cost
+
+
+
+def test_scan_adapter_preserves_packaged_skill_input(runtime):
+    import importlib.util
+    skill = Path('tank/skills/scan.static/1.0.1')
+    case = json.loads((skill / 'evals/cases.jsonl').read_text().splitlines()[0])
+    actor = command.Actor(TENANT, 'founder', True)
+    method, path, query, body = command.adapter_request(command.PlannedAction(tool='radix.scan', arguments=case['input']), actor)
+    assert (method, path) == ('POST', '/v1/skala/scan.static/run')
+    assert body['preview'] is False
+    spec = importlib.util.spec_from_file_location('command_scan_fixture', skill / 'engine.py')
+    engine = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(engine)
+    assert engine.run_skill(body['input']) == case['expected']
+    _, _, _, scaffold = command.adapter_request(command.PlannedAction(tool='tisan.scaffold', arguments={
+        'name': 'Example', 'slug': 'example', 'brand': {'colours': {}}}), actor)
+    assert 'pages' not in scaffold['input']  # preserve the existing route's default pages
+    assert command.ADAPTERS['tisan.scaffold'].paid is False  # current scaffold is pure code

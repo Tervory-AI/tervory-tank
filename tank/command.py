@@ -664,13 +664,13 @@ class SkillVersionArgs(Body):
 class ScaffoldArgs(Body):
     name: str = Field(min_length=1, max_length=200)
     slug: str = Field(min_length=1, max_length=80, pattern=r"^[a-z0-9-]+$")
-    pages: list[str] = Field(default_factory=list, max_length=20)
+    pages: list[str] | None = Field(default=None, min_length=1, max_length=20)
     brand: dict[str, Any]
 
 
 class SourceFile(Body):
     path: str = Field(min_length=1, max_length=200)
-    content: str = Field(max_length=20000)
+    text: str = Field(max_length=20000)
 
 
 class ScanArgs(Body):
@@ -725,7 +725,7 @@ ADAPTERS = {
     "market_lab.research": Adapter("POST", "/v1/research", QuestionArgs, "Research a market question", True, "paid_run"),
     "rig.search": Adapter("GET", "/v1/rig/search", QueryArgs, "Search the product catalogue"),
     "rig.ask": Adapter("POST", "/v1/rig/ask", RigAskArgs, "Ask about a product", True, "paid_run"),
-    "tisan.scaffold": Adapter("POST", "/v1/skala/tisan.scaffold/run", ScaffoldArgs, "Create a site scaffold", True, "paid_run", "tisan.scaffold"),
+    "tisan.scaffold": Adapter("POST", "/v1/skala/tisan.scaffold/run", ScaffoldArgs, "Create a site scaffold", False, "other", "tisan.scaffold"),
     "radix.scan": Adapter("POST", "/v1/skala/scan.static/run", ScanArgs, "Scan supplied source text", False, "other", "scan.static"),
     "zenas.ask": Adapter("POST", "/v1/zenas/answers", ZenasAskArgs, "Ask a civil law question", True, "paid_run"),
     "zenas.matters": Adapter("POST", "/v1/zenas/matters", MatterArgs, "Create a matter"),
