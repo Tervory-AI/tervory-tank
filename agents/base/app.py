@@ -97,6 +97,9 @@ app = create_app(
     ],
 )
 
+from base_brain import register as register_brain  # noqa: E402
+register_brain(app)
+
 
 @app.get("/gold/candidates")
 async def gold_candidates(

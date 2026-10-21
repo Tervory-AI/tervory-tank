@@ -1,0 +1,13 @@
+# Preload a code-only image at build time. The runtime daemon has no internet.
+FROM python:3.12.14-slim AS rootfs
+RUN tar --exclude=./proc --exclude=./sys --exclude=./dev --exclude=./tmp \
+    --exclude=./etc/resolv.conf --exclude=./etc/hosts --exclude=./etc/hostname \
+    -C / -cf /tmp/base-python.tar .
+FROM docker:28.4.0-dind-rootless
+USER root
+RUN mkdir -p /data && chown 1000:1000 /data
+COPY --from=rootfs /tmp/base-python.tar /opt/base-python.tar
+COPY agents/base/sandbox-start.sh /usr/local/bin/base-sandbox-start
+RUN chmod 755 /usr/local/bin/base-sandbox-start
+USER rootless
+ENTRYPOINT ["base-sandbox-start"]

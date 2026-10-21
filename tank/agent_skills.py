@@ -9,6 +9,7 @@ import hmac
 import json
 import math
 import os
+import re
 import time
 import uuid
 from pathlib import Path
@@ -188,8 +189,200 @@ def stream_completion(result: dict):
     yield "data: [DONE]\n\n"
 
 
+class Candidate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tenant_id: uuid.UUID
+    home_region: str
+    skill_id: str = Field(pattern=r"^base\.learned\.[a-z][a-z0-9_]{0,40}$")
+    version: str = Field(pattern=r"^[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}$")
+    description: str = Field(min_length=1, max_length=1024)
+    instructions: str = Field(min_length=1, max_length=16000)
+    run_py: str = Field(min_length=1, max_length=64000)
+    input_schema: dict[str, Any] = Field(default_factory=lambda: {"type": "object"})
+    output_schema: dict[str, Any] = Field(default_factory=lambda: {"type": "object"})
+    cases: list[dict[str, Any]] = Field(min_length=1, max_length=100)
+
+
+def candidate_files(body: Candidate) -> dict[str, str]:
+    import ast
+
+    try:
+        tree = ast.parse(body.run_py)
+    except SyntaxError:
+        raise HTTPException(422, "Candidate Python does not parse.") from None
+    if not any(isinstance(node, ast.AsyncFunctionDef) and node.name == "run" for node in tree.body):
+        raise HTTPException(422, "Candidate needs async def run(input, ctx).")
+    if any(not {"input", "expected"} <= set(case) for case in body.cases):
+        raise HTTPException(422, "Every eval case needs input and expected.")
+    files = {
+        "skill.yaml": yaml.safe_dump({"id": body.skill_id, "version": body.version, "agent": ROOM,
+            "rung": 3, "description": body.description, "input": body.input_schema,
+            "output": body.output_schema, "eval_threshold": 1.0}),
+        "run.py": body.run_py,
+        "SKILL.md": "---\n" + yaml.safe_dump({"name": body.skill_id.replace(".", "-").replace("_", "-"), "description": body.description}) + "---\n" + body.instructions,
+        "evals/cases.jsonl": "\n".join(json.dumps(case) for case in body.cases) + "\n",
+        "CHANGELOG.md": "# " + body.version + "\n\nSubmitted by Base as a candidate. Requires evals and founder approval.\n",
+    }
+    if len(json.dumps(files)) > 256_000:
+        raise HTTPException(413, "Candidate package is too large.")
+    # Reject accidental copies of credentials, without disclosing which value matched.
+    raw = json.dumps(files)
+    for name, value in os.environ.items():
+        if any(part in name for part in ("KEY", "PASSWORD", "TOKEN", "SECRET")) and len(value) >= 8 and value in raw:
+            raise HTTPException(422, "Remove credentials from the candidate.")
+    return files
+
+
+def materialize(tank: Any, skill_id: str, version: str, files: dict, digest: str):
+    """Rebuild immutable source from Postgres; never write over a Git package."""
+    if not re.fullmatch(r"base\.learned\.[a-z][a-z0-9_]{0,40}", skill_id) or not re.fullmatch(r"[0-9]{1,4}\.[0-9]{1,4}\.[0-9]{1,4}", version):
+        raise RuntimeError("Invalid stored candidate identity")
+    if hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest() != digest:
+        raise RuntimeError("Candidate source digest mismatch")
+    directory = SUBMISSIONS / digest / skill_id / version
+    directory.mkdir(parents=True, exist_ok=True)
+    allowed = {"skill.yaml", "run.py", "SKILL.md", "evals/cases.jsonl", "CHANGELOG.md"}
+    if set(files) != allowed:
+        raise RuntimeError("Invalid stored package files")
+    for name, content in files.items():
+        path = directory / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists():
+            if path.read_text() != content:
+                raise RuntimeError("Candidate source was modified")
+        else:
+            with path.open("x") as target:
+                target.write(content)
+    return tank.skala._parse_package(directory / "skill.yaml", directory)
+
+
+async def submit(tank: Any, body: Candidate) -> dict:
+    region = local_region(tank, body.home_region)
+    files = candidate_files(body)
+    digest = hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest()
+    identity = (body.skill_id, body.version)
+    async with tank.pool().acquire() as conn:
+        async with conn.transaction():
+            await conn.execute("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", body.skill_id)
+            exists = await conn.fetchval("SELECT 1 FROM tank.skills WHERE id=$1 AND version=$2", *identity)
+            if exists or identity in tank._packages:
+                raise HTTPException(409, "This version already exists; submit a new version.")
+            owner = await conn.fetchrow("SELECT tenant_id,region FROM tank.agent_skill_submissions WHERE skill_id=$1 LIMIT 1", body.skill_id)
+            if owner and (owner["tenant_id"] != body.tenant_id or owner["region"] != region):
+                raise HTTPException(403, "This skill id belongs to another tenant or region.")
+            if not owner and await conn.fetchval("SELECT 1 FROM tank.skills WHERE id=$1 LIMIT 1", body.skill_id):
+                raise HTTPException(409, "Use a new id for a room-authored skill.")
+            pkg = materialize(tank, *identity, files, digest)
+            await conn.execute(
+                "INSERT INTO tank.skills (id,version,agent,rung,description,eval_threshold,cases,state,present) "
+                "VALUES ($1,$2,'base',3,$3,1.0,$4,'candidate',true)",
+                *identity, body.description, len(body.cases),
+            )
+            await conn.execute(
+                "INSERT INTO tank.agent_skill_submissions "
+                "(skill_id,version,tenant_id,region,submitted_by_room,package,sha256) VALUES ($1,$2,$3,$4,'base',$5::jsonb,$6)",
+                *identity, body.tenant_id, region, json.dumps(files), digest,
+            )
+    tank._packages[identity] = pkg
+    return {"skill": pkg.ref, "state": "candidate", "submitted_by_room": ROOM, "sha256": digest}
+
+
+async def restore(tank: Any) -> None:
+    """Run after normal startup registration; state remains owned by Skala."""
+    async with tank.pool().acquire() as conn:
+        rows = await conn.fetch("SELECT * FROM tank.agent_skill_submissions WHERE submitted_by_room='base' AND region=$1", tank.box_region())
+        for row in rows:
+            identity = (row["skill_id"], row["version"])
+            if identity in tank._packages:
+                raise RuntimeError("Submitted skill collides with a Git package")
+            files = json.loads(row["package"]) if isinstance(row["package"], str) else row["package"]
+            tank._packages[identity] = materialize(tank, *identity, files, row["sha256"])
+            await conn.execute("UPDATE tank.skills SET present=true WHERE id=$1 AND version=$2", *identity)
+
+
+async def export_skills(tank: Any, tenant: uuid.UUID, region: str) -> dict:
+    async with tank.pool().acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT s.id,s.version FROM tank.skills s LEFT JOIN tank.agent_skill_submissions a "
+            "ON a.skill_id=s.id AND a.version=s.version "
+            "WHERE s.agent='base' AND s.state='approved' AND s.present "
+            "AND (a.skill_id IS NULL OR (a.tenant_id=$1 AND a.region=$2)) ORDER BY s.id,s.version", tenant, region,
+        )
+    skills = []
+    for row in rows:
+        pkg = tank.get_package(row["id"], row["version"])
+        if pkg.agent != ROOM:
+            raise HTTPException(409, "Skill ownership does not match the registry.")
+        name = pkg.id.replace(".", "-").replace("_", "-")[:40] + "-v" + pkg.version.replace(".", "-")
+        # Export instructions and schemas, never executable source into Hermes.
+        text = "---\n" + yaml.safe_dump({"name": name, "description": pkg.description or pkg.id,
+            "metadata": {"skala-id": pkg.id, "skala-version": pkg.version}}) + "---\n"
+        instructions = pkg.path / "SKILL.md"
+        if instructions.exists():
+            source = instructions.read_text()
+            text += source.split("---", 2)[-1] if source.startswith("---") else source
+        text += "\nExecute through skala_run with skill_id=" + pkg.id + " and version=" + pkg.version + ".\n"
+        text += "Input schema:\n```json\n" + json.dumps(pkg.input_schema) + "\n```\n"
+        skills.append({"id": pkg.id, "version": pkg.version, "state": "approved", "agent": ROOM,
+                       "name": name, "files": {"SKILL.md": text}, "input_schema": pkg.input_schema})
+    return {"tenant_id": str(tenant), "room": ROOM, "region": region, "skills": skills}
+
+
+class BaseSkillHTTP:
+    """Only the old browser adapter is redirected; all other skill HTTP stays unchanged."""
+    def __init__(self, client: Any, tenant: uuid.UUID, task: uuid.UUID | None):
+        self.client, self.tenant, self.task = client, tenant, task
+
+    def __getattr__(self, name):
+        return getattr(self.client, name)
+
+    async def post(self, url: str, **kwargs):
+        if url == "http://base-browser-gateway:3000/render":
+            kwargs["headers"] = {"X-Tank-Key": os.environ.get("TANK_KEY_BASE", ""),
+                                 "X-Tenant-ID": str(self.tenant), "X-Home-Region": "us-east"}
+            if self.task:
+                kwargs["headers"]["X-Task-ID"] = str(self.task)
+        return await self.client.post(url, **kwargs)
+
+
+async def guard_base_run(tank: Any, pkg: Any, body: Any, ctx: Any) -> None:
+    local_region(tank, body.home_region)
+    if pkg.agent != ROOM or body.preview or await tank.skill_state(pkg.id, pkg.version) != "approved":
+        raise HTTPException(403, "Base may run only its own approved skills; preview is founder-only.")
+    async with tank.pool().acquire() as conn:
+        owner = await conn.fetchrow("SELECT tenant_id,region FROM tank.agent_skill_submissions WHERE skill_id=$1 AND version=$2", pkg.id, pkg.version)
+    if owner and (owner["tenant_id"] != body.tenant_id or owner["region"] != tank.box_region()):
+        raise HTTPException(403, "This skill belongs to another tenant or region.")
+    ctx.env["TIGER_URL"] = "http://base-browser-gateway:3000"
+    ctx.http = BaseSkillHTTP(ctx.http, body.tenant_id, ctx.task_id)
+
+
 def build_router(tank: Any) -> APIRouter:
     router = APIRouter()
+
+    @router.on_event("startup")
+    async def restore_candidates():
+        await restore(tank)
+
+    @router.get("/v1/agents/{room}/skills")
+    async def approved(room: str, tenant_id: uuid.UUID, request: Request, home_region: str = "us-east"):
+        room_key(room, request.headers.get("authorization", ""), request.headers.get("x-tank-key", ""))
+        return await export_skills(tank, tenant_id, local_region(tank, home_region))
+
+    @router.post("/v1/agents/{room}/skills/candidates", status_code=201)
+    async def candidate(room: str, body: Candidate, request: Request):
+        room_key(room, request.headers.get("authorization", ""), request.headers.get("x-tank-key", ""))
+        return await submit(tank, body)
+
+    @router.get("/v1/agents/{room}/receipts")
+    async def receipts(room: str, tenant_id: uuid.UUID, task_id: uuid.UUID, request: Request):
+        room_key(room, request.headers.get("authorization", ""), request.headers.get("x-tank-key", ""))
+        local_region(tank, request.headers.get("x-home-region"))
+        async with tank.pool().acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT r.receipt FROM tank.agent_receipts r JOIN tank.ledger l ON l.id=r.ledger_id "
+                "WHERE r.tenant_id=$1 AND l.tenant_id=$1 AND l.task_id=$2 AND r.room='base' ORDER BY r.created_at", tenant_id, task_id)
+        return {"receipts": [json.loads(r["receipt"]) if isinstance(r["receipt"], str) else r["receipt"] for r in rows]}
 
     @router.post("/v1/agents/{room}/chat/completions")
     async def chat(room: str, body: Chat, request: Request,
