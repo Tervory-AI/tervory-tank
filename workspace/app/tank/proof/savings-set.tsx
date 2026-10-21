@@ -10,14 +10,14 @@ function monthStart(asOf: string, months = 1) {
 }
 function Lines({ points, cumulative = false, names }: { points: Savings["daily"]; cumulative?: boolean; names: string }) {
   const keys = cumulative ? ["cumulative"] as const : ["spent", "would_have_cost"] as const;
-  const max = Math.max(...points.flatMap(p => keys.map(k => Number(p[k]))), 0.000001);
+  const max = Math.max(...points.flatMap(p => keys.map(k => Number(p[k]))), 0);
   const first = Date.parse(points[0]?.day ?? "2000-01-01"), last = Date.parse(points.at(-1)?.day ?? "2000-01-01");
   const x = (day: string) => 12 + (last === first ? 0.5 : (Date.parse(day) - first) / (last - first)) * 576;
   return <><svg className="savings-chart" viewBox="0 0 600 170" role="img" aria-label={cumulative ? "Savings growing over time" : "Daily spent and would have cost"}>
     <path d="M12 12V150H588" fill="none" stroke="#B8BFD0"/>
     {[0.5,1].map(y => <path key={y} d={`M12 ${150-y*130}H588`} stroke="#E4E8F0"/>)}
-    {keys.map((key,i) => <g key={key}><polyline fill="none" stroke={i ? "#7C89A3" : "#001840"} strokeWidth="3" strokeDasharray={i ? "7 5" : undefined} points={points.map(p => `${x(p.day)},${150-Number(p[key])/max*130}`).join(" ")}/>{points.length===1 && <circle cx={x(points[0].day)} cy={150-Number(points[0][key])/max*130} r="4" fill="#001840"/>}</g>)}
-  </svg><div className="savings-axis"><span>{points[0]?.day ?? "No work yet"}</span><span>{dollars(max === .000001 ? 0 : max)} · standard {names}</span><span>{points.at(-1)?.day}</span></div></>;
+    {keys.map((key,i) => <g key={key}><polyline fill="none" stroke={i ? "#7C89A3" : "#001840"} strokeWidth="3" strokeDasharray={i ? "7 5" : undefined} points={points.map(p => `${x(p.day)},${150-Number(p[key])/(max||1)*130}`).join(" ")}/>{points.length===1 && <circle cx={x(points[0].day)} cy={150-Number(points[0][key])/(max||1)*130} r="4" fill="#001840"/>}</g>)}
+  </svg><div className="savings-axis"><span>{points[0]?.day ?? "No work yet"}</span><span>{dollars(max)} · standard {names}</span><span>{points.at(-1)?.day}</span></div></>;
 }
 
 export function EvidenceButton({ label, filters, loadRows, founder = false, exportBase }: { label: string; filters: RowFilter; loadRows: Loader; founder?: boolean; exportBase?: string }) {
