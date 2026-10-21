@@ -1276,9 +1276,67 @@ CREATE TABLE IF NOT EXISTS tank.workers_controls (
     PRIMARY KEY (tenant_id, name)
 );
 
+<<<<<<< HEAD
 -- ---------- 21 Oct 2026: the window's turns need a platform policy ----------
 -- command.turn had no row, so every turn in /chats failed with "no policy".
 -- Tank's planning message supplies the system prompt; the founder promotes later.
 INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_tokens_out, system_prompt) VALUES
   ('command.turn', 1, 'luna', 'urgent', 'none', 2048, NULL)
 ON CONFLICT DO NOTHING;
+=======
+-- MOA-1: opt-in only, no serving model or enabled policy is seeded here.
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS moa_enabled boolean NOT NULL DEFAULT false;
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS moa_config jsonb NOT NULL DEFAULT '{}'::jsonb;
+CREATE TABLE IF NOT EXISTS tank.moa_runs (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid NOT NULL,
+    region text NOT NULL, task_type text NOT NULL, config_hash text NOT NULL,
+    shape text NOT NULL, mode text NOT NULL, kind text NOT NULL,
+    status text NOT NULL DEFAULT 'running', receipt jsonb NOT NULL DEFAULT '{}'::jsonb,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS moa_runs_scope ON tank.moa_runs(tenant_id,region,task_type,created_at DESC);
+CREATE TABLE IF NOT EXISTS tank.moa_shadow (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(), run_id uuid NOT NULL REFERENCES tank.moa_runs(id),
+    tenant_id uuid NOT NULL, region text NOT NULL, task_type text NOT NULL,
+    config_hash text NOT NULL, seat text NOT NULL, current_model text NOT NULL,
+    candidate_model text NOT NULL, status text NOT NULL,
+    against_current numeric, against_final numeric, current_cost numeric, candidate_cost numeric,
+    receipt jsonb NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
+    UNIQUE(run_id,seat)
+);
+CREATE INDEX IF NOT EXISTS moa_shadow_scope ON tank.moa_shadow(tenant_id,region,task_type,config_hash,seat);
+CREATE TABLE IF NOT EXISTS tank.moa_bench (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id uuid NOT NULL,
+    region text NOT NULL, task_type text NOT NULL, config_hash text NOT NULL,
+    suite_hash text NOT NULL, shape text NOT NULL, mode text NOT NULL,
+    status text NOT NULL, score numeric, cost_per_call numeric, samples integer NOT NULL DEFAULT 0,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS moa_bench_scope ON tank.moa_bench(tenant_id,region,task_type,config_hash,created_at DESC);
+-- Seat receipts inherit the original task's baseline, never an arbitrary seat alias.
+-- Trigger names run alphabetically; this follows CORE-1's existing baseline snapshot.
+CREATE OR REPLACE FUNCTION tank.moa_baseline_snapshot() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE chosen text; rate tank.proof_prices%ROWTYPE;
+BEGIN
+    IF NEW.route_seat IS NULL OR NEW.task_type NOT LIKE '%#moa.%' THEN RETURN NEW; END IF;
+    SELECT p.baseline_model INTO chosen FROM tank.policy p
+      WHERE p.task_type=split_part(NEW.task_type,'#moa.',1)
+        AND (p.tenant_id=NEW.tenant_id OR p.tenant_id IS NULL)
+      ORDER BY p.tenant_id NULLS LAST LIMIT 1;
+    IF chosen IS NOT NULL THEN
+      SELECT * INTO rate FROM tank.proof_prices WHERE model=chosen;
+      NEW.baseline_model := chosen;
+      NEW.baseline_cost_usd := NEW.tokens_in*rate.input_usd+NEW.tokens_out*rate.output_usd;
+      NEW.baseline_status := CASE WHEN rate.model IS NULL THEN 'unpriced' ELSE 'measured' END;
+      NEW.baseline_priced_at := rate.updated_at;
+    END IF;
+    RETURN NEW;
+END $$;
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='zz_moa_baseline'
+                   AND tgrelid='tank.ledger'::regclass) THEN
+        CREATE TRIGGER zz_moa_baseline BEFORE INSERT ON tank.ledger
+            FOR EACH ROW EXECUTE FUNCTION tank.moa_baseline_snapshot();
+    END IF;
+END $$;
+>>>>>>> a4e842f5953e43026f84b04e9988ff484bad1712

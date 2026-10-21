@@ -165,7 +165,8 @@ def test_founder_tile_shows_stale_after_three_minutes(client, conn):
 
 def test_storage_is_additive_and_main_only_registers_routes():
     schema = (ROOT / "tank/schema.sql").read_text()
-    block = schema.split("-- WORKERS-2:", 1)[1]
+    # This lane owns its block, not additive migrations appended by other lanes.
+    block = schema.split("-- WORKERS-2:", 1)[1].split("-- MOA-1:", 1)[0]
     assert "CREATE TABLE IF NOT EXISTS tank.workers_heartbeat" in block
     assert "CREATE TABLE IF NOT EXISTS tank.workers_controls" in block
     assert "ALTER TABLE" not in block and "DROP" not in block

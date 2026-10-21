@@ -932,3 +932,36 @@ async def training_table(conn, tenant, region: str) -> list[dict]:
                        'can_promote': can_promote, 'trained_on_removed': trained,
                        'blocked_reason': blocked})
     return result
+
+
+def moa_seat_proposal(rows: list[dict], *, current: str, candidate: str,
+                      minimum: int = 100, threshold: float = .97) -> dict | None:
+    """Propose only; caller must persist scoped rows and require founder promotion.
+
+    Failed/unknown-price samples count against eligibility, never disappear from
+    the denominator. Rows must be from one tenant/task/config/seat experiment.
+    """
+    minimum = max(100, minimum)
+    if len(rows) < minimum or not current or not candidate or current == candidate:
+        return None
+    eligible = [r for r in rows if r.get('current_model') == current and r.get('candidate_model') == candidate]
+    if len(eligible) != len(rows):
+        return None
+    import math
+    for row in rows:
+        for name in ('current_cost', 'candidate_cost', 'against_current', 'against_final'):
+            value = row.get(name)
+            if not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+                return None
+        if row.get('status') != 'complete':
+            return None
+    matched = sum(min(r['against_current'], r['against_final']) >= threshold for r in rows)
+    if matched / len(rows) < threshold:
+        return None
+    before = sum(r['current_cost'] for r in rows) / len(rows)
+    after = sum(r['candidate_cost'] for r in rows) / len(rows)
+    if after >= before:
+        return None
+    return {'current_model': current, 'candidate_model': candidate, 'samples': len(rows),
+            'agreement': matched / len(rows), 'current_cost': before, 'candidate_cost': after,
+            'status': 'proposed', 'requires_founder': True}
