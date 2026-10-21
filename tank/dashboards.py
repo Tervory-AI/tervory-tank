@@ -27,9 +27,9 @@ async def workspace_only(x_tank_key: str = Header(default='')) -> None:
 async def measurements(conn: Any, tenant_id: uuid.UUID | None) -> dict[str, Any]:
     # A null scope is only passed by the founder-authorized route.
     daily = await conn.fetch(
-        """SELECT ts::date::text AS day, count(*)::int AS calls,
-        count(*) FILTER (WHERE rung=3 AND outcome='delivered')::int AS code,
-        count(*) FILTER (WHERE outcome='delivered')::int AS delivered,
+        """SELECT ts::date::text AS day, count(*) FILTER (WHERE agent <> 'bench')::int AS calls,
+        count(*) FILTER (WHERE agent <> 'bench' AND rung=3 AND outcome='delivered')::int AS code,
+        count(*) FILTER (WHERE agent <> 'bench' AND outcome='delivered')::int AS delivered,
         sum(cost_usd)::float AS spent
         FROM tank.ledger WHERE ($1::uuid IS NULL OR tenant_id=$1)
         AND ts >= date_trunc('month', now()) GROUP BY ts::date ORDER BY ts::date""", tenant_id,
