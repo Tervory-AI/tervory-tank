@@ -673,3 +673,50 @@ def test_token_response_permissions():
         with pytest.raises(TokenRejected):
             assert_token_response({"token": token, "permissions": permissions})
     assert assert_token_response({"token": token, "permissions": dict(APP_PERMISSIONS)}) == token
+
+
+def _mint(tmp_path: Path, response_body: dict) -> str:
+    key_file = tmp_path / "app-key.pem"
+    key_file.write_bytes(_key_pem())
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(f"{request.method} {request.url}")
+        return httpx.Response(201, json=response_body)
+
+    async def run() -> str:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            return await GitHub("Tervory-AI/tervory-tank", client).mint_installation_token(
+                app_id="5378545", installation_id="12345678", key_file=str(key_file)
+            )
+
+    try:
+        return asyncio.run(run())
+    finally:
+        assert seen == ["POST https://api.github.com/app/installations/12345678/access_tokens"]
+
+
+def test_mint_installation_token_accepts_metadata_read(tmp_path: Path):
+    token = _long_token()
+    body = {"token": token, "expires_at": "2026-10-21T12:00:00Z", "permissions": {**APP_PERMISSIONS, "metadata": "read"}}
+    assert _mint(tmp_path, body) == token
+
+
+def test_mint_installation_token_refuses_extra_permissions(tmp_path: Path):
+    token = _long_token()
+    for permissions in (
+        {**APP_PERMISSIONS, "metadata": "read", "administration": "write"},
+        {**APP_PERMISSIONS, "administration": "read"},
+        {**APP_PERMISSIONS, "metadata": "write"},
+        {**APP_PERMISSIONS, "workflows": "write"},
+    ):
+        with pytest.raises(TokenRejected):
+            _mint(tmp_path, {"token": token, "permissions": permissions})
+    with pytest.raises(TokenRejected):
+        _mint(tmp_path, {"token": token + "\n", "permissions": dict(APP_PERMISSIONS)})
+
+
+def test_redact_hides_the_whole_current_token():
+    token = _long_token()
+    cleaned = redact(f"token={token} done")
+    assert "ghs_" not in cleaned and token[10:40] not in cleaned and cleaned.endswith(" done")

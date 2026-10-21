@@ -17,6 +17,7 @@ from typing import Any, Literal
 
 import httpx
 import yaml
+import controls
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
@@ -110,6 +111,7 @@ def baseline_cost(roster: list[dict], model: str, tokens_in: int, tokens_out: in
 
 async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | None, region: str) -> dict:
     validate_chat(body)
+    await controls.refuse_paid(task="agent.base.think", path="agent.chat")
     policy = await tank.load_policy("agent.base.think", tenant)
     model = policy["model"]
     if tank.graduate.router_cannot_serve(model):

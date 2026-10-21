@@ -7,9 +7,9 @@ from typing import Any
 import httpx
 
 from workers.github_app import (
-    APP_PERMISSIONS,
     TokenRejected,
     assert_installation_token,
+    assert_token_response,
     installation_token_body,
     read_private_key,
     sign_app_jwt,
@@ -71,12 +71,11 @@ class GitHub:
         if response.status_code >= 400:
             raise GitHubError("GitHub refused the installation token")
         payload = response.json()
-        permissions = payload.get("permissions") or {}
-        if isinstance(permissions, dict) and set(permissions) - set(APP_PERMISSIONS):
+        if not isinstance(payload, dict):
             raise TokenRejected()
-        token = str(payload.get("token") or "")
-        assert_installation_token(token)
-        return token
+        # One check for the token shape and its permissions, shared with github_app:
+        # the three app permissions plus metadata read only.
+        return assert_token_response(payload)
 
     async def list_issues(self, token: str) -> list[dict[str, Any]]:
         url = f"{API}/repos/{self.repo}/issues?labels=worker&state=open&per_page=50"

@@ -14,6 +14,8 @@ import agent_skills as route
 class Pool:
     def __init__(self):
         self.rows = []
+        self.paused = False
+        self.unavailable = False
 
     @asynccontextmanager
     async def acquire(self):
@@ -22,6 +24,12 @@ class Pool:
     @asynccontextmanager
     async def transaction(self):
         yield
+
+    async def fetchval(self, sql, *args):
+        assert "tank.controls" in sql
+        if self.unavailable:
+            raise RuntimeError("fixture control unavailable")
+        return self.paused
 
     async def execute(self, sql, *args):
         self.rows.append((sql, args))
@@ -32,6 +40,7 @@ def setup(monkeypatch):
     key = uuid.uuid4().hex
     monkeypatch.setenv("TANK_KEY_BASE", key)
     pool = Pool()
+    monkeypatch.setattr(route.controls, "db", lambda: pool)
 
     async def policy(task, tenant):
         assert task == "agent.base.think"
@@ -99,3 +108,18 @@ def test_stream_keeps_tools_and_receipt():
     assert '"index": 0' in chunks[0]
     assert '"receipt"' in chunks[-2]
     assert chunks[-1] == "data: [DONE]\n\n"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("unavailable", [False, True])
+async def test_founder_pause_blocks_thinking_before_gateway(setup, unavailable):
+    app, _, pool, key = setup
+    pool.paused = True
+    pool.unavailable = unavailable
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://tank") as client:
+        result = await client.post("/v1/agents/base/chat/completions",
+            headers={"X-Tank-Key": key, "X-Tenant-ID": str(uuid.uuid4())},
+            json={"messages": [{"role": "user", "content": "Plan"}]})
+    assert result.status_code == 503
+    assert len(pool.rows) == 1 and "tank.control_log" in pool.rows[0][0]
+    assert pool.rows[0][1][-2:] == ("agent.base.think", "agent.chat")

@@ -54,7 +54,8 @@ path. Tank's image copies the new module. Schema is additive and reapplies safel
 The initial `agent.base.think` policy copies the current platform `tier0.answer`
 model once. It does not alter any existing route or select a new provider. The
 new policy has no cache or automatic promotion. Existing policy edits survive
-schema reapplication. Failed gateway responses are sanitized and recorded as
+schema reapplication. The founder paid-work pause also gates thinking calls and fails closed when its
+state is unavailable. Failed gateway responses are sanitized and recorded as
 failed; missing accounting never produces a successful completion.
 
 The full task receipt is stored in `agent_base.tasks.input.brain_receipt` and on

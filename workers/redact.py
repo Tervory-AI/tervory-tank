@@ -7,7 +7,8 @@ import re
 
 _PATTERNS = (
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----"),
-    re.compile(r"\bgh[pousr]_[A-Za-z0-9_]+\b"),
+    # Installation tokens can contain "-" and ".", so redact the whole token, not just a prefix.
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9_.-]+"),
     re.compile(r"\bgithub_pat_[A-Za-z0-9_]+\b"),
     re.compile(r"(?i)(authorization:\s*bearer\s+)\S+"),
     re.compile(r"(?i)(x-tank-key:\s*)\S+"),

@@ -32,10 +32,14 @@ def test_actual_hermes_calls_pipeline_via_tank_with_receipts(tmp_path, monkeypat
         @asynccontextmanager
         async def transaction(self):
             yield
+        async def fetchval(self, sql, *args):
+            assert "tank.controls" in sql
+            return False
         async def execute(self, sql, *args):
             rows.append((sql, args))
 
     pool = Pool()
+    monkeypatch.setattr(agent_skills.controls, "db", lambda: pool)
     async def policy(*args):
         return {"model": "policy", "rung": 1, "priority": "standard", "max_tokens_out": 4096}
     async def roster():
