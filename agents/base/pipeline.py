@@ -338,9 +338,7 @@ async def enrich_one(
                 "pages": len(scr.get("pages") or []),
                 "error": scr.get("error"),
                 "via": scr.get("via"),
-                "archive_date": scr.get("archive_date"),
-                "archive_source": scr.get("archive_source"),
-                "access_error": scr.get("access_error"),
+                **{key: scr[key] for key in ("archive_date", "archive_source", "access_error") if scr.get(key)},
             }
             observed = None if scr.get("archived") else observation(url, scr)
             if observed:
@@ -423,7 +421,8 @@ async def enrich_one(
                 "source": "site",
                 "confidence": int(soc["confidence"]),
             }
-        passes["4"] = {"skill": named("base.socials", soc), "ms": soc.get("_ms"), "count": soc.get("count"), "access_error": soc.get("access_error")}
+        passes["4"] = {"skill": named("base.socials", soc), "ms": soc.get("_ms"), "count": soc.get("count"),
+                       **({"access_error": soc["access_error"]} if soc.get("access_error") else {})}
 
         eng_prof: dict[str, Any] = {}
         if engine and engine_in:
