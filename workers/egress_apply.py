@@ -11,6 +11,8 @@ from urllib.parse import urlsplit
 from workers.egress import HTTPS_HOSTS, EgressError, nft_script
 from workers.settings import validate_tank_url
 
+NFT = "/usr/sbin/nft"
+
 
 def resolve(host: str) -> list[str]:
     infos = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
@@ -53,7 +55,8 @@ def build_from_env() -> str:
 
 
 def apply(script: str, runner: list[str] | None = None) -> None:
-    command = runner or ["nft", "-f", "-"]
+    # Absolute path: the task env PATH has no sbin (nftables installs to /usr/sbin/nft).
+    command = runner or [NFT, "-f", "-"]
     completed = subprocess.run(command, input=script.encode(), check=False)
     if completed.returncode != 0:
         raise EgressError("firewall install failed; the task will not run")

@@ -83,6 +83,14 @@ async def paid_host_hook(request: httpx.Request) -> None:
         await refuse_paid(path=f"HTTP host:{host}", task=_task.get() or "base.find_site (HTTP client has no run ID)")
 
 
+async def workers_paused() -> bool:
+    """WORKERS-2. Stored in the additive tank.workers_controls (tank.controls only allows paid_paused)."""
+    async with db().acquire() as conn:
+        return bool(await conn.fetchval(
+            "SELECT value FROM tank.workers_controls WHERE tenant_id=$1 AND name='workers_paused'", PLATFORM
+        ))
+
+
 @router.get('')
 async def read_controls() -> dict[str, Any]:
     async with db().acquire() as conn:
@@ -113,3 +121,26 @@ async def set_pause(body: Pause, x_tervory_admin: str = Header(default='')) -> d
                 PLATFORM, x_tervory_admin, old, body.paused,
             )
     return {'paid_paused': body.paused}
+
+
+@router.put('/workers-paused')
+async def set_workers_pause(body: Pause, x_tervory_admin: str = Header(default='')) -> dict[str, bool]:
+    """Second founder-only control. Logged exactly like the paid pause, in tank.control_log."""
+    async with db().acquire() as conn:
+        async with conn.transaction():
+            await conn.execute('SELECT pg_advisory_xact_lock(4810116)')
+            old = bool(await conn.fetchval(
+                "SELECT value FROM tank.workers_controls WHERE tenant_id=$1 AND name='workers_paused'", PLATFORM
+            ))
+            await conn.execute(
+                """INSERT INTO tank.workers_controls (tenant_id,name,value,updated_by)
+                VALUES ($1,'workers_paused',$2,$3) ON CONFLICT (tenant_id,name)
+                DO UPDATE SET value=EXCLUDED.value,updated_by=EXCLUDED.updated_by,updated_at=now()""",
+                PLATFORM, body.paused, x_tervory_admin,
+            )
+            await conn.execute(
+                """INSERT INTO tank.control_log (tenant_id,name,by_user,old_value,new_value)
+                VALUES ($1,'workers_paused',$2,$3,$4)""",
+                PLATFORM, x_tervory_admin, old, body.paused,
+            )
+    return {'workers_paused': body.paused}

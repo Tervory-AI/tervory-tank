@@ -605,11 +605,14 @@ async def test_unknown_ledger_cost_can_refresh_without_reexecuting_action(api, m
 
 
 @pytest.mark.asyncio
-async def test_core_baseline_fields_are_used_without_repricing(api, monkeypatch):
+@pytest.mark.parametrize('known_family', [True, False])
+async def test_core_baseline_fields_are_used_without_repricing(api, monkeypatch, known_family):
     client, pool = api
     async with pool.acquire() as conn:
-        await conn.execute("INSERT INTO tank.proof_prices(model,family,input_usd,output_usd) VALUES('fixture-model','fixture',0.001,0.002)")
+        await conn.execute("INSERT INTO tank.proof_prices(model,family,input_usd,output_usd) VALUES('fixture-model',$1,0.001,0.002),('sol','openai/gpt',0.001,0.002)", 'openai/gpt' if known_family else 'fixture')
     ledger = await seed_ledger(pool, cost=0.02)
+    # Command must use the comparison stored by CORE-2, even if today's rates differ.
+    await pool.execute("UPDATE tank.proof_prices SET input_usd=1,output_usd=2 WHERE model='sol'")
     thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
     monkeypatch.setattr(command, 'route_turn', AsyncMock(return_value=SimpleNamespace(ledger_id=ledger, content='Measured answer')))
     await client.post(f'/v1/command/threads/{thread}/turn', json={'text': 'Hello'})
@@ -617,8 +620,13 @@ async def test_core_baseline_fields_are_used_without_repricing(api, monkeypatch)
     async with pool.acquire() as conn:
         actual = await conn.fetchrow('SELECT baseline_model,baseline_cost_usd FROM tank.ledger WHERE id=$1', ledger)
     assert receipt['baseline_model'] == actual['baseline_model']
-    assert receipt['baseline_cost_usd'] == float(actual['baseline_cost_usd']) == 0.05
-    assert receipt['saved_usd'] == pytest.approx(0.03)
+    if known_family:
+        assert receipt['baseline_model'] == 'sol'
+        assert receipt['baseline_cost_usd'] == float(actual['baseline_cost_usd']) == 0.05
+        assert receipt['saved_usd'] == pytest.approx(0.03)
+    else:
+        assert receipt['baseline_cost_usd'] is actual['baseline_cost_usd'] is None
+        assert receipt['saved_usd'] is None and receipt['baseline_status'] == 'baseline pending'
 
 
 @pytest.mark.asyncio

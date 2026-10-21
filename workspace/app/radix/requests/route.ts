@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { createTask, getTask, listTasks } from "@/lib/tank";
 import { currentTenant } from "@/lib/tenant";
 import { radixRequests, RequestError } from "../request-service";
+// Coolify ends HTTPS before Next, so request.url is http:// while the browser's Origin is https://.
+// Compare hosts, not full origins; a browser cannot forge the Host header.
+const sameHost = (request: Request) => { try { return new URL(request.headers.get("origin") ?? "").host === (request.headers.get("host") ?? new URL(request.url).host); } catch { return false; } };
 
 export const runtime = "nodejs";
 const service = radixRequests({ create: createTask, get: getTask, list: listTasks });
@@ -28,7 +31,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const origin = request.headers.get("origin");
-    if (origin && origin !== new URL(request.url).origin) throw new RequestError(403, "Send your request from this workspace.");
+    if (origin && !sameHost(request)) throw new RequestError(403, "Send your request from this workspace.");
     const { tenantId, userId } = await tenant();
     const text = await request.text();
     if (text.length > 64000) throw new RequestError(413, "The request is too long.");

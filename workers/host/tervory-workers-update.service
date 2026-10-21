@@ -1,0 +1,18 @@
+# One auto-update check (workers/updater.py). Started by tervory-workers-update.timer.
+[Unit]
+Description=Tervory workers auto-update check (main, workers/ only)
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/tervory-workers/worker.env
+Environment=PYTHONPATH=/srv/tervory-workers/app
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=WORKER_CODE_DIR=/srv/tervory-workers/app
+Environment=WORKER_STATE_DIR=%t/tervory-workers-update
+RuntimeDirectory=tervory-workers-update
+RuntimeDirectoryMode=0700
+WorkingDirectory=/srv/tervory-workers
+ExecStart=/srv/tervory-workers/venv/bin/python -m workers.updater
+NoNewPrivileges=yes
+UMask=0077
+TimeoutStartSec=15min

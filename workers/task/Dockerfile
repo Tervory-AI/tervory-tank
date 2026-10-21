@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 python3-venv python3-pip git ca-certificates nftables openssl util-linux \
     && rm -rf /var/lib/apt/lists/* \
     && python3 -m venv /opt/venv \
-    && useradd --create-home --uid 1000 --shell /usr/sbin/nologin worker
+    && useradd --create-home --uid 1001 --shell /usr/sbin/nologin worker
 
 COPY workers/task/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt \

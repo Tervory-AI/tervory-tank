@@ -23,6 +23,7 @@ from workers.redact import install as install_redact
 from workers.redact import redact
 from workers.secrets_io import stage
 from workers.settings import Settings, SettingsError, from_env
+from workers.tank_status import HEARTBEAT_S, LastError, TankControl
 from workers.task_run import Outcome, parse_result, summary_for
 
 log = logging.getLogger("workers")
@@ -32,9 +33,15 @@ MALFORMED = (
 )
 
 
+def update_pending(settings: Settings) -> bool:
+    """workers/updater.py leaves UPDATE_PENDING next to the code while it waits for a task."""
+    return (Path(settings.code_dir).parent / "UPDATE_PENDING").exists()
+
+
 class Service:
-    def __init__(self, settings: Settings, github: GitHub, launcher: "Launcher") -> None:
+    def __init__(self, settings: Settings, github: GitHub, launcher: "Launcher", control: TankControl | None = None) -> None:
         self.settings = settings
+        self.control = control
         self.github = github
         self.launcher = launcher
         self.records: list[dict[str, Any]] = []
@@ -66,6 +73,12 @@ class Service:
             if task.number in self.inflight:
                 continue
             if running >= self.settings.max_tasks:
+                return
+            # An auto-update is waiting for the running task: take nothing new until it is applied.
+            if update_pending(self.settings):
+                return
+            # The founder's workers pause is read before taking any task. It fails closed.
+            if self.control is None or await self.control.paused():
                 return
             running += 1
             self.inflight.add(task.number)
@@ -192,24 +205,27 @@ class Launcher:
 
     async def run(self, settings: Settings, task: WorkerIssue, token: str) -> Outcome:
         if not self._built:
-            code, _ = await self.runner(build_argv(), timeout_s=60 * 60)
+            code, build_out = await self.runner(build_argv(settings.code_dir), timeout_s=60 * 60)
             if code != 0:
+                log.warning("task image build failed (exit %s). Last podman lines:\n%s", code, podman_tail(build_out))
                 raise RuntimeError("task image build failed")
             self._built = True
         info_code, info_out = await self.runner(["podman", "info", "--format", "json"], timeout_s=60)
-        runtime = "runc"
-        if info_code == 0:
-            try:
-                runtime = choose_runtime(json.loads(info_out))
-            except json.JSONDecodeError:
-                runtime = "runc"
+        if info_code != 0:
+            log.warning("podman info failed (exit %s). Last podman lines:\n%s", info_code, podman_tail(info_out))
+            raise RuntimeError("podman info failed")
+        try:
+            runtime = choose_runtime(json.loads(info_out))
+        except json.JSONDecodeError:
+            raise RuntimeError("podman info was not JSON") from None
         key = Path(os.environ["TANK_KEY_FILE"]).read_text(encoding="utf-8").strip() if os.environ.get("TANK_KEY_FILE") else os.environ.get("TANK_KEY_WORKERS", "").strip()
         if not key:
             raise RuntimeError("TANK_KEY_WORKERS is not set")
         name = container_name(task.number)
         secret_dir = Path(settings.state_dir) / name
-        stage(secret_dir, token=token, tank_key=key)
         try:
+            # Inside the try: a partly written secret dir is removed even when staging fails.
+            stage(secret_dir, token=token, tank_key=key)
             argv = task_argv(
                 settings,
                 name=name,
@@ -226,9 +242,16 @@ class Launcher:
             shutil.rmtree(secret_dir, ignore_errors=True)
         outcome = parse_result(output)
         if outcome is None:
+            log.warning("task container exit %s. Last podman lines:\n%s", code, podman_tail(output))
             raise RuntimeError("the container ended without a result" if code == 0 else "the container failed")
         outcome.runtime = outcome.runtime or runtime
         return outcome
+
+
+def podman_tail(output: str | None, lines: int = 20) -> str:
+    """The last lines of podman's output, redacted, for the log."""
+    tail = (output or "").rstrip().splitlines()[-lines:]
+    return redact("\n".join(tail)) or "(no output)"
 
 
 def tank_hosts(settings: Settings) -> list[tuple[str, str]]:
@@ -275,6 +298,9 @@ class Runner:
 async def serve(settings: Settings) -> None:
     install_redact()
     records: list[dict[str, Any]] = []
+    state: dict[str, Any] = {"busy": False, "issue": None}
+    last_error = LastError()
+    log.addHandler(last_error)
 
     async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
@@ -289,7 +315,8 @@ async def serve(settings: Settings) -> None:
         if method != "GET":
             body, status, kind = b"Method not allowed\n", "405 Method Not Allowed", "text/plain"
         elif path == "/health":
-            body, status, kind = b'{"ok":true}\n', "200 OK", "application/json"
+            body = (json.dumps({"ok": True, "busy": bool(state["busy"])}) + "\n").encode()
+            status, kind = "200 OK", "application/json"
         elif path == "/workers":
             body = status_page.render(records).encode()
             status, kind = "200 OK", "text/html; charset=utf-8"
@@ -306,21 +333,35 @@ async def serve(settings: Settings) -> None:
         await writer.drain()
         writer.close()
 
-    server = await asyncio.start_server(handle, "0.0.0.0", settings.service_port)
-    log.info("workers listening on %s", settings.service_port)
-    if not settings.github_ready or not Path(settings.private_key_file).is_file():
-        log.info("GitHub App is not configured; not taking tasks")
-        async with server:
-            await server.serve_forever()
-        return
+    # Loopback only. On the Boston host nothing else should reach the status page.
+    server = await asyncio.start_server(handle, "127.0.0.1", settings.service_port)
+    log.info("workers listening on 127.0.0.1:%s", settings.service_port)
     async with httpx.AsyncClient(timeout=60) as client:
+        control = TankControl(settings, client)
+        inflight: set[int] = set()
+
+        async def beat() -> None:
+            while True:
+                await control.paused()
+                await control.heartbeat(issue=min(inflight) if inflight else None, last_error=last_error.line)
+                await asyncio.sleep(HEARTBEAT_S)
+
+        asyncio.create_task(beat())
+        if not settings.github_ready or not Path(settings.private_key_file).is_file():
+            log.warning("GitHub App is not configured; not taking tasks")
+            async with server:
+                await server.serve_forever()
+            return
         github = GitHub(settings.repo, client)
-        service = Service(settings, github, Launcher(Runner()))
+        service = Service(settings, github, Launcher(Runner()), control)
         records_ref = service.records
+        inflight = service.inflight
 
         async def refresh_view() -> None:
             while True:
                 records[:] = list(records_ref)
+                state["busy"] = bool(service.inflight)
+                state["issue"] = min(service.inflight) if service.inflight else None
                 await asyncio.sleep(1)
 
         asyncio.create_task(refresh_view())
