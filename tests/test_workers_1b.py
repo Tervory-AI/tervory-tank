@@ -17,7 +17,6 @@ os.environ.setdefault("DATABASE_URL", "postgresql://x:y@localhost/z")
 os.environ.setdefault("LITELLM_MASTER_KEY", "test")
 os.environ.setdefault("TANK_API_KEY", "test")
 
-import httpx
 import pytest
 import yaml
 from cryptography.hazmat.primitives import serialization
@@ -211,86 +210,65 @@ def test_write_refuses_a_symlinked_directory(tmp_path: Path) -> None:
     assert not any(real.iterdir())
 
 
-def test_workers_compose_passes_the_setting_and_mounts_no_host_file() -> None:
-    text = (ROOT / "docker-compose.workers.yml").read_text(encoding="utf-8")
-    service = yaml.safe_load(text)["services"]["workers"]
-    env = service["environment"]
-    assert "volumes" not in service
-    assert env["GITHUB_APP_ID"] == "${GITHUB_APP_ID:-}"
-    assert env["GITHUB_APP_INSTALLATION_ID"] == "${GITHUB_APP_INSTALLATION_ID:-}"
-    assert env["GITHUB_APP_PRIVATE_KEY"] == "${GITHUB_APP_PRIVATE_KEY:-}"
-    assert "GITHUB_APP_PRIVATE_KEY_FILE" not in env
-    assert "/var/lib/workers" in service["tmpfs"]
-    assert env["WORKER_STATE_DIR"] == "/var/lib/workers"
-    assert "PRIVATE KEY-----" not in text
+def test_workers_host_install_uses_a_key_file_outside_git() -> None:
+    # The Docker workers app is retired. On the host the key is a root:tervory-workers 0640 file.
+    assert not (ROOT / "docker-compose.workers.yml").exists()
+    template = (ROOT / "workers/host/worker.env.example").read_text(encoding="utf-8")
+    assert re.search(r"^GITHUB_APP_PRIVATE_KEY_FILE=/etc/tervory-workers/github-app.pem$", template, re.M)
+    assert not re.search(r"^GITHUB_APP_PRIVATE_KEY=", template, re.M)
+    assert "PRIVATE KEY-----" not in template
     example = (ROOT / ".env.example").read_text(encoding="utf-8")
-    assert re.search(r"^GITHUB_APP_PRIVATE_KEY=$", example, re.M)
     assert "PRIVATE KEY-----" not in example
     assert worker_settings.__doc__ and "GITHUB_APP_PRIVATE_KEY" in worker_settings.__doc__
 
 
 # ---------- 3. The read-only Workers panel ----------
 
-ROWS = [
-    {
-        "issue": 42, "brief": "docs/cursor/MODELS-1-add-deepseek-kimi.md", "status": "ready",
-        "pr_url": "https://github.com/Tervory-AI/tervory-tank/pull/154", "minutes": 12.344, "cost_usd": 0.0213456789,
-        "token": "ghs_example", "ledger_ids": ["11111111-1111-1111-1111-111111111111"],
-    },
-    {"issue": 43, "brief": "docs/cursor/WORKERS-1b-follow-up.md", "status": "running", "pr_url": None, "minutes": None, "cost_usd": None},
-    {"issue": 44, "brief": "x", "status": "<script>", "pr_url": "https://evil.example/pull/1", "minutes": True, "cost_usd": -1},
-    {"issue": "45", "status": "ready"},
-    "junk",
-]
+def test_tank_panel_reads_the_heartbeat_not_the_old_workers_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    # WORKERS-2: GET /v1/workers no longer calls http://workers:8000; it reads tank.workers_heartbeat.
+    import datetime as _dt
 
+    import workers_status
 
-def _workers_client(handler) -> httpx.AsyncClient:
-    return httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    class Conn:
+        def __init__(self, row):
+            self.row = row
 
+        def acquire(self):
+            return self
 
-def test_tank_reads_the_workers_page_and_keeps_the_panel_columns(monkeypatch: pytest.MonkeyPatch) -> None:
-    seen: list[str] = []
+        async def __aenter__(self):
+            return self
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        seen.append(f"{request.method} {request.url}")
-        return httpx.Response(200, json=ROWS)
+        async def __aexit__(self, *_):
+            return False
 
-    monkeypatch.delenv("WORKERS_URL", raising=False)
-    monkeypatch.setattr(main, "_pool", None)  # no database: the route never touches the ledger
-    client = _workers_client(handler)
-    monkeypatch.setattr(main, "_http", client)
-    try:
-        result = asyncio.run(main.workers_panel())
-    finally:
-        asyncio.run(client.aclose())
-    assert seen == ["GET http://workers:8000/workers.json"]
-    assert result == {
+        async def fetchrow(self, sql, *args):
+            assert "tank.workers_heartbeat" in sql
+            return self.row
+
+    now = _dt.datetime.now(_dt.timezone.utc)
+    live = {"worker": "boston", "state": "running", "issue": 211, "commit": "abc1234", "last_error": None, "seen_at": now}
+    monkeypatch.setattr(workers_status, "db", lambda: Conn(live))
+    assert asyncio.run(main.workers_panel()) == {
         "available": True,
-        "tasks": [
-            {
-                "issue": 42, "brief": "docs/cursor/MODELS-1-add-deepseek-kimi.md", "status": "ready",
-                "pr_url": "https://github.com/Tervory-AI/tervory-tank/pull/154", "minutes": 12.34, "cost_usd": 0.021346,
-            },
-            {"issue": 43, "brief": "docs/cursor/WORKERS-1b-follow-up.md", "status": "running", "pr_url": None, "minutes": None, "cost_usd": None},
-            {"issue": 44, "brief": "x", "status": "unknown", "pr_url": None, "minutes": None, "cost_usd": None},
-        ],
+        "tasks": [{"issue": 211, "brief": "", "status": "running", "pr_url": None, "minutes": None, "cost_usd": None}],
     }
-    assert "ghs_" not in str(result)
+    monkeypatch.setattr(workers_status, "db", lambda: Conn({**live, "issue": None}))
+    assert asyncio.run(main.workers_panel()) == {"available": True, "tasks": []}
+    stale = {**live, "seen_at": now - _dt.timedelta(minutes=4)}
+    for row in (None, stale):
+        monkeypatch.setattr(workers_status, "db", lambda row=row: Conn(row))
+        assert asyncio.run(main.workers_panel()) == {"available": False, "tasks": []}
 
+    def broken():
+        raise RuntimeError("pool not ready")
 
-def test_workers_unreachable_is_an_empty_panel(monkeypatch: pytest.MonkeyPatch) -> None:
-    def down(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("down", request=request)
-
-    for handler in (down, lambda r: httpx.Response(503), lambda r: httpx.Response(200, text="<html>"), lambda r: httpx.Response(200, json={"a": 1})):
-        client = _workers_client(handler)
-        monkeypatch.setattr(main, "_http", client)
-        try:
-            assert asyncio.run(main.workers_panel()) == {"available": False, "tasks": []}
-        finally:
-            asyncio.run(client.aclose())
-    monkeypatch.setenv("WORKERS_URL", "ftp://workers")
+    monkeypatch.setattr(workers_status, "db", broken)
     assert asyncio.run(main.workers_panel()) == {"available": False, "tasks": []}
+    source = (ROOT / "tank" / "main.py").read_text(encoding="utf-8")
+    assert "WORKERS_URL" not in source and "workers:8000" not in source
+    assert "WORKERS_URL" not in (ROOT / ".env.example").read_text(encoding="utf-8")
 
 
 def test_the_workers_route_is_get_only_and_keyed() -> None:

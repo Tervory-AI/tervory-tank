@@ -1134,3 +1134,21 @@ CREATE INDEX IF NOT EXISTS tenant_squad_log_tenant ON tank.tenant_squad_log(tena
 
 -- Shared Command/MoA attribution; preserve the historical schema prefix.
 ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS route_seat text;
+
+-- WORKERS-2: host workers check-in and the founder's workers pause. New tables only.
+CREATE TABLE IF NOT EXISTS tank.workers_heartbeat (
+    worker text PRIMARY KEY,
+    state text NOT NULL CHECK (state IN ('running','paused')),
+    issue integer,
+    commit text NOT NULL,
+    last_error text,
+    seen_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS tank.workers_controls (
+    tenant_id uuid NOT NULL,
+    name text NOT NULL CHECK (name = 'workers_paused'),
+    value boolean NOT NULL,
+    updated_by text NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, name)
+);
