@@ -1074,7 +1074,8 @@ CREATE TABLE IF NOT EXISTS tank.provider_standards (
 -- Preserve the previous function's defaults atomically during an upgrade, before
 -- replacing it. Already-running replicas must never see an empty default table.
 DO $$ BEGIN
-  IF to_regprocedure('tank.standard_model_for(text)') IS NOT NULL THEN
+  IF NOT EXISTS (SELECT 1 FROM tank.provider_standards)
+     AND to_regprocedure('tank.standard_model_for(text)') IS NOT NULL THEN
     INSERT INTO tank.provider_standards(provider,model)
       SELECT provider,tank.standard_model_for(provider)
       FROM unnest(ARRAY['openai','anthropic','gemini','xai','moonshot','deepseek']) AS provider
