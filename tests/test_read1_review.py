@@ -307,3 +307,22 @@ async def test_robots_forbidden_policy_is_cached_and_unreachable_is_not_permissi
     class Broken:
         async def get(self, *args, **kwargs): raise TimeoutError('Unavailable')
     assert not await robots.allowed(SimpleNamespace(request=Broken()), 'https://other.example/a')
+
+
+@pytest.mark.asyncio
+async def test_partial_screenshot_write_never_becomes_uploadable(tmp_path, monkeypatch):
+    directory = tmp_path / 'tenants' / str(uuid.uuid4())
+    directory.mkdir(parents=True)
+    original = Path.write_bytes
+    def partial(path, data):
+        if path.name.endswith('.jpg.tmp'):
+            original(path, data[:1])
+            raise OSError('Disk full during screenshot write')
+        return original(path, data)
+    monkeypatch.setattr(Path, 'write_bytes', partial)
+    class Page:
+        async def evaluate(self, *args): return {'width': 1280, 'height': 8000}
+        async def screenshot(self, **kwargs): return b'jpeg'
+    result = await evidence.stage(tmp_path, directory, 'task', html='Readable', page=Page())
+    assert result['status'] == 'pending_upload' and result['screenshot_error']
+    assert {path.suffix for path in (directory / 'evidence').iterdir()} == {'.html'}

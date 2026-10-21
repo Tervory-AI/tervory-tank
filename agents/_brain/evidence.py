@@ -19,7 +19,7 @@ def prune(root: Path) -> None:
     files = []
     now = time.time()
     for path in root.glob('tenants/*/evidence/*'):
-        if any(parent.is_symlink() for parent in (path, path.parent, path.parent.parent)) or path.suffix not in {'.html', '.jpg', '.pdf'}:
+        if any(parent.is_symlink() for parent in (path, path.parent, path.parent.parent)) or path.suffix not in {'.html', '.jpg', '.pdf', '.tmp'}:
             continue
         try:
             info = path.stat()
@@ -40,6 +40,19 @@ def prune(root: Path) -> None:
             continue
 
 
+def write_complete(path: Path, data: bytes) -> None:
+    """Only completed files get an uploadable suffix, even on a full disk."""
+    temporary = path.with_suffix(path.suffix + '.tmp')
+    try:
+        temporary.write_bytes(data)
+        temporary.replace(path)
+    finally:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass  # Any orphan temporary file remains covered by retention.
+
+
 async def stage(root: Path, directory: Path, task: str, *, html: str = '', pdf: bytes | None = None, page=None) -> dict:
     """Evidence failures are explicit, but do not discard a successful page read."""
     identity = hashlib.sha256(os.urandom(32) + task.encode()).hexdigest()
@@ -56,7 +69,7 @@ async def stage(root: Path, directory: Path, task: str, *, html: str = '', pdf: 
         else:
             payload = html[:HTML_CHAR_LIMIT].encode('utf-8')
             suffix = '.html'
-        (destination / (identity + suffix)).write_bytes(payload)
+        write_complete(destination / (identity + suffix), payload)
         result['files'].append(suffix)
         if page is not None and pdf is None:
             try:
@@ -67,7 +80,7 @@ async def stage(root: Path, directory: Path, task: str, *, html: str = '', pdf: 
                     timeout=10000)
                 if len(image) > SCREENSHOT_BYTES:
                     raise ValueError('Screenshot evidence exceeds limit')
-                (destination / (identity + '.jpg')).write_bytes(image)
+                write_complete(destination / (identity + '.jpg'), image)
                 result['files'].append('.jpg')
             except Exception:
                 result['screenshot_error'] = 'Screenshot evidence could not be saved.'
