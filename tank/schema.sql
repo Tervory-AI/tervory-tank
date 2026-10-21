@@ -825,3 +825,35 @@ CREATE TABLE IF NOT EXISTS tank.training_snapshot_batches (
     batch_id text NOT NULL,
     PRIMARY KEY (tenant_id, region, day, agent, batch_id)
 );
+
+-- AGENT-1: Base pilot. Copy the current general-purpose serving route once;
+-- no existing route changes, automatic promotion or new provider is introduced.
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS baseline_model text;
+INSERT INTO tank.policy (task_type,rung,model,priority,cache_scope,max_tokens_out,baseline_model)
+SELECT 'agent.base.think',rung,model,'standard','none',4096,model
+FROM tank.policy WHERE task_type='tier0.answer' AND tenant_id IS NULL
+ON CONFLICT DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS tank.agent_receipts (
+    ledger_id uuid PRIMARY KEY REFERENCES tank.ledger(id),
+    tenant_id uuid NOT NULL,
+    room text NOT NULL CHECK (room='base'),
+    receipt jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS agent_receipts_tenant ON tank.agent_receipts (tenant_id,created_at);
+
+-- Source is immutable. The ordinary tank.skills row owns candidate/staging/
+-- approved/retired state, and only the existing eval and approval routes change it.
+CREATE TABLE IF NOT EXISTS tank.agent_skill_submissions (
+    skill_id text NOT NULL,
+    version text NOT NULL,
+    tenant_id uuid NOT NULL,
+    region text NOT NULL,
+    submitted_by_room text NOT NULL CHECK (submitted_by_room='base'),
+    package jsonb NOT NULL,
+    sha256 text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (skill_id,version),
+    FOREIGN KEY (skill_id,version) REFERENCES tank.skills(id,version)
+);

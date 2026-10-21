@@ -3087,6 +3087,7 @@ app.include_router(__import__("admin").router)
 
 app.include_router(__import__("gold").router)
 app.include_router(__import__("training").router)
+app.include_router(__import__("agent_skills").build_router(__import__("sys").modules[__name__]))
 
 
 @app.get("/v1/training/graduation")
