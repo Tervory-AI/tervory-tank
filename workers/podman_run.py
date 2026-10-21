@@ -120,8 +120,16 @@ def task_argv(
         settings.task_memory,
         "--cap-drop",
         "ALL",
+        # NET_ADMIN: container root installs the in-task firewall. SETUID/SETGID: the entrypoint's
+        # setpriv then drops to the task user (UID 1001). Without them setresuid fails (EPERM).
+        # Inside rootless podman these only reach the user namespace's own IDs, and after the drop
+        # the task process has no capabilities (no-new-privileges, --inh-caps=-all).
         "--cap-add",
         "NET_ADMIN",
+        "--cap-add",
+        "SETUID",
+        "--cap-add",
+        "SETGID",
         "--security-opt",
         "no-new-privileges",
         "--pids-limit",

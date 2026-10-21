@@ -17,7 +17,7 @@ Anything else with that label gets one comment and is left alone. Pull requests 
 
 Each task is a new rootless podman container (`podman run --rm`), started by the `tervory-workers` user on the host. It is not privileged, it does not join the host network, and it never sees `docker.sock`. The run keeps:
 
-- `--cap-drop ALL`, with `NET_ADMIN` added only so the in-task firewall can install
+- `--cap-drop ALL`, with `NET_ADMIN` added only so the in-task firewall can install, and `SETUID`/`SETGID` only so the entrypoint's `setpriv` can drop to the task user (without them `setresuid` fails and no task can start). In rootless podman these reach only the user namespace's own IDs, and the task process keeps no capabilities after the drop
 - `--security-opt no-new-privileges`
 - `--read-only`, with tmpfs for `/tmp`, `/work` and `/home/worker`
 - `--network slirp4netns:allow_host_loopback=true` (see the network section below)
@@ -156,7 +156,7 @@ Per-task token files are staged under `$XDG_RUNTIME_DIR/tervory-workers`, which 
 
 - **Host user:** an unprivileged user with no sudo and no docker group, so it cannot reach the Docker daemon or root.
 - **Unit:** `NoNewPrivileges=yes`, `UMask=0077`, `MemoryMax=6G`, `CPUQuota=300%`, `TasksMax=2048`, `LockPersonality=yes`, `RestrictRealtime=yes` and `SystemCallArchitectures=native`. Do not add `ProtectSystem`, `ProtectHome`, `PrivateTmp` or `PrivateUsers`: they break rootless podman. It restarts on failure and is wanted by `default.target`. `NoNewPrivileges=yes` blocks the setuid `newuidmap` that rootless podman needs to create its user namespace. So the unit has `ExecStartPre=+/usr/bin/podman unshare /bin/true`, which runs without that restriction and only starts podman's pause process. The service keeps `NoNewPrivileges=yes` and joins that namespace. On Boston this was checked with `NoNewPrivs: 1` in the service and the 231072:65536 mapping inside podman. If the pause process is reset (`podman system migrate`), restart the unit.
-- **Tasks:** rootless podman, so container root is the unprivileged host user, and the task process drops to UID 1001 inside after the firewall is installed. It runs with `--cap-drop ALL`, `NET_ADMIN` only, `no-new-privileges` and `--read-only`.
+- **Tasks:** rootless podman, so container root is the unprivileged host user, and the task process drops to UID 1001 inside after the firewall is installed. It runs with `--cap-drop ALL`, plus only `NET_ADMIN`, `SETUID` and `SETGID` for container root before the drop, `no-new-privileges` and `--read-only`.
 - **Network:** slirp4netns gives each task its own user-mode network. `allow_host_loopback=true` makes the host's loopback reachable as `10.0.2.2`. The in-task firewall (nftables, drop by default) allows only DNS to the slirp resolver, GitHub, PyPI and npm on 443, and Tank at `10.0.2.2:8100`. Every other host-loopback port (Coolify, other previews) is dropped. The firewall is installed by container root before privileges drop, and the task user cannot change it.
 - **Tank:** reachable only on `127.0.0.1:8100` on the host. It is never published on a public address.
 

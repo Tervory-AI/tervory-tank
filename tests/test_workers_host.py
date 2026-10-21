@@ -85,7 +85,8 @@ def test_run_is_sealed_with_per_task_limits_and_slirp4netns() -> None:
     assert argv[:3] == ["podman", "run", "--rm"]
     _never_unsealed(argv)
     assert argv[argv.index("--cap-drop") + 1] == "ALL"
-    assert [argv[j + 1] for j, a in enumerate(argv) if a == "--cap-add"] == ["NET_ADMIN"]
+    # NET_ADMIN for the firewall; SETUID/SETGID so setpriv can drop to the task user.
+    assert [argv[j + 1] for j, a in enumerate(argv) if a == "--cap-add"] == ["NET_ADMIN", "SETUID", "SETGID"]
     assert "no-new-privileges" in argv
     assert "--read-only" in argv
     assert argv.count("--tmpfs") == 3
