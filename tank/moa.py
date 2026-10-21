@@ -352,18 +352,28 @@ async def dispatch(*, policy: Policy, complex_request: bool, interactive: bool,
 
 # Tank integration. Imported lazily so the graph contracts remain testable offline.
 import hashlib
+import logging
 import random
 import uuid
 from decimal import Decimal
 from fastapi import APIRouter, Depends, Header, HTTPException
-from pydantic import create_model
 from admin import require_admin
 from gold import PLATFORM_TENANT, encoded, obj, runtime
 
 router = APIRouter(prefix='/v1/moa', dependencies=[Depends(require_admin)])
 _breaker = CircuitBreaker()
+log = logging.getLogger(__name__)
+
+
 def config_for(row: dict) -> Policy:
-    return Policy.model_validate({**obj(row.get('moa_config') or {}), 'enabled': bool(row.get('moa_enabled'))})
+    try:
+        return Policy.model_validate({**obj(row.get('moa_config') or {}), 'enabled': bool(row.get('moa_enabled'))})
+    except (ValueError, TypeError):
+        # Stale stored policies must not take the ordinary route down. Log scope
+        # only, never the config or a validation error containing prompt values.
+        log.warning('Invalid MoA config for task %s tenant %s; MoA disabled',
+                    row.get('task_type'), row.get('tenant_id'))
+        return Policy()
 
 
 def config_hash(row: dict) -> str:
@@ -445,12 +455,21 @@ async def live_budget(req, row: dict, config: Policy) -> RequestBudget:
     return RequestBudget(ceiling, book)
 
 
-def call_adapter(req, caller: str | None, *, budget_run=None, cap=None, book=None, nonce: str = '', live_budget=None) -> Call:
+def call_adapter(req, caller: str | None, *, budget_run=None, cap=None, book=None, nonce: str = '', live_budget=None, shadow: bool = False) -> Call:
     rt = runtime()
 
     async def call(seat: str, model: str, messages: list[dict]) -> Answer:
         import bench
-        policy = await rt.load_policy(req.task_type, req.tenant_id)
+        billing_tenant = PLATFORM_TENANT if shadow else req.tenant_id
+        policy = await rt.load_policy(req.task_type, billing_tenant)
+        if shadow:
+            # Platform-funded experiments still respect the source tenant's
+            # provider restrictions. run_route also checks the platform policy.
+            sent = '\n'.join(str(m.get('content') or '') for m in bench.messages_for(messages, policy.get('system_prompt')))
+            blocked = rt.model_call_refusal(sent, model, box=rt.box_region(), tenant_id=str(req.tenant_id),
+                                            task_type=req.task_type + '#moa.' + seat, caller=caller, skill=req.skill)
+            if blocked:
+                raise CallFailure(400, Answer('', model, 0, 0, 0))
         max_tokens = min(req.max_tokens or policy['max_tokens_out'], policy['max_tokens_out'])
         reservation = None
         if live_budget is not None:
@@ -470,7 +489,8 @@ def call_adapter(req, caller: str | None, *, budget_run=None, cap=None, book=Non
                 raise CallFailure(402, Answer('', model, 0, 0, 0))
         seat_task = req.task_type + '#moa.' + seat
         routed = rt.RouteRequest(**{**req.model_dump(), 'task_type': seat_task, 'case_ref': nonce or None,
-                                    'messages': messages, 'region': rt.box_region(), 'agent': 'bench' if budget_run else req.agent})
+                                    'tenant_id': billing_tenant, 'messages': messages, 'region': rt.box_region(),
+                                    'agent': 'shadow' if shadow else ('bench' if budget_run else req.agent)})
         try:
             result = await rt.run_route(routed, caller=caller, model_override=model)
         except HTTPException as error:
@@ -481,7 +501,7 @@ def call_adapter(req, caller: str | None, *, budget_run=None, cap=None, book=Non
             failed_receipt = None
             if ledger_id:
                 stored = await rt.pool().fetchrow('SELECT * FROM tank.ledger WHERE id=$1 AND tenant_id=$2',
-                                                uuid.UUID(ledger_id), req.tenant_id)
+                                                uuid.UUID(ledger_id), routed.tenant_id)
                 if stored:
                     prefix = str(stored['error'] or '').partition(':')[0]
                     if prefix.isdigit():
@@ -495,7 +515,7 @@ def call_adapter(req, caller: str | None, *, budget_run=None, cap=None, book=Non
                     await rt.pool().execute('''UPDATE tank.bench_calls SET charged_usd=0,status='complete'
                         WHERE id=$1 AND tenant_id=$2 AND region=$3''', reservation, PLATFORM_TENANT, rt.box_region())
             raise CallFailure(status,failed_receipt) from None
-        stored = await rt.pool().fetchrow('SELECT baseline_model,baseline_cost_usd FROM tank.ledger WHERE id=$1 AND tenant_id=$2',result.ledger_id,req.tenant_id)
+        stored = await rt.pool().fetchrow('SELECT baseline_model,baseline_cost_usd FROM tank.ledger WHERE id=$1 AND tenant_id=$2',result.ledger_id,routed.tenant_id)
         answer = Answer(result.content, result.model, result.tokens_in, result.tokens_out,
                         result.cost_usd, str(result.ledger_id), stored['baseline_model'] if stored else None,
                         float(stored['baseline_cost_usd']) if stored and stored['baseline_cost_usd'] is not None else None)
@@ -558,18 +578,6 @@ async def legal_checker(req, content: str) -> bool:
         return False
 
 
-async def code_answer(req, row: dict):
-    rt = runtime()
-    if not graduate.is_skill(row['model']):
-        return None
-    content, cost = await rt._run_code_candidate(req, row['model'], [m.model_dump() for m in req.messages])
-    ledger = await rt.pool().fetchval('''INSERT INTO tank.ledger
-        (tenant_id,region,agent,task_type,model,rung,cost_usd) VALUES($1,$2,$3,$4,$5,3,$6) RETURNING id''',
-        req.tenant_id, rt.box_region(), req.agent, req.task_type, row['model'], cost)
-    return rt.RouteResponse(ledger_id=ledger,model=row['model'],rung=3,content=content,
-                            tokens_in=0,tokens_out=0,cost_usd=cost,latency_ms=0)
-
-
 async def run_mixture(req, row: dict, caller=None, *, kind='live', call=None, prices=None, nonce='') -> tuple[Mixture, dict, uuid.UUID]:
     rt = runtime()
     config = config_for(row)
@@ -623,7 +631,7 @@ async def shadow_seats(req, row: dict, result: Mixture, run_id: uuid.UUID, calle
         # Shared durable budget with CORE-1. Unsettled calls retain their reservation.
         budget_run = await new_budget_run(req.task_type,config_hash(row),'shadow')
         call = call_adapter(req,caller,budget_run=budget_run,cap=Decimal(str(rt._shadow_budget())),
-                            book=book,nonce=uuid.uuid4().hex[:12])
+                            book=book,nonce=uuid.uuid4().hex[:12],shadow=True)
         for seat in shadow_seat_configs(config):
             current = next((r for r in result.results if r.name==('aggregator' if seat.name.startswith('aggregator_') else seat.name) and r.answer and r.model==seat.model),None)
             if not seat.candidate or not current:
@@ -662,7 +670,7 @@ async def shadow_seats(req, row: dict, result: Mixture, run_id: uuid.UUID, calle
                 WHERE id=$1 AND tenant_id=$2 AND region=$3''',budget_run,PLATFORM_TENANT,rt.box_region())
 
 
-async def routed_request(req, caller=None, *, complex_request=False, interactive=True):
+async def routed_request(req, caller=None, *, row=None, complex_request=False, interactive=True):
     rt = runtime()
     if caller:
         req = req.model_copy(update={'agent':caller})
@@ -673,10 +681,12 @@ async def routed_request(req, caller=None, *, complex_request=False, interactive
     # request cannot bypass an off policy by constructing a seat task name.
     if '#moa.' in req.task_type:
         raise HTTPException(403,'Submit the original task; MoA seats are internal')
-    row = await rt.load_policy(req.task_type,req.tenant_id)
-    coded = await code_answer(req,row)
-    if coded is not None:
-        return coded
+    if row is None:
+        row = await rt.load_policy(req.task_type,req.tenant_id)
+    # Non-model policies retain the core router's explicit refusal. They cannot
+    # execute a code skill here or slip through the seat override path.
+    if graduate.router_cannot_serve(row['model']):
+        return await rt.run_route(req,caller=caller)
     config = config_for(row)
     complex_request = complex_request or sum(len(m.content) for m in req.messages) >= config.complex_min_chars
     if not should_mix(config,complex_request=complex_request,interactive=interactive):
@@ -696,17 +706,6 @@ async def routed_request(req, caller=None, *, complex_request=False, interactive
             'tokens_in':sum(a.tokens_in for r in result.results for a in r.attempts),
             'tokens_out':sum(a.tokens_out for r in result.results for a in r.attempts),
             'cost_usd':record['cost_usd'],'latency_ms':int((time.monotonic()-started)*1000),'moa_run_id':str(run_id),'moa':record}
-
-
-def register_route(app, request_type, response_type, auth):
-    extended = create_model('MoaRouteRequest',__base__=request_type,
-                            complex_request=(bool,False),interactive=(bool,True))
-    async def route(body, caller=Depends(auth)):
-        return await routed_request(request_type(**body.model_dump()),caller,
-                                    complex_request=getattr(body,'complex_request',False),interactive=getattr(body,'interactive',True))
-    route.__annotations__['body'] = extended
-    app.post('/v1/route', response_model=response_type, response_model_exclude_none=True)(route)
-    return route
 
 
 async def new_budget_run(task: str, fingerprint: str, shape: str):

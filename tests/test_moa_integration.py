@@ -84,13 +84,19 @@ async def test_registered_route_forwards_complexity_and_preserves_auth(monkeypat
     async def routed(request,caller,**kwargs):
         seen.append((request,caller,kwargs))
         return dict(ledger_id=str(uuid.uuid4()),model='selected',rung=1,content='done',tokens_in=1,tokens_out=1,cost_usd=None,latency_ms=0,moa={'missing':['research']})
+    row = {'model': 'selected', 'moa_enabled': True}
+    async def load(*args): return row
+    monkeypatch.setenv('TANK_REGION', 'us-east')
+    monkeypatch.setattr(main, 'load_policy', load)
     monkeypatch.setattr(moa,'routed_request',routed)
-    moa.register_route(app,main.RouteRequest,main.RouteResponse,auth)
+    app.dependency_overrides[main.require_key] = auth
+    app.post('/v1/route', response_model=main.RouteResponse, response_model_exclude_none=True)(main.route)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://test') as client:
         response=await client.post('/v1/route',json={**req().model_dump(mode='json'),'complex_request':True,'interactive':False})
     assert response.status_code==200
     assert response.json()['moa']['missing']==['research']
-    assert seen[0][1]=='base' and seen[0][2]=={'complex_request':True,'interactive':False}
+    assert seen[0][0].agent=='base' and seen[0][1]=='base'
+    assert seen[0][2]=={'row':row,'complex_request':True,'interactive':False}
 
 
 @pytest.mark.asyncio
@@ -391,3 +397,130 @@ def test_langgraph_is_lazy_pinned_and_tracing_is_off():
     docker = (root/'tank/Dockerfile').read_text()
     assert 'LANGSMITH_TRACING=false LANGCHAIN_TRACING_V2=false' in docker
     assert 'constraints-langgraph.txt' in docker
+
+
+@pytest.mark.asyncio
+async def test_disabled_route_does_not_import_or_call_moa(monkeypatch):
+    import builtins
+    original_import = builtins.__import__
+    def without_moa(name, *args, **kwargs):
+        if name == 'moa':
+            raise AssertionError('Disabled routes must not depend on MoA')
+        return original_import(name, *args, **kwargs)
+    async def load(*args): return {'moa_enabled': False, 'moa_config': 'stale and invalid'}
+    async def single(request, caller):
+        assert request.agent == caller == 'base'
+        return 'ordinary route'
+    monkeypatch.setenv('TANK_REGION', 'us-east')
+    monkeypatch.setattr(main, 'load_policy', load)
+    monkeypatch.setattr(main, 'run_route', single)
+    monkeypatch.setattr(builtins, '__import__', without_moa)
+    assert await main.route(req(), 'base') == 'ordinary route'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('stored', ['invalid json', '[]', [], 123, {'shape': 'obsolete'},
+                                   {'enabled': True}, {'seats': [{'name': 'logic', 'model': 'sonar'}]}])
+async def test_stale_config_logs_and_falls_back_to_single_route(monkeypatch, caplog, stored):
+    row = {'task_type': 'fixture', 'tenant_id': TENANT, 'model': 'selected',
+           'moa_enabled': True, 'moa_config': stored}
+    async def load(*args): return row
+    async def single(*args, **kwargs): return 'ordinary route'
+    async def forbidden(*args): raise AssertionError('No seats may start')
+    monkeypatch.setenv('TANK_REGION', 'us-east')
+    monkeypatch.setattr(moa, 'runtime', lambda: main)
+    monkeypatch.setattr(main, 'load_policy', load)
+    monkeypatch.setattr(main, 'run_route', single)
+    monkeypatch.setattr(moa, 'validate_models', forbidden)
+    assert await main.route(req().model_copy(update={'complex_request': True, 'interactive': False}), None) == 'ordinary route'
+    assert 'Invalid MoA config for task fixture' in caplog.text and 'MoA disabled' in caplog.text
+    assert not moa.config_for(row).enabled
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('enabled', [False, True])
+async def test_code_policy_retains_core_refusal_without_running_skill_or_seats(monkeypatch, enabled):
+    import graduate
+    row = _policy_row(model='skill:base.fixture@1.0.0', moa_enabled=enabled,
+                      moa_config=policy().model_dump())
+    async def load(*args): return row
+    async def forbidden(*args, **kwargs): raise AssertionError('No skill or seat may run')
+    monkeypatch.setenv('TANK_REGION', 'us-east')
+    monkeypatch.delenv('TANK_PROVIDER_ALLOW', raising=False)
+    monkeypatch.setattr(main, 'load_policy', load)
+    monkeypatch.setattr(main, '_run_code_candidate', forbidden)
+    monkeypatch.setattr(moa, 'runtime', lambda: main)
+    monkeypatch.setattr(moa, 'run_mixture', forbidden)
+    with pytest.raises(HTTPException) as error:
+        await main.route(req().model_copy(update={'complex_request': True, 'interactive': False}), None)
+    assert error.value.status_code == 400 and error.value.detail == graduate.ROUTER_BLOCK
+
+
+@pytest.mark.asyncio
+async def test_shadow_billing_cannot_bypass_source_tenant_allowlist(monkeypatch):
+    async def load(*args): return {'max_tokens_out': 32, 'system_prompt': None}
+    async def forbidden(*args, **kwargs): raise AssertionError('No call or reservation allowed')
+    monkeypatch.setattr(moa, 'runtime', lambda: main)
+    monkeypatch.setattr(main, 'load_policy', load)
+    monkeypatch.setattr(main, 'run_route', forbidden)
+    monkeypatch.setattr(main, 'tenant_allowlist', lambda tenant: {'different'} if str(tenant) == str(TENANT) else None)
+    with pytest.raises(moa.CallFailure) as error:
+        await moa.call_adapter(req(), None, shadow=True)('logic', 'candidate', [{'role': 'user', 'content': 'Hello'}])
+    assert error.value.receipt.cost_usd == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('upstream_status', [200, 400])
+async def test_shadow_seat_receipts_bill_platform_never_client(database, monkeypatch, upstream_status):
+    """Real router + real ledger, including a failed provider's billable usage."""
+    import controls
+    pool, _ = database
+    monkeypatch.setenv('TANK_REGION', 'us-east')
+    monkeypatch.delenv('TANK_PROVIDER_ALLOW', raising=False)
+    monkeypatch.setattr(main, 'pool', lambda: pool)
+    monkeypatch.setattr(main, '_redis', None)
+    monkeypatch.setattr(main, '_shadow_budget', lambda: 5)
+    monkeypatch.setattr(moa, 'runtime', lambda: main)
+    monkeypatch.setattr(moa, '_breaker', moa.CircuitBreaker())
+    monkeypatch.setattr(controls, 'db', lambda: pool)
+    config = policy(max_attempts=1)
+    config.seats[0].candidate = 'candidate'
+    await pool.execute("INSERT INTO tank.policy(task_type,model,baseline_model,max_tokens_out) VALUES('fixture','top','top',32)")
+    await pool.execute("INSERT INTO tank.proof_prices(model,family,input_usd,output_usd) VALUES('top','fixture',.001,.002)")
+    row = dict(await pool.fetchrow("SELECT * FROM tank.policy WHERE task_type='fixture'"))
+    row.update(moa_enabled=True, moa_config=config.model_dump())
+    async def roster():
+        return [{'model_name': 'candidate', 'litellm_params': {'model': 'openai/candidate'},
+                 'model_info': {'input_cost_per_token': .00001, 'output_cost_per_token': .00002}}]
+    async def listed(): return [{'name': 'candidate'}]
+    monkeypatch.setattr(main, '_roster_models', roster)
+    monkeypatch.setattr(main, 'list_models', listed)
+    calls = []
+    class Gateway(_OkGateway):
+        async def post(self, url, **kwargs):
+            calls.append(kwargs['json']['model'])
+            return httpx.Response(upstream_status, headers={'x-litellm-response-cost': '.0004'},
+                json={'choices': [{'message': {'content': 'ok'}}],
+                      'usage': {'prompt_tokens': 20, 'completion_tokens': 10}, 'error': {'message': 'fixture refusal'}})
+    monkeypatch.setattr(main.httpx, 'AsyncClient', Gateway)
+    run = await pool.fetchval('''INSERT INTO tank.moa_runs(tenant_id,region,task_type,config_hash,shape,mode,kind)
+        VALUES($1,'us-east','fixture',$2,'optimised','select','live') RETURNING id''', TENANT, moa.config_hash(row))
+    current = moa.Result('logic', 'model-logic', 'COMPLETE', moa.Answer('ok', 'model-logic', 20, 10, .001))
+    await moa.shadow_seats(req(), row, moa.Mixture('ok', [current], 1, []), run, 'base')
+    assert calls == ['candidate']
+    assert await pool.fetchval('SELECT count(*) FROM tank.ledger WHERE tenant_id=$1', TENANT) == 0
+    ledger = await pool.fetchrow('SELECT * FROM tank.ledger WHERE tenant_id=$1', PLATFORM_TENANT)
+    assert ledger['agent'] == 'shadow' and ledger['route_seat'] == 'logic'
+    assert float(ledger['cost_usd']) == pytest.approx(.0004)
+    assert ledger['outcome'] == ('delivered' if upstream_status == 200 else 'failed')
+    assert ledger['tokens_in'] == 20 and ledger['tokens_out'] == 10
+    shadow = await pool.fetchrow('SELECT * FROM tank.moa_shadow WHERE tenant_id=$1 AND run_id=$2', TENANT, run)
+    evidence = json.loads(shadow['receipt'])
+    assert evidence['attempts'][0]['ledger_id'] == str(ledger['id'])
+    assert evidence['attempts'][0]['cost_usd'] == pytest.approx(.0004)
+    assert float(shadow['candidate_cost']) == pytest.approx(.0004)
+    if upstream_status == 200:
+        assert evidence['answer']['baseline_model'] == 'top'
+        assert evidence['answer']['baseline_cost_usd'] == pytest.approx(.04)
+        charge = await pool.fetchval('SELECT charged_usd FROM tank.bench_calls WHERE ledger_id=$1 AND tenant_id=$2', ledger['id'], PLATFORM_TENANT)
+        assert float(charge) == pytest.approx(.0004)

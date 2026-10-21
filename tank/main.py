@@ -584,6 +584,8 @@ class Message(BaseModel):
 
 
 class RouteRequest(BaseModel):
+    complex_request: bool = False
+    interactive: bool = True
     tenant_id: uuid.UUID
     agent: str = "tier0"
     task_type: str = "tier0.answer"
@@ -1997,7 +1999,21 @@ async def search_task(task_type: str, body: SearchBody | None = None) -> dict[st
     return {"ok": True, "skipped": False, "research_due": due, **result.as_dict()}
 
 
-route = __import__("moa").register_route(app, RouteRequest, RouteResponse, require_key)
+@app.post("/v1/route", response_model=RouteResponse, response_model_exclude_none=True)
+async def route(body: RouteRequest, caller: str | None = Depends(require_key)):
+    if caller:
+        body = body.model_copy(update={"agent": caller})
+    foreign = home_region_refusal(call_home(body.home_region, box_region()), box_region())
+    if foreign:
+        raise HTTPException(403, foreign)
+    if "#moa." in body.task_type:
+        raise HTTPException(403, "Submit the original task; MoA seats are internal")
+    row = await load_policy(body.task_type, body.tenant_id)
+    if not row.get("moa_enabled"):
+        return await run_route(body, caller=caller)
+    return await __import__("moa").routed_request(
+        body, caller, row=row, complex_request=body.complex_request, interactive=body.interactive
+    )
 
 
 # ---------- tasks: the board ----------
