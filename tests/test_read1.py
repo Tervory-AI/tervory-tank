@@ -76,22 +76,13 @@ async def test_pdf_reader_extracts_annotations(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_rendered_css_visibility_and_pilot():
-    """Opt-in when Chromium/Playwright are present; no network or model calls."""
-    import shutil
-    if not shutil.which('chromium'):
-        pytest.skip('Cloud Chromium is not installed')
-    api = pytest.importorskip('playwright.async_api')
+async def test_rendered_css_visibility_and_pilot(real_chromium):
+    """Required real-browser fixture; no network or model calls."""
     html = '<html><head><style>.concealed {display:none}.invisible {visibility:hidden}.transparent {opacity:0}</style><script>' + 'setup();' * 2000 + '</script></head><body><h1>Shop</h1><div style="display:contents"><p>Visible contents</p></div><p class="invisible">css-invisible</p><p class="transparent">css-transparent</p><p class="concealed">hidden@example.com</p><div aria-hidden="true">hidden aria</div><a href="https://shop.example/contact">Contact</a><p>555-123-4567 visible@example.com</p></body></html>'
-    async with api.async_playwright() as playwright:
-        chromium = await playwright.chromium.launch(executable_path=shutil.which('chromium'), args=['--no-sandbox'])
-        try:
-            page = await chromium.new_page()
-            await page.set_content(html)
-            source = await browser.rendered_source(page)
-            report = read_page('https://shop.example', source)
-        finally:
-            await chromium.close()
+    page = await real_chromium.new_page()
+    await page.set_content(html)
+    source = await browser.rendered_source(page)
+    report = read_page('https://shop.example', source)
     before = json.dumps({'html': html, 'links': [{'text': 'Contact', 'url': 'https://shop.example/contact'}]})[:7000]
     after = model_page(report)
     assert 'visible@example.com' not in before and '/contact' not in before

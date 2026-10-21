@@ -109,6 +109,7 @@ async def rendered_source(page) -> str:
     """Mark computed CSS invisibility while keeping structured data available."""
     return await page.evaluate(r"""() => {
         const copy = document.documentElement.cloneNode(true);
+        const rawTextTags = new Set(['NOSCRIPT', 'TEMPLATE', 'IFRAME', 'NOEMBED', 'NOFRAMES', 'XMP']);
         const originals = [document.documentElement, ...document.documentElement.querySelectorAll('*')];
         const clones = [copy, ...copy.querySelectorAll('*')];
         const pageWidth = Math.max(document.documentElement.clientWidth, document.body.clientWidth, innerWidth);
@@ -131,7 +132,45 @@ async def rendered_source(page) -> str:
             }
             return [0, 1, 2].map(i => result[i]*result[3] + 255*(1-result[3]));
         };
+
+        // WCAG relative luminance, with translucent ink composited over its
+        // effective background before measuring contrast.
+        const luminance = rgb => {
+            const linear = rgb.map(value => {
+                const channel = value / 255;
+                return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+            });
+            return linear[0]*0.2126 + linear[1]*0.7152 + linear[2]*0.0722;
+        };
+        const contrast = (ink, bg) => {
+            const rendered = ink.slice(0,3).map((value, j) => value*ink[3] + bg[j]*(1-ink[3]));
+            const a = luminance(rendered), b = luminance(bg);
+            return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+        };
+        const visibleText = node => {
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            return [...range.getClientRects()].some(rect => {
+                let left = Math.max(rect.left, -scrollX), top = Math.max(rect.top, -scrollY);
+                let right = Math.min(rect.right, pageWidth-scrollX), bottom = Math.min(rect.bottom, pageHeight-scrollY);
+                for (let parent = node.parentElement; parent; parent = parent.parentElement) {
+                    const css = getComputedStyle(parent), box = parent.getBoundingClientRect();
+                    if (['hidden', 'clip'].includes(css.overflowX)) {
+                        left = Math.max(left, box.left + parent.clientLeft);
+                        right = Math.min(right, box.left + parent.clientLeft + parent.clientWidth);
+                    }
+                    if (['hidden', 'clip'].includes(css.overflowY)) {
+                        top = Math.max(top, box.top + parent.clientTop);
+                        bottom = Math.min(bottom, box.top + parent.clientTop + parent.clientHeight);
+                    }
+                }
+                return right > left && bottom > top;
+            });
+        };
         originals.forEach((el, i) => {
+            // Remove raw-text elements before serialization so embedded closing
+            // tags cannot escape a hidden subtree in the downstream parser.
+            if (rawTextTags.has(el.tagName)) { clones[i].remove(); return; }
             if (el.closest('head') || el.tagName === 'SCRIPT') return;
             const css = getComputedStyle(el);
             // Contents wrappers have no box; their visible children still do.
@@ -141,15 +180,20 @@ async def rendered_source(page) -> str:
             const clipped = (css.clip !== 'auto' || css.clipPath !== 'none');
             const tinyBox = r.width <= 1 && r.height <= 1;
             const hiddenBox = !contents && (r.width <= 0 || r.height <= 0 || x+r.width <= 0 || y+r.height <= 0 || x >= pageWidth || y >= pageHeight || tinyBox);
-            const ink = color(css.color), bg = background(el);
-            const invisibleInk = ink && (ink[3] === 0 || (bg && ink.slice(0,3).every((v,j) => Math.abs(v-bg[j]) < 0.5)));
+            const ink = color(css.webkitTextFillColor || css.color), bg = background(el);
+            const invisibleInk = ink && (ink[3] === 0 || (bg && contrast(ink, bg) < 1.2));
             // Mark the element's own text without hiding contrasting children.
             // Geometric/CSS invisibility applies to the whole subtree.
             if ((!el.checkVisibility({checkOpacity:true,checkVisibilityCSS:true}) && !contents) || hiddenBox || clipped || el.getAttribute('aria-hidden') === 'true') {
-                clones[i].setAttribute('hidden', '');
+                clones[i].remove();
+                return;
             }
+            const originalChildren = [...el.childNodes], copiedChildren = [...clones[i].childNodes];
+            originalChildren.forEach((node, j) => {
+                if (node.nodeType === Node.TEXT_NODE && node.textContent.trim() &&
+                    (parseFloat(css.fontSize) < 4 || invisibleInk || !visibleText(node))) copiedChildren[j].remove();
+            });
             if (parseFloat(css.fontSize) < 4 || invisibleInk) {
-                for (const node of clones[i].childNodes) if (node.nodeType === Node.TEXT_NODE) node.textContent = '';
                 clones[i].removeAttribute('itemprop');
                 if (clones[i].tagName === 'A') clones[i].removeAttribute('href');
             }

@@ -125,6 +125,14 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r tank/requirements.txt -r tank/requirements-dev.txt
+      - name: Prepare Chromium for required READ-1 browser tests
+        run: |
+          browser=$(command -v chromium || command -v chromium-browser || command -v google-chrome || command -v google-chrome-stable || true)
+          if [ -n "$browser" ]; then
+            echo "READ1_CHROMIUM_EXECUTABLE=$browser" >> "$GITHUB_ENV"
+          else
+            python -m playwright install --with-deps chromium
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
