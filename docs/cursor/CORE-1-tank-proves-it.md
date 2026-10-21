@@ -59,6 +59,13 @@ The proof is per client. Every client has one **savings graph set**. The founder
 **Founder (`/tank/proof`):**
 - An **all-clients** set at the top.
 - Then **one set per client**, with a client picker. Tervory's own account is one entry in the picker, not the default.
+- **Tervory's margin (founder only, never on a client screen).** What we save is money for us. For all clients, and per client, show:
+  - what the client paid, from the price book and Stripe;
+  - what the work actually cost us;
+  - what it would have cost on the baseline;
+  - our margin: paid minus actual cost, in money and as a percentage, per day and to date.
+
+  Where a client's payments are not yet available, show "no billing data yet", never an estimate.
 - Every number links to its ledger rows. CSV and PDF export per client, so a client's set can be sent as their case study.
 
 **Client (`/`, their own dashboard):**
@@ -80,4 +87,5 @@ The proof is per client. Every client has one **savings graph set**. The founder
 - The client totals equal their rows.
 - Flagged rows are excluded from client totals but shown to the founder.
 - No banned words on the client graphs.
+- The margin view is founder-only and never appears on a client page.
 - Screenshots at 375px and 1440px.
