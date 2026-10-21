@@ -21,6 +21,7 @@ Endpoints
   GET  /v1/base/records?tenant_id=       proxy: enriched records, newest first
   GET  /v1/policy                        the routing policy rows
   PUT  /v1/policy/{task_type}            change a policy row (no deploy needed)
+  GET  /v1/models                       the roster LiteLLM serves, with USD per million tokens
   GET  /v1/rig/search                    proxy: one tenant's catalogue search
   GET  /v1/rig/graph/{id}                proxy: fit graph for one product
   POST /v1/rig/compare                   proxy: prices for a selection already made
@@ -1065,6 +1066,106 @@ def _price_quotes() -> list[graduate.Quote]:
     return graduate.load_price_roster(path)
 
 
+# The roster LiteLLM actually serves. The Tank image has no copy of litellm/config.yaml,
+# so the file roster above is empty in production; LiteLLM's own /model/info is the source.
+_ROSTER_TTL_S = 300
+_roster_cache: tuple[float, list[dict[str, Any]]] | None = None
+
+
+def _roster_row(item: Any) -> dict[str, Any] | None:
+    """One served model in roster shape: name, provider model and prices only, never a key."""
+    if not isinstance(item, dict):
+        return None
+    name = str(item.get("model_name") or "").strip()
+    if not name:
+        return None
+    params = item.get("litellm_params") if isinstance(item.get("litellm_params"), dict) else {}
+    info = item.get("model_info") if isinstance(item.get("model_info"), dict) else {}
+
+    def price(key: str) -> float | None:
+        value = info.get(key)
+        if value is None:
+            value = params.get(key)
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        return number if number >= 0 else None
+
+    return {
+        "model_name": name,
+        "litellm_params": {"model": str(params.get("model") or "")},
+        "model_info": {
+            "input_cost_per_token": price("input_cost_per_token"),
+            "output_cost_per_token": price("output_cost_per_token"),
+        },
+    }
+
+
+async def _roster_models() -> list[dict[str, Any]]:
+    """Models LiteLLM serves, with per-token prices, cached five minutes. The file roster is the fallback."""
+    global _roster_cache
+    now = time.time()
+    if _roster_cache is not None and now - _roster_cache[0] < _ROSTER_TTL_S:
+        return _roster_cache[1]
+    rows: list[dict[str, Any]] = []
+    if _http is not None and hasattr(_http, "get"):
+        try:
+            response = await _http.get(
+                f"{LITELLM_URL}/model/info",
+                headers={"Authorization": f"Bearer {LITELLM_MASTER_KEY}"},
+                timeout=10,
+            )
+            if response.status_code == 200:
+                payload = response.json()
+                data = payload.get("data") if isinstance(payload, dict) else None
+                seen: set[str] = set()
+                for item in data or []:
+                    row = _roster_row(item)
+                    if row is not None and row["model_name"] not in seen:
+                        seen.add(row["model_name"])
+                        rows.append(row)
+        except Exception:  # noqa: BLE001 - a missing or odd LiteLLM answer falls back to the file roster
+            rows = []
+    if rows:
+        _roster_cache = (now, rows)  # only LiteLLM's live answer is cached
+        return rows
+    path = _roster_path()
+    if not path.is_file():
+        return []
+    import yaml
+
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return [row for row in (_roster_row(item) for item in raw.get("model_list") or []) if row]
+
+
+async def _live_price_quotes() -> list[graduate.Quote]:
+    """Price quotes for the cheapest-model search, from the served roster."""
+    rows = await _roster_models()
+    return graduate.quotes_from_roster(
+        [{**row, "model_info": {key: (value or 0) for key, value in row["model_info"].items()}} for row in rows]
+    )
+
+
+def _per_million(value: Any) -> float | None:
+    return round(float(value) * 1_000_000, 4) if isinstance(value, (int, float)) else None
+
+
+@app.get("/v1/models", dependencies=[Depends(require_key)])
+async def list_models() -> list[dict[str, Any]]:
+    """The served roster for the Tank page: name, provider model, USD per million tokens. No keys."""
+    out = [
+        {
+            "name": row["model_name"],
+            "provider_model": row["litellm_params"]["model"],
+            "input_usd_per_m": _per_million(row["model_info"].get("input_cost_per_token")),
+            "output_usd_per_m": _per_million(row["model_info"].get("output_cost_per_token")),
+        }
+        for row in await _roster_models()
+    ]
+    return sorted(out, key=lambda m: ((m["input_usd_per_m"] or 0) + (m["output_usd_per_m"] or 0), m["name"]))
+
+
 async def _shadow_budget_open(task_type: str) -> bool:
     async with pool().acquire() as conn:
         spent = await conn.fetchval(
@@ -1544,7 +1645,7 @@ async def graduation(
             """
         )
         code_quotes = await _code_quotes(conn)
-    price_quotes = _price_quotes()
+    price_quotes = await _live_price_quotes()
     roster_fp, price_fp = graduate.fingerprints([*price_quotes, *code_quotes])
     by_rank: dict[str, list[Any]] = {}
     for rank in ranks:
@@ -1726,7 +1827,7 @@ async def search_task(task_type: str, body: SearchBody | None = None) -> dict[st
         if policy is None:
             raise HTTPException(status_code=404, detail="no such platform policy")
         code_quotes = await _code_quotes(conn)
-        price_quotes = _price_quotes()
+        price_quotes = await _live_price_quotes()
         roster = [*price_quotes, *code_quotes]
         roster_fp, price_fp = graduate.fingerprints(roster)
         state = await conn.fetchrow("SELECT * FROM tank.search_state WHERE task_type=$1", task_type)
