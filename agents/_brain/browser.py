@@ -16,6 +16,8 @@ from urllib.parse import urljoin, urlsplit
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
+from brain.evidence import stage
+from brain.robots import RobotsDenied, require_allowed
 from brain.reader import read_page
 from brain.security import authenticate, public_url, scope, tenant_dir
 
@@ -81,6 +83,7 @@ async def read_pdf(context, url: str, timeout: int) -> dict:
     started = time.perf_counter()
     for _ in range(8):
         public_url(url)
+        await require_allowed(context, url, min(timeout, 10000))
         response = await context.request.get(url, timeout=timeout, max_redirects=0)
         if response.status in {301, 302, 303, 307, 308}:
             url = urljoin(url, response.headers.get("location", ""))
@@ -104,15 +107,57 @@ async def read_pdf(context, url: str, timeout: int) -> dict:
 
 async def rendered_source(page) -> str:
     """Mark computed CSS invisibility while keeping structured data available."""
-    return await page.evaluate("""() => {
-                        const copy = document.documentElement.cloneNode(true);
-                        const originals = [document.documentElement, ...document.documentElement.querySelectorAll('*')];
-                        const clones = [copy, ...copy.querySelectorAll('*')];
-                        originals.forEach((el, i) => {
-                            if (!el.closest('head') && el.tagName !== 'SCRIPT' && !el.checkVisibility({checkOpacity:true,checkVisibilityCSS:true}) && getComputedStyle(el).display !== 'contents') clones[i].setAttribute('hidden', '');
-                        });
-                        return copy.outerHTML;
-                    }""")
+    return await page.evaluate(r"""() => {
+        const copy = document.documentElement.cloneNode(true);
+        const originals = [document.documentElement, ...document.documentElement.querySelectorAll('*')];
+        const clones = [copy, ...copy.querySelectorAll('*')];
+        const pageWidth = Math.max(document.documentElement.clientWidth, document.body.clientWidth, innerWidth);
+        const pageHeight = Math.max(document.documentElement.clientHeight, document.body.clientHeight, innerHeight);
+        const color = text => {
+            const match = text.match(/rgba?\(([^)]+)\)/);
+            if (!match) return null;
+            const parts = match[1].split(',').map(Number);
+            return [parts[0], parts[1], parts[2], parts.length > 3 ? parts[3] : 1];
+        };
+        const background = el => {
+            let result = [0, 0, 0, 0];
+            for (let node = el; node; node = node.parentElement) {
+                if (getComputedStyle(node).backgroundImage !== 'none') return null;
+                const c = color(getComputedStyle(node).backgroundColor);
+                if (!c) continue;
+                const alpha = result[3] + c[3] * (1 - result[3]);
+                if (alpha) result = [0, 1, 2].map(i => (result[i]*result[3] + c[i]*c[3]*(1-result[3]))/alpha).concat(alpha);
+                if (alpha >= 1) break;
+            }
+            return [0, 1, 2].map(i => result[i]*result[3] + 255*(1-result[3]));
+        };
+        originals.forEach((el, i) => {
+            if (el.closest('head') || el.tagName === 'SCRIPT') return;
+            const css = getComputedStyle(el);
+            // Contents wrappers have no box; their visible children still do.
+            const contents = css.display === 'contents';
+            const r = el.getBoundingClientRect();
+            const x = r.left + scrollX, y = r.top + scrollY;
+            const clipped = (css.clip !== 'auto' || css.clipPath !== 'none');
+            const tinyBox = r.width <= 1 && r.height <= 1;
+            const hiddenBox = !contents && (r.width <= 0 || r.height <= 0 || x+r.width <= 0 || y+r.height <= 0 || x >= pageWidth || y >= pageHeight || tinyBox);
+            const ink = color(css.color), bg = background(el);
+            const invisibleInk = ink && (ink[3] === 0 || (bg && ink.slice(0,3).every((v,j) => Math.abs(v-bg[j]) < 0.5)));
+            // Mark the element's own text without hiding contrasting children.
+            // Geometric/CSS invisibility applies to the whole subtree.
+            if ((!el.checkVisibility({checkOpacity:true,checkVisibilityCSS:true}) && !contents) || hiddenBox || clipped || el.getAttribute('aria-hidden') === 'true') {
+                clones[i].setAttribute('hidden', '');
+            }
+            if (parseFloat(css.fontSize) < 4 || invisibleInk) {
+                for (const node of clones[i].childNodes) if (node.nodeType === Node.TEXT_NODE) node.textContent = '';
+                clones[i].removeAttribute('itemprop');
+                if (clones[i].tagName === 'A') clones[i].removeAttribute('href');
+            }
+            if (clones[i].tagName === 'A' && clones[i].hasAttribute('href')) clones[i].setAttribute('href', el.href);
+        });
+        return copy.outerHTML;
+    }""")
+
 
 
 @app.get("/health")
@@ -148,6 +193,7 @@ async def render(body: Page, x_tank_key: str = Header(default=""), x_tenant_id: 
                     proxy={"server": "http://base-browser-gateway:3128"},
                     service_workers="block", accept_downloads=False)
                 denied: set[str] = set()
+                await require_allowed(context, body.url, min(body.max_ms, 10000))
 
                 async def check(route):
                     try:
@@ -158,6 +204,13 @@ async def render(body: Page, x_tank_key: str = Header(default=""), x_tenant_id: 
                         denied.add("private or unsupported request")
                         await route.abort()
                         return
+                    if route.request.is_navigation_request():
+                        try:
+                            await require_allowed(context, route.request.url)
+                        except RobotsDenied:
+                            denied.add('robots.txt')
+                            await route.abort()
+                            return
                     await route.continue_()
                 await context.route("**/*", check)
                 if urlsplit(body.url).path.lower().endswith(".pdf"):
@@ -187,29 +240,15 @@ async def render(body: Page, x_tank_key: str = Header(default=""), x_tenant_id: 
                             challenge = human_check(html) or bool(response and response.status in {401, 403, 429})
                         # Re-check the final location, including client-side redirects.
                         public_url(page.url)
-                        links = []
-                        if not challenge:
-                            for item in await page.locator("a[href]").evaluate_all(
-                                "els => els.filter(e => e.checkVisibility({checkOpacity:true,checkVisibilityCSS:true})).map(e => ({text:e.innerText.slice(0,120),url:e.href}))"):
-                                try:
-                                    public_url(item["url"])
-                                except ValueError:
-                                    continue
-                                links.append(item)
                         result = {"ok": not challenge and bool(response and response.status < 400), "url": page.url, "status": response.status if response else None,
                             "challenge": challenge, "needs_person": "needs a person" if challenge else None,
                             "html": "" if challenge else html[:600000], "blocked_by_check": challenge,
-                            "denied_requests": len(denied), "links": links, "age_confirmation": clicked}
-                evidence = directory / "evidence"
-                evidence.mkdir(exist_ok=True)
-                identity = hashlib.sha256((x_task_id + str(time.time_ns())).encode()).hexdigest()
-                if result.get("content_type") == "application/pdf":
-                    (evidence / (identity + ".pdf")).write_bytes(result.pop("pdf_data"))
-                else:
-                    (evidence / (identity + ".html")).write_text(html)
-                    await page.screenshot(path=str(evidence / (identity + ".png")), full_page=True)
+                            "denied_requests": len(denied), "age_confirmation": clicked}
+                result['evidence'] = await stage(directory.parent.parent, directory, x_task_id,
+                    html=html if result.get('content_type') != 'application/pdf' else '',
+                    pdf=result.pop('pdf_data', None), page=page if result.get('content_type') != 'application/pdf' else None)
                 # The rendered DOM removes CSS-hidden content before parsing; raw
-                # HTML remains exclusively in this room's tenant evidence directory.
+                # HTML is staged as evidence only, never included in the report.
                 extraction_started = time.perf_counter()
                 source = result.get("html", "")
                 if result.get("content_type") != "application/pdf":
@@ -219,12 +258,16 @@ async def render(body: Page, x_tank_key: str = Header(default=""), x_tenant_id: 
                     challenge=bool(result.get("challenge")))
                 result["page"]["facts"]["age_gate"] |= bool(result.get("age_confirmation"))
                 result["page"]["extraction_ms"] = round((time.perf_counter() - extraction_started) * 1000 + result.pop("pdf_extraction_ms", 0), 3)
-                result["evidence"] = {"id": identity, "storage": "room tenant evidence"}
                 result.pop("html", None)
                 result.pop("text", None)
                 result.pop("links", None)
                 return result
-            except Exception:
+            except Exception as exc:
+                if isinstance(exc, RobotsDenied) or 'robots.txt' in locals().get('denied', set()):
+                    report = read_page(body.url)
+                    report['facts']['skip_reason'] = 'robots.txt'
+                    result = {'ok': False, 'skipped': True, 'reason': 'robots.txt', 'page': report}
+                    return result
                 raise HTTPException(503, "Base browser could not read this page; no result is claimed.") from None
             finally:
                 if context:

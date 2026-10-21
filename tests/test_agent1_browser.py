@@ -10,17 +10,19 @@ import pytest
 
 # The shared brain package is loaded by the room-boundary test harness.
 from test_agent1_isolation import browser
+from brain import robots
 
 
 @pytest.fixture
 def visitor(monkeypatch, tmp_path):
     h=SimpleNamespace(started=[], gate=asyncio.Event(), html='<p>Public business page</p>',
-                      redirect=None, aborted=0, continued=0, scrolls=0)
+                      redirect=None, aborted=0, continued=0, scrolls=0, robots_text="User-agent: *\nAllow: /", robots_calls=[])
     key=uuid.uuid4().hex
     monkeypatch.setenv('TANK_KEY',key)
     monkeypatch.setenv('BROWSER_DATA_DIR',str(tmp_path))
     monkeypatch.setenv('TANK_REGION','us-east')
     monkeypatch.setattr(browser,'site_locks',{})
+    monkeypatch.setattr(robots, 'cache', {})
     monkeypatch.setattr(browser,'last_visit',{})
     monkeypatch.setattr(browser,'concurrency',asyncio.Semaphore(4))
     class Page:
@@ -39,17 +41,27 @@ def visitor(monkeypatch, tmp_path):
             return SimpleNamespace(status=200)
         async def content(self): return h.html
         async def evaluate(self,*args):
+            if "({width: Math.max" in args[0]:
+                return {"width": 1280, "height": 8000}
             h.scrolls+=1
             return h.html
-        async def screenshot(self,path,**kwargs):
-            from pathlib import Path
-            Path(path).write_bytes(b"screenshot")
+        async def screenshot(self,**kwargs):
+            if getattr(h, 'screenshot_failure', False):
+                raise RuntimeError('Failed screenshot')
+            h.screenshot_options = kwargs
+            return b'screenshot'
         async def wait_for_timeout(self,*args): pass
         def get_by_role(self,*args,**kwargs): raise AssertionError('Unexpected click')
         def locator(self,*args):
             async def evaluate_all(*args): return []
             return SimpleNamespace(evaluate_all=evaluate_all)
+    class Request:
+        async def get(self, url, **kwargs):
+            h.robots_calls.append(url)
+            async def body(): return h.robots_text.encode()
+            return SimpleNamespace(status=200, headers={}, body=body)
     class Context:
+        request = Request()
         async def route(self,pattern,handler): self.handler=handler
         async def new_page(self): return Page(self)
         async def storage_state(self,**kwargs): pass
@@ -127,6 +139,8 @@ async def test_pdf_text_is_read_with_bounded_public_requests(monkeypatch):
         async def body(self):return data
     async def get(url,**kwargs):
         assert kwargs['max_redirects']==0;calls.append(url);return Response()
+    async def allow(*args): pass
+    monkeypatch.setattr(browser, 'require_allowed', allow)
     result=await browser.read_pdf(SimpleNamespace(request=SimpleNamespace(get=get)),'https://public.example/file.pdf',90000)
     assert 'Public fixture PDF' in result['text'] and result['content_type']=='application/pdf'
     assert calls==['https://public.example/file.pdf']
@@ -137,6 +151,8 @@ async def test_pdf_redirect_cannot_fetch_a_private_target(monkeypatch):
     calls=[]
     async def get(url,**kwargs):
         calls.append(url);return SimpleNamespace(status=302,headers={'location':'http://169.254.169.254/latest/'})
+    async def allow(*args): pass
+    monkeypatch.setattr(browser, 'require_allowed', allow)
     with pytest.raises(ValueError):
         await browser.read_pdf(SimpleNamespace(request=SimpleNamespace(get=get)),'https://public.example/file.pdf',90000)
     assert calls==['https://public.example/file.pdf']
@@ -162,5 +178,14 @@ async def test_page_evidence_is_saved_without_returning_html(visitor, tmp_path):
     assert 'html' not in result
     assert result['page']['text'] == 'Public business page'
     evidence = list(tmp_path.rglob('evidence/*'))
-    assert {p.suffix for p in evidence} == {'.html', '.png'}
+    assert {p.suffix for p in evidence} == {'.html', '.jpg'}
     assert next(p for p in evidence if p.suffix == '.html').read_text() == visitor.html
+
+
+@pytest.mark.asyncio
+async def test_screenshot_failure_does_not_fail_page_read(visitor):
+    visitor.gate.set()
+    visitor.screenshot_failure = True
+    result = await visitor.visit('https://shop.example')
+    assert result['ok'] and result['page']['text'] == 'Public business page'
+    assert result['evidence']['screenshot_error']

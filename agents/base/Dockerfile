@@ -3,13 +3,14 @@ WORKDIR /app
 COPY agents/_chassis/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
     && useradd --create-home --uid 1000 agent \
-    && mkdir -p /data \
-    && chown agent:agent /data
+    && mkdir -p /data /browser-evidence \
+    && chown agent:agent /data /browser-evidence
 COPY agents/_chassis/chassis /app/chassis
 COPY agents/base/app.py /app/app.py
 COPY agents/base/pipeline.py /app/pipeline.py
 COPY agents/base/room.py /app/room.py
 COPY agents/base/base_brain.py /app/base_brain.py
+COPY agents/base/browser_evidence.py /app/browser_evidence.py
 COPY agents/base/sources /app/sources
 # Engine data files only (word lists, tables). Skill code stays in Skala.
 # Every version's data is in the image; at runtime Base reads only the approved version's folder.

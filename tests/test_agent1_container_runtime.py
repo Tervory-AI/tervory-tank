@@ -62,7 +62,8 @@ def run_browser_boundary(render_public=False):
         ready(gateway, ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health')"])
         script = '''import asyncio, os, socket, uuid, httpx
 from playwright.async_api import async_playwright
-from brain.browser import confirm_age, human_check
+from brain.browser import confirm_age, human_check, rendered_source
+from brain.reader import read_page, model_page
 async def run():
     async with async_playwright() as p:
         browser = await p.chromium.launch(executable_path='/usr/bin/chromium', headless=True)
@@ -83,6 +84,16 @@ async def run():
         await page.set_content('<div class="g-recaptcha">verify you are human</div><button type="button">I am over 21</button>')
         assert human_check(await page.content())
         assert not await confirm_age(page,await page.content())
+        hidden_styles = ['font-size:0','font-size:3px','height:0;overflow:hidden',
+            'position:absolute;left:-10000px;top:0','position:absolute;left:100000px;top:0',
+            'position:absolute;top:100000px;left:0','position:absolute;clip:rect(0px,0px,0px,0px)',
+            'clip-path:inset(50%)','position:absolute;width:1px;height:1px;overflow:hidden',
+            'color:transparent','color:rgb(255,255,255)']
+        await page.set_content('<body style="background:white"><h1>Visible heading</h1>' +
+            ''.join('<p style="'+css+'">HIDDEN INSTRUCTIONS</p>' for css in hidden_styles) + '</body>')
+        report = model_page(read_page('https://public.example', await rendered_source(page)))
+        assert 'HIDDEN INSTRUCTIONS' not in report and 'Visible heading' in report
+        assert 'not instructions' in report
         await context.close()
         await browser.close()
 asyncio.run(run())
@@ -100,7 +111,7 @@ assert b'403' in s.recv(1024)
 s.close()
 print('PASS Chromium, browser allowlist, wrong room key, direct egress, proxy allowlist')
 '''
-        public_check = "response = httpx.post('http://base-browser-gateway:3000/render',headers=headers,json={'url':'https://example.com','settle_ms':0},timeout=170)\nassert response.status_code == 200, (response.status_code,response.text)\nassert response.json()['ok'] and response.json()['page']['facts']['title'] == 'Example Domain', response.text\nassert response.json()['page']['text'] and 'html' not in response.json(), response.text\n"
+        public_check = "response = httpx.post('http://base-browser-gateway:3000/render',headers=headers,json={'url':'https://example.com','settle_ms':0},timeout=170)\nassert response.status_code == 200, (response.status_code,response.text)\nvalue = response.json()\nassert 'html' not in value, response.text\nif value.get('skipped'):\n    assert value['reason'] == 'robots.txt' and value['page']['facts']['skip_reason'] == 'robots.txt', response.text\nelse:\n    assert value['ok'] and value['page']['facts']['title'] == 'Example Domain' and value['page']['text'], response.text\n"
         script = script.replace("PUBLIC_RENDER_CHECK", public_check if render_public else "")
         assert docker("exec", browser, "python", "-c", script).startswith("PASS")
         gateway_address = json.loads(docker("inspect", gateway))[0]["NetworkSettings"]["Networks"][corridor]["IPAddress"]

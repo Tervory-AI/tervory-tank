@@ -29,7 +29,7 @@ def test_budget_and_sections():
     page = read_page('https://shop.example', '<p>' + 'word ' * 10000 + '</p>' + ''.join(f'<a href="/{i}">Contact {i}</a>' for i in range(100)))
     encoded = model_page(page)
     assert len(encoded) <= 8000
-    assert list(json.loads(encoded)) == ['facts', 'links', 'contact_details', 'text']
+    assert list(json.loads(encoded)) == ['notice', 'facts', 'links', 'contact_details', 'text']
     assert len(page['links']) == 30
     assert len(page['text']) <= 5000
 
@@ -67,6 +67,8 @@ async def test_pdf_reader_extracts_annotations(monkeypatch):
         async def get(self, *args, **kwargs):
             return Response()
     monkeypatch.setattr(browser, 'public_url', lambda url: ('shop.example', 443))
+    async def allow(*args): pass
+    monkeypatch.setattr(browser, 'require_allowed', allow)
     result = await browser.read_pdf(SimpleNamespace(request=Request()), 'https://shop.example/a.pdf', 1000)
     report = read_page(result['url'], text=result['text'], links=result['links'], title=result['title'])
     assert report['facts']['title'] == 'Shop document'
@@ -101,11 +103,12 @@ async def test_rendered_css_visibility_and_pilot():
     assert report['extraction_ms'] >= 0
 
 
-def test_runner_records_reading_counters_and_extraction_receipts(tmp_path, monkeypatch):
+@pytest.mark.parametrize("missing_unresolved", [False, True])
+def test_runner_records_reading_counters_and_extraction_receipts(tmp_path, monkeypatch, missing_unresolved):
     import sys
     import types
     import uuid
-    tenant, task, record = (str(uuid.uuid4()) for _ in range(3))
+    tenant, task, record, second_record = (str(uuid.uuid4()) for _ in range(4))
     (tmp_path / 'request.json').write_text(json.dumps({'tenant_id': tenant, 'task_id': task, 'batch': 'pilot', 'count': 1, 'memories': []}))
     monkeypatch.setenv('HERMES_HOME', str(tmp_path / 'home'))
     monkeypatch.setenv('TANK_KEY', uuid.uuid4().hex)
@@ -117,6 +120,8 @@ def test_runner_records_reading_counters_and_extraction_receipts(tmp_path, monke
     state.SessionDB = lambda *a: None
     monkeypatch.setitem(sys.modules, 'hermes_state', state)
     pipeline_calls = []
+    retries = []
+    uploads = []
     class Client:
         def __init__(self, **kwargs): pass
         def __enter__(self): return self
@@ -126,12 +131,20 @@ def test_runner_records_reading_counters_and_extraction_receipts(tmp_path, monke
                 value = {'tenant_id': tenant, 'room': 'base', 'region': 'us-east', 'skills': []}
             elif url.endswith('/render'):
                 report = read_page(kwargs['json']['url'], '<a href="/contact">Contact</a><p>info@example.com</p>')
-                value = {'page': report, 'evidence': {'id': 'fixture'}}
+                value = {'page': report, 'evidence': {'id': 'a' * 64, 'status': 'pending_upload'}}
+            elif url.endswith('/evidence'):
+                uploads.append(kwargs['json'])
+                value = {'status': 'uploaded', 'bucket': 'tervory-base', 'keys': ['evidence/' + tenant + '/date/hash.html']}
             elif url.endswith('/pipeline'):
                 pipeline_calls.append(kwargs['json']['finish'])
-                value = {'pipeline_status': 'done', 'unresolved': [{'id': record}]}
+                value = {'pipeline_status': 'done', 'unresolved': [{'id': record}, {'id': second_record}]}
             elif url.endswith('/retry'):
-                value = {'pipeline_status': 'done', 'unresolved': []}
+                retries.append(kwargs['json']['record_id'])
+                value = {'pipeline_status': 'done'}
+                if len(retries) == 2:
+                    value['unresolved'] = []
+                elif not missing_unresolved:
+                    value['unresolved'] = [{'id': second_record}]
             elif url.endswith('/receipts'):
                 value = {'receipts': []}
             else:
@@ -144,18 +157,21 @@ def test_runner_records_reading_counters_and_extraction_receipts(tmp_path, monke
         def run_conversation(self, *args, **kwargs):
             handlers['pipeline_run']({})
             first = handlers['browser']({'url': 'https://shop.example/'})
-            assert list(json.loads(first)) == ['facts', 'links', 'contact_details', 'text']
+            assert list(json.loads(first)) == ['notice', 'facts', 'links', 'contact_details', 'text']
             handlers['browser']({'url': 'https://shop.example/contact'})
             handlers['retry_record']({'record_id': record, 'website': 'https://shop.example/'})
+            handlers['retry_record']({'record_id': second_record, 'website': 'https://shop.example/'})
             return {'final_response': 'Finished'}
     agent_module.AIAgent = Agent
     monkeypatch.setitem(sys.modules, 'run_agent', agent_module)
     runner.run(tmp_path)
     receipt = json.loads((tmp_path / 'receipt.json').read_text())
-    assert receipt['reading'] == {'pages_read': 2, 'links_followed': 1, 'contact_details_per_page': [1, 1], 'sites_resolved': 1}
+    assert receipt['reading'] == {'pages_read': 2, 'links_followed': 1, 'contact_details_per_page': [1, 1], 'sites_resolved': 1 if missing_unresolved else 2}
     pages = [step for step in receipt['steps'] if step['action'] == 'browser']
-    assert all(step['extraction_ms'] >= 0 and step['evidence']['id'] == 'fixture' for step in pages)
+    assert all(step['extraction_ms'] >= 0 and step['evidence']['id'] == 'a' * 64 for step in pages)
     assert pipeline_calls == [False, True]
+    assert len(uploads) == 2 and all(item['tenant_id'] == tenant for item in uploads)
+    assert all(step['evidence']['status'] == 'uploaded' and step['evidence']['keys'][0].startswith('evidence/' + tenant + '/') for step in pages)
 
 
 
@@ -165,9 +181,9 @@ def test_local_business_precedes_organization_and_contact_budget():
     report = read_page('https://shop.example', html)
     assert report['contact_details'][0]['value'] == 'Branch'
     encoded = model_page(report)
-    assert len(encoded) <= 8000
-    assert json.loads(encoded)['contact_details']
-    assert json.loads(encoded)['links']
+    assert len(json.loads(encoded)['links']) == 30
+    assert json.loads(encoded)['facts']['budget_exceeded_by_links']
+    assert all(len(item['url']) > 1500 for item in json.loads(encoded)['links'])
 
 
 

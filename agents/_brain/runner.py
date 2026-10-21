@@ -150,14 +150,28 @@ def run(work: Path) -> None:
                     result = api("POST", os.environ.get("BASE_BROWSER_URL", "http://base-browser-gateway:3000") + "/render", json={"url": args["url"]})
                     report = result.get("page", {})
                     counters = receipt["reading"]
-                    counters["pages_read"] += 1
-                    counters["links_followed"] += int(args["url"] in discovered_links)
+                    if result.get('skipped'):
+                        step['skipped'] = True
+                        step['reason'] = result.get('reason')
+                    else:
+                        counters['pages_read'] += 1
+                        counters['links_followed'] += int(args['url'] in discovered_links)
                     discovered_links.update(item["url"] for item in report.get("links", []))
                     found = len(report.get("contact_details", []))
-                    counters["contact_details_per_page"].append(found)
+                    if not result.get('skipped'):
+                        counters['contact_details_per_page'].append(found)
                     step["contact_details_found"] = found
                     step["extraction_ms"] = report.get("extraction_ms")
-                    step["evidence"] = result.get("evidence")
+                    evidence = result.get('evidence', {})
+                    step['evidence'] = evidence
+                    if evidence.get('status') == 'pending_upload':
+                        try:
+                            archived = api('POST', os.environ.get('BASE_ROOM_URL', 'http://agent-base:8000') + '/brain/evidence',
+                                json={'tenant_id': tenant, 'task_id': task, 'evidence_id': evidence['id']})
+                            step['evidence'] = {**evidence, **archived}
+                        except Exception:
+                            step['evidence'] = {**evidence, 'status': 'upload_failed',
+                                'error': 'Evidence upload failed; local files remain within retention limits.'}
                     step["human_check"] = bool(result.get("challenge"))
                     if result.get("challenge"):
                         step["needs_person"] = "needs a person"
@@ -208,10 +222,11 @@ def run(work: Path) -> None:
                     pipeline_status = result["pipeline_status"]
                     # A completed retry is counted only when the pipeline reports
                     # a sourced resolution, not merely a browser visit.
-                    remaining = {str(item["id"]) for item in result.get("unresolved", [])}
-                    if result.get("pipeline_status") == "done" and record_id in unresolved_ids and record_id not in remaining:
-                        receipt["reading"]["sites_resolved"] += 1
-                    unresolved_ids = remaining
+                    if 'unresolved' in result:
+                        remaining = {str(item['id']) for item in result['unresolved']}
+                        if result.get('pipeline_status') == 'done' and record_id in unresolved_ids and record_id not in remaining:
+                            receipt['reading']['sites_resolved'] += 1
+                        unresolved_ids = remaining
                 else:
                     raise RuntimeError("Unknown tool")
                 step["status"] = "done"
