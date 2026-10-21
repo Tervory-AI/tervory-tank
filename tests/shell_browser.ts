@@ -2,6 +2,7 @@
  * Loads the shared shell at phone width and checks every signed-in route.
  * Set SHELL_SHOTS=1 to write docs/screenshots/shell-1/.
  */
+import { actualShellHtml } from "./shell_popout.ts";
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -218,7 +219,11 @@ class Cdp {
   send(method: string, params: object = {}): Promise<CdpResult> {
     const id = ++this.next;
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+      const timeout = setTimeout(() => { this.pending.delete(id); reject(new Error(`Chrome timed out: ${method}`)); }, 15000);
+      this.pending.set(id, {
+        resolve: result => { clearTimeout(timeout); resolve(result); },
+        reject: error => { clearTimeout(timeout); reject(error); },
+      });
       this.ws.send(JSON.stringify({ id, method, params }));
     });
   }
@@ -249,7 +254,7 @@ async function navigate(cdp: Cdp, url: string): Promise<void> {
   await cdp.send("Page.navigate", { url });
   const started = Date.now();
   while (Date.now() - started < 8000) {
-    const state = await evaluate<string>(cdp, "document.readyState");
+    const state = await evaluate<string>(cdp, `location.href === ${JSON.stringify(url)} ? document.readyState : "loading"`);
     if (state === "complete" && (await evaluate<boolean>(cdp, "Boolean(document.getElementById('squad-button'))"))) return;
     await new Promise((resolve) => setTimeout(resolve, 40));
   }
@@ -321,7 +326,71 @@ async function main(): Promise<void> {
       if (box.main > box.mainCw + 1) failures.push(`${label} content is wider than the page (${box.main} > ${box.mainCw})`);
     }
 
-    for (const route of SHELL_ROUTES) {
+    // Exercise the real React components, including their actual focus/keyboard effects.
+    async function check(expression: string, message: string) {
+      const until = Date.now() + 3000;
+      while (Date.now() < until) {
+        if (await evaluate<boolean>(cdp, expression)) return;
+        await new Promise(resolve => setTimeout(resolve, 30));
+      }
+      failures.push(message);
+    }
+    async function click(selector: string) {
+      await evaluate(cdp, `document.querySelector(${JSON.stringify(selector)}).click()`);
+    }
+    for (const width of [1440, 375]) {
+      await setViewport(cdp, width, width === 1440 ? 900 : 812);
+      const file = join(dir, `actual-${width}.html`);
+      await writeFile(file, actualShellHtml(true));
+      await navigate(cdp, `file://${file}`);
+      await check('!!document.getElementById("squad-popout")', "React portal did not mount");
+      async function capture(state: string) {
+        if (!process.env.SQUAD_SHOTS) return;
+        await mkdir(process.env.SQUAD_SHOTS, {recursive:true});
+        await cdp.send("Page.bringToFront");
+        await cdp.send("Runtime.evaluate", {expression:"new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))",awaitPromise:true});
+        const image = await cdp.send("Page.captureScreenshot", {format:"png"});
+        await writeFile(join(process.env.SQUAD_SHOTS, `shell_${width}-${state}.png`), Buffer.from(image.data!, "base64"));
+      }
+      await cdp.send("Runtime.evaluate", {expression:"document.fonts.ready",awaitPromise:true});
+      await capture("closed");
+      if (width === 375) await click("#shell-menu");
+      await click("#squad-button");
+      await check('document.activeElement?.dataset.squadHref === "/base"', "Opening must focus current member");
+      await check('document.querySelectorAll("[data-squad-member]").length === 9', "Founder must see nine members");
+      await check('[...document.querySelectorAll(".squad-row img")].every(i=>i.complete && i.naturalWidth && i.getBoundingClientRect().height===22 && Math.abs(i.getBoundingClientRect().width / 22 - i.naturalWidth/i.naturalHeight)<.02)', "Logos must be loaded at equal 22px heights with original proportions");
+      await check('[...document.querySelectorAll(".squad-row")].every(i=>i.getBoundingClientRect().height===56)', "Rows must be 56px");
+      await check('[...document.querySelectorAll(".squad-job")].every(i=>i.scrollWidth<=i.clientWidth)', "Job descriptions must fit without clipping");
+      if (width === 1440) await check('(()=>{const p=document.getElementById("squad-popout");return p.scrollHeight===p.clientHeight && p.getBoundingClientRect().width===360 && p.getBoundingClientRect().bottom<900})()', "Desktop founder panel must fit without scrolling");
+      else await check('document.getElementById("squad-popout").getBoundingClientRect().height === innerHeight', "Mobile must be a full-height sheet");
+      await check('getComputedStyle(document.querySelector(".squad-dim")).backgroundColor === "rgba(0, 24, 64, 0.3)"', "Dim must be navy at 30 percent");
+      await check('(()=>{const b=document.querySelector(".squad-pop-close").getBoundingClientRect();return b.width===44 && b.height===44})()', "X must have a 44px target");
+      await check('document.querySelector("[aria-current=page][data-squad-member]")?.getAttribute("aria-current") === "page"', "Current member must be highlighted");
+      await capture("open");
+      await cdp.send("Input.dispatchKeyEvent", {type:"keyDown",key:"ArrowDown",code:"ArrowDown",windowsVirtualKeyCode:40});
+      await check('document.activeElement?.dataset.squadHref === "/tiger"', "ArrowDown must move to Tiger");
+      await click('[aria-label="Close"]');
+      await check('document.getElementById("squad-popout").hidden && document.activeElement.id === "squad-button"', "X must close and return focus");
+      await click("#squad-button");
+      await check('!document.getElementById("squad-popout").hidden', "Panel must reopen");
+      await cdp.send("Input.dispatchKeyEvent", {type:"keyDown",key:"Escape",code:"Escape",windowsVirtualKeyCode:27});
+      await check('document.getElementById("squad-popout").hidden && document.activeElement.id === "squad-button"', "Escape must close and return focus");
+      if (width === 1440) {
+        await click("#squad-button");
+        await check('!!document.querySelector(".squad-dim")', "Dim must appear");
+        await cdp.send("Input.dispatchMouseEvent", {type:"mousePressed",x:1000,y:400,button:"left",clickCount:1});
+        await cdp.send("Input.dispatchMouseEvent", {type:"mouseReleased",x:1000,y:400,button:"left",clickCount:1});
+        await check('document.getElementById("squad-popout").hidden && document.activeElement.id === "squad-button"', "Dim click must close and return focus");
+      }
+    }
+    const customerFile = join(dir, "actual-customer.html");
+    await writeFile(customerFile, actualShellHtml(false));
+    await navigate(cdp, `file://${customerFile}`);
+    await check('!!document.getElementById("squad-popout")', "Customer portal must mount");
+    await click("#squad-button");
+    await check('document.querySelectorAll("[data-squad-member]").length===7 && !document.querySelector(".squad-platform")', "Customer must not see platform members");
+
+    for (const route of process.env.SQUAD_ONLY ? [] : SHELL_ROUTES) {
       await setViewport(cdp, 375, 812);
       await openRoute(route, true, false);
       await overflow(`${route} 375 closed`);
@@ -376,6 +445,7 @@ async function main(): Promise<void> {
     await cdp.send("Input.dispatchKeyEvent", { type: "keyDown", key: "ArrowDown", code: "ArrowDown", windowsVirtualKeyCode: 40 });
     const second = await evaluate<string>(cdp, `document.activeElement && document.activeElement.textContent || ""`);
     if (!second.includes("Tiger")) failures.push(`ArrowDown did not move to Tiger (got ${second})`);
+
   } finally {
     proc.kill("SIGKILL");
     await rm(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 150 });

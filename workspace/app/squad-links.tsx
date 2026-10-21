@@ -10,22 +10,23 @@ export type SquadMember = {
   label: string;
   job: string;
   logo: string;
+  lightLogo?: string;
   width: number;
   height: number;
   founderOnly: boolean;
 };
 
-/** Same order as the old sidebar list. Logos are the official on-dark files. */
+/** Same order as the old sidebar list. Use official originals; on-dark assets get a navy tile on the light panel. */
 export const SQUAD_MEMBERS: readonly SquadMember[] = [
-  { href: "/base", label: "Base", job: "Verified businesses from a raw list.", logo: "/brand/base-on-dark.png", width: 2322, height: 601, founderOnly: false },
-  { href: "/tiger", label: "Tiger", job: "Watches prices and rival moves.", logo: "/brand/tiger-on-dark.png", width: 2607, height: 801, founderOnly: false },
-  { href: "/market-lab", label: "Market Lab", job: "Sourced market research.", logo: "/brand/market-lab-on-dark.png", width: 3685, height: 608, founderOnly: false },
-  { href: "/rig", label: "Rig", job: "The product and the parts that fit.", logo: "/brand/rig-on-dark.png", width: 1173, height: 651, founderOnly: false },
-  { href: "/tisan", label: "Tisan", job: "Sites and apps from a short brief.", logo: "/brand/tisan-on-dark.png", width: 2806, height: 701, founderOnly: false },
-  { href: "/radix", label: "Radix", job: "Finds what systems and sites expose.", logo: "/brand/radix-on-dark.png", width: 1893, height: 651, founderOnly: false },
-  { href: "/zenas", label: "Zenas", job: "US and South African legal research.", logo: "/brand/zenas-on-dark.png", width: 1970, height: 701, founderOnly: false },
-  { href: "/skala", label: "Skala", job: "Tests skills before they are used.", logo: "/brand/skala-on-dark.png", width: 3796, height: 901, founderOnly: true },
-  { href: "/tank", label: "Tank", job: "Routes each task and keeps receipts.", logo: "/brand/tank-on-dark.png", width: 2466, height: 601, founderOnly: true },
+  { href: "/base", label: "Base", job: "Verified business lists", logo: "/brand/base-on-dark.png", width: 2322, height: 601, founderOnly: false },
+  { href: "/tiger", label: "Tiger", job: "Prices and rival moves", logo: "/brand/tiger-on-dark.png", width: 2607, height: 801, founderOnly: false },
+  { href: "/market-lab", label: "Market Lab", job: "Sourced market research", logo: "/brand/market-lab-on-dark.png", width: 3685, height: 608, founderOnly: false },
+  { href: "/rig", label: "Rig", job: "Products and matching parts", logo: "/brand/rig-on-dark.png", width: 1173, height: 651, founderOnly: false },
+  { href: "/tisan", label: "Tisan", job: "Sites and apps", logo: "/brand/tisan-on-dark.png", width: 2806, height: 701, founderOnly: false },
+  { href: "/radix", label: "Radix", job: "System and site exposure", logo: "/brand/radix-on-dark.png", width: 1893, height: 651, founderOnly: false },
+  { href: "/zenas", label: "Zenas", job: "US & SA legal research", logo: "/brand/zenas-on-dark.png", width: 1970, height: 701, founderOnly: false },
+  { href: "/skala", label: "Skala", job: "Skill testing", logo: "/brand/skala-on-dark.png", lightLogo: "/brand/skala-on-light.png", width: 3796, height: 901, founderOnly: true },
+  { href: "/tank", label: "Tank", job: "Task routing and receipts", logo: "/brand/tank-on-dark.png", width: 2466, height: 601, founderOnly: true },
 ];
 
 export type SquadPanelState = {
@@ -224,6 +225,8 @@ function SquadControl({
   }
 
   const popout = (
+    <>
+    {panel.open ? <div className="squad-dim" aria-hidden="true" onPointerDown={(event) => { event.preventDefault(); dispatch({ type: "outside" }); }} /> : null}
     <div
       ref={panelRef}
       id={panelId}
@@ -236,14 +239,17 @@ function SquadControl({
     >
       <div className="squad-pop-bar shell-pop-head">
         <p className="shell-kicker">Squad</p>
-        <button type="button" className="squad-pop-close shell-pop-close" onClick={() => dispatch({ type: "close" })}>Close</button>
+        <button type="button" className="squad-pop-close shell-pop-close" aria-label="Close" onClick={() => dispatch({ type: "close" })}>
+          <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="m5 5 10 10M15 5 5 15" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+        </button>
       </div>
       <ul className="squad-list shell-members">
-        {members.map((member) => {
+        {members.map((member, index) => {
           const here = isCurrent(pathname, member.href);
-          const width = Math.round((member.width / member.height) * 40);
+          const width = (member.width / member.height) * 22;
           return (
             <li key={member.href}>
+              {member.founderOnly && !members[index - 1]?.founderOnly ? <p className="squad-platform">Platform</p> : null}
               <a
                 className={linkClassName ? `squad-row ${linkClassName}` : "squad-row"}
                 href={member.href}
@@ -252,8 +258,10 @@ function SquadControl({
                 aria-current={here ? "page" : undefined}
                 onClick={() => dispatch({ type: "choose" })}
               >
-                <img src={member.logo} alt="" width={width} height={40} />
-                <span className="squad-name shell-member-name">{member.label}</span>
+                <span className={member.lightLogo ? "squad-logo" : "squad-logo squad-logo-tile"}>
+                  <img src={member.lightLogo ?? member.logo} alt="" width={width} height={22} />
+                </span>
+                <span className="squad-name shell-member-name shell-sr">{member.label}</span>
                 <span className="squad-job shell-member-job">{member.job}</span>
               </a>
             </li>
@@ -261,6 +269,7 @@ function SquadControl({
         })}
       </ul>
     </div>
+    </>
   );
 
   return (
