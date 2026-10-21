@@ -233,6 +233,10 @@ services:
       - tervory-gw-zenas
       - tervory-gw-base
       - tervory-gw-rig
+    # Host loopback only, for the workers service on the Boston host (workers/host/).
+    # Never a public address: Tank stays off the internet.
+    ports:
+      - "127.0.0.1:8100:8000"
     expose:
       - "8000"
     healthcheck:

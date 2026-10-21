@@ -1,0 +1,26 @@
+# systemd USER unit for the tervory-workers host user. Installed by workers/host/install.sh to
+# ~tervory-workers/.config/systemd/user/. Lingering keeps it running without a login.
+# Same pattern as tngo-preview.service: user unit, loopback only.
+[Unit]
+Description=Tervory workers (polls GitHub issues, runs sealed rootless podman tasks)
+After=default.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/tervory-workers/worker.env
+Environment=PYTHONPATH=/srv/tervory-workers/app
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=WORKER_CODE_DIR=/srv/tervory-workers/app
+# Memory-backed (/run/user/<uid>/tervory-workers, 0700): per-task token files live here only.
+Environment=WORKER_STATE_DIR=%t/tervory-workers
+RuntimeDirectory=tervory-workers
+RuntimeDirectoryMode=0700
+WorkingDirectory=/srv/tervory-workers/app
+ExecStart=/srv/tervory-workers/venv/bin/python -m workers.service
+Restart=on-failure
+RestartSec=15
+NoNewPrivileges=yes
+UMask=0077
+
+[Install]
+WantedBy=default.target

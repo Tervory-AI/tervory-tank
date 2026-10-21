@@ -211,20 +211,14 @@ def test_write_refuses_a_symlinked_directory(tmp_path: Path) -> None:
     assert not any(real.iterdir())
 
 
-def test_workers_compose_passes_the_setting_and_mounts_no_host_file() -> None:
-    text = (ROOT / "docker-compose.workers.yml").read_text(encoding="utf-8")
-    service = yaml.safe_load(text)["services"]["workers"]
-    env = service["environment"]
-    assert "volumes" not in service
-    assert env["GITHUB_APP_ID"] == "${GITHUB_APP_ID:-}"
-    assert env["GITHUB_APP_INSTALLATION_ID"] == "${GITHUB_APP_INSTALLATION_ID:-}"
-    assert env["GITHUB_APP_PRIVATE_KEY"] == "${GITHUB_APP_PRIVATE_KEY:-}"
-    assert "GITHUB_APP_PRIVATE_KEY_FILE" not in env
-    assert "/var/lib/workers" in service["tmpfs"]
-    assert env["WORKER_STATE_DIR"] == "/var/lib/workers"
-    assert "PRIVATE KEY-----" not in text
+def test_workers_host_install_uses_a_key_file_outside_git() -> None:
+    # The Docker workers app is retired. On the host the key is a root:tervory-workers 0640 file.
+    assert not (ROOT / "docker-compose.workers.yml").exists()
+    template = (ROOT / "workers/host/worker.env.example").read_text(encoding="utf-8")
+    assert re.search(r"^GITHUB_APP_PRIVATE_KEY_FILE=/etc/tervory-workers/github-app.pem$", template, re.M)
+    assert not re.search(r"^GITHUB_APP_PRIVATE_KEY=", template, re.M)
+    assert "PRIVATE KEY-----" not in template
     example = (ROOT / ".env.example").read_text(encoding="utf-8")
-    assert re.search(r"^GITHUB_APP_PRIVATE_KEY=$", example, re.M)
     assert "PRIVATE KEY-----" not in example
     assert worker_settings.__doc__ and "GITHUB_APP_PRIVATE_KEY" in worker_settings.__doc__
 

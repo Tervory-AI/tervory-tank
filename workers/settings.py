@@ -1,4 +1,4 @@
-"""Environment for the worker service. Values come from Coolify.
+"""Environment for the worker service. On Boston the values come from /etc/tervory-workers/worker.env.
 
 Settings hold no secret. The GitHub App key (GITHUB_APP_PRIVATE_KEY) is checked here and,
 in from_env, kept in a private file for the service; Settings only carries that path.
@@ -42,6 +42,10 @@ KEY_NAME = "app-key.pem"
 LEGACY_KEY_FILE = "/run/secrets/github_app_key"
 
 
+# 127.0.0.1 for the service on the host, 10.0.2.2 for a task (slirp4netns host loopback).
+LOOPBACK_TANK_HOSTS = frozenset({"127.0.0.1", "10.0.2.2"})
+
+
 class SettingsError(ValueError):
     pass
 
@@ -71,6 +75,7 @@ class Settings:
     proxy_port: int = 8765
     service_port: int = 8000
     state_dir: str = "/var/lib/workers"
+    code_dir: str = "/srv/tervory-workers/app"
 
     @property
     def tank_host(self) -> str:
@@ -134,8 +139,8 @@ def _float(data: dict[str, str], name: str, default: float) -> float:
 
 
 def validate_tank_url(url: str, link: str) -> str:
-    if link not in {"internal", "wireguard"}:
-        raise SettingsError("WORKER_LINK must be internal or wireguard")
+    if link not in {"internal", "wireguard", "loopback"}:
+        raise SettingsError("WORKER_LINK must be loopback, internal or wireguard")
     parsed = urlsplit(url)
     host = parsed.hostname
     if parsed.scheme not in {"http", "https"} or not host:
@@ -149,6 +154,12 @@ def validate_tank_url(url: str, link: str) -> str:
         address = ipaddress.ip_address(lowered)
     except ValueError:
         address = None
+    if link == "loopback":
+        # Boston host: the service reaches Tank on 127.0.0.1 (compose binds 127.0.0.1:8100).
+        # A task container reaches the same port through slirp4netns as 10.0.2.2.
+        if parsed.scheme != "http" or lowered not in LOOPBACK_TANK_HOSTS or parsed.port is None:
+            raise SettingsError("with WORKER_LINK=loopback TANK_URL is http://127.0.0.1:<port>")
+        return url
     if link == "wireguard":
         if address is None or not address.is_private or address.is_loopback:
             raise SettingsError("on the third server TANK_URL must be a private WireGuard address")
@@ -203,7 +214,15 @@ def from_mapping(data: dict[str, str]) -> Settings:
         proxy_port=_int(data, "WORKER_PROXY_PORT", 8765, minimum=1024, maximum=65535),
         service_port=_int(data, "WORKER_PORT", 8000, minimum=1024, maximum=65535),
         state_dir=state_dir,
+        code_dir=_code_dir(data),
     )
+
+
+def _code_dir(data: dict[str, str]) -> str:
+    value = _text(data, "WORKER_CODE_DIR", "/srv/tervory-workers/app") or "/srv/tervory-workers/app"
+    if not value.startswith("/") or ".." in value.split("/") or not re.fullmatch(r"[A-Za-z0-9_./-]{1,200}", value):
+        raise SettingsError("WORKER_CODE_DIR must be an absolute path")
+    return value
 
 
 def private_key_path(state_dir: str) -> str:

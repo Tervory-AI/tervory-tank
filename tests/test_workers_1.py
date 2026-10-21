@@ -5,11 +5,11 @@ from __future__ import annotations
 import ast
 import asyncio
 import json
+import re
 from pathlib import Path
 
 import httpx
 import pytest
-import yaml
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
@@ -253,10 +253,8 @@ def test_fresh_podman_container_is_sealed() -> None:
     assert "--privileged" not in argv
     assert "host" != argv[argv.index("--network") + 1]
     assert "docker.sock" not in " ".join(argv)
-    # Cgroups are disabled inside the outer container, so no inner limits.
-    assert "--cgroups=disabled" in argv
-    for flag in ("--cpus", "--memory", "--pids-limit"):
-        assert flag not in argv
+    assert "--cpus" in argv and argv[argv.index("--cpus") + 1] == "2"
+    assert argv[argv.index("--memory") + 1] == "4g"
     assert "--read-only" in argv
     assert "tervory-worker-task:1" in argv
     assert "--add-host" in argv and "tank:10.0.1.8" in argv
@@ -264,7 +262,7 @@ def test_fresh_podman_container_is_sealed() -> None:
     assert "ghs_" not in blob
     assert "BEGIN PRIVATE KEY" not in blob
     assert choose_runtime({"host": {"ociRuntimes": {"runsc": {}, "crun": {}}}}) == "runsc"
-    assert choose_runtime({"host": {"ociRuntimes": {"crun": {}}}}) == "runc"
+    assert choose_runtime({"host": {"ociRuntime": {"name": "crun"}}}) == "crun"
     assert kill_argv("tervory-worker-7-abcd1234") == ["podman", "kill", "tervory-worker-7-abcd1234"]
     text = (ROOT / "workers/task/Dockerfile").read_text(encoding="utf-8")
     assert "node:22-bookworm-slim" in text
@@ -373,16 +371,10 @@ def test_secrets_are_redacted_and_not_in_the_result() -> None:
         directory.rmdir()
 
 
-def test_compose_publishes_nothing_and_joins_tank() -> None:
-    text = (ROOT / "docker-compose.workers.yml").read_text(encoding="utf-8")
-    data = yaml.safe_load(text)
-    service = data["services"]["workers"]
-    assert "ports" not in service
-    assert service["networks"] == ["tank"]
-    assert data["networks"]["tank"]["external"] is True
-    assert "TANK_KEY_WORKERS" in service["environment"]
-    assert "WORKER_LINK" in service["environment"]
-    env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
+def test_host_env_template_names_the_settings() -> None:
+    # The Docker workers app is retired; the host env file (workers/host/) carries the names.
+    assert not (ROOT / "docker-compose.workers.yml").exists()
+    template = (ROOT / "workers/host/worker.env.example").read_text(encoding="utf-8")
     for name in (
         "WORKER_MAX_TASKS",
         "WORKER_TASK_CPUS",
@@ -390,10 +382,12 @@ def test_compose_publishes_nothing_and_joins_tank() -> None:
         "TANK_KEY_WORKERS",
         "GITHUB_APP_ID",
         "GITHUB_APP_PRIVATE_KEY_FILE",
-        "TANK_DOCKER_NETWORK",
+        "TANK_URL",
     ):
-        assert name in env_example
-    assert "BEGIN PRIVATE KEY" not in text
+        assert re.search(rf"^{name}=", template, re.M)
+    env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
+    assert "TANK_KEY_WORKERS" in env_example
+    assert "BEGIN PRIVATE KEY" not in template
     assert "BEGIN PRIVATE KEY" not in (ROOT / "docs/workers/README.md").read_text(encoding="utf-8")
 
 

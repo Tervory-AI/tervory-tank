@@ -192,18 +192,19 @@ class Launcher:
 
     async def run(self, settings: Settings, task: WorkerIssue, token: str) -> Outcome:
         if not self._built:
-            code, build_out = await self.runner(build_argv(), timeout_s=60 * 60)
+            code, build_out = await self.runner(build_argv(settings.code_dir), timeout_s=60 * 60)
             if code != 0:
                 log.warning("task image build failed (exit %s). Last podman lines:\n%s", code, podman_tail(build_out))
                 raise RuntimeError("task image build failed")
             self._built = True
         info_code, info_out = await self.runner(["podman", "info", "--format", "json"], timeout_s=60)
-        runtime = "runc"
-        if info_code == 0:
-            try:
-                runtime = choose_runtime(json.loads(info_out))
-            except json.JSONDecodeError:
-                runtime = "runc"
+        if info_code != 0:
+            log.warning("podman info failed (exit %s). Last podman lines:\n%s", info_code, podman_tail(info_out))
+            raise RuntimeError("podman info failed")
+        try:
+            runtime = choose_runtime(json.loads(info_out))
+        except json.JSONDecodeError:
+            raise RuntimeError("podman info was not JSON") from None
         key = Path(os.environ["TANK_KEY_FILE"]).read_text(encoding="utf-8").strip() if os.environ.get("TANK_KEY_FILE") else os.environ.get("TANK_KEY_WORKERS", "").strip()
         if not key:
             raise RuntimeError("TANK_KEY_WORKERS is not set")
@@ -314,8 +315,9 @@ async def serve(settings: Settings) -> None:
         await writer.drain()
         writer.close()
 
-    server = await asyncio.start_server(handle, "0.0.0.0", settings.service_port)
-    log.info("workers listening on %s", settings.service_port)
+    # Loopback only. On the Boston host nothing else should reach the status page.
+    server = await asyncio.start_server(handle, "127.0.0.1", settings.service_port)
+    log.info("workers listening on 127.0.0.1:%s", settings.service_port)
     if not settings.github_ready or not Path(settings.private_key_file).is_file():
         log.info("GitHub App is not configured; not taking tasks")
         async with server:

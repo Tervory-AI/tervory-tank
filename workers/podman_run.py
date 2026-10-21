@@ -5,19 +5,30 @@ from __future__ import annotations
 import ipaddress
 import re
 import secrets
+from urllib.parse import urlsplit, urlunsplit
 
 from workers.settings import Settings
 
 TASK_IMAGE = "tervory-worker-task:1"
+# The host install copies the code here (workers/host/install.sh). Root-owned, read-only to the service.
+DEFAULT_CODE_DIR = "/srv/tervory-workers/app"
 _NAME = re.compile(r"^tervory-worker-[0-9]+-[0-9a-f]{8}$")
 
 
+class RuntimeMissing(RuntimeError):
+    pass
+
+
 def choose_runtime(info: dict[str, object] | None) -> str:
-    """Use gVisor (runsc) when podman lists it. Otherwise the ordinary runtime."""
+    """Use the runtime podman actually reports. Prefer gVisor (runsc) when podman lists it.
+
+    Never assume runc: Ubuntu's podman uses crun, and runc may not be installed at all.
+    """
     if not isinstance(info, dict):
-        return "runc"
+        raise RuntimeMissing("podman info did not describe a runtime")
     host = info.get("host")
     names: list[str] = []
+    current_name = ""
     if isinstance(host, dict):
         for key in ("ociRuntimes", "runtimes"):
             runtimes = host.get(key)
@@ -25,12 +36,28 @@ def choose_runtime(info: dict[str, object] | None) -> str:
                 names.extend(str(name) for name in runtimes)
         current = host.get("ociRuntime")
         if isinstance(current, dict) and isinstance(current.get("name"), str):
-            names.append(current["name"])
+            current_name = current["name"].strip()
+            names.append(current_name)
     for name in names:
         leaf = name.rsplit("/", 1)[-1]
         if leaf in {"runsc", "gvisor"} or "gvisor" in name:
             return "runsc" if leaf in {"runsc", "gvisor"} else name
-    return "runc"
+    if current_name:
+        return current_name.rsplit("/", 1)[-1]
+    raise RuntimeMissing("podman info did not name its OCI runtime")
+
+
+# On the Boston host, slirp4netns maps the host's loopback to this address inside the task.
+HOST_LOOPBACK = "10.0.2.2"
+TASK_NETWORK = "slirp4netns:allow_host_loopback=true"
+
+
+def task_tank_url(settings: Settings) -> str:
+    """The Tank address as the task container sees it."""
+    if settings.link != "loopback":
+        return settings.tank_url
+    parsed = urlsplit(settings.tank_url)
+    return urlunsplit((parsed.scheme, f"{HOST_LOOPBACK}:{settings.tank_port}", "", "", ""))
 
 
 def container_name(issue: int) -> str:
@@ -60,7 +87,7 @@ def task_argv(
         if "\n" in forbidden or "\r" in forbidden or "\x00" in forbidden:
             raise RuntimeError("refusing a path with a newline")
     env = {
-        "TANK_URL": settings.tank_url,
+        "TANK_URL": task_tank_url(settings),
         "TANK_KEY_FILE": "/run/secrets/tank_key",
         "GITHUB_TOKEN_FILE": "/run/secrets/token",
         "WORKER_TENANT_ID": settings.tenant_id,
@@ -85,14 +112,19 @@ def task_argv(
         "--rm",
         "--name",
         name,
-        # No cgroup writes inside the outer container. Limits come from compose.
-        "--cgroups=disabled",
+        # Per-task limits. The systemd user session delegates cpu, memory and pids (cgroups v2).
+        "--cpus",
+        str(settings.task_cpus),
+        "--memory",
+        settings.task_memory,
         "--cap-drop",
         "ALL",
         "--cap-add",
         "NET_ADMIN",
         "--security-opt",
         "no-new-privileges",
+        "--pids-limit",
+        "512",
         "--read-only",
         "--tmpfs",
         "/tmp:rw,nosuid,nodev,size=1g",
@@ -101,7 +133,7 @@ def task_argv(
         "--tmpfs",
         "/home/worker:rw,nosuid,nodev,size=256m",
         "--network",
-        "slirp4netns:port_handler=slirp4netns",
+        TASK_NETWORK,
         "--runtime",
         runtime,
     ]
@@ -123,7 +155,7 @@ def task_argv(
     argv.extend([TASK_IMAGE])
     joined = " ".join(argv)
     network = argv[argv.index("--network") + 1]
-    if network == "host" or "--privileged" in argv or "--network=host" in joined or "docker.sock" in joined:
+    if not network.startswith("slirp4netns:") or "--privileged" in argv or "--network=host" in joined or "docker.sock" in joined:
         raise RuntimeError("task container is not sealed")
     return argv
 
@@ -134,15 +166,18 @@ def kill_argv(name: str) -> list[str]:
     return ["podman", "kill", name]
 
 
-def build_argv() -> list[str]:
-    return [
+def build_argv(code_dir: str = DEFAULT_CODE_DIR) -> list[str]:
+    root = code_dir.rstrip("/") or "/"
+    argv = [
         "podman",
         "build",
-        # chroot isolation: RUN steps do not need cgroups or a privileged outer container.
-        "--isolation=chroot",
         "-t",
         TASK_IMAGE,
         "-f",
-        "/opt/tervory/workers/task/Dockerfile",
-        "/opt/tervory",
+        f"{root}/workers/task/Dockerfile",
+        root,
     ]
+    joined = " ".join(argv)
+    if "--privileged" in joined or "docker.sock" in joined or "--network=host" in joined:
+        raise RuntimeError("task build is not sealed")
+    return argv
