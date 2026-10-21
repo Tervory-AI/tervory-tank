@@ -838,7 +838,9 @@ export async function setCommandSquad(userId: string, tenantId: string, agent: s
 
 // ---- COMMAND-1: same-box conversations; caller identity is server-owned. ----
 export class CommandRequestError extends Error {
-  constructor(public status: number, public code: string, message: string) { super(message); }
+  status: number;
+  code: string;
+  constructor(status: number, code: string, message: string) { super(message); this.status = status; this.code = code; }
 }
 export async function commandRequest(identity: { tenantId: string; userId: string }, path: string, init: RequestInit = {}): Promise<Response> {
   if (!TANK_API_KEY) throw new Error("The conversation service is not configured.");
