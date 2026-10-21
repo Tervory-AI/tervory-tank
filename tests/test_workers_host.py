@@ -337,3 +337,23 @@ def test_task_dns_is_only_the_slirp_resolver() -> None:
     assert argv.count("--dns") == 1
     script = nft_script({"github.com": ["140.82.112.3"]}, tank_host="10.0.2.2", tank_port=8100, dns_servers=["10.0.2.3"])
     assert "10.0.2.3" in script
+
+
+def test_firewall_calls_nft_by_absolute_path() -> None:
+    # The task env PATH is /opt/venv/bin:/usr/local/bin:/usr/bin:/bin; nftables is /usr/sbin/nft.
+    from workers import egress_apply
+
+    assert egress_apply.NFT == "/usr/sbin/nft"
+    seen: list[list[str]] = []
+
+    def fake_run(command, **kwargs):
+        seen.append(command)
+        return subprocess.CompletedProcess(command, 0)
+
+    original = egress_apply.subprocess.run
+    egress_apply.subprocess.run = fake_run  # type: ignore[assignment]
+    try:
+        egress_apply.apply("table inet t {}\n")
+    finally:
+        egress_apply.subprocess.run = original  # type: ignore[assignment]
+    assert seen == [["/usr/sbin/nft", "-f", "-"]]
