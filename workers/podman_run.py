@@ -51,6 +51,7 @@ def choose_runtime(info: dict[str, object] | None) -> str:
 # On the Boston host, slirp4netns maps the host's loopback to this address inside the task.
 HOST_LOOPBACK = "10.0.2.2"
 TASK_NETWORK = "slirp4netns:allow_host_loopback=true"
+TASK_DNS = "10.0.2.3"  # slirp4netns built-in DNS forwarder
 
 
 def task_tank_url(settings: Settings) -> str:
@@ -143,6 +144,10 @@ def task_argv(
         "/home/worker:rw,nosuid,nodev,size=256m",
         "--network",
         TASK_NETWORK,
+        # Only slirp4netns's own resolver. Podman otherwise also copies the host's upstream public
+        # resolvers into the container, and the in-task firewall refuses public resolvers.
+        "--dns",
+        TASK_DNS,
         "--runtime",
         runtime,
     ]

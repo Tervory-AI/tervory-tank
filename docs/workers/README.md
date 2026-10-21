@@ -20,7 +20,7 @@ Each task is a new rootless podman container (`podman run --rm`), started by the
 - `--cap-drop ALL`, with `NET_ADMIN` added only so the in-task firewall can install, and `SETUID`/`SETGID` only so the entrypoint's `setpriv` can drop to the task user (without them `setresuid` fails and no task can start). In rootless podman these reach only the user namespace's own IDs, and the task process keeps no capabilities after the drop
 - `--security-opt no-new-privileges`
 - `--read-only`, with tmpfs for `/tmp`, `/work` and `/home/worker`
-- `--network slirp4netns:allow_host_loopback=true` (see the network section below)
+- `--network slirp4netns:allow_host_loopback=true` (see the network section below), and `--dns 10.0.2.3` so the only resolver is slirp4netns's own forwarder (podman would otherwise also copy the host's public upstream resolvers, which the firewall refuses)
 - `--runtime` set to the runtime podman itself reports in `podman info` (crun on Ubuntu), or gVisor (`runsc`) if podman lists it. runc is never assumed. If `podman info` fails, the task stops.
 
 Limits are per task, from settings: `--cpus` (`WORKER_TASK_CPUS`, default 2), `--memory` (`WORKER_TASK_MEMORY`, default 4g), `--pids-limit 512`, and the 90-minute timeout. They work because the host uses cgroups v2 and the systemd user session delegates the `cpu`, `memory` and `pids` controllers to `tervory-workers`. `install.sh` checks for that delegation and stops if it is missing. The earlier `--isolation=chroot` and `--cgroups=disabled` workarounds were needed only inside the unprivileged Docker container, and they are gone.

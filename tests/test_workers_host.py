@@ -328,3 +328,12 @@ def test_task_secrets_are_readable_by_the_task_user_only_through_a_0700_parent(t
     assert oct((directory / "token").stat().st_mode & 0o777) == oct(0o444)
     assert oct(parent.stat().st_mode & 0o777) == oct(0o700)
     assert not (ROOT / "workers/Dockerfile").exists()
+
+
+def test_task_dns_is_only_the_slirp_resolver() -> None:
+    # Podman would otherwise add the host's public upstream resolvers, which the firewall refuses.
+    argv = _argv()
+    assert argv[argv.index("--dns") + 1] == "10.0.2.3"
+    assert argv.count("--dns") == 1
+    script = nft_script({"github.com": ["140.82.112.3"]}, tank_host="10.0.2.2", tank_port=8100, dns_servers=["10.0.2.3"])
+    assert "10.0.2.3" in script
