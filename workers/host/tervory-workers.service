@@ -26,6 +26,14 @@ Restart=on-failure
 RestartSec=15
 NoNewPrivileges=yes
 UMask=0077
+# The limits the old tervory-workers container had (6 GB, 3 CPU), now on the unit.
+# Do not add ProtectSystem, ProtectHome, PrivateTmp or PrivateUsers: they break rootless podman.
+MemoryMax=6G
+CPUQuota=300%
+TasksMax=2048
+LockPersonality=yes
+RestrictRealtime=yes
+SystemCallArchitectures=native
 
 [Install]
 WantedBy=default.target
