@@ -16,6 +16,7 @@ from urllib.parse import urljoin, urlsplit
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
+from brain.reader import read_page
 from brain.security import authenticate, public_url, scope, tenant_dir
 
 app = FastAPI()
@@ -77,6 +78,7 @@ async def confirm_age(page, html: str) -> bool:
 
 async def read_pdf(context, url: str, timeout: int) -> dict:
     from pypdf import PdfReader
+    started = time.perf_counter()
     for _ in range(8):
         public_url(url)
         response = await context.request.get(url, timeout=timeout, max_redirects=0)
@@ -91,8 +93,12 @@ async def read_pdf(context, url: str, timeout: int) -> dict:
         reader = PdfReader(io.BytesIO(data))
         text = "\n".join((page.extract_text() or "") for page in reader.pages[:100])[:300000]
         return {"ok": True, "url": url, "status": response.status, "content_type": "application/pdf",
+                "title": str((reader.metadata or {}).get("/Title", "")), "pdf_extraction_ms": (time.perf_counter() - started) * 1000,
                 "text": text, "html": "<pre>" + html_module.escape(text) + "</pre>", "challenge": False,
-                "blocked_by_check": False, "links": []}
+                "blocked_by_check": False, "links": [
+                    {"text": "PDF link", "url": str(annotation.get_object().get("/A", {}).get("/URI", ""))}
+                    for page in reader.pages[:100] for annotation in page.get("/Annots", [])
+                    if annotation.get_object().get("/A", {}).get("/URI")], "pdf_data": data}
     raise ValueError("Too many document redirects")
 
 
@@ -171,7 +177,7 @@ async def render(body: Page, x_tank_key: str = Header(default=""), x_tenant_id: 
                         links = []
                         if not challenge:
                             for item in await page.locator("a[href]").evaluate_all(
-                                "els => els.slice(0,100).map(e => ({text:e.innerText.slice(0,120),url:e.href}))"):
+                                "els => els.filter(e => e.checkVisibility()).map(e => ({text:e.innerText.slice(0,120),url:e.href}))"):
                                 try:
                                     public_url(item["url"])
                                 except ValueError:
@@ -181,6 +187,34 @@ async def render(body: Page, x_tank_key: str = Header(default=""), x_tenant_id: 
                             "challenge": challenge, "needs_person": "needs a person" if challenge else None,
                             "html": "" if challenge else html[:600000], "blocked_by_check": challenge,
                             "denied_requests": len(denied), "links": links, "age_confirmation": clicked}
+                evidence = directory / "evidence"
+                evidence.mkdir(exist_ok=True)
+                identity = hashlib.sha256((x_task_id + str(time.time_ns())).encode()).hexdigest()
+                if result.get("content_type") == "application/pdf":
+                    (evidence / (identity + ".pdf")).write_bytes(result.pop("pdf_data"))
+                else:
+                    (evidence / (identity + ".html")).write_text(html)
+                    await page.screenshot(path=str(evidence / (identity + ".png")), full_page=True)
+                # The rendered DOM removes CSS-hidden content before parsing; raw
+                # HTML remains exclusively in this room's tenant evidence directory.
+                source = result.get("html", "")
+                if result.get("content_type") != "application/pdf":
+                    source = await page.evaluate("""() => {
+                        const copy = document.documentElement.cloneNode(true);
+                        const originals = [document.documentElement, ...document.documentElement.querySelectorAll('*')];
+                        const clones = [copy, ...copy.querySelectorAll('*')];
+                        originals.forEach((el, i) => {
+                            if (!el.closest('head') && el.tagName !== 'SCRIPT' && !el.checkVisibility()) clones[i].setAttribute('hidden', '');
+                        });
+                        return copy.outerHTML;
+                    }""")
+                result["page"] = read_page(result.get("url", body.url), source,
+                    text=result.get("text"), title=result.get("title", ""), links=result.get("links"), status=result.get("status"),
+                    challenge=bool(result.get("challenge")))
+                result["page"]["extraction_ms"] += result.pop("pdf_extraction_ms", 0)
+                result["evidence"] = {"id": identity, "storage": "room tenant evidence"}
+                result.pop("html", None)
+                result.pop("text", None)
                 return result
             except Exception:
                 raise HTTPException(503, "Base browser could not read this page; no result is claimed.") from None

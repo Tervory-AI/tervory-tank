@@ -38,7 +38,12 @@ def visitor(monkeypatch, tmp_path):
             await h.gate.wait()
             return SimpleNamespace(status=200)
         async def content(self): return h.html
-        async def evaluate(self,*args): h.scrolls+=1
+        async def evaluate(self,*args):
+            h.scrolls+=1
+            return h.html
+        async def screenshot(self,path,**kwargs):
+            from pathlib import Path
+            Path(path).write_bytes(b"screenshot")
         async def wait_for_timeout(self,*args): pass
         def get_by_role(self,*args,**kwargs): raise AssertionError('Unexpected click')
         def locator(self,*args):
@@ -82,7 +87,7 @@ async def test_same_site_waits_a_few_seconds(visitor,monkeypatch):
     visitor.gate.set()
     now=[100.0];waits=[]
     async def sleep(seconds): waits.append(seconds);now[0]+=seconds
-    monkeypatch.setattr(browser,'time',SimpleNamespace(monotonic=lambda:now[0],time=lambda:100))
+    monkeypatch.setattr(browser,'time',SimpleNamespace(monotonic=lambda:now[0],time=lambda:100,time_ns=lambda:100))
     monkeypatch.setattr(browser,'asyncio',SimpleNamespace(sleep=sleep,Lock=asyncio.Lock,timeout=asyncio.timeout))
     await visitor.visit('https://www.business.example')
     await visitor.visit('https://business.example/about')
@@ -94,8 +99,8 @@ async def test_captcha_is_recorded_needs_a_person_without_click_or_scroll(visito
     visitor.gate.set()
     visitor.html='<div class="g-recaptcha">verify you are human</div><button>I am over 21</button>'
     result=await visitor.visit('https://business.example')
-    assert result['challenge'] and result['needs_person']=='needs a person' and result['html']==''
-    assert visitor.scrolls==0
+    assert result['challenge'] and result['needs_person']=='needs a person' and 'html' not in result and result['page']['facts']['human_check']
+    assert visitor.scrolls==1  # extraction inspects the DOM without clicking or scrolling
 
 
 @pytest.mark.asyncio
@@ -148,3 +153,14 @@ async def test_busy_browser_queue_returns_before_upstream_timeout(visitor, monke
         await asyncio.wait_for(visitor.visit('https://busy.example'), .5)
     assert error.value.status_code == 503 and lock.locked()
     assert browser.concurrency._value == 4
+
+
+@pytest.mark.asyncio
+async def test_page_evidence_is_saved_without_returning_html(visitor, tmp_path):
+    visitor.gate.set()
+    result = await visitor.visit('https://shop.example')
+    assert 'html' not in result
+    assert result['page']['text'] == 'Public business page'
+    evidence = list(tmp_path.rglob('evidence/*'))
+    assert {p.suffix for p in evidence} == {'.html', '.png'}
+    assert next(p for p in evidence if p.suffix == '.html').read_text() == visitor.html
