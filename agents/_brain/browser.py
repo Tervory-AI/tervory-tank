@@ -9,18 +9,42 @@ import json
 import os
 import re
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit
 
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
-from brain.security import authenticate, public_destination, public_url, scope, tenant_dir
+from brain.security import authenticate, public_url, scope, tenant_dir
 
 app = FastAPI()
 concurrency = asyncio.Semaphore(4)
 site_locks: dict[str, asyncio.Lock] = {}
 last_visit: dict[str, float] = {}
+QUEUE_TIMEOUT = 20
+
+
+@asynccontextmanager
+async def render_slot(site):
+    lock = site_locks.setdefault(site, asyncio.Lock())
+    locked = admitted = False
+    try:
+        try:
+            async with asyncio.timeout(QUEUE_TIMEOUT):
+                await lock.acquire()
+                locked = True
+                await asyncio.sleep(max(0, 3.0 - (time.monotonic() - last_visit.get(site, 0))))
+                await concurrency.acquire()
+                admitted = True
+        except TimeoutError:
+            raise HTTPException(503, "Base browser is busy; try again shortly.") from None
+        yield
+    finally:
+        if admitted:
+            concurrency.release()
+        if locked:
+            lock.release()
 HUMAN_CHECKS = ("g-recaptcha", "hcaptcha", "cf-turnstile", "verify you are human", "confirm you are human",
                 "checking your browser", "complete the security check", "prove you are human")
 AGE_BUTTON = re.compile(r"^(?:yes[,! ]*)?(?:i am|i'm|i confirm i am) (?:over |at least )?(?:18|21)(?:\+| years old)?[.!]?$", re.I)
@@ -54,7 +78,7 @@ async def confirm_age(page, html: str) -> bool:
 async def read_pdf(context, url: str, timeout: int) -> dict:
     from pypdf import PdfReader
     for _ in range(8):
-        await public_destination(url)
+        public_url(url)
         response = await context.request.get(url, timeout=timeout, max_redirects=0)
         if response.status in {301, 302, 303, 307, 308}:
             url = urljoin(url, response.headers.get("location", ""))
@@ -83,7 +107,7 @@ async def render(body: Page, x_tank_key: str = Header(default=""), x_tenant_id: 
     authenticate(x_tank_key)
     tenant = scope(x_tenant_id, x_home_region)
     try:
-        host, _port, _addresses = await public_destination(body.url)
+        host, _port = public_url(body.url)
     except (ValueError, OSError):
         raise HTTPException(403, "Private or internal web address refused.") from None
     directory = tenant_dir(Path(os.environ.get("BROWSER_DATA_DIR", "/browser-data")), tenant)
@@ -93,12 +117,11 @@ async def render(body: Page, x_tank_key: str = Header(default=""), x_tenant_id: 
     from playwright.async_api import async_playwright
 
     site = host.removeprefix("www.")
-    async with site_locks.setdefault(site, asyncio.Lock()):
-        await asyncio.sleep(max(0, 3.0 - (time.monotonic() - last_visit.get(site, 0))))
-        async with concurrency, async_playwright() as playwright:
+    async with render_slot(site):
+        async with async_playwright() as playwright:
             browser = await playwright.chromium.launch(headless=True, executable_path="/usr/bin/chromium",
                 proxy={"server": "http://base-browser-gateway:3128"},
-                args=["--disable-quic", "--proxy-bypass-list=<-loopback>"])
+                args=["--disable-quic", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp", "--proxy-bypass-list=<-loopback>"])
             context = None
             result = {"ok": False, "challenge": False}
             try:
@@ -109,7 +132,7 @@ async def render(body: Page, x_tank_key: str = Header(default=""), x_tenant_id: 
 
                 async def check(route):
                     try:
-                        await public_destination(route.request.url)
+                        public_url(route.request.url)
                         if route.request.is_navigation_request() and route.request.method not in {"GET", "HEAD"}:
                             raise ValueError("Forms are not allowed")
                     except (ValueError, OSError):
@@ -144,7 +167,7 @@ async def render(body: Page, x_tank_key: str = Header(default=""), x_tenant_id: 
                             html = await page.content()
                             challenge = human_check(html) or bool(response and response.status in {401, 403, 429})
                         # Re-check the final location, including client-side redirects.
-                        await public_destination(page.url)
+                        public_url(page.url)
                         links = []
                         if not challenge:
                             for item in await page.locator("a[href]").evaluate_all(

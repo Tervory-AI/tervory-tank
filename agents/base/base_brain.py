@@ -104,14 +104,47 @@ async def drive_batch(pool, skills, task_id, cfg, call):
                 cfg["brain_receipt"] = receipt
                 await _run_batch(pool, task_id, cfg, scoped_call)
                 return
-            if batch.job and not batch.job.done():
+            if not batch.finished:
+                # Close callbacks before stopping the agent, then let any free
+                # pass settle before using the existing paid continuation.
+                async with batch.lock:
+                    batch.finished = True
+                    batch.operation = "finish_fallback"
+                try:
+                    async with httpx.AsyncClient(timeout=5) as cancel_client:
+                        await cancel_client.delete(os.environ["BASE_BRAIN_URL"] + "/tasks/" + str(task_id),
+                            headers=skills._headers(), params={"tenant_id": str(tenant),
+                                "home_region": os.environ.get("TANK_REGION", "us-east")})
+                except Exception:
+                    pass
+                if batch.job:
+                    await asyncio.shield(batch.job)
+                receipt = receipt or {"tenant_id": str(tenant), "task_id": str(task_id), "room": "base",
+                    "steps": [], "model_receipts": []}
+                batch.job = asyncio.create_task(run_phase(batch, Task(tenant_id=tenant, task_id=task_id, finish=True)))
                 await asyncio.shield(batch.job)
-            if not receipt:
-                receipt = {"tenant_id": str(tenant), "task_id": str(task_id), "room": "base", "status": "failed",
-                    "error": "Brain unavailable after pipeline started; completed work retained.", "steps": [], "model_receipts": []}
+                result = batch.result or {"pipeline_status": "failed"}
+                receipt["steps"].append({"action": "pipeline_continue_fallback", "status": result["pipeline_status"],
+                    "summary": result.get("summary"), "reason": "brain failed after pipeline_run"})
+                receipt["status"] = "done" if result["pipeline_status"] == "done" else "failed"
+                receipt["error"] = None if receipt["status"] == "done" else "Default pipeline continuation did not finish."
+            else:
+                if batch.job and not batch.job.done():
+                    await asyncio.shield(batch.job)
+                if not receipt:
+                    receipt = {"tenant_id": str(tenant), "task_id": str(task_id), "room": "base", "status": "failed",
+                        "error": "Brain unavailable after pipeline started; completed work retained.", "steps": [], "model_receipts": []}
+            try:
+                response = await skills._http.get(skills._base + "/v1/agents/base/receipts",
+                    headers=skills._headers(), params={"tenant_id": str(tenant), "task_id": str(task_id)}, timeout=15)
+                if response.status_code == 200:
+                    receipt["model_receipts"] = response.json()["receipts"]
+            except Exception:
+                pass
         cfg["brain_receipt"] = receipt
         cost = sum(float(r["cost_usd"]) for r in receipt.get("model_receipts", []))
         previous_brain_cost = float(cfg.get("brain_spend") or 0)
+        cost = max(previous_brain_cost, cost)
         cfg["brain_spend"] = cost
         cfg["model_spend"] = float(cfg.get("model_spend") or 0) - previous_brain_cost + cost
         failed = receipt.get("status") != "done"
@@ -150,17 +183,19 @@ def selected(body: Task, key: str) -> ActiveBatch:
 async def results(batch: ActiveBatch, body: Task) -> dict:
     async with batch.pool.acquire() as conn:
         rows = await conn.fetch(
-            "SELECT id,raw,profile,passes,status FROM agent_base.records WHERE tenant_id=$1 AND task_id=$2 "
+            "SELECT id,raw,profile,status FROM agent_base.records WHERE tenant_id=$1 AND task_id=$2 "
             "AND (status<>'done' OR confidence<80) ORDER BY created_at LIMIT 20", body.tenant_id, body.task_id)
         task = await conn.fetchrow("SELECT status,result FROM agent_base.tasks WHERE tenant_id=$1 AND id=$2", body.tenant_id, body.task_id)
     unresolved = []
     for row in rows:
-        item = dict(row)
-        item["id"] = str(item["id"])
-        for key in ("raw", "profile", "passes"):
-            if isinstance(item[key], str):
-                item[key] = json.loads(item[key])
-        unresolved.append(item)
+        raw, profile = row["raw"], row["profile"]
+        raw = json.loads(raw) if isinstance(raw, str) else raw
+        profile = json.loads(profile) if isinstance(profile, str) else profile
+        def value(key):
+            item = profile.get(key) or raw.get(key) or ""
+            return str(item.get("value") or "") if isinstance(item, dict) else str(item)
+        unresolved.append({"id": str(row["id"]), "name": value("name")[:120],
+            "website": value("website")[:160], "status": row["status"]})
     return {"pipeline_status": task["status"], "summary": task["result"], "unresolved": unresolved,
             "skills": batch.cfg.get("refs", {}), "cost_usd": batch.cfg.get("model_spend", 0)}
 

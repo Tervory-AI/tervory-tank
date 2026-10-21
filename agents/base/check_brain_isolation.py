@@ -15,8 +15,8 @@ def docker(*args):
 
 def sandbox_probe_script():
     scratch = "blocked=False\ntry:\n import socket\n socket.socket()\nexcept (ImportError,OSError): blocked=True\nassert blocked\nfrom pathlib import Path\nPath('proof').write_text('offline')\nprint('OFFLINE')"
-    sandbox_check = "import json,urllib.request,uuid\ncommand=" + repr("python -c " + shlex.quote(scratch)) + "\n" + """body = json.dumps({'tenant_id':str(uuid.uuid4()),'task_id':str(uuid.uuid4()),'command':command}).encode()
-request = urllib.request.Request('http://base-sandbox:8002/exec',data=body,headers={'Content-Type':'application/json'})
+    sandbox_check = "import json,os,urllib.request,uuid\ncommand=" + repr("python -c " + shlex.quote(scratch)) + "\n" + """body = json.dumps({'tenant_id':str(uuid.uuid4()),'task_id':str(uuid.uuid4()),'command':command}).encode()
+request = urllib.request.Request('http://base-sandbox:8002/exec',data=body,headers={'Content-Type':'application/json','X-Sandbox-Key':os.environ['SANDBOX_KEY']})
 result = json.load(urllib.request.urlopen(request,timeout=35))
 assert result['exit_code']==0 and 'OFFLINE' in result['output'], result
 """

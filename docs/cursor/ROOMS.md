@@ -44,7 +44,10 @@ separate per tenant. Four sites may run in parallel with a few seconds between
 same-site pages. Public HTTP(S) sites and PDFs are permitted; private/internal
 addresses are blocked and DNS/redirects are re-checked. The CONNECT proxy binds
 only to the browser-network interface. Captchas/bot checks are **needs a person**;
-only simple age-confirmation buttons outside forms may be clicked.
+only simple age-confirmation buttons outside forms may be clicked. The browser
+checks URLs without outside DNS; gateway DNS checks pin HTTP/CONNECT addresses.
+WebRTC cannot use non-proxied UDP. Browser memory is 2 GB; queue waits return
+busy after 20 seconds.
 
 Base's Skala context uses its own gateway. Tiger no longer joins
 `tervory-gw-base`; Tank reaches Tiger through `tervory-gw-tiger`. Other room
@@ -60,7 +63,12 @@ unchanged for other rooms. See [Base's runbook](../../agents/base/BRAIN.md).
 
 Brain tasks and pipeline phases use authenticated start-then-poll endpoints.
 When the brain fails before starting pipeline work, Base cancels it and runs
-today's pipeline, retaining a fallback receipt. Work already started is retained.
+today's pipeline, retaining a fallback receipt. If it fails after the free pass,
+Base stops the brain, waits for work, and runs paid continuation with a
+`pipeline_continue_fallback` step. Work already started is retained.
+`SANDBOX_KEY` belongs only to brain and executor, authenticates `/exec` and never
+reaches scratch code. Confirm Coolify adds no outbound tool networks before
+the live pilot.
 
 Receipts are available to the work panel through the existing tenant-scoped
 `GET /v1/base/batches?tenant_id=...` response: each batch has `brain_tasks`, with

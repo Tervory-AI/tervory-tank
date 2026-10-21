@@ -25,7 +25,10 @@ is retained in the image. The brain uses Python 3.14 and has no provider key.
 6. If the brain is down, paused, refused or fails before starting the pipeline,
    Base cancels its job, closes the late-callback gate and runs today's pipeline.
    A fallback receipt explains this. Existing results are retained if the brain
-   fails after pipeline work started. Thinking costs are not counted twice.
+   fails after pipeline work started. If free recovery ran but paid continuation
+   did not, Base stops the brain, waits for active work, then runs the finishing
+   pass and records `pipeline_continue_fallback`. Status follows that pass.
+   Thinking costs are not counted twice.
 
 ## Model and Skala boundary
 
@@ -36,12 +39,18 @@ Skala's eval/approval lifecycle are unchanged.
 - `POST /v1/agents/base/chat/completions`: Base room key plus tenant/task/region
   headers. Policy chooses the model and output cap. The paid-work pause and
   `model_call_refusal` run before LiteLLM. Unknown SDK message fields and requested
-  reasoning effort are removed. A conservative UTF-8 input-token bound caps the
-  complete prompt and tools before spending.
+  reasoning effort are removed. Hermes and Tank share a 64,000-token context
+  budget (the pinned Hermes minimum), reserving requested output. Eight memories
+  are limited to 1,000 characters each; tool results to 8,000 characters.
+  Unresolved records expose only id/name/website/status. Tank counts the complete
+  payload with offline cl100k BPE plus 20% tokenizer margin and chat framing,
+  rather than UTF-8 bytes. Lower policy input limits still apply.
 - Every gateway call writes a ledger row, transcript and scoped receipt in one
   transaction. Missing cost headers use roster token prices and are marked
   estimated. Missing usage on a malformed billed response gets an explicit
-  estimated upper bound. A policy model without prices is refused before calling.
+  estimated upper bound. A timeout/interruption after send is `unknown`, with an
+  `unknown_upper_bound` cost reservation pending reconciliation, never called free.
+  A policy model without prices is refused before calling.
   An unknown baseline stays null. No automatic promotion is enabled.
 - `GET /v1/agents/base/skills?tenant_id=...&home_region=us-east` exports only
   present approved Base versions in agentskills.io format. Room-authored versions
@@ -62,12 +71,16 @@ Both pipeline renders and the brain use Base's real Chromium container, cookie
 volume and history. Tiger is absent from Base's network. Any public HTTP(S) site
 is permitted; there is no host allowlist. Private, loopback, metadata, multicast
 and internal DNS addresses are refused. Requests and redirects are re-checked,
-and the proxy connects only to the checked IP. CONNECT listens only on the
+and the proxy connects only to the checked IP. The internal-only browser does
+URL/literal-IP checks without outside DNS; the gateway resolves and pins every
+HTTP/CONNECT destination. CONNECT listens only on the
 browser-network interface, never the Base corridor interface.
 
 The visitor supports JavaScript, scrolling, public links and PDFs. Cookies
 persist per tenant/site. Same-site pages wait a few seconds, while four sites
-can run in parallel. Slow pages have a generous timeout. No identity masking or
+can run in parallel; the browser has a 2 GB memory limit. Queue waits return
+**busy** after 20 seconds, before upstream request timeouts. Slow pages have a
+generous timeout. Non-proxied WebRTC UDP is disabled. No identity masking or
 proxy rotation is used. Captchas, bot checks and login requirements are recorded
 as **needs a person**. The only automated click is a narrowly identified simple
 age-confirmation button outside a form. No forms, accounts or logins are used.
@@ -76,7 +89,11 @@ age-confirmation button outside a form. No forms, accounts or logins are used.
 
 `base-sandbox` has `cap_drop: ALL`, `no-new-privileges`, a read-only root, bounded
 CPU/memory/PIDs and tmpfs. It joins only the internal sandbox network with Base's
-brain. It has no key, host path, brain/session volume, Docker socket or daemon.
+brain. Its `SANDBOX_KEY` is passed only to brain and executor; `/exec` requires
+`X-Sandbox-Key` using constant-time comparison, while health remains open. Set
+this distinct key through the cloud secret mechanism before deployment. It is
+never inherited by scratch code. There is no host path, brain/session volume,
+Docker socket or daemon. Invalid/oversized uploads remove their work directory.
 
 The small exec API runs **Python scratch commands through CPython/WASI**. It
 accepts `python -c` or a Python heredoc, not host shell commands. Wasmtime exposes
@@ -85,6 +102,12 @@ read-only. No sockets, native subprocesses, host environment or other run paths
 are available. Outputs are explicitly copied back into Base's run volume; the
 executor removes its temporary directory. Memory, fuel, output size and wall
 clock time are bounded. This works without special host namespace privileges.
+
+Tank additionally pins tiktoken **0.14.0** for actual BPE budgeting. The bundled
+cl100k vocabulary is hash checked against OpenAI SHA-256
+`223921b76ee99bde995b7ff738513eef100fb51d18c93597a113bcffe865b2a7`;
+its MIT licence is retained. No tokenizer downloads happen at runtime. Its count
+is a reference budget with margin, not exact provider billing.
 
 Wasmtime **49.0.0** is pinned. CPython/WASI **3.13.11**, WASI SDK 24, is pinned to
 asset SHA-256 `e99a617738ade87cd263aa46cace7173faa91b5de994499c83e49d132c40bb77`.
@@ -120,7 +143,9 @@ AGENT1_PILOT=1 AGENT1_PILOT_OUTPUT=/tmp/base-pilot pytest -q -s tests/test_agent
 
 The pilot also needs `POOL_SCHEMA_DATABASE_URL` for a throwaway Postgres server.
 It removes only its own database, containers, volumes and networks. The container
-checks exercise real JavaScript/age clicks/cookie persistence, human-check
+checks render `https://example.com` through the gateway `/render` with a
+non-internal gateway corridor and an internal-only browser. They also exercise
+real JavaScript/age clicks/cookie persistence, human-check
 refusal, private egress and browser-only proxy binding, plus isolated WASI work.
 
 ## How Claude runs the live pilot
@@ -132,7 +157,10 @@ This is the assigned post-merge handoff. The live run has not occurred here.
 1. After founder merge and authorized Boston deployment, verify existing Base
    credentials, database and Hermes access. Run
    `python agents/base/check_brain_isolation.py ROOM BRAIN SANDBOX BROWSER GATEWAY`
-   with the deployed names. Require every check to pass.
+   with the deployed names. Require every check to pass. Use
+   `docker network inspect SANDBOX_NETWORK BROWSER_NETWORK` to confirm Coolify
+   attached no outbound network to either tool container. Verify `SANDBOX_KEY`
+   exists only in brain and executor.
 2. Save a current official Delaware ATF state file, preserving ATF columns. Record
    source URL, snapshot date and row count.
 3. Open `https://app.tervory.com/data`, name the batch, upload the CSV/TSV, select

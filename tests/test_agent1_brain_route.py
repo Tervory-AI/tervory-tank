@@ -170,7 +170,7 @@ async def test_input_budget_prevents_billed_call(setup):
     app, _, pool, key = setup
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://tank") as client:
         response = await client.post("/v1/agents/base/chat/completions", headers={"X-Tank-Key": key, "X-Tenant-ID": str(uuid.uuid4())},
-            json={"messages": [{"role": "user", "content": "a" * 48001}]})
+            json={"messages": [{"role": "user", "content": "x!y?z@ " * 40000}]})
     assert response.status_code == 413 and pool.rows == []
 
 
@@ -190,3 +190,25 @@ async def test_malformed_billed_reply_retains_reported_or_bounded_cost(setup,mon
     receipt=result.json()['detail']['receipt']
     assert receipt['cost_status']==('reported' if reported else 'estimated_upper_bound')
     if reported: assert receipt['cost_usd']==pytest.approx(.03)
+
+
+@pytest.mark.asyncio
+async def test_read_timeout_after_send_records_unknown_upper_bound(setup, monkeypatch):
+    app, _, pool, key = setup
+    original = httpx.AsyncClient
+    def gateway(request):
+        raise httpx.ReadTimeout("fixture after send", request=request)
+    monkeypatch.setattr(route.httpx, "AsyncClient", lambda **kw: original(transport=httpx.MockTransport(gateway)))
+    async with original(transport=httpx.ASGITransport(app=app), base_url="http://tank") as client:
+        response = await client.post('/v1/agents/base/chat/completions', headers={'X-Tank-Key':key, 'X-Tenant-ID':str(uuid.uuid4())},
+            json={'messages':[{'role':'user','content':'Plan a public batch'}]})
+    assert response.status_code == 502 and len(pool.rows) == 3
+    receipt = response.json()['detail']['receipt']
+    assert receipt['outcome'] == 'unknown' and receipt['cost_status'] == 'unknown_upper_bound'
+    assert receipt['cost_usd'] > 0 and receipt['tokens_out'] == 100
+
+
+def test_token_budget_counts_bpe_instead_of_utf8_bytes():
+    payload = {'messages':[{'role':'user','content':'Public business evidence. ' * 3000}]}
+    assert len(json.dumps(payload).encode()) > 48000
+    assert route.input_tokens(payload) < 20000

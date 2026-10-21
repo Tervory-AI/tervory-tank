@@ -50,11 +50,12 @@ async def run_task(body: Run) -> dict:
             raise RuntimeError("Memory tenant boundary failed")
         receipt["steps"].append({"action": "recall", "count": len(memories), "memory_ids": [m["id"] for m in memories]})
         try:
+            memories = [{"id": m["id"], "text": str(m.get("text", ""))[:1000]} for m in memories[:8]]
             request = {**body.model_dump(mode="json"), "memories": memories}
             (work / "request.json").write_text(json.dumps(request))
             env = {key: value for key, value in os.environ.items() if key in {
                 "PATH", "PYTHONPATH", "LANG", "TANK_URL", "TANK_KEY", "TANK_REGION", "BASE_ROOM_URL",
-                "BASE_BROWSER_URL", "DATA_DIR", "BASE_SANDBOX_URL", "HERMES_BUNDLED_SKILLS", "HERMES_OPTIONAL_SKILLS"}}
+                "BASE_BROWSER_URL", "DATA_DIR", "BASE_SANDBOX_URL", "SANDBOX_KEY", "HERMES_BUNDLED_SKILLS", "HERMES_OPTIONAL_SKILLS"}}
             env.update(HERMES_HOME=str(root / "hermes"), PYTHONUNBUFFERED="1")
             process = await asyncio.create_subprocess_exec(sys.executable, "-m", "brain.runner", str(work),
                 env=env, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)

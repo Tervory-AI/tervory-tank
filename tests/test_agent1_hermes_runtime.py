@@ -103,7 +103,7 @@ def test_actual_hermes_calls_pipeline_via_tank_with_receipts(tmp_path, monkeypat
                         "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}}, extra={"x-litellm-response-cost": "0"})
                 elif self.path == "/brain/pipeline":
                     assert body in ({"tenant_id": tenant, "task_id": task, "finish": False}, {"tenant_id": tenant, "task_id": task, "finish": True})
-                    self.reply({"pipeline_status": "done", "summary": "Cloud fixture processed", "unresolved": [], "cost_usd": 0})
+                    self.reply({"pipeline_status": "done", "summary": "Cloud fixture processed", "unresolved": [{"id":str(uuid.uuid4()),"name":"Fixture business","website":"https://example.com","status":"done"} for _ in range(20)], "cost_usd": 0})
                 else:
                     raise AssertionError("Unexpected POST " + self.path)
             except Exception as exc:
@@ -117,7 +117,7 @@ def test_actual_hermes_calls_pipeline_via_tank_with_receipts(tmp_path, monkeypat
     thread.start()
     work = tmp_path / "tenants" / tenant / "runs" / task
     work.mkdir(parents=True)
-    (work / "request.json").write_text(json.dumps({"tenant_id": tenant, "task_id": task, "batch": "cloud protocol fixture", "count": 1, "memories": []}))
+    (work / "request.json").write_text(json.dumps({"tenant_id": tenant, "task_id": task, "batch": "cloud protocol fixture", "count": 1, "memories": [{"id":str(i),"text":"old public evidence " * 500} for i in range(8)]}))
     root = Path(__file__).resolve().parents[1]
     env = dict(os.environ, TANK_KEY=key, TANK_URL=endpoint, BASE_ROOM_URL=endpoint, NO_PROXY="127.0.0.1,localhost", no_proxy="127.0.0.1,localhost")
     args = ["docker", "run", "--rm", "--network=host", "-v", str(tmp_path) + ":/data",
@@ -132,6 +132,9 @@ def test_actual_hermes_calls_pipeline_via_tank_with_receipts(tmp_path, monkeypat
         receipt = json.loads((work / "receipt.json").read_text())
         assert errors == []
         assert len(calls) == 2
+        assert len(next(m["content"] for m in calls[-1]["messages"] if m["role"]=="tool")) <= 8000
+        config=json.loads((tmp_path/"tenants"/tenant/"hermes"/"config.yaml").read_text())
+        assert config["model"]["context_length"]==64000
         assert len(receipt["model_receipts"]) == 2
         assert [r["action"] for r in receipt["steps"][-2:]] == ["pipeline_run", "pipeline_continue"]
         assert all(r["tenant_id"] == tenant and r["task_id"] == task for r in receipt["model_receipts"])

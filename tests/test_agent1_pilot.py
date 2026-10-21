@@ -46,7 +46,7 @@ async def test_recorded_atf_fixture_through_real_tank(monkeypatch, tmp_path):
     brain, browser, gateway, executor = [prefix + suffix for suffix in ("-brain", "-browser", "-gateway", "-sandbox")]
     data_volume, browser_volume = prefix + "-data", prefix + "-browser-data"
     key, workspace_key, fake_master = (secrets.token_urlsafe(32) for _ in range(3))
-    env = dict(os.environ, TANK_KEY=key)
+    env = dict(os.environ, TANK_KEY=key, SANDBOX_KEY=secrets.token_urlsafe(32))
     tenant, other_tenant = uuid.uuid4(), uuid.uuid4()
     events, completions, site_requests = [], [], []
     output = Path(os.environ.get("AGENT1_PILOT_OUTPUT", str(tmp_path / "evidence")))
@@ -183,8 +183,8 @@ CODE"""
 
         docker("run", "-d", "--name", executor, "--network", sandbox_net, "--network-alias", "base-sandbox",
                "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--read-only", "--pids-limit", "64",
-               "--memory", "512m", "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=32m",
-               "--tmpfs", "/work:rw,nosuid,nodev,size=128m,uid=1000,gid=1000,mode=0700", "tervory-agent1-sandbox:cloud")
+               "--memory", "512m", "-e", "SANDBOX_KEY", "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=32m",
+               "--tmpfs", "/work:rw,nosuid,nodev,size=128m,uid=1000,gid=1000,mode=0700", "tervory-agent1-sandbox:cloud", env=env)
         await asyncio.to_thread(ready, executor, ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health')"])
         for name, alias, image, volume in ((browser, "base-browser", "browser", browser_volume), (gateway, "base-browser-gateway", "gateway", None)):
             args = ["run", "-d", "--name", name, "--network", browser_net, "--network-alias", alias,
@@ -199,7 +199,7 @@ CODE"""
         docker("run", "-d", "--name", brain, "--network", corridor, "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
                "-e", "TANK_KEY", "-e", "TANK_URL=" + origin, "-e", "BASE_ROOM_URL=" + origin + "/base",
                "-e", "HERMES_URL=" + origin + "/memory", "-e", "BASE_BROWSER_URL=http://base-browser-gateway:3000",
-               "-e", "BASE_SANDBOX_URL=http://base-sandbox:8002", "-v", data_volume + ":/data",
+               "-e", "BASE_SANDBOX_URL=http://base-sandbox:8002", "-e", "SANDBOX_KEY", "-v", data_volume + ":/data",
                "-v", str(ROOT / "agents/_brain") + ":/app/brain:ro", "tervory-agent1-brain:cloud", env=env)
         docker("network", "connect", sandbox_net, brain)
         await asyncio.to_thread(ready, brain, ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health')"])

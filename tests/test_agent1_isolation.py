@@ -15,7 +15,7 @@ brain = importlib.util.module_from_spec(spec)
 sys.modules["brain"] = brain
 spec.loader.exec_module(brain)
 
-from brain import browser, runner, security, service  # noqa: E402
+from brain import browser, runner, security, service, sandbox  # noqa: E402
 
 
 def test_browser_and_sandbox_have_no_direct_egress_or_cross_room_network():
@@ -26,6 +26,8 @@ def test_browser_and_sandbox_have_no_direct_egress_or_cross_room_network():
     assert compose["services"]["base-sandbox"]["networks"] == ["sandbox"]
     assert compose["services"]["base-browser"]["volumes"] == ["base_browser_data:/browser-data"]
     assert "TIGER_URL" not in compose["services"]["agent-base"]["environment"]
+    keyed = {name for name, item in compose["services"].items() if "SANDBOX_KEY" in item.get("environment", {})}
+    assert keyed == {"base-brain", "base-sandbox"}
     sandbox = compose["services"]["base-sandbox"]
     assert sandbox["read_only"] is True and sandbox["cap_drop"] == ["ALL"]
     assert not sandbox.get("volumes") and any(str(m).startswith("/work:") for m in sandbox["tmpfs"])
@@ -96,7 +98,7 @@ async def test_recall_precedes_work_and_remember_closes_task(monkeypatch, tmp_pa
         assert payload["tenant_id"] == str(tenant)
         events.append(path)
         if path == "/recall":
-            return {"memories": [{"id": "memory", "tenant_id": str(tenant), "text": "old evidence", "sources": ["public source"]}]}
+            return {"memories": [{"id": str(i), "tenant_id": str(tenant), "text": "old evidence " * 500, "meta": "x" * 5000} for i in range(8)]}
         assert payload["source"] == "base:task:" + str(task)
         return {"id": "saved"}
 
@@ -110,6 +112,8 @@ async def test_recall_precedes_work_and_remember_closes_task(monkeypatch, tmp_pa
         assert str(tenant) in kwargs["env"]["HERMES_HOME"]
         assert "OPENAI_API_KEY" not in kwargs["env"]
         directory = Path(args[-1])
+        recalled=json.loads((directory/"request.json").read_text())["memories"]
+        assert len(recalled)==8 and all(len(m["text"])<=1000 and set(m)=={"id","text"} for m in recalled)
         (directory / "receipt.json").write_text(json.dumps({"tenant_id": str(tenant), "task_id": str(task),
             "steps": [{"action": "pipeline_run", "status": "done"}], "model_receipts": []}))
         events.append("work")
@@ -331,3 +335,91 @@ def test_deployment_gate_rejects_privileges_and_shared_namespaces(monkeypatch,fi
     monkeypatch.setattr(gate,'docker',lambda *args:json.dumps([rows[args[1]]]))
     with pytest.raises(AssertionError): gate.main(list(rows))
     compile(gate.sandbox_probe_script(),'sandbox-probe','exec')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('status', ['done', 'failed'])
+async def test_brain_failure_after_free_pass_runs_paid_continuation(monkeypatch, status):
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    module = sys.modules['base_brain']
+    tenant, task = uuid.uuid4(), uuid.uuid4()
+    monkeypatch.setenv('BASE_BRAIN_URL', 'http://base-brain')
+    calls=[]
+    class Pool:
+        @asynccontextmanager
+        async def acquire(self): yield self
+        async def execute(self, sql, *args):
+            if 'status=$4' in sql: calls.append(('persist',args[3]))
+    async def free_pass():
+        await asyncio.sleep(.01)
+        calls.append('free settled')
+    class Client:
+        def __init__(self, **kwargs): pass
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def post(self, *args, **kwargs):
+            batch=module.active[(tenant,task)]
+            batch.ran=True
+            batch.job=asyncio.create_task(free_pass())
+            return SimpleNamespace(status_code=503)
+        async def delete(self, *args, **kwargs): calls.append('cancel')
+    async def phase(batch, body):
+        assert body.finish and batch.finished and calls==['cancel','free settled']
+        calls.append('paid pass')
+        batch.result={'pipeline_status':status,'summary':'continued'}
+    monkeypatch.setattr(module.httpx,'AsyncClient',Client)
+    monkeypatch.setattr(module,'run_phase',phase)
+    cfg={'tenant_id':str(tenant),'batch':'fixture','count':20}
+    action=module.drive_batch(Pool(),SimpleNamespace(_headers=lambda:{}),task,cfg,None)
+    if status=='failed':
+        with pytest.raises(RuntimeError,match='continuation'): await action
+    else: await action
+    assert calls==['cancel','free settled','paid pass',('persist',status)]
+    assert cfg['brain_receipt']['status']==status
+    assert cfg['brain_receipt']['steps'][-1]['action']=='pipeline_continue_fallback'
+    assert (tenant,task) not in module.active
+
+
+@pytest.mark.asyncio
+async def test_twenty_unresolved_records_exclude_large_profiles_and_passes():
+    from contextlib import asynccontextmanager
+    module=sys.modules['base_brain']
+    tenant, task=uuid.uuid4(),uuid.uuid4()
+    class Pool:
+        @asynccontextmanager
+        async def acquire(self): yield self
+        async def fetch(self, sql, *args):
+            assert args==(tenant,task) and 'LIMIT 20' in sql
+            return [{'id':uuid.uuid4(),'raw':{'name':'Fixture business','large':'x'*50000},
+                'profile':{'website':{'value':'https://example.com'},'large':'x'*50000},
+                'passes':{'large':'x'*50000},'status':'done'} for _ in range(20)]
+        async def fetchrow(self,*args):return {'status':'done','result':'20 processed'}
+    result=await module.results(module.ActiveBatch(Pool(),{},None),module.Task(tenant_id=tenant,task_id=task))
+    assert len(result['unresolved'])==20
+    assert all(set(row)=={'id','name','website','status'} for row in result['unresolved'])
+    assert result['unresolved'][0]['website']=='https://example.com'
+    assert len(runner.tool_result(result))<8000
+    assert len(runner.tool_result({'html':'x'*100000}))<=8000
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('kind', ['auth','path','encoding','size'])
+async def test_sandbox_auth_and_rejected_uploads_leave_no_run(monkeypatch,tmp_path,kind):
+    import base64
+    from fastapi import HTTPException
+    key=uuid.uuid4().hex
+    monkeypatch.setenv('SANDBOX_KEY',key)
+    monkeypatch.setattr(sandbox,'ROOT',tmp_path)
+    monkeypatch.setattr(sandbox,'gate',asyncio.Semaphore(1))
+    files={'safe':base64.b64encode(b'initial').decode()}
+    expected=401
+    if kind=='path': files['../escape']='aA==';expected=422
+    if kind=='encoding': files['bad']='%%%';expected=422
+    if kind=='size': files['huge']=base64.b64encode(b'x'*2000001).decode();expected=413
+    body=sandbox.Execute(tenant_id=uuid.uuid4(),task_id=uuid.uuid4(),command='python -c "pass"',files=files)
+    with pytest.raises(HTTPException) as error:
+        await sandbox.execute(body,uuid.uuid4().hex if kind=='auth' else key)
+    assert error.value.status_code==expected
+    assert not (tmp_path/str(body.tenant_id)/str(body.task_id)).exists()
+    assert sandbox.gate._value==1

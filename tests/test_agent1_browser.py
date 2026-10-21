@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 # The shared brain package is loaded by the room-boundary test harness.
-from test_agent1_isolation import browser, security
+from test_agent1_isolation import browser
 
 
 @pytest.fixture
@@ -23,10 +23,6 @@ def visitor(monkeypatch, tmp_path):
     monkeypatch.setattr(browser,'site_locks',{})
     monkeypatch.setattr(browser,'last_visit',{})
     monkeypatch.setattr(browser,'concurrency',asyncio.Semaphore(4))
-    async def destination(url):
-        host,port=security.public_url(url)
-        return host,port,['93.184.216.34']
-    monkeypatch.setattr(browser,'public_destination',destination)
     class Page:
         def __init__(self,context): self.context=context
         def on(self,*args): pass
@@ -87,7 +83,7 @@ async def test_same_site_waits_a_few_seconds(visitor,monkeypatch):
     now=[100.0];waits=[]
     async def sleep(seconds): waits.append(seconds);now[0]+=seconds
     monkeypatch.setattr(browser,'time',SimpleNamespace(monotonic=lambda:now[0],time=lambda:100))
-    monkeypatch.setattr(browser,'asyncio',SimpleNamespace(sleep=sleep,Lock=asyncio.Lock))
+    monkeypatch.setattr(browser,'asyncio',SimpleNamespace(sleep=sleep,Lock=asyncio.Lock,timeout=asyncio.timeout))
     await visitor.visit('https://www.business.example')
     await visitor.visit('https://business.example/about')
     assert waits[-1]>=3
@@ -120,9 +116,6 @@ async def test_pdf_text_is_read_with_bounded_public_requests(monkeypatch):
     stream=DecodedStreamObject();stream.set_data(b'BT /F1 12 Tf 10 100 Td (Public fixture PDF) Tj ET')
     page[NameObject('/Contents')]=writer._add_object(stream)
     buffer=io.BytesIO();writer.write(buffer);data=buffer.getvalue();calls=[]
-    async def destination(url):
-        host,port=security.public_url(url);return host,port,['93.184.216.34']
-    monkeypatch.setattr(browser,'public_destination',destination)
     class Response:
         status=200
         headers={'content-length':str(len(data))}
@@ -137,11 +130,21 @@ async def test_pdf_text_is_read_with_bounded_public_requests(monkeypatch):
 @pytest.mark.asyncio
 async def test_pdf_redirect_cannot_fetch_a_private_target(monkeypatch):
     calls=[]
-    async def destination(url):
-        host,port=security.public_url(url);return host,port,['93.184.216.34']
-    monkeypatch.setattr(browser,'public_destination',destination)
     async def get(url,**kwargs):
         calls.append(url);return SimpleNamespace(status=302,headers={'location':'http://169.254.169.254/latest/'})
     with pytest.raises(ValueError):
         await browser.read_pdf(SimpleNamespace(request=SimpleNamespace(get=get)),'https://public.example/file.pdf',90000)
     assert calls==['https://public.example/file.pdf']
+
+
+@pytest.mark.asyncio
+async def test_busy_browser_queue_returns_before_upstream_timeout(visitor, monkeypatch):
+    from fastapi import HTTPException
+    monkeypatch.setattr(browser, 'QUEUE_TIMEOUT', .02)
+    lock = asyncio.Lock()
+    await lock.acquire()
+    browser.site_locks['busy.example'] = lock
+    with pytest.raises(HTTPException, match='busy') as error:
+        await asyncio.wait_for(visitor.visit('https://busy.example'), .5)
+    assert error.value.status_code == 503 and lock.locked()
+    assert browser.concurrency._value == 4

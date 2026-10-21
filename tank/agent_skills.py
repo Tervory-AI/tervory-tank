@@ -13,6 +13,7 @@ import os
 import re
 import time
 import uuid
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
@@ -122,6 +123,26 @@ def baseline_cost(roster: list[dict], model: str, tokens_in: int, tokens_out: in
     return None
 
 
+@lru_cache(maxsize=1)
+def input_encoding():
+    import tiktoken
+    from tiktoken.load import load_tiktoken_bpe
+    # OpenAI's MIT-licensed cl100k vocabulary is bundled and hash checked:
+    # no runtime tokenizer download, provider request or credential is needed.
+    ranks = load_tiktoken_bpe(str(Path(__file__).with_name("cl100k_base.tiktoken")),
+        expected_hash="223921b76ee99bde995b7ff738513eef100fb51d18c93597a113bcffe865b2a7")
+    return tiktoken.Encoding(name="base-cl100k", mergeable_ranks=ranks, special_tokens={},
+        pat_str=r"'(?i:[sdmt]|ll|ve|re)|[^\r\n\p{L}\p{N}]?+\p{L}++|\p{N}{1,3}+| ?[^\s\p{L}\p{N}]++[\r\n]*+|\s++$|\s*[\r\n]|\s+(?!\S)|\s")
+
+
+def input_tokens(payload: dict) -> int:
+    # Count the complete serialized message/tool payload, then allow 20% for
+    # provider tokenizer differences and 32 framing tokens per message. This is
+    # a reference BPE budget, not a claim of exact billing for every provider.
+    count = len(input_encoding().encode_ordinary(json.dumps(payload, ensure_ascii=False)))
+    return math.ceil(count * 1.2) + 32 * len(payload.get("messages", []))
+
+
 async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | None, region: str) -> dict:
     validate_chat(body)
     await controls.refuse_paid(task="agent.base.think", path="agent.chat")
@@ -158,10 +179,9 @@ async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | N
     payload = body.model_dump(exclude_none=True, exclude={"model", "stream", "stream_options", "max_completion_tokens", "user", "reasoning_effort"})
     payload.update(model=model, messages=messages, stream=False,
                    max_tokens=min(body.max_tokens or body.max_completion_tokens or policy["max_tokens_out"], policy["max_tokens_out"]))
-    # UTF-8 bytes plus chat framing conservatively bound text/tool token input
-    # without depending on one provider's tokenizer. Reject before any paid call.
-    upper_input = len(json.dumps(payload, ensure_ascii=False).encode()) + 16 * len(messages)
-    if upper_input > min(int(policy.get("max_tokens_in") or 48000), 48000):
+    # Match Hermes' minimum 64k context, reserving the requested output budget.
+    upper_input = input_tokens(payload)
+    if upper_input > min(int(policy.get("max_tokens_in") or 64000), 64000 - payload["max_tokens"]):
         raise HTTPException(413, "Conversation exceeds Base's input-token budget.")
     roster = await tank._roster_models()
     if baseline_cost(roster, model, 1, 1) is None:
@@ -210,6 +230,13 @@ async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | N
             outcome, error = "delivered", None
         else:
             error = "Model gateway refused the call (HTTP %d)." % response.status_code
+    except (httpx.ReadTimeout, httpx.ReadError, httpx.WriteTimeout, httpx.WriteError, httpx.RemoteProtocolError):
+        # The request may have reached the provider. Preserve an explicitly
+        # unknown conservative reservation until a provider receipt reconciles it.
+        tokens_in, tokens_out = upper_input, payload["max_tokens"]
+        cost = baseline_cost(roster, model, tokens_in, tokens_out)
+        cost_status, outcome = "unknown_upper_bound", "unknown"
+        error = "Model gateway interrupted after send; provider charge is unknown."
     except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError):
         # Never return or log upstream bodies: they can contain credentials/prompts.
         error = "Model gateway failed or returned an incomplete receipt."

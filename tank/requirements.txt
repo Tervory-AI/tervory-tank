@@ -7,3 +7,5 @@ PyYAML==6.0.2
 rapidfuzz==3.10.1
 selectolax==0.3.27
 redis==5.2.1
+# Offline BPE input budgeting for the Base agent chat route.
+tiktoken==0.14.0

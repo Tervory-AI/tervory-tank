@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS tank.transcripts (
     ledger_id       uuid PRIMARY KEY,
     tenant_id       uuid NOT NULL,
     task_type       text NOT NULL,
-    messages        jsonb NOT NULL,           -- as sent (system prompt excluded; it lives in policy)
+    messages        jsonb NOT NULL,           -- as sent; agent chat includes its policy system prompt
     content         text NOT NULL,
     created_at      timestamptz NOT NULL DEFAULT now()
 );
