@@ -57,6 +57,12 @@ def _schemas() -> tuple[str, str]:
     index = sql.find(APPENDIX)
     assert index > 0, "billing_events must be appended to tank/schema.sql"
     main_sql = sql[:index]
+    # AGENT-1 corrected only the transcript comment, as requested in review.
+    # Pin the current prefix AND reconstruct the byte-identical historical
+    # fixture; every DDL byte remains protected by the original checksum.
+    assert hashlib.sha256(main_sql.encode()).hexdigest() == "a04241697be2adeb3a65e80ad7cc15a237163715eebc123d6137878caa46d128"
+    main_sql = main_sql.replace("as sent; agent chat includes its policy system prompt",
+        "as sent (system prompt excluded; it lives in policy)")
     assert hashlib.sha256(main_sql.encode()).hexdigest() == MAIN_SCHEMA_SHA256
     assert "billing_events" not in main_sql
     assert "CREATE TABLE IF NOT EXISTS tank.billing_events" in sql[index:]

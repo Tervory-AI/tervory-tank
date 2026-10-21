@@ -177,7 +177,6 @@ services:
     networks:
       - default
       - tervory-gw-tiger
-      - tervory-gw-base
     expose:
       - "3000"
     healthcheck:
@@ -430,7 +429,7 @@ networks:
     external: true
     name: tervory-gw-zenas
   # Compose creates this corridor on deploy. Base's own compose attaches as external.
-  # Not internal: Base reads websites through Tiger's browser and SearXNG.
+  # Not internal: Base's own browser gateway and SearXNG reach public websites.
   tervory-gw-base:
     name: tervory-gw-base
   # Created by this stack on deploy (ROOMS.md). The Rig resource joins it as external.
