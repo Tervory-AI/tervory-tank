@@ -9,11 +9,15 @@ from pathlib import Path
 
 
 class Store:
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, region: str = "us-east"):
+        if region not in {"us-east", "za"}:
+            raise ValueError("Invalid Ghost region.")
+        self.region = region
         path.parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(path)
         self.db.row_factory = sqlite3.Row
         self.db.executescript("""
+            CREATE TABLE IF NOT EXISTS region (id INTEGER PRIMARY KEY CHECK(id=1), home TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS incidents (
                 id TEXT PRIMARY KEY, tenant TEXT NOT NULL, fingerprint TEXT NOT NULL,
                 state TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL
@@ -25,6 +29,11 @@ class Store:
                 payload TEXT NOT NULL, PRIMARY KEY(tenant, incident)
             );
         """)
+        with self.db:
+            self.db.execute("INSERT OR IGNORE INTO region VALUES (1,?)", (region,))
+        if self.db.execute("SELECT home FROM region WHERE id=1").fetchone()[0] != region:
+            self.db.close()
+            raise ValueError("Ghost's volume belongs to another region.")
 
     def open(self, tenant: str, target: str, signal: str, origin: str) -> dict:
         fingerprint = f"{target}:{signal}"

@@ -825,3 +825,14 @@ CREATE TABLE IF NOT EXISTS tank.training_snapshot_batches (
     batch_id text NOT NULL,
     PRIMARY KEY (tenant_id, region, day, agent, batch_id)
 );
+
+-- Ghost recovery idempotency; no production resource credentials or payloads.
+CREATE TABLE IF NOT EXISTS tank.ghost_recovery (
+    tenant_id uuid NOT NULL,
+    id uuid NOT NULL,
+    action text NOT NULL CHECK (action IN ('rerun_failed_deploy','restart_crashed_room')),
+    target text NOT NULL,
+    status text NOT NULL DEFAULT 'pending',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,id)
+);

@@ -76,7 +76,7 @@ def create_app() -> FastAPI:
     async def lifespan(app: FastAPI):
         if not os.environ.get("TANK_KEY"):
             raise RuntimeError("Ghost's Tank key is not configured.")
-        store = Store(Path(os.environ.get("DATA_DIR", "/data")) / "ghost.sqlite3")
+        store = Store(Path(os.environ.get("DATA_DIR", "/data")) / "ghost.sqlite3", os.environ.get("TANK_REGION", "us-east"))
         async with httpx.AsyncClient(follow_redirects=False) as http:
             tank = Tank(http)
             app.state.store = store

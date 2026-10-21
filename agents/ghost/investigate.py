@@ -29,6 +29,8 @@ class Investigator:
         if origin not in {"look", "alert", "message"}:
             raise ValueError("Unknown issue source.")
         item = self.store.open(PLATFORM_TENANT, request.target.value, request.signal.value, origin)
+        if item["state"] == "blocked" and origin == "look":
+            item["state"] = "open"
         if item["state"] != "open":
             return item
         await self.record(item, "opened")
@@ -40,6 +42,8 @@ class Investigator:
             return item
         try:
             evidence = await self.probes.reproduce(request)
+            if evidence.target != request.target or evidence.signal not in {request.signal, Signal.human_check}:
+                raise ValueError("The evidence does not match the requested check.")
         except Exception:
             # Exception strings, browser output and HTTP bodies may contain secrets.
             item.update(state="blocked", summary="Evidence is unavailable. No action was taken.")

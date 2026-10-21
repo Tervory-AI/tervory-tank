@@ -36,6 +36,7 @@ async def test_failed_health_raises_deduplicated_issue_and_worker_brief(room):
 
 @pytest.mark.asyncio
 async def test_look_and_message_start_an_investigation(room):
+    room.probes.reproduce.return_value = Observation(target="workspace", signal="slow", failing=True)
     item = await room.look(classify_message("Ghost, the login page is slow"), "message")
     assert item["target"] == "workspace" and item["signal"] == "slow"
     assert item["origin"] == "message"

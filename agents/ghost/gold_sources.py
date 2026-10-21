@@ -4,7 +4,7 @@ from .store import Store
 
 
 def candidates(store: Store, region: str, limit: int = 200) -> list[dict]:
-    if region not in {"us-east", "za"} or not 1 <= limit <= 200:
+    if region != store.region or region not in {"us-east", "za"} or not 1 <= limit <= 200:
         raise ValueError("Invalid gold request.")
     return [{"skill_id": "ghost.incident", "input": {"target": row["target"], "signal": row["signal"]},
              "expected": {"cause": row["cause"], "fix": row["fix"]},

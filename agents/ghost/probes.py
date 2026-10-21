@@ -66,7 +66,7 @@ class Probes:
 
 
 async def browser_check(request: Look) -> Observation:
-    from playwright.async_api import async_playwright
+    from playwright.async_api import Error as BrowserError, async_playwright
     target = request.target.value
     if target not in SITES or request.signal not in {Signal.health, Signal.slow, Signal.headers}:
         raise ValueError("Only public read-only checks are allowed.")
@@ -92,7 +92,12 @@ async def browser_check(request: Look) -> Observation:
             await context.route("**/*", guard)
             page = await context.new_page()
             started = time.monotonic()
-            response = await page.goto(url, wait_until="domcontentloaded", timeout=25000)
+            try:
+                response = await page.goto(url, wait_until="domcontentloaded", timeout=25000)
+            except BrowserError:
+                # A completed attempt with a navigation/network failure is a
+                # failing check; a missing browser service remains unavailable.
+                return Observation(target=request.target, signal=request.signal, failing=True)
             latency = min(120000, int((time.monotonic() - started) * 1000))
             status = response.status if response else 503
             # Inspect a bounded page in memory; never return its text or header values.

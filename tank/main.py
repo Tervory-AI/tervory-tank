@@ -580,8 +580,9 @@ async def require_key(request: Request, x_tank_key: str = Header(default="")) ->
         raise HTTPException(status_code=401, detail="missing or invalid X-Tank-Key")
     path = request.url.path
     skill_run = path.startswith("/v1/skala/") and path.endswith("/run") and path.count("/") == 4
+    ghost_route = matched == "ghost" and (request.method, path) in __import__("ghost_routes").ROOM_METHODS
     vendor_write = request.method == "POST" and path == "/v1/ledger/vendor"
-    if path not in {"/health", "/v1/route"} and not skill_run and not vendor_write:
+    if path not in {"/health", "/v1/route"} and not skill_run and not vendor_write and not ghost_route:
         raise HTTPException(status_code=403, detail="This agent key cannot call that.")
     return matched
 
@@ -3396,3 +3397,6 @@ async def market_quarantine_act(
     except Exception:
         raise HTTPException(status_code=502, detail=_MARKET_DOWN) from None
     return {**payload, "models": models}
+
+# GHOST-1: isolated founder panel, room checks, sealed Radix handoff and bounded recovery.
+app.include_router(__import__("ghost_routes").router)
