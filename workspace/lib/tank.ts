@@ -4,6 +4,33 @@
 const TANK_URL = process.env.TANK_URL ?? "http://tank:8000";
 const TANK_API_KEY = process.env.TANK_API_KEY ?? "";
 
+// Founder-only Ghost corridor. Identity is resolved by the server action, never the browser.
+export type GhostIncident = {
+  id: string; target: string; signal: string; origin: string; state: string;
+  summary?: string; created_at: string; cost_usd: number;
+  steps: { step: string; ledger_id: string; cost_usd: number }[];
+  previous?: { cause: string; fix: string }[];
+  brief?: { title: string; cause: string; status: string; instructions: string[] };
+};
+export type GhostPanel = {
+  incidents: GhostIncident[];
+  monitor: { running: boolean; unavailable_checks: number };
+  integrations: Record<string, string>;
+};
+export function ghostPanel(userId: string): Promise<GhostPanel> {
+  return tank<GhostPanel>("/v1/ghost/incidents", { method: "GET", headers: { "X-Tervory-Admin": userId } });
+}
+export function ghostLook(userId: string, target: string, signal: string): Promise<GhostIncident> {
+  return tank<GhostIncident>("/v1/ghost/look", {
+    method: "POST", headers: { "X-Tervory-Admin": userId }, body: JSON.stringify({ target, signal }),
+  });
+}
+export function ghostResolve(userId: string, id: string, cause: string, fix: string): Promise<GhostIncident> {
+  return tank<GhostIncident>(`/v1/ghost/incidents/${encodeURIComponent(id)}/resolve`, {
+    method: "POST", headers: { "X-Tervory-Admin": userId }, body: JSON.stringify({ cause, fix }),
+  });
+}
+
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
 export type RouteResult = {
@@ -787,4 +814,24 @@ export function switchProvenModel(userId: string, taskType: string): Promise<{ o
 
 export function readDashboardCandidates(userId: string): Promise<{ task_type: string; candidate_model: string | null; n: number; agreement: number | null; min_shadow_samples?: number; eligible: boolean; prim_cost?: number | null; cand_cost?: number | null }[]> {
   return tank("/v1/graduation", { method: "GET", headers: { "x-tervory-admin": userId } });
+}
+
+// COMMAND-1A: founder-managed client squad grants on this box.
+export type CommandSquadGrant = { agent: string; enabled: boolean; enabled_by: string | null; enabled_at: string | null };
+export type CommandSquadChange = { id: number; agent: string; enabled: boolean; changed_by: string; changed_at: string };
+function commandSquadHeaders(userId: string, tenantId: string) {
+  return { "X-Tervory-User": userId, "X-Tervory-Tenant": tenantId };
+}
+export async function readCommandSquads(userId: string, tenantId: string) {
+  const headers = commandSquadHeaders(userId, tenantId);
+  const [grants, log] = await Promise.all([
+    tank<CommandSquadGrant[]>("/v1/command/squads", { method: "GET", headers }),
+    tank<CommandSquadChange[]>("/v1/command/squads/log", { method: "GET", headers }),
+  ]);
+  return { grants, log };
+}
+export async function setCommandSquad(userId: string, tenantId: string, agent: string, enabled: boolean) {
+  return tank<{ agent: string; enabled: boolean; changed: boolean }>(`/v1/command/squads/${encodeURIComponent(agent)}`, {
+    method: "PUT", headers: commandSquadHeaders(userId, tenantId), body: JSON.stringify({ enabled }),
+  });
 }

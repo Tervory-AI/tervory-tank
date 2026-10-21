@@ -569,8 +569,9 @@ async def require_key(request: Request, x_tank_key: str = Header(default="")) ->
         raise HTTPException(status_code=401, detail="missing or invalid X-Tank-Key")
     path = request.url.path
     skill_run = path.startswith("/v1/skala/") and path.endswith("/run") and path.count("/") == 4
+    ghost_route = matched == "ghost" and (request.method, path) in __import__("ghost_routes").ROOM_METHODS
     vendor_write = request.method == "POST" and path == "/v1/ledger/vendor"
-    if path not in {"/health", "/v1/route"} and not skill_run and not vendor_write:
+    if path not in {"/health", "/v1/route"} and not skill_run and not vendor_write and not ghost_route:
         raise HTTPException(status_code=403, detail="This agent key cannot call that.")
     return matched
 
@@ -826,10 +827,22 @@ def _choice_answer(data: dict[str, Any]) -> tuple[str, str]:
     return _content_text(message.get("content")), str(choice.get("finish_reason") or "")
 
 
+# The shared override gate for Command and MoA. Never persist policy changes
+# to pin one call; MoA uses the parent task's policy limits.
+MODEL_OVERRIDE_TASK_TYPES = frozenset({"command.turn"})
+MOA_SEAT_TASK = re.compile(r"[a-zA-Z0-9_.-]+#moa\.[a-z][a-z0-9_]{0,79}")
+
+
+def override_allowed(task_type: str) -> bool:
+    return task_type in MODEL_OVERRIDE_TASK_TYPES or MOA_SEAT_TASK.fullmatch(task_type) is not None
+
+
 async def run_route(
     req: RouteRequest,
     task_id: uuid.UUID | None = None,
     caller: str | None = None,
+    *,
+    model_override: str | None = None,
 ) -> RouteResponse:
     """Pick the model from policy, call it through LiteLLM, write the ledger row.
     Used directly by /v1/route and in the background by tasks."""
@@ -855,7 +868,19 @@ async def run_route(
     if early:
         raise HTTPException(status_code=403, detail=early)
 
-    policy = await load_policy(req.task_type, req.tenant_id)
+    seat = MOA_SEAT_TASK.fullmatch(req.task_type)
+    if seat and model_override is None:
+        raise HTTPException(status_code=400, detail="A MoA seat requires a model override")
+    if model_override is not None:
+        if not override_allowed(req.task_type):
+            raise HTTPException(status_code=403, detail="Model override is not enabled for this task type")
+        if model_override not in {row["name"] for row in await list_models()}:
+            raise HTTPException(status_code=422, detail="Model is not on the roster")
+    policy = await load_policy(req.task_type.partition("#moa.")[0], req.tenant_id)
+    if model_override is not None:
+        policy = {**policy, "model": model_override, "rung": 1, "candidate_model": None, "shadow_rate": 0}
+    route_seat = req.task_type.partition("#moa.")[2] if seat else (
+        "pinned" if req.task_type == "command.turn" and model_override is not None else None)
     model = policy["model"]
     # skill: and cache: are not model names. Do not send them to LiteLLM.
     if graduate.router_cannot_serve(model):
@@ -873,6 +898,8 @@ async def run_route(
         )})
     max_tokens = min(req.max_tokens or policy["max_tokens_out"], policy["max_tokens_out"])
     generation = case_facts_generation(model) if req.task_type == "zenas.case_facts" else {}
+    if model_override is not None:
+        generation = {**generation, "disable_fallbacks": True}
     sent = "\n".join(str(item.get("content") or "") for item in messages)
     holds_identifier = prompt_has_identifier(sent)
     blocked = model_call_refusal(
@@ -895,6 +922,8 @@ async def run_route(
     if not holds_identifier and _redis is not None and policy.get("cache_scope") in ("tenant", "platform"):
         scope = str(req.tenant_id) if policy["cache_scope"] == "tenant" else "platform"
         digest_parts: list[Any] = [req.task_type, model, max_tokens, messages]
+        if route_seat is not None:
+            digest_parts.append(route_seat)
         if generation:
             digest_parts.append(generation)
         digest = hashlib.sha256(json.dumps(digest_parts, sort_keys=True).encode()).hexdigest()
@@ -911,11 +940,11 @@ async def run_route(
                     """
                     INSERT INTO tank.ledger
                       (id, tenant_id, region, agent, skill, task_type, rung, model, priority,
-                       tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id)
-                    VALUES ($1,$2,$3,$4,$5,$6,4,$7,$8,0,0,0,0,true,'delivered',$9)
+                       tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, route_seat)
+                    VALUES ($1,$2,$3,$4,$5,$6,4,$7,$8,0,0,0,0,true,'delivered',$9,$10)
                     """,
                     ledger_id, req.tenant_id, req.region or DEFAULT_REGION, req.agent, req.skill,
-                    req.task_type, model, priority, task_id,
+                    req.task_type, model, priority, task_id, route_seat,
                 )
             return RouteResponse(ledger_id=ledger_id, model=model, rung=4, content=cached["content"],
                                  tokens_in=0, tokens_out=0, cost_usd=0.0, latency_ms=0)
@@ -939,11 +968,11 @@ async def run_route(
                 """
                 INSERT INTO tank.ledger
                   (id, tenant_id, region, agent, skill, task_type, rung, model, priority,
-                   tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, error)
-                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,0,0,$10,false,'failed',$11,$12)
+                   tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, error, route_seat)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,0,0,$10,false,'failed',$11,$12,$13)
                 """,
                 ledger_id, req.tenant_id, req.region or DEFAULT_REGION, req.agent, req.skill,
-                req.task_type, policy["rung"], model, priority, latency_ms, task_id, err,
+                req.task_type, policy["rung"], model, priority, latency_ms, task_id, err, route_seat,
             )
         raise HTTPException(status_code=502, detail={"ledger_id": str(ledger_id), "upstream": err}) from exc
     latency_ms = int((time.perf_counter() - started) * 1000)
@@ -978,12 +1007,12 @@ async def run_route(
             """
             INSERT INTO tank.ledger
               (id, tenant_id, region, agent, skill, task_type, rung, model, priority,
-               tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, error)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,$14,$15,$16)
+               tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, error, route_seat)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,$14,$15,$16,$17)
             """,
             ledger_id, req.tenant_id, req.region or DEFAULT_REGION, req.agent, req.skill,
             req.task_type, policy["rung"], answered, priority, tokens_in, tokens_out, cost_usd,
-            latency_ms, outcome, task_id, error,
+            latency_ms, outcome, task_id, error, route_seat,
         )
 
     if outcome == "failed":
@@ -3340,5 +3369,10 @@ async def market_quarantine_act(
         raise HTTPException(status_code=502, detail=_MARKET_DOWN) from None
     return {**payload, "models": models}
 
+# GHOST-1: isolated founder panel, room checks, sealed Radix handoff and bounded recovery.
+app.include_router(__import__("ghost_routes").router)
 # MODELS-2: research stays in its own module; generic routing is unchanged.
 __import__("research").register(app, globals())
+
+# COMMAND-1A: conversation routes live in their own module.
+app.include_router(__import__("command").router)

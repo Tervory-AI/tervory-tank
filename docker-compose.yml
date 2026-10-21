@@ -32,6 +32,7 @@ services:
       - tervory-gw-zenas
       - tervory-gw-base
       - tervory-gw-rig
+      - tervory-gw-ghost
 
   redis:
     image: redis:7
@@ -215,6 +216,7 @@ services:
       TANK_KEY_ZENAS: ${TANK_KEY_ZENAS:-}
       TANK_KEY_BASE: ${TANK_KEY_BASE:-}
       TANK_KEY_RIG: ${TANK_KEY_RIG:-}
+      TANK_KEY_GHOST: ${TANK_KEY_GHOST:-}
       TANK_KEY_WORKERS: ${TANK_KEY_WORKERS:-}
       TANK_REGION: ${TANK_REGION:-us-east}
       BASE_AGENT_URL: http://agent-base:8000
@@ -236,6 +238,7 @@ services:
       - tervory-gw-zenas
       - tervory-gw-base
       - tervory-gw-rig
+      - tervory-gw-ghost
     # Host loopback only, for the workers service on the Boston host (workers/host/).
     # Never a public address: Tank stays off the internet.
     ports:
@@ -304,6 +307,7 @@ services:
       AGENT_DB_PASSWORD_ZENAS: ${AGENT_DB_PASSWORD_ZENAS:-}
       AGENT_DB_PASSWORD_BASE: ${AGENT_DB_PASSWORD_BASE:-}
       AGENT_DB_PASSWORD_RIG: ${AGENT_DB_PASSWORD_RIG:-}
+      AGENT_DB_PASSWORD_GHOST: ${AGENT_DB_PASSWORD_GHOST:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -436,3 +440,6 @@ networks:
   # Created by this stack on deploy (ROOMS.md). The Rig resource joins it as external.
   tervory-gw-rig:
     name: tervory-gw-rig
+  # Ghost alone uses this corridor; no other main-stack service joins it.
+  tervory-gw-ghost:
+    name: tervory-gw-ghost

@@ -32,7 +32,7 @@ export function WorkersTile({ workers, now }: { workers: WorkersRead | null | un
     <div className="dash-row"><span>{workers ? (workers.workers_paused ? "Workers are paused: no new task is taken" : "Workers take new tasks") : "Pause unavailable"}</span><WorkersActions paused={workers ? workers.workers_paused : null} /></div>
   </section>;
 }
-export function FounderDashboard({ view }: { view: FounderView }) {
+export function FounderDashboard({ view, squads }: { view: FounderView; squads?: import("react").ReactNode }) {
   const { data, signups, paying } = view;
   const today = new Date().toISOString().slice(0, 10);
   const daily = data?.daily ?? [];
@@ -70,6 +70,7 @@ export function FounderDashboard({ view }: { view: FounderView }) {
     </div>
     <div style={{marginTop:18}}><WorkersTile workers={view.workers} /></div>
     <section className="dash-card" style={{marginTop:18}}><h2>Stopped by the pause</h2>{view.refused.length ? view.refused.map((row,i) => <p className="dash-note" key={i}>{row.task} · {row.path} · {row.at}</p>) : <p className="dash-empty">No recorded refusals.</p>}</section>
+    {squads}
     <p className="dash-footer">Live measurements only. Unavailable sources stay empty. Controls apply to this server.</p>
   </div>;
 }
