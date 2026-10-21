@@ -672,7 +672,7 @@ async def _startup() -> None:
             "WHERE status IN ('queued','running') AND task_type <> 'base.enrich'"
         )
     global _http, _packages
-    _http = httpx.AsyncClient(headers={"User-Agent": "TervoryBase/0.1 (+https://tervory.com)"}, timeout=15)
+    _http = httpx.AsyncClient(headers={"User-Agent": "TervoryBase/0.1 (+https://tervory.com)"}, timeout=15, event_hooks={"request": [__import__("controls").paid_host_hook]})
     global _redis
     try:
         _redis = aioredis.from_url(REDIS_URL, decode_responses=True, socket_connect_timeout=2)
@@ -931,6 +931,7 @@ async def run_route(
             return RouteResponse(ledger_id=ledger_id, model=model, rung=4, content=cached["content"],
                                  tokens_in=0, tokens_out=0, cost_usd=0.0, latency_ms=0)
 
+    await __import__("controls").refuse_paid(paid=True, task=req.task_type, path="route")
     started = time.perf_counter()
     try:
         async with httpx.AsyncClient(timeout=120) as client:
@@ -1030,6 +1031,7 @@ async def run_route(
 
 
 async def _llm(model: str, messages: list[dict[str, str]], max_tokens: int) -> tuple[str, float]:
+    await __import__("controls").refuse_paid(path="_llm")
     async with httpx.AsyncClient(timeout=120) as client:
         r = await client.post(
             f"{LITELLM_URL}/v1/chat/completions",
@@ -3084,6 +3086,8 @@ async def mark_billing_event_handled(body: BillingEventHandled) -> dict[str, boo
 
 
 app.include_router(__import__("admin").router)
+app.include_router(__import__("controls").router)
+app.include_router(__import__("dashboards").router)
 
 app.include_router(__import__("gold").router)
 app.include_router(__import__("training").router)

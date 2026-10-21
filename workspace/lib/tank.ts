@@ -751,3 +751,40 @@ export function rigProxy(
   }
   return tank<Record<string, unknown>>(path, { method: "GET" });
 }
+
+// DASH-1: server-only dashboard reads and founder control calls.
+export type DashboardDay = { day: string; calls: number; code: number; delivered: number; spent: number };
+export type DashboardRead = {
+  daily: DashboardDay[];
+  jobs_done: number;
+  saved_usd: number | null;
+  credits_left: number | null;
+  recent?: { id: string; title: string; status: string }[];
+  skills?: { id: string; version: string; last_eval_score: number | null; eval_threshold: number }[];
+  squad?: { agent: string; status: string; jobs: number }[];
+  shadow_policies?: number;
+  batch_policies?: number;
+};
+export function readClientDashboard(tenantId: string): Promise<DashboardRead> {
+  return tank(`/v1/dashboards/client?${new URLSearchParams({ tenant_id: tenantId })}`, { method: "GET" });
+}
+export function readFounderDashboard(userId: string): Promise<DashboardRead> {
+  return tank("/v1/dashboards/founder", { method: "GET", headers: { "x-tervory-admin": userId } });
+}
+export function readPaidPause(userId: string): Promise<{ paid_paused: boolean; refused: { task: string; path: string; at: string }[] }> {
+  return tank("/v1/controls", { method: "GET", headers: { "x-tervory-admin": userId } });
+}
+export function setPaidPause(userId: string, paused: boolean): Promise<{ paid_paused: boolean }> {
+  return tank("/v1/controls/paid-paused", {
+    method: "PUT", headers: { "x-tervory-admin": userId }, body: JSON.stringify({ paused }),
+  });
+}
+export function switchProvenModel(userId: string, taskType: string): Promise<{ ok: boolean }> {
+  return tank(`/v1/graduation/${encodeURIComponent(taskType)}/promote`, {
+    method: "POST", headers: { "x-tervory-admin": userId }, body: JSON.stringify({ by: userId }),
+  });
+}
+
+export function readDashboardCandidates(userId: string): Promise<{ task_type: string; candidate_model: string | null; n: number; agreement: number | null; min_shadow_samples?: number; eligible: boolean; prim_cost?: number | null; cand_cost?: number | null }[]> {
+  return tank("/v1/graduation", { method: "GET", headers: { "x-tervory-admin": userId } });
+}
