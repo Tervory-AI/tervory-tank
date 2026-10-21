@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 import uuid
 from typing import Any
@@ -444,7 +445,11 @@ async def base_loop(pool: Any, skills: SkillClient) -> None:
                     await skills.approved(f"{cfg['engine']}.profile") if cfg.get("engine") else None
                 )
                 call = skills.bind(versions, bool(cfg.get("preview")), str(row["tenant_id"]))
-                await _run_batch(pool, row["id"], cfg, call)
+                if os.environ.get("BASE_BRAIN_URL"):
+                    from base_brain import drive_batch
+                    await drive_batch(pool, skills, row["id"], cfg, call)
+                else:
+                    await _run_batch(pool, row["id"], cfg, call)
             except Exception as exc:  # noqa: BLE001 — one bad batch must not stop the queue
                 log.error("base worker: %s", type(exc).__name__)
                 async with pool.acquire() as conn:
