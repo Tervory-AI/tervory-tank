@@ -10,6 +10,7 @@ import asyncio
 import hmac
 import json
 import os
+import re
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -321,9 +322,24 @@ async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages
             await event(conn, row, "done", {"message_id": turn_id})
             if state["active_turn"] == turn_id:
                 state["active_turn"] = None
-    except (Exception, asyncio.CancelledError):
+    except (Exception, asyncio.CancelledError) as exc:
         # Never return raw provider exceptions, URLs, headers or prompts.
         async with editing(thread_id, actor) as (conn, row, state):
+            # Failed paid calls may have a ledger row too. Preserve its actual
+            # cost without exposing the upstream exception or inventing a row.
+            detail = exc.detail if isinstance(exc, HTTPException) else None
+            if isinstance(detail, dict) and detail.get("ledger_id"):
+                try:
+                    ledger_id = uuid.UUID(str(detail["ledger_id"]))
+                except ValueError:
+                    ledger_id = None
+                if ledger_id:
+                    ledger = await conn.fetchval("SELECT to_jsonb(l) FROM tank.ledger l WHERE id=$1 AND tenant_id=$2",
+                                                 ledger_id, actor.tenant_id)
+                    if ledger:
+                        receipt = receipt_row(unpack(ledger), turn_id)
+                        state["receipts"].append(receipt)
+                        await event(conn, row, "receipt", {"rows": [receipt], "totals": totals([receipt])})
             await step(conn, row, state, {"step_id": turn_id, "label": "Answer failed", "actor": "Tervory", "status": "failed"})
             await event(conn, row, "error", {"message": "The answer could not be completed. Check routing policy and service availability."})
             if state["active_turn"] == turn_id:
@@ -465,8 +481,7 @@ async def progress(build_id: uuid.UUID, body: Progress) -> dict:
         from urllib.parse import urlsplit
         parsed = urlsplit(body.pr_url)
         if (parsed.scheme != "https" or parsed.netloc != "github.com" or parsed.query or parsed.fragment
-                or not parsed.path.startswith("/Tervory-AI/tervory-tank/pull/")
-                or not parsed.path.rsplit("/", 1)[-1].isdigit()):
+                or not re.fullmatch(r"/Tervory-AI/tervory-tank/pull/[1-9][0-9]*", parsed.path)):
             raise HTTPException(422, "A repository pull request URL is required")
     async with db().acquire() as conn:
         build = await build_record(conn, build_id)

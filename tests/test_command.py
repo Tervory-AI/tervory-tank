@@ -239,3 +239,21 @@ async def test_interrupted_turn_is_not_retried_and_new_turn_can_start(api, monke
     assert reply.status_code == 200
     assert 'previous answer was interrupted' in reply.text
     route.assert_awaited_once()  # Only the new request, never the stale request.
+
+
+@pytest.mark.asyncio
+async def test_failed_paid_turn_keeps_ledger_receipt(api, monkeypatch):
+    client, pool = api
+    thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
+    ledger_id = uuid.uuid4()
+    async with pool.acquire() as conn:
+        await conn.execute("INSERT INTO tank.ledger(id,tenant_id,agent,task_type,model,cost_usd,outcome) VALUES($1,$2,'orchestrator','command.turn','fixture-model',0.01,'failed')", ledger_id, TENANT)
+    error = HTTPException(502, {'ledger_id': str(ledger_id), 'upstream': 'private upstream text'})
+    monkeypatch.setattr(command, 'route_turn', AsyncMock(side_effect=error))
+    reply = await client.post(f'/v1/command/threads/{thread}/turn', json={'text': 'Hello'})
+    assert 'event: error' in reply.text
+    assert 'event: receipt' in reply.text
+    assert str(ledger_id) in reply.text
+    assert 'private upstream text' not in reply.text
+    detail = (await client.get(f'/v1/command/threads/{thread}')).json()
+    assert detail['thread']['spent_usd'] == 0.01
