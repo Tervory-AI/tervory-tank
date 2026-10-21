@@ -1276,14 +1276,6 @@ CREATE TABLE IF NOT EXISTS tank.workers_controls (
     PRIMARY KEY (tenant_id, name)
 );
 
-<<<<<<< HEAD
--- ---------- 21 Oct 2026: the window's turns need a platform policy ----------
--- command.turn had no row, so every turn in /chats failed with "no policy".
--- Tank's planning message supplies the system prompt; the founder promotes later.
-INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_tokens_out, system_prompt) VALUES
-  ('command.turn', 1, 'luna', 'urgent', 'none', 2048, NULL)
-ON CONFLICT DO NOTHING;
-=======
 -- MOA-1: opt-in only, no serving model or enabled policy is seeded here.
 ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS moa_enabled boolean NOT NULL DEFAULT false;
 ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS moa_config jsonb NOT NULL DEFAULT '{}'::jsonb;
@@ -1339,4 +1331,9 @@ DO $$ BEGIN
             FOR EACH ROW EXECUTE FUNCTION tank.moa_baseline_snapshot();
     END IF;
 END $$;
->>>>>>> a4e842f5953e43026f84b04e9988ff484bad1712
+-- ---------- 21 Oct 2026: the window's turns need a platform policy ----------
+-- command.turn had no row, so every turn in /chats failed with "no policy".
+-- Tank's planning message supplies the system prompt; the founder promotes later.
+INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_tokens_out, system_prompt) VALUES
+  ('command.turn', 1, 'luna', 'urgent', 'none', 2048, NULL)
+ON CONFLICT DO NOTHING;
