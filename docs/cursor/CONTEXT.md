@@ -51,6 +51,7 @@
 - Use plain English in the UI. No placeholder text. Use the exact logo files; never redraw a logo.
 
 ## How to work
+- **Work without asking.** The brief, this file and `AGENTS.md` are your answers. When something is unclear, choose the option that fits them best, keep going, and list it under "Decisions I made" in the PR. Never ask whether to proceed. Stop only for: a secret value you need, a paid service or key the brief does not name, an action on production that cannot be undone, or a conflict with a hard rule. Then ask once, in one message, with your recommended answer.
 - **Run in the cloud only, never on the founder's computer.** Use your cloud or background agent, with its own cloud machine. Do not clone the repo, install packages, run builds, run tests or start servers on the founder's laptop. If you are running locally, stop and say so. CI runs the tests; Claude checks production through Coolify.
 - Branch from the latest `main`, and stay inside your brief's "Files you may change".
 - Put new logic in new modules. In shared files (`tank/main.py`, `tank/schema.sql`), add only route registrations and additive schema, to keep merge conflicts small with other lanes running in parallel.
