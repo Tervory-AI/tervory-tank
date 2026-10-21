@@ -591,6 +591,7 @@ class RouteRequest(BaseModel):
     skill: str | None = None
     region: str | None = None
     home_region: str | None = None
+    case_ref: str | None = None          # isolates internal bench samples in the cache
     messages: list[Message] = Field(min_length=1)
     max_tokens: int | None = None          # a skill may ask for fewer than the policy's cap
 
@@ -602,8 +603,10 @@ class RouteResponse(BaseModel):
     content: str
     tokens_in: int
     tokens_out: int
-    cost_usd: float
+    cost_usd: float | None
     latency_ms: int
+    moa_run_id: uuid.UUID | None = None
+    moa: dict[str, Any] | None = None
     finish_reason: str = ""
 
 
@@ -924,6 +927,8 @@ async def run_route(
         digest_parts: list[Any] = [req.task_type, model, max_tokens, messages]
         if route_seat is not None:
             digest_parts.append(route_seat)
+            if seat and req.case_ref:
+                digest_parts.append(req.case_ref)
         if generation:
             digest_parts.append(generation)
         digest = hashlib.sha256(json.dumps(digest_parts, sort_keys=True).encode()).hexdigest()
@@ -1992,11 +1997,7 @@ async def search_task(task_type: str, body: SearchBody | None = None) -> dict[st
     return {"ok": True, "skipped": False, "research_due": due, **result.as_dict()}
 
 
-@app.post("/v1/route", response_model=RouteResponse)
-async def route(req: RouteRequest, caller: str | None = Depends(require_key)) -> RouteResponse:
-    if caller:
-        req = req.model_copy(update={"agent": caller})
-    return await run_route(req, caller=caller)
+route = __import__("moa").register_route(app, RouteRequest, RouteResponse, require_key)
 
 
 # ---------- tasks: the board ----------
@@ -3063,6 +3064,7 @@ app.include_router(__import__("bench").router)
 app.include_router(__import__("proof").router)
 app.include_router(__import__("proof").client_router)
 app.include_router(__import__("agent_skills").build_router(__import__("sys").modules[__name__]))
+app.include_router(__import__("moa").router)
 
 
 @app.get("/v1/training/graduation")
