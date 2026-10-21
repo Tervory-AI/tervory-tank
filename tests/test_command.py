@@ -131,6 +131,9 @@ async def command_pool():
         async with pool.acquire() as conn:
             await conn.execute(schema)
             await conn.execute(schema)  # Empty database and idempotent reapplication.
+            # Match Tank startup; this fixture mounts only the command router.
+            from savings_defaults import initialize
+            await initialize(conn)
         yield pool
     finally:
         if command._background:

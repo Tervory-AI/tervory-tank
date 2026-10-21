@@ -33,6 +33,8 @@ async def database(monkeypatch):
     pool = await asyncpg.create_pool(URL, database=name, min_size=1, max_size=4)
     async with pool.acquire() as conn:
         await conn.execute((ROOT / "tank/schema.sql").read_text())
+        from savings_defaults import initialize
+        await initialize(conn)
     rt = SimpleNamespace(pool=lambda: pool, box_region=lambda: "us-east", _packages={})
     monkeypatch.setattr(gold, "runtime", lambda: rt)
     monkeypatch.setattr(training, "runtime", lambda: rt)
