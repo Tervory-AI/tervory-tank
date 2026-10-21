@@ -1071,6 +1071,17 @@ CREATE TABLE IF NOT EXISTS tank.baseline_price_changes (
 CREATE TABLE IF NOT EXISTS tank.provider_standards (
     provider text PRIMARY KEY, model text NOT NULL
 );
+-- Preserve the previous function's defaults atomically during an upgrade, before
+-- replacing it. Already-running replicas must never see an empty default table.
+DO $$ BEGIN
+  IF to_regprocedure('tank.standard_model_for(text)') IS NOT NULL THEN
+    INSERT INTO tank.provider_standards(provider,model)
+      SELECT provider,tank.standard_model_for(provider)
+      FROM unnest(ARRAY['openai','anthropic','gemini','xai','moonshot','deepseek']) AS provider
+      WHERE tank.standard_model_for(provider) IS NOT NULL
+      ON CONFLICT(provider) DO NOTHING;
+  END IF;
+END $$;
 CREATE OR REPLACE FUNCTION tank.standard_model_for(family text) RETURNS text
 LANGUAGE sql STABLE AS $$
     SELECT model FROM tank.provider_standards WHERE provider=split_part(family,'/',1)

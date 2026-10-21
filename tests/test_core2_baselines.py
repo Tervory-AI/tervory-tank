@@ -304,3 +304,21 @@ async def test_base_receipt_uses_answered_provider_standard_and_task_override(da
             answered='haiku'
         elif expected=='sonnet':
             await pool.execute("UPDATE tank.baseline_settings SET override_model='astra' WHERE task_type='agent.base.think'")
+
+
+@pytest.mark.asyncio
+async def test_upgrade_preserves_defaults_before_new_router_startup(database):
+    pool,_=database
+    # Simulate the old immutable function on a box still accepting receipts from
+    # another replica. Schema apply must preserve all six standards atomically.
+    await pool.execute('TRUNCATE tank.provider_standards')
+    await pool.execute("""CREATE OR REPLACE FUNCTION tank.standard_model_for(family text) RETURNS text
+        LANGUAGE sql IMMUTABLE AS $$ SELECT CASE split_part(family,'/',1)
+        WHEN 'openai' THEN 'sol' WHEN 'anthropic' THEN 'sonnet' WHEN 'gemini' THEN 'argon'
+        WHEN 'xai' THEN 'grok-top' WHEN 'moonshot' THEN 'kimi' WHEN 'deepseek' THEN 'deepseek-pro' END $$""")
+    await pool.execute((Path(__file__).resolve().parents[1]/'tank/schema.sql').read_text())
+    from savings_defaults import STANDARDS
+    actual={r['provider']:r['model'] for r in await pool.fetch('SELECT * FROM tank.provider_standards')}
+    assert actual==STANDARDS
+    await fixture(pool)
+    assert await pool.fetchval("SELECT standard_model FROM tank.ledger LIMIT 1")=='sol'
