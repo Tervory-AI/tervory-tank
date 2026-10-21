@@ -41,6 +41,54 @@ async def test_access_empty_schema_reapply_and_scoped_routes(monkeypatch):
             response = await client.post("/v1/access/credentials", json={"room": "base", "site": "https://dealer.example",
                 "username": uuid.uuid4().hex, "password": uuid.uuid4().hex, "dedicated_read_only": True})
             assert response.status_code == 200
+            other = uuid.uuid4()
+            # Platform terms reveal no other client's sites to a client.
+            response = await client.post("/v1/access/sites", json={"site": "https://other-dealer.example", "terms": "unknown"})
+            assert response.status_code == 200
+            app.dependency_overrides[access.identity] = lambda: Actor(actor.tenant_id, "client", False, frozenset({"base", "tiger"}))
+            response = await client.get("/v1/access/connections")
+            assert response.json()["policies"] == [] and "other-dealer" not in response.text
+            assert response.json()["connections"][0]["site"] == "https://dealer.example"
+            app.dependency_overrides[access.identity] = lambda: actor
+            # Terms clear settings checks for every affected tenant, not other sites.
+            async with pool.acquire() as conn:
+                await access.enqueue(conn, actor.tenant_id, "base", "https://dealer.example", "terms_unknown")
+                await access.enqueue(conn, other, "base", "https://dealer.example", "terms_unknown")
+                await access.enqueue(conn, other, "base", "https://other-dealer.example", "terms_unknown")
+            response = await client.post("/v1/access/sites", json={"site": "https://dealer.example", "terms": "yes", "rotation_days": 30})
+            assert response.status_code == 200
+            async with pool.acquire() as conn:
+                assert await conn.fetchval("SELECT count(*) FROM tank.access_queue WHERE tenant_id=$1 AND site='https://dealer.example' AND status='done'", other) == 1
+                assert await conn.fetchval("SELECT status FROM tank.access_queue WHERE tenant_id=$1 AND site='https://other-dealer.example'", other) == "waiting"
+                await access.enqueue(conn, actor.tenant_id, "base", "https://dealer.example", "rotation_due")
+                other_check = await access.enqueue(conn, other, "base", "https://dealer.example", "captcha")
+            response = await client.post("/v1/access/credentials", json={"room": "base", "site": "https://dealer.example",
+                "username": uuid.uuid4().hex, "password": uuid.uuid4().hex, "dedicated_read_only": True})
+            assert response.status_code == 200
+            async with pool.acquire() as conn:
+                assert not await conn.fetchval("SELECT 1 FROM tank.access_queue WHERE tenant_id=$1 AND site='https://dealer.example' AND status IN ('waiting','handling')", actor.tenant_id)
+                assert await conn.fetchval("SELECT status FROM tank.access_queue WHERE tenant_id=$1 AND id=$2", other, uuid.UUID(other_check)) == "waiting"
+            # Only a founder can dismiss, including a settings-only check with no live view.
+            app.dependency_overrides[access.identity] = lambda: Actor(other, "client", False, frozenset({"base"}))
+            response = await client.post("/v1/access/queue/" + other_check, json={"tenant_id": str(other), "action": "dismiss"})
+            assert response.status_code == 403
+            app.dependency_overrides[access.identity] = lambda: actor
+            response = await client.post("/v1/access/queue/" + other_check, json={"tenant_id": str(other), "action": "dismiss"})
+            assert response.status_code == 200 and response.json()["dismissed"]
+            # Browser restart loses handles. Queue refresh releases the old handler.
+            async with pool.acquire() as conn:
+                stale = uuid.UUID(await access.enqueue(conn, actor.tenant_id, "base", "https://dealer.example", "captcha", uuid.uuid4()))
+                await conn.execute("UPDATE tank.access_queue SET status='handling',handler='previous-person',started_at=now() WHERE tenant_id=$1 AND id=$2", actor.tenant_id, stale)
+            async def missing(*args): return {"available": False}
+            monkeypatch.setattr(access, "control", missing)
+            response = await client.get("/v1/access/queue")
+            assert response.status_code == 200
+            item = next(row for row in response.json() if row["id"] == str(stale))
+            assert item["status"] == "waiting" and not item["live_available"] and "browser_handle" not in item
+            async with pool.acquire() as conn:
+                row = await conn.fetchrow("SELECT * FROM tank.access_queue WHERE tenant_id=$1 AND id=$2", actor.tenant_id, stale)
+                assert row["handler"] is None and row["started_at"] is None
+            monkeypatch.setattr(access, "control", control)
             response = await client.get("/v1/access/connections")
             assert response.status_code == 200 and response.json()["connections"][0]["terms"] == "yes"
             response = await client.post("/v1/access/feeds/import", json={"distributor": "rsr", "site": "https://dealer.example", "source": "ftp_export", "format": "csv", "contents": "sku,price,quantity\nitem-1,12.50,7"})

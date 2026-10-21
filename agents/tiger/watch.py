@@ -925,8 +925,10 @@ async def run_check(
         return {"status": "skipped", "url": url, "alerts": []}
     if feed is not None:
         official = await feed(str(tenant_id), url)
-        if official.get("found"):
+        if official.get("found") is True:
             return await external_observation(store, tenant_id, watch, official["item"], "official_feed", official["receipt"], clock)
+        if official.get("found") is not False:
+            raise ValueError("Official feed did not confirm whether the product exists.")
     host = host_of(url)
     await limiter.wait(host)
     try:

@@ -39,6 +39,10 @@ sees only login status. Tiger can read founder-configured `price_selector` and
 `quantity_selector` numeric fields through the site-policy API; these go directly
 to that client's observations, without a model, screenshot, shared cache or gold.
 No logged-in social browsing is permitted.
+Clients see only their own connections; only the founder receives the platform
+site-policy catalogue. Equivalent site hosts (case and default port) are
+normalized before feed lookup. A confirmed “no feed” permits scraping; an
+unavailable or malformed feed answer does not.
 
 ## Revoke, rotate and human checks
 
@@ -59,6 +63,14 @@ or add a second paid run. If the original run has finished, retry the affected
 page/task using the existing room controls. Expired views must be reopened by a
 fresh room read. Terms/rotation checks have no live view until their settings are
 fixed. Handling records the authenticated operator and elapsed time.
+Credential updates close that connection's old checks. Site-policy updates close
+the affected terms/renewal checks. The founder can Dismiss any open check; a live
+view is closed without saving its session. If a browser restart loses a handling
+view, refreshing the queue returns it to waiting and releases its previous handler.
+Only a click, key, text entry or scroll permits human form submission, for at most
+two minutes after the last such input. Opening or polling screenshots does not
+extend this permission. Login receipts identify the owning room and upstream
+task (Tiger supplies its job ID); calls without one are explicitly “unassigned”.
 
 ## Official feeds
 
@@ -83,6 +95,8 @@ Tank first; a matching feed outranks scraping and retains source, fetch time,
 row count and batch receipt. An unavailable feed service fails visibly rather
 than silently substituting a scrape. All feed rows and observations are tenant
 scoped. Refreshes atomically replace only that client's distributor/site rows.
+Private-portal observations are refused at the training confirmation endpoint,
+before a gold candidate can be created, as well as excluded from export.
 
 ## Public business pages and dead sites
 

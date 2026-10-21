@@ -93,7 +93,8 @@ def origin(value: str, *, https: bool = True) -> str:
 
 def site_name(value: str) -> str:
     result = origin(value)
-    if value.rstrip("/") != result:
+    parsed = urlsplit(value)
+    if parsed.path not in {"", "/"} or parsed.query or parsed.fragment:
         raise HTTPException(422, "Use the site's HTTPS address without a path or query.")
     return result
 
@@ -171,6 +172,13 @@ async def enqueue(conn, tenant, room: str, site: str, reason: str, handle=None, 
     return str(row["id"])
 
 
+async def resolve_checks(conn, tenant, room, site, *, reasons=None):
+    await conn.execute("""UPDATE tank.access_queue SET status='done',finished_at=now(),browser_handle=NULL,
+        handler=NULL,started_at=NULL WHERE tenant_id=$1 AND room=$2 AND site=$3
+        AND status IN ('waiting','handling') AND ($4::text[] IS NULL OR reason=ANY($4))""",
+        tenant, room, site, reasons)
+
+
 @router.get("/connections")
 async def connections(actor: Actor = Depends(identity)):
     async with db().acquire() as conn:
@@ -179,7 +187,7 @@ async def connections(actor: Actor = Depends(identity)):
             c.updated_at + make_interval(days => COALESCE(p.rotation_days,90)) AS rotate_by
             FROM tank.access_connections c LEFT JOIN tank.access_sites p ON p.tenant_id=$2 AND p.site=c.site
             WHERE c.tenant_id=$1 ORDER BY c.site,c.room""", actor.tenant_id, PLATFORM)
-        policies = await conn.fetch("SELECT site,terms,rotation_days FROM tank.access_sites WHERE tenant_id=$1 ORDER BY site", PLATFORM)
+        policies = await conn.fetch("SELECT site,terms,rotation_days FROM tank.access_sites WHERE tenant_id=$1 ORDER BY site", PLATFORM) if actor.founder else []
         feeds = await conn.fetch("""SELECT distributor,site,source,fetched_at,row_count FROM tank.access_feed_batches
             WHERE tenant_id=$1 ORDER BY fetched_at DESC LIMIT 30""", actor.tenant_id)
     now = datetime.now(timezone.utc)
@@ -202,6 +210,13 @@ async def policy(request: Request, actor: Actor = Depends(identity)):
             terms=$3,rotation_days=$4,login_config=$5::jsonb,updated_at=now()""", PLATFORM, site,
             body.terms, body.rotation_days, json.dumps(body.model_dump(exclude={"site", "terms", "rotation_days"})))
         await receipt(conn, PLATFORM, "platform", site, actor.user_id, "terms_updated")
+        # Terms are founder-managed platform policy. Resolve affected clients'
+        # settings-only checks individually, preserving each tenant boundary.
+        affected = await conn.fetch("""SELECT DISTINCT tenant_id,room FROM tank.access_queue
+            WHERE (tenant_id=$1 OR $2::bool) AND site=$3 AND status IN ('waiting','handling')
+            AND reason IN ('terms_no','terms_unknown','rotation_due')""", actor.tenant_id, actor.founder, site)
+        for item in affected:
+            await resolve_checks(conn, item["tenant_id"], item["room"], site, reasons=["terms_no", "terms_unknown", "rotation_due"])
     return {"ok": True}
 
 
@@ -227,13 +242,13 @@ async def control(room: str, data: dict) -> dict:
         raise HTTPException(503, "The room's browser is unavailable. Session removal has not been confirmed.") from None
 
 
-async def clear_session(tenant, room, site):
+async def clear_session(tenant, room, site, actor):
     result = await control(room, {"action": "revoke", "tenant_id": str(tenant), "site": site})
     if result.get("cleared") is not True:
         raise HTTPException(503, "Session removal has not been confirmed.")
     async with db().acquire() as conn:
         await conn.execute("UPDATE tank.access_connections SET clear_pending=false WHERE tenant_id=$1 AND room=$2 AND site=$3", tenant, room, site)
-        await receipt(conn, tenant, room, site, "browser", "logout")
+        await receipt(conn, tenant, room, site, actor, "logout")
 
 
 @asynccontextmanager
@@ -271,11 +286,12 @@ async def credentials(request: Request, actor: Actor = Depends(identity)):
             await conn.execute("""INSERT INTO tank.access_connections(tenant_id,room,site,sealed,revoked,clear_pending)
                 VALUES($1,$2,$3,NULL,true,true) ON CONFLICT(tenant_id,room,site)
                 DO UPDATE SET sealed=NULL,revoked=true,clear_pending=true,version=gen_random_uuid()""", actor.tenant_id, body.room, site)
-        await clear_session(actor.tenant_id, body.room, site)
+        await clear_session(actor.tenant_id, body.room, site, actor.user_id)
         async with db().acquire() as conn:
             await conn.execute("""UPDATE tank.access_connections SET sealed=$4,revoked=false,updated_at=now(),version=gen_random_uuid()
                 WHERE tenant_id=$1 AND room=$2 AND site=$3""", actor.tenant_id, body.room, site, encrypted)
             await receipt(conn, actor.tenant_id, body.room, site, actor.user_id, "credential_updated")
+            await resolve_checks(conn, actor.tenant_id, body.room, site)
         return {"ok": True}
 
 
@@ -290,7 +306,7 @@ async def revoke(request: Request, actor: Actor = Depends(identity)):
             await conn.execute("""UPDATE tank.access_queue SET status='revoked' WHERE tenant_id=$1 AND room=$2
                 AND site=$3 AND status IN ('waiting','handling')""", actor.tenant_id, body.room, site)
             await receipt(conn, actor.tenant_id, body.room, site, actor.user_id, "revoked")
-        await clear_session(actor.tenant_id, body.room, site)
+        await clear_session(actor.tenant_id, body.room, site, actor.user_id)
         return {"ok": True, "credential_deleted": True, "session_deleted": True}
 
 
@@ -325,8 +341,10 @@ async def browser_rpc(room: str, request: Request):
         nonce = uuid.UUID(data["nonce"])
         site = origin(data["site"], https=False)
         action = data["action"]
+        task = uuid.UUID(data["task_id"]) if data.get("task_id") else None
     except (ValueError, KeyError):
         raise HTTPException(422, "Invalid browser request.") from None
+    browser_actor = f"{room}:task:{task}" if task else f"{room}:task:unassigned"
     async with db().acquire() as conn:
         inserted = await conn.fetchval("""INSERT INTO tank.access_nonces(tenant_id,nonce) VALUES($1,$2)
             ON CONFLICT DO NOTHING RETURNING nonce""", tenant, nonce)
@@ -340,23 +358,22 @@ async def browser_rpc(room: str, request: Request):
             result["config"] = json.loads(row["login_config"]) if isinstance(row["login_config"], str) else row["login_config"]
         if action == "release":
             if state != "allowed":
-                await receipt(conn, tenant, room, site, "browser", "login_refused")
+                await receipt(conn, tenant, room, site, browser_actor, "login_refused")
             else:
                 result["credential"] = vault.open_seal(row["sealed"], vault.context(tenant, room, site, "login"))
                 result["config"] = json.loads(row["login_config"]) if isinstance(row["login_config"], str) else row["login_config"]
-                await receipt(conn, tenant, room, site, "browser", "login_started")
+                await receipt(conn, tenant, room, site, browser_actor, "login_started")
         elif action == "queue":
             reason = data.get("reason")
             if reason not in {"captcha", "human_login", "terms_no", "terms_unknown", "rotation_due"}:
                 raise HTTPException(422, "Invalid check reason.")
             handle = uuid.UUID(data["handle"]) if data.get("handle") else None
-            task = uuid.UUID(data["task_id"]) if data.get("task_id") else None
             result["queue_id"] = await enqueue(conn, tenant, room, site, reason, handle, task)
         elif action == "event":
             event = data.get("event")
             if event not in {"logged_in", "login_failed", "logout", "live_expired"}:
                 raise HTTPException(422, "Invalid browser event.")
-            await receipt(conn, tenant, room, site, "browser", event)
+            await receipt(conn, tenant, room, site, browser_actor, event)
             if event == "live_expired":
                 await conn.execute("UPDATE tank.access_queue SET browser_handle=NULL,handler=NULL,status='waiting' WHERE tenant_id=$1 AND room=$2 AND site=$3 AND status IN ('waiting','handling')", tenant, room, site)
         elif action != "policy":
@@ -367,16 +384,36 @@ async def browser_rpc(room: str, request: Request):
 @router.get("/queue")
 async def queue(actor: Actor = Depends(identity)):
     async with db().acquire() as conn:
-        rows = await conn.fetch("""SELECT id,tenant_id,room,site,reason,status,created_at,
+        rows = await conn.fetch("""SELECT id,tenant_id,room,site,reason,status,created_at,browser_handle,
             (browser_handle IS NOT NULL) AS live_available FROM tank.access_queue
             WHERE (tenant_id=$1 OR $2::bool) AND status IN ('waiting','handling') ORDER BY created_at LIMIT 100""",
             actor.tenant_id, actor.founder)
-    return [dict(r) for r in rows]
+    async def current(row):
+        value = dict(row)
+        if row["browser_handle"] and row["status"] == "handling":
+            try:
+                state = await control(row["room"], {"action": "status", "tenant_id": str(row["tenant_id"]),
+                    "site": row["site"], "handle": str(row["browser_handle"])})
+                if state.get("available") is False:
+                    await reset_check(row)
+                    value.update(status="waiting", live_available=False)
+            except HTTPException:
+                pass  # A network failure cannot establish that the view was lost.
+        value.pop("browser_handle", None)
+        return value
+    return await asyncio.gather(*(current(row) for row in rows))
+
+
+async def reset_check(row):
+    async with db().acquire() as conn:
+        await conn.execute("""UPDATE tank.access_queue SET status='waiting',browser_handle=NULL,handler=NULL,started_at=NULL
+            WHERE tenant_id=$1 AND id=$2 AND browser_handle=$3 AND status IN ('waiting','handling')""",
+            row["tenant_id"], row["id"], row["browser_handle"])
 
 
 class HumanAction(Body):
     tenant_id: uuid.UUID
-    action: Literal["open", "frame", "click", "key", "text", "scroll", "hand_back"]
+    action: Literal["open", "frame", "click", "key", "text", "scroll", "hand_back", "dismiss"]
     x: int = Field(default=0, ge=0, le=1280)
     y: int = Field(default=0, ge=0, le=900)
     text: SecretStr = Field(default=SecretStr(""), max_length=2000)
@@ -392,15 +429,28 @@ async def human_action(item_id: uuid.UUID, request: Request, actor: Actor = Depe
     async with db().acquire() as conn:
         async with conn.transaction():
             row = await conn.fetchrow("SELECT * FROM tank.access_queue WHERE id=$1 AND tenant_id=$2 AND status IN ('waiting','handling') FOR UPDATE", item_id, body.tenant_id)
-            if not row or not row["browser_handle"]:
+            if not row:
+                raise HTTPException(404, "This check is no longer waiting.")
+            if body.action == "dismiss":
+                if row["browser_handle"]:
+                    await control(row["room"], {"action": "dismiss", "tenant_id": str(row["tenant_id"]),
+                        "site": row["site"], "handle": str(row["browser_handle"])})
+                await resolve_checks(conn, row["tenant_id"], row["room"], row["site"])
+                await receipt(conn, row["tenant_id"], row["room"], row["site"], actor.user_id, "dismissed")
+                return {"dismissed": True}
+            if not row["browser_handle"]:
                 raise HTTPException(409, "Retry the page after the connection or site terms are updated.")
             if row["handler"] and row["handler"] != actor.user_id:
                 raise HTTPException(409, "Another person is handling this check.")
             if row["status"] == "waiting" and body.action != "open":
                 raise HTTPException(409, "Open the live view first.")
             await conn.execute("UPDATE tank.access_queue SET handler=$2,status='handling',started_at=COALESCE(started_at,now()) WHERE id=$1 AND tenant_id=$3", item_id, actor.user_id, row["tenant_id"])
-    result = await control(row["room"], {"action": "live", "tenant_id": str(row["tenant_id"]), "site": row["site"],
-        "handle": str(row["browser_handle"]), "input": {**body.model_dump(exclude={"text", "tenant_id"}), "text": body.text.get_secret_value()}})
+    try:
+        result = await control(row["room"], {"action": "live", "tenant_id": str(row["tenant_id"]), "site": row["site"],
+            "handle": str(row["browser_handle"]), "input": {**body.model_dump(exclude={"text", "tenant_id"}), "text": body.text.get_secret_value()}})
+    except HTTPException as exc:
+        if exc.status_code == 409: await reset_check(row)
+        raise
     if body.action == "hand_back":
         if not result.get("ready"):
             raise HTTPException(409, "The page still needs a person.")
@@ -461,7 +511,7 @@ def parse_feed(body: FeedImport) -> list[dict]:
             elif current is not None and parts[0] == "CTP" and len(parts) > 3:
                 current["price"] = parts[3]
     else:
-        rows = list(csv.DictReader(io.StringIO(raw), delimiter="\t" if body.format == "tsv" else ","))
+        rows = list(csv.DictReader(io.StringIO(raw), delimiter="\t" if body.format == "tsv" else ",", strict=True))
     if len(rows) > 50000 or not rows:
         raise ValueError()
     result = []
@@ -490,7 +540,7 @@ async def import_feed(request: Request, actor: Actor = Depends(identity)):
     site_name(body.site)
     try:
         rows = parse_feed(body)
-    except (ValueError, TypeError, KeyError, InvalidOperation):
+    except (ValueError, TypeError, KeyError, InvalidOperation, csv.Error):
         raise HTTPException(422, "The feed could not be read. Check its format and column mapping.") from None
     return await save_feed(actor, body, rows)
 
@@ -499,14 +549,15 @@ async def import_feed(request: Request, actor: Actor = Depends(identity)):
 async def feed_price(tenant_id: uuid.UUID, site: str, sku: str = "", upc: str = "", url: str = "", room: str = Depends(room_identity)):
     if room != "tiger" or (not sku and not upc and not url):
         raise HTTPException(422, "Tiger must name the product identifier.")
+    site = site_name(site)
     async with db().acquire() as conn:
         if url:
-            if origin(url) != site_name(site): raise HTTPException(422, "Product site differs.")
+            if origin(url) != site: raise HTTPException(422, "Product site differs.")
             sku = await conn.fetchval("SELECT sku FROM tank.access_feed_links WHERE tenant_id=$1 AND url=$2", tenant_id, url) or ""
         row = await conn.fetchrow("""SELECT r.data,b.source,b.fetched_at,b.row_count,b.distributor,b.id FROM tank.access_feed_rows r
             JOIN tank.access_feed_batches b ON b.tenant_id=r.tenant_id AND b.id=r.batch_id
             WHERE r.tenant_id=$1 AND r.site=$2 AND (($3<>'' AND r.sku=$3) OR ($4<>'' AND r.upc=$4))
-            ORDER BY b.fetched_at DESC LIMIT 1""", tenant_id, site_name(site), sku, upc)
+            ORDER BY b.fetched_at DESC LIMIT 1""", tenant_id, site, sku, upc)
     if not row: return {"found": False}
     data = json.loads(row["data"]) if isinstance(row["data"], str) else row["data"]
     return {"found": True, "item": data, "receipt": {k: row[k] for k in ("source", "fetched_at", "row_count", "distributor", "id")}}
@@ -689,6 +740,8 @@ class SocialPage(Body):
 async def social_page(request: Request, room: str = Depends(room_identity)):
     body = await parse(request, SocialPage)
     if room != "base": raise HTTPException(403, "Only Base reads business pages.")
+    if body.platform == "facebook" and (".." in body.business_id or "/" in body.business_id):
+        raise HTTPException(422, "Use a public business page identifier, not a path.")
     if not os.environ.get("META_APP_ID") or os.environ.get("META_APP_REVIEW_APPROVED") != "true":
         return {"enabled": False, "source": "search_results"}
     version = os.environ.get("META_GRAPH_VERSION", "")

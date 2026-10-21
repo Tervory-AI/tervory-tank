@@ -32,6 +32,8 @@ const output=path.join(root,'tests/artifacts/access-1');
    await page.screenshot({path:path.join(output,`${role}-${width}.png`),fullPage:true});
    await page.getByRole('button',{name:/Needs a person/}).click();await page.screenshot({path:path.join(output,`checks-${role}-${width}.png`),fullPage:true});
    assert.equal(await page.getByRole('link',{name:'Open live view'}).count(),role==='founder'?1:0);
+   assert.equal(await page.getByRole('button',{name:'Dismiss',exact:true}).count(),role==='founder'?1:0);
+   if(role==='founder'&&width===375){await page.getByRole('button',{name:'Dismiss',exact:true}).click();await page.getByRole('status').filter({hasText:'Check dismissed.'}).waitFor();assert(calls.some(c=>c.body.action==='dismiss'&&c.body.tenant_id===queue[0].tenant_id));}
    if(role==='client'&&width===375){
     await page.getByRole('button',{name:'Connections',exact:true}).click();
     const generated=require('node:crypto').randomUUID();

@@ -193,13 +193,14 @@ async def visit(body, tenant, task, origin):
                     target = site_origin(route.request.url)
                     target_host = urlsplit(route.request.url).hostname or ""
                     target_social = any(target_host == name or target_host.endswith("." + name) for name in ("facebook.com", "instagram.com", "fb.com", "fb.me"))
-                    if target_social and (navigation["human"] or route.request.method not in {"GET", "HEAD", "OPTIONS"}):
+                    human = human_navigation(navigation)
+                    if target_social and (human or route.request.method not in {"GET", "HEAD", "OPTIONS"}):
                         raise ValueError("Social pages are anonymous and read-only")
                     if private and target != origin:
                         raise ValueError("Authenticated requests stay on the owning site")
                     # The automated visitor cannot submit a form. Only this
                     # sealed login operation or an authenticated human may do so.
-                    if (private or route.request.is_navigation_request()) and route.request.method not in {"GET", "HEAD", "OPTIONS"} and not (navigation["login"] or navigation["human"]):
+                    if (private or route.request.is_navigation_request()) and route.request.method not in {"GET", "HEAD", "OPTIONS"} and not (navigation["login"] or human):
                         raise ValueError("Forms are not allowed")
                     if navigation["login"] and urlsplit(route.request.url).query:
                         raise ValueError("Login query refused")
@@ -229,8 +230,8 @@ async def visit(body, tenant, task, origin):
                     challenge = human_check(html) or bool(response and response.status in {401, 403, 429})
                     login_needed = private and (not storage.exists() or await page.locator('input[type="password"]').count() > 0 or bool(response and response.status == 401))
                     if login_needed and not human_check(html) and not bool(response and response.status in {403, 429}):
-                        success = await login(page, context, tenant, origin, navigation)
-                        await access_rpc(tenant, origin, "event", event="logged_in" if success else "login_failed")
+                        success = await login(page, context, tenant, origin, navigation, task)
+                        await access_rpc(tenant, origin, "event", event="logged_in" if success else "login_failed", task_id=task or None)
                         if success:
                             if (await access_rpc(tenant, origin, "policy"))["state"] != "allowed":
                                 raise HTTPException(403, "Connection is no longer available.")
@@ -379,6 +380,7 @@ class LivePage:
     reserved: bool = False
     ready: bool = False
     timer: object = None
+    human_timer: object = None
 
 
 held: dict[str, LivePage] = {}
@@ -391,6 +393,7 @@ async def dispose(handle, *, save=True):
     item = held.pop(handle, None)
     if not item: return
     if item.timer and item.timer is not asyncio.current_task(): item.timer.cancel()
+    stop_human(item)
     try:
         if save: await item.context.storage_state(path=str(item.storage))
     finally:
@@ -408,7 +411,7 @@ async def expire_live(handle):
         async with access_locks.setdefault((item.tenant, item.site), asyncio.Lock()):
             await dispose(handle)
         try:
-            await access_rpc(item.tenant, item.site, "event", event="live_expired")
+            await access_rpc(item.tenant, item.site, "event", event="live_expired", task_id=item.task or None)
         except HTTPException:
             pass  # Expiry still closes the browser; no credential was used.
 
@@ -434,8 +437,8 @@ def authenticator(secret):
     return str((int.from_bytes(digest[offset:offset+4], "big") & 0x7fffffff) % 1000000).zfill(6)
 
 
-async def login(page, context, tenant, site, navigation):
-    grant = await access_rpc(tenant, site, "release")
+async def login(page, context, tenant, site, navigation, task=""):
+    grant = await access_rpc(tenant, site, "release", task_id=task or None)
     if grant["state"] != "allowed": return False
     values = grant.pop("credential")
     config = grant["config"]
@@ -495,6 +498,25 @@ async def portal_result(page, policy):
     return result
 
 
+def human_navigation(navigation):
+    if time.monotonic() >= navigation.get("human_until", 0):
+        navigation["human"] = False
+    return navigation.get("human", False)
+
+
+def stop_human(item):
+    item.navigation.update(human=False, human_until=0)
+    if item.human_timer:
+        item.human_timer.cancel()
+        item.human_timer = None
+
+
+def human_input(item):
+    stop_human(item)
+    item.navigation.update(human=True, human_until=time.monotonic() + 120)
+    item.human_timer = asyncio.get_running_loop().call_later(120, stop_human, item)
+
+
 @app.post("/access/control")
 async def access_control(request: Request):
     raw = await request.body()
@@ -523,6 +545,11 @@ async def access_control(request: Request):
             storage_for(tenant, site).unlink(missing_ok=True)
             storage_for(tenant, site, authenticated=True).unlink(missing_ok=True)
             result = {"cleared": True}
+        elif body["action"] in {"status", "dismiss"}:
+            item = held.get(body["handle"])
+            available = bool(item and item.tenant == tenant and item.site == site)
+            if body["action"] == "dismiss" and available: await dispose(body["handle"], save=False)
+            result = {"available": available} if body["action"] == "status" else {"dismissed": True}
         elif body["action"] == "live":
             item = held.get(body["handle"])
             if not item or item.tenant != tenant or item.site != site:
@@ -530,12 +557,16 @@ async def access_control(request: Request):
             else:
                 value = body["input"]
                 action = value["action"]
-                item.navigation["human"] = action != "hand_back"
+                # Only actual human input extends permission to submit forms.
+                # Screenshots/open/polling cannot keep that permission alive.
+                human_navigation(item.navigation)
+                if action in {"click", "key", "text", "scroll"}: human_input(item)
                 if action == "click": await item.page.mouse.click(value["x"], value["y"])
                 elif action == "key": await item.page.keyboard.press(value["key"])
                 elif action == "text": await item.page.keyboard.insert_text(value["text"])
                 elif action == "scroll": await item.page.mouse.wheel(0, value["delta"])
                 elif action == "hand_back":
+                    stop_human(item)
                     policy = await access_rpc(tenant, site, "policy")
                     item.ready = not human_check(await item.page.content())
                     if policy["state"] not in {"public", "allowed"}: item.ready = False

@@ -56,12 +56,12 @@ async def ping(ctx: JobContext) -> dict:
     return result
 
 
-async def _render(url: str, session: str, agent: str, tenant: str) -> dict[str, Any]:
+async def _render(url: str, session: str, agent: str, tenant: str, task: str = "") -> dict[str, Any]:
     response = await app.state.http.post(
         f"{TIGER_URL.rstrip('/')}/render",
         json={"url": url, "screenshot": True, "settle_ms": 10000, "max_ms": 25000},
         headers={"X-Tank-Key": os.environ.get("TANK_KEY", ""), "X-Tenant-ID": tenant,
-                 "X-Home-Region": os.environ.get("TANK_REGION", "us-east")},
+                 "X-Home-Region": os.environ.get("TANK_REGION", "us-east"), "X-Task-ID": task},
         timeout=50,
     )
     if response.status_code >= 400:
@@ -74,7 +74,7 @@ async def _render(url: str, session: str, agent: str, tenant: str) -> dict[str, 
         # request, with the session cookie in the same room's own browser.
         response = await app.state.http.post(f"{TIGER_URL.rstrip('/')}/render",
             json={"url": url, "max_ms": 25000}, headers={"X-Tank-Key": os.environ.get("TANK_KEY", ""),
-            "X-Tenant-ID": tenant, "X-Home-Region": os.environ.get("TANK_REGION", "us-east")}, timeout=50)
+            "X-Tenant-ID": tenant, "X-Home-Region": os.environ.get("TANK_REGION", "us-east"), "X-Task-ID": task}, timeout=50)
         if response.status_code != 200: return {"ok": False, "error": "Private page unavailable."}
         data = response.json()
     return data
@@ -102,7 +102,10 @@ async def official_feed(tenant: str, url: str) -> dict:
         headers={"X-Tank-Key": os.environ.get("TANK_KEY", "")}, timeout=30)
     if response.status_code != 200:
         raise RuntimeError("Official feeds are unavailable; no scrape was substituted.")
-    return response.json()
+    data = response.json()
+    if not isinstance(data, dict) or type(data.get("found")) is not bool:
+        raise RuntimeError("Official feeds returned an invalid answer; no scrape was substituted.")
+    return data
 
 
 async def check(ctx: JobContext) -> dict:
@@ -118,12 +121,15 @@ async def check(ctx: JobContext) -> dict:
     async def ocr(png_base64: str, page_url: str) -> dict[str, Any]:
         return await ctx.tank.run_skill(ctx.tenant_id, "tiger.price_ocr", {"png_base64": png_base64, "url": page_url})
 
+    async def render(url, session, agent, tenant):
+        return await _render(url, session, agent, tenant, str(ctx.job_id))
+
     return await run_check(
         store,
         ctx.tenant_id,
         watch,
         ctx.agent,
-        _render,
+        render,
         extract,
         ocr,
         _fetch_text,
