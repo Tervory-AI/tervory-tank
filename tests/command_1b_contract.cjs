@@ -21,7 +21,7 @@ let upstreamCalls = [];
 let upstream = () => Response.json([]);
 mock('workspace/lib/tenant.ts', {activeTenant:async()=>currentIdentity});
 mock('workspace/lib/admin.ts', {isFounder:()=>founder});
-process.env.TANK_API_KEY = 'synthetic-test-key';
+process.env.TANK_API_KEY = 'dummy-command-key';
 process.env.TANK_URL = 'http://same-box.invalid';
 global.fetch = async (url, init) => { upstreamCalls.push({url:String(url),init}); if(String(url).endsWith('/v1/models')) return Response.json([{name:'test-model',provider_model:'provider/test-model',input_usd_per_m:.1,output_usd_per_m:.5}]); return upstream(url,init); };
 const route = require('../workspace/app/chats/api/[...path]/route.ts');
@@ -48,7 +48,7 @@ const snapshot = {thread:{thread_id:'one',title:'Tank test-model',updated_at:'20
   response=await request('threads/../../admin');assert.equal(response.status,404);
   upstream=()=>Response.json({thread_id:'one'});
   response=await request('threads','POST',{title:'New',tenant_id:'forged',user_id:'forged'});assert.equal(response.status,200);
-  const sent=upstreamCalls.at(-1);assert.equal(new URL(sent.url).searchParams.get('tenant_id'),'tenant-owned');assert.equal(JSON.parse(sent.init.body).user_id,undefined);assert.equal(JSON.parse(sent.init.body).tenant_id,undefined);assert.equal(sent.init.headers.get('x-tank-key'),'synthetic-test-key');assert.equal(sent.init.headers.get('x-tervory-user'),'user-owned');
+  const sent=upstreamCalls.at(-1);assert.equal(new URL(sent.url).searchParams.get('tenant_id'),'tenant-owned');assert.equal(JSON.parse(sent.init.body).user_id,undefined);assert.equal(JSON.parse(sent.init.body).tenant_id,undefined);assert.equal(sent.init.headers.get('x-tank-key'),'dummy-command-key');assert.equal(sent.init.headers.get('x-tervory-user'),'user-owned');
   response=await request('threads/one/turn','POST',{text:'hello',model:'not-a-model'});assert.equal(response.status,400);
   response=await request('threads/one/turn','POST',{text:'hello',attachments:[{name:'x',content_type:'text/plain',data_base64:'invalid!'}]});assert.equal(response.status,400);
   upstream=()=>new Response(stream('event: token\ndata: {"text":"test-"}\n\nevent: token\ndata: {"text":"model answered. "}\n\nevent: receipt\ndata: '+JSON.stringify(receipt)+'\n\nevent: done\ndata: {"message_id":"answer","seq":4}\n\n'),{headers:{'content-type':'text/event-stream'}});
