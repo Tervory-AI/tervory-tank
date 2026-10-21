@@ -3,12 +3,12 @@ export type Money = number | null;
 export type Totals = { cost_usd: Money; baseline_cost_usd: Money; saved_usd: Money; auto_cost_usd?: Money };
 export type ReceiptRow = Totals & { step_id: string; model?: string; baseline_model?: string; tokens_in?: number; tokens_out?: number; ledger_id: string };
 export type Receipt = { rows: ReceiptRow[]; totals: Totals };
-export type Attachment = { name: string; content_type: string; data_base64?: string; attachment_id?: string; size?: number };
+export type Attachment = { name: string; content_type: string; text?: string; attachment_id?: string; size?: number };
 export type Message = { message_id: string; role: "user" | "assistant"; content: string; receipt?: Receipt; attachments?: Attachment[] };
 export type Step = { step_id: string; label: string; actor: string; status: "planned" | "running" | "done" | "failed"; link?: string };
 export type Card = { card_id: string; kind: "approve_skill" | "paid_run" | "build" | "retire" | "other"; summary: string; cost_estimate_usd?: Money; status?: string };
 export type Thread = { thread_id: string; title: string; updated_at: string; spent_usd: Money; saved_usd: Money };
-export type Snapshot = { thread: Thread; messages: Message[]; steps: Step[]; cards: Card[]; seq?: number };
+export type Snapshot = { thread: Thread; messages: Message[]; steps: Step[]; cards: Card[]; seq?: number; receipts?: ReceiptRow[]; job_receipts?: Receipt[] };
 export type ModelOption = { value: string; label: string; inputPerM: Money; outputPerM: Money };
 export type Event = { type: string; data: Record<string, unknown>; seq?: number };
 export function dollars(value: Money | undefined): string {
@@ -45,4 +45,17 @@ export async function readEvents(stream: ReadableStream<Uint8Array>, receive: (e
 }
 export function upsert<T>(rows: T[], row: T, key: keyof T): T[] {
   return rows.some(item => item[key] === row[key]) ? rows.map(item => item[key] === row[key] ? row : item) : [...rows, row];
+}
+
+/** Lane A persists receipt rows separately, keyed to the answer by step_id. */
+export function normalizeSnapshot(snapshot: Snapshot): Snapshot {
+  const rows = snapshot.receipts ?? [];
+  const sum = (items: ReceiptRow[], key: "cost_usd" | "baseline_cost_usd" | "saved_usd") => items.every(row => typeof row[key] === "number") ? items.reduce((total, row) => total + row[key]!, 0) : null;
+  const receiptFor = (items: ReceiptRow[]): Receipt => ({ rows: items, totals: { cost_usd: sum(items, "cost_usd"), baseline_cost_usd: sum(items, "baseline_cost_usd"), saved_usd: sum(items, "saved_usd") } });
+  const messages = snapshot.messages.map(message => {
+    const matches = rows.filter(row => row.step_id === message.message_id);
+    return { ...message, receipt: message.receipt ?? (matches.length ? receiptFor(matches) : undefined) };
+  });
+  const attached = new Set(messages.flatMap(message => message.receipt?.rows.map(row => row.ledger_id) ?? []));
+  return { ...snapshot, messages, job_receipts: snapshot.job_receipts ?? rows.filter(row => !attached.has(row.ledger_id)).map(row => receiptFor([row])) };
 }

@@ -3,7 +3,7 @@ import { isFounder } from "@/lib/admin";
 import { commandRequest, listRoster } from "@/lib/tank";
 import { modelValue } from "../../models";
 import { clientText, presentReceipt, presentSnapshot, presentThread, visibleCard } from "../../presentation";
-import { readEvents, type Card, type Receipt, type Snapshot, type Thread } from "../../contract";
+import { normalizeSnapshot, readEvents, type Card, type Receipt, type Snapshot, type Thread } from "../../contract";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 type Context = { params: Promise<{ path: string[] }> };
@@ -18,6 +18,13 @@ async function handle(request: Request, context: Context): Promise<Response> {
     if (path.some(part => !/^[a-zA-Z0-9_-]+$/.test(part))) return json({ error: "Unknown request." }, 404);
     const target = path.join("/");
     const method = request.method;
+    const fileRequest = /^threads\/[\w-]+\/files\/[\w-]+\/\d+$/.test(target) && method === "GET";
+    if (fileRequest) {
+      const snapshot: Snapshot = await (await commandRequest(identity, `threads/${path[1]}`, { signal: request.signal })).json();
+      const file = snapshot.messages.find(message => message.message_id === path[3])?.attachments?.[Number(path[4])];
+      if (!file || typeof file.text !== "string") return json({ error: "This file is unavailable." }, 404);
+      return new Response(file.text, { headers: { "Content-Type": "text/plain; charset=utf-8", "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(file.name).replace(/['()*]/g, char => `%${char.charCodeAt(0).toString(16)}`)}`, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
+    }
     const valid = (target === "threads" && ["GET", "POST"].includes(method))
       || (/^threads\/[\w-]+$/.test(target) && ["GET", "PATCH"].includes(method))
       || (/^threads\/[\w-]+\/turn$/.test(target) && method === "POST")
@@ -39,9 +46,8 @@ async function handle(request: Request, context: Context): Promise<Response> {
         const model = !input.model || input.model === "auto" ? "auto" : roster.find(row => modelValue(row.name) === input.model)?.name;
         if (!model) return json({ error: "That option is no longer available. Choose another." }, 400);
         const attachments = input.attachments ?? [];
-        if (!Array.isArray(attachments) || attachments.length > 5 || attachments.some(file => !file || typeof file.name !== "string" || file.name.length > 200 || typeof file.content_type !== "string" || typeof file.data_base64 !== "string" || !/^[A-Za-z0-9+/]*={0,2}$/.test(file.data_base64))) return json({ error: "The attached files could not be read." }, 400);
-        if (attachments.reduce((sum, file) => sum + Buffer.byteLength(file.data_base64, "base64"), 0) > 5 * 1024 * 1024) return json({ error: "Files must total less than 5 MB." }, 413);
-        body = { text: input.text.trim(), model, attachments: attachments.map(file => ({ name: file.name, content_type: file.content_type, data_base64: file.data_base64 })) };
+        if (!Array.isArray(attachments) || attachments.length > 5 || attachments.some(file => !file || typeof file.name !== "string" || !file.name || file.name.length > 200 || typeof file.text !== "string" || file.text.length > 200000 || file.text.includes("\0"))) return json({ error: "Attach text files with no more than 200,000 characters each." }, 400);
+        body = { text: input.text.trim(), model, attachments: attachments.map(file => ({ name: file.name, text: file.text })) };
       } else {
         if (input.title !== undefined && (typeof input.title !== "string" || !input.title.trim() || input.title.length > 160)) return json({ error: "Use a chat name of 1 to 160 characters." }, 400);
         body = input.title ? { title: input.title.trim() } : {};
@@ -91,7 +97,7 @@ async function handle(request: Request, context: Context): Promise<Response> {
     if (upstream.status === 204) return json({ ok: true });
     const result = await upstream.json();
     if (method === "GET" && target === "threads") return json((result as Thread[]).map(row => presentThread(row, founder, names)));
-    if (method === "GET" && path.length === 2 && path[0] === "threads") return json(presentSnapshot(result as Snapshot, founder, names));
+    if (method === "GET" && path.length === 2 && path[0] === "threads") return json(presentSnapshot(normalizeSnapshot(result as Snapshot), founder, names));
     // Writes only acknowledge success; authoritative state is refreshed from the thread.
     return json(target === "threads" && method === "POST" ? { thread_id: result.thread_id } : { ok: true });
   } catch { return json({ error: "This request could not be completed. Reload the chat before trying again." }, 502); }

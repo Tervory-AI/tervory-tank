@@ -4,6 +4,9 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { SquadLinks } from "../squad-links";
 import { clientText, visibleCard } from "./presentation";
 import { dollars, readEvents, safeLink, upsert, type Attachment, type Card, type Message, type ModelOption, type Receipt, type Snapshot, type Step, type Thread } from "./contract";
+import doneDot from "./assets/done.svg";
+import attentionDot from "./assets/attention.svg";
+import plannedDot from "./assets/planned.svg";
 import "./window.css";
 
 async function api(path: string, init: RequestInit = {}) {
@@ -12,6 +15,7 @@ async function api(path: string, init: RequestInit = {}) {
   return response;
 }
 const problem = (error: unknown) => error instanceof Error ? error.message : "Your request could not be completed.";
+const statusAsset = (status: Step["status"]) => { const asset = status === "done" ? doneDot : status === "failed" ? attentionDot : plannedDot; return typeof asset === "string" ? asset : asset.src; };
 const statusLabel = { planned: "Planned", running: "Running", done: "Done", failed: "Failed" };
 
 function CostReceipt({ receipt, founder, threadId, messageId }: { receipt: Receipt; founder: boolean; threadId: string; messageId: string }) {
@@ -20,7 +24,7 @@ function CostReceipt({ receipt, founder, threadId, messageId }: { receipt: Recei
     {founder && <span>{row.model === "code" ? "code (no model)" : row.model}<small>{row.tokens_in ?? "—"} in · {row.tokens_out ?? "—"} out</small></span>}
     <span>Cost {dollars(row.cost_usd)}</span><span>{founder && row.baseline_model ? `${row.baseline_model} ` : "Would have cost "}{dollars(row.baseline_cost_usd)}</span><span className="cw-saving">Saved {dollars(row.saved_usd)}</span>
     {founder && <small>{row.ledger_id}</small>}
-  </a>)}<div className="cw-receipt-total"><span>Total</span><span>Cost {dollars(receipt.totals.cost_usd)}</span><span>Would have cost {dollars(receipt.totals.baseline_cost_usd)}</span><span>Saved {dollars(receipt.totals.saved_usd)}</span>{receipt.totals.auto_cost_usd !== undefined && <span>Auto would have cost {dollars(receipt.totals.auto_cost_usd)}</span>}</div></div>;
+  </a>)}<a className="cw-receipt-total" href={`/chats/evidence/${encodeURIComponent(threadId)}`}><span>Total</span><span>Cost {dollars(receipt.totals.cost_usd)}</span><span>Would have cost {dollars(receipt.totals.baseline_cost_usd)}</span><span>Saved {dollars(receipt.totals.saved_usd)}</span>{receipt.totals.auto_cost_usd !== undefined && <span>Auto would have cost {dollars(receipt.totals.auto_cost_usd)}</span>}</a></div>;
   return <section className="cw-receipt" id={`cost-${messageId}`} aria-label="Answer cost"><div className="cw-receipt-desktop"><header><strong>Receipt</strong><small>Each step links to its cost details</small></header>{rows}</div><details className="cw-receipt-mobile"><summary>Receipt · {dollars(receipt.totals.cost_usd)} · would have cost {dollars(receipt.totals.baseline_cost_usd)} · saved {dollars(receipt.totals.saved_usd)}</summary>{rows}</details></section>;
 }
 
@@ -73,25 +77,24 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
-    if (!selected || sending) return;
+    if (!selected || sending || busy || cardBusy) return;
     let stopped = false; let timer: ReturnType<typeof setTimeout>;
-    const version = generation.current;
     const tick = async () => {
       if (stopped) return;
       if (document.visibilityState === "visible" && !sendingRef.current) {
-        try { await load(selected, version); } catch { if (!stopped) setError("Live updates are unavailable. Your last saved work is still shown."); }
+        try { await load(selected); } catch { if (!stopped) setError("Live updates are unavailable. Your last saved work is still shown."); }
       }
       if (!stopped) timer = setTimeout(tick, 4000);
     };
     timer = setTimeout(tick, 4000);
     return () => { stopped = true; clearTimeout(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, sending]);
+  }, [selected, sending, busy, cardBusy]);
   useEffect(() => { bottom.current?.scrollIntoView({ block: "end" }); }, [snapshot?.messages.length, sending]);
   useEffect(() => { if (work) workClose.current?.focus(); }, [work]);
   useEffect(() => { if (menu) menuClose.current?.focus(); }, [menu]);
-  function closeWork() { setWork(false); workButton.current?.focus(); }
-  function closeMenu() { setMenu(false); menuButton.current?.focus(); }
+  function closeWork() { setWork(false); requestAnimationFrame(() => workButton.current?.focus()); }
+  function closeMenu() { setMenu(false); requestAnimationFrame(() => menuButton.current?.focus()); }
 
   async function newThread() {
     if (busy || sendingRef.current) return;
@@ -101,13 +104,13 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
   }
   async function rename(event: FormEvent) {
     event.preventDefault(); if (!selected || busy) return;
-    setBusy(true); setError("");
+    ++generation.current; setBusy(true); setError("");
     try { await api(`threads/${selected}`, { method: "PATCH", body: JSON.stringify({ title }) }); await load(selected); await refreshThreads(); setRenaming(false); }
     catch (err) { setError(problem(err)); } finally { setBusy(false); }
   }
   async function decide(card: Card, action: "confirm" | "cancel") {
     if (cardBusy || !selected || sendingRef.current) return;
-    setCardBusy(card.card_id); setError("");
+    ++generation.current; setCardBusy(card.card_id); setError("");
     try { await api(`cards/${encodeURIComponent(card.card_id)}`, { method: "POST", body: JSON.stringify({ action }) }); await load(selected); }
     catch (err) { setError(problem(err)); } finally { setCardBusy(null); }
   }
@@ -117,10 +120,11 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
     if (attachments.length + files.length > 5 || combinedSize > 5 * 1024 * 1024) { setError("Attach up to five files, totaling no more than 5 MB."); return; }
     setBusy(true);
     try {
-      const additions = await Promise.all(Array.from(files).map(file => new Promise<Attachment>((resolve, reject) => {
-        const reader = new FileReader(); reader.onerror = () => reject(new Error("A file could not be read."));
-        reader.onload = () => resolve({ name: file.name, content_type: file.type || "application/octet-stream", size: file.size, data_base64: String(reader.result).split(",")[1] }); reader.readAsDataURL(file);
-      })));
+      const additions = await Promise.all(Array.from(files).map(async file => {
+        const text = new TextDecoder("utf-8", { fatal: true }).decode(await file.arrayBuffer());
+        if (text.length > 200000 || text.includes("\0")) throw new Error("Attach UTF-8 text files with no more than 200,000 characters each.");
+        return { name: file.name, content_type: file.type || "text/plain", size: file.size, text };
+      }));
       setAttachments(current => [...current, ...additions]);
     } catch (err) { setError(problem(err)); } finally { setBusy(false); }
   }
@@ -169,24 +173,24 @@ export function CommandWindow({ initialThreads, models, founder, account, initia
     <aside className="cw-sidebar" id="cw-sidebar" aria-label="Chats and navigation" inert={work ? true : undefined}>
       <div className="cw-brand"><img src="/brand/tervory-logo-reversed.png" alt="Tervory" /><button className="cw-mobile-only" ref={menuClose} onClick={closeMenu}>Close</button></div>
       <a className="cw-account" href="/onboarding">{account}</a>
-      <nav aria-label="Workspace"><a href="/control">Dashboard</a><a href="/matters">Projects</a><a href="/chats" aria-current="page">Chats</a><SquadLinks active founder={founder} /></nav>
+      <nav aria-label="Workspace">{founder && <a href="/control">Dashboard</a>}<a href="/matters">Projects</a><a href="/chats" aria-current="page">Chats</a><SquadLinks active founder={founder} /></nav>
       <p className="cw-eyebrow">CHATS</p><button className="cw-new" disabled={busy || sending} onClick={() => void newThread()}>+ New chat</button>
       <input type="search" aria-label="Search chats" placeholder="Search chats" value={query} onChange={event => setQuery(event.target.value)} />
       <div className="cw-threads">{threads.filter(thread => thread.title.toLowerCase().includes(query.toLowerCase())).map(thread => <button key={thread.thread_id} className={selected === thread.thread_id ? "selected" : ""} disabled={sending} aria-current={selected === thread.thread_id ? "page" : undefined} onClick={() => void choose(thread.thread_id)}><span>{clean(thread.title)}</span><small>Spent {dollars(thread.spent_usd)} · saved {dollars(thread.saved_usd)}</small></button>)}{!threads.length && <p className="cw-note">Your saved chats will appear here.</p>}</div>
       <nav className="cw-bottom-nav">{founder && <a href="/ledger">Ledger</a>}<a href="/billing">Billing</a><a href="/data">Files</a><a href="/onboarding">Settings</a></nav>
     </aside>
     <main className="cw-chat" inert={menu || work ? true : undefined}>
-      <header className="cw-thread-header"><div><h1>{snapshot ? clean(snapshot.thread.title) : selected ? "Loading chat…" : "A new conversation"}</h1>{snapshot && <button className="cw-rename" disabled={sending || busy} onClick={() => { setTitle(snapshot.thread.title); setRenaming(true); }}>Rename</button>}</div><button className="cw-work-tab" ref={workButton} onClick={() => setWork(true)} aria-expanded={work}>Work {done}/{steps.length}</button><div className="cw-totals"><a href="#cw-costs">Spent {dollars(snapshot?.thread.spent_usd)}</a><a className="cw-saving" href="#cw-costs">Saved {dollars(snapshot?.thread.saved_usd)}</a></div></header>
+      <header className="cw-thread-header"><div><h1>{snapshot ? clean(snapshot.thread.title) : selected ? "Loading chat…" : "A new conversation"}</h1>{snapshot && <button className="cw-rename" disabled={sending || busy} onClick={() => { setTitle(snapshot.thread.title); setRenaming(true); }}>Rename</button>}</div><button className="cw-work-tab" ref={workButton} onClick={() => setWork(true)} aria-expanded={work}>Work {done}/{steps.length}</button><div className="cw-totals"><a href={selected ? `/chats/evidence/${encodeURIComponent(selected)}` : "#cw-costs"}>Spent {dollars(snapshot?.thread.spent_usd)}</a><a className="cw-saving" href={selected ? `/chats/evidence/${encodeURIComponent(selected)}` : "#cw-costs"}>Saved {dollars(snapshot?.thread.saved_usd)}</a></div></header>
       {renaming && <form className="cw-rename-form" onSubmit={rename}><label>Chat name<input autoFocus value={title} maxLength={160} required onChange={event => setTitle(event.target.value)} /></label><button disabled={busy}>Save</button><button type="button" onClick={() => setRenaming(false)}>Cancel</button></form>}
       {error && <div className="cw-error" role="alert">{error}<button disabled={sending || busy} onClick={() => { setError(""); void (selected ? load(selected) : refreshThreads()).catch(err => setError(problem(err))); }}>Reload</button></div>}
       <div className="cw-messages" aria-label="Conversation" aria-busy={sending || busy}>
         {!selected && <section className="cw-empty"><h2>What would you like to do?</h2><p>Start a chat to ask a question or give your team some work. Your conversation and progress stay together.</p><button disabled={busy} onClick={() => void newThread()}>Start a new chat</button></section>}
         <span id="cw-costs" className="cw-anchor" />
-        {snapshot?.messages.map(message => <article key={message.message_id} className={`cw-message cw-${message.role}`}><div className="cw-message-text">{clean(message.content) || (sending && message.role === "assistant" ? "Working…" : "")}</div>{message.attachments?.length ? <ul className="cw-files">{message.attachments.map((file, i) => <li key={i}>{clean(file.name)}</li>)}</ul> : null}{message.role === "assistant" && (message.receipt ? <CostReceipt receipt={message.receipt} founder={founder} threadId={selected!} messageId={message.message_id} /> : <p className="cw-note">{sending ? "Cost details arrive when this answer is complete." : "Cost details are not available for this answer."}</p>)}{message.message_id === lastAnswer && confirmation}</article>)}
-        {!lastAnswer && confirmation}<div ref={bottom} />
+        {snapshot?.messages.map(message => <article key={message.message_id} className={`cw-message cw-${message.role}`}><div className="cw-message-text">{clean(message.content) || (sending && message.role === "assistant" ? "Working…" : "")}</div>{message.attachments?.length ? <ul className="cw-files">{message.attachments.map((file, i) => <li key={i}>{message.message_id.startsWith("pending-") ? clean(file.name) : <a href={`/chats/api/threads/${encodeURIComponent(selected!)}/files/${encodeURIComponent(message.message_id)}/${i}`} download>{clean(file.name)}</a>}</li>)}</ul> : null}{message.role === "assistant" && (message.receipt ? <CostReceipt receipt={message.receipt} founder={founder} threadId={selected!} messageId={message.message_id} /> : <p className="cw-note">{sending ? "Cost details arrive when this answer is complete." : "Cost details are not available for this answer."}</p>)}{message.message_id === lastAnswer && confirmation}</article>)}
+        {!lastAnswer && confirmation}{snapshot?.job_receipts?.map((receipt, index) => <section key={index}><h2>Work cost</h2><CostReceipt receipt={receipt} founder={founder} threadId={selected!} messageId={`work-${index}`} /></section>)}<div ref={bottom} />
       </div>
-      <form className="cw-composer" onSubmit={send}><div className="cw-input"><textarea id="cw-message" aria-label="Message Tervory" placeholder="Ask Tervory, or describe a change to build…" maxLength={20000} value={text} disabled={!snapshot || sending} onChange={event => setText(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><label className="cw-attach">Attach<input type="file" multiple aria-label="Attach files" disabled={!snapshot || busy || sending} onChange={event => { void attach(event.target.files); event.currentTarget.value = ""; }} /></label><button className="cw-send" disabled={!snapshot || !text.trim() || sending || busy}>{sending ? "Sending…" : "Send"}</button></div><div className="cw-composer-meta"><label>{founder ? "Model" : "Answer option"}<select aria-label={founder ? "Model" : "Answer option"} value={model} disabled={sending} onChange={event => setModel(event.target.value)}><option value="auto">Auto</option>{models.map(option => <option key={option.value} value={option.value}>{option.label} · {dollars(option.inputPerM)} in / {dollars(option.outputPerM)} out per million tokens</option>)}</select></label><small>Auto chooses the cheapest proven option. Every answer shows its cost.</small></div>{!!attachments.length && <ul className="cw-files">{attachments.map((file, i) => <li key={i}>{clean(file.name)} <button type="button" aria-label={`Remove ${file.name}`} disabled={sending} onClick={() => setAttachments(files => files.filter((_, index) => index !== i))}>×</button></li>)}</ul>}</form>
+      <form className="cw-composer" onSubmit={send}><div className="cw-input"><textarea id="cw-message" aria-label="Message Tervory" placeholder="Ask Tervory, or describe a change to build…" maxLength={20000} value={text} disabled={!snapshot || sending} onChange={event => setText(event.target.value)} onKeyDown={event => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} /><label className="cw-attach" title="Attach UTF-8 text files, up to 200,000 characters each">Attach<input type="file" accept="text/*,.txt,.md,.csv,.tsv,.json,.xml,.html,.log,.yaml,.yml" multiple aria-label="Attach files" disabled={!snapshot || busy || sending} onChange={event => { void attach(event.target.files); event.currentTarget.value = ""; }} /></label><button className="cw-send" disabled={!snapshot || !text.trim() || sending || busy}>{sending ? "Sending…" : "Send"}</button></div><div className="cw-composer-meta"><label>{founder ? "Model" : "Answer option"}<select aria-label={founder ? "Model" : "Answer option"} value={model} disabled={sending} onChange={event => setModel(event.target.value)}><option value="auto">Auto</option>{models.map(option => <option key={option.value} value={option.value}>{option.label} · {dollars(option.inputPerM)} in / {dollars(option.outputPerM)} out per million tokens</option>)}</select></label><small>Auto chooses the cheapest proven option. Attach UTF-8 text files.</small></div>{!!attachments.length && <ul className="cw-files">{attachments.map((file, i) => <li key={i}>{clean(file.name)} <button type="button" aria-label={`Remove ${file.name}`} disabled={sending} onClick={() => setAttachments(files => files.filter((_, index) => index !== i))}>×</button></li>)}</ul>}</form>
     </main>
-    <aside className="cw-work" aria-label="Work" inert={menu ? true : undefined}><header><h2>Work</h2><span className="cw-meta">{done} of {steps.length} done</span><button className="cw-mobile-only" ref={workClose} aria-label="Close work" onClick={closeWork}>×</button></header>{!steps.length && <p className="cw-note">The steps for this chat will appear here when work begins.</p>}<ol>{steps.map(step => <li className={`cw-step cw-step-${step.status}`} key={step.step_id}><span className="cw-status-dot" aria-hidden="true" /><div><strong>{clean(step.label)}</strong><small>{clean(step.actor)}</small>{safeLink(step.link) && <a href={safeLink(step.link)} target="_blank" rel="noreferrer">Open result ↗</a>}</div><span className="cw-step-state">{statusLabel[step.status]}</span></li>)}</ol><p className="cw-live" role="status">{sending ? "Receiving your answer…" : busy ? "Loading…" : "Progress is saved with this chat."}</p></aside>
+    <aside className="cw-work" aria-label="Work" inert={menu ? true : undefined}><header><h2>Work</h2><span className="cw-meta">{done} of {steps.length} done</span><button className="cw-mobile-only" ref={workClose} aria-label="Close work" onClick={closeWork}>×</button></header>{!steps.length && <p className="cw-note">The steps for this chat will appear here when work begins.</p>}<ol>{steps.map(step => <li className={`cw-step cw-step-${step.status}`} key={step.step_id}><img className="cw-status-dot" src={statusAsset(step.status)} alt="" /><div><strong>{clean(step.label)}</strong><small>{clean(step.actor)}</small>{safeLink(step.link) && <a href={safeLink(step.link)} target="_blank" rel="noreferrer">Open result</a>}</div><span className="cw-step-state">{statusLabel[step.status]}</span></li>)}</ol><p className="cw-live" role="status">{sending ? "Receiving your answer…" : busy ? "Loading…" : "Progress is saved with this chat."}</p></aside>
   </div>;
 }
