@@ -18,7 +18,7 @@ export type FounderView = {
   paused: boolean | null; errors: string[]; models: { task_type: string; candidate_model: string | null; n: number; agreement: number | null; min_shadow_samples?: number; eligible: boolean; prim_cost?: number | null; cand_cost?: number | null }[];
   refused: { task: string; path: string; at: string }[];
 };
-export function FounderDashboard({ view }: { view: FounderView }) {
+export function FounderDashboard({ view, squads }: { view: FounderView; squads?: import("react").ReactNode }) {
   const { data, signups, paying } = view;
   const today = new Date().toISOString().slice(0, 10);
   const daily = data?.daily ?? [];
@@ -55,6 +55,7 @@ export function FounderDashboard({ view }: { view: FounderView }) {
       <section className="dash-card"><h2>Controls</h2><div className="dash-row"><span>Shadow checks</span><span className="dash-note">{data ? `${data.shadow_policies} policies on` : "Unavailable"} · MODELS-2</span></div><div className="dash-row"><span>Overnight batches</span><span className="dash-note">{data ? `${data.batch_policies} eligible policies` : "Unavailable"} · BATCH-1</span></div><div className="dash-row"><span>Paid tools without asking</span><span className="dash-note">No global setting · CORE-1</span></div><div className="dash-row"><span>Squad builds Tervory</span><span className="dash-note">Unavailable · AGENT-1</span></div><div className="dash-row"><span>Daily budget</span><span className="dash-note">Not connected</span></div><div className="dash-row"><span>Server load</span><span className="dash-note">Unavailable · GHOST-1</span></div><div className="dash-row"><span>Storage used</span><span className="dash-note">Unavailable · BUCKET-1</span></div><div className="dash-actions"><a className="dash-button primary" href="/admin">Open the window</a><a className="dash-button" href="/admin">Proof report</a></div></section>
     </div>
     <section className="dash-card" style={{marginTop:18}}><h2>Stopped by the pause</h2>{view.refused.length ? view.refused.map((row,i) => <p className="dash-note" key={i}>{row.task} · {row.path} · {row.at}</p>) : <p className="dash-empty">No recorded refusals.</p>}</section>
+    {squads}
     <p className="dash-footer">Live measurements only. Unavailable sources stay empty. Controls apply to this server.</p>
   </div>;
 }
