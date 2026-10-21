@@ -1,3 +1,4 @@
+import { ApproveAllReady } from "../skala/approve-all";
 import type { DashboardRead } from "@/lib/tank";
 import type { Signups } from "./sources";
 import { ControlActions } from "./widgets";
@@ -38,7 +39,7 @@ export function FounderDashboard({ view }: { view: FounderView }) {
     <div className="dash-middle">
       <section className="dash-card"><h2>Case study · AmmoSync on Base</h2><div className="dash-case-charts"><div><p className="dash-label">Verified records by state</p><div className="dash-chart-space"><p className="dash-empty">AmmoSync’s data source is not linked.</p></div></div><div><p className="dash-label">Cost per verified record</p><div className="dash-chart-space"><p className="dash-empty">No measured Apollo comparison yet.</p></div></div></div><p className="dash-empty">Headline numbers will appear when records and their costs can be attributed to this case study.</p><div className="dash-case-actions"><button className="dash-button" disabled>Run next state · AGENT-1</button><button className="dash-button" disabled>Export case study · no source</button></div></section>
       <section className="dash-card"><h2>Needs you</h2>
-        <div className="dash-row"><span>{data ? `${data.skills?.length ?? 0} skills awaiting review` : "Skill reviews unavailable"}</span><button className="dash-button" disabled>Approve all ready · SKALA-2</button></div>
+        <div className="dash-row"><span>{data ? `${data.skills?.length ?? 0} skills awaiting review` : "Skill reviews unavailable"}</span><ApproveAllReady className="dash-button" /></div>
         {view.models.filter(row => row.candidate_model && row.eligible && row.prim_cost != null && row.cand_cost != null && row.cand_cost < row.prim_cost).map(row => <div className="dash-row" key={row.task_type}><span>{row.task_type} · {row.n} comparisons · {Math.round(Number(row.agreement) * 100)}% agreement</span><ControlActions taskType={row.task_type} /></div>)}
         <div className="dash-row"><span>Paid steps</span><span className="dash-note">No pending-action source connected</span></div>
         <div className="dash-row"><span>Daily check</span><a className="dash-button" href="/skala/gold">Open checks</a></div>

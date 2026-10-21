@@ -11,6 +11,9 @@ export type LibrarySkill = {
   last_eval_score: number | string | null;
   last_eval_at: string | null;
   present: boolean;
+  approved_at?: string | null;
+  runs?: number;
+  reason?: string | null;
   calls_30d?: number | null;
   avg_cost_usd?: number | string | null;
 };
@@ -111,7 +114,7 @@ export function scoreDate(iso: string | null): string {
 export function versionAction(skill: { state: string; present: boolean }): VersionAction | null {
   if (skill.state === "candidate" && skill.present) return "evals";
   if (skill.state === "staging" && skill.present) return "approve";
-  if (skill.state === "approved") return "retire";
+
   return null;
 }
 
@@ -265,4 +268,13 @@ export function visibleLibrary(
       skills: skillsInGroup,
     };
   });
+}
+
+/** Keep one skill row, with its current and newest pending versions visible. */
+export function versionSections(versions: LibrarySkill[]) {
+  const ordered = [...versions].sort((a, b) => compareVersions(a.version, b.version));
+  const approved = ordered.find(v => v.state === "approved");
+  const pending = ordered.find(v => v.state === "candidate" || v.state === "staging");
+  const current = [approved, pending].filter((v): v is LibrarySkill => Boolean(v));
+  return { current, history: ordered.filter(v => !current.includes(v)) };
 }

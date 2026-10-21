@@ -847,3 +847,33 @@ CREATE TABLE IF NOT EXISTS tank.control_log (
 ALTER TABLE tank.control_log ADD COLUMN IF NOT EXISTS task text;
 ALTER TABLE tank.control_log ADD COLUMN IF NOT EXISTS path text;
 CREATE INDEX IF NOT EXISTS control_log_tenant_at ON tank.control_log (tenant_id, at DESC);
+
+-- SKALA-2: platform-scoped lifecycle receipts and single-confirmation snapshots.
+CREATE TABLE IF NOT EXISTS tank.skill_approvals (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    skill_id text NOT NULL,
+    version text NOT NULL,
+    action text NOT NULL CHECK (action IN ('approve','rollback','retire')),
+    acted_by text NOT NULL,
+    acted_at timestamptz NOT NULL DEFAULT now(),
+    previous_version text,
+    evidence jsonb NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE TABLE IF NOT EXISTS tank.skill_approval_previews (
+    token text PRIMARY KEY,
+    tenant_id uuid NOT NULL,
+    acted_by text NOT NULL,
+    items jsonb NOT NULL,
+    expires_at timestamptz NOT NULL DEFAULT now() + interval '15 minutes',
+    used_at timestamptz
+);
+CREATE TABLE IF NOT EXISTS tank.skill_source_reviews (
+    token text PRIMARY KEY,
+    tenant_id uuid NOT NULL,
+    skill_id text NOT NULL,
+    version text NOT NULL,
+    acted_by text NOT NULL,
+    package_hash text NOT NULL,
+    expires_at timestamptz NOT NULL DEFAULT now() + interval '15 minutes'
+);

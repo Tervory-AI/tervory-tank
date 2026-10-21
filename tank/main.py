@@ -2284,38 +2284,47 @@ async def run_skill_evals(skill_id: str, version: str, body: EvalRun | None = No
 
 class Approval(BaseModel):
     by: str = Field(min_length=1)
+    confirmed: bool = False
+    review_token: str | None = None
+    token: str | None = None
+
+
+@app.post("/v1/skala/approvals/preview", dependencies=[Depends(require_key)])
+async def preview_skill_approvals(body: Approval) -> dict[str, Any]:
+    return await skala.bulk_preview(pool(), _packages, body.by, region=box_region())
+
+
+@app.post("/v1/skala/approvals/confirm", dependencies=[Depends(require_key)])
+async def confirm_skill_approvals(body: Approval) -> dict[str, Any]:
+    return await skala.bulk_confirm(pool(), _packages, body.by, body.token or "", body.confirmed, region=box_region())
+
+
+@app.get("/v1/skala/approvals/status", dependencies=[Depends(require_key)])
+async def skill_approval_status() -> list[dict[str, Any]]:
+    async with pool().acquire() as conn:
+        return [await skala.review_evidence(conn, pkg, region=box_region()) for pkg in _packages.values()]
+
+
+@app.post("/v1/skala/{skill_id}/{version}/source-review", dependencies=[Depends(require_key)])
+async def review_skill_source(skill_id: str, version: str, body: Approval) -> dict[str, Any]:
+    return await skala.source_review(pool(), get_package(skill_id, version), body.by)
 
 
 @app.post("/v1/skala/{skill_id}/{version}/approve", dependencies=[Depends(require_key)])
 async def approve_skill(skill_id: str, version: str, body: Approval) -> dict[str, Any]:
-    """Human sign-off. Only a version in staging (evals passed) can be approved."""
-    get_package(skill_id, version)
-    async with pool().acquire() as conn:
-        state = await conn.fetchval("SELECT state FROM tank.skills WHERE id=$1 AND version=$2", skill_id, version)
-        if state != "staging":
-            raise HTTPException(status_code=409, detail=f"state is {state!r}; run evals until it reaches staging first")
-        blocked = await skala.zenas_approval_refusal(conn, skill_id, region=box_region())
-        if blocked:
-            raise HTTPException(status_code=409, detail=blocked)
-        async with conn.transaction():
-            await conn.execute(
-                "UPDATE tank.skills SET state='retired', updated_at=now() WHERE id=$1 AND state='approved' AND version<>$2",
-                skill_id, version,
-            )
-            await conn.execute(
-                "UPDATE tank.skills SET state='approved', approved_by=$3, approved_at=now(), updated_at=now() WHERE id=$1 AND version=$2",
-                skill_id, version, body.by,
-            )
-    return {"ok": True, "skill": f"{skill_id}@{version}", "state": "approved"}
+    return await skala.change_version(pool(), get_package(skill_id, version), body.by, "approve",
+                                     region=box_region(), confirmed=body.confirmed, review_token=body.review_token)
+
+
+@app.post("/v1/skala/{skill_id}/{version}/rollback", dependencies=[Depends(require_key)])
+async def rollback_skill(skill_id: str, version: str, body: Approval) -> dict[str, Any]:
+    return await skala.change_version(pool(), get_package(skill_id, version), body.by, "rollback",
+                                     region=box_region(), confirmed=body.confirmed)
 
 
 @app.post("/v1/skala/{skill_id}/{version}/retire", dependencies=[Depends(require_key)])
 async def retire_skill(skill_id: str, version: str, body: Approval) -> dict[str, Any]:
-    async with pool().acquire() as conn:
-        n = await conn.execute("UPDATE tank.skills SET state='retired', updated_at=now() WHERE id=$1 AND version=$2", skill_id, version)
-    if n.endswith(" 0"):
-        raise HTTPException(status_code=404, detail="no such skill version")
-    return {"ok": True, "skill": f"{skill_id}@{version}", "state": "retired", "by": body.by}
+    return await skala.change_version(pool(), get_package(skill_id, version), body.by, "retire", region=box_region())
 
 
 def known_engines() -> list[str]:

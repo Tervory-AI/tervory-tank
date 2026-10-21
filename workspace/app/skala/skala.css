@@ -487,3 +487,10 @@ body:has(.skala) main {
   .sk-filters { flex-direction: row; }
   .sk-filters label { min-width: 200px; }
 }
+
+.sk-history { list-style: none; width: 100%; }
+.sk-history summary { cursor: pointer; padding: 12px 0; }
+.sk-source { white-space: pre; overflow: auto; max-height: 50vh; padding: 12px; background: #F4F6FB; }
+.sk-dialog { max-width: min(850px, calc(100vw - 32px)); box-sizing: border-box; }
+.sk-bulk { margin: 8px 0; }
+.sk-bulk-list { max-height: 45vh; overflow: auto; overflow-wrap: anywhere; }

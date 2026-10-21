@@ -15,8 +15,11 @@ import {
   STATES,
   versionAction,
   visibleLibrary,
+  versionSections,
   type LibrarySkill,
 } from "./library";
+
+import { ApproveAllReady } from "./approve-all";
 
 const TOP_LINKS = [
   { href: "/ledger", label: "Dashboard" },
@@ -68,6 +71,9 @@ export function SkalaApp({
   const [state, setState] = useState("");
   const [notice, setNotice] = useState<Notice | null>(loadError ? { tone: "err", text: loadError } : null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<"approve" | "rollback">("approve");
+  const [sourceReview, setSourceReview] = useState<{source: string; review_token: string} | null>(null);
+  const [sourceError, setSourceError] = useState<string | null>(null);
   const [pending, setPending] = useState<LibrarySkill | null>(null);
   const [rowRefusal, setRowRefusal] = useState<{ key: string; text: string } | null>(null);
   const [record, setRecord] = useState<{ key: string; result: EvalResult } | null>(null);
@@ -98,8 +104,20 @@ export function SkalaApp({
     if (menu && narrow) closeRef.current?.focus();
   }, [menu, narrow]);
 
-  function openApprove(skill: LibrarySkill) {
+  async function openApprove(skill: LibrarySkill, action: "approve" | "rollback" = "approve") {
+    setPendingAction(action);
+    setSourceReview(null);
+    setSourceError(null);
     setPending(skill);
+    if (action === "approve" && skill.id.split(".")[1] === "learned") {
+      try {
+        const res = await fetch("/api/skala", { method: "POST", headers: {"content-type": "application/json"},
+          body: JSON.stringify({id: skill.id, version: skill.version, action: "source-review"}) });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Source could not be loaded.");
+        setSourceReview(data);
+      } catch { setSourceError("Source could not be loaded. Close this dialog and try again."); }
+    }
   }
 
   useEffect(() => {
@@ -119,7 +137,7 @@ export function SkalaApp({
     if (live) setSkills(live);
   }
 
-  async function run(skill: LibrarySkill, action: "evals" | "approve" | "retire") {
+  async function run(skill: LibrarySkill, action: "evals" | "approve" | "retire" | "rollback") {
     const key = `${skill.id}@${skill.version}:${action}`;
     setBusyKey(key);
     setNotice(null);
@@ -127,7 +145,7 @@ export function SkalaApp({
       const response = await fetch("/api/skala", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id: skill.id, version: skill.version, action }),
+        body: JSON.stringify({ id: skill.id, version: skill.version, action, confirmed: action === "rollback" || Boolean(sourceReview), review_token: sourceReview?.review_token }),
       });
       const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
       if (response.status === 404) {
@@ -139,7 +157,7 @@ export function SkalaApp({
         return;
       }
       if (!response.ok || !payload) {
-        const refused = action === "approve" ? approvalRowText(response.status, payload?.error) : null;
+        const refused = action !== "evals" ? approvalRowText(response.status, payload?.error) : null;
         if (refused) {
           setRowRefusal({ key: `${skill.id}@${skill.version}`, text: refused });
           closeApprove();
@@ -148,7 +166,7 @@ export function SkalaApp({
         setNotice({ tone: "err", text: failureText(action, response.status) });
         return;
       }
-      if (action === "approve") {
+      if (action === "approve" || action === "rollback") {
         setRowRefusal(null);
         await refreshAfter(applyApproval(skills, skill.id, skill.version));
         setNotice({ tone: "ok", text: `${skill.id} ${skill.version} is approved. The previous approved version is retired.` });
@@ -235,6 +253,7 @@ export function SkalaApp({
           <header className="sk-header">
             <div>
               <h1>Skala</h1>
+            <ApproveAllReady onApproved={async () => { const rows = await readSkills(); if (rows) setSkills(rows); }} />
               <p>Every skill, with its versions and scores.</p>
             </div>
             <a className="sk-examples" href="/skala/gold">Check examples</a>
@@ -295,7 +314,9 @@ export function SkalaApp({
                         <h3>{skill.id}</h3>
                         <p>{skill.description}</p>
                         <ul className="sk-versions">
-                          {skill.versions.map((version) => {
+                          {([false, true] as const).map((history) => {
+                          const sections = versionSections(skill.versions);
+                          const rows = (history ? sections.history : sections.current).map((version) => {
                             const action = versionAction(version);
                             const key = `${version.id}@${version.version}`;
                             const shown = record?.key === key ? caseRecord(record.result) : null;
@@ -306,8 +327,9 @@ export function SkalaApp({
                                 <span className="sk-meta">{scoreLabel(version.last_eval_score)}</span>
                                 {scoreDate(version.last_eval_at) ? <span className="sk-meta">{scoreDate(version.last_eval_at)}</span> : null}
                                 <span className="sk-meta">{costLabel(version)}</span>
+                                {version.runs !== undefined ? <span className="sk-meta">{version.runs}/3 runs</span> : null}
                                 {!version.present && version.state !== "approved" ? <span className="sk-gone">This version is no longer in the folder.</span> : null}
-                                {action === "evals" ? (
+                                {(version.state === "candidate" || version.state === "staging") && version.present ? (
                                   <button type="button" disabled={busyKey !== null} onClick={() => run(version, "evals")}>
                                     {busyKey === `${key}:evals` ? "Running evals…" : "Run evals"}
                                   </button>
@@ -320,11 +342,15 @@ export function SkalaApp({
                                     {rowRefusal?.key === key ? <p className="sk-err sk-row-err" role="alert">{rowRefusal.text}</p> : null}
                                   </>
                                 ) : null}
-                                {action === "retire" ? (
+                                {version.state === "candidate" || version.state === "staging" ? (
                                   <button type="button" disabled={busyKey !== null} onClick={() => run(version, "retire")}>
                                     {busyKey === `${key}:retire` ? "Retiring…" : "Retire"}
                                   </button>
                                 ) : null}
+                                {version.state === "retired" && version.approved_at && version.present ? (
+                                  <button type="button" disabled={busyKey !== null} onClick={() => openApprove(version, "rollback")}>Roll back to {version.version}</button>
+                                ) : null}
+                                {version.state === "staging" && version.reason ? <p className="sk-row-err">{version.reason}</p> : null}
                                 {shown?.ok ? (
                                   <div className="sk-cases">
                                     <p>Cases</p>
@@ -341,6 +367,8 @@ export function SkalaApp({
                                 ) : shown ? <p className="sk-err">{shown.message} Run evals again.</p> : null}
                               </li>
                             );
+                          });
+                          return history ? (sections.history.length > 0 ? <li key="history" className="sk-history"><details><summary>History ({sections.history.length})</summary><ul className="sk-versions">{rows}</ul></details></li> : null) : rows;
                           })}
                         </ul>
                       </li>
@@ -354,10 +382,15 @@ export function SkalaApp({
       </div>
 
       <dialog ref={dialogRef} className="sk-dialog" aria-labelledby="approve-title" onClose={() => setPending(null)}>
-        <h2 id="approve-title">{pending ? confirmApprove(pending.id, pending.version) : "Approve this version?"}</h2>
+        <h2 id="approve-title">{pending ? pendingAction === "rollback" ? `Roll back ${pending.id} to ${pending.version}?` : confirmApprove(pending.id, pending.version) : "Approve this version?"}</h2>
+        {pendingAction === "rollback" ? <p>This restores a previously approved version and records your confirmation.</p> : null}
+        {pendingAction === "approve" && pending?.id.split(".")[1] === "learned" ? <>
+          <p>Review the full run.py before approving. This room-authored code also runs during evaluations.</p>
+          {sourceReview ? <pre className="sk-source">{sourceReview.source}</pre> : <p role="status">{sourceError || "Loading full source…"}</p>}
+        </> : null}
         <div className="sk-dialog-actions">
-          <button type="button" className="primary" disabled={!pending || busyKey !== null} onClick={() => pending && run(pending, "approve")}>
-            {pending && busyKey === `${pending.id}@${pending.version}:approve` ? "Approving…" : "Approve"}
+          <button type="button" className="primary" disabled={!pending || busyKey !== null || (pendingAction === "approve" && pending.id.split(".")[1] === "learned" && !sourceReview)} onClick={() => pending && run(pending, pendingAction)}>
+            {pending && busyKey === `${pending.id}@${pending.version}:approve` ? "Saving…" : pendingAction === "rollback" ? "Confirm rollback" : "Approve"}
           </button>
           <button type="button" onClick={closeApprove}>Cancel</button>
         </div>
@@ -366,7 +399,7 @@ export function SkalaApp({
   );
 }
 
-function failureText(action: "evals" | "approve" | "retire", status: number): string {
+function failureText(action: "evals" | "approve" | "retire" | "rollback", status: number): string {
   if (action === "approve" && status === 409) return "That version is not in staging. Run evals until it is, then approve it.";
   if (action === "evals") return "Evals could not be run. Reload the page and try again.";
   if (action === "approve") return "Approve could not be saved. Reload the page and try again.";
