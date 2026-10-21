@@ -584,6 +584,8 @@ class Message(BaseModel):
 
 
 class RouteRequest(BaseModel):
+    complex_request: bool = False
+    interactive: bool = True
     tenant_id: uuid.UUID
     agent: str = "tier0"
     task_type: str = "tier0.answer"
@@ -591,6 +593,7 @@ class RouteRequest(BaseModel):
     skill: str | None = None
     region: str | None = None
     home_region: str | None = None
+    case_ref: str | None = None          # isolates internal bench samples in the cache
     messages: list[Message] = Field(min_length=1)
     max_tokens: int | None = None          # a skill may ask for fewer than the policy's cap
 
@@ -602,8 +605,10 @@ class RouteResponse(BaseModel):
     content: str
     tokens_in: int
     tokens_out: int
-    cost_usd: float
+    cost_usd: float | None
     latency_ms: int
+    moa_run_id: uuid.UUID | None = None
+    moa: dict[str, Any] | None = None
     finish_reason: str = ""
 
 
@@ -924,6 +929,8 @@ async def run_route(
         digest_parts: list[Any] = [req.task_type, model, max_tokens, messages]
         if route_seat is not None:
             digest_parts.append(route_seat)
+            if seat and req.case_ref:
+                digest_parts.append(req.case_ref)
         if generation:
             digest_parts.append(generation)
         digest = hashlib.sha256(json.dumps(digest_parts, sort_keys=True).encode()).hexdigest()
@@ -1992,11 +1999,21 @@ async def search_task(task_type: str, body: SearchBody | None = None) -> dict[st
     return {"ok": True, "skipped": False, "research_due": due, **result.as_dict()}
 
 
-@app.post("/v1/route", response_model=RouteResponse)
-async def route(req: RouteRequest, caller: str | None = Depends(require_key)) -> RouteResponse:
+@app.post("/v1/route", response_model=RouteResponse, response_model_exclude_none=True)
+async def route(body: RouteRequest, caller: str | None = Depends(require_key)):
     if caller:
-        req = req.model_copy(update={"agent": caller})
-    return await run_route(req, caller=caller)
+        body = body.model_copy(update={"agent": caller})
+    foreign = home_region_refusal(call_home(body.home_region, box_region()), box_region())
+    if foreign:
+        raise HTTPException(403, foreign)
+    if "#moa." in body.task_type:
+        raise HTTPException(403, "Submit the original task; MoA seats are internal")
+    row = await load_policy(body.task_type, body.tenant_id)
+    if not row.get("moa_enabled"):
+        return await run_route(body, caller=caller)
+    return await __import__("moa").routed_request(
+        body, caller, row=row, complex_request=body.complex_request, interactive=body.interactive
+    )
 
 
 # ---------- tasks: the board ----------
@@ -3063,6 +3080,7 @@ app.include_router(__import__("bench").router)
 app.include_router(__import__("proof").router)
 app.include_router(__import__("proof").client_router)
 app.include_router(__import__("agent_skills").build_router(__import__("sys").modules[__name__]))
+app.include_router(__import__("moa").router)
 
 
 @app.get("/v1/training/graduation")

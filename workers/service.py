@@ -17,7 +17,7 @@ import httpx
 from workers import status_page
 from workers.github_api import GitHub, GitHubError, ci_state, ready_body
 from workers.github_app import TokenRejected
-from workers.issues import WorkerIssue
+from workers.issues import FAILED_LABEL, WorkerIssue
 from workers.podman_run import build_argv, choose_runtime, container_name, kill_argv, task_argv
 from workers.redact import install as install_redact
 from workers.redact import redact
@@ -27,10 +27,39 @@ from workers.tank_status import HEARTBEAT_S, LastError, TankControl
 from workers.task_run import Outcome, parse_result, summary_for
 
 log = logging.getLogger("workers")
+# A task that fails this many times in a row stops retrying and is marked failed.
+MAX_FAILURES = 3
+MAX_ERROR = 1500
 MALFORMED = (
     "This issue needs exactly one brief file under docs/cursor/, "
     "for example docs/cursor/EXAMPLE.md. Nothing was started."
 )
+
+
+class TaskFailed(RuntimeError):
+    """The task container failed. detail holds the redacted tail of its stderr and stdout."""
+
+    def __init__(self, message: str, detail: str = "") -> None:
+        super().__init__(message)
+        self.detail = detail
+
+
+def failure_text(exc: BaseException) -> str:
+    """One redacted error for the log, the panel and the issue comment."""
+    text = str(exc)
+    detail = getattr(exc, "detail", "")
+    if detail:
+        text = f"{text}\n{detail}"
+    return redact(text)[-MAX_ERROR:]
+
+
+def stopped_comment(failures: int, error: str) -> str:
+    fence = "~~~~"
+    return (
+        f"Worker stopped: this task failed {failures} times in a row, so it will not be retried.\n"
+        f"Last error:\n{fence}\n{error.replace(fence, '~~~')}\n{fence}\n"
+        f"Fix the cause, then remove the `{FAILED_LABEL}` label to let a worker try again."
+    )
 
 
 def update_pending(settings: Settings) -> bool:
@@ -48,6 +77,10 @@ class Service:
         self.inflight: set[int] = set()
         self.commented: set[int] = set()
         self.done: set[int] = set()
+        # Consecutive failures per issue. Reset on any run that produces a result.
+        self.failures: dict[int, int] = {}
+        # Stopped in this process when GitHub would not take the failed label.
+        self.stopped: set[int] = set()
         self.jobs: list[asyncio.Task[None]] = []
         self.pause_s = 15
 
@@ -70,7 +103,7 @@ class Service:
             if pulls:
                 await self._finish_existing(token, task, pulls[0])
                 continue
-            if task.number in self.inflight:
+            if task.number in self.inflight or task.number in self.stopped:
                 continue
             if running >= self.settings.max_tasks:
                 return
@@ -123,6 +156,9 @@ class Service:
         try:
             token = await self._token()
             outcome = await self.launcher.run(self.settings, task, token)
+            if outcome.status == "failed" and not outcome.pr_url:
+                raise TaskFailed("the task reported a failure", outcome.detail)
+            self.failures.pop(task.number, None)
             self._record(
                 issue=task.number,
                 brief=task.brief,
@@ -144,10 +180,38 @@ class Service:
             if outcome.status == "draft" and outcome.sha and outcome.node_id and outcome.pr_number:
                 await self._wait_ci(task, outcome)
         except (GitHubError, TokenRejected, OSError, RuntimeError) as exc:
+            error = failure_text(exc)
             log.warning("task %s failed: %s", task.number, redact(str(exc)))
-            self._record(issue=task.number, brief=task.brief, status="failed", pr_url=None, minutes=None, cost_usd=None)
+            await self._failed(task, error, token)
         finally:
             self.inflight.discard(task.number)
+
+    async def _failed(self, task: WorkerIssue, error: str, token: str) -> None:
+        failures = self.failures.get(task.number, 0) + 1
+        self.failures[task.number] = failures
+        if failures < MAX_FAILURES:
+            self._record(
+                issue=task.number, brief=task.brief, status="failed", pr_url=None, minutes=None, cost_usd=None,
+                failures=failures, error=error,
+            )
+            return
+        # Stop retrying. The label keeps it stopped across restarts; the comment records the error.
+        self.stopped.add(task.number)
+        self._record(
+            issue=task.number, brief=task.brief, status="stopped", pr_url=None, minutes=None, cost_usd=None,
+            failures=failures, error=error,
+        )
+        log.warning("task %s stopped after %s failures in a row; not retrying", task.number, failures)
+        try:
+            token = token or await self._token()
+            await self.github.comment(token, task.number, stopped_comment(failures, error))
+            await self.github.add_label(token, task.number, FAILED_LABEL)
+        except (GitHubError, TokenRejected, OSError, RuntimeError) as exc:
+            # Still stopped in this process; it will be retried only after a restart.
+            log.warning("task %s: could not mark the issue failed: %s", task.number, redact(str(exc)))
+            return
+        self.stopped.discard(task.number)
+        self.failures.pop(task.number, None)
 
     async def _wait_ci(self, task: WorkerIssue, outcome: Outcome) -> None:
         assert outcome.sha and outcome.node_id and outcome.pr_number
@@ -205,14 +269,15 @@ class Launcher:
 
     async def run(self, settings: Settings, task: WorkerIssue, token: str) -> Outcome:
         if not self._built:
-            code, build_out = await self.runner(build_argv(settings.code_dir), timeout_s=60 * 60)
+            code, build_out, build_err = split(await self.runner(build_argv(settings.code_dir), timeout_s=60 * 60))
+            build_out = joined(build_out, build_err)
             if code != 0:
                 log.warning("task image build failed (exit %s). Last podman lines:\n%s", code, podman_tail(build_out))
                 raise RuntimeError("task image build failed")
             self._built = True
-        info_code, info_out = await self.runner(["podman", "info", "--format", "json"], timeout_s=60)
+        info_code, info_out, info_err = split(await self.runner(["podman", "info", "--format", "json"], timeout_s=60))
         if info_code != 0:
-            log.warning("podman info failed (exit %s). Last podman lines:\n%s", info_code, podman_tail(info_out))
+            log.warning("podman info failed (exit %s). Last podman lines:\n%s", info_code, podman_tail(joined(info_out, info_err)))
             raise RuntimeError("podman info failed")
         try:
             runtime = choose_runtime(json.loads(info_out))
@@ -237,15 +302,39 @@ class Launcher:
                 title=task.title,
                 hosts=tank_hosts(settings),
             )
-            code, output = await self.runner(argv, timeout_s=settings.task_timeout_s, kill=kill_argv(name))
+            code, output, errors = split(await self.runner(argv, timeout_s=settings.task_timeout_s, kill=kill_argv(name)))
         finally:
             shutil.rmtree(secret_dir, ignore_errors=True)
         outcome = parse_result(output)
         if outcome is None:
-            log.warning("task container exit %s. Last podman lines:\n%s", code, podman_tail(output))
-            raise RuntimeError("the container ended without a result" if code == 0 else "the container failed")
+            # Never let the task's own secrets reach the log or the issue, even if it echoed them.
+            err_tail = podman_tail(scrub(errors, key, token))
+            out_tail = podman_tail(scrub(output, key, token))
+            log.warning(
+                "task container exit %s. Last stderr lines:\n%s\nLast stdout lines:\n%s", code, err_tail, out_tail
+            )
+            detail = f"exit {code}. stderr: {err_tail}" + (f"\nstdout: {out_tail}" if out_tail != "(no output)" else "")
+            raise TaskFailed("the container ended without a result" if code == 0 else "the container failed", detail)
         outcome.runtime = outcome.runtime or runtime
         return outcome
+
+
+def split(result: tuple[Any, ...]) -> tuple[int, str, str]:
+    """(code, stdout, stderr) from a runner. Older runners return (code, output)."""
+    if len(result) == 3:
+        return int(result[0]), str(result[1] or ""), str(result[2] or "")
+    return int(result[0]), str(result[1] or ""), ""
+
+
+def joined(stdout: str, stderr: str) -> str:
+    return "\n".join(part for part in (stdout.rstrip(), stderr.rstrip()) if part)
+
+
+def scrub(text: str, *secrets_: str) -> str:
+    for value in secrets_:
+        if value and len(value) >= 8:
+            text = text.replace(value, "[redacted]")
+    return text
 
 
 def podman_tail(output: str | None, lines: int = 20) -> str:
@@ -277,14 +366,15 @@ class Runner:
         *,
         timeout_s: int,
         kill: list[str] | None = None,
-    ) -> tuple[int, str]:
+    ) -> tuple[int, str, str]:
+        """Returns (exit code, stdout, stderr). stdout carries WORKER_RESULT; stderr is kept for failures."""
         process = await asyncio.create_subprocess_exec(
             *argv,
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
+            stderr=asyncio.subprocess.PIPE,
         )
         try:
-            raw, _ = await asyncio.wait_for(process.communicate(), timeout=timeout_s)
+            raw, err = await asyncio.wait_for(process.communicate(), timeout=timeout_s)
         except asyncio.TimeoutError:
             if kill:
                 killer = await asyncio.create_subprocess_exec(*kill, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL)
@@ -292,7 +382,11 @@ class Runner:
             process.kill()
             await process.communicate()
             raise RuntimeError("task timed out") from None
-        return process.returncode or 0, raw.decode("utf-8", errors="replace")
+        return (
+            process.returncode or 0,
+            raw.decode("utf-8", errors="replace"),
+            (err or b"").decode("utf-8", errors="replace"),
+        )
 
 
 async def serve(settings: Settings) -> None:

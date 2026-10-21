@@ -6,6 +6,8 @@ import re
 from dataclasses import dataclass
 
 LABEL = "worker"
+# Added by the service after MAX_FAILURES failures in a row. Remove it to retry the task.
+FAILED_LABEL = "worker-failed"
 BRIEF_RE = re.compile(r"(?<![\w./-])docs/cursor/([A-Za-z0-9][A-Za-z0-9._-]{0,120}\.md)\b")
 BRANCH_STEM_RE = re.compile(r"[^A-Za-z0-9._-]+")
 
@@ -50,7 +52,7 @@ def issue_from_api(payload: dict[str, object]) -> WorkerIssue | None:
                 names.append(label["name"])
             elif isinstance(label, str):
                 names.append(label)
-    if LABEL not in names:
+    if LABEL not in names or FAILED_LABEL in names:
         return None
     number = payload.get("number")
     if not isinstance(number, int) or isinstance(number, bool) or number <= 0:
