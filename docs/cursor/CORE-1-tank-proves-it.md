@@ -89,3 +89,11 @@ The proof is per client. Every client has one **savings graph set**. The founder
 - No banned words on the client graphs.
 - The margin view is founder-only and never appears on a client page.
 - Screenshots at 375px and 1440px.
+
+**Later (not this PR): a live ticker on tervory.com.** The founder wants the all-clients "saved to date" total on the public homepage. Build the totals so that a later lane can expose one aggregate-only figure:
+- money saved for all clients to date, plus the jobs count;
+- defensible rows only;
+- no client names or per-client figures;
+- cached, and safe to call publicly.
+
+Do not build the public endpoint now.
