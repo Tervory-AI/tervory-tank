@@ -32,7 +32,7 @@ export function ProofView({ data, task }: { data: Proof; task?: string }) {
     {Object.values(data.has_more).some(Boolean) && <a href={url(task, "receipts", data.page + 1)}>Next page</a>}
   </nav>;
   return <article className="proof">
-    <header><div><a href="/tank">← Tank</a><p className="proof-kicker">Founder · {data.region} · {data.tenant_id === "all" ? "all tenants" : data.tenant_names[data.tenant_id] ?? "Name unavailable"}</p><h1>Tank proof</h1><p>What we tested, what it cost, and what we saved.</p></div>
+    <header><div><a href="/tank">← Tank</a><p className="proof-kicker">Founder · {data.region} · {data.tenant_id === "all" ? "all tenants" : data.tenant_names[data.tenant_id] ?? "Unlinked account"}</p><h1>Tank proof</h1><p>What we tested, what it cost, and what we saved.</p></div>
       <nav aria-label="Export evidence"><a href={`/tank/proof/export?format=csv${query}`}>Export CSV</a><a href={`/tank/proof/export?format=pdf${query}`}>Export PDF</a></nav></header>
     <aside>Savings compare the same tokens at baseline prices with actual spend. Backfilled rows use the price book available when filled. Unknown costs and vendor fees have no token baseline and claim no savings. Known vendor fees count only as spend. Bench and shadow spend stay separate. Zero-token cache hits claim no token savings.</aside>
     <section className="proof-total"><h2>All tenants · saved to date</h2>

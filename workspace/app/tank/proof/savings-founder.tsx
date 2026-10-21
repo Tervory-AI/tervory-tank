@@ -1,5 +1,5 @@
 import { clerkClient } from "@clerk/nextjs/server";
-import { tenantIdFor } from "@/lib/tenant";
+import { tenantIdFor, uuidFrom } from "@/lib/tenant";
 import { resolveTenantNames } from "./tenant-names";
 import { proofResponse } from "./server";
 import { readFounderSavingsRows } from "./savings-founder-actions";
@@ -27,13 +27,13 @@ function ClientSet({ data, title }: { data: FounderSavings; title: string }) {
 }
 export async function FounderSavingsPanel({ tenant }: { tenant?: string }) {
   const all: FounderSavings = await (await proofResponse({},undefined,"/savings")).json();
-  const names = await resolveTenantNames(all.tenants, async params => (await clerkClient()).organizations.getOrganizationList(params), tenantIdFor);
+  const names = await resolveTenantNames(all.tenants, async params => (await clerkClient()).organizations.getOrganizationList(params), tenantIdFor, uuidFrom);
   const selected = tenant && tenant!=="all" ? tenant : undefined;
   const one: FounderSavings | null = selected ? await (await proofResponse({tenant_id:selected,end:all.as_of},undefined,"/savings")).json() : null;
   return <article className="savings-founder"><a href="/tank">← Tank</a><p>Founder · {all.region}</p><h1>Client savings</h1><p>The same five graphs each client sees, using only defensible comparisons. Tervory is a separate choice below.</p>
     <ClientSet data={all} title="All clients"/>
     <form action="/tank/proof" method="get"><label>Client<select aria-label="Client" name="tenant_id" defaultValue={selected ?? "all"}><option value="all">Choose a client</option>{all.tenants.map(id => <option key={id} value={id}>{names.tenant_names[id]}</option>)}</select></label><button type="submit">Show client</button></form>
     {names.tenant_names_note && <p role="status">{names.tenant_names_note}</p>}
-    {one && <ClientSet data={one} title={names.tenant_names[one.tenant_id] ?? "Client name unavailable"}/>}
+    {one && <ClientSet data={one} title={names.tenant_names[one.tenant_id] ?? "Unlinked account"}/>}
   </article>;
 }

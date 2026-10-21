@@ -1,6 +1,6 @@
 import "server-only";
 import { clerkClient } from "@clerk/nextjs/server";
-import { tenantIdFor } from "@/lib/tenant";
+import { tenantIdFor, uuidFrom } from "@/lib/tenant";
 import { resolveTenantNames } from "./tenant-names";
 import { goldIdentity } from "../../skala/gold/access";
 import { notFound } from "next/navigation";
@@ -30,6 +30,6 @@ export async function readProof(filters: ProofFilters = {}): Promise<Proof> {
   const names = await resolveTenantNames(data.tenants, async params => {
     const client = await clerkClient();
     return client.organizations.getOrganizationList(params);
-  }, tenantIdFor);
+  }, tenantIdFor, uuidFrom);
   return { ...data, ...names };
 }
