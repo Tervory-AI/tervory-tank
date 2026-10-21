@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import json
+import logging
 import os
 import re
 import uuid
@@ -23,6 +24,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 router = APIRouter(prefix="/v1/command", tags=["command"])
+logger = logging.getLogger(__name__)
 _background: set[asyncio.Task] = set()
 SQUADS = frozenset({"base", "tiger", "market_lab", "rig", "tisan", "radix", "zenas"})
 TOOLS = {
@@ -35,7 +37,7 @@ TOOLS = {
     "zenas": ["zenas.ask", "zenas.matters", "zenas.review"],
 }
 FOUNDER_TOOLS = ["skala.list", "skala.evals", "skala.approve", "skala.retire",
-                 "ledger.receipts", "ledger.savings", "worker.build", "repo.read"]
+                 "ledger.receipts", "ledger.savings", "worker.build"]
 
 
 def db() -> Any:
@@ -68,7 +70,7 @@ async def identity(request: Request) -> Actor:
     if not key_matches(request.headers.get("x-tank-key", ""), TANK_API_KEY):
         raise HTTPException(401, "Workspace authentication required")
     user = request.headers.get("x-tervory-user", "").strip()
-    tenant = request.headers.get("x-tervory-tenant") or request.query_params.get("tenant_id")
+    tenant = request.headers.get("x-tervory-tenant")
     if not user:
         raise HTTPException(401, "Signed-in user required")
     try:
@@ -340,7 +342,11 @@ def sse(kind: str, data: dict) -> str:
 async def replay(thread_id: uuid.UUID, actor: Actor, after: int, *, turn_id: str | None = None):
     while True:
         async with db().acquire() as conn:
-            row = await owned(conn, thread_id, actor)
+            row = await conn.fetchrow(
+                "SELECT state->>'active_turn' AS active_turn FROM tank.command_threads "
+                "WHERE thread_id=$1 AND tenant_id=$2 AND user_id=$3", thread_id, actor.tenant_id, actor.user_id)
+            if row is None:
+                raise HTTPException(404, "Thread not found")
             events = await conn.fetch(
                 "SELECT kind,data FROM tank.command_events WHERE thread_id=$1 AND tenant_id=$2 AND seq>$3 ORDER BY seq LIMIT 500",
                 thread_id, actor.tenant_id, after,
@@ -351,7 +357,7 @@ async def replay(thread_id: uuid.UUID, actor: Actor, after: int, *, turn_id: str
             yield sse(item["kind"], data)
         if len(events) == 500:
             continue
-        if turn_id is None or unpack(row["state"]).get("active_turn") != turn_id:
+        if turn_id is None or row["active_turn"] != turn_id:
             break
         yield ": waiting\n\n"
         await asyncio.sleep(0.25)
@@ -409,6 +415,8 @@ async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages
                 state["active_turn"] = None
     except (Exception, asyncio.CancelledError) as exc:
         # Never return raw provider exceptions, URLs, headers or prompts.
+        if not isinstance(exc, (HTTPException, asyncio.CancelledError)):
+            logger.error("Command turn failed: %s", type(exc).__name__)
         async with editing(thread_id, actor) as (conn, row, state):
             # Failed paid calls may have a ledger row too. Preserve its actual
             # cost without exposing the upstream exception or inventing a row.
@@ -435,7 +443,10 @@ async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages
                 await receipt_pending(conn, row, turn_id)
             await step(conn, row, state, {**state["steps"][turn_id], "label": "Answer failed", "status": "failed",
                                           "receipt_status": "pending" if pending else "recorded" if receipt_known else "not_started"})
-            await event(conn, row, "error", {"message": "The answer could not be completed. Check routing policy and service availability."})
+            message = (f"The pinned model {model} did not answer. Pinned models never fall back; choose Auto or another model."
+                       if model not in (None, "auto") and answer is None else
+                       "The answer could not be completed. Check routing policy and service availability.")
+            await event(conn, row, "error", {"message": message})
             if state["active_turn"] == turn_id:
                 state["active_turn"] = None
 
@@ -670,6 +681,12 @@ async def add_followup(build_id: uuid.UUID, body: Followup, actor: Actor = Depen
 
 @router.get("/builds/{build_id}/followups", dependencies=[Depends(worker)])
 async def get_followups(build_id: uuid.UUID, after: int = Query(default=0, ge=0)) -> list[dict]:
+    """Lane C: poll GET /v1/command/builds/{id}/followups?after=<last_followup_id>
+
+    Use TANK_KEY_WORKERS, starting at after=0. Process replies in returned order
+    on the same build/PR and persist the last processed followup_id. Empty means
+    no new replies; polling builds/next does not deliver an active build's replies.
+    """
     # Cursor replay is lossless; reads never delete or acknowledge work.
     async with db().acquire() as conn:
         build = await build_record(conn, build_id)
@@ -849,7 +866,13 @@ def parse_plan(content: str, actor: Actor) -> ActionPlan:
         raise ValueError("Answer exceeds plan limit")
     if not content.lstrip().startswith("{"):
         return ActionPlan(text=content)
-    plan = ActionPlan.model_validate_json(content)
+    try:
+        decoded = json.loads(content)
+    except ValueError:
+        return ActionPlan(text=content)
+    if not isinstance(decoded, dict) or not ({"text", "actions"} & decoded.keys()):
+        return ActionPlan(text=content)
+    plan = ActionPlan.model_validate(decoded)
     # Validate the entire plan before persisting any card (no partial plan).
     return ActionPlan(text=plan.text, actions=[validate_action(a, actor) for a in plan.actions])
 
@@ -1100,12 +1123,15 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
             await event(conn, row, "card", public_card(card))
         try:
             await refresh_action_receipts(thread_id, actor, card_id)
-        except Exception:
+        except Exception as exc:
             # The confirmed result remains durable. Recovery retries evidence
             # reconciliation only, never dispatch. Error text contains no data.
+            logger.error("Command receipt reconciliation failed: %s", type(exc).__name__)
             async with editing(thread_id, actor) as (conn, row, state):
                 await event(conn, row, "error", {"message": "The action result was saved, but its receipt needs reconciliation."})
-    except (Exception, asyncio.CancelledError):
+    except (Exception, asyncio.CancelledError) as exc:
+        if not isinstance(exc, (HTTPException, asyncio.CancelledError)):
+            logger.error("Command action failed: %s", type(exc).__name__)
         async with editing(thread_id, actor) as (conn, row, state):
             card = state["cards"][card_id]
             card["status"] = "unknown" if attempted else "failed"

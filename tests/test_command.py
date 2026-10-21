@@ -115,7 +115,7 @@ async def test_unknown_pin_fails_explicitly_before_any_write(runtime):
 
 
 @pytest_asyncio.fixture
-async def api(runtime, monkeypatch):
+async def command_pool():
     url = os.environ.get('POOL_SCHEMA_DATABASE_URL')
     if not url:
         pytest.skip('POOL_SCHEMA_DATABASE_URL is not set; CI provides isolated Postgres')
@@ -131,12 +131,7 @@ async def api(runtime, monkeypatch):
         async with pool.acquire() as conn:
             await conn.execute(schema)
             await conn.execute(schema)  # Empty database and idempotent reapplication.
-        monkeypatch.setattr(command, 'db', lambda: pool)
-        app = FastAPI()
-        app.include_router(command.router)
-        headers = {'x-tank-key': runtime.TANK_API_KEY, 'x-tervory-tenant': str(TENANT), 'x-tervory-user': 'founder'}
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://fixture', headers=headers) as client:
-            yield client, pool
+        yield pool
     finally:
         if command._background:
             import asyncio
@@ -144,6 +139,16 @@ async def api(runtime, monkeypatch):
         await pool.close()
         await admin.execute(f'DROP DATABASE "{name}"')
         await admin.close()
+
+
+@pytest_asyncio.fixture
+async def api(runtime, monkeypatch, command_pool):
+    monkeypatch.setattr(command, 'db', lambda: command_pool)
+    app = FastAPI()
+    app.include_router(command.router)
+    headers = {'x-tank-key': runtime.TANK_API_KEY, 'x-tervory-tenant': str(TENANT), 'x-tervory-user': 'founder'}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://fixture', headers=headers) as client:
+        yield client, command_pool
 
 
 @pytest.mark.asyncio
@@ -954,3 +959,140 @@ async def test_auto_comparison_prices_same_tokens_with_frozen_tenant_policy(api,
         await conn.execute("UPDATE tank.proof_prices SET active=false WHERE model='fixture-platform'")
         missing = await command.auto_price_snapshot(conn, OTHER)
         assert missing['model'] == 'fixture-platform' and missing['input_usd'] is None
+
+
+@pytest.mark.asyncio
+async def test_query_tenant_never_authenticates(runtime):
+    req = request(**{'x-tank-key': runtime.TANK_API_KEY, 'x-tervory-user': 'founder'})
+    req.scope['query_string'] = f'tenant_id={TENANT}'.encode()
+    with pytest.raises(HTTPException) as error:
+        await command.identity(req)
+    assert error.value.status_code == 422
+
+
+@pytest.mark.parametrize('content', ['{braces} can start a sentence.', '{"example": 1}', '{unfinished'])
+def test_brace_prefixed_text_is_preserved_without_actions(content):
+    actor = command.Actor(TENANT, 'founder', True)
+    plan = command.parse_plan(content, actor)
+    assert plan.text == content and plan.actions == []
+    assert 'repo.read' not in command.allowed_tools(actor)
+    assert 'repo.read' not in command.planning_message(actor)['content']
+
+
+@pytest.mark.asyncio
+async def test_pinned_failure_is_clear_and_logs_only_exception_type(api, runtime, monkeypatch, caplog):
+    client, pool = api
+    runtime.list_models = AsyncMock(return_value=[{'name': 'fixture-pin'}])
+    monkeypatch.setattr(command, 'route_turn', AsyncMock(side_effect=RuntimeError('private provider detail')))
+    thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
+    reply = await client.post(f'/v1/command/threads/{thread}/turn', json={'text': 'Hi', 'model': 'fixture-pin'})
+    assert 'The pinned model fixture-pin did not answer. Pinned models never fall back; choose Auto or another model.' in reply.text
+    assert 'RuntimeError' in caplog.text
+    assert 'private provider detail' not in caplog.text + reply.text
+    data = (await client.get(f'/v1/command/threads/{thread}')).json()
+    assert data['steps'][-1]['receipt_status'] == 'pending'
+    assert data['cards'] == []
+
+
+@pytest.mark.asyncio
+async def test_shared_override_disables_fallback_and_shadow_without_mutating_policy(shared_router, monkeypatch):
+    tank, conn, calls, policy, req = shared_router
+    policy.update(rung=2, candidate_model='fixture-candidate', shadow_rate=1)
+    original = dict(policy)
+    shadow = AsyncMock()
+    monkeypatch.setattr(tank, '_shadow', shadow)
+    answer = await tank.run_route(req, model_override='fixture-pin')
+    assert calls[0]['disable_fallbacks'] is True
+    assert answer.rung == 1 and policy == original
+    shadow.assert_not_called()
+    ledger = next(c.args for c in conn.execute.call_args_list if 'INSERT INTO tank.ledger' in c.args[0])
+    assert ledger[7] == 1 and ledger[-1] == 'pinned'
+    # Auto still follows its policy, including the existing shadow mechanism.
+    await tank.run_route(req)
+    import asyncio
+    await asyncio.gather(*list(tank._background))
+    shadow.assert_awaited_once()
+    assert 'disable_fallbacks' not in calls[-1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('task_type', ['rig.ask#moa.synthesizer', 'command.turn#moa.seat_1', 'Zenas-2#moa.a'])
+async def test_moa_seat_requires_override_and_loads_parent_policy(shared_router, task_type):
+    tank, conn, calls, policy, req = shared_router
+    req.task_type = task_type
+    with pytest.raises(HTTPException) as error:
+        await tank.run_route(req)
+    assert error.value.status_code == 400
+    assert calls == []
+    tank.load_policy.assert_not_awaited()
+    await tank.run_route(req, model_override='fixture-pin')
+    tank.load_policy.assert_awaited_once_with(task_type.partition('#moa.')[0], TENANT)
+    assert calls[0]['disable_fallbacks'] is True
+    ledger = next(c.args for c in conn.execute.call_args_list if 'INSERT INTO tank.ledger' in c.args[0])
+    assert ledger[6] == task_type and ledger[-1] == task_type.partition('#moa.')[2]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('task_type', ['rig.ask#moa.', '#moa.a', 'rig.ask#moa.A', 'rig.ask#moa.a-b',
+                                      'rig.ask#moa.a\n', 'rig.ask#moa.a#moa.b', 'rig.ask#moa.' + 'a' * 81])
+async def test_malformed_seat_cannot_use_override(shared_router, task_type):
+    tank, conn, calls, policy, req = shared_router
+    req.task_type = task_type
+    assert not tank.override_allowed(task_type)
+    with pytest.raises(HTTPException) as error:
+        await tank.run_route(req, model_override='fixture-pin')
+    assert error.value.status_code == 403 and calls == []
+
+
+@pytest.mark.asyncio
+async def test_same_model_auto_pin_and_seats_do_not_share_cache(shared_router, monkeypatch):
+    tank, conn, calls, policy, req = shared_router
+    entries = {}
+
+    async def get(key):
+        return entries.get(key)
+
+    async def put(key, value, **kwargs):
+        entries[key] = value
+
+    monkeypatch.setattr(tank, '_redis', SimpleNamespace(get=get, set=put))
+    for task, override in [('command.turn', None), ('command.turn', 'fixture-auto'),
+                            ('command.turn#moa.writer', 'fixture-auto'), ('command.turn#moa.judge', 'fixture-auto')]:
+        req.task_type = task
+        first = await tank.run_route(req, model_override=override)
+        cached = await tank.run_route(req, model_override=override)
+        assert first.rung == 1 and cached.rung == 4
+    assert len(entries) == 4 and len(calls) == 4
+    ledger = [c.args for c in conn.execute.call_args_list if 'INSERT INTO tank.ledger' in c.args[0]]
+    assert [row[-1] for row in ledger] == [None, None, 'pinned', 'pinned', 'writer', 'writer', 'judge', 'judge']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('mode', ['delivered', 'cache', 'transport', 'provider'])
+@pytest.mark.parametrize('task,override,seat', [('command.turn', None, None), ('command.turn', 'fixture-pin', 'pinned'),
+                                              ('rig.ask#moa.writer', 'fixture-pin', 'writer')])
+async def test_route_seat_is_durable_in_every_ledger_insert(shared_router, command_pool, monkeypatch, mode, task, override, seat):
+    tank, conn, calls, policy, req = shared_router
+    req.task_type = task
+    if mode == 'cache':
+        monkeypatch.setattr(tank, '_redis', SimpleNamespace(get=AsyncMock(return_value=json.dumps({'content': 'Cached'}))))
+    elif mode in {'transport', 'provider'}:
+        response = httpx.Response(503, json={'error': {'message': 'Unavailable'}})
+        post = AsyncMock(side_effect=httpx.ConnectError('unavailable')) if mode == 'transport' else AsyncMock(return_value=response)
+        monkeypatch.setattr(tank.httpx.AsyncClient, 'post', post)
+    if mode in {'transport', 'provider'}:
+        with pytest.raises(HTTPException) as error:
+            await tank.run_route(req, model_override=override)
+        assert error.value.status_code == 502
+    else:
+        await tank.run_route(req, model_override=override)
+    # Execute the router's actual SQL and bound arguments against the reapplied
+    # schema, checking all three INSERT shapes rather than just SQL strings.
+    ledger = [c.args for c in conn.execute.call_args_list if 'INSERT INTO tank.ledger' in c.args[0]]
+    assert len(ledger) == 1
+    async with command_pool.acquire() as database:
+        await database.execute(*ledger[0])
+        row = await database.fetchrow('SELECT * FROM tank.ledger WHERE id=$1 AND tenant_id=$2', ledger[0][1], TENANT)
+    assert row['route_seat'] == seat and row['task_type'] == task
+    assert row['outcome'] == ('failed' if mode in {'transport', 'provider'} else 'delivered')
+    assert row['rung'] == (4 if mode == 'cache' else 1)
