@@ -38,6 +38,9 @@
 - **#210 just fixed it so Tank lists its models.** Before that, the cheapest-model search saw an empty roster in production.
 
 ## Hard rules
+- **Pre-launch (founder, 21 Oct): there are no clients yet.** Test with real public data freely, including the R2 buckets (BUCKET-1). Client-data rules apply from the first real client.
+- **Client screens are clean.** No internal words (Skala, Tank, ledger, eval, gold, shadow, retire, model names) and no text dumps. The detail lives in founder screens. Match the approved Figma: https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS
+- **Every squad member has its own box:** its own Hermes Agent, sandbox, browser, memory and bucket. It shares nothing and talks only to Tank and Skala.
 - Every model call goes through Tank. Rooms never hold model keys. The Workspace never calls a room directly.
 - SA client data stays on the ZA box, and nothing is proxied between boxes. Decided cases and legislation are public record.
 - No criminal law in Zenas. No tracking or profiling of individuals.
