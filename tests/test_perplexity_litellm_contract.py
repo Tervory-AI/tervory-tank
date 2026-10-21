@@ -17,6 +17,12 @@ import yaml
 from fastapi import FastAPI
 
 os.environ.setdefault("LITELLM_LOCAL_MODEL_COST_MAP", "True")
+# The repository's litellm/ directory can import as a namespace package even
+# when the separately deployed LiteLLM distribution is not installed.
+try:
+    importlib.metadata.version("litellm")
+except importlib.metadata.PackageNotFoundError:
+    pytest.skip("run in isolated environment with deployed LiteLLM pin", allow_module_level=True)
 litellm = pytest.importorskip("litellm", reason="run in isolated environment with deployed LiteLLM pin")
 
 from litellm.llms.custom_httpx.http_handler import AsyncHTTPHandler
