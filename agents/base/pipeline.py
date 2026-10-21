@@ -423,7 +423,7 @@ async def enrich_one(
                 "source": "site",
                 "confidence": int(soc["confidence"]),
             }
-        passes["4"] = {"skill": named("base.socials", soc), "ms": soc.get("_ms"), "count": soc.get("count")}
+        passes["4"] = {"skill": named("base.socials", soc), "ms": soc.get("_ms"), "count": soc.get("count"), "access_error": soc.get("access_error")}
 
         eng_prof: dict[str, Any] = {}
         if engine and engine_in:

@@ -282,7 +282,6 @@ async def credentials(request: Request, actor: Actor = Depends(identity)):
 @router.post("/revoke")
 async def revoke(request: Request, actor: Actor = Depends(identity)):
     body = await parse(request, Connection)
-    permit_room(actor, body.room)
     site = site_name(body.site)
     async with connection_change(actor.tenant_id, body.room, site):
         async with db().acquire() as conn:

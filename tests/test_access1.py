@@ -333,3 +333,38 @@ async def test_login_uses_only_approved_post_form_and_stops_for_captcha(keys, mo
     assert result is success and not navigation["login"]
     assert bool(filled) is success
     assert all(value not in caplog.text for value in sensitive)
+
+
+@pytest.mark.asyncio
+async def test_revocation_cancels_an_active_visit_before_removing_cookie(keys, monkeypatch, tmp_path):
+    import asyncio
+    tenant = str(uuid.uuid4()); site = "https://dealer.example"
+    monkeypatch.setenv("BROWSER_DATA_DIR", str(tmp_path))
+    cookie = browser.storage_for(tenant, site); cookie.write_text("{}")
+    stopped = asyncio.Event()
+    async def visit():
+        try: await asyncio.Future()
+        finally:
+            cookie.write_text("{}")
+            stopped.set()
+    task = asyncio.create_task(visit()); await asyncio.sleep(0)
+    monkeypatch.setattr(browser, "active_visits", {(tenant, site): task})
+    monkeypatch.setattr(browser, "held", {}); monkeypatch.setattr(browser, "access_locks", {})
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=browser.app), base_url="http://browser") as client:
+        response = await client.post("/access/control", json=vault.envelope("base", "control", {"tenant_id": tenant, "site": site, "action": "revoke"}))
+    assert response.status_code == 200 and stopped.is_set() and not cookie.exists()
+
+
+@pytest.mark.asyncio
+async def test_held_page_keeps_one_of_four_browser_slots(monkeypatch):
+    import asyncio
+    monkeypatch.setattr(browser, "concurrency", asyncio.Semaphore(4))
+    monkeypatch.setattr(browser, "site_locks", {}); monkeypatch.setattr(browser, "last_visit", {})
+    async with browser.render_slot("dealer.example") as slot:
+        slot["retained"] = True
+    assert browser.concurrency._value == 3
+
+
+def test_cookie_files_do_not_cross_http_https_origins(monkeypatch, tmp_path):
+    monkeypatch.setenv("BROWSER_DATA_DIR", str(tmp_path)); tenant = str(uuid.uuid4())
+    assert browser.storage_for(tenant, "https://dealer.example") != browser.storage_for(tenant, "http://dealer.example")

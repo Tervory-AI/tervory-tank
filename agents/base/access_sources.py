@@ -28,6 +28,7 @@ class Text(HTMLParser):
 
 async def scrape_with_archives(run, http, base, headers, tenant, payload):
     result = await run()
+    spent = float(result.get("_cost_usd") or 0)
     # Human checks take the queue. Archives are for unreachable/dead sites only.
     def failed(value):
         return not value.get("text") and value.get("error") and not value.get("blocked_by_check") and not value.get("challenge") and not any(word in str(value.get("error", "")).lower() for word in ("human", "captcha", "blocked", "login"))
@@ -35,8 +36,13 @@ async def scrape_with_archives(run, http, base, headers, tenant, payload):
     for delay in (1, 3):
         await asyncio.sleep(delay)
         result = await run()
+        spent += float(result.get("_cost_usd") or 0)
+        result["_cost_usd"] = spent
         if not failed(result): return result
-    response = await http.post(base + "/v1/access/archives", json={"tenant_id": tenant, "url": payload.get("website", "")}, headers=headers, timeout=90)
+    try:
+        response = await http.post(base + "/v1/access/archives", json={"tenant_id": tenant, "url": payload.get("website", "")}, headers=headers, timeout=90)
+    except Exception:
+        return {**result, "access_error": "Archived sources are unavailable.", "next": "existing_paid_rung"}
     if response.status_code != 200:
         return {**result, "access_error": "Archived sources are unavailable.", "next": "existing_paid_rung"}
     archive = response.json()
@@ -62,9 +68,13 @@ async def public_business_pages(run, http, base, headers, tenant, payload):
         if parsed.hostname not in {platform + ".com", "www." + platform + ".com"}: continue
         name = parsed.path.strip("/").split("/")[0]
         if not re.fullmatch(r"[A-Za-z0-9._-]{1,100}", name): continue
-        response = await http.post(base + "/v1/access/social", headers=headers, timeout=40,
-            json={"tenant_id": tenant, "platform": platform, "business_id": name,
-                  "business_username": name if platform == "instagram" else ""})
+        try:
+            response = await http.post(base + "/v1/access/social", headers=headers, timeout=40,
+                json={"tenant_id": tenant, "platform": platform, "business_id": name,
+                      "business_username": name if platform == "instagram" else ""})
+        except Exception:
+            result["access_error"] = "The public business API is unavailable; search evidence was kept."
+            continue
         if response.status_code != 200:
             result["access_error"] = "The public business API is unavailable; search evidence was kept."
             continue

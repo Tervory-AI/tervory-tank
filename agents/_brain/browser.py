@@ -34,6 +34,7 @@ QUEUE_TIMEOUT = 20
 async def render_slot(site):
     lock = site_locks.setdefault(site, asyncio.Lock())
     locked = admitted = False
+    slot = {"retained": False}
     try:
         try:
             async with asyncio.timeout(QUEUE_TIMEOUT):
@@ -44,9 +45,9 @@ async def render_slot(site):
                 admitted = True
         except TimeoutError:
             raise HTTPException(503, "Base browser is busy; try again shortly.") from None
-        yield
+        yield slot
     finally:
-        if admitted:
+        if admitted and not slot["retained"]:
             concurrency.release()
         if locked:
             lock.release()
@@ -121,7 +122,12 @@ async def render(body: Page, x_tank_key: str = Header(default=""), x_tenant_id: 
         raise HTTPException(403, "Private or internal web address refused.") from None
     if os.environ.get("ACCESS_BROWSER_KEY"):
         async with access_locks.setdefault((tenant, site), asyncio.Lock()):
-            return await visit(body, tenant, x_task_id, site)
+            task = asyncio.current_task()
+            active_visits[(tenant, site)] = task
+            try:
+                return await visit(body, tenant, x_task_id, site)
+            finally:
+                if active_visits.get((tenant, site)) is task: active_visits.pop((tenant, site), None)
     return await visit(body, tenant, x_task_id, site)
 
 
@@ -158,7 +164,7 @@ async def visit(body, tenant, task, origin):
             return result
     from playwright.async_api import async_playwright
     site = host.removeprefix("www.")
-    async with render_slot(site):
+    async with render_slot(site) as slot:
         manager = async_playwright()
         playwright = await manager.__aenter__()
         browser = None
@@ -244,7 +250,7 @@ async def visit(body, tenant, task, origin):
                         queue = (await access_rpc(tenant, origin, "queue", reason="human_login", task_id=task or None))["queue_id"]
                     if challenge and secure and not social:
                         queue = await retain(tenant, origin, page, context, browser, manager, storage, body.url, task,
-                                             "captcha" if human_check(html) else "human_login", navigation)
+                                             "captcha" if human_check(html) else "human_login", navigation, slot)
                         retained = True
                     result = {"ok": not challenge and bool(response and response.status < 400), "url": origin if private else page.url,
                         "status": response.status if response else None, "challenge": challenge,
@@ -358,11 +364,13 @@ class LivePage:
     url: str
     task: str
     navigation: dict
+    reserved: bool = False
     ready: bool = False
     timer: object = None
 
 
 held: dict[str, LivePage] = {}
+active_visits: dict[tuple[str, str], asyncio.Task] = {}
 access_locks: dict[tuple[str, str], asyncio.Lock] = {}
 control_nonces: dict[str, float] = {}
 
@@ -374,8 +382,11 @@ async def dispose(handle, *, save=True):
     try:
         if save: await item.context.storage_state(path=str(item.storage))
     finally:
-        await item.browser.close()
-        await item.manager.__aexit__(None, None, None)
+        try:
+            await item.browser.close()
+        finally:
+            await item.manager.__aexit__(None, None, None)
+            if item.reserved: concurrency.release()
 
 
 async def expire_live(handle):
@@ -390,12 +401,13 @@ async def expire_live(handle):
             pass  # Expiry still closes the browser; no credential was used.
 
 
-async def retain(tenant, site, page, context, browser, manager, storage, url, task, reason, navigation):
+async def retain(tenant, site, page, context, browser, manager, storage, url, task, reason, navigation, slot):
     if len(held) >= 4:
         raise HTTPException(503, "All live views are in use; try again shortly.")
     handle = str(uuid.uuid4())
     result = await access_rpc(tenant, site, "queue", reason=reason, handle=handle, task_id=task or None)
-    item = LivePage(tenant, site, page, context, browser, manager, storage, url, task, navigation)
+    item = LivePage(tenant, site, page, context, browser, manager, storage, url, task, navigation, reserved=True)
+    slot["retained"] = True
     held[handle] = item
     item.timer = asyncio.create_task(expire_live(handle))
     return result["queue_id"]
@@ -486,6 +498,11 @@ async def access_control(request: Request):
         if at < now-120: control_nonces.pop(nonce, None)
     if body["nonce"] in control_nonces: raise HTTPException(409, "Request already used.")
     control_nonces[body["nonce"]] = now
+    if body["action"] == "revoke":
+        visiting = active_visits.get((tenant, site))
+        if visiting and visiting is not asyncio.current_task():
+            visiting.cancel()
+            await asyncio.gather(visiting, return_exceptions=True)
     async with access_locks.setdefault((tenant, site), asyncio.Lock()):
         result = {}
         if body["action"] == "revoke":
