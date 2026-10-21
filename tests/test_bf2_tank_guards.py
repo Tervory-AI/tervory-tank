@@ -65,6 +65,12 @@ class _Conn:
             return list(self.ranks)
         return []
 
+    async def fetchval(self, sql: str, *args: object) -> object:
+        self.queries.append((sql, args))
+        if "tank.controls" in sql:
+            return False  # Fixture has paid work enabled.
+        raise AssertionError(f"unexpected scalar query: {sql}")
+
     async def execute(self, *args: object) -> str:
         self.executes.append(args)
         return "UPDATE 1"
