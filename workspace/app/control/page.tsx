@@ -5,6 +5,9 @@ import { readFounderDashboard, readPaidPause, readDashboardCandidates } from "@/
 import { signupSource, payingSource } from "./sources";
 import { FounderDashboard } from "./view";
 import "./dashboard.css";
+import "./client-squads.css";
+import { ClientSquads } from "./client-squads";
+import { squadClients, squadState } from "./squad-actions";
 export const dynamic = "force-dynamic";
 export default async function ControlPage() {
   const { userId } = await auth();
@@ -12,7 +15,10 @@ export default async function ControlPage() {
   const results = await Promise.allSettled([readFounderDashboard(userId), signupSource(), payingSource(), readPaidPause(userId), readDashboardCandidates(userId)]);
   const [data, signups, paying, pause, models] = results;
   const labels = ["Work measurements unavailable.", "Clerk sign-ups unavailable.", "Stripe clients unavailable.", "Paid pause unavailable.", "Model comparisons unavailable."];
-  return <FounderDashboard view={{
+  const clients = await squadClients(0);
+  const selectedClient = clients.clients[0]?.id ?? "";
+  const access = selectedClient ? await squadState(selectedClient) : null;
+  return <FounderDashboard squads={<ClientSquads initial={clients} selectedClient={selectedClient} initialState={access} />} view={{
     data: data.status === "fulfilled" ? data.value : null,
     signups: signups.status === "fulfilled" ? signups.value : null,
     paying: paying.status === "fulfilled" ? paying.value : null,
