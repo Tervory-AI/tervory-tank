@@ -58,11 +58,11 @@ class Storage:
         expected_agent = 'tank' if owner == 'uploads' else owner
         if env.get('AGENT_NAME', expected_agent).replace('-', '_') != expected_agent:
             raise StorageError('Storage credential owner does not match this process')
-        self.owner = owner
-        self.bucket = 'tervory-' + owner.replace('_', '-')
+        self._owner = owner
+        self._bucket = 'tervory-' + owner.replace('_', '-')
         if env.get('R2_BUCKET', self.bucket) != self.bucket:
             raise StorageError('Storage bucket does not match this room')
-        self.host = account_host(env)
+        self._host = account_host(env)
         suffix = owner.upper()
         self._access = env.get(f'R2_ACCESS_KEY_ID_{suffix}', '')
         self._secret = env.get(f'R2_SECRET_ACCESS_KEY_{suffix}', '')
@@ -80,6 +80,18 @@ class Storage:
             proxy = ROOM_PROXY
         self._http = httpx.AsyncClient(transport=transport, proxy=proxy if transport is None else None,
                                       timeout=180, trust_env=False, follow_redirects=False)
+
+    @property
+    def owner(self) -> str:
+        return self._owner
+
+    @property
+    def bucket(self) -> str:
+        return self._bucket
+
+    @property
+    def host(self) -> str:
+        return self._host
 
     async def close(self) -> None:
         await self._http.aclose()

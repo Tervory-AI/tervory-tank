@@ -317,3 +317,13 @@ def test_backup_children_receive_only_needed_credentials(monkeypatch):
     assert env['PGHOST'] == 'postgres'
     assert not ({'DATABASE_URL', 'R2_SECRET_ACCESS_KEY_BASE', 'HF_TOKEN', 'TANK_KEY'} & env.keys())
     assert not any(key.startswith('PG') for key in backup.tool_environment())
+
+
+def test_storage_destination_cannot_be_reassigned():
+    async def scenario():
+        store = Storage('base', environ=environment())
+        for field in ('bucket', 'host', 'owner'):
+            with pytest.raises(AttributeError):
+                setattr(store, field, 'foreign')
+        await store.close()
+    asyncio.run(scenario())
