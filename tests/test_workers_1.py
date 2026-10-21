@@ -363,8 +363,8 @@ def test_secrets_are_redacted_and_not_in_the_result() -> None:
     try:
         stage(directory, token=TOKEN, tank_key="tank-key-example")
         assert (directory / "token").read_text(encoding="utf-8") == TOKEN
-        assert oct((directory / "token").stat().st_mode & 0o777) == oct(0o644)
-        assert oct(directory.stat().st_mode & 0o777) == oct(0o700)
+        assert oct((directory / "token").stat().st_mode & 0o777) == oct(0o444)
+        assert oct(directory.stat().st_mode & 0o777) == oct(0o711)
     finally:
         for child in directory.iterdir():
             child.unlink()
