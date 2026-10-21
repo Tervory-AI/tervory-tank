@@ -206,6 +206,9 @@ CODE"""
         inspect = {name: json.loads(docker("inspect", name))[0] for name in (brain, browser, gateway, executor)}
         brain_url = "http://" + inspect[brain]["NetworkSettings"]["Networks"][corridor]["IPAddress"] + ":8001"
         monkeypatch.setenv("BASE_BRAIN_URL", brain_url)
+        async with httpx.AsyncClient(timeout=3) as probe:
+            health=await probe.get(brain_url+"/health")
+            assert health.status_code==200, health.text
         skill_http = httpx.AsyncClient(timeout=120)
         skills = room.SkillClient(skill_http, origin, key)
         fixture = json.loads(FIXTURE.read_text())
@@ -233,6 +236,10 @@ CODE"""
             (tmp_path / "failure.json").write_text(debug)
             raise
         receipt = cfg["brain_receipt"]
+        if receipt["status"] != "done":
+            debug={"events":events,"completions":completions,"receipt":receipt,
+                "logs":subprocess.run(["docker","logs",brain],capture_output=True,text=True).stderr}
+            (tmp_path/"brain-failure.json").write_text(json.dumps(debug,indent=2,default=str))
         assert receipt["status"] == "done", receipt
         assert receipt["steps"][0]["action"] == "recall" and receipt["steps"][0]["count"] == 1
         assert receipt["steps"][-1]["action"] == "remember"

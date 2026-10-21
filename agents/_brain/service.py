@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import sys
+import traceback
 import uuid
 from pathlib import Path
 
@@ -111,7 +113,8 @@ async def perform(body: Run) -> dict:
     async with gate:
         try:
             return await run_task(body)
-        except Exception:
+        except Exception as exc:
+            logging.getLogger("brain.service").warning("Brain prerequisites failed (%s, errno=%s, operation=%s)", type(exc).__name__, getattr(exc, "errno", None), traceback.extract_tb(exc.__traceback__)[-1].name)
             return {"tenant_id": str(body.tenant_id), "task_id": str(body.task_id), "room": "base", "status": "failed",
                 "steps": [], "model_receipts": [], "error": "Brain prerequisites unavailable before pipeline work."}
 

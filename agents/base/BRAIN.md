@@ -137,13 +137,15 @@ tagging each `tervory-agent1-<name>:cloud`, and run in a managed cloud sandbox:
 
 ```sh
 AGENT1_CONTAINER_IMAGES=1 pytest -q tests/test_agent1_container_runtime.py
+AGENT1_PUBLIC_RENDER=1 pytest -q tests/test_agent1_public_render.py
 AGENT1_HERMES_IMAGE=tervory-agent1-brain:cloud pytest -q tests/test_agent1_hermes_runtime.py
 AGENT1_PILOT=1 AGENT1_PILOT_OUTPUT=/tmp/base-pilot pytest -q -s tests/test_agent1_pilot.py
 ```
 
 The pilot also needs `POOL_SCHEMA_DATABASE_URL` for a throwaway Postgres server.
 It removes only its own database, containers, volumes and networks. The container
-checks render `https://example.com` through the gateway `/render` with a
+public regression runs automatically in GitHub cloud CI and builds the actual
+browser/gateway Dockerfiles. It renders `https://example.com` through `/render` with a
 non-internal gateway corridor and an internal-only browser. They also exercise
 real JavaScript/age clicks/cookie persistence, human-check
 refusal, private egress and browser-only proxy binding, plus isolated WASI work.

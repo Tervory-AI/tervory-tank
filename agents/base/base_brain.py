@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import json
+import logging
 import os
 import socket
 import ipaddress
@@ -71,7 +72,8 @@ async def drive_batch(pool, skills, task_id, cfg, call):
                 raise RuntimeError("Brain receipt scope mismatch")
             if receipt.get("status") != "done":
                 raise RuntimeError("Brain did not finish")
-        except Exception:
+        except Exception as exc:
+            logging.getLogger("base.brain").warning("Brain flow failed (%s)", type(exc).__name__)
             # The unchanged pipeline remains available if memory, policy, the
             # agent or its service failed before it started any pipeline work.
             if not batch.ran:
