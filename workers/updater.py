@@ -5,7 +5,9 @@
 2. Compare main's workers/ tree with the deployed one (WORKERS_TREE next to the code).
    Same tree: nothing to do. Different: update, unless main does not have the host install
    yet (workers/host/tervory-workers.service), so an older main never replaces this code.
-3. Wait while a task is running (the service's /health says busy). Never kill a task.
+   main must move forward: a non-fast-forward main (force-push) is refused, never applied.
+3. While a task is running (the service's /health says busy), leave UPDATE_PENDING next to the
+   code so the service takes no new task, and try again next time. Never kill a task.
 4. Extract workers/ at main into app.new, fix modes, refresh the venv if requirements changed,
    swap it in, write COMMIT and WORKERS_TREE, restart tervory-workers.service.
 Each update logs one line: old -> new commit. No secrets are logged.
@@ -36,6 +38,7 @@ from workers.settings import Settings, SettingsError, from_env
 log = logging.getLogger("workers.updater")
 MARKER = "workers/host/tervory-workers.service"
 SERVICE = "tervory-workers.service"
+PENDING = "UPDATE_PENDING"
 BRANCH = "main"
 
 
@@ -83,14 +86,19 @@ def busy(port: int) -> bool:
 
 
 def fix_modes(root: Path) -> None:
-    """The task image COPYs this tree: files must stay world-readable despite UMask=0077."""
-    for path in [root, *root.rglob("*")]:
-        if path.is_dir():
-            path.chmod(0o755)
-        elif path.suffix == ".sh":
-            path.chmod(0o755)
-        else:
-            path.chmod(0o644)
+    """The task image COPYs this tree: files must stay world-readable despite UMask=0077.
+
+    Symlinks are skipped (chmod would follow them out of the tree).
+    """
+    for current, dirs, files in os.walk(root, followlinks=False):
+        here = Path(current)
+        if not here.is_symlink():
+            here.chmod(0o755)
+        for name in files + [d for d in dirs if (here / d).is_symlink()]:
+            path = here / name
+            if path.is_symlink():
+                continue
+            path.chmod(0o755 if path.suffix == ".sh" else 0o644)
 
 
 def read(path: Path) -> str:
@@ -106,19 +114,31 @@ def update(settings: Settings, token: str, *, srv: Path, cache: Path, restart: b
         cache.mkdir(parents=True, exist_ok=True)
         git(cache, "init", "-q", env=env)
         git(cache, "remote", "add", "origin", remote or f"https://github.com/{settings.repo}.git", env=env)
-    git(cache, "fetch", "-q", "--no-tags", "--filter=blob:none", "origin", f"+refs/heads/{BRANCH}:refs/remotes/origin/{BRANCH}", env=env)
+    before = git(cache, "rev-parse", "-q", "--verify", f"refs/remotes/origin/{BRANCH}", env=env, check=False).stdout.strip()
+    # No "+" in the refspec: git itself refuses a non-fast-forward update of main.
+    fetched = git(cache, "fetch", "-q", "--no-tags", "--filter=blob:none", "origin", f"refs/heads/{BRANCH}:refs/remotes/origin/{BRANCH}", env=env, check=False)
+    if fetched.returncode != 0:
+        log.warning("workers update refused: main did not fast-forward (or fetch failed): %s", redact(fetched.stderr.strip())[-200:])
+        return Plan("skip", "main did not fast-forward")
     new = git(cache, "rev-parse", f"refs/remotes/origin/{BRANCH}", env=env).stdout.strip()
+    if before and before != new and git(cache, "merge-base", "--is-ancestor", before, new, env=env, check=False).returncode != 0:
+        log.warning("workers update refused: main %s is not a fast-forward of %s", new[:12], before[:12])
+        return Plan("skip", "main did not fast-forward")
     new_tree = git(cache, "rev-parse", f"{new}:workers", env=env).stdout.strip()
     has_marker = git(cache, "cat-file", "-e", f"{new}:{MARKER}", env=env, check=False).returncode == 0
     app = srv / "app"
     old = read(app / "COMMIT") or "unknown"
     plan = decide(deployed_tree=read(app / "WORKERS_TREE"), new_tree=new_tree, has_marker=has_marker)
+    pending = srv / PENDING
     if plan.action != "update":
+        pending.unlink(missing_ok=True)
         if plan.action == "skip":
             log.info("workers update skipped: %s (deployed %s, main %s)", plan.reason, old[:12], new[:12])
         return plan
     if busy(settings.service_port):
-        log.info("workers update deferred: a task is running (deployed %s, main %s)", old[:12], new[:12])
+        # The service sees this file and takes no new task until the update is done.
+        pending.write_text(new + "\n", encoding="utf-8")
+        log.info("workers update pending: a task is running; no new task until it is applied (deployed %s, main %s)", old[:12], new[:12])
         return Plan("skip", "task running")
     stage = srv / "app.new"
     shutil.rmtree(stage, ignore_errors=True)
@@ -142,6 +162,7 @@ def update(settings: Settings, token: str, *, srv: Path, cache: Path, restart: b
         app.rename(previous)
     stage.rename(app)
     shutil.rmtree(previous, ignore_errors=True)
+    pending.unlink(missing_ok=True)
     log.info("workers updated: %s -> %s", old[:12], new[:12])
     if restart:
         subprocess.run(["systemctl", "--user", "restart", SERVICE], check=True)

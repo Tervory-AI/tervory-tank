@@ -33,6 +33,11 @@ MALFORMED = (
 )
 
 
+def update_pending(settings: Settings) -> bool:
+    """workers/updater.py leaves UPDATE_PENDING next to the code while it waits for a task."""
+    return (Path(settings.code_dir).parent / "UPDATE_PENDING").exists()
+
+
 class Service:
     def __init__(self, settings: Settings, github: GitHub, launcher: "Launcher", control: TankControl | None = None) -> None:
         self.settings = settings
@@ -68,6 +73,9 @@ class Service:
             if task.number in self.inflight:
                 continue
             if running >= self.settings.max_tasks:
+                return
+            # An auto-update is waiting for the running task: take nothing new until it is applied.
+            if update_pending(self.settings):
                 return
             # The founder's workers pause is read before taking any task. It fails closed.
             if self.control is None or await self.control.paused():
