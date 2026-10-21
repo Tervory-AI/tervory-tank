@@ -8,17 +8,43 @@ import io
 import json
 import os
 import re
+import socket
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from brain.security import authenticate, public_url, scope, tenant_dir
+from brain.security import public_url, scope, tenant_dir
 
 app = FastAPI()
+# The browser holds no Tank key (SEAL-1): it runs untrusted web pages. Its only
+# caller is base-browser-gateway, which checks the room key before forwarding.
+GATEWAY_HOST = "base-browser-gateway"
+
+
+async def gateway_addresses() -> set[str]:
+    answers = await asyncio.get_running_loop().getaddrinfo(GATEWAY_HOST, 3000, type=socket.SOCK_STREAM)
+    return {answer[4][0] for answer in answers}
+
+
+@app.middleware("http")
+async def only_the_gateway(request: Request, call_next):
+    # Everything but /health must come from the gateway's address on the internal
+    # browser network. A page inside this container calls from 127.0.0.1, which is
+    # refused. uvicorn runs with --no-proxy-headers, so the peer cannot be forged.
+    if request.url.path != "/health":
+        peer = request.client.host if request.client else ""
+        try:
+            allowed = await gateway_addresses()
+        except OSError:
+            return JSONResponse({"detail": "Base browser gateway cannot be found."}, status_code=503)
+        if not peer or peer not in allowed:
+            return JSONResponse({"detail": "Base browser accepts work only from its gateway."}, status_code=401)
+    return await call_next(request)
 concurrency = asyncio.Semaphore(4)
 site_locks: dict[str, asyncio.Lock] = {}
 last_visit: dict[str, float] = {}
@@ -104,7 +130,8 @@ async def health():
 @app.post("/render")
 async def render(body: Page, x_tank_key: str = Header(default=""), x_tenant_id: str = Header(default=""),
                  x_home_region: str = Header(default=""), x_task_id: str = Header(default="")):
-    authenticate(x_tank_key)
+    # x_tank_key is ignored and kept only so existing callers keep their argument
+    # order. The gateway no longer sends it; only_the_gateway admits the caller.
     tenant = scope(x_tenant_id, x_home_region)
     try:
         host, _port = public_url(body.url)
