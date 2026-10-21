@@ -791,7 +791,7 @@ export function readDashboardCandidates(userId: string): Promise<{ task_type: st
 
 // SKALA-2 founder approval safety. Credentials remain in this server-only client.
 export type SkillApprovalStatus = {
-  id: string; version: string; reason: string | null; runs: number; model: boolean; room_authored: boolean;
+  id: string; version: string; reason: string | null; score: number | null; runs: number; model: boolean; room_authored: boolean;
 };
 export type SkillApprovalPreview = { token: string; items: SkillApprovalStatus[] };
 export function skillApprovalStatus(): Promise<SkillApprovalStatus[]> {
@@ -806,7 +806,7 @@ export function confirmSkillApprovals(by: string, token: string, confirmed: bool
   });
 }
 export function reviewSkillSource(id: string, version: string, by: string) {
-  return tank<{ source: string; review_token: string }>(`/v1/skala/${encodeURIComponent(id)}/${encodeURIComponent(version)}/source-review`, {
+  return tank<{ source: string; files: { path: string; source: string }[]; review_token: string }>(`/v1/skala/${encodeURIComponent(id)}/${encodeURIComponent(version)}/source-review`, {
     method: "POST", body: JSON.stringify({ by }),
   });
 }

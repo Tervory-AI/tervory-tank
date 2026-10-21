@@ -72,7 +72,7 @@ export function SkalaApp({
   const [notice, setNotice] = useState<Notice | null>(loadError ? { tone: "err", text: loadError } : null);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<"approve" | "rollback">("approve");
-  const [sourceReview, setSourceReview] = useState<{source: string; review_token: string} | null>(null);
+  const [sourceReview, setSourceReview] = useState<{files: {path: string; source: string}[]; review_token: string} | null>(null);
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [pending, setPending] = useState<LibrarySkill | null>(null);
   const [rowRefusal, setRowRefusal] = useState<{ key: string; text: string } | null>(null);
@@ -329,7 +329,7 @@ export function SkalaApp({
                                 <span className="sk-meta">{costLabel(version)}</span>
                                 {version.model && version.runs !== undefined ? <span className="sk-meta">{version.runs}/3 runs</span> : null}
                                 {!version.present && version.state !== "approved" ? <span className="sk-gone">This version is no longer in the folder.</span> : null}
-                                {(version.state === "candidate" || version.state === "staging") && version.present ? (
+                                {(version.state === "candidate" || version.state === "staging" || version.state === "approved") && version.present ? (
                                   <button type="button" disabled={busyKey !== null} onClick={() => run(version, "evals")}>
                                     {busyKey === `${key}:evals` ? "Running evals…" : "Run evals"}
                                   </button>
@@ -385,8 +385,8 @@ export function SkalaApp({
         <h2 id="approve-title">{pending ? pendingAction === "rollback" ? `Roll back ${pending.id} to ${pending.version}?` : confirmApprove(pending.id, pending.version) : "Approve this version?"}</h2>
         {pendingAction === "rollback" ? <p>This restores a previously approved version and records your confirmation.</p> : null}
         {pendingAction === "approve" && pending?.id.split(".")[1] === "learned" ? <>
-          <p>Review the full run.py before approving. This room-authored code also runs during evaluations.</p>
-          {sourceReview ? <pre className="sk-source">{sourceReview.source}</pre> : <p role="status">{sourceError || "Loading full source…"}</p>}
+          <p>Review every Python file, including run.py, before approving. This room-authored code also runs during evaluations.</p>
+          {sourceReview ? <div>{sourceReview.files.map(file => <section key={file.path}><h3>{file.path}</h3><pre className="sk-source">{file.source}</pre></section>)}</div> : <p role="status">{sourceError || "Loading full source…"}</p>}
         </> : null}
         <div className="sk-dialog-actions">
           <button type="button" className="primary" disabled={!pending || busyKey !== null || (pendingAction === "approve" && pending.id.split(".")[1] === "learned" && !sourceReview)} onClick={() => pending && run(pending, pendingAction)}>

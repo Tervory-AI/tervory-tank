@@ -113,7 +113,7 @@ export function scoreDate(iso: string | null): string {
 }
 
 export function versionAction(skill: { state: string; present: boolean }): VersionAction | null {
-  if (skill.state === "candidate" && skill.present) return "evals";
+  if ((skill.state === "candidate" || skill.state === "approved") && skill.present) return "evals";
   if (skill.state === "staging" && skill.present) return "approve";
 
   return null;

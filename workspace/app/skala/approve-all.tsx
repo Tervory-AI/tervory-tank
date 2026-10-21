@@ -1,7 +1,7 @@
 "use client";
 import { useRef, useState } from "react";
 
-type Preview = { token: string; items: { id: string; version: string }[] };
+type Preview = { token: string; items: { id: string; version: string; score: number; runs: number; model: boolean }[] };
 
 export function ApproveAllReady({ onApproved, className }: { onApproved?: () => Promise<void>; className?: string }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -37,7 +37,7 @@ export function ApproveAllReady({ onApproved, className }: { onApproved?: () => 
     <dialog ref={dialog} className="sk-dialog" style={{maxWidth: "min(850px, calc(100vw - 32px))", boxSizing: "border-box", border: "1px solid #B8BFD0", borderRadius: 8, padding: 24, color: "#001840"}} aria-label="Confirm ready versions">
       <h2>Approve these versions?</h2>
       <p>Room-authored skills need individual source review and are excluded.</p>
-      {preview?.items.length ? <ul className="sk-bulk-list" style={{maxHeight: "45vh", overflow: "auto", overflowWrap: "anywhere"}}>{preview.items.map(item => <li key={item.id}>{item.id} · {item.version}</li>)}</ul> : <p>No versions are ready.</p>}
+      {preview?.items.length ? <ul className="sk-bulk-list" style={{maxHeight: "45vh", overflow: "auto", overflowWrap: "anywhere"}}>{preview.items.map(item => <li key={item.id}>{item.id} · {item.version} · {(item.score * 100).toFixed(1)}%{item.model ? ` · ${item.runs}/3 runs` : " · code skill"}</li>)}</ul> : <p>No versions are ready.</p>}
       <button className={className ?? "primary"} type="button" disabled={busy || !preview?.items.length} onClick={() => request(true)}>Confirm listed approvals</button>{" "}
       <button className={className} type="button" disabled={busy} onClick={() => { dialog.current?.close(); setPreview(null); }}>Cancel</button>
     </dialog>

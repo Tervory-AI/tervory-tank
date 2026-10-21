@@ -2153,7 +2153,7 @@ def make_ctx(pkg: skala.SkillPackage, tenant_id: uuid.UUID, task_id: uuid.UUID |
 
 
 # Evals and previews run under the platform tenant so their model spend never lands on a client.
-PLATFORM_TENANT = uuid.UUID("00000000-0000-0000-0000-000000000001")
+PLATFORM_TENANT = skala.PLATFORM_TENANT
 
 
 class VendorCall(BaseModel):
@@ -2313,7 +2313,7 @@ async def rollback_skill(skill_id: str, version: str, body: Approval) -> dict[st
 
 @app.post("/v1/skala/{skill_id}/{version}/retire", dependencies=[Depends(require_key)])
 async def retire_skill(skill_id: str, version: str, body: Approval) -> dict[str, Any]:
-    return await skala.change_version(pool(), get_package(skill_id, version), body.by, "retire", region=box_region())
+    return await skala.retire_version(pool(), skill_id, version, body.by)
 
 
 def known_engines() -> list[str]:

@@ -1022,3 +1022,6 @@ ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS provider_cost_usd numeric(20,10
 ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS research_sources jsonb;
 -- Unknown charges on failed calls require reconciliation; they are never called free.
 ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS research_cost_status text;
+
+-- SKALA-2: a source-review confirmation can authorize only one approval.
+ALTER TABLE tank.skill_source_reviews ADD COLUMN IF NOT EXISTS used_at timestamptz;

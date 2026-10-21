@@ -95,9 +95,11 @@ try {
     if (route.request().method() === "GET") return route.fulfill({json: fixture});
     const body = route.request().postDataJSON();
     actions.push(body);
-    if (body.action === "bulk-preview") return route.fulfill({json: {token: "preview-test", items: [{id: "base.find_site", version: "1.8.0"}]}});
+    if (body.action === "bulk-preview") return route.fulfill({json: {token: "preview-test", items: [{id: "base.find_site", version: "1.8.0", score: 1, runs: 1, model: false}, {id: "base.extract", version: "2.0.0", score: 1, runs: 3, model: true}]}});
     if (body.action === "bulk-confirm") return route.fulfill({json: {ok: true, approved: [{id: "base.find_site", version: "1.8.0"}]}});
-    if (body.action === "source-review") return route.fulfill({json: {source: "async def run(payload, ctx):\n    return payload\n# END OF FULL SOURCE", review_token: "source-test"}});
+    if (body.action === "source-review") return route.fulfill({json: {files: [{path: "run.py", source: "async def run(payload, ctx):\n    return payload\n# END OF FULL SOURCE"}, {path: "nested/helper.py", source: "def normalize(value):\n    return value.strip()"}], review_token: "source-test"}});
+    if (body.action === "evals") return route.fulfill({json: {score: 1, state: "approved", gate: "passed", passed: 5, total: 5,
+      details: Array.from({length: 5}, (_, i) => ({case: i, name: `Case ${i}`, passed: true, why: "ok", goal: {n:i}, result: {n:i}}))}});
     return route.fulfill({json: {ok: true}});
   });
   await page.goto(`http://127.0.0.1:${port}/`);
@@ -187,6 +189,10 @@ try {
   await page.getByRole("button", { name: "Cancel" }).click();
   await page.getByLabel("State").selectOption("");
   const findSite = page.getByRole("heading", {name: "base.find_site", exact: true}).locator("..");
+  const approved = findSite.locator(".sk-version").filter({has: page.getByText("1.7.0", {exact: true})});
+  await approved.getByRole("button", {name: "Run evals", exact: true}).click();
+  assert.ok(actions.some(a => a.action === "evals" && a.version === "1.7.0"));
+  await approved.getByText("approved", {exact: true}).waitFor();
   assert.equal(await findSite.getByText("1.6.0", {exact:true}).isVisible(), false);
   await findSite.getByText("History (1)").click();
   await findSite.getByRole("button", {name: "Roll back to 1.6.0"}).click();
@@ -194,7 +200,8 @@ try {
   assert.ok(actions.some(a => a.action === "rollback" && a.confirmed === true));
   await page.getByRole("button", {name: "Approve all ready", exact: true}).click();
   const bulk = page.getByRole("dialog", {name: "Confirm ready versions"});
-  await bulk.getByText("base.find_site · 1.8.0").waitFor();
+  await bulk.getByText("base.find_site · 1.8.0 · 100.0% · code skill").waitFor();
+  await bulk.getByText("base.extract · 2.0.0 · 100.0% · 3/3 runs").waitFor();
   assert.equal(await bulk.getByText("base.learned.example").count(), 0);
   await page.screenshot({ path: join(shots, "bulk-375.png") });
   await page.setViewportSize({width: 1440, height: 1000});
@@ -203,6 +210,8 @@ try {
   assert.ok(actions.some(a => a.action === "bulk-confirm" && a.token === "preview-test" && a.confirmed === true));
   await page.getByRole("heading", {name: "base.learned.example", exact:true}).locator("..").getByRole("button", {name:"Approve",exact:true}).click();
   await page.getByText("# END OF FULL SOURCE", {exact:false}).waitFor();
+  await page.getByRole("heading", {name: "nested/helper.py", exact:true}).waitFor();
+  await page.getByText("return value.strip()", {exact:false}).waitFor();
   await page.screenshot({ path: join(shots, "source-review-1440.png") });
   await page.setViewportSize({width: 375, height: 812});
   await page.screenshot({ path: join(shots, "source-review-375.png") });

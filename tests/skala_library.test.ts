@@ -82,7 +82,7 @@ test("descriptions stay on one line and code skills say no model", () => {
 test("actions follow the version state", () => {
   assert.equal(versionAction({ state: "candidate", present: true }), "evals");
   assert.equal(versionAction({ state: "staging", present: true }), "approve");
-  assert.equal(versionAction({ state: "approved", present: true }), null);
+  assert.equal(versionAction({ state: "approved", present: true }), "evals");
   assert.equal(versionAction({ state: "retired", present: true }), null);
   assert.equal(versionAction({ state: "candidate", present: false }), null);
   assert.equal(confirmApprove("base.find_site", "1.7.0"), "Approve base.find_site 1.7.0?");
