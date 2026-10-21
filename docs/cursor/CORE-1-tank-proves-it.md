@@ -114,3 +114,9 @@ Do not build the public endpoint now.
 - **The founder can override per task** on `/tank/proof`. Changing it re-prices that task's past rows in batches, marked "re-priced" with the date, and is logged with who, old, new and when.
 - **Where a client's real before-Tervory bills exist (CASE-1),** those replace the default for that client's case study.
 - **Every "would have cost" figure names its baseline,** on the founder page and in exports.
+
+**Headline rule (founder, 21 Oct, 09:02 PT): the number that can't be called padded leads.**
+- **Headline everywhere** (proof page, client dashboards, exports, and the later homepage ticker): savings against the **standard default model** above, as a percentage and as "N× cheaper". For example "95% cheaper (20×) than the standard model".
+- **Second line, always named:** savings against the provider's **top model** (for example astra), labelled "vs the top model".
+- **Every dollar figure names its baseline.** Never show a dollar saving without saying what it is compared against.
+- **Until shadow comparisons exist for a task,** its savings carry the note "same work assumed; quality comparison pending". Remove the note once that task has shadow evidence.
