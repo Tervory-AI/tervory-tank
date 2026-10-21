@@ -516,6 +516,10 @@ def quotes_from_roster(models: list[dict[str, Any]]) -> list[Quote]:
     quotes: list[Quote] = []
     for model in models:
         info = model.get("model_info") or {}
+        provider_model = str((model.get("litellm_params") or {}).get("model") or "")
+        # Perplexity presets use the dedicated research route, never generic chat/shadow.
+        if provider_model.startswith("perplexity/preset/"):
+            continue
         price = float(info.get("input_cost_per_token") or 0) + float(info.get("output_cost_per_token") or 0)
         quotes.append(Quote(name=str(model["model_name"]), price=price, funds=True, kind="model"))
     return quotes
