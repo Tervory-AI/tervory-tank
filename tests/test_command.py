@@ -938,6 +938,8 @@ async def test_auto_comparison_prices_same_tokens_with_frozen_tenant_policy(api,
     runtime.list_models = AsyncMock(return_value=[{'name': 'fixture-pin'}])
     async with pool.acquire() as conn:
         await conn.execute("INSERT INTO tank.proof_prices(model,family,input_usd,output_usd) VALUES('fixture-auto','fixture',0.001,0.002),('fixture-platform','fixture',0.5,0.5)")
+        # schema.sql now seeds a platform command.turn row; replace it with this test's fixture.
+        await conn.execute("DELETE FROM tank.policy WHERE task_type='command.turn' AND tenant_id IS NULL")
         await conn.execute("INSERT INTO tank.policy(tenant_id,task_type,model) VALUES(NULL,'command.turn','fixture-platform'),($1,'command.turn','fixture-auto')", TENANT)
     ledger_id = await seed_ledger(pool)
 

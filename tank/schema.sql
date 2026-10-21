@@ -1009,6 +1009,14 @@ ALTER TABLE tank.control_log ADD COLUMN IF NOT EXISTS task text;
 ALTER TABLE tank.control_log ADD COLUMN IF NOT EXISTS path text;
 CREATE INDEX IF NOT EXISTS control_log_tenant_at ON tank.control_log (tenant_id, at DESC);
 
+-- ---------- 21 Oct 2026: the window's turns need a platform policy ----------
+-- command.turn had no row, so every turn in /chats failed with "no policy".
+-- Tank's planning message supplies the system prompt; the founder promotes later.
+-- Kept above MODELS-2 so later re-apply tests see it as an existing row.
+INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_tokens_out, system_prompt) VALUES
+  ('command.turn', 1, 'luna', 'urgent', 'none', 2048, NULL)
+ON CONFLICT DO NOTHING;
+
 -- MODELS-2: provider tool charges are expenses, scoped to the platform price book.
 -- Checked 2026-10-21: https://docs.perplexity.ai/docs/getting-started/pricing
 -- Presets fast/low/medium/high use Fast Search ($0.001/invocation); fetch is $0.0005.
