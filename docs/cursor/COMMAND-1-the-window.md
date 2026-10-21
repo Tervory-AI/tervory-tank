@@ -87,3 +87,8 @@ Three builders work at once. Each lane changes only its own files and codes agai
 - `GET /v1/command/threads/{id}/events?after=<seq>`: replays events for a returning viewer. Every event carries a `seq`.
 - **Builds:** on a confirmed `build` card, Tank creates a row in `tank.command_builds {build_id, thread_id, brief_markdown, status, pr_url, ci_status, review_status}`. Workers poll `GET /v1/command/builds/next` with the worker key (`TANK_KEY_WORKERS`), take one, and report through `POST /v1/command/builds/{build_id}/progress` `{status, step_label, pr_url?, ci_status?}`. Each progress report becomes a `step` event on the thread. A reply in the thread while a build is open is sent to the worker as `{followup_text}` on its next poll.
 - **Roles:** the founder (TERVORY_ADMIN_USER_IDS) gets every tool. A client gets only their own squad tools. Tank enforces this; the page only hides what Tank refuses.
+
+## Model picker (added 20 Oct 20:10 PT, applies to Lanes A and B and to CLI-1)
+- The composer has a model picker, like Cursor's. The default is **Auto** (Tank picks the cheapest proven step). The list shows every roster model with its price per million tokens, from `GET /v1/models`.
+- A pinned model still goes through Tank, with a ledger row. The receipt also shows what Auto would have cost, so pinning a pricier model is visible.
+- Lane A: `turn` accepts `{model?: "auto" | <roster name>}`, and Tank refuses a name that is not on the roster.
