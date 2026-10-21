@@ -53,12 +53,12 @@ def test_page_matches_the_panel_and_hides_keys():
     assert "Ask Tank" in view
     assert "Search agents, models, ledger and tasks" in view
     assert "Skills" not in view
-    assert "pipelineTo(" in view
-    assert "Pipeline to ${name}" in (PAGE / "squads.ts").read_text(encoding="utf-8")
+    assert "pipelineTo(" not in view
+    assert 'aria-label="Boxes"' not in view
+    assert 'className="tk-box"' not in view
     assert "The key is held by LiteLLM." in (PAGE / "squads.ts").read_text(encoding="utf-8")
     assert "MODEL_KEY_LINE" in view
     assert "Key is missing" not in view
-    assert "squad.logo" in view
     assert 'squad.id === "tank"' not in view
     assert "models.ts" not in text
     assert "MODEL_ROSTER" not in text
@@ -66,7 +66,6 @@ def test_page_matches_the_panel_and_hides_keys():
     squads = (PAGE / "squads.ts").read_text(encoding="utf-8")
     for name in ("Base", "Tiger", "Market Lab", "Rig", "Tisan", "Radix", "Zenas", "Skala", "Tank"):
         assert f'name: "{name}"' in squads
-    assert "squads.map" in view
     assert "app/skala" not in text
     assert 'type="password"' not in text
     assert "sk-" not in text

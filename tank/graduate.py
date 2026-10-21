@@ -375,9 +375,9 @@ def _rolled_back(policy: dict[str, Any], reason: str) -> dict[str, Any]:
 
 
 def _wants_auto(policy: dict[str, Any]) -> bool:
-    value = policy.get("auto_promote", True)
+    value = policy.get("auto_promote", False)
     if value is None:
-        return True
+        return False
     return bool(value)
 
 
@@ -874,8 +874,9 @@ async def training_table(conn, tenant, region: str) -> list[dict]:
         JOIN tank.removed_batches r ON r.tenant_id=b.tenant_id AND r.batch_id=b.batch_id
         WHERE b.tenant_id=$1""", tenant)
     removed_models = {row["model_repo"] for row in removed_rows}
-    costs = await conn.fetch("""SELECT task_type,model,avg(cost_usd) AS cost FROM tank.ledger
+    costs = await conn.fetch("""SELECT task_type,model,percentile_cont(0.5) WITHIN GROUP (ORDER BY cost_usd) AS cost FROM tank.ledger
         WHERE tenant_id=$1 AND region=$2 AND ts>now()-interval '30 days' AND NOT cache_hit
+        AND agent NOT IN ('bench','shadow') AND outcome='delivered'
         GROUP BY task_type,model""", tenant, region)
     counts = {r['skill_id']: r['n'] for r in gold}
     prices = {(r['task_type'], r['model']): float(r['cost']) for r in costs}
