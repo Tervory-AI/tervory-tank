@@ -1064,3 +1064,13 @@ CREATE TABLE IF NOT EXISTS tank.command_attachments (
     FOREIGN KEY (thread_id,tenant_id) REFERENCES tank.command_threads(thread_id,tenant_id)
 );
 CREATE INDEX IF NOT EXISTS command_attachments_owner ON tank.command_attachments(tenant_id,user_id,thread_id);
+-- Ghost recovery idempotency; no production resource credentials or payloads.
+CREATE TABLE IF NOT EXISTS tank.ghost_recovery (
+    tenant_id uuid NOT NULL,
+    id uuid NOT NULL,
+    action text NOT NULL CHECK (action IN ('rerun_failed_deploy','restart_crashed_room')),
+    target text NOT NULL,
+    status text NOT NULL DEFAULT 'pending',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,id)
+);

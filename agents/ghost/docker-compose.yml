@@ -1,0 +1,53 @@
+# Separate Coolify resource, base /agents/ghost, isolated network only.
+# No production DB login, model key, control-plane key or Docker socket.
+services:
+  agent-ghost:
+    build:
+      context: ..
+      dockerfile: ghost/Dockerfile
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    environment:
+      AGENT_NAME: ghost
+      TANK_KEY: ${TANK_KEY_GHOST:-}
+      TANK_REGION: ${TANK_REGION:-us-east}
+      DATA_DIR: /data
+    volumes:
+      - agent_ghost_data:/data
+    networks: [gw]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    expose: ["8000"]
+  ghost-browser:
+    build:
+      context: ..
+      dockerfile: ghost/Dockerfile.browser
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 0.5
+    environment:
+      TANK_KEY: ${TANK_KEY_GHOST:-}
+    volumes:
+      - ghost_browser_data:/data
+    networks: [gw]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    expose: ["8000"]
+volumes:
+  agent_ghost_data:
+  ghost_browser_data:
+networks:
+  gw:
+    external: true
+    name: tervory-gw-ghost

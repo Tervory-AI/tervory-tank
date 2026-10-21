@@ -271,7 +271,7 @@ async def collect_once() -> None:
 
 
 
-ROOMS = ("base", "tiger", "market_lab", "rig", "zenas", "radix", "tisan")
+ROOMS = ("base", "tiger", "market_lab", "rig", "zenas", "radix", "tisan", "ghost")
 
 
 GOLD_RESPONSE_MAX_BYTES = 5 * 1024 * 1024
@@ -298,14 +298,22 @@ def skill_owners() -> dict[str, set[str]]:
     owners: dict[str, set[str]] = {}
     for package in load_packages().values():
         owners.setdefault(package.id, set()).add(package.agent)
+    # Ghost's incident labels are a learning task, not an executable Skala skill.
+    owners.setdefault("ghost.incident", set()).add("ghost")
     return owners
 
 
 def valid_auto_candidate(row: Any, room: str, region: str,
                          owners: dict[str, set[str]] | None = None) -> bool:
-    """Accept room-owned public labels with an optional nonempty label_family."""
+    """Accept public room labels and Ghost's private monthly incident labels."""
     owners = skill_owners() if owners is None else owners
-    return (isinstance(row, dict) and row.get("public") is True
+    private_ghost = (isinstance(row, dict) and room == "ghost"
+                     and row.get("skill_id") == "ghost.incident" and row.get("public") is False
+                     and isinstance(row.get("label_source"), str)
+                     and row["label_source"].startswith("ghost:incident:")
+                     and isinstance(row.get("label_family"), str)
+                     and re.fullmatch(r"ghost:incident:\d{4}-(0[1-9]|1[0-2])", row["label_family"]) is not None)
+    return (isinstance(row, dict) and (private_ghost or (room != "ghost" and row.get("public") is True))
             and row.get("client_matter", False) is False
             and row.get("tenant_id") in (None, str(PLATFORM_TENANT))
             and region in ("us-east", "za") and row.get("region") == region
@@ -389,13 +397,13 @@ async def collect_room_gold(day: date) -> dict[str, int]:
                                     (tenant_id,region,skill_id,agent,input,expected,source,source_ref,
                                      input_hash,holdout,auto_label,label_source,public,intake_day,label_family,
                                      batch_id,currency,unit,quarantine)
-                                    VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,'room_auto',$7,$8,$9,true,$10,true,$11,$12,$13,$14,$15,$16)
+                                    VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,'room_auto',$7,$8,$9,true,$10,$17,$11,$12,$13,$14,$15,$16)
                                     ON CONFLICT (tenant_id,region,skill_id,source,source_ref) DO NOTHING""",
                                     PLATFORM_TENANT, region, row["skill_id"], room, value, expected,
                                     input_hash([source, row["input"], row["expected"]]), input_hash(row["input"]),
                                     row.get("holdout") is True or is_holdout(PLATFORM_TENANT, row["skill_id"], row["input"]), source, day,
                                     row.get("label_family"), row.get("batch_id"), row.get("currency"),
-                                    row.get("unit"), row.get("quarantine"),
+                                    row.get("unit"), row.get("quarantine"), row["public"],
                                 )
                                 from gold import settle_auto_source
                                 await settle_auto_source(conn, {"tenant_id": PLATFORM_TENANT, "region": region,

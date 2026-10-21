@@ -4,6 +4,33 @@
 const TANK_URL = process.env.TANK_URL ?? "http://tank:8000";
 const TANK_API_KEY = process.env.TANK_API_KEY ?? "";
 
+// Founder-only Ghost corridor. Identity is resolved by the server action, never the browser.
+export type GhostIncident = {
+  id: string; target: string; signal: string; origin: string; state: string;
+  summary?: string; created_at: string; cost_usd: number;
+  steps: { step: string; ledger_id: string; cost_usd: number }[];
+  previous?: { cause: string; fix: string }[];
+  brief?: { title: string; cause: string; status: string; instructions: string[] };
+};
+export type GhostPanel = {
+  incidents: GhostIncident[];
+  monitor: { running: boolean; unavailable_checks: number };
+  integrations: Record<string, string>;
+};
+export function ghostPanel(userId: string): Promise<GhostPanel> {
+  return tank<GhostPanel>("/v1/ghost/incidents", { method: "GET", headers: { "X-Tervory-Admin": userId } });
+}
+export function ghostLook(userId: string, target: string, signal: string): Promise<GhostIncident> {
+  return tank<GhostIncident>("/v1/ghost/look", {
+    method: "POST", headers: { "X-Tervory-Admin": userId }, body: JSON.stringify({ target, signal }),
+  });
+}
+export function ghostResolve(userId: string, id: string, cause: string, fix: string): Promise<GhostIncident> {
+  return tank<GhostIncident>(`/v1/ghost/incidents/${encodeURIComponent(id)}/resolve`, {
+    method: "POST", headers: { "X-Tervory-Admin": userId }, body: JSON.stringify({ cause, fix }),
+  });
+}
+
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
 export type RouteResult = {
