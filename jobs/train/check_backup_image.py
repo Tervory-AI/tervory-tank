@@ -1,11 +1,10 @@
-"""Inside the backup image: real age, synthetic pg_dump, throwaway test identity.
+"""Inside the backup image: real age, synthetic pg_dump, public recipient only.
 
 Run with --network none. Never uses a real database, R2 bucket or restore key.
 """
 import asyncio
 import os
 from pathlib import Path
-import subprocess
 import sys
 import tempfile
 sys.path.insert(0, '/app/jobs/train')
@@ -13,9 +12,9 @@ import backup
 
 with tempfile.TemporaryDirectory() as directory:
     root = Path(directory)
-    identity = root / 'test-only-identity'
-    subprocess.run(['age-keygen', '-o', str(identity)], check=True, capture_output=True)
-    recipient = subprocess.check_output(['age-keygen', '-y', str(identity)], text=True).strip()
+    # Public example from https://github.com/FiloSottile/age#readme.
+    # This fixture is never used by the backup worker itself.
+    recipient = 'age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p'
     fixture = b'public synthetic database backup fixture\n'
     test_bin = root / 'bin'
     test_bin.mkdir()
@@ -30,6 +29,4 @@ with tempfile.TemporaryDirectory() as directory:
     cipher = encrypted.read_bytes()
     assert cipher.startswith(b'age-encryption.org/v1')
     assert fixture not in cipher
-    restored = subprocess.check_output(['age', '--decrypt', '--identity', str(identity), str(encrypted)])
-    assert restored == fixture
-print('PASS: real age encryption/decryption round trip with synthetic dump and network disabled')
+print('PASS: real age encryption of a synthetic dump; no private key; network disabled')

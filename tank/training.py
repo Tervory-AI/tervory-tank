@@ -17,6 +17,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import httpx
+from storage import archive_training_snapshot
 from fastapi import APIRouter, Depends, HTTPException
 
 from gold import (PLATFORM_TENANT, Reviewer, add_candidate, encoded, input_hash,
@@ -533,6 +534,8 @@ async def upload_dataset(client: httpx.AsyncClient, org: str, agent: str, day: s
         or not exportable({**row, "tenant_id": PLATFORM_TENANT}) for row in rows
     ):
         raise ValueError("Unsafe training export")
+    data = "\n".join(encoded(row) for row in rows) + "\n"
+    await archive_training_snapshot(agent, day, data.encode(), region=region)
     name = f"tervory-public-{agent}"
     created = await client.post("https://huggingface.co/api/repos/create",
                                 json={"type": "dataset", "name": name, "organization": org, "private": True})
@@ -542,7 +545,6 @@ async def upload_dataset(client: httpx.AsyncClient, org: str, agent: str, day: s
     info = await client.get(f"https://huggingface.co/api/datasets/{repo}")
     if info.status_code != 200 or info.json().get("private") is not True:
         raise RuntimeError("Dataset is not private")
-    data = "\n".join(encoded(row) for row in rows) + "\n"
     # Native Hub commit API, no new runtime dependency; a date is a complete snapshot.
     operations = [
         {"key": "header", "value": {"summary": f"Training snapshot {day}"}},

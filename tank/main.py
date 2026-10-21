@@ -3087,6 +3087,7 @@ app.include_router(__import__("admin").router)
 
 app.include_router(__import__("gold").router)
 app.include_router(__import__("training").router)
+app.include_router(__import__("storage").router)
 
 
 @app.get("/v1/training/graduation")

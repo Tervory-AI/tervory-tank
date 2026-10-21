@@ -229,10 +229,24 @@ def test_backup_missing_pair_never_dumps(monkeypatch):
 
 
 def test_tank_adapter_only_has_uploads_credentials():
-    source = (ROOT / 'tank' / 'storage.py').read_text()
-    assert "Storage('uploads'" in source
-    assert 'R2_ACCESS_KEY_ID_' not in source
-    assert 'R2_SECRET_ACCESS_KEY_' not in source
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('bucket1_tank_storage', ROOT / 'tank/storage.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    class Tracked(dict):
+        def get(self, key, *args):
+            reads.append(key)
+            return super().get(key, *args)
+    reads = []
+    env = Tracked(environment('uploads', **environment('ghost')))
+    async def scenario():
+        store = module.uploads(environ=env)
+        await store.close()
+        with pytest.raises(module.StorageError, match='only UPLOADS'):
+            module.Storage('ghost', environ=env)
+    asyncio.run(scenario())
+    assert [key for key in reads if key.startswith('R2_ACCESS_KEY_ID_')] == ['R2_ACCESS_KEY_ID_UPLOADS']
+    assert [key for key in reads if key.startswith('R2_SECRET_ACCESS_KEY_')] == ['R2_SECRET_ACCESS_KEY_UPLOADS']
 
 
 def test_archive_restore_checks_hashes_before_replacing_file(tmp_path, monkeypatch):

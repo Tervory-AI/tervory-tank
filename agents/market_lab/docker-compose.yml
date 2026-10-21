@@ -14,6 +14,9 @@ services:
     environment:
       AGENT_NAME: market_lab
       R2_BUCKET: tervory-market-lab
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID_MARKET_LAB: ${R2_ACCESS_KEY_ID_MARKET_LAB:-}
+      R2_SECRET_ACCESS_KEY_MARKET_LAB: ${R2_SECRET_ACCESS_KEY_MARKET_LAB:-}
       DATABASE_URL: postgresql://agent_market_lab:${AGENT_DB_PASSWORD_MARKET_LAB}@postgres:5432/${POSTGRES_DB:-tervory}
       TANK_URL: http://tank:8000
       TANK_KEY: ${TANK_KEY_MARKET_LAB:-}

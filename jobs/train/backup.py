@@ -40,13 +40,18 @@ def backup_environment() -> dict[str, str]:
         raise StorageError('DATABASE_URL is missing or invalid for backup') from None
 
 
-async def encrypted_dump(target: Path) -> None:
+def dump_configuration() -> tuple[dict[str, str], str]:
     recipient = os.environ.get('R2_BACKUP_RECIPIENT', '')
     if re.fullmatch(r'age1[023456789acdefghjklmnpqrstuvwxyz]{58}', recipient) is None:
         raise StorageError('R2_BACKUP_RECIPIENT must be a public age recipient')
     env = backup_environment()
     if not shutil.which('pg_dump') or not shutil.which('age'):
         raise StorageError('Backup requires pg_dump and age on this cloud worker')
+    return env, recipient
+
+
+async def encrypted_dump(target: Path) -> None:
+    env, recipient = dump_configuration()
     read_fd, write_fd = os.pipe()
     children = []
     try:
@@ -80,6 +85,8 @@ async def encrypted_dump(target: Path) -> None:
 
 
 async def backup_once(owner: str = 'uploads') -> dict:
+    if owner != 'uploads':
+        raise StorageError('Database backups use UPLOADS only')
     store = Storage(owner)
     try:
         # Region check before launching pg_dump: ZA databases never leave ZA.
@@ -93,6 +100,15 @@ async def backup_once(owner: str = 'uploads') -> dict:
 
 
 async def main(owner: str, nightly: bool) -> None:
+    if owner != 'uploads':
+        raise StorageError('Database backups use UPLOADS only')
+    # Fail at worker start, not silently after waiting for the first night.
+    store = Storage(owner)
+    try:
+        store._prefix(PLATFORM_TENANT, 'backups', public=False)
+        dump_configuration()
+    finally:
+        await store.close()
     while True:
         if nightly:
             now = datetime.now(timezone.utc)
@@ -108,7 +124,7 @@ async def main(owner: str, nightly: bool) -> None:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--owner', default='uploads')
+    parser.add_argument('--owner', choices=['uploads'], default='uploads')
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument('--once', action='store_true')
     mode.add_argument('--nightly', action='store_true')

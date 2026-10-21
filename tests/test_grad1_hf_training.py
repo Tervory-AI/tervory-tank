@@ -218,6 +218,8 @@ async def test_reservation_blocks_second_submission_even_after_hf_error(database
 
 @pytest.mark.asyncio
 async def test_public_za_decided_case_exports_but_client_matter_does_not(database, monkeypatch):
+    from unittest.mock import AsyncMock
+    monkeypatch.setattr(training, "archive_training_snapshot", AsyncMock())
     import base64
     import gold
     import httpx

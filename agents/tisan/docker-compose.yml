@@ -15,6 +15,9 @@ services:
     environment:
       AGENT_NAME: tisan
       R2_BUCKET: tervory-tisan
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID_TISAN: ${R2_ACCESS_KEY_ID_TISAN:-}
+      R2_SECRET_ACCESS_KEY_TISAN: ${R2_SECRET_ACCESS_KEY_TISAN:-}
       DATABASE_URL: postgresql://agent_tisan:${AGENT_DB_PASSWORD_TISAN}@postgres:5432/${POSTGRES_DB:-tervory}
       TANK_URL: http://tank:8000
       TANK_KEY: ${TANK_KEY_TISAN:-}

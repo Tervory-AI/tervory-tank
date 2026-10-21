@@ -20,10 +20,12 @@ def storage_router(agent: str) -> APIRouter:
     router = APIRouter(prefix='/storage', dependencies=[Depends(require_room)])
 
     @asynccontextmanager
-    async def client():
+    async def client(region: str | None = None):
         store = None
         try:
             store = Storage(agent)
+            if region is not None and region != store.region:
+                raise HTTPException(409, "Storage region does not match this room")
             yield store
         except StorageError as exc:
             raise HTTPException(503, str(exc)) from None
@@ -37,14 +39,14 @@ def storage_router(agent: str) -> APIRouter:
             return await store.usage()
 
     @router.get('/objects/{category}')
-    async def objects(category: str, tenant_id: uuid.UUID, public: bool = False):
-        async with client() as store:
+    async def objects(category: str, tenant_id: uuid.UUID, public: bool = False, region: str | None = None):
+        async with client(region) as store:
             return await store.objects(str(tenant_id), category, public=public)
 
     @router.put('/objects/{category}/{name:path}')
-    async def put(category: str, name: str, tenant_id: uuid.UUID, request: Request, public: bool = False):
+    async def put(category: str, name: str, tenant_id: uuid.UUID, request: Request, public: bool = False, region: str | None = None):
         # Validate credentials before reading the request or making any changes.
-        async with client() as store:
+        async with client(region) as store:
             data = bytearray()
             async for chunk in request.stream():
                 data.extend(chunk)
@@ -54,8 +56,8 @@ def storage_router(agent: str) -> APIRouter:
             return {'bucket': store.bucket, 'key': key, 'size_bytes': len(data)}
 
     @router.get('/objects/{category}/{name:path}')
-    async def get(category: str, name: str, tenant_id: uuid.UUID, public: bool = False):
-        async with client() as store:
+    async def get(category: str, name: str, tenant_id: uuid.UUID, public: bool = False, region: str | None = None):
+        async with client(region) as store:
             data = await store.get(str(tenant_id), category, name, public=public)
             return Response(data, media_type='application/octet-stream')
 
