@@ -6,6 +6,9 @@ import { clientLabel, presentCard, presentReceipt, presentSnapshot, presentThrea
 import { normalizeSnapshot, readEvents, type Card, type Receipt, type Snapshot, type Thread } from "../../contract";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+// Coolify ends HTTPS before Next, so request.url is http:// while the browser's Origin is https://.
+// Compare hosts, not full origins; a browser cannot forge the Host header.
+const sameHost = (request: Request) => { try { return new URL(request.headers.get("origin") ?? "").host === (request.headers.get("host") ?? new URL(request.url).host); } catch { return false; } };
 type Context = { params: Promise<{ path: string[] }> };
 const json = (data: unknown, status = 200) => Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
 const attachmentId = (value: unknown): value is string => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
@@ -30,7 +33,7 @@ async function boundedBody(request: Request, limit: number): Promise<Uint8Array>
 }
 async function handle(request: Request, context: Context): Promise<Response> {
   try {
-    if (request.method !== "GET" && request.headers.get("origin") !== new URL(request.url).origin) return json({ error: "This request must come from your workspace." }, 403);
+    if (request.method !== "GET" && !sameHost(request)) return json({ error: "This request must come from your workspace." }, 403);
     const identity = await activeTenant();
     if (!identity) return json({ error: "Please sign in and choose your workspace." }, 401);
     const founder = isFounder(identity.userId);
