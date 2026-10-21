@@ -15,10 +15,24 @@ from workers.settings import Settings
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def _argv() -> list[str]:
-    from tests.test_workers_1 import _settings
+def _settings() -> Settings:
+    return Settings(  # type: ignore[call-arg]
+        max_tasks=1,
+        task_cpus=2,
+        task_memory="4g",
+        task_timeout_s=90 * 60,
+        link="internal",
+        tank_url="http://tank:8000",
+        tenant_id="00000000-0000-0000-0000-000000000001",
+        task_type="reason.brief",
+        repo="Tervory-AI/tervory-tank",
+        app_id="12345",
+        installation_id="99",
+    )
 
-    settings: Settings = _settings()
+
+def _argv() -> list[str]:
+    settings = _settings()
     return task_argv(
         settings,
         name="tervory-worker-7-abcd1234",
@@ -90,8 +104,6 @@ def test_podman_tail_is_redacted_and_short() -> None:
 
 
 def test_build_failure_logs_podman_tail(caplog: pytest.LogCaptureFixture) -> None:
-    from tests.test_workers_1 import _settings
-
     async def runner(argv: list[str], *, timeout_s: int, kill: list[str] | None = None) -> tuple[int, str]:
         return 125, "STEP 3/9\nError: building at STEP \"RUN useradd\": exit status 4"
 
