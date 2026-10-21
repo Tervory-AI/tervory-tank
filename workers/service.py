@@ -23,6 +23,7 @@ from workers.redact import install as install_redact
 from workers.redact import redact
 from workers.secrets_io import stage
 from workers.settings import Settings, SettingsError, from_env
+from workers.tank_status import HEARTBEAT_S, LastError, TankControl
 from workers.task_run import Outcome, parse_result, summary_for
 
 log = logging.getLogger("workers")
@@ -33,8 +34,9 @@ MALFORMED = (
 
 
 class Service:
-    def __init__(self, settings: Settings, github: GitHub, launcher: "Launcher") -> None:
+    def __init__(self, settings: Settings, github: GitHub, launcher: "Launcher", control: TankControl | None = None) -> None:
         self.settings = settings
+        self.control = control
         self.github = github
         self.launcher = launcher
         self.records: list[dict[str, Any]] = []
@@ -66,6 +68,9 @@ class Service:
             if task.number in self.inflight:
                 continue
             if running >= self.settings.max_tasks:
+                return
+            # The founder's workers pause is read before taking any task. It fails closed.
+            if self.control is None or await self.control.paused():
                 return
             running += 1
             self.inflight.add(task.number)
@@ -284,6 +289,9 @@ class Runner:
 async def serve(settings: Settings) -> None:
     install_redact()
     records: list[dict[str, Any]] = []
+    state: dict[str, Any] = {"busy": False, "issue": None}
+    last_error = LastError()
+    log.addHandler(last_error)
 
     async def handle(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
@@ -298,7 +306,8 @@ async def serve(settings: Settings) -> None:
         if method != "GET":
             body, status, kind = b"Method not allowed\n", "405 Method Not Allowed", "text/plain"
         elif path == "/health":
-            body, status, kind = b'{"ok":true}\n', "200 OK", "application/json"
+            body = (json.dumps({"ok": True, "busy": bool(state["busy"])}) + "\n").encode()
+            status, kind = "200 OK", "application/json"
         elif path == "/workers":
             body = status_page.render(records).encode()
             status, kind = "200 OK", "text/html; charset=utf-8"
@@ -318,19 +327,32 @@ async def serve(settings: Settings) -> None:
     # Loopback only. On the Boston host nothing else should reach the status page.
     server = await asyncio.start_server(handle, "127.0.0.1", settings.service_port)
     log.info("workers listening on 127.0.0.1:%s", settings.service_port)
-    if not settings.github_ready or not Path(settings.private_key_file).is_file():
-        log.info("GitHub App is not configured; not taking tasks")
-        async with server:
-            await server.serve_forever()
-        return
     async with httpx.AsyncClient(timeout=60) as client:
+        control = TankControl(settings, client)
+        inflight: set[int] = set()
+
+        async def beat() -> None:
+            while True:
+                await control.paused()
+                await control.heartbeat(issue=min(inflight) if inflight else None, last_error=last_error.line)
+                await asyncio.sleep(HEARTBEAT_S)
+
+        asyncio.create_task(beat())
+        if not settings.github_ready or not Path(settings.private_key_file).is_file():
+            log.warning("GitHub App is not configured; not taking tasks")
+            async with server:
+                await server.serve_forever()
+            return
         github = GitHub(settings.repo, client)
-        service = Service(settings, github, Launcher(Runner()))
+        service = Service(settings, github, Launcher(Runner()), control)
         records_ref = service.records
+        inflight = service.inflight
 
         async def refresh_view() -> None:
             while True:
                 records[:] = list(records_ref)
+                state["busy"] = bool(service.inflight)
+                state["issue"] = min(service.inflight) if service.inflight else None
                 await asyncio.sleep(1)
 
         asyncio.create_task(refresh_view())

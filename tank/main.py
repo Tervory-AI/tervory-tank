@@ -3076,6 +3076,8 @@ async def mark_billing_event_handled(body: BillingEventHandled) -> dict[str, boo
 
 app.include_router(__import__("admin").router)
 app.include_router(__import__("controls").router)
+app.include_router(__import__("workers_status").router)
+app.include_router(__import__("workers_status").founder_router)
 app.include_router(__import__("dashboards").router)
 
 app.include_router(__import__("gold").router)

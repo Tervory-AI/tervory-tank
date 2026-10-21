@@ -870,3 +870,21 @@ ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS provider_cost_usd numeric(20,10
 ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS research_sources jsonb;
 -- Unknown charges on failed calls require reconciliation; they are never called free.
 ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS research_cost_status text;
+
+-- WORKERS-2: host workers check-in and the founder's workers pause. New tables only.
+CREATE TABLE IF NOT EXISTS tank.workers_heartbeat (
+    worker text PRIMARY KEY,
+    state text NOT NULL CHECK (state IN ('running','paused')),
+    issue integer,
+    commit text NOT NULL,
+    last_error text,
+    seen_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS tank.workers_controls (
+    tenant_id uuid NOT NULL,
+    name text NOT NULL CHECK (name = 'workers_paused'),
+    value boolean NOT NULL,
+    updated_by text NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, name)
+);

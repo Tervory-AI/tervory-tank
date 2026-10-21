@@ -67,6 +67,15 @@ async function render() {
   const view={data:fixture,signups:{total:1,recent:[{id:'user',name:'Alex Example',company:'Example Company',country:'United States',plan:'Trial',createdAt:Date.UTC(2026,9,21)}],days:[]},paying:0,paused:false,models:[],refused:[],errors:[]};
   const control=renderToStaticMarkup(React.createElement(FounderDashboard,{view}));
   for (const label of ['SKALA-2','GHOST-1','AGENT-1','BATCH-1']) assert(control.includes(label));
+  // WORKERS-2 tile: status, commit, last check-in, Pause/Resume; "not checking in" after 3 minutes.
+  assert(control.includes('Workers status unavailable') && control.includes('Workers pause unavailable'));
+  const beat=(ageS,state='running',issue=211)=>({worker:'boston',state,issue,commit:'c379a45deadbeef',last_error:null,seen_at:new Date(Date.now()-ageS*1000).toISOString(),age_s:ageS,checking_in:ageS<=180});
+  const tile=w=>renderToStaticMarkup(React.createElement(FounderDashboard,{view:{...view,workers:w}}));
+  const live=tile({workers_paused:false,worker:beat(30),stale_after_s:180});
+  assert(live.includes('Running · issue #211') && live.includes('c379a45deadb') && live.includes('Pause workers') && !live.includes('not checking in'));
+  const stale=tile({workers_paused:true,worker:beat(200,'paused',null),stale_after_s:180});
+  assert(stale.includes('not checking in') && stale.includes('Resume workers'));
+  assert(tile({workers_paused:false,worker:null,stale_after_s:180}).includes('No check-in yet'));
   const {signupSource,payingSource}=require('../workspace/app/control/sources.ts');
   process.env.STRIPE_SECRET_KEY='sk_test_dummy';
   assert.equal(await payingSource(),2);

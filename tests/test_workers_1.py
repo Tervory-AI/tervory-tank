@@ -391,6 +391,13 @@ def test_host_env_template_names_the_settings() -> None:
     assert "BEGIN PRIVATE KEY" not in (ROOT / "docs/workers/README.md").read_text(encoding="utf-8")
 
 
+class _Open:
+    """The founder's workers pause, switched off."""
+
+    async def paused(self) -> bool:
+        return False
+
+
 class _Launcher:
     def __init__(self, outcome_status: str = "draft") -> None:
         self.calls = 0
@@ -472,7 +479,7 @@ async def test_worker_label_opens_a_draft_and_marks_ready(tmp_path: Path) -> Non
     github = _client(handler)
     launcher = _Launcher()
     settings = _settings(private_key_file=str(key_file), state_dir=str(tmp_path))
-    service = Service(settings, github, launcher)  # type: ignore[arg-type]
+    service = Service(settings, github, launcher, _Open())  # type: ignore[arg-type]
     service.pause_s = 0
     await service.poll_once(TOKEN)
     await asyncio.gather(*service.jobs)
@@ -520,7 +527,7 @@ async def test_ci_failure_stays_a_draft(tmp_path: Path) -> None:
         return httpx.Response(404)
 
     github = _client(handler)
-    service = Service(_settings(private_key_file=str(key_file)), github, _Launcher())  # type: ignore[arg-type]
+    service = Service(_settings(private_key_file=str(key_file)), github, _Launcher(), _Open())  # type: ignore[arg-type]
     service.pause_s = 0
     await service.poll_once(TOKEN)
     await asyncio.gather(*service.jobs)
@@ -557,7 +564,7 @@ async def test_one_task_at_a_time_and_bad_issue_gets_one_comment() -> None:
     github = _client(handler)
     launcher = _Launcher()
     launcher.release.clear()
-    service = Service(_settings(private_key_file=str(key_file)), github, launcher)  # type: ignore[arg-type]
+    service = Service(_settings(private_key_file=str(key_file)), github, launcher, _Open())  # type: ignore[arg-type]
     await service.poll_once(TOKEN)
     await launcher.started.wait()
     await service.poll_once(TOKEN)
@@ -605,7 +612,7 @@ async def test_existing_green_draft_is_marked_ready_without_a_new_container() ->
 
     github = _client(handler)
     launcher = _Launcher()
-    service = Service(_settings(), github, launcher)  # type: ignore[arg-type]
+    service = Service(_settings(), github, launcher, _Open())  # type: ignore[arg-type]
     await service.poll_once(TOKEN)
     assert launcher.calls == 0
     assert service.records[0]["status"] == "ready"

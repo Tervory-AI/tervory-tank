@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Install or update the Tervory workers service on a host (Boston first). Idempotent. Run as root.
 #
-#   sudo workers/host/install.sh [--subid-start N] [--no-start]
+#   sudo workers/host/install.sh [--subid-start N] [--no-start] [--commit SHA --tree SHA]
+#   (--commit/--tree only when the source is not a git checkout, e.g. a git archive tarball)
 #
 # What it does, in order:
 #   1. apt: podman, uidmap, slirp4netns, passt, python3-venv from the distro's own repos, after a dry
@@ -12,11 +13,11 @@
 #   4. Lingering (loginctl enable-linger) so the user's systemd manager runs without a login.
 #   5. /etc/tervory-workers: dir root:tervory-workers 0750, worker.env and the App key 0640.
 #      A missing worker.env is created from worker.env.example with EMPTY secret values.
-#   6. Code to /srv/tervory-workers/app (root-owned, read-only to the user), venv in
-#      /srv/tervory-workers/venv.
-#   7. The systemd user unit, then checks podman as the user and fails loudly if rootless podman,
-#      cgroups v2 delegation, the OCI runtime or slirp4netns are not usable.
-#   8. Enables and (re)starts the unit unless --no-start.
+#   6. Code to /srv/tervory-workers/app with COMMIT and WORKERS_TREE, venv in /srv/tervory-workers/venv.
+#      Owned by tervory-workers so the auto-update timer (workers/updater.py) can replace it.
+#   7. The systemd user units (service + auto-update timer), then checks podman as the user and
+#      fails loudly if rootless podman, cgroups v2 delegation, the runtime or slirp4netns are missing.
+#   8. Enables and (re)starts the service and the timer unless --no-start.
 #
 # This file holds no secret. Values live only in /etc/tervory-workers on the server.
 set -euo pipefail
@@ -29,10 +30,12 @@ SRV_DIR="/srv/tervory-workers"
 APP_DIR="$SRV_DIR/app"
 VENV_DIR="$SRV_DIR/venv"
 UNIT_NAME="tervory-workers.service"
+UPDATE_UNITS=(tervory-workers-update.service tervory-workers-update.timer)
+TIMER_NAME="tervory-workers-update.timer"
 SUBID_COUNT=65536
 SUBID_FLOOR=100000
 # crun explicitly: podman accepts runc too, and Docker's containerd.io ships one. We want crun.
-APT_PACKAGES=(podman crun uidmap slirp4netns passt dbus-user-session python3 python3-venv)
+APT_PACKAGES=(podman crun uidmap slirp4netns passt dbus-user-session python3 python3-venv git)
 # Never let apt touch these. podman-docker replaces the docker CLI.
 APT_FORBIDDEN_RE='^(Inst|Remv|Purg|Conf) (docker[^ ]*|containerd[^ ]*|runc|moby[^ ]*|podman-docker)( |$)'
 SECRET_NAMES=(GITHUB_APP_ID GITHUB_APP_INSTALLATION_ID TANK_KEY_WORKERS)
@@ -170,18 +173,27 @@ ensure_secrets_dir() {
 }
 
 deploy_code() {
-  local src
+  local commit=$1 tree=$2 src
   src=$(cd "$(script_dir)/../.." && pwd)
   [ -f "$src/workers/service.py" ] || die "run this from a checkout of tervory-tank"
-  install -d -o root -g root -m 0755 "$SRV_DIR"
+  if [ -z "$commit" ] && git -C "$src" rev-parse --git-dir >/dev/null 2>&1; then
+    commit=$(git -C "$src" rev-parse HEAD)
+    tree=$(git -C "$src" rev-parse HEAD:workers)
+    git -C "$src" diff --quiet HEAD -- workers || die "workers/ has uncommitted changes in $src"
+  fi
+  [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || commit=unknown
+  [[ "$tree" =~ ^[0-9a-f]{40}$ ]] || tree=""
+  install -d -o "$WORKER_USER" -g "$WORKER_USER" -m 0755 "$SRV_DIR"
   local stage="$SRV_DIR/app.new"
   rm -rf "$stage"
-  install -d -o root -g root -m 0755 "$stage"
+  install -d -m 0755 "$stage"
   (cd "$src" && tar --exclude='__pycache__' --exclude='*.pyc' -cf - workers) | tar -C "$stage" --no-same-owner -xf -
-  chown -R root:root "$stage"
+  echo "$commit" > "$stage/COMMIT"
+  echo "$tree" > "$stage/WORKERS_TREE"
   find "$stage" -type d -exec chmod 0755 {} +
   find "$stage" -type f -exec chmod 0644 {} +
   find "$stage" -type f -name '*.sh' -exec chmod 0755 {} +
+  chown -R "$WORKER_USER:$WORKER_USER" "$stage"
   rm -rf "$SRV_DIR/app.old"
   [ ! -d "$APP_DIR" ] || mv "$APP_DIR" "$SRV_DIR/app.old"
   mv "$stage" "$APP_DIR"
@@ -196,9 +208,9 @@ deploy_code() {
     "$VENV_DIR/bin/pip" install -q --disable-pip-version-check -r "$APP_DIR/workers/requirements.txt"
     echo "$want" > "$VENV_DIR/.requirements.sha256"
   fi
-  chown -R root:root "$VENV_DIR"
+  chown -R "$WORKER_USER:$WORKER_USER" "$VENV_DIR"
   chmod -R go-w "$VENV_DIR"
-  say "code in $APP_DIR, venv in $VENV_DIR"
+  say "code in $APP_DIR (commit ${commit:0:12}), venv in $VENV_DIR"
 }
 
 as_user() {
@@ -215,7 +227,10 @@ install_unit() {
   home=$(getent passwd "$WORKER_USER" | cut -d: -f6)
   unit_dir="$home/.config/systemd/user"
   as_user mkdir -p "$unit_dir"
-  install -o "$WORKER_USER" -g "$WORKER_USER" -m 0644 "$(script_dir)/$UNIT_NAME" "$unit_dir/$UNIT_NAME"
+  local unit
+  for unit in "$UNIT_NAME" "${UPDATE_UNITS[@]}"; do
+    install -o "$WORKER_USER" -g "$WORKER_USER" -m 0644 "$(script_dir)/$unit" "$unit_dir/$unit"
+  done
   as_user systemctl --user daemon-reload
 }
 
@@ -255,15 +270,18 @@ start_unit() {
   as_user systemctl --user restart "$UNIT_NAME"
   sleep 3
   as_user systemctl --user is-active --quiet "$UNIT_NAME" || die "$UNIT_NAME did not stay active"
-  say "$UNIT_NAME is active"
+  as_user systemctl --user enable --now "$TIMER_NAME" >/dev/null
+  say "$UNIT_NAME is active; $TIMER_NAME is enabled"
 }
 
 main() {
-  local subid_start="" start=1
+  local subid_start="" start=1 commit="" tree=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --subid-start) subid_start=${2:?}; shift 2 ;;
       --no-start) start=0; shift ;;
+      --commit) commit=${2:?}; shift 2 ;;
+      --tree) tree=${2:?}; shift 2 ;;
       *) die "unknown option $1" ;;
     esac
   done
@@ -274,7 +292,7 @@ main() {
   ensure_linger
   check_apparmor
   ensure_secrets_dir
-  deploy_code
+  deploy_code "$commit" "$tree"
   install_unit
   check_podman
   if [ "$start" -eq 1 ]; then

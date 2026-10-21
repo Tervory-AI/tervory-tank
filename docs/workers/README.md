@@ -112,11 +112,33 @@ What it does:
 4. Enables lingering (`loginctl enable-linger`) so the user's systemd manager runs without a login. This is the same pattern as `tngo-preview.service`.
 5. Checks AppArmor. Ubuntu sets `kernel.apparmor_restrict_unprivileged_userns=1`, so rootless podman depends on the `podman` profile in `/etc/apparmor.d`. The script makes sure it is loaded.
 6. Creates `/etc/tervory-workers` (owner root, group `tervory-workers`, mode `0750`). It copies the template to `worker.env` only if `worker.env` is missing, and sets `worker.env` and `github-app.pem` to owner root, group `tervory-workers`, mode `0640`. It prints the names (never the values) that are still empty.
-7. Copies `workers/` to `/srv/tervory-workers/app` and builds the venv in `/srv/tervory-workers/venv`. Both are root-owned, so the service can read the code but not change it.
-8. Installs the unit to `~tervory-workers/.config/systemd/user/`. Then, as the user, it checks `podman info`: rootless, cgroups v2 with `cpu`, `memory` and `pids` delegated, an OCI runtime, slirp4netns, and podman 5.x (podman 6 removed slirp4netns). It fails loudly if any is missing.
-9. Enables and restarts the unit, unless `--no-start` is given.
+7. Copies `workers/` to `/srv/tervory-workers/app`, with `COMMIT` and `WORKERS_TREE` (the git commit, and the tree of `workers/`), and builds the venv in `/srv/tervory-workers/venv`. Both are owned by `tervory-workers` so the auto-update timer can replace them. Use `--commit`/`--tree` when the source is a tarball, not a git checkout.
+8. Installs the units (`tervory-workers.service`, `tervory-workers-update.service`, `tervory-workers-update.timer`) to `~tervory-workers/.config/systemd/user/`. Then, as the user, it checks `podman info`: rootless, cgroups v2 with `cpu`, `memory` and `pids` delegated, an OCI runtime, slirp4netns, and podman 5.x (podman 6 removed slirp4netns). It fails loudly if any is missing.
+9. Enables and restarts the service and enables the update timer, unless `--no-start` is given.
 
-To update, pull the checkout and run `install.sh` again. It replaces the code, reinstalls the venv only when `workers/requirements.txt` changed, and restarts the unit.
+To update by hand, run `install.sh` again from a newer checkout. It replaces the code, reinstalls the venv only when `workers/requirements.txt` changed, and restarts the unit.
+
+### Auto-update (no server login needed)
+
+`tervory-workers-update.timer` (user timer, every 5 minutes) runs `python -m workers.updater` as `tervory-workers`:
+
+1. It mints a GitHub App installation token and fetches `main` into `~/.cache/tervory-workers/repo` (blobless). The token reaches git only through `GIT_CONFIG_*` environment variables, never in argv, a URL or a log.
+2. It compares the tree of `workers/` on `main` with the deployed `WORKERS_TREE`. If they are the same, it does nothing. Squash merges are fine, because it compares trees, not commits.
+3. If `main` does not have `workers/host/tervory-workers.service` yet (an older main from before this design), it skips and logs it, so the host code is never replaced by the Docker-era code.
+4. If a task is running (`/health` says `busy`), it waits for the next run. It never kills a task.
+5. Otherwise it extracts `workers/` at `main`, sets modes to 0755/0644, refreshes the venv if `requirements.txt` changed, swaps the directory, writes `COMMIT` and `WORKERS_TREE`, and restarts `tervory-workers.service`.
+
+Each update logs one line, for example `workers updated: 4c30622a1b2c -> 9f1e0d3c4b5a`. See `journalctl --user -u tervory-workers-update`. No secrets are logged.
+
+Because the code is owned by `tervory-workers` so it can update itself, the service could change its own code. That gives it nothing new, since it already runs as that user. Task containers never mount the code directory.
+
+### Heartbeat, pause and the /control tile
+
+- **Heartbeat:** every 60 seconds the service sends `POST {TANK_URL}/v1/workers/heartbeat` with `TANK_KEY_WORKERS`. It sends `state` (`running` or `paused`), the current issue, the deployed commit, and the last warning or error line, redacted with `workers/redact.py` (Tank redacts again). Tank keeps one row per worker in the new table `tank.workers_heartbeat`.
+- **Pause:** before taking any task, the worker calls `GET {TANK_URL}/v1/workers/paused`. Anything other than a clear `{"paused": false}` counts as paused (fail closed). A task already running finishes. The switch is the second founder-only control in `tank/controls.py` (`PUT /v1/controls/workers-paused`). It is logged exactly like the paid pause, in `tank.control_log` (`name='workers_paused'`, who, old, new, time). Its state lives in the new table `tank.workers_controls`, because `tank.controls` only allows `paid_paused` and existing tables are not changed.
+- **/control:** the Workers tile shows status, commit, last check-in and a Pause/Resume button, from `GET /v1/controls/workers` (founder only). It shows "not checking in" when the last heartbeat is more than 3 minutes old.
+
+All three need Tank redeployed with this PR, for the new routes, the tables and the `127.0.0.1:8100` port. Until then the worker cannot reach Tank, so it stays paused (fail closed) and the tile says the workers status is unavailable.
 
 ### Secrets and the env file
 
