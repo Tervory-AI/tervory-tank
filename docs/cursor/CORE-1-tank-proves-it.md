@@ -97,3 +97,20 @@ The proof is per client. Every client has one **savings graph set**. The founder
 - cached, and safe to call publicly.
 
 Do not build the public endpoint now.
+
+## 8. The baseline is the default everyone uses (founder, 21 Oct, 08:55 PT)
+> "It's against what everyone would use as standard, bearing in mind that most will use whatever the default is."
+
+- **"Would have cost" means the provider's default model,** the one a business gets if it doesn't choose. Never the most expensive model in the family.
+- **Defaults today:**
+  - OpenAI-family tasks: `sol`;
+  - Anthropic: `sonnet`;
+  - Gemini: `argon`;
+  - xAI: `grok-top`;
+  - Moonshot: `kimi`;
+  - DeepSeek: `deepseek-pro`.
+
+  When a provider changes its default, update this list.
+- **The founder can override per task** on `/tank/proof`. Changing it re-prices that task's past rows in batches, marked "re-priced" with the date, and is logged with who, old, new and when.
+- **Where a client's real before-Tervory bills exist (CASE-1),** those replace the default for that client's case study.
+- **Every "would have cost" figure names its baseline,** on the founder page and in exports.
