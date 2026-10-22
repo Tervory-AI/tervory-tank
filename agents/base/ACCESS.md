@@ -17,8 +17,8 @@ Coolify; missing settings fail closed without accepting credentials.
 
 Both Base and Tiger must use Raw Compose Deployment (SEAL-1) so Coolify cannot
 attach an outbound network to their sealed browsers. Base retains the live volume
-names from main. Before deploying Tiger, set `TIGER_DATA_VOLUME` to its existing
-`/data` volume name; it is external and is never recreated. Its new, separate
+names from main. Tiger's existing `/data` volume is pinned to its live name,
+`fro6z8xlh579owlp1wwrjr8n_agent-tiger-data`; it is external and is never recreated. Its new, separate
 browser volume is `tervory-tiger-browser-data`. No volume name is guessed.
 
 ## Keys and isolation

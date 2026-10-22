@@ -1,7 +1,8 @@
 # coolify: raw compose
 # Tiger. Enable Raw Compose Deployment so Coolify cannot add an outbound network
 # to the sealed browser. Environment and networks are explicit on each service.
-# TIGER_DATA_VOLUME must name the existing live /data volume before deployment.
+# The /data volume is pinned to its live Boston name, as Base and Radix are.
+# Coolify 4.4.6 rejects ${VAR:?…} in an external volume name.
 
 services:
   agent-tiger:
@@ -84,7 +85,7 @@ services:
 volumes:
   agent_tiger_data:
     external: true
-    name: ${TIGER_DATA_VOLUME:?Set the existing Tiger data volume name}
+    name: fro6z8xlh579owlp1wwrjr8n_agent-tiger-data
   tiger_browser_data:
     name: tervory-tiger-browser-data
 
