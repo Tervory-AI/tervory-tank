@@ -16,6 +16,8 @@
 
 **Phase 1 is the complete machine, running on stand-in data.** Every lane uses fixtures, sample feeds and stand-in 3D models. Real suppliers, supplier keys, Custom Nation's Odoo login and the makers' CAD files are plugged in **last**, as configuration only, with no new code. Every lane builds the adapter, the screen and the test now, and leaves the real credentials as a named, empty Coolify setting.
 
+**Rig is built neutral (founder, 22 Oct).** Rig is a product for any retailer. Build every lane industry-neutral, with neutral stand-in data and neutral stand-in 3D models; no retailer- or industry-specific content in code, fixtures or models. Custom Nation comes with its own skin, which already exists (`theme="custom-nation"` in `tervory-rig`), and its catalogue is loaded last, as data. Don't add to or change the existing `customnation` catalogue files.
+
 The lanes run **in parallel**. To keep merges clean, each lane owns its own files:
 
 | Lane | What | Builder | Owns |
@@ -158,10 +160,10 @@ Tisan's rule: design before code. Add these frames to `uRpPy3Hns0WxWZYTPwZ2ni`:
 
 **Done when:**
 - CI is green.
-- On the Custom Nation test page, a Staccato P (a stand-in model is fine until the maker's CAD arrives) shows in 3D, with an approved red dot snapping to the optic cut and a holster shown in the exploded view.
+- On the Custom Nation test page, the neutral stand-in centre product shows in 3D, with an approved part snapping to its mount point and a second part shown in the exploded view.
 - A tenant without `rig_3d` loads no 3D code (bundle test).
 - Kiosk mode runs at 1920×1080.
-- Build and test on stand-in models now: one CC0 or self-made pistol-shaped test model, a red-dot model and a holster model, each with mount points. The makers' CAD files are plugged in last.
+- Build and test on stand-in models now: neutral stand-in models (a centre product and two parts that fit it), each with mount points. The makers' CAD files are plugged in last.
 
 ## Plugged in last (configuration only, no code)
 1. Custom Nation's real suppliers and their keys: RIG-3's feed connections take them.
