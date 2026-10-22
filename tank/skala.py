@@ -24,6 +24,7 @@ is a separate, human-only call; a new approved version retires the previous one.
 from __future__ import annotations
 
 import importlib.util
+import copy
 import hashlib
 import json
 import logging
@@ -324,7 +325,7 @@ async def run_evals(pkg: SkillPackage, make_ctx: Callable[[], SkillContext],
             ctx = replace(ctx, _model=saved_model)
         goal = case.get("expected", {})
         try:
-            out = await (execute or run_skill)(pkg, case["input"], ctx)
+            out = await (execute or run_skill)(pkg, copy.deepcopy(case["input"]), ctx)
             ok, why = score_case(goal, out, case.get("tolerance", "exact"))
             if case.get("expected_error"):
                 ok, why = False, "expected refusal exception was not raised"

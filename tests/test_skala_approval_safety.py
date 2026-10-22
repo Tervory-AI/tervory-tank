@@ -1,8 +1,10 @@
 """Approval policy tests and real Postgres transaction/confirmation regression tests."""
 from dataclasses import replace
+import copy
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 import uuid
 
 import asyncpg
@@ -36,6 +38,30 @@ def evaluation(pkg, passed=None):
 def reason(pkg, *, approved=None, runs=None, baseline=None):
     return skala.approval_reason(pkg, {"state": "staging", "present": True}, approved,
                                  runs if runs is not None else [evaluation(pkg)], baseline or [])
+
+
+@pytest.mark.asyncio
+async def test_mutating_skill_cannot_change_eval_cases_or_package_hash(tmp_path):
+    pkg = package(tmp_path)
+    (pkg.path / "run.py").write_text(
+        "async def run(payload, ctx):\n"
+        "    payload['nested']['values'].append('changed')\n"
+        "    payload['ok'] = True\n"
+        "    return payload\n")
+    pkg.cases = [{"input": {"nested": {"values": ["original"]}}, "expected": {"ok": True}}]
+    original_cases = copy.deepcopy(pkg.cases)
+    original_hash = skala.package_hash(pkg)
+    for _ in range(2):
+        result = await skala.run_evals(pkg, lambda: SimpleNamespace(cost_usd=0))
+        assert result["passed"] == 1
+        detail = result["details"][0]
+        assert detail["result"]["nested"]["values"] == ["original", "changed"]
+        assert detail["result"]["_skill"] == pkg.ref
+        assert "_ms" in detail["result"]
+        assert pkg.cases == original_cases
+        assert skala.package_hash(pkg) == original_hash
+        assert detail["case_hash"] == skala.evidence_hash(original_cases[0])
+        assert detail["package_hash"] == original_hash
 
 
 def test_older_version_and_lower_score_are_refused(tmp_path):
