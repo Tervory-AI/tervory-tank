@@ -8,7 +8,7 @@ from pathlib import Path
 import httpx
 import pytest
 import yaml
-from fastapi import FastAPI, HTTPException
+from fastapi import HTTPException
 
 from test_agent1_isolation import runner as shared_runner
 
@@ -24,11 +24,23 @@ def test_rig_is_its_own_box_and_only_the_api_is_public():
     assert cfg["networks"]["gw"] == {"external": True, "name": "tervory-gw-rig"}
     assert services["agent-rig"]["networks"] == ["gw", "proxy"]
     assert cfg["networks"]["proxy"] == {"external": True, "name": "59f8cnpelzwsyte1atyjc4fv"}
-    labels = dict(label.split("=", 1) for label in services["agent-rig"]["labels"])
-    assert labels["traefik.docker.network"] == cfg["networks"]["proxy"]["name"]
-    assert labels["traefik.http.routers.rig-https.rule"] == "Host(`rig.tervory.com`)"
-    assert labels["traefik.http.routers.rig-https.tls.certresolver"] == "letsencrypt"
-    assert labels["traefik.http.services.rig.loadbalancer.server.port"] == "8000"
+    labels = services["agent-rig"]["labels"]
+    assert len(labels) == 13
+    assert dict(label.split("=", 1) for label in labels) == {
+        "traefik.enable": "true",
+        "traefik.docker.network": "59f8cnpelzwsyte1atyjc4fv",
+        "traefik.http.routers.rig-http.rule": "Host(`rig.tervory.com`)",
+        "traefik.http.routers.rig-http.entrypoints": "http",
+        "traefik.http.routers.rig-http.middlewares": "redirect-to-https",
+        "traefik.http.routers.rig-https.rule": "Host(`rig.tervory.com`)",
+        "traefik.http.routers.rig-https.entrypoints": "https",
+        "traefik.http.routers.rig-https.tls": "true",
+        "traefik.http.routers.rig-https.tls.certresolver": "letsencrypt",
+        "traefik.http.routers.rig-https.service": "rig",
+        "traefik.http.routers.rig-https.middlewares": "rig-gzip",
+        "traefik.http.middlewares.rig-gzip.compress": "true",
+        "traefik.http.services.rig.loadbalancer.server.port": "8000",
+    }
     assert {name for name, spec in services.items() if spec.get("labels")} == {"agent-rig"}
     assert services["rig-brain"]["networks"] == ["gw", "sandbox", "forge-control"]
     assert services["rig-browser-gateway"]["networks"] == ["gw", "browser"]
@@ -68,28 +80,53 @@ def test_rig_skills_export_rejects_other_rooms_candidates_and_tenants(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_public_api_task_proxy_needs_room_key_and_local_region(monkeypatch):
+async def test_public_api_has_no_brain_task_routes_even_with_room_key(monkeypatch):
+    from test_rig import _load_rig_app
+
     key = uuid.uuid4().hex
     monkeypatch.setenv("TANK_KEY", key)
     monkeypatch.setenv("TANK_REGION", "us-east")
-    app = FastAPI()
-    room.mount(app)
+    app = _load_rig_app().app
     payload = {"tenant_id": str(uuid.uuid4()), "task_id": str(uuid.uuid4()), "home_region": "us-east", "question": "A catalogue question"}
-    original = httpx.AsyncClient
-    calls = []
-    def brain(request):
-        calls.append(request)
-        assert request.url.host == "rig-brain"
-        assert request.headers["x-tank-key"] == key
-        return httpx.Response(202, json={"status": "running", "task_id": payload["task_id"]})
-    monkeypatch.setattr(room.httpx, "AsyncClient", lambda **kw: original(transport=httpx.MockTransport(brain)))
-    async with original(transport=httpx.ASGITransport(app=app), base_url="http://rig") as client:
+    params = {"tenant_id": payload["tenant_id"], "home_region": "us-east"}
+    assert "/v1/rig/search" in {route.path for route in app.routes}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://rig.tervory.com") as client:
+        for headers in ({}, {"X-Rig-Key": uuid.uuid4().hex}, {"X-Tank-Key": key}):
+            assert (await client.post("/brain/tasks", json=payload, headers=headers)).status_code == 404
+            for method in ("GET", "DELETE"):
+                response = await client.request(method, f"/brain/tasks/{payload['task_id']}", params=params, headers=headers)
+                assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_private_brain_tasks_require_room_key_and_local_region(monkeypatch, tmp_path):
+    key = uuid.uuid4().hex
+    monkeypatch.setenv("TANK_KEY", key)
+    monkeypatch.setenv("TANK_REGION", "us-east")
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    body = room.Question(tenant_id=uuid.uuid4(), task_id=uuid.uuid4(), home_region="us-east", question="A catalogue question")
+    payload = body.model_dump(mode="json")
+    params = {"tenant_id": str(body.tenant_id), "home_region": "us-east"}
+    path = f"/tasks/{body.task_id}"
+
+    async def perform(body):
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(service, "perform", perform)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=service.app), base_url="http://rig-brain:8001") as client:
         for headers in ({}, {"X-Rig-Key": uuid.uuid4().hex}, {"X-Tank-Key": uuid.uuid4().hex}):
-            assert (await client.post("/brain/tasks", json=payload, headers=headers)).status_code == 401
-        assert (await client.post("/brain/tasks", json={**payload, "home_region": "za"}, headers={"X-Tank-Key": key})).status_code == 403
-        assert not calls
-        assert (await client.post("/brain/tasks", json=payload, headers={"X-Tank-Key": key})).status_code == 202
-        assert json.loads(calls[0].content) == payload
+            assert (await client.post("/tasks", json=payload, headers=headers)).status_code == 401
+            for method in ("GET", "DELETE"):
+                assert (await client.request(method, path, params=params, headers=headers)).status_code == 401
+        headers = {"X-Tank-Key": key}
+        assert (await client.post("/tasks", json={**payload, "home_region": "za"}, headers=headers)).status_code == 403
+        try:
+            assert (await client.post("/tasks", json=payload, headers=headers)).status_code == 202
+            assert (await client.get(path, params=params, headers=headers)).status_code == 202
+            assert (await client.get(path, params={**params, "tenant_id": str(uuid.uuid4())}, headers=headers)).status_code == 404
+            assert (await client.delete(path, params=params, headers=headers)).json() == {"cancelled": True}
+        finally:
+            await service.cancel(body.task_id, body.tenant_id, "us-east", key)
 
 
 @pytest.mark.asyncio

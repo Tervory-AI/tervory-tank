@@ -58,14 +58,17 @@ Check `https://rig.tervory.com/health` still returns 200 and `ok: true`, then ch
 the existing stand-in catalogue search from Rig's public page. No feeds or live
 shopper data are needed.
 
-From the room corridor, submit `POST /brain/tasks` on agent-rig with the Rig key
-in the `X-Tank-Key` header and a JSON body containing `tenant_id`, a new UUID
-`task_id`, `home_region: "us-east"`, and `question` about the stand-in catalogue.
-Poll `GET /brain/tasks/{task_id}?tenant_id=...&home_region=us-east` with the same
-header. The final response must be `done`, contain a grounded answer, and contain
-Tank receipt IDs. A shopper publishable key must be refused. Another tenant must
-receive 404 for this task. Do not copy keys into commands, URLs, logs or this file;
-load them from the existing secret bindings.
+Task control is available only on the private `http://rig-brain:8001` service.
+From the room corridor, submit `POST /tasks` there with the Rig key in the
+`X-Tank-Key` header and a JSON body containing `tenant_id`, a new UUID `task_id`,
+`home_region: "us-east"`, and `question` about the stand-in catalogue. Poll
+`GET /tasks/{task_id}?tenant_id=...&home_region=us-east` with the same header.
+The final response must be `done`, contain a grounded answer, and contain Tank
+receipt IDs. A shopper publishable key must be refused. Another tenant must
+receive 404 for this task. The public `rig.tervory.com` API must return 404 for
+`POST /brain/tasks` and `GET`/`DELETE /brain/tasks/{task_id}`, even with a valid
+room key. Do not copy keys into commands, URLs, logs or this file; load them from
+the existing secret bindings.
 
 Read `GET /v1/agents/rig/receipts` on Tank with that tenant/task and Rig key.
 Verify its IDs against `tank.ledger` and `tank.agent_receipts`, filtering both
