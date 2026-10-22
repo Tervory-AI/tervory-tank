@@ -33,7 +33,7 @@ def pytest_runtest_logreport(report: pytest.TestReport) -> None:
     # publish the source location and unparameterized test name.
     def escape(value: str) -> str:
         return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A").replace(",", "%2C")
-    print(f"::error file={escape(path)},line={line + 1},title=Pytest failure::{escape(name.split('[', 1)[0])} ({report.when})", flush=True)
+    print(f"\n::error file={escape(path)},line={line + 1},title=Pytest failure::{escape(name.split('[', 1)[0])} ({report.when})", flush=True)
 
 
 @pytest_asyncio.fixture
