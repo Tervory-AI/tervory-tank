@@ -44,7 +44,12 @@ export function RetailerAdmin({ initial, act = sendRetailer }: { initial: Retail
       const file = values.file;
       if (!(file instanceof File) || !file.size || file.size > 8_000_000) { setNotice("Choose a feed file smaller than 8 MB."); setError(true); return; }
       data.contents = await file.text(); data.source = "ftp_export";
-    } else { data.endpoint = String(values.endpoint).trim(); data.auth_mode = authMode; data.token = String(values.token || ""); data.username = String(values.username || ""); data.password = String(values.password || ""); data.official_read_only = values.official === "on"; }
+    } else {
+      data.endpoint = String(values.endpoint).trim();
+      data.auth_mode = authMode;
+      for (const field of ["token", "username", "password"]) data[field] = String(values[field] || "");
+      data.official_read_only = values.official === "on";
+    }
     const ok = await run(mode === "file" ? "import" : "connect", data);
     if (ok) form.reset();
   };
