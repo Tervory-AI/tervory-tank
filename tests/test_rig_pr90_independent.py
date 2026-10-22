@@ -39,7 +39,7 @@ EXAMPLE = CATALOGUES / "example"
 SECOND = CATALOGUES / "second"
 PAGE = ROOT / "agents" / "rig" / "rigbox" / "page"
 REPORT = Path("/tmp/rig-pr90-independent.json")
-SHOTS = Path(os.environ.get("RIG_REVIEW_SCREENSHOT_DIR", "/tmp/rig-pr90/screenshots"))
+SHOTS = Path(os.environ.get("RIG_SCREENSHOT_DIR", "/tmp/rig-pr90-screenshots"))
 
 CN_TENANT = "33333333-3333-4333-8333-333333333333"
 EX_TENANT = "11111111-1111-4111-8111-111111111111"
@@ -981,9 +981,9 @@ def test_browser_search_accessories_compare_admin() -> None:
     try:
         assert server.started, "Rig page did not start on 127.0.0.1:5173"
         with playwright_sync.sync_playwright() as playwright:
-            executable = os.environ.get("READ1_CHROMIUM_EXECUTABLE")
             browser = playwright.chromium.launch(
-                **({"executable_path": executable} if executable else {"channel": "chrome"}),
+                channel=None if os.environ.get("READ1_CHROMIUM_EXECUTABLE") else "chrome",
+                executable_path=os.environ.get("READ1_CHROMIUM_EXECUTABLE"),
                 headless=True,
                 args=["--no-sandbox", "--disable-dev-shm-usage"],
             )

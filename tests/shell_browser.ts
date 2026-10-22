@@ -5,10 +5,11 @@
 import { actualShellHtml } from "./shell_popout.ts";
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
+import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { extname, join, resolve, sep } from "node:path";
 import {
   FOUNDER_LINKS,
   REST_LINKS,
@@ -288,42 +289,52 @@ function slug(route: string): string {
 
 async function main(): Promise<void> {
   const failures: string[] = [];
+  const executable = chromePath();
   const dir = await mkdtemp(join(tmpdir(), "shell-nav-"));
-  // Serve only this test's generated pages and known public assets. Managed
-  // browsers can disable file:// navigation while allowing local app testing.
-  let fixtureOrigin = "";
-  const fixtures = createServer(async (request, response) => {
+  // Serve only generated fixtures and their repository assets. Managed cloud
+  // browsers can prohibit file:// navigation; HTTP exercises the same DOM and
+  // font/layout assertions without changing browser security policy.
+  const fixtures = new Map<string, string>();
+  const workspaceRoot = await realpath(fileURLToPath(new URL("workspace/", ROOT)));
+  const fixtureServer = createServer(async (request, response) => {
     try {
-      const pathname = new URL(request.url || "/", "http://fixture").pathname;
-      if (/^\/fixtures\/[a-z0-9-]+\.html$/i.test(pathname)) {
-        const html = await readFile(join(dir, basename(pathname)), "utf8");
-        response.setHeader("Content-Type", "text/html");
-        response.end(html.replaceAll(new URL("workspace/", ROOT).href, fixtureOrigin + "/assets/"));
+      const path = decodeURIComponent(new URL(request.url ?? "/", "http://127.0.0.1").pathname);
+      if (fixtures.has(path)) {
+        response.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+        response.end(fixtures.get(path));
         return;
       }
-      const asset = pathname.slice("/assets/".length);
-      if (!pathname.startsWith("/assets/") || asset.includes("..") || !(
-        asset === "app/globals.css" || /^app\/fonts\/[A-Za-z0-9-]+\.woff2$/.test(asset)
-        || /^public\/brand\/[A-Za-z0-9_.-]+\.(png|svg|jpg|webp)$/.test(asset)
-      )) { response.writeHead(404); response.end(); return; }
-      const type = asset.endsWith(".css") ? "text/css" : asset.endsWith(".woff2") ? "font/woff2" : asset.endsWith(".svg") ? "image/svg+xml" : "image/" + asset.split(".").pop();
-      response.setHeader("Content-Type", type);
-      response.end(await readFile(new URL("workspace/" + asset, ROOT)));
-    } catch { response.writeHead(404); response.end(); }
+      const asset = path.startsWith("/workspace/") ? path.slice("/workspace/".length) : "";
+      if (asset !== "app/globals.css" && !asset.startsWith("public/brand/") && !asset.startsWith("app/fonts/")) {
+        response.writeHead(404).end(); return;
+      }
+      const file = await realpath(resolve(workspaceRoot, asset));
+      if (file !== join(workspaceRoot, "app/globals.css") &&
+          !file.startsWith(join(workspaceRoot, "public/brand") + sep) &&
+          !file.startsWith(join(workspaceRoot, "app/fonts") + sep)) {
+        response.writeHead(404).end(); return;
+      }
+      const mime: Record<string, string> = { ".css": "text/css", ".woff2": "font/woff2", ".png": "image/png", ".svg": "image/svg+xml" };
+      response.writeHead(200, { "content-type": mime[extname(file)] ?? "application/octet-stream" });
+      response.end(await readFile(file));
+    } catch { response.writeHead(404).end(); }
   });
-  await new Promise<void>(resolve => fixtures.listen(0, "127.0.0.1", resolve));
-  const address = fixtures.address();
+  await new Promise<void>(resolve => fixtureServer.listen(0, "127.0.0.1", resolve));
+  const address = fixtureServer.address();
   if (!address || typeof address === "string") throw new Error("Fixture server did not start");
-  fixtureOrigin = `http://127.0.0.1:${address.port}`;
-  const fixtureUrl = (file: string) => `${fixtureOrigin}/fixtures/${basename(file)}`;
+  const fixtureOrigin = `http://127.0.0.1:${address.port}`;
+  function fixtureUrl(name: string, html: string): string {
+    const path = `/fixtures/${name}`;
+    fixtures.set(path, html.replaceAll(new URL("workspace/", ROOT).href, `${fixtureOrigin}/workspace/`));
+    return fixtureOrigin + path;
+  }
   const port = 9400 + Math.floor(Math.random() * 400);
-  const proc = spawn(chromePath(), [
+  const proc = spawn(executable, [
     "--headless=new",
     "--disable-gpu",
     "--no-sandbox",
     "--disable-dev-shm-usage",
     "--hide-scrollbars",
-    "--allow-file-access-from-files",
     `--remote-debugging-port=${port}`,
     `--user-data-dir=${join(dir, "profile")}`,
     "about:blank",
@@ -343,9 +354,8 @@ async function main(): Promise<void> {
     await cdp.send("Runtime.enable");
 
     async function openRoute(route: string, founder: boolean, reviewer: boolean): Promise<void> {
-      const file = join(dir, `${slug(route)}-${founder ? "founder" : "customer"}.html`);
-      await writeFile(file, shellHtml(route, founder, reviewer));
-      await navigate(cdp, fixtureUrl(file));
+      const name = `${slug(route)}-${founder ? "founder" : "customer"}.html`;
+      await navigate(cdp, fixtureUrl(name, shellHtml(route, founder, reviewer)));
     }
 
     async function overflow(label: string): Promise<void> {
@@ -368,9 +378,7 @@ async function main(): Promise<void> {
     }
     for (const width of [1440, 375]) {
       await setViewport(cdp, width, width === 1440 ? 900 : 812);
-      const file = join(dir, `actual-${width}.html`);
-      await writeFile(file, actualShellHtml(true));
-      await navigate(cdp, fixtureUrl(file));
+      await navigate(cdp, fixtureUrl(`actual-${width}.html`, actualShellHtml(true)));
       await check('!!document.getElementById("squad-popout")', "React portal did not mount");
       async function capture(state: string) {
         if (!process.env.SQUAD_SHOTS) return;
@@ -411,9 +419,7 @@ async function main(): Promise<void> {
         await check('document.getElementById("squad-popout").hidden && document.activeElement.id === "squad-button"', "Dim click must close and return focus");
       }
     }
-    const customerFile = join(dir, "actual-customer.html");
-    await writeFile(customerFile, actualShellHtml(false));
-    await navigate(cdp, fixtureUrl(customerFile));
+    await navigate(cdp, fixtureUrl("actual-customer.html", actualShellHtml(false)));
     await check('!!document.getElementById("squad-popout")', "Customer portal must mount");
     await click("#squad-button");
     await check('document.querySelectorAll("[data-squad-member]").length===7 && !document.querySelector(".squad-platform")', "Customer must not see platform members");
@@ -476,7 +482,8 @@ async function main(): Promise<void> {
 
   } finally {
     proc.kill("SIGKILL");
-    await new Promise<void>(resolve => fixtures.close(() => resolve()));
+    fixtureServer.closeAllConnections();
+    await new Promise<void>(resolve => fixtureServer.close(() => resolve()));
     await rm(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 150 });
   }
   if (failures.length) {

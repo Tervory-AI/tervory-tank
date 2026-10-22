@@ -20,6 +20,7 @@ from chassis.logs import log_line
 from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
+from rig_brain.room import mount as mount_brain
 from rigbox.api import mount
 from rigbox.page_route import mount_page
 from rigbox.service import RigError, Service, WebhookHandoff
@@ -95,6 +96,7 @@ app = create_app(
     ],
 )
 mount(app)
+mount_brain(app)
 
 # Chassis job intake and the generated docs are not part of the shopper API.
 # The worker and the scheduler still run inside this process.

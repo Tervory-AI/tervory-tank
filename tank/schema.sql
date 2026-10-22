@@ -1046,6 +1046,11 @@ INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_toke
   ('command.turn', 1, 'luna', 'urgent', 'none', 2048, NULL)
 ON CONFLICT DO NOTHING;
 
+-- RIG-2: Rig's own Hermes brain; the founder controls later promotions.
+INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_tokens_out, system_prompt) VALUES
+  ('agent.rig.think', 1, 'luna', 'standard', 'none', 4096, NULL)
+ON CONFLICT DO NOTHING;
+
 -- MODELS-2: provider tool charges are expenses, scoped to the platform price book.
 -- Checked 2026-10-21: https://docs.perplexity.ai/docs/getting-started/pricing
 -- Presets fast/low/medium/high use Fast Search ($0.001/invocation); fetch is $0.0005.
