@@ -105,8 +105,25 @@ async def test_built_widget_live_api_journey(real_chromium, widget_server, tmp_p
     await capture("04-missing")
     await page.locator("#link-url").fill("https://example.com/item")
     await page.locator("#link-name").fill("Sample Shopper")
-    await page.locator("#link-email").fill("sample@example.com")
     await page.get_by_role("button", name="Request a quote", exact=True).click()
+    await expect(page.locator("#link-email-error")).to_have_text("Enter your email address.")
+    await expect(page.locator("#link-phone-error")).to_have_text("Enter your phone number.")
+    await expect(page.locator("#link-email")).to_be_focused()
+    await capture("04-missing-errors")
+    await page.locator("#link-email").fill("not-an-email")
+    await page.locator("#link-phone").fill("123")
+    await page.get_by_role("button", name="Request a quote", exact=True).click()
+    await expect(page.locator("#link-email-error")).to_contain_text("Enter a valid email address")
+    await expect(page.locator("#link-phone-error")).to_contain_text("Enter a valid phone number")
+    await capture("04-missing-invalid")
+    await page.locator("#link-email").fill("sample@example.com")
+    await page.locator("#link-phone").fill("+1 202-555-0123")
+    await expect(page.locator(".field-error")).to_have_count(0)
+    async with page.expect_request("**/v1/rig/link-quote") as submitted:
+        await page.get_by_role("button", name="Request a quote", exact=True).click()
+    assert (await submitted.value).post_data_json["contact"] == {
+        "name": "Sample Shopper", "email": "sample@example.com", "phone": "+1 202-555-0123"}
+
     await expect(page.get_by_text("Request received. Reference", exact=False)).to_be_visible()
     await page.get_by_role("searchbox").fill("Core One")
     await page.get_by_role("button", name="Search", exact=True).click()
