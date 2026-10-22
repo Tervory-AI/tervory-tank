@@ -24,6 +24,7 @@ jobs:
     env:
       COOLIFY_URL: ${{ vars.COOLIFY_URL || 'https://coolify.tervory.com' }}
       COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+      ZA_OFFLINE: ${{ vars.ZA_OFFLINE || '' }}
       AFTER: ${{ github.event.workflow_run.head_sha }}
     steps:
       - uses: actions/checkout@v4

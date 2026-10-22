@@ -149,3 +149,34 @@ def test_a_room_only_change_does_not_deploy_the_sa_stack(monkeypatch: pytest.Mon
     monkeypatch.setattr(mod, "wait_for", lambda uuid, name, timeout_s=900: True)
     assert mod.main() == 0
     assert order == ["agent-zenas", "agent-zenas-za"]
+
+
+def test_za_offline_skips_the_sa_stack_and_za_rooms_without_failing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ZA_OFFLINE", "true")
+    mod = _script(monkeypatch)
+    order: list[tuple[str, str]] = []
+    monkeypatch.setattr(mod, "changed_paths", lambda: ["tank/main.py", "agents/zenas/app.py"])
+    monkeypatch.setattr(mod, "api", lambda method, path: (200, _apps()))
+
+    def deploy(uuid: str, name: str) -> bool:
+        order.append(("deploy", name))
+        return name != "tervory-tank-za"
+
+    def wait_for(uuid: str, name: str, timeout_s: int = 900) -> bool:
+        order.append(("wait", name))
+        return True
+
+    monkeypatch.setattr(mod, "deploy", deploy)
+    monkeypatch.setattr(mod, "wait_for", wait_for)
+    assert mod.main() == 0
+    assert order == [("deploy", "main"), ("wait", "main"), ("deploy", "agent-zenas"), ("wait", "agent-zenas")]
+
+
+def test_za_offline_other_values_keep_todays_behaviour(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ZA_OFFLINE", "false")
+    mod = _script(monkeypatch)
+    monkeypatch.setattr(mod, "changed_paths", lambda: ["tank/main.py"])
+    monkeypatch.setattr(mod, "api", lambda method, path: (200, _apps()))
+    monkeypatch.setattr(mod, "deploy", lambda uuid, name: name != "tervory-tank-za")
+    monkeypatch.setattr(mod, "wait_for", lambda uuid, name, timeout_s=900: True)
+    assert mod.main() == 1

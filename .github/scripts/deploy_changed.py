@@ -23,6 +23,9 @@ BEFORE = os.environ.get("BEFORE", "")
 AFTER = os.environ.get("AFTER", "HEAD")
 MAIN_APP = "xnmc0jkz8j9i5jh1jwanbsfv"
 SA_APP = "tervory-tank-za"
+# Repo variable ZA_OFFLINE=true: the ZA stack is switched off on purpose (box being moved).
+# Skip it and every -za room with a notice, and do not fail the run. Unset: today's behaviour.
+ZA_OFFLINE = os.environ.get("ZA_OFFLINE", "").strip().lower() == "true"
 
 # Paths that rebuild the main stack (Tank, Workspace, LiteLLM, Hermes, SearXNG, site, shared compose).
 MAIN_PREFIXES = (
@@ -116,7 +119,12 @@ def main() -> int:
             print("::error title=stopped::main did not deploy; rooms were not touched")
             return 1
     za_ok = True
-    if want_main:
+    if ZA_OFFLINE:
+        skipped = sorted(n for n in targets if n.endswith("-za"))
+        targets = {n: u for n, u in targets.items() if not n.endswith("-za")}
+        print("::notice title=za offline::ZA_OFFLINE is set: tervory-tank-za"
+              + (" and " + ", ".join(skipped) if skipped else "") + " skipped on purpose")
+    elif want_main:
         za_uuid = by_name.get(SA_APP)
         if not za_uuid or not deploy(za_uuid, SA_APP) or not wait_for(za_uuid, SA_APP):
             # The ZA box failing (for example a power outage there) must not hold back
