@@ -22,12 +22,12 @@ The lanes run **in parallel**. To keep merges clean, each lane owns its own file
 
 | Lane | What | Builder | Owns |
 |---|---|---|---|
-| **RIG-2** | Rig's own box: brain, sandbox, sealed browser, storage, memory | Grok | `agents/rig/` compose, Dockerfiles, `brain/`, `ops/seal-check.sh`, `tests/test_room_seal.py`, `tests/test_rig_box*.py` |
-| **RIG-3** | Feed machinery, price rules, fit approval, retailer admin, on sample feeds | Cursor | `agents/rig/rigbox/` (feeds, pricing, fits), `tank/access.py` (Rig mapping only), `workspace/app/rig/admin/`, `tests/test_rig_feeds*.py` |
-| **RIG-4** | The widget complete to Figma 01–05, the quote handoff (Odoo adapter stubbed), bundle hosting, analytics | Cursor | `Tervory-AI/tervory-rig`, plus `agents/rig/rigbox/quotes/` and `tests/test_rig_quotes*.py` |
-| **RIG-5a** | 3D frames 06–07 in Figma | Cursor | Figma `uRpPy3Hns0WxWZYTPwZ2ni` only |
+| **RIG-2** | Rig's own box: brain, sandbox, sealed browser, storage, memory | Codex | `agents/rig/` compose, Dockerfiles, `brain/`, `ops/seal-check.sh`, `tests/test_room_seal.py`, `tests/test_rig_box*.py` |
+| **RIG-3** | Feed machinery, price rules, fit approval, retailer admin, on sample feeds | Codex | `agents/rig/rigbox/` (feeds, pricing, fits), `tank/access.py` (Rig mapping only), `workspace/app/rig/admin/`, `tests/test_rig_feeds*.py` |
+| **RIG-4** | The widget complete to Figma 01–05, the quote handoff (Odoo adapter stubbed), bundle hosting, analytics | Codex | `Tervory-AI/tervory-rig`, plus `agents/rig/rigbox/quotes/` and `tests/test_rig_quotes*.py` |
+| **RIG-5a** | 3D frames 06–07 in Figma | Codex | Figma `uRpPy3Hns0WxWZYTPwZ2ni` only |
 | **RIG-5F** | The 3D forge: every 3D tool brought in, pinned and sealed, plus the GPU jobs | Codex | `agents/rig/forge/` (new service), `agents/rig/docker-compose.yml` (the forge service only), `ops/seal-check.sh` (forge entries), `tests/test_rig_forge*.py` |
-| **RIG-5** | The 3D engine: asset pipeline, mount points, `rig_3d` entitlement, viewer chunk, kiosk mode, on stand-in models | Grok or Cursor | `agents/rig/rigbox/three_d/`, `tervory-rig/widget/src/three/`, `tests/test_rig_3d*.py` |
+| **RIG-5** | The 3D engine: asset pipeline, mount points, `rig_3d` entitlement, viewer chunk, kiosk mode, on stand-in models | Codex | `agents/rig/rigbox/three_d/`, `tervory-rig/widget/src/three/`, `tests/test_rig_3d*.py` |
 
 **How the lanes meet:**
 - **Shared tables:** each lane adds its own additive schema in `agents/rig/schema.sql`, in its own clearly marked block. Merge main before marking ready, and keep every other lane's block.
