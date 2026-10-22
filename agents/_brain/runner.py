@@ -22,8 +22,8 @@ import httpx
 from brain.reader import model_page, read_page
 
 
-def install_skills(home: Path, bundle: dict, tenant: str) -> dict:
-    if bundle.get("tenant_id") != tenant or bundle.get("room") != "base" or bundle.get("region") != "us-east":
+def install_skills(home: Path, bundle: dict, tenant: str, *, room: str = "base") -> dict:
+    if bundle.get("tenant_id") != tenant or bundle.get("room") != room or bundle.get("region") != "us-east":
         raise RuntimeError("Skill scope mismatch")
     directory = home / "skills"
     if directory.exists():
@@ -31,7 +31,7 @@ def install_skills(home: Path, bundle: dict, tenant: str) -> dict:
     directory.mkdir(parents=True)
     approved = {}
     for item in bundle["skills"]:
-        if item.get("state") != "approved" or item.get("agent") != "base":
+        if item.get("state") != "approved" or item.get("agent") != room:
             raise RuntimeError("Unapproved skill in export")
         name = item["name"]
         if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", name) or set(item["files"]) != {"SKILL.md"}:
