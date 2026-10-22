@@ -28,7 +28,8 @@ def scope():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("method", ["photogrammetry", "trellis2"])
-async def test_gpu_stub_reserves_claims_tracks_and_receipts(method):
+async def test_gpu_stub_reserves_claims_tracks_and_receipts(method, monkeypatch):
+    monkeypatch.setenv("RIG_FORGE_TRELLIS_ENABLED", "true")
     body, events, ids, provider = scope(), [], [], Provider()
     async def relay(action, payload):
         events.append((action, payload))
@@ -38,14 +39,15 @@ async def test_gpu_stub_reserves_claims_tracks_and_receipts(method):
         return {"recorded": True}
     async def save_provider(value):
         ids.append(value)
-    result = await GPU(provider).run(body, method, "forge/manifest.json", timeout=60, cap="1",
-        relay=relay, save_provider=save_provider, secrets={}, namespace="fixture")
+    result = await GPU(provider).run(body, method, transfers={}, timeout=60, cap="1",
+        relay=relay, save_provider=save_provider, namespace="fixture")
     assert result == "stub-job-1" and ids == [result]
     assert [action for action, _ in events] == ["reserve", "claim", "steps", "steps", "complete"]
     assert events[-1][1]["outcome"] == "delivered"
     assert provider.started[0]["timeout"] == 60
     assert provider.started[0]["command"][-1] == method
-    assert "HF_JOBS_TOKEN" not in provider.started[0]["secrets"]
+    assert set(provider.started[0]["secrets"]) == {"FORGE_TRANSFERS"}
+    assert not any(name.startswith("R2_") for name in provider.started[0]["env"])
     assert "HF_JOBS_TOKEN" not in provider.started[0]["env"]
 
 
@@ -63,8 +65,8 @@ async def test_failures_stop_cancel_and_keep_uncertain_spend(mode):
                 "flavor":"a10g-small","timeout_seconds":60}
     async def save_provider(value): pass
     with pytest.raises(GPUError):
-        await GPU(provider,wait=wait,clock=lambda:ticks[0]).run(body,"trellis2","manifest.json",
-            timeout=60,cap="1",relay=relay,save_provider=save_provider,secrets={},namespace="fixture")
+        await GPU(provider,wait=wait,clock=lambda:ticks[0]).run(body,"photogrammetry",transfers={},
+            timeout=60,cap="1",relay=relay,save_provider=save_provider,namespace="fixture")
     assert len(provider.started) == 1
     assert events[-1][0] == "complete"
     assert events[-1][1]["outcome"] in {"unverified","failed"}
@@ -77,7 +79,7 @@ async def test_missing_token_or_denied_budget_never_launches(monkeypatch):
     async def denied(*args): raise RuntimeError("Budget denied")
     for gpu, error in ((GPU(), GPUError), (GPU(Provider()), RuntimeError)):
         with pytest.raises(error):
-            await gpu.run(scope(),"trellis2","manifest.json",timeout=60,cap="1",
-                relay=denied,save_provider=denied,secrets={},namespace="fixture")
+            await gpu.run(scope(),"photogrammetry",transfers={},timeout=60,cap="1",
+                relay=denied,save_provider=denied,namespace="fixture")
         if gpu.api:
             assert not gpu.api.started

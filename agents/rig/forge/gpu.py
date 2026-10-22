@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
 import time
@@ -18,8 +19,10 @@ class GPU:
         self.api = api
         self.wait, self.clock = wait, clock
 
-    async def run(self, scope: dict, method: str, manifest: str, *, timeout: int,
-                  cap: str, relay, save_provider, secrets: dict, namespace: str) -> str:
+    async def run(self, scope: dict, method: str, *, transfers: dict, timeout: int,
+                  cap: str, relay, save_provider, namespace: str) -> str:
+        if method == "trellis2" and os.environ.get("RIG_FORGE_TRELLIS_ENABLED", "").lower() != "true":
+            raise GPUError("TRELLIS is disabled pending the founder's licence decision.")
         token = os.environ.get("HF_JOBS_TOKEN", "")
         if self.api is None and not token:
             raise GPUError("HF_JOBS_TOKEN is not configured.")
@@ -38,10 +41,10 @@ class GPU:
         try:
             job = await asyncio.wait_for(asyncio.to_thread(api.run_job, image=authorization["image"],
                 command=["python", "/opt/forge/gpu/entrypoint.py", method],
-                env={"FORGE_MANIFEST": manifest, "FORGE_TENANT_ID": scope["tenant_id"],
-                     "FORGE_JOB_ID": scope["job_id"], "R2_BUCKET": "tervory-rig",
+                env={"FORGE_TENANT_ID": scope["tenant_id"], "FORGE_JOB_ID": scope["job_id"],
                      "HF_HUB_DISABLE_TELEMETRY": "1"},
-                secrets=secrets, namespace=namespace, flavor=authorization["flavor"],
+                secrets={"FORGE_TRANSFERS": json.dumps(transfers, separators=(",", ":"))},
+                namespace=namespace, flavor=authorization["flavor"],
                 timeout=authorization["timeout_seconds"]), timeout=30)
             provider_id = job.id
             if not re.fullmatch(r"[a-zA-Z0-9_-]{1,128}", provider_id):

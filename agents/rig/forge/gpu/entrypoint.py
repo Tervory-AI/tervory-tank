@@ -1,4 +1,4 @@
-"""HF Jobs controller: scoped R2 I/O; native/GPU child processes get no secrets."""
+"""HF controller: short-lived object capabilities only, never R2/HF credentials."""
 import json
 import math
 import os
@@ -7,10 +7,11 @@ import subprocess
 import sys
 import tempfile
 import uuid
+import zipfile
 from pathlib import Path
+from urllib.parse import urlsplit, unquote
 
-import boto3
-from botocore.config import Config
+import requests
 
 
 def validate_manifest(body, tenant, job, method):
@@ -25,23 +26,38 @@ def validate_manifest(body, tenant, job, method):
     dimensions = body["dimensions_mm"]
     if len(dimensions) != 3 or any(not math.isfinite(x) or not 0 < x <= 100000 for x in dimensions):
         raise ValueError("Measured dimensions are required")
+    if not 60 <= body["timeout_seconds"] <= 3600:
+        raise ValueError("Invalid timeout")
 
 
-def download(client, key, target, maximum):
-    response = client.get_object(Bucket="tervory-rig", Key=key)
-    stream = response["Body"]
-    try:
-        if response["ContentLength"] > maximum:
-            raise ValueError("Photo exceeds job budget")
+def validate_url(url, key):
+    parsed = urlsplit(url)
+    if (parsed.scheme != "https" or parsed.username or parsed.password or parsed.port
+            or not re.fullmatch(r"[a-f0-9]{32}\.r2\.cloudflarestorage\.com", parsed.hostname or "")
+            or unquote(parsed.path) != "/tervory-rig/" + key or not parsed.query or parsed.fragment):
+        raise ValueError("Invalid scoped transfer")
+
+
+def download(url, target, maximum):
+    # Signed capabilities must never be redirected to a different host.
+    with requests.get(url, stream=True, timeout=(10, 120), allow_redirects=False) as response:
+        if response.status_code != 200 or int(response.headers.get("Content-Length", 0)) > maximum:
+            raise ValueError("Input transfer failed")
         size = 0
         with target.open("xb") as output:
-            while chunk := stream.read(1024 * 1024):
+            for chunk in response.iter_content(1024 * 1024):
                 size += len(chunk)
                 if size > maximum:
                     raise ValueError("Photo exceeds job budget")
                 output.write(chunk)
-    finally:
-        stream.close()
+
+
+def upload(url, path):
+    with path.open("rb") as content:
+        with requests.put(url, data=content, headers={"x-amz-meta-approval": "draft"},
+                          timeout=(10, 120), allow_redirects=False) as response:
+            if response.status_code not in {200, 204}:
+                raise ValueError("Output transfer failed")
 
 
 def main(method):
@@ -49,25 +65,23 @@ def main(method):
         raise ValueError("Unsupported GPU method")
     tenant, job = (str(uuid.UUID(os.environ[name])) for name in ("FORGE_TENANT_ID", "FORGE_JOB_ID"))
     prefix = f"forge/{tenant}/{job}/"
-    if os.environ["FORGE_MANIFEST"] != prefix + "inputs/manifest.json":
-        raise ValueError("Invalid manifest location")
-    account = os.environ["R2_ACCOUNT_ID"]
-    if not re.fullmatch(r"[a-f0-9]{32}", account):
-        raise ValueError("Invalid Rig storage account")
-    client = boto3.client("s3", endpoint_url=f"https://{account}.r2.cloudflarestorage.com",
-        aws_access_key_id=os.environ["R2_ACCESS_KEY_ID_RIG"],
-        aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY_RIG"], region_name="auto",
-        config=Config(connect_timeout=10, read_timeout=120, retries={"max_attempts": 2}))
+    # Even /proc access by a compromised same-user parser can reveal only these
+    # expiring capabilities for this job, never a bucket-wide signing credential.
+    transfers = json.loads(os.environ.pop("FORGE_TRANSFERS"))
+    body = transfers["manifest"]
+    validate_manifest(body, tenant, job, method)
+    if set(transfers["get"]) != set(body["inputs"]) or set(transfers["put"]) != {"result.glb", "source.zip"}:
+        raise ValueError("Invalid transfer set")
+    for direction, folder in (("get", "inputs/"), ("put", "gpu/")):
+        for name, url in transfers[direction].items():
+            validate_url(url, prefix + folder + name)
     with tempfile.TemporaryDirectory() as directory:
         work = Path(directory)
-        manifest = work / "manifest.json"
-        download(client, prefix + "inputs/manifest.json", manifest, 65536)
-        body = json.loads(manifest.read_text())
-        validate_manifest(body, tenant, job, method)
+        (work / "manifest.json").write_text(json.dumps(body))
         photos = work / "photos"
         photos.mkdir()
         for name in body["inputs"]:
-            download(client, prefix + "inputs/" + name, photos / name, 20_000_000)
+            download(transfers["get"][name], photos / name, 20_000_000)
         safe = {name: os.environ[name] for name in ("PATH", "LD_LIBRARY_PATH", "CUDA_HOME") if name in os.environ}
         safe.update(HOME=directory, TMPDIR=directory, HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1",
                     HF_HUB_DISABLE_TELEMETRY="1", PYTHONPATH="/opt/trellis2", OMP_NUM_THREADS="4",
@@ -75,22 +89,31 @@ def main(method):
         subprocess.run([sys.executable, str(Path(__file__).with_name("reconstruct.py")), method, directory],
             env=safe, check=True, timeout=body["timeout_seconds"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         outputs = work / "outputs"
+        artifacts, total = [], 0
         for path in sorted(outputs.iterdir()):
             if path.is_symlink() or not path.is_file() or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}", path.name):
                 raise ValueError("Invalid output artifact")
-            if path.stat().st_size > 256_000_000:
+            total += path.stat().st_size
+            if total > 256_000_000:
                 raise ValueError("GPU output exceeds ingestion budget")
-            with path.open("rb") as content:
-                client.put_object(Bucket="tervory-rig", Key=prefix + "gpu/" + path.name, Body=content,
-                                  Metadata={"approval": "draft"})
+            artifacts.append(path)
         if not (outputs / "result.glb").is_file():
             raise ValueError("GPU job produced no model")
+        # A fixed object key contains original OBJ/materials/textures. The worker
+        # never gets authority to invent output keys or list other jobs' objects.
+        archive = work / "source.zip"
+        with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_STORED) as bundle:
+            for path in artifacts:
+                if path.name != "result.glb":
+                    bundle.write(path, arcname=path.name)
+        upload(transfers["put"]["source.zip"], archive)
+        upload(transfers["put"]["result.glb"], outputs / "result.glb")
 
 
 if __name__ == "__main__":
     try:
         main(sys.argv[1])
     except Exception:
-        # Provider errors may contain credentials or signed URLs: never print them.
+        # Provider errors may contain signed capabilities: never print them.
         print("Forge GPU reconstruction failed. No model was approved.", file=sys.stderr)
         sys.exit(1)

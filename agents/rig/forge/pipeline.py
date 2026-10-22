@@ -5,12 +5,12 @@ import asyncio
 import json
 import os
 import signal
+import sys
+from dataclasses import asdict
 from pathlib import Path
 from typing import Awaitable, Callable
 
-from .cad import convert
-from .inputs import embedded_mesh
-from .model_check import Budget, check
+from .model_check import Budget
 
 HERE = Path(os.environ.get("RIG_FORGE_TOOL_ROOT", Path(__file__).resolve().parent))
 Receipt = Callable[[str, str], Awaitable[None]]
@@ -20,16 +20,21 @@ class StageFailed(RuntimeError):
     pass
 
 
-async def command(args: list[str], cwd: Path, timeout: int = 300) -> None:
+async def command(args: list[str], cwd: Path, timeout: int = 300, *, memory_bytes: int | None = None) -> None:
     # Tool processes receive no HF/R2/room credentials and no network proxy.
     safe = {k: os.environ[k] for k in ("PATH", "LANG", "LD_LIBRARY_PATH") if k in os.environ}
-    safe.update(HOME=str(cwd), TMPDIR=str(cwd), OMP_NUM_THREADS="2")
+    safe.update(HOME=str(cwd), TMPDIR=str(cwd), OMP_NUM_THREADS="2", OPENBLAS_NUM_THREADS="1")
+    if memory_bytes is not None:
+        args = [sys.executable, str(HERE / "limited.py"), str(memory_bytes), *args]
     process = await asyncio.create_subprocess_exec(*args, cwd=cwd, env=safe,
         stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL, start_new_session=True)
     try:
         await asyncio.wait_for(process.wait(), timeout)
     except (asyncio.TimeoutError, asyncio.CancelledError):
-        os.killpg(process.pid, signal.SIGKILL)
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
         await process.wait()
         raise
     if process.returncode:
@@ -48,19 +53,20 @@ async def run(source: Path, work: Path, *, unit_mm: float, dimensions_mm: tuple[
         return result
 
     async def geometry(path, scale, cap, encoded_bytes=None):
-        embedded_mesh(path)
-        report = await asyncio.to_thread(check, path, unit_mm=scale, expected_mm=dimensions_mm,
-                                         budget=cap, encoded_bytes=encoded_bytes)
-        (work / "report.json").write_text(json.dumps(report, indent=2))
+        report_path = work / "report.json"
+        report_path.unlink(missing_ok=True)
+        options = dict(unit_mm=scale, expected_mm=dimensions_mm,
+                       budget=asdict(cap), encoded_bytes=encoded_bytes)
+        await command([sys.executable, str(HERE / "model_check.py"), str(path), str(report_path),
+                       json.dumps(options)], work, timeout=60, memory_bytes=3 * 1024**3)
+        report = json.loads(report_path.read_text())
         if not report["passed"]:
             raise StageFailed("Model checks failed.")
         return report
 
     mesh = source
-    if source.suffix.lower() in {".step", ".stp", ".iges", ".igs"}:
-        mesh = work / "cad.obj"
-        await stage("cad", lambda: asyncio.to_thread(convert, source, mesh))
-        unit_mm = 1.0
+    if source.suffix.lower() not in {".obj", ".ply", ".glb"}:
+        raise StageFailed("Only scan or AI mesh assets are supported.")
     # Do not repair the scan before detecting holes and inward faces. The input
     # may be larger than the delivery budget but still has a hard ingestion cap.
     await stage("preflight", lambda: geometry(mesh, unit_mm, Budget(triangles=2_000_000, bytes=256_000_000)))

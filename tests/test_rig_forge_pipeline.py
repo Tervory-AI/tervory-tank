@@ -16,14 +16,14 @@ pytestmark = pytest.mark.skipif(not shutil.which("blender"), reason="Runs in req
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("name", ["block.step", "scan.obj"])
+@pytest.mark.parametrize("name", ["ai-sample.glb", "scan.obj"])
 async def test_neutral_samples_pass_all_real_tools(tmp_path, name):
     source = tmp_path / name
     shutil.copyfile(ROOT / "agents/rig/forge/samples" / name, source)
     steps = []
     async def receipt(stage, outcome):
         steps.append((stage, outcome))
-    report = await run(source, tmp_path, unit_mm=1, dimensions_mm=(20, 30, 40), budget=Budget(), receipt=receipt)
+    report = await run(source, tmp_path, unit_mm=1000 if name.endswith(".glb") else 1, dimensions_mm=(20, 30, 40), budget=Budget(), receipt=receipt)
     assert report["passed"] and report["status"] == "draft" and all(report["checks"].values())
     assert report["bytes"] < 8_000_000 and report["triangles"] <= 100_000
     assert steps[-1] == ("validate", "delivered")

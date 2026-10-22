@@ -72,6 +72,7 @@ services:
       RIG_SANDBOX_URL: http://rig-sandbox:8002
       SANDBOX_KEY: ${SANDBOX_KEY_RIG:?Set the Rig-only sandbox key}
       DATA_DIR: /data
+      RIG_FORGE_TRELLIS_ENABLED: ${RIG_FORGE_TRELLIS_ENABLED:-false}
     volumes:
       - rig_brain_data:/data
     networks: [gw, sandbox, forge-control]
@@ -171,6 +172,8 @@ services:
     volumes:
       - rig_forge_data:/data
     environment:
+      RIG_FORGE_TRELLIS_ENABLED: ${RIG_FORGE_TRELLIS_ENABLED:-false}
+      FORGE_RETENTION_SECONDS: ${FORGE_RETENTION_SECONDS:-604800}
       R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
       R2_ACCESS_KEY_ID_RIG: ${R2_ACCESS_KEY_ID_RIG:-}
       R2_SECRET_ACCESS_KEY_RIG: ${R2_SECRET_ACCESS_KEY_RIG:-}

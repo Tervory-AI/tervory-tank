@@ -19,7 +19,8 @@ class Storage:
                 raise ValueError("Rig R2 storage is not configured.")
             client = boto3.client("s3", endpoint_url=f"https://{account}.r2.cloudflarestorage.com",
                 aws_access_key_id=key, aws_secret_access_key=secret, region_name="auto",
-                config=Config(connect_timeout=10, read_timeout=120, retries={"max_attempts": 2},
+                config=Config(signature_version="s3v4", s3={"addressing_style": "path"},
+                              connect_timeout=10, read_timeout=120, retries={"max_attempts": 2},
                               proxies={"https": "http://rig-forge-egress:8080"}))
         self.client = client
 
@@ -27,6 +28,26 @@ class Storage:
         if not re.fullmatch(r"(?:inputs|gpu|drafts)/[a-zA-Z0-9][a-zA-Z0-9_.-]{0,119}", relative):
             raise ValueError("Invalid job object name.")
         return self.prefix + relative
+
+    def transfers(self, manifest: dict) -> dict:
+        """Mint method/object-limited capabilities, never send a bucket key to HF.
+
+        GET expires within 15 minutes; PUT lasts the job timeout plus five minutes
+        (at most 65 minutes). Queue delays fail closed. Do not persist/log this.
+        """
+        timeout = manifest["timeout_seconds"]
+        if not 60 <= timeout <= 3600:
+            raise ValueError("Invalid transfer timeout.")
+        def signed(operation, name, expires, **params):
+            return self.client.generate_presigned_url(operation,
+                Params={"Bucket": "tervory-rig", "Key": self.key(name), **params},
+                ExpiresIn=expires, HttpMethod="GET" if operation == "get_object" else "PUT")
+        return {"manifest": manifest,
+                "get": {name: signed("get_object", "inputs/" + name, min(900, timeout + 300))
+                        for name in manifest["inputs"]},
+                "put": {name: signed("put_object", "gpu/" + name, timeout + 300,
+                                    Metadata={"approval": "draft"})
+                        for name in ("result.glb", "source.zip")}}
 
     def download(self, name: str, destination: Path, limit: int = 256_000_000):
         response = self.client.get_object(Bucket="tervory-rig", Key=self.key(name))

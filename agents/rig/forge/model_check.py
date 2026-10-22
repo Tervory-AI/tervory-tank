@@ -4,10 +4,6 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-import manifold3d
-import numpy as np
-import trimesh
-
 
 @dataclass(frozen=True)
 class Budget:
@@ -21,10 +17,15 @@ def check(path: Path, *, unit_mm: float, expected_mm: tuple[float, float, float]
           budget: Budget = Budget(), encoded_bytes: int | None = None) -> dict:
     """Check each connected shell, including small inverted parts of a large mesh.
 
-    glTF coordinates are metres (unit_mm=1000); CAD/OBJ inputs explicitly declare
+    glTF coordinates are metres (unit_mm=1000); OBJ inputs explicitly declare
     their units. Dimensions come from the job's measured dimensions, never AI.
     A failed check yields a report and cannot enter the human approval queue.
     """
+    # Only the bounded worker imports native parsers; the service imports Budget.
+    import manifold3d
+    import numpy as np
+    import trimesh
+
     checks = {key: False for key in ("finite", "watertight", "outward", "manifold", "dimensions", "budget")}
     report = {"passed": False, "checks": checks, "triangles": 0,
               "bytes": path.stat().st_size if encoded_bytes is None else encoded_bytes,
@@ -37,7 +38,7 @@ def check(path: Path, *, unit_mm: float, expected_mm: tuple[float, float, float]
         meshes = scene.to_geometry()
         if not isinstance(meshes, trimesh.Trimesh) or not len(meshes.faces):
             raise ValueError("empty mesh")
-        # OBJ and CAD can repeat vertices at face boundaries. Weld coincident
+        # OBJ can repeat vertices at face boundaries. Weld coincident
         # positions without fixing normals, filling holes, or reversing winding.
         meshes.merge_vertices()
         finite = bool(np.isfinite(meshes.vertices).all())
@@ -76,3 +77,16 @@ def check(path: Path, *, unit_mm: float, expected_mm: tuple[float, float, float]
     report["status"] = "draft" if report["passed"] else "rejected"
     report["budget"] = asdict(budget)
     return report
+
+
+if __name__ == "__main__":
+    import json
+    import sys
+    from inputs import embedded_mesh
+
+    source, destination, settings = sys.argv[1:]
+    options = json.loads(settings)
+    options["budget"] = Budget(**options["budget"])
+    embedded_mesh(Path(source))
+    result = check(Path(source), **options)
+    Path(destination).write_text(json.dumps(result))

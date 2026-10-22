@@ -36,7 +36,7 @@ class Complete(Scope):
 
 
 class Step(Scope):
-    stage: Literal["intake", "cad", "preflight", "blender", "dedup", "simplify", "meshopt",
+    stage: Literal["intake", "preflight", "blender", "dedup", "simplify", "meshopt",
                    "resize", "gltfpack", "ktx2", "meshopt_final", "model_check", "validate", "upload", "gpu_submit", "gpu_poll", "gpu_cancel", "gpu_download"]
     outcome: Literal["delivered", "failed"]
 

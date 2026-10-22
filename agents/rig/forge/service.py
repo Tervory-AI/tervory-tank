@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import socket
+import time
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -18,6 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .gpu import GPU
 from .model_check import Budget
 from .pipeline import run
+from .retention import cleanup, save, sweep
 from .storage import Storage
 
 gate = asyncio.Semaphore(1)
@@ -29,7 +32,7 @@ class Job(BaseModel):
     tenant_id: uuid.UUID
     job_id: uuid.UUID
     home_region: Literal["us-east"]
-    method: Literal["cad", "scan", "photogrammetry", "trellis2"]
+    method: Literal["scan", "photogrammetry", "trellis2"]
     inputs: list[str] = Field(min_length=1, max_length=150)
     unit_mm: float = Field(gt=0, le=1000)
     dimensions_mm: tuple[float, float, float]
@@ -46,10 +49,10 @@ class Job(BaseModel):
         if len(set(self.inputs)) != len(self.inputs) or any(v <= 0 or v > 100_000 for v in self.dimensions_mm):
             raise ValueError("Duplicate files or invalid measured dimensions.")
         suffixes = {Path(name).suffix.lower() for name in self.inputs}
-        if self.method in {"cad", "scan"}:
-            allowed = {".step", ".stp", ".iges", ".igs"} if self.method == "cad" else {".obj", ".ply", ".glb"}
+        if self.method == "scan":
+            allowed = {".obj", ".ply", ".glb"}
             if len(self.inputs) != 1 or not suffixes <= allowed:
-                raise ValueError("One CAD or scan asset is required.")
+                raise ValueError("One scan or AI mesh asset is required.")
         else:
             low, high = (50, 150) if self.method == "photogrammetry" else (1, 4)
             if not low <= len(self.inputs) <= high or not suffixes <= {".jpg", ".jpeg", ".png", ".webp"}:
@@ -67,12 +70,6 @@ def directory(tenant: uuid.UUID, job: uuid.UUID) -> Path:
         raise HTTPException(409, "Invalid job storage.")
     work.mkdir(parents=True, exist_ok=True, mode=0o700)
     return work
-
-
-def save(path: Path, value: dict):
-    temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(value, indent=2))
-    temporary.replace(path)
 
 
 async def brain_addresses():
@@ -115,14 +112,11 @@ async def perform(body: Job, work: Path, store: Storage):
         save(work / "state.json", state)
         try:
             if body.method in {"photogrammetry", "trellis2"}:
-                manifest = work / "manifest.json"
-                save(manifest, body.model_dump(mode="json"))
-                await asyncio.to_thread(store.upload, "inputs/manifest.json", manifest)
+                transfers = await asyncio.to_thread(store.transfers, body.model_dump(mode="json"))
                 await receipt("intake", "delivered")
-                await GPU().run(body.scope(), body.method, store.key("inputs/manifest.json"),
+                await GPU().run(body.scope(), body.method, transfers=transfers,
                     timeout=body.timeout_seconds, cap=body.cost_cap_usd, relay=gpu_relay, save_provider=provider,
-                    namespace=os.environ.get("HF_JOBS_NAMESPACE", ""), secrets={name: os.environ.get(name, "") for name in
-                    ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID_RIG", "R2_SECRET_ACCESS_KEY_RIG")})
+                    namespace=os.environ.get("HF_JOBS_NAMESPACE", ""))
                 state["stage"] = "gpu_download"
                 source = work / "generated.glb"
                 await asyncio.to_thread(store.download, "gpu/result.glb", source)
@@ -152,15 +146,30 @@ async def perform(body: Job, work: Path, store: Storage):
             if (work / "report.json").exists():
                 state["report"] = json.loads((work / "report.json").read_text())
         finally:
+            state["finished_at"] = time.time()
             save(work / "state.json", state)
+            try:
+                cleanup(work)
+            except OSError:
+                logging.getLogger(__name__).error("Forge intermediates could not be removed; retention will retry.")
 
 
 @asynccontextmanager
 async def lifespan(app):
-    yield
-    for task in list(tasks.values()):
-        task.cancel()
-    await asyncio.gather(*list(tasks.values()), return_exceptions=True)
+    root = Path(os.environ.get("FORGE_DATA_DIR", "/data"))
+    sweep(root, set(tasks))
+    async def maintain():
+        while True:
+            await asyncio.sleep(60)
+            sweep(root, set(tasks))
+    maintenance = asyncio.create_task(maintain())
+    try:
+        yield
+    finally:
+        maintenance.cancel()
+        for task in list(tasks.values()):
+            task.cancel()
+        await asyncio.gather(maintenance, *list(tasks.values()), return_exceptions=True)
 
 
 app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
@@ -186,6 +195,8 @@ async def health():
 
 @app.post("/jobs")
 async def submit(body: Job):
+    if body.method == "trellis2" and os.environ.get("RIG_FORGE_TRELLIS_ENABLED", "").lower() != "true":
+        raise HTTPException(503, "TRELLIS is disabled pending the founder's licence decision.")
     if any(os.environ.get(name) for name in ("TANK_KEY", "TANK_API_KEY", "TANK_KEY_RIG")):
         raise HTTPException(503, "A Tank credential must never be installed in the forge.")
     try:

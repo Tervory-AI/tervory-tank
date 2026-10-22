@@ -1,7 +1,7 @@
 # GPU runtime dependencies; torch/CUDA come from the digest-pinned base.
 torch==2.6.0
 torchvision==0.21.0
-boto3==1.40.47
+requests==2.34.2
 trimesh==4.9.0
 numpy==2.2.6
 pillow==11.3.0

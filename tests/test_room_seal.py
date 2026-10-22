@@ -368,7 +368,7 @@ def test_seal_check_is_read_only() -> None:
         assert word not in script.split("set -uo pipefail", 1)[1], word
 
 
-@pytest.mark.parametrize("service", ["agent-rig", "rig-brain", "rig-browser", "rig-browser-gateway", "rig-sandbox"])
+@pytest.mark.parametrize("service", ["agent-rig", "rig-brain", "rig-browser", "rig-browser-gateway", "rig-sandbox", "rig-forge", "rig-forge-egress"])
 def test_rig_extra_network_is_a_leak_even_on_public_api(tmp_path, service):
     data = json.loads((FIXTURES / "sealed.json").read_text())
     data["networks"]["unexpected"] = False
