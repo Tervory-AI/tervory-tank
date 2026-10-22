@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 from typing import Any
 from urllib.parse import urlparse
 
-_FORMATS = ("shopify", "woocommerce", "google")
+_FORMATS = ("shopify", "woocommerce", "google", "csv", "tsv", "json", "xml", "xlsx")
 
 
 def register(url: str, fmt: str, currency: str = "") -> dict[str, str]:
@@ -20,7 +20,7 @@ def register(url: str, fmt: str, currency: str = "") -> dict[str, str]:
     text = str(url or "").strip()
     kind = str(fmt or "").strip().lower()
     if kind not in _FORMATS:
-        raise ValueError("feed format must be shopify, woocommerce, or google")
+        raise ValueError("feed format must be " + ", ".join(_FORMATS))
     parsed = urlparse(text)
     if parsed.scheme != "https" or not parsed.netloc:
         raise ValueError("feed url must be https")
@@ -37,6 +37,14 @@ def pull(record: dict[str, Any], body: Any) -> dict[str, Any]:
     if not isinstance(record, dict):
         return _feed_error("feed is not registered")
     kind = str(record.get("format") or "")
+    if record.get("columns") or kind in {"csv", "tsv", "json", "xml", "xlsx"}:
+        import csv
+        import zipfile
+        from .catalogue import map_catalogue
+        try:
+            return map_catalogue({**record, "format": "xml" if kind == "google" else kind}, body)
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError, RecursionError, UnicodeError, csv.Error, ET.ParseError, zipfile.BadZipFile, RuntimeError):
+            return _feed_error("Check the file format and confirmed field names.")
     if kind == "shopify":
         return map_shopify(body, str(record.get("currency") or ""))
     if kind == "woocommerce":

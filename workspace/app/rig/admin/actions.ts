@@ -4,7 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { activeTenant } from "@/lib/tenant";
 import { rigAdminAction, rigAdminPanel } from "@/lib/tank";
 import { isListedFounder } from "../../review/founder";
-import type { AdminOperation, AdminResult, RetailerPanel } from "./types";
+import type { AdminOperation, AdminResult, RetailerPanel, MappingPreview } from "./types";
 
 export async function retailerIdentity() {
   const { userId, orgRole } = await auth();
@@ -18,6 +18,10 @@ export async function retailerIdentity() {
 export async function changeRetailer(operation: AdminOperation, data: Record<string, unknown>): Promise<AdminResult> {
   try {
     const actor = await retailerIdentity();
+    if (operation === "mapping") {
+      const mapping = await rigAdminAction<MappingPreview>(actor, operation, data);
+      return { ok: true, message: "Check each field and confirm the mapping before saving.", mapping };
+    }
     const result = await rigAdminAction<{ ok?: boolean; suggestions?: string; receipt?: { added: number; updated: number; rejected: number } }>(actor, operation, data);
     if (result.ok === false) return { ok: false, message: "Nothing was imported. Check the file, private price rule and founder-set exchange rate.", panel: await rigAdminPanel<RetailerPanel>(actor) };
     const message = result.receipt

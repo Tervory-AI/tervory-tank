@@ -45,13 +45,13 @@ class RetailerMemoryStore:
         self._retailer_state()
         self.private_rules[str(tenant_id)] = dict(rule)
 
-    async def rate(self, tenant_id: str, currency: str) -> Any:
+    async def rate(self, tenant_id: str, currency: str, target: str = "ZAR") -> Any:
         self._retailer_state()
-        return "1" if currency == "ZAR" else self.private_rates.get((str(tenant_id), currency))
+        return "1" if currency == target else self.private_rates.get((str(tenant_id), currency if target == "ZAR" else currency + ":" + target))
 
-    async def save_rate(self, tenant_id: str, currency: str, rate: Any) -> None:
+    async def save_rate(self, tenant_id: str, currency: str, rate: Any, target: str = "ZAR") -> None:
         self._retailer_state()
-        self.private_rates[(str(tenant_id), currency)] = str(rate)
+        self.private_rates[(str(tenant_id), currency if target == "ZAR" else currency + ":" + target)] = str(rate)
 
     async def costs(self, tenant_id: str) -> list[dict[str, Any]]:
         self._retailer_state()
@@ -100,30 +100,37 @@ class RetailerPgStore:
             await conn.execute("""INSERT INTO agent_rig.price_rules(tenant_id,rule) VALUES($1,$2::jsonb)
                 ON CONFLICT(tenant_id) DO UPDATE SET rule=EXCLUDED.rule,updated_at=now()""", UUID(str(tenant_id)), json.dumps(rule))
 
-    async def rate(self, tenant_id: str, currency: str) -> Any:
-        if currency == "ZAR":
+    async def rate(self, tenant_id: str, currency: str, target: str = "ZAR") -> Any:
+        if currency == target:
             return "1"
         async with self.pool.acquire() as conn:
-            return await conn.fetchval("SELECT rate FROM agent_rig.exchange_rates WHERE tenant_id=$1 AND currency=$2", UUID(str(tenant_id)), currency)
+            return await conn.fetchval("SELECT rate FROM agent_rig.exchange_rates WHERE tenant_id=$1 AND currency=$2", UUID(str(tenant_id)), currency if target == "ZAR" else currency + ":" + target)
 
-    async def save_rate(self, tenant_id: str, currency: str, rate: Any) -> None:
+    async def save_rate(self, tenant_id: str, currency: str, rate: Any, target: str = "ZAR") -> None:
         from decimal import Decimal
         async with self.pool.acquire() as conn:
             await conn.execute("""INSERT INTO agent_rig.exchange_rates(tenant_id,currency,rate) VALUES($1,$2,$3)
-                ON CONFLICT(tenant_id,currency) DO UPDATE SET rate=EXCLUDED.rate,updated_at=now()""", UUID(str(tenant_id)), currency, Decimal(str(rate)))
+                ON CONFLICT(tenant_id,currency) DO UPDATE SET rate=EXCLUDED.rate,updated_at=now()""", UUID(str(tenant_id)), currency if target == "ZAR" else currency + ":" + target, Decimal(str(rate)))
 
     async def costs(self, tenant_id: str) -> list[dict[str, Any]]:
         async with self.pool.acquire() as conn:
-            rows = await conn.fetch("SELECT sku,cost,currency,provider,site FROM agent_rig.supplier_costs WHERE tenant_id=$1", UUID(str(tenant_id)))
-        return [dict(row) for row in rows]
+            rows = await conn.fetch("SELECT sku,cost,currency,provider,site,feed_metadata FROM agent_rig.supplier_costs WHERE tenant_id=$1", UUID(str(tenant_id)))
+        result = []
+        for row in rows:
+            values = dict(row)
+            metadata = values.pop("feed_metadata")
+            result.append({**values, **(json.loads(metadata) if isinstance(metadata, str) else metadata)})
+        return result
 
     async def save_cost(self, tenant_id: str, row: dict[str, Any]) -> None:
         from decimal import Decimal
         async with self.pool.acquire() as conn:
-            await conn.execute("""INSERT INTO agent_rig.supplier_costs(tenant_id,sku,cost,currency,provider,site)
-                VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(tenant_id,sku) DO UPDATE SET
-                cost=EXCLUDED.cost,currency=EXCLUDED.currency,provider=EXCLUDED.provider,site=EXCLUDED.site,updated_at=now()""",
-                UUID(str(tenant_id)), row["sku"], Decimal(str(row["cost"])), row["currency"], row["provider"], row["site"])
+            await conn.execute("""INSERT INTO agent_rig.supplier_costs(tenant_id,sku,cost,currency,provider,site,feed_metadata)
+                VALUES($1,$2,$3,$4,$5,$6,$7::jsonb) ON CONFLICT(tenant_id,sku) DO UPDATE SET
+                cost=EXCLUDED.cost,currency=EXCLUDED.currency,provider=EXCLUDED.provider,site=EXCLUDED.site,
+                feed_metadata=EXCLUDED.feed_metadata,updated_at=now()""",
+                UUID(str(tenant_id)), row["sku"], Decimal(str(row["cost"])), row["currency"], row["provider"], row["site"],
+                json.dumps({key: row[key] for key in ("feed_id", "country", "price_basis") if key in row}))
 
     async def is_feed_product(self, tenant_id: str, sku: str) -> bool:
         async with self.pool.acquire() as conn:
@@ -131,13 +138,13 @@ class RetailerPgStore:
 
     async def save_feed_receipt(self, tenant_id: str, receipt: dict[str, Any]) -> None:
         async with self.pool.acquire() as conn:
-            await conn.execute("""INSERT INTO agent_rig.feed_receipts(tenant_id,id,provider,site,added,updated,rejected)
-                VALUES($1,$2,$3,$4,$5,$6,$7)""", UUID(str(tenant_id)), UUID(receipt["id"]), receipt["provider"], receipt["site"],
-                receipt["added"], receipt["updated"], receipt["rejected"])
+            await conn.execute("""INSERT INTO agent_rig.feed_receipts(tenant_id,id,provider,site,added,updated,rejected,feed_id)
+                VALUES($1,$2,$3,$4,$5,$6,$7,$8)""", UUID(str(tenant_id)), UUID(receipt["id"]), receipt["provider"], receipt["site"],
+                receipt["added"], receipt["updated"], receipt["rejected"], receipt.get("feed_id", ""))
 
     async def receipts(self, tenant_id: str) -> list[dict[str, Any]]:
         async with self.pool.acquire() as conn:
-            rows = await conn.fetch("""SELECT id,provider,site,added,updated,rejected,created_at FROM agent_rig.feed_receipts
+            rows = await conn.fetch("""SELECT id,provider,site,feed_id,added,updated,rejected,created_at FROM agent_rig.feed_receipts
                 WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 30""", UUID(str(tenant_id)))
         return [{**dict(row), "id": str(row["id"]), "created_at": row["created_at"].isoformat()} for row in rows]
 

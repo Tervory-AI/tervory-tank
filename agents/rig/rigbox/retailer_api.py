@@ -12,7 +12,7 @@ from rigbox.retailer import Retailer
 from rigbox.service import RigError
 
 router = APIRouter()
-OPERATIONS = {"panel", "import", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest", "tiger"}
+OPERATIONS = {"panel", "import", "mapping", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest", "tiger"}
 
 
 @router.post("/internal/retailer/{operation}")
@@ -26,7 +26,7 @@ async def retailer_operation(operation: str, request: Request) -> JSONResponse:
     raw = bytearray()
     async for chunk in request.stream():
         raw.extend(chunk)
-        if len(raw) > 10_000_000:
+        if len(raw) > 12_000_000:
             raise RigError("invalid", "The file is too large.", 413)
     try:
         body = json.loads(raw)
@@ -41,6 +41,20 @@ async def retailer_operation(operation: str, request: Request) -> JSONResponse:
     try:
         if operation == "panel":
             result = await retailer.panel(tenant)
+        elif operation == "mapping":
+            import csv
+            import zipfile
+            import xml.etree.ElementTree as ET
+            from rigbox.feeds.catalogue import suggest_mapping
+            kind = data.get("provider")
+            if kind == "google":
+                kind = "xml"
+            elif kind not in {"shopify", "woocommerce"}:
+                kind = data.get("format")
+            try:
+                result = suggest_mapping({**data, "format": kind}, data["contents"])
+            except (ValueError, TypeError, KeyError, IndexError, AttributeError, RecursionError, UnicodeError, csv.Error, ET.ParseError, zipfile.BadZipFile, RuntimeError):
+                raise ValueError("Check the file format and product list path.") from None
         elif operation == "import":
             result = await retailer.import_file(tenant, data)
         elif operation == "price-rule":

@@ -280,7 +280,7 @@ async def test_access_connect_manual_refresh_nightly_and_receipts_on_postgres(mo
         app.dependency_overrides[access.identity] = lambda: actor
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             connection = {"target": "rig", "distributor": "shopify", "site": SITE, "endpoint": SITE + "/products.json",
-                          "format": "json", "currency": "USD", "official_read_only": True, "auth_mode": "none"}
+                          "format": "json", "official_read_only": True, "auth_mode": "none", "mapping_confirmed": True, "country": "US", "price_basis": "cost", "currency": "USD"}
             response = await client.post("/v1/access/rig/admin/connect", json={"data": connection})
             assert response.status_code == 200
             request = {"target": "rig", "distributor": "shopify", "site": SITE}
@@ -290,7 +290,7 @@ async def test_access_connect_manual_refresh_nightly_and_receipts_on_postgres(mo
             actor = Actor(UUID(OTHER), "other-retailer", False, frozenset({"rig"}))
             assert (await client.post("/v1/access/rig/admin/refresh", json={"data": request})).status_code == 409
             actor = Actor(UUID(TENANT), "retailer-user", False, frozenset({"rig"}))
-            invalid = {"target": "rig", "distributor": "zanders", "site": "https://SUPPLIER.example/", "format": "csv", "source": "ftp_export", "contents": "not,a,valid,feed"}
+            invalid = {"target": "rig", "distributor": "zanders", "site": "https://SUPPLIER.example/", "format": "csv", "source": "ftp_export", "contents": "not,a,valid,feed", "mapping_confirmed": True, "country": "US", "price_basis": "cost", "currency": "USD"}
             response = await client.post("/v1/access/rig/admin/import", json={"data": invalid})
             assert response.status_code == 200
             assert response.json()["receipt"]["rejected"] == 1

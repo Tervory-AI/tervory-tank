@@ -1,7 +1,43 @@
-"""Private landed-cost calculations. Only the final ZAR amount is public."""
+"""Private landed-cost calculations. Only the final shop amount is public."""
 
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any
+import re
+
+EU_COUNTRIES = frozenset("AT BE BG HR CY CZ DE DK EE ES FI FR GR HU IE IT LT LU LV MT NL PL PT RO SE SI SK".split())
+
+
+def currency(value: Any) -> str:
+    code = str(value).upper()
+    if not re.fullmatch("[A-Z]{3}", code):
+        raise ValueError("Use a three-letter currency code.")
+    return code
+
+
+def region(country: str) -> str:
+    return "EU" if country in EU_COUNTRIES else country
+
+
+def supplier_key(row: dict) -> str:
+    return ":".join((row["provider"], row["site"], row.get("feed_id", "")))
+
+
+def resolved_rule(settings: dict | None, row: dict) -> dict:
+    if settings is None:
+        raise ValueError("Set a private price rule first.")
+    scopes = settings.get("scopes", {})
+    country = row.get("country", "US")
+    rule = (scopes.get("supplier:" + supplier_key(row)) or scopes.get("region:" + country)
+            or scopes.get("region:" + region(country)))
+    return rule or settings
+
+
+def selling_price(amount: Any, rate: Any) -> Decimal:
+    fx = number(rate, maximum="1000000")
+    if not fx:
+        raise ValueError("A founder-set exchange rate is required.")
+    value = number(amount)
+    return value if fx == 1 else number(value * fx, maximum="1000000000000").quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
 def number(value: Any, *, maximum: str = "1000000000") -> Decimal:

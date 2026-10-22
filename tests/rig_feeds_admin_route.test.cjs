@@ -40,7 +40,7 @@ async function main() {
   assert.equal(big.status, 200);
   assert.equal(calls.length, 1);
   assert.equal(calls[0].data.contents.length, 1_100_000);
-  assert.equal((await route.POST(request({ operation: 'import', data: { contents: 'x'.repeat(10_000_001) } }))).status, 413);
+  assert.equal((await route.POST(request({ operation: 'import', data: { contents: 'x'.repeat(12_000_001) } }))).status, 413);
   assert.equal(calls.length, 1);
 
   let role = 'org:member';

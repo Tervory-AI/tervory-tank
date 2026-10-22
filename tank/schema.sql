@@ -1580,3 +1580,12 @@ END $$;
 -- Rig connection names use the rig: prefix to preserve Tiger's bindings.
 ALTER TABLE tank.access_feed_connections ADD COLUMN IF NOT EXISTS rig_refresh_at timestamptz;
 ALTER TABLE tank.access_feed_batches ADD COLUMN IF NOT EXISTS rig_summary jsonb;
+
+-- RIG-3: confirmed mappings for uploads and scheduled feeds, no source amounts or credentials.
+CREATE TABLE IF NOT EXISTS tank.rig_feed_settings (
+    tenant_id uuid NOT NULL,
+    distributor text NOT NULL,
+    site text NOT NULL,
+    settings jsonb NOT NULL,
+    PRIMARY KEY (tenant_id,distributor,site)
+);

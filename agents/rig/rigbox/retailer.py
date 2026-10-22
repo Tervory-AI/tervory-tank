@@ -7,7 +7,7 @@ from typing import Any
 
 from rigbox.catalogue import _product_row, check_fit_refs, families_from
 from rigbox.feeds import pull
-from rigbox.pricing import indicative_price, number, price_rule
+from rigbox.pricing import currency, indicative_price, number, price_rule, resolved_rule, selling_price
 from rigbox.service import RigError, Service
 
 
@@ -29,9 +29,17 @@ def map_import(data: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
         raise ValueError("The source file could not be read.")
     provider = data["provider"]
     metadata = {}
-    if provider in {"shopify", "woocommerce", "google"}:
+    if data.get("contents") and data.get("format") in {"csv", "tsv", "json", "xml", "xlsx"} and (provider not in {"shopify", "woocommerce", "google"} or data.get("columns")):
+        kind = provider if provider in {"shopify", "woocommerce", "google"} else data["format"]
+        mapped = pull({**data, "format": kind}, data["contents"])
+        metadata = mapped.get("metadata", {})
+    elif provider in {"shopify", "woocommerce", "google"}:
         raw = data["contents"]
+        if isinstance(raw, (str, bytes)) and len(raw.encode() if isinstance(raw, str) else raw) > 8_000_000:
+            raise ValueError("File too large.")
         mapped = pull({"format": provider, "currency": data.get("currency", "")}, raw)
+        if any(row["currency"] != data.get("currency", row["currency"]) for row in mapped["rows"]):
+            raise ValueError("The feed currency differs from its declared currency.")
         if provider != "google":
             loaded = json.loads(raw) if isinstance(raw, str) else raw
             if isinstance(loaded, dict):
@@ -52,6 +60,8 @@ def map_import(data: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
         metadata = data.get("metadata") or {}
     if not isinstance(metadata, dict):
         raise ValueError("Feed metadata must be an object.")
+    if len(mapped["rows"]) > 50000:
+        raise ValueError("Too many products.")
     if not mapped["rows"] and not mapped["rejected"]:
         raise ValueError("The file has no products.")
     return mapped, metadata
@@ -63,9 +73,10 @@ class Retailer:
         self.store = service.store
 
     async def panel(self, tenant: str) -> dict[str, Any]:
+        settings = await self.store.rule(tenant)
         return {
-            "price_configured": bool(await self.store.rule(tenant)),
-            "currency": "ZAR",
+            "price_configured": bool(settings),
+            "currency": (settings or {}).get("shop_currency", "ZAR"),
             "templates": await self.store.templates_for(tenant),
             "fits": (await self.service.suggested_fits(tenant))["fits"],
             "missed_searches": await self.store.missed_searches(tenant),
@@ -74,27 +85,52 @@ class Retailer:
         }
 
     async def reprice(self, store: Any, tenant: str) -> None:
-        rule = await store.rule(tenant)
+        settings = await store.rule(tenant)
+        target = (settings or {}).get("shop_currency", "ZAR")
         for row in await store.costs(tenant):
-            amount = indicative_price(row["cost"], rule or {}, await store.rate(tenant, row["currency"]))
-            await store.update_price(tenant, row["sku"], {"price": amount, "currency": "ZAR"})
+            amount = await self.amount(store, tenant, row, settings)
+            await store.update_price(tenant, row["sku"], {"price": amount, "currency": target})
+
+    async def amount(self, store: Any, tenant: str, row: dict, settings: dict | None):
+        target = (settings or {}).get("shop_currency", "ZAR")
+        rate = await store.rate(tenant, row["currency"], target)
+        if row.get("price_basis", "cost") == "selling":
+            return selling_price(row["cost"], rate)
+        return indicative_price(row["cost"], resolved_rule(settings, row), rate)
 
     async def set_rule(self, tenant: str, data: dict[str, Any]) -> dict[str, bool]:
         rule = price_rule(data)
+        scope = data.get("scope", "default")
+        identifier = str(data.get("scope_id", "")).strip()
+        if scope not in {"default", "region", "supplier"} or (scope != "default" and (not identifier or len(identifier) > 500)):
+            raise ValueError("Choose a default, region or supplier rule.")
+        if scope == "region" and not re.fullmatch("[A-Z]{2}", identifier):
+            raise ValueError("Choose a two-letter region or country.")
         async with self.store.atomic(tenant) as store:
-            await store.save_rule(tenant, rule)
+            settings = dict(await store.rule(tenant) or {})
+            if scope == "default":
+                settings.update(rule)
+            else:
+                # A scoped rule cannot silently establish a zero-cost default.
+                if not all(key in settings for key in rule):
+                    raise ValueError("Set the default price rule first.")
+                settings["scopes"] = {**settings.get("scopes", {}), scope + ":" + identifier: rule}
+            if data.get("shop_currency"):
+                settings["shop_currency"] = currency(data["shop_currency"])
+            await store.save_rule(tenant, settings)
             await self.reprice(store, tenant)
         return {"saved": True, "price_configured": True}
 
     async def set_rate(self, tenant: str, data: dict[str, Any], founder: bool = False) -> dict[str, bool]:
         if not founder:
             raise RigError("forbidden", "Only the founder can set an exchange rate.", 403)
-        code = str(data.get("currency", "")).upper()
+        code = currency(data.get("currency", ""))
+        target = currency(data.get("target_currency", "ZAR"))
         rate = number(data.get("rate"), maximum="1000000")
-        if not re.fullmatch("[A-Z]{3}", code) or not rate or (code == "ZAR" and rate != 1):
-            raise ValueError("Use a currency code and a positive rate to ZAR.")
+        if not rate or (code == target and rate != 1):
+            raise ValueError("Use a currency code and a positive exchange rate.")
         async with self.store.atomic(tenant) as store:
-            await store.save_rate(tenant, code, rate)
+            await store.save_rate(tenant, code, rate, target)
             await self.reprice(store, tenant)
         return {"saved": True}
 
@@ -106,18 +142,22 @@ class Retailer:
         return {"saved": True}
 
     async def import_file(self, tenant: str, data: dict[str, Any]) -> dict[str, Any]:
-        receipt = {"id": str(uuid4()), "provider": data["provider"], "site": data["site"], "added": 0, "updated": 0, "rejected": 0}
+        receipt = {"id": str(uuid4()), "provider": data["provider"], "site": data["site"], "feed_id": data.get("feed_id", ""), "added": 0, "updated": 0, "rejected": 0}
         problems = []
         try:
+            country = str(data.get("country", "US")).upper()
+            basis = data.get("price_basis", "cost")
+            if not re.fullmatch("[A-Z]{2}", country) or basis not in {"cost", "selling"}:
+                raise ValueError("Declare the feed country and price type.")
+            currency(data.get("currency", "USD"))
             mapped, metadata = map_import(data)
             problems = mapped["rejected"]
             if problems:
                 raise ValueError("The file contains invalid products.")
             defaults = templates(metadata.get("setup_templates", {}))
             async with self.store.atomic(tenant) as store:
-                rule = await store.rule(tenant)
-                if rule is None:
-                    raise ValueError("Set the private price rule before importing.")
+                settings = await store.rule(tenant)
+                target = (settings or {}).get("shop_currency", "ZAR")
                 existing = {row["sku"]: row for row in await store.products(tenant)}
                 combined = {**existing, **{row["sku"]: row for row in mapped["rows"]}}
                 families = metadata.get("families", {})
@@ -145,9 +185,10 @@ class Retailer:
                 for row in mapped["rows"]:
                     sku = row["sku"]
                     # Source amounts exist only in the private cost table.
-                    cost = {"sku": sku, "cost": row["price"], "currency": row["currency"], "provider": data["provider"], "site": data["site"]}
-                    amount = indicative_price(cost["cost"], rule, await store.rate(tenant, cost["currency"]))
-                    public = {**combined[sku], "price": amount, "currency": "ZAR", "attributes": {}}
+                    cost = {"sku": sku, "cost": row["price"], "currency": row["currency"], "provider": data["provider"], "site": data["site"],
+                            "country": country, "price_basis": basis, "feed_id": data.get("feed_id", "")}
+                    amount = await self.amount(store, tenant, cost, settings)
+                    public = {**combined[sku], "price": amount, "currency": target, "attributes": {}}
                     action = await store.upsert_product(tenant, public)
                     receipt[action] += 1
                     await store.save_cost(tenant, cost)

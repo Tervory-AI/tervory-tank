@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { changeRetailer, retailerIdentity } from "../actions";
 import type { AdminOperation } from "../types";
 
-const operations = new Set(["connect", "import", "refresh", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest"]);
+const operations = new Set(["connect", "import", "refresh", "mapping", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest"]);
 
 // Feed files use a bounded route body instead of Next's 1 MB server-action limit.
 export async function POST(request: NextRequest) {
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     const { done, value } = await reader.read();
     if (done) break;
     size += value.byteLength;
-    if (size > 10_000_000) {
+    if (size > 12_000_000) {
       await reader.cancel();
       return NextResponse.json({ ok: false }, { status: 413 });
     }

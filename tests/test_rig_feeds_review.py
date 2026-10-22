@@ -25,7 +25,7 @@ async def test_public_retailer_paths_are_404_even_with_valid_control_or_room_key
     monkeypatch.setenv("RIG_RETAILER_KEY", control_key)
     app = _load_rig_app().app
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://rig.tervory.com") as client:
-        for operation in ("panel", "import", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest", "tiger"):
+        for operation in ("panel", "import", "mapping", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest", "tiger"):
             for headers in ({}, {"x-tank-key": room_key}, {"x-rig-retailer-key": control_key}):
                 response = await client.post("/internal/retailer/" + operation, headers=headers,
                     json={"tenant_id": OTHER, "founder": True, "data": {}})

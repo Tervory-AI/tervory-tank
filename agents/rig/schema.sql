@@ -208,3 +208,7 @@ CREATE TABLE IF NOT EXISTS agent_rig.feed_receipts (
     PRIMARY KEY (tenant_id,id)
 );
 CREATE INDEX IF NOT EXISTS rig_feed_receipts_tenant_created ON agent_rig.feed_receipts(tenant_id,created_at DESC);
+
+-- RIG-3: source provenance for per-feed pricing. Amounts stay private.
+ALTER TABLE agent_rig.supplier_costs ADD COLUMN IF NOT EXISTS feed_metadata jsonb NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE agent_rig.feed_receipts ADD COLUMN IF NOT EXISTS feed_id text NOT NULL DEFAULT '';
