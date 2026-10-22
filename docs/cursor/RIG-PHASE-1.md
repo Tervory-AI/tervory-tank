@@ -84,7 +84,10 @@ Clone the AGENT-1 shape that Base proved (`agents/base/`: brain, sandbox, browse
 - tests.
 
 1. **Feeds into Rig's tables** (`products`, `fits`, `families`, `setup_templates`):
-   - formats: Shopify `products.json`, WooCommerce REST, Google Merchant XML, and the US distributor feeds ACCESS-1 already reads (Zanders, Sports South, RSR, Jerry's);
+   - formats (founder, 22 Oct):
+     - **the store's own CSV.** The store uploads or connects it itself in the admin and maps its columns. Its prices are used exactly as given; that's the store's choice. A store can optionally turn on the price rule below.
+     - **US distributor feeds** that ACCESS-1 already reads (Zanders, Sports South, RSR, Jerry's). These prices are supplier cost, and the landed-cost price rule applies.
+     - No Shopify, WooCommerce or Google Merchant importers.
    - pulled nightly, plus a manual **Refresh now**;
    - all-or-nothing per file, with `{added, updated, rejected}` on a receipt.
 2. **Price rules** (server-side only): the retailer's landed-cost rule (supplier cost, freight, duty, margin and FX to ZAR at a rate the founder sets) gives **one indicative price**. The rule and its inputs never leave the server, and the API sends the result only.
@@ -97,11 +100,11 @@ Clone the AGENT-1 shape that Base proved (`agents/base/`: brain, sandbox, browse
    - connect a feed, set the price rule, choose setup templates per category (pistol: red dot, plate, holster, light; rifle: scope, rings, bipod), and see the fit queue;
    - **what shoppers searched for and didn't find.**
 5. **Tiger** updates price and availability for products with no feed (never fitment).
-6. **Run on sample feeds now:** a sample Shopify feed, a sample WooCommerce feed, a sample Google Merchant feed and a sample distributor file, all in `agents/rig/catalogues/samples/`. Real suppliers are connected last, through the admin, with no code change.
+6. **Run on sample feeds now:** a sample store CSV and a sample distributor file, both in `agents/rig/catalogues/samples/`. Real suppliers are connected last, through the admin, with no code change.
 
 **Done when:**
 - CI is green.
-- A sample Shopify feed and a sample distributor feed import with receipts.
+- A sample store CSV and a sample distributor feed import with receipts.
 - A suggested fit is invisible until approved.
 - The browser never receives cost, duty or margin (test).
 - Screenshots of `/rig/admin` at 375px and 1440px.
