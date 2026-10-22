@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SEAL-1 live check. Read-only: it runs only `docker ps`, `docker inspect` and
 # `docker network inspect`, and changes nothing. Run it on the host after every
-# deploy of Base, Tiger or Radix:
+# deploy of Base, Tiger, Radix or Rig:
 #   bash ops/seal-check.sh
 #
 # For every running container labelled coolify.applicationUuid, it lists the
@@ -10,6 +10,7 @@
 # corridor services (matched by compose service name):
 #   agent-base, base-brain and base-browser-gateway on tervory-gw-base;
 #   tiger-browser-gateway on tervory-gw-tiger;
+#   agent-rig, rig-brain and rig-browser-gateway on tervory-gw-rig;
 #   egress-proxy on egress (compose names it <project>_egress).
 #
 # Rooms are found by labels, never by container name. Coolify's normal mode names
@@ -35,7 +36,7 @@ set -uo pipefail
 DOCKER="${DOCKER:-docker}"
 
 # Rooms whose compose files declare sealed services; each must be found and sealed.
-EXPECTED_SEALED=(agent-base agent-radix agent-tiger)
+EXPECTED_SEALED=(agent-base agent-radix agent-tiger agent-rig)
 
 # service name -> the one non-internal network it may also join
 declare -A CORRIDOR=(
@@ -43,6 +44,9 @@ declare -A CORRIDOR=(
   [base-brain]="tervory-gw-base"
   [base-browser-gateway]="tervory-gw-base"
   [tiger-browser-gateway]="tervory-gw-tiger"
+  [agent-rig]="tervory-gw-rig"
+  [rig-brain]="tervory-gw-rig"
+  [rig-browser-gateway]="tervory-gw-rig"
   [egress-proxy]="egress"
 )
 
@@ -108,6 +112,38 @@ for id in $ids; do
       outward+=("$net")
     fi
   done
+  # Rig's public API has only its corridor; only its sandbox and browser are
+  # sealed. Check every Rig service, even if a sealed network was removed.
+  expected_nets=""
+  case "$service" in
+    agent-rig) expected_nets="tervory-gw-rig" ;;
+    rig-brain) expected_nets="tervory-gw-rig ${project}_sandbox" ;;
+    rig-sandbox) expected_nets="${project}_sandbox" ;;
+    rig-browser) expected_nets="${project}_browser" ;;
+    rig-browser-gateway) expected_nets="tervory-gw-rig ${project}_browser" ;;
+  esac
+  if [[ -n "$expected_nets" ]]; then
+    for net in $networks; do
+      if [[ " $expected_nets " != *" $net "* ]]; then
+        APP_LEAKS[$uuid]="${APP_LEAKS[$uuid]:+${APP_LEAKS[$uuid]}; }LEAK: $name on $net"
+      fi
+    done
+    for net in $expected_nets; do
+      if [[ " $networks " != *" $net "* ]]; then
+        APP_LEAKS[$uuid]="${APP_LEAKS[$uuid]:+${APP_LEAKS[$uuid]}; }NOT SEALED: $name missing $net"
+      elif [[ "$net" != "tervory-gw-rig" ]]; then
+        internal_flag "$net"
+        if [[ "$FLAG" != "true" ]]; then
+          APP_LEAKS[$uuid]="${APP_LEAKS[$uuid]:+${APP_LEAKS[$uuid]}; }NOT SEALED: $name on non-internal $net"
+        fi
+      fi
+    done
+    # Rig's exact-network check above already accounts for each attachment.
+    if (( on_internal )); then
+      APP_SEALED[$uuid]=$(( APP_SEALED[$uuid] + 1 ))
+    fi
+    continue
+  fi
   (( on_internal )) || continue
   APP_SEALED[$uuid]=$(( APP_SEALED[$uuid] + 1 ))
   allowed="${CORRIDOR[$service]:-}"

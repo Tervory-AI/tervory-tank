@@ -1,6 +1,7 @@
-# Rig. Deploy this file as its own Coolify resource.
+# coolify: raw compose
+# Rig. Enable Raw Compose Deployment before merging/deploying RIG-2.
 # Build context is agents/ (the parent of this file), because the chassis lives there.
-# The only network is the external gateway. Coolify attaches https://rig.tervory.com.
+# Keep the existing Coolify domain on agent-rig:8000 only. No other service has a domain.
 # The corridor is created by the main stack. This resource joins it by name.
 
 services:
@@ -23,6 +24,7 @@ services:
       TANK_REGION: ${TANK_REGION:-us-east}
       RIG_ADMIN_KEY: ${RIG_ADMIN_KEY:-}
       HERMES_URL: http://hermes:8000
+      RIG_BRAIN_URL: http://rig-brain:8001
       DATA_DIR: /data
       CATALOGUE_DIR: /app/catalogues
     volumes:
@@ -36,11 +38,126 @@ services:
       retries: 10
     expose:
       - "8000"
+    labels:
+      traefik.docker.network: tervory-gw-rig
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+
+  rig-brain:
+    build:
+      context: ../..
+      dockerfile: agents/rig/Dockerfile.brain
+    restart: unless-stopped
+    mem_limit: 2g
+    cpus: 1
+    environment:
+      TANK_URL: http://tank:8000
+      TANK_KEY: ${TANK_KEY_RIG:-}
+      TANK_REGION: ${TANK_REGION:-us-east}
+      HERMES_URL: http://hermes:8000
+      RIG_BROWSER_URL: http://rig-browser-gateway:3000
+      RIG_SANDBOX_URL: http://rig-sandbox:8002
+      SANDBOX_KEY: ${SANDBOX_KEY_RIG:?Set the Rig-only sandbox key}
+      DATA_DIR: /data
+    volumes:
+      - rig_brain_data:/data
+    networks: [gw, sandbox]
+    depends_on:
+      rig-sandbox:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+
+  rig-sandbox:
+    # The exact Base WASI runtime; a separate container and internal network.
+    build:
+      context: ../..
+      dockerfile: agents/base/Dockerfile.sandbox
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+    pids_limit: 64
+    environment:
+      BRAIN_ROOM: rig
+      SANDBOX_KEY: ${SANDBOX_KEY_RIG:?Set the Rig-only sandbox key}
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m
+      - /work:rw,nosuid,nodev,size=128m,uid=1000,gid=1000,mode=0700
+    networks: [sandbox]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8002/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+
+  rig-browser:
+    build:
+      context: ../..
+      dockerfile: agents/base/Dockerfile.browser
+    restart: unless-stopped
+    mem_limit: 2g
+    cpus: 0.5
+    shm_size: 256m
+    environment:
+      ACCESS_ROOM: rig
+      ACCESS_GATEWAY_URL: http://rig-browser-gateway:3000
+      BROWSER_PROXY_URL: http://rig-browser-gateway:3128
+    volumes:
+      - rig_browser_data:/browser-data
+    networks: [browser]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+
+  rig-browser-gateway:
+    build:
+      context: ../..
+      dockerfile: agents/base/Dockerfile.gateway
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.25
+    environment:
+      TANK_KEY: ${TANK_KEY_RIG:-}
+      TANK_REGION: ${TANK_REGION:-us-east}
+      ACCESS_ROOM: rig
+      BROWSER_HOST: rig-browser
+    networks: [gw, browser]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
 
 volumes:
   agent_rig_data:
+    external: true
+    # Set to the verified existing mount on agent-rig. Never guess or create it.
+    # No :? interpolation here: Coolify rejects it in external volume names.
+    name: ${RIG_DATA_VOLUME_NAME}
+  rig_brain_data:
+    name: tervory-rig-brain-data
+  rig_browser_data:
+    name: tervory-rig-browser-data
 
 networks:
+  sandbox:
+    internal: true
+  browser:
+    internal: true
   gw:
     external: true
     name: tervory-gw-rig

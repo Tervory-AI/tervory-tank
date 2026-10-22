@@ -87,7 +87,7 @@ def test_no_room_service_would_leak_when_coolify_deploys_it(path: Path) -> None:
     assert leaks(path.read_text(encoding="utf-8")) == []
 
 
-@pytest.mark.parametrize("room", ["base", "radix", "tiger"])
+@pytest.mark.parametrize("room", ["base", "radix", "tiger", "rig"])
 def test_sealed_rooms_are_marked_raw_compose(room: str) -> None:
     text = (ROOT / "agents" / room / "docker-compose.yml").read_text(encoding="utf-8")
     assert is_raw(text), f"agents/{room}/docker-compose.yml must start with {RAW_MARKER!r}"
@@ -96,6 +96,7 @@ def test_sealed_rooms_are_marked_raw_compose(room: str) -> None:
 @pytest.mark.parametrize("room, sealed", [
     ("base", {"base-sandbox", "base-browser"}),
     ("tiger", {"tiger-browser"}),
+    ("rig", {"rig-sandbox", "rig-browser"}),
     # Radix is sealed on the live host today; this keeps it so.
     ("radix", {"agent-radix"}),
 ])
@@ -165,7 +166,7 @@ def test_base_volumes_keep_their_live_names() -> None:
     assert radix["volumes"]["agent_radix_data"]["name"] == "liv4x7vshraiwnnowjv0kgfd_agent-radix-data"
 
 
-@pytest.mark.parametrize("room", ["base", "tiger"])
+@pytest.mark.parametrize("room", ["base", "tiger", "rig"])
 def test_browser_holds_no_tank_key_and_only_the_gateway_talks_to_tank(room: str) -> None:
     compose = yaml.safe_load((ROOT / f"agents/{room}/docker-compose.yml").read_text(encoding="utf-8"))
     services = compose["services"]
@@ -246,6 +247,7 @@ def test_seal_check_reports_sealed_rooms(tmp_path: Path) -> None:
         "agent-base (baseuuid): sealed",
         "agent-radix (radixuuid): sealed",
         "agent-tiger (tigeruuid): sealed",
+        "agent-rig (riguuid): sealed",
     ]
 
 
@@ -257,6 +259,7 @@ def test_seal_check_names_each_leaking_container_and_network(tmp_path: Path) -> 
         "agent-base (baseuuid): LEAK: base-sandbox-baseuuid on baseuuid; LEAK: base-browser-baseuuid on baseuuid;"
         " LEAK: base-brain-baseuuid on baseuuid",
         "agent-radix (radixuuid): LEAK: agent-radix-radixuuid on radixuuid",
+        "agent-rig (riguuid): sealed",
         "agent-tiger: NOT FOUND",
     ]
 
@@ -279,6 +282,7 @@ def test_seal_check_finds_raw_compose_rooms_by_label_not_container_name(tmp_path
         "agent-base (baseuuid): sealed",
         "agent-radix (radixuuid): sealed",
         "agent-tiger (tigeruuid): NOT SEALED: no container on an internal network",
+        "agent-rig (riguuid): sealed",
     ]
 
 
@@ -310,6 +314,7 @@ def test_seal_check_reports_leaks_in_raw_compose_rooms(tmp_path: Path) -> None:
         "tervory-tankmain-tankuuid (tankuuid): not a room, skipped",
         "agent-base (baseuuid): LEAK: baseuuid-base-sandbox-1 on baseuuid",
         "agent-radix (radixuuid): sealed",
+        "agent-rig (riguuid): sealed",
         "agent-tiger: NOT FOUND",
     ]
 
@@ -322,6 +327,7 @@ def test_seal_check_fails_when_an_expected_room_is_missing(tmp_path: Path) -> No
         "tervory-tankmain-tankuuid (tankuuid): not a room, skipped",
         "agent-base (baseuuid): sealed",
         "agent-tiger (tigeruuid): NOT SEALED: no container on an internal network",
+        "agent-rig (riguuid): sealed",
         "agent-radix: NOT FOUND",
     ]
 
@@ -335,6 +341,7 @@ def test_seal_check_never_passes_when_only_the_hub_is_running(tmp_path: Path) ->
         "agent-base: NOT FOUND",
         "agent-radix: NOT FOUND",
         "agent-tiger: NOT FOUND",
+        "agent-rig: NOT FOUND",
     ]
 
 
@@ -359,3 +366,29 @@ def test_seal_check_is_read_only() -> None:
     assert set(calls) == {"ps", "inspect", "network inspect"}
     for word in ("disconnect", "connect ", " rm ", " stop", " kill", " run ", " exec ", "create", "prune"):
         assert word not in script.split("set -uo pipefail", 1)[1], word
+
+
+@pytest.mark.parametrize("service", ["agent-rig", "rig-brain", "rig-browser", "rig-browser-gateway", "rig-sandbox"])
+def test_rig_extra_network_is_a_leak_even_on_public_api(tmp_path, service):
+    data = json.loads((FIXTURES / "sealed.json").read_text())
+    data["networks"]["unexpected"] = False
+    for container in data["containers"].values():
+        if container["service"] == service:
+            container["networks"].append("unexpected")
+    path = tmp_path / "rig-extra.json"
+    path.write_text(json.dumps(data))
+    result = run_seal_check(tmp_path, str(path))
+    assert result.returncode == 1
+    assert f"LEAK: riguuid-{service}-1 on unexpected" in result.stdout
+
+
+@pytest.mark.parametrize("service", ["rig-browser", "rig-sandbox", "rig-brain", "rig-browser-gateway"])
+def test_rig_missing_internal_attachment_fails(tmp_path, service):
+    data = json.loads((FIXTURES / "sealed.json").read_text())
+    for container in data["containers"].values():
+        if container["service"] == service:
+            container["networks"] = [n for n in container["networks"] if not data["networks"][n]]
+    path = tmp_path / "rig-missing.json"
+    path.write_text(json.dumps(data))
+    result = run_seal_check(tmp_path, str(path))
+    assert result.returncode == 1 and f"NOT SEALED: riguuid-{service}-1 missing" in result.stdout

@@ -3089,6 +3089,7 @@ app.include_router(__import__("bench").router)
 app.include_router(__import__("proof").router)
 app.include_router(__import__("proof").client_router)
 app.include_router(__import__("agent_skills").build_router(__import__("sys").modules[__name__]))
+app.include_router(__import__("rig_brain_routes").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("moa").router)
 
 

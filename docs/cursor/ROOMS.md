@@ -145,6 +145,25 @@ and fix. `GET /gold/candidates` on Ghost must then show the family
 Recovery requests are scoped and deduplicated in `tank.ghost_recovery`. Do not
 test recovery by restarting production during PR review.
 
+## Rig brain pilot (RIG-2)
+
+Rig uses Raw Compose with its existing public API on `agent-rig:8000` and the
+`tervory-gw-rig` corridor. Only that service keeps the public domain. Its separate
+`rig-brain`, internal-only `rig-sandbox`, internal-only `rig-browser`, and
+`rig-browser-gateway` follow Base's isolated execution shape. They share no Base
+or Tiger processes, volumes, keys or browser state. The brain uses only approved
+Rig skills, its tenant's Hermes memory and Tank's `agent.rig.think` policy, with
+the paid-work pause and task receipts. Existing Rig R2 storage stays on agent-rig.
+
+Before merging, enable Raw Compose on agent-rig and set `RIG_DATA_VOLUME_NAME`
+to the verified existing live `/data` volume, plus the Rig-only `SANDBOX_KEY_RIG`.
+Do not guess the live volume name or let Compose replace it. Keep the proxy's
+existing reachability to the Rig corridor. Run `ops/seal-check.sh` after deployment;
+Rig is now an expected room and its public API is allowed only on its corridor.
+See [Rig's box runbook](../../agents/rig/BOX.md) for the authenticated question,
+receipt and public-health checks. Stand-in catalogue data only on Boston; live
+ZA shopper data is not part of this pilot.
+
 ## Regions
 
 South African clients and South African law stay in South Africa. United States clients stay in the United States. Same code, deployed twice. The region is `TANK_REGION`: `za` or `us-east`. It is not a fork.
