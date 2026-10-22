@@ -169,9 +169,29 @@ def test_readme_has_one_row_each() -> None:
     assert "| Tisan | `tervory-gw-tisan`" in text
 
 
+def _load_room_app(folder: str):
+    """Load a room's app.py so its bare imports (e.g. gold_sources) find that room's files.
+
+    Other tests put agents/rig on sys.path and can leave Rig's gold_sources cached,
+    so put this room's folder first and hide any cached copy while loading. Both
+    are put back afterwards so later tests see what they saw before.
+    """
+    room = str(ROOT / "agents" / folder)
+    cached = sys.modules.pop("gold_sources", None)
+    sys.path.insert(0, room)
+    try:
+        return _load(f"{folder}_app", ROOT / "agents" / folder / "app.py")
+    finally:
+        sys.path.remove(room)
+        if cached is not None:
+            sys.modules["gold_sources"] = cached
+        else:
+            sys.modules.pop("gold_sources", None)
+
+
 def test_ping_schedules_are_the_template_heartbeat() -> None:
     for folder, agent in (("radix", "radix"), ("tisan", "tisan")):
-        module = _load(f"{folder}_app", ROOT / "agents" / folder / "app.py")
+        module = _load_room_app(folder)
         assert module.app.state.agent == agent
         handlers = set(module.app.state.handlers)
         # RX1 adds scan on Radix. TS1 adds scaffold on Tisan. TS2 adds figma.
