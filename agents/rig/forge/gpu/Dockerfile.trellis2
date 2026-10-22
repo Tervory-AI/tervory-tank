@@ -6,7 +6,8 @@ COPY gpu /opt/forge/gpu
 # No HF Jobs token or model download token becomes an image layer or job variable.
 COPY --from=weights / /opt/models/
 ENV TORCH_CUDA_ARCH_LIST="8.0;8.6;8.9;9.0" MAX_JOBS=2 \
-    FLASH_ATTENTION_FORCE_BUILD=TRUE FORCE_CUDA=1 CUDA_HOME=/usr/local/cuda
+    FLASH_ATTENTION_FORCE_BUILD=TRUE FORCE_CUDA=1 CUDA_HOME=/usr/local/cuda \
+    LIBRARY_PATH=/usr/local/cuda/lib64/stubs
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates build-essential libjpeg-dev libgl1 \
     && python -m pip install --no-cache-dir --require-hashes -r gpu/requirements.lock \
     && python gpu/install_sources.py gpu/sources.lock.json \

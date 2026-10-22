@@ -216,6 +216,11 @@ async def poll(job_id: uuid.UUID, tenant_id: uuid.UUID):
     if not path.exists():
         if (tenant_id, job_id) in tasks:
             return JSONResponse({"status": "queued"}, status_code=202)
+        if (work / "request.json").exists():
+            state = {"tenant_id": str(tenant_id), "job_id": str(job_id), "status": "failed",
+                     "error": "Forge restarted before execution. This job is not relaunched."}
+            save(path, state)
+            return JSONResponse(state)
         raise HTTPException(404, "Forge job not found.")
     state = json.loads(path.read_text())
     if state["status"] == "running" and (tenant_id, job_id) not in tasks:
