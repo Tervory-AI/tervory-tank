@@ -50,6 +50,7 @@ from rigbox.recall import parts_of
 from rigbox.recall import signature
 from rigbox.recall import whole_hit
 from rigbox.store import _fit_key
+from rigbox.quotes.limits import MemoryRateLimits, PgRateLimits
 
 _KEY = re.compile(r"^rk_pub_[A-Za-z0-9][A-Za-z0-9_-]{0,80}$")
 _MAPS = {
@@ -217,12 +218,12 @@ class Service:
         self.models = models
         self.handoff = handoff or RecordingHandoff()
         self.limiter = RateLimiter(limit=rate_limit)
+        pool = getattr(store, "pool", None)
+        self.public_limits = PgRateLimits(pool, rate_limit) if pool is not None else MemoryRateLimits(rate_limit)
 
     async def authenticate(self, raw_key: str) -> dict[str, Any]:
         presented = raw_key or ""
         digest = hash_key(presented)
-        if not self.limiter.allow(digest):
-            raise RigError("rate_limit", "Too many requests. Try again in a minute.", 429)
         if _KEY.fullmatch(presented) is None:
             raise RigError("unauthorized", "That key is not valid.", 401)
         row = await self.store.key(digest)

@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from rigbox.service import RigError
 from rigbox.quotes.privacy import shopper_body
+from rigbox.quotes.limits import client_address
 
 router = APIRouter(prefix="/v1/rig")
 
@@ -93,6 +94,11 @@ async def _auth(request: Request) -> dict[str, Any]:
     request.state.rig_origin = origin
     request.state.rig_origin_ok = bool(origin)
     request.state.tenant_id = row["tenant_id"]
+    route = request.scope["route"].path
+    retry_after = await _service(request).public_limits.consume(str(row["tenant_id"]), client_address(request), route)
+    if retry_after:
+        request.state.rig_retry_after = retry_after
+        raise RigError("rate_limit", "Too many requests. Please try again shortly.", 429)
     return row
 
 
@@ -119,6 +125,8 @@ def _one_target(payload: FitDecision) -> tuple[str, str | None, str | None]:
 
 async def _on_rig_error(request: Request, exc: RigError) -> JSONResponse:
     response = JSONResponse(status_code=exc.status, content={"error": {"code": exc.code, "message": exc.message}})
+    if exc.status == 429:
+        response.headers["Retry-After"] = str(getattr(request.state, "rig_retry_after", 60))
     origin = _origin(request)
     return _cors(response, origin, bool(getattr(request.state, "rig_origin_ok", False) and origin))
 

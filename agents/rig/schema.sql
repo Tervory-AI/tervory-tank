@@ -191,3 +191,21 @@ CREATE TABLE IF NOT EXISTS agent_rig.widget_counts (
     PRIMARY KEY (tenant_id, day, event)
 );
 -- End RIG-4.
+
+-- RIG-4b: short-lived per-client/route abuse limits; never joined to analytics.
+CREATE TABLE IF NOT EXISTS agent_rig.rate_windows (
+    tenant_id uuid NOT NULL,
+    window_id bigint NOT NULL,
+    salt bytea NOT NULL,
+    PRIMARY KEY (tenant_id, window_id)
+);
+CREATE TABLE IF NOT EXISTS agent_rig.rate_counts (
+    tenant_id uuid NOT NULL,
+    window_id bigint NOT NULL,
+    route text NOT NULL,
+    client_hash bytea NOT NULL,
+    hits integer NOT NULL CHECK (hits > 0),
+    PRIMARY KEY (tenant_id, window_id, route, client_hash),
+    FOREIGN KEY (tenant_id, window_id) REFERENCES agent_rig.rate_windows(tenant_id, window_id) ON DELETE CASCADE
+);
+-- End RIG-4b.
