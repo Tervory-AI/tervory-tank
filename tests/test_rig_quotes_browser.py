@@ -97,6 +97,11 @@ async def test_built_widget_live_api_journey(real_chromium, widget_server, tmp_p
     await page.get_by_role("searchbox").fill("zzzzzzzzzzzzzz")
     await page.get_by_role("button", name="Search", exact=True).click()
     await expect(page.locator("#link-url")).to_be_visible()
+    labels = await page.locator(".link-form label").evaluate_all("""labels => labels.map(label => {
+        const style = getComputedStyle(label.querySelector('span') ?? label);
+        return [style.fontSize, style.fontWeight, style.color].join('|');
+    })""")
+    assert len(labels) == 4 and len(set(labels)) == 1
     await capture("04-missing")
     await page.locator("#link-url").fill("https://example.com/item")
     await page.locator("#link-name").fill("Sample Shopper")
