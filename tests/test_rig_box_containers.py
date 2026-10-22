@@ -82,7 +82,7 @@ def test_rig_real_box_public_api_and_sealed_execution(tmp_path):
         brain = create("rig-brain", "brain", [corridor, sandbox_net], "-e", "TANK_KEY", "-e", "SANDBOX_KEY",
             "-v", volumes[1] + ":/data", "-e", "TANK_REGION=us-east")
         api = create("agent-rig", "api", [corridor, proxy_net], "-e", "TANK_KEY", "-e", "AGENT_NAME=rig",
-            "-e", "DATABASE_URL=postgresql://postgres@postgres:5432/postgres", "-e", "RIG_BRAIN_URL=http://rig-brain:8001",
+            "-e", "DATABASE_URL=postgresql://postgres@postgres:5432/postgres",
             "-e", "CATALOGUE_DIR=/app/catalogues", "-e", "DATA_DIR=/data", "-v", volumes[0] + ":/data")
         for name, port in ((api, 8000), (brain, 8001), (browser, 3000), (gateway, 3000), (sandbox, 8002)):
             ready(name, port)
@@ -100,7 +100,7 @@ print('PASS proxy reaches only public API')
         assert "PASS proxy" in docker("run", "--rm", "-i", "--name", probe, "--network", proxy_net,
             "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "tervory-rig-api:cloud",
             "python", "-", input=proxy_probe)
-        api_probe = r'''import httpx,json
+        api_probe = r'''import httpx,json,os
 from pathlib import Path
 with httpx.Client(base_url='http://127.0.0.1:8000',trust_env=False) as client:
  assert client.get('/health').json()['ok'] is True
@@ -108,8 +108,12 @@ with httpx.Client(base_url='http://127.0.0.1:8000',trust_env=False) as client:
  headers={'X-Rig-Key':config['keys'][0]['key'],'Origin':config['keys'][0]['origins'][0]}
  result=client.get('/v1/rig/search',params={'q':'lamp'},headers=headers)
  assert result.status_code==200 and 'Second Desk Lamp' in result.text
- assert client.post('/brain/tasks',json={'tenant_id':config['tenant_id'],'task_id':'00000000-0000-4000-8000-000000000001','home_region':'us-east','question':'Sample lamp'},headers=headers).status_code==401
-print('PASS public health, real catalogue, shopper cannot start brain')
+ body={'tenant_id':config['tenant_id'],'task_id':'00000000-0000-4000-8000-000000000001','home_region':'us-east','question':'Sample lamp'}
+ for auth in ({},headers,{'X-Tank-Key':os.environ['TANK_KEY']}):
+  assert client.post('/brain/tasks',json=body,headers=auth).status_code==404
+  for method in ('GET','DELETE'):
+   assert client.request(method,'/brain/tasks/'+body['task_id'],params={'tenant_id':body['tenant_id'],'home_region':'us-east'},headers=auth).status_code==404
+print('PASS public health, real catalogue, brain task routes absent')
 '''
         assert "PASS public" in docker("exec", "-i", api, "python", "-", input=api_probe)
         execution_probe = r'''import httpx,os,uuid
