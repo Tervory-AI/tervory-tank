@@ -14,15 +14,19 @@ COPY tisan/review_store.py /app/review_store.py
 COPY tisan/fixtures /app/fixtures
 COPY tisan/templates /app/templates
 # Node is for the scaffold checks. Dependencies are cached here so a run needs no network.
+# Node 22 LTS, pinned to an exact patch. The hashes come from
+# https://nodejs.org/dist/v22.23.4/SHASUMS256.txt; the build fails if the tarball does not match.
+ARG NODE_VERSION=22.23.4
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl xz-utils \
     && arch="$(uname -m)" \
     && case "$arch" in \
-         x86_64) node_arch=x64 ;; \
-         aarch64) node_arch=arm64 ;; \
+         x86_64) node_arch=x64; node_sha256=1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce ;; \
+         aarch64) node_arch=arm64; node_sha256=6287aa46b6c375d816e63ae66d024fbbfd70404825aabdfdf898a970871d2f4b ;; \
          *) echo "unsupported architecture $arch" >&2; exit 1 ;; \
        esac \
-    && curl -fsSL "https://nodejs.org/dist/v22.14.0/node-v22.14.0-linux-${node_arch}.tar.xz" -o /tmp/node.tar.xz \
+    && curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${node_arch}.tar.xz" -o /tmp/node.tar.xz \
+    && echo "${node_sha256}  /tmp/node.tar.xz" | sha256sum -c - \
     && tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 \
     && rm /tmp/node.tar.xz \
     && apt-get purge -y curl xz-utils \
