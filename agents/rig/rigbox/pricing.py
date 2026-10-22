@@ -1,9 +1,10 @@
 """Private landed-cost calculations. Only the final ZAR amount is public."""
 
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from typing import Any
 
 
-def number(value, *, maximum="1000000000") -> Decimal:
+def number(value: Any, *, maximum: str = "1000000000") -> Decimal:
     try:
         result = Decimal(str(value))
         if not result.is_finite() or result < 0 or result > Decimal(maximum):
@@ -13,7 +14,7 @@ def number(value, *, maximum="1000000000") -> Decimal:
         raise ValueError("Enter a finite, non-negative amount within the allowed range.") from None
 
 
-def price_rule(values: dict) -> dict[str, str]:
+def price_rule(values: dict[str, Any]) -> dict[str, str]:
     """Freight is per item in supplier currency. Margin is a gross margin %."""
     freight = number(values.get("freight", 0))
     duty = number(values.get("duty_percent", 0), maximum="1000")
@@ -21,7 +22,7 @@ def price_rule(values: dict) -> dict[str, str]:
     return {"freight": str(freight), "duty_percent": str(duty), "margin_percent": str(margin)}
 
 
-def indicative_price(cost, rule: dict, rate) -> Decimal:
+def indicative_price(cost: Any, rule: dict[str, Any], rate: Any) -> Decimal:
     validated = price_rule(rule)
     fx = number(rate, maximum="1000000")
     if not fx:

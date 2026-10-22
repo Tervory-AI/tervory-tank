@@ -18,7 +18,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from contextlib import asynccontextmanager
 from decimal import Decimal, InvalidOperation
-from typing import Literal
+from typing import Any, Literal
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
@@ -665,7 +665,7 @@ async def refresh_feed(request: Request, actor: Actor = Depends(identity)):
     return await refresh_connected_feed(actor, body)
 
 
-async def refresh_connected_feed(actor, body):
+async def refresh_connected_feed(actor: Actor, body: FeedRefresh) -> dict[str, Any]:
     site = site_name(body.site)
     async with db().acquire() as conn:
         row = await conn.fetchrow("SELECT sealed FROM tank.access_feed_connections WHERE tenant_id=$1 AND distributor=$2 AND site=$3", actor.tenant_id, feed_storage_name(body), site)
@@ -710,7 +710,7 @@ async def save_feed(actor, body, rows):
 # RIG-3 mapping: the existing ACCESS import/connect/refresh/vault and HTTP
 # validation remain the sole supplier transport. Rig receives a server-to-server
 # catalogue envelope and commits products, fits and its receipt together.
-def permit_feed(actor, target, provider):
+def permit_feed(actor: Actor, target: str, provider: str) -> None:
     if target == "rig":
         if not actor.founder and "rig" not in actor.squads:
             raise HTTPException(403, "Rig is not enabled for this account.")
@@ -720,11 +720,11 @@ def permit_feed(actor, target, provider):
             raise HTTPException(422, "Choose an official distributor.")
 
 
-def feed_storage_name(body):
+def feed_storage_name(body: FeedImport | FeedConnection | FeedRefresh) -> str:
     return ("rig:" if body.target == "rig" else "") + body.distributor
 
 
-def rig_feed_rows(body):
+def rig_feed_rows(body: FeedImport) -> list[dict[str, Any]]:
     if body.distributor not in DISTRIBUTORS:
         if body.format != ("xml" if body.distributor == "google" else "json"):
             raise ValueError()
@@ -747,7 +747,7 @@ def rig_feed_rows(body):
     return rows
 
 
-async def rig_request(actor, operation, data=None):
+async def rig_request(actor: Actor, operation: str, data: dict[str, Any] | None = None) -> dict[str, Any]:
     key = os.environ.get("TANK_KEY_RIG", "").strip()
     if not key:
         raise HTTPException(503, "Rig's room connection is not configured.")
@@ -770,7 +770,7 @@ async def rig_request(actor, operation, data=None):
         raise HTTPException(503, "Rig returned an invalid response.") from None
 
 
-async def save_rig_feed(actor, body, rows):
+async def save_rig_feed(actor: Actor, body: FeedImport, rows: list[dict[str, Any]] | None) -> dict[str, Any]:
     parse_error = rows is None
     rows = rows or []
     metadata = {"fits": [{"part_sku": row["sku"], "fits_sku": row.get("fits_sku") or None,
@@ -793,7 +793,7 @@ async def save_rig_feed(actor, body, rows):
     return result
 
 
-def feed_auth_headers(config):
+def feed_auth_headers(config: dict[str, Any]) -> dict[str, str]:
     mode = config.get("auth_mode", "bearer")
     if mode == "basic":
         encoded = base64.b64encode((config["username"] + ":" + config["password"]).encode()).decode()
@@ -805,14 +805,17 @@ def feed_auth_headers(config):
     return {}
 
 
-async def read_rig_feed(config, headers):
+async def read_rig_feed(config: dict[str, Any], headers: dict[str, str]) -> bytes:
     """Reuse ACCESS's pinned fetcher for bounded Shopify/WooCommerce pages."""
     endpoint = config["endpoint"]
     raw, response_headers = await public_get(endpoint, headers=headers, limit=8_000_000)
     if config["distributor"] not in {"shopify", "woocommerce"}:
         return raw
     total_bytes = len(raw)
-    result = json.loads(raw)
+    try:
+        result = json.loads(raw)
+    except ValueError:
+        return raw  # Let the importer record an invalid-file receipt.
     kind = config["distributor"]
     products = result.get("products") if isinstance(result, dict) else result
     if not isinstance(products, list):
@@ -866,7 +869,7 @@ async def rig_admin_panel(actor: Actor = Depends(identity)):
 
 
 class RigAdminAction(Body):
-    data: dict = Field(default_factory=dict)
+    data: dict[str, Any] = Field(default_factory=dict)
 
 
 @router.post("/rig/admin/{operation}")
@@ -897,7 +900,7 @@ async def rig_tiger_update(request: Request):
     return await rig_request(actor, "tiger", body.model_dump(exclude={"tenant_id"}, exclude_none=True))
 
 
-async def refresh_due_rig_feeds():
+async def refresh_due_rig_feeds() -> None:
     async with db().acquire() as conn:
         async with conn.transaction():
             rows = await conn.fetch("""SELECT tenant_id,distributor,site FROM tank.access_feed_connections
@@ -916,7 +919,7 @@ async def refresh_due_rig_feeds():
                 await receipt(conn, actor.tenant_id, "rig", row["site"], actor.user_id, "feed_refresh_failed")
 
 
-async def rig_feed_loop():
+async def rig_feed_loop() -> None:
     import logging
     while True:
         await asyncio.sleep(60)

@@ -16,7 +16,7 @@ OPERATIONS = {"panel", "import", "price-rule", "exchange-rate", "templates", "ap
 
 
 @router.post("/internal/retailer/{operation}")
-async def retailer_operation(operation: str, request: Request):
+async def retailer_operation(operation: str, request: Request) -> JSONResponse:
     expected = os.environ.get("TANK_KEY", "")
     given = request.headers.get("x-tank-key", "")
     if not expected or not given or not hmac.compare_digest(expected.encode(), given.encode()):

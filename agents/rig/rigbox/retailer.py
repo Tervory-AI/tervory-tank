@@ -3,6 +3,7 @@
 import json
 import re
 from uuid import uuid4
+from typing import Any
 
 from rigbox.catalogue import _product_row, check_fit_refs, families_from
 from rigbox.feeds import pull
@@ -10,7 +11,7 @@ from rigbox.pricing import indicative_price, number, price_rule
 from rigbox.service import RigError, Service
 
 
-def templates(value):
+def templates(value: Any) -> dict[str, dict[str, str]]:
     if not isinstance(value, dict) or len(value) > 30:
         raise ValueError("Choose at most 30 category templates.")
     result = {}
@@ -23,7 +24,7 @@ def templates(value):
     return result
 
 
-def map_import(data):
+def map_import(data: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     if data.get("parse_error"):
         raise ValueError("The source file could not be read.")
     provider = data["provider"]
@@ -57,11 +58,11 @@ def map_import(data):
 
 
 class Retailer:
-    def __init__(self, service: Service):
+    def __init__(self, service: Service) -> None:
         self.service = service
         self.store = service.store
 
-    async def panel(self, tenant):
+    async def panel(self, tenant: str) -> dict[str, Any]:
         return {
             "price_configured": bool(await self.store.rule(tenant)),
             "currency": "ZAR",
@@ -72,20 +73,20 @@ class Retailer:
             "products": len(await self.store.products(tenant)),
         }
 
-    async def reprice(self, store, tenant):
+    async def reprice(self, store: Any, tenant: str) -> None:
         rule = await store.rule(tenant)
         for row in await store.costs(tenant):
             amount = indicative_price(row["cost"], rule or {}, await store.rate(tenant, row["currency"]))
             await store.update_price(tenant, row["sku"], {"price": amount, "currency": "ZAR"})
 
-    async def set_rule(self, tenant, data):
+    async def set_rule(self, tenant: str, data: dict[str, Any]) -> dict[str, bool]:
         rule = price_rule(data)
         async with self.store.atomic(tenant) as store:
             await store.save_rule(tenant, rule)
             await self.reprice(store, tenant)
         return {"saved": True, "price_configured": True}
 
-    async def set_rate(self, tenant, data, founder=False):
+    async def set_rate(self, tenant: str, data: dict[str, Any], founder: bool = False) -> dict[str, bool]:
         if not founder:
             raise RigError("forbidden", "Only the founder can set an exchange rate.", 403)
         code = str(data.get("currency", "")).upper()
@@ -97,14 +98,14 @@ class Retailer:
             await self.reprice(store, tenant)
         return {"saved": True}
 
-    async def set_templates(self, tenant, data):
+    async def set_templates(self, tenant: str, data: dict[str, Any]) -> dict[str, bool]:
         values = templates(data)
         async with self.store.atomic(tenant) as store:
             for category, roles in values.items():
                 await store.set_template(tenant, category, roles)
         return {"saved": True}
 
-    async def import_file(self, tenant, data):
+    async def import_file(self, tenant: str, data: dict[str, Any]) -> dict[str, Any]:
         receipt = {"id": str(uuid4()), "provider": data["provider"], "site": data["site"], "added": 0, "updated": 0, "rejected": 0}
         problems = []
         try:
