@@ -25,7 +25,6 @@ services:
       TANK_REGION: ${TANK_REGION:-us-east}
       RIG_ADMIN_KEY: ${RIG_ADMIN_KEY:-}
       HERMES_URL: http://hermes:8000
-      RIG_BRAIN_URL: http://rig-brain:8001
       DATA_DIR: /data
       CATALOGUE_DIR: /app/catalogues
     volumes:
