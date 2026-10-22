@@ -2,9 +2,13 @@
 
 > Written 20 Oct 2026, 12:15 PT. The founder plans moots filmed in a studio set up as a courtroom, with law students as counsel, to show SAFLII (and later law faculties) what Zenas does. The judge is AI: it hears counsel, puts questions out loud like a real bench, checks every authority as it is cited, and delivers a judgment. Also used for Street Law and practice runs later.
 
-**Depends on Z12** (court weight, citation trail, made-up-case gate). Parts 1, 3 and 6 can start now; the judge's authority checks use Z12 functions once merged (stub them behind the same interface until then).
+**Z12 is merged** (#204, #206): use its court weight, citation trail and made-up-case gate directly.
 
-**Files you may change:** new `agents/zenas/core/moot/` (problem, session, judge, feedback), `agents/zenas/app.py` (moot routes only), `agents/zenas/schema.sql` (additive), new `tank/moot/` (the LiveKit Agents judge worker and its Dockerfile), `tank/` policy seed rows for the new task types only, `docker-compose.yml` (add the LiveKit server, Redis use and egress services only), `.env.example` (variable NAMES only), new `workspace/app/zenas/moot/` (pages and components), `workspace/lib/tank.ts` (moot calls only), tests. Do not change other Zenas behaviour.
+**Hosting (22 Oct):** the ZA box is offline while it moves to Hetzner. Build and test SA mode on fixtures; it goes live on the new ZA host later, as configuration only. US mode runs on Boston now.
+
+**Civil only (founder):** if someone's guilt, liberty or criminal defence is at stake, Zenas doesn't take it. A civil claim, including a constitutional challenge brought as a civil suit, is in.
+
+**Files you may change:** new `agents/zenas/core/moot/` (problem, session, judge, feedback), `agents/zenas/app.py` (moot routes only), `agents/zenas/schema.sql` (additive), new `tank/moot/` (the LiveKit Agents judge worker and its Dockerfile), `tank/` policy seed rows for the new task types only, `docker-compose.yml` (add the LiveKit server, Redis use and egress services only), `.env.example` (variable NAMES only), new `workspace/app/zenas/moot/` (pages and components), new public `workspace/app/moot/` (watch pages, section 7), `workspace/lib/tank.ts` (moot calls only), tests. Do not change other Zenas behaviour.
 
 ## 1. The moot problem (from a real case)
 - The founder picks a decided **civil** SA appeal from the library (ConCourt, SCA, full bench or High Court appeal). Criminal cases are not offered.
@@ -44,6 +48,38 @@ Use these. Do not add other paid services or providers; that is the founder's de
 - **Feedback PDF:** [WeasyPrint](https://pypi.org/project/weasyprint) from the same HTML as the feedback page.
 - **The judge prompt must be adversarial.** Research on AI moot judges (Princeton, 2026) found they agree too easily and ask too few hypotheticals. The judge is instructed to press, to disagree, and to put hypotheticals, and the "hardness" setting in section 2 scales that. Tests include a weak submission that the judge must not accept.
 - **Licences:** anything GPL or AGPL runs in its own container over HTTP and is never imported. Models under attribution licences get a credits line on the admin page.
+
+## 2c. Counsel: students or AI (founder, 21 Oct)
+- **Three modes:**
+  - **AI against AI**, the public showcase;
+  - **a student against AI counsel,** for practice at any hour, with the AI arguing the other side at full strength;
+  - **students against students,** with the AI judge.
+- **Parties are named for the proceeding:**
+  - **SA:** Applicant and Respondent in motion court; Plaintiff and Defendant at trial; Appellant and Respondent on appeal.
+  - **US:** Plaintiff and Defendant at trial; Appellant (or Petitioner) and Appellee (or Respondent) on appeal.
+- **AI counsel:**
+  - each is its own seat, run by the same worker as the judge, with a voice distinct from the judge's and from each other;
+  - both sides use the same model and settings;
+  - they argue against each other's points directly, never conceding just to be polite.
+- **Real authorities only:** every authority either counsel cites passes the Z12 gate. A failure is flagged in the ruling, as a real judge would catch it, and counts against that counsel.
+- **Fairness check, published for every AI-against-AI match:** each match runs twice with the sides swapped.
+  - If the same side wins both times, the problem is lopsided.
+  - If the same seat wins both times, it's model strength, not argument.
+- **Learning:** every point the judge accepts or rejects becomes a gold candidate (`zenas:moot:{YYYY-MM}`), checked before use.
+- **Receipts:** every match shows its cost through Tank.
+
+## 2d. Major issues re-argued (founder, 21 Oct)
+Landmark civil and constitutional cases, argued again with no emotion: pure legal argument and a reasoned judgment.
+- **No private person is a party; the issue is the law.** Only decided cases and the public record. Never a case still before a court (sub judice).
+- **The judge states its method first.** Each major issue runs under each main method:
+  - text and history;
+  - precedent;
+  - evolving standards.
+
+  Each gets a majority and a dissent, published side by side.
+- **Neutral titles only,** for example "Roe v. Wade re-argued" or "Three methods, three answers". Never "AI rules X".
+- **The reveal shows what the courts actually held over time.** For Roe that's Roe (1973), Casey (1992) and Dobbs (2022), each linked to the source.
+- **Build the format and test it on a fixture case.** The founder picks the real cases.
 
 ## 3. The session page (`/zenas/moot`)
 - **Roles:** presiding judge (AI), counsel for the appellant, counsel for the respondent, and an operator (the founder).
@@ -105,8 +141,25 @@ It goes out as a PDF and as a page.
 ## 6. Admin
 The founder creates sessions, adds participants by name (no accounts are needed for counsel in practice mode), and can delete a session and its recordings.
 
+## 7. Public watch pages: Moot brings people to Tervory (founder, 21 Oct)
+Legal formats only, with no game features.
+- **`/moot/{match}` watch page:**
+  - the bench screen recording with captions, the written judgment, the fairness check and the reveal;
+  - every authority links to the real case on SAFLII (SA) or CourtListener (US);
+  - a shareable link with a proper preview card.
+- **Clips:**
+  - the operator marks moments (the sharpest question, a failed citation caught, the reveal);
+  - ffmpeg cuts 9:16 and 16:9 clips with captions burned in.
+- **"Argue against the AI":**
+  - a visitor picks a side of a public problem and argues in text or voice against AI counsel;
+  - a free sign-up saves the result, and that's the funnel into Tervory;
+  - it's rate-limited, with the same Tank receipts.
+- **A weekly match slot,** alternating SA and US problems.
+- **Counts on the founder control panel:** watch-page views, clips shared, and argue-against-the-AI sign-ups. Count them server-side, with no tracking of individuals.
+- Publishing a match needs the founder's approval.
+
 ## Rules
-- Civil law only. SA sessions on the ZA box, US sessions on Boston. Model calls go only through Tank.
+- Civil law only. SA sessions on the ZA box (fixtures until the Hetzner move), US sessions on Boston. Model calls go only through Tank.
 - No secrets in code, URLs, logs or tests.
 - The judge never invents an authority. This is tested.
 
@@ -118,6 +171,10 @@ CI green. Tests on fixture data:
 - the judge's speech never names an authority outside the library;
 - the judgment cites only verified authorities;
 - timers and floor changes work;
+- AI against AI runs end to end on a fixture problem, both orders, with the fairness check computed;
+- a failed citation by AI counsel is flagged in the ruling;
+- a major-issue fixture produces one judgment per method;
+- the watch page renders with links to the source cases, and an unpublished match returns 404;
 - each screen loads on its own URL at 1440px and 1920x1080 with a clean feed, practice mode works at 375px; an SA and a US session each use their own procedure, library and box.
 
 Then a 10-minute recorded demo run on staging with two people, linked in the PR. After merge, Claude sets up the first session with the founder.
