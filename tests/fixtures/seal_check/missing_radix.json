@@ -1,0 +1,91 @@
+{
+ "containers": {
+  "t1": {
+   "uuid": "tankuuid",
+   "resource": "tervory-tankmain-tankuuid",
+   "service": "tank",
+   "name": "tank-tankuuid-20261021T183545",
+   "networks": [
+    "tankuuid",
+    "tervory-gw-base",
+    "tervory-gw-radix"
+   ]
+  },
+  "t2": {
+   "uuid": "tankuuid",
+   "resource": "tervory-tankmain-tankuuid",
+   "service": "postgres",
+   "name": "postgres-tankuuid-20261021T183545",
+   "networks": [
+    "tankuuid"
+   ]
+  },
+  "b1": {
+   "uuid": "baseuuid",
+   "resource": "",
+   "service": "agent-base",
+   "name": "baseuuid-agent-base-1",
+   "networks": [
+    "tervory-gw-base"
+   ]
+  },
+  "b2": {
+   "uuid": "baseuuid",
+   "resource": "",
+   "service": "base-brain",
+   "name": "baseuuid-base-brain-1",
+   "networks": [
+    "baseuuid_sandbox",
+    "tervory-gw-base"
+   ]
+  },
+  "b3": {
+   "uuid": "baseuuid",
+   "resource": "",
+   "service": "base-sandbox",
+   "name": "baseuuid-base-sandbox-1",
+   "networks": [
+    "baseuuid_sandbox"
+   ]
+  },
+  "b4": {
+   "uuid": "baseuuid",
+   "resource": "",
+   "service": "base-browser",
+   "name": "baseuuid-base-browser-1",
+   "networks": [
+    "baseuuid_browser"
+   ]
+  },
+  "b5": {
+   "uuid": "baseuuid",
+   "resource": "",
+   "service": "base-browser-gateway",
+   "name": "baseuuid-base-browser-gateway-1",
+   "networks": [
+    "baseuuid_browser",
+    "tervory-gw-base"
+   ]
+  },
+  "g1": {
+   "uuid": "tigeruuid",
+   "resource": "agent-tiger",
+   "service": "agent-tiger",
+   "name": "agent-tiger-tigeruuid-20261021T183545",
+   "networks": [
+    "tigeruuid"
+   ]
+  }
+ },
+ "networks": {
+  "tankuuid": false,
+  "tervory-gw-base": false,
+  "tervory-gw-radix": true,
+  "baseuuid": false,
+  "baseuuid_sandbox": true,
+  "baseuuid_browser": true,
+  "radixuuid_proxy-link": true,
+  "radixuuid_egress": false,
+  "tigeruuid": false
+ }
+}

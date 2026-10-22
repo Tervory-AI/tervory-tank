@@ -17,6 +17,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import httpx
+from storage import StorageError, archive_training_snapshot
 from fastapi import APIRouter, Depends, HTTPException
 
 from gold import (PLATFORM_TENANT, Reviewer, add_candidate, encoded, input_hash,
@@ -270,7 +271,7 @@ async def collect_once() -> None:
 
 
 
-ROOMS = ("base", "tiger", "market_lab", "rig", "zenas", "radix", "tisan")
+ROOMS = ("base", "tiger", "market_lab", "rig", "zenas", "radix", "tisan", "ghost")
 
 
 GOLD_RESPONSE_MAX_BYTES = 5 * 1024 * 1024
@@ -297,14 +298,22 @@ def skill_owners() -> dict[str, set[str]]:
     owners: dict[str, set[str]] = {}
     for package in load_packages().values():
         owners.setdefault(package.id, set()).add(package.agent)
+    # Ghost's incident labels are a learning task, not an executable Skala skill.
+    owners.setdefault("ghost.incident", set()).add("ghost")
     return owners
 
 
 def valid_auto_candidate(row: Any, room: str, region: str,
                          owners: dict[str, set[str]] | None = None) -> bool:
-    """Accept room-owned public labels with an optional nonempty label_family."""
+    """Accept public room labels and Ghost's private monthly incident labels."""
     owners = skill_owners() if owners is None else owners
-    return (isinstance(row, dict) and row.get("public") is True
+    private_ghost = (isinstance(row, dict) and room == "ghost"
+                     and row.get("skill_id") == "ghost.incident" and row.get("public") is False
+                     and isinstance(row.get("label_source"), str)
+                     and row["label_source"].startswith("ghost:incident:")
+                     and isinstance(row.get("label_family"), str)
+                     and re.fullmatch(r"ghost:incident:\d{4}-(0[1-9]|1[0-2])", row["label_family"]) is not None)
+    return (isinstance(row, dict) and (private_ghost or (room != "ghost" and row.get("public") is True))
             and row.get("client_matter", False) is False
             and row.get("tenant_id") in (None, str(PLATFORM_TENANT))
             and region in ("us-east", "za") and row.get("region") == region
@@ -388,13 +397,13 @@ async def collect_room_gold(day: date) -> dict[str, int]:
                                     (tenant_id,region,skill_id,agent,input,expected,source,source_ref,
                                      input_hash,holdout,auto_label,label_source,public,intake_day,label_family,
                                      batch_id,currency,unit,quarantine)
-                                    VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,'room_auto',$7,$8,$9,true,$10,true,$11,$12,$13,$14,$15,$16)
+                                    VALUES ($1,$2,$3,$4,$5::jsonb,$6::jsonb,'room_auto',$7,$8,$9,true,$10,$17,$11,$12,$13,$14,$15,$16)
                                     ON CONFLICT (tenant_id,region,skill_id,source,source_ref) DO NOTHING""",
                                     PLATFORM_TENANT, region, row["skill_id"], room, value, expected,
                                     input_hash([source, row["input"], row["expected"]]), input_hash(row["input"]),
                                     row.get("holdout") is True or is_holdout(PLATFORM_TENANT, row["skill_id"], row["input"]), source, day,
                                     row.get("label_family"), row.get("batch_id"), row.get("currency"),
-                                    row.get("unit"), row.get("quarantine"),
+                                    row.get("unit"), row.get("quarantine"), row["public"],
                                 )
                                 from gold import settle_auto_source
                                 await settle_auto_source(conn, {"tenant_id": PLATFORM_TENANT, "region": region,
@@ -509,7 +518,7 @@ async def confirm_tiger(observation_id: uuid.UUID, actor: Reviewer = Depends(req
         row = await conn.fetchrow(
             "SELECT * FROM agent_tiger.observations WHERE id=$1 AND tenant_id=$2", observation_id, actor.tenant,
         )
-        if row is None or row["price"] is None:
+        if row is None or row["price"] is None or row.get("method") == "private_portal":
             raise HTTPException(404, "not found")
         await add_candidate(conn, tenant=actor.tenant, skill="tiger.price_read", agent="tiger",
                             value={"url": row["url"], "evidence": row["evidence"]},
@@ -533,6 +542,8 @@ async def upload_dataset(client: httpx.AsyncClient, org: str, agent: str, day: s
         or not exportable({**row, "tenant_id": PLATFORM_TENANT}) for row in rows
     ):
         raise ValueError("Unsafe training export")
+    data = "\n".join(encoded(row) for row in rows) + "\n"
+    await archive_training_snapshot(agent, day, data.encode(), region=region)
     name = f"tervory-public-{agent}"
     created = await client.post("https://huggingface.co/api/repos/create",
                                 json={"type": "dataset", "name": name, "organization": org, "private": True})
@@ -542,7 +553,6 @@ async def upload_dataset(client: httpx.AsyncClient, org: str, agent: str, day: s
     info = await client.get(f"https://huggingface.co/api/datasets/{repo}")
     if info.status_code != 200 or info.json().get("private") is not True:
         raise RuntimeError("Dataset is not private")
-    data = "\n".join(encoded(row) for row in rows) + "\n"
     # Native Hub commit API, no new runtime dependency; a date is a complete snapshot.
     operations = [
         {"key": "header", "value": {"summary": f"Training snapshot {day}"}},
@@ -567,6 +577,7 @@ async def export_once(*, day: date | None = None) -> dict[str, Any]:
         return {"status": "skipped", "reason": "invalid organisation"}
     day = day or datetime.now(timezone.utc).date()
     exported = 0
+    incomplete = False
     async with runtime().pool().acquire() as conn:
         if not await conn.fetchval("SELECT pg_try_advisory_lock(871223)"):
             return {"status": "skipped", "reason": "already running"}
@@ -607,7 +618,14 @@ async def export_once(*, day: date | None = None) -> dict[str, Any]:
                                 payload.append(item)
                     if not payload:
                         continue
-                    await upload_dataset(client, org, agent, day.isoformat(), payload, region)
+                    try:
+                        await upload_dataset(client, org, agent, day.isoformat(), payload, region)
+                    except StorageError:
+                        # Leave this agent unrecorded so the slot retries it,
+                        # while independent rooms can still finish their exports.
+                        incomplete = True
+                        log.warning("Training archive unavailable for agent: %s", agent)
+                        continue
                     for item in payload:
                         if item.get("batch_id"):
                             await conn.execute(
@@ -622,7 +640,7 @@ async def export_once(*, day: date | None = None) -> dict[str, Any]:
                     exported += len(payload)
         finally:
             await conn.execute("SELECT pg_advisory_unlock(871223)")
-    return {"status": "complete", "exported": exported}
+    return {"status": "incomplete" if incomplete else "complete", "exported": exported}
 
 
 async def _batch_removed(conn, tenant: uuid.UUID, batch_id: str | None) -> bool:

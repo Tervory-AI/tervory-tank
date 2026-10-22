@@ -7,3 +7,11 @@ PyYAML==6.0.2
 rapidfuzz==3.10.1
 selectolax==0.3.27
 redis==5.2.1
+# Offline BPE input budgeting for the Base agent chat route.
+tiktoken==0.14.0
+
+# ACCESS-1 authenticated encryption for the credential vault and browser channel.
+cryptography==50.0.2
+-c constraints-langgraph.txt
+# Per-node timeouts and jittered retries for MOA-1.
+langgraph==1.2.16

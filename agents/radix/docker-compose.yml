@@ -1,13 +1,19 @@
-# Radix, the security auditor. Deploy this file as its own Coolify resource.
+# coolify: raw compose
+# Radix, the security auditor. Deploy this file as its own Coolify resource, with
+# Raw Compose Deployment turned on (Coolify > app > Advanced). Raw mode deploys
+# this file exactly as written: Coolify adds only its labels, no app network and no
+# env_file, so no sealed service gains a route Coolify chose (SEAL-1).
+# tests/test_room_seal.py fails if this marker is removed.
 # Build context is agents/ (the parent of this file), because the chassis lives there.
-# Coolify's own network for this resource contains just these services.
+# Every variable reaches a service through explicit environment: interpolation.
+# No service publishes ports.
 #
 # tervory-gw-radix is an internal network, created once on the server with:
 #   docker network create --internal tervory-gw-radix
 # The agent reaches Tank, Postgres, and Hermes on that corridor.
 # It has no route to the public internet. Direct sockets to a site fail.
 #
-# The only approved external name is lokd.co.za, HTTPS, port 443.
+# Approved external names: lokd.co.za and the exact account R2 host, HTTPS 443.
 # egress-proxy is the only service on the egress network. Its process refuses
 # every other destination. This is not general internet, and this file does
 # not deploy the room.
@@ -25,6 +31,10 @@ services:
       - NET_RAW
     environment:
       AGENT_NAME: radix
+      R2_BUCKET: tervory-radix
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID_RADIX: ${R2_ACCESS_KEY_ID_RADIX:-}
+      R2_SECRET_ACCESS_KEY_RADIX: ${R2_SECRET_ACCESS_KEY_RADIX:-}
       TANK_REGION: ${TANK_REGION:-us-east}
       DATABASE_URL: postgresql://agent_radix:${AGENT_DB_PASSWORD_RADIX}@postgres:5432/${POSTGRES_DB:-tervory}
       TANK_URL: http://tank:8000
@@ -62,6 +72,7 @@ services:
     security_opt:
       - no-new-privileges:true
     environment:
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
       RADIX_EGRESS_POLICY: /app/egress-policy.json
       PYTHONDONTWRITEBYTECODE: "1"
     networks:
@@ -75,8 +86,13 @@ services:
     expose:
       - "8080"
 
+# The volume the room used before the raw-compose switch, by its live name, so
+# the data survives. external: compose reuses it and never recreates it. On a new
+# server, create it once first: docker volume create <name>
 volumes:
   agent_radix_data:
+    external: true
+    name: liv4x7vshraiwnnowjv0kgfd_agent-radix-data
 
 networks:
   gw:

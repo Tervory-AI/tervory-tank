@@ -312,8 +312,10 @@ def test_room_is_wired_and_client_queries_are_tenant_scoped() -> None:
     corridor = "tervory-gw-base"
     assert "external" not in compose["networks"][corridor]
     assert compose["networks"][corridor]["name"] == corridor
-    for name in ("tank", "postgres", "hermes", "tiger", "searxng"):
+    for name in ("tank", "postgres", "hermes", "searxng"):
         assert corridor in services[name]["networks"]
+    assert corridor not in services["tiger"]["networks"]
+    assert "tervory-gw-tiger" in services["tiger"]["networks"]
     for name in ("redis", "qdrant", "litellm", "workspace", "agent-roles"):
         assert corridor not in (services[name].get("networks") or [])
     assert services["tank"]["environment"]["TANK_KEY_BASE"] == "${TANK_KEY_BASE:-}"
@@ -333,7 +335,8 @@ def test_room_is_wired_and_client_queries_are_tenant_scoped() -> None:
     assert "POSTGRES_PASSWORD" not in service["environment"]
     assert "POSTGRES_USER" not in service["environment"]
     assert service["environment"]["TANK_KEY"] == "${TANK_KEY_BASE:-}"
-    assert service["environment"]["TIGER_URL"] == "http://tiger:3000"
+    assert "TIGER_URL" not in service["environment"]
+    assert service["environment"]["BASE_BRAIN_URL"] == "http://base-brain:8001"
     assert service["environment"]["SEARXNG_URL"] == "http://searxng:8080"
     assert service["environment"]["HERMES_URL"] == "http://hermes:8000"
 

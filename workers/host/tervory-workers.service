@@ -1,0 +1,39 @@
+# systemd USER unit for the tervory-workers host user. Installed by workers/host/install.sh to
+# ~tervory-workers/.config/systemd/user/. Lingering keeps it running without a login.
+# Same pattern as tngo-preview.service: user unit, loopback only.
+[Unit]
+Description=Tervory workers (polls GitHub issues, runs sealed rootless podman tasks)
+After=default.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/tervory-workers/worker.env
+Environment=PYTHONPATH=/srv/tervory-workers/app
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=WORKER_CODE_DIR=/srv/tervory-workers/app
+# Memory-backed (/run/user/<uid>/tervory-workers, 0700): per-task token files live here only.
+Environment=WORKER_STATE_DIR=%t/tervory-workers
+RuntimeDirectory=tervory-workers
+RuntimeDirectoryMode=0700
+WorkingDirectory=/srv/tervory-workers/app
+# NoNewPrivileges=yes blocks the setuid newuidmap/newgidmap that rootless podman needs to create
+# its user namespace ("newuidmap: write to uid_map failed"). The "+" step runs without that
+# restriction and only starts podman's pause process (the user namespace, 231072:65536).
+# The service itself keeps NoNewPrivileges=yes and podman joins that namespace without newuidmap.
+ExecStartPre=+/usr/bin/podman unshare /bin/true
+ExecStart=/srv/tervory-workers/venv/bin/python -m workers.service
+Restart=on-failure
+RestartSec=15
+NoNewPrivileges=yes
+UMask=0077
+# The limits the old tervory-workers container had (6 GB, 3 CPU), now on the unit.
+# Do not add ProtectSystem, ProtectHome, PrivateTmp or PrivateUsers: they break rootless podman.
+MemoryMax=6G
+CPUQuota=300%
+TasksMax=2048
+LockPersonality=yes
+RestrictRealtime=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=default.target

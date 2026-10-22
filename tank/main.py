@@ -569,8 +569,9 @@ async def require_key(request: Request, x_tank_key: str = Header(default="")) ->
         raise HTTPException(status_code=401, detail="missing or invalid X-Tank-Key")
     path = request.url.path
     skill_run = path.startswith("/v1/skala/") and path.endswith("/run") and path.count("/") == 4
+    ghost_route = matched == "ghost" and (request.method, path) in __import__("ghost_routes").ROOM_METHODS
     vendor_write = request.method == "POST" and path == "/v1/ledger/vendor"
-    if path not in {"/health", "/v1/route"} and not skill_run and not vendor_write:
+    if path not in {"/health", "/v1/route"} and not skill_run and not vendor_write and not ghost_route:
         raise HTTPException(status_code=403, detail="This agent key cannot call that.")
     return matched
 
@@ -583,6 +584,8 @@ class Message(BaseModel):
 
 
 class RouteRequest(BaseModel):
+    complex_request: bool = False
+    interactive: bool = True
     tenant_id: uuid.UUID
     agent: str = "tier0"
     task_type: str = "tier0.answer"
@@ -590,6 +593,7 @@ class RouteRequest(BaseModel):
     skill: str | None = None
     region: str | None = None
     home_region: str | None = None
+    case_ref: str | None = None          # isolates internal bench samples in the cache
     messages: list[Message] = Field(min_length=1)
     max_tokens: int | None = None          # a skill may ask for fewer than the policy's cap
 
@@ -601,8 +605,10 @@ class RouteResponse(BaseModel):
     content: str
     tokens_in: int
     tokens_out: int
-    cost_usd: float
+    cost_usd: float | None
     latency_ms: int
+    moa_run_id: uuid.UUID | None = None
+    moa: dict[str, Any] | None = None
     finish_reason: str = ""
 
 
@@ -826,10 +832,22 @@ def _choice_answer(data: dict[str, Any]) -> tuple[str, str]:
     return _content_text(message.get("content")), str(choice.get("finish_reason") or "")
 
 
+# The shared override gate for Command and MoA. Never persist policy changes
+# to pin one call; MoA uses the parent task's policy limits.
+MODEL_OVERRIDE_TASK_TYPES = frozenset({"command.turn"})
+MOA_SEAT_TASK = re.compile(r"[a-zA-Z0-9_.-]+#moa\.[a-z][a-z0-9_]{0,79}")
+
+
+def override_allowed(task_type: str) -> bool:
+    return task_type in MODEL_OVERRIDE_TASK_TYPES or MOA_SEAT_TASK.fullmatch(task_type) is not None
+
+
 async def run_route(
     req: RouteRequest,
     task_id: uuid.UUID | None = None,
     caller: str | None = None,
+    *,
+    model_override: str | None = None,
 ) -> RouteResponse:
     """Pick the model from policy, call it through LiteLLM, write the ledger row.
     Used directly by /v1/route and in the background by tasks."""
@@ -855,7 +873,19 @@ async def run_route(
     if early:
         raise HTTPException(status_code=403, detail=early)
 
-    policy = await load_policy(req.task_type, req.tenant_id)
+    seat = MOA_SEAT_TASK.fullmatch(req.task_type)
+    if seat and model_override is None:
+        raise HTTPException(status_code=400, detail="A MoA seat requires a model override")
+    if model_override is not None:
+        if not override_allowed(req.task_type):
+            raise HTTPException(status_code=403, detail="Model override is not enabled for this task type")
+        if model_override not in {row["name"] for row in await list_models()}:
+            raise HTTPException(status_code=422, detail="Model is not on the roster")
+    policy = await load_policy(req.task_type.partition("#moa.")[0], req.tenant_id)
+    if model_override is not None:
+        policy = {**policy, "model": model_override, "rung": 1, "candidate_model": None, "shadow_rate": 0}
+    route_seat = req.task_type.partition("#moa.")[2] if seat else (
+        "pinned" if req.task_type == "command.turn" and model_override is not None else None)
     model = policy["model"]
     # skill: and cache: are not model names. Do not send them to LiteLLM.
     if graduate.router_cannot_serve(model):
@@ -873,6 +903,8 @@ async def run_route(
         )})
     max_tokens = min(req.max_tokens or policy["max_tokens_out"], policy["max_tokens_out"])
     generation = case_facts_generation(model) if req.task_type == "zenas.case_facts" else {}
+    if model_override is not None:
+        generation = {**generation, "disable_fallbacks": True}
     sent = "\n".join(str(item.get("content") or "") for item in messages)
     holds_identifier = prompt_has_identifier(sent)
     blocked = model_call_refusal(
@@ -895,6 +927,10 @@ async def run_route(
     if not holds_identifier and _redis is not None and policy.get("cache_scope") in ("tenant", "platform"):
         scope = str(req.tenant_id) if policy["cache_scope"] == "tenant" else "platform"
         digest_parts: list[Any] = [req.task_type, model, max_tokens, messages]
+        if route_seat is not None:
+            digest_parts.append(route_seat)
+            if seat and req.case_ref:
+                digest_parts.append(req.case_ref)
         if generation:
             digest_parts.append(generation)
         digest = hashlib.sha256(json.dumps(digest_parts, sort_keys=True).encode()).hexdigest()
@@ -911,11 +947,11 @@ async def run_route(
                     """
                     INSERT INTO tank.ledger
                       (id, tenant_id, region, agent, skill, task_type, rung, model, priority,
-                       tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id)
-                    VALUES ($1,$2,$3,$4,$5,$6,4,$7,$8,0,0,0,0,true,'delivered',$9)
+                       tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, route_seat)
+                    VALUES ($1,$2,$3,$4,$5,$6,4,$7,$8,0,0,0,0,true,'delivered',$9,$10)
                     """,
                     ledger_id, req.tenant_id, req.region or DEFAULT_REGION, req.agent, req.skill,
-                    req.task_type, model, priority, task_id,
+                    req.task_type, model, priority, task_id, route_seat,
                 )
             return RouteResponse(ledger_id=ledger_id, model=model, rung=4, content=cached["content"],
                                  tokens_in=0, tokens_out=0, cost_usd=0.0, latency_ms=0)
@@ -939,11 +975,11 @@ async def run_route(
                 """
                 INSERT INTO tank.ledger
                   (id, tenant_id, region, agent, skill, task_type, rung, model, priority,
-                   tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, error)
-                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,0,0,$10,false,'failed',$11,$12)
+                   tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, error, route_seat)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,0,0,$10,false,'failed',$11,$12,$13)
                 """,
                 ledger_id, req.tenant_id, req.region or DEFAULT_REGION, req.agent, req.skill,
-                req.task_type, policy["rung"], model, priority, latency_ms, task_id, err,
+                req.task_type, policy["rung"], model, priority, latency_ms, task_id, err, route_seat,
             )
         raise HTTPException(status_code=502, detail={"ledger_id": str(ledger_id), "upstream": err}) from exc
     latency_ms = int((time.perf_counter() - started) * 1000)
@@ -978,12 +1014,12 @@ async def run_route(
             """
             INSERT INTO tank.ledger
               (id, tenant_id, region, agent, skill, task_type, rung, model, priority,
-               tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, error)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,$14,$15,$16)
+               tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, error, route_seat)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,$14,$15,$16,$17)
             """,
             ledger_id, req.tenant_id, req.region or DEFAULT_REGION, req.agent, req.skill,
             req.task_type, policy["rung"], answered, priority, tokens_in, tokens_out, cost_usd,
-            latency_ms, outcome, task_id, error,
+            latency_ms, outcome, task_id, error, route_seat,
         )
 
     if outcome == "failed":
@@ -1963,11 +1999,21 @@ async def search_task(task_type: str, body: SearchBody | None = None) -> dict[st
     return {"ok": True, "skipped": False, "research_due": due, **result.as_dict()}
 
 
-@app.post("/v1/route", response_model=RouteResponse)
-async def route(req: RouteRequest, caller: str | None = Depends(require_key)) -> RouteResponse:
+@app.post("/v1/route", response_model=RouteResponse, response_model_exclude_none=True)
+async def route(body: RouteRequest, caller: str | None = Depends(require_key)):
     if caller:
-        req = req.model_copy(update={"agent": caller})
-    return await run_route(req, caller=caller)
+        body = body.model_copy(update={"agent": caller})
+    foreign = home_region_refusal(call_home(body.home_region, box_region()), box_region())
+    if foreign:
+        raise HTTPException(403, foreign)
+    if "#moa." in body.task_type:
+        raise HTTPException(403, "Submit the original task; MoA seats are internal")
+    row = await load_policy(body.task_type, body.tenant_id)
+    if not row.get("moa_enabled"):
+        return await run_route(body, caller=caller)
+    return await __import__("moa").routed_request(
+        body, caller, row=row, complex_request=body.complex_request, interactive=body.interactive
+    )
 
 
 # ---------- tasks: the board ----------
@@ -2398,6 +2444,8 @@ async def _run_one_skill(
     ctx = make_ctx(pkg, body.tenant_id, preview=body.preview)
     if caller:
         ctx.agent = caller
+    if caller == "base":
+        await __import__("agent_skills").guard_base_run(__import__("sys").modules[__name__], pkg, body, ctx)
     out = await skala.run_skill(pkg, body.input, ctx)
     out["_cost_usd"] = round(ctx.cost_usd, 6)
     return out
@@ -2933,67 +2981,12 @@ async def tiger_alerts(request: Request) -> Response:
 
 # ---------- workers panel (read only) ----------
 
-_WORKER_STATUS = re.compile(r"^[a-z_]{1,32}$")
-_WORKER_PR = re.compile(r"^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/[0-9]{1,9}$")
-_WORKERS_MAX_ROWS = 50
-_WORKERS_MAX_BYTES = 256 * 1024
-
-
-def _worker_number(value: Any, *, digits: int) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    number = float(value)
-    if number != number or number < 0 or number > 1e9:
-        return None
-    return round(number, digits)
-
-
-def _worker_row(raw: Any) -> dict[str, Any] | None:
-    """Keep the panel's columns only, as plain values. Anything else in a row is dropped."""
-    if not isinstance(raw, dict):
-        return None
-    issue = raw.get("issue")
-    if isinstance(issue, bool) or not isinstance(issue, int) or issue <= 0:
-        return None
-    status = str(raw.get("status") or "").strip().lower()
-    pr_url = raw.get("pr_url")
-    brief = raw.get("brief")
-    return {
-        "issue": issue,
-        "brief": brief.strip()[:200] if isinstance(brief, str) else "",
-        "status": status if _WORKER_STATUS.fullmatch(status) else "unknown",
-        "pr_url": pr_url if isinstance(pr_url, str) and _WORKER_PR.fullmatch(pr_url) else None,
-        "minutes": _worker_number(raw.get("minutes"), digits=2),
-        "cost_usd": _worker_number(raw.get("cost_usd"), digits=6),
-    }
-
 
 @app.get("/v1/workers", dependencies=[Depends(require_key)])
 async def workers_panel() -> dict[str, Any]:
-    """Recent worker tasks for the Tank page. Reads the workers service's /workers page as
-    JSON (/workers.json, the same rows). Read only: no ledger row, no write, no key."""
-    base = (os.environ.get("WORKERS_URL", "").strip() or "http://workers:8000").rstrip("/")
-    parsed = urlparse(base)
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
-        return {"available": False, "tasks": []}
-    try:
-        if _http is not None:
-            resp = await _http.get(f"{base}/workers.json", timeout=5, follow_redirects=False)
-        else:
-            async with httpx.AsyncClient(timeout=5) as client:
-                resp = await client.get(f"{base}/workers.json", follow_redirects=False)
-    except httpx.HTTPError:
-        return {"available": False, "tasks": []}
-    if resp.status_code != 200 or len(resp.content) > _WORKERS_MAX_BYTES:
-        return {"available": False, "tasks": []}
-    try:
-        rows = resp.json()
-    except ValueError:
-        return {"available": False, "tasks": []}
-    if not isinstance(rows, list):
-        return {"available": False, "tasks": []}
-    tasks = [row for row in (_worker_row(item) for item in rows[:_WORKERS_MAX_ROWS]) if row is not None]
-    return {"available": True, "tasks": tasks}
+    """Worker status for the Tank page, from the host workers' heartbeat (WORKERS-2).
+    Read only: no write, no outbound call. See workers_status.panel."""
+    return await __import__("workers_status").panel()
 
 
 # ---------- billing events (Workspace key only) ----------
@@ -3085,12 +3078,18 @@ async def mark_billing_event_handled(body: BillingEventHandled) -> dict[str, boo
 
 app.include_router(__import__("admin").router)
 app.include_router(__import__("controls").router)
+app.include_router(__import__("workers_status").router)
+app.include_router(__import__("workers_status").founder_router)
 app.include_router(__import__("dashboards").router)
 
 app.include_router(__import__("gold").router)
 app.include_router(__import__("training").router)
+app.include_router(__import__("storage").router)
 app.include_router(__import__("bench").router)
 app.include_router(__import__("proof").router)
+app.include_router(__import__("proof").client_router)
+app.include_router(__import__("agent_skills").build_router(__import__("sys").modules[__name__]))
+app.include_router(__import__("moa").router)
 
 
 @app.get("/v1/training/graduation")
@@ -3401,5 +3400,13 @@ async def market_quarantine_act(
         raise HTTPException(status_code=502, detail=_MARKET_DOWN) from None
     return {**payload, "models": models}
 
+# GHOST-1: isolated founder panel, room checks, sealed Radix handoff and bounded recovery.
+app.include_router(__import__("ghost_routes").router)
 # MODELS-2: research stays in its own module; generic routing is unchanged.
 __import__("research").register(app, globals())
+
+# COMMAND-1A: conversation routes live in their own module.
+app.include_router(__import__("command").router)
+
+# ACCESS-1: scoped connections and browser-only credential handoff.
+app.include_router(__import__("access").router)

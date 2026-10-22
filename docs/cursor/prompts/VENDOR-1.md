@@ -1,0 +1,7 @@
+Run in the cloud only, on your own cloud machine. Never use my computer. Work without asking me: the brief, docs/cursor/CONTEXT.md and AGENTS.md are your answers; list your choices under "Decisions I made" in the PR. Stop only for a secret value, a paid service or key the brief does not name, an irreversible production action, or a conflict with a hard rule.
+
+Repo Tervory-AI/tervory-tank. Branch from the latest main. Read AGENTS.md and docs/cursor/CONTEXT.md, then docs/cursor/VENDOR-1-book-every-paid-tool.md and do all of it.
+
+Every paid tool call on the ledger: meter each Brave request through the shared HTTP client's existing paid-host hook (no skill edits) as one vendor:brave.search ledger row priced from tank.price_book, unpriced (never $0) until the founder sets a price; Context.dev rows get dollars from the price book next to their credits, with the Pro list price as the default and a founder-set free-pass flag.
+
+Five other lanes are running at the same time. In tank/main.py and tank/schema.sql add only route registrations and additive schema, so merges stay clean. Branch from latest main. Stay inside the brief's "Files you may change". No secrets in code, URLs, logs or tests. One branch, one PR, never push to main. Do not merge: the founder merges after review. Open a draft PR early so CI runs; mark it ready and write "ready for review" only when every check is green. End the PR with how to prove it live after deploy: which page, route or database row to check.
