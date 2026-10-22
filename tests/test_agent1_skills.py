@@ -90,12 +90,18 @@ async def test_schema_export_submission_and_existing_run_guard(monkeypatch, tmp_
             stored = await conn.fetchrow("SELECT * FROM tank.agent_skill_submissions WHERE skill_id='base.learned.echo'")
             assert stored["tenant_id"] == tenant and stored["submitted_by_room"] == "base"
             assert json.loads(stored["package"])["run.py"] == body["run_py"]
-        # Existing lifecycle only: evals then founder approval, never the room endpoint.
+        # Existing lifecycle only: evals, founder source review, then approval.
         evaluated = await tank.run_skill_evals("base.learned.echo", "1.0.0")
         assert evaluated["state"] == "staging"
-        await tank.approve_skill("base.learned.echo", "1.0.0", tank.Approval(by="test-founder"))
-        # Free recovery removes paid capabilities without modifying approved code.
         from fastapi import HTTPException
+        with pytest.raises(HTTPException, match="Review every Python file") as unreviewed:
+            await tank.approve_skill("base.learned.echo", "1.0.0", tank.Approval(by="test-founder"))
+        assert unreviewed.value.status_code == 409
+        review = await tank.review_skill_source("base.learned.echo", "1.0.0", tank.Approval(by="test-founder"))
+        assert {file["path"]: file["source"] for file in review["files"]}["run.py"] == body["run_py"]
+        await tank.approve_skill("base.learned.echo", "1.0.0", tank.Approval(
+            by="test-founder", confirmed=True, review_token=review["review_token"]))
+        # Free recovery removes paid capabilities without modifying approved code.
         pkg = packages[("base.learned.echo", "1.0.0")]
         ctx = tank.make_ctx(pkg, tenant)
         ctx.env["BRAVE_API_KEY"] = uuid.uuid4().hex

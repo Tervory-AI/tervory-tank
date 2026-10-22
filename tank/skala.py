@@ -24,6 +24,8 @@ is a separate, human-only call; a new approved version retires the previous one.
 from __future__ import annotations
 
 import importlib.util
+import copy
+import hashlib
 import json
 import logging
 import os
@@ -35,6 +37,8 @@ from typing import Any, Awaitable, Callable
 
 import httpx
 import yaml
+
+from gold import PLATFORM_TENANT
 
 SKILLS_DIR = Path(os.environ.get("SKILLS_DIR", os.path.join(os.path.dirname(__file__), "skills")))
 
@@ -245,6 +249,10 @@ async def zenas_approval_refusal(conn: Any, skill_id: str, *, region: str) -> st
     """The sentence Skala shows when this box has not passed the made-up-case test."""
     if not str(skill_id or "").startswith("zenas."):
         return None
+    if conn is not None and hasattr(conn, "fetchval"):
+        exists = await conn.fetchval("SELECT to_regclass('agent_zenas.selftest_runs')")
+        if exists is None:
+            return "This Zenas skill stays unapproved. The made-up-case test is unavailable on this box."
     box = "za" if str(region or "").strip().lower() == "za" else "us-east"
     area = ""
     if conn is not None and hasattr(conn, "fetchrow"):
@@ -302,6 +310,7 @@ def eval_properties(case: dict[str, Any], output: dict[str, Any], model_configur
 
 async def run_evals(pkg: SkillPackage, make_ctx: Callable[[], SkillContext],
                     execute: Callable[..., Awaitable[dict[str, Any]]] | None = None) -> dict[str, Any]:
+    source_fingerprint = package_hash(pkg)
     details: list[dict[str, Any]] = []
     passed = 0
     cost = 0.0
@@ -316,7 +325,7 @@ async def run_evals(pkg: SkillPackage, make_ctx: Callable[[], SkillContext],
             ctx = replace(ctx, _model=saved_model)
         goal = case.get("expected", {})
         try:
-            out = await (execute or run_skill)(pkg, case["input"], ctx)
+            out = await (execute or run_skill)(pkg, copy.deepcopy(case["input"]), ctx)
             ok, why = score_case(goal, out, case.get("tolerance", "exact"))
             if case.get("expected_error"):
                 ok, why = False, "expected refusal exception was not raised"
@@ -338,6 +347,9 @@ async def run_evals(pkg: SkillPackage, make_ctx: Callable[[], SkillContext],
             "why": why,
             "goal": goal,
             "result": out,
+            "case_hash": evidence_hash(case),
+            "package_hash": source_fingerprint,
+            "used_model": getattr(ctx, "calls", 0) > 0,
         })
     total = len(pkg.cases)
     distinct = {json.dumps(case["input"], sort_keys=True) + json.dumps(case.get("model"), sort_keys=True)
@@ -357,3 +369,265 @@ async def run_evals(pkg: SkillPackage, make_ctx: Callable[[], SkillContext],
         "cost_usd": round(cost, 6),
         "details": details,
     }
+
+
+# Approval evidence is deliberately separate from execution and routing.
+def evidence_hash(value: Any) -> str:
+    return hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def source_files(pkg: SkillPackage) -> list[dict[str, str]]:
+    """The complete Python source, including helpers in nested directories."""
+    return [{"path": path.relative_to(pkg.path).as_posix(), "source": path.read_text(encoding="utf-8")}
+            for path in sorted(pkg.path.rglob("*.py")) if path.is_file()]
+
+
+def package_hash(pkg: SkillPackage, files: list[dict[str, str]] | None = None) -> str:
+    return evidence_hash([source_files(pkg) if files is None else files, pkg.cases,
+                          pkg.eval_threshold, pkg.task_type, pkg.rung])
+
+
+def version_key(version: str) -> tuple[int, int, int]:
+    import re
+    if not re.fullmatch(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)", version):
+        raise ValueError("Approval requires a release version such as 1.2.3.")
+    return tuple(map(int, version.split(".")))
+
+
+def room_authored(skill_id: str) -> bool:
+    return len(skill_id.split(".")) >= 3 and skill_id.split(".")[1] == "learned"
+
+
+def eval_details(row: dict[str, Any]) -> list[dict[str, Any]]:
+    details = row["details"]
+    return json.loads(details) if isinstance(details, str) else details
+
+
+def passing_runs(pkg: SkillPackage, runs: list[dict[str, Any]]) -> int:
+    count = 0
+    for row in runs[:3]:
+        details = eval_details(row)
+        if (row["total"] != len(pkg.cases) or row["passed"] != row["total"] or not details
+                or any(d.get("package_hash") != package_hash(pkg) for d in details)):
+            break
+        count += 1
+    return count
+
+
+def approval_reason(pkg: SkillPackage, target: dict[str, Any], approved: dict[str, Any] | None,
+                    runs: list[dict[str, Any]], baseline: list[dict[str, Any]]) -> str | None:
+    try:
+        if approved and version_key(pkg.version) <= version_key(approved["version"]):
+            return f"{pkg.version} is older than or equal to approved {approved['version']}."
+        version_key(pkg.version)
+    except ValueError as exc:
+        return str(exc)
+    if target["state"] != "staging" or not target["present"]:
+        return "Run evals until this version reaches staging first."
+    distinct = {evidence_hash([c["input"], c.get("model")]) for c in pkg.cases}
+    refusals = [i for i, c in enumerate(pkg.cases)
+                if c.get("must_refuse") is True and (c.get("expected") or c.get("expected_error"))]
+    if len(distinct) < 5 or not refusals:
+        return "At least five distinct cases including a refusal are required."
+    if not runs:
+        return "Run evals to record approval evidence."
+    latest = runs[0]
+    details = eval_details(latest)
+    hashes = [evidence_hash(c) for c in pkg.cases]
+    if (len(details) != len(hashes) or [d.get("case_hash") for d in details] != hashes
+            or any(d.get("package_hash") != package_hash(pkg) for d in details)):
+        return "Run evals again: the evidence does not match this package and its cases."
+    if float(latest["score"]) < pkg.eval_threshold or not all(details[i]["passed"] for i in refusals):
+        return "The latest eval does not pass this skill's gate."
+    model = bool(pkg.task_type) or pkg.rung in {1, 2} or any(d.get("used_model") for d in details)
+    if model and passing_runs(pkg, runs) < 3:
+        return f"{passing_runs(pkg, runs)}/3 runs. Every case must pass on three consecutive runs."
+    if approved:
+        base_details = eval_details(baseline[0]) if baseline else []
+        if not base_details or any(not isinstance(d.get("case_hash"), str) or not d["case_hash"] for d in base_details):
+            return f"Run evals on approved {approved['version']} first"
+        base_hashes = {d["case_hash"] for d in base_details}
+        missing = base_hashes - set(hashes)
+        if missing:
+            return f"{pkg.version} drops or changes {len(missing)} of approved {approved['version']}'s cases"
+        # Extra cases must pass the candidate's own gate, but cannot mask a
+        # regression on the approved suite. Keep each approved case's weight;
+        # repeating a candidate case cannot turn its failure into a pass.
+        passed_by_hash = {h: all(d["passed"] is True for d in details if d["case_hash"] == h)
+                          for h in base_hashes}
+        score = sum(passed_by_hash[d["case_hash"]] for d in base_details) / len(base_details)
+        previous = sum(d["passed"] is True for d in base_details) / len(base_details)
+        if score < previous:
+            return f"scores {score * 100:.1f}%, below approved {previous * 100:.1f}%."
+    return None
+
+
+async def review_evidence(conn: Any, pkg: SkillPackage, *, region: str) -> dict[str, Any]:
+    rows = [dict(r) for r in await conn.fetch("SELECT * FROM tank.skills WHERE id=$1", pkg.id)]
+    target = next((r for r in rows if r["version"] == pkg.version), None)
+    approved = next((r for r in rows if r["state"] == "approved"), None)
+    runs = [dict(r) for r in await conn.fetch(
+        "SELECT * FROM tank.skill_evals WHERE skill_id=$1 AND version=$2 ORDER BY ran_at DESC, id DESC LIMIT 3",
+        pkg.id, pkg.version)]
+    baseline = []
+    if approved:
+        baseline = [dict(r) for r in await conn.fetch(
+            "SELECT * FROM tank.skill_evals WHERE skill_id=$1 AND version=$2 ORDER BY ran_at DESC, id DESC LIMIT 1",
+            pkg.id, approved["version"])]
+    reason = await zenas_approval_refusal(conn, pkg.id, region=region)
+    reason = reason or (approval_reason(pkg, target, approved, runs, baseline) if target else "Version is missing.")
+    return {"id": pkg.id, "version": pkg.version, "reason": reason,
+            "score": float(runs[0]["score"]) if runs else None,
+            "runs": passing_runs(pkg, runs), "model": bool(pkg.task_type) or pkg.rung in {1, 2}
+            or any(d.get("used_model") for r in runs for d in eval_details(r)), "room_authored": room_authored(pkg.id),
+            "fingerprint": evidence_hash([target, approved, runs, baseline, package_hash(pkg), reason])}
+
+
+async def lock_approvals(conn: Any) -> None:
+    # All lifecycle writers serialize; eval inserts cannot race the evidence check.
+    await conn.execute("SELECT pg_advisory_xact_lock(73202102)")
+    await conn.execute("LOCK TABLE tank.skill_evals IN SHARE MODE")
+    await conn.execute("LOCK TABLE tank.skills IN SHARE ROW EXCLUSIVE MODE")
+
+
+async def log_action(conn: Any, skill_id: str, version: str, by: str, action: str,
+                     previous: str | None, evidence: dict[str, Any]) -> None:
+    await conn.execute(
+        """INSERT INTO tank.skill_approvals (tenant_id, skill_id, version, action, acted_by, previous_version, evidence)
+        VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb)""",
+        PLATFORM_TENANT, skill_id, version, action, by,
+        previous, json.dumps(evidence))
+
+
+async def promote(conn: Any, pkg: SkillPackage, by: str, evidence: dict[str, Any], *, rollback: bool = False) -> None:
+    rows = await conn.fetch("SELECT * FROM tank.skills WHERE id=$1", pkg.id)
+    previous = next((r["version"] for r in rows if r["state"] == "approved"), None)
+    for row in rows:
+        older_pending = False
+        if not rollback and row["state"] in {"candidate", "staging"} and row["approved_at"] is None:
+            try:
+                older_pending = version_key(row["version"]) < version_key(pkg.version)
+            except ValueError:
+                pass
+        if row["state"] == "approved" or older_pending:
+            await conn.execute("UPDATE tank.skills SET state='retired', updated_at=now() WHERE id=$1 AND version=$2",
+                               pkg.id, row["version"])
+    await conn.execute(
+        "UPDATE tank.skills SET state='approved', approved_by=$3, approved_at=now(), updated_at=now() WHERE id=$1 AND version=$2",
+        pkg.id, pkg.version, by)
+    await log_action(conn, pkg.id, pkg.version, by, "rollback" if rollback else "approve", previous, evidence)
+
+
+async def change_version(db: Any, pkg: SkillPackage, by: str, action: str, *, region: str,
+                         confirmed: bool = False, review_token: str | None = None) -> dict[str, Any]:
+    from fastapi import HTTPException
+    if action == "retire":
+        return await retire_version(db, pkg.id, pkg.version, by)
+    async with db.acquire() as conn:
+        async with conn.transaction():
+            await lock_approvals(conn)
+            if action == "approve":
+                evidence = await review_evidence(conn, pkg, region=region)
+                if evidence["reason"]:
+                    raise HTTPException(409, evidence["reason"])
+                if room_authored(pkg.id):
+                    if not confirmed or not review_token:
+                        raise HTTPException(409, "Review every Python file, including run.py, and confirm this individual approval.")
+                    review = await conn.fetchrow(
+                        """SELECT * FROM tank.skill_source_reviews WHERE token=$1 AND tenant_id=$2
+                        AND acted_by=$3 AND skill_id=$4 AND version=$5 AND expires_at>now() AND used_at IS NULL FOR UPDATE""",
+                        review_token, PLATFORM_TENANT, by, pkg.id, pkg.version)
+                    if not review or review["package_hash"] != package_hash(pkg):
+                        raise HTTPException(409, "The source review expired, changed or was used. Review every Python file again.")
+                await promote(conn, pkg, by, evidence)
+                if room_authored(pkg.id):
+                    await conn.execute(
+                        "UPDATE tank.skill_source_reviews SET used_at=now() WHERE token=$1 AND tenant_id=$2",
+                        review_token, PLATFORM_TENANT)
+            elif action == "rollback":
+                if not confirmed:
+                    raise HTTPException(409, "Confirm the rollback first.")
+                row = await conn.fetchrow("SELECT * FROM tank.skills WHERE id=$1 AND version=$2", pkg.id, pkg.version)
+                if not row or row["state"] != "retired" or row["approved_at"] is None or not row["present"]:
+                    raise HTTPException(409, "Only a retired version that was previously approved can be restored.")
+                blocked = await zenas_approval_refusal(conn, pkg.id, region=region)
+                if blocked:
+                    raise HTTPException(409, blocked)
+                await promote(conn, pkg, by, {"confirmed": True}, rollback=True)
+    return {"ok": True, "skill": pkg.ref, "state": "approved"}
+
+
+async def retire_version(db: Any, skill_id: str, version: str, by: str) -> dict[str, Any]:
+    """Retirement needs the registry row, even when its package is no longer on disk."""
+    from fastapi import HTTPException
+    async with db.acquire() as conn:
+        async with conn.transaction():
+            await lock_approvals(conn)
+            row = await conn.fetchrow("SELECT * FROM tank.skills WHERE id=$1 AND version=$2", skill_id, version)
+            if row is None:
+                raise HTTPException(404, "No such skill version.")
+            if row["state"] not in {"candidate", "staging"}:
+                raise HTTPException(409, "Only candidate or staging versions can be retired here. The approved version stays in service.")
+            await conn.execute("UPDATE tank.skills SET state='retired', updated_at=now() WHERE id=$1 AND version=$2", skill_id, version)
+            await log_action(conn, skill_id, version, by, "retire", None, {})
+    return {"ok": True, "skill": f"{skill_id}@{version}", "state": "retired"}
+
+
+async def source_review(db: Any, pkg: SkillPackage, by: str) -> dict[str, Any]:
+    token = str(uuid.uuid4())
+    files = source_files(pkg)
+    async with db.acquire() as conn:
+        await conn.execute(
+            """INSERT INTO tank.skill_source_reviews (token, tenant_id, skill_id, version, acted_by, package_hash)
+            VALUES ($1,$2,$3,$4,$5,$6)""", token,
+            PLATFORM_TENANT, pkg.id, pkg.version, by, package_hash(pkg, files))
+    return {"source": next((f["source"] for f in files if f["path"] == "run.py"), ""),
+            "files": files, "review_token": token}
+
+
+async def bulk_preview(db: Any, packages: dict[tuple[str, str], SkillPackage], by: str, *, region: str) -> dict[str, Any]:
+    async with db.acquire() as conn:
+        async with conn.transaction():
+            await lock_approvals(conn)
+            ready: dict[str, dict[str, Any]] = {}
+            for pkg in packages.values():
+                if room_authored(pkg.id):
+                    continue
+                item = await review_evidence(conn, pkg, region=region)
+                if item["reason"] is None and (pkg.id not in ready or version_key(pkg.version) > version_key(ready[pkg.id]["version"])):
+                    ready[pkg.id] = item
+            items = sorted(ready.values(), key=lambda r: r["id"])
+            token = str(uuid.uuid4())
+            await conn.execute(
+                "INSERT INTO tank.skill_approval_previews (token, tenant_id, acted_by, items) VALUES ($1,$2,$3,$4::jsonb)",
+                token, PLATFORM_TENANT, by, json.dumps(items))
+    return {"token": token, "items": items}
+
+
+async def bulk_confirm(db: Any, packages: dict[tuple[str, str], SkillPackage], by: str, token: str,
+                       confirmed: bool, *, region: str) -> dict[str, Any]:
+    from fastapi import HTTPException
+    if not confirmed:
+        raise HTTPException(409, "Confirm the listed versions first.")
+    async with db.acquire() as conn:
+        async with conn.transaction():
+            await lock_approvals(conn)
+            row = await conn.fetchrow(
+                """SELECT * FROM tank.skill_approval_previews WHERE token=$1 AND tenant_id=$2
+                AND acted_by=$3 AND expires_at>now() AND used_at IS NULL FOR UPDATE""",
+                token, PLATFORM_TENANT, by)
+            if row is None:
+                raise HTTPException(409, "The approval list expired or was already used. Load it again.")
+            items = json.loads(row["items"]) if isinstance(row["items"], str) else row["items"]
+            for item in items:
+                pkg = packages.get((item["id"], item["version"]))
+                if pkg is None or room_authored(pkg.id):
+                    raise HTTPException(409, "The approval list changed. Load it again.")
+                fresh = await review_evidence(conn, pkg, region=region)
+                if fresh["reason"] or fresh["fingerprint"] != item["fingerprint"]:
+                    raise HTTPException(409, f"{pkg.ref}: evidence changed. Load the approval list again.")
+            for item in items:
+                await promote(conn, packages[(item["id"], item["version"])], by, item)
+            await conn.execute("UPDATE tank.skill_approval_previews SET used_at=now() WHERE token=$1 AND tenant_id=$2",
+                               token, PLATFORM_TENANT)
+    return {"ok": True, "approved": [{"id": i["id"], "version": i["version"]} for i in items]}

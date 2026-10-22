@@ -17,8 +17,8 @@ PACKAGE = ROOT / "tank/skills/market.series_fetch/1.1.0"
 
 
 def platform_tenant() -> str:
-    # Read the authoritative constant without importing Tank's server or DB.
-    tree = ast.parse((ROOT / "tank/main.py").read_text())
+    # Main and Skala share Gold's constant; avoid importing the server or DB.
+    tree = ast.parse((ROOT / "tank/gold.py").read_text())
     for node in tree.body:
         if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "PLATFORM_TENANT" for t in node.targets):
             return ast.literal_eval(node.value.args[0])

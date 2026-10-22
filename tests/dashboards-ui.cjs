@@ -72,7 +72,7 @@ async function render() {
   const {FounderDashboard} = require('../workspace/app/control/view.tsx');
   const view={data:fixture,signups:{total:1,recent:[{id:'user',name:'Alex Example',company:'Example Company',country:'United States',plan:'Trial',createdAt:Date.UTC(2026,9,21)}],days:[]},paying:0,paused:false,models:[],refused:[],errors:[]};
   const control=renderToStaticMarkup(React.createElement(FounderDashboard,{view}));
-  for (const label of ['SKALA-2','GHOST-1','AGENT-1','BATCH-1']) assert(control.includes(label));
+  for (const label of ['Approve all ready','GHOST-1','AGENT-1','BATCH-1']) assert(control.includes(label));
   // WORKERS-2 tile: status, commit, last check-in, Pause/Resume; "not checking in" after 3 minutes.
   assert(control.includes('Workers status unavailable') && control.includes('Workers pause unavailable'));
   const beat=(ageS,state='running',issue=211)=>({worker:'boston',state,issue,commit:'c379a45deadbeef',last_error:null,seen_at:new Date(Date.now()-ageS*1000).toISOString(),age_s:ageS,checking_in:ageS<=180});
