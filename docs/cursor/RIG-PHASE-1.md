@@ -172,6 +172,16 @@ Every step has a receipt, and a failed step stops the job with its reason.
 - Its outbound traffic goes only to the R2 host and the Hugging Face API, through an allow-listed egress proxy (the Radix pattern).
 - Add it to `ops/seal-check.sh` and to the seal test.
 
+**Wiring the forge needs (approved 22 Oct):**
+- `agents/rig/docker-compose.yml`: the forge's private network to `rig-brain`, plus a forge egress proxy allow-listing only the R2 host and the Hugging Face API.
+- In `rig-brain`, only the connection to the forge and a receipt relay. The forge has no Tank key; its receipts go through the brain.
+- Tank: new, additive receipt routes for GPU job costs, with the cost cap enforced in Tank. The existing vendor endpoint's behaviour does not change.
+- CI image-build wiring for the forge image.
+- Seal tests and `ops/seal-check.sh` entries.
+- Variable names in `.env.example`, with empty values.
+
+Nothing else in other lanes' files changes behaviour.
+
 **Done when:**
 - CI builds the forge image and verifies every tool's checksum.
 - `tests/test_rig_forge*.py` takes a neutral sample STEP file and a sample scan (OBJ) end to end into a GLB that passes the model check and the validator.
