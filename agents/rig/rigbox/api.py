@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from rigbox.service import RigError
+from rigbox.quotes.privacy import shopper_body
 
 router = APIRouter(prefix="/v1/rig")
 
@@ -24,6 +25,7 @@ class SetupIn(BaseModel):
 class SwapIn(BaseModel):
     setup: dict[str, Any]
     role: str = ""
+    commit: bool = False
 
 
 class AskIn(BaseModel):
@@ -35,6 +37,7 @@ class AskIn(BaseModel):
 class LinkIn(BaseModel):
     url: str = ""
     note: str = ""
+    contact: dict[str, Any] | None = None
 
 
 class QuoteIn(BaseModel):
@@ -143,6 +146,10 @@ async def preflight(request: Request, rest: str = "") -> Response:
 async def search(request: Request, q: str = "", limit: int = 12) -> Response:
     await _auth(request)
     body = await _service(request).search(_tenant(request), q, limit)
+    if q.strip():
+        await _count(request, "searches")
+        if not body.get("results"):
+            await _count(request, "no_results")
     return _ok(request, body)
 
 
@@ -157,6 +164,8 @@ async def product(request: Request, product_id: str) -> Response:
 async def setups(request: Request, payload: SetupIn) -> Response:
     await _auth(request)
     body = await _service(request).setups(_tenant(request), payload.product_id)
+    if body.get("setups"):
+        await _count(request, "setups_opened")
     return _ok(request, body)
 
 
@@ -164,6 +173,8 @@ async def setups(request: Request, payload: SetupIn) -> Response:
 async def swap(request: Request, payload: SwapIn) -> Response:
     await _auth(request)
     body = await _service(request).swap(_tenant(request), payload.setup, payload.role)
+    if payload.commit:
+        await _count(request, "swaps")
     return _ok(request, body)
 
 
@@ -191,7 +202,8 @@ async def ask(request: Request, payload: AskIn) -> Response:
 @router.post("/link-quote")
 async def link_quote(request: Request, payload: LinkIn) -> Response:
     await _auth(request)
-    body = await _service(request).link_quote(_tenant(request), payload.url, payload.note)
+    kwargs = {"contact": payload.contact} if payload.contact is not None else {}
+    body = await _service(request).link_quote(_tenant(request), payload.url, payload.note, **kwargs)
     return _ok(request, body)
 
 
@@ -242,5 +254,11 @@ async def admin_suggest(request: Request) -> Response:
 
 
 def _ok(request: Request, body: dict[str, Any]) -> JSONResponse:
-    response = JSONResponse(body)
+    response = JSONResponse(shopper_body(body))
     return _cors(response, _origin(request), bool(getattr(request.state, "rig_origin_ok", False)))
+
+
+async def _count(request: Request, event: str) -> None:
+    counts = getattr(_service(request), "quote_store", None)
+    if counts is not None:
+        await counts.count(_tenant(request), event)

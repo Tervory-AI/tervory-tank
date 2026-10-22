@@ -171,3 +171,23 @@ CREATE INDEX IF NOT EXISTS searches_tenant_version ON agent_rig.searches (tenant
 
 CREATE INDEX IF NOT EXISTS searches_tenant_created
     ON agent_rig.searches (tenant_id, created_at DESC);
+
+-- RIG-4: durable retailer handoff and anonymous daily widget counts.
+CREATE TABLE IF NOT EXISTS agent_rig.quote_handoffs (
+    tenant_id uuid NOT NULL,
+    quote_id text NOT NULL REFERENCES agent_rig.quotes(id),
+    status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sending', 'sent')),
+    error text,
+    attempts integer NOT NULL DEFAULT 0,
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, quote_id)
+);
+
+CREATE TABLE IF NOT EXISTS agent_rig.widget_counts (
+    tenant_id uuid NOT NULL,
+    day date NOT NULL,
+    event text NOT NULL CHECK (event IN ('searches', 'setups_opened', 'swaps', 'quotes', 'no_results')),
+    count bigint NOT NULL DEFAULT 0 CHECK (count >= 0),
+    PRIMARY KEY (tenant_id, day, event)
+);
+-- End RIG-4.
