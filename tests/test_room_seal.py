@@ -383,6 +383,19 @@ def test_rig_extra_network_is_a_leak_even_on_public_api(tmp_path, service):
 
 
 @pytest.mark.parametrize("service", ["rig-browser", "rig-sandbox", "rig-brain", "rig-browser-gateway"])
+def test_rig_proxy_network_is_for_the_public_api_only(tmp_path, service):
+    data = json.loads((FIXTURES / "sealed.json").read_text())
+    for container in data["containers"].values():
+        if container["service"] == service:
+            container["networks"].append("59f8cnpelzwsyte1atyjc4fv")
+    path = tmp_path / "rig-private-proxy.json"
+    path.write_text(json.dumps(data))
+    result = run_seal_check(tmp_path, str(path))
+    assert result.returncode == 1
+    assert f"LEAK: riguuid-{service}-1 on 59f8cnpelzwsyte1atyjc4fv" in result.stdout
+
+
+@pytest.mark.parametrize("service", ["rig-browser", "rig-sandbox", "rig-brain", "rig-browser-gateway"])
 def test_rig_missing_internal_attachment_fails(tmp_path, service):
     data = json.loads((FIXTURES / "sealed.json").read_text())
     for container in data["containers"].values():

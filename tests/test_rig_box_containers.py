@@ -19,9 +19,10 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_rig_real_box_public_api_and_sealed_execution(tmp_path):
     executable = os.environ.get("RIG2_DOCKER", "docker")
     project = "rig2-box-" + uuid.uuid4().hex[:10]
-    # The live checker requires the literal corridor. Use an isolated fixture
-    # network with a Docker command adapter that reports only its logical name.
+    # The live checker requires literal corridor/proxy names. Use isolated
+    # fixture networks and report their production logical names to the checker.
     corridor, sandbox_net, browser_net = project + "_gw", project + "_sandbox", project + "_browser"
+    proxy_net = project + "_proxy"
     containers, volumes, networks = [], [], []
     key, executor_key = uuid.uuid4().hex, uuid.uuid4().hex
     env = dict(os.environ, TANK_KEY=key, SANDBOX_KEY=executor_key)
@@ -54,7 +55,7 @@ def test_rig_real_box_public_api_and_sealed_execution(tmp_path):
         docker("start", name)
         return name
     try:
-        for network, internal in ((corridor, False), (sandbox_net, True), (browser_net, True)):
+        for network, internal in ((corridor, False), (proxy_net, False), (sandbox_net, True), (browser_net, True)):
             docker("network", "create", *(["--internal"] if internal else []), network)
             networks.append(network)
         for suffix in ("api", "brain", "browser"):
@@ -80,11 +81,25 @@ def test_rig_real_box_public_api_and_sealed_execution(tmp_path):
             "-e", "ACCESS_ROOM=rig", "-e", "BROWSER_HOST=rig-browser")
         brain = create("rig-brain", "brain", [corridor, sandbox_net], "-e", "TANK_KEY", "-e", "SANDBOX_KEY",
             "-v", volumes[1] + ":/data", "-e", "TANK_REGION=us-east")
-        api = create("agent-rig", "api", [corridor], "-e", "TANK_KEY", "-e", "AGENT_NAME=rig",
+        api = create("agent-rig", "api", [corridor, proxy_net], "-e", "TANK_KEY", "-e", "AGENT_NAME=rig",
             "-e", "DATABASE_URL=postgresql://postgres@postgres:5432/postgres", "-e", "RIG_BRAIN_URL=http://rig-brain:8001",
             "-e", "CATALOGUE_DIR=/app/catalogues", "-e", "DATA_DIR=/data", "-v", volumes[0] + ":/data")
         for name, port in ((api, 8000), (brain, 8001), (browser, 3000), (gateway, 3000), (sandbox, 8002)):
             ready(name, port)
+        proxy_probe = r'''import httpx
+with httpx.Client(trust_env=False,timeout=3) as client:
+ assert client.get('http://agent-rig:8000/health').json()['ok'] is True
+ for host,port in [('rig-brain',8001),('rig-sandbox',8002),('rig-browser',3000),('rig-browser-gateway',3000)]:
+  try: client.get(f'http://{host}:{port}/health')
+  except httpx.HTTPError: pass
+  else: raise AssertionError('proxy reached private service: '+host)
+print('PASS proxy reaches only public API')
+'''
+        probe = project + "-proxy-probe"
+        containers.append(probe)
+        assert "PASS proxy" in docker("run", "--rm", "-i", "--name", probe, "--network", proxy_net,
+            "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "tervory-rig-api:cloud",
+            "python", "-", input=proxy_probe)
         api_probe = r'''import httpx,json
 from pathlib import Path
 with httpx.Client(base_url='http://127.0.0.1:8000',trust_env=False) as client:
@@ -133,14 +148,16 @@ print('PASS browser egress denied, no Tank key, separate tenant contexts')
 '''
         assert "PASS browser" in docker("exec", "-i", browser, "python", "-", input=browser_probe)
         # Actual inspect evidence, translated only from the unique fixture
-        # corridor to its production logical name. No production objects touched.
-        data = {"containers": {}, "networks": {"tervory-gw-rig": False, sandbox_net: True, browser_net: True}}
+        # networks to production logical names. No production objects touched.
+        logical = {corridor: "tervory-gw-rig", proxy_net: "59f8cnpelzwsyte1atyjc4fv"}
+        data = {"containers": {}, "networks": {"tervory-gw-rig": False,
+                "59f8cnpelzwsyte1atyjc4fv": False, sandbox_net: True, browser_net: True}}
         for name in (api, brain, sandbox, browser, gateway):
             info = json.loads(docker("inspect", name))[0]
             assert not info["HostConfig"]["Privileged"] and not info["HostConfig"].get("PortBindings")
             data["containers"][name] = {"uuid": project, "project": project,
                 "service": info["Config"]["Labels"]["com.docker.compose.service"], "name": name,
-                "networks": ["tervory-gw-rig" if n == corridor else n for n in info["NetworkSettings"]["Networks"]]}
+                "networks": [logical.get(n, n) for n in info["NetworkSettings"]["Networks"]]}
         from test_room_seal import run_seal_check
         path = tmp_path / "rig-live-inspect.json"
         path.write_text(json.dumps(data))

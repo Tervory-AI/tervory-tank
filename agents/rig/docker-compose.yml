@@ -1,7 +1,8 @@
 # coolify: raw compose
-# Rig. Enable Raw Compose Deployment before merging/deploying RIG-2.
+# Rig. Deploy this file as its own Coolify resource, with Raw Compose Deployment on.
+# Raw mode requires the explicit public route and existing proxy network below.
+# Only agent-rig is public; its brain, sandbox and browser have no proxy attachment.
 # Build context is agents/ (the parent of this file), because the chassis lives there.
-# Keep the existing Coolify domain on agent-rig:8000 only. No other service has a domain.
 # The corridor is created by the main stack. This resource joins it by name.
 
 services:
@@ -31,6 +32,21 @@ services:
       - agent_rig_data:/data
     networks:
       - gw
+      - proxy
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=59f8cnpelzwsyte1atyjc4fv
+      - traefik.http.routers.rig-http.rule=Host(`rig.tervory.com`)
+      - traefik.http.routers.rig-http.entrypoints=http
+      - traefik.http.routers.rig-http.middlewares=redirect-to-https
+      - traefik.http.routers.rig-https.rule=Host(`rig.tervory.com`)
+      - traefik.http.routers.rig-https.entrypoints=https
+      - traefik.http.routers.rig-https.tls=true
+      - traefik.http.routers.rig-https.tls.certresolver=letsencrypt
+      - traefik.http.routers.rig-https.service=rig
+      - traefik.http.routers.rig-https.middlewares=rig-gzip
+      - traefik.http.middlewares.rig-gzip.compress=true
+      - traefik.http.services.rig.loadbalancer.server.port=8000
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
       interval: 10s
@@ -38,8 +54,6 @@ services:
       retries: 10
     expose:
       - "8000"
-    labels:
-      traefik.docker.network: tervory-gw-rig
     security_opt: ["no-new-privileges:true"]
     cap_drop: [ALL]
 
@@ -142,12 +156,12 @@ services:
     security_opt: ["no-new-privileges:true"]
     cap_drop: [ALL]
 
+# The volume Rig used before the raw-compose switch, by its live name, so its data survives.
+# external: a wrong name fails the deploy instead of starting on an empty volume.
 volumes:
   agent_rig_data:
     external: true
-    # Set to the verified existing mount on agent-rig. Never guess or create it.
-    # No :? interpolation here: Coolify rejects it in external volume names.
-    name: ${RIG_DATA_VOLUME_NAME}
+    name: 59f8cnpelzwsyte1atyjc4fv_agent-rig-data
   rig_brain_data:
     name: tervory-rig-brain-data
   rig_browser_data:
@@ -161,3 +175,8 @@ networks:
   gw:
     external: true
     name: tervory-gw-rig
+  # Rig's own proxy network, the one coolify-proxy already reaches it on today. Not the
+  # shared coolify network, so Rig stays on a per-app network as before the raw switch.
+  proxy:
+    external: true
+    name: 59f8cnpelzwsyte1atyjc4fv

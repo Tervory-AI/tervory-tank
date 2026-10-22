@@ -121,7 +121,8 @@
    "name": "riguuid-agent-rig-1",
    "project": "riguuid",
    "networks": [
-    "tervory-gw-rig"
+    "tervory-gw-rig",
+    "59f8cnpelzwsyte1atyjc4fv"
    ]
   },
   "rig-rig-brain": {
@@ -177,6 +178,7 @@
   "tervory-gw-tiger": false,
   "tervory-gw-rig": false,
   "riguuid_sandbox": true,
-  "riguuid_browser": true
+  "riguuid_browser": true,
+  "59f8cnpelzwsyte1atyjc4fv": false
  }
 }

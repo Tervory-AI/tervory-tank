@@ -32,20 +32,22 @@ for the stand-in tests. Do not put live ZA shopper information on Boston.
 
 ## Before deployment
 
-1. The founder enables **Raw Compose Deployment** on agent-rig before merging.
+1. Keep **Raw Compose Deployment** enabled on agent-rig. Main's deployment fix
+   records that the founder enabled it on 22 October 2026.
 2. On the authorized cloud host, inspect the existing agent-rig container's
    `/data` mount and list volumes for application `59f8cnpelzwsyte1atyjc4fv`.
-   Set the non-secret `RIG_DATA_VOLUME_NAME` to that exact existing volume name
-   in Coolify. The compose declares it external; do not create a replacement.
-   Its live name could not be verified from the coding environment, so no name
-   was guessed. An empty setting must not be deployed.
+   Confirm it is `59f8cnpelzwsyte1atyjc4fv_agent-rig-data`, the external volume
+   pinned by main's deployment fix. This PR preserves that pin; do not create
+   a replacement. A missing external volume must fail deployment.
 3. Generate `SANDBOX_KEY_RIG` securely in the deployment secret store. Only
    rig-brain and rig-sandbox receive it. Keep `TANK_KEY_RIG`, Rig's database
    binding, the R2 pair and existing domain configuration. New brain and browser
    volumes have fixed names `tervory-rig-brain-data` and `tervory-rig-browser-data`.
-4. Keep the proxy's access to `tervory-gw-rig`. The API's Traefik network label
-   explicitly selects that corridor. Do not attach a proxy/app network to the
-   brain, browser or sandbox. No service publishes host ports.
+4. Keep the existing external proxy network `59f8cnpelzwsyte1atyjc4fv` attached
+   only to agent-rig. Its explicit Traefik labels select that network, keep the
+   `rig.tervory.com` HTTPS route and target port 8000. The API also retains its
+   `tervory-gw-rig` corridor. No private Rig service joins the proxy network,
+   and no service publishes host ports.
 5. Deploy only after review and merge. Run `bash ops/seal-check.sh` on the host;
    it must exit 0 and include `agent-rig (...): sealed`. It checks exact Rig
    service networks and fails if any sandbox/browser network becomes external.
@@ -76,7 +78,7 @@ fails before a model call. Production pause changes belong to the founder.
 
 From the repository root, use Python 3.12 and the pinned Tank development
 requirements. Set `POOL_SCHEMA_DATABASE_URL` to disposable PostgreSQL 16.
-Run `pytest -q tests/test_rig_box*.py tests/test_room_seal.py` with `PYTHONPATH=tank`.
+Run `python -m pytest -q tests/test_rig_box*.py tests/test_room_seal.py` with `PYTHONPATH=tank`.
 The Rig/Postgres, existing Base brain and bucket tests cover shared boundaries.
 The opt-in runtime tests explicitly require locally built images and use a fake
 model response with the real pinned Hermes runtime; they are protocol evidence,

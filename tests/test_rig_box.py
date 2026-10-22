@@ -22,7 +22,14 @@ def test_rig_is_its_own_box_and_only_the_api_is_public():
     services = cfg["services"]
     assert set(services) == {"agent-rig", "rig-brain", "rig-browser", "rig-browser-gateway", "rig-sandbox"}
     assert cfg["networks"]["gw"] == {"external": True, "name": "tervory-gw-rig"}
-    assert services["agent-rig"]["networks"] == ["gw"]
+    assert services["agent-rig"]["networks"] == ["gw", "proxy"]
+    assert cfg["networks"]["proxy"] == {"external": True, "name": "59f8cnpelzwsyte1atyjc4fv"}
+    labels = dict(label.split("=", 1) for label in services["agent-rig"]["labels"])
+    assert labels["traefik.docker.network"] == cfg["networks"]["proxy"]["name"]
+    assert labels["traefik.http.routers.rig-https.rule"] == "Host(`rig.tervory.com`)"
+    assert labels["traefik.http.routers.rig-https.tls.certresolver"] == "letsencrypt"
+    assert labels["traefik.http.services.rig.loadbalancer.server.port"] == "8000"
+    assert {name for name, spec in services.items() if spec.get("labels")} == {"agent-rig"}
     assert services["rig-brain"]["networks"] == ["gw", "sandbox"]
     assert services["rig-browser-gateway"]["networks"] == ["gw", "browser"]
     for name in ("sandbox", "browser"):
@@ -30,7 +37,7 @@ def test_rig_is_its_own_box_and_only_the_api_is_public():
         assert services["rig-" + name]["networks"] == [name]
     assert {k for k, v in services.items() if v.get("expose")} == {"agent-rig"}
     assert services["agent-rig"]["expose"] == ["8000"]
-    assert cfg["volumes"]["agent_rig_data"] == {"external": True, "name": "${RIG_DATA_VOLUME_NAME}"}
+    assert cfg["volumes"]["agent_rig_data"] == {"external": True, "name": "59f8cnpelzwsyte1atyjc4fv_agent-rig-data"}
     for spec in services.values():
         assert not any(k in spec for k in ("ports", "privileged", "cap_add", "network_mode", "pid", "env_file"))
         assert spec["cap_drop"] == ["ALL"]

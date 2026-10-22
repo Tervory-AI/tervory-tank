@@ -155,11 +155,13 @@ or Tiger processes, volumes, keys or browser state. The brain uses only approved
 Rig skills, its tenant's Hermes memory and Tank's `agent.rig.think` policy, with
 the paid-work pause and task receipts. Existing Rig R2 storage stays on agent-rig.
 
-Before merging, enable Raw Compose on agent-rig and set `RIG_DATA_VOLUME_NAME`
-to the verified existing live `/data` volume, plus the Rig-only `SANDBOX_KEY_RIG`.
-Do not guess the live volume name or let Compose replace it. Keep the proxy's
-existing reachability to the Rig corridor. Run `ops/seal-check.sh` after deployment;
-Rig is now an expected room and its public API is allowed only on its corridor.
+Keep Raw Compose enabled and provision the Rig-only `SANDBOX_KEY_RIG`.
+The existing `/data` volume remains pinned external to
+`59f8cnpelzwsyte1atyjc4fv_agent-rig-data`, preserving main's deployment fix.
+Only agent-rig joins the existing proxy network `59f8cnpelzwsyte1atyjc4fv` as
+well as its corridor; its explicit Traefik labels retain the public HTTPS route.
+Run `ops/seal-check.sh` after deployment. Rig is now an expected room; any extra
+attachment, including the proxy network on a private service, fails the check.
 See [Rig's box runbook](../../agents/rig/BOX.md) for the authenticated question,
 receipt and public-health checks. Stand-in catalogue data only on Boston; live
 ZA shopper data is not part of this pilot.
