@@ -26,6 +26,8 @@ class Pool:
         yield
 
     async def fetchval(self, sql, *args):
+        if "tank.standard_model_for" in sql:
+            return "baseline"
         assert "tank.controls" in sql
         if self.unavailable:
             raise RuntimeError("fixture control unavailable")
@@ -47,7 +49,7 @@ def setup(monkeypatch):
         return {"model": "serving", "baseline_model": "baseline", "rung": 1, "priority": "standard", "max_tokens_out": 100}
 
     async def roster():
-        return [{"model_name": name, "model_info": {"input_cost_per_token": 0.001, "output_cost_per_token": 0.002}} for name in ("baseline", "serving")]
+        return [{"model_name": name, "litellm_params": {"model": "openai/gpt-fixture"}, "model_info": {"input_cost_per_token": 0.001, "output_cost_per_token": 0.002}} for name in ("baseline", "serving")]
 
     tank = SimpleNamespace(pool=lambda: pool, load_policy=policy, _roster_models=roster,
                            box_region=lambda: "us-east", model_call_refusal=lambda *a, **kw: None, graduate=SimpleNamespace(router_cannot_serve=lambda m: False),

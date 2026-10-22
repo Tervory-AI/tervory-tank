@@ -49,8 +49,9 @@ def run_browser_boundary(render_public=False):
             docker("network", "create", "--internal", network)
         docker("network", "create", corridor)
         docker("volume", "create", volume)
+        # SEAL-1: the browser runs with no Tank key; only the gateway holds it.
         docker("run", "-d", "--name", browser, "--network", private, "--network-alias", "base-browser",
-               "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "-e", "TANK_KEY",
+               "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
                "-v", volume + ":/browser-data", "-v", str(ROOT / "agents/_brain") + ":/app/brain:ro",
                "tervory-agent1-browser:cloud", env=env)
         docker("create", "--name", gateway, "--network", corridor,
@@ -98,10 +99,12 @@ async def run():
         await browser.close()
 asyncio.run(run())
 headers = {'X-Tank-Key': os.environ['TANK_KEY'], 'X-Tenant-ID': str(uuid.uuid4()), 'X-Home-Region': 'us-east'}
-assert httpx.post('http://127.0.0.1:3000/render',headers=headers,json={'url':'https://169.254.169.254'}).status_code == 403
+# SEAL-1: the browser answers only its gateway, so a caller inside it is refused.
+assert httpx.post('http://127.0.0.1:3000/render',headers=headers,json={'url':'https://www.atf.gov'}).status_code == 401
+assert httpx.post('http://base-browser-gateway:3000/render',headers=headers,json={'url':'https://169.254.169.254'}).status_code == 403
 PUBLIC_RENDER_CHECK
 headers['X-Tank-Key'] = uuid.uuid4().hex
-assert httpx.post('http://127.0.0.1:3000/render',headers=headers,json={'url':'https://www.atf.gov'}).status_code == 401
+assert httpx.post('http://base-browser-gateway:3000/render',headers=headers,json={'url':'https://www.atf.gov'}).status_code == 401
 s = socket.socket(); s.settimeout(2)
 assert s.connect_ex(('1.1.1.1',443)) != 0
 s.close()
@@ -109,11 +112,12 @@ s = socket.create_connection(('base-browser-gateway',3128),2)
 s.sendall(b'CONNECT 169.254.169.254:443 HTTP/1.1\\r\\nHost: 169.254.169.254\\r\\n\\r\\n')
 assert b'403' in s.recv(1024)
 s.close()
-print('PASS Chromium, browser allowlist, wrong room key, direct egress, proxy allowlist')
+print('PASS Chromium, gateway-only browser, wrong room key, direct egress, proxy allowlist')
 '''
         public_check = "response = httpx.post('http://base-browser-gateway:3000/render',headers=headers,json={'url':'https://example.com','settle_ms':0},timeout=170)\nassert response.status_code == 200, (response.status_code,response.text)\nvalue = response.json()\nassert 'html' not in value, response.text\nif value.get('skipped'):\n    assert value['reason'] == 'robots.txt' and value['page']['facts']['skip_reason'] == 'robots.txt', response.text\nelse:\n    assert value['ok'] and value['page']['facts']['title'] == 'Example Domain' and value['page']['text'], response.text\n"
         script = script.replace("PUBLIC_RENDER_CHECK", public_check if render_public else "")
-        assert docker("exec", browser, "python", "-c", script).startswith("PASS")
+        # The test key reaches only this one exec, never the browser's own environment.
+        assert docker("exec", "-e", "TANK_KEY", browser, "python", "-c", script, env=env).startswith("PASS")
         gateway_address = json.loads(docker("inspect", gateway))[0]["NetworkSettings"]["Networks"][corridor]["IPAddress"]
         corridor_probe = "import socket,urllib.request,sys; urllib.request.urlopen('http://'+sys.argv[1]+':3000/health'); s=socket.socket(); s.settimeout(2); assert s.connect_ex((sys.argv[1],3128)) != 0; print('PASS proxy is browser-only')"
         assert docker("run","--rm","--network",corridor,"--cap-drop","ALL","tervory-agent1-browser:cloud",

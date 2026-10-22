@@ -27,7 +27,7 @@ async def test_all_hidden_text_cases_in_real_chromium(real_chromium):
         'empty-box': 'height:0;overflow:hidden',
         'outside-page': 'position:absolute;left:-10000px;top:0',
         'outside-right': 'position:absolute;left:100000px;top:0',
-        'outside-bottom': 'position:absolute;top:100000px;left:0',
+        'outside-bottom': 'position:fixed;top:100000px;left:0',
         'clip-rect': 'position:absolute;clip:rect(0px,0px,0px,0px)',
         'clip-path': 'clip-path:inset(50%)',
         'screen-reader': 'position:absolute;width:1px;height:1px;overflow:hidden',
@@ -385,3 +385,76 @@ async def test_low_contrast_and_transparent_text_fill_are_removed(real_chromium,
     report = model_page(read_page('https://shop.example', await browser.rendered_source(page)))
     assert 'HIDDEN-' not in report and 'Visible control' in report
     assert 'Visible above 1.2 contrast' in report
+
+
+@pytest.mark.asyncio
+async def test_full_height_document_keeps_text_below_first_screen(real_chromium):
+    page = await real_chromium.new_page(viewport={'width': 800, 'height': 600})
+    await page.set_content('<style>html,body{height:100%}</style><p>Visible top</p>'
+                           '<div style="height:1400px"></div><p>Visible below first screen</p>')
+    report = model_page(read_page('https://shop.example', await browser.rendered_source(page)))
+    assert 'Visible top' in report and 'Visible below first screen' in report
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('overflow', ['auto', 'scroll'])
+async def test_inner_scroll_extent_survives_body_overflow_hidden(real_chromium, overflow):
+    page = await real_chromium.new_page(viewport={'width': 800, 'height': 600})
+    await page.set_content(f'<style>html,body{{height:100%;margin:0;overflow:hidden}}'
+                           f'main{{height:100%;overflow:{overflow}}}</style>'
+                           '<main><p>Visible top</p><div style="height:1400px"></div>'
+                           '<p>Visible inner bottom</p><div style="height:200px"></div></main>')
+    for scrolled in (False, True):
+        if scrolled:
+            await page.eval_on_selector('main', 'el => el.scrollTop = el.scrollHeight')
+        report = model_page(read_page('https://shop.example', await browser.rendered_source(page)))
+        assert 'Visible top' in report and 'Visible inner bottom' in report
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('cloaked', [
+    '<div style="opacity:0.01">HIDDEN-opacity</div>',
+    '<div style="opacity:0.3"><span style="opacity:0.3">HIDDEN-cumulative-opacity</span></div>',
+    '<div style="opacity:0.09"><span style="opacity:1">HIDDEN-parent-opacity</span></div>',
+])
+async def test_cumulative_opacity_below_point_one_is_hidden(real_chromium, cloaked):
+    page = await real_chromium.new_page()
+    await page.set_content(cloaked + '<p style="opacity:0.1">Visible at threshold</p><p>Visible control</p>')
+    report = model_page(read_page('https://shop.example', await browser.rendered_source(page)))
+    assert 'HIDDEN-' not in report and 'Visible at threshold' in report and 'Visible control' in report
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('background,ink,visible', [
+    ('white', 'oklch(99.8% 0 0)', 'oklch(30% 0 0)'),
+    ('color(srgb 1 1 1)', 'color(srgb 0.998 0.998 0.998)', 'color(srgb 0.2 0.2 0.2)'),
+    ('oklch(30% 0 0)', 'oklch(30% 0 0)', 'white'),
+])
+async def test_canvas_normalizes_modern_css_colours(real_chromium, background, ink, visible):
+    page = await real_chromium.new_page()
+    await page.set_content(f'<body style="background:{background}"><p style="color:{ink}">HIDDEN-modern-colour</p>'
+                           f'<p style="color:{visible}">Visible contrast</p></body>')
+    report = model_page(read_page('https://shop.example', await browser.rendered_source(page)))
+    assert 'HIDDEN-' not in report and 'Visible contrast' in report
+
+
+@pytest.mark.asyncio
+async def test_render_uses_gateway_peer_without_tank_key(monkeypatch):
+    tenant, task = str(uuid.uuid4()), str(uuid.uuid4())
+    monkeypatch.delenv('TANK_KEY', raising=False)
+    monkeypatch.setenv('TANK_REGION', 'us-east')
+    async def gateway_addresses(): return {'10.0.27.3'}
+    monkeypatch.setattr(browser, 'gateway_addresses', gateway_addresses)
+    calls = []
+    async def visit(body, owner, work, origin):
+        calls.append((owner, work, body.url))
+        return {'ok': True, 'page': {'text': 'Visible control'}}
+    monkeypatch.setattr(browser, 'visit', visit)
+    payload = {'url': 'https://shop.example/'}
+    headers = {'X-Tenant-ID': tenant, 'X-Home-Region': 'us-east', 'X-Task-ID': task}
+    for peer, expected in [('127.0.0.1', 401), ('10.0.27.3', 200)]:
+        transport = httpx.ASGITransport(app=browser.app, client=(peer, 12345))
+        async with httpx.AsyncClient(transport=transport, base_url='http://browser') as client:
+            response = await client.post('/render', json=payload, headers=headers)
+        assert response.status_code == expected
+    assert calls == [(tenant, task, payload['url'])]

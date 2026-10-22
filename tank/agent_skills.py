@@ -241,8 +241,17 @@ async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | N
         # Never return or log upstream bodies: they can contain credentials/prompts.
         error = "Model gateway failed or returned an incomplete receipt."
     latency = int((time.perf_counter() - started) * 1000)
-    baseline = policy.get("baseline_model") or model
-    baseline_usd = baseline_cost(roster, baseline, tokens_in, tokens_out)
+    # Reporting follows the answered provider, including a gateway fallback.
+    # The cleared legacy policy field is not a comparison baseline.
+    from bench import price_book
+    book = price_book(roster)
+    family = book.get(answered, {}).get("family")
+    async with tank.pool().acquire() as conn:
+        baseline = await conn.fetchval("""SELECT coalesce(
+            (SELECT override_model FROM tank.baseline_settings WHERE task_type='agent.base.think'),
+            tank.standard_model_for($1::text))""", family)
+    baseline_usd = (baseline_cost(roster, baseline, tokens_in, tokens_out)
+                    if family and book.get(baseline, {}).get("family") == family else None)
     receipt = {
         "ledger_id": str(ledger_id), "tenant_id": str(tenant), "task_id": str(task) if task else None,
         "room": ROOM, "task_type": "agent.base.think", "region": region, "model": answered,

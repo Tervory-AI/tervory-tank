@@ -49,6 +49,7 @@
 - Schema changes are additive, tested on an empty database and re-applied.
 - Never fail silently. A missing key or an unreachable service shows an error and changes nothing.
 - Use plain English in the UI. No placeholder text. Use the exact logo files; never redraw a logo.
+- **The Tervory logo (founder, 21 Oct):** on light pages use `/brand/tervory-logo.png` (transparent); on dark pages use `/brand/tervory-logo-reversed.png`. Never use `tervory-logo-on-white.png` in the app: it has a solid white background and shows as a white box. Never show it narrower than 180px, or the lines in the mark blur together. `tests/test_brand_logo.py` enforces the white-box rule.
 
 ## How to work
 - **Work without asking.** The brief, this file and `AGENTS.md` are your answers. When something is unclear, choose the option that fits them best, keep going, and list it under "Decisions I made" in the PR. Never ask whether to proceed. Stop only for: a secret value you need, a paid service or key the brief does not name, an action on production that cannot be undone, or a conflict with a hard rule. Then ask once, in one message, with your recommended answer.

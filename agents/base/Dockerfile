@@ -11,6 +11,7 @@ COPY agents/base/pipeline.py /app/pipeline.py
 COPY agents/base/room.py /app/room.py
 COPY agents/base/base_brain.py /app/base_brain.py
 COPY agents/base/browser_evidence.py /app/browser_evidence.py
+COPY agents/base/access_sources.py /app/access_sources.py
 COPY agents/base/sources /app/sources
 # Engine data files only (word lists, tables). Skill code stays in Skala.
 # Every version's data is in the image; at runtime Base reads only the approved version's folder.

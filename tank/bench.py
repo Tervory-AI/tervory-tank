@@ -282,6 +282,10 @@ async def tick() -> str | None:
             policies = await conn.fetch("SELECT * FROM tank.policy WHERE tenant_id IS NULL AND rung IN (1,2) ORDER BY task_type")
             for row in policies:
                 policy = dict(row)
+                try:
+                    await __import__('moa').bench_task(policy, book, region, cap)
+                except Exception:
+                    log.exception('MoA bench failed for task %s; continuing CORE-1 bench', policy['task_type'])
                 state = await conn.fetchrow('SELECT * FROM tank.search_state WHERE task_type=$1', policy['task_type'])
                 if state and state['bench_status'] != 'paused' and not due(dict(state), datetime.now(timezone.utc), roster_fp, price_fp):
                     continue
@@ -357,3 +361,41 @@ async def lifespan(_app):
 
 
 router = APIRouter(lifespan=lifespan)
+
+
+def moa_shapes(config: dict) -> list[dict]:
+    """The same suite must compare every shape and both aggregation modes.
+
+    A benchmark configuration never enables a live policy. The caller must use
+    the existing platform budget reservations and ledger path for every call.
+    """
+    from moa import Policy
+    policy = Policy.model_validate(config)
+    shapes = [policy.model_copy(update={'shape': 'single', 'enabled': False}).model_dump()]
+    for shape in ('self', 'diverse', 'optimised'):
+        for mode in ('select', 'synthesize'):
+            shapes.append(policy.model_copy(update={'shape': shape, 'mode': mode, 'enabled': False}).model_dump())
+    return shapes
+
+
+def choose_moa_shape(rows: list[dict]) -> dict | None:
+    """Only comparable, complete suites can propose a cheaper shape.
+
+    No policy writes, and no partial suite or unknown cost becomes a winner.
+    """
+    if len(rows) != 7 or any(r.get('status') != 'complete' for r in rows):
+        return None
+    if len({r.get('suite_hash') for r in rows}) != 1 or not rows[0].get('suite_hash'):
+        return None
+    if any(not isinstance(r.get(k), (int, float, Decimal)) or not math.isfinite(float(r[k])) or r[k] < 0
+           for r in rows for k in ('score', 'cost_per_call')):
+        return None
+    singles = [r for r in rows if r.get('shape') == 'single']
+    expected = {(s, m) for s in ('self', 'diverse', 'optimised') for m in ('select', 'synthesize')}
+    if len(singles) != 1 or {(r.get('shape'), r.get('mode')) for r in rows if r.get('shape') != 'single'} != expected:
+        return None
+    baseline = singles[0]
+    eligible = [r for r in rows if r['score'] >= baseline['score']]
+    winner = min(eligible, key=lambda r: (r['cost_per_call'], -r['score'], r['shape'], r.get('mode', '')))
+    return {'shape': winner['shape'], 'mode': winner.get('mode'), 'score': winner['score'],
+            'cost_per_call': winner['cost_per_call'], 'status': 'proposed', 'requires_founder': True}

@@ -1,6 +1,12 @@
-# Radix, the security auditor. Deploy this file as its own Coolify resource.
+# coolify: raw compose
+# Radix, the security auditor. Deploy this file as its own Coolify resource, with
+# Raw Compose Deployment turned on (Coolify > app > Advanced). Raw mode deploys
+# this file exactly as written: Coolify adds only its labels, no app network and no
+# env_file, so no sealed service gains a route Coolify chose (SEAL-1).
+# tests/test_room_seal.py fails if this marker is removed.
 # Build context is agents/ (the parent of this file), because the chassis lives there.
-# Coolify's own network for this resource contains just these services.
+# Every variable reaches a service through explicit environment: interpolation.
+# No service publishes ports.
 #
 # tervory-gw-radix is an internal network, created once on the server with:
 #   docker network create --internal tervory-gw-radix
@@ -80,8 +86,13 @@ services:
     expose:
       - "8080"
 
+# The volume the room used before the raw-compose switch, by its live name, so
+# the data survives. external: compose reuses it and never recreates it. On a new
+# server, create it once first: docker volume create <name>
 volumes:
   agent_radix_data:
+    external: true
+    name: liv4x7vshraiwnnowjv0kgfd_agent-radix-data
 
 networks:
   gw:

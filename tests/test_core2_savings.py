@@ -277,3 +277,87 @@ async def test_client_cache_reuses_revision_isolates_tenants_and_invalidates(dat
     monkeypatch.setattr(proof.time,'monotonic',lambda:clock()+301)
     await proof.client_savings(a)
     assert len(calls)==5
+
+
+@pytest.mark.asyncio
+async def test_client_copy_exports_five_graphs_job_pages_and_no_founder_detail(database,monkeypatch):
+    import csv
+    import io
+    pool,rt=database;monkeypatch.setattr(proof,'runtime',lambda:rt)
+    await prices(pool)
+    tenant,foreign=uuid.uuid4(),uuid.uuid4()
+    ids,job=await seed(pool,tenant,count=101,cost='.000001',baseline='.00000325')
+    await seed(pool,foreign,cost='777',baseline='888')
+    await seed(pool,tenant,cost='2',baseline='1')  # excluded comparison
+    await pool.execute('UPDATE tank.tasks SET title=$2 WHERE id=$1',job,' =HYPERLINK("unsafe")')
+    csv_text=(await proof.savings_client_copy('csv',END,tenant,1)).body.decode()
+    pdf_bytes=(await proof.savings_client_copy('pdf',END,tenant,1)).body
+    reader=PdfReader(BytesIO(pdf_bytes))
+    pdf_text='\n'.join(p.extract_text() for p in reader.pages)
+    sections=['Spent and would have cost','Saved to date','Saved this month','Done at no AI cost','Saved by team member']
+    for text in [csv_text,pdf_text]:
+        for section in sections: assert section in text
+        for forbidden in ['margin','no billing data','tenant_id','baseline_model','expensive',str(tenant),str(foreign),str(ids[0]),'777','888','excluded_reason']:
+            assert forbidden not in text
+        import re
+        assert not re.search(r'\bcheap\b',text)
+        assert '0.00022725' in text and '0.00000325' in text
+        assert '69.2% cheaper (3.25× cheaper) vs the standard model' in text
+        assert 'same work assumed; quality comparison pending' in text
+        assert 'the top model' in text
+    assert "' =HYPERLINK" in csv_text
+    rows=list(csv.reader(io.StringIO(csv_text)))
+    from savings_export import JOB_HEADERS
+    assert len(rows[rows.index(JOB_HEADERS)+1:])==1
+    # PDF graphs are vector paths, not just headings and JSON dumps.
+    streams=b'\n'.join(p.get_contents().get_data() for p in reader.pages)
+    assert b' re f' in streams and b' m ' in streams and b'[4 3]' in streams
+    for tenant_arg in ['',str(foreign),'all','clients']:
+        app=FastAPI();app.include_router(proof.router)
+        key=secrets.token_urlsafe(32)
+        monkeypatch.setenv('TANK_API_KEY',key)
+        monkeypatch.setenv('TERVORY_ADMIN_USER_IDS','founder-copy')
+        headers={'x-tank-key':key,'x-tervory-admin':'founder-copy'}
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://test') as client:
+            url='/v1/proof/savings/client-copy/csv'
+            params={'end':END.isoformat(),'tenant_id':tenant_arg}
+            assert (await client.get(url,params=params)).status_code==404
+            response=await client.get(url,params=params,headers=headers)
+            assert response.status_code==(200 if tenant_arg==str(foreign) else 422)
+            if response.status_code==200:
+                assert '777' in response.text and '0.00022725' not in response.text
+    empty=(await proof.savings_client_copy('pdf',END,uuid.uuid4(),0)).body
+    assert 'No comparable work yet' in ''.join(p.extract_text() for p in PdfReader(BytesIO(empty)).pages)
+
+
+@pytest.mark.asyncio
+async def test_revision_counter_commits_updates_deletes_tenant_moves_and_schema_reapply(database,monkeypatch):
+    pool,rt=database;monkeypatch.setattr(proof,'runtime',lambda:rt)
+    a,b=uuid.uuid4(),uuid.uuid4()
+    before=await proof.client_savings_revision(a)
+    ids,job=await seed(pool,a)
+    inserted=await proof.client_savings_revision(a)
+    assert inserted!=before
+    other=await proof.client_savings_revision(b)
+    async with pool.acquire() as conn:
+        tx=conn.transaction();await tx.start()
+        await conn.execute("UPDATE tank.tasks SET title='Updated work' WHERE tenant_id=$1 AND id=$2",a,job)
+        assert await proof.client_savings_revision(a)==inserted  # no uncommitted invalidation
+        await tx.rollback()
+    assert await proof.client_savings_revision(a)==inserted
+    await pool.execute("UPDATE tank.tasks SET title='Updated work' WHERE tenant_id=$1 AND id=$2",a,job)
+    edited=await proof.client_savings_revision(a)
+    assert edited!=inserted and await proof.client_savings_revision(b)==other
+    await pool.execute('UPDATE tank.ledger SET tenant_id=$2 WHERE tenant_id=$1',a,b)
+    assert await proof.client_savings_revision(a)!=edited
+    assert await proof.client_savings_revision(b)!=other
+    await pool.execute("""INSERT INTO tank.shadow(ledger_id,tenant_id,task_type,primary_model,candidate_model,primary_content,candidate_content,primary_cost_usd,candidate_cost_usd,agreement,method)
+        VALUES($1,$2,'fixture','sol','luna','ok','ok',.3,.1,1,'exact')""",ids[0],b)
+    quality=await proof.client_savings_revision(b)
+    await pool.execute('DELETE FROM tank.shadow WHERE tenant_id=$1',b)
+    assert await proof.client_savings_revision(b)!=quality
+    revision=await proof.client_savings_revision(b)
+    await pool.execute((ROOT/'tank/schema.sql').read_text())
+    assert await proof.client_savings_revision(b)==revision
+    await pool.execute('DELETE FROM tank.ledger WHERE tenant_id=$1',b)
+    assert await proof.client_savings_revision(b)!=revision

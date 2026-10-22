@@ -877,10 +877,52 @@ export async function commandTools(identity: { tenantId: string; userId: string 
   return result;
 }
 
+// ACCESS-1: identity is always supplied by the authenticated Workspace server.
+export type AccessIdentity = { tenantId: string; userId: string };
+export type AccessConnection = { room: string; site: string; terms: string; revoked: boolean; clear_pending: boolean; overdue: boolean; rotate_by: string; rotation_days: number };
+export type AccessQueueItem = { id: string; tenant_id: string; room: string; site: string; reason: string; status: string; created_at: string; live_available: boolean };
+export type AccessPanel = { connections: AccessConnection[]; policies: { site: string; terms: string; rotation_days: number }[]; feeds: { distributor: string; site: string; source: string; fetched_at: string; row_count: number }[]; meta_enabled: boolean };
+export async function accessRequest<T>(actor: AccessIdentity, path: string, body?: unknown): Promise<T> {
+  const response = await fetch(`${TANK_URL}/v1/access/${path}`, {
+    method: body === undefined ? "GET" : "POST", cache: "no-store",
+    headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY,
+      "x-tervory-user": actor.userId, "x-tervory-tenant": actor.tenantId },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  if (!response.ok) throw new Error("The connection request could not be completed. Check the settings or try again.");
+  return response.json() as Promise<T>;
+}
+
 /** CORE-2 only: server-resolved identity wins over every caller query field. */
 export function readClientSavings<T>(tenantId: string, endpoint: "" | "/rows" | "/revision" = "", query: Record<string,string> = {}): Promise<T> {
   const params = new URLSearchParams();
   for (const name of ["end","start","until","member","free_only","page"]) if(query[name]) params.set(name,query[name]);
   params.set("tenant_id",tenantId);
   return tank<T>(`/v1/client-savings${endpoint}?${params}`,{method:"GET"});
+}
+
+// MOA-1 founder evidence. Only server components/actions call these helpers.
+export type MoaShape = { shape: string; mode: string; status: string; score: number | null; cost_per_call: number | null; samples: number };
+export type MoaSeat = { name: string; model: string; candidate: string | null; critical: boolean; timeout_s: number };
+export type MoaAttempt = { model: string; tokens_in: number; tokens_out: number; cost_usd: number | null; ledger_id: string | null };
+export type MoaReceiptSeat = { name: string; model: string; status: string; error: string | null; attempts: MoaAttempt[] };
+export type MoaEvidence = {
+  tenant_id: string; region: string;
+  tasks: { task_type: string; enabled: boolean; config_hash: string;
+    config: { seats: MoaSeat[]; shape: string; mode: string; min_samples: number; bench_enabled: boolean; cheap_aggregator: string; frontier_aggregator: string; cheap_candidate: string | null; frontier_candidate: string | null };
+    shapes: MoaShape[]; proposals: { seat: string; candidate_model: string; samples: number; agreement: number }[] }[];
+  runs: { id: string; task_type: string; kind: string; status: string; created_at: string;
+    receipt: { baseline_model?: string; seats?: MoaReceiptSeat[]; cost_usd?: number | null; all_frontier_usd?: number | null;
+      single_top_usd?: number | null; saved_vs_frontier_usd?: number | null; saved_vs_single_usd?: number | null;
+      error?: string; shadow_error?: string } }[];
+  shadows: { id: string; seat: string; status: string; current_model: string; candidate_model: string;
+    against_current: number | null; against_final: number | null; candidate_cost: number | null }[];
+};
+export function moaEvidence(userId: string, tenantId: string, task?: string): Promise<MoaEvidence> {
+  const query = new URLSearchParams({ tenant_id: tenantId });
+  if (task) query.set("task", task);
+  return tank(`/v1/moa?${query}`, { method: "GET", headers: { "x-tervory-admin": userId } });
+}
+export function moaAction(userId: string, action: "bench" | "promote", body: { tenant_id: string; task_type: string; config_hash: string; seat?: string }): Promise<unknown> {
+  return tank(`/v1/moa/${action}`, { method: "POST", headers: { "x-tervory-admin": userId }, body: JSON.stringify(body) });
 }

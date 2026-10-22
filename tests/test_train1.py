@@ -33,6 +33,8 @@ async def database(monkeypatch):
     pool = await asyncpg.create_pool(URL, database=name, min_size=1, max_size=4)
     async with pool.acquire() as conn:
         await conn.execute((ROOT / "tank/schema.sql").read_text())
+        from savings_defaults import initialize
+        await initialize(conn)
     rt = SimpleNamespace(pool=lambda: pool, box_region=lambda: "us-east", _packages={})
     monkeypatch.setattr(gold, "runtime", lambda: rt)
     monkeypatch.setattr(training, "runtime", lambda: rt)
@@ -342,13 +344,18 @@ async def test_rig_only_approved_and_tiger_only_human_confirmed(database):
         # Tiger's room schema does not have an approval flag: a human confirmation
         # endpoint is the sole path from an observation into the shared store.
         await conn.execute("CREATE SCHEMA IF NOT EXISTS agent_tiger")
-        await conn.execute("CREATE TABLE agent_tiger.observations(id uuid,tenant_id uuid,url text,evidence text,price numeric,currency text,availability text)")
+        await conn.execute("CREATE TABLE agent_tiger.observations(id uuid,tenant_id uuid,url text,evidence text,price numeric,currency text,availability text,method text DEFAULT 'json_ld')")
         observation = uuid.uuid4()
-        await conn.execute("INSERT INTO agent_tiger.observations VALUES ($1,$2,'https://example.invalid/item','confirmed snapshot',12,'USD','in stock')", observation, tenant)
+        await conn.execute("INSERT INTO agent_tiger.observations(id,tenant_id,url,evidence,price,currency,availability) VALUES ($1,$2,'https://example.invalid/item','confirmed snapshot',12,'USD','in stock')", observation, tenant)
+        private = uuid.uuid4()
+        await conn.execute("INSERT INTO agent_tiger.observations VALUES ($1,$2,'https://dealer.example/item','private receipt',12,'USD','in stock','private_portal')", private, tenant)
         assert not await conn.fetchval("SELECT 1 FROM tank.gold_examples WHERE source='tiger_confirmed'")
     with pytest.raises(HTTPException):
         await training.confirm_tiger(observation, gold.Reviewer("founder", other, True))
     await training.confirm_tiger(observation, gold.Reviewer("founder", tenant, True))
+    with pytest.raises(HTTPException) as denied:
+        await training.confirm_tiger(private, gold.Reviewer("founder", tenant, True))
+    assert denied.value.status_code == 404
     await training.confirm_tiger(observation, gold.Reviewer("founder", tenant, True))
     async with pool.acquire() as conn:
         assert await conn.fetchval("SELECT count(*) FROM tank.gold_examples WHERE source='tiger_confirmed'") == 1
