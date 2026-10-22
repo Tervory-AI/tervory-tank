@@ -1,6 +1,6 @@
 # Working on Tervory (read this first)
 
-This file is for any coding agent working in this repo (Cursor, Claude, others). It is short on purpose.
+This file is for any coding agent working in this repo (Codex, Cursor, Claude, Grok, others). It is short on purpose.
 
 ## What this repo is
 One Docker Compose stack, deployed by Coolify on a Boston VPS:
@@ -16,7 +16,7 @@ One Docker Compose stack, deployed by Coolify on a Boston VPS:
 Spec: Build Pack v2 (Claude Doc) and `README.md`.
 
 ## Rules that are not negotiable
-1. **Never push to `main`.** A push to `main` deploys to production within two minutes. Work on a branch named `cursor/<task-id>-<slug>`, open a pull request, and stop. The founder or Claude reviews and merges.
+1. **Never push to `main`.** A push to `main` deploys to production within two minutes. Work on a branch named `<builder>/<task-id>-<slug>` (for example `codex/rig-5-3d-engine`), open a pull request, and stop. The founder or Claude reviews and merges.
 2. **No secrets in code, ever.** Keys live in Coolify's environment panel. If you need a new variable, add its NAME to `.env.example` with a comment and say so in the PR.
 3. **Every Tank read or write is scoped by `tenant_id`.** No endpoint may return another tenant's rows. Platform work uses `PLATFORM_TENANT`.
 4. **The Workspace never calls a model or LiteLLM.** It calls Tank, server-side only, through `workspace/lib/tank.ts`. `TANK_API_KEY` never reaches the browser.
