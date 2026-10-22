@@ -1570,3 +1570,8 @@ DO $$ BEGIN
             FOR EACH ROW EXECUTE FUNCTION tank.moa_baseline_snapshot();
     END IF;
 END $$;
+
+-- RIG-3: use the existing ACCESS feed connections, batches and receipts.
+-- Rig connection names use the rig: prefix to preserve Tiger's bindings.
+ALTER TABLE tank.access_feed_connections ADD COLUMN IF NOT EXISTS rig_refresh_at timestamptz;
+ALTER TABLE tank.access_feed_batches ADD COLUMN IF NOT EXISTS rig_summary jsonb;

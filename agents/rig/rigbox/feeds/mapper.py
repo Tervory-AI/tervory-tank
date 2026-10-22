@@ -94,7 +94,7 @@ def map_shopify(body: Any, currency: str) -> dict[str, Any]:
                 image_url=_variant_image(variant) or image,
                 url=link,
                 gtin=_text(variant.get("barcode")),
-                active=active,
+                active=active and variant.get("available") is not False and variant.get("inventory_quantity", 1) != 0,
             )
             if row is None:
                 rejected.append({"row": index, "reason": prefix + (reason or "missing sku")})
@@ -136,7 +136,7 @@ def map_woocommerce(body: Any, currency: str) -> dict[str, Any]:
             image_url=_first_image(item.get("images")),
             url=_text(item.get("permalink")),
             gtin=_text(item.get("global_unique_id") or item.get("gtin")),
-            active=_flag(item.get("status"), default="publish", yes={"publish", "active", "yes"}),
+            active=_flag(item.get("status"), default="publish", yes={"publish", "active", "yes"}) and item.get("stock_status") != "outofstock",
         )
         if row is None:
             rejected.append({"row": index, "reason": reason or "missing sku"})

@@ -5,9 +5,10 @@
 import { actualShellHtml } from "./shell_popout.ts";
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import {
   FOUNDER_LINKS,
   REST_LINKS,
@@ -288,6 +289,33 @@ function slug(route: string): string {
 async function main(): Promise<void> {
   const failures: string[] = [];
   const dir = await mkdtemp(join(tmpdir(), "shell-nav-"));
+  // Serve only this test's generated pages and known public assets. Managed
+  // browsers can disable file:// navigation while allowing local app testing.
+  let fixtureOrigin = "";
+  const fixtures = createServer(async (request, response) => {
+    try {
+      const pathname = new URL(request.url || "/", "http://fixture").pathname;
+      if (/^\/fixtures\/[a-z0-9-]+\.html$/i.test(pathname)) {
+        const html = await readFile(join(dir, basename(pathname)), "utf8");
+        response.setHeader("Content-Type", "text/html");
+        response.end(html.replaceAll(new URL("workspace/", ROOT).href, fixtureOrigin + "/assets/"));
+        return;
+      }
+      const asset = pathname.slice("/assets/".length);
+      if (!pathname.startsWith("/assets/") || asset.includes("..") || !(
+        asset === "app/globals.css" || /^app\/fonts\/[A-Za-z0-9-]+\.woff2$/.test(asset)
+        || /^public\/brand\/[A-Za-z0-9_.-]+\.(png|svg|jpg|webp)$/.test(asset)
+      )) { response.writeHead(404); response.end(); return; }
+      const type = asset.endsWith(".css") ? "text/css" : asset.endsWith(".woff2") ? "font/woff2" : asset.endsWith(".svg") ? "image/svg+xml" : "image/" + asset.split(".").pop();
+      response.setHeader("Content-Type", type);
+      response.end(await readFile(new URL("workspace/" + asset, ROOT)));
+    } catch { response.writeHead(404); response.end(); }
+  });
+  await new Promise<void>(resolve => fixtures.listen(0, "127.0.0.1", resolve));
+  const address = fixtures.address();
+  if (!address || typeof address === "string") throw new Error("Fixture server did not start");
+  fixtureOrigin = `http://127.0.0.1:${address.port}`;
+  const fixtureUrl = (file: string) => `${fixtureOrigin}/fixtures/${basename(file)}`;
   const port = 9400 + Math.floor(Math.random() * 400);
   const proc = spawn(chromePath(), [
     "--headless=new",
@@ -317,7 +345,7 @@ async function main(): Promise<void> {
     async function openRoute(route: string, founder: boolean, reviewer: boolean): Promise<void> {
       const file = join(dir, `${slug(route)}-${founder ? "founder" : "customer"}.html`);
       await writeFile(file, shellHtml(route, founder, reviewer));
-      await navigate(cdp, `file://${file}`);
+      await navigate(cdp, fixtureUrl(file));
     }
 
     async function overflow(label: string): Promise<void> {
@@ -342,7 +370,7 @@ async function main(): Promise<void> {
       await setViewport(cdp, width, width === 1440 ? 900 : 812);
       const file = join(dir, `actual-${width}.html`);
       await writeFile(file, actualShellHtml(true));
-      await navigate(cdp, `file://${file}`);
+      await navigate(cdp, fixtureUrl(file));
       await check('!!document.getElementById("squad-popout")', "React portal did not mount");
       async function capture(state: string) {
         if (!process.env.SQUAD_SHOTS) return;
@@ -385,7 +413,7 @@ async function main(): Promise<void> {
     }
     const customerFile = join(dir, "actual-customer.html");
     await writeFile(customerFile, actualShellHtml(false));
-    await navigate(cdp, `file://${customerFile}`);
+    await navigate(cdp, fixtureUrl(customerFile));
     await check('!!document.getElementById("squad-popout")', "Customer portal must mount");
     await click("#squad-button");
     await check('document.querySelectorAll("[data-squad-member]").length===7 && !document.querySelector(".squad-platform")', "Customer must not see platform members");
@@ -448,6 +476,7 @@ async function main(): Promise<void> {
 
   } finally {
     proc.kill("SIGKILL");
+    await new Promise<void>(resolve => fixtures.close(() => resolve()));
     await rm(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 150 });
   }
   if (failures.length) {
