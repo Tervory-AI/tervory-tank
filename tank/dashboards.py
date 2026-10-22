@@ -24,6 +24,13 @@ async def workspace_only(x_tank_key: str = Header(default='')) -> None:
         raise HTTPException(status_code=404, detail='not found')
 
 
+def client_tenant(tenant_id: uuid.UUID) -> uuid.UUID:
+    from gold import PLATFORM_TENANT
+    if tenant_id == PLATFORM_TENANT:
+        raise HTTPException(status_code=404, detail='not found')
+    return tenant_id
+
+
 async def measurements(conn: Any, tenant_id: uuid.UUID | None) -> dict[str, Any]:
     # A null scope is only passed by the founder-authorized route.
     daily = await conn.fetch(
@@ -46,6 +53,7 @@ async def measurements(conn: Any, tenant_id: uuid.UUID | None) -> dict[str, Any]
 
 @router.get('/client', dependencies=[Depends(workspace_only)])
 async def client_dashboard(tenant_id: uuid.UUID) -> dict[str, Any]:
+    client_tenant(tenant_id)
     async with db().acquire() as conn:
         result = await measurements(conn, tenant_id)
         recent = await conn.fetch(

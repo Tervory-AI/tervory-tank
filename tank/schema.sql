@@ -1429,25 +1429,67 @@ CREATE TABLE IF NOT EXISTS tank.access_feed_links (
 CREATE TABLE IF NOT EXISTS tank.savings_revisions (
     tenant_id uuid PRIMARY KEY, revision bigint NOT NULL DEFAULT 1
 );
-CREATE OR REPLACE FUNCTION tank.bump_savings_revision() RETURNS trigger LANGUAGE plpgsql AS $$
+-- Legacy immediate triggers only collect IDs in transaction-local state. The
+-- constraint trigger flushes once, in UUID order, without locks during writes.
+CREATE OR REPLACE FUNCTION tank.collect_savings_tenant(changed_tenant uuid) RETURNS void LANGUAGE plpgsql AS $$
+DECLARE pending jsonb:=coalesce(nullif(current_setting('tank.savings_changed_tenants',true),''),'[]')::jsonb;
 BEGIN
-    IF TG_OP <> 'INSERT' THEN
-      INSERT INTO tank.savings_revisions(tenant_id) VALUES(OLD.tenant_id)
-        ON CONFLICT(tenant_id) DO UPDATE SET revision=tank.savings_revisions.revision+1;
-    END IF;
-    IF TG_OP='INSERT' OR (TG_OP='UPDATE' AND NEW.tenant_id IS DISTINCT FROM OLD.tenant_id) THEN
-      INSERT INTO tank.savings_revisions(tenant_id) VALUES(NEW.tenant_id)
-        ON CONFLICT(tenant_id) DO UPDATE SET revision=tank.savings_revisions.revision+1;
-    END IF;
-    RETURN NULL;
+  IF changed_tenant IS NOT NULL AND NOT pending ? changed_tenant::text THEN
+    PERFORM set_config('tank.savings_changed_tenants',(pending||to_jsonb(changed_tenant::text))::text,true);
+  END IF;
+END $$;
+CREATE OR REPLACE FUNCTION tank.collect_savings_row() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP<>'INSERT' THEN PERFORM tank.collect_savings_tenant(OLD.tenant_id); END IF;
+  IF TG_OP<>'DELETE' THEN PERFORM tank.collect_savings_tenant(NEW.tenant_id); END IF;
+  RETURN NULL;
+END $$;
+CREATE OR REPLACE FUNCTION tank.bump_savings_revision() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE pending jsonb:=coalesce(nullif(current_setting('tank.savings_changed_tenants',true),''),'[]')::jsonb;
+BEGIN
+  IF pending='[]'::jsonb THEN RETURN NULL; END IF;
+  INSERT INTO tank.savings_revisions(tenant_id)
+    SELECT value::uuid FROM jsonb_array_elements_text(pending) ORDER BY value::uuid
+    ON CONFLICT(tenant_id) DO UPDATE SET revision=tank.savings_revisions.revision+1;
+  PERFORM set_config('tank.savings_changed_tenants','[]',true);
+  RETURN NULL;
 END $$;
 DO $$ DECLARE tab text; BEGIN
   FOREACH tab IN ARRAY ARRAY['ledger','tasks','shadow'] LOOP
-    IF NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='savings_revision' AND tgrelid=('tank.'||tab)::regclass) THEN
-      EXECUTE format('CREATE TRIGGER savings_revision AFTER INSERT OR UPDATE OR DELETE ON tank.%I
+    IF NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='savings_revision_on_commit' AND tgrelid=('tank.'||tab)::regclass) THEN
+      -- Rebind the old ordinary trigger without removing or renaming it.
+      EXECUTE format('CREATE OR REPLACE TRIGGER savings_revision AFTER INSERT OR UPDATE OR DELETE ON tank.%I
+        FOR EACH ROW EXECUTE FUNCTION tank.collect_savings_row()',tab);
+      EXECUTE format('CREATE CONSTRAINT TRIGGER savings_revision_on_commit
+        AFTER INSERT OR UPDATE OR DELETE ON tank.%I DEFERRABLE INITIALLY DEFERRED
         FOR EACH ROW EXECUTE FUNCTION tank.bump_savings_revision()',tab);
     END IF;
   END LOOP;
+END $$;
+-- The model-reference index is built concurrently by savings_indexes after schema application.
+CREATE OR REPLACE FUNCTION tank.collect_price_savings_revisions() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE changed_models text[]; affected uuid;
+BEGIN
+  IF TG_OP='UPDATE' AND (to_jsonb(OLD)-'updated_at') IS NOT DISTINCT FROM (to_jsonb(NEW)-'updated_at') THEN
+    RETURN NULL;
+  END IF;
+  IF TG_OP<>'INSERT' THEN changed_models:=array_append(changed_models,OLD.model); END IF;
+  IF TG_OP<>'DELETE' THEN changed_models:=array_append(changed_models,NEW.model); END IF;
+  FOR affected IN SELECT DISTINCT tenant_id FROM tank.ledger
+    WHERE ARRAY[model,standard_model,top_model,baseline_model] && changed_models LOOP
+    PERFORM tank.collect_savings_tenant(affected);
+  END LOOP;
+  RETURN NULL;
+END $$;
+DO $$ BEGIN
+  IF NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='savings_price_collect' AND tgrelid='tank.proof_prices'::regclass) THEN
+    CREATE TRIGGER savings_price_collect AFTER INSERT OR UPDATE OR DELETE ON tank.proof_prices
+      FOR EACH ROW EXECUTE FUNCTION tank.collect_price_savings_revisions();
+  END IF;
+  IF NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='savings_price_on_commit' AND tgrelid='tank.proof_prices'::regclass) THEN
+    CREATE CONSTRAINT TRIGGER savings_price_on_commit AFTER INSERT OR UPDATE OR DELETE ON tank.proof_prices
+      DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION tank.bump_savings_revision();
+  END IF;
 END $$;
 -- This inbox is committed with the receipt. Workers cannot acknowledge it before
 -- that receipt becomes visible, even if an override finished in the meantime.

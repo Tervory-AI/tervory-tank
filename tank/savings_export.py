@@ -5,7 +5,12 @@ No arbitrary dictionaries or internal metadata are serialized.
 """
 import csv
 from decimal import Decimal
-from io import StringIO
+from io import StringIO, BytesIO
+from functools import lru_cache
+from pathlib import Path
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfgen.canvas import Canvas
 import textwrap
 
 NOTE = 'same work assumed; quality comparison pending'
@@ -92,16 +97,45 @@ def csv_copy(report, evidence):
     return stream.getvalue()
 
 
+@lru_cache(maxsize=1)
+def unicode_fonts() -> tuple[str, ...]:
+    names=[]
+    for name,filename in [('SavingsSans','NotoSans-Regular.ttf'),('SavingsCJK','SavingsUnicode-Regular.ttf')]:
+        pdfmetrics.registerFont(TTFont(name,str(Path(__file__).with_name('fonts')/filename)))
+        names.append(name)
+    return tuple(names)
+
+
+def font_runs(value: str) -> list[tuple[str, str]]:
+    runs=[]
+    for character in value:
+        name=next((name for name in unicode_fonts() if ord(character) in pdfmetrics.getFont(name).face.charToGlyph),None)
+        if name is None:
+            name=unicode_fonts()[0]
+            character='\ufffd'
+        if runs and runs[-1][0]==name:
+            runs[-1]=(name,runs[-1][1]+character)
+        else:
+            runs.append((name,character))
+    return runs
+
+
+def text_width(value: str, size: int) -> float:
+    return sum(pdfmetrics.stringWidth(text,font,size) for font,text in font_runs(value))
+
+
 class PDF:
     """Small paginated vector document; chart values remain exact in adjacent text."""
-    def __init__(self):
+    def __init__(self, document_title='Tervory savings'):
+        self.document_title=document_title
+        self.substituted=False
         self.pages = []
         self.commands = []
         self.y = 760
 
     def page(self):
         if self.commands:
-            self.pages.append('\n'.join(self.commands).encode('latin-1',errors='replace'))
+            self.pages.append(self.commands)
         self.commands = []
         self.y = 760
 
@@ -110,11 +144,25 @@ class PDF:
             self.page()
 
     def text(self, value, size=10):
-        for line in textwrap.wrap(str(value), width=int(545/(size*.55))) or ['']:
-            self.space(size+7)
-            escaped = line.replace('\\','\\\\').replace('(','\\(').replace(')','\\)')
-            self.commands.append(f'0 .094 .25 rg BT /F1 {size} Tf 32 {self.y} Td ({escaped}) Tj ET')
-            self.y -= size+7
+        self.substituted |= ''.join(text for _,text in font_runs(str(value))) != str(value)
+        # Wrap using the embedded font's real advances, including full-width CJK.
+        for paragraph in str(value).splitlines() or ['']:
+            lines=textwrap.wrap(paragraph,width=max(1,int(545/(size*.55)))) or ['']
+            for line in lines:
+                while line:
+                    count=len(line)
+                    while count>1 and text_width(line[:count],size)>545:
+                        count-=1
+                    self.space(size+7)
+                    x=32
+                    for font,text in font_runs(line[:count]):
+                        self.commands.append((text,size,self.y,font,x))
+                        x+=pdfmetrics.stringWidth(text,font,size)
+                    self.y-=size+7
+                    line=line[count:]
+                if not line and not paragraph:
+                    self.space(size+7)
+                    self.y-=size+7
 
     def title(self, value):
         self.space(155)
@@ -152,27 +200,30 @@ class PDF:
         self.y -= 22
 
     def finish(self):
+        if self.substituted:
+            self.commands.append(("Some characters can't be shown in the PDF; the CSV has the full text",
+                                  8,18,unicode_fonts()[0],32))
         self.page()
-        objects = [b'<< /Type /Catalog /Pages 2 0 R >>',b'',b'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>']
-        ids=[]
-        for stream in self.pages:
-            idx=len(objects)+1
-            ids.append(idx)
-            objects.append(f'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents {idx+1} 0 R >>'.encode())
-            objects.append(f'<< /Length {len(stream)} >>\nstream\n'.encode()+stream+b'\nendstream')
-        objects[1]=f"<< /Type /Pages /Count {len(ids)} /Kids [{' '.join(f'{i} 0 R' for i in ids)}] >>".encode()
-        result=bytearray(b'%PDF-1.4\n');offsets=[0]
-        for i,item in enumerate(objects,1):
-            offsets.append(len(result));result.extend(f'{i} 0 obj\n'.encode()+item+b'\nendobj\n')
-        start=len(result)
-        result.extend(f'xref\n0 {len(offsets)}\n0000000000 65535 f \n'.encode())
-        result.extend(''.join(f'{offset:010d} 00000 n \n' for offset in offsets[1:]).encode())
-        result.extend(f'trailer\n<< /Size {len(offsets)} /Root 1 0 R >>\nstartxref\n{start}\n%%EOF\n'.encode())
-        return bytes(result)
+        output=BytesIO()
+        canvas=Canvas(output,pagesize=(612,792),pageCompression=1)
+        canvas.setTitle(self.document_title)
+        canvas.setAuthor('Tervory')
+        for commands in self.pages:
+            for command in commands:
+                if isinstance(command,str):
+                    canvas.addLiteral(command)
+                else:
+                    value,size,y,font,x=command
+                    canvas.setFillColorRGB(0,.094,.25)
+                    canvas.setFont(font,size)
+                    canvas.drawString(x,y,value)
+            canvas.showPage()
+        canvas.save()
+        return output.getvalue()
 
 
-def pdf_copy(report,evidence):
-    pdf=PDF()
+def pdf_copy(report,evidence,client_name='Client savings'):
+    pdf=PDF(client_name)
     for i,line in enumerate(headings(report,evidence)):
         pdf.text(line,16 if i==0 else 10)
     total,month=report['total'],report['month']
