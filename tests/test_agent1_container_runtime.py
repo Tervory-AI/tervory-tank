@@ -87,7 +87,7 @@ async def run():
         assert not await confirm_age(page,await page.content())
         hidden_styles = ['font-size:0','font-size:3px','height:0;overflow:hidden',
             'position:absolute;left:-10000px;top:0','position:absolute;left:100000px;top:0',
-            'position:absolute;top:100000px;left:0','position:absolute;clip:rect(0px,0px,0px,0px)',
+            'position:fixed;top:100000px;left:0','position:absolute;clip:rect(0px,0px,0px,0px)',
             'clip-path:inset(50%)','position:absolute;width:1px;height:1px;overflow:hidden',
             'color:transparent','color:rgb(255,255,255)']
         await page.set_content('<body style="background:white"><h1>Visible heading</h1>' +
