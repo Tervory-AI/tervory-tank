@@ -12,6 +12,7 @@ from uuid import UUID
 from rigbox.logic import fitting_parts, reprice, rule_matches
 from rigbox.service import RigError
 from .contracts import Assembly, Job, Report, Review
+from .forge import photo_sources
 
 
 def fail(message, status=422):
@@ -26,7 +27,7 @@ class Engine:
     async def capabilities(self, tenant):
         row = await self.store.entitlement(tenant)
         enabled = bool(row and row["enabled"])
-        return {"rig_3d": enabled, "sample": self.sample,
+        return {"rig_3d": enabled, "sample": self.sample, "photo_sources": photo_sources(),
                 "valid_until": int(time.time()) + 300 if enabled else 0,
                 "billing": {"name": "3D product views", "enabled": enabled,
                             "price": None if not row or row["price_amount"] is None else
@@ -107,7 +108,9 @@ class Engine:
         c, p = await self.store.approved(tenant, centre), await self.store.approved(tenant, part)
         if not c or not p or centre_anchor not in c["report"]["anchors"] or part_anchor not in p["report"]["anchors"]:
             fail("Choose attachment points from approved models.")
-        if not await self.store.set_mounts(tenant, part, centre, centre_anchor, part_anchor):
+        bundle = await self.catalogue._bundle(tenant, centre)
+        product = next((p for p in bundle["products"] if (p.get("sku") or p.get("id")) == centre), {})
+        if not await self.store.set_mounts(tenant, part, centre, product.get("family", ""), centre_anchor, part_anchor):
             fail("This part has no approved fit to that product.", 409)
         return {"saved": True}
 

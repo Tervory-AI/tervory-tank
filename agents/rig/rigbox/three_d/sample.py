@@ -52,8 +52,8 @@ async def seed(pool, directory: Path, *, approve_models=True):
             if await engine.store.approved(TENANT, product):
                 continue
             metadata = json.loads((Path(__file__).with_name("fixtures") / (product + ".json")).read_text())
-            job = Job(id=uuid4(), tenant_id=TENANT, product_id=product, source="cad",
-                      inputs=[f"{TENANT}/uploads/sample.step"], dimensions_mm=metadata["dimensions_mm"], cost_cap_usd=0)
+            job = Job(id=uuid4(), tenant_id=TENANT, product_id=product, source="scan",
+                      inputs=[f"{TENANT}/uploads/sample-{n}.jpg" for n in range(50)], dimensions_mm=metadata["dimensions_mm"], cost_cap_usd=0)
             await engine.submit(str(TENANT), job)
             result = await engine.poll(str(TENANT), job.id)
             if result["status"] != "draft":

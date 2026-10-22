@@ -1,19 +1,23 @@
 # RIG-5: approved 3D engine
 
-Industry-neutral stand-ins only. CAD, AI and scan conversion belong to RIG-5F;
+Industry-neutral stand-ins only. Photo reconstruction and scanning belong to RIG-5F;
 this engine never installs Blender or runs a GPU job. RIG-5F remains unmerged;
 `StubForge` is the explicit stand-in. Its `submit(Job)`, `poll(Job)`, `artifact(Job)`
 interface matches `BrainForge`. The engine's versioned `rig-forge/1` domain types
-map to the published RIG-5F draft #254 contract at `c4c343a`:
+map to the published RIG-5F draft #254 contract at `ab2400e`:
 POST `/forge/jobs`, GET `/forge/jobs/{job_id}?tenant_id=…&home_region=us-east`.
-The adapter maps CAD/photo/scan to `cad`/`trellis2`/`photogrammetry`, passes measured
+The adapter maps few-photo/scan jobs to `trellis2`/`photogrammetry`, passes measured
 units, budgets and a decimal-string cap, and checks tenant/job identity and receipts.
-The three requests were validated against that draft's actual Pydantic Job schema.
+Both photo requests were validated against that draft's actual Pydantic Job schema.
 
-Existing tenant uploads (`us-east/{tenant}/uploads/{basename}`) are copied with
-conditional, immutable writes to `forge/{tenant}/{job}/inputs/{basename}` in
+Existing tenant uploads (`us-east/{tenant}/uploads/{basename}`) are checked for
+JPEG/PNG signatures, capped at 20 MB each, 70 files and 1 GB per job, then streamed
+with conditional, immutable writes to `forge/{tenant}/{job}/inputs/{basename}` in
 `tervory-rig`. Outputs are read only from that job's `drafts/model.glb`; there is
-no artifact HTTP route in RIG-5F. Rig's existing signer/credentials are reused.
+no artifact HTTP route in RIG-5F. Rig's existing R2 credentials are reused.
+Files stream through bounded disk scratch
+and 64 KiB chunks with a precomputed SigV4 hash; scratch is always removed.
+No job is submitted and no staged objects are written until all inputs pass.
 This adapter rejects ZA storage; it never moves client data across regions.
 Live R2, conversion receipts and GPU caps were not exercised.
 
@@ -23,10 +27,19 @@ without changing geometry or binary chunks. These points are shown in the privat
 preview and require human approval. No automatic fit or placement is inferred.
 
 Each request names tenant-owned bucket inputs, real millimetre dimensions,
-polygon/byte limits, cost cap and timeout. CAD is preferred, then AI (one to four
-photos), then scan (50–70 photos). Failed automatic checks never enter review.
+polygon/byte limits, a positive cost cap and timeout. Inputs are photos only:
+50–70 overlapping photos, or one to four photos when explicitly enabled.
+`RIG_FORGE_TRELLIS_ENABLED=false` is the default. The API rejects the few-photo
+method and the form hides it unless the existing setting is true in agent-rig;
+the brain and forge independently enforce the same switch. A future enablement
+must pass this setting to all three services. No extra Compose wiring for that
+switch is included in the founder's narrowly approved deployment edits.
+Failed automatic checks never enter review.
 Approval separately confirms scale, appearance and anchors. The public API
-returns only current approved fits and approved model revisions.
+returns only current approved fits and approved model revisions. Saving attachment
+points supports both product-specific and family-approved fits using the centre
+product's server-derived family; unrelated tenants/families and pending fits stay
+unchanged. Each assembly still checks the actual approved models' anchor names.
 
 The test entry point uses `StubForge` and tenant-private disk storage. Production
 uses the existing Rig R2 adapter and a brain relay. The forge owns conversion
@@ -35,8 +48,10 @@ identifiers. Stand-in receipts are explicitly synthetic, zero-cost identifiers.
 
 Deploy using the existing Rig image with the command
 `uvicorn rigbox.three_d.asgi:app --host 0.0.0.0 --port 8000`.
-This opt-in entry point retains the original app/lifespan and registers only
-RIG-5 routes, without modifying another lane's `app.py` or Compose file.
+The image CMD selects this entry point under the founder's review approval. It
+retains the original app/lifespan and registers only RIG-5 routes. The Docker-CMD
+regression boots the actual target, preserves every existing route and health
+behaviour, and confirms that `/brain/tasks*` stays absent after #252.
 The existing image already copies `rigbox/` and `schema.sql`.
 
 An internal room-authenticated entitlement route controls `rig_3d`; retailer
@@ -44,7 +59,9 @@ administrators cannot grant their own paid add-on. Price stays unset until the
 founder sets it. The capability response exposes the add-on billing summary.
 The founder-approved scope extension adds a billing card and a standalone
 `/rig/admin/three-d/` page. Set `RIG_3D_PRICE_ID` only when its price is established;
-its default is empty and billing says **Not available yet**. No purchase action,
+its default is empty and billing says **Not available yet** for a tenant without
+the add-on. An entitled tenant sees only **Included** with a management link.
+No purchase action,
 Stripe API call, checkout, webhook or existing plan is changed. Setting a price
 alone does not grant access: entitlement changes remain a trusted operational step.
 
@@ -53,7 +70,9 @@ action and file request. It submits preparation jobs, previews drafts, requires
 three separate approval checks, saves approved-fit anchors and resets terminals.
 All Workspace calls go server-side through `workspace/lib/tank.ts` and the new
 Tank proxy. No retailer navigation is edited; the founder can add the link after
-RIG-3 merges. Only the proxy registration is added in `tank/main.py`, plus its
+RIG-3 merges. The main Compose passes `RIG_3D_PRICE_ID` to Workspace
+(the only approved line).
+Only the proxy registration is added in `tank/main.py`, plus its
 filename in the Dockerfile COPY line under standing approval.
 
 Drafts remain private in the `tervory-rig` bucket. Approved models are served
@@ -100,8 +119,9 @@ retailer catalogue, contact or paid job is used.
   Purchase/Stripe synchronization is deliberately excluded by the approved scope.
 - Until frames 06–07 are approved, the existing widget does not expose a 3D
   button; its caller integration is `openThreeD(host, client, request, kioskId)`.
-- Kiosk snapshots expire after five minutes. Quotes require a connection and
-  are never queued locally. A remote reset takes effect on the next successful
+- Kiosk snapshots expire after five minutes. Quotes accept a phone number or
+  email through the existing storage/handoff interface, require a connection
+  and are never queued locally. A remote reset takes effect on the next successful
   five-second poll; it cannot reach a disconnected terminal. No contact is cached.
 
 ## Prove it after deploy
@@ -128,5 +148,7 @@ retailer catalogue, contact or paid job is used.
    check scale/look/attachment points and approve it. Confirm `reviewed_by` is the
    server-derived Clerk actor. A member must be unable to read previews or submit
    actions. The page currently accepts previously uploaded files by name.
-7. With `RIG_3D_PRICE_ID` empty, `/billing` shows **Not available yet**, with no
-   purchase button. No Stripe product/price or subscription should be created.
+7. For a tenant without the add-on and `RIG_3D_PRICE_ID` empty, `/billing` shows
+   **Not available yet**, with no
+   purchase button. No Stripe product/price or subscription should be created. An entitled tenant sees **Included**
+   without a conflicting availability message.

@@ -1,4 +1,4 @@
-"""Opt-in deployment entry point: uvicorn rigbox.three_d.asgi:app.
+"""Production deployment entry point: uvicorn rigbox.three_d.asgi:app.
 
 Keeps other lanes' app.py unchanged. The existing image already copies rigbox.
 No stand-in or automatic entitlement in this production entry point.
@@ -14,7 +14,7 @@ from pydantic import Field
 from app import app
 
 from .api import mount
-from .assets import R2Assets, ForgeFiles
+from .assets import R2Assets, ForgeFiles, PhotoInputError
 from .engine import Engine
 from .forge import BrainForge
 from .store import Store
@@ -61,6 +61,8 @@ class LazyR2:
         from chassis.storage import StorageError
         try:
             return await self.backend().storage.stage(job)
+        except PhotoInputError as exc:
+            raise RigError("uploads", str(exc), 422) from None
         except StorageError:
             raise RigError("storage", "The uploaded files could not be prepared. Check them and try again.", 503) from None
 

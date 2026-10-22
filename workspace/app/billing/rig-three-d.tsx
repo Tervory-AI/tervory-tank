@@ -22,8 +22,9 @@ export function RigThreeDAddon({ view }: { view: RigThreeDBilling }) {
     {view.enabled === true ? <p className="chip">Included for this organisation</p> : null}
     {view.enabled === null ? <p role="status">We could not check whether this is included. Try again in a moment.</p> : null}
     {view.amount ? <p className="amount">{view.amount}</p> : null}
-    {!view.configured ? <p><strong>Not available yet</strong></p>
-      : view.enabled ? <a href="/rig/admin/three-d/">Manage 3D product views</a>
+    {view.enabled ? <a href="/rig/admin/three-d/">Manage 3D product views</a>
+      : view.enabled === null ? null
+      : !view.configured ? <p><strong>Not available yet</strong></p>
       : <p>Contact your account owner to confirm the price and add 3D product views.</p>}
     <p className="caption">Your existing plan stays the same. Nothing is charged from this page.</p>
   </section>;

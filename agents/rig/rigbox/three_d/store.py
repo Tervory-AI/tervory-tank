@@ -78,11 +78,12 @@ class Store:
               AND (fits_sku=$3 OR (fits_sku='' AND fits_family=$4 AND fits_family<>''))
         """, UUID(str(tenant)), part, centre, family)]
 
-    async def set_mounts(self, tenant, part, centre, centre_anchor, part_anchor):
+    async def set_mounts(self, tenant, part, centre, family, centre_anchor, part_anchor):
         return await self.pool.fetchval("""
-            UPDATE agent_rig.fits SET mount_points=$4::jsonb
-            WHERE tenant_id=$1 AND part_sku=$2 AND fits_sku=$3 AND approved=true RETURNING part_sku
-        """, UUID(str(tenant)), part, centre, json.dumps({"centre": centre_anchor, "part": part_anchor}))
+            UPDATE agent_rig.fits SET mount_points=$5::jsonb
+            WHERE tenant_id=$1 AND part_sku=$2 AND approved=true
+              AND (fits_sku=$3 OR (fits_sku='' AND fits_family=$4 AND fits_family<>'')) RETURNING part_sku
+        """, UUID(str(tenant)), part, centre, family, json.dumps({"centre": centre_anchor, "part": part_anchor}))
 
     async def kiosk(self, tenant, kiosk_id, reset=False):
         if reset:

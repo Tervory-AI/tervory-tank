@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import hmac
 import os
+import re
 from uuid import UUID
 
 from fastapi import APIRouter, Request
 from fastapi.responses import Response
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from rigbox.api import _admin, _auth, _ok, _tenant
 from rigbox.service import RigError
@@ -33,7 +34,20 @@ class Mount(Strict):
 class Quote(Strict):
     assembly: Assembly
     name: str = Field(min_length=1, max_length=160)
-    email: str = Field(min_length=3, max_length=254)
+    email: str = Field(default="", max_length=254)
+    phone: str = Field(default="", max_length=32)
+
+    @model_validator(mode="after")
+    def contact(self):
+        self.name, self.email, self.phone = self.name.strip(), self.email.strip(), self.phone.strip()
+        if not self.name or not (self.email or self.phone):
+            raise ValueError("Enter your name and a phone number or email")
+        if self.email and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", self.email):
+            raise ValueError("Enter a valid email")
+        if self.phone and (not re.fullmatch(r"\+?[0-9 ()-]+", self.phone)
+                           or not 7 <= sum(c.isdigit() for c in self.phone) <= 15):
+            raise ValueError("Enter a valid phone number")
+        return self
 
 
 def engine(request):
@@ -75,8 +89,10 @@ async def quote(request: Request, body: Quote):
     # queued or cached on a shared kiosk, and no receipt means no success UI.
     value = engine(request)
     built = await value.assembly(_tenant(request), body.assembly)
-    ack = await value.catalogue.quote(_tenant(request), {
-        "setup": built["setup"], "contact": {"name": body.name, "email": body.email}})
+    # assembly() already rebuilds current approved fits and prices. Reuse the
+    # existing durable quote/handoff interface, which also accepts phone contacts.
+    contact = {key: value for key, value in {"name": body.name, "email": body.email, "phone": body.phone}.items() if value}
+    ack = await value.catalogue._store_quote(_tenant(request), {"kind": "setup", "setup": built["setup"]}, contact)
     return _ok(request, ack)
 
 

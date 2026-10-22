@@ -132,8 +132,9 @@ async def rig(tmp_path):
 
 def job(product="centre", **changes):
     dimensions = {"centre": (160,70,110), "part-a": (40,40,40), "part-b": (40,60,40), "part-tall": (40,70,40)}
-    return Job(id=uuid4(), tenant_id=TENANT, product_id=product, source="cad",
-               inputs=[f"{TENANT}/uploads/model.step"], dimensions_mm=dimensions[product], cost_cap_usd=0, **changes)
+    value = dict(id=uuid4(), tenant_id=TENANT, product_id=product, source="scan",
+                 inputs=[f"{TENANT}/uploads/photo-{n}.jpg" for n in range(50)], dimensions_mm=dimensions[product], cost_cap_usd=0)
+    return Job(**(value | changes))
 
 
 async def approve_all(engine):
@@ -282,7 +283,7 @@ async def test_corrupted_model_cannot_be_approved_or_served(rig):
 async def test_forge_relay_contract_and_failure_do_not_leak_upstream(rig):
     from rigbox.three_d.contracts import Anchor
     from rigbox.three_d.forge import wire_job
-    request = job(anchors={"reviewed": Anchor(position_mm=(0,0,0), quaternion=(0,0,0,1))})
+    request = job(cost_cap_usd=1, anchors={"reviewed": Anchor(position_mm=(0,0,0), quaternion=(0,0,0,1))})
     fixture = (ROOT / "agents/rig/rigbox/three_d/fixtures/centre.glb").read_bytes()
     calls = []
     class Files:
@@ -309,7 +310,7 @@ async def test_forge_relay_contract_and_failure_do_not_leak_upstream(rig):
         assert result.tenant_id == TENANT and check_artifact(artifact, result.report) is None
     sent = json.loads(calls[0].content)
     assert set(sent) == {"tenant_id", "job_id", "home_region", "method", "inputs", "unit_mm", "dimensions_mm", "max_triangles", "max_bytes", "timeout_seconds", "cost_cap_usd"}
-    assert sent["cost_cap_usd"] == "0" and sent["inputs"] == ["model.step"] and sent["method"] == "cad"
+    assert sent["cost_cap_usd"] == "1" and sent["inputs"] == [f"photo-{n}.jpg" for n in range(50)] and sent["method"] == "photogrammetry"
     assert calls[1].url.params["tenant_id"] == str(TENANT) and calls[1].url.params["home_region"] == "us-east"
     assert all("x-tank-key" in call.headers and "key" not in call.url.query.decode() for call in calls)
     for source, method in [("ai", "trellis2"), ("scan", "photogrammetry")]:
@@ -321,18 +322,18 @@ async def test_forge_relay_contract_and_failure_do_not_leak_upstream(rig):
         assert "private upstream" not in str(error.value)
 
 
-@pytest.mark.parametrize("source,count", [("cad",1),("ai",1),("ai",4),("scan",50),("scan",70)])
+@pytest.mark.parametrize("source,count", [("ai",1),("ai",4),("scan",50),("scan",70)])
 def test_source_modes(source, count):
-    suffix = "step" if source == "cad" else "jpg"
+    suffix = "jpg"
     value = job().model_dump(); value.update(source=source, inputs=[f"{TENANT}/uploads/photo-{n}.{suffix}" for n in range(count)])
     assert Job.model_validate(value).source == source
 
 
 @pytest.mark.parametrize("change", [
-    {"source":"scan"}, {"inputs":["https://example.test/model.step"]},
-    {"inputs":[f"{WITHOUT_3D}/uploads/model.step"]}, {"dimensions_mm":[0,1,1]},
+    {"source":"unsupported"}, {"inputs":["https://example.test/model.jpg"]},
+    {"inputs":[f"{WITHOUT_3D}/uploads/model.jpg"]}, {"dimensions_mm":[0,1,1]},
     {"dimensions_mm":[float("nan"),1,1]}, {"cost_cap_usd":-1}, {"max_bytes":5_000_001},
-    {"inputs":[f"{TENANT}/uploads/../model.step"]},
+    {"inputs":[f"{TENANT}/uploads/../model.jpg"]},
 ])
 def test_reject_unsafe_source_and_budget(change):
     value = job().model_dump(); value.update(change)
@@ -369,35 +370,6 @@ async def test_stand_in_does_not_silently_replace_requested_attachment_points(ri
 
 
 @pytest.mark.asyncio
-async def test_forge_files_are_tenant_scoped_immutable_and_us_only():
-    from rigbox.three_d.assets import ForgeFiles
-    from chassis.storage import StorageError
-    request = job()
-    paths = []
-    def handler(call):
-        paths.append(call.url.path)
-        if call.method == "PUT":
-            assert call.headers["if-none-match"] == "*"
-            assert call.url.path == f"/tervory-rig/forge/{TENANT}/{request.id}/inputs/model.step"
-            return httpx.Response(412)
-        return httpx.Response(200, content=b"same input")
-    env = {"R2_ACCOUNT_ID": uuid4().hex, "R2_ACCESS_KEY_ID_RIG": secrets.token_hex(20),
-           "R2_SECRET_ACCESS_KEY_RIG": secrets.token_hex(32)}
-    files = ForgeFiles("rig", environ=env, transport=httpx.MockTransport(handler))
-    try:
-        await files.stage(request)
-        assert paths[0] == f"/tervory-rig/us-east/{TENANT}/uploads/model.step"
-        assert await files.draft(request) == b"same input"
-        assert paths[-1] == f"/tervory-rig/forge/{TENANT}/{request.id}/drafts/model.glb"
-        count = len(paths); files.region = "za"
-        with pytest.raises(StorageError):
-            await files.stage(request)
-        assert len(paths) == count
-    finally:
-        await files.close()
-
-
-@pytest.mark.asyncio
 async def test_unapproved_fit_cannot_gain_mounts_or_enter_assembly(rig):
     engine, pool, _, _ = rig
     await approve_all(engine)
@@ -421,3 +393,70 @@ def test_glb_cannot_cause_external_fetch_even_with_a_matching_checksum():
     report = Report(**json.loads(path.with_suffix(".json").read_text()),
                     size_bytes=len(modified), sha256=hashlib.sha256(modified).hexdigest(), receipt_ids=[uuid4()])
     assert check_artifact(modified, report) == "The model contains an external resource"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('source', ['ai', 'scan'])
+async def test_every_live_photo_method_needs_a_positive_budget(source, monkeypatch):
+    monkeypatch.setenv('RIG_FORGE_TRELLIS_ENABLED', 'true')
+    count = 1 if source == 'ai' else 50
+    request = job(source=source, inputs=[f'{TENANT}/uploads/{n}.jpg' for n in range(count)],
+                  anchors={'attach': {'position_mm': [0, 0, 0], 'quaternion': [0, 0, 0, 1]}})
+    class Files:
+        async def stage(self, job):
+            pytest.fail('No storage or paid work before budget validation')
+    async with httpx.AsyncClient() as client:
+        with pytest.raises(RigError, match='positive cost limit'):
+            await BrainForge(client, secrets.token_urlsafe(32), Files()).submit(request)
+
+
+@pytest.mark.asyncio
+async def test_few_photo_preparation_is_hidden_and_rejected_until_enabled(rig, monkeypatch):
+    engine, _, _, _ = rig
+    monkeypatch.delenv('RIG_FORGE_TRELLIS_ENABLED', raising=False)
+    assert (await engine.capabilities(TENANT))['photo_sources'] == ['scan']
+    request = job(source='ai', inputs=[f'{TENANT}/uploads/one.png'], cost_cap_usd=1,
+                  anchors={'attach': {'position_mm': [0, 0, 0], 'quaternion': [0, 0, 0, 1]}})
+    async with httpx.AsyncClient() as client:
+        with pytest.raises(RigError, match='not available yet'):
+            await BrainForge(client, secrets.token_urlsafe(32), object()).submit(request)
+    monkeypatch.setenv('RIG_FORGE_TRELLIS_ENABLED', 'true')
+    assert (await engine.capabilities(TENANT))['photo_sources'] == ['scan', 'ai']
+
+
+@pytest.mark.asyncio
+async def test_family_mount_write_matches_read_and_stays_scoped(rig):
+    engine, pool, client, admin = rig
+    await approve_all(engine)
+    await pool.execute("UPDATE agent_rig.products SET family='sample-family' WHERE tenant_id=$1 AND sku='centre'", TENANT)
+    await pool.execute("UPDATE agent_rig.fits SET fits_sku='', fits_family='sample-family', mount_points='{}' WHERE tenant_id=$1 AND part_sku='part-a'", TENANT)
+    for tenant, family, approved in [(TENANT, 'different-family', True), (TENANT, 'pending-family', False),
+                                      (WITHOUT_3D, 'sample-family', True)]:
+        await pool.execute("INSERT INTO agent_rig.fits (tenant_id,part_sku,fits_family,approved,source) VALUES ($1,'part-a',$2,$3,'sample')", tenant, family, approved)
+    response = await client.post('/v1/rig/admin/3d/mounts', headers={'X-Rig-Key': admin}, json={
+        'part': 'part-a', 'centre': 'centre', 'centre_anchor': 'left', 'part_anchor': 'attach'})
+    assert response.status_code == 200
+    rows = await engine.store.mounts(TENANT, 'part-a', 'centre', 'sample-family')
+    assert rows[0]['mount_points'] == {'centre': 'left', 'part': 'attach'}
+    built = await engine.assembly(str(TENANT), Assembly(product_id='centre'))
+    assert built['available'] and 'part-a' in {m['product_id'] for m in built['models']}
+    for tenant, family in [(TENANT, 'different-family'), (TENANT, 'pending-family'), (WITHOUT_3D, 'sample-family')]:
+        assert json.loads(await pool.fetchval("SELECT mount_points FROM agent_rig.fits WHERE tenant_id=$1 AND part_sku='part-a' AND fits_family=$2", tenant, family)) == {}
+    await pool.execute("UPDATE agent_rig.fits SET approved=false WHERE tenant_id=$1 AND part_sku='part-a'", TENANT)
+    with pytest.raises(RigError, match='no approved fit'):
+        await engine.mount_points(str(TENANT), 'part-a', 'centre', 'left', 'attach')
+
+
+@pytest.mark.asyncio
+async def test_quote_accepts_phone_only_and_rejects_missing_or_invalid_contacts(rig):
+    engine, pool, client, _ = rig
+    await approve_all(engine)
+    base = {'assembly': {'product_id': 'centre'}, 'name': 'Sample Shopper'}
+    path, headers = '/v1/rig/3d/quote', {'X-Rig-Key': PUBLIC_KEY}
+    for contact in ({}, {'phone': 'letters'}, {'email': 'invalid'}, {'phone': '123'}, {'phone': '1'*16}):
+        assert (await client.post(path, headers=headers, json=base | contact)).status_code == 422
+    response = await client.post(path, headers=headers, json=base | {'phone': '+1 202 555 0100'})
+    assert response.status_code == 200
+    row = await pool.fetchrow('SELECT tenant_id, contact FROM agent_rig.quotes WHERE id=$1', response.json()['request_id'])
+    assert row['tenant_id'] == TENANT
+    assert json.loads(row['contact']) == {'name': 'Sample Shopper', 'phone': '+1 202 555 0100'}

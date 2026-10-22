@@ -5,7 +5,7 @@ export type ProductJob = {
   report: { dimensions_mm: number[]; anchors: Record<string, { position_mm: number[]; quaternion: number[] }> } | null;
 };
 type Props = {
-  jobs: ProductJob[]; enabled: boolean; error?: string; notice?: string;
+  jobs: ProductJob[]; enabled: boolean; fewPhotos?: boolean; error?: string; notice?: string;
   jobId: string; action: (form: FormData) => Promise<void>;
 };
 const LABELS: Record<string, string> = { queued: "Waiting", running: "Preparing", draft: "Ready to review", approved: "Approved", failed: "Could not prepare" };
@@ -20,7 +20,7 @@ function TextField({ label, name }: { label: string; name: string }) {
   return <label>{label}<input name={name} required maxLength={64} pattern="[A-Za-z0-9][A-Za-z0-9_.-]*" /></label>;
 }
 
-export function ThreeDAdminScreen({ jobs, enabled, error, notice, jobId, action }: Props) {
+export function ThreeDAdminScreen({ jobs, enabled, fewPhotos = false, error, notice, jobId, action }: Props) {
   const drafts = jobs.filter(job => job.status === "draft");
   return <div className="three-admin">
     <p className="kicker">Rig · Administration</p>
@@ -32,13 +32,12 @@ export function ThreeDAdminScreen({ jobs, enabled, error, notice, jobId, action 
     {!enabled ? <section><h2>3D is not available for this organisation</h2><p>Check your add-on in billing.</p></section> : <>
       <section>
         <h2>Prepare a product</h2>
-        <p>Use files already uploaded to your shop. Enter one file name per line, including its extension.</p>
+        <p>Use photos already uploaded to your shop. Enter one file name per line, including its extension. Each photo must be a JPEG or PNG, at most 20 MB. A job can contain up to 70 photos and 1 GB in total.</p>
         <form action={action}>
           <input type="hidden" name="operation" value="submit" /><input type="hidden" name="jobId" value={jobId} />
           <TextField label="Product code" name="product" />
-          <label>Starting files<select name="source" defaultValue="cad">
-            <option value="cad">Maker’s design file (.step or .iges)</option>
-            <option value="ai">One to four photos (.jpg or .png)</option>
+          <label>Starting files<select name="source" defaultValue="scan">
+            {fewPhotos ? <option value="ai">One to four photos (.jpg or .png)</option> : null}
             <option value="scan">50 to 70 overlapping photos (.jpg or .png)</option>
           </select></label>
           <label>Uploaded file names<textarea name="files" required rows={3} maxLength={21000} /></label>
@@ -69,7 +68,7 @@ export function ThreeDAdminScreen({ jobs, enabled, error, notice, jobId, action 
         <li key={job.id}><strong>{job.product_id}</strong> — {LABELS[job.status] ?? "Check progress"}
           {job.status === "failed" ? <p>The product did not pass preparation. Check the files and dimensions before trying again.</p> : null}
         </li>)}</ul>}</section>
-      <section><h2>Attach an approved part</h2><p>The part must already have an approved fit. Use the named points from the approved product views.</p>
+      <section><h2>Attach an approved part</h2><p>The part must already have an approved fit to this product or its family. Use the named points from the approved product views.</p>
         <form action={action}><input type="hidden" name="operation" value="mounts" />
           <TextField label="Centre product code" name="centre" /><TextField label="Part code" name="part" />
           <TextField label="Point on the centre product" name="centre_anchor" /><TextField label="Point on the part" name="part_anchor" />

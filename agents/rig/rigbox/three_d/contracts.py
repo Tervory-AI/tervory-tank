@@ -41,7 +41,7 @@ class Job(Strict):
     id: UUID
     tenant_id: UUID
     product_id: str = Field(pattern=NAME)
-    source: Literal["cad", "ai", "scan"]
+    source: Literal["ai", "scan"]
     # Bucket-relative names, never URLs, credentials or caller-selected buckets.
     inputs: list[str] = Field(min_length=1, max_length=70)
     dimensions_mm: tuple[float, float, float]
@@ -54,12 +54,9 @@ class Job(Strict):
     @model_validator(mode="after")
     def valid_source(self):
         prefix = f"{self.tenant_id}/uploads/"
-        suffixes = {"cad": {"step", "stp", "iges", "igs"}, "ai": {"jpg", "jpeg", "png"},
-                    "scan": {"jpg", "jpeg", "png"}}[self.source]
+        suffixes = {"jpg", "jpeg", "png"}
         if self.source == "scan" and not 50 <= len(self.inputs) <= 70:
             raise ValueError("A scan needs 50 to 70 overlapping photos")
-        if self.source == "cad" and len(self.inputs) != 1:
-            raise ValueError("Choose one CAD file")
         if self.source == "ai" and len(self.inputs) > 4:
             raise ValueError("Choose up to four photos")
         if len(set(self.inputs)) != len(self.inputs):

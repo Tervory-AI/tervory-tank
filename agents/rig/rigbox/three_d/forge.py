@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Protocol
 from uuid import UUID, uuid5, NAMESPACE_URL
@@ -13,6 +14,11 @@ from rigbox.service import RigError
 from .contracts import Job, Report, Result
 
 
+def photo_sources():
+    # This switch is off unless explicitly enabled, as in the brain and forge.
+    return ["scan", "ai"] if os.environ.get("RIG_FORGE_TRELLIS_ENABLED", "").lower() == "true" else ["scan"]
+
+
 class Forge(Protocol):
     async def submit(self, job: Job) -> Result: ...
     async def poll(self, job: Job) -> Result: ...
@@ -20,7 +26,7 @@ class Forge(Protocol):
 
 
 class BrainForge:
-    """RIG-5F draft c4c343a: brain start/poll plus tenant/job-scoped R2 files."""
+    """RIG-5F draft ab2400e: brain start/poll plus tenant/job-scoped R2 files."""
     def __init__(self, client: httpx.AsyncClient, key: str, files=None):
         self.client, self.key, self.files = client, key, files
 
@@ -45,7 +51,9 @@ class BrainForge:
             raise RigError("forge_unavailable", "The product service is not connected.", 503)
         if not job.anchors:
             raise RigError("anchors", "Enter the measured attachment points before preparing this product.", 422)
-        if job.source != "cad" and job.cost_cap_usd <= 0:
+        if job.source not in photo_sources():
+            raise RigError("source_unavailable", "Preparation from a few photos is not available yet.", 422)
+        if job.cost_cap_usd <= 0:
             raise RigError("budget", "Photo preparation needs a positive cost limit.", 422)
         await self.files.stage(job)
         return await self._result(await self._call("POST", job), job)
@@ -101,7 +109,7 @@ class BrainForge:
 def wire_job(job: Job):
     """Exact fields of RIG-5F's Job; product/anchor metadata stays in RIG-5."""
     return {"tenant_id": str(job.tenant_id), "job_id": str(job.id), "home_region": "us-east",
-            "method": {"cad": "cad", "ai": "trellis2", "scan": "photogrammetry"}[job.source],
+            "method": {"ai": "trellis2", "scan": "photogrammetry"}[job.source],
             "inputs": [name.rsplit("/", 1)[1] for name in job.inputs], "unit_mm": 1.0,
             "dimensions_mm": list(job.dimensions_mm), "max_triangles": job.max_triangles,
             "max_bytes": job.max_bytes, "timeout_seconds": job.timeout_seconds,
@@ -133,7 +141,7 @@ def add_anchors(data: bytes, job: Job) -> bytes:
 
 
 class StubForge:
-    """Explicit stand-in only. Never pretends to convert uploaded CAD or photos.
+    """Explicit stand-in only. Never pretends to convert uploaded photos.
 
     Uses the same submit/poll/artifact interface and wire shapes as BrainForge.
     The fixtures contain a neutral centre and two parts, made by this stub's
