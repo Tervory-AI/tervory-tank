@@ -45,10 +45,11 @@ class Job(Strict):
     # Bucket-relative names, never URLs, credentials or caller-selected buckets.
     inputs: list[str] = Field(min_length=1, max_length=70)
     dimensions_mm: tuple[float, float, float]
-    max_bytes: int = Field(default=MAX_BYTES, gt=0, le=MAX_BYTES)
-    max_triangles: int = Field(default=MAX_TRIANGLES, gt=0, le=MAX_TRIANGLES)
+    anchors: dict[str, Anchor] = Field(default_factory=dict, max_length=32)
+    max_bytes: int = Field(default=MAX_BYTES, ge=1024, le=MAX_BYTES)
+    max_triangles: int = Field(default=MAX_TRIANGLES, ge=12, le=MAX_TRIANGLES)
     cost_cap_usd: float = Field(ge=0, le=100)
-    timeout_seconds: int = Field(default=900, ge=30, le=3600)
+    timeout_seconds: int = Field(default=900, ge=60, le=3600)
 
     @model_validator(mode="after")
     def valid_source(self):
@@ -65,9 +66,12 @@ class Job(Strict):
             raise ValueError("Choose different input files")
         for name in self.inputs:
             if (not name.startswith(prefix) or len(name) > 300
+                    or "/" in name[len(prefix):]
                     or any(not re.fullmatch(NAME, p) for p in name.split("/"))
                     or name.rsplit(".", 1)[-1].lower() not in suffixes):
                 raise ValueError("Inputs must be this tenant's uploaded files")
+        if any(not re.fullmatch(NAME, name) for name in self.anchors):
+            raise ValueError("Use simple names for attachment points")
         if any(n <= 0 or n > 100_000 for n in self.dimensions_mm):
             raise ValueError("Supply the real dimensions in millimetres")
         return self

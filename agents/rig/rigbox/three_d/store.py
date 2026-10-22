@@ -53,6 +53,12 @@ class Store:
             WHERE tenant_id=$1 AND status='draft' ORDER BY created_at, id LIMIT 100
         """, UUID(str(tenant)))]
 
+    async def jobs(self, tenant):
+        return [decoded(r) for r in await self.pool.fetch("""
+            SELECT id, product_id, status, report, reason FROM agent_rig.rig_3d_jobs
+            WHERE tenant_id=$1 ORDER BY created_at DESC, id DESC LIMIT 100
+        """, UUID(str(tenant)))]
+
     async def approve(self, tenant, job_id, review, reviewer):
         return await self.pool.fetchval("""
             UPDATE agent_rig.rig_3d_jobs SET status='approved', review=$3::jsonb,

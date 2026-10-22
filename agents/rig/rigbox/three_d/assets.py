@@ -7,7 +7,41 @@ short-lived, tenant-partitioned kiosk cache instead.
 from pathlib import Path
 from uuid import UUID
 
-from chassis.storage import Storage
+from chassis.storage import Storage, StorageError
+import httpx
+
+
+class ForgeFiles(Storage):
+    """Use only this tenant/job's RIG-5F prefix with the existing Rig signer."""
+    def prefix(self, job):
+        if self.region != "us-east":
+            raise StorageError("This conversion is available on the US box only")
+        return f"forge/{job.tenant_id}/{job.id}/"
+
+    async def stage(self, job):
+        prefix = self.prefix(job)
+        try:
+            for source in job.inputs:
+                name = source.rsplit("/", 1)[1]
+                data = await self.get(str(job.tenant_id), "uploads", name)
+                key = prefix + "inputs/" + name
+                path = "/" + self.bucket + "/" + key
+                headers = self._sign("PUT", path, "", data)
+                headers["If-None-Match"] = "*"
+                response = await self._http.put(f"https://{self.host}{path}", headers=headers, content=data)
+                if response.status_code == 412:
+                    if await self._request("GET", key) != data:
+                        raise StorageError("This job already has different input files")
+                elif response.status_code not in {200, 204}:
+                    raise StorageError("Input files could not be prepared")
+        except httpx.HTTPError:
+            raise StorageError("Input storage is unavailable") from None
+
+    async def draft(self, job):
+        data = await self._request("GET", self.prefix(job) + "drafts/model.glb")
+        if len(data) > job.max_bytes:
+            raise StorageError("The product file exceeds its size limit")
+        return data
 
 
 def asset_name(job_id):

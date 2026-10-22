@@ -150,3 +150,5 @@ async def mounts(request: Request, body: Mount):
 
 def mount(app):
     app.include_router(router)
+    from .internal import router as workspace_router
+    app.include_router(workspace_router)

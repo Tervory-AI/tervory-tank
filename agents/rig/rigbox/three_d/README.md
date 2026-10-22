@@ -1,14 +1,26 @@
 # RIG-5: approved 3D engine
 
 Industry-neutral stand-ins only. CAD, AI and scan conversion belong to RIG-5F;
-this engine never installs Blender or runs a GPU job. The forge is not merged;
-draft PR #254 has not published a job/relay interface at the revision inspected
-(b1e68c7). `StubForge` and `BrainForge` implement the same
-`submit(Job)`, `poll(Job)`, `artifact(Job)` interface, contract `rig-forge/1`.
-The brain relay uses POST `/forge/jobs`, GET `/forge/jobs/{id}` and
-GET `/forge/jobs/{id}/artifact`, with tenant scoping and header authorization.
-RIG-5F must expose this relay or adapt this boundary when its final contract is
-available. This is an explicitly proposed contract, not a verified live forge.
+this engine never installs Blender or runs a GPU job. RIG-5F remains unmerged;
+`StubForge` is the explicit stand-in. Its `submit(Job)`, `poll(Job)`, `artifact(Job)`
+interface matches `BrainForge`. The engine's versioned `rig-forge/1` domain types
+map to the published RIG-5F draft #254 contract at `c4c343a`:
+POST `/forge/jobs`, GET `/forge/jobs/{job_id}?tenant_id=…&home_region=us-east`.
+The adapter maps CAD/photo/scan to `cad`/`trellis2`/`photogrammetry`, passes measured
+units, budgets and a decimal-string cap, and checks tenant/job identity and receipts.
+The three requests were validated against that draft's actual Pydantic Job schema.
+
+Existing tenant uploads (`us-east/{tenant}/uploads/{basename}`) are copied with
+conditional, immutable writes to `forge/{tenant}/{job}/inputs/{basename}` in
+`tervory-rig`. Outputs are read only from that job's `drafts/model.glb`; there is
+no artifact HTTP route in RIG-5F. Rig's existing signer/credentials are reused.
+This adapter rejects ZA storage; it never moves client data across regions.
+Live R2, conversion receipts and GPU caps were not exercised.
+
+RIG-5F does not invent attachment points. The administrator supplies measured
+positions and unit quaternions; RIG-5 adds named root nodes to the checked GLB
+without changing geometry or binary chunks. These points are shown in the private
+preview and require human approval. No automatic fit or placement is inferred.
 
 Each request names tenant-owned bucket inputs, real millimetre dimensions,
 polygon/byte limits, cost cap and timeout. CAD is preferred, then AI (one to four
@@ -30,8 +42,19 @@ The existing image already copies `rigbox/` and `schema.sql`.
 An internal room-authenticated entitlement route controls `rig_3d`; retailer
 administrators cannot grant their own paid add-on. Price stays unset until the
 founder sets it. The capability response exposes the add-on billing summary.
-The existing Workspace billing screen is outside this lane's allowed files;
-its Stripe subscription-to-entitlement integration is a separate wiring step.
+The founder-approved scope extension adds a billing card and a standalone
+`/rig/admin/three-d/` page. Set `RIG_3D_PRICE_ID` only when its price is established;
+its default is empty and billing says **Not available yet**. No purchase action,
+Stripe API call, checkout, webhook or existing plan is changed. Setting a price
+alone does not grant access: entitlement changes remain a trusted operational step.
+
+The admin page requires an active Clerk organization administrator on every read,
+action and file request. It submits preparation jobs, previews drafts, requires
+three separate approval checks, saves approved-fit anchors and resets terminals.
+All Workspace calls go server-side through `workspace/lib/tank.ts` and the new
+Tank proxy. No retailer navigation is edited; the founder can add the link after
+RIG-3 merges. Only the proxy registration is added in `tank/main.py`, plus its
+filename in the Dockerfile COPY line under standing approval.
 
 Drafts remain private in the `tervory-rig` bucket. Approved models are served
 through the key-gated route. A CDN may front this route only if it forwards
@@ -70,13 +93,11 @@ retailer catalogue, contact or paid job is used.
   optional `photo_key` for a separate non-entitled test tenant. Use an existing
   **publishable** key only. Private/admin keys are rejected. Each physical
   terminal needs a distinct configured UUID, never a shopper identifier.
-- The brain relay/job contract must be reconciled with RIG-5F before real
-  conversion. Actual receipts/caps and R2/CDN transfer are unverified until
-  that lane and secure settings are available. The stub is not a live forge.
-- Existing Workspace billing/Stripe hooks and `/rig/admin` controls belong to
-  other lanes and are not edited here. Their required calls are the internal
-  entitlement route, administrator job/review/mount routes and terminal reset.
-  The billing summary on the test page does not claim a Stripe integration.
+- Recheck the published RIG-5F contract on merge. The adapter matches the inspected
+  draft; actual conversion receipts/caps and R2/CDN transfer still need live proof.
+  The stub never claims to be a live conversion service.
+- Add the standalone administration page's navigation link after RIG-3 merges.
+  Purchase/Stripe synchronization is deliberately excluded by the approved scope.
 - Until frames 06–07 are approved, the existing widget does not expose a 3D
   button; its caller integration is `openThreeD(host, client, request, kioskId)`.
 - Kiosk snapshots expire after five minutes. Quotes require a connection and
@@ -102,3 +123,10 @@ retailer catalogue, contact or paid job is used.
 5. POST the administrator terminal reset route. Its tenant-scoped
    `agent_rig.rig_3d_kiosks.revision` must increment and the connected terminal
    must clear contact/build state. No production deployment was performed here.
+
+6. As an organization administrator, open `/rig/admin/three-d/`, preview a draft,
+   check scale/look/attachment points and approve it. Confirm `reviewed_by` is the
+   server-derived Clerk actor. A member must be unable to read previews or submit
+   actions. The page currently accepts previously uploaded files by name.
+7. With `RIG_3D_PRICE_ID` empty, `/billing` shows **Not available yet**, with no
+   purchase button. No Stripe product/price or subscription should be created.

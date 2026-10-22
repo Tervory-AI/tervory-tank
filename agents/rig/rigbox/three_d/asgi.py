@@ -11,11 +11,10 @@ from pathlib import Path
 from fastapi import Request
 from fastapi.staticfiles import StaticFiles
 from pydantic import Field
-from chassis.storage import Storage
 from app import app
 
 from .api import mount
-from .assets import R2Assets
+from .assets import R2Assets, ForgeFiles
 from .engine import Engine
 from .forge import BrainForge
 from .store import Store
@@ -31,8 +30,9 @@ async def lifespan(application):
     async with _original(application):
         # Missing R2 credentials must not break Rig's existing catalogue API.
         # Initialize lazily at the first 3D storage operation and show its error.
+        assets = LazyR2()
         application.state.rig_three_d = Engine(Store(application.state.pool), application.state.rig,
-            BrainForge(application.state.http, os.environ.get("TANK_KEY", "")), LazyR2())
+            BrainForge(application.state.http, os.environ.get("TANK_KEY", ""), assets), assets)
         yield
         if application.state.rig_three_d.assets.instance:
             await application.state.rig_three_d.assets.instance.storage.close()
@@ -46,7 +46,7 @@ class LazyR2:
         from rigbox.service import RigError
         if self.instance is None:
             try:
-                self.instance = R2Assets(Storage("rig"))
+                self.instance = R2Assets(ForgeFiles("rig"))
             except StorageError:
                 raise RigError("storage", "Model storage is not connected.", 503) from None
         return self.instance
@@ -56,6 +56,20 @@ class LazyR2:
 
     async def get(self, *args):
         return await self.backend().get(*args)
+
+    async def stage(self, job):
+        from chassis.storage import StorageError
+        try:
+            return await self.backend().storage.stage(job)
+        except StorageError:
+            raise RigError("storage", "The uploaded files could not be prepared. Check them and try again.", 503) from None
+
+    async def draft(self, job):
+        from chassis.storage import StorageError
+        try:
+            return await self.backend().storage.draft(job)
+        except StorageError:
+            raise RigError("storage", "The product file could not be read.", 503) from None
 
 
 app.router.lifespan_context = lifespan

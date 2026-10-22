@@ -30,6 +30,78 @@ from rigbox.three_d.forge import BrainForge  # noqa: E402
 from rigbox.three_d.sample import TENANT, WITHOUT_3D, PUBLIC_KEY, PLAIN_KEY, seed  # noqa: E402
 
 
+@pytest.mark.asyncio
+async def test_workspace_corridor_requires_room_key_tenant_and_review(rig, monkeypatch):
+    engine, pool, client, _ = rig
+    room_key = secrets.token_urlsafe(32)
+    monkeypatch.setenv("TANK_KEY", room_key)
+    headers = {"X-Tank-Key": room_key}
+    body = {"tenant_id": str(TENANT), "actor": "reviewer-fixture", "payload": {}}
+    root = "/v1/rig/internal/3d/workspace/"
+    assert (await client.post(root + "dashboard", json=body)).status_code == 401
+    assert (await client.post(root + "dashboard", headers={"X-Rig-Key": PUBLIC_KEY}, json=body)).status_code == 401
+    assert (await client.post(root + "dashboard", headers=headers, json={**body, "actor": ""})).status_code == 403
+    assert (await client.post(root + "dashboard", headers=headers, json={**body, "tenant_id": str(WITHOUT_3D)})).status_code == 403
+    caps = await client.post(root + "capabilities", headers=headers, json={**body, "actor": ""})
+    assert caps.json()["rig_3d"] is True
+    assert (await client.post(root + "entitlement", headers=headers, json=body)).status_code == 422
+    request = job()
+    submitted = await client.post(root + "submit", headers=headers, json={**body, "payload": request.model_dump(mode="json")})
+    assert submitted.status_code == 200
+    dashboard = (await client.post(root + "dashboard", headers=headers, json=body)).json()
+    assert dashboard["jobs"][0]["status"] == "draft"
+    preview = await client.post(root + "preview", headers=headers, json={**body, "payload": {"id": str(request.id)}})
+    assert preview.content[:4] == b"glTF" and "no-store" in preview.headers["cache-control"]
+    review = {"id": str(request.id), "review": {"scale": True, "appearance": True}}
+    assert (await client.post(root + "approve", headers=headers, json={**body, "payload": review})).status_code == 422
+    review["review"]["attachment_points"] = True
+    assert (await client.post(root + "approve", headers=headers, json={**body, "payload": review})).status_code == 200
+    actor = await pool.fetchval("SELECT reviewed_by FROM agent_rig.rig_3d_jobs WHERE tenant_id=$1 AND id=$2", TENANT, request.id)
+    assert actor == "reviewer-fixture"
+    assert (await client.post(root + "runtime", headers=headers, json={**body, "payload": {"name": "../api.py"}})).status_code == 422
+    runtime = await client.post(root + "runtime", headers=headers, json={**body, "payload": {"name": "runtime.js"}})
+    assert runtime.status_code == 200 and "no-store" in runtime.headers["cache-control"]
+    kiosk = str(uuid4())
+    reset = await client.post(root + "reset", headers=headers, json={**body, "payload": {"id": kiosk}})
+    assert reset.json()["revision"] == 1
+    assert await engine.store.kiosk(WITHOUT_3D, kiosk) == 0
+
+
+@pytest.mark.asyncio
+async def test_tank_proxy_does_not_accept_unscoped_or_entitlement_writes(rig, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", os.environ.get("RIG_TEST_DATABASE_URL") or os.environ["POOL_SCHEMA_DATABASE_URL"])
+    monkeypatch.setenv("LITELLM_MASTER_KEY", secrets.token_urlsafe(32))
+    monkeypatch.setenv("TANK_API_KEY", secrets.token_urlsafe(32))
+    import main as tank
+    from rig_three_d import build_router
+    _, _, room, _ = rig
+    room_key, workspace_key = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
+    monkeypatch.setenv("TANK_KEY", room_key)
+    monkeypatch.setenv("TANK_KEY_RIG", room_key)
+    monkeypatch.setenv("TANK_API_KEY", workspace_key)
+    monkeypatch.setattr(tank, "TANK_API_KEY", workspace_key)
+    monkeypatch.setattr(tank, "_http", room)
+    monkeypatch.setattr(tank, "RIG_AGENT_URL", "http://rig.test")
+    app = FastAPI(); app.include_router(build_router(tank))
+    headers = {"X-Tank-Key": workspace_key, "X-Tervory-User": "reviewer-fixture"}
+    body = {"tenant_id": str(TENANT), "payload": {}}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://tank.test") as client:
+        root = "/v1/rig/3d/workspace/"
+        assert (await client.post(root + "capabilities", json=body)).status_code == 401
+        assert (await client.post(root + "capabilities", headers=headers, json=body)).json()["rig_3d"] is True
+        assert (await client.post(root + "dashboard", headers={"X-Tank-Key": workspace_key}, json=body)).status_code == 403
+        assert (await client.post(root + "dashboard", headers=headers, json={})).status_code == 400
+        assert (await client.post(root + "entitlement", headers=headers, json=body)).status_code == 404
+        assert (await client.post(root + "dashboard?tenant_id=" + str(WITHOUT_3D), headers=headers, json=body)).status_code == 403
+        foreign = job().model_dump(mode="json"); foreign["tenant_id"] = str(WITHOUT_3D)
+        assert (await client.post(root + "submit", headers=headers, json={**body, "payload": foreign})).status_code == 403
+        request = job().model_dump(mode="json")
+        assert (await client.post(root + "submit", headers=headers, json={**body, "payload": request})).status_code == 200
+        assert (await client.post(root + "dashboard", headers=headers, json=body)).json()["jobs"][0]["status"] == "draft"
+        data = await client.post(root + "preview", headers=headers, json={**body, "payload": {"id": request["id"]}})
+        assert data.content[:4] == b"glTF" and "no-store" in data.headers["cache-control"]
+
+
 @pytest_asyncio.fixture
 async def rig(tmp_path):
     url = os.environ.get("RIG_TEST_DATABASE_URL") or os.environ.get("POOL_SCHEMA_DATABASE_URL")
@@ -208,25 +280,44 @@ async def test_corrupted_model_cannot_be_approved_or_served(rig):
 
 @pytest.mark.asyncio
 async def test_forge_relay_contract_and_failure_do_not_leak_upstream(rig):
-    engine, _, _, _ = rig
-    request = job(); result = await engine.forge.poll(request)
+    from rigbox.three_d.contracts import Anchor
+    from rigbox.three_d.forge import wire_job
+    request = job(anchors={"reviewed": Anchor(position_mm=(0,0,0), quaternion=(0,0,0,1))})
+    fixture = (ROOT / "agents/rig/rigbox/three_d/fixtures/centre.glb").read_bytes()
     calls = []
-    def handler(http_request):
-        calls.append(http_request)
-        if http_request.url.path.endswith("/artifact"):
-            return httpx.Response(200, content=b"glTF")
-        return httpx.Response(202, json=result.model_dump(mode="json"))
+    class Files:
+        async def stage(self, value):
+            assert value == request
+        async def draft(self, value):
+            assert value == request
+            return fixture
+    def handler(call):
+        calls.append(call)
+        if call.method == "POST":
+            return httpx.Response(202, json={"tenant_id": str(TENANT), "job_id": str(request.id), "status": "queued"})
+        return httpx.Response(200, json={"tenant_id": str(TENANT), "job_id": str(request.id), "status": "draft",
+            "asset_key": f"forge/{TENANT}/{request.id}/drafts/model.glb",
+            "report": {"passed": True, "checks": dict.fromkeys(["finite", "watertight", "outward", "manifold", "dimensions", "budget", "gltf_validator"], True),
+                       "bytes": len(fixture), "triangles": 12, "dimensions_mm": [160,70,110]},
+            "receipts": [{"tenant_id": str(TENANT), "task_id": str(request.id), "ledger_id": str(uuid4()),
+                          "stage": stage, "outcome": "delivered"} for stage in ("model_check", "validate", "upload")]})
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-        relay = BrainForge(client, secrets.token_urlsafe(32))
+        relay = BrainForge(client, secrets.token_urlsafe(32), Files())
         assert (await relay.submit(request)).id == request.id
-        assert (await relay.poll(request)).tenant_id == TENANT
-        assert await relay.artifact(request) == b"glTF"
-    assert json.loads(calls[0].content)["cost_cap_usd"] == 0
-    assert calls[1].url.params["tenant_id"] == str(TENANT)
+        result = await relay.poll(request)
+        artifact = await relay.artifact(request)
+        assert result.tenant_id == TENANT and check_artifact(artifact, result.report) is None
+    sent = json.loads(calls[0].content)
+    assert set(sent) == {"tenant_id", "job_id", "home_region", "method", "inputs", "unit_mm", "dimensions_mm", "max_triangles", "max_bytes", "timeout_seconds", "cost_cap_usd"}
+    assert sent["cost_cap_usd"] == "0" and sent["inputs"] == ["model.step"] and sent["method"] == "cad"
+    assert calls[1].url.params["tenant_id"] == str(TENANT) and calls[1].url.params["home_region"] == "us-east"
     assert all("x-tank-key" in call.headers and "key" not in call.url.query.decode() for call in calls)
+    for source, method in [("ai", "trellis2"), ("scan", "photogrammetry")]:
+        value = request.model_copy(update={"source": source})
+        assert wire_job(value)["method"] == method
     async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(503, text="private upstream detail"))) as client:
         with pytest.raises(RigError) as error:
-            await BrainForge(client, secrets.token_urlsafe(32)).submit(request)
+            await BrainForge(client, secrets.token_urlsafe(32), Files()).submit(request)
         assert "private upstream" not in str(error.value)
 
 
@@ -265,6 +356,35 @@ async def test_unavailable_forge_changes_nothing(rig):
         with pytest.raises(RigError):
             await engine.submit(str(TENANT), job())
     assert await pool.fetchval("SELECT count(*) FROM agent_rig.rig_3d_jobs WHERE tenant_id=$1", TENANT) == 0
+
+
+@pytest.mark.asyncio
+async def test_forge_files_are_tenant_scoped_immutable_and_us_only():
+    from rigbox.three_d.assets import ForgeFiles
+    from chassis.storage import StorageError
+    request = job()
+    paths = []
+    def handler(call):
+        paths.append(call.url.path)
+        if call.method == "PUT":
+            assert call.headers["if-none-match"] == "*"
+            assert call.url.path == f"/tervory-rig/forge/{TENANT}/{request.id}/inputs/model.step"
+            return httpx.Response(412)
+        return httpx.Response(200, content=b"same input")
+    env = {"R2_ACCOUNT_ID": uuid4().hex, "R2_ACCESS_KEY_ID_RIG": secrets.token_hex(20),
+           "R2_SECRET_ACCESS_KEY_RIG": secrets.token_hex(32)}
+    files = ForgeFiles("rig", environ=env, transport=httpx.MockTransport(handler))
+    try:
+        await files.stage(request)
+        assert paths[0] == f"/tervory-rig/us-east/{TENANT}/uploads/model.step"
+        assert await files.draft(request) == b"same input"
+        assert paths[-1] == f"/tervory-rig/forge/{TENANT}/{request.id}/drafts/model.glb"
+        count = len(paths); files.region = "za"
+        with pytest.raises(StorageError):
+            await files.stage(request)
+        assert len(paths) == count
+    finally:
+        await files.close()
 
 
 @pytest.mark.asyncio
