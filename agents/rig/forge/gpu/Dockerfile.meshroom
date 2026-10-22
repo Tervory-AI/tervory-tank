@@ -1,0 +1,14 @@
+# syntax=docker/dockerfile:1
+FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04@sha256:cff3a0d82d2c2b47bab252d67fa9b34a20ef4c50781d98501b5c7367ea9afd10
+WORKDIR /opt/forge
+COPY gpu /opt/forge/gpu
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip ca-certificates \
+      libgl1 libglib2.0-0 libx11-6 libxrender1 libxi6 libsm6 libice6 libgomp1 libfontconfig1 \
+    && python3 -m pip install --no-cache-dir --require-hashes -r gpu/meshroom-requirements.lock \
+    && python3 gpu/install_sources.py gpu/meshroom.lock.json \
+    && ln -s /usr/bin/python3 /usr/local/bin/python \
+    && rm -rf /var/lib/apt/lists/* && useradd --uid 1000 --create-home forge \
+    && chmod -R a+rX /opt/forge /opt/meshroom
+USER forge
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 QT_QPA_PLATFORM=offscreen
+CMD ["python", "/opt/forge/gpu/entrypoint.py", "photogrammetry"]

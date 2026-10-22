@@ -96,7 +96,7 @@ def test_sealed_rooms_are_marked_raw_compose(room: str) -> None:
 @pytest.mark.parametrize("room, sealed", [
     ("base", {"base-sandbox", "base-browser"}),
     ("tiger", {"tiger-browser"}),
-    ("rig", {"rig-sandbox", "rig-browser"}),
+    ("rig", {"rig-sandbox", "rig-browser", "rig-forge"}),
     # Radix is sealed on the live host today; this keeps it so.
     ("radix", {"agent-radix"}),
 ])
@@ -382,7 +382,7 @@ def test_rig_extra_network_is_a_leak_even_on_public_api(tmp_path, service):
     assert f"LEAK: riguuid-{service}-1 on unexpected" in result.stdout
 
 
-@pytest.mark.parametrize("service", ["rig-browser", "rig-sandbox", "rig-brain", "rig-browser-gateway"])
+@pytest.mark.parametrize("service", ["rig-browser", "rig-sandbox", "rig-brain", "rig-browser-gateway", "rig-forge", "rig-forge-egress"])
 def test_rig_proxy_network_is_for_the_public_api_only(tmp_path, service):
     data = json.loads((FIXTURES / "sealed.json").read_text())
     for container in data["containers"].values():
@@ -395,7 +395,7 @@ def test_rig_proxy_network_is_for_the_public_api_only(tmp_path, service):
     assert f"LEAK: riguuid-{service}-1 on 59f8cnpelzwsyte1atyjc4fv" in result.stdout
 
 
-@pytest.mark.parametrize("service", ["rig-browser", "rig-sandbox", "rig-brain", "rig-browser-gateway"])
+@pytest.mark.parametrize("service", ["rig-browser", "rig-sandbox", "rig-brain", "rig-browser-gateway", "rig-forge", "rig-forge-egress"])
 def test_rig_missing_internal_attachment_fails(tmp_path, service):
     data = json.loads((FIXTURES / "sealed.json").read_text())
     for container in data["containers"].values():
@@ -407,7 +407,7 @@ def test_rig_missing_internal_attachment_fails(tmp_path, service):
     assert result.returncode == 1 and f"NOT SEALED: riguuid-{service}-1 missing" in result.stdout
 
 
-@pytest.mark.parametrize("service", ["rig-browser", "rig-sandbox", "rig-brain", "rig-browser-gateway"])
+@pytest.mark.parametrize("service", ["rig-browser", "rig-sandbox", "rig-brain", "rig-browser-gateway", "rig-forge", "rig-forge-egress"])
 def test_rig_missing_service_cannot_claim_sealed(tmp_path, service):
     data = json.loads((FIXTURES / "sealed.json").read_text())
     data["containers"] = {k: v for k, v in data["containers"].items() if v["service"] != service}

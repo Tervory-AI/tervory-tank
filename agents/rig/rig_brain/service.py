@@ -191,3 +191,7 @@ async def cancel(task_id: uuid.UUID, tenant_id: uuid.UUID, home_region: str, x_t
         job.cancel()
         await asyncio.gather(job, return_exceptions=True)
     return {"cancelled": cancelled}
+
+# RIG-5F: private forge connection and receipt relay.
+from rig_brain.forge import router as forge_router
+app.include_router(forge_router)

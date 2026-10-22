@@ -3411,3 +3411,6 @@ app.include_router(__import__("command").router)
 
 # ACCESS-1: scoped connections and browser-only credential handoff.
 app.include_router(__import__("access").router)
+
+# RIG-5F: additive GPU reservation and receipt routes.
+app.include_router(__import__("rig_forge_routes").build_router(__import__("sys").modules[__name__]))

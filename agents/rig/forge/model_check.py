@@ -18,7 +18,7 @@ class Budget:
 
 
 def check(path: Path, *, unit_mm: float, expected_mm: tuple[float, float, float],
-          budget: Budget = Budget()) -> dict:
+          budget: Budget = Budget(), encoded_bytes: int | None = None) -> dict:
     """Check each connected shell, including small inverted parts of a large mesh.
 
     glTF coordinates are metres (unit_mm=1000); CAD/OBJ inputs explicitly declare
@@ -26,7 +26,8 @@ def check(path: Path, *, unit_mm: float, expected_mm: tuple[float, float, float]
     A failed check yields a report and cannot enter the human approval queue.
     """
     checks = {key: False for key in ("finite", "watertight", "outward", "manifold", "dimensions", "budget")}
-    report = {"passed": False, "checks": checks, "triangles": 0, "bytes": path.stat().st_size,
+    report = {"passed": False, "checks": checks, "triangles": 0,
+              "bytes": path.stat().st_size if encoded_bytes is None else encoded_bytes,
               "dimensions_mm": [], "reasons": [], "status": "rejected"}
     if not np.isfinite(unit_mm) or unit_mm <= 0:
         report["reasons"] = ["Input units must be a positive millimetre scale."]
@@ -51,7 +52,7 @@ def check(path: Path, *, unit_mm: float, expected_mm: tuple[float, float, float]
             expected.shape == (3,) and np.isfinite(expected).all()
             and np.all(expected >= budget.min_mm) and np.all(expected <= budget.max_mm)
             and np.all(extents >= budget.min_mm) and np.all(extents <= budget.max_mm)
-            and np.allclose(extents, expected, rtol=0.02, atol=0.01))
+            and np.allclose(np.sort(extents), np.sort(expected), rtol=0.02, atol=0.01))
         components = meshes.split(only_watertight=False, repair=False)
         checks["watertight"] = bool(len(components)) and all(m.is_watertight for m in components)
         checks["outward"] = bool(len(components)) and all(
