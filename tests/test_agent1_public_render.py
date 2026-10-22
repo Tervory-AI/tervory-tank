@@ -25,4 +25,4 @@ def test_example_com_through_render_with_internal_browser(capsys):
         assert result.returncode == 0, result.stdout[-5000:]
     run_browser_boundary(render_public=True)
     with capsys.disabled():
-        print("PASS: https://example.com through /render: HTTP 200, Example Domain; browser internal-only, gateway outbound corridor")
+        print("PASS: public /render respects robots.txt or returns page facts/text; browser internal-only, gateway outbound corridor")

@@ -113,6 +113,10 @@ class Service:
             # The founder's workers pause is read before taking any task. It fails closed.
             if self.control is None or await self.control.paused():
                 return
+            # The updater can request a drain while the pause check is in flight.
+            # Do not yield between this final check and marking the task running.
+            if update_pending(self.settings):
+                return
             running += 1
             self.inflight.add(task.number)
             self.jobs.append(asyncio.create_task(self._run(task)))
@@ -392,7 +396,7 @@ class Runner:
 async def serve(settings: Settings) -> None:
     install_redact()
     records: list[dict[str, Any]] = []
-    state: dict[str, Any] = {"busy": False, "issue": None}
+    inflight: set[int] = set()
     last_error = LastError()
     log.addHandler(last_error)
 
@@ -409,7 +413,7 @@ async def serve(settings: Settings) -> None:
         if method != "GET":
             body, status, kind = b"Method not allowed\n", "405 Method Not Allowed", "text/plain"
         elif path == "/health":
-            body = (json.dumps({"ok": True, "busy": bool(state["busy"])}) + "\n").encode()
+            body = (json.dumps({"ok": True, "busy": bool(inflight)}) + "\n").encode()
             status, kind = "200 OK", "application/json"
         elif path == "/workers":
             body = status_page.render(records).encode()
@@ -432,7 +436,6 @@ async def serve(settings: Settings) -> None:
     log.info("workers listening on 127.0.0.1:%s", settings.service_port)
     async with httpx.AsyncClient(timeout=60) as client:
         control = TankControl(settings, client)
-        inflight: set[int] = set()
 
         async def beat() -> None:
             while True:
@@ -454,8 +457,6 @@ async def serve(settings: Settings) -> None:
         async def refresh_view() -> None:
             while True:
                 records[:] = list(records_ref)
-                state["busy"] = bool(service.inflight)
-                state["issue"] = min(service.inflight) if service.inflight else None
                 await asyncio.sleep(1)
 
         asyncio.create_task(refresh_view())

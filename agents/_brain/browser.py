@@ -23,6 +23,9 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from brain.evidence import stage
+from brain.robots import RobotsDenied, require_allowed
+from brain.reader import read_page
 from brain.security import public_url, scope, tenant_dir
 
 app = FastAPI()
@@ -111,8 +114,10 @@ async def confirm_age(page, html: str) -> bool:
 
 async def read_pdf(context, url: str, timeout: int) -> dict:
     from pypdf import PdfReader
+    started = time.perf_counter()
     for _ in range(8):
         public_url(url)
+        await require_allowed(context, url, min(timeout, 10000))
         response = await context.request.get(url, timeout=timeout, max_redirects=0)
         if response.status in {301, 302, 303, 307, 308}:
             url = urljoin(url, response.headers.get("location", ""))
@@ -125,9 +130,139 @@ async def read_pdf(context, url: str, timeout: int) -> dict:
         reader = PdfReader(io.BytesIO(data))
         text = "\n".join((page.extract_text() or "") for page in reader.pages[:100])[:300000]
         return {"ok": True, "url": url, "status": response.status, "content_type": "application/pdf",
+                "title": str((reader.metadata or {}).get("/Title", "")), "pdf_extraction_ms": (time.perf_counter() - started) * 1000,
                 "text": text, "html": "<pre>" + html_module.escape(text) + "</pre>", "challenge": False,
-                "blocked_by_check": False, "links": []}
+                "blocked_by_check": False, "links": [
+                    {"text": "PDF link", "url": str(annotation.get_object().get("/A", {}).get("/URI", ""))}
+                    for page in reader.pages[:100] for annotation in page.get("/Annots", [])
+                    if annotation.get_object().get("/A", {}).get("/URI")], "pdf_data": data}
     raise ValueError("Too many document redirects")
+
+
+async def rendered_source(page) -> str:
+    """Remove computed CSS invisibility while keeping structured data available."""
+    return await page.evaluate(r"""() => {
+        const copy = document.documentElement.cloneNode(true);
+        const rawTextTags = new Set(['NOSCRIPT', 'TEMPLATE', 'IFRAME', 'NOEMBED', 'NOFRAMES', 'XMP']);
+        const originals = [document.documentElement, ...document.documentElement.querySelectorAll('*')];
+        const clones = [copy, ...copy.querySelectorAll('*')];
+        const pageWidth = Math.max(document.documentElement.clientWidth, document.body.clientWidth, innerWidth);
+        const pageHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight, innerHeight);
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = 1;
+        const paint = canvas.getContext('2d', {willReadFrequently: true});
+        const color = text => {
+            paint.clearRect(0, 0, 1, 1);
+            paint.fillStyle = text;
+            paint.fillRect(0, 0, 1, 1);
+            const rgba = [...paint.getImageData(0, 0, 1, 1).data];
+            return [rgba[0], rgba[1], rgba[2], rgba[3] / 255];
+        };
+        const effectiveOpacity = el => {
+            let opacity = 1;
+            for (let node = el; node; node = node.parentElement) opacity *= Number(getComputedStyle(node).opacity);
+            return opacity;
+        };
+        const background = el => {
+            let result = [0, 0, 0, 0];
+            for (let node = el; node; node = node.parentElement) {
+                if (getComputedStyle(node).backgroundImage !== 'none') return null;
+                const c = color(getComputedStyle(node).backgroundColor);
+                if (!c) continue;
+                const alpha = result[3] + c[3] * (1 - result[3]);
+                if (alpha) result = [0, 1, 2].map(i => (result[i]*result[3] + c[i]*c[3]*(1-result[3]))/alpha).concat(alpha);
+                if (alpha >= 1) break;
+            }
+            return [0, 1, 2].map(i => result[i]*result[3] + 255*(1-result[3]));
+        };
+
+        // WCAG relative luminance, with translucent ink composited over its
+        // effective background before measuring contrast.
+        const luminance = rgb => {
+            const linear = rgb.map(value => {
+                const channel = value / 255;
+                return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+            });
+            return linear[0]*0.2126 + linear[1]*0.7152 + linear[2]*0.0722;
+        };
+        const contrast = (ink, bg) => {
+            const rendered = ink.slice(0,3).map((value, j) => value*ink[3] + bg[j]*(1-ink[3]));
+            const a = luminance(rendered), b = luminance(bg);
+            return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+        };
+        const visibleText = node => {
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            return [...range.getClientRects()].some(rect => {
+                let left = rect.left, top = rect.top, right = rect.right, bottom = rect.bottom;
+                for (let parent = node.parentElement; parent; parent = parent.parentElement) {
+                    const css = getComputedStyle(parent), box = parent.getBoundingClientRect();
+                    // Scrollable text is reachable by a reader. Project its
+                    // logical extent into the scrollport before outer clipping.
+                    if (['auto', 'scroll'].includes(css.overflowX) && parent.scrollWidth > parent.clientWidth) {
+                        const start = box.left + parent.clientLeft - parent.scrollLeft;
+                        if (right <= left || right <= start || left >= start + parent.scrollWidth) return false;
+                        left = box.left + parent.clientLeft;
+                        right = left + parent.clientWidth;
+                    } else if (['hidden', 'clip'].includes(css.overflowX)) {
+                        left = Math.max(left, box.left + parent.clientLeft);
+                        right = Math.min(right, box.left + parent.clientLeft + parent.clientWidth);
+                    }
+                    if (['auto', 'scroll'].includes(css.overflowY) && parent.scrollHeight > parent.clientHeight) {
+                        const start = box.top + parent.clientTop - parent.scrollTop;
+                        if (bottom <= top || bottom <= start || top >= start + parent.scrollHeight) return false;
+                        top = box.top + parent.clientTop;
+                        bottom = top + parent.clientHeight;
+                    } else if (['hidden', 'clip'].includes(css.overflowY)) {
+                        top = Math.max(top, box.top + parent.clientTop);
+                        bottom = Math.min(bottom, box.top + parent.clientTop + parent.clientHeight);
+                    }
+                }
+                return Math.min(right, pageWidth-scrollX) > Math.max(left, -scrollX) &&
+                       Math.min(bottom, pageHeight-scrollY) > Math.max(top, -scrollY);
+            });
+        };
+        originals.forEach((el, i) => {
+            // Remove raw-text elements before serialization so embedded closing
+            // tags cannot escape a hidden subtree in the downstream parser.
+            if (rawTextTags.has(el.tagName)) { clones[i].remove(); return; }
+            if (el.closest('head') || el.tagName === 'SCRIPT') return;
+            const css = getComputedStyle(el);
+            // Contents wrappers have no box; their visible children still do.
+            const contents = css.display === 'contents';
+            const r = el.getBoundingClientRect();
+            const x = r.left + scrollX, y = r.top + scrollY;
+            let scrollableAncestor = false;
+            for (let parent = el.parentElement; parent; parent = parent.parentElement) {
+                const style = getComputedStyle(parent);
+                if ((['auto', 'scroll'].includes(style.overflowY) && parent.scrollHeight > parent.clientHeight) ||
+                    (['auto', 'scroll'].includes(style.overflowX) && parent.scrollWidth > parent.clientWidth)) scrollableAncestor = true;
+            }
+            const clipped = (css.clip !== 'auto' || css.clipPath !== 'none');
+            const tinyBox = r.width <= 1 && r.height <= 1;
+            const hiddenBox = !contents && (r.width <= 0 || r.height <= 0 || (!scrollableAncestor && (x+r.width <= 0 || y+r.height <= 0 || x >= pageWidth || y >= pageHeight)) || tinyBox);
+            const ink = color(css.webkitTextFillColor || css.color), bg = background(el);
+            const invisibleInk = ink && (ink[3] === 0 || (bg && contrast(ink, bg) < 1.2));
+            // Mark the element's own text without hiding contrasting children.
+            // Geometric/CSS invisibility applies to the whole subtree.
+            if ((!el.checkVisibility({checkOpacity:true,checkVisibilityCSS:true}) && !contents) || hiddenBox || clipped || effectiveOpacity(el) < 0.1 || el.getAttribute('aria-hidden') === 'true') {
+                clones[i].remove();
+                return;
+            }
+            const originalChildren = [...el.childNodes], copiedChildren = [...clones[i].childNodes];
+            originalChildren.forEach((node, j) => {
+                if (node.nodeType === Node.TEXT_NODE && node.textContent.trim() &&
+                    (parseFloat(css.fontSize) < 4 || invisibleInk || !visibleText(node))) copiedChildren[j].remove();
+            });
+            if (parseFloat(css.fontSize) < 4 || invisibleInk) {
+                clones[i].removeAttribute('itemprop');
+                if (clones[i].tagName === 'A') clones[i].removeAttribute('href');
+            }
+            if (clones[i].tagName === 'A' && clones[i].hasAttribute('href')) clones[i].setAttribute('href', el.href);
+        });
+        return copy.outerHTML;
+    }""")
+
 
 
 @app.get("/health")
@@ -194,6 +329,8 @@ async def visit(body, tenant, task, origin):
                       "human_handled": True, "links": []}
             if private:
                 result.update(await portal_result(item.page, policy))
+            if not private:
+                result = await public_result(item.page, result, html, directory, task)
             await dispose(handle)
             return result
     from playwright.async_api import async_playwright
@@ -213,8 +350,9 @@ async def visit(body, tenant, task, origin):
                 args=["--disable-quic", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp", "--proxy-bypass-list=<-loopback>"])
             context = await browser.new_context(storage_state=str(storage) if storage.exists() else None,
                 proxy={"server": proxy}, viewport={"width": 1280, "height": 900},
-                service_workers="block", accept_downloads=False)
+                service_workers="block", accept_downloads=False, user_agent="TervoryBase/1.0 (+https://tervory.com)")
             denied: set[str] = set()
+            await require_allowed(context, body.url, min(body.max_ms, 10000))
             async def check(route):
                 try:
                     public_url(route.request.url)
@@ -236,6 +374,13 @@ async def visit(body, tenant, task, origin):
                     denied.add("private or unsupported request")
                     await route.abort()
                     return
+                if route.request.is_navigation_request():
+                    try:
+                        await require_allowed(context, route.request.url)
+                    except RobotsDenied:
+                        denied.add('robots.txt')
+                        await route.abort()
+                        return
                 await route.continue_()
             await context.route("**/*", check)
             if urlsplit(body.url).path.lower().endswith(".pdf"):
@@ -275,13 +420,6 @@ async def visit(body, tenant, task, origin):
                         html = await page.content()
                         challenge = human_check(html) or bool(response and response.status in {401, 403, 429})
                     public_url(page.url)
-                    links = []
-                    if not challenge and not private:
-                        for item in await page.locator("a[href]").evaluate_all(
-                            "els => els.slice(0,100).map(e => ({text:e.innerText.slice(0,120),url:e.href}))"):
-                            try: public_url(item["url"])
-                            except ValueError: continue
-                            links.append(item)
                     queue = None
                     if challenge and secure and social:
                         queue = (await access_rpc(tenant, origin, "queue", reason="human_login", task_id=task or None))["queue_id"]
@@ -293,7 +431,7 @@ async def visit(body, tenant, task, origin):
                         "status": response.status if response else None, "challenge": challenge,
                         "needs_person": "needs a person" if challenge else None, "queue_id": queue,
                         "html": "" if challenge or private else html[:600000],
-                        "blocked_by_check": challenge, "denied_requests": len(denied), "links": links, "age_confirmation": clicked}
+                        "blocked_by_check": challenge, "denied_requests": len(denied), "age_confirmation": clicked}
             if private and result.get("ok") and not urlsplit(body.url).path.lower().endswith(".pdf"):
                 result.update(await portal_result(page, policy))
             if private and urlsplit(body.url).path.lower().endswith(".pdf"):
@@ -301,12 +439,20 @@ async def visit(body, tenant, task, origin):
             if private and (await access_rpc(tenant, origin, "policy"))["state"] != "allowed":
                 storage.unlink(missing_ok=True)
                 raise HTTPException(403, "Connection is no longer available.")
+            if not private:
+                result = await public_result(page if result.get('content_type') != 'application/pdf' else None,
+                                             result, html if result.get('content_type') != 'application/pdf' else '', directory, task)
             if body.screenshot and not private and not result.get("challenge") and result.get("ok"):
                 result["png_base64"] = base64.b64encode(await page.screenshot(type="png")).decode()
             return result
         except HTTPException:
             raise
-        except Exception:
+        except Exception as exc:
+            if isinstance(exc, RobotsDenied) or 'robots.txt' in locals().get('denied', set()):
+                report = read_page(body.url)
+                report['facts']['skip_reason'] = 'robots.txt'
+                result = {'ok': False, 'skipped': True, 'reason': 'robots.txt', 'page': report}
+                return result
             raise HTTPException(503, "The browser could not read this page; no result is claimed.") from None
         finally:
             if not retained:
@@ -322,6 +468,27 @@ async def visit(body, tenant, task, origin):
                     "needs_person": "needs a person" if result.get("challenge") else None,
                     "age_confirmation": bool(result.get("age_confirmation")), "ok": result.get("ok", False)}) + "\n")
             last_visit[site] = time.monotonic()
+
+
+async def public_result(page, result, html, directory, task):
+    result['evidence'] = await stage(directory.parent.parent, directory, task,
+        html=html if result.get('content_type') != 'application/pdf' else '',
+        pdf=result.pop('pdf_data', None), page=page if result.get('content_type') != 'application/pdf' else None)
+    # The rendered DOM removes CSS-hidden content before parsing; raw
+    # HTML is staged as evidence only, never included in the report.
+    extraction_started = time.perf_counter()
+    source = result.get("html", "")
+    if result.get("content_type") != "application/pdf":
+        source = await rendered_source(page)
+    result["page"] = read_page(result.get("url", ""), source,
+        text=result.get("text"), title=result.get("title", ""), links=result.get("links"), status=result.get("status"),
+        challenge=bool(result.get("challenge")))
+    result["page"]["facts"]["age_gate"] |= bool(result.get("age_confirmation"))
+    result["page"]["extraction_ms"] = round((time.perf_counter() - extraction_started) * 1000 + result.pop("pdf_extraction_ms", 0), 3)
+    result.pop("html", None)
+    result.pop("text", None)
+    result.pop("links", None)
+    return result
 
 
 # ACCESS-1. The gateway transports ciphertext; it has no copy of this key.

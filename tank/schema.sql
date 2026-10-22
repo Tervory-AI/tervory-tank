@@ -1009,6 +1009,35 @@ ALTER TABLE tank.control_log ADD COLUMN IF NOT EXISTS task text;
 ALTER TABLE tank.control_log ADD COLUMN IF NOT EXISTS path text;
 CREATE INDEX IF NOT EXISTS control_log_tenant_at ON tank.control_log (tenant_id, at DESC);
 
+-- SKALA-2: platform-scoped lifecycle receipts and single-confirmation snapshots.
+CREATE TABLE IF NOT EXISTS tank.skill_approvals (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    skill_id text NOT NULL,
+    version text NOT NULL,
+    action text NOT NULL CHECK (action IN ('approve','rollback','retire')),
+    acted_by text NOT NULL,
+    acted_at timestamptz NOT NULL DEFAULT now(),
+    previous_version text,
+    evidence jsonb NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE TABLE IF NOT EXISTS tank.skill_approval_previews (
+    token text PRIMARY KEY,
+    tenant_id uuid NOT NULL,
+    acted_by text NOT NULL,
+    items jsonb NOT NULL,
+    expires_at timestamptz NOT NULL DEFAULT now() + interval '15 minutes',
+    used_at timestamptz
+);
+CREATE TABLE IF NOT EXISTS tank.skill_source_reviews (
+    token text PRIMARY KEY,
+    tenant_id uuid NOT NULL,
+    skill_id text NOT NULL,
+    version text NOT NULL,
+    acted_by text NOT NULL,
+    package_hash text NOT NULL,
+    expires_at timestamptz NOT NULL DEFAULT now() + interval '15 minutes'
+);
 -- ---------- 21 Oct 2026: the window's turns need a platform policy ----------
 -- command.turn had no row, so every turn in /chats failed with "no policy".
 -- Tank's planning message supplies the system prompt; the founder promotes later.
@@ -1040,6 +1069,8 @@ ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS research_sources jsonb;
 -- Unknown charges on failed calls require reconciliation; they are never called free.
 ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS research_cost_status text;
 
+-- SKALA-2: a source-review confirmation can authorize only one approval.
+ALTER TABLE tank.skill_source_reviews ADD COLUMN IF NOT EXISTS used_at timestamptz;
 -- CORE-2: bounded evidence joins and the client job-completion watermark.
 CREATE INDEX IF NOT EXISTS tasks_tenant_ledger ON tank.tasks(tenant_id,ledger_id) WHERE ledger_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS tasks_tenant_finished ON tank.tasks(tenant_id,finished_at DESC) WHERE finished_at IS NOT NULL;

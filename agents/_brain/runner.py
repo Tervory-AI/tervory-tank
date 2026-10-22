@@ -19,6 +19,8 @@ from pathlib import Path
 
 import httpx
 
+from brain.reader import model_page, read_page
+
 
 def install_skills(home: Path, bundle: dict, tenant: str) -> dict:
     if bundle.get("tenant_id") != tenant or bundle.get("room") != "base" or bundle.get("region") != "us-east":
@@ -43,6 +45,10 @@ def install_skills(home: Path, bundle: dict, tenant: str) -> dict:
 
 
 def tool_result(result: dict) -> str:
+    if "page" in result:
+        return model_page(result["page"])
+    if "html" in result:
+        return model_page(read_page(result.get("url", ""), result["html"], links=result.get("links")))
     text = json.dumps(result)
     if len(text) <= 8000:
         return text
@@ -63,6 +69,9 @@ def run(work: Path) -> None:
     key = os.environ["TANK_KEY"]
     headers = {"X-Tank-Key": key, "X-Tenant-ID": tenant, "X-Task-ID": task, "X-Home-Region": "us-east"}
     receipt = {"tenant_id": tenant, "task_id": task, "steps": [], "model_receipts": []}
+    receipt["reading"] = {"pages_read": 0, "links_followed": 0, "contact_details_per_page": [], "sites_resolved": 0}
+    discovered_links: set[str] = set()
+    unresolved_ids: set[str] = set()
     pipeline_done = False
     pipeline_status = None
     retried: set[str] = set()
@@ -113,7 +122,7 @@ def run(work: Path) -> None:
             return result
 
         def dispatch(name: str, args: dict):
-            nonlocal pipeline_done, pipeline_status
+            nonlocal pipeline_done, pipeline_status, unresolved_ids
             if name != "pipeline_run" and not pipeline_done:
                 return json.dumps({"error": "Run the existing pipeline first."})
             step = {"action": name, "status": "running"}
@@ -124,6 +133,7 @@ def run(work: Path) -> None:
                     if pipeline_done:
                         raise RuntimeError("The pipeline already ran")
                     result = pipeline_api()
+                    unresolved_ids = {str(item["id"]) for item in result.get("unresolved", [])}
                     pipeline_done = True
                     pipeline_status = result["pipeline_status"]
                 elif name == "skala_run":
@@ -138,11 +148,33 @@ def run(work: Path) -> None:
                     parsed = urlsplit(args["url"])
                     step["source"] = parsed.scheme + "://" + (parsed.hostname or "refused") + parsed.path
                     result = api("POST", os.environ.get("BASE_BROWSER_URL", "http://base-browser-gateway:3000") + "/render", json={"url": args["url"]})
+                    report = result.get("page", {})
+                    counters = receipt["reading"]
+                    if result.get('skipped'):
+                        step['skipped'] = True
+                        step['reason'] = result.get('reason')
+                    else:
+                        counters['pages_read'] += 1
+                        counters['links_followed'] += int(args['url'] in discovered_links)
+                    discovered_links.update(item["url"] for item in report.get("links", []))
+                    found = len(report.get("contact_details", []))
+                    if not result.get('skipped'):
+                        counters['contact_details_per_page'].append(found)
+                    step["contact_details_found"] = found
+                    step["extraction_ms"] = report.get("extraction_ms")
+                    evidence = result.get('evidence', {})
+                    step['evidence'] = evidence
+                    if evidence.get('status') == 'pending_upload':
+                        try:
+                            archived = api('POST', os.environ.get('BASE_ROOM_URL', 'http://agent-base:8000') + '/brain/evidence',
+                                json={'tenant_id': tenant, 'task_id': task, 'evidence_id': evidence['id']})
+                            step['evidence'] = {**evidence, **archived}
+                        except Exception:
+                            step['evidence'] = {**evidence, 'status': 'upload_failed',
+                                'error': 'Evidence upload failed; local files remain within retention limits.'}
                     step["human_check"] = bool(result.get("challenge"))
                     if result.get("challenge"):
                         step["needs_person"] = "needs a person"
-                    if result.get("challenge"):
-                        result = {"human_check": True, "message": "Human check recorded. Do not solve or bypass it."}
                 elif name == "sandbox":
                     inputs = {}
                     total = 0
@@ -188,6 +220,13 @@ def run(work: Path) -> None:
                         time.sleep(2)
                         result = api("GET", retry_url, params=retry_scope)
                     pipeline_status = result["pipeline_status"]
+                    # A completed retry is counted only when the pipeline reports
+                    # a sourced resolution, not merely a browser visit.
+                    if 'unresolved' in result:
+                        remaining = {str(item['id']) for item in result['unresolved']}
+                        if result.get('pipeline_status') == 'done' and record_id in unresolved_ids and record_id not in remaining:
+                            receipt['reading']['sites_resolved'] += 1
+                        unresolved_ids = remaining
                 else:
                     raise RuntimeError("Unknown tool")
                 step["status"] = "done"

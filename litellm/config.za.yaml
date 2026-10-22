@@ -334,6 +334,327 @@ model_list:
       output_cost_per_token: 0.0000100000
       search_fee_per_request: 0.001
 
+  # ---------- MODELS-3: open-weight models via Hugging Face Inference Providers ----------
+  # One least-privilege token, HF_INFERENCE_TOKEN ("Make calls to Inference Providers" only),
+  # billed to Tervory's Hugging Face account. Not the training HF_TOKEN. Each entry pins the
+  # cheapest host that answered a live call on the build day. Hugging Face host roster prices
+  # are estimates, to be reconciled against the first Hugging Face invoice.
+  # family = the model maker (never the host); TANK_PROVIDER_ALLOW applies by model name.
+  # Route: LiteLLM's OpenAI-compatible client on the Hugging Face router (model id + ':' + host).
+  # LiteLLM v1.106.0's huggingface/ prefix prices every call at $0, which would zero the receipt;
+  # this route reaches the same router with the same token and records the cost.
+  # Bench entries only: no serving chain falls back to them and no policy row names them.
+  # Catalogue: https://huggingface.co/api/models?inference_provider=all&pipeline_tag=text-generation&author=<org>&sort=downloads
+  # Hosts and prices: https://router.huggingface.co/v1/models/<hf id> (USD per MTok), checked 2026-10-21.
+
+  # meta flagship. Host: Novita via Hugging Face. Licence: Llama 4 Community License, https://huggingface.co/meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8/blob/main/LICENSE
+  # Licence conditions: Acceptable use policy https://www.llama.com/llama4/use-policy ; licence from Meta needed above 700M MAU; show "Built with Llama"; a fine-tuned model's name must start with "Llama"; multimodal rights not granted to EU-based companies.
+  # Price checked 2026-10-21: https://router.huggingface.co/v1/models/meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
+  # USD per MTok: input $0.27, output $0.85 (novita row).
+  - model_name: llama
+    litellm_params:
+      model: openai/meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8:novita
+      api_base: https://router.huggingface.co/v1
+      api_key: os.environ/HF_INFERENCE_TOKEN
+      input_cost_per_token: 0.0000002700
+      output_cost_per_token: 0.0000008500
+    model_info:
+      input_cost_per_token: 0.0000002700
+      output_cost_per_token: 0.0000008500
+      open_weights: true
+      family: meta
+      size: flagship
+      host: novita
+      hf_model_id: meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8
+      licence: Llama 4 Community License
+      licence_url: https://huggingface.co/meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8/blob/main/LICENSE
+
+  # meta small. Host: Novita via Hugging Face. Licence: Llama 3.1 Community License, https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct/blob/main/LICENSE
+  # Licence conditions: Acceptable use policy https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct/blob/main/USE_POLICY.md ; licence from Meta needed above 700M MAU; show "Built with Llama"; a fine-tuned model's name must start with "Llama".
+  # Price checked 2026-10-21: https://router.huggingface.co/v1/models/meta-llama/Llama-3.1-8B-Instruct
+  # USD per MTok: input $0.02, output $0.05 (novita row).
+  - model_name: llama-small
+    litellm_params:
+      model: openai/meta-llama/Llama-3.1-8B-Instruct:novita
+      api_base: https://router.huggingface.co/v1
+      api_key: os.environ/HF_INFERENCE_TOKEN
+      input_cost_per_token: 0.0000000200
+      output_cost_per_token: 0.0000000500
+    model_info:
+      input_cost_per_token: 0.0000000200
+      output_cost_per_token: 0.0000000500
+      open_weights: true
+      family: meta
+      size: small
+      host: novita
+      hf_model_id: meta-llama/Llama-3.1-8B-Instruct
+      licence: Llama 3.1 Community License
+      licence_url: https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct/blob/main/LICENSE
+
+  # alibaba flagship. Host: Novita via Hugging Face. Licence: Qwen3.8-Max License, https://huggingface.co/Qwen/Qwen3.8-2.4T-A95B/blob/main/LICENSE
+  # Licence conditions: Fine-tuning and selling allowed. A Model-as-a-Service business above US$50M revenue in 12 months needs a separate Qwen licence; above 100M MAU or US$20M monthly revenue the model name must be shown.
+  # Price checked 2026-10-21: https://router.huggingface.co/v1/models/Qwen/Qwen3.8-2.4T-A95B
+  # USD per MTok: input $2, output $6 (novita row).
+  - model_name: qwen
+    litellm_params:
+      model: openai/Qwen/Qwen3.8-2.4T-A95B:novita
+      api_base: https://router.huggingface.co/v1
+      api_key: os.environ/HF_INFERENCE_TOKEN
+      input_cost_per_token: 0.0000020000
+      output_cost_per_token: 0.0000060000
+    model_info:
+      input_cost_per_token: 0.0000020000
+      output_cost_per_token: 0.0000060000
+      open_weights: true
+      family: alibaba
+      size: flagship
+      host: novita
+      hf_model_id: Qwen/Qwen3.8-2.4T-A95B
+      licence: Qwen3.8-Max License
+      licence_url: https://huggingface.co/Qwen/Qwen3.8-2.4T-A95B/blob/main/LICENSE
+
+  # alibaba small. Host: OVHcloud via Hugging Face. Licence: Apache 2.0, https://huggingface.co/Qwen/Qwen3.5-9B/blob/main/LICENSE
+  # Licence conditions: None beyond Apache 2.0 notices.
+  # Price checked 2026-10-21: https://router.huggingface.co/v1/models/Qwen/Qwen3.5-9B
+  # USD per MTok: input $0.12, output $0.18 (ovhcloud row).
+  - model_name: qwen-small
+    litellm_params:
+      model: openai/Qwen/Qwen3.5-9B:ovhcloud
+      api_base: https://router.huggingface.co/v1
+      api_key: os.environ/HF_INFERENCE_TOKEN
+      input_cost_per_token: 0.0000001200
+      output_cost_per_token: 0.0000001800
+    model_info:
+      input_cost_per_token: 0.0000001200
+      output_cost_per_token: 0.0000001800
+      open_weights: true
+      family: alibaba
+      size: small
+      host: ovhcloud
+      hf_model_id: Qwen/Qwen3.5-9B
+      licence: Apache 2.0
+      licence_url: https://huggingface.co/Qwen/Qwen3.5-9B/blob/main/LICENSE
+
+  # google flagship. Host: Novita via Hugging Face. Licence: Apache 2.0 (Gemma 4), https://ai.google.dev/gemma/docs/gemma_4_license
+  # Licence conditions: None beyond Apache 2.0 notices.
+  # Price checked 2026-10-21: https://router.huggingface.co/v1/models/google/gemma-4-31B-it
+  # USD per MTok: input $0.14, output $0.4 (novita row).
+  - model_name: gemma
+    litellm_params:
+      model: openai/google/gemma-4-31B-it:novita
+      api_base: https://router.huggingface.co/v1
+      api_key: os.environ/HF_INFERENCE_TOKEN
+      input_cost_per_token: 0.0000001400
+      output_cost_per_token: 0.0000004000
+    model_info:
+      input_cost_per_token: 0.0000001400
+      output_cost_per_token: 0.0000004000
+      open_weights: true
+      family: google
+      size: flagship
+      host: novita
+      hf_model_id: google/gemma-4-31B-it
+      licence: Apache 2.0 (Gemma 4)
+      licence_url: https://ai.google.dev/gemma/docs/gemma_4_license
+
+  # google small. Host: Novita via Hugging Face. Licence: Apache 2.0 (Gemma 4), https://ai.google.dev/gemma/docs/gemma_4_license
+  # Licence conditions: None beyond Apache 2.0 notices.
+  # Price checked 2026-10-21: https://router.huggingface.co/v1/models/google/gemma-4-26B-A4B-it
+  # USD per MTok: input $0.13, output $0.4 (novita row).
+  - model_name: gemma-small
+    litellm_params:
+      model: openai/google/gemma-4-26B-A4B-it:novita
+      api_base: https://router.huggingface.co/v1
+      api_key: os.environ/HF_INFERENCE_TOKEN
+      input_cost_per_token: 0.0000001300
+      output_cost_per_token: 0.0000004000
+    model_info:
+      input_cost_per_token: 0.0000001300
+      output_cost_per_token: 0.0000004000
+      open_weights: true
+      family: google
+      size: small
+      host: novita
+      hf_model_id: google/gemma-4-26B-A4B-it
+      licence: Apache 2.0 (Gemma 4)
+      licence_url: https://ai.google.dev/gemma/docs/gemma_4_license
+
+  # openai flagship. Host: Novita via Hugging Face. Licence: Apache 2.0, https://huggingface.co/openai/gpt-oss-120b/blob/main/LICENSE
+  # Licence conditions: Apache 2.0 plus OpenAI's gpt-oss usage policy https://huggingface.co/openai/gpt-oss-120b/blob/main/USAGE_POLICY .
+  # Price checked 2026-10-21: https://router.huggingface.co/v1/models/openai/gpt-oss-120b
+  # USD per MTok: input $0.05, output $0.25 (novita row).
+  - model_name: gpt-oss
+    litellm_params:
+      model: openai/openai/gpt-oss-120b:novita
+      api_base: https://router.huggingface.co/v1
+      api_key: os.environ/HF_INFERENCE_TOKEN
+      input_cost_per_token: 0.0000000500
+      output_cost_per_token: 0.0000002500
+    model_info:
+      input_cost_per_token: 0.0000000500
+      output_cost_per_token: 0.0000002500
+      open_weights: true
+      family: openai
+      size: flagship
+      host: novita
+      hf_model_id: openai/gpt-oss-120b
+      licence: Apache 2.0
+      licence_url: https://huggingface.co/openai/gpt-oss-120b/blob/main/LICENSE
+
+  # openai small. Host: OVHcloud via Hugging Face. Licence: Apache 2.0, https://huggingface.co/openai/gpt-oss-20b/blob/main/LICENSE
+  # Licence conditions: Apache 2.0 plus OpenAI's gpt-oss usage policy https://huggingface.co/openai/gpt-oss-20b/blob/main/USAGE_POLICY .
+  # Price checked 2026-10-21: https://router.huggingface.co/v1/models/openai/gpt-oss-20b
+  # USD per MTok: input $0.05, output $0.18 (ovhcloud row).
+  - model_name: gpt-oss-small
+    litellm_params:
+      model: openai/openai/gpt-oss-20b:ovhcloud
+      api_base: https://router.huggingface.co/v1
+      api_key: os.environ/HF_INFERENCE_TOKEN
+      input_cost_per_token: 0.0000000500
+      output_cost_per_token: 0.0000001800
+    model_info:
+      input_cost_per_token: 0.0000000500
+      output_cost_per_token: 0.0000001800
+      open_weights: true
+      family: openai
+      size: small
+      host: ovhcloud
+      hf_model_id: openai/gpt-oss-20b
+      licence: Apache 2.0
+      licence_url: https://huggingface.co/openai/gpt-oss-20b/blob/main/LICENSE
+
+  # deepseek flagship. Host: Novita via Hugging Face. Licence: MIT, https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro-0813/blob/main/LICENSE
+  # Licence conditions: None beyond MIT notice. Same weights as the deepseek-pro API entry.
+  # Price checked 2026-10-21: https://router.huggingface.co/v1/models/deepseek-ai/DeepSeek-V4-Pro-0813
+  # USD per MTok: input $1.32, output $3.96 (novita row).
+  - model_name: deepseek-open
+    litellm_params:
+      model: openai/deepseek-ai/DeepSeek-V4-Pro-0813:novita
+      api_base: https://router.huggingface.co/v1
+      api_key: os.environ/HF_INFERENCE_TOKEN
+      input_cost_per_token: 0.0000013200
+      output_cost_per_token: 0.0000039600
+    model_info:
+      input_cost_per_token: 0.0000013200
+      output_cost_per_token: 0.0000039600
+      open_weights: true
+      family: deepseek
+      size: flagship
+      host: novita
+      hf_model_id: deepseek-ai/DeepSeek-V4-Pro-0813
+      licence: MIT
+      licence_url: https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro-0813/blob/main/LICENSE
+
+  # deepseek small. Host: Novita via Hugging Face. Licence: MIT, https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/blob/main/LICENSE
+  # Licence conditions: None beyond MIT notice. Same weights as the deepseek-flash API entry.
+  # Price checked 2026-10-21: https://router.huggingface.co/v1/models/deepseek-ai/DeepSeek-V4.1-Flash-1017
+  # USD per MTok: input $0.3, output $1.2 (novita row).
+  - model_name: deepseek-open-small
+    litellm_params:
+      model: openai/deepseek-ai/DeepSeek-V4.1-Flash-1017:novita
+      api_base: https://router.huggingface.co/v1
+      api_key: os.environ/HF_INFERENCE_TOKEN
+      input_cost_per_token: 0.0000003000
+      output_cost_per_token: 0.0000012000
+    model_info:
+      input_cost_per_token: 0.0000003000
+      output_cost_per_token: 0.0000012000
+      open_weights: true
+      family: deepseek
+      size: small
+      host: novita
+      hf_model_id: deepseek-ai/DeepSeek-V4.1-Flash-1017
+      licence: MIT
+      licence_url: https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017/blob/main/LICENSE
+
+  # moonshot flagship. Host: Baseten via Hugging Face. Licence: Kimi K3 License, https://huggingface.co/moonshotai/Kimi-K3/blob/main/LICENSE
+  # Licence conditions: Fine-tuning and selling allowed. A Model-as-a-Service business above US$20M revenue in 12 months needs a separate Moonshot agreement (not when served by certified inference partners); above 100M MAU or US$20M monthly revenue "Kimi K3" must be shown.
+  # Price checked 2026-10-21: https://router.huggingface.co/v1/models/moonshotai/Kimi-K3
+  # USD per MTok: input $3, output $15 (baseten row).
+  - model_name: kimi-open
+    litellm_params:
+      model: openai/moonshotai/Kimi-K3:baseten
+      api_base: https://router.huggingface.co/v1
+      api_key: os.environ/HF_INFERENCE_TOKEN
+      input_cost_per_token: 0.0000030000
+      output_cost_per_token: 0.0000150000
+    model_info:
+      input_cost_per_token: 0.0000030000
+      output_cost_per_token: 0.0000150000
+      open_weights: true
+      family: moonshot
+      size: flagship
+      host: baseten
+      hf_model_id: moonshotai/Kimi-K3
+      licence: Kimi K3 License
+      licence_url: https://huggingface.co/moonshotai/Kimi-K3/blob/main/LICENSE
+
+  # moonshot small. Host: Novita via Hugging Face. Licence: Modified MIT, https://huggingface.co/moonshotai/Kimi-K2.6/blob/main/LICENSE
+  # Licence conditions: Above 100M MAU or US$20M monthly revenue "Kimi K2.6" must be shown. No smaller Kimi is served; K2.6 is the cheaper previous generation.
+  # Price checked 2026-10-21: https://router.huggingface.co/v1/models/moonshotai/Kimi-K2.6
+  # USD per MTok: input $0.8, output $3.4 (novita row).
+  - model_name: kimi-open-small
+    litellm_params:
+      model: openai/moonshotai/Kimi-K2.6:novita
+      api_base: https://router.huggingface.co/v1
+      api_key: os.environ/HF_INFERENCE_TOKEN
+      input_cost_per_token: 0.0000008000
+      output_cost_per_token: 0.0000034000
+    model_info:
+      input_cost_per_token: 0.0000008000
+      output_cost_per_token: 0.0000034000
+      open_weights: true
+      family: moonshot
+      size: small
+      host: novita
+      hf_model_id: moonshotai/Kimi-K2.6
+      licence: Modified MIT
+      licence_url: https://huggingface.co/moonshotai/Kimi-K2.6/blob/main/LICENSE
+
+  # zhipu flagship. Host: Novita via Hugging Face. Licence: GLM-5.3 License, https://huggingface.co/zai-org/GLM-5.3/blob/main/LICENSE
+  # Licence conditions: Fine-tuning and selling allowed. A Model-as-a-Service business above US$10B revenue in 12 months must pass Z.AI's security review.
+  # Price checked 2026-10-21: https://router.huggingface.co/v1/models/zai-org/GLM-5.3
+  # USD per MTok: input $1.4, output $4.4 (novita row).
+  - model_name: glm
+    litellm_params:
+      model: openai/zai-org/GLM-5.3:novita
+      api_base: https://router.huggingface.co/v1
+      api_key: os.environ/HF_INFERENCE_TOKEN
+      input_cost_per_token: 0.0000014000
+      output_cost_per_token: 0.0000044000
+    model_info:
+      input_cost_per_token: 0.0000014000
+      output_cost_per_token: 0.0000044000
+      open_weights: true
+      family: zhipu
+      size: flagship
+      host: novita
+      hf_model_id: zai-org/GLM-5.3
+      licence: GLM-5.3 License
+      licence_url: https://huggingface.co/zai-org/GLM-5.3/blob/main/LICENSE
+
+  # zhipu small. Host: Novita via Hugging Face. Licence: MIT, https://huggingface.co/zai-org/GLM-5.3-Flash/blob/main/LICENSE
+  # Licence conditions: None beyond MIT notice.
+  # Price checked 2026-10-21: https://router.huggingface.co/v1/models/zai-org/GLM-5.3-Flash
+  # USD per MTok: input $0.15, output $0.5 (novita row).
+  - model_name: glm-small
+    litellm_params:
+      model: openai/zai-org/GLM-5.3-Flash:novita
+      api_base: https://router.huggingface.co/v1
+      api_key: os.environ/HF_INFERENCE_TOKEN
+      input_cost_per_token: 0.0000001500
+      output_cost_per_token: 0.0000005000
+    model_info:
+      input_cost_per_token: 0.0000001500
+      output_cost_per_token: 0.0000005000
+      open_weights: true
+      family: zhipu
+      size: small
+      host: novita
+      hf_model_id: zai-org/GLM-5.3-Flash
+      licence: MIT
+      licence_url: https://huggingface.co/zai-org/GLM-5.3-Flash/blob/main/LICENSE
+
 litellm_settings:
   drop_params: true
   set_verbose: false
@@ -372,6 +693,22 @@ litellm_settings:
     - research-low: ["research-medium", "research-fast", "research-high"]
     - research-medium: ["research-low", "research-fast", "research-high"]
     - research-high: ["research-low", "research-medium", "research-fast"]
+
+    # MODELS-3 open-weight bench entries: fall back to existing serving models only, cheapest first.
+    - llama: ["luna", "haiku", "flash-lite", "grok", "flash"]
+    - llama-small: ["luna", "haiku", "flash-lite", "grok", "flash"]
+    - qwen: ["grok-top", "sol", "argon", "sonnet"]
+    - qwen-small: ["luna", "haiku", "flash-lite", "grok", "flash"]
+    - gemma: ["luna", "haiku", "flash-lite", "grok", "flash"]
+    - gemma-small: ["luna", "haiku", "flash-lite", "grok", "flash"]
+    - gpt-oss: ["luna", "haiku", "flash-lite", "grok", "flash"]
+    - gpt-oss-small: ["luna", "haiku", "flash-lite", "grok", "flash"]
+    - deepseek-open: ["grok-top", "sol", "argon", "sonnet"]
+    - deepseek-open-small: ["luna", "haiku", "flash-lite", "grok", "flash"]
+    - kimi-open: ["grok-top", "sol", "argon", "sonnet"]
+    - kimi-open-small: ["grok-top", "sol", "argon", "sonnet"]
+    - glm: ["grok-top", "sol", "argon", "sonnet"]
+    - glm-small: ["luna", "haiku", "flash-lite", "grok", "flash"]
 
 router_settings:
   allowed_fails: 1          # one refusal (no credit / bad key) and that model is skipped...

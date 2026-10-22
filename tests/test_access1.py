@@ -247,7 +247,9 @@ def test_separate_browser_keys_and_volumes_are_not_in_brains():
             assert ("ACCESS_BROWSER_KEY_" + room.upper() in env) == (name == room + "-browser")
             assert "TANK_VAULT_KEY" not in env
             assert "ACCESS_BROWSER_KEY" not in env
-            if name != room + "-browser": assert not any("browser_data" in v for v in service.get("volumes", []))
+            if name != room + "-browser":
+                browser_mounts = [v for v in service.get("volumes", []) if "browser_data" in v]
+                assert browser_mounts == (["base_browser_data:/browser-evidence"] if room == "base" and name == "agent-base" else [])
 
 
 def test_browser_envelope_interoperates_with_tank(keys):
@@ -265,7 +267,8 @@ async def test_hand_back_preserves_same_live_page(keys, monkeypatch, tmp_path):
     monkeypatch.setattr(browser, "access_rpc", rpc)
     async def content(): return "<p>The check is complete</p>"
     async def state(**kwargs): events.append("cookies saved")
-    item = browser.LivePage(tenant, site, SimpleNamespace(content=content), SimpleNamespace(storage_state=state), None, None,
+    async def evaluate(*args): return await content()
+    item = browser.LivePage(tenant, site, SimpleNamespace(content=content, evaluate=evaluate), SimpleNamespace(storage_state=state), None, None,
                             tmp_path / "cookies", site, "", {"human": True})
     monkeypatch.setattr(browser, "held", {handle: item}); monkeypatch.setattr(browser, "access_locks", {})
     payload = vault.envelope("base", "control", {"action": "live", "tenant_id": tenant, "site": site, "handle": handle,
@@ -411,7 +414,8 @@ async def test_handed_back_content_is_only_returned_for_its_requested_page(keys,
     async def rpc(*args, **kwargs): return {"state": "public"}
     monkeypatch.setattr(browser, "access_rpc", rpc)
     async def content(): return "Only the original product"
-    item = browser.LivePage(tenant, site, SimpleNamespace(content=content), None, None, None,
+    async def evaluate(*args): return await content()
+    item = browser.LivePage(tenant, site, SimpleNamespace(content=content, evaluate=evaluate), None, None, None,
                            tmp_path / "cookies", site + "/original", "", {}, ready=True)
     monkeypatch.setattr(browser, "held", {handle: item})
     disposed = []
@@ -426,7 +430,8 @@ async def test_handed_back_content_is_only_returned_for_its_requested_page(keys,
     body = browser.Page(url=site + ("/original" if same_page else "/another"))
     if same_page:
         result = await browser.visit(body, tenant, "", site)
-        assert result["html"] == "Only the original product" and result["human_handled"]
+        assert result["page"]["text"] == "Only the original product" and result["human_handled"]
+        assert "html" not in result
     else:
         with pytest.raises(NewPageRequested): await browser.visit(body, tenant, "", site)
     assert disposed == [handle]
