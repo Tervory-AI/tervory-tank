@@ -75,6 +75,54 @@
    "networks": [
     "tigeruuid"
    ]
+  },
+  "rig-agent-rig": {
+   "uuid": "riguuid",
+   "service": "agent-rig",
+   "name": "riguuid-agent-rig-1",
+   "project": "riguuid",
+   "networks": [
+    "tervory-gw-rig",
+    "59f8cnpelzwsyte1atyjc4fv"
+   ]
+  },
+  "rig-rig-brain": {
+   "uuid": "riguuid",
+   "service": "rig-brain",
+   "name": "riguuid-rig-brain-1",
+   "project": "riguuid",
+   "networks": [
+    "tervory-gw-rig",
+    "riguuid_sandbox"
+   ]
+  },
+  "rig-rig-sandbox": {
+   "uuid": "riguuid",
+   "service": "rig-sandbox",
+   "name": "riguuid-rig-sandbox-1",
+   "project": "riguuid",
+   "networks": [
+    "riguuid_sandbox"
+   ]
+  },
+  "rig-rig-browser": {
+   "uuid": "riguuid",
+   "service": "rig-browser",
+   "name": "riguuid-rig-browser-1",
+   "project": "riguuid",
+   "networks": [
+    "riguuid_browser"
+   ]
+  },
+  "rig-rig-browser-gateway": {
+   "uuid": "riguuid",
+   "service": "rig-browser-gateway",
+   "name": "riguuid-rig-browser-gateway-1",
+   "project": "riguuid",
+   "networks": [
+    "tervory-gw-rig",
+    "riguuid_browser"
+   ]
   }
  },
  "networks": {
@@ -86,6 +134,10 @@
   "baseuuid_browser": true,
   "radixuuid_proxy-link": true,
   "radixuuid_egress": false,
-  "tigeruuid": false
+  "tigeruuid": false,
+  "tervory-gw-rig": false,
+  "riguuid_sandbox": true,
+  "riguuid_browser": true,
+  "59f8cnpelzwsyte1atyjc4fv": false
  }
 }

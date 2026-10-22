@@ -44,7 +44,7 @@ def file_path(work: Path, name: str) -> Path:
 
 @app.get("/health")
 async def health():
-    return {"ok": True, "room": "base", "backend": "sibling-exec", "runtime": "cpython-wasi"}
+    return {"ok": True, "room": os.environ.get("BRAIN_ROOM", "base"), "backend": "sibling-exec", "runtime": "cpython-wasi"}
 
 
 @app.post("/exec")

@@ -1,4 +1,4 @@
-"""Base's Hermes boundary: room authentication, chat receipts and Skala exchange.
+"""Hermes room boundary: room authentication, chat receipts and Skala exchange.
 
 There is deliberately no second skill runner or approval endpoint here.
 """
@@ -36,16 +36,16 @@ VALUES ($1,$2,$3,'base','agent.base.think',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
 
 
 def room_key(room: str, authorization: str = "", x_tank_key: str = "") -> None:
-    """Only Base is piloting. Never accept the Workspace or another room's key."""
-    if room != ROOM:
+    """Only enabled rooms. Never accept the Workspace or another room's key."""
+    if room not in {"base", "rig"}:
         raise HTTPException(403, "This room does not have a brain pilot.")
     bearer = authorization.removeprefix("Bearer ") if authorization.startswith("Bearer ") else ""
     if bearer and x_tank_key and not hmac.compare_digest(bearer.encode(), x_tank_key.encode()):
         raise HTTPException(401, "Conflicting room keys.")
     presented = bearer or x_tank_key
-    expected = os.environ.get("TANK_KEY_BASE", "").strip()
+    expected = os.environ.get("TANK_KEY_" + room.upper(), "").strip()
     if not expected or not presented or not hmac.compare_digest(expected.encode(), presented.encode()):
-        raise HTTPException(401, "Base room key required.")
+        raise HTTPException(401, "Owning room key required.")
 
 
 def local_region(tank: Any, home: str | None) -> str:
@@ -143,10 +143,13 @@ def input_tokens(payload: dict) -> int:
     return math.ceil(count * 1.2) + 32 * len(payload.get("messages", []))
 
 
-async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | None, region: str) -> dict:
+async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | None, region: str, *, room: str = ROOM) -> dict:
+    if room not in {"base", "rig"}:
+        raise HTTPException(403, "Room is not enabled.")
+    task_type = f"agent.{room}.think"
     validate_chat(body)
-    await controls.refuse_paid(task="agent.base.think", path="agent.chat")
-    policy = await tank.load_policy("agent.base.think", tenant)
+    await controls.refuse_paid(task=task_type, path="agent.chat")
+    policy = await tank.load_policy(task_type, tenant)
     model = policy["model"]
     if tank.graduate.router_cannot_serve(model):
         raise HTTPException(409, "The brain needs a model policy.")
@@ -172,7 +175,7 @@ async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | N
         text.append(content if isinstance(content, str) else "\n".join(part["text"] for part in content or []))
         text.extend(call["function"]["arguments"] for call in message.get("tool_calls", []))
     refusal = tank.model_call_refusal("\n".join(text), model,
-        box=region, tenant_id=str(tenant), task_type="agent.base.think", caller=ROOM)
+        box=region, tenant_id=str(tenant), task_type=task_type, caller=room)
     if refusal:
         raise HTTPException(403, refusal)
     # Policy chooses the route; a model name in an SDK request cannot override it.
@@ -182,10 +185,10 @@ async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | N
     # Match Hermes' minimum 64k context, reserving the requested output budget.
     upper_input = input_tokens(payload)
     if upper_input > min(int(policy.get("max_tokens_in") or 64000), 64000 - payload["max_tokens"]):
-        raise HTTPException(413, "Conversation exceeds Base's input-token budget.")
+        raise HTTPException(413, "Conversation exceeds The brain's input-token budget.")
     roster = await tank._roster_models()
     if baseline_cost(roster, model, 1, 1) is None:
-        raise HTTPException(503, "Base's policy model needs roster prices before it can be called.")
+        raise HTTPException(503, "The brain's policy model needs roster prices before it can be called.")
     ledger_id = uuid.uuid4()
     started = time.perf_counter()
     outcome, error, cost = "failed", "Model gateway unavailable.", 0.0
@@ -248,28 +251,28 @@ async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | N
     family = book.get(answered, {}).get("family")
     async with tank.pool().acquire() as conn:
         baseline = await conn.fetchval("""SELECT coalesce(
-            (SELECT override_model FROM tank.baseline_settings WHERE task_type='agent.base.think'),
-            tank.standard_model_for($1::text))""", family)
+            (SELECT override_model FROM tank.baseline_settings WHERE task_type=$2),
+            tank.standard_model_for($1::text))""", family, task_type)
     baseline_usd = (baseline_cost(roster, baseline, tokens_in, tokens_out)
                     if family and book.get(baseline, {}).get("family") == family else None)
     receipt = {
         "ledger_id": str(ledger_id), "tenant_id": str(tenant), "task_id": str(task) if task else None,
-        "room": ROOM, "task_type": "agent.base.think", "region": region, "model": answered,
+        "room": room, "task_type": task_type, "region": region, "model": answered,
         "cost_usd": cost, "cost_status": cost_status, "baseline_model": baseline, "baseline_cost_usd": baseline_usd,
         "saving_usd": None if baseline_usd is None or cost is None else baseline_usd - cost,
         "tokens_in": tokens_in, "tokens_out": tokens_out, "latency_ms": latency, "outcome": outcome,
     }
     async with tank.pool().acquire() as conn:
         async with conn.transaction():
-            await conn.execute(LEDGER_SQL, ledger_id, tenant, region, policy["rung"], answered, policy["priority"],
+            await conn.execute(LEDGER_SQL.replace("'base'", "'" + room + "'").replace("agent.base.think", task_type), ledger_id, tenant, region, policy["rung"], answered, policy["priority"],
                                tokens_in, tokens_out, cost, latency, outcome, task, error)
             await conn.execute(
                 "INSERT INTO tank.transcripts (ledger_id,tenant_id,task_type,messages,content) "
-                "VALUES ($1,$2,'agent.base.think',$3::jsonb,$4)", ledger_id, tenant, json.dumps(messages),
+                f"VALUES ($1,$2,'{task_type}',$3::jsonb,$4)", ledger_id, tenant, json.dumps(messages),
                 json.dumps(data.get("choices", [])) if data else "Model call failed.",
             )
             await conn.execute(
-                "INSERT INTO tank.agent_receipts (ledger_id,tenant_id,room,receipt) VALUES ($1,$2,'base',$3::jsonb)",
+                f"INSERT INTO tank.agent_receipts (ledger_id,tenant_id,room,receipt) VALUES ($1,$2,'{room}',$3::jsonb)",
                 ledger_id, tenant, json.dumps(receipt),
             )
     if outcome != "delivered":
@@ -424,18 +427,20 @@ async def restore(tank: Any) -> None:
             log.warning("Base submission availability update deferred")
 
 
-async def export_skills(tank: Any, tenant: uuid.UUID, region: str) -> dict:
+async def export_skills(tank: Any, tenant: uuid.UUID, region: str, *, room: str = ROOM) -> dict:
+    if room not in {"base", "rig"}:
+        raise HTTPException(403, "Room is not enabled.")
     async with tank.pool().acquire() as conn:
         rows = await conn.fetch(
             "SELECT s.id,s.version FROM tank.skills s LEFT JOIN tank.agent_skill_submissions a "
             "ON a.skill_id=s.id AND a.version=s.version "
-            "WHERE s.agent='base' AND s.state='approved' AND s.present "
+            f"WHERE s.agent='{room}' AND s.state='approved' AND s.present "
             "AND (a.skill_id IS NULL OR (a.tenant_id=$1 AND a.region=$2)) ORDER BY s.id,s.version", tenant, region,
         )
     skills = []
     for row in rows:
         pkg = tank.get_package(row["id"], row["version"])
-        if pkg.agent != ROOM:
+        if pkg.agent != room:
             raise HTTPException(409, "Skill ownership does not match the registry.")
         name = pkg.id.replace(".", "-").replace("_", "-")[:40] + "-v" + pkg.version.replace(".", "-")
         # Export instructions and schemas, never executable source into Hermes.
@@ -447,9 +452,9 @@ async def export_skills(tank: Any, tenant: uuid.UUID, region: str) -> dict:
             text += source.split("---", 2)[-1] if source.startswith("---") else source
         text += "\nExecute through skala_run with skill_id=" + pkg.id + " and version=" + pkg.version + ".\n"
         text += "Input schema:\n```json\n" + json.dumps(pkg.input_schema) + "\n```\n"
-        skills.append({"id": pkg.id, "version": pkg.version, "state": "approved", "agent": ROOM,
+        skills.append({"id": pkg.id, "version": pkg.version, "state": "approved", "agent": room,
                        "name": name, "files": {"SKILL.md": text}, "input_schema": pkg.input_schema})
-    return {"tenant_id": str(tenant), "room": ROOM, "region": region, "skills": skills}
+    return {"tenant_id": str(tenant), "room": room, "region": region, "skills": skills}
 
 
 class BaseSkillHTTP:
@@ -508,11 +513,13 @@ def build_router(tank: Any) -> APIRouter:
     @router.get("/v1/agents/{room}/skills")
     async def approved(room: str, tenant_id: uuid.UUID, request: Request, home_region: str = "us-east"):
         room_key(room, request.headers.get("authorization", ""), request.headers.get("x-tank-key", ""))
-        return await export_skills(tank, tenant_id, local_region(tank, home_region))
+        return await export_skills(tank, tenant_id, local_region(tank, home_region), room=room)
 
     @router.post("/v1/agents/{room}/skills/candidates", status_code=201)
     async def candidate(room: str, body: Candidate, request: Request):
         room_key(room, request.headers.get("authorization", ""), request.headers.get("x-tank-key", ""))
+        if room != ROOM:
+            raise HTTPException(403, "Skill submission is not enabled for this room.")
         return await submit(tank, body)
 
     @router.get("/v1/agents/{room}/receipts")
@@ -522,7 +529,7 @@ def build_router(tank: Any) -> APIRouter:
         async with tank.pool().acquire() as conn:
             rows = await conn.fetch(
                 "SELECT r.receipt FROM tank.agent_receipts r JOIN tank.ledger l ON l.id=r.ledger_id "
-                "WHERE r.tenant_id=$1 AND l.tenant_id=$1 AND l.task_id=$2 AND r.room='base' ORDER BY r.created_at", tenant_id, task_id)
+                f"WHERE r.tenant_id=$1 AND l.tenant_id=$1 AND l.task_id=$2 AND r.room='{room}' ORDER BY r.created_at", tenant_id, task_id)
         return {"receipts": [json.loads(r["receipt"]) if isinstance(r["receipt"], str) else r["receipt"] for r in rows]}
 
     @router.post("/v1/agents/{room}/chat/completions")
@@ -530,7 +537,7 @@ def build_router(tank: Any) -> APIRouter:
                    x_tenant_id: uuid.UUID = Header(), x_task_id: uuid.UUID | None = Header(default=None),
                    x_home_region: str | None = Header(default=None)):
         room_key(room, request.headers.get("authorization", ""), request.headers.get("x-tank-key", ""))
-        result = await complete(tank, body, x_tenant_id, x_task_id, local_region(tank, x_home_region))
+        result = await complete(tank, body, x_tenant_id, x_task_id, local_region(tank, x_home_region), room=room)
         if body.stream:
             return StreamingResponse(stream_completion(result), media_type="text/event-stream")
         return result
