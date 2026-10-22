@@ -3,10 +3,17 @@
 The production room uses `QuoteService` with `PgQuotes` and `RetailerHandoff`.
 The existing quote row, its delivery state and its anonymous quote count are
 inserted in one transaction before any outbound call. The browser sees a
-reference and `delivery: pending|sending|sent`. A failed or unconfigured handoff
+reference and `delivery: pending|sending|sent|needs_person`. A failed or unconfigured handoff
 stays pending, keeps `sent_at` empty and shows a clear pending message.
 
-The room retries up to 25 pending requests per tenant every five minutes.
+The room checks up to 25 due requests per tenant every five minutes. A discovery
+job refreshes retailer schedules every five minutes, including tenants added
+after startup. Failures back off by 5, 10, 20, 40 and 80 minutes. The sixth failed
+attempt stops automatic delivery and exposes `needs_person`; a crash during the
+last attempt also stops after its lease expires. The delivery row keeps the
+fixed error code, attempt count, and next due time. An admin can use `/retry` to
+bring a due time forward without resetting the budget, or explicitly `/resume`
+after investigating a stopped request to allow a new six-attempt budget.
 Claims are atomic across workers. A 60-second send timeout is shorter than the
 five-minute crash-recovery lease. Odoo reconciles `client_order_ref` before
 creating another order; webhooks must honor `Idempotency-Key`. No errors, URLs,
@@ -38,8 +45,15 @@ Additional retailers can select distinct `RIG_ODOO_<RETAILER>` prefixes. Expose
 their corresponding variables to the room through Coolify/Compose when adding
 them; never put credential values in the mapping, catalogue or widget.
 
-The adapter follows Odoo's [external RPC API](https://www.odoo.com/documentation/19.0/developer/reference/external_rpc_api.html):
-`/jsonrpc`, `common.authenticate`, then `object.execute_kw`. The Odoo plan must
+The adapter supports **Odoo 16, 17 and 18**, using the
+[external RPC API](https://www.odoo.com/documentation/18.0/developer/reference/external_api.html):
+`/jsonrpc`, `common.version`, `common.authenticate`, then `object.execute_kw`.
+The version is checked before authentication or mutations. Other versions fail
+closed with `odoo_version_unsupported`. **Odoo 19 is not supported**: it renamed
+`tax_id` to `tax_ids`; the legacy RPC endpoints are deprecated and scheduled for
+removal. Supporting 19+ requires a separately reviewed JSON-2 adapter
+and tax-field mapping. Versioned stubs cover 16–18 and rejection of 19; this is
+not a claim of live validation against each Odoo deployment. The Odoo plan must
 support external API access. The integration user needs partner/product reads,
 partner creation and draft sale-order creation. Product internal references
 (`product.product.default_code`) must match Rig SKUs uniquely. A pricelist in
@@ -66,8 +80,39 @@ The widget repo's `scripts/package-widget.mjs` packages its verified UMD into
 `quotes/widget/`. The current manifest selects the bundle served at
 `/widget/assets/<content hash>.umd.js`. SHA-256 and the 150 KB gzip budget are
 checked before serving. Assets have immutable caching; the manifest is uncached.
+The test page serves Barlow Condensed 600 and Inter 400/500/600 locally from
+`/widget/fonts/`. The WOFF2 assets are from Fontsource 5.3.0 under the adjacent
+SIL Open Font Licenses; they add no external font dependency to the test page.
+
 No change to the existing Dockerfile COPY line is needed: `rigbox` is already
 copied in full. `/widget/test` is unavailable until its publishable key is set.
+
+## Rate limits and settled searches
+
+Public requests use Postgres fixed-minute counters shared across replicas and
+restarts. Limits apply to the tenant, client address and normalized route (all
+product IDs share the same route budget). Each client gets 60 requests/minute
+per browsing route, 10 for Ask, and a separate **combined 5 quote/link-quote**
+budget. Tenant ceilings are 6000 browsing and 600 quote requests/minute. A
+rejected client does not consume the tenant ceiling. HTTP 429 includes
+`Retry-After`, exposed through CORS. These are abuse controls, not visitor
+analytics; clients sharing a public address share its allowance.
+
+`RIG_TRUSTED_PROXY_CIDRS` is empty by default. Configure only the actual trusted
+reverse-proxy peer addresses/networks in Coolify. Forwarded headers from other
+peers are ignored; trusted chains are walked from right to left. Never trust all
+addresses or let the ASGI server trust arbitrary forwarded headers. Raw IPs are
+never stored. The HMAC salt rotates per tenant/minute, preventing joins across
+windows; counters/salts expire after the current and previous minute. The
+periodic discovery job also removes inactive retailers' expired counters.
+
+Typeahead GETs do not increment analytics. The widget posts a one-off UUID and
+`no_results` flag to `POST /v1/rig/search-events` after 750ms without another edit
+following the successful response, or on explicit submit/product selection.
+The server counts a receipt once per tenant for 24 hours, then discards it;
+aggregate daily counts remain. There is no query, cookie, visitor ID or contact
+in this receipt. These are client-reported usage counts, not billing records.
+Existing tenant-scoped search recall remains separate.
 
 ## Cloud development and checks
 
@@ -111,9 +156,16 @@ Set `RIG_SCREENSHOT_DIR` to retain the 390px/1440px browser screenshots.
 4. Check the client portal webhook received the same reference (combined flow),
    and that the configured portal link opens without contact data in its URL.
 5. With the tenant's admin key, read `GET /v1/rig/admin/analytics`. The five daily
-   counts must increase for the corresponding actions. Opening a swap picker
+   counts must increase for the corresponding actions. Type several characters
+   with pauses shorter than one second: only the settled search should count. Opening a swap picker
    alone must not increment swaps. Shopper keys cannot read these counts.
 6. For a failed test delivery, inspect
    `GET /v1/rig/admin/quotes/<id>/delivery`, fix configuration, then use
    `POST /v1/rig/admin/quotes/<id>/retry` or wait for the scheduled retry. There
-   must still be only one Odoo order for that reference.
+   must still be only one Odoo order for that reference. After six failures,
+   verify `needs_person` and no further automatic attempts; use `/resume` only
+   after fixing the cause. Add a new test retailer after startup and verify its
+   `retry_quotes` row in `agent_rig.schedules` appears on the next discovery tick.
+7. With a test publishable key, exhaust one client’s browse allowance: another
+   client and the first client’s quote allowance must still work. Verify 429
+   exposes `Retry-After`, and that restart/replica traffic shares the budget.

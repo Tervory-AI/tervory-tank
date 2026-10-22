@@ -98,7 +98,7 @@ class PgRateLimits:
         retry_after = 60
         try:
             async with self.pool.acquire() as conn, conn.transaction():
-                now = int(await conn.fetchval("SELECT extract(epoch FROM clock_timestamp())::bigint"))
+                now = int(await conn.fetchval("SELECT floor(extract(epoch FROM clock_timestamp()))::bigint"))
                 window = now // 60
                 retry_after = 60 - now % 60
                 await conn.execute("""DELETE FROM agent_rig.rate_windows

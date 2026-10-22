@@ -35,6 +35,12 @@ def test_packaged_bundle_and_configured_test_page(monkeypatch):
         assert page.status_code == 200 and 'theme="custom-nation"' in page.text
         assert 'api-base=""' in page.text and 'api-base="mock"' not in page.text
         assert name in page.text and page.headers["Cache-Control"] == "no-store"
+        assert 'fonts="/widget/fonts/custom-nation.css"' in page.text
+        css = client.get("/widget/fonts/custom-nation.css")
+        assert css.status_code == 200 and "Barlow Condensed" in css.text
+        font = client.get("/widget/fonts/barlow-condensed-latin-600-normal.woff2")
+        assert font.status_code == 200 and font.content.startswith(b"wOF2")
+        assert client.get("/widget/fonts/hosting.py").status_code == 404
 
 
 def test_corruption_and_unknown_paths_fail_closed(tmp_path, monkeypatch):

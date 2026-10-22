@@ -5,6 +5,7 @@ from datetime import date
 import json
 from pathlib import Path
 import sys
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -39,6 +40,7 @@ class OdooStub:
         self.orders = []
         self.fail_after_create = False
         self.missing_product = False
+        self.version = 17
 
     def __call__(self, request):
         assert request.url.path == "/jsonrpc"
@@ -46,6 +48,8 @@ class OdooStub:
         assert body["jsonrpc"] == "2.0" and body["method"] == "call"
         params = body["params"]
         if params["service"] == "common":
+            if params["method"] == "version":
+                return httpx.Response(200, json={"result": {"server_version_info": [self.version, 0, 0]}})
             assert params["method"] == "authenticate"
             return httpx.Response(200, json={"result": 7})
         assert params["method"] == "execute_kw"
@@ -106,6 +110,8 @@ async def test_missing_configuration_is_stored_pending_and_can_be_retried(monkey
     assert (await rig.store.quotes_for(TENANT))[0]["sent_at"] is None
     assert (await rig.quote_store.status(TENANT, ack["request_id"]))["error"] == "not_configured"
     rig.handoff = RecordingHandoff()
+    assert not await rig.quote_store.pending(TENANT)
+    await rig.quote_store.retry_now(TENANT, ack["request_id"])
     await asyncio.gather(rig.deliver(TENANT, ack["request_id"]), rig.deliver(TENANT, ack["request_id"]))
     assert len(rig.handoff.sent) == 1
     assert (await rig.quote_store.status(TENANT, ack["request_id"]))["status"] == "sent"
@@ -120,6 +126,7 @@ async def test_odoo_draft_uses_server_price_and_reconciles_timeout():
         rig = await service(adapter(http))
         ack = await rig.quote(TENANT, {"product_id": "CORE-1", "contact": CONTACT})
         assert ack["delivery"] == "pending"
+        await rig.quote_store.retry_now(TENANT, ack["request_id"])
         await rig.retry_pending(TENANT)
         assert (await rig.quote_store.status(TENANT, ack["request_id"]))["status"] == "sent"
     assert len(stub.orders) == 1
@@ -209,6 +216,11 @@ def test_http_flow_counts_and_admin_isolation():
         assert all(word not in found.text for word in ("supplier_cost", "pricing_rule", '"duty"', '"margin"', '"vat"'))
         empty = client.get("/v1/rig/search?q=zzzzzzzzzzzzzz", headers=headers)
         assert empty.json()["results"] == []
+        assert client.get("/v1/rig/admin/analytics", headers=admin).json()["counts"]["searches"] == 0
+        for no_results in (False, True):
+            body = {"event_id": str(uuid4()), "no_results": no_results}
+            assert client.post("/v1/rig/search-events", headers=headers, json=body).json() == {"counted": True}
+            assert client.post("/v1/rig/search-events", headers=headers, json=body).json() == {"counted": False}
         setup = client.post("/v1/rig/setups", headers=headers, json={"product_id": "CORE-1"}).json()["setups"][0]
         swap = client.post("/v1/rig/swap", headers=headers, json={"setup": setup, "role": "Part"}).json()
         assert [p["id"] for p in swap["options"]] == ["PART-B"]
@@ -240,3 +252,56 @@ def test_http_flow_counts_and_admin_isolation():
             json={"origins": ["https://["]}).status_code == 422
         assert client.post("/v1/rig/link-quote", headers=headers,
             json={"url": "https://[", "contact": CONTACT}).status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_delivery_backoff_stops_and_only_explicit_resume_reopens_budget():
+    now = [1000.0]
+    rig = await service(RetailerHandoff(None))
+    rig.quote_store.clock = lambda: now[0]
+    ack = await rig.quote(TENANT, {"product_id": "CORE-1", "contact": CONTACT})
+    qid = ack["request_id"]
+    for attempt in range(1, 6):
+        state = await rig.quote_store.status(TENANT, qid)
+        assert state["attempts"] == attempt
+        assert not await rig.quote_store.pending(TENANT)
+        now[0] += 300 * 2 ** (attempt - 1)
+        assert await rig.quote_store.pending(TENANT) == [qid]
+        await rig.retry_pending(TENANT)
+    state = await rig.quote_store.status(TENANT, qid)
+    assert state == {"status": "needs_person", "error": "not_configured", "attempts": 6, "next_attempt_at": None}
+    await rig.quote_store.retry_now(TENANT, qid)
+    now[0] += 86400
+    await rig.retry_pending(TENANT)
+    assert (await rig.quote_store.status(TENANT, qid))["attempts"] == 6
+    await rig.quote_store.retry_now(OTHER, qid, resume=True)
+    assert not await rig.quote_store.pending(TENANT)
+    await rig.quote_store.retry_now(TENANT, qid, resume=True)
+    rig.handoff = RecordingHandoff()
+    await rig.retry_pending(TENANT)
+    assert (await rig.quote_store.status(TENANT, qid))["status"] == "sent"
+    assert len(rig.handoff.sent) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("version", [16, 17, 18, 19])
+async def test_odoo_version_guard_precedes_all_mutations(version):
+    stub = OdooStub()
+    stub.version = version
+    async with httpx.AsyncClient(transport=httpx.MockTransport(stub)) as http:
+        rig = await service(adapter(http))
+        ack = await rig.quote(TENANT, {"product_id": "CORE-1", "contact": CONTACT})
+    if version == 19:
+        assert not stub.calls and not stub.orders
+        assert (await rig.quote_store.status(TENANT, ack["request_id"]))["error"] == "odoo_version_unsupported"
+    else:
+        assert ack["delivery"] == "sent" and len(stub.orders) == 1
+
+
+@pytest.mark.asyncio
+async def test_sample_has_three_distinct_approved_tiers():
+    rig = await service()
+    setups = (await rig.setups(TENANT, "CORE-1"))["setups"]
+    assert [s["total"]["amount"] for s in setups] == [120, 130, 160]
+    assert setups[1]["badge"] == "Most chosen"
+    assert all("PART-DRAFT" not in [part["product"]["id"] for part in s["parts"]] for s in setups)

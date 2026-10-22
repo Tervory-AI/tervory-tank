@@ -56,30 +56,44 @@ async def test_built_widget_live_api_journey(real_chromium, widget_server, tmp_p
     page = await real_chromium.new_page(viewport={"width": width, "height": 900})
     failures = []
     page.on("pageerror", lambda error: failures.append(str(error)))
-    # Only local API and static bundle traffic. Samples have no remote images/fonts.
+    # API, bundle and licensed fonts must all work on the local origin.
     await page.route("**/*", lambda route: route.continue_() if route.request.url.startswith(widget_server + "/")
                      else route.abort())
 
     async def capture(name):
-        await page.locator("tervory-rig").screenshot(path=str(output / f"rig4-{name}-{width}.png"))
+        await page.evaluate("document.fonts.ready")
+        await page.locator("tervory-rig").screenshot(path=str(output / f"rig4b-{name}-{width}.png"))
         assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
+        assert await page.locator("tervory-rig").evaluate("el => el.shadowRoot.querySelector('.shell').scrollWidth <= el.clientWidth + 1")
 
     await page.goto(widget_server + "/widget/test")
     await expect(page.get_by_role("heading", name="Find it. We source it.")).to_be_visible()
     await capture("01-search")
-    await page.get_by_role("searchbox").fill("Core One")
+    assert await page.evaluate("document.fonts.load('600 32px \"Barlow Condensed\"').then(fonts => fonts.length > 0)")
+    assert await page.evaluate("document.fonts.check('600 32px \"Barlow Condensed\"')")
+    await page.get_by_role("searchbox").fill("Core")
     await page.get_by_role("button", name="Search", exact=True).click()
     await expect(page.get_by_role("heading", name="Core One", exact=True)).to_be_visible()
-    await expect(page.get_by_text("SAMPLE DATA").first).to_be_visible()
-    await capture("02-results")
-    await page.get_by_role("button", name="Complete my setup", exact=True).click()
+    await expect(page.get_by_text("SAMPLE DATA", exact=True)).to_have_count(1)
+    await expect(page.locator(".card")).to_have_count(3)
+    await page.locator(".card").filter(has=page.get_by_role("heading", name="Core One", exact=True)).get_by_role("button", name="Complete my setup", exact=True).click()
     await expect(page.get_by_text("R 120", exact=True)).to_be_visible()
+    await expect(page.locator(".setup")).to_have_count(3)
+    await expect(page.get_by_text("Most chosen", exact=True)).to_be_visible()
+    await expect(page.locator(".chosen-note")).to_contain_text("We matched")
+    await expect(page.locator(".chosen button")).to_have_count(0)
+    await expect(page.get_by_text("SAMPLE DATA", exact=True)).to_have_count(1)
     await capture("03-setup")
-    await page.get_by_role("button", name="Swap ⇄", exact=True).click()
-    await page.get_by_role("button", name="Part Beta", exact=True).click()
-    await expect(page.get_by_text("R 130", exact=True)).to_be_visible()
-    assert "Unapproved Part" not in await page.locator("tervory-rig").inner_text()
+    essential = page.locator(".setup").first
+    await essential.get_by_role("button", name="Swap ⇄", exact=True).click()
+    await essential.get_by_role("button", name="Part Beta", exact=True).click()
+    await expect(essential.get_by_text("R 130", exact=True)).to_be_visible()
+    assert "Unapproved Part" not in await page.locator(".shell").text_content()
     await capture("03-swap")
+    await page.get_by_role("searchbox").fill("Core")
+    await page.get_by_role("button", name="Search", exact=True).click()
+    await expect(page.get_by_role("button", name="Selected ✓", exact=True)).to_be_visible()
+    await capture("02-results")
     await page.get_by_role("searchbox").fill("zzzzzzzzzzzzzz")
     await page.get_by_role("button", name="Search", exact=True).click()
     await expect(page.locator("#link-url")).to_be_visible()
@@ -91,10 +105,16 @@ async def test_built_widget_live_api_journey(real_chromium, widget_server, tmp_p
     await expect(page.get_by_text("Request received. Reference", exact=False)).to_be_visible()
     await page.get_by_role("searchbox").fill("Core One")
     await page.get_by_role("button", name="Search", exact=True).click()
+    await page.get_by_role("button", name="Selected ✓", exact=True).click()
     await page.get_by_role("button", name="Explore", exact=True).click()
     await expect(page.get_by_role("heading", name="Core One", exact=True)).to_be_visible()
-    await expect(page.get_by_text("R 120", exact=True)).to_be_visible()
+    await expect(page.get_by_text("R 130", exact=True)).to_be_visible()
+    await expect(page.get_by_role("button", name="2 parts", exact=True)).to_be_visible()
+    await expect(page.get_by_role("button", name="+2 more", exact=True)).to_be_visible()
+    await expect(page.locator(".connectors path")).to_have_count(8)
     await capture("05-explore")
+    await page.get_by_role("button", name="+2 more", exact=True).click()
+    await expect(page.locator(".g-chip")).to_have_count(7)
     await page.locator("#ask-q").fill("What fits this product?")
     await page.get_by_role("button", name="Ask", exact=True).click()
     await expect(page.locator(".answer")).to_contain_text("I don't know")
@@ -105,4 +125,34 @@ async def test_built_widget_live_api_journey(real_chromium, widget_server, tmp_p
     await expect(page.get_by_text("Request received. Reference", exact=False)).to_be_visible()
     await capture("quote")
     assert not failures
+    await page.close()
+
+
+@pytest.mark.asyncio
+async def test_typeahead_only_counts_the_settled_search(real_chromium, widget_server):
+    from playwright.async_api import expect
+
+    page = await real_chromium.new_page()
+    receipts = []
+    searches = []
+    page.on("request", lambda request: receipts.append(request.post_data_json)
+            if request.url.endswith("/search-events") else searches.append(request.url)
+            if "/v1/rig/search?" in request.url else None)
+    await page.goto(widget_server + "/widget/test")
+    box = page.get_by_role("searchbox")
+    await expect(box).to_be_visible()
+    # Slow enough for several typeahead fetches, faster than settlement.
+    await box.press_sequentially("Core", delay=350)
+    await expect(page.locator(".card")).to_have_count(3)
+    for _ in range(30):
+        if receipts:
+            break
+        await asyncio.sleep(0.1)
+    assert len(searches) >= 3
+    assert len(receipts) == 1 and receipts[0]["no_results"] is False
+    assert set(receipts[0]) == {"event_id", "no_results"}
+    await box.press("Enter")
+    await expect(page.locator(".card")).to_have_count(3)
+    await asyncio.sleep(0.2)
+    assert len(receipts) == 1
     await page.close()

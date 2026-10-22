@@ -70,7 +70,9 @@ class QuoteService(Service):
         state = await self.quote_store.status(tenant_id, quote_id)
         body: dict[str, Any] = {"request_id": quote_id, "delivery": state["status"]}
         if state["status"] != "sent":
-            body["message"] = "Your request is saved. Delivery to the retailer is pending."
+            body["message"] = ("Your request is saved. The retailer needs to check its delivery."
+                               if state["status"] == "needs_person" else
+                               "Your request is saved. Delivery to the retailer is pending.")
         if hasattr(self.handoff, "portal"):
             try:
                 portal = self.handoff.portal(tenant_id)
@@ -84,18 +86,19 @@ class QuoteService(Service):
         quote = await self.quote_store.claim(tenant, quote_id)
         if quote is None:
             return
-        retailer = await self.store.retailer(tenant) or {}
+        attempt = quote.pop("_attempt")
         error = None
         try:
             # Shorter than the five-minute claim lease, including multi-line Odoo orders.
             async with asyncio.timeout(60):
+                retailer = await self.store.retailer(tenant) or {}
                 await self.handoff.send(tenant_id=tenant, email=retailer.get("email"),
                                         webhook=retailer.get("webhook"), quote=quote)
         except DeliveryError as exc:
             error = str(exc)
         except Exception:
             error = "retailer_unavailable"
-        await self.quote_store.finish(tenant, quote_id, error)
+        await self.quote_store.finish(tenant, quote_id, error, attempt)
 
     async def retry_pending(self, tenant: str) -> int:
         ids = await self.quote_store.pending(tenant)

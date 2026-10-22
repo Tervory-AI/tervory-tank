@@ -67,6 +67,10 @@ class OdooHandoff:
     async def send(self, *, tenant_id: str, email: str | None, webhook: str | None,
                    quote: dict[str, Any]) -> None:
         del email, webhook
+        version = await self._rpc("common", "version", [])
+        info = version.get("server_version_info") if isinstance(version, dict) else None
+        if not isinstance(info, list) or not info or info[0] not in (16, 17, 18):
+            raise DeliveryError("odoo_version_unsupported")
         uid = await self._rpc("common", "authenticate", [self.database, self.user, self.api_key, {}])
         if not isinstance(uid, int) or isinstance(uid, bool) or uid <= 0:
             raise DeliveryError("odoo_authentication")

@@ -31,11 +31,13 @@ async def test_delivery_claims_schema_reapply_and_counts():
             claims = await asyncio.gather(quotes.claim(TENANT, "req_sample"), quotes.claim(TENANT, "req_sample"))
             assert sum(claim is not None for claim in claims) == 1
             await quotes.finish(TENANT, "req_sample", "not_configured")
-            assert await quotes.pending(TENANT) == ["req_sample"]
+            assert await quotes.pending(TENANT) == []
+            await quotes.retry_now(TENANT, "req_sample")
             assert await quotes.claim(TENANT, "req_sample")
             await quotes.finish(TENANT, "req_sample", None)
             assert not await quotes.pending(TENANT)
-            assert await quotes.status(TENANT, "req_sample") == {"status": "sent", "error": None}
+            assert await quotes.status(TENANT, "req_sample") == {
+                "status": "sent", "error": None, "attempts": 2, "next_attempt_at": None}
             assert await quotes.claim(TENANT, "req_sample") is None
             await asyncio.gather(*(quotes.count(TENANT, "searches") for _ in range(10)))
             counts = await quotes.analytics(TENANT, date.min)
@@ -43,6 +45,109 @@ async def test_delivery_claims_schema_reapply_and_counts():
             assert set((await quotes.analytics(OTHER, date.min)).values()) == {0}
             async with pool.acquire() as conn:
                 assert await conn.fetchval("SELECT sent_at IS NOT NULL FROM agent_rig.quotes WHERE id='req_sample'")
+        finally:
+            await pool.close()
+    finally:
+        await _drop_database(admin, name)
+
+
+@pytest.mark.asyncio
+async def test_replicas_retry_exhaustion_and_settled_search_receipts():
+    from uuid import UUID
+    from rigbox.quotes.limits import PgRateLimits
+
+    admin = _admin_url()
+    name = "rig4b_" + uuid4().hex[:12]
+    await _create_database(admin, name)
+    try:
+        pool = await asyncpg.create_pool(_database_url(admin, name), min_size=1, max_size=10)
+        try:
+            store = PgStore(pool)
+            await store.apply_schema()
+            limits = [PgRateLimits(pool), PgRateLimits(pool)]
+            # Keep the small concurrent burst within one database clock window.
+            async with pool.acquire() as conn:
+                seconds = float(await conn.fetchval("SELECT extract(epoch FROM clock_timestamp()) % 60"))
+            if seconds > 55:
+                await asyncio.sleep(60 - seconds + 0.05)
+            outcomes = await asyncio.gather(*(limits[i % 2].consume(TENANT, "192.0.2.1",
+                "/v1/rig/quote" if i % 2 else "/v1/rig/link-quote") for i in range(10)))
+            assert outcomes.count(0) == 5
+            assert await PgRateLimits(pool).consume(TENANT, "192.0.2.1", "/v1/rig/quote") > 0
+            assert await limits[0].consume(TENANT, "192.0.2.2", "/v1/rig/quote") == 0
+            assert await limits[0].consume(OTHER, "192.0.2.1", "/v1/rig/quote") == 0
+            async with pool.acquire() as conn:
+                assert await conn.fetchval("SELECT hits FROM agent_rig.rate_counts WHERE tenant_id=$1 AND route='quotes' AND client_hash=''::bytea", UUID(TENANT)) == 6
+                rows = await conn.fetch("SELECT client_hash FROM agent_rig.rate_counts WHERE tenant_id=$1", UUID(TENANT))
+                assert all(len(row["client_hash"]) in (0, 32) for row in rows)
+                await conn.execute("UPDATE agent_rig.rate_counts SET hits=600 WHERE tenant_id=$1 AND route='quotes' AND client_hash=''::bytea", UUID(TENANT))
+            assert await limits[1].consume(TENANT, "192.0.2.3", "/v1/rig/quote") > 0
+            assert await limits[1].consume(TENANT, "192.0.2.3", "/v1/rig/search") == 0
+
+            quotes = PgQuotes(pool)
+            receipt = str(uuid4())
+            accepted = await asyncio.gather(*(quotes.settled_search(TENANT, receipt, True) for _ in range(10)))
+            assert accepted.count(True) == 1
+            assert (await quotes.analytics(TENANT, date.min))["searches"] == 1
+            assert (await quotes.analytics(TENANT, date.min))["no_results"] == 1
+            assert (await quotes.analytics(OTHER, date.min))["searches"] == 0
+            await quotes.create(TENANT, {"id": "bounded", "payload": {}, "contact": {}})
+            for attempt in range(1, 7):
+                row = await quotes.claim(TENANT, "bounded")
+                assert row["_attempt"] == attempt
+                await quotes.finish(TENANT, "bounded", "not_configured", attempt)
+                assert not await quotes.pending(TENANT)
+                if attempt < 6:
+                    async with pool.acquire() as conn:
+                        delay = await conn.fetchval("SELECT extract(epoch FROM next_attempt_at-updated_at) FROM agent_rig.quote_handoffs WHERE tenant_id=$1 AND quote_id='bounded'", UUID(TENANT))
+                        assert float(delay) == 300 * 2 ** (attempt - 1)
+                await quotes.retry_now(TENANT, "bounded")
+            assert (await quotes.status(TENANT, "bounded"))["status"] == "needs_person"
+            assert await quotes.claim(TENANT, "bounded") is None
+            await quotes.retry_now(TENANT, "bounded", resume=True)
+            assert (await quotes.claim(TENANT, "bounded"))["_attempt"] == 1
+            # A stale attempt cannot overwrite a newer worker's result.
+            await quotes.finish(TENANT, "bounded", None, 2)
+            assert (await quotes.status(TENANT, "bounded"))["status"] == "sending"
+            async with pool.acquire() as conn:
+                await conn.execute("UPDATE agent_rig.quote_handoffs SET attempts=6, updated_at=now()-interval '6 minutes' WHERE tenant_id=$1 AND quote_id='bounded'", UUID(TENANT))
+            assert not await quotes.pending(TENANT)
+            assert (await quotes.status(TENANT, "bounded"))["status"] == "needs_person"
+        finally:
+            await pool.close()
+    finally:
+        await _drop_database(admin, name)
+
+
+@pytest.mark.asyncio
+async def test_retry_discovery_picks_up_retailers_added_after_startup():
+    import sys
+    from pathlib import Path
+    from uuid import UUID
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agents" / "_chassis"))
+    from chassis.db import ensure_schema
+    from rigbox.quotes.schedules import refresh
+
+    admin = _admin_url()
+    name = "rig4b_" + uuid4().hex[:12]
+    await _create_database(admin, name)
+    try:
+        pool = await asyncpg.create_pool(_database_url(admin, name), min_size=1, max_size=2)
+        try:
+            store = PgStore(pool)
+            await store.apply_schema()
+            async with pool.acquire() as conn:
+                await ensure_schema(conn, "rig")
+            assert await refresh(pool, store, "rig") == 0
+            await store.put_retailer(TENANT, "first", None, None, "Sample")
+            assert await refresh(pool, store, "rig") == 1
+            await store.put_retailer(OTHER, "second", None, None, "Another sample")
+            assert await refresh(pool, store, "rig") == 2
+            assert await refresh(pool, store, "rig") == 2
+            async with pool.acquire() as conn:
+                rows = await conn.fetch("SELECT tenant_id, cron, kind FROM agent_rig.schedules ORDER BY tenant_id")
+                assert [row["tenant_id"] for row in rows] == [UUID(TENANT), UUID(OTHER)]
+                assert all(row["cron"] == "*/5 * * * *" and row["kind"] == "retry_quotes" for row in rows)
         finally:
             await pool.close()
     finally:

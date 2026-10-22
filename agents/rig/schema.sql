@@ -192,7 +192,17 @@ CREATE TABLE IF NOT EXISTS agent_rig.widget_counts (
 );
 -- End RIG-4.
 
--- RIG-4b: short-lived per-client/route abuse limits; never joined to analytics.
+-- RIG-4b: short-lived per-client/route abuse limits, never joined to analytics.
+ALTER TABLE agent_rig.quote_handoffs ADD COLUMN IF NOT EXISTS next_attempt_at timestamptz DEFAULT now();
+ALTER TABLE agent_rig.quote_handoffs ADD COLUMN IF NOT EXISTS needs_attention boolean NOT NULL DEFAULT false;
+CREATE INDEX IF NOT EXISTS quote_handoffs_due ON agent_rig.quote_handoffs(tenant_id, next_attempt_at)
+    WHERE NOT needs_attention AND status <> 'sent';
+CREATE TABLE IF NOT EXISTS agent_rig.widget_search_events (
+    tenant_id uuid NOT NULL,
+    event_id uuid NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, event_id)
+);
 CREATE TABLE IF NOT EXISTS agent_rig.rate_windows (
     tenant_id uuid NOT NULL,
     window_id bigint NOT NULL,

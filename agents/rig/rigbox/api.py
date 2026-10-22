@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -21,6 +22,11 @@ _CORS_METHODS = "GET, POST, OPTIONS"
 
 class SetupIn(BaseModel):
     product_id: str = Field(min_length=1)
+
+
+class SearchEventIn(BaseModel):
+    event_id: UUID
+    no_results: bool
 
 
 class SwapIn(BaseModel):
@@ -80,6 +86,7 @@ def _cors(response: Response, origin: str, allowed: bool) -> Response:
         response.headers["Vary"] = "Origin"
     response.headers["Access-Control-Allow-Headers"] = _CORS_HEADERS
     response.headers["Access-Control-Allow-Methods"] = _CORS_METHODS
+    response.headers["Access-Control-Expose-Headers"] = "Retry-After"
     return response
 
 
@@ -154,11 +161,17 @@ async def preflight(request: Request, rest: str = "") -> Response:
 async def search(request: Request, q: str = "", limit: int = 12) -> Response:
     await _auth(request)
     body = await _service(request).search(_tenant(request), q, limit)
-    if q.strip():
-        await _count(request, "searches")
-        if not body.get("results"):
-            await _count(request, "no_results")
     return _ok(request, body)
+
+
+@router.post("/search-events")
+async def settled_search(request: Request, payload: SearchEventIn) -> Response:
+    await _auth(request)
+    counts = getattr(_service(request), "quote_store", None)
+    if counts is None:
+        raise RigError("unavailable", "Rig is not ready.", 503)
+    accepted = await counts.settled_search(_tenant(request), str(payload.event_id), payload.no_results)
+    return _ok(request, {"counted": accepted})
 
 
 @router.get("/products/{product_id}")

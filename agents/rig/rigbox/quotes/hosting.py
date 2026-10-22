@@ -42,6 +42,17 @@ def manifest() -> dict:
 
 
 def mount(application: FastAPI) -> None:
+    @application.get("/widget/fonts/{name}", include_in_schema=False)
+    async def widget_font(name: str):
+        allowed = {"custom-nation.css", "barlow-condensed-latin-600-normal.woff2",
+                   "inter-latin-400-normal.woff2", "inter-latin-500-normal.woff2", "inter-latin-600-normal.woff2"}
+        if name not in allowed:
+            raise HTTPException(404, "No such font")
+        body = (Path(__file__).parent / "fonts" / name).read_bytes()
+        return Response(body, media_type="text/css" if name.endswith(".css") else "font/woff2",
+                        headers={"Cache-Control": "public, max-age=86400", "Access-Control-Allow-Origin": "*",
+                                 "X-Content-Type-Options": "nosniff"})
+
     @application.get("/widget/manifest.json", include_in_schema=False)
     async def widget_manifest():
         return JSONResponse(manifest(), headers={"Cache-Control": "no-cache", "Access-Control-Allow-Origin": "*"})
@@ -63,7 +74,7 @@ def mount(application: FastAPI) -> None:
         return HTMLResponse(f'''<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rig · retailer test page</title><style>body{{margin:0}}tervory-rig{{display:block}}</style>
-</head><body><tervory-rig api-base="" rig-key="{public_key}" theme="custom-nation" fonts="off"></tervory-rig>
+</head><body><tervory-rig api-base="" rig-key="{public_key}" theme="custom-nation" fonts="/widget/fonts/custom-nation.css"></tervory-rig>
 <script src="/widget/assets/{file}"></script></body></html>''', headers={
             "Cache-Control": "no-store", "Referrer-Policy": "no-referrer",
             "X-Robots-Tag": "noindex, nofollow",

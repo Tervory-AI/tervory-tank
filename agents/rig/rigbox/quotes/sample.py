@@ -24,21 +24,34 @@ KEY = "rk_pub_neutral_sample"
 async def seed(store, tenant: str = TENANT, *, sample: bool = True):
     for sku, name, category, price in [
         ("CORE-1", "Core One", "core", 100),
+        ("CORE-2", "Core Two", "core", 150),
+        ("CORE-3", "Core Three", "core", 200),
         ("PART-A", "Part Alpha", "part", 20),
         ("PART-B", "Part Beta", "part", 30),
         ("PART-DRAFT", "Unapproved Part", "part", 15),
+        ("SUPPORT-A", "Support Alpha", "supports", 30),
+        *((f"ADAPTER-{letter}", f"Adapter {letter}", "adapters", 10 + index * 5)
+          for index, letter in enumerate("ABCDE")),
     ]:
         await store.upsert_product(tenant, {
             "sku": sku, "id": sku, "name": name, "brand": "Sample", "category": category,
             "price": price, "currency": "ZAR", "image_url": "", "active": True,
-            "attributes": {"sample": sample, "summary": "Neutral stand-in product"},
+            "attributes": {"sample": sample, "summary": "Neutral stand-in product",
+                           "match_note": "We matched parts with an approved mounting point for this product."},
         })
-    for part in ("PART-A", "PART-B", "PART-DRAFT"):
-        await store.upsert_fit(tenant, {"part_sku": part, "fits_sku": "CORE-1", "rule": {},
-            "source": "import" if part != "PART-DRAFT" else "suggested",
-            "approved": part != "PART-DRAFT", "note": "Sample approved mounting point"})
+    for core in ("CORE-1", "CORE-2", "CORE-3"):
+        for part in ("PART-A", "PART-B", "PART-DRAFT", "SUPPORT-A", *(f"ADAPTER-{letter}" for letter in "ABCDE")):
+            await store.upsert_fit(tenant, {"part_sku": part, "fits_sku": core, "rule": {},
+                "source": "import" if part != "PART-DRAFT" else "suggested",
+                "approved": part != "PART-DRAFT", "note": "Sample approved mounting point"})
     await store.set_template(tenant, "core", {"tiers": [
-        {"tier": "essential", "label": "A simple setup", "roles": [{"role": "Part", "category": "part"}]},
+        {"tier": tier, "label": label, **({"badge": "Most chosen"} if tier == "balanced" else {}),
+         "roles": [{"role": role, "category": category} for role, category in roles]}
+        for tier, label, roles in [
+            ("essential", "A simple setup", [("Part", "part")]),
+            ("balanced", "Everyday versatility", [("Part", "part"), ("Adapter", "adapters")]),
+            ("premium", "More flexibility", [("Part", "part"), ("Adapter", "adapters"), ("Support", "supports")]),
+        ]
     ]})
     await store.put_retailer(tenant, "rig4-neutral-sample", None, None, "Sample retailer")
     await store.put_key(tenant, hash_key(KEY), "publishable",

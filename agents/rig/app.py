@@ -30,6 +30,7 @@ from rigbox.quotes.service import QuoteService
 from rigbox.quotes.senders import RetailerHandoff
 from rigbox.quotes.store import PgQuotes
 from rigbox.quotes.hosting import mount as mount_widget
+from rigbox.quotes.schedules import refresh as refresh_quote_schedules
 
 AGENT = os.environ.get("AGENT_NAME", "rig")
 HEARTBEAT_TENANT = "00000000-0000-0000-0000-000000000001"
@@ -86,10 +87,14 @@ async def retry_quotes(ctx: JobContext) -> dict:
     return {"attempted": await app.state.rig.retry_pending(ctx.tenant_id)}
 
 
+async def discover_quote_tenants(ctx: JobContext) -> dict:
+    return {"tenants": await refresh_quote_schedules(app.state.pool, app.state.rig.store, ctx.agent)}
+
+
 app = create_app(
     agent=AGENT,
     handlers={"ping": ping, "pull_feeds": pull_feeds, "expire_searches": expire_searches,
-              "retry_quotes": retry_quotes},
+              "retry_quotes": retry_quotes, "discover_quote_tenants": discover_quote_tenants},
     schedules=[
         {
             "tenant_id": HEARTBEAT_TENANT,
@@ -101,6 +106,12 @@ app = create_app(
             "tenant_id": HEARTBEAT_TENANT,
             "cron": "0 3 * * *",
             "kind": "expire_searches",
+            "input": {},
+        },
+        {
+            "tenant_id": HEARTBEAT_TENANT,
+            "cron": "*/5 * * * *",
+            "kind": "discover_quote_tenants",
             "input": {},
         },
     ],

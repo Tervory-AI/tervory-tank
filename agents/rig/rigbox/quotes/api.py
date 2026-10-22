@@ -40,6 +40,19 @@ async def retry(request: Request, quote_id: str):
     service, tenant = _service(request), _tenant(request)
     if await service.quote_store.status(tenant, quote_id) is None:
         raise RigError("not_found", "No such request.", 404)
+    await service.quote_store.retry_now(tenant, quote_id)
+    await service.deliver(tenant, quote_id)
+    return _ok(request, await service.quote_store.status(tenant, quote_id))
+
+
+@router.post("/quotes/{quote_id}/resume")
+async def resume(request: Request, quote_id: str):
+    """Explicit retailer action after investigating a stopped delivery."""
+    await _admin(request)
+    service, tenant = _service(request), _tenant(request)
+    if await service.quote_store.status(tenant, quote_id) is None:
+        raise RigError("not_found", "No such request.", 404)
+    await service.quote_store.retry_now(tenant, quote_id, resume=True)
     await service.deliver(tenant, quote_id)
     return _ok(request, await service.quote_store.status(tenant, quote_id))
 
