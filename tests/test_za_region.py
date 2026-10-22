@@ -115,7 +115,8 @@ def test_za_roster_matches_the_funded_models_and_has_no_sa_model_yet() -> None:
     assert "model_name: za-local" in raw
     assert "hosted_in: za" in raw
     for item in ZA_CONFIG["model_list"]:
-        assert "api_base" not in item["litellm_params"]
+        # MODELS-3: the public Hugging Face router is the only api_base; it is not SA hosting.
+        assert item["litellm_params"].get("api_base") in (None, "https://router.huggingface.co/v1"), item["model_name"]
         assert "hosted_in" not in (item.get("model_info") or {}), item["model_name"]
     assert main.sa_hosted_models() == frozenset()
 
