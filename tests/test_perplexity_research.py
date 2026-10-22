@@ -399,9 +399,16 @@ async def test_schema_applies_twice_and_preserves_policy(harness):
         await conn.execute(schema.split("-- MODELS-2: provider tool charges", 1)[0])
         before = await conn.fetch("SELECT * FROM tank.policy ORDER BY task_type,tenant_id")
         await conn.execute(schema)
+        migrated = await conn.fetch("SELECT * FROM tank.policy ORDER BY task_type,tenant_id")
         await conn.execute(schema)
         after = await conn.fetch("SELECT * FROM tank.policy ORDER BY task_type,tenant_id")
-        assert before == after
+        # CORE-2 clears the old reporting baseline once; MoA only adds fields.
+        # Preserve every other prior value and the full migrated row on reapply.
+        assert len(before) == len(after)
+        assert [{**dict(row), "baseline_model": None} for row in before] == [
+            {key: new[key] for key in old.keys()} for old, new in zip(before, after)]
+        assert migrated == after
+        assert all(row["moa_enabled"] is False and json.loads(row["moa_config"]) == {} for row in after)
         rows = await conn.fetch("SELECT outcome_type,unit_price FROM tank.price_book WHERE tenant_id=$1 AND outcome_type LIKE 'perplexity.%'", main.PLATFORM_TENANT)
         assert {r["outcome_type"]: r["unit_price"] for r in rows} == {
             "perplexity.search.fast": Decimal("0.001"), "perplexity.fetch": Decimal("0.0005")}

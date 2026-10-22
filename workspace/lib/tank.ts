@@ -815,3 +815,114 @@ export function switchProvenModel(userId: string, taskType: string): Promise<{ o
 export function readDashboardCandidates(userId: string): Promise<{ task_type: string; candidate_model: string | null; n: number; agreement: number | null; min_shadow_samples?: number; eligible: boolean; prim_cost?: number | null; cand_cost?: number | null }[]> {
   return tank("/v1/graduation", { method: "GET", headers: { "x-tervory-admin": userId } });
 }
+
+// COMMAND-1A: founder-managed client squad grants on this box.
+export type CommandSquadGrant = { agent: string; enabled: boolean; enabled_by: string | null; enabled_at: string | null };
+export type CommandSquadChange = { id: number; agent: string; enabled: boolean; changed_by: string; changed_at: string };
+function commandSquadHeaders(userId: string, tenantId: string) {
+  return { "X-Tervory-User": userId, "X-Tervory-Tenant": tenantId };
+}
+export async function readCommandSquads(userId: string, tenantId: string) {
+  const headers = commandSquadHeaders(userId, tenantId);
+  const [grants, log] = await Promise.all([
+    tank<CommandSquadGrant[]>("/v1/command/squads", { method: "GET", headers }),
+    tank<CommandSquadChange[]>("/v1/command/squads/log", { method: "GET", headers }),
+  ]);
+  return { grants, log };
+}
+export async function setCommandSquad(userId: string, tenantId: string, agent: string, enabled: boolean) {
+  return tank<{ agent: string; enabled: boolean; changed: boolean }>(`/v1/command/squads/${encodeURIComponent(agent)}`, {
+    method: "PUT", headers: commandSquadHeaders(userId, tenantId), body: JSON.stringify({ enabled }),
+  });
+}
+
+// ---- COMMAND-1: same-box conversations; caller identity is server-owned. ----
+export class CommandRequestError extends Error {
+  status: number;
+  code: string;
+  constructor(status: number, code: string, message: string) { super(message); this.status = status; this.code = code; }
+}
+export async function commandRequest(identity: { tenantId: string; userId: string }, path: string, init: RequestInit = {}): Promise<Response> {
+  if (!TANK_API_KEY) throw new Error("The conversation service is not configured.");
+  const url = new URL(`/v1/command/${path}`, TANK_URL);
+  url.searchParams.delete("tenant_id");
+  url.searchParams.delete("user_id");
+  const headers = new Headers(init.headers);
+  if (!headers.has("content-type")) headers.set("content-type", "application/json");
+  headers.set("x-tank-key", TANK_API_KEY);
+  headers.set("x-tervory-user", identity.userId);
+  headers.set("x-tervory-tenant", identity.tenantId);
+  headers.set("x-tervory-admin", identity.userId);
+  // Lane A resolves tenant_squad from the database on each authenticated call.
+  // Never turn a caller header into tool authority.
+  headers.delete("x-tervory-squad");
+  const response = await fetch(url, { ...init, headers, cache: "no-store", redirect: "error" });
+  if (!response.ok) {
+    const detail = await response.json().then(body => body.detail).catch(() => undefined);
+    if (response.status === 409 && detail === "Pinned models await a router capability; choose Auto") throw new CommandRequestError(409, "pin_pending", "Choosing a specific answer option is not supported yet. Choose Auto to continue.");
+    if (response.status === 422 && detail === "Model is not on the roster") throw new CommandRequestError(422, "pin_unavailable", "That answer option is no longer available. Choose Auto to continue.");
+    if (response.status === 409 && detail === "An answer is already running in this thread") throw new CommandRequestError(409, "answer_running", "An answer is already running. Wait for it to finish before sending again.");
+    if (response.status === 403) throw new CommandRequestError(403, "access_denied", "Access to this action has not been verified for your account. No new permission has been granted.");
+    if (response.status === 404) throw new CommandRequestError(404, "not_found", "This item is unavailable.");
+    if (response.status === 413) throw new CommandRequestError(413, "attachment_limit", "The file or this chat's storage limit has been reached (5 MB per file, 20 files and 20 MB per chat).");
+    throw new CommandRequestError(502, "request_failed", "This request could not be completed. Reload the chat before trying again.");
+  }
+  return response;
+}
+
+/** Lane A derives this catalogue from the founder-controlled tenant_squad list. */
+export async function commandTools(identity: { tenantId: string; userId: string }): Promise<string[]> {
+  const result: unknown = await (await commandRequest(identity, "tools")).json();
+  if (!Array.isArray(result) || !result.every(tool => typeof tool === "string" && /^[a-z_]+\.[a-z_]+$/.test(tool))) throw new Error("Tool access could not be loaded.");
+  return result;
+}
+
+// ACCESS-1: identity is always supplied by the authenticated Workspace server.
+export type AccessIdentity = { tenantId: string; userId: string };
+export type AccessConnection = { room: string; site: string; terms: string; revoked: boolean; clear_pending: boolean; overdue: boolean; rotate_by: string; rotation_days: number };
+export type AccessQueueItem = { id: string; tenant_id: string; room: string; site: string; reason: string; status: string; created_at: string; live_available: boolean };
+export type AccessPanel = { connections: AccessConnection[]; policies: { site: string; terms: string; rotation_days: number }[]; feeds: { distributor: string; site: string; source: string; fetched_at: string; row_count: number }[]; meta_enabled: boolean };
+export async function accessRequest<T>(actor: AccessIdentity, path: string, body?: unknown): Promise<T> {
+  const response = await fetch(`${TANK_URL}/v1/access/${path}`, {
+    method: body === undefined ? "GET" : "POST", cache: "no-store",
+    headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY,
+      "x-tervory-user": actor.userId, "x-tervory-tenant": actor.tenantId },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  if (!response.ok) throw new Error("The connection request could not be completed. Check the settings or try again.");
+  return response.json() as Promise<T>;
+}
+
+/** CORE-2 only: server-resolved identity wins over every caller query field. */
+export function readClientSavings<T>(tenantId: string, endpoint: "" | "/rows" | "/revision" = "", query: Record<string,string> = {}): Promise<T> {
+  const params = new URLSearchParams();
+  for (const name of ["end","start","until","member","free_only","page"]) if(query[name]) params.set(name,query[name]);
+  params.set("tenant_id",tenantId);
+  return tank<T>(`/v1/client-savings${endpoint}?${params}`,{method:"GET"});
+}
+
+// MOA-1 founder evidence. Only server components/actions call these helpers.
+export type MoaShape = { shape: string; mode: string; status: string; score: number | null; cost_per_call: number | null; samples: number };
+export type MoaSeat = { name: string; model: string; candidate: string | null; critical: boolean; timeout_s: number };
+export type MoaAttempt = { model: string; tokens_in: number; tokens_out: number; cost_usd: number | null; ledger_id: string | null };
+export type MoaReceiptSeat = { name: string; model: string; status: string; error: string | null; attempts: MoaAttempt[] };
+export type MoaEvidence = {
+  tenant_id: string; region: string;
+  tasks: { task_type: string; enabled: boolean; config_hash: string;
+    config: { seats: MoaSeat[]; shape: string; mode: string; min_samples: number; bench_enabled: boolean; cheap_aggregator: string; frontier_aggregator: string; cheap_candidate: string | null; frontier_candidate: string | null };
+    shapes: MoaShape[]; proposals: { seat: string; candidate_model: string; samples: number; agreement: number }[] }[];
+  runs: { id: string; task_type: string; kind: string; status: string; created_at: string;
+    receipt: { baseline_model?: string; seats?: MoaReceiptSeat[]; cost_usd?: number | null; all_frontier_usd?: number | null;
+      single_top_usd?: number | null; saved_vs_frontier_usd?: number | null; saved_vs_single_usd?: number | null;
+      error?: string; shadow_error?: string } }[];
+  shadows: { id: string; seat: string; status: string; current_model: string; candidate_model: string;
+    against_current: number | null; against_final: number | null; candidate_cost: number | null }[];
+};
+export function moaEvidence(userId: string, tenantId: string, task?: string): Promise<MoaEvidence> {
+  const query = new URLSearchParams({ tenant_id: tenantId });
+  if (task) query.set("task", task);
+  return tank(`/v1/moa?${query}`, { method: "GET", headers: { "x-tervory-admin": userId } });
+}
+export function moaAction(userId: string, action: "bench" | "promote", body: { tenant_id: string; task_type: string; config_hash: string; seat?: string }): Promise<unknown> {
+  return tank(`/v1/moa/${action}`, { method: "POST", headers: { "x-tervory-admin": userId }, body: JSON.stringify(body) });
+}

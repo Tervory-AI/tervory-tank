@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import time
 import uuid
 from typing import Any
@@ -192,7 +193,7 @@ class SkillClient:
         return version if isinstance(version, str) and version else None
 
     def bind(self, versions: dict[str, str], preview: bool, tenant_id: str) -> SkillCall:
-        async def call(skill_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        async def direct(skill_id: str, payload: dict[str, Any]) -> dict[str, Any]:
             response = await self._http.post(
                 f"{self._base}/v1/skala/{skill_id}/run",
                 json={
@@ -205,6 +206,17 @@ class SkillClient:
                 timeout=300,
             )
             return await self._read(response)
+
+        async def call(skill_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+            if skill_id == "base.scrape_site":
+                from access_sources import scrape_with_archives
+                return await scrape_with_archives(lambda: direct(skill_id, payload), self._http, self._base,
+                                                  self._headers(), tenant_id, payload)
+            if skill_id == "base.socials":
+                from access_sources import public_business_pages
+                return await public_business_pages(lambda: direct(skill_id, payload), self._http, self._base,
+                                                   self._headers(), tenant_id, payload)
+            return await direct(skill_id, payload)
 
         return call
 
@@ -444,7 +456,11 @@ async def base_loop(pool: Any, skills: SkillClient) -> None:
                     await skills.approved(f"{cfg['engine']}.profile") if cfg.get("engine") else None
                 )
                 call = skills.bind(versions, bool(cfg.get("preview")), str(row["tenant_id"]))
-                await _run_batch(pool, row["id"], cfg, call)
+                if os.environ.get("BASE_BRAIN_URL"):
+                    from base_brain import drive_batch
+                    await drive_batch(pool, skills, row["id"], cfg, call)
+                else:
+                    await _run_batch(pool, row["id"], cfg, call)
             except Exception as exc:  # noqa: BLE001 — one bad batch must not stop the queue
                 log.error("base worker: %s", type(exc).__name__)
                 async with pool.acquire() as conn:

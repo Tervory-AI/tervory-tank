@@ -35,7 +35,7 @@ export default function DataPage() {
   const [csv, setCsv] = useState(SAMPLE);
   const [file, setFile] = useState<File | null>(null);
   const [link, setLink] = useState("");
-  const [preview, setPreview] = useState(true);
+  const preview = false;
   const [engine, setEngine] = useState("");
   const [splitByState, setSplitByState] = useState(true);
   const [engines, setEngines] = useState<string[]>([]);
@@ -149,9 +149,6 @@ export default function DataPage() {
           </select>
           <label style={{ color: "var(--muted)", fontSize: 13 }}>
             <input type="checkbox" checked={splitByState} onChange={(e) => setSplitByState(e.target.checked)} /> one batch per state, smallest state first
-          </label>
-          <label style={{ color: "var(--muted)", fontSize: 13 }}>
-            <input type="checkbox" checked={preview} onChange={(e) => setPreview(e.target.checked)} /> preview (allow unapproved skill versions)
           </label>
           <button type="submit" disabled={busy}>{busy ? "Importing… (a big file takes a couple of minutes)" : "Run Base"}</button>
         </div>

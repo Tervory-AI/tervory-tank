@@ -1,0 +1,12 @@
+# Every 5 minutes: if workers/ changed on main, update the code and restart the worker.
+[Unit]
+Description=Tervory workers auto-update every 5 minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+RandomizedDelaySec=20
+Unit=tervory-workers-update.service
+
+[Install]
+WantedBy=timers.target

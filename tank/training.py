@@ -518,7 +518,7 @@ async def confirm_tiger(observation_id: uuid.UUID, actor: Reviewer = Depends(req
         row = await conn.fetchrow(
             "SELECT * FROM agent_tiger.observations WHERE id=$1 AND tenant_id=$2", observation_id, actor.tenant,
         )
-        if row is None or row["price"] is None:
+        if row is None or row["price"] is None or row.get("method") == "private_portal":
             raise HTTPException(404, "not found")
         await add_candidate(conn, tenant=actor.tenant, skill="tiger.price_read", agent="tiger",
                             value={"url": row["url"], "evidence": row["evidence"]},

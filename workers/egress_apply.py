@@ -5,11 +5,15 @@ from __future__ import annotations
 import os
 import socket
 import subprocess
+import sys
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from workers.egress import HTTPS_HOSTS, EgressError, nft_script
+from workers.redact import redact
 from workers.settings import validate_tank_url
+
+NFT = "/usr/sbin/nft"
 
 
 def resolve(host: str) -> list[str]:
@@ -53,7 +57,8 @@ def build_from_env() -> str:
 
 
 def apply(script: str, runner: list[str] | None = None) -> None:
-    command = runner or ["nft", "-f", "-"]
+    # Absolute path: the task env PATH has no sbin (nftables installs to /usr/sbin/nft).
+    command = runner or [NFT, "-f", "-"]
     completed = subprocess.run(command, input=script.encode(), check=False)
     if completed.returncode != 0:
         raise EgressError("firewall install failed; the task will not run")
@@ -62,7 +67,9 @@ def apply(script: str, runner: list[str] | None = None) -> None:
 def main() -> int:
     try:
         apply(build_from_env())
-    except (EgressError, OSError, ValueError):
+    except (EgressError, OSError, ValueError) as exc:
+        # Say why on stderr. Without this the task container exits 1 with no output at all.
+        print(f"worker task: firewall not installed: {type(exc).__name__}: {redact(str(exc))[:300]}", file=sys.stderr)
         return 1
     return 0
 

@@ -91,36 +91,25 @@ async def sync_prices(conn, book: dict) -> None:
     async with conn.transaction():
         await conn.execute('UPDATE tank.proof_prices SET active=false WHERE active')
         for name, p in book.items():
+            await conn.execute("""INSERT INTO tank.baseline_price_changes(model,old_input,old_output,new_input,new_output)
+                SELECT $1,input_usd,output_usd,$2,$3 FROM tank.proof_prices WHERE model=$1
+                AND (input_usd,output_usd) IS DISTINCT FROM ($2,$3)""",name,p['input'],p['output'])
             await conn.execute('''INSERT INTO tank.proof_prices(model,family,input_usd,output_usd)
                 VALUES ($1,$2,$3,$4) ON CONFLICT(model) DO UPDATE SET family=$2,input_usd=$3,output_usd=$4,
                 active=true,updated_at=CASE WHEN (tank.proof_prices.input_usd,tank.proof_prices.output_usd)
                 IS DISTINCT FROM ($3,$4) THEN now() ELSE tank.proof_prices.updated_at END''',
                 name, p['family'], p['input'], p['output'])
-        await conn.execute('''UPDATE tank.policy p SET baseline_model=(
-            SELECT b.model FROM tank.proof_prices a JOIN tank.proof_prices b ON b.family=a.family AND b.active
-            WHERE a.model=p.model ORDER BY b.input_usd+b.output_usd DESC,b.model LIMIT 1)
-            WHERE p.tenant_id IS NULL AND p.baseline_model IS NULL''')
+        # Price changes make unavailable comparisons eligible for a new backfill.
+        # Defaults come from tank.standard_model_for; prices never select the headline.
 
 
 async def backfill(conn, tenant: uuid.UUID, region: str) -> None:
-    # A current price-book estimate, explicitly marked; never rewrites a receipt
-    # already priced at call time. Tenant policies override platform defaults.
     while True:
-        changed = await conn.execute('''WITH pending AS (
-        SELECT l.id,(to_jsonb(l)->>'research_cost_status'='unknown' OR l.model LIKE 'vendor:%' OR l.vendor IS NOT NULL) IS TRUE AS no_baseline,coalesce((SELECT coalesce(p.baseline_model,(SELECT b.model FROM tank.proof_prices a
-          JOIN tank.proof_prices b ON b.family=a.family AND b.active WHERE a.model=p.model
-          ORDER BY b.input_usd+b.output_usd DESC,b.model LIMIT 1)) FROM tank.policy p
-          WHERE p.task_type=l.task_type AND (p.tenant_id=l.tenant_id OR p.tenant_id IS NULL)
-          ORDER BY p.tenant_id NULLS LAST LIMIT 1),l.model) AS baseline
-        FROM tank.ledger l WHERE l.tenant_id=$1 AND l.region=$2 AND l.baseline_status='pending' ORDER BY l.id LIMIT 5000 FOR UPDATE OF l SKIP LOCKED
-    ) UPDATE tank.ledger l SET baseline_model=CASE WHEN p.no_baseline THEN NULL ELSE p.baseline END,
-        baseline_cost_usd=CASE WHEN p.no_baseline THEN NULL
-          WHEN l.tokens_in=0 AND l.tokens_out=0 THEN 0 ELSE l.tokens_in*b.input_usd+l.tokens_out*b.output_usd END,
-        baseline_status=CASE WHEN p.no_baseline THEN 'unpriced' WHEN b.model IS NOT NULL OR (l.tokens_in=0 AND l.tokens_out=0) THEN 'backfilled' ELSE 'unpriced' END,
-        baseline_priced_at=CASE WHEN p.no_baseline THEN NULL ELSE b.updated_at END
-        FROM pending p LEFT JOIN tank.proof_prices b ON b.model=p.baseline
-        WHERE l.id=p.id AND l.tenant_id=$1 AND l.region=$2''', tenant, region)
-
+        changed = await conn.execute("""WITH pending AS (
+            SELECT id FROM tank.ledger WHERE tenant_id=$1 AND region=$2 AND baseline_status='pending'
+            ORDER BY id LIMIT 5000 FOR UPDATE SKIP LOCKED)
+            UPDATE tank.ledger l SET comparison_revision=l.comparison_revision
+            FROM pending p WHERE l.id=p.id AND l.tenant_id=$1 AND l.region=$2""", tenant, region)
         if changed == 'UPDATE 0':
             break
 
@@ -132,11 +121,11 @@ async def scheduled_backfill(pool, region: str, price_fp: str) -> None:
         return
     if not state or state['bench_price_fingerprint'] != price_fp:
         # Retry previously unavailable prices in bounded batches only on price change.
-        unpriced = await pool.fetch("SELECT DISTINCT tenant_id FROM tank.ledger WHERE region=$1 AND baseline_status='unpriced'", region)
+        unpriced = await pool.fetch("SELECT DISTINCT tenant_id FROM tank.ledger WHERE region=$1 AND (baseline_status='unpriced' OR (standard_cost_usd IS NOT NULL AND top_cost_usd IS NULL AND baseline_status<>'pending'))", region)
         for row in unpriced:
             while True:
                 changed = await pool.execute("""WITH batch AS (
-                    SELECT id FROM tank.ledger WHERE tenant_id=$1 AND region=$2 AND baseline_status='unpriced'
+                    SELECT id FROM tank.ledger WHERE tenant_id=$1 AND region=$2 AND (baseline_status='unpriced' OR (standard_cost_usd IS NOT NULL AND top_cost_usd IS NULL AND baseline_status<>'pending'))
                     ORDER BY id LIMIT 5000 FOR UPDATE SKIP LOCKED)
                     UPDATE tank.ledger l SET baseline_status='pending' FROM batch b
                     WHERE l.id=b.id AND l.tenant_id=$1 AND l.region=$2""", row['tenant_id'], region)
@@ -293,6 +282,10 @@ async def tick() -> str | None:
             policies = await conn.fetch("SELECT * FROM tank.policy WHERE tenant_id IS NULL AND rung IN (1,2) ORDER BY task_type")
             for row in policies:
                 policy = dict(row)
+                try:
+                    await __import__('moa').bench_task(policy, book, region, cap)
+                except Exception:
+                    log.exception('MoA bench failed for task %s; continuing CORE-1 bench', policy['task_type'])
                 state = await conn.fetchrow('SELECT * FROM tank.search_state WHERE task_type=$1', policy['task_type'])
                 if state and state['bench_status'] != 'paused' and not due(dict(state), datetime.now(timezone.utc), roster_fp, price_fp):
                     continue
@@ -368,3 +361,41 @@ async def lifespan(_app):
 
 
 router = APIRouter(lifespan=lifespan)
+
+
+def moa_shapes(config: dict) -> list[dict]:
+    """The same suite must compare every shape and both aggregation modes.
+
+    A benchmark configuration never enables a live policy. The caller must use
+    the existing platform budget reservations and ledger path for every call.
+    """
+    from moa import Policy
+    policy = Policy.model_validate(config)
+    shapes = [policy.model_copy(update={'shape': 'single', 'enabled': False}).model_dump()]
+    for shape in ('self', 'diverse', 'optimised'):
+        for mode in ('select', 'synthesize'):
+            shapes.append(policy.model_copy(update={'shape': shape, 'mode': mode, 'enabled': False}).model_dump())
+    return shapes
+
+
+def choose_moa_shape(rows: list[dict]) -> dict | None:
+    """Only comparable, complete suites can propose a cheaper shape.
+
+    No policy writes, and no partial suite or unknown cost becomes a winner.
+    """
+    if len(rows) != 7 or any(r.get('status') != 'complete' for r in rows):
+        return None
+    if len({r.get('suite_hash') for r in rows}) != 1 or not rows[0].get('suite_hash'):
+        return None
+    if any(not isinstance(r.get(k), (int, float, Decimal)) or not math.isfinite(float(r[k])) or r[k] < 0
+           for r in rows for k in ('score', 'cost_per_call')):
+        return None
+    singles = [r for r in rows if r.get('shape') == 'single']
+    expected = {(s, m) for s in ('self', 'diverse', 'optimised') for m in ('select', 'synthesize')}
+    if len(singles) != 1 or {(r.get('shape'), r.get('mode')) for r in rows if r.get('shape') != 'single'} != expected:
+        return None
+    baseline = singles[0]
+    eligible = [r for r in rows if r['score'] >= baseline['score']]
+    winner = min(eligible, key=lambda r: (r['cost_per_call'], -r['score'], r['shape'], r.get('mode', '')))
+    return {'shape': winner['shape'], 'mode': winner.get('mode'), 'score': winner['score'],
+            'cost_per_call': winner['cost_per_call'], 'status': 'proposed', 'requires_founder': True}

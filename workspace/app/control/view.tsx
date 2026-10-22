@@ -1,6 +1,7 @@
 import type { DashboardRead } from "@/lib/tank";
 import type { Signups } from "./sources";
-import { ControlActions } from "./widgets";
+import { ControlActions, WorkersActions } from "./widgets";
+import { checkingIn, type WorkersRead } from "./workers";
 
 export const money = (value: number | null | undefined) => value == null ? "—" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
 export function Spark({ values, green = false }: { values: number[]; green?: boolean }) {
@@ -17,8 +18,21 @@ export type FounderView = {
   data: DashboardRead | null; signups: Signups | null; paying: number | null;
   paused: boolean | null; errors: string[]; models: { task_type: string; candidate_model: string | null; n: number; agreement: number | null; min_shadow_samples?: number; eligible: boolean; prim_cost?: number | null; cand_cost?: number | null }[];
   refused: { task: string; path: string; at: string }[];
+  workers?: WorkersRead | null;
 };
-export function FounderDashboard({ view }: { view: FounderView }) {
+export function WorkersTile({ workers, now }: { workers: WorkersRead | null | undefined; now?: number }) {
+  const beat = workers?.worker ?? null;
+  const live = checkingIn(beat, now);
+  const status = !workers ? "Workers status unavailable" : !beat ? "No check-in yet" : !live ? "not checking in" : beat.state === "paused" ? "Paused" : beat.issue ? `Running · issue #${beat.issue}` : "Running · idle";
+  return <section className="dash-card" data-tile="workers"><div className="dash-subhead"><h2>Workers</h2><span className="dash-note">Boston host · WORKERS-2</span></div>
+    <div className="dash-row"><span>Status</span><span className={live ? "dash-chip" : "dash-problem"}>{status}</span></div>
+    <div className="dash-row"><span>Commit</span><span className="dash-note">{beat ? beat.commit.slice(0, 12) : "—"}</span></div>
+    <div className="dash-row"><span>Last check-in</span><span className="dash-note">{beat ? `${beat.seen_at} · ${beat.age_s}s ago` : "—"}</span></div>
+    {beat?.last_error && <div className="dash-row"><span>Last error</span><span className="dash-note">{beat.last_error}</span></div>}
+    <div className="dash-row"><span>{workers ? (workers.workers_paused ? "Workers are paused: no new task is taken" : "Workers take new tasks") : "Pause unavailable"}</span><WorkersActions paused={workers ? workers.workers_paused : null} /></div>
+  </section>;
+}
+export function FounderDashboard({ view, squads }: { view: FounderView; squads?: import("react").ReactNode }) {
   const { data, signups, paying } = view;
   const today = new Date().toISOString().slice(0, 10);
   const daily = data?.daily ?? [];
@@ -26,7 +40,7 @@ export function FounderDashboard({ view }: { view: FounderView }) {
   const spent = data ? daily.reduce((sum, row) => sum + Number(row.spent), 0) : null;
   const code = day && day.delivered > 0 ? `${Math.round(day.code / day.delivered * 100)}% by code` : "No completed calls today.";
   return <div className="dashboard-root dash-control">
-    <header className="dash-top"><img className="dash-brand" src="/brand/tervory-logo-on-white.png" alt="Tervory" /><h1>Control panel</h1><span className="dash-health">Health unavailable · GHOST-1</span><ControlActions paused={view.paused} /></header>
+    <header className="dash-top"><img className="dash-brand" src="/brand/tervory-logo.png" alt="Tervory" /><h1>Control panel</h1><span className="dash-health">Health unavailable · GHOST-1</span><ControlActions paused={view.paused} /></header>
     {view.errors.length > 0 && <p role="alert" className="dash-problem">{view.errors.join(" ")}</p>}
     <div className="dash-kpis">
       <Card label="Sign-ups" value={signups?.total ?? "—"} note={signups ? "From Clerk" : "Clerk unavailable"} values={signups?.days.map(day => day.value)} />
@@ -54,7 +68,9 @@ export function FounderDashboard({ view }: { view: FounderView }) {
       <section className="dash-card"><div className="dash-subhead"><h2>Latest sign-ups</h2><a className="dash-button" href="/control/signups">All {signups?.total ?? "sign-ups"}</a></div>{signups?.recent.length ? signups.recent.map(user => <div className="dash-row" key={user.id}><span><strong>{user.name}</strong><br /><span className="dash-note">{user.company ?? "Company not provided"} · {user.country ?? "Country not provided"}</span></span><span className="dash-chip">{user.plan ?? "Plan not recorded"}</span></div>) : <p className="dash-empty">{signups ? "No sign-ups yet." : "Sign-ups could not be loaded."}</p>}</section>
       <section className="dash-card"><h2>Controls</h2><div className="dash-row"><span>Shadow checks</span><span className="dash-note">{data ? `${data.shadow_policies} policies on` : "Unavailable"} · MODELS-2</span></div><div className="dash-row"><span>Overnight batches</span><span className="dash-note">{data ? `${data.batch_policies} eligible policies` : "Unavailable"} · BATCH-1</span></div><div className="dash-row"><span>Paid tools without asking</span><span className="dash-note">No global setting · CORE-1</span></div><div className="dash-row"><span>Squad builds Tervory</span><span className="dash-note">Unavailable · AGENT-1</span></div><div className="dash-row"><span>Daily budget</span><span className="dash-note">Not connected</span></div><div className="dash-row"><span>Server load</span><span className="dash-note">Unavailable · GHOST-1</span></div><div className="dash-row"><span>Storage used</span><span className="dash-note">Unavailable · BUCKET-1</span></div><div className="dash-actions"><a className="dash-button primary" href="/admin">Open the window</a><a className="dash-button" href="/admin">Proof report</a></div></section>
     </div>
+    <div style={{marginTop:18}}><WorkersTile workers={view.workers} /></div>
     <section className="dash-card" style={{marginTop:18}}><h2>Stopped by the pause</h2>{view.refused.length ? view.refused.map((row,i) => <p className="dash-note" key={i}>{row.task} · {row.path} · {row.at}</p>) : <p className="dash-empty">No recorded refusals.</p>}</section>
+    {squads}
     <p className="dash-footer">Live measurements only. Unavailable sources stay empty. Controls apply to this server.</p>
   </div>;
 }

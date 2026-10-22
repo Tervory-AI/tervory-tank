@@ -3,6 +3,9 @@ import { activeTenant } from "@/lib/tenant";
 import { uploadRadixFiles } from "../../plugin-actions";
 
 export const runtime = "nodejs";
+// Coolify ends HTTPS before Next, so request.url is http:// while the browser's Origin is https://.
+// Compare hosts, not full origins; a browser cannot forge the Host header.
+const sameHost = (request: Request) => { try { return new URL(request.headers.get("origin") ?? "").host === (request.headers.get("host") ?? new URL(request.url).host); } catch { return false; } };
 const MAX_REQUEST_BYTES = 8 * 1024 * 1024 + 64 * 1024;
 
 function reply(message: string, status: number) {
@@ -11,7 +14,7 @@ function reply(message: string, status: number) {
 
 /** A bounded multipart route avoids changing Next's shared server-action limit. */
 export async function POST(request: Request) {
-  if (request.headers.get("origin") !== new URL(request.url).origin) return reply("This request was refused.", 403);
+  if (!sameHost(request)) return reply("This request was refused.", 403);
   const tenant = await activeTenant().catch(() => null);
   if (!tenant) return reply("Choose an account to use Plugins.", 401);
   const contentType = request.headers.get("content-type") ?? "";

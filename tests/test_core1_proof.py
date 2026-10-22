@@ -28,6 +28,11 @@ def roster():
             for name, price in [('expensive', .001), ('cheap', .0001)]]
 
 
+def comparison_roster():
+    return roster()+[dict(model_name="sol",litellm_params={"model":"openai/gpt-sol"},
+        model_info={"input_cost_per_token":.001,"output_cost_per_token":.001})]
+
+
 def test_proposes_only_cheaper_no_score_regression_against_live():
     rows = [dict(model=name, score=score, cost_per_call=cost, status='complete')
             for name, score, cost in [('live',.9,3),('candidate',.7,2),('bad',.8,.1),('good',.9,.5)]]
@@ -95,10 +100,11 @@ async def test_receipts_backfill_schema_repeat_and_median(database,monkeypatch):
         # Historical receipt before the price book exists.
         old=await conn.fetchval("""INSERT INTO tank.ledger(tenant_id,agent,task_type,model,tokens_in,tokens_out,cost_usd)
             VALUES($1,'base','fixture','cheap',100,20,.01) RETURNING id""",PLATFORM_TENANT)
-        await bench.sync_prices(conn,bench.price_book(roster()))
+        await bench.sync_prices(conn,bench.price_book(comparison_roster()))
+        await conn.execute("UPDATE tank.ledger SET baseline_status='pending' WHERE id=$1",old)
         await bench.backfill(conn,PLATFORM_TENANT,'us-east')
         row=await conn.fetchrow('SELECT * FROM tank.ledger WHERE id=$1',old)
-        assert row['baseline_model']=='expensive' and row['baseline_status']=='backfilled'
+        assert row['baseline_model']=='sol' and row['baseline_status']=='backfilled'
         assert row['baseline_cost_usd']==Decimal('.12')
         for cost in (.02,.90):
             await conn.execute("""INSERT INTO tank.ledger(tenant_id,agent,task_type,model,tokens_in,tokens_out,cost_usd)
@@ -121,7 +127,12 @@ async def test_receipts_backfill_schema_repeat_and_median(database,monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_bench_runs_every_model_records_scores_proposes_and_does_not_switch(database,monkeypatch):
+@pytest.mark.parametrize('moa_fails', [False, True])
+async def test_bench_runs_every_model_records_scores_proposes_and_does_not_switch(database,monkeypatch,caplog,moa_fails):
+    if moa_fails:
+        import moa
+        async def broken(*args): raise RuntimeError('MoA fixture failure')
+        monkeypatch.setattr(moa, 'bench_task', broken)
     pool,rt=database
     monkeypatch.setattr(controls,'db',lambda:pool)
     monkeypatch.setattr(bench,'runtime',lambda:rt)
@@ -152,6 +163,8 @@ async def test_bench_runs_every_model_records_scores_proposes_and_does_not_switc
         assert await conn.fetchval("SELECT count(*) FROM tank.bench_calls WHERE tenant_id=$1 AND status='complete'",PLATFORM_TENANT)==2
     await bench.tick()
     assert called==['expensive','cheap'] # no replay before next night or roster change
+    if moa_fails:
+        assert 'continuing CORE-1 bench' in caplog.text
 
 
 @pytest.mark.asyncio
@@ -281,7 +294,7 @@ async def test_backfill_batches_once_daily_and_retries_unpriced_on_price_change(
     pool,_=database
     await pool.execute("""INSERT INTO tank.ledger(tenant_id,agent,task_type,model,tokens_in,cost_usd)
         SELECT $1,'base','fixture','cheap',100,.01 FROM generate_series(1,5001)""",PLATFORM_TENANT)
-    book=bench.price_book(roster())
+    book=bench.price_book(comparison_roster())
     async with pool.acquire() as conn:
         await bench.sync_prices(conn,book)
     await bench.scheduled_backfill(pool,'us-east','first')
@@ -289,7 +302,7 @@ async def test_backfill_batches_once_daily_and_retries_unpriced_on_price_change(
     unknown=await pool.fetchval("""INSERT INTO tank.ledger(tenant_id,agent,task_type,model,tokens_in,cost_usd)
         VALUES($1,'base','unknown','missing',100,.01) RETURNING id""",PLATFORM_TENANT)
     await bench.scheduled_backfill(pool,'us-east','first')
-    assert await pool.fetchval('SELECT baseline_status FROM tank.ledger WHERE id=$1',unknown)=='pending'
+    assert await pool.fetchval('SELECT baseline_status FROM tank.ledger WHERE id=$1',unknown)=='unpriced'
     await pool.execute("UPDATE tank.search_state SET bench_at=now()-interval '1 day' WHERE task_type='@backfill:us-east'")
     await bench.scheduled_backfill(pool,'us-east','first')
     assert await pool.fetchval('SELECT baseline_status FROM tank.ledger WHERE id=$1',unknown)=='unpriced'
@@ -320,6 +333,8 @@ async def test_proof_sql_totals_match_paged_rows_scopes_windows_flags_and_export
             (PLATFORM_TENANT,'us-east','base','different',start),(PLATFORM_TENANT,'us-east','base','fixture',end)]:
         await pool.execute("""INSERT INTO tank.ledger(tenant_id,region,agent,task_type,ts,model,cost_usd,baseline_cost_usd,baseline_status)
             VALUES($1,$2,$3,$4,$5,'cheap',.1,.25,'measured')""",tenant,region,agent,task,ts)
+    # Explicit old snapshots test negative/mismatched evidence independently of today's default trigger.
+    await pool.execute("UPDATE tank.ledger SET baseline_model='baseline',baseline_cost_usd=.25,standard_model='baseline',standard_cost_usd=.25,baseline_status='backfilled'")
     pages=[await proof.snapshot(PLATFORM_TENANT,'fixture',start,end,n) for n in range(3)]
     rows=[r for page in pages for r in page['ledger']]
     assert len(rows)==len({r['id'] for r in rows})==205
@@ -379,7 +394,7 @@ async def test_research_unknown_and_vendor_fees_never_claim_baseline_savings(dat
     pool,rt=database
     monkeypatch.setattr(proof,'runtime',lambda:rt)
     async with pool.acquire() as conn:
-        await bench.sync_prices(conn,bench.price_book(roster()))
+        await bench.sync_prices(conn,bench.price_book(comparison_roster()))
         await conn.execute("UPDATE tank.policy SET model='cheap',baseline_model='expensive' WHERE task_type='market.research' AND tenant_id IS NULL")
         ids=[]
         for model,vendor,cost_status,cost in [('cheap',None,'unknown',0),

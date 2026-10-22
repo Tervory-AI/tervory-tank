@@ -179,7 +179,6 @@ services:
     networks:
       - default
       - tervory-gw-tiger
-      - tervory-gw-base
     expose:
       - "3000"
     healthcheck:
@@ -217,6 +216,14 @@ services:
       TANK_KEY_TISAN: ${TANK_KEY_TISAN:-}
       TANK_KEY_ZENAS: ${TANK_KEY_ZENAS:-}
       TANK_KEY_BASE: ${TANK_KEY_BASE:-}
+      TANK_VAULT_KEY: ${TANK_VAULT_KEY}
+      ACCESS_BROWSER_KEY_BASE: ${ACCESS_BROWSER_KEY_BASE}
+      ACCESS_BROWSER_KEY_TIGER: ${ACCESS_BROWSER_KEY_TIGER}
+      META_APP_ID: ${META_APP_ID}
+      META_APP_REVIEW_APPROVED: ${META_APP_REVIEW_APPROVED}
+      META_ACCESS_TOKEN: ${META_ACCESS_TOKEN}
+      META_GRAPH_VERSION: ${META_GRAPH_VERSION}
+      META_IG_BUSINESS_ID: ${META_IG_BUSINESS_ID}
       TANK_KEY_RIG: ${TANK_KEY_RIG:-}
       TANK_KEY_GHOST: ${TANK_KEY_GHOST:-}
       TANK_KEY_WORKERS: ${TANK_KEY_WORKERS:-}
@@ -241,6 +248,10 @@ services:
       - tervory-gw-base
       - tervory-gw-rig
       - tervory-gw-ghost
+    # Host loopback only, for the workers service on the Boston host (workers/host/).
+    # Never a public address: Tank stays off the internet.
+    ports:
+      - "127.0.0.1:8100:8000"
     expose:
       - "8000"
     healthcheck:
@@ -432,7 +443,7 @@ networks:
     external: true
     name: tervory-gw-zenas
   # Compose creates this corridor on deploy. Base's own compose attaches as external.
-  # Not internal: Base reads websites through Tiger's browser and SearXNG.
+  # Not internal: Base's own browser gateway and SearXNG reach public websites.
   tervory-gw-base:
     name: tervory-gw-base
   # Created by this stack on deploy (ROOMS.md). The Rig resource joins it as external.

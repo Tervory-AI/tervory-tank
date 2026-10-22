@@ -5,11 +5,11 @@ from __future__ import annotations
 import ast
 import asyncio
 import json
+import re
 from pathlib import Path
 
 import httpx
 import pytest
-import yaml
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
@@ -262,7 +262,7 @@ def test_fresh_podman_container_is_sealed() -> None:
     assert "ghs_" not in blob
     assert "BEGIN PRIVATE KEY" not in blob
     assert choose_runtime({"host": {"ociRuntimes": {"runsc": {}, "crun": {}}}}) == "runsc"
-    assert choose_runtime({"host": {"ociRuntimes": {"crun": {}}}}) == "runc"
+    assert choose_runtime({"host": {"ociRuntime": {"name": "crun"}}}) == "crun"
     assert kill_argv("tervory-worker-7-abcd1234") == ["podman", "kill", "tervory-worker-7-abcd1234"]
     text = (ROOT / "workers/task/Dockerfile").read_text(encoding="utf-8")
     assert "node:22-bookworm-slim" in text
@@ -363,24 +363,18 @@ def test_secrets_are_redacted_and_not_in_the_result() -> None:
     try:
         stage(directory, token=TOKEN, tank_key="tank-key-example")
         assert (directory / "token").read_text(encoding="utf-8") == TOKEN
-        assert oct((directory / "token").stat().st_mode & 0o777) == oct(0o644)
-        assert oct(directory.stat().st_mode & 0o777) == oct(0o700)
+        assert oct((directory / "token").stat().st_mode & 0o777) == oct(0o444)
+        assert oct(directory.stat().st_mode & 0o777) == oct(0o711)
     finally:
         for child in directory.iterdir():
             child.unlink()
         directory.rmdir()
 
 
-def test_compose_publishes_nothing_and_joins_tank() -> None:
-    text = (ROOT / "docker-compose.workers.yml").read_text(encoding="utf-8")
-    data = yaml.safe_load(text)
-    service = data["services"]["workers"]
-    assert "ports" not in service
-    assert service["networks"] == ["tank"]
-    assert data["networks"]["tank"]["external"] is True
-    assert "TANK_KEY_WORKERS" in service["environment"]
-    assert "WORKER_LINK" in service["environment"]
-    env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
+def test_host_env_template_names_the_settings() -> None:
+    # The Docker workers app is retired; the host env file (workers/host/) carries the names.
+    assert not (ROOT / "docker-compose.workers.yml").exists()
+    template = (ROOT / "workers/host/worker.env.example").read_text(encoding="utf-8")
     for name in (
         "WORKER_MAX_TASKS",
         "WORKER_TASK_CPUS",
@@ -388,11 +382,20 @@ def test_compose_publishes_nothing_and_joins_tank() -> None:
         "TANK_KEY_WORKERS",
         "GITHUB_APP_ID",
         "GITHUB_APP_PRIVATE_KEY_FILE",
-        "TANK_DOCKER_NETWORK",
+        "TANK_URL",
     ):
-        assert name in env_example
-    assert "BEGIN PRIVATE KEY" not in text
+        assert re.search(rf"^{name}=", template, re.M)
+    env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
+    assert "TANK_KEY_WORKERS" in env_example
+    assert "BEGIN PRIVATE KEY" not in template
     assert "BEGIN PRIVATE KEY" not in (ROOT / "docs/workers/README.md").read_text(encoding="utf-8")
+
+
+class _Open:
+    """The founder's workers pause, switched off."""
+
+    async def paused(self) -> bool:
+        return False
 
 
 class _Launcher:
@@ -476,7 +479,7 @@ async def test_worker_label_opens_a_draft_and_marks_ready(tmp_path: Path) -> Non
     github = _client(handler)
     launcher = _Launcher()
     settings = _settings(private_key_file=str(key_file), state_dir=str(tmp_path))
-    service = Service(settings, github, launcher)  # type: ignore[arg-type]
+    service = Service(settings, github, launcher, _Open())  # type: ignore[arg-type]
     service.pause_s = 0
     await service.poll_once(TOKEN)
     await asyncio.gather(*service.jobs)
@@ -524,7 +527,7 @@ async def test_ci_failure_stays_a_draft(tmp_path: Path) -> None:
         return httpx.Response(404)
 
     github = _client(handler)
-    service = Service(_settings(private_key_file=str(key_file)), github, _Launcher())  # type: ignore[arg-type]
+    service = Service(_settings(private_key_file=str(key_file)), github, _Launcher(), _Open())  # type: ignore[arg-type]
     service.pause_s = 0
     await service.poll_once(TOKEN)
     await asyncio.gather(*service.jobs)
@@ -561,7 +564,7 @@ async def test_one_task_at_a_time_and_bad_issue_gets_one_comment() -> None:
     github = _client(handler)
     launcher = _Launcher()
     launcher.release.clear()
-    service = Service(_settings(private_key_file=str(key_file)), github, launcher)  # type: ignore[arg-type]
+    service = Service(_settings(private_key_file=str(key_file)), github, launcher, _Open())  # type: ignore[arg-type]
     await service.poll_once(TOKEN)
     await launcher.started.wait()
     await service.poll_once(TOKEN)
@@ -609,7 +612,7 @@ async def test_existing_green_draft_is_marked_ready_without_a_new_container() ->
 
     github = _client(handler)
     launcher = _Launcher()
-    service = Service(_settings(), github, launcher)  # type: ignore[arg-type]
+    service = Service(_settings(), github, launcher, _Open())  # type: ignore[arg-type]
     await service.poll_once(TOKEN)
     assert launcher.calls == 0
     assert service.records[0]["status"] == "ready"

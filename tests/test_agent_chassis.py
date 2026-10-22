@@ -324,6 +324,8 @@ def test_route_overwrites_agent_with_the_authenticated_caller(monkeypatch: pytes
         seen["caller"] = caller
         return "sent"
 
+    async def disabled_policy(*args): return {"model": "fixture", "moa_enabled": False}
+    monkeypatch.setattr(TANK, "load_policy", disabled_policy)
     monkeypatch.setattr(TANK, "run_route", fake_run_route)
     body = TANK.RouteRequest(
         tenant_id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
