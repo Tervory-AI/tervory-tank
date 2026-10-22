@@ -14,7 +14,7 @@
 ## How it runs: all five lanes in parallel, now (founder, 22 Oct 11:13)
 > "Forget anything to do with my suppliers or API keys. Those come last. The infrastructure needs to be built and complete."
 
-**Phase 1 is the complete machine, running on stand-in data.** Every lane uses fixtures, sample feeds and stand-in 3D models. Real suppliers, supplier keys, Custom Nation's Odoo login and the makers' CAD files are plugged in **last**, as configuration only, with no new code. Every lane builds the adapter, the screen and the test now, and leaves the real credentials as a named, empty Coolify setting.
+**Phase 1 is the complete machine, running on stand-in data.** Every lane uses fixtures, sample feeds and stand-in 3D models. Real suppliers, supplier keys, and Custom Nation's Odoo login are plugged in **last**, as configuration only, with no new code. Every lane builds the adapter, the screen and the test now, and leaves the real credentials as a named, empty Coolify setting.
 
 **Rig is built neutral (founder, 22 Oct).** Rig is a product for any retailer. Build every lane industry-neutral, with neutral stand-in data and neutral stand-in 3D models; no retailer- or industry-specific content in code, fixtures or models. Custom Nation comes with its own skin, which already exists (`theme="custom-nation"` in `tervory-rig`), and its catalogue is loaded last, as data. Don't add to or change the existing `customnation` catalogue files.
 
@@ -84,13 +84,18 @@ Clone the AGENT-1 shape that Base proved (`agents/base/`: brain, sandbox, browse
 - tests.
 
 1. **Feeds into Rig's tables** (`products`, `fits`, `families`, `setup_templates`):
-   - formats (founder, 22 Oct):
-     - **the store's own CSV.** The store uploads or connects it itself in the admin and maps its columns. Its prices are used exactly as given; that's the store's choice. A store can optionally turn on the price rule below.
-     - **US distributor feeds** that ACCESS-1 already reads (Zanders, Sports South, RSR, Jerry's). These prices are supplier cost, and the landed-cost price rule applies.
-     - No Shopify, WooCommerce or Google Merchant importers.
+   - **Rig takes every feed it is fed** (founder, 22 Oct). That covers distributors in the US, the EU and New Zealand, and stores' own catalogues:
+     - **Formats:** CSV/TSV, Excel (.xlsx), XML (including Google Merchant), JSON (including Shopify `products.json` and WooCommerce REST), and the distributor feeds ACCESS-1 already reads (Zanders, Sports South, RSR, Jerry's). A new format is a new parser behind the same interface, never a fork.
+     - **Delivery:** a file upload, a URL pulled on a schedule, or an API connection with credentials stored by name only.
+     - **Mapping per feed:** the admin maps the feed's columns or fields to Rig's fields once and saves the map. Rig suggests the map; a person confirms it.
+     - **Each feed declares:**
+       - its **currency** (USD, EUR, NZD, ZAR…);
+       - its **country**;
+       - whether its prices are **cost from a supplier** (the landed-cost rule applies) or **a selling price** (used exactly as given, the store's choice).
+     - **Safety:** size limits on every file, no XML entities or DOCTYPE, and a private or internal address is never fetched.
    - pulled nightly, plus a manual **Refresh now**;
    - all-or-nothing per file, with `{added, updated, rejected}` on a receipt.
-2. **Price rules** (server-side only): the retailer's landed-cost rule (supplier cost, freight, duty, margin and FX to ZAR at a rate the founder sets) gives **one indicative price**. The rule and its inputs never leave the server, and the API sends the result only.
+2. **Price rules** (server-side only): the landed-cost rule gives **one indicative price**. Its inputs are supplier cost, freight and duty **per supplier or region** (US, EU, NZ), margin, and FX from **the feed's currency** to the shop's currency, at rates the founder sets per currency. The rule and its inputs never leave the server, and the API sends the result only.
 3. **Fitment:**
    - feed fitment data where it exists;
    - otherwise `rig.fit_suggest` proposes rows (`source='suggested'`);
@@ -100,11 +105,11 @@ Clone the AGENT-1 shape that Base proved (`agents/base/`: brain, sandbox, browse
    - connect a feed, set the price rule, choose setup templates per category (pistol: red dot, plate, holster, light; rifle: scope, rings, bipod), and see the fit queue;
    - **what shoppers searched for and didn't find.**
 5. **Tiger** updates price and availability for products with no feed (never fitment).
-6. **Run on sample feeds now:** a sample store CSV and a sample distributor file, both in `agents/rig/catalogues/samples/`. Real suppliers are connected last, through the admin, with no code change.
+6. **Run on sample feeds now:** in `agents/rig/catalogues/samples/`, a US distributor CSV (USD cost), an EU XML feed (EUR cost), an NZ JSON feed (NZD cost), an .xlsx file, and a store's own CSV (ZAR selling price). Real suppliers are connected last, through the admin, with no code change.
 
 **Done when:**
 - CI is green.
-- A sample store CSV and a sample distributor feed import with receipts.
+- Every sample feed imports with a receipt, and each priced correctly in ZAR from its own currency.
 - A suggested fit is invisible until approved.
 - The browser never receives cost, duty or margin (test).
 - Screenshots of `/rig/admin` at 375px and 1440px.
@@ -152,7 +157,6 @@ Rig gets one sealed worker service, **`rig-forge`**, holding every 3D tool. It's
 | `@gltf-transform/cli` | simplify to a size target, meshopt, dedupe, resize textures, validate | MIT |
 | `gltfpack` (meshoptimizer) | final compression for the web | MIT |
 | KTX-Software (`toktx`) | KTX2/Basis textures | Apache-2.0 |
-| OpenCascade via `cadquery-ocp` (or the FreeCAD CLI) | maker CAD (STEP/IGES) to a mesh, in millimetres | LGPL |
 | `trimesh` + `manifold3d` | the automatic model check: outward faces, watertight, real size, budget | MIT / Apache-2.0 |
 | Khronos `gltf-validator` | spec check of every GLB | Apache-2.0 |
 
@@ -163,7 +167,7 @@ Rig gets one sealed worker service, **`rig-forge`**, holding every 3D tool. It's
 
 **How a job flows:**
 1. Rig's brain (or the retailer admin) creates a 3D job.
-2. The forge picks it up: CAD, a scan or AI, then Blender, then gltf-transform and gltfpack, then KTX2, then the model check, then the validator.
+2. The forge picks it up: a scan or AI, then Blender, then gltf-transform and gltfpack, then KTX2, then the model check, then the validator.
 3. The result goes to the bucket as a **draft**, with a report (triangles, size, dimensions, pass or fail per check).
 4. A person approves it before any shopper sees it (RIG-5).
 
@@ -187,7 +191,7 @@ Nothing else in other lanes' files changes behaviour.
 
 **Done when:**
 - CI builds the forge image and verifies every tool's checksum.
-- `tests/test_rig_forge*.py` takes a neutral sample STEP file and a sample scan (OBJ) end to end into a GLB that passes the model check and the validator.
+- `tests/test_rig_forge*.py` takes a sample scan (OBJ) and a sample AI-made GLB end to end into a GLB that passes the model check and the validator.
 - An inside-out mesh and a mesh with holes are both rejected, with a reason.
 - A GPU job runs against the stub with a receipt.
 - The forge image's software list is in the PR.
@@ -196,14 +200,14 @@ Nothing else in other lanes' files changes behaviour.
 **3D is not for everyone:** it is a per-tenant entitlement (`rig_3d`). Tenants without it never download a byte of 3D code.
 
 1. **Getting the 3D models, in order of preference:**
-   1. **The maker's CAD files** (STEP/IGES), converted to optimised GLB with the CAD converter (`cadconvert`), with a polygon budget and real dimensions in millimetres.
-   2. **Photos to 3D with AI** (one or a few photos), using an open model on our Hugging Face GPUs. TRELLIS 2 is MIT-licensed and gives GLB with PBR materials. Check any other model's licence first.
-   3. **Photos to 3D by scanning (photogrammetry):** the retailer uploads 50 to 70 overlapping phone photos of one product. It all runs in the cloud, in the RIG-5F forge, never on anyone's laptop:
+   *No CAD files (founder, 22 Oct): 3D does not use AutoCAD, STEP or IGES. Models come from photos only.*
+   1. **Photos to 3D with AI** (one or a few photos), using an open model on our Hugging Face GPUs. TRELLIS 2 is MIT-licensed and gives GLB with PBR materials. Check any other model's licence first.
+   2. **Photos to 3D by scanning (photogrammetry):** the retailer uploads 50 to 70 overlapping phone photos of one product. It all runs in the cloud, in the RIG-5F forge, never on anyone's laptop:
       - Meshroom runs headless (`meshroom_batch`) on a Hugging Face GPU job;
       - Blender runs headless (`blender -b -P optimize.py -- in.obj out.glb`, using `bpy.ops.wm.obj_import` because Blender 4.x removed `import_scene.obj`);
       - then `gltf-transform` (simplify to a size target, meshopt and KTX2).
       - Every step goes on a receipt.
-   4. **Automatic model check before anyone reviews it:**
+   3. **Automatic model check before anyone reviews it:**
       - every face points outward (no inside-out parts; the 22 Oct test mug's handle failed exactly this);
       - no open holes;
       - real size in millimetres;
@@ -230,11 +234,10 @@ Nothing else in other lanes' files changes behaviour.
 - On the Custom Nation test page, the neutral stand-in centre product shows in 3D, with an approved part snapping to its mount point and a second part shown in the exploded view.
 - A tenant without `rig_3d` loads no 3D code (bundle test).
 - Kiosk mode runs at 1920×1080.
-- Build and test on stand-in models now: neutral stand-in models (a centre product and two parts that fit it), each with mount points. The makers' CAD files are plugged in last.
+- Build and test on stand-in models now: neutral stand-in models (a centre product and two parts that fit it), each with mount points.
 
 ## Plugged in last (configuration only, no code)
 1. Custom Nation's real suppliers and their keys: RIG-3's feed connections take them.
 2. Custom Nation's Odoo URL and user: RIG-4's adapter takes them.
-3. The makers' CAD files: RIG-5's pipeline takes them.
-4. The 3D add-on price.
-5. Going live on the new ZA host (Hetzner) for Custom Nation shopper data.
+3. The 3D add-on price.
+4. Going live on the new ZA host (Hetzner) for Custom Nation shopper data.
