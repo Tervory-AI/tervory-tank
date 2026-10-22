@@ -7,7 +7,6 @@ RUN pip install --no-cache-dir -r requirements.txt \
     && chown agent:agent /data
 COPY _chassis/chassis /app/chassis
 COPY rig/rigbox /app/rigbox
-COPY rig/rig_brain /app/rig_brain
 COPY rig/app.py /app/app.py
 COPY rig/gold_sources.py /app/gold_sources.py
 COPY rig/schema.sql /app/schema.sql
