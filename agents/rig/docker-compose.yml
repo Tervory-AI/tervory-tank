@@ -1,6 +1,9 @@
-# Rig. Deploy this file as its own Coolify resource.
+# coolify: raw compose
+# Rig. Deploy this file as its own Coolify resource, with Raw Compose Deployment on.
+# Raw mode deploys this file exactly as written: Coolify adds only its own labels, so the
+# public route for https://rig.tervory.com is declared here (Traefik labels plus Rig's own
+# existing proxy network), and the data volume is pinned to its live name.
 # Build context is agents/ (the parent of this file), because the chassis lives there.
-# The only network is the external gateway. Coolify attaches https://rig.tervory.com.
 # The corridor is created by the main stack. This resource joins it by name.
 
 services:
@@ -29,6 +32,21 @@ services:
       - agent_rig_data:/data
     networks:
       - gw
+      - proxy
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=59f8cnpelzwsyte1atyjc4fv
+      - traefik.http.routers.rig-http.rule=Host(`rig.tervory.com`)
+      - traefik.http.routers.rig-http.entrypoints=http
+      - traefik.http.routers.rig-http.middlewares=redirect-to-https
+      - traefik.http.routers.rig-https.rule=Host(`rig.tervory.com`)
+      - traefik.http.routers.rig-https.entrypoints=https
+      - traefik.http.routers.rig-https.tls=true
+      - traefik.http.routers.rig-https.tls.certresolver=letsencrypt
+      - traefik.http.routers.rig-https.service=rig
+      - traefik.http.routers.rig-https.middlewares=rig-gzip
+      - traefik.http.middlewares.rig-gzip.compress=true
+      - traefik.http.services.rig.loadbalancer.server.port=8000
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
       interval: 10s
@@ -37,10 +55,19 @@ services:
     expose:
       - "8000"
 
+# The volume Rig used before the raw-compose switch, by its live name, so its data survives.
+# external: a wrong name fails the deploy instead of starting on an empty volume.
 volumes:
   agent_rig_data:
+    external: true
+    name: 59f8cnpelzwsyte1atyjc4fv_agent-rig-data
 
 networks:
   gw:
     external: true
     name: tervory-gw-rig
+  # Rig's own proxy network, the one coolify-proxy already reaches it on today. Not the
+  # shared coolify network, so Rig stays on a per-app network as before the raw switch.
+  proxy:
+    external: true
+    name: 59f8cnpelzwsyte1atyjc4fv
