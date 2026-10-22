@@ -1,0 +1,3 @@
+[
+  {"sku": "SAMPLE-MUG", "name": "Sample Ceramic Mug", "price": "4.00", "permalink": "https://example.com/mug", "status": "publish", "stock_status": "instock", "images": [{"src": "https://example.com/mug.png"}], "categories": [{"name": "tableware"}], "brands": [{"name": "Sample Workshop"}], "global_unique_id": "100002"}
+]
