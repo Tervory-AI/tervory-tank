@@ -15,3 +15,6 @@ cryptography==50.0.2
 -c constraints-langgraph.txt
 # Per-node timeouts and jittered retries for MOA-1.
 langgraph==1.2.16
+
+# Subset and embed the bundled Unicode font in savings/evidence PDFs.
+reportlab==4.4.9

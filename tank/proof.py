@@ -195,7 +195,7 @@ def csv_export(data: dict) -> str:
 
 
 def pdf_export(data: dict) -> bytes:
-    """Small, dependency-free, paginated PDF containing totals and the selected evidence page."""
+    """Paginated Unicode PDF containing totals and the selected evidence page."""
     import textwrap
     lines = ['Tervory | Tank proof', f"Region: {data['region']}  Tenant: {data['tenant_id']}",
              'Savings = named standard cost - actual. Percent saved = savings / standard cost; cheaper multiple = standard cost / actual.',
@@ -208,30 +208,14 @@ def pdf_export(data: dict) -> bytes:
     for section in ('metadata','tasks','ledger','shadows','runs','cases','promotions','policies','state'):
         lines.append(section.upper())
         for row in ([{k:v for k,v in data.items() if k not in ('tasks','ledger','shadows','runs','cases','promotions','policies','state')}] if section=='metadata' else data[section]):
-            lines.extend(textwrap.wrap(json.dumps(row, sort_keys=True), width=110) or [''])
+            lines.extend(textwrap.wrap(json.dumps(row, sort_keys=True, ensure_ascii=False), width=110) or [''])
     if data.get('headline'):
         lines[1:1]=textwrap.wrap(data['headline'],110)
-    chunks = [lines[i:i+50] for i in range(0,len(lines),50)]
-    objects = [b'<< /Type /Catalog /Pages 2 0 R >>', b'', b'<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>']
-    pages = []
-    for chunk in chunks:
-        page_id = len(objects)+1
-        pages.append(page_id)
-        objects.append(f'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents {page_id+1} 0 R >>'.encode())
-        escaped = [line.replace('\\','\\\\').replace('(','\\(').replace(')','\\)') for line in chunk]
-        stream = ('BT /F1 8 Tf 32 760 Td 14 TL '+ ' T* '.join('('+s+') Tj' for s in escaped) +' ET').encode('latin-1',errors='replace')
-        objects.append(f'<< /Length {len(stream)} >>\nstream\n'.encode()+stream+b'\nendstream')
-    objects[1] = f"<< /Type /Pages /Count {len(pages)} /Kids [{' '.join(f'{p} 0 R' for p in pages)}] >>".encode()
-    result = bytearray(b'%PDF-1.4\n')
-    offsets = [0]
-    for i, item in enumerate(objects, 1):
-        offsets.append(len(result))
-        result.extend(f'{i} 0 obj\n'.encode()+item+b'\nendobj\n')
-    start = len(result)
-    result.extend(f'xref\n0 {len(offsets)}\n0000000000 65535 f \n'.encode())
-    result.extend(''.join(f'{offset:010d} 00000 n \n' for offset in offsets[1:]).encode())
-    result.extend(f'trailer\n<< /Size {len(offsets)} /Root 1 0 R >>\nstartxref\n{start}\n%%EOF\n'.encode())
-    return bytes(result)
+    from savings_export import PDF
+    pdf=PDF()
+    for line in lines:
+        pdf.text(line,8)
+    return pdf.finish()
 
 
 @router.get('/export/{format}')
@@ -434,7 +418,7 @@ async def savings_export(format: str, end: datetime, tenant_id: uuid.UUID | None
         raise HTTPException(404, 'not found')
     report = await savings_snapshot(tenant_id, end, founder=True, clients_only=clients_only)
     evidence = await savings_rows(tenant_id, end, page, clients_only=clients_only, founder=True)
-    # Reuse the bounded, formula-safe, dependency-free evidence exporters.
+    # Reuse the bounded evidence exporters: formula-safe CSV and embedded-font PDF.
     data = dict(tenant_id=report['tenant_id'], region=report['region'], as_of=report['as_of'], headline=report['total']['headline'],
                 description='Headline: savings against the named standard model, percent cheaper and times cheaper. Second comparison: vs the named top model. Defensible linked work only; evidence is the selected page.',
                 page=page, has_more=evidence['has_more'], page_size=PAGE_SIZE,
@@ -452,6 +436,7 @@ async def savings_client_copy(format: str, end: datetime, tenant_id: uuid.UUID,
     from savings_export import csv_copy, pdf_copy
     if format not in ('csv','pdf'):
         raise HTTPException(404,'not found')
+    client_tenant(tenant_id)
     # Required UUID: never an all-client aggregate or founder population.
     report=client_payload(await savings_snapshot(tenant_id,end))
     evidence=client_payload(await savings_rows(tenant_id,end,page))
@@ -461,8 +446,8 @@ async def savings_client_copy(format: str, end: datetime, tenant_id: uuid.UUID,
 
 
 # Registered separately: no founder dependency and no optional/all-tenant scope.
-from dashboards import workspace_only
-client_router = APIRouter(prefix='/v1/client-savings', dependencies=[Depends(workspace_only)])
+from dashboards import workspace_only, client_tenant
+client_router = APIRouter(prefix='/v1/client-savings', dependencies=[Depends(workspace_only), Depends(client_tenant)])
 
 
 # Explicit projection keeps names, receipt metadata and founder-only comparisons
@@ -484,6 +469,7 @@ _CLIENT_PENDING: dict = {}
 
 @client_router.get('/revision')
 async def client_savings_revision(tenant_id: uuid.UUID) -> dict:
+    client_tenant(tenant_id)
     async with runtime().pool().acquire() as conn:
         revision = await conn.fetchval('SELECT revision FROM tank.savings_revisions WHERE tenant_id=$1',tenant_id)
     return {'revision':datetime.now(timezone.utc).date().isoformat()+':'+str(revision or 0)}
@@ -516,6 +502,7 @@ async def client_savings(tenant_id: uuid.UUID) -> dict:
 async def client_savings_rows(tenant_id: uuid.UUID, end: datetime,
         page: int = Query(default=0, ge=0, le=100000), start: datetime | None = None,
         until: datetime | None = None, member: str | None = Query(default=None, max_length=80), free_only: bool = False) -> dict:
+    client_tenant(tenant_id)
     return client_payload(await savings_rows(tenant_id, end, page, start, until, member, free_only))
 
 

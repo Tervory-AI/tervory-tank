@@ -89,7 +89,9 @@ def reserve_quote(messages: list[dict], max_tokens: int, price: dict) -> Decimal
 
 async def sync_prices(conn, book: dict) -> None:
     async with conn.transaction():
-        await conn.execute('UPDATE tank.proof_prices SET active=false WHERE active')
+        # Avoid transient false/true flips: an unchanged book must not invalidate
+        # every client cache when this transaction commits.
+        await conn.execute('UPDATE tank.proof_prices SET active=false WHERE active AND NOT (model=ANY($1::text[]))',list(book))
         for name, p in book.items():
             await conn.execute("""INSERT INTO tank.baseline_price_changes(model,old_input,old_output,new_input,new_output)
                 SELECT $1,input_usd,output_usd,$2,$3 FROM tank.proof_prices WHERE model=$1
