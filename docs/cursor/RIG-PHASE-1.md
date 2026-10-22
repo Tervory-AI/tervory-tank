@@ -11,15 +11,25 @@
 >
 > **Design:** Figma `uRpPy3Hns0WxWZYTPwZ2ni`, frames 01–05 (search, results, complete your setup, can't find it, the explore graph). There are no 3D frames yet.
 
-## The order (each lane starts only when the one before is live)
+## How it runs: all five lanes in parallel, now (founder, 22 Oct 11:13)
+> "Forget anything to do with my suppliers or API keys. Those come last. The infrastructure needs to be built and complete."
 
-| Lane | What | Builder | Starts when |
+**Phase 1 is the complete machine, running on stand-in data.** Every lane uses fixtures, sample feeds and stand-in 3D models. Real suppliers, supplier keys, Custom Nation's Odoo login and the makers' CAD files are plugged in **last**, as configuration only, with no new code. Every lane builds the adapter, the screen and the test now, and leaves the real credentials as a named, empty Coolify setting.
+
+The lanes run **in parallel**. To keep merges clean, each lane owns its own files:
+
+| Lane | What | Builder | Owns |
 |---|---|---|---|
-| **RIG-2** | Infrastructure: Rig's own box | Cursor or Grok (catalogue is firearms; Codex refuses) | now |
-| **RIG-3** | Catalogue and feeds, retailer admin, price rules | Cursor or Grok | RIG-2 live and sealed |
-| **RIG-4** | The widget live on Custom Nation | Cursor (UI to Figma) | RIG-3 has a real catalogue |
-| **RIG-5a** | 3D frames in Figma, for founder approval | Cursor | can run alongside RIG-3 |
-| **RIG-5** | The 3D upgrade (paid tier; Custom Nation first) | Cursor or Grok | RIG-5a approved and RIG-4 live |
+| **RIG-2** | Rig's own box: brain, sandbox, sealed browser, storage, memory | Grok | `agents/rig/` compose, Dockerfiles, `brain/`, `ops/seal-check.sh`, `tests/test_room_seal.py`, `tests/test_rig_box*.py` |
+| **RIG-3** | Feed machinery, price rules, fit approval, retailer admin, on sample feeds | Cursor | `agents/rig/rigbox/` (feeds, pricing, fits), `tank/access.py` (Rig mapping only), `workspace/app/rig/admin/`, `tests/test_rig_feeds*.py` |
+| **RIG-4** | The widget complete to Figma 01–05, the quote handoff (Odoo adapter stubbed), bundle hosting, analytics | Cursor | `Tervory-AI/tervory-rig`, plus `agents/rig/rigbox/quotes/` and `tests/test_rig_quotes*.py` |
+| **RIG-5a** | 3D frames 06–07 in Figma | Cursor | Figma `uRpPy3Hns0WxWZYTPwZ2ni` only |
+| **RIG-5** | The 3D engine: asset pipeline, mount points, `rig_3d` entitlement, viewer chunk, kiosk mode, on stand-in models | Grok or Cursor | `agents/rig/rigbox/three_d/`, `tervory-rig/widget/src/three/`, `tests/test_rig_3d*.py` |
+
+**How the lanes meet:**
+- **Shared tables:** each lane adds its own additive schema in `agents/rig/schema.sql`, in its own clearly marked block. Merge main before marking ready, and keep every other lane's block.
+- **RIG-5 builds the engine now** (pipeline, anchors, entitlement, loader, viewer core, kiosk shell) and wires its screens to frames 06–07 once the founder approves them. Until then the viewer runs in a plain test page.
+- **Deploy order:** whichever lane merges first deploys. Tick Raw Compose on agent-rig before RIG-2 merges.
 
 **Hard rules for every Rig lane:** `docs/cursor/CONTEXT.md`, `AGENTS.md` and `tervory-rig/AGENTS.md`. In particular:
 - One indicative total. Cost, duty and margin never reach the browser.
@@ -27,7 +37,7 @@
 - No checkout; every path ends in a quote.
 - The widget code is industry-neutral.
 - No secrets in the widget.
-- **Custom Nation is a ZA client:** its live shopper data (quote contacts) is stored on the ZA box. Until the ZA box is back, build and test on Boston with sample or stand-in data only.
+- **Custom Nation is a ZA client:** its live shopper data (quote contacts) will be stored on the new ZA host. Phase 1 builds and tests on Boston with stand-in data only.
 
 ---
 
@@ -59,7 +69,7 @@ Clone the AGENT-1 shape that Base proved (`agents/base/`: brain, sandbox, browse
 
 ---
 
-## RIG-3: catalogue, feeds, retailer admin and price rules
+## RIG-3: catalogue, feeds, retailer admin and price rules (on sample feeds)
 **Reuse ACCESS-1's feed system in Tank** (`tank/access.py`: feed import, connect and refresh, with receipts). Don't build a second one.
 
 **Files you may change:**
@@ -84,7 +94,7 @@ Clone the AGENT-1 shape that Base proved (`agents/base/`: brain, sandbox, browse
    - connect a feed, set the price rule, choose setup templates per category (pistol: red dot, plate, holster, light; rifle: scope, rings, bipod), and see the fit queue;
    - **what shoppers searched for and didn't find.**
 5. **Tiger** updates price and availability for products with no feed (never fitment).
-6. Replace the 18-row stand-in only when the founder names the suppliers. **Founder decision:** which US suppliers and accounts Custom Nation uses (the Figma notes' open question).
+6. **Run on sample feeds now:** a sample Shopify feed, a sample WooCommerce feed, a sample Google Merchant feed and a sample distributor file, all in `agents/rig/catalogues/samples/`. Real suppliers are connected last, through the admin, with no code change.
 
 **Done when:**
 - CI is green.
@@ -103,7 +113,7 @@ Clone the AGENT-1 shape that Base proved (`agents/base/`: brain, sandbox, browse
    - every quote and "can't find it" link request is stored in Rig and sent to the retailer's flow, configured per tenant;
    - for Custom Nation that flow is its client portal and an **Odoo quotation** (Figma notes);
    - build the Odoo adapter behind the existing sender interface, with a stub in tests.
-   - **Founder decision:** Custom Nation's Odoo URL and the user to create quotations, entered by the founder in Coolify; never in chat.
+   - Build the adapter against Odoo's documented API with a stub in tests. `RIG_ODOO_URL` and `RIG_ODOO_USER` stay empty in Coolify until they are plugged in last.
 3. **Keys and origins:** a live publishable key for Custom Nation, limited to customnation.co.za and its test page.
 4. **Hosting the bundle:** the UMD bundle on a public, cache-busted path (an R2 public bucket or Rig's own domain), under 150 KB gzipped.
 5. **Analytics** (no tracking of people): counts of searches, setups opened, swaps, quotes, and searches with no result, per tenant.
@@ -111,7 +121,7 @@ Clone the AGENT-1 shape that Base proved (`agents/base/`: brain, sandbox, browse
 **Done when:**
 - The widget on a Custom Nation test page searches the real catalogue, builds setups, swaps a part and sends a test quote, which reaches Odoo as a draft quotation (in a test Odoo, or by founder sign-off).
 - Screenshots at 390px and 1440px.
-- **Live on the ZA box** once it's back (Custom Nation shopper data stays in ZA).
+- **Custom Nation's live shopper data moves to the new ZA host (Hetzner) with the rest of ZA, last.** Until then the test page runs on Boston with stand-in data.
 
 ---
 
@@ -151,11 +161,11 @@ Tisan's rule: design before code. Add these frames to `uRpPy3Hns0WxWZYTPwZ2ni`:
 - On the Custom Nation test page, a Staccato P (a stand-in model is fine until the maker's CAD arrives) shows in 3D, with an approved red dot snapping to the optic cut and a holster shown in the exploded view.
 - A tenant without `rig_3d` loads no 3D code (bundle test).
 - Kiosk mode runs at 1920×1080.
-- **Founder decision:** ask Custom Nation's suppliers and makers for CAD or 3D files of the top 20 products; AI-from-photos drafts are only the fallback.
+- Build and test on stand-in models now: one CC0 or self-made pistol-shaped test model, a red-dot model and a holster model, each with mount points. The makers' CAD files are plugged in last.
 
-## Founder decisions (collected)
-1. The US suppliers and accounts Custom Nation uses (RIG-3).
-2. Custom Nation's Odoo, for quotes (RIG-4).
-3. CAD or 3D files from the makers for the top 20 products (RIG-5).
-4. The price of the 3D add-on (RIG-5).
-5. Going live on the ZA box when it's back (RIG-4).
+## Plugged in last (configuration only, no code)
+1. Custom Nation's real suppliers and their keys: RIG-3's feed connections take them.
+2. Custom Nation's Odoo URL and user: RIG-4's adapter takes them.
+3. The makers' CAD files: RIG-5's pipeline takes them.
+4. The 3D add-on price.
+5. Going live on the new ZA host (Hetzner) for Custom Nation shopper data.
