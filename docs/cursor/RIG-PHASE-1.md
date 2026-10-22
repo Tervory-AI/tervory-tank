@@ -26,6 +26,7 @@ The lanes run **in parallel**. To keep merges clean, each lane owns its own file
 | **RIG-3** | Feed machinery, price rules, fit approval, retailer admin, on sample feeds | Cursor | `agents/rig/rigbox/` (feeds, pricing, fits), `tank/access.py` (Rig mapping only), `workspace/app/rig/admin/`, `tests/test_rig_feeds*.py` |
 | **RIG-4** | The widget complete to Figma 01–05, the quote handoff (Odoo adapter stubbed), bundle hosting, analytics | Cursor | `Tervory-AI/tervory-rig`, plus `agents/rig/rigbox/quotes/` and `tests/test_rig_quotes*.py` |
 | **RIG-5a** | 3D frames 06–07 in Figma | Cursor | Figma `uRpPy3Hns0WxWZYTPwZ2ni` only |
+| **RIG-5F** | The 3D forge: every 3D tool brought in, pinned and sealed, plus the GPU jobs | Codex | `agents/rig/forge/` (new service), `agents/rig/docker-compose.yml` (the forge service only), `ops/seal-check.sh` (forge entries), `tests/test_rig_forge*.py` |
 | **RIG-5** | The 3D engine: asset pipeline, mount points, `rig_3d` entitlement, viewer chunk, kiosk mode, on stand-in models | Grok or Cursor | `agents/rig/rigbox/three_d/`, `tervory-rig/widget/src/three/`, `tests/test_rig_3d*.py` |
 
 **How the lanes meet:**
@@ -137,13 +138,54 @@ Tisan's rule: design before code. Add these frames to `uRpPy3Hns0WxWZYTPwZ2ni`:
 
 ---
 
+## RIG-5F: the 3D forge (bring the software in)
+Rig gets one sealed worker service, **`rig-forge`**, holding every 3D tool. It's pinned, checksum-verified, headless, and runs nothing on anyone's laptop. The GPU-heavy steps run as **Hugging Face GPU jobs**, started and tracked by the forge.
+
+**Tools in the `rig-forge` image** (CPU, on Boston). Each is pinned to an exact version and checked against its published SHA256. Licences are recorded in `agents/rig/forge/LICENSES.md`:
+
+| Tool | Job | Licence |
+|---|---|---|
+| Blender 4.x LTS, headless (`blender -b -P`) | import OBJ/PLY, clean up, decimate, bake normal and AO maps, export GLB | GPL (run as a separate program, never linked) |
+| `@gltf-transform/cli` | simplify to a size target, meshopt, dedupe, resize textures, validate | MIT |
+| `gltfpack` (meshoptimizer) | final compression for the web | MIT |
+| KTX-Software (`toktx`) | KTX2/Basis textures | Apache-2.0 |
+| OpenCascade via `cadquery-ocp` (or the FreeCAD CLI) | maker CAD (STEP/IGES) to a mesh, in millimetres | LGPL |
+| `trimesh` + `manifold3d` | the automatic model check: outward faces, watertight, real size, budget | MIT / Apache-2.0 |
+| Khronos `gltf-validator` | spec check of every GLB | Apache-2.0 |
+
+**GPU jobs** (Hugging Face Jobs, on Tervory's account):
+- **Photogrammetry:** Meshroom/AliceVision headless (`meshroom_batch`), a CUDA image pinned by digest. Input: 50–150 photos from the `tervory-rig` bucket. Output: OBJ plus textures back to the bucket.
+- **Photos to 3D with AI:** TRELLIS 2 (MIT), from one or a few photos to a GLB with PBR materials, as a draft only.
+- **Settings:** the token is `HF_JOBS_TOKEN`, a job-scoped token held by `rig-forge` only. It stays empty until plugged in; tests use a stub. Each job has a cost cap and a timeout, and goes on a receipt through Tank's vendor ledger.
+
+**How a job flows:**
+1. Rig's brain (or the retailer admin) creates a 3D job.
+2. The forge picks it up: CAD, a scan or AI, then Blender, then gltf-transform and gltfpack, then KTX2, then the model check, then the validator.
+3. The result goes to the bucket as a **draft**, with a report (triangles, size, dimensions, pass or fail per check).
+4. A person approves it before any shopper sees it (RIG-5).
+
+Every step has a receipt, and a failed step stops the job with its reason.
+
+**Sealed like the browser:**
+- `rig-forge` has no public route and no Tank key.
+- It is reachable only from `rig-brain` over an internal network.
+- Its outbound traffic goes only to the R2 host and the Hugging Face API, through an allow-listed egress proxy (the Radix pattern).
+- Add it to `ops/seal-check.sh` and to the seal test.
+
+**Done when:**
+- CI builds the forge image and verifies every tool's checksum.
+- `tests/test_rig_forge*.py` takes a neutral sample STEP file and a sample scan (OBJ) end to end into a GLB that passes the model check and the validator.
+- An inside-out mesh and a mesh with holes are both rejected, with a reason.
+- A GPU job runs against the stub with a receipt.
+- The forge image's software list is in the PR.
+
 ## RIG-5: the 3D upgrade (a paid tier; Custom Nation first)
 **3D is not for everyone:** it is a per-tenant entitlement (`rig_3d`). Tenants without it never download a byte of 3D code.
 
 1. **Getting the 3D models, in order of preference:**
    1. **The maker's CAD files** (STEP/IGES), converted to optimised GLB with the CAD converter (`cadconvert`), with a polygon budget and real dimensions in millimetres.
    2. **Photos to 3D with AI** (one or a few photos), using an open model on our Hugging Face GPUs. TRELLIS 2 is MIT-licensed and gives GLB with PBR materials. Check any other model's licence first.
-   3. **Photos to 3D by scanning (photogrammetry):** the retailer uploads 50 to 70 overlapping phone photos of one product. It all runs in the cloud, never on anyone's laptop:
+   3. **Photos to 3D by scanning (photogrammetry):** the retailer uploads 50 to 70 overlapping phone photos of one product. It all runs in the cloud, in the RIG-5F forge, never on anyone's laptop:
       - Meshroom runs headless (`meshroom_batch`) on a Hugging Face GPU job;
       - Blender runs headless (`blender -b -P optimize.py -- in.obj out.glb`, using `bpy.ops.wm.obj_import` because Blender 4.x removed `import_scene.obj`);
       - then `gltf-transform` (simplify to a size target, meshopt and KTX2).
