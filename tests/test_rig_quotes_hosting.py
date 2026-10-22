@@ -35,6 +35,9 @@ def test_packaged_bundle_and_configured_test_page(monkeypatch):
         assert page.status_code == 200 and 'theme="custom-nation"' in page.text
         assert 'api-base=""' in page.text and 'api-base="mock"' not in page.text
         assert name in page.text and page.headers["Cache-Control"] == "no-store"
+        assert page.headers["Content-Security-Policy"] == "frame-ancestors 'none'"
+        assert list((Path(__file__).resolve().parents[1] / "agents/rig/rigbox/quotes/widget").glob("*.umd.js"))[0].name == name
+        assert len(list((Path(__file__).resolve().parents[1] / "agents/rig/rigbox/quotes/widget").glob("*.umd.js"))) == 1
         assert 'fonts="/widget/fonts/custom-nation.css"' in page.text
         css = client.get("/widget/fonts/custom-nation.css")
         assert css.status_code == 200 and "Barlow Condensed" in css.text

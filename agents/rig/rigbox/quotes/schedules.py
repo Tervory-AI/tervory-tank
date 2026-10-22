@@ -1,10 +1,14 @@
 """Discover new retailers on every scheduler tick, not only process startup."""
 
 from chassis.db import ensure_schedules, schema_for
+from .store import PgQuotes
 
 
 async def refresh(pool, store, agent: str) -> int:
     tenants = await store.tenant_ids()
+    quotes = PgQuotes(pool)
+    for tenant in await quotes.expired_tenants():
+        await quotes.purge(tenant)
     async with pool.acquire() as conn:
         for tenant in tenants:
             # Only operational counters/receipts expire; aggregate totals remain.

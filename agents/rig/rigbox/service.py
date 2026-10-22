@@ -8,6 +8,7 @@ import json
 import os
 import re
 import time
+import unicodedata
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -50,7 +51,7 @@ from rigbox.recall import parts_of
 from rigbox.recall import signature
 from rigbox.recall import whole_hit
 from rigbox.store import _fit_key
-from rigbox.quotes.limits import MemoryRateLimits, PgRateLimits
+from rigbox.quotes.limits import FailedKeyLimits, MemoryRateLimits, PgRateLimits
 
 _KEY = re.compile(r"^rk_pub_[A-Za-z0-9][A-Za-z0-9_-]{0,80}$")
 _MAPS = {
@@ -218,17 +219,26 @@ class Service:
         self.models = models
         self.handoff = handoff or RecordingHandoff()
         self.limiter = RateLimiter(limit=rate_limit)
+        self.failed_keys = FailedKeyLimits()
         pool = getattr(store, "pool", None)
         self.public_limits = PgRateLimits(pool, rate_limit) if pool is not None else MemoryRateLimits(rate_limit)
 
-    async def authenticate(self, raw_key: str) -> dict[str, Any]:
+    async def authenticate(self, raw_key: str, address: str = "unknown") -> dict[str, Any]:
+        reservation = self.failed_keys.reserve(address)
+        if reservation is None:
+            raise RigError("rate_limit", "Too many failed keys. Try again in a minute.", 429)
         presented = raw_key or ""
         digest = hash_key(presented)
         if _KEY.fullmatch(presented) is None:
             raise RigError("unauthorized", "That key is not valid.", 401)
-        row = await self.store.key(digest)
+        try:
+            row = await self.store.key(digest)
+        except Exception:
+            self.failed_keys.release(reservation)
+            raise
         if row is None or row.get("kind") != "publishable":
             raise RigError("unauthorized", "That key is not valid.", 401)
+        self.failed_keys.release(reservation)
         return row
 
     async def authenticate_admin(self, raw_key: str) -> dict[str, Any]:
@@ -494,6 +504,10 @@ class Service:
         )
 
     async def quote(self, tenant_id: str, body: dict[str, Any]) -> dict[str, str]:
+        payload, contact = await self.quote_payload(tenant_id, body)
+        return await self._store_quote(tenant_id, payload, contact)
+
+    async def quote_payload(self, tenant_id: str, body: dict[str, Any]) -> tuple[dict, dict]:
         contact = _contact(body.get("contact") or {})
         if isinstance(body.get("setup"), dict):
             products = await self._active(tenant_id)
@@ -506,7 +520,7 @@ class Service:
             payload = {"kind": "product", "product": await self.product(tenant_id, str(body["product_id"]))}
         else:
             raise RigError("invalid", "A setup or a product is required.", 422)
-        return await self._store_quote(tenant_id, payload, contact)
+        return payload, contact
 
     async def compare(self, tenant_id: str, product_ids: list[str]) -> dict[str, Any]:
         """Other sellers' prices for a selection the shopper already made.
@@ -991,14 +1005,21 @@ def _confidence(value: Any) -> float | None:
         return None
 
 
+def _clean_text(value: Any, limit: int) -> str:
+    value = str(value or "")
+    if len(value) > limit:
+        raise RigError("invalid", "A contact field or note is too long.", 422)
+    return "".join(c for c in value if not unicodedata.category(c).startswith("C")).strip()
+
+
 def _contact(contact: dict[str, Any]) -> dict[str, str]:
-    name = str(contact.get("name") or "").strip()
-    email = str(contact.get("email") or "").strip()
+    name = _clean_text(contact.get("name"), 120)
+    email = _clean_text(contact.get("email"), 254)
     domain = email.split("@")[-1] if "@" in email else ""
-    if not name or "@" not in email or "." not in domain:
+    if not name or email.count("@") != 1 or "." not in domain or any(c.isspace() for c in email):
         raise RigError("invalid", "A name and email are required.", 422)
     out = {"name": name, "email": email}
-    phone = str(contact.get("phone") or "").strip()
+    phone = _clean_text(contact.get("phone"), 40)
     if phone:
         out["phone"] = phone
     return out

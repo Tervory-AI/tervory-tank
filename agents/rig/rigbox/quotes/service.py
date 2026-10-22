@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any
 from urllib.parse import urlsplit
 from uuid import uuid4
 
 from rigbox.logic import fitting_parts
-from rigbox.service import RigError, Service, _contact
+from rigbox.service import RigError, Service, _clean_text, _contact
 
 from .senders import DeliveryError
 
@@ -44,13 +45,15 @@ class QuoteService(Service):
         await self.validate_setup(tenant_id, setup)
         return await super().swap(tenant_id, setup, role)
 
-    async def quote(self, tenant_id: str, body: dict[str, Any]) -> dict[str, Any]:
+    async def quote(self, tenant_id: str, body: dict[str, Any], *, hold: bool = False) -> dict[str, Any]:
         if isinstance(body.get("setup"), dict):
             await self.validate_setup(tenant_id, body["setup"])
-        return await super().quote(tenant_id, body)
+        payload, contact = await self.quote_payload(tenant_id, body)
+        return await self._store_quote(tenant_id, payload, contact, hold=hold)
 
     async def link_quote(self, tenant_id: str, url: str, note: str,
-                         contact: dict[str, Any] | None = None) -> dict[str, Any]:
+                         contact: dict[str, Any] | None = None, *, hold: bool = False) -> dict[str, Any]:
+        note = _clean_text(note, 4000)
         try:
             parsed = urlsplit(url.strip())
         except ValueError:
@@ -60,13 +63,17 @@ class QuoteService(Service):
             raise RigError("invalid", "That link is not a web address.", 422)
         return await self._store_quote(tenant_id,
             {"kind": "link", "url": parsed.geturl(), "note": note.strip()},
-            _contact(contact) if contact else {})
+            _contact(contact) if contact else {}, hold=hold)
 
     async def _store_quote(self, tenant_id: str, payload: dict[str, Any],
-                           contact: dict[str, Any]) -> dict[str, Any]:
+                           contact: dict[str, Any], *, hold: bool = False) -> dict[str, Any]:
         quote_id = "req_" + uuid4().hex
-        await self.quote_store.create(tenant_id, {"id": quote_id, "payload": payload, "contact": contact})
-        await self.deliver(tenant_id, quote_id)
+        await self.quote_store.create(tenant_id, {"id": quote_id, "payload": payload, "contact": contact}, hold=hold)
+        if hold:
+            logging.getLogger("agent").warning("rig_quote_held tenant_id=%s request_id=%s reason=tenant_quote_limit",
+                                               tenant_id, quote_id)
+        else:
+            await self.deliver(tenant_id, quote_id)
         state = await self.quote_store.status(tenant_id, quote_id)
         body: dict[str, Any] = {"request_id": quote_id, "delivery": state["status"]}
         if state["status"] != "sent":

@@ -175,7 +175,7 @@ CREATE INDEX IF NOT EXISTS searches_tenant_created
 -- RIG-4: durable retailer handoff and anonymous daily widget counts.
 CREATE TABLE IF NOT EXISTS agent_rig.quote_handoffs (
     tenant_id uuid NOT NULL,
-    quote_id text NOT NULL REFERENCES agent_rig.quotes(id),
+    quote_id text NOT NULL REFERENCES agent_rig.quotes(id) ON DELETE CASCADE,
     status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sending', 'sent')),
     error text,
     attempts integer NOT NULL DEFAULT 0,

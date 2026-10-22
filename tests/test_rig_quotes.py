@@ -38,6 +38,7 @@ class OdooStub:
     def __init__(self):
         self.calls = []
         self.orders = []
+        self.partners = []
         self.fail_after_create = False
         self.missing_product = False
         self.version = 17
@@ -67,6 +68,9 @@ class OdooStub:
             result = len(self.orders)
         elif model == "product.product" and self.missing_product:
             result = []
+        elif model == "res.partner" and method == "create":
+            self.partners.append(args[0])
+            result = 100 + len(self.partners)
         elif method == "search":
             result = [42]
         elif method == "create":
@@ -137,6 +141,44 @@ async def test_odoo_draft_uses_server_price_and_reconciles_timeout():
     assert order["client_order_ref"] == f"rig:{TENANT}:{ack['request_id']}"
     assert all(call[1] in {"search", "create"} for call in stub.calls)
     assert "state" not in order  # Odoo's create default is a draft quotation.
+    assert len(stub.partners) == 1  # Reconciliation avoids a second unverified partner too.
+
+
+@pytest.mark.asyncio
+async def test_typed_email_never_selects_an_existing_odoo_customer():
+    stub = OdooStub()  # Searches would return existing customer 42.
+    async with httpx.AsyncClient(transport=httpx.MockTransport(stub)) as http:
+        rig = await service(adapter(http))
+        for _ in range(2):
+            ack = await rig.quote(TENANT, {"product_id": "CORE-1", "contact": CONTACT})
+            assert ack["delivery"] == "sent"
+    assert [order["partner_id"] for order in stub.orders] == [101, 102]
+    assert all(partner["email"] == CONTACT["email"] and partner["comment"] == "from Rig, not verified"
+               for partner in stub.partners)
+    assert not any(model == "res.partner" and method == "search" for model, method, *_ in stub.calls)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field,limit", [("name", 120), ("email", 254), ("phone", 40)])
+async def test_contact_length_caps_prevent_storage_and_delivery(field, limit):
+    rig = await service()
+    with pytest.raises(RigError) as error:
+        await rig.quote(TENANT, {"product_id": "CORE-1", "contact": {**CONTACT, field: "a" * (limit + 1)}})
+    assert error.value.status == 422
+    assert not await rig.store.quotes_for(TENANT) and not rig.handoff.sent
+
+
+@pytest.mark.asyncio
+async def test_controls_are_removed_before_storage_and_handoff():
+    rig = await service()
+    contact = {"name": "Sam\x00ple\u202e", "email": "shopper\r\n@example.com", "phone": "12\x003"}
+    await rig.link_quote(TENANT, "https://example.com/item", "Please\x00 source\r\n this\u202e", contact)
+    stored = (await rig.store.quotes_for(TENANT))[0]
+    assert stored["contact"] == {"name": "Sample", "email": "shopper@example.com", "phone": "123"}
+    assert stored["payload"]["note"] == "Please source this"
+    assert rig.handoff.sent[0]["quote"]["contact"] == stored["contact"]
+    with pytest.raises(RigError):
+        await rig.link_quote(TENANT, "https://example.com/item", "a" * 4001, CONTACT)
 
 
 @pytest.mark.asyncio

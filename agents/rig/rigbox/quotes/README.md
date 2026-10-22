@@ -65,6 +65,10 @@ tax set, preserving the single indicative total. The retailer reviews tax and
 commercial terms before sending or confirming the quote. A product link becomes
 an unpriced order note with the shopper's contact, never a fabricated product or
 price. The adapter never confirms orders, invoices, charges or emails shoppers.
+Each new request creates a separate partner with the internal comment
+**“from Rig, not verified”**. Shopper-typed email never selects an existing
+customer account. Order-reference reconciliation still prevents duplicate orders
+and partners after a successful order write whose response was lost.
 
 ## Key, origins and bundle
 
@@ -86,6 +90,8 @@ SIL Open Font Licenses; they add no external font dependency to the test page.
 
 No change to the existing Dockerfile COPY line is needed: `rigbox` is already
 copied in full. `/widget/test` is unavailable until its publishable key is set.
+Its `frame-ancestors 'none'` policy prevents framing the test page. The UMD remains
+embeddable. Only the manifest's current bundle is shipped.
 
 ## Rate limits and settled searches
 
@@ -93,13 +99,36 @@ Public requests use Postgres fixed-minute counters shared across replicas and
 restarts. Limits apply to the tenant, client address and normalized route (all
 product IDs share the same route budget). Each client gets 60 requests/minute
 per browsing route, 10 for Ask, and a separate **combined 5 quote/link-quote**
-budget. Tenant ceilings are 6000 browsing and 600 quote requests/minute. A
-rejected client does not consume the tenant ceiling. HTTP 429 includes
+budget. Tenant ceilings are 6000 browsing requests and 600 automatic quote
+handoffs/minute. Above the quote ceiling, eligible shoppers can still submit:
+their requests are saved atomically with `needs_person`, error
+`tenant_quote_limit`, and no automatic delivery. The client's five-request cap
+still applies to held quotes. A `rig_quote_held` warning includes only tenant ID,
+request ID and the fixed reason. Staff can list the first 100 held/failed requests
+at `GET /v1/rig/admin/quotes/attention`, inspect the matching tenant-scoped quote,
+and explicitly `/resume` after review. Ordinary retry and scheduled retry cannot
+release a hold. No Odoo partner, order or webhook is created while held.
+A rejected client does not consume the tenant ceiling. HTTP 429 includes
 `Retry-After`, exposed through CORS. These are abuse controls, not visitor
-analytics; clients sharing a public address share its allowance.
+analytics; clients sharing a public IPv4 address or IPv6 `/64` share an allowance.
+IPv4-mapped IPv6 addresses share the corresponding IPv4 allowance.
+Both quote routes require an exact allowed `Origin`, including same-host calls.
+Origin checking is a browser boundary, not proof of shopper identity.
 
-`RIG_TRUSTED_PROXY_CIDRS` is empty by default. Configure only the actual trusted
-reverse-proxy peer addresses/networks in Coolify. Forwarded headers from other
+Failed publishable-key lookups have a separate per-client, per-process guard:
+60 failures or in-flight lookups per minute, before the database lookup. A
+successful lookup releases its reservation. Rotating invalid keys or addresses
+within one IPv6 `/64` cannot bypass it. Its bounded memory retains only
+minute-salted hashes, expires every minute, and does not join analytics.
+
+`RIG_TRUSTED_PROXY_CIDRS` is empty by default and **production `/health` returns
+503 while it is empty, invalid, or includes a universal `/0` network**. There is
+no test-mode bypass in the production app. Grok must supply the verified subnet
+of proxy network `59f8cnpelzwsyte1atyjc4fv`; Compose contains a TODO until then.
+Configure only actual trusted reverse-proxy peer addresses/networks in Coolify.
+The Docker command disables Uvicorn's proxy-header rewriting so Rig sees the
+real socket peer, and disables access logs so raw IPs/query strings are not kept.
+Forwarded headers from other
 peers are ignored; trusted chains are walked from right to left. Never trust all
 addresses or let the ASGI server trust arbitrary forwarded headers. Raw IPs are
 never stored. The HMAC salt rotates per tenant/minute, preventing joins across
@@ -113,6 +142,27 @@ The server counts a receipt once per tenant for 24 hours, then discards it;
 aggregate daily counts remain. There is no query, cookie, visitor ID or contact
 in this receipt. These are client-reported usage counts, not billing records.
 Existing tenant-scoped search recall remains separate.
+
+## Quote/contact retention
+
+`RIG_QUOTE_RETENTION_DAYS` defaults to **30**, accepts 1–365, and rejects invalid
+configuration at startup. The five-minute discovery job purges expired quote
+rows, including contact details and free-text notes. It discovers expired quotes
+even after a retailer is removed and deletes each tenant's rows separately.
+`quote_handoffs` has `ON DELETE CASCADE`; anonymous daily counts remain. A live
+five-minute delivery lease is allowed to finish before deletion; an expired
+quote cannot start another delivery attempt. This policy also covers held quotes.
+Retailer Odoo/webhook copies have their own retention policy.
+
+Contact fields are capped at 120 characters for name, 254 for email and 40 for
+phone; notes are capped at 4000. Oversized fields fail before storage/delivery.
+Unicode control/format characters are stripped before storing or sending them.
+
+Fresh databases create the cascading foreign key directly. For a database that
+ran an earlier revision of this PR, startup replaces only the old foreign-key
+constraint inside a locked transaction. Reapplication is safe and preserves all
+rows; no table or column is dropped. Purging happens only through the scheduled
+retention policy after deployment.
 
 ## Cloud development and checks
 
@@ -144,7 +194,8 @@ Set `RIG_SCREENSHOT_DIR` to retain the 390px/1440px browser screenshots.
 
 ## Prove it after deployment
 
-1. Check `/health` and `/widget/manifest.json`. Open `/widget/test` with a neutral
+1. With the proxy CIDR unset, verify `/health` is 503. Have Grok set the verified
+   subnet, then check `/health` is 200 and `/widget/manifest.json` loads. Open `/widget/test` with a neutral
    sample tenant on Boston; real Custom Nation shopper data is enabled on ZA last.
 2. Search, open a setup, swap a part, open Explore and submit Ask. Unapproved
    parts must be absent. The network payload must contain no pricing inputs.
@@ -169,3 +220,13 @@ Set `RIG_SCREENSHOT_DIR` to retain the 390px/1440px browser screenshots.
 7. With a test publishable key, exhaust one client’s browse allowance: another
    client and the first client’s quote allowance must still work. Verify 429
    exposes `Retry-After`, and that restart/replica traffic shares the budget.
+   Repeat behind the same proxy with two client addresses; IPv6 addresses within
+   one `/64` must share the allowance. Missing/wrong quote Origin must be 403.
+8. In a disposable test tenant, reach the tenant quote ceiling: further eligible
+   submissions must return `needs_person`, emit `rig_quote_held`, appear in the
+   admin attention queue, and create no outbound writes until explicit resume.
+   Use a synthetic email matching a test Odoo customer and verify the new order
+   uses a new partner marked “from Rig, not verified”, never the existing account.
+9. In a disposable database, age synthetic quote rows past the retention window
+   and run discovery. Quote/contact and handoff rows must disappear together;
+   recent quotes and anonymous totals must remain. Do not age real shopper rows.

@@ -30,6 +30,8 @@ from rigbox.quotes.senders import RetailerHandoff
 from rigbox.quotes.store import PgQuotes
 from rigbox.quotes.hosting import mount as mount_widget
 from rigbox.quotes.schedules import refresh as refresh_quote_schedules
+from rigbox.quotes.limits import proxy_configured
+from rigbox.quotes.store import retention_days
 
 AGENT = os.environ.get("AGENT_NAME", "rig")
 HEARTBEAT_TENANT = "00000000-0000-0000-0000-000000000001"
@@ -338,6 +340,8 @@ def _room_read_kind(method: str, path: str) -> str | None:
 @app.middleware("http")
 async def rig_room_reads(request: Request, call_next):
     """Serve Tank's read with the room key. Shopper calls fall through."""
+    if request.url.path == "/health" and not proxy_configured():
+        return JSONResponse(status_code=503, content={"ok": False, "error": "RIG_TRUSTED_PROXY_CIDRS is required"})
     kind = _room_read_kind(request.method.upper(), request.url.path)
     if kind is None or not _room_key_ok(request):
         if kind == "catalogues":
@@ -356,6 +360,8 @@ async def _lifespan(app: FastAPI):
     async with _inner(app):
         store = PgStore(app.state.pool)
         await store.apply_schema()
+        retention_days()
+        await PgQuotes(app.state.pool).apply_schema()
         service = QuoteService(store, _TankModels(app.state.tank), RetailerHandoff(app.state.http),
                                PgQuotes(app.state.pool))
         app.state.rig = service

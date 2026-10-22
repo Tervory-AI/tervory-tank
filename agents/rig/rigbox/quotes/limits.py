@@ -14,14 +14,14 @@ import ipaddress
 import os
 import secrets
 import time
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
 QUOTE_ROUTES = frozenset({"/v1/rig/quote", "/v1/rig/link-quote"})
 
 
-def client_address(request: Any) -> str:
-    peer = request.client.host if request.client else "unknown"
+def trusted_proxy_networks() -> list:
     networks = []
     for value in os.environ.get("RIG_TRUSTED_PROXY_CIDRS", "").split(","):
         if value.strip():
@@ -29,6 +29,19 @@ def client_address(request: Any) -> str:
             if network.prefixlen == 0:
                 raise ValueError("A specific trusted proxy network is required")
             networks.append(network)
+    return networks
+
+
+def proxy_configured() -> bool:
+    try:
+        return bool(trusted_proxy_networks())
+    except ValueError:
+        return False
+
+
+def client_address(request: Any) -> str:
+    peer = request.client.host if request.client else "unknown"
+    networks = trusted_proxy_networks()
 
     def trusted(value: str) -> bool:
         try:
@@ -62,7 +75,56 @@ def budgets(route: str, read_limit: int = 60) -> tuple[str, int, str, int]:
 
 
 def fingerprint(salt: bytes, address: str) -> bytes:
+    try:
+        ip = ipaddress.ip_address(address)
+        if isinstance(ip, ipaddress.IPv6Address):
+            address = str(ip.ipv4_mapped or ipaddress.ip_network(f"{ip}/64", strict=False))
+        else:
+            address = str(ip)
+    except ValueError:
+        pass
     return hmac.new(salt, address.encode(), hashlib.sha256).digest()
+
+
+@dataclass(frozen=True)
+class LimitDecision:
+    retry_after: int = 0
+    hold: bool = False
+
+
+class FailedKeyLimits:
+    """Bound failed lookups before touching Postgres, per process and client.
+
+    Successful lookups release their reservation. In-flight lookups count so a
+    concurrent burst cannot bypass the guard. No key or raw address is retained.
+    """
+
+    def __init__(self, limit: int = 60, clock=time.time):
+        self.limit, self.clock = limit, clock
+        self.window = -1
+        self.salt = b""
+        self.counts: dict[bytes, int] = {}
+
+    def reserve(self, address: str) -> tuple[int, bytes] | None:
+        window = int(self.clock()) // 60
+        if window != self.window:
+            self.window, self.salt, self.counts = window, secrets.token_bytes(32), {}
+        identity = fingerprint(self.salt, address)
+        if self.counts.get(identity, 0) >= self.limit:
+            return None
+        if identity not in self.counts and len(self.counts) >= 10000:
+            return None
+        self.counts[identity] = self.counts.get(identity, 0) + 1
+        return window, identity
+
+    def release(self, reservation: tuple[int, bytes]) -> None:
+        window, identity = reservation
+        if window == self.window:
+            remaining = self.counts.get(identity, 1) - 1
+            if remaining:
+                self.counts[identity] = remaining
+            else:
+                self.counts.pop(identity, None)
 
 
 class MemoryRateLimits:
@@ -71,7 +133,7 @@ class MemoryRateLimits:
         self.windows: dict[tuple[str, int], tuple[bytes, dict]] = {}
         self.lock = asyncio.Lock()
 
-    async def consume(self, tenant: str, address: str, route: str) -> int:
+    async def consume(self, tenant: str, address: str, route: str) -> LimitDecision:
         now = int(self.clock())
         window = now // 60
         async with self.lock:
@@ -79,11 +141,13 @@ class MemoryRateLimits:
             salt, counts = self.windows.setdefault((tenant, window), (secrets.token_bytes(32), {}))
             client_route, limit, group, ceiling = budgets(route, self.read_limit)
             keys = [(group, b""), (client_route, fingerprint(salt, address))]
-            if any(counts.get(key, 0) >= cap for key, cap in zip(keys, (ceiling, limit))):
-                return 60 - now % 60
-            for key in keys:
-                counts[key] = counts.get(key, 0) + 1
-        return 0
+            hold = counts.get(keys[0], 0) >= ceiling and route in QUOTE_ROUTES
+            if counts.get(keys[1], 0) >= limit or (counts.get(keys[0], 0) >= ceiling and not hold):
+                return LimitDecision(retry_after=60 - now % 60)
+            counts[keys[1]] = counts.get(keys[1], 0) + 1
+            if not hold:
+                counts[keys[0]] = counts.get(keys[0], 0) + 1
+        return LimitDecision(hold=hold)
 
 
 class _Full(Exception):
@@ -94,8 +158,9 @@ class PgRateLimits:
     def __init__(self, pool: Any, read_limit: int = 60):
         self.pool, self.read_limit = pool, read_limit
 
-    async def consume(self, tenant: str, address: str, route: str) -> int:
+    async def consume(self, tenant: str, address: str, route: str) -> LimitDecision:
         retry_after = 60
+        hold = False
         try:
             async with self.pool.acquire() as conn, conn.transaction():
                 now = int(await conn.fetchval("SELECT floor(extract(epoch FROM clock_timestamp()))::bigint"))
@@ -116,7 +181,10 @@ class PgRateLimits:
                         SET hits=agent_rig.rate_counts.hits + 1 WHERE agent_rig.rate_counts.hits < $5
                         RETURNING hits""", UUID(tenant), window, bucket, identity, cap)
                     if accepted is None:
+                        if identity == b"" and route in QUOTE_ROUTES:
+                            hold = True
+                            continue  # Still enforce the client's allowance for held quotes.
                         raise _Full  # Roll back BOTH counters; rejected clients cannot drain the tenant.
         except _Full:
-            return retry_after
-        return 0
+            return LimitDecision(retry_after=retry_after)
+        return LimitDecision(hold=hold)

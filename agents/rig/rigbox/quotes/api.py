@@ -34,6 +34,13 @@ async def delivery(request: Request, quote_id: str):
     return _ok(request, state)
 
 
+@router.get("/quotes/attention")
+async def attention(request: Request):
+    """Staff review queue, including held quotes, without shopper contact data."""
+    await _admin(request)
+    return _ok(request, {"requests": await _service(request).quote_store.attention(_tenant(request))})
+
+
 @router.post("/quotes/{quote_id}/retry")
 async def retry(request: Request, quote_id: str):
     await _admin(request)

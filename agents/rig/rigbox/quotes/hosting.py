@@ -78,4 +78,5 @@ def mount(application: FastAPI) -> None:
 <script src="/widget/assets/{file}"></script></body></html>''', headers={
             "Cache-Control": "no-store", "Referrer-Policy": "no-referrer",
             "X-Robots-Tag": "noindex, nofollow",
+            "Content-Security-Policy": "frame-ancestors 'none'",
         })

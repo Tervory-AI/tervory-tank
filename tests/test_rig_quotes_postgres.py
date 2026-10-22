@@ -72,19 +72,33 @@ async def test_replicas_retry_exhaustion_and_settled_search_receipts():
                 await asyncio.sleep(60 - seconds + 0.05)
             outcomes = await asyncio.gather(*(limits[i % 2].consume(TENANT, "192.0.2.1",
                 "/v1/rig/quote" if i % 2 else "/v1/rig/link-quote") for i in range(10)))
-            assert outcomes.count(0) == 5
-            assert await PgRateLimits(pool).consume(TENANT, "192.0.2.1", "/v1/rig/quote") > 0
-            assert await limits[0].consume(TENANT, "192.0.2.2", "/v1/rig/quote") == 0
-            assert await limits[0].consume(OTHER, "192.0.2.1", "/v1/rig/quote") == 0
+            assert sum(outcome.retry_after == 0 for outcome in outcomes) == 5
+            assert (await PgRateLimits(pool).consume(TENANT, "192.0.2.1", "/v1/rig/quote")).retry_after > 0
+            assert (await limits[0].consume(TENANT, "192.0.2.2", "/v1/rig/quote")).retry_after == 0
+            assert (await limits[0].consume(OTHER, "192.0.2.1", "/v1/rig/quote")).retry_after == 0
             async with pool.acquire() as conn:
                 assert await conn.fetchval("SELECT hits FROM agent_rig.rate_counts WHERE tenant_id=$1 AND route='quotes' AND client_hash=''::bytea", UUID(TENANT)) == 6
                 rows = await conn.fetch("SELECT client_hash FROM agent_rig.rate_counts WHERE tenant_id=$1", UUID(TENANT))
                 assert all(len(row["client_hash"]) in (0, 32) for row in rows)
                 await conn.execute("UPDATE agent_rig.rate_counts SET hits=600 WHERE tenant_id=$1 AND route='quotes' AND client_hash=''::bytea", UUID(TENANT))
-            assert await limits[1].consume(TENANT, "192.0.2.3", "/v1/rig/quote") > 0
-            assert await limits[1].consume(TENANT, "192.0.2.3", "/v1/rig/search") == 0
+            assert (await limits[1].consume(TENANT, "192.0.2.3", "/v1/rig/quote")).hold
+            # Holds remain bounded per shopper and persist across replicas.
+            for _ in range(4):
+                held = await limits[0].consume(TENANT, "192.0.2.3", "/v1/rig/link-quote")
+                assert held.hold and held.retry_after == 0
+            assert (await limits[1].consume(TENANT, "192.0.2.3", "/v1/rig/quote")).retry_after > 0
+            assert (await limits[1].consume(TENANT, "192.0.2.3", "/v1/rig/search")).retry_after == 0
 
             quotes = PgQuotes(pool)
+            await quotes.create(TENANT, {"id": "held", "payload": {}, "contact": {}}, hold=True)
+            assert await quotes.claim(TENANT, "held") is None
+            assert (await PgQuotes(pool).attention(TENANT))[0]["error"] == "tenant_quote_limit"
+            assert not await quotes.attention(OTHER)
+            await quotes.retry_now(TENANT, "held")
+            assert await quotes.claim(TENANT, "held") is None
+            await quotes.retry_now(TENANT, "held", resume=True)
+            assert (await quotes.claim(TENANT, "held"))["_attempt"] == 1
+            await quotes.finish(TENANT, "held", None, 1)
             receipt = str(uuid4())
             accepted = await asyncio.gather(*(quotes.settled_search(TENANT, receipt, True) for _ in range(10)))
             assert accepted.count(True) == 1
@@ -117,6 +131,72 @@ async def test_replicas_retry_exhaustion_and_settled_search_receipts():
             await pool.close()
     finally:
         await _drop_database(admin, name)
+
+
+@pytest.mark.asyncio
+async def test_retention_upgrade_purge_job_cascade_and_tenant_isolation(monkeypatch):
+    import sys
+    from pathlib import Path
+    from uuid import UUID
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agents" / "_chassis"))
+    from chassis.db import ensure_schema
+    from rigbox.quotes.schedules import refresh
+    from rigbox.quotes.store import retention_days
+
+    monkeypatch.setenv("RIG_QUOTE_RETENTION_DAYS", "7")
+    assert retention_days() == 7
+    admin = _admin_url()
+    name = "rig4_retention_" + uuid4().hex[:12]
+    await _create_database(admin, name)
+    try:
+        pool = await asyncpg.create_pool(_database_url(admin, name), min_size=1, max_size=5)
+        try:
+            store, quotes = PgStore(pool), PgQuotes(pool)
+            await store.apply_schema()
+            await store.put_retailer(TENANT, slug="retention", email=None, webhook=None)
+            for tenant, quote_id in ((TENANT, "old"), (OTHER, "other_old"), (TENANT, "recent"), (TENANT, "active")):
+                await quotes.create(tenant, {"id": quote_id, "payload": {"note": "contact note"},
+                                             "contact": {"name": "Sample", "email": "sample@example.com"}})
+            async with pool.acquire() as conn:
+                await ensure_schema(conn, "rig")
+                # Simulate the previous PR's deployed NO ACTION constraint.
+                await conn.execute("""ALTER TABLE agent_rig.quote_handoffs DROP CONSTRAINT quote_handoffs_quote_id_fkey;
+                    ALTER TABLE agent_rig.quote_handoffs ADD CONSTRAINT quote_handoffs_quote_id_fkey
+                    FOREIGN KEY (quote_id) REFERENCES agent_rig.quotes(id)""")
+                await conn.execute("UPDATE agent_rig.quotes SET created_at=now()-interval '8 days' WHERE id <> 'recent'")
+                await conn.execute("UPDATE agent_rig.quote_handoffs SET status='sending', updated_at=now() WHERE quote_id='active'")
+            await asyncio.gather(quotes.apply_schema(), PgQuotes(pool).apply_schema())
+            await store.apply_schema()
+            await quotes.apply_schema()
+            assert await quotes.status(TENANT, "old") is not None  # Upgrade preserves rows.
+            assert await quotes.claim(TENANT, "old") is None  # No expired delivery before purge.
+            assert await quotes.purge(TENANT) == 1
+            assert await quotes.status(TENANT, "old") is None  # Handoff cascaded.
+            assert await quotes.status(OTHER, "other_old") is not None
+            assert await quotes.status(TENANT, "recent") is not None
+            assert await quotes.status(TENANT, "active") is not None
+            assert await refresh(pool, store, "rig") == 1
+            assert await quotes.status(OTHER, "other_old") is None  # Removed retailer still expires.
+            assert (await quotes.analytics(TENANT, date.min))["quotes"] == 3
+            assert await quotes.purge(TENANT) == 0
+            async with pool.acquire() as conn:
+                assert await conn.fetchval("SELECT count(*) FROM agent_rig.quotes WHERE tenant_id=$1", UUID(TENANT)) == 2
+                await conn.execute("UPDATE agent_rig.quote_handoffs SET updated_at=now()-interval '6 minutes' WHERE quote_id='active'")
+            assert await quotes.purge(TENANT) == 1
+            assert await quotes.status(TENANT, "active") is None
+            assert await quotes.purge(OTHER) == 0
+        finally:
+            await pool.close()
+    finally:
+        await _drop_database(admin, name)
+
+
+@pytest.mark.parametrize("value", ["0", "-1", "366", "invalid"])
+def test_retention_cannot_be_unbounded(monkeypatch, value):
+    from rigbox.quotes.store import retention_days
+    monkeypatch.setenv("RIG_QUOTE_RETENTION_DAYS", value)
+    with pytest.raises(ValueError, match="RIG_QUOTE_RETENTION_DAYS"):
+        retention_days()
 
 
 @pytest.mark.asyncio

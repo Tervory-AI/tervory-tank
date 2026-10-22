@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from rigbox.service import RigError
 from rigbox.quotes.privacy import shopper_body
-from rigbox.quotes.limits import client_address
+from rigbox.quotes.limits import QUOTE_ROUTES, client_address
 
 router = APIRouter(prefix="/v1/rig")
 
@@ -94,17 +94,19 @@ async def _auth(request: Request) -> dict[str, Any]:
     if request.method == "OPTIONS":
         return {}
     raw = request.headers.get("x-rig-key") or ""
-    row = await _service(request).authenticate(raw)
+    address = client_address(request)
+    row = await _service(request).authenticate(raw, address)
     origin = _origin(request)
-    if origin and origin not in (row.get("origins") or []):
+    route = request.scope["route"].path
+    if (route in QUOTE_ROUTES and not origin) or (origin and origin not in (row.get("origins") or [])):
         raise RigError("origin", "This shop is not allowed to use that key.", 403)
     request.state.rig_origin = origin
     request.state.rig_origin_ok = bool(origin)
     request.state.tenant_id = row["tenant_id"]
-    route = request.scope["route"].path
-    retry_after = await _service(request).public_limits.consume(str(row["tenant_id"]), client_address(request), route)
-    if retry_after:
-        request.state.rig_retry_after = retry_after
+    decision = await _service(request).public_limits.consume(str(row["tenant_id"]), address, route)
+    request.state.rig_hold_quote = decision.hold
+    if decision.retry_after:
+        request.state.rig_retry_after = decision.retry_after
         raise RigError("rate_limit", "Too many requests. Please try again shortly.", 429)
     return row
 
@@ -224,6 +226,8 @@ async def ask(request: Request, payload: AskIn) -> Response:
 async def link_quote(request: Request, payload: LinkIn) -> Response:
     await _auth(request)
     kwargs = {"contact": payload.contact} if payload.contact is not None else {}
+    if request.state.rig_hold_quote:
+        kwargs["hold"] = True
     body = await _service(request).link_quote(_tenant(request), payload.url, payload.note, **kwargs)
     return _ok(request, body)
 
@@ -234,6 +238,7 @@ async def quote(request: Request, payload: QuoteIn) -> Response:
     body = await _service(request).quote(
         _tenant(request),
         {"setup": payload.setup, "product_id": payload.product_id, "contact": payload.contact},
+        **({"hold": True} if request.state.rig_hold_quote else {}),
     )
     return _ok(request, body)
 

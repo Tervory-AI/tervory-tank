@@ -89,9 +89,11 @@ class OdooHandoff:
         # customer or turn an unpriced product URL into a priced quotation.
         if not contact.get("email"):
             raise DeliveryError("contact_required")
-        partners = await execute("res.partner", "search", [[['email', '=', contact['email']]]], limit=1)
-        partner_id = partners[0] if partners else await execute("res.partner", "create", [{
+        # Typed contact details prove no customer identity. Never reuse an account
+        # selected by email. Order reconciliation above still makes retries safe.
+        partner_id = await execute("res.partner", "create", [{
             "name": contact["name"], "email": contact["email"],
+            "comment": "from Rig, not verified",
             **({"phone": contact["phone"]} if contact.get("phone") else {}),
         }])
         values: dict[str, Any] = {"partner_id": partner_id, "client_order_ref": reference}
