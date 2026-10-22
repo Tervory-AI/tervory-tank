@@ -13845,7 +13845,8 @@ async function Md(e, t, n, r) {
 	let c = new Wu(s, e);
 	c.enableDamping = !1, c.minDistance = .2, c.maxDistance = 2;
 	let l = new Va();
-	l.setURLModifier(() => {
+	l.setURLModifier((e) => {
+		if (e.startsWith("blob:")) return e;
 		throw Error("External model resources are not allowed");
 	});
 	let u = new Ll(l);

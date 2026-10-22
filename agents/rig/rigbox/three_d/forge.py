@@ -146,6 +146,9 @@ class StubForge:
     async def submit(self, job: Job) -> Result:
         if job.product_id not in {"centre", "part-a", "part-b", "part-tall"} or job.cost_cap_usd != 0:
             raise RigError("stand_in", "The stand-in accepts only the three sample models at zero cost.", 422)
+        metadata = json.loads((self.root / (job.product_id + ".json")).read_text())
+        if job.anchors and job.model_dump(mode="json")["anchors"] != metadata["anchors"]:
+            raise RigError("stand_in", "The stand-in uses the sample product's fixed attachment points.", 422)
         self.jobs[(job.tenant_id, job.id)] = job
         return Result(id=job.id, tenant_id=job.tenant_id, status="queued")
 

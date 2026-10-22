@@ -359,6 +359,16 @@ async def test_unavailable_forge_changes_nothing(rig):
 
 
 @pytest.mark.asyncio
+async def test_stand_in_does_not_silently_replace_requested_attachment_points(rig):
+    from rigbox.three_d.contracts import Anchor
+    engine, pool, _, _ = rig
+    request = job(anchors={"different": Anchor(position_mm=(1,2,3), quaternion=(0,0,0,1))})
+    with pytest.raises(RigError):
+        await engine.submit(str(TENANT), request)
+    assert await pool.fetchval("SELECT count(*) FROM agent_rig.rig_3d_jobs WHERE tenant_id=$1", TENANT) == 0
+
+
+@pytest.mark.asyncio
 async def test_forge_files_are_tenant_scoped_immutable_and_us_only():
     from rigbox.three_d.assets import ForgeFiles
     from chassis.storage import StorageError
