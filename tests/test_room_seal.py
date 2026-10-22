@@ -392,3 +392,14 @@ def test_rig_missing_internal_attachment_fails(tmp_path, service):
     path.write_text(json.dumps(data))
     result = run_seal_check(tmp_path, str(path))
     assert result.returncode == 1 and f"NOT SEALED: riguuid-{service}-1 missing" in result.stdout
+
+
+@pytest.mark.parametrize("service", ["rig-browser", "rig-sandbox", "rig-brain", "rig-browser-gateway"])
+def test_rig_missing_service_cannot_claim_sealed(tmp_path, service):
+    data = json.loads((FIXTURES / "sealed.json").read_text())
+    data["containers"] = {k: v for k, v in data["containers"].items() if v["service"] != service}
+    path = tmp_path / "rig-missing-service.json"
+    path.write_text(json.dumps(data))
+    result = run_seal_check(tmp_path, str(path))
+    assert result.returncode == 1 and f"NOT FOUND: {service}" in result.stdout
+    assert "agent-rig (riguuid): sealed" not in result.stdout

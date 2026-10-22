@@ -111,3 +111,37 @@ async def test_rig_seed_is_before_models_marker_and_does_not_overwrite_policy(da
     await pool.execute("UPDATE tank.policy SET model='founder-choice' WHERE task_type='agent.rig.think'")
     await pool.execute(schema)
     assert await pool.fetchval("SELECT model FROM tank.policy WHERE task_type='agent.rig.think' AND tenant_id IS NULL") == "founder-choice"
+
+
+@pytest.mark.asyncio
+async def test_skill_execution_rechecks_approval_and_passes_task_to_existing_runner(monkeypatch):
+    key = uuid.uuid4().hex
+    monkeypatch.setenv("TANK_KEY_RIG", key)
+    package = SimpleNamespace(agent="rig", id="rig.search")
+    ctx = SimpleNamespace(cost_usd=0)
+    state, calls = ["approved"], []
+    async def skill_state(*args): return state[0]
+    async def execute(pkg, values, context):
+        calls.append((pkg, values, context))
+        return {"results": []}
+    monkeypatch.setattr(rig_brain_routes.skala, "run_skill", execute)
+    rt = SimpleNamespace(box_region=lambda: "us-east", get_package=lambda *args: package,
+                         skill_state=skill_state, make_ctx=lambda *args, **kw: ctx)
+    app = FastAPI()
+    app.include_router(rig_brain_routes.build_router(rt))
+    body = {"tenant_id": str(uuid.uuid4()), "task_id": str(uuid.uuid4()), "home_region": "us-east", "version": "1.0.1", "input": {"query": "lamp"}}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://tank") as client:
+        url = "/v1/agents/rig/skills/rig.search/run"
+        headers = {"X-Tank-Key": key}
+        assert (await client.post(url, json=body)).status_code == 401
+        assert (await client.post(url, json={**body, "preview": True}, headers=headers)).status_code == 422
+        for status in ("candidate", "staging", "retired"):
+            state[0] = status
+            assert (await client.post(url, json=body, headers=headers)).status_code == 409
+        state[0] = "approved"
+        package.agent = "base"
+        assert (await client.post(url, json=body, headers=headers)).status_code == 403
+        assert not calls
+        package.agent = "rig"
+        assert (await client.post(url, json=body, headers=headers)).status_code == 200
+        assert len(calls) == 1 and ctx.agent == "rig" and ctx.task_id == uuid.UUID(body["task_id"])

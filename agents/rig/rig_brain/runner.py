@@ -45,10 +45,14 @@ def run(work: Path) -> None:
             receipt["steps"].append(item)
             save()
 
-        bundle = api("GET", tank + "/v1/agents/rig/skills", params={"tenant_id": tenant, "home_region": "us-east"})
-        approved = install_skills(home, bundle, tenant, room="rig")
-        if any(not identity[0].startswith("rig.") for identity in approved):
-            raise RuntimeError("Foreign skill in Rig's export")
+        try:
+            bundle = api("GET", tank + "/v1/agents/rig/skills", params={"tenant_id": tenant, "home_region": "us-east"})
+            approved = install_skills(home, bundle, tenant, room="rig")
+            if any(not identity[0].startswith("rig.") for identity in approved):
+                raise RuntimeError("Foreign skill in Rig's export")
+        except Exception:
+            record("skills", "failed")
+            raise
         record("skills", "done", len(approved))
         (home / "config.yaml").write_text(json.dumps({
             "model": {"default": "policy", "provider": "custom", "base_url": tank + "/v1/agents/rig",

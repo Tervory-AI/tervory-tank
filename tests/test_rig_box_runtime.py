@@ -61,6 +61,11 @@ def test_real_hermes_answers_from_standin_catalogue_with_tank_receipts(tmp_path,
             agent_skills.room_key("rig", self.headers.get("Authorization", ""), self.headers.get("X-Tank-Key", ""))
         def do_GET(self):
             try:
+                if urlsplit(self.path).path not in {"/v1/agents/rig/skills", "/v1/agents/rig/receipts"}:
+                    # Hermes probes backend metadata. Tank has no such routes;
+                    # mirror its 404 without pretending the probes are skills.
+                    self.reply({"detail": "Not Found"}, 404)
+                    return
                 self.authorize()
                 query = parse_qs(urlsplit(self.path).query)
                 assert query["tenant_id"] == [tenant]
@@ -73,7 +78,7 @@ def test_real_hermes_answers_from_standin_catalogue_with_tank_receipts(tmp_path,
                 else:
                     raise AssertionError("Unexpected GET")
             except Exception as exc:
-                errors.append(type(exc).__name__)
+                errors.append(urlsplit(self.path).path + ":" + type(exc).__name__)
                 self.reply({"error": "Fixture request failed"}, 400)
         def do_POST(self):
             try:
@@ -112,7 +117,7 @@ def test_real_hermes_answers_from_standin_catalogue_with_tank_receipts(tmp_path,
                 else:
                     raise AssertionError("Unexpected POST")
             except Exception as exc:
-                errors.append(type(exc).__name__)
+                errors.append(urlsplit(self.path).path + ":" + type(exc).__name__)
                 self.reply({"error": "Fixture request failed"}, 400)
 
     server = ThreadingHTTPServer(("0.0.0.0", 0), Handler)
@@ -128,7 +133,8 @@ def test_real_hermes_answers_from_standin_catalogue_with_tank_receipts(tmp_path,
     env = dict(os.environ, TANK_KEY=key, TANK_URL=endpoint)
     args = [docker, "run", "--name", container, "--add-host", "rig-test-host:host-gateway",
         "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--memory", "2g", "--cpus", "1",
-        "-e", "TANK_KEY", "-e", "TANK_URL", "-e", "HERMES_HOME=/data/hermes", os.environ["RIG2_HERMES_IMAGE"],
+        "-e", "TANK_KEY", "-e", "TANK_URL", "-e", "NO_PROXY=rig-test-host", "-e", "no_proxy=rig-test-host",
+        "-e", "HERMES_HOME=/data/hermes", os.environ["RIG2_HERMES_IMAGE"],
         "sh", "-c", "cat > /data/request.json && python -m rig_brain.runner /data"]
     # stdin avoids mounting pytest's permission-restricted directory into the image.
     args.insert(2, "-i")

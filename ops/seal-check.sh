@@ -64,6 +64,7 @@ declare -A APP_RESOURCE=() # uuid -> coolify.resourceName (empty in raw mode)
 declare -A APP_ROOM=()     # uuid -> agent-* compose service name, if any
 declare -A APP_LEAKS=()    # uuid -> leak text
 declare -A APP_SEALED=()   # uuid -> number of containers on an internal network
+declare -A APP_SERVICES=() # uuid/service -> 1
 APPS=()
 FORMAT='{{index .Config.Labels "coolify.applicationUuid"}}|{{index .Config.Labels "coolify.resourceName"}}|{{index .Config.Labels "com.docker.compose.service"}}|{{index .Config.Labels "com.docker.compose.project"}}|{{.Name}}|{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}'
 
@@ -99,6 +100,7 @@ for id in $ids; do
     APP_SEALED[$uuid]=0
   fi
   [[ -n "$resource" ]] && APP_RESOURCE[$uuid]="$resource"
+  APP_SERVICES["$uuid/$service"]=1
   if [[ "$service" == agent-* && -z "${APP_ROOM[$uuid]}" ]]; then
     APP_ROOM[$uuid]="$service"
   fi
@@ -188,6 +190,13 @@ is_expected() {
 
 for uuid in "${ROOMS[@]}"; do
   room="${ROOM_NAME[$uuid]}"
+  if [[ "$room" == "agent-rig" ]]; then
+    for required in agent-rig rig-brain rig-sandbox rig-browser rig-browser-gateway; do
+      if [[ -z "${APP_SERVICES[$uuid/$required]+set}" ]]; then
+        APP_LEAKS[$uuid]="${APP_LEAKS[$uuid]:+${APP_LEAKS[$uuid]}; }NOT FOUND: $required"
+      fi
+    done
+  fi
   if [[ -n "${APP_LEAKS[$uuid]}" ]]; then
     echo "$room ($uuid): ${APP_LEAKS[$uuid]}"
     status=1
