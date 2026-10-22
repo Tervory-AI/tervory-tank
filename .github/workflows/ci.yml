@@ -97,7 +97,8 @@ jobs:
     if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.run == 'true' }}
     # Self-hosted only when "pick runner" chose it and the change is not from a fork.
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.runner.outputs.runner && fromJSON(needs.runner.outputs.runner) || 'ubuntu-latest' }}
-    timeout-minutes: 12
+    # The merged full suite takes over 11 minutes before setup/cleanup.
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:16
@@ -125,6 +126,14 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r tank/requirements.txt -r tank/requirements-dev.txt
+      - name: Prepare Chromium for required READ-1 browser tests
+        run: |
+          browser=$(command -v chromium || command -v chromium-browser || command -v google-chrome || command -v google-chrome-stable || true)
+          if [ -n "$browser" ]; then
+            echo "READ1_CHROMIUM_EXECUTABLE=$browser" >> "$GITHUB_ENV"
+          else
+            python -m playwright install --with-deps chromium
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: "22"

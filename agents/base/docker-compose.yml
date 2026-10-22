@@ -37,6 +37,8 @@ services:
       CONTEXT_DEV_MAX_CREDITS: ${CONTEXT_DEV_MAX_CREDITS:-500}
     volumes:
       - agent_base_data:/data
+      # Same Base room spool; only agent-base uploads and deletes evidence.
+      - base_browser_data:/browser-evidence
     networks:
       - gw
     healthcheck:

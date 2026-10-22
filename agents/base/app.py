@@ -98,7 +98,9 @@ app = create_app(
 )
 
 from base_brain import register as register_brain  # noqa: E402
+from browser_evidence import register as register_browser_evidence  # noqa: E402
 register_brain(app)
+register_browser_evidence(app)
 
 
 @app.get("/gold/candidates")

@@ -83,7 +83,10 @@ def portal(app, monkeypatch, tmp_path):
             self.url = url; state.urls.append(url)
             return SimpleNamespace(status=200)
         async def content(self): return state.private_text if self.context.logged_in else state.html
-        async def evaluate(self, *args): state.scrolls += 1
+        async def evaluate(self, *args):
+            if 'cloneNode' in args[0]: return await self.content()
+            if '({width: Math.max' in args[0]: return {'width': 1280, 'height': 900}
+            state.scrolls += 1
         async def wait_for_timeout(self, *args): pass
         async def screenshot(self, **kwargs): return b"fixture"
         def locator(self, name): return Field(self, name)
@@ -91,7 +94,12 @@ def portal(app, monkeypatch, tmp_path):
             buttons = [Button(label, form) for label, form in state.buttons if name.fullmatch(label)]
             async def count(): return len(buttons)
             return SimpleNamespace(count=count, nth=lambda i: buttons[i])
+    class Request:
+        async def get(self, url, **kwargs):
+            async def body(): return b'User-agent: *\nAllow: /'
+            return SimpleNamespace(status=200, headers={}, body=body)
     class Context:
+        request = Request()
         def __init__(self, storage): self.logged_in = bool(storage and Path(storage).exists())
         async def route(self, pattern, handler): self.handler = handler
         async def new_page(self): return Page(self)
@@ -120,7 +128,7 @@ async def test_captcha_render_reaches_tenant_queue_without_clicking(portal):
     page.buttons = [("I am over 21", False)]
     task = uuid.uuid4()
     result = await page.read(actor.tenant_id, task=task)
-    assert result["challenge"] and result["queue_id"] and not result["html"]
+    assert result["challenge"] and result["queue_id"] and "html" not in result and result["page"]["facts"]["human_check"]
     assert db.queues[-1][:4] == (actor.tenant_id, "base", "https://dealer.example", "captcha")
     assert db.queues[-1][4] is not None and db.queues[-1][5] == task
     assert not page.clicks and page.scrolls == 0

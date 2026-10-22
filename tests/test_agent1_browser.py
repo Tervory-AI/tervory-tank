@@ -10,17 +10,19 @@ import pytest
 
 # The shared brain package is loaded by the room-boundary test harness.
 from test_agent1_isolation import browser
+from brain import robots
 
 
 @pytest.fixture
 def visitor(monkeypatch, tmp_path):
     h=SimpleNamespace(started=[], gate=asyncio.Event(), html='<p>Public business page</p>',
-                      redirect=None, aborted=0, continued=0, scrolls=0)
+                      redirect=None, aborted=0, continued=0, scrolls=0, robots_text="User-agent: *\nAllow: /", robots_calls=[])
     key=uuid.uuid4().hex
     monkeypatch.setenv('TANK_KEY',key)
     monkeypatch.setenv('BROWSER_DATA_DIR',str(tmp_path))
     monkeypatch.setenv('TANK_REGION','us-east')
     monkeypatch.setattr(browser,'site_locks',{})
+    monkeypatch.setattr(robots, 'cache', {})
     monkeypatch.setattr(browser,'last_visit',{})
     monkeypatch.setattr(browser,'concurrency',asyncio.Semaphore(4))
     class Page:
@@ -38,13 +40,28 @@ def visitor(monkeypatch, tmp_path):
             await h.gate.wait()
             return SimpleNamespace(status=200)
         async def content(self): return h.html
-        async def evaluate(self,*args): h.scrolls+=1
+        async def evaluate(self,*args):
+            if "({width: Math.max" in args[0]:
+                return {"width": 1280, "height": 8000}
+            h.scrolls+=1
+            return h.html
+        async def screenshot(self,**kwargs):
+            if getattr(h, 'screenshot_failure', False):
+                raise RuntimeError('Failed screenshot')
+            h.screenshot_options = kwargs
+            return b'screenshot'
         async def wait_for_timeout(self,*args): pass
         def get_by_role(self,*args,**kwargs): raise AssertionError('Unexpected click')
         def locator(self,*args):
             async def evaluate_all(*args): return []
             return SimpleNamespace(evaluate_all=evaluate_all)
+    class Request:
+        async def get(self, url, **kwargs):
+            h.robots_calls.append(url)
+            async def body(): return h.robots_text.encode()
+            return SimpleNamespace(status=200, headers={}, body=body)
     class Context:
+        request = Request()
         async def route(self,pattern,handler): self.handler=handler
         async def new_page(self): return Page(self)
         async def storage_state(self,**kwargs): pass
@@ -82,7 +99,7 @@ async def test_same_site_waits_a_few_seconds(visitor,monkeypatch):
     visitor.gate.set()
     now=[100.0];waits=[]
     async def sleep(seconds): waits.append(seconds);now[0]+=seconds
-    monkeypatch.setattr(browser,'time',SimpleNamespace(monotonic=lambda:now[0],time=lambda:100))
+    monkeypatch.setattr(browser,'time',SimpleNamespace(monotonic=lambda:now[0],time=lambda:100,time_ns=lambda:100,perf_counter=lambda:100))
     monkeypatch.setattr(browser,'asyncio',SimpleNamespace(sleep=sleep,Lock=asyncio.Lock,timeout=asyncio.timeout))
     await visitor.visit('https://www.business.example')
     await visitor.visit('https://business.example/about')
@@ -94,8 +111,8 @@ async def test_captcha_is_recorded_needs_a_person_without_click_or_scroll(visito
     visitor.gate.set()
     visitor.html='<div class="g-recaptcha">verify you are human</div><button>I am over 21</button>'
     result=await visitor.visit('https://business.example')
-    assert result['challenge'] and result['needs_person']=='needs a person' and result['html']==''
-    assert visitor.scrolls==0
+    assert result['challenge'] and result['needs_person']=='needs a person' and 'html' not in result and result['page']['facts']['human_check']
+    assert visitor.scrolls==1  # extraction inspects the DOM without clicking or scrolling
 
 
 @pytest.mark.asyncio
@@ -122,6 +139,8 @@ async def test_pdf_text_is_read_with_bounded_public_requests(monkeypatch):
         async def body(self):return data
     async def get(url,**kwargs):
         assert kwargs['max_redirects']==0;calls.append(url);return Response()
+    async def allow(*args): pass
+    monkeypatch.setattr(browser, 'require_allowed', allow)
     result=await browser.read_pdf(SimpleNamespace(request=SimpleNamespace(get=get)),'https://public.example/file.pdf',90000)
     assert 'Public fixture PDF' in result['text'] and result['content_type']=='application/pdf'
     assert calls==['https://public.example/file.pdf']
@@ -132,6 +151,8 @@ async def test_pdf_redirect_cannot_fetch_a_private_target(monkeypatch):
     calls=[]
     async def get(url,**kwargs):
         calls.append(url);return SimpleNamespace(status=302,headers={'location':'http://169.254.169.254/latest/'})
+    async def allow(*args): pass
+    monkeypatch.setattr(browser, 'require_allowed', allow)
     with pytest.raises(ValueError):
         await browser.read_pdf(SimpleNamespace(request=SimpleNamespace(get=get)),'https://public.example/file.pdf',90000)
     assert calls==['https://public.example/file.pdf']
@@ -148,3 +169,23 @@ async def test_busy_browser_queue_returns_before_upstream_timeout(visitor, monke
         await asyncio.wait_for(visitor.visit('https://busy.example'), .5)
     assert error.value.status_code == 503 and lock.locked()
     assert browser.concurrency._value == 4
+
+
+@pytest.mark.asyncio
+async def test_page_evidence_is_saved_without_returning_html(visitor, tmp_path):
+    visitor.gate.set()
+    result = await visitor.visit('https://shop.example')
+    assert 'html' not in result
+    assert result['page']['text'] == 'Public business page'
+    evidence = list(tmp_path.rglob('evidence/*'))
+    assert {p.suffix for p in evidence} == {'.html', '.jpg'}
+    assert next(p for p in evidence if p.suffix == '.html').read_text() == visitor.html
+
+
+@pytest.mark.asyncio
+async def test_screenshot_failure_does_not_fail_page_read(visitor):
+    visitor.gate.set()
+    visitor.screenshot_failure = True
+    result = await visitor.visit('https://shop.example')
+    assert result['ok'] and result['page']['text'] == 'Public business page'
+    assert result['evidence']['screenshot_error']
