@@ -31,9 +31,10 @@ polygon/byte limits, a positive cost cap and timeout. Inputs are photos only:
 50–70 overlapping photos, or one to four photos when explicitly enabled.
 `RIG_FORGE_TRELLIS_ENABLED=false` is the default. The API rejects the few-photo
 method and the form hides it unless the existing setting is true in agent-rig;
-the brain and forge independently enforce the same switch. A future enablement
-must pass this setting to all three services. No extra Compose wiring for that
-switch is included in the founder's narrowly approved deployment edits.
+the brain and forge independently enforce the same switch. The agent Compose
+passes it through with a false default under the founder's one-line approval.
+Merge after #254 and keep one shared definition in `.env.example`; enable the
+setting consistently on agent-rig, brain and forge only after founder approval.
 Failed automatic checks never enter review.
 Approval separately confirms scale, appearance and anchors. The public API
 returns only current approved fits and approved model revisions. Saving attachment

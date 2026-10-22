@@ -13106,7 +13106,7 @@ async function du(e, t, n, r) {
 		antialias: !0,
 		alpha: !1
 	});
-	i.setPixelRatio(Math.min(globalThis.devicePixelRatio || 1, 2)), i.setClearColor(globalThis.getComputedStyle(e).getPropertyValue("--rig-canvas").trim() || "#f4f6fb");
+	i.setPixelRatio(Math.min(globalThis.devicePixelRatio || 1, 2)), i.setClearColor(globalThis.getComputedStyle(e).getPropertyValue("--rig-card").trim() || "#f4f6fb");
 	let a = new Fo();
 	a.add(new cc(16777215, 5464439, 3));
 	let o = new xc(16777215, 4);
