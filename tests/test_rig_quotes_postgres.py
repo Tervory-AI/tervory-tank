@@ -1,7 +1,7 @@
 """Apply the additive schema twice and exercise real tenant-scoped delivery state."""
 
 import asyncio
-from datetime import date
+from datetime import date, datetime
 
 import asyncpg
 import pytest
@@ -91,12 +91,14 @@ async def test_replicas_retry_exhaustion_and_settled_search_receipts():
 
             quotes = PgQuotes(pool)
             await quotes.create(TENANT, {"id": "held", "payload": {}, "contact": {}}, hold=True)
+            assert (await quotes.analytics(TENANT, date.min))["quotes"] == 0
             assert await quotes.claim(TENANT, "held") is None
             assert (await PgQuotes(pool).attention(TENANT))[0]["error"] == "tenant_quote_limit"
             assert not await quotes.attention(OTHER)
             await quotes.retry_now(TENANT, "held")
             assert await quotes.claim(TENANT, "held") is None
-            await quotes.retry_now(TENANT, "held", resume=True)
+            await asyncio.gather(*(PgQuotes(pool).retry_now(TENANT, "held", resume=True) for _ in range(10)))
+            assert (await quotes.analytics(TENANT, date.min))["quotes"] == 1
             assert (await quotes.claim(TENANT, "held"))["_attempt"] == 1
             await quotes.finish(TENANT, "held", None, 1)
             receipt = str(uuid4())
@@ -168,6 +170,11 @@ async def test_retention_upgrade_purge_job_cascade_and_tenant_isolation(monkeypa
             await asyncio.gather(quotes.apply_schema(), PgQuotes(pool).apply_schema())
             await store.apply_schema()
             await quotes.apply_schema()
+            # An already-current FK must not request ACCESS EXCLUSIVE and block
+            # behind ordinary traffic on every process startup.
+            async with pool.acquire() as conn, conn.transaction():
+                await conn.execute("LOCK TABLE agent_rig.quote_handoffs IN ROW EXCLUSIVE MODE")
+                await asyncio.wait_for(PgQuotes(pool).apply_schema(), timeout=2)
             assert await quotes.status(TENANT, "old") is not None  # Upgrade preserves rows.
             assert await quotes.claim(TENANT, "old") is None  # No expired delivery before purge.
             assert await quotes.purge(TENANT) == 1
@@ -185,6 +192,38 @@ async def test_retention_upgrade_purge_job_cascade_and_tenant_isolation(monkeypa
             assert await quotes.purge(TENANT) == 1
             assert await quotes.status(TENANT, "active") is None
             assert await quotes.purge(OTHER) == 0
+        finally:
+            await pool.close()
+    finally:
+        await _drop_database(admin, name)
+
+
+@pytest.mark.asyncio
+async def test_postgres_attention_keyset_paging_with_ties_removal_and_tenant_scope():
+    from uuid import UUID
+    admin = _admin_url()
+    name = "rig4_pages_" + uuid4().hex[:12]
+    await _create_database(admin, name)
+    try:
+        pool = await asyncpg.create_pool(_database_url(admin, name), min_size=1, max_size=2)
+        try:
+            await PgStore(pool).apply_schema()
+            quotes = PgQuotes(pool)
+            for index in range(205):
+                await quotes.create(TENANT, {"id": f"held_{index:03}", "payload": {}, "contact": {}}, hold=True)
+            await quotes.create(OTHER, {"id": "other_held", "payload": {}, "contact": {}}, hold=True)
+            async with pool.acquire() as conn:
+                await conn.execute("UPDATE agent_rig.quotes SET created_at='2026-01-01T00:00:00Z' WHERE tenant_id=$1", UUID(TENANT))
+            assert (await quotes.analytics(TENANT, date.min))["quotes"] == 0
+            first = await quotes.attention(TENANT)
+            assert len(first) == 100
+            await quotes.retry_now(TENANT, "held_000", resume=True)
+            second = await quotes.attention(TENANT, after=(datetime.fromisoformat(first[-1]["created_at"]), first[-1]["request_id"]))
+            third = await quotes.attention(TENANT, after=(datetime.fromisoformat(second[-1]["created_at"]), second[-1]["request_id"]))
+            assert len(second) == 100 and len(third) == 5
+            assert [row["request_id"] for row in first + second + third] == [f"held_{index:03}" for index in range(205)]
+            assert [row["request_id"] for row in await quotes.attention(OTHER)] == ["other_held"]
+            assert (await quotes.analytics(TENANT, date.min))["quotes"] == 1
         finally:
             await pool.close()
     finally:

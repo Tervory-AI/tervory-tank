@@ -48,8 +48,10 @@ class MemoryQuotes:
     async def create(self, tenant: str, quote: dict[str, Any], *, hold: bool = False) -> None:
         await self.store.add_quote(tenant, quote["id"], quote["payload"], quote["contact"])
         self.states[(tenant, quote["id"])] = {"status": "pending", "error": "tenant_quote_limit" if hold else None,
-            "attempts": 0, "needs_attention": hold, "next_attempt_at": None if hold else self.clock()}
-        await self.count(tenant, "quotes")
+            "attempts": 0, "needs_attention": hold, "next_attempt_at": None if hold else self.clock(),
+            "created_at": datetime.fromtimestamp(self.clock(), timezone.utc)}
+        if not hold:
+            await self.count(tenant, "quotes")
 
     async def count(self, tenant: str, event: str) -> None:
         if event not in EVENTS:
@@ -103,15 +105,21 @@ class MemoryQuotes:
         state = self.states.get((tenant, quote_id))
         return _state(state) if state else None
 
-    async def attention(self, tenant: str) -> list[dict]:
-        return [{"request_id": q, **_state(state)} for (t, q), state in self.states.items()
-                if t == tenant and state["needs_attention"]][:100]
+    async def attention(self, tenant: str, *, limit: int = 100,
+                        after: tuple[datetime, str] | None = None) -> list[dict]:
+        rows = sorted((state["created_at"], q, state) for (t, q), state in self.states.items()
+                      if t == tenant and state["needs_attention"]
+                      and (after is None or (state["created_at"], q) > after))
+        return [{"request_id": q, "created_at": created.isoformat(), **_state(state)}
+                for created, q, state in rows[:limit]]
 
     async def retry_now(self, tenant: str, quote_id: str, *, resume: bool = False) -> None:
         state = self.states.get((tenant, quote_id))
         if not state or state["status"] != "pending":
             return
         if resume and state["needs_attention"]:
+            if state["error"] == "tenant_quote_limit":
+                await self.count(tenant, "quotes")
             state.update(attempts=0, needs_attention=False)
         if not state["needs_attention"]:
             state["next_attempt_at"] = self.clock()
@@ -125,17 +133,21 @@ class PgQuotes:
         """Upgrade the prior PR's FK atomically, without removing any rows.
 
         CREATE TABLE IF NOT EXISTS cannot update an existing delete action.
-        This replaces only that constraint, under a lock, and is safe to repeat.
+        Current schemas need no table lock. An upgrade rechecks under the lock
+        so concurrent startup processes cannot replace the constraint twice.
         """
-        async with self.pool.acquire() as conn, conn.transaction():
-            await conn.execute("LOCK TABLE agent_rig.quote_handoffs IN ACCESS EXCLUSIVE MODE")
-            action = await conn.fetchval("""SELECT confdeltype FROM pg_constraint
-                WHERE conrelid='agent_rig.quote_handoffs'::regclass AND conname='quote_handoffs_quote_id_fkey'""")
-            if action != b"c" and action != "c":
-                await conn.execute("""ALTER TABLE agent_rig.quote_handoffs
-                    DROP CONSTRAINT IF EXISTS quote_handoffs_quote_id_fkey""")
-                await conn.execute("""ALTER TABLE agent_rig.quote_handoffs ADD CONSTRAINT quote_handoffs_quote_id_fkey
-                    FOREIGN KEY (quote_id) REFERENCES agent_rig.quotes(id) ON DELETE CASCADE""")
+        check = """SELECT confdeltype FROM pg_constraint
+            WHERE conrelid='agent_rig.quote_handoffs'::regclass AND conname='quote_handoffs_quote_id_fkey'"""
+        async with self.pool.acquire() as conn:
+            if await conn.fetchval(check) in (b"c", "c"):
+                return
+            async with conn.transaction():
+                await conn.execute("LOCK TABLE agent_rig.quote_handoffs IN ACCESS EXCLUSIVE MODE")
+                if await conn.fetchval(check) not in (b"c", "c"):
+                    await conn.execute("""ALTER TABLE agent_rig.quote_handoffs
+                        DROP CONSTRAINT IF EXISTS quote_handoffs_quote_id_fkey""")
+                    await conn.execute("""ALTER TABLE agent_rig.quote_handoffs ADD CONSTRAINT quote_handoffs_quote_id_fkey
+                        FOREIGN KEY (quote_id) REFERENCES agent_rig.quotes(id) ON DELETE CASCADE""")
 
     async def purge(self, tenant: str) -> int:
         async with self.pool.acquire() as conn:
@@ -163,7 +175,8 @@ class PgQuotes:
                 (tenant_id, quote_id, needs_attention, error, next_attempt_at)
                 VALUES ($1, $2, $3, $4, CASE WHEN $3 THEN NULL ELSE now() END)""",
                 UUID(tenant), quote["id"], hold, "tenant_quote_limit" if hold else None)
-            await self._count(conn, tenant, "quotes")
+            if not hold:
+                await self._count(conn, tenant, "quotes")
 
     async def _count(self, conn: Any, tenant: str, event: str) -> None:
         if event not in EVENTS:
@@ -254,16 +267,28 @@ class PgQuotes:
                 WHERE tenant_id = $1 AND quote_id = $2""", UUID(tenant), quote_id)
         return _state(dict(row)) if row else None
 
-    async def attention(self, tenant: str) -> list[dict]:
+    async def attention(self, tenant: str, *, limit: int = 100,
+                        after: tuple[datetime, str] | None = None) -> list[dict]:
         async with self.pool.acquire() as conn:
-            rows = await conn.fetch("""SELECT quote_id, status, error, attempts, next_attempt_at, needs_attention
-                FROM agent_rig.quote_handoffs WHERE tenant_id=$1 AND needs_attention
-                ORDER BY updated_at, quote_id LIMIT 100""", UUID(tenant))
-        return [{"request_id": row["quote_id"], **_state(dict(row))} for row in rows]
+            rows = await conn.fetch("""SELECT h.quote_id, h.status, h.error, h.attempts,
+                h.next_attempt_at, h.needs_attention, q.created_at
+                FROM agent_rig.quote_handoffs h JOIN agent_rig.quotes q
+                  ON q.tenant_id=h.tenant_id AND q.id=h.quote_id
+                WHERE h.tenant_id=$1 AND h.needs_attention
+                  AND ($2::timestamptz IS NULL OR (q.created_at, h.quote_id) > ($2, $3::text))
+                ORDER BY q.created_at, h.quote_id LIMIT $4""", UUID(tenant),
+                after[0] if after else None, after[1] if after else None, limit)
+        return [{"request_id": row["quote_id"], "created_at": row["created_at"].isoformat(), **_state(dict(row))}
+                for row in rows]
 
     async def retry_now(self, tenant: str, quote_id: str, *, resume: bool = False) -> None:
-        async with self.pool.acquire() as conn:
+        async with self.pool.acquire() as conn, conn.transaction():
+            held = await conn.fetchval("""SELECT needs_attention AND error='tenant_quote_limit'
+                FROM agent_rig.quote_handoffs WHERE tenant_id=$1 AND quote_id=$2 AND status='pending'
+                FOR UPDATE""", UUID(tenant), quote_id)
             await conn.execute("""UPDATE agent_rig.quote_handoffs SET next_attempt_at=now(),
                 attempts=CASE WHEN $3 AND needs_attention THEN 0 ELSE attempts END,
                 needs_attention=false WHERE tenant_id=$1 AND quote_id=$2 AND status='pending'
                 AND (NOT needs_attention OR $3)""", UUID(tenant), quote_id, resume)
+            if resume and held:
+                await self._count(conn, tenant, "quotes")

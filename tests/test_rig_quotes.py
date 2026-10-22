@@ -40,6 +40,8 @@ class OdooStub:
         self.orders = []
         self.partners = []
         self.fail_after_create = False
+        self.fail_after_partner = False
+        self.reject_order = False
         self.missing_product = False
         self.version = 17
 
@@ -61,6 +63,8 @@ class OdooStub:
             result = [index + 1 for index, order in enumerate(self.orders)
                       if order["client_order_ref"] == args[0][0][2]]
         elif model == "sale.order" and method == "create":
+            if self.reject_order:
+                return httpx.Response(200, json={"error": {"message": "stub order rejected"}})
             self.orders.append(args[0])
             if self.fail_after_create:
                 self.fail_after_create = False
@@ -70,7 +74,18 @@ class OdooStub:
             result = []
         elif model == "res.partner" and method == "create":
             self.partners.append(args[0])
+            if self.fail_after_partner:
+                self.fail_after_partner = False
+                raise httpx.ReadTimeout("stub", request=request)
             result = 100 + len(self.partners)
+        elif model == "res.partner" and method == "search":
+            if args[0][0][0] == "email":
+                result = [42]  # An existing customer must never be selected by typed email.
+            else:
+                assert args[0][0][0] == "ref"
+                assert len(args[0]) == 1
+                result = [101 + index for index, partner in enumerate(self.partners)
+                          if partner["ref"] == args[0][0][2]]
         elif method == "search":
             result = [42]
         elif method == "create":
@@ -155,7 +170,72 @@ async def test_typed_email_never_selects_an_existing_odoo_customer():
     assert [order["partner_id"] for order in stub.orders] == [101, 102]
     assert all(partner["email"] == CONTACT["email"] and partner["comment"] == "from Rig, not verified"
                for partner in stub.partners)
-    assert not any(model == "res.partner" and method == "search" for model, method, *_ in stub.calls)
+    assert all(args[0][0][0] == "ref" for model, method, args, _ in stub.calls
+               if model == "res.partner" and method == "search")
+    assert len({partner["ref"] for partner in stub.partners}) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("lost_partner_response", [False, True])
+async def test_odoo_retries_reuse_request_partner_before_an_order_exists(lost_partner_response):
+    stub = OdooStub()
+    stub.fail_after_partner = lost_partner_response
+    stub.reject_order = True
+    async with httpx.AsyncClient(transport=httpx.MockTransport(stub)) as http:
+        rig = await service(adapter(http))
+        ack = await rig.quote(TENANT, {"product_id": "CORE-1", "contact": CONTACT})
+        assert ack["delivery"] == "pending" and not stub.orders
+        stub.partners[0]["comment"] = "<p>from Rig, not verified</p>"  # Odoo normalizes HTML notes.
+        for _ in range(2):
+            await rig.quote_store.retry_now(TENANT, ack["request_id"])
+            await rig.retry_pending(TENANT)
+            assert len(stub.partners) == 1 and not stub.orders
+        stub.reject_order = False
+        await rig.quote_store.retry_now(TENANT, ack["request_id"])
+        await rig.retry_pending(TENANT)
+        assert (await rig.quote_store.status(TENANT, ack["request_id"]))["status"] == "sent"
+    assert len(stub.orders) == len(stub.partners) == 1
+    assert stub.orders[0]["partner_id"] == 101
+    assert stub.partners[0]["ref"] == f"rig:{TENANT}:{ack['request_id']}"
+
+
+@pytest.mark.asyncio
+async def test_attention_pages_past_100_and_only_resumed_holds_count():
+    rig = await service()
+    rig.quote_store.clock = lambda: 120  # Equal timestamps exercise the ID tie-breaker.
+    await rig.store.put_key(TENANT, hash_key("RIG_ADMIN_KEY"), "admin", [])
+    await rig.store.put_key(OTHER, hash_key("OTHER_RIG_ADMIN_KEY"), "admin", [])
+    await rig.quote(TENANT, {"product_id": "CORE-1", "contact": CONTACT})
+    for index in range(205):
+        await rig.quote_store.create(TENANT, {"id": f"held_{index:03}", "payload": {}, "contact": {}}, hold=True)
+    await rig.quote_store.create(OTHER, {"id": "other_held", "payload": {}, "contact": {}}, hold=True)
+    assert (await rig.quote_store.analytics(TENANT, date.min))["quotes"] == 1
+    app = FastAPI()
+    app.state.rig = rig
+    mount(app)
+    mount_quotes(app)
+    headers = {"X-Rig-Key": "RIG_ADMIN_KEY"}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        first = (await client.get("/v1/rig/admin/quotes/attention", headers=headers)).json()
+        assert len(first["requests"]) == 100 and first["next_cursor"]
+        ids = [row["request_id"] for row in first["requests"]]
+        # Removing an earlier entry while paging must not skip later entries.
+        for _ in range(2):
+            assert (await client.post("/v1/rig/admin/quotes/held_000/resume", headers=headers)).status_code == 200
+        assert (await rig.quote_store.analytics(TENANT, date.min))["quotes"] == 2
+        cursor = first["next_cursor"]
+        while cursor:
+            response = await client.get("/v1/rig/admin/quotes/attention", params={"cursor": cursor}, headers=headers)
+            assert response.status_code == 200
+            page = response.json()
+            ids.extend(row["request_id"] for row in page["requests"])
+            cursor = page["next_cursor"]
+        assert ids == [f"held_{index:03}" for index in range(205)]
+        other = (await client.get("/v1/rig/admin/quotes/attention", headers={"X-Rig-Key": "OTHER_RIG_ADMIN_KEY"})).json()
+        assert [row["request_id"] for row in other["requests"]] == ["other_held"]
+        for params in ({"limit": 0}, {"limit": 101}, {"cursor": "not-a-cursor"}, {"cursor": "W10"}):
+            assert (await client.get("/v1/rig/admin/quotes/attention", params=params, headers=headers)).status_code == 422
+        assert (await client.get("/v1/rig/admin/quotes/attention", headers={"X-Rig-Key": KEY})).status_code == 403
 
 
 @pytest.mark.asyncio
@@ -204,6 +284,7 @@ async def test_odoo_refuses_unmapped_sku_and_remote_error_is_not_exposed():
         ack = await rig.quote(TENANT, {"product_id": "CORE-1", "contact": CONTACT})
         assert ack["delivery"] == "pending"
         assert not stub.orders
+        assert not stub.partners  # A mapping failure must not create an orphan partner.
         assert (await rig.quote_store.status(TENANT, ack["request_id"]))["error"] == "odoo_product_mapping"
     async with httpx.AsyncClient(transport=httpx.MockTransport(
         lambda _: httpx.Response(200, json={"error": {"data": "PRIVATE_REMOTE_DIAGNOSTIC"}}))) as http:

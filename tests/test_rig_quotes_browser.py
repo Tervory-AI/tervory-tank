@@ -146,7 +146,7 @@ async def test_built_widget_live_api_journey(real_chromium, widget_server, tmp_p
     await expect(page.locator("#ask-q")).to_have_css("resize", "none")
     await page.locator("#ask-q").press("Enter")
     await expect(page.locator(".answer")).to_contain_text("I don't know")
-    await page.get_by_role("link", name="Find it. We source it.", exact=True).click()
+    await page.get_by_role("button", name="Find it. We source it. Back to setups", exact=True).click()
     await expect(page.locator(".setup")).to_have_count(3)
     await page.go_forward()
     await expect(page.locator(".answer")).to_contain_text("I don't know")

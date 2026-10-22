@@ -1,10 +1,12 @@
 """Admin-only delivery recovery, counters and publishable key provisioning."""
 
+import base64
 from datetime import date, datetime, timedelta, timezone
+import json
 import secrets
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, FastAPI, Request
+from fastapi import APIRouter, FastAPI, Query, Request
 from pydantic import BaseModel, Field
 
 from rigbox.api import _admin, _ok, _service, _tenant
@@ -35,10 +37,30 @@ async def delivery(request: Request, quote_id: str):
 
 
 @router.get("/quotes/attention")
-async def attention(request: Request):
+async def attention(request: Request, limit: int = Query(default=100, ge=1, le=100),
+                    cursor: str | None = Query(default=None, max_length=512)):
     """Staff review queue, including held quotes, without shopper contact data."""
     await _admin(request)
-    return _ok(request, {"requests": await _service(request).quote_store.attention(_tenant(request))})
+    after = None
+    if cursor is not None:
+        try:
+            decoded = json.loads(base64.b64decode(cursor + "=" * (-len(cursor) % 4), altchars=b"-_", validate=True))
+            if not isinstance(decoded, list) or len(decoded) != 2:
+                raise ValueError
+            stamp = datetime.fromisoformat(decoded[0])
+            quote_id = decoded[1]
+            if stamp.tzinfo is None or not isinstance(quote_id, str) or not 1 <= len(quote_id) <= 128 or "\x00" in quote_id:
+                raise ValueError
+            after = stamp, quote_id
+        except (ValueError, TypeError):
+            raise RigError("invalid", "That page cursor is not valid.", 422) from None
+    rows = await _service(request).quote_store.attention(_tenant(request), limit=limit + 1, after=after)
+    page = rows[:limit]
+    next_cursor = None
+    if len(rows) > limit:
+        last = page[-1]
+        next_cursor = base64.urlsafe_b64encode(json.dumps([last["created_at"], last["request_id"]]).encode()).decode().rstrip("=")
+    return _ok(request, {"requests": page, "next_cursor": next_cursor})
 
 
 @router.post("/quotes/{quote_id}/retry")

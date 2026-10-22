@@ -89,14 +89,7 @@ class OdooHandoff:
         # customer or turn an unpriced product URL into a priced quotation.
         if not contact.get("email"):
             raise DeliveryError("contact_required")
-        # Typed contact details prove no customer identity. Never reuse an account
-        # selected by email. Order reconciliation above still makes retries safe.
-        partner_id = await execute("res.partner", "create", [{
-            "name": contact["name"], "email": contact["email"],
-            "comment": "from Rig, not verified",
-            **({"phone": contact["phone"]} if contact.get("phone") else {}),
-        }])
-        values: dict[str, Any] = {"partner_id": partner_id, "client_order_ref": reference}
+        values: dict[str, Any] = {"client_order_ref": reference}
         if payload["kind"] == "link":
             values["order_line"] = [[0, 0, {"display_type": "line_note", "name":
                 "Product to source: " + payload["url"] + "\n" + payload["note"]}]]
@@ -123,6 +116,22 @@ class OdooHandoff:
                     "tax_id": [[6, 0, []]]}])
             values["order_line"] = lines
             values["note"] = "Indicative quote from Rig. Retailer review required."
+        # Validate all product/currency mappings before creating a partner.
+        # Typed email proves no identity: reuse only this tenant/request's
+        # unverified partner, including after a lost partner-create response.
+        # Do not match the HTML notes field: Odoo may normalize its markup.
+        partners = await execute("res.partner", "search", [[["ref", "=", reference]]],
+                                 limit=2, context={"active_test": False})
+        if len(partners) > 1:
+            raise DeliveryError("odoo_partner_mapping")
+        partner_id = partners[0] if partners else await execute("res.partner", "create", [{
+            "name": contact["name"], "email": contact["email"], "ref": reference,
+            "comment": "from Rig, not verified",
+            **({"phone": contact["phone"]} if contact.get("phone") else {}),
+        }])
+        if not isinstance(partner_id, int) or isinstance(partner_id, bool) or partner_id <= 0:
+            raise DeliveryError("odoo_partner_mapping")
+        values["partner_id"] = partner_id
         order_id = await execute("sale.order", "create", [values])
         if not isinstance(order_id, int) or isinstance(order_id, bool) or order_id <= 0:
             raise DeliveryError("odoo_rejected")

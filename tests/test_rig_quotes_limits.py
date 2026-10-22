@@ -194,7 +194,54 @@ async def test_failed_key_lookups_are_bounded_before_database_access(monkeypatch
     assert len(looked_up) == 2
     assert sorted(result.status for result in results) == [401, 401] + [429] * 8
     assert all(isinstance(result, RigError) for result in results)
-    assert await rig.authenticate(KEY, "2001:db8:1:2::1")
+    assert await rig.authenticate(KEY, "2001:db8:2:2::1")
     now[0] += 60
     assert await rig.authenticate(KEY, "2001:db8:1:1::1")
     assert "2001:db8" not in str(rig.failed_keys.counts)
+
+
+@pytest.mark.asyncio
+async def test_failed_key_flood_from_10000_ipv6_subnets_does_not_lock_out_stores():
+    from rigbox.quotes.limits import FailedKeyLimits
+    from rigbox.quotes.sample import KEY
+    from rigbox.service import RigError, hash_key
+    from test_rig_quotes import service, OTHER
+
+    rig = await service()
+    rig.failed_keys = FailedKeyLimits(clock=lambda: 120)
+    await rig.store.put_key(OTHER, hash_key("rk_pub_OTHER_RIG_PUBLISHABLE_KEY"), "publishable", [])
+    for index in range(10000):
+        # The review reproduction: 10,000 different /64s within one /48.
+        with pytest.raises(RigError) as error:
+            await rig.authenticate("rk_pub_INVALID_RIG_PUBLISHABLE_KEY", f"2001:db8:1:{index:x}::1")
+        assert error.value.status == (401 if index < 60 else 429)
+    assert len(rig.failed_keys.counts) == 1
+    assert (await rig.authenticate(KEY, "2001:db8:2::1"))["tenant_id"] == TENANT
+    assert (await rig.authenticate("rk_pub_OTHER_RIG_PUBLISHABLE_KEY", "192.0.2.1"))["tenant_id"] == OTHER
+
+
+@pytest.mark.asyncio
+async def test_full_failed_key_table_evicts_oldest_and_only_that_guard_fails_open():
+    from ipaddress import IPv4Address
+    from rigbox.quotes.limits import FailedKeyLimits
+    from rigbox.quotes.sample import KEY
+    from rigbox.service import RigError
+    from test_rig_quotes import service
+
+    rig = await service()
+    limits = rig.failed_keys = FailedKeyLimits(limit=1, clock=lambda: 120)
+    for index in range(10000):
+        assert limits.reserve(str(IPv4Address(0xC6120000 + index))) is not None
+    oldest = next(iter(limits.counts))
+    assert await rig.authenticate(KEY, "192.0.2.1")  # Full table cannot reject a new shopper.
+    assert oldest not in limits.counts and len(limits.counts) == 9999
+    assert limits.reserve("192.0.2.2") is not None
+    assert len(limits.counts) == 10000
+    with pytest.raises(RigError) as error:
+        await rig.authenticate("rk_pub_INVALID_RIG_PUBLISHABLE_KEY", "192.0.2.3")
+    assert error.value.status == 401  # Fail-open never accepts an invalid key.
+    assert len(limits.counts) == 9999
+    assert limits.reserve("192.0.2.2") is None  # Tracked clients still have their failed-key cap.
+    for _ in range(5):
+        assert (await rig.public_limits.consume(TENANT, "192.0.2.1", "/v1/rig/quote")).retry_after == 0
+    assert (await rig.public_limits.consume(TENANT, "192.0.2.1", "/v1/rig/quote")).retry_after > 0

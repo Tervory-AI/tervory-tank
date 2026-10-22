@@ -67,8 +67,11 @@ an unpriced order note with the shopper's contact, never a fabricated product or
 price. The adapter never confirms orders, invoices, charges or emails shoppers.
 Each new request creates a separate partner with the internal comment
 **“from Rig, not verified”**. Shopper-typed email never selects an existing
-customer account. Order-reference reconciliation still prevents duplicate orders
-and partners after a successful order write whose response was lost.
+customer account. Product/currency mappings are checked before creating a
+partner. The partner's `ref` is the tenant/request reference, so a rejected order
+or lost partner-create response reuses that request's unverified partner on
+retry. An ambiguous partner reference stops delivery for staff review. Order
+reconciliation still prevents a duplicate order after a lost order response.
 
 ## Key, origins and bundle
 
@@ -104,9 +107,17 @@ handoffs/minute. Above the quote ceiling, eligible shoppers can still submit:
 their requests are saved atomically with `needs_person`, error
 `tenant_quote_limit`, and no automatic delivery. The client's five-request cap
 still applies to held quotes. A `rig_quote_held` warning includes only tenant ID,
-request ID and the fixed reason. Staff can list the first 100 held/failed requests
-at `GET /v1/rig/admin/quotes/attention`, inspect the matching tenant-scoped quote,
-and explicitly `/resume` after review. Ordinary retry and scheduled retry cannot
+request ID and the fixed reason. Held submissions do not increment the anonymous
+`quotes` total. Explicit staff resume counts a held request once, on the day it
+is released; retries and concurrent resumes cannot double-count it.
+
+Staff list held/failed requests at `GET /v1/rig/admin/quotes/attention?limit=100`.
+The response contains `requests` (including `created_at`) and `next_cursor`.
+Pass a non-null cursor as `cursor` on the next request; null means the last page.
+The limit is 1–100. Pages use the immutable creation time and request ID, scoped
+to the authenticated tenant, so removing an earlier hold does not skip later
+requests. Staff inspect the matching tenant-scoped quote and explicitly
+`/resume` after review. Ordinary retry and scheduled retry cannot
 release a hold. No Odoo partner, order or webhook is created while held.
 A rejected client does not consume the tenant ceiling. HTTP 429 includes
 `Retry-After`, exposed through CORS. These are abuse controls, not visitor
@@ -118,13 +129,20 @@ Origin checking is a browser boundary, not proof of shopper identity.
 Failed publishable-key lookups have a separate per-client, per-process guard:
 60 failures or in-flight lookups per minute, before the database lookup. A
 successful lookup releases its reservation. Rotating invalid keys or addresses
-within one IPv6 `/64` cannot bypass it. Its bounded memory retains only
-minute-salted hashes, expires every minute, and does not join analytics.
+within one IPv6 `/48` cannot bypass it (authenticated shopper budgets still use
+`/64`). At 10,000 tracked clients, a new client evicts the oldest bucket and
+bypasses only this failed-key guard for that lookup. Key validation and the
+Postgres tenant/shopper limits still apply. Existing tracked clients keep their
+failed-key caps. This prevents a bad-key flood from denying every new shopper.
+Memory retains only minute-salted hashes, expires every minute, and does not
+join analytics.
 
 `RIG_TRUSTED_PROXY_CIDRS` is empty by default and **production `/health` returns
 503 while it is empty, invalid, or includes a universal `/0` network**. There is
-no test-mode bypass in the production app. Grok must supply the verified subnet
-of proxy network `59f8cnpelzwsyte1atyjc4fv`; Compose contains a TODO until then.
+no test-mode bypass in the production app. Grok has set
+`RIG_TRUSTED_PROXY_CIDRS=10.0.21.0/24` on agent-rig in Coolify (both rows), as
+confirmed in the review. Keep Compose's `${RIG_TRUSTED_PROXY_CIDRS:-}`; the live
+subnet remains deployment configuration.
 Configure only actual trusted reverse-proxy peer addresses/networks in Coolify.
 The Docker command disables Uvicorn's proxy-header rewriting so Rig sees the
 real socket peer, and disables access logs so raw IPs/query strings are not kept.
@@ -160,8 +178,10 @@ Unicode control/format characters are stripped before storing or sending them.
 
 Fresh databases create the cascading foreign key directly. For a database that
 ran an earlier revision of this PR, startup replaces only the old foreign-key
-constraint inside a locked transaction. Reapplication is safe and preserves all
-rows; no table or column is dropped. Purging happens only through the scheduled
+constraint inside a locked transaction. Startup first checks `pg_constraint`;
+if cascading deletion is already applied, it returns without a table lock.
+An upgrade rechecks under the lock to serialize concurrent startup processes.
+Reapplication preserves all rows; no table or column is dropped. Purging happens only through the scheduled
 retention policy after deployment.
 
 ## Cloud development and checks

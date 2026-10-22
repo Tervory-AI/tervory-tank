@@ -74,11 +74,11 @@ def budgets(route: str, read_limit: int = 60) -> tuple[str, int, str, int]:
     return route, limit, "browse", 6000
 
 
-def fingerprint(salt: bytes, address: str) -> bytes:
+def fingerprint(salt: bytes, address: str, *, ipv6_prefix: int = 64) -> bytes:
     try:
         ip = ipaddress.ip_address(address)
         if isinstance(ip, ipaddress.IPv6Address):
-            address = str(ip.ipv4_mapped or ipaddress.ip_network(f"{ip}/64", strict=False))
+            address = str(ip.ipv4_mapped or ipaddress.ip_network(f"{ip}/{ipv6_prefix}", strict=False))
         else:
             address = str(ip)
     except ValueError:
@@ -105,21 +105,25 @@ class FailedKeyLimits:
         self.salt = b""
         self.counts: dict[bytes, int] = {}
 
-    def reserve(self, address: str) -> tuple[int, bytes] | None:
+    def reserve(self, address: str) -> tuple[int, bytes | None] | None:
         window = int(self.clock()) // 60
         if window != self.window:
             self.window, self.salt, self.counts = window, secrets.token_bytes(32), {}
-        identity = fingerprint(self.salt, address)
+        identity = fingerprint(self.salt, address, ipv6_prefix=48)
         if self.counts.get(identity, 0) >= self.limit:
             return None
         if identity not in self.counts and len(self.counts) >= 10000:
-            return None
+            # This optional pre-auth guard must never lock out every retailer.
+            # Evict the oldest bucket and leave this lookup untracked. Normal
+            # key authentication and tenant/shopper rate limits still apply.
+            self.counts.pop(next(iter(self.counts)))
+            return window, None
         self.counts[identity] = self.counts.get(identity, 0) + 1
         return window, identity
 
-    def release(self, reservation: tuple[int, bytes]) -> None:
+    def release(self, reservation: tuple[int, bytes | None]) -> None:
         window, identity = reservation
-        if window == self.window:
+        if identity is not None and window == self.window:
             remaining = self.counts.get(identity, 1) - 1
             if remaining:
                 self.counts[identity] = remaining
