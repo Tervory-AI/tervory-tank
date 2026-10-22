@@ -22,7 +22,8 @@ def measured_scale(scene, dimensions):
 def photogrammetry(work, body):
     output = work / "meshroom-output"
     subprocess.run(["/opt/meshroom/meshroom_batch", "--input", str(work / "photos"),
-                    "--output", str(output), "--cache", str(work / "cache")], check=True)
+                    "--output", str(output), "--cache", str(work / "cache"),
+                    "--paramOverrides", "Texturing:colorMapping.colorMappingFileType=png"], check=True)
     models = list(output.rglob("texturedMesh.obj"))
     if len(models) != 1:
         raise ValueError("Meshroom did not produce one textured mesh")
