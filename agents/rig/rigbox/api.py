@@ -54,9 +54,7 @@ class FitDecision(BaseModel):
 
 
 def mount(app: FastAPI) -> None:
-    from rigbox.retailer_api import router as retailer_router
     app.include_router(router)
-    app.include_router(retailer_router)
     app.add_exception_handler(RigError, _on_rig_error)
     app.add_exception_handler(RequestValidationError, _on_invalid)
 

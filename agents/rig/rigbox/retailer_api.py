@@ -1,4 +1,4 @@
-"""Room-only retailer operations. The Workspace always goes through Tank."""
+"""Private retailer operations. Only Tank holds this control credential."""
 
 import hmac
 import json
@@ -17,10 +17,10 @@ OPERATIONS = {"panel", "import", "price-rule", "exchange-rate", "templates", "ap
 
 @router.post("/internal/retailer/{operation}")
 async def retailer_operation(operation: str, request: Request) -> JSONResponse:
-    expected = os.environ.get("TANK_KEY", "")
-    given = request.headers.get("x-tank-key", "")
+    expected = os.environ.get("RIG_RETAILER_KEY", "")
+    given = request.headers.get("x-rig-retailer-key", "")
     if not expected or not given or not hmac.compare_digest(expected.encode(), given.encode()):
-        raise RigError("unauthorized", "Room authentication required.", 401)
+        raise RigError("unauthorized", "Retailer control authentication required.", 401)
     if operation not in OPERATIONS:
         raise RigError("not_found", "Unknown retailer operation.", 404)
     raw = bytearray()

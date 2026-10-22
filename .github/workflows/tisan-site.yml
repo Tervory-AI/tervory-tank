@@ -57,14 +57,7 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run deploy
-      - name: Prepare Chromium
-        run: |
-          browser=$(command -v chromium || command -v chromium-browser || command -v google-chrome || command -v google-chrome-stable || true)
-          if [ -n "$browser" ]; then
-            echo "CHROME_PATH=$browser" >> "$GITHUB_ENV"
-          else
-            npx playwright install --with-deps chromium
-          fi
+      - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
         env:
           NEXT_TELEMETRY_DISABLED: "1"

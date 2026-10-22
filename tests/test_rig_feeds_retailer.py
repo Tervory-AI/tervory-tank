@@ -22,7 +22,7 @@ sys.path.insert(0, str(ROOT / "agents" / "_chassis"))
 
 import access  # noqa: E402
 from command import Actor  # noqa: E402
-from rigbox.api import mount  # noqa: E402
+from rigbox.retailer_server import create_retailer_app  # noqa: E402
 from rigbox.retailer import Retailer  # noqa: E402
 from rigbox.service import RigError, Service  # noqa: E402
 from rigbox.store import MemoryStore, PgStore  # noqa: E402
@@ -178,19 +178,17 @@ async def test_template_defaults_and_no_result_counts_are_tenant_scoped():
 
 
 @pytest.mark.asyncio
-async def test_room_api_needs_room_key_and_ignores_body_tenant_in_data(monkeypatch):
+async def test_private_api_needs_control_key_and_ignores_body_tenant_in_data(monkeypatch):
     retailer = await prepared()
-    app = FastAPI()
-    app.state.rig = retailer.service
-    mount(app)
+    app = create_retailer_app(retailer.service)
     key = secrets.token_hex(32)
-    monkeypatch.setenv("TANK_KEY", key)
+    monkeypatch.setenv("RIG_RETAILER_KEY", key)
     with TestClient(app) as client:
         assert client.post("/internal/retailer/panel", json={"tenant_id": TENANT}).status_code == 401
-        response = client.post("/internal/retailer/panel", headers={"x-tank-key": key}, json={"tenant_id": OTHER, "data": {"tenant_id": TENANT}})
+        response = client.post("/internal/retailer/panel", headers={"x-rig-retailer-key": key}, json={"tenant_id": OTHER, "data": {"tenant_id": TENANT}})
         assert response.status_code == 200
         assert response.json()["price_configured"] is False
-        response = client.post("/internal/retailer/exchange-rate", headers={"x-tank-key": key}, json={"tenant_id": TENANT, "data": {"currency": "USD", "rate": "20"}})
+        response = client.post("/internal/retailer/exchange-rate", headers={"x-rig-retailer-key": key}, json={"tenant_id": TENANT, "data": {"currency": "USD", "rate": "20"}})
         assert response.status_code == 403
 
 
@@ -283,17 +281,17 @@ async def test_access_connect_manual_refresh_nightly_and_receipts_on_postgres(mo
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             connection = {"target": "rig", "distributor": "shopify", "site": SITE, "endpoint": SITE + "/products.json",
                           "format": "json", "currency": "USD", "official_read_only": True, "auth_mode": "none"}
-            response = await client.post("/v1/access/feeds/connect", json=connection)
+            response = await client.post("/v1/access/rig/admin/connect", json={"data": connection})
             assert response.status_code == 200
             request = {"target": "rig", "distributor": "shopify", "site": SITE}
-            response = await client.post("/v1/access/feeds/refresh", json=request)
+            response = await client.post("/v1/access/rig/admin/refresh", json={"data": request})
             assert response.status_code == 200
             assert response.json()["receipt"]["added"] == 2
             actor = Actor(UUID(OTHER), "other-retailer", False, frozenset({"rig"}))
-            assert (await client.post("/v1/access/feeds/refresh", json=request)).status_code == 409
+            assert (await client.post("/v1/access/rig/admin/refresh", json={"data": request})).status_code == 409
             actor = Actor(UUID(TENANT), "retailer-user", False, frozenset({"rig"}))
-            invalid = {"target": "rig", "distributor": "zanders", "site": SITE, "format": "csv", "source": "ftp_export", "contents": "not,a,valid,feed"}
-            response = await client.post("/v1/access/feeds/import", json=invalid)
+            invalid = {"target": "rig", "distributor": "zanders", "site": "https://SUPPLIER.example/", "format": "csv", "source": "ftp_export", "contents": "not,a,valid,feed"}
+            response = await client.post("/v1/access/rig/admin/import", json={"data": invalid})
             assert response.status_code == 200
             assert response.json()["receipt"]["rejected"] == 1
         async with pool.acquire() as conn:
@@ -307,6 +305,13 @@ async def test_access_connect_manual_refresh_nightly_and_receipts_on_postgres(mo
             assert [row["action"] for row in receipts] == ["feed_connected", "feed_imported", "feed_rejected", "feed_imported"]
             summaries = await conn.fetch("SELECT rig_summary FROM tank.access_feed_batches WHERE tenant_id=$1 ORDER BY fetched_at", UUID(TENANT))
             assert json.loads(summaries[-1]["rig_summary"])["updated"] == 2
+            assert await conn.fetchval("SELECT count(*) FROM tank.access_feed_batches WHERE tenant_id=$1 AND site<>$2", UUID(TENANT), SITE) == 0
+            assert await conn.fetchval("SELECT count(*) FROM tank.access_receipts WHERE tenant_id=$1 AND site<>$2", UUID(TENANT), SITE) == 0
+            await conn.execute("""INSERT INTO tank.access_feed_batches(tenant_id,id,distributor,site,source,row_count)
+                VALUES($1,gen_random_uuid(),'zanders',$2,'ftp_export',1)""", UUID(TENANT), SITE)
+        panel = await access.connections(actor)
+        assert len(panel["feeds"]) == 1
+        assert panel["feeds"][0]["distributor"] == "zanders"
     finally:
         await pool.close()
         await _drop_database(admin, name)

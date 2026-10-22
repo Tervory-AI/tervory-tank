@@ -1,0 +1,46 @@
+name: Rig admin review
+
+on:
+  pull_request:
+    paths:
+      - "workspace/app/rig/admin/**"
+      - "workspace/lib/tank.ts"
+      - "tests/rig_feeds_admin_browser.mjs"
+      - ".github/workflows/rig-admin-review.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  rig-admin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Workspace dependencies
+        working-directory: workspace
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-package-lock --no-audit --no-fund
+          fi
+      - name: Install pinned review browser
+        run: |
+          npm install --prefix "$RUNNER_TEMP/rig-browser" --no-audit --no-fund esbuild@0.28.2 playwright@1.64.1
+          "$RUNNER_TEMP/rig-browser/node_modules/.bin/playwright" install chromium
+      - name: Check retailer admin and capture both widths
+        run: node tests/rig_feeds_admin_browser.mjs
+        env:
+          RIG_ESBUILD_PATH: ${{ runner.temp }}/rig-browser/node_modules/esbuild
+          RIG_PLAYWRIGHT_PATH: ${{ runner.temp }}/rig-browser/node_modules/playwright
+          RIG_SCREENSHOT_DIR: ${{ runner.temp }}/rig-admin-screenshots
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rig-admin-screenshots
+          path: ${{ runner.temp }}/rig-admin-screenshots/*.png
+          if-no-files-found: error
+          retention-days: 30

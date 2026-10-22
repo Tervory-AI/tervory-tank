@@ -63,6 +63,25 @@ async function main() {
   active = null;
   assert.equal((await actions.changeRetailer('price-rule', {})).ok, false);
   assert.equal(forwarded.length, 1);
+
+  const accessCalls = [];
+  const accessRoute = moduleFrom('workspace/app/access/api/[...path]/route.ts', {
+    'next/server': { NextResponse: { json: (body, options = {}) => ({ body, status: options.status || 200 }) } },
+    '../../identity': { accessIdentity: async () => ({ tenantId: 'member-tenant', userId: 'member-user' }) },
+    '@/lib/tank': { accessRequest: async (...args) => { accessCalls.push(args); return { ok: true }; } },
+  });
+  function accessRequest(body) {
+    return { headers: new Headers({ origin: 'https://app.example', host: 'app.example' }),
+      nextUrl: new URL('https://app.example/access/api/feeds/import'), text: async () => JSON.stringify(body) };
+  }
+  for (const operation of ['import', 'connect', 'refresh']) {
+    const context = { params: Promise.resolve({ path: ['feeds', operation] }) };
+    assert.equal((await accessRoute.POST(accessRequest({ target: 'rig' }), context)).status, 403);
+    assert.equal(accessCalls.length, 0);
+  }
+  assert.equal((await accessRoute.POST(accessRequest({ distributor: 'zanders' }),
+    { params: Promise.resolve({ path: ['feeds', 'import'] }) })).status, 200);
+  assert.equal(accessCalls.length, 1);
   console.log('Retailer route: session role, server tenant, origin checks and bounded uploads passed.');
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

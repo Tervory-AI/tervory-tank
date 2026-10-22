@@ -151,6 +151,10 @@ def map_woocommerce(body: Any, currency: str) -> dict[str, Any]:
 
 def map_google_merchant(text: str | bytes) -> dict[str, Any]:
     raw = text.decode("utf-8", errors="replace") if isinstance(text, bytes) else str(text)
+    # Merchant catalogues never need DTDs or entity declarations. Reject them
+    # before ElementTree can expand even a small malicious document in memory.
+    if "\x00" in raw or "<!DOCTYPE" in raw.upper() or "<!ENTITY" in raw.upper():
+        return _feed_error("merchant feed declarations are not allowed")
     try:
         root = ET.fromstring(raw.lstrip("\ufeff").strip())
     except ET.ParseError:

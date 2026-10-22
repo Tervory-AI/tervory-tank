@@ -4,10 +4,7 @@ export default defineConfig({
   testDir: "e2e",
   retries: 0,
   workers: 1,
-  use: {
-    baseURL: "http://127.0.0.1:3000",
-    launchOptions: { executablePath: process.env.CHROME_PATH },
-  },
+  use: { baseURL: "http://127.0.0.1:3000" },
   webServer: {
     command: "npx next start -H 127.0.0.1 -p 3000",
     url: "http://127.0.0.1:3000",

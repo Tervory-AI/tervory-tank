@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 
@@ -10,7 +11,7 @@ const root = process.cwd();
 const require = createRequire(path.join(root, 'workspace/package.json'));
 const { build } = require(process.env.RIG_ESBUILD_PATH || 'esbuild');
 const { chromium } = require(process.env.RIG_PLAYWRIGHT_PATH || 'playwright');
-const out = process.env.RIG_SCREENSHOT_DIR || path.join(root, 'agents/rig/review-artifacts');
+const out = process.env.RIG_SCREENSHOT_DIR || path.join(os.tmpdir(), 'rig-admin-review');
 await fs.mkdir(out, { recursive: true });
 const initial = {
   price_configured: true, currency: 'ZAR', products: 24, can_set_exchange_rate: false,
@@ -41,7 +42,7 @@ const server = createServer(async(req,res)=>{
   res.setHeader('content-type','text/html');res.end(html);
 });
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
-const browser = await chromium.launch({ executablePath: process.env.READ1_CHROMIUM_EXECUTABLE || '/usr/bin/chromium', args: ['--no-sandbox'] });
+const browser = await chromium.launch({ executablePath: process.env.READ1_CHROMIUM_EXECUTABLE, args: ['--no-sandbox'] });
 try {
   const page=await browser.newPage();
   const errors=[];page.on('pageerror',error=>errors.push(error.message));
@@ -53,6 +54,8 @@ try {
     assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`Overflow at ${width}`);
     await page.screenshot({path:path.join(out,`rig-admin-${width}.png`),fullPage:true});
   }
+  assert.equal(await page.getByText('shade: shade', {exact:true}).count(), 0);
+  assert.equal(await page.getByLabel('Column names', {exact:true}).count(), 1);
   assert.equal(await page.getByLabel('Freight per item, in supplier currency').inputValue(),'');
   assert.equal(await page.getByLabel('Duty (%)',{exact:true}).inputValue(),'');
   assert.equal(await page.getByLabel('Gross margin (%)',{exact:true}).inputValue(),'');
@@ -63,7 +66,7 @@ try {
   await page.getByLabel('Product category',{exact:true}).fill('tableware');
   await page.getByLabel('Included categories, separated by commas').fill('saucer, coaster');
   await page.getByRole('button',{name:'Save template',exact:true}).click();
-  await page.getByText('saucer: saucer · coaster: coaster',{exact:true}).waitFor();
+  await page.getByText('saucer · coaster',{exact:true}).waitFor();
   await page.getByLabel('Freight per item, in supplier currency').fill('2');
   await page.getByLabel('Duty (%)',{exact:true}).fill('10');
   await page.getByLabel('Gross margin (%)',{exact:true}).fill('20');
