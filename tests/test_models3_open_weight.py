@@ -17,6 +17,9 @@ os.environ.setdefault("LITELLM_MASTER_KEY", "test")
 os.environ.setdefault("TANK_API_KEY", "test")
 
 import main
+from test_train1 import database as _database
+
+database = _database
 
 ROOT = Path(__file__).resolve().parents[1]
 TENANT = "33333333-3333-3333-3333-333333333333"
@@ -201,6 +204,43 @@ def test_open_models_enter_the_bench_and_price_search():
     for name in OPEN:
         assert name in book and book[name]["input"] > 0
         assert name in quotes
+
+
+@pytest.mark.parametrize("filename", FILES)
+def test_bench_families_keep_hosted_weights_separate_from_api_baselines(filename):
+    import bench
+
+    models = rows(filename)
+    book = bench.price_book(list(models.values()))
+    for name, (maker, *_) in OPEN.items():
+        assert book[name]["family"].startswith(f"{maker}/open-"), name
+        # The product comes from the HF id, not the routing provider or alias.
+        changed_route = {**models[name], "litellm_params": {"model": "other/unrelated-model"}}
+        assert bench.price_book([changed_route])[name]["family"] == book[name]["family"]
+    assert book["gpt-oss"]["family"] == book["gpt-oss-small"]["family"] == "openai/open-gpt"
+    assert book["luna"]["family"] == book["sol"]["family"] == book["astra"]["family"] == "openai/gpt"
+    assert book["gpt-oss"]["family"] != book["luna"]["family"]
+
+
+@pytest.mark.asyncio
+async def test_open_weight_receipts_have_no_api_standard_and_keep_top_in_family(database):
+    import bench
+    import uuid
+
+    pool, _ = database
+    book = bench.price_book(config("config.yaml")["model_list"])
+    async with pool.acquire() as conn:
+        await bench.sync_prices(conn, book)
+        for name in OPEN:
+            receipt = await conn.fetchrow("""INSERT INTO tank.ledger
+                (tenant_id,agent,task_type,model,tokens_in,tokens_out,cost_usd)
+                VALUES($1,'base','models3.fixture',$2,100,10,.001) RETURNING *""",
+                uuid.UUID(TENANT), name)
+            assert receipt["standard_cost_usd"] is None, name
+            assert receipt["baseline_cost_usd"] is None, name
+            assert receipt["baseline_status"] == "unpriced", name
+            assert receipt["top_model"] in OPEN, name
+            assert book[receipt["top_model"]]["family"] == book[name]["family"], name
 
 
 @pytest.mark.parametrize("filename", ["docker-compose.yml", "docker-compose.za.yml"])

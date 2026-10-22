@@ -337,8 +337,9 @@ model_list:
   # ---------- MODELS-3: open-weight models via Hugging Face Inference Providers ----------
   # One least-privilege token, HF_INFERENCE_TOKEN ("Make calls to Inference Providers" only),
   # billed to Tervory's Hugging Face account. Not the training HF_TOKEN. Each entry pins the
-  # cheapest host that answered a live call on the build day, so the recorded price is the one
-  # billed. family = the model maker (never the host); TANK_PROVIDER_ALLOW applies by model name.
+  # cheapest host that answered a live call on the build day. Hugging Face host roster prices
+  # are estimates, to be reconciled against the first Hugging Face invoice.
+  # family = the model maker (never the host); TANK_PROVIDER_ALLOW applies by model name.
   # Route: LiteLLM's OpenAI-compatible client on the Hugging Face router (model id + ':' + host).
   # LiteLLM v1.106.0's huggingface/ prefix prices every call at $0, which would zero the receipt;
   # this route reaches the same router with the same token and records the cost.

@@ -38,9 +38,14 @@ def price_book(rows: list[dict]) -> dict[str, dict]:
         if a is None or b is None or not all(math.isfinite(float(x)) and float(x) >= 0 for x in (a, b)):
             continue
         provider = str((row.get('litellm_params') or {}).get('model') or '')
-        # Family is provider + product line, not an alias (luna/sol/astra -> openai/gpt).
-        family = re.sub(r'[-\d].*$', '', provider.rsplit('/', 1)[-1])
-        family = provider.split('/')[0] + '/' + family if '/' in provider else provider
+        if info.get('open_weights') and info.get('family'):
+            # Hosted weights must not inherit the routing provider's API baselines.
+            product = re.sub(r'[-\d].*$', '', str(info.get('hf_model_id') or '').rsplit('/', 1)[-1])
+            family = f"{info['family']}/open-{product}"
+        else:
+            # Provider + product line, not an alias (luna/sol/astra -> openai/gpt).
+            family = re.sub(r'[-\d].*$', '', provider.rsplit('/', 1)[-1])
+            family = provider.split('/')[0] + '/' + family if '/' in provider else provider
         if not family:
             family = row['model_name']
         book[row['model_name']] = {'input': Decimal(str(a)), 'output': Decimal(str(b)), 'family': family}
