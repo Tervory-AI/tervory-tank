@@ -138,7 +138,8 @@ jobs:
         with:
           node-version: "22"
       - name: Install workspace packages for offline billing tests
-        if: needs.changes.outputs.full == 'true'
+        # Also when Tisan changed: tests/test_tisan_gold_actions.py needs workspace's typescript.
+        if: needs.changes.outputs.full == 'true' || needs.changes.outputs.tisan == 'true'
         working-directory: workspace
         run: |
           if [ -f package-lock.json ]; then
