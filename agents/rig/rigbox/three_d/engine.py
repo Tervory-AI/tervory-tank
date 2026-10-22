@@ -6,6 +6,7 @@ import hashlib
 import json
 import struct
 import time
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from rigbox.logic import fitting_parts, reprice, rule_matches
@@ -47,10 +48,10 @@ class Engine:
             return self.job_view(previous)
         # Job id is the idempotency key on both sides. An uncertain submission
         # may be retried with exactly the same request, never with a new id.
-        await self.store.create(job)
         result = await self.forge.submit(job)
         if result.id != job.id or result.tenant_id != job.tenant_id:
             fail("The model service returned the wrong job.", 502)
+        await self.store.create(job)
         if result.status == "failed":
             await self.store.finish(tenant, job.id, "failed", reason="The model conversion failed.")
         return self.job_view(await self.store.job(tenant, job.id))
@@ -136,7 +137,7 @@ class Engine:
         setup = reprice(setup, products)
         model = await self.store.approved(tenant, request.product_id)
         base = {"sample": self.sample, "setup": setup, "total": setup["total"],
-                "product_id": request.product_id, "photo": centre.get("image_url") or "",
+                "product_id": request.product_id, "photo": photo_url(centre.get("image_url") or ""),
                 "valid_until": int(time.time()) + 300, "options": {}}
         if not model:
             return {**base, "available": False, "models": []}
@@ -202,13 +203,17 @@ def check_artifact(data: bytes, report: Report):
         if magic != b"glTF" or version != 2 or length != len(data) or chunk != 0x4E4F534A:
             raise ValueError("GLB header")
         doc = json.loads(data[20:20 + size])
-        if "EXT_meshopt_compression" not in doc.get("extensionsUsed", []) and "KHR_draco_mesh_compression" not in doc.get("extensionsUsed", []):
+        if "EXT_meshopt_compression" not in doc.get("extensionsUsed", []):
             return "The model has no supported mesh compression"
         # Self-contained GLBs only. A loader must never fetch arbitrary textures,
         # credentials or remote buffer URLs embedded in an uploaded model.
         if any("uri" in obj for group in ("buffers", "images") for obj in doc.get(group, [])):
             return "The model contains an external resource"
-        names = {n.get("name"): n for n in doc.get("nodes", [])}
+        nodes = doc.get("nodes", [])
+        roots = doc.get("scenes", [])[doc.get("scene", 0)].get("nodes", [])
+        names = {n.get("name"): n for i, n in enumerate(nodes) if i in roots}
+        if len([n for n in nodes if n.get("name") in report.anchors]) != len(report.anchors):
+            return "The named anchors are ambiguous"
         for name, anchor in report.anchors.items():
             node = names.get(name)
             if not node or "matrix" in node or node.get("scale", [1, 1, 1]) != [1, 1, 1]:
@@ -217,6 +222,18 @@ def check_artifact(data: bytes, report: Report):
                 return "The named anchors do not match the GLB"
             if any(abs(a - b) > 1e-6 for a, b in zip(anchor.quaternion, node.get("rotation", [0, 0, 0, 1]))):
                 return "The named anchors do not match the GLB"
-    except (ValueError, KeyError, TypeError, struct.error):
+    except (ValueError, KeyError, IndexError, AttributeError, TypeError, struct.error):
         return "The GLB is not valid"
     return None
+
+
+def photo_url(value):
+    """No credentials, signed queries or script URLs in the photo fallback."""
+    try:
+        parsed = urlsplit(value)
+        if (parsed.username or parsed.password or parsed.query or parsed.fragment
+                or (parsed.scheme and parsed.scheme != "https") or value.startswith("//")):
+            return ""
+        return value if (parsed.scheme == "https" and parsed.hostname) or value.startswith("/") else ""
+    except ValueError:
+        return ""

@@ -4,10 +4,13 @@ Keeps other lanes' app.py unchanged. The existing image already copies rigbox.
 No stand-in or automatic entitlement in this production entry point.
 """
 import os
+import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from fastapi import Request
 from fastapi.staticfiles import StaticFiles
+from pydantic import Field
 from chassis.storage import Storage
 from app import app
 
@@ -16,6 +19,8 @@ from .assets import R2Assets
 from .engine import Engine
 from .forge import BrainForge
 from .store import Store
+from .contracts import Strict, NAME
+from rigbox.service import RigError
 
 mount(app)
 _original = app.router.lifespan_context
@@ -54,6 +59,27 @@ class LazyR2:
 
 
 app.router.lifespan_context = lifespan
+
+
+class PageConfig(Strict):
+    publishable_key: str = Field(pattern=r"^rk_pub_[A-Za-z0-9_-]+$")
+    photo_key: str = Field(default="", pattern=r"^(rk_pub_[A-Za-z0-9_-]+)?$")
+    product_id: str = Field(pattern=NAME)
+    kiosk_id: str = Field(pattern=r"^[0-9a-f-]{36}$")
+
+
+@app.get("/3d/config", include_in_schema=False)
+async def page_config(request: Request):
+    # Public embed configuration only. No new credential or environment variable.
+    path = Path(os.environ.get("DATA_DIR", "/data")) / "rig-3d-page.json"
+    try:
+        config = PageConfig.model_validate(json.loads(path.read_text()))
+    except (OSError, ValueError):
+        raise RigError("configuration", "The 3D test page is not configured.", 503) from None
+    await request.app.state.rig.authenticate(config.publishable_key)
+    return config.model_dump()
+
+
 bundle = Path(__file__).with_name("widget")
 if bundle.is_dir():
     app.mount("/3d", StaticFiles(directory=bundle, html=True), name="rig-three-d-test")

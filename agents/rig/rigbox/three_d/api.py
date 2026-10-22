@@ -52,7 +52,9 @@ async def capabilities(request: Request):
 @router.post("/3d/assembly")
 async def assembly(request: Request, body: Assembly):
     await _auth(request)
-    return _ok(request, await engine(request).assembly(_tenant(request), body))
+    value = await engine(request).assembly(_tenant(request), body)
+    value.pop("setup", None)  # Internal repricing/quote data never goes to the viewer.
+    return _ok(request, value)
 
 
 @router.get("/3d/assets/{job_id}")
@@ -61,8 +63,8 @@ async def asset(request: Request, job_id: UUID):
     data = await engine(request).asset(_tenant(request), job_id)
     response = _ok(request, {})
     return Response(data, media_type="model/gltf-binary", headers={
-        **dict(response.headers), "Cache-Control": "private, no-store", "Vary": "Origin, X-Rig-Key",
-        "Content-Length": str(len(data)), "X-Content-Type-Options": "nosniff",
+        **{k: v for k, v in response.headers.items() if k not in {"content-length", "content-type"}},
+        "Cache-Control": "private, no-store", "Vary": "Origin, X-Rig-Key", "X-Content-Type-Options": "nosniff",
     })
 
 

@@ -79,7 +79,7 @@ class StubForge:
         self.root = Path(__file__).with_name("fixtures")
 
     async def submit(self, job: Job) -> Result:
-        if job.product_id not in {"centre", "part-a", "part-b"} or job.cost_cap_usd != 0:
+        if job.product_id not in {"centre", "part-a", "part-b", "part-tall"} or job.cost_cap_usd != 0:
             raise RigError("stand_in", "The stand-in accepts only the three sample models at zero cost.", 422)
         self.jobs[(job.tenant_id, job.id)] = job
         return Result(id=job.id, tenant_id=job.tenant_id, status="queued")
@@ -94,6 +94,6 @@ class StubForge:
 
     async def artifact(self, job: Job) -> bytes:
         # Tenant and request are persisted by Engine, so polling survives restart.
-        if job.product_id not in {"centre", "part-a", "part-b"}:
+        if job.product_id not in {"centre", "part-a", "part-b", "part-tall"}:
             raise RigError("not_found", "No sample model exists.", 404)
         return (self.root / (job.product_id + ".glb")).read_bytes()

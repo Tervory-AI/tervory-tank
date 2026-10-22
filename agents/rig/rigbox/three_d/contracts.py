@@ -81,7 +81,7 @@ class Report(Strict):
     triangles: int = Field(gt=0)
     size_bytes: int = Field(gt=0)
     dimensions_mm: tuple[float, float, float]
-    compression: Literal["meshopt", "draco"]
+    compression: Literal["meshopt"]
     sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     anchors: dict[str, Anchor]
     receipt_ids: list[UUID] = Field(min_length=1)
