@@ -111,8 +111,8 @@ def font_runs(value: str) -> list[tuple[str, str]]:
     for character in value:
         name=next((name for name in unicode_fonts() if ord(character) in pdfmetrics.getFont(name).face.charToGlyph),None)
         if name is None:
-            from fastapi import HTTPException
-            raise HTTPException(422,'Some characters cannot be printed in this PDF. Download the CSV to keep the complete text.')
+            name=unicode_fonts()[0]
+            character='\ufffd'
         if runs and runs[-1][0]==name:
             runs[-1]=(name,runs[-1][1]+character)
         else:
@@ -126,7 +126,9 @@ def text_width(value: str, size: int) -> float:
 
 class PDF:
     """Small paginated vector document; chart values remain exact in adjacent text."""
-    def __init__(self):
+    def __init__(self, document_title='Tervory savings'):
+        self.document_title=document_title
+        self.substituted=False
         self.pages = []
         self.commands = []
         self.y = 760
@@ -142,6 +144,7 @@ class PDF:
             self.page()
 
     def text(self, value, size=10):
+        self.substituted |= ''.join(text for _,text in font_runs(str(value))) != str(value)
         # Wrap using the embedded font's real advances, including full-width CJK.
         for paragraph in str(value).splitlines() or ['']:
             lines=textwrap.wrap(paragraph,width=max(1,int(545/(size*.55)))) or ['']
@@ -197,9 +200,14 @@ class PDF:
         self.y -= 22
 
     def finish(self):
+        if self.substituted:
+            self.commands.append(("Some characters can't be shown in the PDF; the CSV has the full text",
+                                  8,18,unicode_fonts()[0],32))
         self.page()
         output=BytesIO()
         canvas=Canvas(output,pagesize=(612,792),pageCompression=1)
+        canvas.setTitle(self.document_title)
+        canvas.setAuthor('Tervory')
         for commands in self.pages:
             for command in commands:
                 if isinstance(command,str):
@@ -214,8 +222,8 @@ class PDF:
         return output.getvalue()
 
 
-def pdf_copy(report,evidence):
-    pdf=PDF()
+def pdf_copy(report,evidence,client_name='Client savings'):
+    pdf=PDF(client_name)
     for i,line in enumerate(headings(report,evidence)):
         pdf.text(line,16 if i==0 else 10)
     total,month=report['total'],report['month']

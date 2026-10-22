@@ -1435,9 +1435,7 @@ DO $$ DECLARE tab text; BEGIN
     END IF;
   END LOOP;
 END $$;
--- One array index covers all model references used by client comparisons.
-CREATE INDEX IF NOT EXISTS ledger_savings_model_references ON tank.ledger
-  USING gin ((ARRAY[model,standard_model,top_model,baseline_model]));
+-- The model-reference index is built concurrently by savings_indexes after schema application.
 CREATE OR REPLACE FUNCTION tank.collect_price_savings_revisions() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE changed_models text[]; affected uuid;
 BEGIN

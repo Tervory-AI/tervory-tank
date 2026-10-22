@@ -169,6 +169,7 @@ async def test_unicode_job_titles_survive_client_and_founder_pdfs(database,monke
         text='\n'.join(p.extract_text() for p in reader.pages)
         for word in title.split(): assert word in text
         assert '?' not in text and '\\u4e2d' not in text
+        assert "Some characters can't be shown" not in text
         fonts=[font.get_object() for page in reader.pages for font in page['/Resources']['/Font'].values()]
         assert any('/FontFile2' in font.get('/FontDescriptor',{}) for font in fonts)
         assert any('/ToUnicode' in font for font in fonts)
@@ -193,3 +194,37 @@ async def test_unchanged_price_sync_does_not_invalidate_clients(database,monkeyp
         await bench.sync_prices(conn,book)
     assert await proof.client_savings_revision(tenant)!=before
     assert await pool.fetchval("SELECT active FROM tank.proof_prices WHERE model='expensive'") is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('title,expected',[('Launch plan 🚀','Launch plan �'),('Launch خطة العمل','Launch ��� �����')])
+async def test_unsupported_titles_download_with_notice_and_original_csv(database,monkeypatch,title,expected):
+    pool,rt=database;monkeypatch.setattr(proof,'runtime',lambda:rt)
+    await prices(pool)
+    tenant=uuid.uuid4();_,job=await seed(pool,tenant)
+    await pool.execute('UPDATE tank.tasks SET title=$2 WHERE id=$1 AND tenant_id=$3',job,title,tenant)
+    notice="Some characters can't be shown in the PDF; the CSV has the full text"
+    for export in [proof.savings_client_copy,proof.savings_export]:
+        response=await export('pdf',END,tenant,0,client_name='Café Client')
+        reader=PdfReader(BytesIO(response.body))
+        text='\n'.join(page.extract_text() for page in reader.pages)
+        assert expected in " ".join(text.split())
+        assert text.count(notice)==1
+        assert reader.metadata.title=='Café Client'
+        assert reader.metadata.author=='Tervory'
+        csv=await export('csv',END,tenant,0)
+        assert title in csv.body.decode()
+
+
+@pytest.mark.asyncio
+async def test_index_is_built_online_and_reapplies(database):
+    from savings_indexes import ensure_index
+    pool,_=database
+    assert not await pool.fetchval("SELECT to_regclass('tank.ledger_savings_model_references')")
+    # CONCURRENTLY would fail if wrapped in the schema transaction.
+    await ensure_index(pool)
+    await ensure_index(pool)
+    async with pool.acquire() as conn:
+        assert await conn.fetchval("SELECT indisvalid FROM pg_index WHERE indexrelid='tank.ledger_savings_model_references'::regclass")
+        await conn.execute((ROOT/'tank/schema.sql').read_text())
+    await ensure_index(pool)

@@ -27,8 +27,8 @@ python tank/fonts/build_font.py /path/to/NotoSansCJK-Regular.ttc
 
 The CJK collection uses face 2 (`NotoSansCJKsc-Regular`). Text uses Noto Sans
 first, then the embedded CJK font. A character outside both fonts' coverage
-produces an explicit error offering the CSV, rather than a substituted question
-mark or an invisible missing glyph.
+is replaced with U+FFFD. One notice in the PDF points readers to the CSV,
+which preserves the complete original text.
 
 Source versions and SHA-256 checksums:
 

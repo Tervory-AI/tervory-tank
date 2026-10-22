@@ -22,6 +22,8 @@ from gold import runtime
 
 @asynccontextmanager
 async def baseline_lifespan(app):
+    from savings_indexes import ensure_index
+    await ensure_index(runtime().pool())
     from savings_defaults import initialize
     async with runtime().pool().acquire() as conn:
         await initialize(conn)
@@ -212,7 +214,7 @@ def pdf_export(data: dict) -> bytes:
     if data.get('headline'):
         lines[1:1]=textwrap.wrap(data['headline'],110)
     from savings_export import PDF
-    pdf=PDF()
+    pdf=PDF(data.get('client_name') or 'Tervory | Tank proof')
     for line in lines:
         pdf.text(line,8)
     return pdf.finish()
@@ -220,12 +222,12 @@ def pdf_export(data: dict) -> bytes:
 
 @router.get('/export/{format}')
 async def export(format: str, tenant_id: uuid.UUID | None = None, task: str | None = Query(default=None, max_length=200),
-                 start: datetime | None = None, end: datetime | None = None, page: int = Query(default=0, ge=0, le=100000), clients_only: bool = False) -> Response:
+                 start: datetime | None = None, end: datetime | None = None, page: int = Query(default=0, ge=0, le=100000), clients_only: bool = False, client_name: str = '') -> Response:
     from fastapi import HTTPException
     if format not in ('csv','pdf'):
         raise HTTPException(404, 'not found')
     data = await snapshot(tenant_id, task, start, end, page, clients_only)
-    content = csv_export(data) if format=='csv' else pdf_export(data)
+    content = csv_export(data) if format=='csv' else pdf_export(dict(data,client_name=client_name))
     return Response(content, media_type='text/csv' if format=='csv' else 'application/pdf',
                     headers={'Content-Disposition': f'attachment; filename="tank-proof.{format}"', 'Cache-Control': 'no-store'})
 
@@ -412,7 +414,7 @@ async def founder_savings_rows(end: datetime, tenant_id: uuid.UUID | None = None
 
 @router.get('/savings/export/{format}')
 async def savings_export(format: str, end: datetime, tenant_id: uuid.UUID | None = None,
-                         page: int = Query(default=0, ge=0, le=100000), clients_only: bool = False) -> Response:
+                         page: int = Query(default=0, ge=0, le=100000), clients_only: bool = False, client_name: str = '') -> Response:
     from fastapi import HTTPException
     if format not in ('csv', 'pdf'):
         raise HTTPException(404, 'not found')
@@ -424,14 +426,14 @@ async def savings_export(format: str, end: datetime, tenant_id: uuid.UUID | None
                 page=page, has_more=evidence['has_more'], page_size=PAGE_SIZE,
                 tasks=[report['total'],dict(this_month=report['month']),dict(team_members=report['members']),dict(margin=report['margin'])],
                 ledger=evidence['rows'], shadows=[], runs=[], cases=[], promotions=[], policies=[], state=report['daily'])
-    content = csv_export(data) if format=='csv' else pdf_export(data)
+    content = csv_export(data) if format=='csv' else pdf_export(dict(data,client_name=client_name))
     return Response(content, media_type='text/csv' if format=='csv' else 'application/pdf',
                     headers={'Content-Disposition': f'attachment; filename="client-savings.{format}"', 'Cache-Control':'no-store'})
 
 
 @router.get('/savings/client-copy/{format}')
 async def savings_client_copy(format: str, end: datetime, tenant_id: uuid.UUID,
-                              page: int = Query(default=0, ge=0, le=100000)) -> Response:
+                              page: int = Query(default=0, ge=0, le=100000), client_name: str = '') -> Response:
     from fastapi import HTTPException
     from savings_export import csv_copy, pdf_copy
     if format not in ('csv','pdf'):
@@ -440,7 +442,7 @@ async def savings_client_copy(format: str, end: datetime, tenant_id: uuid.UUID,
     # Required UUID: never an all-client aggregate or founder population.
     report=client_payload(await savings_snapshot(tenant_id,end))
     evidence=client_payload(await savings_rows(tenant_id,end,page))
-    content=csv_copy(report,evidence) if format=='csv' else pdf_copy(report,evidence)
+    content=csv_copy(report,evidence) if format=='csv' else pdf_copy(report,evidence,client_name or 'Client savings')
     return Response(content,media_type='text/csv' if format=='csv' else 'application/pdf',
         headers={'Content-Disposition':f'attachment; filename="your-savings.{format}"','Cache-Control':'no-store'})
 

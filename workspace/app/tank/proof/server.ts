@@ -18,6 +18,18 @@ export async function proofResponse(filters: ProofFilters & { until?: string; me
     if (key === "tenant_id" && value === "clients") { query.set("clients_only","true"); continue; }
     query.set(key, (key === "start" || key === "end") && !/(Z|[+-]\d\d:\d\d)$/.test(value) ? `${value}Z` : value);
   }
+  if (format === "pdf" || endpoint.endsWith("/pdf")) {
+    const tenant = filters.tenant_id;
+    let name = tenant === "clients" ? "All clients" : "All accounts";
+    if (tenant && !["all", "clients"].includes(tenant)) {
+      const names = await resolveTenantNames([tenant], async params => {
+        const client = await clerkClient();
+        return client.organizations.getOrganizationList(params);
+      }, tenantIdFor, uuidFrom);
+      name = names.tenant_names[tenant];
+    }
+    query.set("client_name", name);
+  }
   const response = await fetch(`${process.env.TANK_URL ?? "http://tank:8000"}/v1/proof${endpoint}${format ? `/export/${format}` : ""}?${query}`, {
     ...init, cache: "no-store",
     headers: { "content-type": "application/json", "x-tank-key": process.env.TANK_API_KEY ?? "", "x-tervory-admin": identity.userId },
