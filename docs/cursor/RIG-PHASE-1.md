@@ -142,10 +142,22 @@ Tisan's rule: design before code. Add these frames to `uRpPy3Hns0WxWZYTPwZ2ni`:
 
 1. **Getting the 3D models, in order of preference:**
    1. **The maker's CAD files** (STEP/IGES), converted to optimised GLB with the CAD converter (`cadconvert`), with a polygon budget and real dimensions in millimetres.
-   2. **Photos to 3D** with an open model on our Hugging Face GPUs. TRELLIS 2 is MIT-licensed and gives GLB with PBR materials. Check any other model's licence first.
-   3. Every model is a **draft until a person approves it** (scale, look, attachment points). Unapproved models never reach a shopper.
-   4. Files are stored in `tervory-rig` R2, served through a CDN, compressed (meshopt or Draco, KTX2 textures), with a size budget per model.
-2. **Attachment points:** fitment rows gain **mount points** (for example the optic cut, rail, muzzle thread and holster envelope) as named anchors with position and orientation in the product's GLB. A part snaps only to an anchor that an approved fit allows. The 3D view **never assembles anything the API didn't return** (widget rule 4).
+   2. **Photos to 3D with AI** (one or a few photos), using an open model on our Hugging Face GPUs. TRELLIS 2 is MIT-licensed and gives GLB with PBR materials. Check any other model's licence first.
+   3. **Photos to 3D by scanning (photogrammetry):** the retailer uploads 50 to 70 overlapping phone photos of one product. It all runs in the cloud, never on anyone's laptop:
+      - Meshroom runs headless (`meshroom_batch`) on a Hugging Face GPU job;
+      - Blender runs headless (`blender -b -P optimize.py -- in.obj out.glb`, using `bpy.ops.wm.obj_import` because Blender 4.x removed `import_scene.obj`);
+      - then `gltf-transform` (simplify to a size target, meshopt and KTX2).
+      - Every step goes on a receipt.
+   4. **Automatic model check before anyone reviews it:**
+      - every face points outward (no inside-out parts; the 22 Oct test mug's handle failed exactly this);
+      - no open holes;
+      - real size in millimetres;
+      - under the size budget.
+
+      A model that fails goes back with the reason and never reaches the approval queue.
+   5. Every model is a **draft until a person approves it** (scale, look, attachment points). Unapproved models never reach a shopper.
+   6. Files are stored in `tervory-rig` R2, served through a CDN, compressed (meshopt or Draco, KTX2 textures), with a size budget per model.
+2. **Attachment points:** fitment rows gain **mount points** (for example a mount plate, a rail, a thread or a case cut-out) as named anchors with position and orientation in the product's GLB. A part snaps only to an anchor that an approved fit allows. The 3D view **never assembles anything the API didn't return** (widget rule 4).
 3. **Viewer:**
    - three.js in the widget as a separate, lazy-loaded chunk, fetched only when the tenant has `rig_3d` and the shopper opens 3D;
    - the base bundle stays under 150 KB;
