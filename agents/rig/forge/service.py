@@ -63,12 +63,13 @@ class Job(BaseModel):
         return self.model_dump(mode="json", include={"tenant_id", "job_id", "home_region"})
 
 
-def directory(tenant: uuid.UUID, job: uuid.UUID) -> Path:
+def directory(tenant: uuid.UUID, job: uuid.UUID, *, create: bool = True) -> Path:
     root = Path(os.environ.get("FORGE_DATA_DIR", "/data"))
     work = root / str(tenant) / str(job)
     if root.is_symlink() or work.parent.is_symlink() or work.is_symlink():
         raise HTTPException(409, "Invalid job storage.")
-    work.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if create:
+        work.mkdir(parents=True, exist_ok=True, mode=0o700)
     return work
 
 
@@ -222,7 +223,8 @@ async def submit(body: Job):
 
 @app.get("/jobs/{job_id}")
 async def poll(job_id: uuid.UUID, tenant_id: uuid.UUID):
-    work = directory(tenant_id, job_id)
+    # Lookups never create folders: an unknown job id leaves no trace on disk.
+    work = directory(tenant_id, job_id, create=False)
     path = work / "state.json"
     if not path.exists():
         if (tenant_id, job_id) in tasks:

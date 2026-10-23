@@ -32,8 +32,9 @@ class Storage:
     def transfers(self, manifest: dict) -> dict:
         """Mint method/object-limited capabilities, never send a bucket key to HF.
 
-        GET expires within 15 minutes; PUT lasts the job timeout plus five minutes
-        (at most 65 minutes). Queue delays fail closed. Do not persist/log this.
+        GET and PUT both last the job timeout plus five minutes (at most 65
+        minutes), so a job that waits in the provider queue can still read its
+        photos instead of failing after paying for start-up. Do not persist/log this.
         """
         timeout = manifest["timeout_seconds"]
         if not 60 <= timeout <= 3600:
@@ -43,7 +44,7 @@ class Storage:
                 Params={"Bucket": "tervory-rig", "Key": self.key(name), **params},
                 ExpiresIn=expires, HttpMethod="GET" if operation == "get_object" else "PUT")
         return {"manifest": manifest,
-                "get": {name: signed("get_object", "inputs/" + name, min(900, timeout + 300))
+                "get": {name: signed("get_object", "inputs/" + name, timeout + 300)
                         for name in manifest["inputs"]},
                 "put": {name: signed("put_object", "gpu/" + name, timeout + 300,
                                     Metadata={"approval": "draft"})

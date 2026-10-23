@@ -49,12 +49,35 @@ def test_presigned_transfers_limit_methods_keys_and_expiry():
         params = options["Params"]
         assert params["Bucket"] == "tervory-rig" and params["Key"].startswith(store.prefix)
         if operation == "get_object":
-            assert options["HttpMethod"] == "GET" and options["ExpiresIn"] == 900
+            # GET covers queue time too, so a queued job does not pay to fail.
+            assert options["HttpMethod"] == "GET" and options["ExpiresIn"] == 3900
             assert params["Key"].removeprefix(store.prefix) in {"inputs/a.png", "inputs/b.png"}
         else:
             assert options["HttpMethod"] == "PUT" and options["ExpiresIn"] == 3900
             assert params["Key"].removeprefix(store.prefix) in {"gpu/result.glb", "gpu/source.zip"}
             assert params["Metadata"] == {"approval": "draft"}
+
+
+@pytest.mark.asyncio
+async def test_oversized_transfer_secret_is_refused_before_any_reservation(monkeypatch):
+    monkeypatch.setenv("RIG_FORGE_TRELLIS_ENABLED", "false")
+    async def forbidden(*args, **kwargs):
+        pytest.fail("An oversized link set must never reserve budget or launch work")
+    long_link = "https://" + "a" * 32 + ".r2.cloudflarestorage.com/tervory-rig/x?" + "s" * 900
+    transfers = {"manifest": {}, "get": {f"p{i}.jpg": long_link for i in range(150)}, "put": {}}
+    with pytest.raises(GPUError, match="Too many photo links"):
+        await GPU(object()).run({}, "photogrammetry", transfers=transfers, timeout=60, cap="1",
+                               relay=forbidden, save_provider=forbidden, namespace="fixture")
+
+
+@pytest.mark.asyncio
+async def test_poll_of_unknown_job_creates_no_folder(monkeypatch, tmp_path):
+    monkeypatch.setenv("FORGE_DATA_DIR", str(tmp_path))
+    tenant, job_id = uuid.uuid4(), uuid.uuid4()
+    with pytest.raises(HTTPException) as caught:
+        await service.poll(job_id, tenant)
+    assert caught.value.status_code == 404
+    assert not (tmp_path / str(tenant)).exists() and list(tmp_path.iterdir()) == []
 
 
 @pytest.mark.asyncio
@@ -90,6 +113,9 @@ def terminal(root, body, status="draft"):
 async def test_retention_cleans_terminal_artifacts_preserves_pending_and_retry_identity(tmp_path, monkeypatch):
     monkeypatch.setenv("FORGE_RETENTION_SECONDS", "3600")
     monkeypatch.setenv("FORGE_DATA_DIR", str(tmp_path))
+    # Other test modules set TANK_API_KEY at import; the forge must see none.
+    for name in ("TANK_KEY", "TANK_API_KEY", "TANK_KEY_RIG"):
+        monkeypatch.delenv(name, raising=False)
     finished, waiting, active = job(), job(), job()
     done = terminal(tmp_path, finished)
     pending = terminal(tmp_path, waiting, "failed")

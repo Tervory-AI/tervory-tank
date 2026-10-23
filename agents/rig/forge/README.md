@@ -69,10 +69,12 @@ the job status, including a failing model-check report.
 Coolify settings `HF_JOBS_TOKEN` and `HF_JOBS_NAMESPACE` remain empty until the
 Tervory account is connected. Forge holds the job-scoped token; neither the brain
 nor the remote job receives it. **No R2 credentials reach a GPU job.** Forge signs
-GET URLs for that job's exact inputs (at most 15 minutes) and PUT URLs for only
-`gpu/result.glb` and `gpu/source.zip` (job timeout plus five minutes, at most 65
-minutes). These expiring capabilities travel in HF job secrets, never ordinary
-job arguments, persisted manifests, receipts or logs. Delayed/expired jobs fail
+GET URLs for that job's exact inputs and PUT URLs for only `gpu/result.glb` and
+`gpu/source.zip`; both last the job timeout plus five minutes (at most 65
+minutes), so a queued job can still read its photos. These expiring capabilities
+travel in one HF job secret, never ordinary job arguments, persisted manifests,
+receipts or logs. A link set over 120 KB (Linux allows 128 KiB per environment
+variable) is refused before any GPU budget is reserved. Expired jobs fail
 closed. The GPU controller refuses redirects and mismatched host/object paths.
 Same-user `/proc` access can expose only this job's expiring capabilities, not a
 bucket signing key. `source.zip` preserves original OBJ/materials/textures under
