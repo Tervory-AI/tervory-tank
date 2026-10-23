@@ -727,7 +727,7 @@ h1.title {
   color: var(--rig-graph-text);
 }
 .panel-body { color: var(--rig-graph-muted); font-size: 13px; line-height: 1.5; }
-.stats { display: grid; grid-template-columns: minmax(0, 1fr) max-content; gap: 10px; }
+.stats { display: grid; grid-template-columns: repeat(2, minmax(max-content, 1fr)); gap: 10px; }
 .stat {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -740,6 +740,7 @@ h1.title {
   font-size: 26px;
   font-weight: 600;
   line-height: 1;
+  white-space: nowrap;
 }
 .stat span { color: var(--rig-graph-muted); font-size: 11px; }
 .tier-row { gap: 6px; flex-wrap: wrap; }
@@ -763,6 +764,7 @@ h1.title {
 }
 .why strong { font-size: 12px; }
 .why p { color: var(--rig-graph-muted); font-size: 12px; }
+.panel .btn { border-radius: var(--rig-radius-graph); }
 .ask {
   display: flex;
   align-items: center;
