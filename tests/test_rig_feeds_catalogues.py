@@ -10,7 +10,7 @@ from uuid import UUID
 
 import httpx
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import ValidationError
 
 from test_rig_feeds_retailer import ROOT, SAMPLES, SITE, TENANT, OTHER, prepared
@@ -21,6 +21,7 @@ from rigbox.feeds.catalogue import suggest_mapping
 from rigbox.retailer import Retailer
 from rigbox.service import Service
 from rigbox.store import MemoryStore, PgStore
+from test_rig_feeds_mapping import mapping_pool, confirm_feed  # noqa: F401
 
 CASES = [
     ("us-distributor.csv", "USD", "US", "cost", "US-LAMP", "534.19", ""),
@@ -66,6 +67,29 @@ async def test_every_required_sample_is_mapped_receipted_and_priced(case):
     assert product["currency"] == "ZAR"
     assert (await retailer.import_file(TENANT, data))["receipt"]["updated"] == 1
     assert not await retailer.store.products(OTHER)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("amount,expected", [("19.9949999999999999999999", "19.99"), ("19.9950000000000000000001", "20.00"), ("999999999.99", "999999999.99")])
+async def test_xlsx_numeric_prices_do_not_pass_through_float(amount, expected):
+    from rigbox.feeds.catalogue import xlsx_rows
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(SAMPLES / "distributor.xlsx") as original, zipfile.ZipFile(buffer, "w") as archive:
+        for name in original.namelist():
+            contents = original.read(name)
+            if name.endswith("sheet1.xml"):
+                import re
+                contents, replaced = re.subn(rb'<c r="E2"[^>]*>.*?</c>', f'<c r="E2"><v>{amount}</v></c>'.encode(), contents)
+                assert replaced == 1
+            archive.writestr(name, contents)
+    raw = buffer.getvalue()
+    assert xlsx_rows(raw)[0]["cost"] == amount
+    data = sample(CASES[3])
+    data.update(contents=base64.b64encode(raw).decode(), currency="ZAR", price_basis="selling")
+    retailer = await prepared()
+    assert (await retailer.import_file(TENANT, data))["ok"]
+    assert (await retailer.store.products(TENANT))[0]["price"] == Decimal(expected)
+    assert Decimal((await retailer.store.costs(TENANT))[0]["cost"]) == Decimal(expected)
 
 
 @pytest.mark.asyncio
@@ -134,6 +158,7 @@ def test_feed_bounds_and_explicit_declarations_do_not_expand_tiger_formats():
             "source": "ftp_export", "contents": "x", "mapping_confirmed": True}
     with pytest.raises(ValidationError):
         access.FeedImport(**data)
+    data.pop("mapping_confirmed")
     data.update(currency="ZAR", country="ZA", price_basis="selling")
     assert access.FeedImport(**data).price_basis == "selling"
     with pytest.raises(ValidationError):
@@ -146,6 +171,7 @@ def test_feed_bounds_and_explicit_declarations_do_not_expand_tiger_formats():
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("mapping_pool")
 async def test_mapping_preview_is_read_only_and_refuses_private_fetches(monkeypatch):
     from rigbox.retailer_server import create_retailer_app
     app = FastAPI()
@@ -240,15 +266,20 @@ async def test_saved_maps_refresh_metadata_scopes_and_schema_reapply_on_postgres
         async def dispatch(who, operation, data=None):
             if operation == "panel":
                 return await retailer.panel(str(who.tenant_id))
+            if operation == "mapping":
+                return suggest_mapping(data, data["contents"])
             return await retailer.import_file(str(who.tenant_id), data)
         monkeypatch.setattr(access, "rig_request", dispatch)
         for case in CASES:
             data = sample(case)
-            body = access.FeedImport(**{k: v for k, v in data.items() if k != "provider"}, distributor="catalogue", target="rig", source="ftp_export", mapping_confirmed=True)
+            data = await confirm_feed(actor, {**{k: v for k, v in data.items() if k != "provider"}, "distributor": "catalogue", "target": "rig", "source": "ftp_export"})
+            body = access.FeedImport(**data)
             assert (await access.import_feed_body(actor, body))["ok"]
             # An upload without a new confirmation reuses exactly the saved mapping and declarations.
-            again = body.model_copy(update={"mapping_confirmed": False, "columns": {}, "currency": "AUD", "country": "AU", "price_basis": "selling"})
+            again = body.model_copy(update={"columns": {}})
             assert (await access.import_feed_body(actor, again))["receipt"]["updated"] == 1
+            with pytest.raises(HTTPException, match="settings changed"):
+                await access.import_feed_body(actor, body.model_copy(update={"currency": "AUD", "country": "AU", "price_basis": "selling"}))
         panel = await access.rig_admin_panel(actor)
         assert len(panel["feeds"]) == 5
         assert {f["currency"] for f in panel["feeds"]} == {"USD", "EUR", "NZD", "ZAR"}
@@ -256,11 +287,15 @@ async def test_saved_maps_refresh_metadata_scopes_and_schema_reapply_on_postgres
         # Two feeds at the same website retain different declarations and schedules.
         data = sample(CASES[3])
         connection = access.FeedConnection(**{k: v for k, v in data.items() if k not in {"provider", "contents", "encoding"}}, distributor="catalogue", target="rig",
-            endpoint=SITE + "/catalogue.xlsx", auth_mode="none", official_read_only=True, mapping_confirmed=True)
-        await access.connect_feed_body(actor, connection)
+            endpoint=SITE + "/catalogue.xlsx", auth_mode="none", official_read_only=True)
         async def fetch(url, **kwargs):
             return (SAMPLES / "distributor.xlsx").read_bytes(), {}
         monkeypatch.setattr(access, "public_get", fetch)
+        data_connection = connection.model_dump(mode="json", exclude={"token", "username", "password"})
+        connection = access.FeedConnection(**await confirm_feed(actor, data_connection))
+        await access.connect_feed_body(actor, connection)
+        with pytest.raises(HTTPException, match="settings changed"):
+            await access.connect_feed_body(actor, connection.model_copy(update={"endpoint": SITE + "/changed.xlsx"}))
         refreshed = await access.refresh_connected_feed(actor, access.FeedRefresh(distributor="catalogue", target="rig", site=SITE, feed_id=data["feed_id"]))
         assert refreshed["receipt"]["updated"] == 1
         restored = Retailer(Service(PgStore(pool)))

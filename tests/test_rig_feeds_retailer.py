@@ -265,6 +265,9 @@ async def test_access_connect_manual_refresh_nightly_and_receipts_on_postgres(mo
         monkeypatch.setattr(access, "db", lambda: pool)
         monkeypatch.setenv("TANK_VAULT_KEY", base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())
         async def dispatch(who, operation, data=None):
+            if operation == "mapping":
+                from rigbox.feeds.catalogue import suggest_mapping
+                return suggest_mapping({**data, "format": "shopify" if data["provider"] == "shopify" else data["format"]}, data["contents"])
             assert operation == "import"
             return await retailer.import_file(str(who.tenant_id), data)
         monkeypatch.setattr(access, "rig_request", dispatch)
@@ -280,7 +283,9 @@ async def test_access_connect_manual_refresh_nightly_and_receipts_on_postgres(mo
         app.dependency_overrides[access.identity] = lambda: actor
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
             connection = {"target": "rig", "distributor": "shopify", "site": SITE, "endpoint": SITE + "/products.json",
-                          "format": "json", "official_read_only": True, "auth_mode": "none", "mapping_confirmed": True, "country": "US", "price_basis": "cost", "currency": "USD"}
+                          "format": "json", "official_read_only": True, "auth_mode": "none", "country": "US", "price_basis": "cost", "currency": "USD"}
+            from test_rig_feeds_mapping import confirm_feed
+            connection = await confirm_feed(actor, connection)
             response = await client.post("/v1/access/rig/admin/connect", json={"data": connection})
             assert response.status_code == 200
             request = {"target": "rig", "distributor": "shopify", "site": SITE}
@@ -290,19 +295,21 @@ async def test_access_connect_manual_refresh_nightly_and_receipts_on_postgres(mo
             actor = Actor(UUID(OTHER), "other-retailer", False, frozenset({"rig"}))
             assert (await client.post("/v1/access/rig/admin/refresh", json={"data": request})).status_code == 409
             actor = Actor(UUID(TENANT), "retailer-user", False, frozenset({"rig"}))
-            invalid = {"target": "rig", "distributor": "zanders", "site": "https://SUPPLIER.example/", "format": "csv", "source": "ftp_export", "contents": "not,a,valid,feed", "mapping_confirmed": True, "country": "US", "price_basis": "cost", "currency": "USD"}
+            invalid = {"target": "rig", "distributor": "zanders", "site": "https://SUPPLIER.example/", "format": "csv", "source": "ftp_export", "contents": "not,a,valid,feed", "country": "US", "price_basis": "cost", "currency": "USD"}
+            valid = await confirm_feed(actor, {**invalid, "contents": (SAMPLES / "us-distributor.csv").read_text()})
+            invalid["columns"] = valid["columns"]
             response = await client.post("/v1/access/rig/admin/import", json={"data": invalid})
             assert response.status_code == 200
             assert response.json()["receipt"]["rejected"] == 1
         async with pool.acquire() as conn:
             await conn.execute("UPDATE tank.access_feed_connections SET rig_refresh_at=now()-interval '1 minute' WHERE tenant_id=$1", UUID(TENANT))
         await access.refresh_due_rig_feeds()
-        assert len(calls) == 2
+        assert len(calls) == 3
         await access.refresh_due_rig_feeds()
-        assert len(calls) == 2
+        assert len(calls) == 3
         async with pool.acquire() as conn:
             receipts = await conn.fetch("SELECT action,row_count FROM tank.access_receipts WHERE tenant_id=$1 AND room='rig' ORDER BY created_at", UUID(TENANT))
-            assert [row["action"] for row in receipts] == ["feed_connected", "feed_imported", "feed_rejected", "feed_imported"]
+            assert [row["action"] for row in receipts] == ["feed_mapping_confirmed", "feed_connected", "feed_imported", "feed_mapping_confirmed", "feed_rejected", "feed_imported"]
             summaries = await conn.fetch("SELECT rig_summary FROM tank.access_feed_batches WHERE tenant_id=$1 ORDER BY fetched_at", UUID(TENANT))
             assert json.loads(summaries[-1]["rig_summary"])["updated"] == 2
             assert await conn.fetchval("SELECT count(*) FROM tank.access_feed_batches WHERE tenant_id=$1 AND site<>$2", UUID(TENANT), SITE) == 0
@@ -312,6 +319,13 @@ async def test_access_connect_manual_refresh_nightly_and_receipts_on_postgres(mo
         panel = await access.connections(actor)
         assert len(panel["feeds"]) == 1
         assert panel["feeds"][0]["distributor"] == "zanders"
+        async with pool.acquire() as conn:
+            await conn.execute("UPDATE tank.rig_feed_settings SET settings=$2::jsonb WHERE tenant_id=$1",
+                               actor.tenant_id, json.dumps({"mapping_confirmed": True}))
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException, match="Review and confirm"):
+            await access.refresh_connected_feed(actor, access.FeedRefresh(**request))
+        assert len(calls) == 3  # An old client flag cannot authorize even a scheduled fetch.
     finally:
         await pool.close()
         await _drop_database(admin, name)

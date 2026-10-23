@@ -4,12 +4,15 @@ on:
   pull_request:
     paths:
       - "workspace/app/rig/admin/**"
-      - "workspace/lib/tank.ts"
-      - "tests/rig_feeds_admin_browser.mjs"
+      - "tests/rig_feeds_admin*"
       - ".github/workflows/rig-admin-review.yml"
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   rig-admin:
@@ -28,6 +31,8 @@ jobs:
           else
             npm install --no-package-lock --no-audit --no-fund
           fi
+      - name: Check real Tank helper and retailer route
+        run: node tests/rig_feeds_admin_route.test.cjs
       - name: Install pinned review browser
         run: |
           npm install --prefix "$RUNNER_TEMP/rig-browser" --no-audit --no-fund esbuild@0.28.2 playwright@1.64.1

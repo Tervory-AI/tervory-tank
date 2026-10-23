@@ -112,6 +112,7 @@ def xlsx_rows(raw: bytes) -> list[dict]:
                 if index > 200 or index in values or any(n.tag.endswith("}f") for n in cell):
                     raise ValueError("Use a value-only workbook with at most 200 columns.")
                 kind = cell.get("t")
+                # Keep numeric XML text exact; catalogue money validation uses Decimal.
                 value = next((n.text or "" for n in cell if n.tag.endswith("}v")), "")
                 if kind == "s":
                     if not value.isdigit() or int(value) >= len(strings):

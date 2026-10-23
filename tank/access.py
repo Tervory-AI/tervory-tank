@@ -26,6 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, model_validator
 
 import vault
+import rig_feed_mapping
 from command import Actor, identity, key_matches
 
 async def rotation_reminders():
@@ -502,14 +503,11 @@ class FeedOptions(Body):
     price_basis: Literal["cost", "selling"] = "cost"
     feed_id: str = Field(default="", max_length=60, pattern="^[a-z0-9_-]*$")
     records_path: str = Field(default="", max_length=200, pattern=r"^[A-Za-z0-9_.-]*$")
-    mapping_confirmed: bool = False
 
     @model_validator(mode="after")
     def target_options(self):
         if self.target == "tiger" and (self.distributor not in DISTRIBUTORS or self.format in {"xml", "xlsx"} or len(self.columns) > 5):
             raise ValueError("Use an existing Tiger distributor format and at most five column names.")
-        if self.target == "rig" and self.mapping_confirmed and not {"currency", "country", "price_basis"}.issubset(self.model_fields_set):
-            raise ValueError("Declare this feed's currency, country and price type.")
         if self.target == "rig" and any(len(key) > 40 or len(value) > 160 for key, value in self.columns.items()):
             raise ValueError("Column names are too long.")
         return self
@@ -589,15 +587,12 @@ async def import_feed_body(actor: Actor, body: FeedImport):
     if body.target == "rig":
         body = await rig_confirmed_settings(actor, body)
     try:
-        rows = rig_feed_rows(body) if body.target == "rig" else parse_feed(body)
+        rows = [] if body.target == "rig" else parse_feed(body)
     except (ValueError, TypeError, KeyError, InvalidOperation, csv.Error):
         if body.target == "rig":
             return await save_rig_feed(actor, body, None)
         raise HTTPException(422, "The feed could not be read. Check its format and column mapping.") from None
-    result = await save_feed(actor, body, rows)
-    if body.target == "rig" and result.get("ok"):
-        await save_rig_settings(actor, body)
-    return result
+    return await save_feed(actor, body, rows)
 
 
 @router.get("/feeds/price")
@@ -696,8 +691,6 @@ async def connect_feed_body(actor: Actor, body: FeedConnection):
                 date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' + interval '1 day 3 hours'
                 WHERE tenant_id=$1 AND distributor=$2 AND site=$3""", actor.tenant_id, feed_storage_name(body), site)
             await receipt(conn, actor.tenant_id, "rig", site, actor.user_id, "feed_connected")
-    if body.target == "rig":
-        await save_rig_settings(actor, body)
     return {"ok": True}
 
 
@@ -724,6 +717,9 @@ async def refresh_connected_feed(actor: Actor, body: FeedRefresh) -> dict[str, A
         row = await conn.fetchrow("SELECT sealed FROM tank.access_feed_connections WHERE tenant_id=$1 AND distributor=$2 AND site=$3", actor.tenant_id, feed_storage_name(body), site)
     if not row: raise HTTPException(409, "Connect the official feed first.")
     config = vault.open_seal(row["sealed"], vault.context(actor.tenant_id, body.target, site, "feed:" + body.distributor + (":" + body.feed_id if body.target == "rig" and body.feed_id else "")))
+    if body.target == "rig":
+        # Old client-confirmed connections must be reviewed before any fetch or import.
+        await rig_confirmed_settings(actor, FeedConnection.model_validate({k: v for k, v in config.items() if k != "mapping_confirmed"}))
     try:
         headers = feed_auth_headers(config)
         if body.target == "rig":
@@ -738,8 +734,8 @@ async def refresh_connected_feed(actor: Actor, body: FeedRefresh) -> dict[str, A
                             contents=SecretStr(base64.b64encode(raw).decode() if encoded else raw.decode("utf-8-sig" if body.target == "rig" else "utf-8")),
                             columns=config["columns"], target=body.target, currency=config.get("currency", "USD"),
                             country=config.get("country", "US"), price_basis=config.get("price_basis", "cost"), feed_id=body.feed_id,
-                            records_path=config.get("records_path", ""), mapping_confirmed=True, encoding="base64" if encoded else "text")
-        rows = rig_feed_rows(parsed) if body.target == "rig" else parse_feed(parsed)
+                            records_path=config.get("records_path", ""), encoding="base64" if encoded else "text")
+        rows = [] if body.target == "rig" else parse_feed(parsed)
     except Exception:
         if body.target == "rig":
             failed = FeedImport(target="rig", distributor=body.distributor, site=site, source="dealer_api",
@@ -781,30 +777,15 @@ def feed_storage_name(body: FeedImport | FeedConnection | FeedRefresh) -> str:
     return ("rig:" if body.target == "rig" else "") + body.distributor + (":" + body.feed_id if body.target == "rig" and body.feed_id else "")
 
 
-RIG_SETTING_FIELDS = {"format", "columns", "currency", "country", "price_basis", "records_path", "mapping_confirmed"}
+RIG_SETTING_FIELDS = rig_feed_mapping.SETTING_FIELDS
 
 
 async def rig_confirmed_settings(actor: Actor, body: FeedOptions):
-    if body.mapping_confirmed:
-        return body
-    async with db().acquire() as conn:
-        saved = await conn.fetchval("SELECT settings FROM tank.rig_feed_settings WHERE tenant_id=$1 AND distributor=$2 AND site=$3",
-                                   actor.tenant_id, feed_storage_name(body), site_name(body.site))
-    if saved:
-        settings = json.loads(saved) if isinstance(saved, str) else saved
-        return type(body).model_validate({**body.model_dump(), **settings})
-    raise HTTPException(422, "Review and confirm the field mapping before saving this feed.")
-
-
-async def save_rig_settings(actor: Actor, body: FeedOptions):
-    async with db().acquire() as conn:
-        await conn.execute("""INSERT INTO tank.rig_feed_settings(tenant_id,distributor,site,settings) VALUES($1,$2,$3,$4::jsonb)
-            ON CONFLICT(tenant_id,distributor,site) DO UPDATE SET settings=EXCLUDED.settings""",
-            actor.tenant_id, feed_storage_name(body), site_name(body.site), json.dumps(body.model_dump(include=RIG_SETTING_FIELDS)))
+    return await rig_feed_mapping.confirmed(db(), actor, body, feed_storage_name(body), site_name(body.site))
 
 
 def rig_feed_rows(body: FeedImport) -> list[dict[str, Any]]:
-    if body.mapping_confirmed or body.distributor == "catalogue" or body.format in {"xml", "xlsx"}:
+    if body.distributor == "catalogue" or body.format in {"xml", "xlsx"}:
         return []  # Every catalogue parser runs behind Rig's bounded feed interface.
     if body.distributor not in DISTRIBUTORS:
         if body.format != ("xml" if body.distributor == "google" else "json"):
@@ -953,7 +934,7 @@ async def rig_admin_panel(actor: Actor = Depends(identity)):
         parts = row["distributor"].split(":", 2)
         settings = json.loads(row["settings"]) if isinstance(row["settings"], str) else row["settings"] or {}
         result["feeds"].append({"provider": parts[1], "feed_id": parts[2] if len(parts) > 2 else "", "site": row["site"],
-                                "next_refresh": row["rig_refresh_at"], **{key: value for key, value in settings.items() if key in RIG_SETTING_FIELDS}})
+                                "next_refresh": row["rig_refresh_at"], "mapping_confirmed": settings.get("confirmation_version") == 1, **{key: value for key, value in settings.items() if key in RIG_SETTING_FIELDS}})
     result["can_set_exchange_rate"] = actor.founder
     return result
 
@@ -965,20 +946,27 @@ class RigAdminAction(Body):
 @router.post("/rig/admin/{operation}")
 async def rig_admin_action(operation: str, request: Request, actor: Actor = Depends(identity)):
     permit_feed(actor, "rig", "shopify")
-    if operation not in {"import", "connect", "refresh", "mapping", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest"}:
+    if operation not in {"import", "connect", "refresh", "mapping", "confirm-mapping", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest"}:
         raise HTTPException(404, "Unknown retailer operation.")
     if operation == "exchange-rate" and not actor.founder:
         raise HTTPException(403, "Only the founder may set exchange rates.")
-    body = await parse(request, RigAdminAction, 12_000_000 if operation in {"import", "mapping"} else 16000)
-    if operation == "mapping":
+    body = await parse(request, RigAdminAction, 12_000_000 if operation in {"import", "mapping", "confirm-mapping"} else 16000)
+    if operation in {"mapping", "confirm-mapping"}:
         try:
             data = {**body.data, "target": "rig"}
-            if "contents" in data:
-                feed = FeedImport.model_validate(data)
+            preview_id = data.pop("preview_id", None) if operation == "confirm-mapping" else None
+            if not {"currency", "country", "price_basis"}.issubset(data):
+                raise ValueError()
+            feed = (FeedImport if "contents" in data else FeedConnection).model_validate(data)
+        except (ValidationError, ValueError):
+            raise HTTPException(422, "Declare this feed's currency, country, price type and fields.") from None
+        if operation == "confirm-mapping":
+            return await rig_feed_mapping.confirm(db(), actor, feed, feed_storage_name(feed), site_name(feed.site), preview_id, receipt)
+        try:
+            if isinstance(feed, FeedImport):
                 contents = feed.contents.get_secret_value()
                 encoding = feed.encoding
             else:
-                feed = FeedConnection.model_validate(data)
                 if origin(feed.endpoint) != site_name(feed.site) or urlsplit(feed.endpoint).query or urlsplit(feed.endpoint).fragment:
                     raise ValueError()
                 config = feed.model_dump(exclude={"token", "username", "password"})
@@ -988,8 +976,9 @@ async def rig_admin_action(operation: str, request: Request, actor: Actor = Depe
                 contents = base64.b64encode(raw).decode() if encoding == "base64" else raw.decode("utf-8-sig")
         except Exception:
             raise HTTPException(422, "The feed could not be read. Check its address, format and credentials.") from None
-        return await rig_request(actor, "mapping", {**feed.model_dump(include=RIG_SETTING_FIELDS), "provider": feed.distributor,
+        result = await rig_request(actor, "mapping", {**feed.model_dump(include=RIG_SETTING_FIELDS), "provider": feed.distributor,
                                                     "contents": contents, "encoding": encoding})
+        return await rig_feed_mapping.preview(db(), actor, feed, feed_storage_name(feed), site_name(feed.site), result)
     if operation in {"import", "connect", "refresh"}:
         model = {"import": FeedImport, "connect": FeedConnection, "refresh": FeedRefresh}[operation]
         try:

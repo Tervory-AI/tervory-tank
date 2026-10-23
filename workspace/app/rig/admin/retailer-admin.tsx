@@ -41,7 +41,7 @@ export function RetailerAdmin({ initial, act = sendRetailer }: { initial: Retail
     const format = provider === "google" ? "xml" : ["shopify", "woocommerce"].includes(provider) ? "json" : String(values.format);
     const data: Record<string, unknown> = { distributor: provider, site: String(values.site).trim(),
       feed_id: String(values.feed_id || ""), currency: String(values.currency).toUpperCase(), country: String(values.country).toUpperCase(),
-      price_basis: values.price_basis, format, columns, records_path: String(values.records_path || ""), mapping_confirmed: confirmed };
+      price_basis: values.price_basis, format, columns, records_path: String(values.records_path || "") };
     if (mode === "file") {
       const file = values.file;
       if (!(file instanceof File) || !file.size || file.size > 8_000_000) throw new Error("Choose a feed file smaller than 8 MB.");
@@ -62,7 +62,7 @@ export function RetailerAdmin({ initial, act = sendRetailer }: { initial: Retail
   const preview = async () => {
     const form = feedForm.current;
     if (!form || !form.reportValidity()) return;
-    setBusy(true); setConfirmed(false);
+    setBusy(true); setConfirmed(false); setMapping(null);
     try {
       const result = await act("mapping", await feedData(form));
       if (result.mapping) { setMapping(result.mapping); setColumns(result.mapping.columns); }
@@ -73,12 +73,22 @@ export function RetailerAdmin({ initial, act = sendRetailer }: { initial: Retail
   const submitFeed = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!confirmed || !mapping) { setNotice("Suggest the field mapping, review it and confirm it first."); setError(true); return; }
-    try { await run(mode === "file" ? "import" : "connect", await feedData(event.currentTarget)); }
-    catch { setNotice("Choose a feed file smaller than 8 MB."); setError(true); }
+    setBusy(true);
+    try {
+      const data = await feedData(event.currentTarget);
+      if (mapping.preview_id) {
+        const result = await act("confirm-mapping", { ...data, preview_id: mapping.preview_id });
+        if (!result.ok) { setNotice(result.message); setError(true); return; }
+        if (result.panel) setPanel(result.panel);
+        setMapping({ ...mapping, preview_id: undefined });
+      }
+      await run(mode === "file" ? "import" : "connect", data);
+    } catch { setNotice("The feed was not saved. Check the file and confirm the mapping again."); setError(true); }
+    finally { setBusy(false); }
   };
   const reuseFeed = (feed: RetailerPanel["feeds"][number]) => {
     const form = feedForm.current;
-    if (!form) return;
+    if (!form || !feed.mapping_confirmed) return;
     setProvider(feed.provider);
     for (const name of ["site", "feed_id", "currency", "country", "price_basis", "records_path"] as const) {
       const input = form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement | null;
@@ -98,14 +108,20 @@ export function RetailerAdmin({ initial, act = sendRetailer }: { initial: Retail
     {notice && <p className={`retailer-notice ${error ? "is-error" : ""}`} role={error ? "alert" : "status"}>{notice}</p>}
     <div className="retailer-grid">
       <section className="retailer-card"><div className="retailer-section-heading"><span>01</span><h2>Feeds</h2></div><p>Import a sample file or connect an official feed. Connected feeds refresh nightly at 03:00 UTC.</p>
-        {panel.feeds.map(feed => <div className="retailer-feed" key={feed.provider + feed.site + feed.feed_id}><div><strong>{providerName(feed.provider)}</strong><small>{feed.site} {feed.feed_id}</small><small>{feed.country} · {feed.currency} · {feed.price_basis === "selling" ? "Selling price" : "Supplier cost"}</small></div><div><button disabled={busy} onClick={() => reuseFeed(feed)}>Use saved mapping</button>{feed.next_refresh && <button disabled={busy} onClick={() => run("refresh", { distributor: feed.provider, site: feed.site, feed_id: feed.feed_id || "" })}>Refresh now</button>}</div></div>)}
+        {panel.feeds.map(feed => <div className="retailer-feed" key={feed.provider + feed.site + feed.feed_id}><div><strong>{providerName(feed.provider)}</strong><small>{feed.site} {feed.feed_id}</small><small>{feed.country} · {feed.currency} · {feed.price_basis === "selling" ? "Selling price" : "Supplier cost"}</small></div><div><button disabled={busy || !feed.mapping_confirmed} onClick={() => reuseFeed(feed)}>Use saved mapping</button>{feed.next_refresh && <button disabled={busy} onClick={() => run("refresh", { distributor: feed.provider, site: feed.site, feed_id: feed.feed_id || "" })}>Refresh now</button>}</div></div>)}
         {!panel.feeds.length && <p className="retailer-empty">No feed connected yet. Start with a sample file.</p>}
-        <form ref={feedForm} onSubmit={submitFeed} onChange={e => { if ((e.target as HTMLInputElement).name !== "confirmed") setConfirmed(false); }}><fieldset disabled={busy}><legend className="retailer-sr">Feed settings</legend>
-          <div className="retailer-fields"><label>Source<select name="provider" value={provider} onChange={e => setProvider(e.target.value)}>{PROVIDERS.map(([key, name]) => <option key={key} value={key}>{name}</option>)}</select></label><label>Add by<select value={mode} onChange={e => setMode(e.target.value)}><option value="file">Import file</option><option value="connection">Connect feed</option></select></label></div>
+        <form ref={feedForm} onSubmit={submitFeed} onChange={e => {
+          const name = (e.target as HTMLInputElement).name;
+          if (name === "confirmed") return;
+          setConfirmed(false);
+          if (name && (name !== "file" || mapping?.preview_id)) setMapping(null);
+          if (!name && !mapping?.preview_id) setMapping(null);
+        }}><fieldset disabled={busy}><legend className="retailer-sr">Feed settings</legend>
+          <div className="retailer-fields"><label>Source<select name="provider" value={provider} onChange={e => setProvider(e.target.value)}>{PROVIDERS.map(([key, name]) => <option key={key} value={key}>{name}</option>)}</select></label><label>Add by<select name="delivery" value={mode} onChange={e => setMode(e.target.value)}><option value="file">Import file</option><option value="connection">Connect feed</option></select></label></div>
           <label>Feed name<input name="feed_id" required pattern="[a-z0-9_-]+" maxLength={60} placeholder="main-catalogue" /></label><label>Supplier or store website<input name="site" type="url" required placeholder="https://supplier.example" /></label>
           <div className="retailer-fields"><label>Feed currency<input name="currency" required pattern="[A-Za-z]{3}" maxLength={3} placeholder="USD" /></label>{!["shopify", "woocommerce", "google"].includes(provider) && <label>File format<select name="format"><option value="csv">CSV</option><option value="tsv">TSV</option><option value="json">JSON</option><option value="xml">XML</option><option value="xlsx">Excel (.xlsx)</option></select></label>}</div><div className="retailer-fields"><label>Country code<input name="country" required pattern="[A-Za-z]{2}" maxLength={2} placeholder="NZ" /></label><label>Prices are<select name="price_basis"><option value="cost">Supplier cost</option><option value="selling">Selling price</option></select></label></div>
-          {mode === "file" ? <label>Sample or supplier file<input name="file" type="file" required accept=".json,.xml,.csv,.tsv,.xlsx" /></label> : <><label>Read-only feed address<input name="endpoint" type="url" required /></label><label>Authentication<select value={authMode} onChange={e => setAuthMode(e.target.value)}><option value="none">Public feed</option><option value="bearer">Access key</option><option value="shopify">Shopify access key</option><option value="basic">Username and password / WooCommerce keys</option></select></label>{authMode === "basic" ? <><label>Username or consumer key<input name="username" type="password" autoComplete="new-password" required /></label><label>Password or consumer secret<input name="password" type="password" autoComplete="new-password" required /></label></> : authMode !== "none" && <label>Access key<input name="token" type="password" autoComplete="new-password" required /></label>}<label className="retailer-check"><input name="official" type="checkbox" required />This is an official, read-only feed.</label></>}
-          <label>Product list path, if nested<input name="records_path" placeholder="catalogue.products" /></label>
+          {mode === "file" ? <label>Sample or supplier file<input name="file" type="file" required accept=".json,.xml,.csv,.tsv,.xlsx" /></label> : <><label>Read-only feed address<input name="endpoint" type="url" required /></label><label>Authentication<select name="auth_mode" value={authMode} onChange={e => setAuthMode(e.target.value)}><option value="none">Public feed</option><option value="bearer">Secret key</option><option value="shopify">Shopify secret key</option><option value="basic">Username and password / WooCommerce keys</option></select></label>{authMode === "basic" ? <><label>Username or consumer key<input name="username" type="password" autoComplete="new-password" required /></label><label>Password or consumer secret<input name="password" type="password" autoComplete="new-password" required /></label></> : authMode !== "none" && <label>Secret key<input name="token" type="password" autoComplete="new-password" required /></label>}<label className="retailer-check"><input name="official" type="checkbox" required />This is an official, read-only feed.</label></>}
+          <label>Where the products are in the file<input name="records_path" placeholder="catalogue.products" /></label>
           <button type="button" onClick={preview}>Suggest field mapping</button>
           {mapping && <div><p>Column names — check each match. Only names are shown; source prices stay private.</p><div className="retailer-fields">{[...mapping.required, "quantity", "active", "url", "gtin", "family", "fits_sku", "fits_family", "fit_evidence"].map(name => <label key={name}>{({ sku: "Product code", name: "Product name", brand: "Brand", category: "Category", price: "Price", image_url: "Image address", quantity: "Stock quantity", active: "Availability", url: "Product address", gtin: "Barcode", family: "Product family", fits_sku: "Fits product", fits_family: "Fits family", fit_evidence: "Fit evidence" } as Record<string, string>)[name]}<select value={columns[name] || ""} onChange={e => setColumns(previous => { const next = { ...previous }; if (e.target.value) next[name] = e.target.value; else delete next[name]; return next; })}><option value="">Choose a field</option>{mapping.fields.map(field => <option key={field} value={field}>{field}</option>)}</select></label>)}</div><label className="retailer-check"><input name="confirmed" type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />I checked this mapping and the feed's currency, country and price type.</label></div>}
           <button className="retailer-primary" type="submit" disabled={!confirmed || !mapping || mapping.required.some(name => !columns[name])}>{mode === "file" ? "Import file" : "Connect feed"}</button>

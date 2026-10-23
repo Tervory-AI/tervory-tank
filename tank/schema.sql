@@ -1589,3 +1589,13 @@ CREATE TABLE IF NOT EXISTS tank.rig_feed_settings (
     settings jsonb NOT NULL,
     PRIMARY KEY (tenant_id,distributor,site)
 );
+
+-- Short-lived field-name previews bind confirmation to the reviewing administrator.
+CREATE TABLE IF NOT EXISTS tank.rig_feed_previews (
+    tenant_id uuid NOT NULL,
+    id uuid NOT NULL,
+    user_id text NOT NULL,
+    preview jsonb NOT NULL,
+    expires_at timestamptz NOT NULL DEFAULT now() + interval '15 minutes',
+    PRIMARY KEY (tenant_id,id)
+);

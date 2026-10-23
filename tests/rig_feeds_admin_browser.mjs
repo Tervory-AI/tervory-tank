@@ -15,7 +15,7 @@ const out = process.env.RIG_SCREENSHOT_DIR || path.join(os.tmpdir(), 'rig-admin-
 await fs.mkdir(out, { recursive: true });
 const initial = {
   price_configured: true, currency: 'ZAR', products: 24, can_set_exchange_rate: false,
-  feeds: [{ provider: 'shopify', site: 'https://sample-shop.example', next_refresh: '2026-10-23T03:00:00Z', feed_id: 'main-catalogue', currency: 'USD', country: 'US', price_basis: 'cost', format: 'json', columns: {sku:'sku',name:'name',brand:'brand',category:'category',price:'price',image_url:'image_url'} }],
+  feeds: [{ provider: 'shopify', site: 'https://sample-shop.example', next_refresh: '2026-10-23T03:00:00Z', feed_id: 'main-catalogue', mapping_confirmed: true, currency: 'USD', country: 'US', price_basis: 'cost', format: 'json', columns: {sku:'sku',name:'name',brand:'brand',category:'category',price:'price',image_url:'image_url'} }],
   templates: { lighting: { shade: 'shade', stand: 'stand' } },
   fits: [{ part_sku: 'SAMPLE-SHADE', part_name: 'Sample Lamp Shade', fits_sku: 'SAMPLE-LAMP', fits_family: null, fits_with: 'Sample Desk Lamp', note: 'Supplier sample catalogue lists this shade for the sample desk lamp. Review before showing it to shoppers.', confidence: null }],
   missed_searches: [{ query: 'blue desk lamp', count: 12 }, { query: 'compact reading light', count: 7 }, { query: 'replacement shade', count: 4 }],
@@ -25,7 +25,8 @@ const entry = `import React from 'react'; import {createRoot} from 'react-dom/cl
 import {RetailerAdmin} from './app/rig/admin/retailer-admin';
 let panel=${JSON.stringify(initial)}; window.__calls=[];
 const act=async(operation,data)=>{window.__calls.push({operation,data});
-if(operation==='mapping')return {ok:true,message:'Check each field.',mapping:{fields:['sku','name','brand','category','price','image_url'],columns:{sku:'sku',name:'name',brand:'brand',category:'category',price:'price',image_url:'image_url'},required:['sku','name','brand','category','price','image_url']}};
+if(operation==='mapping')return {ok:true,message:'Check each field.',mapping:{preview_id:'server-preview',fields:['sku','name','brand','category','price','image_url'],columns:{sku:'sku',name:'name',brand:'brand',category:'category',price:'price',image_url:'image_url'},required:['sku','name','brand','category','price','image_url']}};
+if(operation==='confirm-mapping'&&window.__denyConfirmation)return {ok:false,message:'Preview expired. Review the mapping again.'};
 if(operation==='approve'||operation==='reject')panel={...panel,fits:[]};
 if(operation==='templates')panel={...panel,templates:{...panel.templates,...data}};
 return {ok:true,message:operation==='refresh'?'0 added, 24 updated, 0 rejected.':'Saved.',panel};};
@@ -82,15 +83,25 @@ try {
   assert(await page.getByRole('button',{name:'Import file',exact:true}).isDisabled());
   await page.getByRole('button',{name:'Suggest field mapping',exact:true}).click();
   await page.getByLabel('I checked this mapping', {exact:false}).check();
+  await page.evaluate(()=>{window.__denyConfirmation=true;});
+  await page.getByRole('button',{name:'Import file',exact:true}).click();
+  await page.getByRole('alert').filter({hasText:'Preview expired'}).waitFor();
+  assert(!(await page.evaluate(()=>window.__calls.some(call=>call.operation==='import'))));
+  await page.evaluate(()=>{window.__denyConfirmation=false;});
   await page.getByRole('button',{name:'Import file',exact:true}).click();
   await page.waitForFunction(()=>window.__calls.some(call=>call.operation==='import'));
   await page.getByLabel('Country code',{exact:true}).fill('NZ');
   assert(await page.getByRole('button',{name:'Import file',exact:true}).isDisabled());
   const calls=await page.evaluate(()=>window.__calls);
-  assert.deepEqual(calls.map(call=>call.operation),['refresh','approve','templates','price-rule','mapping','import']);
+  assert.deepEqual(calls.map(call=>call.operation),['refresh','approve','templates','price-rule','mapping','confirm-mapping','confirm-mapping','import']);
   assert.equal(calls.at(-1).data.price_basis,'selling');
   assert.equal(calls.at(-1).data.country,'ZA');
-  assert.equal(calls.at(-1).data.mapping_confirmed,true);
+  assert(calls.every(call=>!('mapping_confirmed' in call.data)));
+  assert.equal(calls.at(-2).data.preview_id,'server-preview');
+  assert.equal(await page.getByLabel('Where the products are in the file',{exact:true}).count(),1);
+  await page.getByRole('combobox',{name:/^Add by/}).selectOption('connection');
+  await page.getByRole('combobox',{name:/^Authentication/}).selectOption('bearer');
+  assert.equal(await page.getByLabel('Secret key',{exact:true}).count(),1);
   assert(calls.every(call=>!('tenant_id' in call.data)));
   assert.deepEqual(errors,[]);
   console.log('Retailer admin: 375px/1440px screenshots, no overflow, refresh, approval, template and private-rule form checks passed.');
