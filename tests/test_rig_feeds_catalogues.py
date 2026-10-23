@@ -202,10 +202,13 @@ async def test_mapping_preview_is_read_only_and_refuses_private_fetches(monkeypa
         loop = asyncio.get_running_loop()
         async def private_dns(*args, **kwargs):
             return [(2, 1, 6, "", ("127.0.0.1", 443))]
-        monkeypatch.setattr(loop, "getaddrinfo", private_dns)
         remote = {k: v for k, v in data.items() if k not in {"contents", "encoding", "source"}}
         remote.update(endpoint=SITE + "/catalogue.csv", auth_mode="none", official_read_only=True)
-        denied = await client.post("/v1/access/rig/admin/mapping", json={"data": remote})
+        # Undo the DNS patch before fixtures tear down, so dropping the test
+        # database still resolves the real Postgres host.
+        with monkeypatch.context() as dns:
+            dns.setattr(loop, "getaddrinfo", private_dns)
+            denied = await client.post("/v1/access/rig/admin/mapping", json={"data": remote})
         assert denied.status_code == 422
 
 
