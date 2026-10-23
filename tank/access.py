@@ -784,31 +784,6 @@ async def rig_confirmed_settings(actor: Actor, body: FeedOptions):
     return await rig_feed_mapping.confirmed(db(), actor, body, feed_storage_name(body), site_name(body.site))
 
 
-def rig_feed_rows(body: FeedImport) -> list[dict[str, Any]]:
-    if body.distributor == "catalogue" or body.format in {"xml", "xlsx"}:
-        return []  # Every catalogue parser runs behind Rig's bounded feed interface.
-    if body.distributor not in DISTRIBUTORS:
-        if body.format != ("xml" if body.distributor == "google" else "json"):
-            raise ValueError()
-        return []
-    rows = parse_feed(body)
-    raw = body.contents.get_secret_value()
-    if body.format == "json":
-        source = json.loads(raw)
-    elif body.format in {"csv", "tsv"}:
-        source = list(csv.DictReader(io.StringIO(raw), delimiter="\t" if body.format == "tsv" else ",", strict=True))
-    else:
-        # An inventory-only EDI file has no catalogue labels. Refuse to invent
-        # them; use an official catalogue export with the required columns.
-        raise ValueError()
-    normalize = lambda value: re.sub(r"[^a-z0-9]", "", str(value).lower())
-    for row, original in zip(rows, source, strict=True):
-        values = {normalize(k): v for k, v in original.items()}
-        for field in ("name", "brand", "category", "image_url", "url", "family", "fits_sku", "fits_family", "fit_evidence"):
-            row[field] = str(values.get(normalize(body.columns.get(field, field))) or "").strip()
-    return rows
-
-
 async def rig_request(actor: Actor, operation: str, data: dict[str, Any] | None = None) -> dict[str, Any]:
     key = os.environ.get("RIG_RETAILER_KEY", "")
     if not key:

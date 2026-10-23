@@ -1,5 +1,7 @@
 """RIG-3 imports, review boundaries and private prices, using synthetic goods."""
 
+import csv
+import io
 import json
 import secrets
 import sys
@@ -68,8 +70,12 @@ async def test_distributor_uses_access_adapter_and_produces_receipt(provider):
     retailer = await prepared()
     body = access.FeedImport(target="rig", distributor=provider, site=SITE, source="ftp_export", format="csv",
         contents=SecretStr((SAMPLES / "distributor.csv").read_text()), columns={"sku": "ItemNumber", "price": "DealerPrice", "quantity": "Quantity", "upc": "UPC"})
-    rows = access.rig_feed_rows(body)
+    rows = access.parse_feed(body)
     assert rows[0]["sku"] == "SAMPLE-DESK"
+    # ACCESS's adapter reads stock and price; Rig's catalogue needs the labels too.
+    labels = ("name", "brand", "category", "image_url", "url", "family")
+    for row, original in zip(rows, csv.DictReader(io.StringIO(body.contents.get_secret_value())), strict=True):
+        row.update({field: original[field] for field in labels})
     result = await retailer.import_file(TENANT, {"provider": provider, "site": SITE, "currency": "USD", "rows": rows})
     assert result["ok"] is True
     assert result["receipt"]["added"] == 1

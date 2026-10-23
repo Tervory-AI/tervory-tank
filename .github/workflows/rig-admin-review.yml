@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "workspace/app/rig/admin/**"
+      - "workspace/lib/tank.ts"
       - "tests/rig_feeds_admin*"
       - ".github/workflows/rig-admin-review.yml"
 

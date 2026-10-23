@@ -19,9 +19,9 @@ def test_rig_review_workflow_limits_minutes_to_rig_changes():
     assert set(events) == {"pull_request"}
     patterns = events["pull_request"]["paths"]
     matches = lambda path: any(fnmatch.fnmatchcase(path, pattern) for pattern in patterns)
-    for path in ["workspace/app/rig/admin/retailer-admin.tsx", "tests/rig_feeds_admin_route.test.cjs", ".github/workflows/rig-admin-review.yml"]:
+    for path in ["workspace/app/rig/admin/retailer-admin.tsx", "workspace/lib/tank.ts", "tests/rig_feeds_admin_route.test.cjs", ".github/workflows/rig-admin-review.yml"]:
         assert matches(path)
-    for path in ["workspace/lib/tank.ts", "workspace/app/tiger/page.tsx", "tank/main.py", "README.md", ".github/workflows/ci.yml"]:
+    for path in ["workspace/app/tiger/page.tsx", "tank/main.py", "README.md", ".github/workflows/ci.yml"]:
         assert not matches(path)
     assert workflow["concurrency"]["cancel-in-progress"] is True
     assert "github.event.pull_request.number" in workflow["concurrency"]["group"]
