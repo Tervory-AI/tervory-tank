@@ -765,6 +765,8 @@ async def watch(app, interval: int = INTERVAL_SECONDS) -> None:
         try:
             async with app.state.advisory_lock:
                 await app.state.watcher.cycle()
+                if getattr(app.state, "shields", None) is not None:
+                    await app.state.shields.after_cycle()
         except Exception:
             pass  # Status is in last_cycle; exception text may carry response content.
         await asyncio.sleep(interval)

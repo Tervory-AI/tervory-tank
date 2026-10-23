@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 
 from . import advisories as advisory_watch
 from . import inventory as inv
+from . import shields as shield_room
 from .gold_sources import candidates
 from .investigate import Investigator
 from .models import Look, Message, Observation, PLATFORM_TENANT, Resolution, SITES, ROOMS, Signal, classify_message
@@ -48,7 +49,7 @@ class Tank:
             raise RuntimeError("Tank did not accept the request.") from None
 
     async def record(self, receipt_id: str, step: str, outcome: str, task_type: str = "ghost.incident") -> None:
-        if task_type not in {"ghost.incident", "ghost.advisory"}:
+        if task_type not in {"ghost.incident", "ghost.advisory", "ghost.shield"}:
             raise ValueError("Unknown Ghost receipt type.")
         result = await self.call("POST", "/v1/ledger/vendor", {
             "id": receipt_id, "tenant_id": PLATFORM_TENANT, "agent": "ghost",
@@ -139,6 +140,7 @@ def create_app() -> FastAPI:
             app.state.http = http
             app.state.advisory_lock = asyncio.Lock()
             app.state.watcher = advisory_watch.Watcher(store, advisory_watch.Feeds(http), tank)
+            app.state.shields = shield_room.Shields(store, http, tank)
             tasks = [asyncio.create_task(watch(app)), asyncio.create_task(nightly(app)),
                      asyncio.create_task(advisory_watch.watch(app))]
             try:
@@ -206,7 +208,7 @@ def create_app() -> FastAPI:
         """Host and repo facts arrive here (Ghost has no Docker socket). Replaces that source's snapshot."""
         raw = await bounded_json(request, 2_000_000)
         try:
-            report = inv.InventoryReport.model_validate_json(raw)
+            report = inv.InventoryReport.from_body(raw)
             components = report.to_components()
         except ValueError:
             raise HTTPException(422, "Invalid Ghost request.") from None
@@ -231,12 +233,54 @@ def create_app() -> FastAPI:
     @app.post("/ghost/advisories/pull", dependencies=[Depends(require_tank)])
     async def advisories_pull():
         async with app.state.advisory_lock:
-            return await app.state.watcher.cycle()
+            summary = await app.state.watcher.cycle()
+            if getattr(app.state, "shields", None) is not None:
+                await app.state.shields.after_cycle()
+            return summary
 
     @app.get("/ghost/advisories/matches", dependencies=[Depends(require_tank)])
     async def advisory_matches(state: str = Query(default="open", pattern="^(open|resolved|all)$")):
         rows = app.state.store.matches(PLATFORM_TENANT, None if state == "all" else state)
         return {"matches": rows, "last_cycle": app.state.store.get_state(PLATFORM_TENANT, "last_cycle")}
+
+    # ---------- GHOST-2 D3: Shields Up (dry-run unless CLOUDFLARE_API_TOKEN_GHOST is set) ----------
+
+    @app.get("/ghost/shields", dependencies=[Depends(require_tank)])
+    async def shields_list():
+        return {"mode": shield_room.mode(),
+                "shields": [shield_room.public_view(s) for s in app.state.store.shields(PLATFORM_TENANT)]}
+
+    @app.post("/ghost/shields/propose", dependencies=[Depends(require_tank)])
+    async def shields_propose(request: Request):
+        try:
+            body = shield_room.ShieldRequest.model_validate_json(await bounded_json(request, 10_000))
+        except ValueError:
+            raise HTTPException(422, "Invalid Ghost request.") from None
+        async with app.state.advisory_lock:
+            try:
+                return shield_room.public_view(await app.state.shields.propose(body))
+            except ValueError:
+                raise HTTPException(422, "Ghost only shields our own sites.") from None
+
+    @app.post("/ghost/shields/{shield_id}/raise", dependencies=[Depends(require_tank)])
+    async def shields_raise(shield_id: UUID):
+        async with app.state.advisory_lock:
+            try:
+                return shield_room.public_view(await app.state.shields.raise_shield(str(shield_id)))
+            except LookupError:
+                raise HTTPException(404, "not found") from None
+
+    @app.post("/ghost/shields/{shield_id}/undo", dependencies=[Depends(require_tank)])
+    async def shields_undo(shield_id: UUID):
+        async with app.state.advisory_lock:
+            try:
+                return shield_room.public_view(await app.state.shields.undo(str(shield_id)))
+            except LookupError:
+                raise HTTPException(404, "not found") from None
+
+    @app.get("/ghost/summary", dependencies=[Depends(require_tank)])
+    async def ghost_summary():
+        return {**app.state.shields.summary(), "last_cycle": app.state.store.get_state(PLATFORM_TENANT, "last_cycle")}
 
     return app
 

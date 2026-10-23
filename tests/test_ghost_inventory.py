@@ -207,3 +207,31 @@ def test_compose_adds_names_only_and_keeps_the_seal():
         assert not any("docker.sock" in str(v) for v in service.get("volumes", []))
         assert service["networks"] == ["gw"]
     assert "COOLIFY_TOKEN_GHOST_ACTIONS" not in str(room)
+
+
+@pytest.mark.asyncio
+async def test_intake_accepts_the_host_report_exactly_as_the_collector_writes_it(room):
+    """The founder-side step posts the collector's JSON file unchanged (same keys and shape as the
+    sanitised fixture; the real file also carries the server name and address in "host")."""
+    app, store = room
+    raw = HOST_REPORT.read_bytes()
+    assert list(json.loads(raw))[:3] == ["captured_at", "host", "os"]
+    original = json.loads(raw)
+    original["host"] = "edge-box 203.0.113.7"  # an unsanitised-looking host field (documentation address)
+    key = {"X-Tank-Key": "ghost-test"}
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://ghost") as client:
+        assert (await client.post("/ghost/inventory/report", content=raw,
+                                  headers={"content-type": "application/json"})).status_code == 404
+        exact = await client.post("/ghost/inventory/report", content=raw,
+                                  headers={**key, "content-type": "application/json"})
+        assert exact.status_code == 200 and exact.json()["accepted"] is True
+        real = await client.post("/ghost/inventory/report", json=original, headers=key)
+        assert real.status_code == 200
+        assert "203.0.113.7" not in real.text and real.json()["source"] == "host:edge-box"
+        listed = (await client.get("/ghost/inventory", headers=key)).json()["components"]
+    sources = {c["source"] for c in listed}
+    assert sources == {"host:host-a", "host:edge-box"}
+    assert "203.0.113.7" not in json.dumps(store.inventory(PLATFORM_TENANT, current_only=False))
+    php = {c["version"] for c in listed if c["app"] == "coolify" and c["name"] == "php"}
+    assert php == {"8.4.27"}
+    assert inv.host_source("203.0.113.7") == "host" and inv.host_source("2001:db8::1 box") == "host:box"

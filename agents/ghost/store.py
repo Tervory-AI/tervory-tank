@@ -48,6 +48,12 @@ class Store:
             );
             CREATE UNIQUE INDEX IF NOT EXISTS open_match ON ghost_matches(tenant, fingerprint)
                 WHERE state = 'open';
+            -- GHOST-2 D3: one row per proposed shield; the payload carries its plan and receipts.
+            CREATE TABLE IF NOT EXISTS ghost_shields (
+                tenant TEXT NOT NULL, id TEXT NOT NULL, site TEXT NOT NULL, kind TEXT NOT NULL,
+                path TEXT NOT NULL, state TEXT NOT NULL, payload TEXT NOT NULL, proposed_at TEXT NOT NULL,
+                PRIMARY KEY(tenant, id)
+            );
             CREATE TABLE IF NOT EXISTS ghost_state (
                 tenant TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY(tenant, key)
             );
@@ -179,6 +185,28 @@ class Store:
             sql, args = sql + " AND state=?", [*args, state]
         rows = self.db.execute(sql + " ORDER BY flagged_at DESC LIMIT ?", (*args, limit))
         return [json.loads(row[0]) for row in rows]
+
+    def save_shield(self, tenant: str, shield: dict) -> None:
+        with self.db:
+            self.db.execute("INSERT OR REPLACE INTO ghost_shields VALUES (?,?,?,?,?,?,?,?)",
+                            (tenant, shield["id"], shield["site"], shield["kind"], shield["path"], shield["state"],
+                             json.dumps(shield), shield["proposed_at"]))
+
+    def shield(self, tenant: str, shield_id: str) -> dict | None:
+        row = self.db.execute("SELECT payload FROM ghost_shields WHERE tenant=? AND id=?", (tenant, shield_id)).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def shields(self, tenant: str, limit: int = 500) -> list[dict]:
+        rows = self.db.execute("SELECT payload FROM ghost_shields WHERE tenant=? ORDER BY proposed_at DESC LIMIT ?",
+                               (tenant, limit))
+        return [json.loads(row[0]) for row in rows]
+
+    def open_shield(self, tenant: str, site: str, kind: str, path: str) -> dict | None:
+        row = self.db.execute(
+            "SELECT payload FROM ghost_shields WHERE tenant=? AND site=? AND kind=? AND path=?"
+            " AND state IN ('proposed','dry_run','brief','up','undo_failed') ORDER BY proposed_at DESC LIMIT 1",
+            (tenant, site, kind, path)).fetchone()
+        return json.loads(row[0]) if row else None
 
     def get_state(self, tenant: str, key: str, default=None):
         row = self.db.execute("SELECT value FROM ghost_state WHERE tenant=? AND key=?", (tenant, key)).fetchone()

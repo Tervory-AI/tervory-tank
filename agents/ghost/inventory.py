@@ -61,11 +61,34 @@ class InventoryReport(BaseModel):
     components: list[ComponentIn] = Field(default_factory=list, max_length=5000)
     host_report: dict[str, Any] | None = None
 
+    @classmethod
+    def from_body(cls, raw: bytes) -> "InventoryReport":
+        """The wrapped shape ({source, components, host_report}), or a raw host report posted as is
+        (top-level captured_at/host/os/.../containers, exactly as the host collector writes it)."""
+        data = json.loads(raw)
+        if isinstance(data, dict) and "source" not in data and isinstance(data.get("containers"), list):
+            return cls(source=host_source(data.get("host")), host_report=data)
+        return cls.model_validate(data)
+
     def to_components(self) -> list[Component]:
         items = [Component(**c.model_dump()) for c in self.components]
         if self.host_report is not None:
             items.extend(from_host_report(self.host_report))
         return dedupe(items)
+
+
+_IP_LIKE = re.compile(r"^(\d{1,3}(\.\d{1,3}){3}|[0-9a-f:]*:[0-9a-f:]*)$", re.IGNORECASE)
+
+
+def host_source(host: Any) -> str:
+    """'name 203.0.113.7' -> 'host:name'. Addresses are dropped, never stored."""
+    for token in str(host or "").split():
+        if _IP_LIKE.match(token):
+            continue
+        slug = re.sub(r"[^a-z0-9-]+", "-", token.lower()).strip("-")[:40].strip("-")
+        if slug and re.fullmatch(r"[a-z0-9][a-z0-9-]{0,39}", slug):
+            return f"host:{slug}"
+    return "host"
 
 
 def dedupe(items: Iterable[Component]) -> list[Component]:

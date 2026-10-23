@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, type ReactNode } from "react";
 import type { GhostIncident, GhostPanel } from "@/lib/tank";
 import type { GhostResult } from "./actions";
 import "./ghost.css";
@@ -37,12 +37,13 @@ function Incident({ item, resolve }: { item: GhostIncident; resolve: Action }) {
   </article>;
 }
 
-export function GhostConsole({ data, error, look, resolve }: { data: GhostPanel | null; error?: string; look: Action; resolve: Action }) {
+export function GhostConsole({ data, error, look, resolve, tile }: { data: GhostPanel | null; error?: string; look: Action; resolve: Action; tile?: ReactNode }) {
   const [result, action, pending] = useActionState(look, null);
   return <main className="ghost-panel">
     <header className="ghost-head"><div><img src="/brand/tervory-logo.png" width="160" height="36" alt="Tervory" /><p className="ghost-eyebrow">Founder console / Ghost</p><h1>Find the problem.<br />Keep the proof.</h1><p>Point Ghost at an issue. Follow its checks, review the proposed fix, and keep what worked.</p></div><Link href="/admin">Back to console</Link></header>
     <section className="ghost-watch" aria-label="Monitoring status"><div><h2>On watch</h2><p>{data?.monitor.running ? "Public site and room checks run every five minutes." : "Monitoring has not reported a completed check cycle."}</p></div><span>{data ? `${data.monitor.unavailable_checks} unavailable checks` : "Room unavailable"}</span></section>
     {(error || data?.monitor.unavailable_checks) ? <p role="alert" className="ghost-error">{error ?? "Some checks could not finish. An unavailable check is not a healthy result."}</p> : null}
+    {tile}
     <form action={action} className="ghost-look"><h2>Take a look</h2><label>Where<select name="target">{targets.map(target => <option key={target} value={target}>{words(target)}</option>)}</select></label><label>What to check<select name="signal"><option value="health">Availability</option><option value="slow">Response time</option><option value="dns">DNS</option><option value="certificate">Certificate expiry</option><option value="headers">Security headers</option></select></label><button type="submit" disabled={pending}>{pending ? "Looking…" : "Look"}</button>{result && <p role="status" className="ghost-result">{result.message}</p>}</form>
     <div className="ghost-section-title"><h2>Investigations</h2><span>{data?.incidents.length ?? 0} recorded</span></div>
     {data?.incidents.length ? data.incidents.map(item => <Incident key={item.id} item={item} resolve={resolve} />) : <p className="ghost-empty">{data ? "No issues recorded yet. Use Look to start a check." : "Investigations will appear when Ghost’s room is connected."}</p>}
