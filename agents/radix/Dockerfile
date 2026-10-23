@@ -1,3 +1,17 @@
+# Stage 1, build time only: the real OSV advisory data for PyPI and npm, from the
+# official public OSV bucket. ADD re-checks the remote file on every build, so a
+# redeploy picks up new advisories. osv_bake.py opens no socket; it turns the two
+# zips into one indexed /out/osv.sqlite (~35 MB). The zips stay in this stage.
+# Radix itself never downloads anything at runtime: the room has no internet route.
+FROM python:3.12-slim AS osv
+ARG OSV_BUCKET=https://osv-vulnerabilities.storage.googleapis.com
+ADD ${OSV_BUCKET}/PyPI/all.zip /osv/PyPI.zip
+ADD ${OSV_BUCKET}/npm/all.zip /osv/npm.zip
+COPY radix/scanlib /bake/scanlib
+COPY radix/osv_bake.py /bake/osv_bake.py
+RUN mkdir -p /out \
+    && python /bake/osv_bake.py /out/osv.sqlite PyPI=/osv/PyPI.zip npm=/osv/npm.zip
+
 FROM python:3.12-slim
 
 # Pinned scanners. The downloads run at image build. A scan does not use the network.
@@ -48,6 +62,8 @@ COPY radix/schema.sql /app/schema.sql
 COPY radix/scanlib /app/scanlib
 COPY radix/scanlib/osv/ /opt/osv/
 RUN chown -R agent:agent /app /opt/osv
+# Root-owned and read-only for the agent; copied after the chown so it is one layer.
+COPY --from=osv /out/osv.sqlite /opt/osv/osv.sqlite
 USER agent
 ENV AGENT_NAME=radix \
     DATA_DIR=/data \
