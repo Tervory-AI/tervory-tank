@@ -13,6 +13,9 @@ services:
       TANK_KEY: ${TANK_KEY_GHOST:-}
       TANK_REGION: ${TANK_REGION:-us-east}
       DATA_DIR: /data
+      # GHOST-2 inventory: read-only Coolify API token, by name only. Empty = not connected.
+      COOLIFY_TOKEN_GHOST: ${COOLIFY_TOKEN_GHOST:-}
+      COOLIFY_URL_GHOST: ${COOLIFY_URL_GHOST:-}
     volumes:
       - agent_ghost_data:/data
     networks: [gw]

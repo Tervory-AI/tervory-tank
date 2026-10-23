@@ -9,10 +9,12 @@ from pathlib import Path
 from uuid import UUID
 
 import httpx
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from . import advisories as advisory_watch
+from . import inventory as inv
 from .gold_sources import candidates
 from .investigate import Investigator
 from .models import Look, Message, Observation, PLATFORM_TENANT, Resolution, SITES, ROOMS, Signal, classify_message
@@ -45,10 +47,12 @@ class Tank:
         except (httpx.HTTPError, ValueError):
             raise RuntimeError("Tank did not accept the request.") from None
 
-    async def record(self, receipt_id: str, step: str, outcome: str) -> None:
+    async def record(self, receipt_id: str, step: str, outcome: str, task_type: str = "ghost.incident") -> None:
+        if task_type not in {"ghost.incident", "ghost.advisory"}:
+            raise ValueError("Unknown Ghost receipt type.")
         result = await self.call("POST", "/v1/ledger/vendor", {
             "id": receipt_id, "tenant_id": PLATFORM_TENANT, "agent": "ghost",
-            "task_type": "ghost.incident", "vendor": "ghost." + step, "units": 1,
+            "task_type": task_type, "vendor": "ghost." + step, "units": 1,
             "cost_usd": 0, "outcome": outcome, "region": os.environ.get("TANK_REGION", "us-east"),
         })
         if result.get("recorded") is not True or result.get("ledger_id") != receipt_id:
@@ -71,6 +75,54 @@ async def watch(app: FastAPI) -> None:
         await asyncio.sleep(300)
 
 
+async def refresh_inventory(app: FastAPI) -> dict:
+    """Coolify (read-only, only when its token is set) and our own sites' headers."""
+    store, http = app.state.store, app.state.http
+    seen = advisory_watch.iso(advisory_watch.now_utc())
+    result: dict = {}
+    try:
+        components = await inv.fetch_coolify(http)
+        if components is None:
+            result["coolify"] = "not_connected"
+        else:
+            store.replace_inventory(PLATFORM_TENANT, "coolify", [vars(c) for c in components], seen)
+            result["coolify"] = "ok"
+    except Exception:
+        result["coolify"] = "unavailable"
+    headers: list = []
+    failed = 0
+    for app_name, host in inv.WATCHED_SITES.items():
+        try:
+            headers.extend(await inv.fetch_headers(http, app_name, host))
+        except Exception:
+            failed += 1
+    if headers:
+        store.replace_inventory(PLATFORM_TENANT, "headers", [vars(c) for c in headers], seen)
+    result["headers"] = "ok" if not failed else f"{len(inv.WATCHED_SITES) - failed}_of_{len(inv.WATCHED_SITES)}"
+    store.set_state(PLATFORM_TENANT, "inventory_refreshed", {"at": seen, **result})
+    return result
+
+
+async def nightly(app: FastAPI) -> None:
+    while True:
+        last = app.state.store.get_state(PLATFORM_TENANT, "inventory_refreshed", {}).get("at")
+        moment = advisory_watch.parse_time(last)
+        if moment is None or (advisory_watch.now_utc() - moment).total_seconds() > 86400:
+            try:
+                async with app.state.advisory_lock:
+                    await refresh_inventory(app)
+            except Exception:
+                pass
+        await asyncio.sleep(1800)
+
+
+async def bounded_json(request: Request, limit: int) -> bytes:
+    raw = await request.body()
+    if len(raw) > limit:
+        raise HTTPException(413, "Request too large.")
+    return raw
+
+
 def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -84,12 +136,17 @@ def create_app() -> FastAPI:
             app.state.investigator = Investigator(store, app.state.probes, tank)
             app.state.lock = asyncio.Lock()
             app.state.monitor = {"running": False, "unavailable_checks": 0}
-            task = asyncio.create_task(watch(app))
+            app.state.http = http
+            app.state.advisory_lock = asyncio.Lock()
+            app.state.watcher = advisory_watch.Watcher(store, advisory_watch.Feeds(http), tank)
+            tasks = [asyncio.create_task(watch(app)), asyncio.create_task(nightly(app)),
+                     asyncio.create_task(advisory_watch.watch(app))]
             try:
                 yield
             finally:
-                task.cancel()
-                await asyncio.gather(task, return_exceptions=True)
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
                 store.close()
 
     app = FastAPI(title="Ghost", lifespan=lifespan)
@@ -141,6 +198,45 @@ def create_app() -> FastAPI:
     @app.get("/gold/candidates", dependencies=[Depends(require_tank)])
     async def gold(limit: int = Query(default=200, ge=1, le=200)):
         return candidates(app.state.store, os.environ.get("TANK_REGION", "us-east"), limit)
+
+    # ---------- GHOST-2: inventory and advisory watcher ----------
+
+    @app.post("/ghost/inventory/report", dependencies=[Depends(require_tank)])
+    async def inventory_report(request: Request):
+        """Host and repo facts arrive here (Ghost has no Docker socket). Replaces that source's snapshot."""
+        raw = await bounded_json(request, 2_000_000)
+        try:
+            report = inv.InventoryReport.model_validate_json(raw)
+            components = report.to_components()
+        except ValueError:
+            raise HTTPException(422, "Invalid Ghost request.") from None
+        if not components:
+            raise HTTPException(422, "The report has no version facts.")
+        seen = advisory_watch.iso(advisory_watch.now_utc())
+        async with app.state.advisory_lock:
+            stored = app.state.store.replace_inventory(PLATFORM_TENANT, report.source, [vars(c) for c in components], seen)
+        return {"accepted": True, **stored}
+
+    @app.get("/ghost/inventory", dependencies=[Depends(require_tank)])
+    async def inventory_list(history: bool = False):
+        return {"components": app.state.store.inventory(PLATFORM_TENANT, current_only=not history),
+                "refreshed": app.state.store.get_state(PLATFORM_TENANT, "inventory_refreshed")}
+
+    @app.post("/ghost/inventory/refresh", dependencies=[Depends(require_tank)])
+    async def inventory_refresh():
+        """Called after each deploy (deploy-on-merge receipt); also runs nightly."""
+        async with app.state.advisory_lock:
+            return await refresh_inventory(app)
+
+    @app.post("/ghost/advisories/pull", dependencies=[Depends(require_tank)])
+    async def advisories_pull():
+        async with app.state.advisory_lock:
+            return await app.state.watcher.cycle()
+
+    @app.get("/ghost/advisories/matches", dependencies=[Depends(require_tank)])
+    async def advisory_matches(state: str = Query(default="open", pattern="^(open|resolved|all)$")):
+        rows = app.state.store.matches(PLATFORM_TENANT, None if state == "all" else state)
+        return {"matches": rows, "last_cycle": app.state.store.get_state(PLATFORM_TENANT, "last_cycle")}
 
     return app
 
