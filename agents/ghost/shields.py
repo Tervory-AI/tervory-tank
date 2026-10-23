@@ -148,7 +148,7 @@ class Cloudflare:
 
     def __init__(self, http, api_token: str):
         if not api_token:
-            raise CloudflareError("Cloudflare is not connected.")
+            raise CloudflareError("The edge network is not connected.")
         self.http, self._token = http, api_token
 
     async def call(self, method: str, path: str, *, params=None, body=None) -> Any:
@@ -156,21 +156,21 @@ class Cloudflare:
             raise CloudflareError("Ghost only edits firewall rules in named zones.")
         url = CF_API + path
         if urlparse(url).hostname != "api.cloudflare.com":
-            raise CloudflareError("Ghost only talks to Cloudflare's API.")
+            raise CloudflareError("Ghost only talks to the edge network.")
         try:
             response = await self.http.request(method, url, params=params, json=body, timeout=30, follow_redirects=False,
                                                headers={"Authorization": f"Bearer {self._token}",
                                                         "Content-Type": "application/json"})
         except Exception:
-            raise CloudflareError("Cloudflare did not answer.") from None
+            raise CloudflareError("The edge network did not answer.") from None
         if response.status_code == 404:
             return None
         try:
             data = response.json()
         except ValueError:
-            raise CloudflareError("Cloudflare sent something unreadable.") from None
+            raise CloudflareError("The edge network sent something unreadable.") from None
         if response.status_code >= 400 or not isinstance(data, dict) or not data.get("success"):
-            raise CloudflareError("Cloudflare refused the change.")
+            raise CloudflareError("The edge network refused the change.")
         return data.get("result")
 
     async def zone_id(self, zone: str) -> str:
@@ -263,7 +263,7 @@ class Shields:
                   "applied": None, "up_at": None, "ended_at": None, "receipts": []}
         if not on_cloudflare:
             shield["brief"] = {"for": "Grok", "title": f"Edge protection for {request.site}",
-                               "steps": [f"{request.site} is not confirmed behind Cloudflare, so Ghost will not change it.",
+                               "steps": [f"{request.site} is not confirmed behind our edge network, so Ghost will not change it.",
                                          shield["plan"]["plain"],
                                          "Apply the equivalent at the site's own edge after founder approval, "
                                          "then post a fresh host report."]}
@@ -367,7 +367,7 @@ class Shields:
         if shield["state"] not in {"up", "undo_failed"} or not shield.get("applied"):
             return shield
         if not token():
-            shield["note"] = "Cloudflare is not connected, so the rule must be removed by hand."
+            shield["note"] = "The edge network is not connected, so the rule must be removed by hand."
             self.store.save_shield(self.tenant, shield)
             return shield
         return await self._take_down(shield, "undone")

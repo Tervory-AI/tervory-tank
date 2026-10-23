@@ -194,7 +194,7 @@ async def test_cloudflare_refusal_is_generic_and_never_echoes_the_token(tmp_path
     try:
         shield = await shields.propose(sh.ShieldRequest(site="coolify.tervory.com", kind="waf_managed"))
         failed = await shields.raise_shield(shield["id"])
-        assert failed["state"] == "failed" and failed["note"] == "Cloudflare refused the change."
+        assert failed["state"] == "failed" and failed["note"] == "The edge network refused the change."
         assert TOKEN not in everything(store, receipts, sh.public_view(failed))
     finally:
         await http.aclose()

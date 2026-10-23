@@ -1,5 +1,6 @@
 """GHOST-2 D4: Tank's founder-only corridor for the Shields tile. The room is faked; nothing leaves the box."""
 import importlib.util
+import re
 import uuid
 from decimal import Decimal
 from pathlib import Path
@@ -63,7 +64,20 @@ def test_tile_is_plain_english_on_the_light_logo_with_no_tool_or_model_names():
     assert "/brand/tervory-logo.png" in text
     assert "tervory-logo-reversed" not in text and "on-white" not in text
     tile = (PANEL / "tile.tsx").read_text()
-    for word in ("Cloudflare", "GPT", "Claude", "Grok", "Gemini", "Hermes", "LiteLLM", "OpenAI", "Anthropic", "WAF", "API"):
+    names = ("Cloudflare", "GPT", "Claude", "Grok", "Gemini", "Hermes", "LiteLLM", "OpenAI", "Anthropic", "Coolify")
+    for path in PANEL.glob("*.ts*"):
+        for word in names:
+            assert word not in path.read_text(), f"{word} in {path.name}"
+    for word in ("WAF", "API"):
         assert word not in tile, word
     for words in ("Open issues", "Time to know", "Time to shield", "Sites broken by a shield", "Cost this month", "Undo"):
         assert words in tile, words
+
+
+def test_shield_notes_shown_on_the_tile_name_no_tools():
+    from agents.ghost import shields
+    shown = re.findall(r'(?:CloudflareError\(|"note"\] = |shield\["note"\] = )f?"([^"]*)"', (ROOT / "agents/ghost/shields.py").read_text())
+    shown += list(shields.PLAIN.values())
+    assert len(shown) > 10
+    for text in shown:
+        assert "Cloudflare" not in text and "Grok" not in text, text
