@@ -136,7 +136,7 @@ async def test_replicas_retry_exhaustion_and_settled_search_receipts():
 
 
 @pytest.mark.asyncio
-async def test_retention_upgrade_purge_job_cascade_and_tenant_isolation(monkeypatch):
+async def test_retention_purge_job_cascade_and_tenant_isolation(monkeypatch):
     import sys
     from pathlib import Path
     from uuid import UUID
@@ -161,24 +161,22 @@ async def test_retention_upgrade_purge_job_cascade_and_tenant_isolation(monkeypa
                                              "contact": {"name": "Sample", "email": "sample@example.com"}})
             async with pool.acquire() as conn:
                 await ensure_schema(conn, "rig")
-                # Simulate the previous PR's deployed NO ACTION constraint.
-                await conn.execute("""ALTER TABLE agent_rig.quote_handoffs DROP CONSTRAINT quote_handoffs_quote_id_fkey;
-                    ALTER TABLE agent_rig.quote_handoffs ADD CONSTRAINT quote_handoffs_quote_id_fkey
-                    FOREIGN KEY (quote_id) REFERENCES agent_rig.quotes(id)""")
                 await conn.execute("UPDATE agent_rig.quotes SET created_at=now()-interval '8 days' WHERE id <> 'recent'")
                 await conn.execute("UPDATE agent_rig.quote_handoffs SET status='sending', updated_at=now() WHERE quote_id='active'")
-            await asyncio.gather(quotes.apply_schema(), PgQuotes(pool).apply_schema())
-            await store.apply_schema()
-            await quotes.apply_schema()
-            # An already-current FK must not request ACCESS EXCLUSIVE and block
-            # behind ordinary traffic on every process startup.
-            async with pool.acquire() as conn, conn.transaction():
-                await conn.execute("LOCK TABLE agent_rig.quote_handoffs IN ROW EXCLUSIVE MODE")
-                await asyncio.wait_for(PgQuotes(pool).apply_schema(), timeout=2)
-            assert await quotes.status(TENANT, "old") is not None  # Upgrade preserves rows.
+            await store.apply_schema()  # Re-running additive setup keeps rows.
+            async with pool.acquire() as conn:
+                # The FK is declared ON DELETE CASCADE by CREATE TABLE.
+                assert await conn.fetchval("""SELECT confdeltype FROM pg_constraint
+                    WHERE conrelid='agent_rig.quote_handoffs'::regclass
+                    AND conname='quote_handoffs_quote_id_fkey'""") in (b"c", "c")
+            assert await quotes.status(TENANT, "old") is not None  # Re-setup preserves rows.
             assert await quotes.claim(TENANT, "old") is None  # No expired delivery before purge.
             assert await quotes.purge(TENANT) == 1
             assert await quotes.status(TENANT, "old") is None  # Handoff cascaded.
+            async with pool.acquire() as conn:
+                handoffs = """SELECT count(*) FROM agent_rig.quote_handoffs WHERE tenant_id=$1 AND quote_id=$2"""
+                assert await conn.fetchval(handoffs, UUID(TENANT), "old") == 0  # Deleted quote's handoff row is gone.
+                assert await conn.fetchval(handoffs, UUID(OTHER), "other_old") == 1  # Other tenant untouched.
             assert await quotes.status(OTHER, "other_old") is not None
             assert await quotes.status(TENANT, "recent") is not None
             assert await quotes.status(TENANT, "active") is not None

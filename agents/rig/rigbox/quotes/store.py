@@ -129,26 +129,6 @@ class PgQuotes:
     def __init__(self, pool: Any) -> None:
         self.pool = pool
 
-    async def apply_schema(self) -> None:
-        """Upgrade the prior PR's FK atomically, without removing any rows.
-
-        CREATE TABLE IF NOT EXISTS cannot update an existing delete action.
-        Current schemas need no table lock. An upgrade rechecks under the lock
-        so concurrent startup processes cannot replace the constraint twice.
-        """
-        check = """SELECT confdeltype FROM pg_constraint
-            WHERE conrelid='agent_rig.quote_handoffs'::regclass AND conname='quote_handoffs_quote_id_fkey'"""
-        async with self.pool.acquire() as conn:
-            if await conn.fetchval(check) in (b"c", "c"):
-                return
-            async with conn.transaction():
-                await conn.execute("LOCK TABLE agent_rig.quote_handoffs IN ACCESS EXCLUSIVE MODE")
-                if await conn.fetchval(check) not in (b"c", "c"):
-                    await conn.execute("""ALTER TABLE agent_rig.quote_handoffs
-                        DROP CONSTRAINT IF EXISTS quote_handoffs_quote_id_fkey""")
-                    await conn.execute("""ALTER TABLE agent_rig.quote_handoffs ADD CONSTRAINT quote_handoffs_quote_id_fkey
-                        FOREIGN KEY (quote_id) REFERENCES agent_rig.quotes(id) ON DELETE CASCADE""")
-
     async def purge(self, tenant: str) -> int:
         async with self.pool.acquire() as conn:
             result = await conn.execute("""DELETE FROM agent_rig.quotes q

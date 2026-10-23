@@ -361,7 +361,6 @@ async def _lifespan(app: FastAPI):
         store = PgStore(app.state.pool)
         await store.apply_schema()
         retention_days()
-        await PgQuotes(app.state.pool).apply_schema()
         service = QuoteService(store, _TankModels(app.state.tank), RetailerHandoff(app.state.http),
                                PgQuotes(app.state.pool))
         app.state.rig = service

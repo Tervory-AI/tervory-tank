@@ -176,13 +176,10 @@ Contact fields are capped at 120 characters for name, 254 for email and 40 for
 phone; notes are capped at 4000. Oversized fields fail before storage/delivery.
 Unicode control/format characters are stripped before storing or sending them.
 
-Fresh databases create the cascading foreign key directly. For a database that
-ran an earlier revision of this PR, startup replaces only the old foreign-key
-constraint inside a locked transaction. Startup first checks `pg_constraint`;
-if cascading deletion is already applied, it returns without a table lock.
-An upgrade rechecks under the lock to serialize concurrent startup processes.
-Reapplication preserves all rows; no table or column is dropped. Purging happens only through the scheduled
-retention policy after deployment.
+The cascading foreign key is declared in the `CREATE TABLE IF NOT EXISTS`
+statement in `agents/rig/schema.sql`. Schema setup is additive only; no table,
+column or constraint is dropped or renamed. Purging happens only through the
+scheduled retention policy after deployment.
 
 ## Cloud development and checks
 
