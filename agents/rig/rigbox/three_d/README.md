@@ -86,7 +86,7 @@ or public draft paths. The kiosk keeps short-lived approved models locally.
 Use an isolated Postgres database, Python 3.12 with Tank's requirements, and
 Chromium. From the repository root set `PYTHONPATH=tank` and
 `READ1_CHROMIUM_EXECUTABLE` to the installed Chromium executable. Run
-`python -m pytest -q tests/test_rig_3d_engine.py tests/test_rig_postgres.py`
+`python -m pytest -q tests/test_rig_3d_deployment.py tests/test_rig_3d_engine.py tests/test_rig_3d_uploads.py tests/test_rig_3d_workspace.py`
 with `RIG_TEST_DATABASE_URL` pointing to the local test database. These tests
 create their own empty databases, apply the room schema twice and remove only
 the databases they create.

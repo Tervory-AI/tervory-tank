@@ -340,6 +340,15 @@ def test_reject_unsafe_source_and_budget(change):
     with pytest.raises(ValidationError): Job.model_validate(value)
 
 
+@pytest.mark.parametrize("suffix", ["step", "stp", "iges", "igs", "stl", "obj", "fbx", "gltf", "glb", "3dm", "dwg"])
+def test_photos_only_rejects_cad_and_model_suffixes(suffix):
+    """Founder rule: 3D comes from photos only — never accept CAD/mesh upload names."""
+    value = job().model_dump()
+    value["inputs"] = [f"{TENANT}/uploads/part.{suffix}"]
+    with pytest.raises(ValidationError):
+        Job.model_validate(value)
+
+
 def test_fixture_glbs_match_their_report_and_are_compressed():
     root = ROOT / "agents/rig/rigbox/three_d/fixtures"
     for path in root.glob("*.glb"):
