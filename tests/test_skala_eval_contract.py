@@ -39,10 +39,16 @@ def context(pkg):
 
 @pytest.mark.parametrize("skill", PATCH_SKILLS)
 def test_patch_keeps_skill_code_and_has_evidence(skill):
-    pkg = package(skill)
-    versions = sorted(pkg.path.parent.glob("*/skill.yaml"),
+    # The newest eval-only patch release (x.y.Z, Z > 0) keeps the code of the version
+    # just before it. A later minor version (e.g. scan.dependencies 1.1.0, a candidate)
+    # may change code and goes through evals and founder approval on its own.
+    versions = sorted(package(skill).path.parent.glob("*/skill.yaml"),
                       key=lambda file: tuple(map(int, file.parent.name.split("."))))
-    previous = versions[-2].parent
+    patches = [i for i, file in enumerate(versions) if i and int(file.parent.name.split(".")[2]) > 0]
+    index = patches[-1] if patches else len(versions) - 1
+    pkg = next(p for p in skala.load_packages().values()
+               if p.id == skill and p.version == versions[index].parent.name)
+    previous = versions[index - 1].parent
     for source in previous.rglob("*.py"):
         original = source.read_bytes()
         if skill == "base.socials" and source.name == "run.py":
