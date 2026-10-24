@@ -19,7 +19,7 @@ module.exports = {
       startServerCommand: "npx next start -H 127.0.0.1 -p 3000",
       startServerReadyPattern: "Ready",
       startServerReadyTimeout: 120000,
-      numberOfRuns: 1,
+      numberOfRuns: 3,
       chromePath: process.env.CHROME_PATH || chromium.executablePath(),
       settings: {
         chromeFlags: "--no-sandbox --disable-dev-shm-usage --disable-gpu",

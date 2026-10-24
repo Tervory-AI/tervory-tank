@@ -123,6 +123,7 @@ def test_site_gate_runs_in_github_actions() -> None:
     for category in ("performance", "accessibility", "best-practices", "seo"):
         assert f"categories:{category}" in lighthouse
     assert "minScore: 0.9" in lighthouse
+    assert "numberOfRuns: 3" in lighthouse
     playwright = (TEMPLATE / "playwright.config.ts").read_text(encoding="utf-8")
     for width in ("390", "768", "1440"):
         assert f"width: {width}" in playwright
