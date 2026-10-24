@@ -316,3 +316,139 @@ def test_review_reported_cross_room_tests_are_selected():
                        ("rig", "tests/test_train1.py"), ("zenas", "tests/test_train1.py"),
                        ("zenas", "tests/test_deploy_changed.py")):
         assert path in module.select([f"agents/{room}/app.py"])["tests"]
+
+
+# --- CI-2: cancel superseded pull request runs, never main; savings-page limit and caches.
+
+class _Ctx(dict):
+    """Attribute access for a GitHub expression context; missing keys are falsy."""
+
+    def __getattr__(self, name):
+        value = self.get(name, _Ctx())
+        return _Ctx(value) if isinstance(value, dict) else value
+
+
+def _eval(expression: str, **contexts) -> object:
+    """Evaluate the small subset of GitHub expression syntax these workflows use.
+
+    `&&` and `||` return an operand, like Python's `and`/`or`; empty strings are falsy
+    in both. Only ==, !=, &&, ||, ! and fromJSON are used here.
+    """
+    body = expression.strip()
+    assert body.startswith("${{") and body.endswith("}}"), expression
+    body = body[3:-2].strip()
+    for token in ("&&", "||"):
+        assert f" {token} " in f" {body} " or token not in body
+    body = body.replace("&&", " and ").replace("||", " or ").replace("fromJSON(", "json.loads(")
+    body = body.replace("!=", "<>").replace("!", " not ").replace("<>", "!=")
+    scope = {name: _Ctx(value) for name, value in contexts.items()}
+    return eval(body, {"json": json, "__builtins__": {}}, scope)  # noqa: S307 - test-only, our own YAML
+
+
+def _github(event: str, *, pr: int | None = None, head_repo: str = "Tervory-AI/tervory-tank",
+            ref: str = "refs/heads/main", run_id: str = "1001") -> dict:
+    ctx = {"workflow": "ci", "event_name": event, "ref": ref, "run_id": run_id,
+           "repository": "Tervory-AI/tervory-tank", "event": {}}
+    if pr is not None:
+        ctx["event"] = {"pull_request": {"number": pr, "head": {"repo": {"full_name": head_repo}}}}
+        ctx["ref"] = f"refs/pull/{pr}/merge"
+    return ctx
+
+
+@pytest.mark.parametrize("path", [CI, TISAN], ids=lambda p: p.name)
+def test_workflow_level_concurrency_block(path: Path) -> None:
+    workflow = _load(path)
+    assert workflow["concurrency"] == {
+        "group": "${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}",
+        "cancel-in-progress": "${{ github.event_name == 'pull_request' }}",
+    }
+    # No job sets its own concurrency, which could override or widen the rule.
+    for name, job in workflow["jobs"].items():
+        assert "concurrency" not in job, name
+        assert "queue" not in job, name
+
+
+def _group(path: Path, github: dict) -> str:
+    group = _load(path)["concurrency"]["group"]
+    left, right = group.split("}}-${{")
+    return f"{_eval(left + '}}', github=github)}-{_eval('${{' + right, github=github)}"
+
+
+def _cancels(path: Path, github: dict) -> bool:
+    return _eval(_load(path)["concurrency"]["cancel-in-progress"], github=github) is True
+
+
+@pytest.mark.parametrize("path", [CI, TISAN], ids=lambda p: p.name)
+def test_second_push_to_pull_request_cancels_the_first(path: Path) -> None:
+    first = _github("pull_request", pr=254, run_id="1")
+    second = _github("pull_request", pr=254, run_id="2")
+    assert _group(path, first) == _group(path, second) == "ci-254"
+    assert _cancels(path, second)
+    # Another pull request is a different group, so it is never cancelled by this one.
+    assert _group(path, _github("pull_request", pr=255)) != _group(path, first)
+
+
+@pytest.mark.parametrize("path", [CI, TISAN], ids=lambda p: p.name)
+def test_main_runs_are_never_cancelled_or_replaced(path: Path) -> None:
+    first = _github("push", run_id="9001")
+    second = _github("push", run_id="9002")
+    assert not _cancels(path, first) and not _cancels(path, second)
+    # Each main run has its own group: it never waits as "pending" behind another
+    # main run, so GitHub can never replace it with a newer one.
+    assert _group(path, first) != _group(path, second)
+    # A pull request can never share a group with a main run.
+    assert _group(path, _github("pull_request", pr=1)) not in {_group(path, first), _group(path, second)}
+
+
+def test_concurrency_groups_differ_per_workflow() -> None:
+    # ci and tisan-site must not cancel each other on the same pull request.
+    pr = _github("pull_request", pr=7)
+    assert _group(CI, pr) == "ci-7"
+    assert _group(TISAN, {**pr, "workflow": "tisan-site"}) == "tisan-site-7"
+
+
+def _runs_on(job: str, github: dict, runner_output: str) -> object:
+    return _eval(_load(CI)["jobs"][job]["runs-on"], github=github,
+                 needs={"runner": {"outputs": {"runner": runner_output}}})
+
+
+@pytest.mark.parametrize("job", ["tank", "workspace"])
+def test_runs_on_switch_off_falls_back_to_github_hosted(job: str) -> None:
+    # "pick runner" skipped: its output is empty.
+    assert _runs_on(job, _github("push"), "") == "ubuntu-latest"
+    assert _runs_on(job, _github("pull_request", pr=3), "") == "ubuntu-latest"
+    # Switch on but no runner online: pick runner hands back ubuntu-latest.
+    assert _runs_on(job, _github("push"), HOSTED) == "ubuntu-latest"
+
+
+@pytest.mark.parametrize("job", ["tank", "workspace"])
+def test_runs_on_switch_on_uses_our_runner(job: str) -> None:
+    assert _runs_on(job, _github("push"), SELF_HOSTED) == ["self-hosted", "linux"]
+    assert _runs_on(job, _github("pull_request", pr=3), SELF_HOSTED) == ["self-hosted", "linux"]
+
+
+@pytest.mark.parametrize("job", ["tank", "workspace"])
+def test_runs_on_fork_guard_holds_even_if_pick_runner_says_self_hosted(job: str) -> None:
+    fork = _github("pull_request", pr=3, head_repo="someone/tervory-tank")
+    assert _runs_on(job, fork, SELF_HOSTED) == "ubuntu-latest"
+
+
+def test_savings_page_limit_and_caches() -> None:
+    job = _load(CI)["jobs"]["savings-page"]
+    assert job["timeout-minutes"] == 12
+    assert job["runs-on"] == "ubuntu-latest"
+    steps = job["steps"]
+    caches = {step["with"]["path"]: index for index, step in enumerate(steps)
+              if str(step.get("uses", "")).startswith("actions/cache@")}
+    assert set(caches) == {"~/.npm", "~/.cache/ms-playwright"}
+    install = next(index for index, step in enumerate(steps)
+                   if step.get("name") == "Install workspace and browser test packages")
+    # Restore before installing, so the install reuses the cache.
+    assert all(index < install for index in caches.values())
+    playwright_key = steps[caches["~/.cache/ms-playwright"]]["with"]["key"]
+    pinned = steps[install]["run"]
+    # The browser cache key follows the pinned Playwright version in the install step.
+    assert "playwright@1.64.1" in pinned and "1.64.1" in playwright_key
+    assert "esbuild@0.28.2" in pinned
+    assert "1.64.1" in steps[caches["~/.npm"]]["with"]["key"]
+    assert "0.28.2" in steps[caches["~/.npm"]]["with"]["key"]

@@ -20,7 +20,7 @@ from rig_brain import room, service  # noqa: E402
 def test_rig_is_its_own_box_and_only_the_api_is_public():
     cfg = yaml.safe_load((ROOT / "agents/rig/docker-compose.yml").read_text())
     services = cfg["services"]
-    assert set(services) == {"agent-rig", "rig-brain", "rig-browser", "rig-browser-gateway", "rig-sandbox"}
+    assert set(services) == {"agent-rig", "rig-brain", "rig-browser", "rig-browser-gateway", "rig-sandbox", "rig-forge", "rig-forge-egress"}
     assert cfg["networks"]["gw"] == {"external": True, "name": "tervory-gw-rig"}
     assert services["agent-rig"]["networks"] == ["gw", "proxy"]
     assert cfg["networks"]["proxy"] == {"external": True, "name": "59f8cnpelzwsyte1atyjc4fv"}
@@ -42,7 +42,7 @@ def test_rig_is_its_own_box_and_only_the_api_is_public():
         "traefik.http.services.rig.loadbalancer.server.port": "8000",
     }
     assert {name for name, spec in services.items() if spec.get("labels")} == {"agent-rig"}
-    assert services["rig-brain"]["networks"] == ["gw", "sandbox"]
+    assert services["rig-brain"]["networks"] == ["gw", "sandbox", "forge-control"]
     assert services["rig-browser-gateway"]["networks"] == ["gw", "browser"]
     for name in ("sandbox", "browser"):
         assert cfg["networks"][name]["internal"] is True
@@ -59,7 +59,7 @@ def test_rig_is_its_own_box_and_only_the_api_is_public():
     sandbox = services["rig-sandbox"]
     assert sandbox["read_only"] and sandbox["pids_limit"] == 64 and not sandbox.get("volumes")
     assert {n for n, s in services.items() if "SANDBOX_KEY" in s["environment"]} == {"rig-brain", "rig-sandbox"}
-    assert {n for n, s in services.items() if any(k.startswith("R2_") for k in s["environment"])} == {"agent-rig"}
+    assert {n for n, s in services.items() if any(k.startswith("R2_") for k in s["environment"])} == {"agent-rig", "rig-forge", "rig-forge-egress"}
     assert not any("TANK" in str(k) + str(v) for k, v in services["rig-browser"]["environment"].items())
     assert services["rig-browser"]["environment"]["ACCESS_GATEWAY_URL"] == "http://rig-browser-gateway:3000"
     assert services["rig-browser-gateway"]["environment"]["BROWSER_HOST"] == "rig-browser"

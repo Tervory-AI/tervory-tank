@@ -1,0 +1,2 @@
+ItemNumber,DealerPrice,Quantity,UPC,name,brand,category,image_url,url,family
+SAMPLE-DESK,40.00,12,100003,Sample Desk,Sample Workshop,furniture,https://example.com/desk.png,https://example.com/desk,sample-office
