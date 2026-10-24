@@ -10,12 +10,14 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agents" / "rig"))
-from rigbox.quotes.hosting import mount  # noqa: E402
+from rigbox.quotes import hosting  # noqa: E402
+from rigbox.quotes.hosting import TEST_PAGE_CSP, mount  # noqa: E402
 
 
 def test_packaged_bundle_and_configured_test_page(monkeypatch):
     monkeypatch.delenv("RIG_WIDGET_DIR", raising=False)
     monkeypatch.delenv("RIG_WIDGET_PUBLISHABLE_KEY", raising=False)
+    hosting._verified_asset.cache_clear()
     app = FastAPI()
     mount(app)
     with TestClient(app) as client:
@@ -35,7 +37,10 @@ def test_packaged_bundle_and_configured_test_page(monkeypatch):
         assert page.status_code == 200 and 'theme="custom-nation"' in page.text
         assert 'api-base=""' in page.text and 'api-base="mock"' not in page.text
         assert name in page.text and page.headers["Cache-Control"] == "no-store"
-        assert page.headers["Content-Security-Policy"] == "frame-ancestors 'none'"
+        assert page.headers["Content-Security-Policy"] == TEST_PAGE_CSP
+        assert "frame-ancestors 'none'" in TEST_PAGE_CSP
+        assert "default-src 'none'" in TEST_PAGE_CSP
+        assert "script-src 'self'" in TEST_PAGE_CSP
         assert list((Path(__file__).resolve().parents[1] / "agents/rig/rigbox/quotes/widget").glob("*.umd.js"))[0].name == name
         assert len(list((Path(__file__).resolve().parents[1] / "agents/rig/rigbox/quotes/widget").glob("*.umd.js"))) == 1
         assert 'fonts="/widget/fonts/custom-nation.css"' in page.text
@@ -48,6 +53,7 @@ def test_packaged_bundle_and_configured_test_page(monkeypatch):
 
 def test_corruption_and_unknown_paths_fail_closed(tmp_path, monkeypatch):
     monkeypatch.setenv("RIG_WIDGET_DIR", str(tmp_path))
+    hosting._verified_asset.cache_clear()
     name = "tervory-rig." + "0" * 64 + ".umd.js"
     (tmp_path / name).write_text("altered artifact")
     (tmp_path / "manifest.json").write_text(json.dumps({"file": name}))
@@ -57,3 +63,45 @@ def test_corruption_and_unknown_paths_fail_closed(tmp_path, monkeypatch):
         assert client.get("/widget/assets/" + name).status_code == 503
         assert client.get("/widget/manifest.json").status_code == 503
         assert client.get("/widget/assets/manifest.json").status_code == 404
+
+
+def test_asset_verification_is_cached(monkeypatch, tmp_path):
+    """Second read of the same bundle must not re-hash or re-gzip."""
+    hosting._verified_asset.cache_clear()
+    body = b"console.log('rig-widget-cache-test');"
+    digest = hashlib.sha256(body).hexdigest()
+    name = f"tervory-rig.{digest}.umd.js"
+    path = tmp_path / name
+    path.write_bytes(body)
+    monkeypatch.setenv("RIG_WIDGET_DIR", str(tmp_path))
+
+    calls = {"sha": 0, "gzip": 0}
+    real_sha = hashlib.sha256
+    real_gzip = gzip.compress
+
+    def counting_sha(data=b"", *, usedforsecurity=True):
+        # hashlib.sha256(data) returns a HASH; we wrap the constructor.
+        h = real_sha(data)
+        if data:
+            calls["sha"] += 1
+        return h
+
+    class ShaFactory:
+        def __call__(self, data=b"", *, usedforsecurity=True):
+            obj = real_sha(data)
+            if data:
+                calls["sha"] += 1
+            return obj
+
+    def counting_gzip(data, **kwargs):
+        calls["gzip"] += 1
+        return real_gzip(data, **kwargs)
+
+    monkeypatch.setattr(hosting.hashlib, "sha256", ShaFactory())
+    monkeypatch.setattr(hosting.gzip, "compress", counting_gzip)
+
+    first = hosting.asset(name)
+    second = hosting.asset(name)
+    assert first == second == body
+    assert calls["sha"] == 1
+    assert calls["gzip"] == 1
