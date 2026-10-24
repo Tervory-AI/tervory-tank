@@ -19,10 +19,12 @@ export function BillingScreen({
   tab,
   view,
   notice,
+  addon,
 }: {
   tab: BillingTab;
   view: BillingView;
   notice: string | null;
+  addon?: React.ReactNode;
 }) {
   const title = tab === "usage" ? COPY.usageTitle : tab === "invoices" ? COPY.invoicesTitle : "Billing";
   const lead = tab === "usage" ? COPY.usageLead : tab === "invoices" ? COPY.invoicesLead : COPY.lead;
@@ -41,6 +43,7 @@ export function BillingScreen({
         ))}
       </nav>
       {tab === "plans" ? <Plans view={view} /> : null}
+      {tab === "plans" ? addon : null}
       {tab === "usage" ? <Usage usage={view.usage} /> : null}
       {tab === "invoices" ? <Invoices invoices={view.invoices} /> : null}
     </div>

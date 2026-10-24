@@ -1,0 +1,249 @@
+# RIG-4 quote handoff and widget
+
+The production room uses `QuoteService` with `PgQuotes` and `RetailerHandoff`.
+The existing quote row, its delivery state and its anonymous quote count are
+inserted in one transaction before any outbound call. The browser sees a
+reference and `delivery: pending|sending|sent|needs_person`. A failed or unconfigured handoff
+stays pending, keeps `sent_at` empty and shows a clear pending message.
+
+The room checks up to 25 due requests per tenant every five minutes. A discovery
+job refreshes retailer schedules every five minutes, including tenants added
+after startup. Failures back off by 5, 10, 20, 40 and 80 minutes. The sixth failed
+attempt stops automatic delivery and exposes `needs_person`; a crash during the
+last attempt also stops after its lease expires. The delivery row keeps the
+fixed error code, attempt count, and next due time. An admin can use `/retry` to
+bring a due time forward without resetting the budget, or explicitly `/resume`
+after investigating a stopped request to allow a new six-attempt budget.
+Claims are atomic across workers. A 60-second send timeout is shorter than the
+five-minute crash-recovery lease. Odoo reconciles `client_order_ref` before
+creating another order; webhooks must honor `Idempotency-Key`. No errors, URLs,
+contact details or credential values are written to logs. Stored error values
+are fixed codes such as `not_configured` and `odoo_product_mapping`.
+
+## Configure the retailer last
+
+Set `RIG_QUOTE_FLOWS` to a JSON object keyed by exact tenant UUID. Each value has
+`sender` (`webhook`, `odoo`, or `odoo+webhook`), `env_prefix` (default `RIG_ODOO`)
+and optional `portal_url` (the retailer's HTTPS client portal). A missing entry
+uses that tenant's existing retailer webhook. An empty configuration is valid.
+This mapping never crosses into the public API. For combined delivery, Odoo is
+reconciled first and the portal webhook is then delivered with the same request
+reference. The portal endpoint is the existing `agent_rig.retailers.webhook`.
+
+Leave these Coolify settings empty until the test or live retailer is connected:
+
+```dotenv
+RIG_QUOTE_FLOWS=
+RIG_ODOO_URL=
+RIG_ODOO_DATABASE=
+RIG_ODOO_USER=
+RIG_ODOO_API_KEY=
+RIG_WIDGET_PUBLISHABLE_KEY=
+```
+
+Additional retailers can select distinct `RIG_ODOO_<RETAILER>` prefixes. Expose
+their corresponding variables to the room through Coolify/Compose when adding
+them; never put credential values in the mapping, catalogue or widget.
+
+The adapter supports **Odoo 16, 17 and 18**, using the
+[external RPC API](https://www.odoo.com/documentation/18.0/developer/reference/external_api.html):
+`/jsonrpc`, `common.version`, `common.authenticate`, then `object.execute_kw`.
+The version is checked before authentication or mutations. Other versions fail
+closed with `odoo_version_unsupported`. **Odoo 19 is not supported**: it renamed
+`tax_id` to `tax_ids`; the legacy RPC endpoints are deprecated and scheduled for
+removal. Supporting 19+ requires a separately reviewed JSON-2 adapter
+and tax-field mapping. Versioned stubs cover 16–18 and rejection of 19; this is
+not a claim of live validation against each Odoo deployment. The Odoo plan must
+support external API access. The integration user needs partner/product reads,
+partner creation and draft sale-order creation. Product internal references
+(`product.product.default_code`) must match Rig SKUs uniquely. A pricelist in
+the quote currency must exist. Missing configuration, ambiguous/missing SKUs,
+or currency mapping leaves the request pending rather than inventing data.
+
+The order keeps Rig's server-priced indicative amounts and an explicit empty
+tax set, preserving the single indicative total. The retailer reviews tax and
+commercial terms before sending or confirming the quote. A product link becomes
+an unpriced order note with the shopper's contact, never a fabricated product or
+price. The adapter never confirms orders, invoices, charges or emails shoppers.
+Each new request creates a separate partner with the internal comment
+**“from Rig, not verified”**. Shopper-typed email never selects an existing
+customer account. Product/currency mappings are checked before creating a
+partner. The partner's `ref` is the tenant/request reference, so a rejected order
+or lost partner-create response reuses that request's unverified partner on
+retry. An ambiguous partner reference stops delivery for staff review. Order
+reconciliation still prevents a duplicate order after a lost order response.
+
+## Key, origins and bundle
+
+With the tenant's admin key in `X-Rig-Key`, call
+`POST /v1/rig/admin/embed-keys` with exact HTTPS `origins`. For Custom Nation use
+`https://customnation.co.za` (and `https://www.customnation.co.za` only if used)
+plus the Rig test-page origin. CORS origins cannot be restricted to a path.
+The endpoint creates a fresh publishable key and stores only its hash. Supply
+the result to the embed and `RIG_WIDGET_PUBLISHABLE_KEY`. Do not use the existing
+demo key for the live retailer. No live key is generated by this change.
+
+The widget repo's `scripts/package-widget.mjs` packages its verified UMD into
+`quotes/widget/`. The current manifest selects the bundle served at
+`/widget/assets/<content hash>.umd.js`. SHA-256 and the 150 KB gzip budget are
+checked before serving. Assets have immutable caching; the manifest is uncached.
+The test page serves Barlow Condensed 600 and Inter 400/500/600 locally from
+`/widget/fonts/`. The WOFF2 assets are from Fontsource 5.3.0 under the adjacent
+SIL Open Font Licenses; they add no external font dependency to the test page.
+
+No change to the existing Dockerfile COPY line is needed: `rigbox` is already
+copied in full. `/widget/test` is unavailable until its publishable key is set.
+Its `frame-ancestors 'none'` policy prevents framing the test page. The UMD remains
+embeddable. Only the manifest's current bundle is shipped.
+
+## Rate limits and settled searches
+
+Public requests use Postgres fixed-minute counters shared across replicas and
+restarts. Limits apply to the tenant, client address and normalized route (all
+product IDs share the same route budget). Each client gets 60 requests/minute
+per browsing route, 10 for Ask, and a separate **combined 5 quote/link-quote**
+budget. Tenant ceilings are 6000 browsing requests and 600 automatic quote
+handoffs/minute. Above the quote ceiling, eligible shoppers can still submit:
+their requests are saved atomically with `needs_person`, error
+`tenant_quote_limit`, and no automatic delivery. The client's five-request cap
+still applies to held quotes. A `rig_quote_held` warning includes only tenant ID,
+request ID and the fixed reason. Held submissions do not increment the anonymous
+`quotes` total. Explicit staff resume counts a held request once, on the day it
+is released; retries and concurrent resumes cannot double-count it.
+
+Staff list held/failed requests at `GET /v1/rig/admin/quotes/attention?limit=100`.
+The response contains `requests` (including `created_at`) and `next_cursor`.
+Pass a non-null cursor as `cursor` on the next request; null means the last page.
+The limit is 1–100. Pages use the immutable creation time and request ID, scoped
+to the authenticated tenant, so removing an earlier hold does not skip later
+requests. Staff inspect the matching tenant-scoped quote and explicitly
+`/resume` after review. Ordinary retry and scheduled retry cannot
+release a hold. No Odoo partner, order or webhook is created while held.
+A rejected client does not consume the tenant ceiling. HTTP 429 includes
+`Retry-After`, exposed through CORS. These are abuse controls, not visitor
+analytics; clients sharing a public IPv4 address or IPv6 `/64` share an allowance.
+IPv4-mapped IPv6 addresses share the corresponding IPv4 allowance.
+Both quote routes require an exact allowed `Origin`, including same-host calls.
+Origin checking is a browser boundary, not proof of shopper identity.
+
+Failed publishable-key lookups have a separate per-client, per-process guard:
+60 failures or in-flight lookups per minute, before the database lookup. A
+successful lookup releases its reservation. Rotating invalid keys or addresses
+within one IPv6 `/48` cannot bypass it (authenticated shopper budgets still use
+`/64`). At 10,000 tracked clients, a new client evicts the oldest bucket and
+bypasses only this failed-key guard for that lookup. Key validation and the
+Postgres tenant/shopper limits still apply. Existing tracked clients keep their
+failed-key caps. This prevents a bad-key flood from denying every new shopper.
+Memory retains only minute-salted hashes, expires every minute, and does not
+join analytics.
+
+`RIG_TRUSTED_PROXY_CIDRS` is empty by default and **production `/health` returns
+503 while it is empty, invalid, or includes a universal `/0` network**. There is
+no test-mode bypass in the production app. Grok has set
+`RIG_TRUSTED_PROXY_CIDRS=10.0.21.0/24` on agent-rig in Coolify (both rows), as
+confirmed in the review. Keep Compose's `${RIG_TRUSTED_PROXY_CIDRS:-}`; the live
+subnet remains deployment configuration.
+Configure only actual trusted reverse-proxy peer addresses/networks in Coolify.
+The Docker command disables Uvicorn's proxy-header rewriting so Rig sees the
+real socket peer, and disables access logs so raw IPs/query strings are not kept.
+Forwarded headers from other
+peers are ignored; trusted chains are walked from right to left. Never trust all
+addresses or let the ASGI server trust arbitrary forwarded headers. Raw IPs are
+never stored. The HMAC salt rotates per tenant/minute, preventing joins across
+windows; counters/salts expire after the current and previous minute. The
+periodic discovery job also removes inactive retailers' expired counters.
+
+Typeahead GETs do not increment analytics. The widget posts a one-off UUID and
+`no_results` flag to `POST /v1/rig/search-events` after 750ms without another edit
+following the successful response, or on explicit submit/product selection.
+The server counts a receipt once per tenant for 24 hours, then discards it;
+aggregate daily counts remain. There is no query, cookie, visitor ID or contact
+in this receipt. These are client-reported usage counts, not billing records.
+Existing tenant-scoped search recall remains separate.
+
+## Quote/contact retention
+
+`RIG_QUOTE_RETENTION_DAYS` defaults to **30**, accepts 1–365, and rejects invalid
+configuration at startup. The five-minute discovery job purges expired quote
+rows, including contact details and free-text notes. It discovers expired quotes
+even after a retailer is removed and deletes each tenant's rows separately.
+`quote_handoffs` has `ON DELETE CASCADE`; anonymous daily counts remain. A live
+five-minute delivery lease is allowed to finish before deletion; an expired
+quote cannot start another delivery attempt. This policy also covers held quotes.
+Retailer Odoo/webhook copies have their own retention policy.
+
+Contact fields are capped at 120 characters for name, 254 for email and 40 for
+phone; notes are capped at 4000. Oversized fields fail before storage/delivery.
+Unicode control/format characters are stripped before storing or sending them.
+
+The cascading foreign key is declared in the `CREATE TABLE IF NOT EXISTS`
+statement in `agents/rig/schema.sql`. Schema setup is additive only; no table,
+column or constraint is dropped or renamed. Purging happens only through the
+scheduled retention policy after deployment.
+
+## Cloud development and checks
+
+Use the existing isolated cloud checkout; do not create a worktree. From the
+Tank root, use Python 3.12 and install `tank/requirements.txt`, the test packages
+in `tank/requirements-dev.txt`, and an installed Chromium. From the widget root,
+use Node 22 or newer, `npm ci`, `npm run lint`, `npm run build`, and `npm test`.
+Use an npm cache inside `/workspace` if the default home cache is not writable.
+
+For the credential-free sample API, from the Tank root:
+
+```sh
+PYTHONPATH=agents/rig python -m uvicorn rigbox.quotes.sample:app --host 127.0.0.1 --port 8001 --no-access-log
+```
+
+`GET /health` must return `sample: true`; the internal `/widget/test` page calls
+the real API with neutral in-memory sample products. Its recording sender makes
+no external request and the sample module is never mounted by production
+`app.py`. Stopping it discards sample requests. The API browser test launches its
+own isolated sample server and checks search, approved fits, swap, Explore, Ask,
+link quote and setup quote. Without a model, Ask honestly answers "I don't know".
+
+Run `pytest -q tests/test_rig_quotes*.py` with
+`READ1_CHROMIUM_EXECUTABLE` pointing at Chromium and `POOL_SCHEMA_DATABASE_URL`
+pointing at a disposable local Postgres. The Postgres test creates a temporary
+database, applies schema twice, exercises concurrent claims/counts and deletes
+only its temporary database. The hosting test checks the committed artifact.
+Set `RIG_SCREENSHOT_DIR` to retain the 390px/1440px browser screenshots.
+
+## Prove it after deployment
+
+1. With the proxy CIDR unset, verify `/health` is 503. Have Grok set the verified
+   subnet, then check `/health` is 200 and `/widget/manifest.json` loads. Open `/widget/test` with a neutral
+   sample tenant on Boston; real Custom Nation shopper data is enabled on ZA last.
+2. Search, open a setup, swap a part, open Explore and submit Ask. Unapproved
+   parts must be absent. The network payload must contain no pricing inputs.
+3. Submit a setup quote and a missing-product link with synthetic contact data.
+   Check the matching tenant/id in `agent_rig.quotes` and
+   `agent_rig.quote_handoffs`. With Odoo configured, `sent_at` must be populated
+   and `sale.order.client_order_ref` must be `rig:<tenant>:<request_id>` in draft
+   state. With no configuration, verify pending status instead.
+4. Check the client portal webhook received the same reference (combined flow),
+   and that the configured portal link opens without contact data in its URL.
+5. With the tenant's admin key, read `GET /v1/rig/admin/analytics`. The five daily
+   counts must increase for the corresponding actions. Type several characters
+   with pauses shorter than one second: only the settled search should count. Opening a swap picker
+   alone must not increment swaps. Shopper keys cannot read these counts.
+6. For a failed test delivery, inspect
+   `GET /v1/rig/admin/quotes/<id>/delivery`, fix configuration, then use
+   `POST /v1/rig/admin/quotes/<id>/retry` or wait for the scheduled retry. There
+   must still be only one Odoo order for that reference. After six failures,
+   verify `needs_person` and no further automatic attempts; use `/resume` only
+   after fixing the cause. Add a new test retailer after startup and verify its
+   `retry_quotes` row in `agent_rig.schedules` appears on the next discovery tick.
+7. With a test publishable key, exhaust one client’s browse allowance: another
+   client and the first client’s quote allowance must still work. Verify 429
+   exposes `Retry-After`, and that restart/replica traffic shares the budget.
+   Repeat behind the same proxy with two client addresses; IPv6 addresses within
+   one `/64` must share the allowance. Missing/wrong quote Origin must be 403.
+8. In a disposable test tenant, reach the tenant quote ceiling: further eligible
+   submissions must return `needs_person`, emit `rig_quote_held`, appear in the
+   admin attention queue, and create no outbound writes until explicit resume.
+   Use a synthetic email matching a test Odoo customer and verify the new order
+   uses a new partner marked “from Rig, not verified”, never the existing account.
+9. In a disposable database, age synthetic quote rows past the retention window
+   and run discovery. Quote/contact and handoff rows must disappear together;
+   recent quotes and anonymous totals must remain. Do not age real shopper rows.

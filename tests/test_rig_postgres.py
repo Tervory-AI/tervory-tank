@@ -89,7 +89,7 @@ def _search(client: TestClient, key: str, origin: str, query: str) -> dict:
     return response.json()
 
 
-def test_rig_startup_loads_catalogues_on_postgres(tmp_path: Path) -> None:
+def test_rig_startup_loads_catalogues_on_postgres(tmp_path: Path, monkeypatch) -> None:
     admin = _admin_url()
     name = "rig_boot_" + uuid4().hex[:12]
     url = _database_url(admin, name)
@@ -102,6 +102,11 @@ def test_rig_startup_loads_catalogues_on_postgres(tmp_path: Path) -> None:
     try:
         app_module = _load_app()
         with TestClient(app_module.app) as client:
+            monkeypatch.delenv("RIG_TRUSTED_PROXY_CIDRS", raising=False)
+            assert client.get("/health").status_code == 503
+            monkeypatch.setenv("RIG_TRUSTED_PROXY_CIDRS", "0.0.0.0/0")
+            assert client.get("/health").status_code == 503
+            monkeypatch.setenv("RIG_TRUSTED_PROXY_CIDRS", "10.20.0.0/24")
             health = client.get("/health")
             assert health.status_code == 200
             assert health.json()["ok"] is True

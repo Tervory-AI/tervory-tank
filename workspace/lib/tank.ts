@@ -4,6 +4,20 @@
 const TANK_URL = process.env.TANK_URL ?? "http://tank:8000";
 const TANK_API_KEY = process.env.TANK_API_KEY ?? "";
 
+// RIG-5: all 3D Workspace traffic, including private previews, stays server-side.
+export type RigThreeDOperation = "capabilities" | "dashboard" | "submit" | "approve" | "mounts" | "reset" | "preview" | "runtime";
+export async function rigThreeDRequest(
+  tenantId: string, operation: RigThreeDOperation, payload: Record<string, unknown> = {}, actor = "",
+): Promise<Response> {
+  const response = await fetch(`${TANK_URL}/v1/rig/3d/workspace/${operation}`, {
+    method: "POST", cache: "no-store", redirect: "error",
+    headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY, "x-tervory-user": actor },
+    body: JSON.stringify({ tenant_id: tenantId, payload }),
+  });
+  if (!response.ok) throw new Error("The 3D request could not be completed. Check the details and try again.");
+  return response;
+}
+
 // Founder-only Ghost corridor. Identity is resolved by the server action, never the browser.
 export type GhostIncident = {
   id: string; target: string; signal: string; origin: string; state: string;
@@ -923,6 +937,18 @@ export async function accessRequest<T>(actor: AccessIdentity, path: string, body
   });
   if (!response.ok) throw new Error("The connection request could not be completed. Check the settings or try again.");
   return response.json() as Promise<T>;
+}
+
+// RIG-3 retailer calls reuse ACCESS-1. Identity comes only from the server session.
+export function rigAdminPanel<T>(actor: AccessIdentity): Promise<T> {
+  return accessRequest<T>(actor, "rig/admin");
+}
+
+export function rigAdminAction<T>(actor: AccessIdentity, operation: string, data: Record<string, unknown>): Promise<T> {
+  if (!["connect", "import", "refresh", "mapping", "confirm-mapping", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest"].includes(operation)) {
+    throw new Error("Unknown retailer operation.");
+  }
+  return accessRequest<T>(actor, `rig/admin/${operation}`, { data });
 }
 
 /** CORE-2 only: server-resolved identity wins over every caller query field. */

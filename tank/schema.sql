@@ -1575,3 +1575,55 @@ DO $$ BEGIN
             FOR EACH ROW EXECUTE FUNCTION tank.moa_baseline_snapshot();
     END IF;
 END $$;
+
+-- RIG-3: use the existing ACCESS feed connections, batches and receipts.
+-- Rig connection names use the rig: prefix to preserve Tiger's bindings.
+ALTER TABLE tank.access_feed_connections ADD COLUMN IF NOT EXISTS rig_refresh_at timestamptz;
+ALTER TABLE tank.access_feed_batches ADD COLUMN IF NOT EXISTS rig_summary jsonb;
+
+-- RIG-3: confirmed mappings for uploads and scheduled feeds, no source amounts or credentials.
+CREATE TABLE IF NOT EXISTS tank.rig_feed_settings (
+    tenant_id uuid NOT NULL,
+    distributor text NOT NULL,
+    site text NOT NULL,
+    settings jsonb NOT NULL,
+    PRIMARY KEY (tenant_id,distributor,site)
+);
+
+-- Short-lived field-name previews bind confirmation to the reviewing administrator.
+CREATE TABLE IF NOT EXISTS tank.rig_feed_previews (
+    tenant_id uuid NOT NULL,
+    id uuid NOT NULL,
+    user_id text NOT NULL,
+    preview jsonb NOT NULL,
+    expires_at timestamptz NOT NULL DEFAULT now() + interval '15 minutes',
+    PRIMARY KEY (tenant_id,id)
+);
+
+-- RIG-5F: operator-configured GPU limits and durable reservations. No default spend.
+CREATE TABLE IF NOT EXISTS tank.rig_forge_limits (
+    tenant_id uuid NOT NULL,
+    method text NOT NULL CHECK (method IN ('photogrammetry','trellis2')),
+    enabled boolean NOT NULL DEFAULT false,
+    image text NOT NULL CHECK (image ~ '^[a-z0-9][a-z0-9./_-]+@sha256:[a-f0-9]{64}$'),
+    flavor text NOT NULL CHECK (flavor IN ('t4-small','a10g-small','a10g-large','a100-large','h100')),
+    hour_usd numeric(12,6) NOT NULL CHECK (hour_usd > 0),
+    billing_quantum_seconds integer NOT NULL CHECK (billing_quantum_seconds BETWEEN 1 AND 3600),
+    max_seconds integer NOT NULL CHECK (max_seconds BETWEEN 60 AND 3600),
+    max_job_usd numeric(12,6) NOT NULL CHECK (max_job_usd > 0),
+    total_budget_usd numeric(12,6) NOT NULL CHECK (total_budget_usd >= max_job_usd),
+    PRIMARY KEY (tenant_id, method)
+);
+CREATE TABLE IF NOT EXISTS tank.rig_forge_jobs (
+    tenant_id uuid NOT NULL,
+    id uuid NOT NULL,
+    method text NOT NULL CHECK (method IN ('photogrammetry','trellis2')),
+    request jsonb NOT NULL,
+    grant_payload jsonb NOT NULL,
+    reserved_usd numeric(12,6) NOT NULL CHECK (reserved_usd > 0),
+    state text NOT NULL CHECK (state IN ('reserved','claimed','complete')),
+    receipt jsonb,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,id)
+);
+-- End RIG-5F.
