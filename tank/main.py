@@ -2504,12 +2504,17 @@ async def base_proxy(path: str, request: Request) -> Response:
 
 _LOCAL_ZENAS_HOSTS = frozenset({"agent-zenas", "localhost", "127.0.0.1"})
 _ZENAS_PATH = re.compile(
-    r"^(consents|matters|pool|pool/status|health|review|selftest|review-switch|cases/convert|rule-cards|worked|matches|training-pairs|drafts|tenants|answers)$"
+    r"^(consents|matters|pool|pool/status|health|review|selftest|review-switch|cases/convert|rule-cards|worked|matches|training-pairs|drafts|tenants|answers|moot/fixtures)$"
     r"|^(matters|documents|rule-cards|worked)/[0-9a-fA-F-]{36}$"
     r"|^matters/[0-9a-fA-F-]{36}/documents$"
     r"|^matters/[0-9a-fA-F-]{36}/release$"
     r"|^documents/[0-9a-fA-F-]{36}/reviews$"
     r"|^pool/sources/[A-Za-z0-9._-]{1,80}/load$"
+    r"|^moot/problems/[A-Za-z0-9._-]{1,80}/counsel/(appellant|respondent)$"
+    r"|^moot/problems/[A-Za-z0-9._-]{1,80}/(edit|lock)$"
+    r"|^moot/matches/ai-ai$"
+    r"|^moot/matches/student$"
+    r"|^moot/matches/[0-9a-fA-F-]{36}/publish$"
 )
 
 

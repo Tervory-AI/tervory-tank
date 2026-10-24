@@ -1051,6 +1051,12 @@ INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_toke
   ('agent.rig.think', 1, 'luna', 'standard', 'none', 4096, NULL)
 ON CONFLICT DO NOTHING;
 
+-- MOOT-1a: text counsel and judge (no STT/TTS yet — that is MOOT-1b).
+INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_tokens_out, system_prompt) VALUES
+  ('moot.counsel', 1, 'luna', 'standard', 'none', 4096, NULL),
+  ('moot.judge', 1, 'luna', 'standard', 'none', 4096, NULL)
+ON CONFLICT DO NOTHING;
+
 -- MODELS-2: provider tool charges are expenses, scoped to the platform price book.
 -- Checked 2026-10-21: https://docs.perplexity.ai/docs/getting-started/pricing
 -- Presets fast/low/medium/high use Fast Search ($0.001/invocation); fetch is $0.0005.
