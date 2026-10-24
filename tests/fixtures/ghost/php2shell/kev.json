@@ -1,0 +1,4 @@
+{"title": "CISA Catalog of Known Exploited Vulnerabilities (fixture)", "catalogVersion": "2026.10.21", "count": 2,
+ "vulnerabilities": [
+  {"cveID": "CVE-2026-109618", "vendorProject": "PHP", "product": "PHP", "vulnerabilityName": "PHP2Shell", "dateAdded": "2026-10-21"},
+  {"cveID": "CVE-2026-109619", "vendorProject": "Coollabs", "product": "Coolify", "vulnerabilityName": "PHP2Shell in Coolify", "dateAdded": "2026-10-21"}]}

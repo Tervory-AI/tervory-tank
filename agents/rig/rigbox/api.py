@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from uuid import UUID
 
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -10,6 +11,8 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from rigbox.service import RigError
+from rigbox.quotes.privacy import shopper_body
+from rigbox.quotes.limits import QUOTE_ROUTES, client_address
 
 router = APIRouter(prefix="/v1/rig")
 
@@ -21,9 +24,15 @@ class SetupIn(BaseModel):
     product_id: str = Field(min_length=1)
 
 
+class SearchEventIn(BaseModel):
+    event_id: UUID
+    no_results: bool
+
+
 class SwapIn(BaseModel):
     setup: dict[str, Any]
     role: str = ""
+    commit: bool = False
 
 
 class AskIn(BaseModel):
@@ -35,6 +44,7 @@ class AskIn(BaseModel):
 class LinkIn(BaseModel):
     url: str = ""
     note: str = ""
+    contact: dict[str, Any] | None = None
 
 
 class QuoteIn(BaseModel):
@@ -76,6 +86,7 @@ def _cors(response: Response, origin: str, allowed: bool) -> Response:
         response.headers["Vary"] = "Origin"
     response.headers["Access-Control-Allow-Headers"] = _CORS_HEADERS
     response.headers["Access-Control-Allow-Methods"] = _CORS_METHODS
+    response.headers["Access-Control-Expose-Headers"] = "Retry-After"
     return response
 
 
@@ -83,13 +94,20 @@ async def _auth(request: Request) -> dict[str, Any]:
     if request.method == "OPTIONS":
         return {}
     raw = request.headers.get("x-rig-key") or ""
-    row = await _service(request).authenticate(raw)
+    address = client_address(request)
+    row = await _service(request).authenticate(raw, address)
     origin = _origin(request)
-    if origin and origin not in (row.get("origins") or []):
+    route = request.scope["route"].path
+    if (route in QUOTE_ROUTES and not origin) or (origin and origin not in (row.get("origins") or [])):
         raise RigError("origin", "This shop is not allowed to use that key.", 403)
     request.state.rig_origin = origin
     request.state.rig_origin_ok = bool(origin)
     request.state.tenant_id = row["tenant_id"]
+    decision = await _service(request).public_limits.consume(str(row["tenant_id"]), address, route)
+    request.state.rig_hold_quote = decision.hold
+    if decision.retry_after:
+        request.state.rig_retry_after = decision.retry_after
+        raise RigError("rate_limit", "Too many requests. Please try again shortly.", 429)
     return row
 
 
@@ -116,6 +134,8 @@ def _one_target(payload: FitDecision) -> tuple[str, str | None, str | None]:
 
 async def _on_rig_error(request: Request, exc: RigError) -> JSONResponse:
     response = JSONResponse(status_code=exc.status, content={"error": {"code": exc.code, "message": exc.message}})
+    if exc.status == 429:
+        response.headers["Retry-After"] = str(getattr(request.state, "rig_retry_after", 60))
     origin = _origin(request)
     return _cors(response, origin, bool(getattr(request.state, "rig_origin_ok", False) and origin))
 
@@ -146,6 +166,16 @@ async def search(request: Request, q: str = "", limit: int = 12) -> Response:
     return _ok(request, body)
 
 
+@router.post("/search-events")
+async def settled_search(request: Request, payload: SearchEventIn) -> Response:
+    await _auth(request)
+    counts = getattr(_service(request), "quote_store", None)
+    if counts is None:
+        raise RigError("unavailable", "Rig is not ready.", 503)
+    accepted = await counts.settled_search(_tenant(request), str(payload.event_id), payload.no_results)
+    return _ok(request, {"counted": accepted})
+
+
 @router.get("/products/{product_id}")
 async def product(request: Request, product_id: str) -> Response:
     await _auth(request)
@@ -157,6 +187,8 @@ async def product(request: Request, product_id: str) -> Response:
 async def setups(request: Request, payload: SetupIn) -> Response:
     await _auth(request)
     body = await _service(request).setups(_tenant(request), payload.product_id)
+    if body.get("setups"):
+        await _count(request, "setups_opened")
     return _ok(request, body)
 
 
@@ -164,6 +196,8 @@ async def setups(request: Request, payload: SetupIn) -> Response:
 async def swap(request: Request, payload: SwapIn) -> Response:
     await _auth(request)
     body = await _service(request).swap(_tenant(request), payload.setup, payload.role)
+    if payload.commit:
+        await _count(request, "swaps")
     return _ok(request, body)
 
 
@@ -191,7 +225,10 @@ async def ask(request: Request, payload: AskIn) -> Response:
 @router.post("/link-quote")
 async def link_quote(request: Request, payload: LinkIn) -> Response:
     await _auth(request)
-    body = await _service(request).link_quote(_tenant(request), payload.url, payload.note)
+    kwargs = {"contact": payload.contact} if payload.contact is not None else {}
+    if request.state.rig_hold_quote:
+        kwargs["hold"] = True
+    body = await _service(request).link_quote(_tenant(request), payload.url, payload.note, **kwargs)
     return _ok(request, body)
 
 
@@ -201,6 +238,7 @@ async def quote(request: Request, payload: QuoteIn) -> Response:
     body = await _service(request).quote(
         _tenant(request),
         {"setup": payload.setup, "product_id": payload.product_id, "contact": payload.contact},
+        **({"hold": True} if request.state.rig_hold_quote else {}),
     )
     return _ok(request, body)
 
@@ -242,5 +280,11 @@ async def admin_suggest(request: Request) -> Response:
 
 
 def _ok(request: Request, body: dict[str, Any]) -> JSONResponse:
-    response = JSONResponse(body)
+    response = JSONResponse(shopper_body(body))
     return _cors(response, _origin(request), bool(getattr(request.state, "rig_origin_ok", False)))
+
+
+async def _count(request: Request, event: str) -> None:
+    counts = getattr(_service(request), "quote_store", None)
+    if counts is not None:
+        await counts.count(_tenant(request), event)

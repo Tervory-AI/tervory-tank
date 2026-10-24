@@ -35,7 +35,9 @@ services:
       - tervory-gw-ghost
 
   redis:
-    image: redis:7
+    # 7.4.11 fixes CVE-2026-81934 (TLS pending-data use-after-free) and carries the 7.4.9 fix for CVE-2026-23479.
+    # Multi-arch index digest; keep identical in docker-compose.yml and docker-compose.za.yml.
+    image: redis:7.4.11@sha256:44960b3100c48159a66d28c18b0588c193492e25f7551d60e51dd464fc3eca5b
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
@@ -227,6 +229,7 @@ services:
       TANK_KEY_RIG: ${TANK_KEY_RIG:-}
       TANK_KEY_GHOST: ${TANK_KEY_GHOST:-}
       TANK_KEY_WORKERS: ${TANK_KEY_WORKERS:-}
+      RIG_RETAILER_KEY: ${RIG_RETAILER_KEY:-}
       TANK_REGION: ${TANK_REGION:-us-east}
       BASE_AGENT_URL: http://agent-base:8000
       SEARXNG_URL: http://searxng:8080
@@ -344,6 +347,7 @@ services:
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       STRIPE_PLAN_PRICE_IDS: ${STRIPE_PLAN_PRICE_IDS:-}
+      RIG_3D_PRICE_ID: ${RIG_3D_PRICE_ID:-}
     depends_on:
       - tank
     # Coolify attaches the public domain to this service (port 3000).
