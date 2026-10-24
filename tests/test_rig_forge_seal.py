@@ -26,6 +26,33 @@ def test_compose_only_brain_controls_forge_and_only_proxy_has_egress():
     assert data["networks"]["forge-egress"]["internal"]
 
 
+def test_compose_forge_hardening_matches_a2_seal_invariants():
+    """A2 post-deploy checks these at runtime; keep the compose source honest too.
+
+    Mirrors the hardening asserts in test_agent1_isolation for Base, for the
+    forge path from #254: privileged false, read-only root, no docker.sock,
+    cap_drop ALL, TRELLIS default false, forge-outbound only on the egress proxy.
+    """
+    data = yaml.safe_load((ROOT / "agents/rig/docker-compose.yml").read_text())
+    services = data["services"]
+    for name in ("rig-forge", "rig-forge-egress"):
+        spec = services[name]
+        assert not spec.get("privileged"), name
+        assert not spec.get("cap_add"), name
+        assert spec.get("read_only") is True, name
+        assert spec.get("cap_drop") == ["ALL"], name
+        assert "no-new-privileges:true" in (spec.get("security_opt") or []), name
+        assert not spec.get("ports"), name
+        volumes = [str(v) for v in (spec.get("volumes") or [])]
+        assert not any("docker.sock" in v for v in volumes), name
+    for name in ("rig-forge", "rig-brain", "agent-rig"):
+        value = services[name]["environment"]["RIG_FORGE_TRELLIS_ENABLED"]
+        assert value == "${RIG_FORGE_TRELLIS_ENABLED:-false}", name
+    assert "forge-outbound" not in services["rig-forge"]["networks"]
+    assert services["rig-forge-egress"]["networks"] == ["forge-egress", "forge-outbound"]
+    assert data["networks"]["forge-outbound"]["internal"] is False
+
+
 def test_exact_hosts_ports_and_public_ip_policy(monkeypatch):
     monkeypatch.setenv("R2_ACCOUNT_ID","a"*32)
     assert egress.target("CONNECT huggingface.co:443 HTTP/1.1") == "huggingface.co"
