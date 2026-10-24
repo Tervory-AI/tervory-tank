@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 from typing import Any
 from urllib.parse import urlparse
 
-_FORMATS = ("shopify", "woocommerce", "google")
+_FORMATS = ("shopify", "woocommerce", "google", "csv", "tsv", "json", "xml", "xlsx")
 
 
 def register(url: str, fmt: str, currency: str = "") -> dict[str, str]:
@@ -20,7 +20,7 @@ def register(url: str, fmt: str, currency: str = "") -> dict[str, str]:
     text = str(url or "").strip()
     kind = str(fmt or "").strip().lower()
     if kind not in _FORMATS:
-        raise ValueError("feed format must be shopify, woocommerce, or google")
+        raise ValueError("feed format must be " + ", ".join(_FORMATS))
     parsed = urlparse(text)
     if parsed.scheme != "https" or not parsed.netloc:
         raise ValueError("feed url must be https")
@@ -37,6 +37,14 @@ def pull(record: dict[str, Any], body: Any) -> dict[str, Any]:
     if not isinstance(record, dict):
         return _feed_error("feed is not registered")
     kind = str(record.get("format") or "")
+    if record.get("columns") or kind in {"csv", "tsv", "json", "xml", "xlsx"}:
+        import csv
+        import zipfile
+        from .catalogue import map_catalogue
+        try:
+            return map_catalogue({**record, "format": "xml" if kind == "google" else kind}, body)
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError, RecursionError, UnicodeError, csv.Error, ET.ParseError, zipfile.BadZipFile, RuntimeError):
+            return _feed_error("Check the file format and confirmed field names.")
     if kind == "shopify":
         return map_shopify(body, str(record.get("currency") or ""))
     if kind == "woocommerce":
@@ -94,7 +102,7 @@ def map_shopify(body: Any, currency: str) -> dict[str, Any]:
                 image_url=_variant_image(variant) or image,
                 url=link,
                 gtin=_text(variant.get("barcode")),
-                active=active,
+                active=active and variant.get("available") is not False and variant.get("inventory_quantity", 1) != 0,
             )
             if row is None:
                 rejected.append({"row": index, "reason": prefix + (reason or "missing sku")})
@@ -136,7 +144,7 @@ def map_woocommerce(body: Any, currency: str) -> dict[str, Any]:
             image_url=_first_image(item.get("images")),
             url=_text(item.get("permalink")),
             gtin=_text(item.get("global_unique_id") or item.get("gtin")),
-            active=_flag(item.get("status"), default="publish", yes={"publish", "active", "yes"}),
+            active=_flag(item.get("status"), default="publish", yes={"publish", "active", "yes"}) and item.get("stock_status") != "outofstock",
         )
         if row is None:
             rejected.append({"row": index, "reason": reason or "missing sku"})
@@ -151,6 +159,10 @@ def map_woocommerce(body: Any, currency: str) -> dict[str, Any]:
 
 def map_google_merchant(text: str | bytes) -> dict[str, Any]:
     raw = text.decode("utf-8", errors="replace") if isinstance(text, bytes) else str(text)
+    # Merchant catalogues never need DTDs or entity declarations. Reject them
+    # before ElementTree can expand even a small malicious document in memory.
+    if "\x00" in raw or "<!DOCTYPE" in raw.upper() or "<!ENTITY" in raw.upper():
+        return _feed_error("merchant feed declarations are not allowed")
     try:
         root = ET.fromstring(raw.lstrip("\ufeff").strip())
     except ET.ParseError:

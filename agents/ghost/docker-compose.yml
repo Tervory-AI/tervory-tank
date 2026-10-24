@@ -13,6 +13,11 @@ services:
       TANK_KEY: ${TANK_KEY_GHOST:-}
       TANK_REGION: ${TANK_REGION:-us-east}
       DATA_DIR: /data
+      # GHOST-2 inventory: read-only Coolify API token, by name only. Empty = not connected.
+      COOLIFY_TOKEN_GHOST: ${COOLIFY_TOKEN_GHOST:-}
+      COOLIFY_URL_GHOST: ${COOLIFY_URL_GHOST:-}
+      # GHOST-2 Shields Up: Cloudflare token limited to zone firewall rules, by name only. Empty = dry-run.
+      CLOUDFLARE_API_TOKEN_GHOST: ${CLOUDFLARE_API_TOKEN_GHOST:-}
     volumes:
       - agent_ghost_data:/data
     networks: [gw]

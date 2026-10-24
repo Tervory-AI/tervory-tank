@@ -16,6 +16,15 @@ on:
 permissions:
   contents: read
 
+# Cancel superseded runs (CI-2). A newer push to the same pull request cancels the
+# older run. Runs on main are never cancelled, because deploy-on-merge depends on
+# them: each main run gets its own group (run_id), so it never waits behind or gets
+# replaced by another main run. (With a shared group, GitHub cancels a *pending*
+# run when a newer one queues, even with cancel-in-progress false.)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   changes:
     runs-on: ubuntu-latest
@@ -198,12 +207,28 @@ jobs:
     if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.full == 'true' }}
     # Chromium system dependencies need sudo; keep this job on GitHub hosted runners.
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    # 8 minutes timed out twice on 22 Oct and cancelled CI on main. Usually ~1 minute.
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      # This job installs npm packages and a Playwright Chromium every run, and no pip
+      # packages. Cache the npm download cache and the browser. There is no
+      # workspace/package-lock.json yet, so the npm key uses package.json.
+      - name: Cache npm downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: savings-page-npm-${{ runner.os }}-${{ hashFiles('workspace/package.json', 'workspace/package-lock.json') }}-esbuild0.28.2-playwright1.64.1
+          restore-keys: |
+            savings-page-npm-${{ runner.os }}-
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: savings-page-playwright-${{ runner.os }}-1.64.1-chromium
       - name: Install workspace and browser test packages
         run: |
           if [ -f workspace/package-lock.json ]; then
@@ -212,7 +237,12 @@ jobs:
             npm --prefix workspace install --no-package-lock --no-audit --no-fund
           fi
           npm install --prefix "$RUNNER_TEMP/core2-browser" --no-audit --no-fund esbuild@0.28.2 playwright@1.64.1
-          "$RUNNER_TEMP/core2-browser/node_modules/.bin/playwright" install --with-deps chromium
+          browser=$(command -v chromium || command -v chromium-browser || command -v google-chrome || command -v google-chrome-stable || true)
+          if [ -n "$browser" ]; then
+            echo "CORE2_CHROMIUM=$browser" >> "$GITHUB_ENV"
+          else
+            "$RUNNER_TEMP/core2-browser/node_modules/.bin/playwright" install --with-deps chromium
+          fi
       - name: Check savings pages at 375px and 1440px
         run: |
           CORE2_ESBUILD_PATH="$RUNNER_TEMP/core2-browser/node_modules/esbuild" \

@@ -10,6 +10,7 @@ import { MootCourt } from "./moot-court";
 import { PluginsDialog } from "./plugins-dialog";
 import { PLUGIN_TABS, SEARCH_PLACEHOLDER, type PluginPanel, type PluginTab } from "./plugins";
 import { SquadLinks } from "../squad-links";
+import type { AskReply } from "../api/zenas/rules";
 
 const TOP_LINKS = [
   { href: "/ledger", label: "Dashboard" },
@@ -60,6 +61,8 @@ export function ZenasView({
   const [kind, setKind] = useState<SearchKind>("All");
   const [cursor, setCursor] = useState(0);
   const [asked, setAsked] = useState<string | null>(null);
+  const [reply, setReply] = useState<AskReply | null>(null);
+  const [asking, setAsking] = useState(false);
   const [messages, setMessages] = useState(0);
   const [attached, setAttached] = useState<string | null>(null);
   const [actionNote, setActionNote] = useState("");
@@ -166,17 +169,33 @@ export function ZenasView({
     }
   }
 
-  function onAsk(event: FormEvent<HTMLFormElement>) {
+  async function onAsk(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (asking) return;
     const text = askRef.current?.value.trim() ?? "";
     if (!text) {
       setActionNote("Type a question first. Nothing was sent.");
       return;
     }
     setAsked(text);
+    setReply(null);
+    setAsking(true);
     setMessages((count) => count + 2);
     setActionNote("");
     if (askRef.current) askRef.current.value = "";
+    try {
+      const res = await fetch("/api/zenas/answers", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ question: text }),
+      });
+      const payload = (await res.json().catch(() => null)) as AskReply | null;
+      setReply(payload && typeof payload.kind === "string" ? payload : { kind: "error", message: "Zenas could not answer just now. Please try again in a few minutes." });
+    } catch {
+      setReply({ kind: "error", message: "Zenas could not be reached. Check your connection and try again." });
+    } finally {
+      setAsking(false);
+    }
   }
 
   return (
@@ -384,14 +403,28 @@ export function ZenasView({
                     <span className="zn-mark" aria-hidden="true">Z</span>
                     <strong>Zenas</strong>
                   </header>
-                  <p>Zenas cannot answer from this page yet. Open Matters, or ask again after a lawyer releases an answer.</p>
+                  {asking ? <p role="status" aria-live="polite">Zenas is checking the law. This can take up to a minute.</p> : null}
+                  {!asking && reply?.kind === "answer" ? <p className="zn-answer-text">{reply.text}</p> : null}
+                  {!asking && reply && reply.kind !== "answer" ? (
+                    <div role={reply.kind === "error" ? "alert" : "status"}>
+                      <p>{reply.message}</p>
+                      {reply.kind === "refused" && reply.referral ? <p>{reply.referral}</p> : null}
+                      {(reply.kind === "in_review" || reply.kind === "unverified") && reply.matterId ? <p><Link href="/matters">Open Matters</Link></p> : null}
+                    </div>
+                  ) : null}
+                  {!asking && reply?.kind === "answer" ? (
                   <section className="zn-sources" aria-label="Sources">
                     <header>
                       <h3>Sources</h3>
-                      <p>{draftLabel || "No sources for this answer."}</p>
+                      <p>{draftLabel || "Each point in this answer cites the source below."}</p>
                     </header>
                     <ul className="zn-cited">
-                      {citedCases.length === 0 ? <li>No cited case yet.</li> : null}
+                      {reply.sources.map((source) => (
+                        <li key={`ask-${source.citation}`}>
+                          <strong>{source.citation}</strong>
+                          {source.quote ? <span>{source.quote}</span> : null}
+                        </li>
+                      ))}
                       {citedCases.map((item) => {
                         const answer = weightFor(forum, {
                           court: item.court,
@@ -415,6 +448,7 @@ export function ZenasView({
                       })}
                     </ul>
                   </section>
+                  ) : null}
                 </article>
               </>
             ) : (
@@ -437,7 +471,7 @@ export function ZenasView({
                 {attached ? <span className="zn-attached">{attached}</span> : null}
               </div>
               <div className="zn-send-row">
-                <button className="zn-primary" type="submit">Send</button>
+                <button className="zn-primary" type="submit" disabled={asking}>{asking ? "Asking…" : "Send"}</button>
               </div>
             </div>
           </form>

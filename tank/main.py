@@ -2504,9 +2504,10 @@ async def base_proxy(path: str, request: Request) -> Response:
 
 _LOCAL_ZENAS_HOSTS = frozenset({"agent-zenas", "localhost", "127.0.0.1"})
 _ZENAS_PATH = re.compile(
-    r"^(consents|matters|pool|pool/status|health|review|selftest|review-switch|cases/convert|rule-cards|worked|matches|training-pairs|drafts|tenants)$"
+    r"^(consents|matters|pool|pool/status|health|review|selftest|review-switch|cases/convert|rule-cards|worked|matches|training-pairs|drafts|tenants|answers)$"
     r"|^(matters|documents|rule-cards|worked)/[0-9a-fA-F-]{36}$"
     r"|^matters/[0-9a-fA-F-]{36}/documents$"
+    r"|^matters/[0-9a-fA-F-]{36}/release$"
     r"|^documents/[0-9a-fA-F-]{36}/reviews$"
     r"|^pool/sources/[A-Za-z0-9._-]{1,80}/load$"
 )
@@ -3414,3 +3415,6 @@ app.include_router(__import__("access").router)
 
 # RIG-5F: additive GPU reservation and receipt routes.
 app.include_router(__import__("rig_forge_routes").build_router(__import__("sys").modules[__name__]))
+
+# RIG-5: additive Workspace proxy registration.
+app.include_router(__import__("rig_three_d").build_router(__import__("sys").modules[__name__]))

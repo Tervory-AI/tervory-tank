@@ -101,8 +101,10 @@ def test_skill_engines_match_the_radix_scanners() -> None:
         ("scan.dependencies", "dependencies.py"),
         ("scan.static", "static.py"),
     )
+    # scan.dependencies 1.1.0 (candidate) carries the real-OSV engine; 1.0.0 and 1.0.1 stay as released.
+    latest = {"scan.secrets": "1.0.0", "scan.dependencies": "1.1.0", "scan.static": "1.0.0"}
     for skill, name in pairs:
-        engine = ROOT / "tank" / "skills" / skill / "1.0.0" / "engine.py"
+        engine = ROOT / "tank" / "skills" / skill / latest[skill] / "engine.py"
         source = ROOT / "agents" / "radix" / "scanlib" / name
         assert engine.read_bytes() == source.read_bytes()
     left = ROOT / "agents" / "radix" / "scanlib" / "osv"

@@ -84,6 +84,36 @@ async def resolve(incident: uuid.UUID, request: Request):
     return Response(response.content, status_code=response.status_code, media_type="application/json")
 
 
+# ---------- GHOST-2 Shields Up: founder-only reads and the Shield / Undo taps ----------
+
+@router.get("/shields/list", dependencies=[Depends(admin.require_admin)])
+async def shields_list():
+    response = await call_room("GET", "ghost", "/ghost/shields")
+    return Response(response.content, status_code=response.status_code, media_type="application/json")
+
+
+@router.get("/shields/tile", dependencies=[Depends(admin.require_admin)])
+async def shields_tile():
+    """The founder tile: Ghost's own numbers plus Ghost's cost this month from Tank's receipts."""
+    response = await call_room("GET", "ghost", "/ghost/summary")
+    if response.status_code != 200:
+        raise HTTPException(503, "The room is unavailable.")
+    core = runtime()
+    async with core.pool().acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT coalesce(sum(cost_usd), 0) AS cost, count(*) AS receipts FROM tank.ledger"
+            " WHERE tenant_id=$1 AND agent='ghost' AND ts >= date_trunc('month', now())",
+            core.PLATFORM_TENANT)
+    return {**response.json(), "cost_this_month_usd": float(row["cost"] if row else 0),
+            "receipts_this_month": int(row["receipts"] if row else 0)}
+
+
+@router.post("/shields/{shield}/{tap}", dependencies=[Depends(admin.require_admin)])
+async def shields_tap(shield: uuid.UUID, tap: Literal["raise", "undo"]):
+    response = await call_room("POST", "ghost", f"/ghost/shields/{shield}/{tap}")
+    return Response(response.content, status_code=response.status_code, media_type="application/json")
+
+
 class Check(BaseModel):
     model_config = ConfigDict(extra="forbid")
     target: str

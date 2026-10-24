@@ -26,13 +26,24 @@ from pydantic import BaseModel, ConfigDict, Field
 
 log = logging.getLogger("tank.agent_skills")
 ROOM = "base"
+# Rooms with a brain pilot. room_text() maps a request's room to one of these fixed
+# strings; SQL always receives the room and its task type as bound parameters.
+ROOMS = {"base": "base", "rig": "rig"}
 SUBMISSIONS = Path("/tmp/tervory-agent-skills")
 LEDGER_SQL = """
 INSERT INTO tank.ledger
  (id,tenant_id,region,agent,task_type,rung,model,priority,tokens_in,tokens_out,
   cost_usd,latency_ms,outcome,task_id,error)
-VALUES ($1,$2,$3,'base','agent.base.think',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+VALUES ($1,$2,$3,$14,$15,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
 """
+
+
+def room_text(room: str) -> str:
+    """The allowlisted room string for SQL parameters; anything else is refused."""
+    try:
+        return ROOMS[room]
+    except (KeyError, TypeError):
+        raise HTTPException(403, "Room is not enabled.") from None
 
 
 def room_key(room: str, authorization: str = "", x_tank_key: str = "") -> None:
@@ -144,8 +155,7 @@ def input_tokens(payload: dict) -> int:
 
 
 async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | None, region: str, *, room: str = ROOM) -> dict:
-    if room not in {"base", "rig"}:
-        raise HTTPException(403, "Room is not enabled.")
+    room = room_text(room)
     task_type = f"agent.{room}.think"
     validate_chat(body)
     await controls.refuse_paid(task=task_type, path="agent.chat")
@@ -264,16 +274,16 @@ async def complete(tank: Any, body: Chat, tenant: uuid.UUID, task: uuid.UUID | N
     }
     async with tank.pool().acquire() as conn:
         async with conn.transaction():
-            await conn.execute(LEDGER_SQL.replace("'base'", "'" + room + "'").replace("agent.base.think", task_type), ledger_id, tenant, region, policy["rung"], answered, policy["priority"],
-                               tokens_in, tokens_out, cost, latency, outcome, task, error)
+            await conn.execute(LEDGER_SQL, ledger_id, tenant, region, policy["rung"], answered, policy["priority"],
+                               tokens_in, tokens_out, cost, latency, outcome, task, error, room, task_type)
             await conn.execute(
                 "INSERT INTO tank.transcripts (ledger_id,tenant_id,task_type,messages,content) "
-                f"VALUES ($1,$2,'{task_type}',$3::jsonb,$4)", ledger_id, tenant, json.dumps(messages),
-                json.dumps(data.get("choices", [])) if data else "Model call failed.",
+                "VALUES ($1,$2,$5,$3::jsonb,$4)", ledger_id, tenant, json.dumps(messages),
+                json.dumps(data.get("choices", [])) if data else "Model call failed.", task_type,
             )
             await conn.execute(
-                f"INSERT INTO tank.agent_receipts (ledger_id,tenant_id,room,receipt) VALUES ($1,$2,'{room}',$3::jsonb)",
-                ledger_id, tenant, json.dumps(receipt),
+                "INSERT INTO tank.agent_receipts (ledger_id,tenant_id,room,receipt) VALUES ($1,$2,$4,$3::jsonb)",
+                ledger_id, tenant, json.dumps(receipt), room,
             )
     if outcome != "delivered":
         raise HTTPException(502, {"message": error, "receipt": receipt})
@@ -428,14 +438,13 @@ async def restore(tank: Any) -> None:
 
 
 async def export_skills(tank: Any, tenant: uuid.UUID, region: str, *, room: str = ROOM) -> dict:
-    if room not in {"base", "rig"}:
-        raise HTTPException(403, "Room is not enabled.")
+    room = room_text(room)
     async with tank.pool().acquire() as conn:
         rows = await conn.fetch(
             "SELECT s.id,s.version FROM tank.skills s LEFT JOIN tank.agent_skill_submissions a "
             "ON a.skill_id=s.id AND a.version=s.version "
-            f"WHERE s.agent='{room}' AND s.state='approved' AND s.present "
-            "AND (a.skill_id IS NULL OR (a.tenant_id=$1 AND a.region=$2)) ORDER BY s.id,s.version", tenant, region,
+            "WHERE s.agent=$3 AND s.state='approved' AND s.present "
+            "AND (a.skill_id IS NULL OR (a.tenant_id=$1 AND a.region=$2)) ORDER BY s.id,s.version", tenant, region, room,
         )
     skills = []
     for row in rows:
@@ -529,7 +538,8 @@ def build_router(tank: Any) -> APIRouter:
         async with tank.pool().acquire() as conn:
             rows = await conn.fetch(
                 "SELECT r.receipt FROM tank.agent_receipts r JOIN tank.ledger l ON l.id=r.ledger_id "
-                f"WHERE r.tenant_id=$1 AND l.tenant_id=$1 AND l.task_id=$2 AND r.room='{room}' ORDER BY r.created_at", tenant_id, task_id)
+                "WHERE r.tenant_id=$1 AND l.tenant_id=$1 AND l.task_id=$2 AND r.room=$3 ORDER BY r.created_at",
+                tenant_id, task_id, room_text(room))
         return {"receipts": [json.loads(r["receipt"]) if isinstance(r["receipt"], str) else r["receipt"] for r in rows]}
 
     @router.post("/v1/agents/{room}/chat/completions")
