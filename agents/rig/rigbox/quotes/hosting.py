@@ -7,6 +7,7 @@ import hashlib
 import html
 import json
 import os
+from functools import lru_cache
 from pathlib import Path
 import re
 
@@ -15,9 +16,34 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 NAME = re.compile(r"tervory-rig\.[a-f0-9]{64}\.umd\.js")
 
+# Retailer test page only: same-origin script/fonts/API, inline widget styles,
+# https/data images from feeds. No framing, no base navigation, no plugins.
+TEST_PAGE_CSP = (
+    "default-src 'none'; "
+    "base-uri 'none'; "
+    "object-src 'none'; "
+    "frame-ancestors 'none'; "
+    "form-action 'none'; "
+    "script-src 'self'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "font-src 'self'; "
+    "img-src 'self' data: https:; "
+    "connect-src 'self'"
+)
+
 
 def root() -> Path:
     return Path(os.environ.get("RIG_WIDGET_DIR", str(Path(__file__).parent / "widget"))).resolve()
+
+
+@lru_cache(maxsize=8)
+def _verified_asset(path: str, mtime_ns: int, size: int) -> bytes:
+    """Read and verify a bundle once per (path, mtime, size); skip re-hash/gzip."""
+    body = Path(path).read_bytes()
+    name = Path(path).name
+    if hashlib.sha256(body).hexdigest() != name.split(".")[1] or len(gzip.compress(body)) > 150 * 1024:
+        raise ValueError("Widget bundle failed verification")
+    return body
 
 
 def asset(name: str) -> bytes:
@@ -26,10 +52,11 @@ def asset(name: str) -> bytes:
     path = (root() / name).resolve()
     if path.parent != root() or not path.is_file():
         raise HTTPException(404, "No such widget bundle")
-    body = path.read_bytes()
-    if hashlib.sha256(body).hexdigest() != name.split(".")[1] or len(gzip.compress(body)) > 150 * 1024:
-        raise HTTPException(503, "Widget bundle failed verification")
-    return body
+    st = path.stat()
+    try:
+        return _verified_asset(str(path), st.st_mtime_ns, st.st_size)
+    except ValueError:
+        raise HTTPException(503, "Widget bundle failed verification") from None
 
 
 def manifest() -> dict:
@@ -78,5 +105,5 @@ def mount(application: FastAPI) -> None:
 <script src="/widget/assets/{file}"></script></body></html>''', headers={
             "Cache-Control": "no-store", "Referrer-Policy": "no-referrer",
             "X-Robots-Tag": "noindex, nofollow",
-            "Content-Security-Policy": "frame-ancestors 'none'",
+            "Content-Security-Policy": TEST_PAGE_CSP,
         })
