@@ -1,0 +1,396 @@
+{
+  "captured_at": "2026-10-23T15:05:12-07:00",
+  "host": "host-a",
+  "os": "Ubuntu 26.04.1 LTS",
+  "kernel": {
+    "running": "7.0.0-38-generic",
+    "installed": [
+      "7.0.0-34-generic",
+      "7.0.0-38-generic"
+    ],
+    "reboot_required": false
+  },
+  "docker_engine": {
+    "installed": "29.9.0",
+    "latest_stable": "29.9.2"
+  },
+  "unattended_upgrades": {
+    "installed": "2.12ubuntu9",
+    "enabled": true,
+    "active": true,
+    "origins": [
+      "release",
+      "security"
+    ],
+    "last_run": "2026-10-23 06:12 (zlib1g)"
+  },
+  "apt_upgradable_security": 0,
+  "apt_upgradable_total": 27,
+  "coolify": {
+    "version": "4.4.7",
+    "latest_release": "v4.5.0 (2026-10-23)",
+    "php": "8.4.27",
+    "node": "v24.22.1"
+  },
+  "host_runtimes": {
+    "python3": "3.14.4 (python3.14 3.14.4-1ubuntu0.2, apt candidate same)",
+    "node": "v22.23.4",
+    "php": null
+  },
+  "chatwoot": {
+    "running_image": "chatwoot/chatwoot:v4.18.0-ce",
+    "compose_saved_image": "chatwoot/chatwoot:v4.19.0-ce (pending restart)",
+    "postgres": "pgvector/pgvector:pg12 (PG12 EOL 2024-11-21)"
+  },
+  "litellm": {
+    "image": "xnmc0jkz8j9i5jh1jwanbsfv_litellm:7310dc7aef2903b7954a666c4a4e7bbc8526962e",
+    "litellm_pkg": "1.106.0",
+    "python": "3.13.16",
+    "node": "v26.12.0"
+  },
+  "upstream_python_latest": {
+    "3.10": "3.10.22 (EOL 2026-10-01)",
+    "3.12": "3.12.15",
+    "3.13": "3.13.17",
+    "3.14": "3.14.9"
+  },
+  "containers": [
+    {
+      "name": "h53s8dj3ocdj07wvyayphpse",
+      "image": "docker.io/coollabsio/coolify-helper:1.0.18",
+      "python": null,
+      "node": null,
+      "php": null
+    },
+    {
+      "name": "59f8cnpelzwsyte1atyjc4fv-rig-brain-1",
+      "image": "59f8cnpelzwsyte1atyjc4fv-rig-brain",
+      "python": "3.14.9",
+      "node": null,
+      "php": null,
+      "pip": "26.2.2",
+      "certifi": "2026.5.20"
+    },
+    {
+      "name": "59f8cnpelzwsyte1atyjc4fv-agent-rig-1",
+      "image": "59f8cnpelzwsyte1atyjc4fv-agent-rig",
+      "python": "3.12.15",
+      "node": null,
+      "php": null,
+      "pip": "25.0.1",
+      "certifi": "2026.10.19"
+    },
+    {
+      "name": "59f8cnpelzwsyte1atyjc4fv-rig-browser-gateway-1",
+      "image": "59f8cnpelzwsyte1atyjc4fv-rig-browser-gateway",
+      "python": "3.12.15",
+      "node": null,
+      "php": null,
+      "pip": "25.0.1",
+      "certifi": "2026.10.19"
+    },
+    {
+      "name": "59f8cnpelzwsyte1atyjc4fv-rig-browser-1",
+      "image": "59f8cnpelzwsyte1atyjc4fv-rig-browser",
+      "python": "3.12.15",
+      "node": null,
+      "php": null,
+      "pip": "25.0.1",
+      "certifi": "2026.10.19"
+    },
+    {
+      "name": "59f8cnpelzwsyte1atyjc4fv-rig-sandbox-1",
+      "image": "59f8cnpelzwsyte1atyjc4fv-rig-sandbox",
+      "python": "3.12.15",
+      "node": null,
+      "php": null,
+      "pip": "25.0.1",
+      "certifi": "-"
+    },
+    {
+      "name": "mcp-xnmc0jkz8j9i5jh1jwanbsfv-20261022T210128",
+      "image": "xnmc0jkz8j9i5jh1jwanbsfv_mcp:7310dc7aef2903b7954a666c4a4e7bbc8526962e",
+      "python": "3.12.15",
+      "node": null,
+      "php": null,
+      "pip": "25.0.1",
+      "certifi": "2026.10.19"
+    },
+    {
+      "name": "workspace-xnmc0jkz8j9i5jh1jwanbsfv-20261022T210128",
+      "image": "xnmc0jkz8j9i5jh1jwanbsfv_workspace:7310dc7aef2903b7954a666c4a4e7bbc8526962e",
+      "python": null,
+      "node": "v22.23.4",
+      "php": null
+    },
+    {
+      "name": "tank-xnmc0jkz8j9i5jh1jwanbsfv-20261022T210127",
+      "image": "xnmc0jkz8j9i5jh1jwanbsfv_tank:7310dc7aef2903b7954a666c4a4e7bbc8526962e",
+      "python": "3.12.15",
+      "node": null,
+      "php": null,
+      "pip": "25.0.1",
+      "certifi": "2026.10.19"
+    },
+    {
+      "name": "hermes-xnmc0jkz8j9i5jh1jwanbsfv-20261022T210127",
+      "image": "xnmc0jkz8j9i5jh1jwanbsfv_hermes:7310dc7aef2903b7954a666c4a4e7bbc8526962e",
+      "python": "3.12.15",
+      "node": null,
+      "php": null,
+      "pip": "25.0.1",
+      "certifi": "2026.10.19"
+    },
+    {
+      "name": "searxng-xnmc0jkz8j9i5jh1jwanbsfv-20261022T210127",
+      "image": "xnmc0jkz8j9i5jh1jwanbsfv_searxng:7310dc7aef2903b7954a666c4a4e7bbc8526962e",
+      "python": "3.14.8",
+      "node": null,
+      "php": null,
+      "pip": "-",
+      "certifi": "-"
+    },
+    {
+      "name": "postgres-xnmc0jkz8j9i5jh1jwanbsfv-20261022T210127",
+      "image": "postgres:16",
+      "python": null,
+      "node": null,
+      "php": null
+    },
+    {
+      "name": "litellm-xnmc0jkz8j9i5jh1jwanbsfv-20261022T210127",
+      "image": "xnmc0jkz8j9i5jh1jwanbsfv_litellm:7310dc7aef2903b7954a666c4a4e7bbc8526962e",
+      "python": "3.13.16",
+      "node": "v26.12.0",
+      "php": null,
+      "pip": "-",
+      "certifi": "2026.4.22"
+    },
+    {
+      "name": "qdrant-xnmc0jkz8j9i5jh1jwanbsfv-20261022T210127",
+      "image": "qdrant/qdrant:v1.19.2",
+      "python": null,
+      "node": null,
+      "php": null
+    },
+    {
+      "name": "redis-xnmc0jkz8j9i5jh1jwanbsfv-20261022T210127",
+      "image": "redis:7",
+      "python": null,
+      "node": null,
+      "php": null
+    },
+    {
+      "name": "tiger-xnmc0jkz8j9i5jh1jwanbsfv-20261022T210127",
+      "image": "xnmc0jkz8j9i5jh1jwanbsfv_tiger:7310dc7aef2903b7954a666c4a4e7bbc8526962e",
+      "python": "3.10.12",
+      "node": "v22.23.4",
+      "php": null,
+      "pip": "24.2",
+      "certifi": "-"
+    },
+    {
+      "name": "site-xnmc0jkz8j9i5jh1jwanbsfv-20261022T210128",
+      "image": "xnmc0jkz8j9i5jh1jwanbsfv_site:7310dc7aef2903b7954a666c4a4e7bbc8526962e",
+      "python": null,
+      "node": "v22.23.4",
+      "php": null
+    },
+    {
+      "name": "Ferry-xnmc0jkz8j9i5jh1jwanbsfv-20261022T210127",
+      "image": "ferry",
+      "python": null,
+      "node": null,
+      "php": null
+    },
+    {
+      "name": "r8aprclj8nooe9keywrp9dmb-base-brain-1",
+      "image": "r8aprclj8nooe9keywrp9dmb-base-brain",
+      "python": "3.14.9",
+      "node": null,
+      "php": null,
+      "pip": "26.2.2",
+      "certifi": "2026.5.20"
+    },
+    {
+      "name": "r8aprclj8nooe9keywrp9dmb-agent-base-1",
+      "image": "r8aprclj8nooe9keywrp9dmb-agent-base",
+      "python": "3.12.15",
+      "node": null,
+      "php": null,
+      "pip": "25.0.1",
+      "certifi": "2026.10.19"
+    },
+    {
+      "name": "r8aprclj8nooe9keywrp9dmb-base-browser-gateway-1",
+      "image": "r8aprclj8nooe9keywrp9dmb-base-browser-gateway",
+      "python": "3.12.15",
+      "node": null,
+      "php": null,
+      "pip": "25.0.1",
+      "certifi": "2026.10.19"
+    },
+    {
+      "name": "r8aprclj8nooe9keywrp9dmb-base-browser-1",
+      "image": "r8aprclj8nooe9keywrp9dmb-base-browser",
+      "python": "3.12.15",
+      "node": null,
+      "php": null,
+      "pip": "25.0.1",
+      "certifi": "2026.10.19"
+    },
+    {
+      "name": "r8aprclj8nooe9keywrp9dmb-base-sandbox-1",
+      "image": "r8aprclj8nooe9keywrp9dmb-base-sandbox",
+      "python": "3.12.15",
+      "node": null,
+      "php": null,
+      "pip": "25.0.1",
+      "certifi": "-"
+    },
+    {
+      "name": "agent-tisan-lblbn0wjaz30hhdur9l3pylg-20261022T164844",
+      "image": "lblbn0wjaz30hhdur9l3pylg_agent-tisan:f8a0f14906b08c17109d00c34fcddd54a4c345ae",
+      "python": "3.12.15",
+      "node": "v22.23.4",
+      "php": null,
+      "pip": "25.0.1",
+      "certifi": "2026.10.19"
+    },
+    {
+      "name": "fro6z8xlh579owlp1wwrjr8n-tiger-browser-1",
+      "image": "fro6z8xlh579owlp1wwrjr8n-tiger-browser",
+      "python": "3.12.15",
+      "node": null,
+      "php": null,
+      "pip": "25.0.1",
+      "certifi": "2026.10.19"
+    },
+    {
+      "name": "fro6z8xlh579owlp1wwrjr8n-tiger-browser-gateway-1",
+      "image": "fro6z8xlh579owlp1wwrjr8n-tiger-browser-gateway",
+      "python": "3.12.15",
+      "node": null,
+      "php": null,
+      "pip": "25.0.1",
+      "certifi": "2026.10.19"
+    },
+    {
+      "name": "fro6z8xlh579owlp1wwrjr8n-agent-tiger-1",
+      "image": "fro6z8xlh579owlp1wwrjr8n-agent-tiger",
+      "python": "3.12.15",
+      "node": null,
+      "php": null,
+      "pip": "25.0.1",
+      "certifi": "2026.10.19"
+    },
+    {
+      "name": "coolify-proxy",
+      "image": "traefik:v3.7",
+      "python": null,
+      "node": null,
+      "php": null
+    },
+    {
+      "name": "coolify",
+      "image": "docker.io/coollabsio/coolify:4.4.7",
+      "python": null,
+      "node": "v24.22.1",
+      "php": "8.4.27"
+    },
+    {
+      "name": "coolify-db",
+      "image": "postgres:15-alpine",
+      "python": null,
+      "node": null,
+      "php": null
+    },
+    {
+      "name": "coolify-redis",
+      "image": "redis:7-alpine",
+      "python": null,
+      "node": null,
+      "php": null
+    },
+    {
+      "name": "liv4x7vshraiwnnowjv0kgfd-egress-proxy-1",
+      "image": "liv4x7vshraiwnnowjv0kgfd-egress-proxy",
+      "python": "3.12.15",
+      "node": null,
+      "php": null,
+      "pip": "25.0.1",
+      "certifi": "2026.10.19"
+    },
+    {
+      "name": "liv4x7vshraiwnnowjv0kgfd-agent-radix-1",
+      "image": "liv4x7vshraiwnnowjv0kgfd-agent-radix",
+      "python": "3.12.15",
+      "node": null,
+      "php": null,
+      "pip": "25.0.1",
+      "certifi": "2026.10.19"
+    },
+    {
+      "name": "agent-zenas-r7qzm460bc4scnskurlowbvn-20261021T162130",
+      "image": "r7qzm460bc4scnskurlowbvn_agent-zenas:8a89ffa4bc09398a727fe7f0a54e0608f2a87501",
+      "python": "3.12.15",
+      "node": null,
+      "php": null,
+      "pip": "25.0.1",
+      "certifi": "2026.10.19"
+    },
+    {
+      "name": "agent-market-lab-xt0vc7rnr45flw2wg3iyjpmn-20261021T161844",
+      "image": "xt0vc7rnr45flw2wg3iyjpmn_agent-market-lab:8a89ffa4bc09398a727fe7f0a54e0608f2a87501",
+      "python": "3.12.15",
+      "node": null,
+      "php": null,
+      "pip": "25.0.1",
+      "certifi": "2026.10.19"
+    },
+    {
+      "name": "coolify-sentinel",
+      "image": "docker.io/coollabsio/sentinel:1.1.2",
+      "python": null,
+      "node": null,
+      "php": null
+    },
+    {
+      "name": "chatwoot-wefornkolxs7kw194xbdyf1b",
+      "image": "chatwoot/chatwoot:v4.18.0-ce",
+      "python": null,
+      "node": "v24.21.0",
+      "php": null
+    },
+    {
+      "name": "sidekiq-wefornkolxs7kw194xbdyf1b",
+      "image": "chatwoot/chatwoot:v4.18.0-ce",
+      "python": null,
+      "node": "v24.21.0",
+      "php": null
+    },
+    {
+      "name": "redis-wefornkolxs7kw194xbdyf1b",
+      "image": "redis:alpine",
+      "python": null,
+      "node": null,
+      "php": null
+    },
+    {
+      "name": "postgres-wefornkolxs7kw194xbdyf1b",
+      "image": "pgvector/pgvector:pg12",
+      "python": null,
+      "node": null,
+      "php": null
+    },
+    {
+      "name": "agent-template-jodjyt6vsyoyhfr6axtuc8ij-20261014T153941",
+      "image": "jodjyt6vsyoyhfr6axtuc8ij_agent-template:4d1590ff23bb6a5933140ebca022fd870ff6a0f0",
+      "python": "3.12.15",
+      "node": null,
+      "php": null,
+      "pip": "25.0.1",
+      "certifi": "2026.7.22"
+    }
+  ]
+}
