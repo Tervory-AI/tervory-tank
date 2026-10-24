@@ -119,7 +119,9 @@ for id in $ids; do
   expected_nets=""
   case "$service" in
     agent-rig) expected_nets="tervory-gw-rig 59f8cnpelzwsyte1atyjc4fv" ;;
-    rig-brain) expected_nets="tervory-gw-rig ${project}_sandbox" ;;
+    rig-brain) expected_nets="tervory-gw-rig ${project}_sandbox ${project}_forge-control" ;;
+    rig-forge) expected_nets="${project}_forge-control ${project}_forge-egress" ;;
+    rig-forge-egress) expected_nets="${project}_forge-egress ${project}_forge-outbound" ;;
     rig-sandbox) expected_nets="${project}_sandbox" ;;
     rig-browser) expected_nets="${project}_browser" ;;
     rig-browser-gateway) expected_nets="tervory-gw-rig ${project}_browser" ;;
@@ -133,7 +135,7 @@ for id in $ids; do
     for net in $expected_nets; do
       if [[ " $networks " != *" $net "* ]]; then
         APP_LEAKS[$uuid]="${APP_LEAKS[$uuid]:+${APP_LEAKS[$uuid]}; }NOT SEALED: $name missing $net"
-      elif [[ "$service" != "agent-rig" && "$net" != "tervory-gw-rig" ]]; then
+      elif [[ "$service" != "agent-rig" && "$net" != "tervory-gw-rig" && !( "$service" == "rig-forge-egress" && "$net" == "${project}_forge-outbound" ) ]]; then
         internal_flag "$net"
         if [[ "$FLAG" != "true" ]]; then
           APP_LEAKS[$uuid]="${APP_LEAKS[$uuid]:+${APP_LEAKS[$uuid]}; }NOT SEALED: $name on non-internal $net"
@@ -191,7 +193,7 @@ is_expected() {
 for uuid in "${ROOMS[@]}"; do
   room="${ROOM_NAME[$uuid]}"
   if [[ "$room" == "agent-rig" ]]; then
-    for required in agent-rig rig-brain rig-sandbox rig-browser rig-browser-gateway; do
+    for required in agent-rig rig-brain rig-sandbox rig-browser rig-browser-gateway rig-forge rig-forge-egress; do
       if [[ -z "${APP_SERVICES[$uuid/$required]+set}" ]]; then
         APP_LEAKS[$uuid]="${APP_LEAKS[$uuid]:+${APP_LEAKS[$uuid]}; }NOT FOUND: $required"
       fi

@@ -85,9 +85,10 @@ services:
       RIG_SANDBOX_URL: http://rig-sandbox:8002
       SANDBOX_KEY: ${SANDBOX_KEY_RIG:?Set the Rig-only sandbox key}
       DATA_DIR: /data
+      RIG_FORGE_TRELLIS_ENABLED: ${RIG_FORGE_TRELLIS_ENABLED:-false}
     volumes:
       - rig_brain_data:/data
-    networks: [gw, sandbox]
+    networks: [gw, sandbox, forge-control]
     depends_on:
       rig-sandbox:
         condition: service_healthy
@@ -168,9 +169,69 @@ services:
     security_opt: ["no-new-privileges:true"]
     cap_drop: [ALL]
 
+  # RIG-5F: only the brain shares this control network with the forge.
+  rig-forge:
+    build:
+      context: ./forge
+      dockerfile: Dockerfile
+      target: runtime
+    restart: unless-stopped
+    mem_limit: 4g
+    cpus: 2
+    pids_limit: 128
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=256m,uid=1000,gid=1000
+    volumes:
+      - rig_forge_data:/data
+    environment:
+      RIG_FORGE_TRELLIS_ENABLED: ${RIG_FORGE_TRELLIS_ENABLED:-false}
+      FORGE_RETENTION_SECONDS: ${FORGE_RETENTION_SECONDS:-604800}
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+      R2_ACCESS_KEY_ID_RIG: ${R2_ACCESS_KEY_ID_RIG:-}
+      R2_SECRET_ACCESS_KEY_RIG: ${R2_SECRET_ACCESS_KEY_RIG:-}
+      HF_JOBS_TOKEN: ${HF_JOBS_TOKEN:-}
+      HF_JOBS_NAMESPACE: ${HF_JOBS_NAMESPACE:-}
+      HTTP_PROXY: http://rig-forge-egress:8080
+      HTTPS_PROXY: http://rig-forge-egress:8080
+      NO_PROXY: rig-brain,localhost,127.0.0.1
+      FORGE_DATA_DIR: /data
+    networks: [forge-control, forge-egress]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; assert urllib.request.urlopen('http://127.0.0.1:8010/health',timeout=3).status == 200"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+
+  rig-forge-egress:
+    build:
+      context: ./forge
+      dockerfile: Dockerfile
+      target: runtime
+    command: ["python", "-m", "forge.egress"]
+    restart: unless-stopped
+    mem_limit: 128m
+    cpus: 0.25
+    pids_limit: 32
+    read_only: true
+    environment:
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
+    networks: [forge-egress, forge-outbound]
+    healthcheck:
+      test: ["CMD", "python", "-m", "forge.egress", "health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+
 # The volume Rig used before the raw-compose switch, by its live name, so its data survives.
 # external: a wrong name fails the deploy instead of starting on an empty volume.
 volumes:
+  rig_forge_data:
+    name: tervory-rig-forge-data
   agent_rig_data:
     external: true
     name: 59f8cnpelzwsyte1atyjc4fv_agent-rig-data
@@ -180,6 +241,12 @@ volumes:
     name: tervory-rig-browser-data
 
 networks:
+  forge-control:
+    internal: true
+  forge-egress:
+    internal: true
+  forge-outbound:
+    internal: false
   sandbox:
     internal: true
   browser:
