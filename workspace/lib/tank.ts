@@ -925,6 +925,18 @@ export async function accessRequest<T>(actor: AccessIdentity, path: string, body
   return response.json() as Promise<T>;
 }
 
+// RIG-3 retailer calls reuse ACCESS-1. Identity comes only from the server session.
+export function rigAdminPanel<T>(actor: AccessIdentity): Promise<T> {
+  return accessRequest<T>(actor, "rig/admin");
+}
+
+export function rigAdminAction<T>(actor: AccessIdentity, operation: string, data: Record<string, unknown>): Promise<T> {
+  if (!["connect", "import", "refresh", "mapping", "confirm-mapping", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest"].includes(operation)) {
+    throw new Error("Unknown retailer operation.");
+  }
+  return accessRequest<T>(actor, `rig/admin/${operation}`, { data });
+}
+
 /** CORE-2 only: server-resolved identity wins over every caller query field. */
 export function readClientSavings<T>(tenantId: string, endpoint: "" | "/rows" | "/revision" = "", query: Record<string,string> = {}): Promise<T> {
   const params = new URLSearchParams();

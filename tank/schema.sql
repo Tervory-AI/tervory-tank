@@ -1575,3 +1575,27 @@ DO $$ BEGIN
             FOR EACH ROW EXECUTE FUNCTION tank.moa_baseline_snapshot();
     END IF;
 END $$;
+
+-- RIG-3: use the existing ACCESS feed connections, batches and receipts.
+-- Rig connection names use the rig: prefix to preserve Tiger's bindings.
+ALTER TABLE tank.access_feed_connections ADD COLUMN IF NOT EXISTS rig_refresh_at timestamptz;
+ALTER TABLE tank.access_feed_batches ADD COLUMN IF NOT EXISTS rig_summary jsonb;
+
+-- RIG-3: confirmed mappings for uploads and scheduled feeds, no source amounts or credentials.
+CREATE TABLE IF NOT EXISTS tank.rig_feed_settings (
+    tenant_id uuid NOT NULL,
+    distributor text NOT NULL,
+    site text NOT NULL,
+    settings jsonb NOT NULL,
+    PRIMARY KEY (tenant_id,distributor,site)
+);
+
+-- Short-lived field-name previews bind confirmation to the reviewing administrator.
+CREATE TABLE IF NOT EXISTS tank.rig_feed_previews (
+    tenant_id uuid NOT NULL,
+    id uuid NOT NULL,
+    user_id text NOT NULL,
+    preview jsonb NOT NULL,
+    expires_at timestamptz NOT NULL DEFAULT now() + interval '15 minutes',
+    PRIMARY KEY (tenant_id,id)
+);
