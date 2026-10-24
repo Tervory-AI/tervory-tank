@@ -17,7 +17,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pa
     const actor = await accessIdentity(request.nextUrl.searchParams.get("account"));
     const raw = await request.text();
     if (raw.length > 8_020_000) return NextResponse.json({ error: "The file is too large." }, { status: 413 });
-    const result = await accessRequest(actor, path, JSON.parse(raw));
+    const body = JSON.parse(raw);
+    if (body && typeof body === "object" && "target" in body) {
+      return NextResponse.json({ error: "Use retailer settings for catalogue feeds." }, { status: 403 });
+    }
+    const result = await accessRequest(actor, path, body);
     return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch {
     return NextResponse.json({ error: "Could not complete the request. Check the connection settings and try again. If revoking, access is denied while session removal is pending." }, { status: 400, headers: { "Cache-Control": "no-store" } });

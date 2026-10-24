@@ -6,6 +6,7 @@ end to end with a separate key held only by Tank and that room's browser.
 from __future__ import annotations
 
 import asyncio
+import base64
 import csv
 import io
 import ipaddress
@@ -17,14 +18,15 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from contextlib import asynccontextmanager
 from decimal import Decimal, InvalidOperation
-from typing import Literal
-from urllib.parse import urlsplit
+from typing import Any, Literal
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, model_validator
 
 import vault
+import rig_feed_mapping
 from command import Actor, identity, key_matches
 
 async def rotation_reminders():
@@ -52,11 +54,14 @@ async def reminder_loop():
 async def access_lifespan(app):
     from contextlib import suppress
     task = asyncio.create_task(reminder_loop())
+    rig_feeds = asyncio.create_task(rig_feed_loop())
     try:
         yield
     finally:
         task.cancel()
+        rig_feeds.cancel()
         with suppress(asyncio.CancelledError): await task
+        with suppress(asyncio.CancelledError): await rig_feeds
 
 
 router = APIRouter(prefix="/v1/access", lifespan=access_lifespan)
@@ -192,7 +197,7 @@ async def connections(actor: Actor = Depends(identity)):
             WHERE c.tenant_id=$1 ORDER BY c.site,c.room""", actor.tenant_id, PLATFORM)
         policies = await conn.fetch("SELECT site,terms,rotation_days FROM tank.access_sites WHERE tenant_id=$1 ORDER BY site", PLATFORM) if actor.founder else []
         feeds = await conn.fetch("""SELECT distributor,site,source,fetched_at,row_count FROM tank.access_feed_batches
-            WHERE tenant_id=$1 ORDER BY fetched_at DESC LIMIT 30""", actor.tenant_id)
+            WHERE tenant_id=$1 AND distributor NOT LIKE 'rig:%' ORDER BY fetched_at DESC LIMIT 30""", actor.tenant_id)
     now = datetime.now(timezone.utc)
     return {"connections": [{**dict(r), "overdue": r["rotate_by"] <= now} for r in rows],
             "policies": [dict(r) for r in policies], "feeds": [dict(r) for r in feeds],
@@ -484,13 +489,44 @@ FEED_COLUMNS = {
 }
 
 
-class FeedImport(Body):
-    distributor: Literal["zanders", "sports_south", "rsr", "jerrys"]
+FeedProvider = Literal["zanders", "sports_south", "rsr", "jerrys", "shopify", "woocommerce", "google", "catalogue"]
+
+
+class FeedOptions(Body):
+    distributor: FeedProvider
+    target: Literal["tiger", "rig"] = "tiger"
+    currency: str = Field(default="USD", pattern="^[A-Z]{3}$")
     site: str = Field(max_length=240)
+    format: Literal["csv", "tsv", "json", "edi846", "xml", "xlsx"]
+    columns: dict[str, str] = Field(default_factory=dict, max_length=20)
+    country: str = Field(default="US", pattern="^[A-Z]{2}$")
+    price_basis: Literal["cost", "selling"] = "cost"
+    feed_id: str = Field(default="", max_length=60, pattern="^[a-z0-9_-]*$")
+    records_path: str = Field(default="", max_length=200, pattern=r"^[A-Za-z0-9_.-]*$")
+
+    @model_validator(mode="after")
+    def target_options(self):
+        if self.target == "tiger" and (self.distributor not in DISTRIBUTORS or self.format in {"xml", "xlsx"} or len(self.columns) > 5):
+            raise ValueError("Use an existing Tiger distributor format and at most five column names.")
+        if self.target == "rig" and any(len(key) > 40 or len(value) > 160 for key, value in self.columns.items()):
+            raise ValueError("Column names are too long.")
+        return self
+
+
+class FeedImport(FeedOptions):
     source: Literal["dealer_api", "ftp_export", "edi_export"]
-    format: Literal["csv", "tsv", "json", "edi846"]
-    contents: SecretStr = Field(max_length=8_000_000)
-    columns: dict[str, str] = Field(default_factory=dict, max_length=5)
+    contents: SecretStr = Field(max_length=10_666_668)
+    encoding: Literal["text", "base64"] = "text"
+
+    @model_validator(mode="after")
+    def bounded_contents(self):
+        raw = self.contents.get_secret_value()
+        if self.encoding == "base64":
+            if self.target != "rig" or self.format != "xlsx" or len(base64.b64decode(raw, validate=True)) > 8_000_000:
+                raise ValueError("Use a bounded Excel file.")
+        elif (len(raw.encode()) if self.target == "rig" else len(raw)) > 8_000_000:
+            raise ValueError("File too large.")
+        return self
 
 
 def parse_feed(body: FeedImport) -> list[dict]:
@@ -541,10 +577,20 @@ def parse_feed(body: FeedImport) -> list[dict]:
 async def import_feed(request: Request, actor: Actor = Depends(identity)):
     permit_room(actor, "tiger")
     body = await parse(request, FeedImport, 8_020_000)
+    if body.target != "tiger":
+        raise HTTPException(403, "Use retailer settings for Rig feeds.")
+    return await import_feed_body(actor, body)
+
+
+async def import_feed_body(actor: Actor, body: FeedImport):
     site_name(body.site)
+    if body.target == "rig":
+        body = await rig_confirmed_settings(actor, body)
     try:
-        rows = parse_feed(body)
+        rows = [] if body.target == "rig" else parse_feed(body)
     except (ValueError, TypeError, KeyError, InvalidOperation, csv.Error):
+        if body.target == "rig":
+            return await save_rig_feed(actor, body, None)
         raise HTTPException(422, "The feed could not be read. Check its format and column mapping.") from None
     return await save_feed(actor, body, rows)
 
@@ -596,58 +642,112 @@ async def public_get(url: str, *, headers=None, limit=2_000_000) -> tuple[bytes,
             return bytes(data), dict(response.headers)
 
 
-class FeedConnection(Body):
-    distributor: Literal["zanders", "sports_south", "rsr", "jerrys"]
-    site: str = Field(max_length=240)
+class FeedConnection(FeedOptions):
     endpoint: str = Field(max_length=1000)
     token: SecretStr = Field(default=SecretStr(""), max_length=2048)
-    format: Literal["csv", "tsv", "json", "edi846"]
-    columns: dict[str, str] = Field(default_factory=dict, max_length=5)
+    auth_mode: Literal["none", "bearer", "basic", "shopify"] = "bearer"
+    username: SecretStr = Field(default=SecretStr(""), max_length=2048)
+    password: SecretStr = Field(default=SecretStr(""), max_length=2048)
     official_read_only: Literal[True]
+
+    @model_validator(mode="after")
+    def target_authentication(self):
+        if self.target != "rig" and (self.auth_mode != "bearer" or self.username.get_secret_value() or self.password.get_secret_value()):
+            raise ValueError("This authentication mode is only available for Rig feeds.")
+        return self
 
 
 @router.post("/feeds/connect")
 async def connect_feed(request: Request, actor: Actor = Depends(identity)):
     permit_room(actor, "tiger")
     body = await parse(request, FeedConnection)
+    if body.target != "tiger":
+        raise HTTPException(403, "Use retailer settings for Rig feeds.")
+    return await connect_feed_body(actor, body)
+
+
+async def connect_feed_body(actor: Actor, body: FeedConnection):
+    if body.target == "rig":
+        body = await rig_confirmed_settings(actor, body)
+        expected = {"shopify": {"json"}, "woocommerce": {"json"}, "google": {"xml"}}.get(body.distributor, {"csv", "tsv", "json", "xml", "xlsx"})
+        if body.format not in expected:
+            raise HTTPException(422, "Choose the matching catalogue format for this supplier.")
     site = site_name(body.site)
     if origin(body.endpoint) != site or urlsplit(body.endpoint).query or urlsplit(body.endpoint).fragment:
         raise HTTPException(422, "Use a same-site read-only HTTPS feed endpoint, without a query or credentials.")
-    config = {**body.model_dump(exclude={"token"}), "token": body.token.get_secret_value()}
-    encrypted = vault.seal(config, vault.context(actor.tenant_id, "tiger", site, "feed:" + body.distributor))
+    if body.auth_mode == "basic" and not (body.username.get_secret_value() and body.password.get_secret_value()):
+        raise HTTPException(422, "Provide both read-only account credentials.")
+    if body.auth_mode == "shopify" and not body.token.get_secret_value():
+        raise HTTPException(422, "Provide the Shopify access token.")
+    config = {**body.model_dump(exclude={"token", "username", "password"}), "token": body.token.get_secret_value(),
+              "username": body.username.get_secret_value(), "password": body.password.get_secret_value()}
+    encrypted = vault.seal(config, vault.context(actor.tenant_id, body.target, site, "feed:" + body.distributor + (":" + body.feed_id if body.target == "rig" and body.feed_id else "")))
     async with db().acquire() as conn:
         await conn.execute("""INSERT INTO tank.access_feed_connections(tenant_id,distributor,site,sealed)
             VALUES($1,$2,$3,$4) ON CONFLICT(tenant_id,distributor,site) DO UPDATE SET sealed=$4""",
-            actor.tenant_id, body.distributor, site, encrypted)
+            actor.tenant_id, feed_storage_name(body), site, encrypted)
+        if body.target == "rig":
+            await conn.execute("""UPDATE tank.access_feed_connections SET rig_refresh_at=
+                date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' + interval '1 day 3 hours'
+                WHERE tenant_id=$1 AND distributor=$2 AND site=$3""", actor.tenant_id, feed_storage_name(body), site)
+            await receipt(conn, actor.tenant_id, "rig", site, actor.user_id, "feed_connected")
     return {"ok": True}
 
 
 class FeedRefresh(Body):
-    distributor: Literal["zanders", "sports_south", "rsr", "jerrys"]
+    distributor: FeedProvider
+    target: Literal["tiger", "rig"] = "tiger"
     site: str = Field(max_length=240)
+    feed_id: str = Field(default="", max_length=60, pattern="^[a-z0-9_-]*$")
 
 
 @router.post("/feeds/refresh")
 async def refresh_feed(request: Request, actor: Actor = Depends(identity)):
     permit_room(actor, "tiger")
     body = await parse(request, FeedRefresh)
+    if body.target != "tiger":
+        raise HTTPException(403, "Use retailer settings for Rig feeds.")
+    permit_feed(actor, "tiger", body.distributor)
+    return await refresh_connected_feed(actor, body)
+
+
+async def refresh_connected_feed(actor: Actor, body: FeedRefresh) -> dict[str, Any]:
     site = site_name(body.site)
     async with db().acquire() as conn:
-        row = await conn.fetchrow("SELECT sealed FROM tank.access_feed_connections WHERE tenant_id=$1 AND distributor=$2 AND site=$3", actor.tenant_id, body.distributor, site)
+        row = await conn.fetchrow("SELECT sealed FROM tank.access_feed_connections WHERE tenant_id=$1 AND distributor=$2 AND site=$3", actor.tenant_id, feed_storage_name(body), site)
     if not row: raise HTTPException(409, "Connect the official feed first.")
-    config = vault.open_seal(row["sealed"], vault.context(actor.tenant_id, "tiger", site, "feed:" + body.distributor))
+    config = vault.open_seal(row["sealed"], vault.context(actor.tenant_id, body.target, site, "feed:" + body.distributor + (":" + body.feed_id if body.target == "rig" and body.feed_id else "")))
+    if body.target == "rig":
+        # Old client-confirmed connections must be reviewed before any fetch or import.
+        await rig_confirmed_settings(actor, FeedConnection.model_validate({k: v for k, v in config.items() if k != "mapping_confirmed"}))
     try:
-        headers = {"Authorization": "Bearer " + config["token"]} if config["token"] else {}
-        raw, _ = await public_get(config["endpoint"], headers=headers, limit=8_000_000)
-        parsed = FeedImport(distributor=body.distributor, site=site, source="dealer_api", format=config["format"],
-                            contents=SecretStr(raw.decode()), columns=config["columns"])
-        rows = parse_feed(parsed)
+        headers = feed_auth_headers(config)
+        if body.target == "rig":
+            raw = await read_rig_feed(config, headers)
+        else:
+            raw, _ = await public_get(config["endpoint"], headers=headers, limit=8_000_000)
     except Exception:
+        raise HTTPException(503, "The official feed could not be refreshed. Existing data was kept.") from None
+    try:
+        encoded = config["format"] == "xlsx"
+        parsed = FeedImport(distributor=body.distributor, site=site, source="dealer_api", format=config["format"],
+                            contents=SecretStr(base64.b64encode(raw).decode() if encoded else raw.decode("utf-8-sig" if body.target == "rig" else "utf-8")),
+                            columns=config["columns"], target=body.target, currency=config.get("currency", "USD"),
+                            country=config.get("country", "US"), price_basis=config.get("price_basis", "cost"), feed_id=body.feed_id,
+                            records_path=config.get("records_path", ""), encoding="base64" if encoded else "text")
+        rows = [] if body.target == "rig" else parse_feed(parsed)
+    except Exception:
+        if body.target == "rig":
+            failed = FeedImport(target="rig", distributor=body.distributor, site=site, source="dealer_api",
+                                format=config["format"], contents=SecretStr(""), currency=config.get("currency", "USD"), feed_id=body.feed_id)
+            return await save_rig_feed(actor, failed, None)
         raise HTTPException(503, "The official feed could not be refreshed. Existing data was kept.") from None
     return await save_feed(actor, parsed, rows)
 
 
 async def save_feed(actor, body, rows):
+    if body.target == "rig":
+        return await save_rig_feed(actor, body, rows)
     site, batch = site_name(body.site), uuid.uuid4()
     async with db().acquire() as conn:
         async with conn.transaction():
@@ -658,6 +758,258 @@ async def save_feed(actor, body, rows):
                 VALUES($1,$2,$3,$4,$5,$6::jsonb,$7)""", [(actor.tenant_id, body.distributor, site, r["sku"], r["upc"], json.dumps(r), batch) for r in rows])
             await receipt(conn, actor.tenant_id, "tiger", site, actor.user_id, "feed_fetched", row_count=len(rows))
     return {"batch_id": str(batch), "row_count": len(rows)}
+
+
+# RIG-3 mapping: the existing ACCESS import/connect/refresh/vault and HTTP
+# validation remain the sole supplier transport. Rig receives a server-to-server
+# catalogue envelope and commits products, fits and its receipt together.
+def permit_feed(actor: Actor, target: str, provider: str) -> None:
+    if target == "rig":
+        if not actor.founder and "rig" not in actor.squads:
+            raise HTTPException(403, "Rig is not enabled for this account.")
+    else:
+        permit_room(actor, "tiger")
+        if provider not in DISTRIBUTORS:
+            raise HTTPException(422, "Choose an official distributor.")
+
+
+def feed_storage_name(body: FeedImport | FeedConnection | FeedRefresh) -> str:
+    return ("rig:" if body.target == "rig" else "") + body.distributor + (":" + body.feed_id if body.target == "rig" and body.feed_id else "")
+
+
+RIG_SETTING_FIELDS = rig_feed_mapping.SETTING_FIELDS
+
+
+async def rig_confirmed_settings(actor: Actor, body: FeedOptions):
+    return await rig_feed_mapping.confirmed(db(), actor, body, feed_storage_name(body), site_name(body.site))
+
+
+async def rig_request(actor: Actor, operation: str, data: dict[str, Any] | None = None) -> dict[str, Any]:
+    key = os.environ.get("RIG_RETAILER_KEY", "")
+    if not key:
+        raise HTTPException(503, "Rig's retailer control connection is not configured.")
+    try:
+        async with httpx.AsyncClient(timeout=90, trust_env=False) as client:
+            response = await client.post("http://agent-rig:8003/internal/retailer/" + operation,
+                headers={"x-rig-retailer-key": key}, json={"tenant_id": str(actor.tenant_id), "founder": actor.founder, "data": data or {}})
+    except httpx.HTTPError:
+        raise HTTPException(503, "Rig did not confirm this operation. Check its receipts before retrying.") from None
+    if response.status_code >= 400:
+        raise HTTPException(response.status_code if response.status_code in {403, 404, 409, 422} else 503,
+                            "The retailer operation could not be completed. Check the fields and room connection.")
+    try:
+        result = response.json()
+        if not isinstance(result, dict):
+            raise ValueError()
+        return result
+    except ValueError:
+        raise HTTPException(503, "Rig returned an invalid response.") from None
+
+
+async def save_rig_feed(actor: Actor, body: FeedImport, rows: list[dict[str, Any]] | None) -> dict[str, Any]:
+    site = site_name(body.site)
+    parse_error = rows is None
+    rows = rows or []
+    metadata = {"fits": [{"part_sku": row["sku"], "fits_sku": row.get("fits_sku") or None,
+                          "fits_family": row.get("fits_family") or None, "note": row.get("fit_evidence", "")}
+                         for row in rows if row.get("fits_sku") or row.get("fits_family")]}
+    result = await rig_request(actor, "import", {"provider": body.distributor, "site": site,
+        **body.model_dump(include=RIG_SETTING_FIELDS | {"feed_id", "encoding"}),
+        "contents": body.contents.get_secret_value() if not rows else "",
+        "rows": rows, "metadata": metadata, "parse_error": parse_error})
+    # The room's receipt is durable even if the connection breaks here. No raw
+    # supplier data, costs or credential fields are returned to the browser.
+    summary = result["receipt"]
+    async with db().acquire() as conn:
+        async with conn.transaction():
+            await conn.execute("""INSERT INTO tank.access_feed_batches(tenant_id,id,distributor,site,source,row_count,rig_summary)
+                VALUES($1,$2,$3,$4,$5,$6,$7::jsonb) ON CONFLICT(tenant_id,id) DO NOTHING""", actor.tenant_id,
+                uuid.UUID(summary["id"]), feed_storage_name(body), site, body.source,
+                summary["added"] + summary["updated"], json.dumps({k: summary[k] for k in ("added", "updated", "rejected")}))
+            await receipt(conn, actor.tenant_id, "rig", site, actor.user_id, "feed_imported" if result["ok"] else "feed_rejected",
+                          row_count=summary["added"] + summary["updated"])
+    return result
+
+
+def feed_auth_headers(config: dict[str, Any]) -> dict[str, str]:
+    mode = config.get("auth_mode", "bearer")
+    if mode == "basic":
+        encoded = base64.b64encode((config["username"] + ":" + config["password"]).encode()).decode()
+        return {"Authorization": "Basic " + encoded}
+    if mode == "shopify":
+        return {"X-Shopify-Access-Token": config["token"]}
+    if mode == "bearer" and config.get("token"):
+        return {"Authorization": "Bearer " + config["token"]}
+    return {}
+
+
+async def read_rig_feed(config: dict[str, Any], headers: dict[str, str]) -> bytes:
+    """Reuse ACCESS's pinned fetcher for bounded Shopify/WooCommerce pages."""
+    endpoint = config["endpoint"]
+    raw, response_headers = await public_get(endpoint, headers=headers, limit=8_000_000)
+    if config["distributor"] not in {"shopify", "woocommerce"}:
+        return raw
+    total_bytes = len(raw)
+    try:
+        result = json.loads(raw)
+    except ValueError:
+        return raw  # Let the importer record an invalid-file receipt.
+    kind = config["distributor"]
+    products = result.get("products") if isinstance(result, dict) else result
+    if not isinstance(products, list):
+        return raw  # The catalogue mapper returns a rejected-file receipt.
+    current = endpoint
+    seen = {endpoint}
+    original = urlsplit(endpoint)
+    for page in range(1, 101):
+        response_headers = {key.lower(): value for key, value in response_headers.items()}
+        link = response_headers.get("link", "")
+        match = re.search(r'<([^>]+)>\s*;\s*rel=[\"\x27]?next(?:[\"\x27]|\s|,|$)', link)
+        next_url = match.group(1) if match else ""
+        if kind == "woocommerce" and not next_url and page < int(response_headers.get("x-wp-totalpages", "1")):
+            next_url = urlunsplit((original.scheme, original.netloc, original.path, urlencode({"page": page + 1}), ""))
+        if not next_url:
+            return json.dumps(result).encode()
+        parsed = urlsplit(next_url)
+        query = parse_qsl(parsed.query, keep_blank_values=True)
+        if (page == 100 or next_url in seen or origin(next_url) != origin(endpoint) or parsed.path != original.path or parsed.fragment
+                or any(key not in {"page", "per_page", "limit", "offset", "since_id", "page_info"} or len(value) > 512 for key, value in query)):
+            raise ValueError("Invalid catalogue pagination")
+        seen.add(next_url)
+        current = next_url
+        body, response_headers = await public_get(current, headers=headers, limit=8_000_000 - total_bytes)
+        total_bytes += len(body)
+        if total_bytes > 8_000_000:
+            raise ValueError("Catalogue too large")
+        loaded = json.loads(body)
+        extra = loaded.get("products") if isinstance(loaded, dict) else loaded
+        if not isinstance(extra, list):
+            raise ValueError("Invalid catalogue page")
+        products.extend(extra)
+        if isinstance(result, dict) and isinstance(loaded, dict) and loaded.get("rig"):
+            metadata = result.setdefault("rig", {})
+            for field in ("families", "setup_templates"):
+                metadata.setdefault(field, {}).update(loaded["rig"].get(field, {}))
+            metadata.setdefault("fits", []).extend(loaded["rig"].get("fits", []))
+    raise ValueError("Catalogue page limit exceeded")
+
+
+@router.get("/rig/admin")
+async def rig_admin_panel(actor: Actor = Depends(identity)):
+    permit_feed(actor, "rig", "shopify")
+    result = await rig_request(actor, "panel")
+    async with db().acquire() as conn:
+        rows = await conn.fetch("""SELECT coalesce(s.distributor,c.distributor) AS distributor,coalesce(s.site,c.site) AS site,
+            s.settings,c.rig_refresh_at FROM tank.rig_feed_settings s FULL JOIN tank.access_feed_connections c
+            ON c.tenant_id=s.tenant_id AND c.distributor=s.distributor AND c.site=s.site
+            WHERE coalesce(s.tenant_id,c.tenant_id)=$1 AND coalesce(s.distributor,c.distributor) LIKE 'rig:%'
+            ORDER BY site,distributor""", actor.tenant_id)
+    result["feeds"] = []
+    for row in rows:
+        parts = row["distributor"].split(":", 2)
+        settings = json.loads(row["settings"]) if isinstance(row["settings"], str) else row["settings"] or {}
+        result["feeds"].append({"provider": parts[1], "feed_id": parts[2] if len(parts) > 2 else "", "site": row["site"],
+                                "next_refresh": row["rig_refresh_at"], "mapping_confirmed": settings.get("confirmation_version") == 1, **{key: value for key, value in settings.items() if key in RIG_SETTING_FIELDS}})
+    result["can_set_exchange_rate"] = actor.founder
+    return result
+
+
+class RigAdminAction(Body):
+    data: dict[str, Any] = Field(default_factory=dict)
+
+
+@router.post("/rig/admin/{operation}")
+async def rig_admin_action(operation: str, request: Request, actor: Actor = Depends(identity)):
+    permit_feed(actor, "rig", "shopify")
+    if operation not in {"import", "connect", "refresh", "mapping", "confirm-mapping", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest"}:
+        raise HTTPException(404, "Unknown retailer operation.")
+    if operation == "exchange-rate" and not actor.founder:
+        raise HTTPException(403, "Only the founder may set exchange rates.")
+    body = await parse(request, RigAdminAction, 12_000_000 if operation in {"import", "mapping", "confirm-mapping"} else 16000)
+    if operation in {"mapping", "confirm-mapping"}:
+        try:
+            data = {**body.data, "target": "rig"}
+            preview_id = data.pop("preview_id", None) if operation == "confirm-mapping" else None
+            if not {"currency", "country", "price_basis"}.issubset(data):
+                raise ValueError()
+            feed = (FeedImport if "contents" in data else FeedConnection).model_validate(data)
+        except (ValidationError, ValueError):
+            raise HTTPException(422, "Declare this feed's currency, country, price type and fields.") from None
+        if operation == "confirm-mapping":
+            return await rig_feed_mapping.confirm(db(), actor, feed, feed_storage_name(feed), site_name(feed.site), preview_id, receipt)
+        try:
+            if isinstance(feed, FeedImport):
+                contents = feed.contents.get_secret_value()
+                encoding = feed.encoding
+            else:
+                if origin(feed.endpoint) != site_name(feed.site) or urlsplit(feed.endpoint).query or urlsplit(feed.endpoint).fragment:
+                    raise ValueError()
+                config = feed.model_dump(exclude={"token", "username", "password"})
+                config.update({key: getattr(feed, key).get_secret_value() for key in ("token", "username", "password")})
+                raw = await read_rig_feed(config, feed_auth_headers(config))
+                encoding = "base64" if feed.format == "xlsx" else "text"
+                contents = base64.b64encode(raw).decode() if encoding == "base64" else raw.decode("utf-8-sig")
+        except Exception:
+            raise HTTPException(422, "The feed could not be read. Check its address, format and credentials.") from None
+        result = await rig_request(actor, "mapping", {**feed.model_dump(include=RIG_SETTING_FIELDS), "provider": feed.distributor,
+                                                    "contents": contents, "encoding": encoding})
+        return await rig_feed_mapping.preview(db(), actor, feed, feed_storage_name(feed), site_name(feed.site), result)
+    if operation in {"import", "connect", "refresh"}:
+        model = {"import": FeedImport, "connect": FeedConnection, "refresh": FeedRefresh}[operation]
+        try:
+            feed = model.model_validate({**body.data, "target": "rig"})
+        except (ValidationError, ValueError):
+            raise HTTPException(422, "Check the feed fields and try again.") from None
+        handler = {"import": import_feed_body, "connect": connect_feed_body, "refresh": refresh_connected_feed}[operation]
+        return await handler(actor, feed)
+    return await rig_request(actor, operation, body.data)
+
+
+class RigTigerUpdate(Body):
+    tenant_id: uuid.UUID
+    sku: str = Field(min_length=1, max_length=120)
+    price: str | None = Field(default=None, max_length=32)
+    currency: str | None = Field(default=None, pattern="^[A-Z]{3}$")
+    active: bool | None = None
+
+
+@router.post("/rig/tiger")
+async def rig_tiger_update(request: Request):
+    if not key_matches(request.headers.get("x-tank-key", ""), os.environ.get("TANK_KEY_TIGER", "")):
+        raise HTTPException(401, "Tiger authentication required.")
+    body = await parse(request, RigTigerUpdate)
+    actor = Actor(body.tenant_id, "tiger-price-watch", False, frozenset({"rig"}))
+    return await rig_request(actor, "tiger", body.model_dump(exclude={"tenant_id"}, exclude_none=True))
+
+
+async def refresh_due_rig_feeds() -> None:
+    async with db().acquire() as conn:
+        async with conn.transaction():
+            rows = await conn.fetch("""SELECT tenant_id,distributor,site FROM tank.access_feed_connections
+                WHERE distributor LIKE 'rig:%' AND rig_refresh_at<=now()
+                ORDER BY rig_refresh_at FOR UPDATE SKIP LOCKED LIMIT 20""")
+            for row in rows:
+                await conn.execute("""UPDATE tank.access_feed_connections SET rig_refresh_at=
+                    date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC' + interval '1 day 3 hours'
+                    WHERE tenant_id=$1 AND distributor=$2 AND site=$3""", row["tenant_id"], row["distributor"], row["site"])
+    for row in rows:
+        actor = Actor(row["tenant_id"], "nightly-feed", False, frozenset({"rig"}))
+        try:
+            parts = row["distributor"].split(":", 2)
+            await refresh_connected_feed(actor, FeedRefresh(target="rig", distributor=parts[1], feed_id=parts[2] if len(parts) > 2 else "", site=row["site"]))
+        except Exception:
+            async with db().acquire() as conn:
+                await receipt(conn, actor.tenant_id, "rig", row["site"], actor.user_id, "feed_refresh_failed")
+
+
+async def rig_feed_loop() -> None:
+    import logging
+    while True:
+        await asyncio.sleep(60)
+        try:
+            await refresh_due_rig_feeds()
+        except Exception:
+            logging.getLogger(__name__).warning("Rig feed refresh is unavailable. Check its connection and receipts.")
 
 
 class FeedLink(Body):

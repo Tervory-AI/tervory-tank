@@ -1,0 +1,11 @@
+{
+  "products": [
+    {"title": "Sample Desk Lamp", "vendor": "Sample Workshop", "product_type": "lighting", "handle": "sample-desk-lamp", "status": "active", "images": [{"src": "https://example.com/lamp.png"}], "variants": [{"sku": "SAMPLE-LAMP", "price": "20.00", "barcode": "100001", "available": true}]},
+    {"title": "Sample Lamp Shade", "vendor": "Sample Workshop", "product_type": "shade", "handle": "sample-shade", "status": "active", "images": [{"src": "https://example.com/shade.png"}], "variants": [{"sku": "SAMPLE-SHADE", "price": "5.00", "available": true}]}
+  ],
+  "rig": {
+    "families": {"sample-lighting": ["SAMPLE-LAMP"]},
+    "setup_templates": {"lighting": {"shade": "shade"}},
+    "fits": [{"part_sku": "SAMPLE-SHADE", "fits_sku": "SAMPLE-LAMP", "note": "Synthetic supplier catalogue: these two sample products belong together."}]
+  }
+}

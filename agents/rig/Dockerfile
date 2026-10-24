@@ -19,4 +19,4 @@ ENV AGENT_NAME=rig \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app
 EXPOSE 8000
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "rigbox.three_d.asgi:app", "--host", "0.0.0.0", "--port", "8000", "--no-proxy-headers", "--no-access-log"]
