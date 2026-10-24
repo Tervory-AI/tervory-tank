@@ -39,6 +39,7 @@ test("the GitHub Actions gate requires a full pass", () => {
     expect(lighthouse).toContain(`categories:${category}`);
   }
   expect(lighthouse).toContain("minScore: 0.9");
+  expect(lighthouse).toContain("numberOfRuns: 3");
 
   const playwright = readFileSync("playwright.config.ts", "utf8");
   expect(playwright).toContain("width: 390");
