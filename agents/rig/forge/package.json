@@ -5,5 +5,8 @@
   "dependencies": {
     "@gltf-transform/cli": "4.2.1",
     "gltf-validator": "2.0.0-dev.3.10"
+  },
+  "overrides": {
+    "sharp": "0.35.5"
   }
 }
