@@ -208,3 +208,82 @@ export function presentReview(payload: unknown, tags: string[]): ReviewItem[] {
   }
   return out;
 }
+
+/** What the Ask Zenas box shows. Plain English only: no model, tool, cost or internal names. */
+export type AskSource = { citation: string; quote: string };
+export type AskReply =
+  | { kind: "answer"; text: string; sources: AskSource[]; matterId: string | null }
+  | { kind: "in_review"; message: string; matterId: string | null }
+  | { kind: "unverified"; message: string; matterId: string | null }
+  | { kind: "refused"; message: string; referral: string | null }
+  | { kind: "error"; message: string };
+
+const CRIMINAL_REFUSAL = "Refused. Zenas does not do criminal law. Ask a criminal lawyer in that jurisdiction.";
+export const ASK_IN_REVIEW = "A lawyer checks every answer before you see it. This one is waiting for review and will appear in Matters once it is released.";
+export const ASK_UNVERIFIED = "Zenas could not check an answer against its sources, so it is not showing one. Your question is saved as a matter for a lawyer.";
+export const ASK_ERROR = "Zenas could not answer just now. Please try again in a few minutes.";
+
+/** A refusal from the room, in plain English. Unknown reasons stay generic so nothing internal leaks. */
+export function askRefusal(status: number, payload: unknown): AskReply {
+  const reason = statedReason(payload) ?? "";
+  if (reason === CRIMINAL_REFUSAL) {
+    return { kind: "refused", message: "Zenas does not do criminal law.", referral: "Ask a criminal lawyer in that jurisdiction." };
+  }
+  if (reason === "Not offered yet.") {
+    return { kind: "refused", message: "Zenas does not cover this area of law yet.", referral: "Ask a lawyer who practises in this area." };
+  }
+  if (reason === "Not in scope.") {
+    return { kind: "refused", message: "This question is outside the civil law Zenas covers.", referral: "Ask a lawyer who practises in this area." };
+  }
+  if (reason === "personal information cannot be stored") {
+    return { kind: "refused", message: "This question has personal details Zenas cannot store yet. Remove names, ID numbers and contact details, then ask again.", referral: null };
+  }
+  if (status === 403) {
+    return { kind: "refused", message: "This question belongs to a different home region, so this server cannot answer it.", referral: null };
+  }
+  return { kind: "error", message: ASK_ERROR };
+}
+
+function askSources(memo: Record<string, unknown>, card: Record<string, unknown>): AskSource[] {
+  const quotes = new Map<string, string>();
+  const elements = Array.isArray(card.elements) ? card.elements : [];
+  for (const item of elements) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    if (typeof row.citation === "string" && typeof row.quote === "string") quotes.set(row.citation, row.quote);
+  }
+  const seen = new Set<string>();
+  const sources: AskSource[] = [];
+  for (const value of Array.isArray(memo.citations) ? memo.citations : []) {
+    const citation = String(value ?? "").trim();
+    if (!citation || seen.has(citation)) continue;
+    seen.add(citation);
+    sources.push({ citation, quote: quotes.get(citation) ?? "" });
+  }
+  return sources;
+}
+
+/**
+ * A 200 from the room's answers path. Only a released answer shows its text and
+ * sources; anything still in review stays hidden, like an unreleased document.
+ */
+export function presentAnswer(payload: unknown, matterId: string | null = null): AskReply {
+  if (!payload || typeof payload !== "object") return { kind: "error", message: ASK_ERROR };
+  const row = payload as Record<string, unknown>;
+  if (row.ok !== true) {
+    if (row.reason === "could not verify") return { kind: "unverified", message: ASK_UNVERIFIED, matterId };
+    return askRefusal(422, row);
+  }
+  if (row.state !== "released") return { kind: "in_review", message: ASK_IN_REVIEW, matterId };
+  const memo = row.memo && typeof row.memo === "object" ? (row.memo as Record<string, unknown>) : {};
+  const card = row.rule_card && typeof row.rule_card === "object" ? (row.rule_card as Record<string, unknown>) : {};
+  const text = typeof memo.text === "string" ? memo.text.trim() : "";
+  const sources = askSources(memo, card);
+  if (!text || sources.length === 0) return { kind: "unverified", message: ASK_UNVERIFIED, matterId };
+  return { kind: "answer", text, sources, matterId };
+}
+
+/** The jurisdiction a question is asked under: this server's home. */
+export function askJurisdiction(home: string): "us" | "za" {
+  return home === "za" ? "za" : "us";
+}
