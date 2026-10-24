@@ -22,6 +22,7 @@ from fastapi.responses import JSONResponse
 
 from rigbox.api import mount
 from rigbox.page_route import mount_page
+from rigbox.retailer_server import serve_retailer
 from rigbox.service import RigError, Service
 from rigbox.store import PgStore
 from rigbox.quotes.api import mount as mount_quotes
@@ -384,7 +385,8 @@ async def _lifespan(app: FastAPI):
                        for tenant in await store.tenant_ids())
         async with app.state.pool.acquire() as conn:
             await ensure_schedules(conn, schema_for(AGENT), nightly)
-        yield
+        async with serve_retailer(service):
+            yield
 
 
 app.router.lifespan_context = _lifespan

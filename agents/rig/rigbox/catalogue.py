@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid5
@@ -247,8 +248,11 @@ def _money_text(value: Any) -> str:
     if not text:
         raise ValueError("price is missing")
     try:
-        number = float(text)
-    except ValueError as exc:
+        number = Decimal(text)
+        if not number.is_finite() or number < 0:
+            raise ValueError("price is not finite")
+        number = number.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    except (ValueError, InvalidOperation) as exc:
         raise ValueError("price is not a number") from exc
     if number < 0:
         raise ValueError("price is negative")

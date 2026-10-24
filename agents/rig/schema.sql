@@ -219,3 +219,44 @@ CREATE TABLE IF NOT EXISTS agent_rig.rate_counts (
     FOREIGN KEY (tenant_id, window_id) REFERENCES agent_rig.rate_windows(tenant_id, window_id) ON DELETE CASCADE
 );
 -- End RIG-4b.
+
+-- RIG-3: private price inputs and per-file import receipts.
+-- Public product queries never select these tables.
+CREATE TABLE IF NOT EXISTS agent_rig.price_rules (
+    tenant_id uuid PRIMARY KEY,
+    rule jsonb NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS agent_rig.exchange_rates (
+    tenant_id uuid NOT NULL,
+    currency text NOT NULL,
+    rate numeric NOT NULL CHECK (rate > 0),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,currency)
+);
+CREATE TABLE IF NOT EXISTS agent_rig.supplier_costs (
+    tenant_id uuid NOT NULL,
+    sku text NOT NULL,
+    cost numeric NOT NULL CHECK (cost >= 0),
+    currency text NOT NULL,
+    provider text NOT NULL,
+    site text NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,sku)
+);
+CREATE TABLE IF NOT EXISTS agent_rig.feed_receipts (
+    tenant_id uuid NOT NULL,
+    id uuid NOT NULL,
+    provider text NOT NULL,
+    site text NOT NULL,
+    added integer NOT NULL CHECK (added >= 0),
+    updated integer NOT NULL CHECK (updated >= 0),
+    rejected integer NOT NULL CHECK (rejected >= 0),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,id)
+);
+CREATE INDEX IF NOT EXISTS rig_feed_receipts_tenant_created ON agent_rig.feed_receipts(tenant_id,created_at DESC);
+
+-- RIG-3: source provenance for per-feed pricing. Amounts stay private.
+ALTER TABLE agent_rig.supplier_costs ADD COLUMN IF NOT EXISTS feed_metadata jsonb NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE agent_rig.feed_receipts ADD COLUMN IF NOT EXISTS feed_id text NOT NULL DEFAULT '';

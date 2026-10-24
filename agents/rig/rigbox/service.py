@@ -582,15 +582,21 @@ class Service:
             [{"role": "user", "content": suggest_prompt({"products": slim})}],
         )
         suggested = fit_suggest({"products": slim}, text)
-        for row in suggested["fits"]:
-            await self.store.upsert_fit(tenant_id, row)
+        async with self.store.atomic(tenant_id) as store:
+            reviewed = {_fit_key(row) for row in await store.fits(tenant_id)
+                        if row.get("approved") or row.get("source") == "rejected"}
+            for row in suggested["fits"]:
+                if _fit_key(row) not in reviewed:
+                    await store.upsert_fit(tenant_id, row)
         return suggested
 
     async def approve(self, tenant_id: str, part_sku: str, fits_sku: str | None, fits_family: str | None) -> bool:
-        return await self.store.approve_fit(tenant_id, part_sku, fits_sku, fits_family)
+        async with self.store.atomic(tenant_id) as store:
+            return await store.approve_fit(tenant_id, part_sku, fits_sku, fits_family)
 
     async def reject(self, tenant_id: str, part_sku: str, fits_sku: str | None, fits_family: str | None) -> bool:
-        return await self.store.reject_fit(tenant_id, part_sku, fits_sku, fits_family)
+        async with self.store.atomic(tenant_id) as store:
+            return await store.reject_fit(tenant_id, part_sku, fits_sku, fits_family)
 
     async def suggested_fits(self, tenant_id: str) -> dict[str, Any]:
         names = {
@@ -627,13 +633,16 @@ class Service:
         patch = price_patch(update)
         if not patch:
             return False
-        return await self.store.update_price(tenant_id, sku, patch)
+        async with self.store.atomic(tenant_id) as store:
+            if await store.is_feed_product(tenant_id, sku):
+                return False
+            return await store.update_price(tenant_id, sku, patch)
 
     async def load_catalogues(self, root: Path) -> list[dict[str, Any]]:
         if not root.is_dir():
             return []
         reports = []
-        for folder in sorted(path for path in root.iterdir() if path.is_dir() and not path.name.startswith(".")):
+        for folder in sorted(path for path in root.iterdir() if path.is_dir() and not path.name.startswith(".") and path.name != "samples"):
             reports.append(await self.load_folder(folder))
         return reports
 

@@ -12,6 +12,7 @@ from uuid import UUID
 
 from rigbox.logic import public_product
 from rigbox.recall import SEARCH_RECALL_CAP
+from rigbox.retailer_store import RetailerMemoryStore, RetailerPgStore
 
 SCHEMA_PATH = Path(__file__).resolve().parents[1] / "schema.sql"
 
@@ -219,7 +220,7 @@ def _fit_key(row: dict[str, Any]) -> tuple[str, str, str]:
     )
 
 
-class MemoryStore:
+class MemoryStore(RetailerMemoryStore):
     """In-memory stand-in. Tests never open a database."""
 
     def __init__(self) -> None:
@@ -470,7 +471,7 @@ def _record_product(row: Any) -> dict[str, Any]:
     }
 
 
-class PgStore:
+class PgStore(RetailerPgStore):
     """Postgres for the live room. Search is full text plus trigram, always by tenant."""
 
     def __init__(self, pool: Any) -> None:

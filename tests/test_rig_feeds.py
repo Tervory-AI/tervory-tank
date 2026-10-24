@@ -224,11 +224,12 @@ def test_register_once_and_pull_maps_a_fetched_body() -> None:
     assert pull(merchant, MERCHANT) == map_google_merchant(MERCHANT)
     with pytest.raises(ValueError, match="https"):
         register("http://shop.example/products.json", "shopify", "USD")
-    with pytest.raises(ValueError, match="shopify, woocommerce, or google"):
+    with pytest.raises(ValueError, match="feed format must be"):
         register("https://shop.example/feed", "magento", "USD")
     with pytest.raises(ValueError, match="currency is required"):
         register("https://shop.example/products.json", "woocommerce", "")
-    assert pull({"format": "csv"}, SHOP)["rejected"] == [{"row": 0, "reason": "unknown feed format"}]
+    assert pull({"format": "unsupported"}, SHOP)["rejected"] == [{"row": 0, "reason": "unknown feed format"}]
+    assert register("https://shop.example/feed.csv", "csv", "NZD")["format"] == "csv"
 
 
 def test_feed_package_does_not_fetch_or_schedule() -> None:

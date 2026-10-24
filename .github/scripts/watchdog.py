@@ -33,11 +33,20 @@ WARN_DAYS = 14
 FAIL_DAYS = 7
 USER_AGENT = "tervory-watchdog"
 
+# Repo variable ZA_OFFLINE=true: the ZA stack is switched off on purpose (box being moved).
+# Skip every -za app (logged as "skip"): no new issue and no failed run. Open ZA issues stay
+# open until ZA is back. Unset or any other value: today's behaviour.
+# Same reading as .github/scripts/deploy_changed.py.
+ZA_OFFLINE = os.environ.get("ZA_OFFLINE", "").strip().lower() == "true"
+
+# Issue titles for per-app rows start with this. The bare "Down: Coolify" issue is the API itself.
+APP_PREFIX = "Coolify "
+
 
 @dataclass
 class Result:
     thing: str
-    state: str  # ok, down, warn, skip
+    state: str  # ok, down, warn, skip, gone
     detail: str
 
 
@@ -245,13 +254,45 @@ def coolify_results() -> list[Result]:
         name = safe_label(item.get("name") or "unnamed")
         status = norm_status(item.get("status"))
         uuid = str(item.get("uuid") or "").strip()
-        thing = f"Coolify {name}"
+        thing = f"{APP_PREFIX}{name}"
+        if ZA_OFFLINE and name.endswith("-za"):
+            results.append(Result(thing, "skip", "ZA_OFFLINE is set"))
+            continue
         allowed = status == "running:healthy" or (status == "running:unknown" and uuid == MAIN_APP)
         if allowed:
             results.append(Result(thing, "ok", status))
         else:
             results.append(Result(thing, "down", f"status {status}"))
     return results
+
+
+def is_za_app(thing: str) -> bool:
+    return thing.startswith(APP_PREFIX) and thing.endswith("-za")
+
+
+def gone_apps(results: list[Result], open_titles: list[str]) -> list[Result]:
+    """Apps with an open "Down: Coolify <name>" issue that Coolify no longer lists.
+
+    Only when the whole Coolify list was read cleanly. The app was
+    deleted, so its issue is closed instead of staying open for ever. While
+    ZA_OFFLINE is set, -za issues are left alone.
+    """
+    api_rows = [result for result in results if result.thing == "Coolify"]
+    # Every app row must have been readable, or a missing name could be an unreadable one.
+    if not api_rows or any(result.state != "ok" for result in api_rows):
+        return []
+    seen = {result.thing for result in results}
+    gone: list[Result] = []
+    for title in open_titles:
+        if not title.startswith("Down: "):
+            continue
+        thing = title[len("Down: "):]
+        if not thing.startswith(APP_PREFIX) or thing in seen:
+            continue
+        if ZA_OFFLINE and is_za_app(thing):
+            continue
+        gone.append(Result(thing, "gone", "no longer in Coolify"))
+    return gone
 
 
 def collect() -> list[Result]:
@@ -383,6 +424,12 @@ def sync_issues(results: list[Result]) -> None:
     github = GitHub(repo, token)
     github.ensure_label()
     open_issues = github.open_incidents()
+    for result in gone_apps(results, list(open_issues)):
+        say(result)
+        number = int(open_issues[f"Down: {result.thing}"]["number"])
+        github.comment(number, "closed: this app no longer exists in Coolify")
+        github.close(number)
+        print(f"closed #{number} Down: {result.thing} (no longer in Coolify)", flush=True)
     for result in results:
         title = f"Down: {result.thing}"
         current = open_issues.get(title)

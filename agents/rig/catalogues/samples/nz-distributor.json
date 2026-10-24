@@ -1,0 +1,17 @@
+{
+  "catalogue": {
+    "products": [
+      {
+        "code": "NZ-SHADE",
+        "title": "Sample Woven Shade",
+        "brand": "Sample Workshop",
+        "category": "shade",
+        "pricing": {
+          "unit_cost": "12.00"
+        },
+        "stock": 5,
+        "image": "https://example.com/shade.png"
+      }
+    ]
+  }
+}
