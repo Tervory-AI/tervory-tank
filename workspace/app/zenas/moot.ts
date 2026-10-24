@@ -9,13 +9,16 @@ export const MOOT_LATER = "Law students will use it later, for free.";
 
 export const MOOT_PARTS = [
   { id: "problem", title: "The problem", empty: "Load a locked civil appeal problem to begin." },
-  { id: "hearing", title: "The hearing", empty: "AI counsel argue in text; the judge questions in text." },
+  {
+    id: "hearing",
+    title: "The hearing",
+    empty: "AI against AI, student against AI, or students against students — all in text.",
+  },
   { id: "ruling", title: "The ruling", empty: "Order, reasons, fairness check, then the reveal." },
 ] as const;
 
 export type MootPartId = (typeof MOOT_PARTS)[number]["id"];
 
-/** A stored text match would fill these parts. None is selected on this panel yet. */
 export type TrainingRound = Record<MootPartId, string>;
 
 /** No match is selected on the signed-in panel yet (watch pages live under /moot). */

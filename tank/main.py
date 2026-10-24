@@ -2511,7 +2511,10 @@ _ZENAS_PATH = re.compile(
     r"|^documents/[0-9a-fA-F-]{36}/reviews$"
     r"|^pool/sources/[A-Za-z0-9._-]{1,80}/load$"
     r"|^moot/problems/[A-Za-z0-9._-]{1,80}/counsel/(appellant|respondent)$"
+    r"|^moot/problems/[A-Za-z0-9._-]{1,80}/(edit|lock)$"
     r"|^moot/matches/ai-ai$"
+    r"|^moot/matches/student$"
+    r"|^moot/matches/[0-9a-fA-F-]{36}/publish$"
 )
 
 

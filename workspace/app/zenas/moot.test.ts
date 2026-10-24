@@ -12,10 +12,11 @@ test("moot court text edition panel starts with no selected match", () => {
     ["The problem", "The hearing", "The ruling"],
   );
   assert.equal(MOOT_PARTS[0]?.empty, "Load a locked civil appeal problem to begin.");
+  assert.match(MOOT_PARTS[1]?.empty ?? "", /AI against AI/);
 });
 
 test("the panel does not invent a case, a student score, or a sign-up", () => {
   const text = [MOOT_LABEL, MOOT_LEAD, MOOT_LATER, ...MOOT_PARTS.flatMap((part) => [part.title, part.empty])].join(" ");
   assert.equal(/\bv\b|criminal|score|%\b|sign up|signup|account/i.test(text), false);
-  assert.equal((text.match(/student/gi) ?? []).length, 1);
+  assert.equal((text.match(/student/gi) ?? []).length >= 1, true);
 });

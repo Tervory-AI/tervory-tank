@@ -996,3 +996,20 @@ export function mootCounselBundle(problemId: string, side: "appellant" | "respon
     method: "GET",
   });
 }
+
+/** MOOT-1a: AI-against-AI fairness pair on a fixture problem. */
+export function mootAiAi(body: { problem_id: string; home_region: string; strictness?: string }): Promise<Record<string, unknown>> {
+  return tank<Record<string, unknown>>("/v1/zenas/moot/matches/ai-ai", { method: "POST", body: JSON.stringify(body) });
+}
+
+/** MOOT-1a: student modes on a fixture problem. */
+export function mootStudentMatch(body: {
+  problem_id: string;
+  home_region: string;
+  mode: "student_ai" | "student_student";
+  student_side: "appellant" | "respondent";
+  student_text: string;
+  strictness?: string;
+}): Promise<Record<string, unknown>> {
+  return tank<Record<string, unknown>>("/v1/zenas/moot/matches/student", { method: "POST", body: JSON.stringify(body) });
+}
