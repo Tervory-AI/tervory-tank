@@ -11,6 +11,7 @@ def test_ghost_corridor_flag_and_exceptions() -> None:
     assert 'tervory-gw-ghost' in SCRIPT
     assert "hermes does not resolve on ghost corridor" in SCRIPT
     assert "ghost-browser" in SCRIPT
+    assert "coolify-proxy" in SCRIPT
     assert "ping job skipped on ghost corridor" in SCRIPT
     assert "database login skipped on ghost corridor" in SCRIPT
     # Seal: hermes on ghost gateway is unexpected

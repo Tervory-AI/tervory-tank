@@ -258,6 +258,10 @@ for net in $nets; do
         if [ "$net" = "tervory-gw-ghost" ] && has_part "$short" ghost-browser; then
           continue
         fi
+        # coolify-proxy may join tervory-gw-* after Traefik multi-net re-attach (routing only).
+        if [ "$net" = "tervory-gw-ghost" ] && has_part "$short" coolify-proxy; then
+          continue
+        fi
         unexpected="$unexpected $short"
       done
       if [ "$net" = "tervory-gw-tiger" ]; then
@@ -265,7 +269,7 @@ for net in $nets; do
       elif [ "$net" = "tervory-gw-base" ]; then
         label="gateway $net holds only this agent, tank, postgres, hermes, tiger, and searxng"
       elif [ "$net" = "tervory-gw-ghost" ]; then
-        label="gateway $net holds only this agent, tank, postgres, and ghost-browser"
+        label="gateway $net holds only this agent, tank, postgres, ghost-browser, and coolify-proxy"
       else
         label="gateway $net holds only this agent, tank, postgres, and hermes"
       fi
