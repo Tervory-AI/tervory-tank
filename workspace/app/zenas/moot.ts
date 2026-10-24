@@ -1,24 +1,24 @@
-/** Moot Court is a training centre. Nothing here is a filed matter. */
+/** Moot Court text edition (MOOT-1a). Training only — nothing here is a filed matter. */
 
 export const MOOT_LABEL = "Moot Court";
 
-export const MOOT_LEAD = "This is where Zenas trains.";
+export const MOOT_LEAD = "This is where Zenas trains in text.";
 
 /** Students come later. This page has no sign-up. */
 export const MOOT_LATER = "Law students will use it later, for free.";
 
 export const MOOT_PARTS = [
-  { id: "problem", title: "The problem", empty: "There is no training problem yet." },
-  { id: "answer", title: "Zenas's answer", empty: "There is no answer yet." },
-  { id: "correction", title: "The correction", empty: "There is no correction yet." },
+  { id: "problem", title: "The problem", empty: "Load a locked civil appeal problem to begin." },
+  { id: "hearing", title: "The hearing", empty: "AI counsel argue in text; the judge questions in text." },
+  { id: "ruling", title: "The ruling", empty: "Order, reasons, fairness check, then the reveal." },
 ] as const;
 
 export type MootPartId = (typeof MOOT_PARTS)[number]["id"];
 
-/** A stored round would be one civil problem, Zenas's answer, and the correction. */
+/** A stored text match would fill these parts. None is selected on this panel yet. */
 export type TrainingRound = Record<MootPartId, string>;
 
-/** No training problem is stored for this page yet. */
+/** No match is selected on the signed-in panel yet (watch pages live under /moot). */
 export function trainingRound(): TrainingRound | null {
   return null;
 }
