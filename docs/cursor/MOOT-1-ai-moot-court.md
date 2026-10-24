@@ -10,6 +10,56 @@
 
 **Files you may change:** new `agents/zenas/core/moot/` (problem, session, judge, feedback), `agents/zenas/app.py` (moot routes only), `agents/zenas/schema.sql` (additive), new `tank/moot/` (the LiveKit Agents judge worker and its Dockerfile), `tank/` policy seed rows for the new task types only, `docker-compose.yml` (add the LiveKit server, Redis use and egress services only), `.env.example` (variable NAMES only), new `workspace/app/zenas/moot/` (pages and components), new public `workspace/app/moot/` (watch pages, section 7), `workspace/lib/tank.ts` (moot calls only), tests. Do not change other Zenas behaviour.
 
+## MOOT-1a: the text edition (by Sunday 25 Oct)
+> Founder, 23 Oct: Zenas must be live by Sunday. MOOT-1a ships the court **in text** by then. Everything spoken (LiveKit, speech-to-text, voices, studio screens, clips, the major-issues format) is **MOOT-1b**, built next on top of 1a. Don't build 1b parts in 1a; leave clean interfaces for them.
+
+**Build in 1a:**
+1. **The problem** (section 1, all of it).
+   - It's built from a decided civil appeal already stored as a worked matter (Z8), with separate bundles for each side and the bench notes hidden from counsel.
+   - The founder edits it, then locks it.
+2. **Counsel in text** (section 2c). Three modes:
+   - AI against AI;
+   - a student against AI (the student types);
+   - students against students.
+
+   AI counsel use the same model and settings on both sides, and argue against each other's points directly.
+3. **The judge in text** (section 2, minus voice).
+   - It questions after each submission, with a strictness setting.
+   - It flags at once an authority that isn't in the library, or one that doesn't bind but is presented as binding.
+   - Every authority anyone names passes the Z12 gate. A failed citation is flagged in the ruling and counts against that counsel.
+   - The judgment gives the order and the reasons, with verified authorities and paragraphs, then the **reveal** of what the real court held.
+4. **The fairness check:** every AI-against-AI match runs twice with the sides swapped, and the result is shown and stored.
+5. **The watch page** (section 7, minus clips). It lives at `/moot/{match}` and is public only after the founder presses Publish; until then it returns 404. It shows:
+   - the transcript;
+   - the judgment;
+   - the fairness check;
+   - the reveal;
+   - each authority linked to its source.
+6. **Receipts and learning:**
+   - every turn goes through Tank, with task types `moot.counsel` and `moot.judge` in the policy table;
+   - the cost is shown per match;
+   - accepted and rejected points become gold candidates (`zenas:moot:{YYYY-MM}`).
+
+**Files you may change (1a):**
+- new `agents/zenas/core/moot/`;
+- `agents/zenas/app.py` (moot routes only);
+- `agents/zenas/schema.sql` (additive);
+- `tank/` policy seed rows for `moot.counsel` and `moot.judge` only, placed above the `-- MODELS-2` marker in `tank/schema.sql`;
+- `workspace/app/zenas/moot*` (replace the placeholder);
+- new public `workspace/app/moot/`;
+- `workspace/lib/tank.ts` (moot calls only);
+- tests.
+
+**Done when (1a):**
+- tests on fixtures prove:
+  - the bench notes never reach counsel's pages (tested at the route);
+  - a made-up case and a non-binding authority presented as binding are both flagged;
+  - the judgment cites only verified authorities;
+  - AI against AI runs in both orders with the fairness check stored;
+  - an unpublished watch page returns 404;
+  - SA mode on fixtures and US mode on the Boston library each use their own court's form of address and procedure;
+- the pages work at 1440px and 375px.
+
 ## 1. The moot problem (from a real case)
 - The founder picks a decided **civil** SA appeal from the library (ConCourt, SCA, full bench or High Court appeal). Criminal cases are not offered.
 - Zenas builds the problem:
