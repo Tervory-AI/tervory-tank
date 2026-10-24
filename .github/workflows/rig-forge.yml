@@ -10,6 +10,9 @@ on:
       - ops/seal-check.sh
       - tests/test_rig_forge*.py
       - .github/workflows/rig-forge.yml
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   forge-image:
     runs-on: ubuntu-latest
