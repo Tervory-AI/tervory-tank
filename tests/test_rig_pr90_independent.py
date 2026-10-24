@@ -981,9 +981,10 @@ def test_browser_search_accessories_compare_admin() -> None:
     try:
         assert server.started, "Rig page did not start on 127.0.0.1:5173"
         with playwright_sync.sync_playwright() as playwright:
+            executable = os.environ.get("READ1_CHROMIUM_EXECUTABLE")
             browser = playwright.chromium.launch(
-                channel=None if os.environ.get("READ1_CHROMIUM_EXECUTABLE") else "chrome",
-                executable_path=os.environ.get("READ1_CHROMIUM_EXECUTABLE"),
+                channel=None if executable else "chrome",
+                executable_path=executable,
                 headless=True,
                 args=["--no-sandbox", "--disable-dev-shm-usage"],
             )

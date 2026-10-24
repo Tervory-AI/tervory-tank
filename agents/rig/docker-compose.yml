@@ -22,8 +22,20 @@ services:
       DATABASE_URL: postgresql://agent_rig:${AGENT_DB_PASSWORD_RIG}@postgres:5432/${POSTGRES_DB:-tervory}
       TANK_URL: http://tank:8000
       TANK_KEY: ${TANK_KEY_RIG:-}
+      # Controls listen on 8003, which has no Traefik route or published port.
+      RIG_RETAILER_KEY: ${RIG_RETAILER_KEY:-}
       TANK_REGION: ${TANK_REGION:-us-east}
       RIG_ADMIN_KEY: ${RIG_ADMIN_KEY:-}
+      RIG_QUOTE_FLOWS: ${RIG_QUOTE_FLOWS:-}
+      RIG_ODOO_URL: ${RIG_ODOO_URL:-}
+      RIG_ODOO_DATABASE: ${RIG_ODOO_DATABASE:-}
+      RIG_ODOO_USER: ${RIG_ODOO_USER:-}
+      RIG_ODOO_API_KEY: ${RIG_ODOO_API_KEY:-}
+      RIG_WIDGET_PUBLISHABLE_KEY: ${RIG_WIDGET_PUBLISHABLE_KEY:-}
+      # Grok set 10.0.21.0/24 on agent-rig in Coolify (both rows).
+      # Keep deployment configuration explicit; /health returns 503 if empty/invalid.
+      RIG_TRUSTED_PROXY_CIDRS: ${RIG_TRUSTED_PROXY_CIDRS:-}
+      RIG_QUOTE_RETENTION_DAYS: ${RIG_QUOTE_RETENTION_DAYS:-30}
       RIG_FORGE_TRELLIS_ENABLED: ${RIG_FORGE_TRELLIS_ENABLED:-false}
       HERMES_URL: http://hermes:8000
       DATA_DIR: /data

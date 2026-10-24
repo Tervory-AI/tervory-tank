@@ -35,6 +35,7 @@ jobs:
     env:
       COOLIFY_URL: ${{ vars.COOLIFY_URL || 'https://coolify.tervory.com' }}
       COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+      ZA_OFFLINE: ${{ vars.ZA_OFFLINE || '' }}
       FORCE_FAIL: ${{ github.event_name == 'workflow_dispatch' && inputs.force_fail || '' }}
       GITHUB_TOKEN: ${{ github.token }}
       GITHUB_REPOSITORY: ${{ github.repository }}

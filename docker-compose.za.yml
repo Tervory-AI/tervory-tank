@@ -27,7 +27,9 @@ services:
       - tervory-gw-zenas
 
   redis:
-    image: redis:7
+    # 7.4.11 fixes CVE-2026-81934 (TLS pending-data use-after-free) and carries the 7.4.9 fix for CVE-2026-23479.
+    # Multi-arch index digest; keep identical in docker-compose.yml and docker-compose.za.yml.
+    image: redis:7.4.11@sha256:44960b3100c48159a66d28c18b0588c193492e25f7551d60e51dd464fc3eca5b
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     environment:
