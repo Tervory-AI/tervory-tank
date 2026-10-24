@@ -39,7 +39,7 @@ with TestClient(base) as client:
     before = protected_surface(client)
     assert client.get('/health').json() == {'ok': True, 'agent': 'rig'}
 cmd = json.loads(next(line[4:] for line in (root/'agents/rig/Dockerfile').read_text().splitlines() if line.startswith('CMD ')))
-assert cmd == ['uvicorn', 'rigbox.three_d.asgi:app', '--host', '0.0.0.0', '--port', '8000']
+assert cmd == ['uvicorn', 'rigbox.three_d.asgi:app', '--host', '0.0.0.0', '--port', '8000', '--no-proxy-headers', '--no-access-log']
 deployed = import_from_string(cmd[1])
 assert deployed is base
 assert all(any(r.path == path and r.methods == methods and r.endpoint is endpoint
@@ -69,7 +69,13 @@ with TestClient(deployed) as client:
 '''
     env = {**os.environ, 'PYTHONPATH': 'agents/rig:agents/_chassis', 'AGENT_NAME': 'rig',
            'DATABASE_URL': _database_url(admin, name), 'DATA_DIR': str(tmp_path),
-           'TANK_KEY': uuid4().hex, 'CATALOGUE_DIR': str(tmp_path / 'empty-catalogues')}
+           'TANK_KEY': uuid4().hex, 'CATALOGUE_DIR': str(tmp_path / 'empty-catalogues'),
+           # RIG-4 (#247): /health is 503 unless a trusted proxy range is configured.
+           'RIG_TRUSTED_PROXY_CIDRS': '10.20.0.0/24',
+           # RIG-4 (#247): the retailer test page is 503 until a public widget key is set.
+           'RIG_WIDGET_PUBLISHABLE_KEY': 'rk_pub_rig5_sample',
+           # Hermetic: fail fast instead of waiting on a real Tank host.
+           'TANK_URL': 'http://127.0.0.1:9'}
     (tmp_path / 'empty-catalogues').mkdir()
     try:
         result = subprocess.run([sys.executable, '-c', script], cwd=ROOT, env=env,
