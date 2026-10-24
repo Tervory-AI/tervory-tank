@@ -22,8 +22,17 @@ from fastapi.responses import JSONResponse
 
 from rigbox.api import mount
 from rigbox.page_route import mount_page
-from rigbox.service import RigError, Service, WebhookHandoff
+from rigbox.retailer_server import serve_retailer
+from rigbox.service import RigError, Service
 from rigbox.store import PgStore
+from rigbox.quotes.api import mount as mount_quotes
+from rigbox.quotes.service import QuoteService
+from rigbox.quotes.senders import RetailerHandoff
+from rigbox.quotes.store import PgQuotes
+from rigbox.quotes.hosting import mount as mount_widget
+from rigbox.quotes.schedules import refresh as refresh_quote_schedules
+from rigbox.quotes.limits import proxy_configured
+from rigbox.quotes.store import retention_days
 
 AGENT = os.environ.get("AGENT_NAME", "rig")
 HEARTBEAT_TENANT = "00000000-0000-0000-0000-000000000001"
@@ -76,9 +85,18 @@ async def expire_searches(ctx: JobContext) -> dict:
     return {"deleted": deleted}
 
 
+async def retry_quotes(ctx: JobContext) -> dict:
+    return {"attempted": await app.state.rig.retry_pending(ctx.tenant_id)}
+
+
+async def discover_quote_tenants(ctx: JobContext) -> dict:
+    return {"tenants": await refresh_quote_schedules(app.state.pool, app.state.rig.store, ctx.agent)}
+
+
 app = create_app(
     agent=AGENT,
-    handlers={"ping": ping, "pull_feeds": pull_feeds, "expire_searches": expire_searches},
+    handlers={"ping": ping, "pull_feeds": pull_feeds, "expire_searches": expire_searches,
+              "retry_quotes": retry_quotes, "discover_quote_tenants": discover_quote_tenants},
     schedules=[
         {
             "tenant_id": HEARTBEAT_TENANT,
@@ -92,9 +110,17 @@ app = create_app(
             "kind": "expire_searches",
             "input": {},
         },
+        {
+            "tenant_id": HEARTBEAT_TENANT,
+            "cron": "*/5 * * * *",
+            "kind": "discover_quote_tenants",
+            "input": {},
+        },
     ],
 )
 mount(app)
+mount_quotes(app)
+mount_widget(app)
 
 # Chassis job intake and the generated docs are not part of the shopper API.
 # The worker and the scheduler still run inside this process.
@@ -315,6 +341,8 @@ def _room_read_kind(method: str, path: str) -> str | None:
 @app.middleware("http")
 async def rig_room_reads(request: Request, call_next):
     """Serve Tank's read with the room key. Shopper calls fall through."""
+    if request.url.path == "/health" and not proxy_configured():
+        return JSONResponse(status_code=503, content={"ok": False, "error": "RIG_TRUSTED_PROXY_CIDRS is required"})
     kind = _room_read_kind(request.method.upper(), request.url.path)
     if kind is None or not _room_key_ok(request):
         if kind == "catalogues":
@@ -333,7 +361,9 @@ async def _lifespan(app: FastAPI):
     async with _inner(app):
         store = PgStore(app.state.pool)
         await store.apply_schema()
-        service = Service(store, _TankModels(app.state.tank), WebhookHandoff(app.state.http))
+        retention_days()
+        service = QuoteService(store, _TankModels(app.state.tank), RetailerHandoff(app.state.http),
+                               PgQuotes(app.state.pool))
         app.state.rig = service
         root = Path(os.environ.get("CATALOGUE_DIR", str(Path(__file__).resolve().parent / "catalogues")))
         if not root.is_dir():
@@ -351,9 +381,12 @@ async def _lifespan(app: FastAPI):
             for report in reports
             if report.get("tenant_id")
         ]
+        nightly.extend({"tenant_id": tenant, "cron": "*/5 * * * *", "kind": "retry_quotes", "input": {}}
+                       for tenant in await store.tenant_ids())
         async with app.state.pool.acquire() as conn:
             await ensure_schedules(conn, schema_for(AGENT), nightly)
-        yield
+        async with serve_retailer(service):
+            yield
 
 
 app.router.lifespan_context = _lifespan

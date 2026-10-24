@@ -81,8 +81,10 @@ def test_rig_real_box_public_api_and_sealed_execution(tmp_path):
             "-e", "ACCESS_ROOM=rig", "-e", "BROWSER_HOST=rig-browser")
         brain = create("rig-brain", "brain", [corridor, sandbox_net], "-e", "TANK_KEY", "-e", "SANDBOX_KEY",
             "-v", volumes[1] + ":/data", "-e", "TANK_REGION=us-east")
+        proxy_subnet = json.loads(docker("network", "inspect", proxy_net))[0]["IPAM"]["Config"][0]["Subnet"]
         api = create("agent-rig", "api", [corridor, proxy_net], "-e", "TANK_KEY", "-e", "AGENT_NAME=rig",
             "-e", "DATABASE_URL=postgresql://postgres@postgres:5432/postgres",
+            "-e", "RIG_TRUSTED_PROXY_CIDRS=" + proxy_subnet,
             "-e", "CATALOGUE_DIR=/app/catalogues", "-e", "DATA_DIR=/data", "-v", volumes[0] + ":/data")
         for name, port in ((api, 8000), (brain, 8001), (browser, 3000), (gateway, 3000), (sandbox, 8002)):
             ready(name, port)

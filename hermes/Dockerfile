@@ -6,7 +6,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     FASTEMBED_CACHE_PATH=/opt/fastembed \
     HERMES_EMBED_MODEL=BAAI/bge-small-en-v1.5
 COPY requirements.txt .
+# Pillow 11.3.0 has advisories fixed only in 13.0.0, but every fastembed release caps
+# pillow<13 (0.6.1 caps <12). Hermes only does text embeddings; Pillow 13 was checked
+# locally with a real bge-small embed. Laid over with --no-deps (PR grok/d-advisory-pins).
 RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir --no-deps pillow==13.0.0 \
     && python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='BAAI/bge-small-en-v1.5')" \
     && useradd --create-home --uid 1000 hermes \
     && mkdir -p /srv/hermes \

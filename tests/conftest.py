@@ -24,6 +24,18 @@ def pytest_configure(config: pytest.Config) -> None:
         config._inicache["asyncio_default_fixture_loop_scope"] = "function"
 
 
+def pytest_runtest_logreport(report: pytest.TestReport) -> None:
+    """Expose failed test identities when archived Actions logs are unavailable."""
+    if not report.failed or os.environ.get("GITHUB_ACTIONS") != "true":
+        return
+    path, line, name = report.location
+    # Parameter values and exception contents can contain private input. Only
+    # publish the source location and unparameterized test name.
+    def escape(value: str) -> str:
+        return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A").replace(",", "%2C")
+    print(f"\n::error file={escape(path)},line={line + 1},title=Pytest failure::{escape(name.split('[', 1)[0])} ({report.when})", flush=True)
+
+
 @pytest_asyncio.fixture
 async def real_chromium():
     """Required browser tests fail, rather than skip, if CI setup is missing."""
