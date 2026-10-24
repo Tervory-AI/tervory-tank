@@ -260,3 +260,42 @@ CREATE INDEX IF NOT EXISTS rig_feed_receipts_tenant_created ON agent_rig.feed_re
 -- RIG-3: source provenance for per-feed pricing. Amounts stay private.
 ALTER TABLE agent_rig.supplier_costs ADD COLUMN IF NOT EXISTS feed_metadata jsonb NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE agent_rig.feed_receipts ADD COLUMN IF NOT EXISTS feed_id text NOT NULL DEFAULT '';
+
+-- RIG-5: immutable model revisions, reviewed anchors and a per-tenant add-on.
+-- A forge result is never a shopper asset until both automatic and human checks pass.
+CREATE TABLE IF NOT EXISTS agent_rig.rig_3d_entitlements (
+    tenant_id uuid PRIMARY KEY,
+    enabled boolean NOT NULL DEFAULT false,
+    price_amount numeric CHECK (price_amount >= 0),
+    currency text NOT NULL DEFAULT 'USD' CHECK (currency ~ '^[A-Z]{3}$')
+);
+
+CREATE TABLE IF NOT EXISTS agent_rig.rig_3d_jobs (
+    tenant_id uuid NOT NULL,
+    id uuid NOT NULL,
+    product_id text NOT NULL,
+    request jsonb NOT NULL,
+    status text NOT NULL DEFAULT 'queued'
+        CHECK (status IN ('queued','running','failed','draft','approved')),
+    report jsonb,
+    reason text,
+    review jsonb,
+    reviewed_by text,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    approved_at timestamptz,
+    PRIMARY KEY (tenant_id,id),
+    FOREIGN KEY (tenant_id,product_id) REFERENCES agent_rig.products (tenant_id,sku),
+    CHECK (status <> 'approved' OR (report IS NOT NULL AND review IS NOT NULL AND approved_at IS NOT NULL))
+);
+CREATE INDEX IF NOT EXISTS rig_3d_jobs_product
+    ON agent_rig.rig_3d_jobs (tenant_id,product_id,status,approved_at DESC);
+
+ALTER TABLE agent_rig.fits ADD COLUMN IF NOT EXISTS mount_points jsonb NOT NULL DEFAULT '{}'::jsonb;
+
+CREATE TABLE IF NOT EXISTS agent_rig.rig_3d_kiosks (
+    tenant_id uuid NOT NULL,
+    id uuid NOT NULL,
+    revision bigint NOT NULL DEFAULT 0 CHECK (revision >= 0),
+    PRIMARY KEY (tenant_id,id)
+);
+-- End RIG-5.

@@ -1,0 +1,41 @@
+{
+  "outward_faces": true,
+  "watertight": true,
+  "real_size": true,
+  "gltf_valid": true,
+  "triangles": 12,
+  "dimensions_mm": [
+    160,
+    70,
+    110
+  ],
+  "compression": "meshopt",
+  "anchors": {
+    "left": {
+      "position_mm": [
+        -80,
+        0,
+        0
+      ],
+      "quaternion": [
+        0,
+        0,
+        0,
+        1
+      ]
+    },
+    "right": {
+      "position_mm": [
+        80,
+        0,
+        0
+      ],
+      "quaternion": [
+        0,
+        0,
+        0,
+        1
+      ]
+    }
+  }
+}

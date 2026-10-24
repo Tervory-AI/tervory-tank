@@ -347,6 +347,7 @@ services:
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       STRIPE_PLAN_PRICE_IDS: ${STRIPE_PLAN_PRICE_IDS:-}
+      RIG_3D_PRICE_ID: ${RIG_3D_PRICE_ID:-}
     depends_on:
       - tank
     # Coolify attaches the public domain to this service (port 3000).
