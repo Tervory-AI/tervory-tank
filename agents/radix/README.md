@@ -22,7 +22,7 @@ Login `agent_radix`. Schema `agent_radix`. Key `TANK_KEY_RADIX` on Tank and on H
 - `source` is the repo, sent by the caller. It may be base64 (optionally prefixed with `b64:`) of a `.tar.gz`, a zip, or a git bundle, or `file:<name>` for a file already stored under `/data/<tenant_id>/`. A web address is refused.
 - `ref` is a label, such as a branch or commit. Radix does not fetch it.
 
-The image bakes in Gitleaks 8.28.0, Semgrep 1.181.0, and pip-audit 2.10.1. Semgrep rules are the file `scanlib/semgrep.yml`. Advisory data is the OSV JSON under `scanlib/osv`, copied to `/opt/osv` at build. pip-audit and npm audit call a live service, so the dependency scan reads that OSV directory and does not run those clients.
+The image bakes in Gitleaks 8.28.0, Semgrep 1.181.0, and pip-audit 2.10.1. Semgrep rules are the file `scanlib/semgrep.yml`. Advisory data is baked at image build: a build-only stage fetches the official OSV PyPI and npm exports (`https://osv-vulnerabilities.storage.googleapis.com/<ecosystem>/all.zip`) and `osv_bake.py` turns them into `/opt/osv/osv.sqlite` (about 35 MB). Every rebuild refreshes it; the build fails if an export looks truncated. The #47 fixture JSON under `scanlib/osv` is still copied to `/opt/osv` as well. At runtime Radix opens the sqlite file read-only and never downloads anything. pip-audit and npm audit call a live service, so the dependency scan reads `/opt/osv` and does not run those clients.
 
 ## What a scan returns
 
@@ -33,7 +33,7 @@ The secret text is not a column. It is masked out of the summary, the rows, and 
 ## The three skills
 
 1. `scan.secrets` — Gitleaks. Reports type, file, line, and rule.
-2. `scan.dependencies` — npm and Python packages against the baked OSV data. Reports package, version, advisory id, severity, and the fixed version.
+2. `scan.dependencies` — npm and Python packages (requirements*.txt, package.json, package-lock.json, and pinned `pip install x==y` / `npm install x@y` lines in Dockerfiles) against the baked OSV data. Reports package, version, advisory id, severity, and the fixed version.
 3. `scan.static` — Semgrep with the vendored rules. Looks for SQL built by string formatting.
 
 ## Gold candidates
