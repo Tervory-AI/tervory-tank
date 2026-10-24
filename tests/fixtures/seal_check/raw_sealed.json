@@ -113,7 +113,8 @@
    "project": "riguuid",
    "networks": [
     "tervory-gw-rig",
-    "riguuid_sandbox"
+    "riguuid_sandbox",
+    "riguuid_forge-control"
    ]
   },
   "rig-rig-sandbox": {
@@ -143,6 +144,26 @@
     "tervory-gw-rig",
     "riguuid_browser"
    ]
+  },
+  "rig-forge": {
+   "uuid": "riguuid",
+   "project": "riguuid",
+   "service": "rig-forge",
+   "name": "riguuid-rig-forge-1",
+   "networks": [
+    "riguuid_forge-control",
+    "riguuid_forge-egress"
+   ]
+  },
+  "rig-forge-egress": {
+   "uuid": "riguuid",
+   "project": "riguuid",
+   "service": "rig-forge-egress",
+   "name": "riguuid-rig-forge-egress-1",
+   "networks": [
+    "riguuid_forge-egress",
+    "riguuid_forge-outbound"
+   ]
   }
  },
  "networks": {
@@ -158,6 +179,9 @@
   "tervory-gw-rig": false,
   "riguuid_sandbox": true,
   "riguuid_browser": true,
-  "59f8cnpelzwsyte1atyjc4fv": false
+  "59f8cnpelzwsyte1atyjc4fv": false,
+  "riguuid_forge-control": true,
+  "riguuid_forge-egress": true,
+  "riguuid_forge-outbound": false
  }
 }
