@@ -67,7 +67,36 @@ except socket.gaierror:
 ' "$1" >/dev/null 2>&1
 }
 
+# Corridor flags before host checks (Ghost needs them for Hermes expectations).
+tiger_corridor=0
+base_corridor=0
+radix_corridor=0
+ghost_corridor=0
+for net in $(docker inspect -f '{{range $name, $net := .NetworkSettings.Networks}}{{$name}} {{end}}' "$container"); do
+  if [ "$net" = "tervory-gw-tiger" ]; then
+    tiger_corridor=1
+  fi
+  if [ "$net" = "tervory-gw-base" ]; then
+    base_corridor=1
+  fi
+  if [ "$net" = "tervory-gw-radix" ]; then
+    radix_corridor=1
+  fi
+  if [ "$net" = "tervory-gw-ghost" ]; then
+    ghost_corridor=1
+  fi
+done
+
 for host in tank postgres hermes; do
+  if [ "$host" = "hermes" ] && [ "$ghost_corridor" -eq 1 ]; then
+    # Ghost corridor: shared Hermes is not attached (ROOMS.md Ghost).
+    if resolves hermes; then
+      mark 1 "hermes does not resolve on ghost corridor"
+    else
+      mark 0 "hermes does not resolve on ghost corridor"
+    fi
+    continue
+  fi
   if resolves "$host"; then
     mark 0 "$host resolves"
   else
@@ -80,20 +109,7 @@ done
 # Tiger's browser is a neighbour only on tervory-gw-tiger. Every other
 # corridor must still be unable to resolve tiger, except Base: tervory-gw-base
 # may also reach tiger and searxng, and no other corridor may reach searxng.
-tiger_corridor=0
-base_corridor=0
-radix_corridor=0
-for net in $(docker inspect -f '{{range $name, $net := .NetworkSettings.Networks}}{{$name}} {{end}}' "$container"); do
-  if [ "$net" = "tervory-gw-tiger" ]; then
-    tiger_corridor=1
-  fi
-  if [ "$net" = "tervory-gw-base" ]; then
-    base_corridor=1
-  fi
-  if [ "$net" = "tervory-gw-radix" ]; then
-    radix_corridor=1
-  fi
-done
+# (Corridor flags were set above.)
 for host in workspace redis qdrant litellm searxng tiger agent-other; do
   if [ "$host" = "tiger" ] && [ "$tiger_corridor" -eq 1 ]; then
     if resolves tiger; then
@@ -146,7 +162,18 @@ else
   mark 1 "postgres answers"
 fi
 
-if docker exec "$container" python -c 'import urllib.request, urllib.error
+if [ "$ghost_corridor" -eq 1 ]; then
+  if docker exec "$container" python -c 'import urllib.request, urllib.error
+try:
+    urllib.request.urlopen("http://hermes:8000/health", timeout=5).read()
+except Exception:
+    raise SystemExit(1)
+' >/dev/null 2>&1; then
+    mark 1 "hermes unreachable on ghost corridor"
+  else
+    mark 0 "hermes unreachable on ghost corridor"
+  fi
+elif docker exec "$container" python -c 'import urllib.request, urllib.error
 try:
     urllib.request.urlopen("http://hermes:8000/health", timeout=5).read()
 except urllib.error.HTTPError:
@@ -213,6 +240,10 @@ for net in $nets; do
           continue
         fi
         if has_part "$short" hermes; then
+          # Ghost corridor must not include Hermes (ROOMS.md).
+          if [ "$net" = "tervory-gw-ghost" ]; then
+            unexpected="$unexpected $short"
+          fi
           continue
         fi
         if [ "$net" = "tervory-gw-tiger" ] && has_part "$short" tiger; then
@@ -224,12 +255,17 @@ for net in $nets; do
         if [ "$net" = "tervory-gw-base" ] && has_part "$short" searxng; then
           continue
         fi
+        if [ "$net" = "tervory-gw-ghost" ] && has_part "$short" ghost-browser; then
+          continue
+        fi
         unexpected="$unexpected $short"
       done
       if [ "$net" = "tervory-gw-tiger" ]; then
         label="gateway $net holds only this agent, tank, postgres, hermes, and tiger"
       elif [ "$net" = "tervory-gw-base" ]; then
         label="gateway $net holds only this agent, tank, postgres, hermes, tiger, and searxng"
+      elif [ "$net" = "tervory-gw-ghost" ]; then
+        label="gateway $net holds only this agent, tank, postgres, and ghost-browser"
       else
         label="gateway $net holds only this agent, tank, postgres, and hermes"
       fi
@@ -251,7 +287,10 @@ else
 fi
 
 # A ping job must reach done. The template handles kind "ping".
-if docker exec "$container" python -c 'import json, time, urllib.request
+# Ghost has no /jobs chassis — skip (ROOMS.md Ghost / SQLite incident room).
+if [ "$ghost_corridor" -eq 1 ]; then
+  mark 0 "ping job skipped on ghost corridor (no /jobs)"
+elif docker exec "$container" python -c 'import json, time, urllib.request
 body = json.dumps({
     "tenant_id": "00000000-0000-0000-0000-000000000001",
     "kind": "ping",
@@ -286,7 +325,10 @@ else
 fi
 
 # Database checks run inside the container so the password never reaches this script.
-if ! docker exec -i "$container" python - <<'PY'
+# Ghost uses SQLite on /data and has no DATABASE_URL (ROOMS.md Ghost).
+if [ "$ghost_corridor" -eq 1 ]; then
+  mark 0 "database login skipped on ghost corridor (SQLite, no DATABASE_URL)"
+elif ! docker exec -i "$container" python - <<'PY'
 import asyncio
 import os
 import re
