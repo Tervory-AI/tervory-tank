@@ -196,3 +196,25 @@ Room checks include existing room page tests, so Node 22 remains available, but
 only a full run installs Workspace packages and runs the global Ruff check.
 The lightweight changed-path jobs always use GitHub-hosted runners. The existing
 self-hosted choice and fork guards still apply to `tank` and `workspace`.
+
+## Superseded runs are cancelled (CI-2)
+
+`ci.yml` and `tisan-site.yml` share one workflow-level `concurrency` rule:
+
+```yaml
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+```
+
+- **Pull requests:** a second push to the same pull request cancels the first run.
+  Different pull requests, and the two workflows, never cancel each other.
+- **`main`:** runs are never cancelled. Each `main` run gets its own group
+  (`github.run_id`), so it never waits behind or gets replaced by another `main` run.
+  A shared `main` group would let GitHub cancel a *pending* run when a newer one
+  queues, even with `cancel-in-progress: false`, and `deploy-on-merge` needs every
+  `main` run to finish.
+
+`savings-page` has a 12-minute limit and caches its npm downloads and Playwright
+Chromium with `actions/cache`. Bump the cache keys when the pinned `esbuild` or
+`playwright` versions in that job change; the tests check they match.
