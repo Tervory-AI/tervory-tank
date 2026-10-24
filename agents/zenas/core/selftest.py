@@ -282,7 +282,8 @@ def _verbatim_quote(text: str) -> str:
     """A sentence copied from the stored judgment, short enough to score, still the court's words.
 
     Skip judge bylines and sentences that personal-information masking would alter, because
-    rule-card cleaning runs quotes through that mask before cite-check.
+    rule-card cleaning runs quotes through that mask before cite-check. Keep the historic
+    20-character floor so short court holdings still become library quotes.
     """
     _skip = re.compile(
         r"(circuit judge|district judge|per curiam|justice[.:]?$|after stat\w* the facts)",
@@ -297,14 +298,14 @@ def _verbatim_quote(text: str) -> str:
     candidates: list[str] = []
     for piece in normalized.split(chr(10)):
         line = piece.strip()
-        if len(line) < 40 or _skip.search(line):
+        if len(line) < 20 or _skip.search(line):
             continue
         end = line.find(". ")
-        if end >= 40:
+        if end >= 20:
             sentence = line[: end + 1]
             if sentence in text and not _skip.search(sentence):
                 candidates.append(sentence)
-        if line.endswith(".") and 40 <= len(line) <= 400 and line in text:
+        if line.endswith(".") and 20 <= len(line) <= 400 and line in text:
             candidates.append(line)
         elif len(line) >= 40 and line[:240] in text:
             candidates.append(line[:240])
@@ -313,7 +314,7 @@ def _verbatim_quote(text: str) -> str:
             return sentence
         if _clean_piece(sentence, []) == sentence:
             return sentence
-    # fall back: any substring 60..180 chars that survives cleaning
+    # fall back: any substring that survives cleaning
     body = " ".join(normalized.split())
     for width in (120, 90, 70):
         for i in range(0, max(0, len(body) - width)):
