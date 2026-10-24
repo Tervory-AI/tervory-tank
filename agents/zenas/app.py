@@ -504,21 +504,41 @@ async def _ready() -> PgLadder:
 
 @app.post("/ladder/retrieve")
 async def post_retrieve(body: RetrieveIn) -> dict[str, Any]:
-    result = await retrieve(
-        await _ready(),
-        app.state.tank,
-        tenant_id=str(body.tenant_id),
-        home_region=body.home_region,
-        box_region=_box_region(),
-        jurisdiction=body.jurisdiction,
-        query=body.query,
-        citation=body.citation,
-        as_at=body.as_at,
-        level=body.level,
-        kind=body.kind,
-        corpus=body.corpus or None,
-        pool=getattr(app.state, "law_pool", None),
-    )
+    """Pull passages from this box's law pool when the caller did not send a corpus."""
+    corpus = body.corpus or None
+    if corpus is not None:
+        result = await retrieve(
+            await _ready(),
+            app.state.tank,
+            tenant_id=str(body.tenant_id),
+            home_region=body.home_region,
+            box_region=_box_region(),
+            jurisdiction=body.jurisdiction,
+            query=body.query,
+            citation=body.citation,
+            as_at=body.as_at,
+            level=body.level,
+            kind=body.kind,
+            corpus=corpus,
+            pool=None,
+        )
+    else:
+        async with _pool_store() as law_pool:
+            result = await retrieve(
+                await _ready(),
+                app.state.tank,
+                tenant_id=str(body.tenant_id),
+                home_region=body.home_region,
+                box_region=_box_region(),
+                jurisdiction=body.jurisdiction,
+                query=body.query,
+                citation=body.citation,
+                as_at=body.as_at,
+                level=body.level,
+                kind=body.kind,
+                corpus=None,
+                pool=law_pool,
+            )
     _fail(result)
     return result
 
@@ -930,8 +950,28 @@ class AnswerIn(BaseModel):
 
 @app.post("/answers", status_code=200)
 async def post_answer(body: AnswerIn) -> dict[str, Any]:
+    """Ask Zenas. Empty passages are filled from this box's law pool (not left unset)."""
     store = _store()
     await store.apply_schema()
+    passages = list(body.passages)
+    if not passages:
+        async with _pool_store() as law_pool:
+            fetched = await retrieve(
+                await _ready(),
+                app.state.tank,
+                tenant_id=str(body.tenant_id),
+                home_region=body.home_region,
+                box_region=_box_region(),
+                jurisdiction=body.jurisdiction,
+                query=body.question,
+                pool=law_pool,
+            )
+        if not fetched.get("ok"):
+            if fetched.get("reason") == "could not verify" or fetched.get("delivered") is False:
+                return fetched
+            _fail(fetched)
+            return fetched
+        passages = list(fetched.get("passages") or [])
     result = await answer_question(
         store,
         await _ready(),
@@ -941,7 +981,7 @@ async def post_answer(body: AnswerIn) -> dict[str, Any]:
         box_region=_box_region(),
         jurisdiction=body.jurisdiction,
         question=body.question,
-        passages=body.passages,
+        passages=passages,
         features=body.features,
         matter_id=str(body.matter_id) if body.matter_id else None,
         provider=body.provider,
