@@ -231,9 +231,21 @@ class Cdp {
   }
 }
 
+async function freePort(): Promise<number> {
+  const server = createServer();
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Could not reserve a local port");
+  const port = address.port;
+  await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  return port;
+}
+
 async function waitJson(url: string, proc: ChildProcess): Promise<unknown> {
+  // CI hosts are often busy when the full tank suite runs; give Chrome a little
+  // longer than a local interactive start before declaring the debug port dead.
   const started = Date.now();
-  while (Date.now() - started < 15000) {
+  while (Date.now() - started < 20000) {
     if (proc.exitCode !== null) throw new Error("Chrome exited before the debugging port opened");
     try {
       const response = await fetch(url);
@@ -244,6 +256,34 @@ async function waitJson(url: string, proc: ChildProcess): Promise<unknown> {
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
   throw new Error("Chrome did not open a debugging port");
+}
+
+/** Start headless Chrome with a free debug port; retry on the known CI flake. */
+async function openChrome(executable: string, root: string): Promise<{ proc: ChildProcess; port: number }> {
+  const errors: string[] = [];
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const port = await freePort();
+    const profile = join(root, `profile-${attempt}`);
+    const proc = spawn(executable, [
+      "--headless=new",
+      "--disable-gpu",
+      "--no-sandbox",
+      "--disable-dev-shm-usage",
+      "--hide-scrollbars",
+      `--remote-debugging-port=${port}`,
+      `--user-data-dir=${profile}`,
+      "about:blank",
+    ], { stdio: "ignore" });
+    try {
+      await waitJson(`http://127.0.0.1:${port}/json/version`, proc);
+      return { proc, port };
+    } catch (error) {
+      proc.kill("SIGKILL");
+      errors.push(error instanceof Error ? error.message : String(error));
+      await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+    }
+  }
+  throw new Error(`Chrome did not open a debugging port after 3 tries (${errors.join("; ")})`);
 }
 
 async function evaluate<T>(cdp: Cdp, expression: string): Promise<T> {
@@ -328,19 +368,8 @@ async function main(): Promise<void> {
     fixtures.set(path, html.replaceAll(new URL("workspace/", ROOT).href, `${fixtureOrigin}/workspace/`));
     return fixtureOrigin + path;
   }
-  const port = 9400 + Math.floor(Math.random() * 400);
-  const proc = spawn(executable, [
-    "--headless=new",
-    "--disable-gpu",
-    "--no-sandbox",
-    "--disable-dev-shm-usage",
-    "--hide-scrollbars",
-    `--remote-debugging-port=${port}`,
-    `--user-data-dir=${join(dir, "profile")}`,
-    "about:blank",
-  ], { stdio: "ignore" });
+  const { proc, port } = await openChrome(executable, dir);
   try {
-    await waitJson(`http://127.0.0.1:${port}/json/version`, proc);
     const list = (await waitJson(`http://127.0.0.1:${port}/json/list`, proc)) as { type: string; webSocketDebuggerUrl: string }[];
     const page = list.find((item) => item.type === "page");
     if (!page) throw new Error("Chrome did not open a page");
