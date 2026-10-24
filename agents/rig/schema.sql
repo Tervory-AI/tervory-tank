@@ -172,6 +172,54 @@ CREATE INDEX IF NOT EXISTS searches_tenant_version ON agent_rig.searches (tenant
 CREATE INDEX IF NOT EXISTS searches_tenant_created
     ON agent_rig.searches (tenant_id, created_at DESC);
 
+-- RIG-4: durable retailer handoff and anonymous daily widget counts.
+CREATE TABLE IF NOT EXISTS agent_rig.quote_handoffs (
+    tenant_id uuid NOT NULL,
+    quote_id text NOT NULL REFERENCES agent_rig.quotes(id) ON DELETE CASCADE,
+    status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sending', 'sent')),
+    error text,
+    attempts integer NOT NULL DEFAULT 0,
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, quote_id)
+);
+
+CREATE TABLE IF NOT EXISTS agent_rig.widget_counts (
+    tenant_id uuid NOT NULL,
+    day date NOT NULL,
+    event text NOT NULL CHECK (event IN ('searches', 'setups_opened', 'swaps', 'quotes', 'no_results')),
+    count bigint NOT NULL DEFAULT 0 CHECK (count >= 0),
+    PRIMARY KEY (tenant_id, day, event)
+);
+-- End RIG-4.
+
+-- RIG-4b: short-lived per-client/route abuse limits, never joined to analytics.
+ALTER TABLE agent_rig.quote_handoffs ADD COLUMN IF NOT EXISTS next_attempt_at timestamptz DEFAULT now();
+ALTER TABLE agent_rig.quote_handoffs ADD COLUMN IF NOT EXISTS needs_attention boolean NOT NULL DEFAULT false;
+CREATE INDEX IF NOT EXISTS quote_handoffs_due ON agent_rig.quote_handoffs(tenant_id, next_attempt_at)
+    WHERE NOT needs_attention AND status <> 'sent';
+CREATE TABLE IF NOT EXISTS agent_rig.widget_search_events (
+    tenant_id uuid NOT NULL,
+    event_id uuid NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, event_id)
+);
+CREATE TABLE IF NOT EXISTS agent_rig.rate_windows (
+    tenant_id uuid NOT NULL,
+    window_id bigint NOT NULL,
+    salt bytea NOT NULL,
+    PRIMARY KEY (tenant_id, window_id)
+);
+CREATE TABLE IF NOT EXISTS agent_rig.rate_counts (
+    tenant_id uuid NOT NULL,
+    window_id bigint NOT NULL,
+    route text NOT NULL,
+    client_hash bytea NOT NULL,
+    hits integer NOT NULL CHECK (hits > 0),
+    PRIMARY KEY (tenant_id, window_id, route, client_hash),
+    FOREIGN KEY (tenant_id, window_id) REFERENCES agent_rig.rate_windows(tenant_id, window_id) ON DELETE CASCADE
+);
+-- End RIG-4b.
+
 -- RIG-3: private price inputs and per-file import receipts.
 -- Public product queries never select these tables.
 CREATE TABLE IF NOT EXISTS agent_rig.price_rules (

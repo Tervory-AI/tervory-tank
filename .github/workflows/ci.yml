@@ -236,7 +236,12 @@ jobs:
             npm --prefix workspace install --no-package-lock --no-audit --no-fund
           fi
           npm install --prefix "$RUNNER_TEMP/core2-browser" --no-audit --no-fund esbuild@0.28.2 playwright@1.64.1
-          "$RUNNER_TEMP/core2-browser/node_modules/.bin/playwright" install --with-deps chromium
+          browser=$(command -v chromium || command -v chromium-browser || command -v google-chrome || command -v google-chrome-stable || true)
+          if [ -n "$browser" ]; then
+            echo "CORE2_CHROMIUM=$browser" >> "$GITHUB_ENV"
+          else
+            "$RUNNER_TEMP/core2-browser/node_modules/.bin/playwright" install --with-deps chromium
+          fi
       - name: Check savings pages at 375px and 1440px
         run: |
           CORE2_ESBUILD_PATH="$RUNNER_TEMP/core2-browser/node_modules/esbuild" \
