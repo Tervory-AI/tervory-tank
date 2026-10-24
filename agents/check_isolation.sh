@@ -255,12 +255,12 @@ for net in $nets; do
         if [ "$net" = "tervory-gw-base" ] && has_part "$short" searxng; then
           continue
         fi
-        if [ "$net" = "tervory-gw-ghost" ] && has_part "$short" ghost-browser; then
-          continue
-        fi
-        # coolify-proxy may join tervory-gw-* after Traefik multi-net re-attach (routing only).
-        if [ "$net" = "tervory-gw-ghost" ] && has_part "$short" coolify-proxy; then
-          continue
+        # Multi-segment names: has_part splits on '-' so "ghost-browser" never matches
+        # a single token. Prefix-match Coolify-style names instead.
+        if [ "$net" = "tervory-gw-ghost" ]; then
+          case "$short" in
+            ghost-browser|ghost-browser-*|coolify-proxy|coolify-proxy-*) continue ;;
+          esac
         fi
         unexpected="$unexpected $short"
       done
