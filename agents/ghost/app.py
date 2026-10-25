@@ -445,7 +445,7 @@ def create_app() -> FastAPI:
         except (ThreatBurned, json.JSONDecodeError, TypeError, ValueError):
             raise HTTPException(422, BURN_DETAIL) from None
 
-@app.post("/ghost/patch/accept", dependencies=[Depends(require_tank)])
+    @app.post("/ghost/patch/accept", dependencies=[Depends(require_tank)])
     async def patch_accept(request: Request):
         """Autumbra patch-as-PR: validate ghost.patch.v1 brief, open draft dep-bump PR or dry-run.
 
