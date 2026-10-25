@@ -20,6 +20,7 @@ from .gold_sources import candidates
 from .investigate import Investigator
 from .models import Look, Message, Observation, PLATFORM_TENANT, Resolution, SITES, ROOMS, Signal, classify_message
 from .threat_payload import BURN_DETAIL, ThreatBurned, ThreatAction, accept_threat_payload, threat_to_shield_request
+from .guardrails import GUARD_BURN_DETAIL, GuardBurned, guard_inbound
 from . import wraith as wraith_room
 from .probes import Probes
 from .store import Store
@@ -254,14 +255,20 @@ def create_app() -> FastAPI:
 
     @app.post("/ghost/triage/accept", dependencies=[Depends(require_tank)])
     async def triage_accept(request: Request):
-        """Air-gap spike: LLM triage JSON must validate as ThreatPayload before any propose.
+        """Dual-LLM air gap: NeMo-shaped guard, then ThreatPayload before any propose.
 
-        Burn on fail (422, fixed detail, never echo body). propose_shield only builds a
-        dry-run/founder proposal — never raises a shield without the Shield tap.
+        Untrusted body hits guard_inbound first (injection burn), then
+        accept_threat_payload. Burn on fail (422, fixed detail, never echo body).
+        propose_shield only builds a dry-run/founder proposal — never raises a
+        shield without the Shield tap. Watch has no weapons; Enforce stays behind
+        the Wraith flag + founder tap.
         """
         raw = await bounded_json(request, 8_000)
         try:
+            guard_inbound(raw)
             payload = accept_threat_payload(raw)
+        except GuardBurned:
+            raise HTTPException(422, GUARD_BURN_DETAIL) from None
         except ThreatBurned:
             raise HTTPException(422, BURN_DETAIL) from None
         if payload.action == ThreatAction.propose_shield:
@@ -289,7 +296,10 @@ def create_app() -> FastAPI:
             raise HTTPException(404, "Not found.")
         raw = await bounded_json(request, 8_000)
         try:
+            guard_inbound(raw)
             payload = accept_threat_payload(raw)
+        except GuardBurned:
+            raise HTTPException(422, GUARD_BURN_DETAIL) from None
         except ThreatBurned:
             raise HTTPException(422, BURN_DETAIL) from None
         return wraith_room.would_enforce(payload)
