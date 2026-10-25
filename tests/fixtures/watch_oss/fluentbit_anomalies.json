@@ -1,0 +1,11 @@
+[
+  {
+    "source": "fluent_bit",
+    "site": "coolify.tervory.com",
+    "signal": "multipart",
+    "score": 0.96,
+    "confidence": 0.96,
+    "cve_ids": ["CVE-2026-109618"],
+    "reason": "multipart post anomaly on Coolify"
+  }
+]

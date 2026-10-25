@@ -1,0 +1,6 @@
+{
+  "indicators": [
+    {"name": "KEV match", "score": 0.92, "cve_ids": ["CVE-2026-109618"]}
+  ],
+  "site": "coolify.tervory.com"
+}

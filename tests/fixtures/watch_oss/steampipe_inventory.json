@@ -1,0 +1,14 @@
+{
+  "rows": [
+    {"name": "nginx", "version": "1.27.0", "kind": "software"}
+  ],
+  "anomaly": {
+    "source": "steampipe",
+    "site": "coolify.tervory.com",
+    "signal": "waf_managed",
+    "score": 0.91,
+    "confidence": 0.91,
+    "cve_ids": ["CVE-2026-109618"],
+    "reason": "steampipe inventory found outdated edge component"
+  }
+}

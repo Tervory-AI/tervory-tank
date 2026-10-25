@@ -1,0 +1,18 @@
+[
+  {
+    "source": "vector",
+    "site": "coolify.tervory.com",
+    "signal": "waf",
+    "score": 0.93,
+    "confidence": 0.93,
+    "cve_ids": ["CVE-2026-109618"],
+    "reason": "managed rule spike on Coolify edge"
+  },
+  {
+    "source": "vector",
+    "site": "coolify.tervory.com",
+    "signal": "waf",
+    "score": 0.4,
+    "reason": "below threshold noise"
+  }
+]

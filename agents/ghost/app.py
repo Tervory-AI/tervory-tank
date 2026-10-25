@@ -25,7 +25,7 @@ from .guardrails import GUARD_BURN_DETAIL, GuardBurned, guard_inbound_if_enabled
 from . import wraith as wraith_room
 from . import rails as airgap_rails
 from . import watch_oss as watch_oss_room
-from .watch_oss import AnomalyEvent, handoff_threat
+from .watch_oss import AnomalyEvent, handoff_threat, propose_from_anomaly
 from .probes import Probes
 from .store import Store
 
@@ -349,38 +349,59 @@ def create_app() -> FastAPI:
 
     @app.post("/ghost/watch/intake", dependencies=[Depends(require_tank)])
     async def watch_oss_intake(request: Request):
-        """Anomaly-only intake → ThreatPayload burn. Flag OFF by default.
+        """Anomaly-only intake → match → ThreatPayload → Shields.propose.
 
-        Raw log bodies are rejected by AnomalyEvent (extra=forbid). Below-threshold
-        scores burn. Never raises a shield — open_match acknowledgement only.
+        Flag OFF by default. Raw log bodies rejected by AnomalyEvent (extra=forbid).
+        Signals that map to a shield kind (waf/multipart/…) open a synthetic match
+        and propose for the founder panel (practice mode when no CF token). Other
+        anomalies acknowledge as open_match only. Never raises a shield / Enforce.
+        Air Gap #286 guard stays optional and OFF — ThreatPayload burn unchanged.
         """
         if not watch_oss_room.enabled():
             raise HTTPException(404, "Not found.")
         raw = await bounded_json(request, 8_000)
         try:
             data = json.loads(raw)
-            if isinstance(data, list):
-                events = data
-            else:
-                events = [data]
+            events = data if isinstance(data, list) else [data]
             accepted = []
-            for item in events[:50]:
-                try:
-                    event = AnomalyEvent.model_validate(item)
-                    payload = handoff_threat(event)
-                except (ThreatBurned, ValueError, TypeError):
-                    continue
-                accepted.append({
-                    "action": payload.action.value,
-                    "site": payload.site,
-                    "severity": payload.severity.value,
-                    "match_id": payload.match_id,
-                })
+            async with app.state.advisory_lock:
+                for item in events[:50]:
+                    try:
+                        event = AnomalyEvent.model_validate(item)
+                        # Prefer propose path when signal maps to a shield kind.
+                        try:
+                            result = await propose_from_anomaly(
+                                app.state.shields, app.state.store, PLATFORM_TENANT, event
+                            )
+                            accepted.append({
+                                "action": result["action"],
+                                "site": result["site"],
+                                "severity": result["severity"],
+                                "match_id": result["match_id"],
+                                "kind": result["kind"],
+                                "shield": shield_room.public_view(result["shield"]),
+                                "note": result["note"],
+                            })
+                            continue
+                        except ThreatBurned:
+                            payload = handoff_threat(event)
+                    except (ThreatBurned, ValueError, TypeError):
+                        continue
+                    accepted.append({
+                        "action": payload.action.value,
+                        "site": payload.site,
+                        "severity": payload.severity.value,
+                        "match_id": payload.match_id,
+                    })
             return {
                 "accepted": len(accepted),
                 "events": accepted,
                 "product": "Autumbra Watch",
-                "note": "Schema passed for anomalies only. No Enforce path from this intake.",
+                "note": (
+                    "Anomalies may propose shields for the founder panel. "
+                    "Practice mode changes nothing. Founder Shield tap required to raise. "
+                    "No Enforce path from this intake."
+                ),
             }
         except (ThreatBurned, json.JSONDecodeError, TypeError, ValueError):
             raise HTTPException(422, BURN_DETAIL) from None

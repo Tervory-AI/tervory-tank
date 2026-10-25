@@ -54,3 +54,23 @@ Do not vendor multi-GB upstream trees into Tank. Prefer primary vault + adapters
 ## Merge gate
 
 CI green. Merge **only after Zenas via AMMOSYNC**. Leave `WATCH_OSS_ENABLED` OFF in prod until founder arming.
+
+
+## Wire (connections) — #284 stack
+
+Path: **anomaly → synthetic match → ThreatPayload → Shields.propose → founder panel**.
+
+- Flag `WATCH_OSS_ENABLED` / `GHOST_WATCH_OSS_ENABLED` default **OFF**.
+- Signals that map to a shield kind (`waf`, `multipart`, `rate`, `bots`, …) open a
+  deduped synthetic match and call `Shields.propose` (practice mode when no CF token).
+- Other anomalies acknowledge as `open_match` only.
+- Uses `#281`/`#284` `match_to_threat_payload` / burn unchanged — does **not** rewrite
+  `threat_payload.py` schema.
+- Aligns with Air Gap `#286`: optional Dual-LLM guard stays flag-OFF; no live HF.
+- Founder must tap **Shield** on the Autumbra Watch panel to raise. Enforce OFF.
+- Fixtures: `tests/fixtures/watch_oss/` + `tests/test_ghost_watch_oss_wire.py`.
+
+**Stack base for this draft tip:** PR `#284` tip `839e997` (`grok/ghost-airgap-slo-wraith`).
+Panel rename `#288` is still based on `main` — retarget `#290` onto `#288` after Dogfood
+lands a linear stack. Leave Wazuh / vLLM alone.
+
