@@ -1,0 +1,29 @@
+{
+  "fingerprint": "CVE-2026-55555|coolify|package|requests",
+  "advisory_id": "CVE-2026-55555",
+  "source_ids": ["CVE-2026-55555", "GHSA-aaaa-bbbb-cccc"],
+  "first_source": "osv",
+  "advisory_published": "2026-10-20T12:00:00Z",
+  "summary": "Fixture only: requests before 2.32.3 has a crafted redirect issue (synthetic Autumbra CONNECT dogfood).",
+  "references": ["https://example.invalid/advisory/CVE-2026-55555"],
+  "affected": {
+    "app": "coolify",
+    "kind": "package",
+    "name": "requests",
+    "version": "2.31.0",
+    "ecosystem": "pypi"
+  },
+  "severity": {
+    "cvss": 8.1,
+    "label": "high",
+    "known_exploited": false
+  },
+  "what_to_do": {
+    "patch_to": "2.32.3",
+    "shield": null,
+    "plain": "Update requests on coolify to 2.32.3 or later."
+  },
+  "id": "fixture-match-autumbra-connect-001",
+  "state": "open",
+  "flagged_at": "2026-10-24T17:00:00Z"
+}

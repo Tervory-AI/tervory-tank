@@ -18,6 +18,7 @@ from . import advisories as advisory_watch
 from . import inventory as inv
 from . import shields as shield_room
 from .patch_brief import BURN_DETAIL as PATCH_BURN_DETAIL, PatchBurned, accept_patch_brief, passes_severity_bar
+from .patch_connect import connect_match_to_plan, threat_to_patch_brief
 from .patch_pr import open_dep_bump_pr
 from .gold_sources import candidates
 from .investigate import Investigator
@@ -462,6 +463,40 @@ def create_app() -> FastAPI:
             "accepted": True,
             "action": brief.action,
             "schema_version": brief.schema_version,
+            **result,
+        }
+
+    @app.post("/ghost/patch/from-match", dependencies=[Depends(require_tank)])
+    async def patch_from_match(request: Request):
+        """CONNECT: advisory match fixture → PatchBrief → draft/dry-run plan. Never merges."""
+        raw = await bounded_json(request, 20_000)
+        try:
+            data = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError, TypeError):
+            raise HTTPException(422, PATCH_BURN_DETAIL) from None
+        if not isinstance(data, dict):
+            raise HTTPException(422, PATCH_BURN_DETAIL)
+        try:
+            return connect_match_to_plan(data)
+        except PatchBurned:
+            raise HTTPException(422, PATCH_BURN_DETAIL) from None
+
+    @app.post("/ghost/patch/from-threat", dependencies=[Depends(require_tank)])
+    async def patch_from_threat(request: Request):
+        """CONNECT: ThreatPayload-shaped facts → PatchBrief → draft/dry-run. Never merges."""
+        raw = await bounded_json(request, 12_000)
+        try:
+            brief = threat_to_patch_brief(raw)
+        except PatchBurned:
+            raise HTTPException(422, PATCH_BURN_DETAIL) from None
+        if not passes_severity_bar(brief):
+            raise HTTPException(422, PATCH_BURN_DETAIL)
+        result = open_dep_bump_pr(brief)
+        return {
+            "connected": True,
+            "action": brief.action,
+            "schema_version": brief.schema_version,
+            "brief": brief.model_dump(mode="json"),
             **result,
         }
 
