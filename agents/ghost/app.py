@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import hmac
 import os
 from contextlib import asynccontextmanager
@@ -23,6 +24,8 @@ from .threat_payload import BURN_DETAIL, ThreatBurned, ThreatAction, accept_thre
 from .guardrails import GUARD_BURN_DETAIL, GuardBurned, guard_inbound_if_enabled
 from . import wraith as wraith_room
 from . import rails as airgap_rails
+from . import watch_oss as watch_oss_room
+from .watch_oss import AnomalyEvent, handoff_threat
 from .probes import Probes
 from .store import Store
 
@@ -335,6 +338,52 @@ def create_app() -> FastAPI:
                 return shield_room.public_view(await app.state.shields.undo(str(shield_id)))
             except LookupError:
                 raise HTTPException(404, "not found") from None
+
+
+    # ---------- Autumbra Watch OSS intake (Vector / Fluent Bit / Steampipe / OpenCTI) ----------
+
+    @app.get("/ghost/watch/oss", dependencies=[Depends(require_tank)])
+    async def watch_oss_status():
+        """Adapter status. Autumbra Watch copy; does not start upstream daemons."""
+        return watch_oss_room.status()
+
+    @app.post("/ghost/watch/intake", dependencies=[Depends(require_tank)])
+    async def watch_oss_intake(request: Request):
+        """Anomaly-only intake → ThreatPayload burn. Flag OFF by default.
+
+        Raw log bodies are rejected by AnomalyEvent (extra=forbid). Below-threshold
+        scores burn. Never raises a shield — open_match acknowledgement only.
+        """
+        if not watch_oss_room.enabled():
+            raise HTTPException(404, "Not found.")
+        raw = await bounded_json(request, 8_000)
+        try:
+            data = json.loads(raw)
+            if isinstance(data, list):
+                events = data
+            else:
+                events = [data]
+            accepted = []
+            for item in events[:50]:
+                try:
+                    event = AnomalyEvent.model_validate(item)
+                    payload = handoff_threat(event)
+                except (ThreatBurned, ValueError, TypeError):
+                    continue
+                accepted.append({
+                    "action": payload.action.value,
+                    "site": payload.site,
+                    "severity": payload.severity.value,
+                    "match_id": payload.match_id,
+                })
+            return {
+                "accepted": len(accepted),
+                "events": accepted,
+                "product": "Autumbra Watch",
+                "note": "Schema passed for anomalies only. No Enforce path from this intake.",
+            }
+        except (ThreatBurned, json.JSONDecodeError, TypeError, ValueError):
+            raise HTTPException(422, BURN_DETAIL) from None
 
     @app.get("/ghost/summary", dependencies=[Depends(require_tank)])
     async def ghost_summary():
