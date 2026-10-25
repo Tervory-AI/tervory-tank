@@ -24,8 +24,6 @@ export type AutumbraThreatReceipt = {
 export type AutumbraWatchFixture = {
   panel: GhostPanel;
   threatReceipts: AutumbraThreatReceipt[];
-  /** Shown when the console is rendering this fixture instead of live Tank data. */
-  banner: string;
 };
 
 const lookSite: GhostIncident = {
@@ -141,7 +139,6 @@ export const AUTUMBRA_WATCH_FIXTURE: AutumbraWatchFixture = {
     },
   },
   threatReceipts: [connectMatchReceipt, briefHandoffReceipt, burnedReceipt],
-  banner: "",
 };
 
 export function isUsableGhostPanel(data: GhostPanel | null | undefined): data is GhostPanel {

@@ -51,9 +51,11 @@ test("Watch fixture exposes ThreatPayload / advisory receipts (propose-only)", (
   assert.ok(connect.cve_ids?.includes("CVE-2026-55555"));
 });
 
-test("no Demo/Practice/Fixture framing in user-facing banner", () => {
-  assert.equal(AUTUMBRA_WATCH_FIXTURE.banner, "");
-  assert.ok(!/Ghost|Wraith/.test(AUTUMBRA_WATCH_FIXTURE.banner));
+test("no Demo/Practice/fixture-banner chrome in Watch panel UI", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const panel = await readFile(new URL("../workspace/app/admin/autumbra/panel.tsx", import.meta.url), "utf8");
+  assert.ok(!/fixtureBanner|autumbra-fixture-banner/.test(panel));
+  assert.ok(!/Demo|Practice|demo data|fixture banner/i.test(panel));
 });
 
 test("isUsableGhostPanel rejects null and incomplete payloads", () => {
