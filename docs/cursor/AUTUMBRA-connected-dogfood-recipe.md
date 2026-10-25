@@ -54,8 +54,8 @@ python -m pytest -q \
 
 ### Optional later-stack fixture checks (not on connected tip until restack)
 
-**#290 Watch OSS** (after Watch restacks onto #288 tip):  
-`tests/test_ghost_watch_oss_intake.py`, `tests/test_ghost_watch_oss_wire.py` — flag OFF.
+**#290 Watch OSS** @ `b1bba3e` (restacked onto #292 `a374a48`; run from `grok/autumbra-watch-oss`):  
+`tests/test_ghost_watch_oss_intake.py`, `tests/test_ghost_watch_oss_wire.py` — flag OFF. Local: **19 passed** (Oct 24 ~5:58pm PT). CI on `b1bba3e`: **pending** (`changes` queued).
 
 **#291 Enforce OSS** tip `99c50f0` (after #290 in merge order):  
 - ThreatPayload → `POST /ghost/enforce/oss/plan`  
