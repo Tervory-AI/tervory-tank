@@ -139,9 +139,11 @@ async def _assert_imported(url: str) -> None:
     conn = await asyncpg.connect(url)
     try:
         products = await conn.fetchval("SELECT count(*) FROM agent_rig.products")
-        assert products == 18 + 3 + 2
+        # customnation 18 + example 3 + second 2 + archon 15
+        assert products == 18 + 3 + 2 + 15
         seen = await conn.fetch("SELECT seen_at, price FROM agent_rig.market_prices")
-        assert len(seen) == 32
+        # customnation market.csv 32 rows + archon market.csv 53 rows
+        assert len(seen) == 32 + 53
         for row in seen:
             assert isinstance(row["seen_at"], datetime)
             assert row["seen_at"].date().isoformat() == "2026-03-01"

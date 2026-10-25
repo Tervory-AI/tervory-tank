@@ -266,15 +266,33 @@ async def test_triage_accept_omits_enforce_oss_when_disabled(tmp_path, monkeypat
 
 def test_no_hf_imports_in_enforce_oss():
     """Enforce OSS path must not pull Hugging Face / transformers."""
+    from pathlib import Path
+
     banned = ("transformers", "huggingface_hub", "huggingface", "torch", "vllm")
-    # Import path under test
+    root = Path(__file__).resolve().parents[1] / "agents" / "ghost" / "enforce_oss"
+    offenders: list[str] = []
+    for path in sorted(root.rglob("*.py")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            if any(f"import {b}" in stripped for b in banned) or any(
+                stripped.startswith(f"from {b}") for b in banned
+            ):
+                offenders.append(f"{path.relative_to(root)}: {stripped}")
+    assert not offenders, f"banned imports in enforce_oss sources: {offenders}"
+
+    # Runtime: only fail if *this* import newly loads banned modules.
+    # Other suite tests (Autumbra dogfood HF) may already have huggingface_hub loaded.
+    before = {name for name in sys.modules if any(b in name for b in banned)}
     import agents.ghost.enforce_oss as mod
     import agents.ghost.enforce_oss.handoff as handoff
     import agents.ghost.enforce_oss.ansible as ansible
     import agents.ghost.enforce_oss.terraform as terraform
     del mod, handoff, ansible, terraform
-    loaded = {name for name in sys.modules if any(b in name for b in banned)}
-    assert not loaded, f"unexpected HF/GPU modules loaded: {loaded}"
+    after = {name for name in sys.modules if any(b in name for b in banned)}
+    newly = after - before
+    assert not newly, f"enforce_oss newly loaded HF/GPU modules: {newly}"
 
 
 def test_dirty_payload_burns_no_echo(monkeypatch):
