@@ -79,6 +79,23 @@ def test_v5_page_serves_both_skins_with_the_archon_key() -> None:
     assert "<script>alert" not in odd.text
 
 
+def test_root_serves_v5_product_surface() -> None:
+    """GET / is the built Rig product (v5), not the classic blank shell."""
+    client = _client()
+    home = client.get("/")
+    assert home.status_code == 200
+    assert 'data-skin="rig"' in home.text
+    assert "What are you building?" in home.text
+    assert "Archon Type B" in home.text  # try chip
+    assert "Demo · fixture catalogues" in home.text
+    assert "live distributor keys are off" in home.text
+    assert "Demo · keys off" in home.text
+    assert json.dumps(KEY) in home.text
+    assert "__RIG_" not in home.text
+    assert client.get("/v5").status_code == 200
+    assert 'data-skin="cn"' in client.get("/v5/cn").text
+
+
 def test_v5_assets_and_traversal() -> None:
     client = _client()
     for name, media in (
@@ -101,7 +118,9 @@ def test_v5_shopper_words() -> None:
     text = "\n".join((V5 / name).read_text(encoding="utf-8") for name in ("index.html", "rig.js"))
     assert "Get A Quote" in text
     assert not re.search(r"reserv", text, re.IGNORECASE)
-    assert "Sample prices" in text
+    assert "Sample prices" in text  # stage / dock still say sample
+    assert "Demo · keys off" in text
+    assert "live distributor keys are off" in text
     assert "sample" in (V5 / "sample-suppliers.json").read_text(encoding="utf-8")
     # No web images: every image the page loads is under /page/v5/media.
     for url in re.findall(r"(?:src=|url\()[\"']?([^\"')\s>]+)", text):

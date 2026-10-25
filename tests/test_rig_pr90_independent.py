@@ -35,6 +35,7 @@ from rigbox.store import MemoryStore  # noqa: E402
 
 CATALOGUES = ROOT / "agents" / "rig" / "catalogues"
 CN = CATALOGUES / "customnation"
+ARCHON = CATALOGUES / "archon"
 EXAMPLE = CATALOGUES / "example"
 SECOND = CATALOGUES / "second"
 PAGE = ROOT / "agents" / "rig" / "rigbox" / "page"
@@ -877,18 +878,22 @@ def test_diff_secrets_feeds_and_admin_key() -> None:
     service = asyncio.run(_loaded())
     client = TestClient(_app(service))
     shop = client.get("/")
+    classic = client.get("/cn-classic")
     admin = client.get("/admin")
-    rendered = shop.text + "\n" + admin.text + "\n" + client.get("/page/admin.js").text + "\n" + client.get("/page/search.js").text
+    rendered = shop.text + "\n" + classic.text + "\n" + admin.text + "\n" + client.get("/page/admin.js").text + "\n" + client.get("/page/search.js").text
     if "RIG_ADMIN_KEY" in rendered or ADMIN_CN in rendered or "review-admin" in rendered:
         admin_leaks.append("rendered page contains an admin key")
     demo_key = _key(CN)
     example_key = _key(EXAMPLE)
-    if example_key in shop.text:
+    archon_key = _key(ARCHON) if ARCHON.exists() else "rk_pub_archon"
+    if example_key in shop.text or example_key in classic.text:
         admin_leaks.append("shopper page embeds the example catalogue key")
-    if demo_key not in shop.text:
-        admin_leaks.append("shopper page did not embed the demo catalogue key")
-    if "Custom Nation" in shop.text:
-        admin_leaks.append("shopper page shows Custom Nation")
+    if archon_key not in shop.text:
+        admin_leaks.append("root product page did not embed the archon catalogue key")
+    if demo_key not in classic.text:
+        admin_leaks.append("classic shopper page did not embed the demo catalogue key")
+    if "Custom Nation" in classic.text:
+        admin_leaks.append("classic shopper page shows Custom Nation")
     feeds = asyncio.run(_feeds(service))
     if any(feeds.values()):
         feed_urls.append(f"loaded feeds {feeds}")
@@ -897,8 +902,9 @@ def test_diff_secrets_feeds_and_admin_key() -> None:
         "distributor_hits": distributor_hits,
         "feed_urls": feed_urls,
         "admin_leaks": admin_leaks,
-        "shopper_page_embeds_demo_catalogue_key": demo_key in shop.text,
-        "shopper_page_embeds_example_publishable_key": example_key in shop.text,
+        "shopper_page_embeds_demo_catalogue_key": demo_key in classic.text,
+        "root_embeds_archon_key": archon_key in shop.text,
+        "shopper_page_embeds_example_publishable_key": example_key in shop.text or example_key in classic.text,
     }
     _record("static", payload)
     assert secret_hits == [], payload
@@ -989,7 +995,7 @@ def test_browser_search_accessories_compare_admin() -> None:
                 args=["--no-sandbox", "--disable-dev-shm-usage"],
             )
             page = browser.new_page(viewport={"width": 1280, "height": 900})
-            page.goto(LOCAL_ORIGIN + "/", wait_until="domcontentloaded")
+            page.goto(LOCAL_ORIGIN + "/cn-classic", wait_until="domcontentloaded")
             shots.append(_shot(page, "pr90-01-search.png"))
             page.fill("#q", "staccato c2")
             page.click("form.search button")
@@ -1073,7 +1079,7 @@ def test_browser_search_accessories_compare_admin() -> None:
             page.locator("tr", has_text="Review Grip").get_by_role("button", name="Reject").click()
             page.wait_for_selector("text=Rejected")
             shots.append(_shot(page, "pr90-07-admin-decided.png"))
-            page.goto(LOCAL_ORIGIN + "/", wait_until="domcontentloaded")
+            page.goto(LOCAL_ORIGIN + "/cn-classic", wait_until="domcontentloaded")
             page.fill("#q", "staccato c2")
             page.click("form.search button")
             page.wait_for_selector("text=Staccato C2")

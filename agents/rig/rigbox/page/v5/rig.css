@@ -194,6 +194,7 @@ main { position: relative; }
 .promise .ico { width: 15px; height: 15px; }
 .promise b { display: block; font-weight: 500; font-size: 13px; }
 .promise small { display: block; color: var(--text-tertiary); font-size: 11px; margin-top: 2px; }
+.demo-banner { position: relative; margin: 14px 0 0; padding: 8px 14px; border-radius: var(--radius-chip); border: 1px solid color-mix(in srgb, var(--data-warn) 50%, transparent); background: color-mix(in srgb, var(--bg-raised) 80%, transparent); color: var(--data-warn); font-size: 12.5px; max-width: 640px; text-align: center; line-height: 1.35; }
 .foot-count { position: relative; margin: 40px 0 0; color: var(--text-tertiary); font-size: 11px; }
 
 /* Stage: pistol with slot cards */
