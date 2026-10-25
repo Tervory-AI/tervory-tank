@@ -7,10 +7,12 @@ change when it is at least four characters. A piece of a longer word does not
 count. A model code that is one edit from a real code, or a short prefix of
 one, can surface that row only as a closest match. It is never an exact hit.
 A digit in a model name, including a single digit joined to or following
-a model word, has to sit on that same row. The token directly after a
-known brand is exact only when it is in that catalogue's names, categories,
-or attributes, or in the bundled shopping glossary. Any other word there,
-including an ordinary English word or a short code, is a missing model.
+a model word, has to sit on that same row. A single letter after a catalogue
+word, such as Type C, is a missing model unless one row carries both. The
+token directly after a known brand is exact only when it is in that
+catalogue's names, categories, or attributes, or in the bundled shopping
+glossary. Any other word there, including an ordinary English word or a
+short code, is a missing model.
 Tokens that do not follow a brand still use the English frequency list:
 they are not model codes unless they carry a digit the catalogue lacks.
 A word that is already a category outranks a shared name, so that part comes
@@ -209,7 +211,9 @@ def search(payload: dict[str, Any]) -> dict[str, Any]:
     body: dict[str, Any] = {"results": results, "ids": [item["id"] for item in results]}
     if not results:
         return body
-    missing = _unmatched_models(query, rows)
+    # Single-letter model words ("Type C") are a shop-search rule. The shared
+    # catalogue leaves them to the brand-after check, which is what main does.
+    missing = _unmatched_models(query, rows, letters=bool(payload.get("model_letters")))
     if missing:
         body["exact_match"] = False
         body["message"] = _no_exact(missing)
@@ -358,7 +362,7 @@ def _after_brand(flat: list[tuple[str, str]], index: int, brands: set[str]) -> b
     return previous >= 0 and _covered(flat[previous][1], brands)
 
 
-def _unmatched_models(query: str, rows: list[dict[str, Any]]) -> list[str]:
+def _unmatched_models(query: str, rows: list[dict[str, Any]], letters: bool = False) -> list[str]:
     """Model codes that no single row carries exactly.
 
     A digit that is not on the same row as the rest of its code is missing.
@@ -396,6 +400,32 @@ def _unmatched_models(query: str, rows: list[dict[str, Any]]) -> list[str]:
         needed = _model_parts(prev_parts) + parts
         if not _row_has_all(needed, rows):
             add(f"{prev_word} {word}")
+    # "Type C": a single letter after a catalogue word. Off unless the shop
+    # asked for it. "a" stays a filler. A letter sitting on a brand is left
+    # to the brand-after loop so it is not named twice.
+    if letters:
+        for index, (word, parts) in enumerate(parsed):
+            if index == 0 or not (len(parts) == 1 and len(parts[0]) == 1 and parts[0].isalpha()):
+                continue
+            if parts[0] in _FILLER:
+                continue
+            prev_word, prev_parts = parsed[index - 1]
+            if not prev_parts or prev_parts[0] in _FILLER or prev_parts[0] in _SKIP:
+                continue
+            # "c 4" is a spaced code. The digit loop owns the letter in front of it.
+            if index + 1 < len(parsed):
+                next_parts = parsed[index + 1][1]
+                if len(next_parts) == 1 and next_parts[0].isdigit():
+                    continue
+            # A typo such as "typ b" is not a new model. The word before the letter
+            # has to be one this catalogue already uses, as "type" is.
+            if not _covered(prev_parts[0], listed):
+                continue
+            if _covered(prev_parts[0], brands):
+                continue
+            needed = _model_parts(prev_parts) + parts
+            if needed and not _row_has_all(needed, rows):
+                add(f"{prev_word} {word}")
     flat: list[tuple[str, str]] = []
     for word, parts in parsed:
         for part in parts:

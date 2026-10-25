@@ -1,0 +1,402 @@
+{
+ "sample": true,
+ "note": "Sample supplier offers for the Rig demo. Not from distributor feeds. Supplier names are placeholders.",
+ "currency": "ZAR",
+ "suppliers": {
+  "A": "Supplier A",
+  "B": "Supplier B",
+  "C": "Supplier C"
+ },
+ "offers": {
+  "ARCHON-TYPE-B": [
+   {
+    "supplier": "A",
+    "price": 26740,
+    "status": "in_stock",
+    "qty": 7,
+    "lead_days": 2,
+    "due": null
+   },
+   {
+    "supplier": "B",
+    "price": 24990.0,
+    "status": "in_stock",
+    "qty": 14,
+    "lead_days": 4,
+    "due": null
+   },
+   {
+    "supplier": "C",
+    "price": 26490,
+    "status": "in_stock",
+    "qty": 8,
+    "lead_days": 3,
+    "due": null
+   }
+  ],
+  "ARCHON-TYPE-A": [
+   {
+    "supplier": "A",
+    "price": 29150,
+    "status": "on_order",
+    "qty": 0,
+    "lead_days": null,
+    "due": "20 Nov"
+   },
+   {
+    "supplier": "B",
+    "price": 28340,
+    "status": "on_order",
+    "qty": 0,
+    "lead_days": null,
+    "due": "20 Nov"
+   },
+   {
+    "supplier": "C",
+    "price": 26990.0,
+    "status": "on_order",
+    "qty": 0,
+    "lead_days": null,
+    "due": "12 Nov"
+   }
+  ],
+  "ARCHON-TYPE-B-PORTED": [
+   {
+    "supplier": "A",
+    "price": 28490.0,
+    "status": "low_stock",
+    "qty": 2,
+    "lead_days": 2,
+    "due": null
+   },
+   {
+    "supplier": "B",
+    "price": 29630,
+    "status": "in_stock",
+    "qty": 4,
+    "lead_days": 4,
+    "due": null
+   },
+   {
+    "supplier": "C",
+    "price": 29910,
+    "status": "in_stock",
+    "qty": 8,
+    "lead_days": 3,
+    "due": null
+   }
+  ],
+  "ARCHON-DOT-RMS": [
+   {
+    "supplier": "A",
+    "price": 6680,
+    "status": "in_stock",
+    "qty": 6,
+    "lead_days": 2,
+    "due": null
+   },
+   {
+    "supplier": "B",
+    "price": 6490.0,
+    "status": "low_stock",
+    "qty": 2,
+    "lead_days": 4,
+    "due": null
+   },
+   {
+    "supplier": "C",
+    "price": 6680,
+    "status": "in_stock",
+    "qty": 10,
+    "lead_days": 3,
+    "due": null
+   }
+  ],
+  "ARCHON-DOT-RMR": [
+   {
+    "supplier": "A",
+    "price": 8990.0,
+    "status": "in_stock",
+    "qty": 14,
+    "lead_days": 2,
+    "due": null
+   },
+   {
+    "supplier": "B",
+    "price": 9260,
+    "status": "low_stock",
+    "qty": 2,
+    "lead_days": 5,
+    "due": null
+   },
+   {
+    "supplier": "C",
+    "price": 8630,
+    "status": "out_of_stock",
+    "qty": 0,
+    "lead_days": null,
+    "due": "6 Nov"
+   }
+  ],
+  "ARCHON-DOT-ACRO": [
+   {
+    "supplier": "A",
+    "price": 11490.0,
+    "status": "out_of_stock",
+    "qty": 0,
+    "lead_days": null,
+    "due": "12 Nov"
+   },
+   {
+    "supplier": "B",
+    "price": 11030,
+    "status": "out_of_stock",
+    "qty": 0,
+    "lead_days": null,
+    "due": "6 Nov"
+   },
+   {
+    "supplier": "C",
+    "price": 11030,
+    "status": "out_of_stock",
+    "qty": 0,
+    "lead_days": null,
+    "due": "6 Nov"
+   }
+  ],
+  "ARCHON-TRIGGER-PERF": [
+   {
+    "supplier": "A",
+    "price": 3880,
+    "status": "in_stock",
+    "qty": 11,
+    "lead_days": 2,
+    "due": null
+   },
+   {
+    "supplier": "B",
+    "price": 3450,
+    "status": "out_of_stock",
+    "qty": 0,
+    "lead_days": null,
+    "due": "6 Nov"
+   },
+   {
+    "supplier": "C",
+    "price": 3590.0,
+    "status": "in_stock",
+    "qty": 11,
+    "lead_days": 3,
+    "due": null
+   }
+  ],
+  "ARCHON-MAG-12": [
+   {
+    "supplier": "A",
+    "price": 1190.0,
+    "status": "in_stock",
+    "qty": 6,
+    "lead_days": 2,
+    "due": null
+   },
+   {
+    "supplier": "B",
+    "price": 1270,
+    "status": "in_stock",
+    "qty": 10,
+    "lead_days": 4,
+    "due": null
+   },
+   {
+    "supplier": "C",
+    "price": 1270,
+    "status": "in_stock",
+    "qty": 11,
+    "lead_days": 3,
+    "due": null
+   }
+  ],
+  "ARCHON-MAG-15": [
+   {
+    "supplier": "A",
+    "price": 1250,
+    "status": "in_stock",
+    "qty": 10,
+    "lead_days": 2,
+    "due": null
+   },
+   {
+    "supplier": "B",
+    "price": 1140,
+    "status": "out_of_stock",
+    "qty": 0,
+    "lead_days": null,
+    "due": "6 Nov"
+   },
+   {
+    "supplier": "C",
+    "price": 1190.0,
+    "status": "in_stock",
+    "qty": 12,
+    "lead_days": 3,
+    "due": null
+   }
+  ],
+  "ARCHON-MAG-18": [
+   {
+    "supplier": "A",
+    "price": 1350,
+    "status": "on_order",
+    "qty": 0,
+    "lead_days": null,
+    "due": "20 Nov"
+   },
+   {
+    "supplier": "B",
+    "price": 1290.0,
+    "status": "on_order",
+    "qty": 0,
+    "lead_days": null,
+    "due": "12 Nov"
+   },
+   {
+    "supplier": "C",
+    "price": 1380,
+    "status": "on_order",
+    "qty": 0,
+    "lead_days": null,
+    "due": "20 Nov"
+   }
+  ],
+  "ARCHON-LIGHT": [
+   {
+    "supplier": "A",
+    "price": 4290.0,
+    "status": "in_stock",
+    "qty": 15,
+    "lead_days": 2,
+    "due": null
+   },
+   {
+    "supplier": "B",
+    "price": 4420,
+    "status": "in_stock",
+    "qty": 5,
+    "lead_days": 4,
+    "due": null
+   },
+   {
+    "supplier": "C",
+    "price": 4630,
+    "status": "low_stock",
+    "qty": 1,
+    "lead_days": 4,
+    "due": null
+   }
+  ],
+  "ARCHON-HOLSTER-TB": [
+   {
+    "supplier": "A",
+    "price": 1580,
+    "status": "low_stock",
+    "qty": 2,
+    "lead_days": 3,
+    "due": null
+   },
+   {
+    "supplier": "B",
+    "price": 1590,
+    "status": "in_stock",
+    "qty": 11,
+    "lead_days": 4,
+    "due": null
+   },
+   {
+    "supplier": "C",
+    "price": 1490.0,
+    "status": "low_stock",
+    "qty": 1,
+    "lead_days": 3,
+    "due": null
+   }
+  ],
+  "ARCHON-RMR-SCREWS": [
+   {
+    "supplier": "A",
+    "price": 290.0,
+    "status": "in_stock",
+    "qty": 16,
+    "lead_days": 2,
+    "due": null
+   },
+   {
+    "supplier": "B",
+    "price": 299,
+    "status": "in_stock",
+    "qty": 4,
+    "lead_days": 4,
+    "due": null
+   },
+   {
+    "supplier": "C",
+    "price": 299,
+    "status": "in_stock",
+    "qty": 11,
+    "lead_days": 3,
+    "due": null
+   }
+  ],
+  "ARCHON-TB-THREADED": [
+   {
+    "supplier": "A",
+    "price": 2870,
+    "status": "out_of_stock",
+    "qty": 0,
+    "lead_days": null,
+    "due": "6 Nov"
+   },
+   {
+    "supplier": "B",
+    "price": 3080,
+    "status": "in_stock",
+    "qty": 11,
+    "lead_days": 4,
+    "due": null
+   },
+   {
+    "supplier": "C",
+    "price": 2990.0,
+    "status": "in_stock",
+    "qty": 11,
+    "lead_days": 3,
+    "due": null
+   }
+  ],
+  "ARCHON-TB-135": [
+   {
+    "supplier": "A",
+    "price": 3200,
+    "status": "low_stock",
+    "qty": 2,
+    "lead_days": 3,
+    "due": null
+   },
+   {
+    "supplier": "B",
+    "price": 2990.0,
+    "status": "in_stock",
+    "qty": 6,
+    "lead_days": 4,
+    "due": null
+   },
+   {
+    "supplier": "C",
+    "price": 2870,
+    "status": "out_of_stock",
+    "qty": 0,
+    "lead_days": null,
+    "due": "6 Nov"
+   }
+  ]
+ }
+}

@@ -160,9 +160,29 @@ async def preflight(request: Request, rest: str = "") -> Response:
 
 
 @router.get("/search")
-async def search(request: Request, q: str = "", limit: int = 12) -> Response:
+async def search(
+    request: Request,
+    q: str = "",
+    limit: int = 12,
+    in_stock: bool = False,
+    min_price: float | None = None,
+    max_price: float | None = None,
+    sort: str = "",
+    category: str = "",
+) -> Response:
     await _auth(request)
-    body = await _service(request).search(_tenant(request), q, limit)
+    filters: dict[str, Any] = {}
+    if in_stock:
+        filters["in_stock"] = True
+    if min_price is not None:
+        filters["min_price"] = min_price
+    if max_price is not None:
+        filters["max_price_inclusive"] = max_price
+    if sort:
+        filters["sort"] = sort
+    if category:
+        filters["category"] = category
+    body = await _service(request).search(_tenant(request), q, limit, filters)
     return _ok(request, body)
 
 
