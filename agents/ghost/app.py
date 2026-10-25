@@ -26,6 +26,7 @@ from . import wraith as wraith_room
 from . import rails as airgap_rails
 from . import watch_oss as watch_oss_room
 from .watch_oss import AnomalyEvent, handoff_threat, propose_from_anomaly
+from . import enforce_oss as enforce_oss_room
 from .probes import Probes
 from .store import Store
 
@@ -282,9 +283,16 @@ def create_app() -> FastAPI:
                     shield = await app.state.shields.propose(threat_to_shield_request(payload))
                 except ValueError:
                     raise HTTPException(422, BURN_DETAIL) from None
-            return {"accepted": True, "action": payload.action.value,
-                    "shield": shield_room.public_view(shield),
-                    "note": "Proposed only. Founder must tap Shield before anything changes."}
+            out = {"accepted": True, "action": payload.action.value,
+                   "shield": shield_room.public_view(shield),
+                   "note": "Proposed only. Founder must tap Shield before anything changes."}
+            # Optional dry Enforce OSS plans (flags OFF by default). Never raise/apply.
+            if enforce_oss_room.enabled():
+                try:
+                    out["enforce_oss"] = enforce_oss_room.receive_from_airgap(payload)
+                except ThreatBurned:
+                    pass
+            return out
         # open_match / write_brief: acknowledge schema pass; no auto-execute in this spike.
         return {"accepted": True, "action": payload.action.value,
                 "severity": payload.severity.value, "site": payload.site,
@@ -310,6 +318,30 @@ def create_app() -> FastAPI:
         except ThreatBurned:
             raise HTTPException(422, BURN_DETAIL) from None
         return wraith_room.would_enforce(payload)
+
+    @app.get("/ghost/enforce/oss", dependencies=[Depends(require_tank)])
+    async def enforce_oss_status():
+        """Autumbra Enforce OSS adapter status (Ansible + Terraform stubs). Always readable.
+
+        Does not enable weapons. Live edge changes still require founder Shield tap.
+        """
+        return enforce_oss_room.status()
+
+    @app.post("/ghost/enforce/oss/plan", dependencies=[Depends(require_tank)])
+    async def enforce_oss_plan(request: Request):
+        """Watch air-gap → Autumbra Enforce OSS dry plans (Ansible + Terraform).
+
+        Disabled unless ENFORCE_OSS_ENABLED=1 (default OFF → 404). Never applies
+        playbooks/modules, never calls HF, never changes the edge. Founder Shield
+        tap remains the live path.
+        """
+        if not enforce_oss_room.enabled():
+            raise HTTPException(404, "Not found.")
+        raw = await bounded_json(request, 8_000)
+        try:
+            return enforce_oss_room.receive_from_airgap(raw)
+        except ThreatBurned:
+            raise HTTPException(422, BURN_DETAIL) from None
 
     @app.post("/ghost/shields/propose", dependencies=[Depends(require_tank)])
     async def shields_propose(request: Request):
