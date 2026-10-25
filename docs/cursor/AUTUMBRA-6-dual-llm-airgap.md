@@ -110,24 +110,19 @@ source /home/box/agent-data/agents/bd32fdb6-b222-4404-a278-ac58baaf52fd/.env.hf
 PYTHONPATH=. /workspace/tank-venv/bin/pytest tests/test_autumbra_dogfood_hf.py -q
 ```
 
-### Live synthetic smoke (when token set)
+### Live HF — STOPPED until Zenas says go (24 Oct 2026)
+
+Credits burned. **Fixtures-only** dogfood until Zenas tops up Inference Providers
+credits and explicitly says go. `live=True` alone is refused; live also requires
+`AUTUMBRA_HF_LIVE=1`.
 
 ```bash
-source /home/box/agent-data/agents/bd32fdb6-b222-4404-a278-ac58baaf52fd/.env.hf
-PYTHONPATH=. /workspace/tank-venv/bin/python -c \
-  'from agents.ghost.dogfood_hf import dogfood_watch_triage; \
-   r=dogfood_watch_triage(live=True); print(r["live_hf"], r["threat_payload_local"], (r["hf_text"] or "")[:120])'
-# or:
-PYTHONPATH=. /workspace/tank-venv/bin/pytest tests/test_autumbra_dogfood_hf.py -q -m integration
+# Do NOT run until Zenas says go:
+# export AUTUMBRA_HF_LIVE=1
+# source .../.env.hf
+# PYTHONPATH=. .../python -c 'from agents.ghost.dogfood_hf import dogfood_watch_triage; print(dogfood_watch_triage(live=True))'
 ```
 
-If the token is unset, integration tests **skip** (CI stays green). This is not a
-permanent GPU blocker — Tank markers/stubs remain the default path.
-
-### Notes from box smoke (24 Oct 2026)
-
-- Token loads (Pro `whoami` OK). Prefer `HF_INFERENCE_TOKEN`.
-- Live call uses Inference Providers router. If HTTP **402**, top up Inference
-  Providers credits — the dogfood path is wired; local ThreatPayload still passes.
-- Soft receipt: `dogfood_watch_triage(live=True)` records `hf_error` instead of
-  crashing CI when credits/model are unavailable.
+Integration live test skips unless `AUTUMBRA_HF_LIVE=1`. Default pytest stays
+fixtures-only and green. Not a permanent GPU bunker blocker — path stays wired,
+spend is hard-gated.

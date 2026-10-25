@@ -6,6 +6,10 @@ Burn / ThreatPayload validation always stays local on Tank.
 Token from env `HF_INFERENCE_TOKEN` (preferred) or `HF_TOKEN`. If unset, callers
 and tests skip — CI stays green.
 
+Live HF is **hard-gated**: requires `AUTUMBRA_HF_LIVE=1` *and* `live=True`.
+Default / Zenas STOP (2026-10-24): fixtures-only — no Inference / GPU spend until
+he tops up credits and explicitly says go.
+
 Load secrets (never print values):
   source /home/box/agent-data/agents/bd32fdb6-b222-4404-a278-ac58baaf52fd/.env.hf
   # or: source /workspace/autumbra-oss-vault/_tervory/load-hf-env.sh
@@ -43,6 +47,11 @@ def hf_token() -> str | None:
     return None
 
 
+def live_armed() -> bool:
+    """True only when AUTUMBRA_HF_LIVE=1 (Zenas explicit go after credit top-up)."""
+    return os.environ.get("AUTUMBRA_HF_LIVE", "").strip() == "1"
+
+
 def load_synthetic_fixtures(path: Path | None = None) -> list[dict[str, Any]]:
     """Load synthetic SIEM-ish JSONL. Never client data."""
     target = path or (FIXTURES_DIR / "synthetic_siem.jsonl")
@@ -67,7 +76,11 @@ def build_watch_prompt(events: list[dict[str, Any]]) -> str:
 
 
 def call_hf_inference(prompt: str, *, model: str | None = None, timeout: float = 60.0) -> str:
-    """Call HF Inference Providers chat completions. Raises if token missing."""
+    """Call HF Inference Providers chat completions. Raises if live disarmed or token missing."""
+    if not live_armed():
+        raise HfDogfoodError(
+            "Live HF STOPPED — set AUTUMBRA_HF_LIVE=1 only after Zenas tops up and says go"
+        )
     token = hf_token()
     if not token:
         raise HfDogfoodError("HF_INFERENCE_TOKEN / HF_TOKEN unset — skip live dogfood")
@@ -147,6 +160,13 @@ def dogfood_watch_triage(
         receipt["threat_payload_local"] = {"accepted": False}
 
     if not live:
+        return receipt
+    if not live_armed():
+        receipt["note"] = (
+            "Live HF STOPPED (fixtures-only). Set AUTUMBRA_HF_LIVE=1 only after "
+            "Zenas tops up credits and says go."
+        )
+        receipt["hf_error"] = "AUTUMBRA_HF_LIVE not set — refusing live call"
         return receipt
     if not hf_token():
         receipt["note"] = "HF token unset — local-only dogfood"
