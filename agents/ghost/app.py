@@ -17,6 +17,8 @@ from fastapi.responses import JSONResponse
 from . import advisories as advisory_watch
 from . import inventory as inv
 from . import shields as shield_room
+from .patch_brief import BURN_DETAIL as PATCH_BURN_DETAIL, PatchBurned, accept_patch_brief, passes_severity_bar
+from .patch_pr import open_dep_bump_pr
 from .gold_sources import candidates
 from .investigate import Investigator
 from .models import Look, Message, Observation, PLATFORM_TENANT, Resolution, SITES, ROOMS, Signal, classify_message
@@ -441,6 +443,27 @@ def create_app() -> FastAPI:
             raise HTTPException(422, GUARD_BURN_DETAIL) from None
         except (ThreatBurned, json.JSONDecodeError, TypeError, ValueError):
             raise HTTPException(422, BURN_DETAIL) from None
+
+@app.post("/ghost/patch/accept", dependencies=[Depends(require_tank)])
+    async def patch_accept(request: Request):
+        """Autumbra patch-as-PR: validate ghost.patch.v1 brief, open draft dep-bump PR or dry-run.
+
+        Flag GHOST_PATCH_PR_ENABLED/PATCH_PR_ENABLED OFF by default. Never merges. Never deploys.
+        """
+        raw = await bounded_json(request, 10_000)
+        try:
+            brief = accept_patch_brief(raw)
+        except PatchBurned:
+            raise HTTPException(422, PATCH_BURN_DETAIL) from None
+        if not passes_severity_bar(brief):
+            raise HTTPException(422, PATCH_BURN_DETAIL)
+        result = open_dep_bump_pr(brief)
+        return {
+            "accepted": True,
+            "action": brief.action,
+            "schema_version": brief.schema_version,
+            **result,
+        }
 
     @app.get("/ghost/summary", dependencies=[Depends(require_tank)])
     async def ghost_summary():
