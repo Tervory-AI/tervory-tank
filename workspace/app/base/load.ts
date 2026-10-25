@@ -1,23 +1,31 @@
 import { baseBatches, baseRecords, listSkills } from "@/lib/tank";
 import { loadContextReport, type ContextReport } from "./context-report";
-import { currentTenant } from "@/lib/tenant";
+import { activeTenant } from "@/lib/tenant";
 import { buildModel, type BatchIn, type PageModel, type SkillIn } from "./model";
 
-/** Reads batch counts and approved skills from Tank. Read only: nothing is queued, re-run or saved. */
+/**
+ * Reads batch counts and approved skills from Tank.
+ * Signed-out / no org → honest empty batches (not invented rows, not a load error).
+ * Read only: nothing is queued, re-run or saved.
+ */
 export async function loadBase(): Promise<PageModel> {
   let batches: BatchIn[] | null = null;
   let skills: SkillIn[] | null = null;
   let contextTrial: ContextReport | null = null;
-  try {
-    const { tenantId } = await currentTenant();
-    batches = await baseBatches(tenantId);
+  const tenant = await activeTenant();
+  if (!tenant) {
+    batches = [];
+  } else {
     try {
-      contextTrial = await loadContextReport(baseRecords);
+      batches = await baseBatches(tenant.tenantId);
+      try {
+        contextTrial = await loadContextReport(baseRecords);
+      } catch {
+        contextTrial = null;
+      }
     } catch {
-      contextTrial = null;
+      batches = null;
     }
-  } catch {
-    batches = null;
   }
   try {
     skills = await listSkills();

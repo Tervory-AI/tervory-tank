@@ -13,13 +13,13 @@ export const WORKSPACE_HREF = "/";
 
 /** Standard panel items, the same on every squad page. Top: account name, then these. Bottom: settings and support. */
 export const STANDARD_TOP = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/projects", label: "Projects" },
-  { href: "/chats", label: "Chats" },
+  { href: "/", label: "Dashboard" },
+  { href: "/matters", label: "Projects" },
+  { href: "/", label: "Chats" },
 ] as const;
 export const STANDARD_BOTTOM = [
-  { href: "/settings", label: "Settings" },
-  { href: "/support", label: "Support" },
+  { href: "/onboarding", label: "Settings" },
+  { href: "https://tervory.com", label: "Support" },
 ] as const;
 
 const SECTIONS = ["overview", "search", "ask", "batches", "skills"] as const;

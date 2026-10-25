@@ -1,0 +1,1 @@
+Figma ksi7ctRwEnN8wbip1yfuhL Base Command Post assets (node 73:1950). Status dots from get_design_context. Logos reuse /brand/base-on-dark.png and /brand/tervory-logo-reversed.png (exact matches already in repo).

@@ -139,7 +139,7 @@ export function AskBase({ ask }: { ask: AskAction }) {
       <div className="bcp-thread" aria-live="polite">
         {thread.length === 0 ? (
           <p className="bcp-thread-empty">
-            Ask about your records, for example “Which Kauai shops have no website?” Answers come from Base records only, and
+            Ask about your records — for example which shops in a city have no website. Answers come from Base records only, and
             the records each answer used are listed under Sources.
           </p>
         ) : (
