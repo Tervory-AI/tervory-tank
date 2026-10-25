@@ -89,7 +89,8 @@ def test_main_jobs_fall_back_to_ubuntu_latest(name: str) -> None:
 
 def test_tisan_site_stays_on_github_hosted() -> None:
     # playwright install --with-deps needs sudo, which the self-hosted runner user must not have.
-    assert _load(TISAN)["jobs"]["gate"]["runs-on"] == "ubuntu-latest"
+    # GitHub-hosted, pinned to 24.04: Playwright 1.55.1 has no Chromium for ubuntu-latest (26.04).
+    assert _load(TISAN)["jobs"]["gate"]["runs-on"] == "ubuntu-24.04"
 
 
 def test_ci_carries_no_production_secrets() -> None:
