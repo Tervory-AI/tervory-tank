@@ -30,15 +30,26 @@ export default clerkMiddleware(async (auth, req) => {
   if (canonical) {
     return NextResponse.redirect(canonical, 308);
   }
+
+  // auth.protect() was rewriting signed-out traffic to a phantom /clerk_* path (404).
+  // Explicit sign-in redirect keeps private panels (e.g. /zenas) usable when signed out.
   const rewriteTo = productHostRewritePath(host, req.nextUrl.pathname);
+  const pathAfter = rewriteTo ?? req.nextUrl.pathname;
+  const publicOk = isPublicProductPath(pathAfter) || isPublic(req);
+  if (!publicOk) {
+    const { userId, redirectToSignIn } = await auth();
+    if (!userId) {
+      const returnUrl = req.nextUrl.clone();
+      if (rewriteTo) returnUrl.pathname = rewriteTo;
+      return redirectToSignIn({ returnBackUrl: returnUrl });
+    }
+  }
+
   if (rewriteTo) {
     const url = req.nextUrl.clone();
     url.pathname = rewriteTo;
-    // After rewrite, isPublic(req) still sees the original path (/).
-    if (!isPublicProductPath(rewriteTo) && !isPublic(req)) await auth.protect();
     return NextResponse.rewrite(url);
   }
-  if (!isPublic(req)) await auth.protect();
 });
 
 export const config = {
