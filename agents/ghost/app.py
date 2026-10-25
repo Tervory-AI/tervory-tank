@@ -19,6 +19,7 @@ from . import shields as shield_room
 from .gold_sources import candidates
 from .investigate import Investigator
 from .models import Look, Message, Observation, PLATFORM_TENANT, Resolution, SITES, ROOMS, Signal, classify_message
+from .threat_payload import BURN_DETAIL, ThreatBurned, ThreatAction, accept_threat_payload, threat_to_shield_request
 from .probes import Probes
 from .store import Store
 
@@ -249,6 +250,32 @@ def create_app() -> FastAPI:
     async def shields_list():
         return {"mode": shield_room.mode(),
                 "shields": [shield_room.public_view(s) for s in app.state.store.shields(PLATFORM_TENANT)]}
+
+    @app.post("/ghost/triage/accept", dependencies=[Depends(require_tank)])
+    async def triage_accept(request: Request):
+        """Air-gap spike: LLM triage JSON must validate as ThreatPayload before any propose.
+
+        Burn on fail (422, fixed detail, never echo body). propose_shield only builds a
+        dry-run/founder proposal — never raises a shield without the Shield tap.
+        """
+        raw = await bounded_json(request, 8_000)
+        try:
+            payload = accept_threat_payload(raw)
+        except ThreatBurned:
+            raise HTTPException(422, BURN_DETAIL) from None
+        if payload.action == ThreatAction.propose_shield:
+            async with app.state.advisory_lock:
+                try:
+                    shield = await app.state.shields.propose(threat_to_shield_request(payload))
+                except ValueError:
+                    raise HTTPException(422, BURN_DETAIL) from None
+            return {"accepted": True, "action": payload.action.value,
+                    "shield": shield_room.public_view(shield),
+                    "note": "Proposed only. Founder must tap Shield before anything changes."}
+        # open_match / write_brief: acknowledge schema pass; no auto-execute in this spike.
+        return {"accepted": True, "action": payload.action.value,
+                "severity": payload.severity.value, "site": payload.site,
+                "note": "Schema passed. No execute path for this action yet."}
 
     @app.post("/ghost/shields/propose", dependencies=[Depends(require_tank)])
     async def shields_propose(request: Request):

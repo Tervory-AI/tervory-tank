@@ -29,6 +29,16 @@ function duration(seconds: number | null): string {
   return `${Math.round(seconds / 86400)} days`;
 }
 
+function sloLine(metric: { median: number | null; worst: number | null; target: number }, goalLabel: string): string {
+  if (metric.worst === null && metric.median === null) {
+    return `No receipts yet · goal ${goalLabel}`;
+  }
+  const worst = metric.worst;
+  const under = worst !== null && worst <= metric.target;
+  const status = worst === null ? "Waiting on receipts" : under ? "Under goal" : "Over goal";
+  return `Median ${duration(metric.median)} · slowest ${duration(metric.worst)} · ${status} (${goalLabel})`;
+}
+
 function ShieldRow({ item, act }: { item: Shield; act: Action }) {
   const [result, action, pending] = useActionState(act, null);
   const canRaise = item.state === "proposed" || item.state === "dry_run";
@@ -59,8 +69,8 @@ export function ShieldsTile({ board, act }: { board: ShieldBoard | null; act: Ac
     <div className="ghost-section-title"><h2>Shields</h2><span>{t.mode === "live" ? "Live: shields change the edge" : "Practice mode: Ghost shows what it would change and changes nothing"}</span></div>
     <dl className="ghost-numbers">
       <div><dt>Open issues</dt><dd>{t.open_total}</dd><p>{open.length ? open.map(([k, n]) => `${n} ${severity[k] ?? k}`).join(" · ") : "Nothing open"}</p></div>
-      <div><dt>Time to know</dt><dd>{duration(t.time_to_know_seconds.worst)}</dd><p>Slowest this period · goal under 1 h</p></div>
-      <div><dt>Time to shield</dt><dd>{duration(t.time_to_shield_seconds.worst)}</dd><p>Slowest this period · goal under 24 h</p></div>
+      <div><dt>Time to know</dt><dd>{duration(t.time_to_know_seconds.worst)}</dd><p>{sloLine(t.time_to_know_seconds, "under 1 h")}</p></div>
+      <div><dt>Time to shield</dt><dd>{duration(t.time_to_shield_seconds.worst)}</dd><p>{sloLine(t.time_to_shield_seconds, "under 24 h")}</p></div>
       <div><dt>Sites broken by a shield</dt><dd>{t.sites_broken_by_a_shield}</dd><p>Goal 0 · a failed check takes the shield down</p></div>
       <div><dt>Cost this month</dt><dd>${t.cost_this_month_usd.toFixed(4)}</dd><p>From {t.receipts_this_month} receipts</p></div>
     </dl>
