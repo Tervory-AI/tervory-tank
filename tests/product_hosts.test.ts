@@ -21,9 +21,9 @@ test("every mapped product host rewrites root to its path", () => {
   }
 });
 
-test("protect and autumbra both land on Autumbra console", () => {
-  assert.equal(productHostRewritePath("protect.tervory.com", "/"), "/admin/autumbra");
-  assert.equal(productHostRewritePath("autumbra.tervory.com", "/"), "/admin/autumbra");
+test("protect and autumbra both land on public Autumbra product page", () => {
+  assert.equal(productHostRewritePath("protect.tervory.com", "/"), "/autumbra");
+  assert.equal(productHostRewritePath("autumbra.tervory.com", "/"), "/autumbra");
   assert.equal(isAutumbraHost("protect.tervory.com"), true);
   assert.equal(isAutumbraHost("autumbra.tervory.com"), true);
   assert.equal(isAutumbraHost("zenas.tervory.com"), false);
@@ -43,6 +43,8 @@ test("public and deep paths on product hosts are not rewritten", () => {
   assert.equal(productHostRewritePath("base.tervory.com", "/api/health"), null);
   assert.equal(productHostRewritePath("base.tervory.com", "/base"), null);
   assert.equal(productHostRewritePath("base.tervory.com", "/base/foo"), null);
+  assert.equal(productHostRewritePath("protect.tervory.com", "/autumbra"), null);
+  assert.equal(productHostRewritePath("protect.tervory.com", "/autumbra/demo"), null);
   assert.equal(productHostRewritePath("protect.tervory.com", "/admin/autumbra"), null);
   assert.equal(productHostRewritePath("protect.tervory.com", "/admin/ghost"), null);
 });

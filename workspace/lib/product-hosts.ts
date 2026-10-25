@@ -1,7 +1,7 @@
 /**
  * Product-per-host map for *.tervory.com.
  * app.tervory.com stays the client workspace home.
- * protect / autumbra land on the Autumbra founder console.
+ * protect / autumbra land on the public Autumbra product page (/autumbra).
  * Squad product hosts land on their existing workspace paths.
  * Separate Coolify services (rig, mcp, site, coolify) are not rewritten here.
  */
@@ -12,14 +12,14 @@ export type ProductHost = {
   rootPath: string;
   /** Short product label for docs / ops (not user-facing Ghost/Wraith names). */
   product: string;
-  /** When true, only founders reach the landing (Autumbra /admin/*). */
+  /** When true, product console under /admin is founder-gated (not the public product page). */
   founderOnly?: boolean;
 };
 
 /** Hosts served by the Coolify workspace service (same as app.tervory.com). */
 export const WORKSPACE_PRODUCT_HOSTS: readonly ProductHost[] = [
-  { host: "protect.tervory.com", rootPath: "/admin/autumbra", product: "Autumbra", founderOnly: true },
-  { host: "autumbra.tervory.com", rootPath: "/admin/autumbra", product: "Autumbra", founderOnly: true },
+  { host: "protect.tervory.com", rootPath: "/autumbra", product: "Autumbra" },
+  { host: "autumbra.tervory.com", rootPath: "/autumbra", product: "Autumbra" },
   { host: "zenas.tervory.com", rootPath: "/zenas", product: "Zenas" },
   { host: "base.tervory.com", rootPath: "/base", product: "Base" },
   { host: "tiger.tervory.com", rootPath: "/tiger", product: "Tiger" },

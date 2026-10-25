@@ -1,0 +1,32 @@
+.aub-page{max-width:1120px;margin:auto;padding:48px 28px 96px;color:#001840;font-family:var(--font-inter),system-ui,sans-serif}
+.aub-top{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin-bottom:48px}
+.aub-top img{object-fit:contain;object-position:left}
+.aub-eyebrow{font-family:var(--font-mono),monospace;font-size:12px;letter-spacing:.12em;text-transform:uppercase;margin:28px 0 0}
+.aub-page h1{font-family:var(--font-jost),sans-serif;font-weight:300;font-size:52px;line-height:1.08;margin:16px 0}
+.aub-lead{max-width:640px;font-size:18px;line-height:1.65;margin:0 0 28px}
+.aub-cta{display:flex;flex-wrap:wrap;gap:12px}
+.aub-cta a{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:10px 24px;text-decoration:none;font-size:15px}
+.aub-cta .aub-primary{background:#E80008;color:#fff}
+.aub-cta .aub-secondary{background:#fff;color:#001840;border:1px solid #001840}
+.aub-cta .aub-quiet{background:#F4F6FB;color:#001840;border:1px solid #B8BFD0}
+.aub-band{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#B8BFD0;border:1px solid #B8BFD0;margin:48px 0}
+.aub-band article{background:#fff;padding:28px}
+.aub-band h2{font-size:22px;font-weight:400;margin:0 0 12px}
+.aub-band p{margin:0;line-height:1.6;font-size:15px}
+.aub-zero{background:#001840;color:#fff;padding:28px;margin:0 0 48px}
+.aub-zero h2{font-family:var(--font-jost),sans-serif;font-weight:300;font-size:28px;margin:0 0 12px}
+.aub-zero p{margin:0;line-height:1.65;max-width:720px}
+.aub-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin:32px 0 48px}
+.aub-card{border:1px solid #B8BFD0;padding:20px}
+.aub-card h3{font-size:16px;font-weight:500;margin:0 0 8px}
+.aub-card p{margin:0;font-size:14px;line-height:1.55;color:#526077}
+.aub-after{border-left:3px solid #E80008;padding:8px 0 8px 20px;margin:0 0 40px}
+.aub-after h2{font-size:22px;font-weight:400;margin:0 0 12px}
+.aub-after ul{margin:0;padding-left:18px;line-height:1.7}
+.aub-note{font-family:var(--font-mono),monospace;font-size:12px;color:#526077}
+@media(max-width:720px){
+  .aub-page{padding:28px 18px 64px}
+  .aub-page h1{font-size:36px}
+  .aub-band{grid-template-columns:1fr}
+  .aub-top{flex-direction:column}
+}

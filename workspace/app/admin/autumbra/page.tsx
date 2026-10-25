@@ -16,8 +16,17 @@ export default async function AutumbraPage() {
   const tile = <ShieldsTile board={board} act={shieldAction} />;
   try {
     const data = await ghostPanel(userId);
-    return <AutumbraConsole data={data} look={look} resolve={resolve} tile={tile} />;
+    return <AutumbraConsole data={data} look={look} resolve={resolve} tile={tile} showFixtures />;
   } catch {
-    return <AutumbraConsole data={null} error="Autumbra’s room is unavailable. Check the room and its Tank connection." look={look} resolve={resolve} tile={tile} />;
+    return (
+      <AutumbraConsole
+        data={null}
+        error="Autumbra’s room is unavailable. Fixture board below still works — sign-out visitors use /autumbra/demo."
+        look={look}
+        resolve={resolve}
+        tile={tile}
+        showFixtures
+      />
+    );
   }
 }

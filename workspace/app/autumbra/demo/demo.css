@@ -1,0 +1,28 @@
+.aub-demo-banner{background:#001840;color:#fff;padding:14px 18px;font-family:var(--font-mono),monospace;font-size:12px;margin:0 0 16px}
+.aub-demo-flash{background:#F4F6FB;border:1px solid #B8BFD0;padding:12px 16px;margin:0 0 16px;line-height:1.5}
+.aub-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 28px}
+.aub-tab{min-height:40px;padding:8px 14px;background:#fff;border:1px solid #B8BFD0;color:#001840;cursor:pointer;font:inherit}
+.aub-tab-on{background:#001840;color:#fff;border-color:#001840}
+.aub-row{padding:22px 0;border-bottom:1px solid #B8BFD0}
+.aub-row h2{font-size:18px;font-weight:400;margin:0;text-transform:capitalize}
+.aub-row p{line-height:1.6}
+.aub-row-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:8px}
+.aub-pill{font-family:var(--font-mono),monospace;font-size:11px;border:1px solid #B8BFD0;padding:6px 8px;white-space:nowrap;text-transform:capitalize}
+.aub-meta{font-family:var(--font-mono),monospace;font-size:12px;color:#526077}
+.aub-row details{margin-top:12px;padding:12px;background:#F4F6FB}
+.aub-row summary{cursor:pointer;font-size:14px}
+.aub-rule{display:block;white-space:pre-wrap;word-break:break-word;font-size:12px;background:#fff;padding:10px;border:1px solid #B8BFD0;margin-top:8px}
+.aub-btn,.aub-btn-secondary{min-height:40px;margin-top:14px;margin-right:8px;padding:8px 18px;border:0;cursor:pointer;font:inherit}
+.aub-btn{background:#E80008;color:#fff}
+.aub-btn-secondary{background:#fff;color:#001840;border:1px solid #001840}
+.aub-actions{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.aub-table{border:1px solid #B8BFD0}
+.aub-table-head,.aub-table-row{display:grid;grid-template-columns:1.1fr .7fr .7fr 1.2fr 1.6fr;gap:8px;padding:12px 14px;font-size:13px}
+.aub-table-head{background:#F4F6FB;font-family:var(--font-mono),monospace;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+.aub-table-row{border-top:1px solid #B8BFD0;align-items:center}
+.aub-table-row code{font-size:11px;overflow-wrap:anywhere}
+@media(max-width:800px){
+  .aub-table-head{display:none}
+  .aub-table-row{grid-template-columns:1fr;gap:4px}
+  .aub-row-head{flex-direction:column}
+}
