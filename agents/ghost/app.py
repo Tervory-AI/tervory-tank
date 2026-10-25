@@ -20,8 +20,9 @@ from .gold_sources import candidates
 from .investigate import Investigator
 from .models import Look, Message, Observation, PLATFORM_TENANT, Resolution, SITES, ROOMS, Signal, classify_message
 from .threat_payload import BURN_DETAIL, ThreatBurned, ThreatAction, accept_threat_payload, threat_to_shield_request
-from .guardrails import GUARD_BURN_DETAIL, GuardBurned, guard_inbound
+from .guardrails import GUARD_BURN_DETAIL, GuardBurned, guard_inbound_if_enabled
 from . import wraith as wraith_room
+from . import rails as airgap_rails
 from .probes import Probes
 from .store import Store
 
@@ -255,17 +256,18 @@ def create_app() -> FastAPI:
 
     @app.post("/ghost/triage/accept", dependencies=[Depends(require_tank)])
     async def triage_accept(request: Request):
-        """Dual-LLM air gap: NeMo-shaped guard, then ThreatPayload before any propose.
+        """Autumbra Dual-LLM air gap: optional guard (flag OFF), then ThreatPayload.
 
-        Untrusted body hits guard_inbound first (injection burn), then
+        Untrusted body hits guard_inbound_if_enabled first (no-op unless
+        GHOST_GUARDRAILS_ENABLED / AUTUMBRA_GUARDRAILS_ENABLED=1), then
         accept_threat_payload. Burn on fail (422, fixed detail, never echo body).
         propose_shield only builds a dry-run/founder proposal — never raises a
         shield without the Shield tap. Watch has no weapons; Enforce stays behind
-        the Wraith flag + founder tap.
+        the Enforce flag + founder tap.
         """
         raw = await bounded_json(request, 8_000)
         try:
-            guard_inbound(raw)
+            guard_inbound_if_enabled(raw)
             payload = accept_threat_payload(raw)
         except GuardBurned:
             raise HTTPException(422, GUARD_BURN_DETAIL) from None
@@ -287,17 +289,19 @@ def create_app() -> FastAPI:
 
     @app.post("/ghost/wraith/enforce", dependencies=[Depends(require_tank)])
     async def wraith_enforce(request: Request):
-        """Autumbra Enforce stub: schema-validated ThreatPayload → would_enforce dry JSON.
+        """Autumbra Enforce stub: ThreatPayload-only rail → would_enforce dry JSON.
 
         Disabled unless GHOST_WRAITH_ENABLED=1 (default OFF → 404). Never changes
         the edge and never auto-patches. Keep using Tank; no Dual-LLM bunker here.
+        Stronger-than-stock: rails.ensure_threat_payload_before_enforce burns
+        anything that is not ThreatPayload before Enforce sees it.
         """
         if not wraith_room.enabled():
             raise HTTPException(404, "Not found.")
         raw = await bounded_json(request, 8_000)
         try:
-            guard_inbound(raw)
-            payload = accept_threat_payload(raw)
+            guard_inbound_if_enabled(raw)
+            payload = airgap_rails.ensure_threat_payload_before_enforce(raw)
         except GuardBurned:
             raise HTTPException(422, GUARD_BURN_DETAIL) from None
         except ThreatBurned:

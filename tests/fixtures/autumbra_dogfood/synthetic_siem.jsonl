@@ -1,0 +1,3 @@
+{"ts":"2026-10-24T12:00:01Z","src":"203.0.113.10","dst":"coolify.tervory.com","event":"http_upload","path":"/api/upload","status":403,"note":"multipart blocked synthetic"}
+{"ts":"2026-10-24T12:00:02Z","src":"198.51.100.22","dst":"panel.tervory.com","event":"auth_fail","user":"dogfood_bot","note":"synthetic brute force line"}
+{"ts":"2026-10-24T12:00:03Z","src":"192.0.2.55","dst":"coolify.tervory.com","event":"waf_match","rule":"sqli_probe","note":"synthetic SIEM fixture only — never client data"}
