@@ -1,4 +1,6 @@
 // Figma's own code for frame 10:115, exported 25 Oct 2026 with get_design_context.
+// Re-exported 25 Oct 2026, 16:20 PT, after the founder's approved answers (Autumbra, logo; South Africa server row,
+// Apollo figures and line, and the sample-figures footer removed).
 // NOT production code: it's the measurement sheet. Rebuild it in the Workspace's own CSS so the result looks the same.
 // Changes from Figma's output, and nothing else:
 //  - the temporary Figma image links now point to the files in ./assets/;
@@ -23,15 +25,15 @@ export default function FounderControlPanelEverythingOnOneScreen() {
   return (
     <div className="bg-[#f4f6fa] content-stretch flex flex-col gap-[18px] items-start pb-[32px] pt-[24px] px-[32px] relative size-full" data-node-id="10:115" data-name="Founder control panel · everything on one screen">
       <div className="content-stretch flex gap-[14px] items-center overflow-clip relative shrink-0 w-full" data-node-id="10:116" data-name="Top bar">
-        <div className="[word-break:break-word] content-stretch flex gap-[4px] items-start leading-[normal] overflow-clip relative shrink-0 text-[#001840] whitespace-nowrap" data-node-id="10:117" data-name="Logo (use exact logo file)">
-          <p className="font-['Jost:Light'] font-light relative shrink-0 text-[30px]" data-node-id="10:118">Tervory</p>
-          <p className="font-['Inter:Regular'] font-normal not-italic relative shrink-0 text-[10px]" data-node-id="10:119">AI</p>
+        <div className="flex items-start relative shrink-0" data-node-id="10:117" data-name="Logo · tervory-logo.png · 180 wide">
+          {/* The real logo file, workspace/public/brand/tervory-logo.png, 180 × 33, fit. */}
+          <img alt="Tervory AI" className="block h-[33px] w-[180px] object-contain" data-node-id="19:3" src="/brand/tervory-logo.png" />
         </div>
         <p className="[word-break:break-word] font-['Jost:Light'] font-light leading-[normal] relative shrink-0 text-[#3d4a66] text-[22px] whitespace-nowrap" data-node-id="10:120">Control panel</p>
         <div className="flex-[1_0_0] h-px min-w-px relative" data-node-id="10:121" data-name="spacer" />
         <div className="bg-[#eaf6ef] content-stretch flex gap-[8px] items-center overflow-clip px-[14px] py-[8px] relative rounded-[999px] shrink-0" data-node-id="10:122" data-name="Health">
           <div className="relative shrink-0 size-[10px]" data-node-id="10:123" data-name="Status dot"><img alt="" className="absolute block inset-0 max-w-none size-full" src={imgStatusDot} /></div>
-          <p className="[word-break:break-word] font-['Inter:Medium'] font-medium leading-[normal] not-italic relative shrink-0 text-[#1e7a46] text-[13px] whitespace-nowrap" data-node-id="10:124">All systems normal · Ghost on watch</p>
+          <p className="[word-break:break-word] font-['Inter:Medium'] font-medium leading-[normal] not-italic relative shrink-0 text-[#1e7a46] text-[13px] whitespace-nowrap" data-node-id="10:124">All systems normal · Autumbra on watch</p>
         </div>
         <div className="bg-[#e80008] content-stretch flex items-start overflow-clip px-[18px] py-[10px] relative rounded-[8px] shrink-0" data-node-id="10:125" data-name="Button: Pause all paid work">
           <p className="[word-break:break-word] font-['Inter:Semi_Bold'] font-semibold leading-[normal] not-italic relative shrink-0 text-[14px] text-white whitespace-nowrap" data-node-id="10:126">Pause all paid work</p>
@@ -161,7 +163,6 @@ export default function FounderControlPanelEverythingOnOneScreen() {
               <div className="h-[170px] relative shrink-0 w-[360px]" data-node-id="10:218" data-name="Line chart"><img alt="" className="absolute block inset-0 max-w-none size-full" src={imgLineChart} /></div>
               <div className="flex font-['Inter:Regular'] gap-[12px] items-start text-[11px] whitespace-nowrap" data-node-id="10:222" data-name="Legend">
                 <p className="text-[#001840]" data-node-id="10:223">— Tervory, falling</p>
-                <p className="text-[#e80008]" data-node-id="10:224">- - Apollo</p>
               </div>
             </div>
           </div>
@@ -169,10 +170,6 @@ export default function FounderControlPanelEverythingOnOneScreen() {
             <div className="flex flex-col gap-[2px] items-start" data-node-id="10:226" data-name="Tervory found">
               <p className="font-['Inter:Regular'] text-[#3d4a66] text-[12px]" data-node-id="10:227">Tervory found</p>
               <p className="font-['JetBrains_Mono:Regular'] text-[#001840] text-[18px]" data-node-id="10:228">14,000 records</p>
-            </div>
-            <div className="flex flex-col gap-[2px] items-start text-[#3d4a66]" data-node-id="10:229" data-name="Apollo found">
-              <p className="font-['Inter:Regular'] text-[12px]" data-node-id="10:230">Apollo found</p>
-              <p className="font-['JetBrains_Mono:Regular'] text-[18px]" data-node-id="10:231">800 records</p>
             </div>
             <div className="flex flex-col gap-[2px] items-start" data-node-id="10:232" data-name="Cost per record">
               <p className="font-['Inter:Regular'] text-[#3d4a66] text-[12px]" data-node-id="10:233">Cost per record</p>
@@ -215,7 +212,7 @@ export default function FounderControlPanelEverythingOnOneScreen() {
             <div className="bg-[#001840] px-[12px] py-[7px] rounded-[8px]" data-node-id="10:266" data-name="Button: Start"><p className="font-['Inter:Semi_Bold'] font-semibold text-[13px] text-white whitespace-nowrap" data-node-id="10:267">Start</p></div>
           </div>
           <div className="flex gap-[8px] items-center py-[6px] w-full" data-node-id="10:268" data-name="Item">
-            <p className="flex-[1_0_0] font-['Inter:Regular'] min-w-px text-[#001840] text-[13px]" data-node-id="10:269">Ghost: login errors up on app.tervory.com</p>
+            <p className="flex-[1_0_0] font-['Inter:Regular'] min-w-px text-[#001840] text-[13px]" data-node-id="10:269">Autumbra: login errors up on app.tervory.com</p>
             <div className="bg-[#e80008] px-[12px] py-[7px] rounded-[8px]" data-node-id="10:270" data-name="Button: Look"><p className="font-['Inter:Semi_Bold'] font-semibold text-[13px] text-white whitespace-nowrap" data-node-id="10:271">Look</p></div>
             <div className="bg-white border border-[#b8bfd0] border-solid px-[12px] py-[7px] rounded-[8px]" data-node-id="10:272" data-name="Button: Let it fix"><p className="font-['Inter:Semi_Bold'] font-semibold text-[#001840] text-[13px] whitespace-nowrap" data-node-id="10:273">Let it fix</p></div>
           </div>
@@ -238,7 +235,7 @@ export default function FounderControlPanelEverythingOnOneScreen() {
               10:304 green  Tisan       "Billing page build"      Pause
               10:310 green  Radix       "Scanning PR #214"        Pause
               10:316 green  Zenas       "SA archive · 1,214 done" Pause
-              10:322 green  Ghost       "No open issues"          Pause */}
+              10:322 green  Autumbra    "No open issues"          Pause */}
           <div className="flex gap-[10px] items-center py-[5px] w-full" data-node-id="10:280" data-name="Agent: Base">
             <div className="relative shrink-0 size-[10px]" data-node-id="10:281" data-name="Status dot"><img alt="" className="absolute block inset-0 max-w-none size-full" src={imgStatusDot} /></div>
             <p className="font-['Inter:Medium'] font-medium text-[#001840] text-[14px] w-[96px]" data-node-id="10:282">Base</p>
@@ -281,9 +278,9 @@ export default function FounderControlPanelEverythingOnOneScreen() {
             <p className="flex-[1_0_0] font-['Inter:Regular'] min-w-px text-[#3d4a66] text-[13px]" data-node-id="10:319">SA archive · 1,214 done</p>
             <div className="bg-white border border-[#b8bfd0] border-solid px-[12px] py-[7px] rounded-[8px]" data-node-id="10:320" data-name="Button: Pause"><p className="font-['Inter:Semi_Bold'] font-semibold text-[#001840] text-[13px] whitespace-nowrap" data-node-id="10:321">Pause</p></div>
           </div>
-          <div className="flex gap-[10px] items-center py-[5px] w-full" data-node-id="10:322" data-name="Agent: Ghost">
+          <div className="flex gap-[10px] items-center py-[5px] w-full" data-node-id="10:322" data-name="Agent: Autumbra">
             <div className="relative shrink-0 size-[10px]" data-node-id="10:323" data-name="Status dot"><img alt="" className="absolute block inset-0 max-w-none size-full" src={imgStatusDot} /></div>
-            <p className="font-['Inter:Medium'] font-medium text-[#001840] text-[14px] w-[96px]" data-node-id="10:324">Ghost</p>
+            <p className="font-['Inter:Medium'] font-medium text-[#001840] text-[14px] w-[96px]" data-node-id="10:324">Autumbra</p>
             <p className="flex-[1_0_0] font-['Inter:Regular'] min-w-px text-[#3d4a66] text-[13px]" data-node-id="10:325">No open issues</p>
             <div className="bg-white border border-[#b8bfd0] border-solid px-[12px] py-[7px] rounded-[8px]" data-node-id="10:326" data-name="Button: Pause"><p className="font-['Inter:Semi_Bold'] font-semibold text-[#001840] text-[13px] whitespace-nowrap" data-node-id="10:327">Pause</p></div>
           </div>
@@ -381,12 +378,6 @@ export default function FounderControlPanelEverythingOnOneScreen() {
               <div className="flex-[1_0_0] h-px min-w-px" data-node-id="10:399" data-name="spacer" />
               <p className="font-['JetBrains_Mono:Regular'] text-[#3d4a66] text-[11px] whitespace-nowrap" data-node-id="10:400">CPU 34% · memory 61%</p>
             </div>
-            <div className="flex gap-[8px] items-start w-full" data-node-id="10:401" data-name="South Africa">
-              <div className="relative shrink-0 size-[10px]" data-node-id="10:402" data-name="Status dot"><img alt="" className="absolute block inset-0 max-w-none size-full" src={imgStatusDot} /></div>
-              <p className="font-['Inter:Medium'] font-medium text-[#001840] text-[12px] whitespace-nowrap" data-node-id="10:403">South Africa</p>
-              <div className="flex-[1_0_0] h-px min-w-px" data-node-id="10:404" data-name="spacer" />
-              <p className="font-['JetBrains_Mono:Regular'] text-[#3d4a66] text-[11px] whitespace-nowrap" data-node-id="10:405">CPU 12% · memory 38%</p>
-            </div>
             <div className="flex gap-[8px] items-start w-full" data-node-id="10:406" data-name="Storage">
               <div className="relative shrink-0 size-[10px]" data-node-id="10:407" data-name="Status dot"><img alt="" className="absolute block inset-0 max-w-none size-full" src={imgStatusDot} /></div>
               <p className="font-['Inter:Medium'] font-medium text-[#001840] text-[12px] whitespace-nowrap" data-node-id="10:408">Storage</p>
@@ -400,7 +391,6 @@ export default function FounderControlPanelEverythingOnOneScreen() {
           </div>
         </div>
       </div>
-      <p className="font-['Inter:Regular'] text-[#8c94a6] text-[12px] w-full" data-node-id="10:416">Sample figures for layout. Real numbers come from the ledger, Clerk sign-ups and the servers.</p>
     </div>
   );
 }

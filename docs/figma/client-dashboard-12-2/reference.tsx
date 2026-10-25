@@ -1,4 +1,5 @@
 // Figma's own code for frame 12:2, exported 25 Oct 2026 with get_design_context, word for word.
+// Re-exported 25 Oct 2026, 16:20 PT, after the founder's approved answers (dollars, logo, team names).
 // NOT production code: it's the measurement sheet. Rebuild it in the Workspace's own CSS so the result looks the same.
 // The only change from Figma: the temporary Figma image links now point to the files in ./assets/.
 // Every text below marked as DATA in SPEC.md is sample data. Fill it from the real source.
@@ -8,15 +9,11 @@ const imgStatusDot2 = "./assets/status-dot-in-progress.svg";
 
 export default function ClientDashboardCleanNorthwindLawZa() {
   return (
-    <div className="bg-[#f4f6fa] content-stretch flex items-start relative size-full" data-node-id="12:2" data-name="Client dashboard · clean (Northwind Law, ZA)">
+    <div className="bg-[#f4f6fa] content-stretch flex items-start relative size-full" data-node-id="12:2" data-name="Client dashboard · clean (Northwind Law, US)">
       <div className="bg-[#001840] content-stretch flex flex-col gap-[6px] h-full items-start overflow-clip pt-[22px] px-[16px] relative shrink-0 w-[220px]" data-node-id="12:3" data-name="Sidebar">
-        <div className="[word-break:break-word] content-stretch flex gap-[4px] items-start leading-[normal] overflow-clip pb-[18px] relative shrink-0 text-white whitespace-nowrap" data-node-id="12:4" data-name="Logo (use exact logo file)">
-          <p className="font-['Jost:Light'] font-light relative shrink-0 text-[28px]" data-node-id="12:5">
-            Tervory
-          </p>
-          <p className="font-['Inter:Regular'] font-normal not-italic relative shrink-0 text-[10px]" data-node-id="12:6">
-            AI
-          </p>
+        <div className="content-stretch flex items-start overflow-clip pb-[18px] relative shrink-0" data-node-id="12:4" data-name="Logo · tervory-logo-reversed.png · 180 wide">
+          {/* The real logo file, workspace/public/brand/tervory-logo-reversed.png, 180 × 33, fit. */}
+          <img alt="Tervory AI" className="block h-[33px] w-[180px] object-contain" data-node-id="19:2" src="/brand/tervory-logo-reversed.png" />
         </div>
         <div className="bg-[#22345a] content-stretch flex items-start overflow-clip px-[12px] py-[10px] relative rounded-[8px] shrink-0 w-full" data-node-id="12:7" data-name="Nav: Home">
           <p className="[word-break:break-word] font-['Inter:Medium'] font-medium leading-[normal] not-italic relative shrink-0 text-[15px] text-white whitespace-nowrap" data-node-id="12:8">
@@ -83,7 +80,7 @@ export default function ClientDashboardCleanNorthwindLawZa() {
               You saved
             </p>
             <p className="font-['Jost:Light'] font-light relative shrink-0 text-[#1e7a46] text-[40px]" data-node-id="12:34">
-              R 8 557
+              $8,557
             </p>
           </div>
           <div className="bg-white border border-[#b8bfd0] border-solid content-stretch flex flex-[1_0_0] flex-col gap-[6px] items-start min-w-px overflow-clip p-[22px] relative rounded-[16px]" data-node-id="12:35" data-name="Credits left">
@@ -91,7 +88,7 @@ export default function ClientDashboardCleanNorthwindLawZa() {
               Credits left
             </p>
             <p className="font-['Jost:Light'] font-light relative shrink-0 text-[#001840] text-[40px]" data-node-id="12:37">
-              18 420
+              18,420
             </p>
           </div>
         </div>
@@ -102,7 +99,7 @@ export default function ClientDashboardCleanNorthwindLawZa() {
             </p>
             <div className="content-stretch flex gap-[8px] items-center overflow-clip py-[6px] relative shrink-0 w-full" data-node-id="12:41" data-name="Item">
               <p className="[word-break:break-word] flex-[1_0_0] font-['Inter:Regular'] font-normal leading-[normal] min-w-px not-italic relative text-[#001840] text-[15px]" data-node-id="12:42">
-                Search the web for 212 businesses? About R 20
+                Search the web for 212 businesses? About $20
               </p>
               <div className="bg-[#001840] content-stretch flex items-start overflow-clip px-[14px] py-[8px] relative rounded-[10px] shrink-0" data-node-id="12:43" data-name="Button: Yes">
                 <p className="[word-break:break-word] font-['Inter:Semi_Bold'] font-semibold leading-[normal] not-italic relative shrink-0 text-[13px] text-white whitespace-nowrap" data-node-id="12:44">
@@ -183,7 +180,7 @@ export default function ClientDashboardCleanNorthwindLawZa() {
           <div className="content-stretch flex gap-[12px] items-start overflow-clip relative shrink-0 w-full" data-node-id="12:71" data-name="Members">
             <div className="bg-[#f4f6fa] content-stretch flex flex-[1_0_0] flex-col gap-[2px] items-start min-w-px overflow-clip px-[16px] py-[14px] relative rounded-[12px]" data-node-id="12:72" data-name="Member: Base">
               <p className="font-['Inter:Semi_Bold'] font-semibold relative shrink-0 text-[#001840] text-[15px]" data-node-id="12:73">
-                Base (logo)
+                Base
               </p>
               <p className="font-['Inter:Regular'] font-normal relative shrink-0 text-[#3d4a66] text-[13px]" data-node-id="12:74">
                 Business lists
@@ -191,7 +188,7 @@ export default function ClientDashboardCleanNorthwindLawZa() {
             </div>
             <div className="bg-[#f4f6fa] content-stretch flex flex-[1_0_0] flex-col gap-[2px] items-start min-w-px overflow-clip px-[16px] py-[14px] relative rounded-[12px]" data-node-id="12:75" data-name="Member: Tiger">
               <p className="font-['Inter:Semi_Bold'] font-semibold relative shrink-0 text-[#001840] text-[15px]" data-node-id="12:76">
-                Tiger (logo)
+                Tiger
               </p>
               <p className="font-['Inter:Regular'] font-normal relative shrink-0 text-[#3d4a66] text-[13px]" data-node-id="12:77">
                 Prices
@@ -199,7 +196,7 @@ export default function ClientDashboardCleanNorthwindLawZa() {
             </div>
             <div className="bg-[#f4f6fa] content-stretch flex flex-[1_0_0] flex-col gap-[2px] items-start min-w-px overflow-clip px-[16px] py-[14px] relative rounded-[12px]" data-node-id="12:78" data-name="Member: Market Lab">
               <p className="font-['Inter:Semi_Bold'] font-semibold relative shrink-0 text-[#001840] text-[15px]" data-node-id="12:79">
-                Market Lab (logo)
+                Market Lab
               </p>
               <p className="font-['Inter:Regular'] font-normal relative shrink-0 text-[#3d4a66] text-[13px]" data-node-id="12:80">
                 Market research
@@ -207,7 +204,7 @@ export default function ClientDashboardCleanNorthwindLawZa() {
             </div>
             <div className="bg-[#f4f6fa] content-stretch flex flex-[1_0_0] flex-col gap-[2px] items-start min-w-px overflow-clip px-[16px] py-[14px] relative rounded-[12px]" data-node-id="12:81" data-name="Member: Zenas">
               <p className="font-['Inter:Semi_Bold'] font-semibold relative shrink-0 text-[#001840] text-[15px]" data-node-id="12:82">
-                Zenas (logo)
+                Zenas
               </p>
               <p className="font-['Inter:Regular'] font-normal relative shrink-0 text-[#3d4a66] text-[13px]" data-node-id="12:83">
                 Legal

@@ -1,18 +1,22 @@
-# Client dashboard: Figma frame 12:2
+# Client dashboard: Figma frames 12:2 and 20:2
 
-- **Figma:** https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS/?node-id=12-2. The frame is named "Client dashboard · clean (Northwind Law, ZA)".
-- **Size:** 1440 × 900. The sidebar is 220 wide and the main area 1220 wide (64 left and right padding, 48 top and bottom).
+> Re-exported Sun 25 Oct 2026, 16:20 PT, after the founder approved all answers ("Do all").
+
+## Where it is
+- **Figma:**
+  - the dashboard: https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS/?node-id=12-2 (image `frame.png`, code `reference.tsx`);
+  - its states: https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS/?node-id=20-2 (image `states.png`, code `states.tsx`).
+- **Size:** 1440 × 900. The sidebar is 220 wide; the main area is 1220 wide, with padding 64 at the sides and 48 at the top and bottom.
 - **Built at:** `app.tervory.com/`, the signed-in client home (`workspace/app/page.tsx`).
-- **Fonts:**
-  - Jost Light for the greeting and the three big numbers;
-  - Inter for everything else.
 
-  Both are already in `workspace/app/fonts`.
+## Look
+- **Logo:** the real file `workspace/public/brand/tervory-logo-reversed.png`, 180 × 33, at the top of the sidebar with 18 below it. No text logo.
+- **Fonts:** Jost Light for the greeting and the three big numbers, and Inter for everything else. Both are in `workspace/app/fonts`.
 - **Colours:**
 
   | Use | Colour |
   |---|---|
-  | Page background | `#f4f6fa` |
+  | Page | `#f4f6fa` |
   | Sidebar | `#001840` |
   | Active nav | `#22345a` |
   | Card border | `#b8bfd0` |
@@ -20,53 +24,52 @@
   | Muted text | `#3d4a66` |
   | Placeholder | `#8c94a6` |
   | Saved (green) | `#1e7a46` |
-  | Status: waiting | `#B26B00` |
-  | Status: ready | `#1E7A46` |
-  | Status: in progress | `#001840` |
+  | Status dot: waiting | `#B26B00` |
+  | Status dot: ready | `#1E7A46` |
+  | Status dot: in progress | `#001840` |
 
 - **Radii:** cards 16, buttons 10, nav items 8, team tiles 12.
-- **Exact sizes, gaps and paddings:** in `reference.tsx`. The image is `frame.png`.
+- **Sizes, gaps and paddings:** exact in `reference.tsx` and `states.tsx`.
 
 ## FIXED text: build exactly, to the character
 | Node | Text |
 |---|---|
-| 12:8 | `Home` |
-| 12:10 | `Chats` |
-| 12:12 | `Files` |
-| 12:14 | `Billing` |
-| 12:16 | `Settings` |
-| 12:23 | `What do you need today?` (placeholder in the ask box) |
-| 12:25 | `Add a file` |
-| 12:27 | `Go` |
-| 12:30 | `Jobs done this month` |
-| 12:33 | `You saved` |
-| 12:36 | `Credits left` |
-| 12:40 | `Waiting on you` |
-| 12:44 / 12:46 | `Yes` / `No` |
-| 12:50 | `Open` |
-| 12:52 | `Recent work` |
-| 12:56 / 12:60 / 12:68 | Job statuses, exactly one of: `Waiting on you`, `Ready`, `In progress` |
-| 12:70 | `Your team` |
+| 12:8, 12:10, 12:12, 12:14, 12:16 | `Home`, `Chats`, `Files`, `Billing`, `Settings` |
+| 12:23 | `What do you need today?` (the ask box placeholder) |
+| 12:25 / 12:27 | `Add a file` / `Go` |
+| 12:30, 12:33, 12:36 | `Jobs done this month`, `You saved`, `Credits left` |
+| 12:40, 12:52, 12:70 | `Waiting on you`, `Recent work`, `Your team` |
+| 12:44 / 12:46 / 12:50 | `Yes` / `No` / `Open` |
+| Job status (12:56, 12:60, 12:68) | Exactly one of `Waiting on you`, `Ready`, `In progress`, with its dot colour |
+| Team tiles | Squad name and line, from this list only: `Base` / `Business lists`, `Tiger` / `Prices`, `Market Lab` / `Market research`, `Zenas` / `Legal` |
+| Greeting (20:4, 20:5, 20:6) | `Good morning, `, `Good afternoon, `, `Good evening, ` + first name |
+| Empty: Waiting on you (20:20) | `Nothing is waiting on you.` |
+| Empty: Recent work (20:39) | `No work yet.` |
+| Empty: Credits left (20:43) | `No credits bought yet` |
 
 ## DATA text: a real value, in exactly this format
-| Node | Frame shows | Real source | Format rule |
+| Node | Frame shows | Real source | Format |
 |---|---|---|---|
-| 12:19 | `Good morning, Thandi` | The signed-in user's first name (Clerk) | `Good morning, ` + first name. See open question 1 |
+| 12:19 | `Good morning, Thandi` | The signed-in user's first name (Clerk). The greeting goes by the client's local time: before 12:00 morning, 12:00 to 17:59 afternoon, from 18:00 evening | One of the three greetings + first name |
 | 12:21 | `Northwind Law` | The client's organisation name | As stored |
-| 12:31 | `67` | Jobs finished this calendar month (ledger) | A whole number, with a space between thousands |
-| 12:34 | `R 8 557` | Saved this month: what it would have cost minus what it cost (ledger) | Currency sign, a space, a whole number with a space between thousands. See open question 2 |
-| 12:37 | `18 420` | Credits left (billing) | A whole number, with a space between thousands |
-| 12:42, 12:48 | `Search the web for 212 businesses? About R 20` / `Lease review is ready to read` | Real items waiting on this client (approvals asked for, finished work not yet opened) | One row per item. The buttons are FIXED (`Yes` `No` for a question, `Open` for finished work) |
-| 12:54, 12:58, 12:62, 12:66 | `Delaware dealer list`, `Lease review`, `Competitor prices`, `Q3 dealer list` | This client's latest jobs | Job name, then a status dot and a status from the FIXED list |
-| 12:73–12:83 | `Base (logo)` + `Business lists`, and so on | The squads on this client's plan | See open question 4 |
+| 12:31 | `67` | Jobs finished this calendar month (ledger) | Whole number, comma between thousands |
+| 12:34 | `$8,557` | Saved this month: what it would have cost, minus what it cost (ledger) | `$` + whole number, comma between thousands |
+| 12:37 | `18,420` | Credits left (billing) | Whole number, comma between thousands |
+| 12:42, 12:48 | `Search the web for 212 businesses? About $20`, `Lease review is ready to read` | Real items waiting on this client | One row each. A question gets `Yes` `No`; finished work gets `Open` |
+| 12:54 to 12:66 | `Delaware dealer list` and so on | This client's latest jobs | Job name, dot, status |
+| Team tiles | Base, Tiger, Market Lab, Zenas | The squads on this client's plan | Only the squads they have |
 
-Every DATA value must come from a real source and open that source when clicked (build list, step 2.1). If a source doesn't exist yet, **stop and report it.** Never put in a made-up or sample value.
+**When to use the states:**
+- **Waiting on you:** nothing is waiting → show 20:8 in place of 12:39.
+- **Recent work:** no jobs yet → show 20:21 in place of 12:51.
+- **Credits left:** no credits ever bought → show 20:40 in place of 12:35.
 
-## Founder's open questions: answer in Figma before the build starts
-The builder must not answer these. Each one is a change to the frame, or a "build as is".
+**Every number opens its source.** If a source doesn't exist yet, or a client has a squad that isn't in the team list above, **stop and report it.** Never fill in a sample value, and never write a line that isn't in this file.
 
-1. **The greeting:** always `Good morning, `, or morning, afternoon and evening? Only "morning" is in the frame.
-2. **Currency:** the frame shows rand (`R 8 557`, `About R 20`). ZA is stopped and clients are in the US. Should it be `$` with US formatting (`$8,557`), or the client's own currency?
-3. **Empty states:** what shows when there's nothing waiting, no recent work, or no credits bought yet? None of these is in the frame, so as it stands a builder can't show anything.
-4. **"Your team":** the frame says `Base (logo)`. Which logo files? `workspace/public/brand` only has the "on-dark" versions, and these tiles are light. Do they show only the client's squads, or always these four?
-5. **The logo size:** the frame's logo is 98 px wide, and the logo rule says at least 180 px. Which wins? The file to use on the dark sidebar is `tervory-logo-reversed.png`.
+## Open questions
+None. All were answered by the founder on 25 Oct:
+- dollars;
+- the greeting by time of day;
+- the three empty states;
+- team names without "(logo)";
+- the logo file at 180 wide.

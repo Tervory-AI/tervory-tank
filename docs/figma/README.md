@@ -9,6 +9,7 @@ Each frame folder has:
 | `frame.png` | The frame at full size, straight from Figma. The live page must look like this at the same width. |
 | `reference.tsx` | Figma's own code for the frame: every text, size, colour, font, gap, padding and radius. **Not production code.** It's the measurement sheet. Rebuild it in the Workspace's own style (plain CSS files, the fonts in `workspace/app/fonts`), with the same result. |
 | `assets/` | Every image in the frame (status dots, switches, sparklines), downloaded from Figma. Use these files and no others. |
+| `states.png`, `states.tsx` | The frame's other approved states (greetings, empty states, problem pill). They are the only other texts the page may show. |
 | `SPEC.md` | Every text on the frame, split into **FIXED** (built exactly to the character) and **DATA** (filled from a real source, in exactly the format shown). It also lists the **founder's open questions**. A builder never answers those. |
 
 ## The rules (founder, 25 Oct 2026)
@@ -21,8 +22,8 @@ Each frame folder has:
 ## Frames exported
 | Frame | Figma node | Page in the Workspace | Status |
 |---|---|---|---|
-| Client dashboard | `12:2` (page "0 · Dashboards") | `app.tervory.com/` (`workspace/app/page.tsx`) | Exported 25 Oct. Open questions in its SPEC |
-| Founder control panel | `10:115` (page "0 · Dashboards") | `app.tervory.com/control` (`workspace/app/control/`) | Exported 25 Oct. Open questions in its SPEC |
+| Client dashboard | `12:2` + states `20:2` (page "0 · Dashboards") | `app.tervory.com/` (`workspace/app/page.tsx`) | **Final, 25 Oct 16:20 PT. Ready to build** |
+| Founder control panel | `10:115` + states `20:44` (page "0 · Dashboards") | `app.tervory.com/control` (`workspace/app/control/`) | **Final, 25 Oct 16:20 PT. Ready to build** |
 
 Figma file: https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS
 
