@@ -72,3 +72,13 @@ test("app /moot redirects canonically to zenas host", () => {
   assert.equal(mootCanonicalRedirectUrl("app.tervory.com", "/matters"), null);
   assert.equal(mootCanonicalRedirectUrl("app.tervory.com", "/zenas"), null);
 });
+
+test("on a squad product host, the root page keeps its own left panel", async () => {
+  const { usesOwnShell } = await import("../workspace/app/product-nav.ts");
+  for (const host of ["base.tervory.com", "tiger.tervory.com", "market-lab.tervory.com", "tisan.tervory.com", "radix.tervory.com", "skala.tervory.com", "tank.tervory.com"]) {
+    const shown = productHostRewritePath(host, "/") ?? "/";
+    assert.equal(usesOwnShell(shown), true, host);
+  }
+  // app.tervory.com/ is the dashboard and keeps the workspace sidebar.
+  assert.equal(usesOwnShell(productHostRewritePath("app.tervory.com", "/") ?? "/"), false);
+});
