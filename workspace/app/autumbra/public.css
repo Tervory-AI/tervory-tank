@@ -22,15 +22,6 @@
   margin: 1rem 0 0;
 }
 .autumbra-public-lede { color: #b9b6b0; max-width: 40rem; }
-.autumbra-public-fixture {
-  margin: 1.5rem 0;
-  padding: 0.75rem 1rem;
-  border: 1px solid #2a4a35;
-  background: #152018;
-  border-radius: 8px;
-  color: #c5e0cc;
-  font-size: 0.95rem;
-}
 .autumbra-public-grid {
   display: grid;
   gap: 1rem;

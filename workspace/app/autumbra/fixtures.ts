@@ -12,7 +12,6 @@ export type PublicThreatReceipt = {
 };
 
 export const PUBLIC_AUTUMBRA_FIXTURE = {
-  banner: "",
   monitor: { running: true, unavailable_checks: 1 },
   lookTargets: ["workspace", "site", "za", "tank", "base", "tiger", "market lab", "rig", "tisan", "radix", "zenas", "Autumbra Watch"],
   investigations: [
