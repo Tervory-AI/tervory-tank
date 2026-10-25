@@ -1,12 +1,9 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import {
-  isPublicProductPath,
-  mootCanonicalRedirectUrl,
-  productHostRewritePath,
-} from "@/lib/product-hosts";
+import { mootCanonicalRedirectUrl, productHostRewritePath } from "@/lib/product-hosts";
 
-// Public: product host roots, Clerk pages, health, Stripe webhook.
+// Public: Clerk pages, health, Stripe webhook, Autumbra product page, Moot watch.
+// The squad consoles (/base, /tiger, /market-lab, /tisan, /radix, /skala, /tank) need sign-in.
 // Founder console /admin/autumbra stays private.
 const isPublic = createRouteMatcher([
   "/sign-in(.*)",
@@ -15,14 +12,12 @@ const isPublic = createRouteMatcher([
   "/api/billing/webhook",
   "/autumbra(.*)",
   "/moot(.*)",
-  "/base(.*)",
-  "/tiger(.*)",
-  "/market-lab(.*)",
-  "/tisan(.*)",
-  "/radix(.*)",
-  "/skala(.*)",
-  "/tank(.*)",
 ]);
+
+// After a host rewrite, isPublic(req) still sees the original path (/).
+function rewriteIsPublic(path: string): boolean {
+  return path === "/autumbra" || path.startsWith("/autumbra/") || path === "/moot" || path.startsWith("/moot/");
+}
 
 export default clerkMiddleware(async (auth, req) => {
   const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
@@ -34,8 +29,7 @@ export default clerkMiddleware(async (auth, req) => {
   // auth.protect() was rewriting signed-out traffic to a phantom /clerk_* path (404).
   // Explicit sign-in redirect keeps private panels (e.g. /zenas) usable when signed out.
   const rewriteTo = productHostRewritePath(host, req.nextUrl.pathname);
-  const pathAfter = rewriteTo ?? req.nextUrl.pathname;
-  const publicOk = isPublicProductPath(pathAfter) || isPublic(req);
+  const publicOk = (rewriteTo ? rewriteIsPublic(rewriteTo) : false) || isPublic(req);
   if (!publicOk) {
     const { userId, redirectToSignIn } = await auth();
     if (!userId) {
