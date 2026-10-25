@@ -1,6 +1,6 @@
 # One sealed computer: Python, Node 22, Chromium via Playwright, and Aider.
 # The repo is cloned at run time. No keys are baked into this image.
-FROM node:22-bookworm-slim
+FROM node:22-bookworm-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \

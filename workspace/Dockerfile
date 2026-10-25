@@ -1,5 +1,5 @@
 # Multi-stage build; output: standalone keeps the runtime image small.
-FROM node:22-slim AS deps
+FROM node:22-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
 # Coolify injects build-time variables into every stage. NODE_ENV=production
@@ -7,7 +7,7 @@ COPY package.json package-lock.json* ./
 # (7.x), which cannot load next.config.ts. --include=dev keeps the pinned 5.9.2.
 RUN npm install --include=dev --no-audit --no-fund
 
-FROM node:22-slim AS build
+FROM node:22-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d AS build
 WORKDIR /app
 ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
@@ -21,7 +21,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
 
-FROM node:22-slim AS run
+FROM node:22-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d AS run
 WORKDIR /app
 ENV NODE_ENV=production HOSTNAME=0.0.0.0 PORT=3000
 RUN groupadd -r app && useradd -r -g app app

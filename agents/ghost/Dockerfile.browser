@@ -1,5 +1,5 @@
 # Same browser version as the existing Tiger image; private to Ghost.
-FROM mcr.microsoft.com/playwright/python:v1.47.0-jammy
+FROM mcr.microsoft.com/playwright/python:v1.47.0-jammy@sha256:f3a3d2e0332df4c7b6992db0ad0687df1653efd4671612b8ca1be6ae5fc06448
 WORKDIR /app
 COPY _chassis/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt playwright==1.47.0 \

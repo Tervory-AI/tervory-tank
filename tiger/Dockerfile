@@ -1,6 +1,6 @@
 # Tiger: Tervory's browser. A real Chromium that loads a page the way a person's browser does,
 # runs its JavaScript and waits for it to settle. Internal only; Tank's skills call it.
-FROM mcr.microsoft.com/playwright/python:v1.47.0-jammy
+FROM mcr.microsoft.com/playwright/python:v1.47.0-jammy@sha256:f3a3d2e0332df4c7b6992db0ad0687df1653efd4671612b8ca1be6ae5fc06448
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

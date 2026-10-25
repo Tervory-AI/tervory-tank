@@ -3,7 +3,7 @@
 # redeploy picks up new advisories. osv_bake.py opens no socket; it turns the two
 # zips into one indexed /out/osv.sqlite (~35 MB). The zips stay in this stage.
 # Radix itself never downloads anything at runtime: the room has no internet route.
-FROM python:3.12-slim AS osv
+FROM python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704 AS osv
 ARG OSV_BUCKET=https://osv-vulnerabilities.storage.googleapis.com
 ADD ${OSV_BUCKET}/PyPI/all.zip /osv/PyPI.zip
 ADD ${OSV_BUCKET}/npm/all.zip /osv/npm.zip
@@ -12,7 +12,7 @@ COPY radix/osv_bake.py /bake/osv_bake.py
 RUN mkdir -p /out \
     && python /bake/osv_bake.py /out/osv.sqlite PyPI=/osv/PyPI.zip npm=/osv/npm.zip
 
-FROM python:3.12-slim
+FROM python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704
 
 # Pinned scanners. The downloads run at image build. A scan does not use the network.
 # Gitleaks 8.28.0 checksums are from the upstream checksums file for that tag.
