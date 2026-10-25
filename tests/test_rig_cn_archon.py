@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 import csv
-import hashlib
 import json
 import re
 import smtplib

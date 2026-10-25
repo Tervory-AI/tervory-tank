@@ -45,6 +45,7 @@ export const REST_LINKS: readonly NavLink[] = [
 
 export const FOUNDER_LINKS: readonly NavLink[] = [
   { href: "/admin", label: "Admin" },
+  { href: "/admin/autumbra", label: "Autumbra" },
   { href: "/admin/feeds", label: "Feeds" },
   { href: "/admin/homes", label: "Homes" },
   { href: "/skala/gold", label: "Training" },
@@ -74,6 +75,7 @@ export const SHELL_ROUTES: readonly string[] = [
   "/skala/gold",
   "/tank",
   "/admin",
+  "/admin/autumbra",
   "/admin/feeds",
   "/admin/homes",
   "/zenas/feeds",
