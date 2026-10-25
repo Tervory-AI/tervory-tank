@@ -111,6 +111,8 @@ async def ping(ctx: JobContext) -> dict:
 def _box_region() -> str:
     """This room's region. Missing or unknown is refused. There is no us-east default."""
     raw = os.environ.get("TANK_REGION", "").strip().lower()
+    if raw == "za":
+        raise HTTPException(status_code=403, detail="needs the United States region")
     try:
         return assert_box_region(raw or None)
     except RegionError as exc:
@@ -288,13 +290,9 @@ _inner_lifespan = app.router.lifespan_context
 @asynccontextmanager
 async def _room_lifespan(application):
     """After the chassis pool is up, bind law_pool and mark cut-off loads."""
+    # Refuse the stopped region before starting the room's workers or connections.
+    region = _box_region()
     async with _inner_lifespan(application):
-        raw = os.environ.get("TANK_REGION", "").strip().lower()
-        try:
-            region = assert_box_region(raw or None)
-        except RegionError:
-            yield
-            return
         bind_law_pool(application, home_region=region)
         try:
             async with _pool_store() as store:

@@ -39,7 +39,14 @@ def test_room_region_refuses_a_missing_or_unknown_value(monkeypatch: pytest.Monk
     assert caught.value.status_code == 409
 
 
-@pytest.mark.parametrize("value", ["us-east", "za", "ZA"])
-def test_room_region_accepts_only_the_two_homes(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+def test_room_region_accepts_boston(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TANK_REGION", "us-east")
+    assert _box_region() == "us-east"
+
+
+@pytest.mark.parametrize("value", ["za", "ZA"])
+def test_room_refuses_the_founder_stopped_region(monkeypatch: pytest.MonkeyPatch, value: str) -> None:
     monkeypatch.setenv("TANK_REGION", value)
-    assert _box_region() == value.strip().lower()
+    with pytest.raises(HTTPException) as caught:
+        _box_region()
+    assert caught.value.status_code == 403
