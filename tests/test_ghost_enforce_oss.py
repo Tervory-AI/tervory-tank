@@ -133,7 +133,6 @@ def test_playbooks_on_disk_unarmed_no_shell_modules():
         assert "autumbra_enforce_armed: false" in text
         assert "Autumbra Enforce" in text
         assert "Ghost" not in text and "Wraith" not in text
-        lowered = text.lower()
         for banned in BANNED_ANSIBLE_MODULES:
             # allow mentioning the ban in comments ("no shell/command/...")
             # but not as YAML keys like "    shell:" / "- shell:"
