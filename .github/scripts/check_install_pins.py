@@ -53,7 +53,7 @@ def install_errors(text: str) -> list[tuple[int, str]]:
         # Commands may be chained in a Docker RUN or a YAML run block.
         for command in re.split(r"&&|;|\|\|", line):
             pip = re.search(
-                r"(?:\bpython[\d.]*\s+-m\s+pip|\bpip3?)\s+(?:--[\w-]+\s+)*install\b(.*)", command,
+                r"(?:\bpython[\d.]*\s+-m\s+pip|\bpip3?)\s+(?:.*?\s+)?install\b(.*)", command,
             )
             if pip:
                 try:
@@ -72,10 +72,15 @@ def install_errors(text: str) -> list[tuple[int, str]]:
                 errors.append((number, "Node packages must be installed with npm ci from a committed lock"))
             if re.search(r"\b(?:yarn|pnpm)\s+(?:install|add|update)\b", command):
                 errors.append((number, "Use the committed npm lock and npm ci"))
-            os_install = re.search(r"\b(?:apt-get|apt|apk)\s+(?:install|add)\b(.*)", command)
+            os_install = re.search(
+                r"\b(?:apt-get|apt|apk)\s+(?P<flags>(?:-\S+\s+)*)(?:install|add)\b(?P<args>.*)", command,
+            )
             if os_install:
                 try:
-                    packages = [arg for arg in shlex.split(os_install[1], comments=True) if not arg.startswith("-")]
+                    args = shlex.split(os_install["flags"] + os_install["args"], comments=True)
+                    if set(args) & {"-s", "--simulate", "--dry-run", "--just-print"}:
+                        continue
+                    packages = [arg for arg in args if not arg.startswith("-")]
                 except ValueError:
                     packages = []
                 if not packages or any(not re.fullmatch(r"[\w.+:-]+=[^\s$*]+", arg) for arg in packages):

@@ -18,12 +18,14 @@ SPEC.loader.exec_module(pins)
     "pip install --upgrade pip",
     "python -m pip install -r tank/requirements.txt",
     "pip3 --no-cache-dir install fastapi==0.133.1",
+    "pip --timeout 30 install -r requirements.txt",
     "pip install --require-hashes -r requirements.txt",
     "pip install --require-hashes -r $LOCK",
     "npm install --include=dev --no-audit",
     'npm --prefix "$RUNNER_TEMP/browser" install esbuild@0.28.2',
     "npm ci || npm install --no-package-lock",
     "RUN apt-get update && apt-get install -y curl",
+    "RUN apt-get -y install curl",
     "RUN apk add --no-cache curl=8.14.1-r2 git",
     "curl -fsSL https://example.org/install.sh | bash",
 ])
@@ -38,6 +40,7 @@ def test_mutable_install_is_rejected(command):
     "RUN pip install \\\n        --require-hashes -r requirements.lock",
     "npm --prefix workspace ci --no-audit --no-fund",
     "RUN apk add --no-cache curl=8.14.1-r2 git=2.49.0-r0",
+    "apt-get install --simulate curl",
     "# npm install is not an executable command",
 ])
 def test_locked_install_is_accepted(command):
