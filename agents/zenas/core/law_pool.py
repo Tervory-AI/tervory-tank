@@ -16,6 +16,8 @@ from agents.zenas.pool.store import PostgresStore
 class AsyncpgLawPool:
     """Postgres-backed law pool used when Ask sends no passages."""
 
+    requires_source_links = True
+
     def __init__(self, pool: Any, *, home_region: str) -> None:
         self._pool = pool
         self.home_region = home_region
@@ -51,6 +53,21 @@ class AsyncpgLawPool:
                 kind=kind,
                 limit=limit,
             )
+
+    async def source_metadata(self, chunks: list[Any], *, jurisdiction: str) -> dict[tuple[str, str], dict[str, str]]:
+        """Resolve links from the exact stored document versions, never the request or model."""
+        if self.home_region != "us-east" or jurisdiction != "us":
+            return {}
+        versions = list({chunk.version_id for chunk in chunks})
+        if not versions:
+            return {}
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch("""SELECT d.document_id,d.version_id,d.url,d.title,d.kind,d.level,d.status
+                FROM zenas_pool.documents d JOIN zenas_pool.sources s ON s.source_id=d.source_id
+                WHERE d.jurisdiction=$1 AND s.region=$2 AND d.version_id=ANY($3::text[])""",
+                jurisdiction, self.home_region, versions)
+        return {(row["document_id"], row["version_id"]): {key: row[key] for key in ("url", "title", "kind", "level", "status")}
+                for row in rows}
 
 
 def bind_law_pool(application: Any, *, home_region: str) -> AsyncpgLawPool:

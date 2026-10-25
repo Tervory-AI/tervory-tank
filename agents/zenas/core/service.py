@@ -45,6 +45,7 @@ from agents.zenas.core.review_switch import card_servable, review_required
 from agents.zenas.core.scope_rules import NOT_YET, REFUSED, classify, ruled
 from agents.zenas.core.precedent import draft_label, drop_unverified_cases, rules_are_draft
 from agents.zenas.core.selftest import is_holdout
+from agents.zenas.core.citation_sources import cited_sources, public_source_url
 
 # Whole passages, best first. A passage is never sliced to fit.
 _PASSAGE_BUDGET = 8000
@@ -343,6 +344,7 @@ async def _passages_from_pool(
         )
     passages = []
     seen: set[str] = set()
+    metadata = await pool.source_metadata(chunks, jurisdiction=law) if hasattr(pool, "source_metadata") else {}
     for chunk in chunks:
         key = getattr(chunk, "chunk_id", "") or str(chunk)
         if key in seen:
@@ -360,6 +362,7 @@ async def _passages_from_pool(
                 "kind": kind or "",
                 "level": level or "",
                 "status": "effective",
+                **metadata.get((chunk.document_id, chunk.version_id), {}),
             }
         )
     return passages
@@ -1725,6 +1728,11 @@ async def answer_question(
         )
     if not passages:
         return _refuse("could not verify", delivered=False)
+    require_links = bool(getattr(pool, "requires_source_links", False))
+    if require_links:
+        passages = [passage for passage in passages if public_source_url(passage.get("url"))]
+        if not passages:
+            return _refuse("could not verify", delivered=False)
     built = await build_rule_card(
         ladder,
         tank,
@@ -1795,6 +1803,10 @@ async def answer_question(
     known = {str(item.get("citation") or "") for item in statements}
     if not checked.get("passed") or any(item not in known for item in memo_cites):
         return _refuse("could not verify", delivered=False, cite=checked)
+    sources = cited_sources(statements, checked, passages, memo_cites, require_links=require_links)
+    if sources is None:
+        return _refuse("could not verify", delivered=False, cite=checked)
+    memo["sources"] = sources
     state = "in_review" if review_on else "released"
     document_id = None
     if matter_id:
@@ -1809,7 +1821,7 @@ async def answer_question(
                 "kind": "memo",
                 "version": version,
                 "body": memo["text"],
-                "sources": [{"citation": item} for item in memo_cites],
+                "sources": sources,
                 "state": state,
                 "reviewed": False,
             }
