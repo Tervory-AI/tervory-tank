@@ -152,8 +152,11 @@ async def _assert_imported(url: str) -> None:
         assert len(seen) == 32 + 53
         for row in seen:
             assert isinstance(row["seen_at"], datetime)
-            assert row["seen_at"].date().isoformat() == "2026-03-01"
             assert row["price"] is not None
+        # Each file keeps its own date: customnation 2026-03-01, archon 2026-10-18.
+        days = sorted(row["seen_at"].date().isoformat() for row in seen)
+        assert days.count("2026-03-01") == 32
+        assert days.count("2026-10-18") == 53
         kind = await conn.fetchval(
             "SELECT jsonb_typeof(attributes) FROM agent_rig.products WHERE sku = $1",
             "STI-C2-9",
