@@ -1,8 +1,6 @@
 """Autumbra Watch OSS intake: anomaly-only, telemetry off, ThreatPayload burn."""
 from __future__ import annotations
 
-import os
-from pathlib import Path
 
 import pytest
 
