@@ -13,7 +13,7 @@
 ## What the founder's browser showed (25 Oct, 14:20 PT)
 | Page | Today |
 |---|---|
-| Chats | **Works.** But it lists model names and prices to clients |
+| Chats | **Works.** Model names show only to the founder; clients see "Auto" (checked in code) |
 | Dashboard (home) | Loads. The savings numbers are real; credits show a dash |
 | Base, Tiger, Market Lab, Tisan, Radix, Tank, Skala | **Demo data** from #306, this morning |
 | Rig (admin) | Test catalogue; no real store |
@@ -26,23 +26,19 @@
 ## Step 2: fix the pages, most important first
 Each line is one PR (**Codex** builds; **Grok** deploys and runs any live data) followed by Claude's browser check.
 
-1. **Chats (the one working product).**
-   - Hide model names and prices from client accounts; founders still see them.
-   - The "Model" picker is founder-only.
-   - **Check:** as a client, no model name appears anywhere.
-2. **Dashboard.** Credits left shows the real balance from billing, or "No credits bought yet". Jobs and savings link to the real work. **Check:** every number opens its source.
-3. **Control panel.**
+1. **Dashboard.** Credits left shows the real balance from billing, or "No credits bought yet". Jobs and savings link to the real work. **Check:** every number opens its source.
+2. **Control panel.**
    - Wire up, or remove, every section showing "unavailable" or "not linked".
    - Remove all build codes from the screen.
    - "Paying clients" counts only real paid Stripe customers.
    - **Check:** no build code, and no number that can't be opened to its source.
-4. **Zenas.**
+3. **Zenas.**
    - Show the US region (Boston), since ZA is stopped.
    - "Ask Zenas" gives a cited answer to a real question.
    - A matter can be opened and saved.
    - **Check:** ask one US civil question live and save it as a matter.
-5. **The seven squad pages, after step 1.** One line per page, each with one real job, written after Claude has seen what the real page does. (Placeholders until then, so nothing is guessed.)
-6. **Rig.**
+4. **The seven squad pages, after step 1.** One line per page, each with one real job, written after Claude has seen what the real page does. (Placeholders until then, so nothing is guessed.)
+5. **Rig.**
    - The store's own catalogue upload works from the admin page.
    - The test catalogue is removed from the live admin.
    - **Check:** upload one real CSV and search it.
