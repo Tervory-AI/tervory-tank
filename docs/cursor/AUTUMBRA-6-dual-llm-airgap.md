@@ -126,3 +126,42 @@ credits and explicitly says go. `live=True` alone is refused; live also requires
 Integration live test skips unless `AUTUMBRA_HF_LIVE=1`. Default pytest stays
 fixtures-only and green. Not a permanent GPU bunker blocker — path stays wired,
 spend is hard-gated.
+
+## How to run fixture E2E (NO live HF)
+
+End-to-end Autumbra Dual-LLM air gap on **synthetic fixtures only**. Proves:
+
+1. Load `tests/fixtures/autumbra_dogfood/synthetic_siem.jsonl`
+2. Optional guardrails adapter (flag **OFF** decodes; flag **ON** burns injection)
+3. Watch triage accept → ThreatPayload burn / accept
+4. Rails `ensure_threat_payload_before_enforce` → Enforce stub dry `would_enforce`
+   (flag temporarily ON inside the dogfood only — never edge apply)
+
+| Item | Value |
+|------|--------|
+| Module | `agents/ghost/dogfood_airgap.py` → `dogfood_airgap_e2e(live=False)` |
+| Fixtures | `tests/fixtures/autumbra_dogfood/synthetic_siem.jsonl` |
+| Live HF | **Forbidden** — `live=True` raises; do not set `AUTUMBRA_HF_LIVE=1` |
+
+### Pytest (CI / default)
+
+```bash
+cd /workspace/ghost-build/tervory-tank
+PYTHONPATH=. /workspace/tank-venv/bin/pytest tests/test_autumbra_dogfood_airgap.py -q
+```
+
+### Python receipt (fixtures only)
+
+```bash
+cd /workspace/ghost-build/tervory-tank
+PYTHONPATH=. /workspace/tank-venv/bin/python -c \
+  'from agents.ghost.dogfood_airgap import dogfood_airgap_e2e; import json; print(json.dumps(dogfood_airgap_e2e(live=False), indent=2))'
+```
+
+Receipt fields: `product=Autumbra`, `roles=[Watch, Enforce]`, `live_hf=False`,
+`threat_payload_accept` / `threat_payload_burn_dirty`, ASGI `watch_accept`,
+`enforce_would.dry_only`, `ok=true` when the whole path passes.
+
+Do **not** call `dogfood_watch_triage(live=True)` or hit `router.huggingface.co`
+from this path. Guard flags and `GHOST_WRAITH_ENABLED` remain OFF by default
+after the dogfood restores env.
