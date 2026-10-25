@@ -53,3 +53,12 @@ test("squad product roots match product-nav paths", () => {
   assert.equal(productHostRewritePath("skala.tervory.com", "/"), "/skala");
   assert.equal(productHostRewritePath("tank.tervory.com", "/"), "/tank");
 });
+
+test("signed-out product host roots have a public demo path", async () => {
+  const { productHostDemoPath } = await import("../workspace/lib/product-hosts.ts");
+  for (const row of WORKSPACE_PRODUCT_HOSTS) {
+    if (row.product === "Autumbra") assert.equal(productHostDemoPath(row.host), null);
+    else assert.equal(productHostDemoPath(row.host), `/demo${row.rootPath}`, row.host);
+  }
+  assert.equal(productHostDemoPath("app.tervory.com"), null);
+});

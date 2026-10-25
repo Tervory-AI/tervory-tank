@@ -76,3 +76,10 @@ export function isAutumbraHost(hostHeader: string | null | undefined): boolean {
   const product = productHostFor(hostHeader);
   return product?.product === "Autumbra";
 }
+
+/** Public fixture-only demo path for a product host root, e.g. `/demo/zenas`. */
+export function productHostDemoPath(hostHeader: string | null | undefined): string | null {
+  const product = productHostFor(hostHeader);
+  if (!product || product.product === "Autumbra") return null;
+  return `/demo${product.rootPath}`;
+}
