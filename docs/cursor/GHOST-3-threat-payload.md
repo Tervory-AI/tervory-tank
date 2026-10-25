@@ -19,7 +19,9 @@ LLM triage may read dirty logs and advisory text. That output must not reach an 
 | extras | Forbidden |
 
 ## Entry
-`POST /ghost/triage/accept` (Tank key). On `propose_shield`, builds a **proposal** via existing `Shields.propose` — never raises. Founder still taps **Shield**.
+Internal: `Shields.propose_for_matches` builds a ThreatPayload via `match_to_threat_payload` before propose (burns skip).
+
+External: `POST /ghost/triage/accept` (Tank key). On `propose_shield`, builds a **proposal** via existing `Shields.propose` — never raises. Founder still taps **Shield**.
 
 ## Panel SLOs (already on main; polished this slice)
 Founder tile shows time-to-know / time-to-shield with median + slowest + under/over goal, plus open issues, sites broken (target 0), and Tank cost receipts. Empty metrics read **None yet / No receipts yet**, not zero pretending to be proof.

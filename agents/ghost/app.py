@@ -20,6 +20,7 @@ from .gold_sources import candidates
 from .investigate import Investigator
 from .models import Look, Message, Observation, PLATFORM_TENANT, Resolution, SITES, ROOMS, Signal, classify_message
 from .threat_payload import BURN_DETAIL, ThreatBurned, ThreatAction, accept_threat_payload, threat_to_shield_request
+from . import wraith as wraith_room
 from .probes import Probes
 from .store import Store
 
@@ -276,6 +277,22 @@ def create_app() -> FastAPI:
         return {"accepted": True, "action": payload.action.value,
                 "severity": payload.severity.value, "site": payload.site,
                 "note": "Schema passed. No execute path for this action yet."}
+
+    @app.post("/ghost/wraith/enforce", dependencies=[Depends(require_tank)])
+    async def wraith_enforce(request: Request):
+        """Wraith stub: schema-validated ThreatPayload → would_enforce dry JSON.
+
+        Disabled unless GHOST_WRAITH_ENABLED=1 (default OFF → 404). Never changes
+        the edge and never auto-patches. Keep using Tank; no Dual-LLM bunker here.
+        """
+        if not wraith_room.enabled():
+            raise HTTPException(404, "Not found.")
+        raw = await bounded_json(request, 8_000)
+        try:
+            payload = accept_threat_payload(raw)
+        except ThreatBurned:
+            raise HTTPException(422, BURN_DETAIL) from None
+        return wraith_room.would_enforce(payload)
 
     @app.post("/ghost/shields/propose", dependencies=[Depends(require_tank)])
     async def shields_propose(request: Request):

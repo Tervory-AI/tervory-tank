@@ -272,15 +272,27 @@ class Shields:
         return shield
 
     async def propose_for_matches(self) -> list[dict]:
+        """Open matches → ThreatPayload air-gap → propose only. Burns skip; never raise."""
+        # Lazy import: threat_payload imports ShieldRequest from this module.
+        from .threat_payload import ThreatBurned, match_to_threat_payload, threat_to_shield_request
+
         out = []
         edges = self.edges()
         # One proposal per match and kind, ever: a withdrawn proposal is not proposed again.
         seen = {(s.get("match_id"), s["kind"]) for s in self.store.shields(self.tenant)}
         for match in self.store.matches(self.tenant, "open"):
             for request in proposals_for_match(match, edges):
-                if (request.match_id, request.kind) not in seen:
-                    out.append(await self.propose(request))
-                    seen.add((request.match_id, request.kind))
+                if (request.match_id, request.kind) in seen:
+                    continue
+                try:
+                    payload = match_to_threat_payload(match, request.kind, request.path)
+                    shield = await self.propose(threat_to_shield_request(payload))
+                except ThreatBurned:
+                    continue  # Schema burn — no propose, no echo.
+                except ValueError:
+                    continue
+                out.append(shield)
+                seen.add((request.match_id, request.kind))
         return out
 
     async def settle_resolved(self) -> list[dict]:
@@ -386,8 +398,17 @@ class Shields:
         flagged = {m["id"]: m["receipt"]["flagged_at"] for m in matches if m.get("receipt", {}).get("flagged_at")}
         tts = []
         for s in shields:
-            if s.get("up_at") and s.get("match_id") in flagged and s["state"] in {"up", "undone"}:
-                tts.append(max(0, (_parse(s["up_at"]) - _parse(flagged[s["match_id"]])).total_seconds()))
+            mid = s.get("match_id")
+            if mid not in flagged:
+                continue
+            # Live apply, or founder Shield tap in dry-run (dogfood default when CF token empty).
+            stamped = None
+            if s.get("up_at") and s["state"] in {"up", "undone"}:
+                stamped = s["up_at"]
+            elif s.get("dry_run_at"):
+                stamped = s["dry_run_at"]
+            if stamped:
+                tts.append(max(0, (_parse(stamped) - _parse(flagged[mid])).total_seconds()))
         return {"mode": mode(), "open_by_severity": by_severity, "open_total": len(open_),
                 "time_to_know_seconds": {"median": _median(ttk), "worst": max(ttk) if ttk else None, "target": 3600},
                 "time_to_shield_seconds": {"median": _median(tts), "worst": max(tts) if tts else None, "target": 86400},
