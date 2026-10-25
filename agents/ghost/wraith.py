@@ -1,15 +1,16 @@
-"""Wraith stub: schema-gated dry enforcer. Disabled unless GHOST_WRAITH_ENABLED=1.
+"""Autumbra Enforce stub: schema-gated dry enforcer. Disabled unless GHOST_WRAITH_ENABLED=1.
 
-This is not a Dual-LLM bunker and not live edge control. It only accepts a
-validated ThreatPayload and returns a would-enforce dry response. No Cloudflare
-calls, no auto-patch, no host changes. Founder Shield tap remains the only path
-that can change the edge (via Ghost Shields Up).
+Internal module name remains wraith.py short-term. This is not a Dual-LLM bunker
+and not live edge control. It only accepts a validated ThreatPayload and returns
+a would-enforce dry response. No Cloudflare calls, no auto-patch, no host changes.
+Founder Shield tap remains the only path that can change the edge (via Autumbra
+Watch Shields Up).
 """
 from __future__ import annotations
 
 import os
 
-from .threat_payload import ThreatAction, ThreatPayload
+from .threat_payload import ThreatPayload
 
 ENABLED_ENV = "GHOST_WRAITH_ENABLED"
 # Also honour WRAITH_ENABLED as an alias (same default OFF).
@@ -26,7 +27,7 @@ def enabled() -> bool:
 def would_enforce(payload: ThreatPayload) -> dict:
     """Dry response only. Caller must already have validated via accept_threat_payload."""
     if not enabled():
-        raise RuntimeError("Wraith is disabled.")
+        raise RuntimeError("Autumbra Enforce is disabled.")
     return {
         "enforced": False,
         "would_enforce": True,
@@ -37,7 +38,7 @@ def would_enforce(payload: ThreatPayload) -> dict:
         "severity": payload.severity.value,
         "note": (
             "Dry stub only. No edge change. No auto-patch. "
-            "Founder must still tap Shield on Ghost proposals."
+            "Founder must still tap Shield on Autumbra Watch proposals."
         ),
         "flag": ENABLED_ENV,
     }

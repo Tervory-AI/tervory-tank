@@ -38,7 +38,7 @@ class Tank:
     async def call(self, method: str, path: str, body: dict | None = None) -> dict:
         key = os.environ.get("TANK_KEY", "")
         if not key:
-            raise RuntimeError("Ghost's Tank key is not configured.")
+            raise RuntimeError("Autumbra Watch's Tank key is not configured.")
         try:
             response = await self.http.request(method, "http://tank:8000" + path,
                                                headers={"X-Tank-Key": key}, json=body, timeout=45)
@@ -52,7 +52,7 @@ class Tank:
 
     async def record(self, receipt_id: str, step: str, outcome: str, task_type: str = "ghost.incident") -> None:
         if task_type not in {"ghost.incident", "ghost.advisory", "ghost.shield"}:
-            raise ValueError("Unknown Ghost receipt type.")
+            raise ValueError("Unknown Autumbra Watch receipt type.")
         result = await self.call("POST", "/v1/ledger/vendor", {
             "id": receipt_id, "tenant_id": PLATFORM_TENANT, "agent": "ghost",
             "task_type": task_type, "vendor": "ghost." + step, "units": 1,
@@ -130,7 +130,7 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         if not os.environ.get("TANK_KEY"):
-            raise RuntimeError("Ghost's Tank key is not configured.")
+            raise RuntimeError("Autumbra Watch's Tank key is not configured.")
         store = Store(Path(os.environ.get("DATA_DIR", "/data")) / "ghost.sqlite3", os.environ.get("TANK_REGION", "us-east"))
         async with httpx.AsyncClient(follow_redirects=False) as http:
             tank = Tank(http)
@@ -153,12 +153,12 @@ def create_app() -> FastAPI:
                 await asyncio.gather(*tasks, return_exceptions=True)
                 store.close()
 
-    app = FastAPI(title="Ghost", lifespan=lifespan)
+    app = FastAPI(title="Autumbra Watch", lifespan=lifespan)
 
     @app.exception_handler(RequestValidationError)
     async def invalid_input(_request, _error):
         # Pydantic's default errors include the rejected input (possibly a secret).
-        return JSONResponse(status_code=422, content={"detail": "Invalid Ghost request."})
+        return JSONResponse(status_code=422, content={"detail": "Invalid Autumbra Watch request."})
 
     @app.exception_handler(RuntimeError)
     async def unavailable(_request, _error):
@@ -213,7 +213,7 @@ def create_app() -> FastAPI:
             report = inv.InventoryReport.from_body(raw)
             components = report.to_components()
         except ValueError:
-            raise HTTPException(422, "Invalid Ghost request.") from None
+            raise HTTPException(422, "Invalid Autumbra Watch request.") from None
         if not components:
             raise HTTPException(422, "The report has no version facts.")
         seen = advisory_watch.iso(advisory_watch.now_utc())
@@ -280,7 +280,7 @@ def create_app() -> FastAPI:
 
     @app.post("/ghost/wraith/enforce", dependencies=[Depends(require_tank)])
     async def wraith_enforce(request: Request):
-        """Wraith stub: schema-validated ThreatPayload → would_enforce dry JSON.
+        """Autumbra Enforce stub: schema-validated ThreatPayload → would_enforce dry JSON.
 
         Disabled unless GHOST_WRAITH_ENABLED=1 (default OFF → 404). Never changes
         the edge and never auto-patches. Keep using Tank; no Dual-LLM bunker here.
@@ -299,12 +299,12 @@ def create_app() -> FastAPI:
         try:
             body = shield_room.ShieldRequest.model_validate_json(await bounded_json(request, 10_000))
         except ValueError:
-            raise HTTPException(422, "Invalid Ghost request.") from None
+            raise HTTPException(422, "Invalid Autumbra Watch request.") from None
         async with app.state.advisory_lock:
             try:
                 return shield_room.public_view(await app.state.shields.propose(body))
             except ValueError:
-                raise HTTPException(422, "Ghost only shields our own sites.") from None
+                raise HTTPException(422, "Autumbra Watch only shields our own sites.") from None
 
     @app.post("/ghost/shields/{shield_id}/raise", dependencies=[Depends(require_tank)])
     async def shields_raise(shield_id: UUID):

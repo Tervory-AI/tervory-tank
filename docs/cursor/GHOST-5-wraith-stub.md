@@ -1,11 +1,13 @@
-# GHOST-5: Wraith stub (flag OFF)
+# GHOST-5: Autumbra Enforce stub (flag OFF)
 
 > Written 24 Oct 2026. Dogfood slice. **Not Dual-LLM / NeMo / vLLM. Not live enforcement.**
+>
+> Product: **Autumbra Enforce** (dry stub). Internal module remains `agents/ghost/wraith.py` and flag `GHOST_WRAITH_ENABLED` until a dedicated rename PR.
 
 ## What this is
-A minimal stub so the Ghost → Wraith air-gap shape exists in code:
+A minimal stub so the Autumbra Watch → Autumbra Enforce air-gap shape exists in code:
 
-1. Ghost (or triage) emits a `ThreatPayload`.
+1. Autumbra Watch (or triage) emits a `ThreatPayload`.
 2. Payload validates (`accept_threat_payload`) or **burns**.
 3. If `GHOST_WRAITH_ENABLED=1` (or `WRAITH_ENABLED=1`), `POST /ghost/wraith/enforce` returns a **would_enforce** dry JSON.
 4. Default is **OFF** → route answers 404. No Cloudflare calls. No auto-patch. No host edits.
@@ -13,7 +15,7 @@ A minimal stub so the Ghost → Wraith air-gap shape exists in code:
 ## What this is not
 - Not a second model room / GPU bunker (keep using Tank).
 - Not auto-execute without founder tap.
-- Not a rename of Shields Up. Live edge changes still go Ghost propose → founder **Shield** → apply/health/undo.
+- Not a rename of Shields Up. Live edge changes still go Autumbra Watch propose → founder **Shield** → apply/health/undo.
 
 ## Enable (dogfood only, founder says go)
 ```

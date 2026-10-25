@@ -11,7 +11,7 @@ from pathlib import Path
 class Store:
     def __init__(self, path: Path, region: str = "us-east"):
         if region not in {"us-east", "za"}:
-            raise ValueError("Invalid Ghost region.")
+            raise ValueError("Invalid Autumbra Watch region.")
         self.region = region
         path.parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(path)
@@ -62,7 +62,7 @@ class Store:
             self.db.execute("INSERT OR IGNORE INTO region VALUES (1,?)", (region,))
         if self.db.execute("SELECT home FROM region WHERE id=1").fetchone()[0] != region:
             self.db.close()
-            raise ValueError("Ghost's volume belongs to another region.")
+            raise ValueError("Autumbra Watch's volume belongs to another region.")
 
     def open(self, tenant: str, target: str, signal: str, origin: str) -> dict:
         fingerprint = f"{target}:{signal}"

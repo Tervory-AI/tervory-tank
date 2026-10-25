@@ -18,6 +18,6 @@ export default async function GhostPage() {
     const data = await ghostPanel(userId);
     return <GhostConsole data={data} look={look} resolve={resolve} tile={tile} />;
   } catch {
-    return <GhostConsole data={null} error="Ghost’s room is unavailable. Check the room and its Tank connection." look={look} resolve={resolve} tile={tile} />;
+    return <GhostConsole data={null} error="Autumbra Watch’s room is unavailable. Check the room and its Tank connection." look={look} resolve={resolve} tile={tile} />;
   }
 }

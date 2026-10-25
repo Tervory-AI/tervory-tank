@@ -564,7 +564,7 @@ class Feeds:
         parsed = urlparse(url)
         if (parsed.scheme != "https" or parsed.hostname not in ALLOWED_HOSTS or parsed.username or parsed.password
                 or method not in {"GET", "POST"} or (method == "POST" and url != OSV_BATCH_URL)):
-            raise PermissionError("Ghost only reads its named public advisory sources.")
+            raise PermissionError("Autumbra Watch only reads its named public advisory sources.")
         merged = {"Accept": "application/json", "User-Agent": "tervory-ghost-advisory-watcher"}
         merged.update(headers or {})
         try:

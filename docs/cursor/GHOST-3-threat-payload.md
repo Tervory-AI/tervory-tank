@@ -1,6 +1,8 @@
 # GHOST-3: ThreatPayload triage schema (Phase 4 spike)
 
-> Written 24 Oct 2026. Dogfood slice from Ghost & Wraith Build Plan. **No auto-patch. No Wraith rename. Founder tap still required for Shields.**
+> Written 24 Oct 2026. Dogfood slice from the **Autumbra** build plan (**Watch** propose path; **Enforce** remains founder-tapped). **No auto-patch. Founder tap still required for Shields.**
+>
+> Product names: **Autumbra**, **Autumbra Watch**, **Autumbra Enforce**. Internal code still lives under `agents/ghost` (routes `/ghost/*`, env `GHOST_*`) until a dedicated rename PR.
 
 ## Why
 LLM triage may read dirty logs and advisory text. That output must not reach an execute or shield-apply path until it validates as a bounded JSON shape. Failures **burn**: fixed error string, never echo the rejected body.
@@ -11,7 +13,7 @@ LLM triage may read dirty logs and advisory text. That output must not reach an 
 | Field | Rule |
 | --- | --- |
 | `action` | `propose_shield` \| `open_match` \| `write_brief` only |
-| `site` | Allowlisted Ghost dogfood hosts / app keys only |
+| `site` | Allowlisted Autumbra Watch dogfood hosts / app keys only |
 | `kind` | Required for `propose_shield`; one of Shields Up v1 kinds |
 | `cve_ids` | `CVE-YYYY-NNNN…` only |
 | `reason` | ≤300 chars; burns on injection / shell markers |

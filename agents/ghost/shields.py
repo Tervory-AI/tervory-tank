@@ -82,7 +82,7 @@ def _quote(value: str) -> str:
 def rule_for(kind: str, site: str, path: str | None, ref: str) -> dict:
     """The exact Cloudflare rule Ghost would add. Expressions are built from fixed parts only."""
     host = f"(http.host eq {_quote(site)})"
-    rule: dict[str, Any] = {"ref": ref, "description": f"Ghost shield {ref}", "enabled": True}
+    rule: dict[str, Any] = {"ref": ref, "description": f"Autumbra Watch shield {ref}", "enabled": True}
     if kind == "waf_managed":
         rule.update(action="execute", expression=host, action_parameters={"id": CF_MANAGED_RULESET})
     elif kind == "rate_limit":
@@ -153,10 +153,10 @@ class Cloudflare:
 
     async def call(self, method: str, path: str, *, params=None, body=None) -> Any:
         if method not in {"GET", "POST", "PUT", "DELETE"} or not path.startswith("/zones"):
-            raise CloudflareError("Ghost only edits firewall rules in named zones.")
+            raise CloudflareError("Autumbra Watch only edits firewall rules in named zones.")
         url = CF_API + path
         if urlparse(url).hostname != "api.cloudflare.com":
-            raise CloudflareError("Ghost only talks to the edge network.")
+            raise CloudflareError("Autumbra Watch only talks to the edge network.")
         try:
             response = await self.http.request(method, url, params=params, json=body, timeout=30, follow_redirects=False,
                                                headers={"Authorization": f"Bearer {self._token}",
@@ -175,7 +175,7 @@ class Cloudflare:
 
     async def zone_id(self, zone: str) -> str:
         if zone not in ALLOWED_ZONES:
-            raise CloudflareError("That zone is not one Ghost may change.")
+            raise CloudflareError("That zone is not one Autumbra Watch may change.")
         result = await self.call("GET", "/zones", params={"name": zone})
         ids = [z.get("id") for z in result or [] if isinstance(z, dict) and z.get("name") == zone]
         if len(ids) != 1 or not re.fullmatch(r"[0-9a-f]{32}", str(ids[0])):
@@ -248,7 +248,7 @@ class Shields:
 
     async def propose(self, request: ShieldRequest) -> dict:
         if request.site not in SITE_HOSTS:
-            raise ValueError("Ghost only shields our own sites.")
+            raise ValueError("Autumbra Watch only shields our own sites.")
         existing = self.store.open_shield(self.tenant, request.site, request.kind, request.path or "")
         if existing:
             return existing
@@ -263,7 +263,7 @@ class Shields:
                   "applied": None, "up_at": None, "ended_at": None, "receipts": []}
         if not on_cloudflare:
             shield["brief"] = {"for": "Grok", "title": f"Edge protection for {request.site}",
-                               "steps": [f"{request.site} is not confirmed behind our edge network, so Ghost will not change it.",
+                               "steps": [f"{request.site} is not confirmed behind our edge network, so Autumbra Watch will not change it.",
                                          shield["plan"]["plain"],
                                          "Apply the equivalent at the site's own edge after founder approval, "
                                          "then post a fresh host report."]}
@@ -361,7 +361,7 @@ class Shields:
             await Cloudflare(self.http, token()).delete_rule(applied["zone_id"], applied["ruleset_id"], applied["rule_id"])
         except CloudflareError:
             shield["state"], shield["ended_at"] = "undo_failed", self.clock()
-            shield["note"] = f"Ghost could not remove rule {shield['ref']}. Remove it by hand in the firewall rules."
+            shield["note"] = f"Autumbra Watch could not remove rule {shield['ref']}. Remove it by hand in the firewall rules."
             await self._receipt(shield, "undo_failed", "failed")
             return shield
         shield["state"], shield["ended_at"] = state, self.clock()

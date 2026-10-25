@@ -18,7 +18,7 @@ export async function look(_previous: GhostResult, form: FormData): Promise<Ghos
     revalidatePath("/admin/ghost");
     return { ok: true, message: incident.summary ?? "The investigation has started." };
   } catch {
-    return { ok: false, message: "Ghost could not finish the investigation. Check its room and Tank connection." };
+    return { ok: false, message: "Autumbra Watch could not finish the investigation. Check its room and Tank connection." };
   }
 }
 
@@ -38,15 +38,15 @@ export async function resolve(_previous: GhostResult, form: FormData): Promise<G
 }
 
 const tapWords: Record<string, string> = {
-  dry_run: "Practice run: nothing was changed. This is exactly what Ghost would change once it is allowed to.",
+  dry_run: "Practice run: nothing was changed. This is exactly what Autumbra Watch would change once it is allowed to.",
   up: "The shield is up and the site passed its health check.",
   auto_undone: "The site failed its health check, so the shield was taken down straight away.",
   refused: "The site was already failing its health check, so the shield was not raised.",
   failed: "The change was refused. Nothing was changed.",
   undone: "The shield is down.",
   withdrawn: "The proposal was withdrawn.",
-  undo_failed: "Ghost could not take the shield down. Remove it by hand.",
-  brief: "This site is not behind our edge, so Ghost wrote it up for a worker instead.",
+  undo_failed: "Autumbra Watch could not take the shield down. Remove it by hand.",
+  brief: "This site is not behind our edge, so Autumbra Watch wrote it up for a worker instead.",
 };
 
 export async function shieldAction(_previous: GhostResult, form: FormData): Promise<GhostResult> {
@@ -60,6 +60,6 @@ export async function shieldAction(_previous: GhostResult, form: FormData): Prom
     return { ok: !["failed", "auto_undone", "undo_failed", "refused"].includes(shield.state),
              message: tapWords[shield.state] ?? "Done." };
   } catch {
-    return { ok: false, message: "Ghost could not finish. Nothing has been marked as changed." };
+    return { ok: false, message: "Autumbra Watch could not finish. Nothing has been marked as changed." };
   }
 }

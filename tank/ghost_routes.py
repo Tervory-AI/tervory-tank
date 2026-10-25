@@ -35,7 +35,7 @@ def runtime():
 
 async def require_ghost(request: Request, x_tank_key: str = Header(default="")):
     if await runtime().require_key(request, x_tank_key) != "ghost":
-        raise HTTPException(403, "Only Ghost may use this corridor.")
+        raise HTTPException(403, "Only Autumbra Watch may use this corridor.")
 
 
 async def call_room(method: str, room: str, path: str, *, body=None, params=None):
@@ -66,7 +66,7 @@ async def panel(action: str, request: Request):
     try:
         body = json.loads(raw) if raw else None
     except ValueError:
-        raise HTTPException(422, "Invalid Ghost request.") from None
+        raise HTTPException(422, "Invalid Autumbra Watch request.") from None
     response = await call_room(request.method, "ghost", path, body=body)
     return Response(response.content, status_code=response.status_code, media_type="application/json")
 
@@ -94,7 +94,7 @@ async def shields_list():
 
 @router.get("/shields/tile", dependencies=[Depends(admin.require_admin)])
 async def shields_tile():
-    """The founder tile: Ghost's own numbers plus Ghost's cost this month from Tank's receipts."""
+    """The founder tile: Autumbra Watch's own numbers plus cost this month from Tank's receipts."""
     response = await call_room("GET", "ghost", "/ghost/summary")
     if response.status_code != 200:
         raise HTTPException(503, "The room is unavailable.")
@@ -129,7 +129,7 @@ async def check(request: Request):
         # No raw-log API, GitHub administration credential, or cross-region proxy.
         raise HTTPException(503, "The read-only evidence feed is not connected.")
     if body.target not in ROOMS and body.target != "tank":
-        raise HTTPException(422, "Public sites use Ghost's own browser.")
+        raise HTTPException(422, "Public sites use Autumbra Watch's own browser.")
     start = time.monotonic()
     if body.target == "tank":
         async with runtime().pool().acquire() as conn:
@@ -153,7 +153,7 @@ async def parse(request: Request, model, max_bytes: int = 4096):
     try:
         return model.model_validate_json(raw)
     except ValidationError:
-        raise HTTPException(422, "Invalid Ghost request.") from None
+        raise HTTPException(422, "Invalid Autumbra Watch request.") from None
 
 
 class Recovery(BaseModel):
@@ -246,7 +246,7 @@ async def scan(request: Request):
         raise HTTPException(422, "Hand over a tar or zip archive.")
     response = await call_room("POST", "radix", "/jobs", body={
         "tenant_id": str(runtime().PLATFORM_TENANT), "kind": "scan",
-        "input": {"source": "b64:" + body.archive, "ref": "Ghost incident code"},
+        "input": {"source": "b64:" + body.archive, "ref": "Autumbra Watch incident code"},
     })
     if response.status_code != 201:
         raise HTTPException(503, "Radix did not accept the scan.")

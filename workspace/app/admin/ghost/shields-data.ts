@@ -29,7 +29,7 @@ async function call<T>(path: string, userId: string, method: "GET" | "POST"): Pr
     method, cache: "no-store",
     headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY, "x-tervory-admin": userId },
   });
-  if (!res.ok) throw new Error(`Ghost shields ${res.status}`);
+  if (!res.ok) throw new Error(`Autumbra Watch shields ${res.status}`);
   return (await res.json()) as T;
 }
 
