@@ -63,3 +63,8 @@ export function isPublicWatch(matchId: string): boolean {
   const row = getMatch(matchId);
   return Boolean(row && row.published);
 }
+
+/** Published fixtures for the /moot index (zenas.tervory.com). */
+export function listPublishedMatches(): MatchRecord[] {
+  return Object.values(FIXTURES).filter((row) => row.published);
+}
