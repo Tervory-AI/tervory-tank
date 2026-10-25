@@ -115,7 +115,8 @@ def test_rig_startup_loads_catalogues_on_postgres(tmp_path: Path, monkeypatch) -
             assert "rk_pub_archon" in home.text
             assert "rk_pub_examplebrand" not in home.text
             assert "What are you building?" in home.text
-            assert "live distributor keys are off" in home.text
+            assert "live distributor keys are off" not in home.text
+            assert "Demo · keys off" not in home.text
             assert 'alt="Tervory"' in home.text
             classic = client.get("/cn-classic")
             assert classic.status_code == 200

@@ -128,9 +128,6 @@ body[data-view="landing"] .bg-glow.g1, body[data-view="idk"] .bg-glow.g1 { top: 
 [data-skin="cn"] .logo-rig { display: none; }
 [data-skin="cn"] .logo-cn { display: block; }
 .tools { position: relative; display: flex; align-items: center; gap: 10px; }
-.pill-sample { display: inline-flex; align-items: center; gap: 7px; height: 25px; padding: 0 12px; border: 1px solid color-mix(in srgb, var(--data-warn) 60%, transparent); border-radius: var(--radius-chip); color: var(--data-warn); font: 600 9.5px/1 var(--font-body); letter-spacing: 0.14em; text-transform: uppercase; }
-.pill-sample i { width: 6px; height: 6px; border-radius: 50%; background: var(--data-warn); }
-.pill-sample .short { display: none; }
 .tool { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--glass-stroke); background: var(--glass-fill); display: grid; place-items: center; color: var(--text-secondary); }
 [data-skin="cn"] .tool { border-radius: var(--radius-tile); }
 .tool .ico { width: 15px; height: 15px; }
@@ -194,7 +191,6 @@ main { position: relative; }
 .promise .ico { width: 15px; height: 15px; }
 .promise b { display: block; font-weight: 500; font-size: 13px; }
 .promise small { display: block; color: var(--text-tertiary); font-size: 11px; margin-top: 2px; }
-.demo-banner { position: relative; margin: 14px 0 0; padding: 8px 14px; border-radius: var(--radius-chip); border: 1px solid color-mix(in srgb, var(--data-warn) 50%, transparent); background: color-mix(in srgb, var(--bg-raised) 80%, transparent); color: var(--data-warn); font-size: 12.5px; max-width: 640px; text-align: center; line-height: 1.35; }
 .foot-count { position: relative; margin: 40px 0 0; color: var(--text-tertiary); font-size: 11px; }
 
 /* Stage: pistol with slot cards */
@@ -438,10 +434,7 @@ body.cmp-open .col .card:not(.on-view), body.cmp-open .col .more-fits, body.cmp-
   .top { height: 72px; padding: 0 18px; }
   .logo-rig { height: 22px; }
   .logo-cn { height: 44px; }
-  .pill-sample .full { display: none; }
-  .pill-sample .short { display: inline; }
-  .pill-sample { height: 24px; font-size: 10px; }
-  .tool-save { display: none; }
+      .tool-save { display: none; }
   .sumbar { position: fixed; top: 70px; left: 18px; right: 18px; transform: none; height: 60px; gap: 12px; padding: 0 7px 0 16px; border-radius: 22px; }
   .sumbar .btn-action .ico { display: none; }
   [data-skin="cn"] .sumbar { border-radius: var(--radius-panel); }

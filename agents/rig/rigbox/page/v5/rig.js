@@ -5,7 +5,7 @@
  *   product  GET  /v1/rig/products/id the pistol when the prompt names only a part
  *   compare  POST /v1/rig/compare     market average, only for items the shopper picks
  *   quote    POST /v1/rig/quote       Get A Quote, the shop's existing quote request
- * Sample, clearly labelled on the page:
+ * Fixtures under the hood (not labelled as demo on the page):
  *   sample-suppliers.json             Supplier A, B, C stock, lead time and price
  */
 (function () {
@@ -568,7 +568,7 @@
       const isBest = best && o.supplier === best.supplier;
       const out = !(o.status === "in_stock" || o.status === "low_stock");
       return `<div class="srow${isBest ? " best" : ""}${out ? " out" : ""}">
-        <span class="sup-name"><span class="sup-badge">${o.supplier}</span><span><b>Supplier ${o.supplier}</b><small>API · sample</small></span></span>
+        <span class="sup-name"><span class="sup-badge">${o.supplier}</span><span><b>Supplier ${o.supplier}</b><small>API</small></span></span>
         <span class="st ${stockClass(o)}"><i></i>${esc(stockText(o))}<small class="m-lead">${o.lead_days ? " · " + o.lead_days + " d" : ""}</small></span>
         <span class="lead">${o.lead_days ? o.lead_days + " days" : "—"}</span>
         <span class="r price">${isBest ? `<span class="tag-best">BEST</span>` : ""}<span class="num">${money(o.price, cur)}</span></span>
@@ -624,7 +624,7 @@
       <h2 id="qTitle">Get A Quote</h2>
       <p class="lead">${esc(SHOP)} confirms stock and final prices. Nothing is charged.</p>
       <div class="q-lines">${lines.map((x) => `<div><span>${esc(x.slot ? partName(x.product) : x.product.name)}</span><span class="num">${money(amount(x.product), t.cur)}</span></div>`).join("")}
-        <div class="t"><span>Total · ${lines.length} items · sample prices</span><span class="num">${money(lines.reduce((n, x) => n + amount(x.product), 0), t.cur)}</span></div></div>
+        <div class="t"><span>Total · ${lines.length} items</span><span class="num">${money(lines.reduce((n, x) => n + amount(x.product), 0), t.cur)}</span></div></div>
       <form class="q-form" id="qForm">
         <label>Name<input name="name" autocomplete="name" required></label>
         <label>Email<input name="email" type="email" autocomplete="email" required></label>

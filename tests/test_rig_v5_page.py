@@ -87,9 +87,12 @@ def test_root_serves_v5_product_surface() -> None:
     assert 'data-skin="rig"' in home.text
     assert "What are you building?" in home.text
     assert "Archon Type B" in home.text  # try chip
-    assert "Demo · fixture catalogues" in home.text
-    assert "live distributor keys are off" in home.text
-    assert "Demo · keys off" in home.text
+    assert "Demo · fixture catalogues" not in home.text
+    assert "live distributor keys are off" not in home.text
+    assert "Demo · keys off" not in home.text
+    assert "demo-banner" not in home.text
+    assert "pill-sample" not in home.text
+    assert "Archon catalogue" in home.text
     assert json.dumps(KEY) in home.text
     assert "__RIG_" not in home.text
     assert client.get("/v5").status_code == 200
@@ -118,9 +121,11 @@ def test_v5_shopper_words() -> None:
     text = "\n".join((V5 / name).read_text(encoding="utf-8") for name in ("index.html", "rig.js"))
     assert "Get A Quote" in text
     assert not re.search(r"reserv", text, re.IGNORECASE)
-    assert "Sample prices" in text  # stage / dock still say sample
-    assert "Demo · keys off" in text
-    assert "live distributor keys are off" in text
+    assert "Market prices" in text
+    assert "Sample prices" not in text
+    assert "Demo · keys off" not in text
+    assert "live distributor keys are off" not in text
+    assert "sample prices" not in text
     assert "sample" in (V5 / "sample-suppliers.json").read_text(encoding="utf-8")
     # No web images: every image the page loads is under /page/v5/media.
     for url in re.findall(r"(?:src=|url\()[\"']?([^\"')\s>]+)", text):
