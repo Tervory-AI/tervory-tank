@@ -38,7 +38,7 @@ export async function resolve(_previous: GhostResult, form: FormData): Promise<G
 }
 
 const tapWords: Record<string, string> = {
-  dry_run: "Practice run: nothing was changed. This is exactly what Autumbra would change once it is allowed to.",
+  dry_run: "Nothing changed at the edge. This is exactly what Autumbra Enforce would apply.",
   up: "The shield is up and the site passed its health check.",
   auto_undone: "The site failed its health check, so the shield was taken down straight away.",
   refused: "The site was already failing its health check, so the shield was not raised.",
