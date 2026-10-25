@@ -1,21 +1,13 @@
 import type { Metadata } from "next";
-import { activeTenant } from "@/lib/tenant";
-import { RadixSettings } from "./settings";
-import { RadixPage } from "./view";
-import "./radix.css";
+import { RadixPublic } from "./public-view";
+import "./public.css";
 
+export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "Radix | Tervory",
-  description: "Review code checks, findings, and reports.",
+  title: "Radix · Tervory",
+  description: "Radix — review findings, severity, and the release brief.",
 };
 
-export default async function Page() {
-  let accountName = "Your account";
-  try {
-    const tenant = await activeTenant();
-    if (tenant?.orgName.trim()) accountName = tenant.orgName.trim();
-  } catch {
-    accountName = "Your account";
-  }
-  return <RadixPage accountName={accountName} settings={<RadixSettings />} />;
+export default function RadixPublicPage() {
+  return <RadixPublic />;
 }

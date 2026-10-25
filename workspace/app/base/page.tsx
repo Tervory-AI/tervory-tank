@@ -1,36 +1,15 @@
 import type { Metadata } from "next";
-import { auth } from "@clerk/nextjs/server";
-import { isFounder } from "@/lib/admin";
-import { activeTenant } from "@/lib/tenant";
-import { refreshBase } from "./actions";
-import { loadBase } from "./load";
-import { offPanel, SIGN_IN_MESSAGE } from "./plugin-panel";
-import { askBase, searchBase } from "./search";
-import { loadBasePlugins } from "./vault-server";
-import { BaseView } from "./view";
-import "./base.css";
+import { BaseDocument } from "./public-doc";
+import "./public.css";
 
 export const dynamic = "force-dynamic";
-export const runtime = "nodejs";
 
 export const metadata: Metadata = {
   title: "Base · Tervory",
+  description: "Base — a typed document with colour. Write, highlight, keep the brief.",
 };
 
-export default async function BasePage() {
-  const { userId } = await auth();
-  let accountName: string | null = null;
-  let signedIn = false;
-  try {
-    const tenant = await activeTenant();
-    signedIn = Boolean(tenant);
-    accountName = tenant?.orgName ?? null;
-  } catch {
-    signedIn = false;
-    accountName = null;
-  }
-  // Plugins read base.vault through Tank. While the vault is off, Tank returns no items and the tab says so.
-  const plugins = signedIn ? await loadBasePlugins() : offPanel(SIGN_IN_MESSAGE);
-  const model = await loadBase();
-  return <BaseView model={model} plugins={plugins} accountName={accountName} refresh={refreshBase} search={searchBase} ask={askBase} canRunTrial={isFounder(userId)} />;
+/** Public Base product — typed document surface. No auth wall. */
+export default function BasePublicPage() {
+  return <BaseDocument />;
 }

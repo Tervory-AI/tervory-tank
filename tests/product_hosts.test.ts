@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   WORKSPACE_PRODUCT_HOSTS,
   isAutumbraHost,
+  isPublicProductPath,
   mootCanonicalRedirectUrl,
   normalizeHost,
   productHostFor,
@@ -71,4 +72,18 @@ test("app /moot redirects canonically to zenas host", () => {
   assert.equal(mootCanonicalRedirectUrl("zenas.tervory.com", "/moot"), null);
   assert.equal(mootCanonicalRedirectUrl("app.tervory.com", "/matters"), null);
   assert.equal(mootCanonicalRedirectUrl("app.tervory.com", "/zenas"), null);
+});
+
+test("squad product paths are public product surfaces", () => {
+  assert.equal(isPublicProductPath("/base"), true);
+  assert.equal(isPublicProductPath("/tiger"), true);
+  assert.equal(isPublicProductPath("/market-lab"), true);
+  assert.equal(isPublicProductPath("/tisan"), true);
+  assert.equal(isPublicProductPath("/radix"), true);
+  assert.equal(isPublicProductPath("/skala"), true);
+  assert.equal(isPublicProductPath("/tank"), true);
+  assert.equal(isPublicProductPath("/autumbra"), true);
+  assert.equal(isPublicProductPath("/moot"), true);
+  assert.equal(isPublicProductPath("/admin/autumbra"), false);
+  assert.equal(isPublicProductPath("/dashboard"), false);
 });
