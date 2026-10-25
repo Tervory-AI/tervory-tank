@@ -40,18 +40,34 @@ This is the **Enforce customise** slice from the Autumbra OSS vault shopping lis
 | `wraith.py` + `POST /ghost/wraith/enforce` | Existing dry Enforce stub behind `GHOST_WRAITH_ENABLED` (**OFF**). Code path name short-term; product = Autumbra Enforce. **Untouched** by this PR except coexistence. |
 | This OSS slice (`enforce_oss`) | Ansible/Terraform **templates + dry plans**. Does **not** call Cloudflare. Does **not** replace founder Shield tap. |
 
+
+## Watch air-gap → Enforce OSS dry plan
+
+ThreatPayload from Autumbra Watch / Air Gap can hand off to Enforce OSS for **dry JSON only**:
+
+| Surface | Behaviour |
+|---------|-----------|
+| `POST /ghost/enforce/oss/plan` | Tank key. Body = ThreatPayload JSON. Flag **OFF** → **404**. On burn → **422** `BURN_DETAIL` (no body echo). When enabled → `receive_from_airgap` dry JSON (`applied: false`, Ansible/Terraform plans or null). |
+| `POST /ghost/triage/accept` | After a successful `propose_shield` propose, if Enforce OSS is **enabled**, response may include `enforce_oss` dry handoff alongside `shield` public_view. When disabled, key is **omitted** (triage never 404s for this). Still never raise/apply. |
+| `agents/ghost/enforce_oss/handoff.py` | `receive_from_airgap` — accept via `accept_enforce_threat` only; builds dry plans; per-adapter burn → that plan null. |
+
+**Flags stay OFF** until founder go. **Shields Up** remains the live Cloudflare path (founder Shield tap). **No live Hugging Face Inference** on this lane — fixtures only. No `ansible-playbook` / `terraform apply` from these adapters.
+
 ## Files
 
-- `agents/ghost/enforce_oss/` — Python adapters (`ansible.py`, `terraform.py`, `common.py`)
+- `agents/ghost/enforce_oss/` — Python adapters (`ansible.py`, `terraform.py`, `common.py`, `handoff.py`)
 - `agents/ghost/configs/enforce/playbooks/` — CF WAF / rate-limit / multipart / bots + host iptables brief
 - `agents/ghost/configs/enforce/terraform/` — `.tf.tpl` stubs + README (BSL note)
 - `agents/ghost/configs/enforce/ansible.cfg` — `gathering = explicit`, no Galaxy auto-fetch
 - `GET /ghost/enforce/oss` — status (Autumbra Enforce copy); flag does not need to be ON to read status
+- `POST /ghost/enforce/oss/plan` — Watch air-gap dry handoff (404 when flag OFF)
 - `tests/test_ghost_enforce_oss.py`
+- `tests/test_ghost_enforce_connections.py` — propose→raise→undo + OSS plan wiring (fixtures)
 
 ## Out of scope
 
 - Live `ansible-playbook` / `terraform apply`
+- Live Hugging Face Inference (fixtures only until founder go)
 - Merge / deploy / enabling flags in prod
 - Expanding `ALLOWED_ZONES` / `WATCHED_SITES`
 - GPU / vLLM

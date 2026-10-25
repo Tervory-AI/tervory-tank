@@ -7,6 +7,7 @@ vendor multi-GB upstream trees. Stronger-than-stock defaults:
 - no raw shell / no subprocess apply
 - dry-run / plan only until separately armed
 - Cloudflare / firewall playbooks as templates (live CF stays on Shields Up)
+- Watch air-gap handoff via receive_from_airgap → dry JSON only
 
 Product copy: Autumbra Enforce / Autumbra Watch only.
 Flags: ENFORCE_OSS_ENABLED / GHOST_ENFORCE_OSS_ENABLED (default OFF);
@@ -17,6 +18,7 @@ from __future__ import annotations
 import os
 
 from .common import accept_enforce_threat, armed, enabled
+from .handoff import receive_from_airgap
 from . import ansible, terraform
 
 __all__ = [
@@ -24,6 +26,7 @@ __all__ = [
     "ansible",
     "armed",
     "enabled",
+    "receive_from_airgap",
     "status",
     "terraform",
 ]
@@ -38,6 +41,12 @@ def status() -> dict:
         "adapters": {
             "ansible": ansible.adapter_meta(),
             "terraform": terraform.adapter_meta(),
+        },
+        "handoff": {
+            "source": "watch_airgap",
+            "route": "POST /ghost/enforce/oss/plan",
+            "triage_attach": "POST /ghost/triage/accept → enforce_oss when enabled",
+            "apply": False,
         },
         "note": (
             "Adapters and dry-run templates only. No ansible-playbook / terraform apply "
