@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
 import httpx
@@ -18,7 +17,6 @@ from agents.ghost.threat_payload import (
     BURN_DETAIL,
     SCHEMA_VERSION,
     ThreatBurned,
-    accept_threat_payload,
     match_to_threat_payload,
     threat_to_shield_request,
 )
