@@ -9,8 +9,8 @@ Code paths may still say `agents/ghost` short-term.
 
 | Item | State |
 |------|--------|
-| Staging vault on bot box `/workspace/autumbra-oss-vault/` | **Populated** (shallow clones) |
-| Push to `ammosync@41.222.36.225:/home/ammosync/code-vault` | **Blocked** — SSH No route to host; see vault `PUSH-WHEN-VAULT-UP.md` |
+| Primary vault: Boston `ammosync@2.25.250.28:/home/ammosync/code-vault/autumbra-oss/` | **Populated** (1.3G, 54,685 files, synced 2026-10-24) |
+| Bot box `/workspace/autumbra-oss-vault/` | Working copy / cache. ZA host (41.222.36.225) **abandoned** for this vault |
 | Dual-LLM / NeMo / Wazuh **live** in product | **No** — clones + plans only |
 | This PR | Docs + clone helper only — **no merge/deploy assumed** |
 
