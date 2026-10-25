@@ -2,13 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
-  C2_PARTS,
-  OPENING_ANSWER,
-  OPENING_ITEMS,
-  OPENING_QUESTION,
-  OPENING_SOURCES,
   PISTOLS,
-  SEED_ADDED,
   type Part,
   type Pistol,
 } from "./copy";
@@ -21,16 +15,6 @@ type Turn =
 
 type Hit = { id?: string; name?: string; category?: string; price?: { amount?: number } };
 
-const OPENING: Turn[] = [
-  { role: "you", text: OPENING_QUESTION },
-  {
-    role: "rig",
-    text: OPENING_ANSWER,
-    items: OPENING_ITEMS,
-    sources: OPENING_SOURCES,
-    note: "Prices are the retailer's. Market average shows once your selection is final.",
-  },
-];
 
 function rand(amount: number): string {
   return `R${Math.round(amount).toLocaleString("en-US")}`;
@@ -57,16 +41,16 @@ async function call<T>(body: unknown): Promise<T> {
 }
 
 export function SearchView({ query, onQuery }: { query: string; onQuery: (value: string) => void }) {
-  const [text, setText] = useState(query || "Staccato");
-  const [pistols, setPistols] = useState<Pistol[]>(PISTOLS);
-  const [parts, setParts] = useState<Part[]>(C2_PARTS);
-  const [chosen, setChosen] = useState<string>("STI-C2-9");
-  const [added, setAdded] = useState<string[]>(SEED_ADDED);
-  const [line, setLine] = useState('Search looks through Rig\'s own catalogue records. Showing results for "Staccato": 3 pistols.');
-  const [thread, setThread] = useState<Turn[]>(OPENING);
+  const [text, setText] = useState(query || "");
+  const [pistols, setPistols] = useState<Pistol[]>([]);
+  const [parts, setParts] = useState<Part[]>([]);
+  const [chosen, setChosen] = useState<string>("");
+  const [added, setAdded] = useState<string[]>([]);
+  const [line, setLine] = useState("Search looks through Rig's own catalogue records. Type a brand or model — results appear only from the live catalogue.");
+  const [thread, setThread] = useState<Turn[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
-  const [final, setFinal] = useState(true);
+  const [final, setFinal] = useState(false);
 
   useEffect(() => {
     if (query && query !== text) {
@@ -78,15 +62,7 @@ export function SearchView({ query, onQuery }: { query: string; onQuery: (value:
   }, [query]);
 
   useEffect(() => {
-    void call<{ results?: Hit[]; exact_match?: boolean; message?: string }>({ op: "search", q: "Staccato" })
-      .then((body) => {
-        const hits = Array.isArray(body.results) ? body.results : [];
-        if (!hits.length) return;
-        applyHits("Staccato", hits, body.exact_match !== false, body.message);
-      })
-      .catch(() => {
-        /* Keep the frame until the live search answers. */
-      });
+    /* No seed search. Catalogue rows appear only after a live search returns hits. */
   }, []);
 
   function applyHits(q: string, hits: Hit[], exact: boolean, message?: string) {
@@ -121,25 +97,18 @@ export function SearchView({ query, onQuery }: { query: string; onQuery: (value:
       return;
     }
     setLine(`Search looks through Rig's own catalogue records. Showing results for "${q}": ${rows.length} ${noun}.`);
-    const pistol = rows.find((row) => row.name === "Staccato C2") ?? rows.find((row) => row.id === "STI-C2-9");
-    if (pistol && q.toLowerCase() === "staccato") {
-      setChosen(pistol.id);
-      setParts(C2_PARTS);
-      setAdded(SEED_ADDED);
-      setFinal(true);
-    } else if (rows[0]) {
+    if (rows[0]) {
       setChosen(rows[0].id);
       void loadParts(rows[0].id);
+    } else {
+      setChosen("");
+      setParts([]);
+      setAdded([]);
+      setFinal(false);
     }
   }
 
   async function loadParts(id: string) {
-    if (id === "STI-C2-9") {
-      setParts(C2_PARTS);
-      setAdded(SEED_ADDED);
-      setFinal(true);
-      return;
-    }
     try {
       const body = await call<{ branches?: { category?: string; products?: Hit[] }[] }>({ op: "graph", id });
       const next: Part[] = [];
@@ -459,8 +428,8 @@ export function SearchView({ query, onQuery }: { query: string; onQuery: (value:
       </section>
 
       <footer className="foot">
-        <p>Stand-in products only. Prices are demo figures in rand.</p>
-        <p className="small">Market averages come from two demo shops, not live quotes.</p>
+        <p>Catalogue results come from Rig&apos;s live records only. Prices show when the catalogue has them.</p>
+        <p className="small">Market averages appear once a selection is final — never invented on this page.</p>
       </footer>
     </div>
   );

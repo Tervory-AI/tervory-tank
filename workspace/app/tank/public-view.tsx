@@ -2,68 +2,46 @@
 
 import { useState } from "react";
 
-const ROSTER = [
-  { id: "m1", name: "base-intake", role: "Base", state: "warm", calls: 142 },
-  { id: "m2", name: "tiger-watch", role: "Tiger", state: "warm", calls: 88 },
-  { id: "m3", name: "radix-gate", role: "Radix", state: "idle", calls: 21 },
-  { id: "m4", name: "zenas-moot", role: "Zenas", state: "warm", calls: 56 },
-];
-
-const TASKS = [
-  { id: "q1", title: "Refresh Capstone batch", worker: "base-intake", status: "done", ago: "4 min" },
-  { id: "q2", title: "Digest Tiger watches", worker: "tiger-watch", status: "running", ago: "now" },
-  { id: "q3", title: "Radix release brief", worker: "radix-gate", status: "queued", ago: "—" },
-  { id: "q4", title: "Publish Moot fixture", worker: "zenas-moot", status: "done", ago: "22 min" },
-];
-
+/** Public product host Main chrome — Figma C5 agent page (ZnphBOJU6657tohGLD3IzS).
+ *  Sidebar is app-shell. Jobs stay empty until Tank has live rows. No invented SKUs/%/findings. */
 export function TankPublic() {
-  const [tab, setTab] = useState<"roster" | "queue">("roster");
-  const [open, setOpen] = useState(ROSTER[0].id);
-  const active = ROSTER.find((r) => r.id === open) ?? ROSTER[0];
-
+  const [ask, setAsk] = useState("");
   return (
-    <main className="tk-public" aria-label="Tank">
-      <header>
-        <p className="tk-eyebrow">Tank</p>
-        <h1>Roster and queue</h1>
-        <p className="tk-lede">Who is warm, what is on the queue, and the receipts when a task lands.</p>
-      </header>
-      <div className="tk-tabs" role="tablist">
-        <button type="button" role="tab" aria-selected={tab === "roster"} onClick={() => setTab("roster")}>Roster</button>
-        <button type="button" role="tab" aria-selected={tab === "queue"} onClick={() => setTab("queue")}>Queue</button>
+    <main className="pp" aria-label="Tank">
+      <h1 className="pp-title">Tank</h1>
+      <p className="pp-lede">Tank runs the roster and the queue. Ask it about a worker, or open a past task receipt.</p>
+      <form
+        className="pp-ask"
+        onSubmit={(e) => {
+          e.preventDefault();
+        }}
+      >
+        <input
+          value={ask}
+          onChange={(e) => setAsk(e.target.value)}
+          placeholder="Ask Tank about a worker, or open a past task…"
+          aria-label="Ask Tank"
+        />
+        <button type="button">Open queue</button>
+        <button type="submit" className="primary">Ask</button>
+      </form>
+      <h2 className="pp-section">Jobs</h2>
+      <div className="pp-table-wrap">
+        <table className="pp-table">
+          <thead>
+            <tr>
+              <th>Task</th>
+              <th>Worker</th>
+              <th>Status</th>
+              <th>Calls</th>
+              <th>When</th>
+            </tr>
+          </thead>
+        </table>
+        <p className="pp-empty" role="status">Queue is empty. Tasks and roster rows appear here when Tank reports them — this page does not invent workers or volumes.</p>
       </div>
-      {tab === "roster" ? (
-        <div className="tk-split">
-          <ul>
-            {ROSTER.map((r) => (
-              <li key={r.id}>
-                <button type="button" className={open === r.id ? "on" : undefined} onClick={() => setOpen(r.id)}>
-                  <strong>{r.name}</strong>
-                  <span>{r.role} · {r.state} · {r.calls} calls</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-          <article>
-            <h2>{active.name}</h2>
-            <p>{active.role}</p>
-            <dl>
-              <div><dt>State</dt><dd>{active.state}</dd></div>
-              <div><dt>Calls (30d)</dt><dd>{active.calls}</dd></div>
-            </dl>
-          </article>
-        </div>
-      ) : (
-        <ul className="tk-queue">
-          {TASKS.map((t) => (
-            <li key={t.id}>
-              <span data-st={t.status}>{t.status}</span>
-              <strong>{t.title}</strong>
-              <em>{t.worker} · {t.ago}</em>
-            </li>
-          ))}
-        </ul>
-      )}
+      <p className="pp-learned">What Tank has learned for you — nothing saved yet. Queue patterns show after real tasks land.</p>
+      <p className="pp-foot">Tank · Tervory · Figma C5 agent page chrome (ZnphBOJU6657tohGLD3IzS)</p>
     </main>
   );
 }

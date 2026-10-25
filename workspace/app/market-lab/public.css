@@ -1,13 +1,1 @@
-.ml-public{min-height:100vh;padding:2rem 1.25rem 4rem;background:#111827;color:#f3f4f6;font-family:ui-sans-serif,system-ui,sans-serif}
-.ml-public header{max-width:960px;margin:0 auto 1.25rem}
-.ml-eyebrow{text-transform:uppercase;letter-spacing:.14em;font-size:.72rem;color:#fbbf24;margin:0}
-.ml-public h1{font-size:clamp(2rem,4vw,2.75rem);margin:.35rem 0 .5rem}
-.ml-lede{color:#9ca3af;max-width:36rem;line-height:1.5}
-.ml-grid{max-width:960px;margin:0 auto;display:grid;gap:1rem;grid-template-columns:1fr 1.2fr}
-@media(max-width:800px){.ml-grid{grid-template-columns:1fr}}
-.ml-grid ul{list-style:none;margin:0;padding:0;display:grid;gap:.5rem}
-.ml-grid button{width:100%;text-align:left;background:#1f2937;border:1px solid #374151;border-radius:12px;padding:.9rem 1rem;color:inherit;cursor:pointer;display:flex;justify-content:space-between;gap:1rem}
-.ml-grid button.on{border-color:#fbbf24;background:#292524}
-.ml-grid article{background:#1f2937;border:1px solid #374151;border-radius:12px;padding:1.1rem 1.2rem}
-.ml-delta{font-size:1.4rem;font-weight:700;color:#fbbf24}
-.ml-grid hr{border:0;border-top:1px solid #374151;margin:1.25rem 0}
+/* market-lab host accents on top of product-public.css (Figma C5 Main). */

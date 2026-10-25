@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { BaseDocument } from "./public-doc";
+import "../product-public.css";
 import "./public.css";
 
 export const dynamic = "force-dynamic";

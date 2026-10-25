@@ -2,70 +2,46 @@
 
 import { useState } from "react";
 
-const THREADS = [
-  {
-    id: "t1",
-    title: "Counter brief — Saturday rush",
-    preview: "Two checkers on Form 4473; keep the safe key with the closer.",
-    messages: [
-      { who: "You", text: "Draft the Saturday counter brief for Kapaa." },
-      { who: "Tisan", text: "Two checkers on every 4473. Safe key stays with the closer. Reman 9mm on the endcap only after noon." },
-      { who: "You", text: "Add the TLR watch note from Tiger." },
-      { who: "Tisan", text: "Added: TLR-1 HL is under ceiling — mention it if a customer asks for a light package." },
-    ],
-  },
-  {
-    id: "t2",
-    title: "Gold note — transfer desk",
-    preview: "Keep outbound Form 3 language tight; no improvising on ATF timing.",
-    messages: [
-      { who: "You", text: "Pin the gold note for Form 3 outbound." },
-      { who: "Tisan", text: "Pinned. Outbound Form 3 uses the standard letter only. Timing questions go to the responsible person." },
-    ],
-  },
-  {
-    id: "t3",
-    title: "Intake chat — Capstone list",
-    preview: "Friday intake cleared 18 rows; three need a second website pass.",
-    messages: [
-      { who: "Tisan", text: "Friday intake: 18 rows cleared, 3 need a second website pass before Base files them." },
-    ],
-  },
-];
-
+/** Public product host Main chrome — Figma C5 agent page (ZnphBOJU6657tohGLD3IzS).
+ *  Sidebar is app-shell. Jobs stay empty until Tank has live rows. No invented SKUs/%/findings. */
 export function TisanPublic() {
-  const [open, setOpen] = useState(THREADS[0].id);
-  const active = THREADS.find((t) => t.id === open) ?? THREADS[0];
+  const [ask, setAsk] = useState("");
   return (
-    <main className="ti-public" aria-label="Tisan">
-      <header>
-        <p className="ti-eyebrow">Tisan</p>
-        <h1>Briefs and chats</h1>
-        <p className="ti-lede">Keep the working brief next to the conversation. Open a thread and read the thread end-to-end.</p>
-      </header>
-      <div className="ti-split">
-        <ul>
-          {THREADS.map((t) => (
-            <li key={t.id}>
-              <button type="button" className={open === t.id ? "on" : undefined} onClick={() => setOpen(t.id)}>
-                <strong>{t.title}</strong>
-                <span>{t.preview}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-        <article>
-          <h2>{active.title}</h2>
-          <ol>
-            {active.messages.map((m, i) => (
-              <li key={i} data-who={m.who}>
-                <span>{m.who}</span>
-                <p>{m.text}</p>
-              </li>
-            ))}
-          </ol>
-        </article>
+    <main className="pp" aria-label="Tisan">
+      <h1 className="pp-title">Tisan</h1>
+      <p className="pp-lede">Tisan keeps briefs next to the conversation. Ask it to draft a brief, or open a past thread.</p>
+      <form
+        className="pp-ask"
+        onSubmit={(e) => {
+          e.preventDefault();
+        }}
+      >
+        <input
+          value={ask}
+          onChange={(e) => setAsk(e.target.value)}
+          placeholder="Ask Tisan to draft a brief, or open a past thread…"
+          aria-label="Ask Tisan"
+        />
+        <button type="button">New brief</button>
+        <button type="submit" className="primary">Ask</button>
+      </form>
+      <h2 className="pp-section">Jobs</h2>
+      <div className="pp-table-wrap">
+        <table className="pp-table">
+          <thead>
+            <tr>
+              <th>Brief</th>
+              <th>Thread</th>
+              <th>Messages</th>
+              <th>Status</th>
+              <th>When</th>
+            </tr>
+          </thead>
+        </table>
+        <p className="pp-empty" role="status">No briefs yet. Threads saved in Tisan appear here when Tank has them — this page does not invent messages.</p>
       </div>
+      <p className="pp-learned">What Tisan has learned for you — nothing saved yet. Gold notes show after real briefs are pinned.</p>
+      <p className="pp-foot">Tisan · Tervory · Figma C5 agent page chrome (ZnphBOJU6657tohGLD3IzS)</p>
     </main>
   );
 }

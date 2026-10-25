@@ -1,53 +1,48 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
-const FINDINGS = [
-  { id: "f1", severity: "High", file: "workers/ingest.py", title: "Token logged on retry path", detail: "A retry branch writes the Authorization header into the worker log. Strip the header before the log call." },
-  { id: "f2", severity: "Medium", file: "package-lock.json", title: "Pinned dependency behind advisory", detail: "extract-zip sits on an advisory. Bump when the upstream patch lands; no live exploit path in this tree." },
-  { id: "f3", severity: "Low", file: "app/settings.tsx", title: "Missing empty-state copy", detail: "Settings renders a blank card when vault is offline. Add a short offline line so the page never looks broken." },
-];
-
+/** Public product host Main chrome — Figma C5 agent page (ZnphBOJU6657tohGLD3IzS).
+ *  Sidebar is app-shell. Jobs stay empty until Tank has live rows. No invented SKUs/%/findings. */
 export function RadixPublic() {
-  const [sev, setSev] = useState<"All" | "High" | "Medium" | "Low">("All");
-  const [open, setOpen] = useState(FINDINGS[0].id);
-  const rows = useMemo(
-    () => FINDINGS.filter((f) => sev === "All" || f.severity === sev),
-    [sev],
-  );
-  const active = rows.find((f) => f.id === open) ?? rows[0] ?? FINDINGS[0];
-
+  const [ask, setAsk] = useState("");
   return (
-    <main className="rx-public" aria-label="Radix">
-      <header>
-        <p className="rx-eyebrow">Radix</p>
-        <h1>Findings</h1>
-        <p className="rx-lede">Review the scan, open a finding, and keep the release brief honest before anything ships.</p>
-      </header>
-      <div className="rx-filters" role="group" aria-label="Severity">
-        {(["All", "High", "Medium", "Low"] as const).map((s) => (
-          <button key={s} type="button" aria-pressed={sev === s} onClick={() => { setSev(s); setOpen(FINDINGS.find((f) => s === "All" || f.severity === s)?.id ?? FINDINGS[0].id); }}>{s}</button>
-        ))}
+    <main className="pp" aria-label="Radix">
+      <h1 className="pp-title">Radix</h1>
+      <p className="pp-lede">Radix reviews code and releases. Ask it to scan a tree, or open a past findings job.</p>
+      <form
+        className="pp-ask"
+        onSubmit={(e) => {
+          e.preventDefault();
+        }}
+      >
+        <input
+          value={ask}
+          onChange={(e) => setAsk(e.target.value)}
+          placeholder="Ask Radix to scan a tree, or open a past job…"
+          aria-label="Ask Radix"
+        />
+        <button type="button">Upload tree</button>
+        <button type="submit" className="primary">Ask</button>
+      </form>
+      <h2 className="pp-section">Jobs</h2>
+      <div className="pp-table-wrap">
+        <table className="pp-table">
+          <thead>
+            <tr>
+              <th>Scan</th>
+              <th>High</th>
+              <th>Medium</th>
+              <th>Low</th>
+              <th>Status</th>
+              <th>When</th>
+            </tr>
+          </thead>
+        </table>
+        <p className="pp-empty" role="status">No scans yet. Findings appear here after Radix completes a real run — this page does not invent severities or files.</p>
       </div>
-      <div className="rx-split">
-        <ul>
-          {rows.map((f) => (
-            <li key={f.id}>
-              <button type="button" className={open === f.id ? "on" : undefined} onClick={() => setOpen(f.id)}>
-                <span data-sev={f.severity}>{f.severity}</span>
-                <strong>{f.title}</strong>
-                <em>{f.file}</em>
-              </button>
-            </li>
-          ))}
-        </ul>
-        <article>
-          <p className="rx-sev" data-sev={active.severity}>{active.severity}</p>
-          <h2>{active.title}</h2>
-          <p className="rx-file">{active.file}</p>
-          <p>{active.detail}</p>
-        </article>
-      </div>
+      <p className="pp-learned">What Radix has learned for you — nothing saved yet. Release-gate patterns show after real scans.</p>
+      <p className="pp-foot">Radix · Tervory · Figma C5 agent page chrome (ZnphBOJU6657tohGLD3IzS)</p>
     </main>
   );
 }

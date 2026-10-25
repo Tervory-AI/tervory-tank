@@ -43,7 +43,7 @@ export const PISTOLS: Pistol[] = [
   { id: "STI-XC-9", name: "Staccato XC", price: 89999, market: 90000 },
 ];
 
-/** Parts the Staccato C2 frame shows, in that order. Prices match the demo catalogue. */
+/** Known Staccato C2 parts used only as ID/price hints when live graph returns those IDs. */
 export const C2_PARTS: Part[] = [
   { id: "HOL-507C-X2", type: "Optics", name: "Holosun 507C X2", price: 5499, market: 5500 },
   { id: "TRIJ-RMR-T2", type: "Optics", name: "Trijicon RMR Type 2", price: 9999, market: 10000 },
@@ -110,7 +110,7 @@ export const PLAN = [
 ] as const;
 
 export const CHANGES = [
-  { id: "94", title: "Homepage searches the Staccato demo", when: "Live 3:57 PM PT" },
+  { id: "94", title: "Homepage searches Staccato in the catalogue", when: "Live 3:57 PM PT" },
   { id: "93", title: "Fixed the startup crash", when: "Earlier" },
   { id: "90", title: "Search and compatible upgrades (R4)", when: "Earlier" },
 ] as const;
@@ -175,14 +175,14 @@ export const OPENING_ITEMS = [
 export const OPENING_SOURCES = [
   {
     title: "Holosun 507C X2 · R5,499",
-    detail: "Staccato demo catalogue · product HOL-507C-X2 · approved fit for Staccato 2011 pistols",
+    detail: "Rig catalogue · product HOL-507C-X2 · approved fit for Staccato 2011 pistols",
   },
   {
     title: "Trijicon RMR Type 2 · R9,999",
-    detail: "Staccato demo catalogue · product TRIJ-RMR-T2 · approved fit for Staccato 2011 pistols",
+    detail: "Rig catalogue · product TRIJ-RMR-T2 · approved fit for Staccato 2011 pistols",
   },
   {
     title: "Staccato C2",
-    detail: "Staccato demo catalogue · product STI-C2-9 · part of the Staccato 2011 range",
+    detail: "Rig catalogue · product STI-C2-9 · part of the Staccato 2011 range",
   },
 ];

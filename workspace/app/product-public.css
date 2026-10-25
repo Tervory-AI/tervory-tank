@@ -1,0 +1,109 @@
+/* Figma ZnphBOJU6657tohGLD3IzS · Client screens · C5 agent page Main chrome.
+   Sidebar comes from app-shell. Honest empty rows when Tank has no data. */
+.pp {
+  min-height: 100%;
+  padding: 2.25rem 3rem 3rem;
+  background: #f7f1e8;
+  color: #1f2937;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+.pp-title {
+  margin: 0;
+  font-size: clamp(2.4rem, 4vw, 3.1rem);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: #111827;
+}
+.pp-lede {
+  margin: 0.65rem 0 0;
+  max-width: 52rem;
+  color: #4b5563;
+  line-height: 1.5;
+  font-size: 1.05rem;
+}
+.pp-ask {
+  margin-top: 1.5rem;
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 0.7rem 0.8rem 0.7rem 1.1rem;
+  box-shadow: 0 1px 0 rgba(17, 24, 39, 0.04);
+}
+.pp-ask input {
+  flex: 1;
+  border: 0;
+  outline: none;
+  font: inherit;
+  font-size: 1.05rem;
+  background: transparent;
+  color: #111827;
+}
+.pp-ask input::placeholder { color: #9ca3af; }
+.pp-ask button {
+  border-radius: 10px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: #111827;
+  padding: 0.55rem 0.95rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.pp-ask button.primary {
+  border-color: #6d28d9;
+  background: #6d28d9;
+  color: #fff;
+}
+.pp-section {
+  margin: 1.75rem 0 0.65rem;
+  font-size: 1rem;
+  font-weight: 650;
+  color: #111827;
+}
+.pp-table-wrap {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  overflow: auto;
+}
+.pp-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 720px;
+}
+.pp-table th,
+.pp-table td {
+  text-align: left;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid #f3f4f6;
+  font-size: 0.95rem;
+}
+.pp-table th {
+  color: #6b7280;
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+.pp-table td { color: #111827; }
+.pp-empty {
+  padding: 1.1rem 1rem;
+  color: #6b7280;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+.pp-learned {
+  margin-top: 1.25rem;
+  background: #efe7ff;
+  border: 1px solid #ddd6fe;
+  border-radius: 12px;
+  padding: 0.95rem 1.1rem;
+  color: #4c1d95;
+  line-height: 1.45;
+}
+.pp-foot {
+  margin-top: 1.5rem;
+  color: #9ca3af;
+  font-size: 0.85rem;
+}

@@ -2,48 +2,46 @@
 
 import { useState } from "react";
 
-const READINGS = [
-  { id: "r1", title: "9mm street vs MAP — West", delta: "+2.4%", note: "Three distributors tightened MAP; street still soft on reman." },
-  { id: "r2", title: "Optics lead times", delta: "−6 days", note: "LPVO replenishment improved; red-dot allotments still rationed." },
-  { id: "r3", title: "FFL transfer velocity (HI)", delta: "+11%", note: "Weekend counters busier; Form 3 outbound backlog clearing." },
-  { id: "r4", title: "Powder & primer basket", delta: "Flat", note: "No new allotment letters this week; watch next Tuesday." },
-];
-
-const REPORT = {
-  title: "Weekly shelf brief",
-  body: "West coast 9mm remains the loudest signal. MAP held at two majors while street inventories cleared reman lots. Optics lead times eased on LPVO; keep the TLR and PMAG watches tight — Tiger already flagged both.",
-};
-
+/** Public product host Main chrome — Figma C5 agent page (ZnphBOJU6657tohGLD3IzS).
+ *  Sidebar is app-shell. Jobs stay empty until Tank has live rows. No invented SKUs/%/findings. */
 export function MarketLabPublic() {
-  const [open, setOpen] = useState(READINGS[0].id);
-  const active = READINGS.find((r) => r.id === open) ?? READINGS[0];
+  const [ask, setAsk] = useState("");
   return (
-    <main className="ml-public" aria-label="Market Lab">
-      <header>
-        <p className="ml-eyebrow">Market Lab</p>
-        <h1>Market readings</h1>
-        <p className="ml-lede">Sourced signals from the feeds you run. Open a reading, keep the weekly brief close.</p>
-      </header>
-      <div className="ml-grid">
-        <ul>
-          {READINGS.map((r) => (
-            <li key={r.id}>
-              <button type="button" className={open === r.id ? "on" : undefined} onClick={() => setOpen(r.id)}>
-                <strong>{r.title}</strong>
-                <span>{r.delta}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-        <article>
-          <h2>{active.title}</h2>
-          <p className="ml-delta">{active.delta}</p>
-          <p>{active.note}</p>
-          <hr />
-          <h3>{REPORT.title}</h3>
-          <p>{REPORT.body}</p>
-        </article>
+    <main className="pp" aria-label="Market Lab">
+      <h1 className="pp-title">Market Lab</h1>
+      <p className="pp-lede">Market Lab turns sourced feeds into readings. Ask it for a shelf brief, or open a past reading.</p>
+      <form
+        className="pp-ask"
+        onSubmit={(e) => {
+          e.preventDefault();
+        }}
+      >
+        <input
+          value={ask}
+          onChange={(e) => setAsk(e.target.value)}
+          placeholder="Ask Market Lab for a reading, or open a past brief…"
+          aria-label="Ask Market Lab"
+        />
+        <button type="button">Add feed</button>
+        <button type="submit" className="primary">Ask</button>
+      </form>
+      <h2 className="pp-section">Jobs</h2>
+      <div className="pp-table-wrap">
+        <table className="pp-table">
+          <thead>
+            <tr>
+              <th>Reading</th>
+              <th>Delta</th>
+              <th>Source</th>
+              <th>Status</th>
+              <th>When</th>
+            </tr>
+          </thead>
+        </table>
+        <p className="pp-empty" role="status">No readings yet. Sourced Market Lab signals appear here when feeds have rows — this page does not invent percentages.</p>
       </div>
+      <p className="pp-learned">What Market Lab has learned for you — nothing saved yet. Feed patterns show after real readings land.</p>
+      <p className="pp-foot">Market Lab · Tervory · Figma C5 agent page chrome (ZnphBOJU6657tohGLD3IzS)</p>
     </main>
   );
 }
