@@ -361,6 +361,8 @@ def create_app() -> FastAPI:
             raise HTTPException(404, "Not found.")
         raw = await bounded_json(request, 8_000)
         try:
+            # #286 Dual-LLM guard: no-op unless GHOST_GUARDRAILS_ENABLED / AUTUMBRA_GUARDRAILS_ENABLED.
+            guard_inbound_if_enabled(raw)
             data = json.loads(raw)
             events = data if isinstance(data, list) else [data]
             accepted = []
@@ -403,6 +405,8 @@ def create_app() -> FastAPI:
                     "No Enforce path from this intake."
                 ),
             }
+        except GuardBurned:
+            raise HTTPException(422, GUARD_BURN_DETAIL) from None
         except (ThreatBurned, json.JSONDecodeError, TypeError, ValueError):
             raise HTTPException(422, BURN_DETAIL) from None
 

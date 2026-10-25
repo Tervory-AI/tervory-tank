@@ -70,7 +70,6 @@ Path: **anomaly → synthetic match → ThreatPayload → Shields.propose → fo
 - Founder must tap **Shield** on the Autumbra Watch panel to raise. Enforce OFF.
 - Fixtures: `tests/fixtures/watch_oss/` + `tests/test_ghost_watch_oss_wire.py`.
 
-**Stack base for this draft tip:** PR `#284` tip `839e997` (`grok/ghost-airgap-slo-wraith`).
-Panel rename `#288` is still based on `main` — retarget `#290` onto `#288` after Dogfood
-lands a linear stack. Leave Wazuh / vLLM alone.
+**Stack base for this draft tip:** PR `#292` tip `a374a48` (`grok/autumbra-connected-dogfood`) —
+`#281` → `#284` → `#286` Dual-LLM (flag OFF) → `#288` `/admin/autumbra` panel. Leave Wazuh / vLLM alone.
 

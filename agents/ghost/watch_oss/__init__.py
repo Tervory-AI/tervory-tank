@@ -61,7 +61,7 @@ def status() -> dict:
         "product": "Autumbra Watch",
         "enabled": enabled(),
         "wire": "anomaly→match→ThreatPayload→Shields.propose→panel (practice)",
-        "stack_base": "PR #284 tip (ThreatPayload + air-gap propose)",
+        "stack_base": "PR #292 tip a374a48 (#281→#284→#286→#288 connected dogfood)",
         "adapters": {
             "vector": vector.adapter_meta(),
             "fluent_bit": fluentbit.adapter_meta(),
