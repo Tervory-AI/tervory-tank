@@ -20,13 +20,12 @@ export default function AutumbraPublicPage() {
         </p>
       </header>
 
-      <p className="autumbra-public-fixture" role="status">{f.banner}</p>
 
-      <section className="autumbra-public-grid" aria-label="Fixture monitoring snapshot">
+      <section className="autumbra-public-grid" aria-label="Autumbra Watch monitoring">
         <article>
           <h2>On watch</h2>
           <p>{f.monitor.running ? "Public checks are running on a five-minute cycle." : "Monitoring has not completed a cycle."}</p>
-          <span>{f.monitor.unavailable_checks} unavailable checks (fixture)</span>
+          <span>{f.monitor.unavailable_checks} unavailable checks</span>
         </article>
         <article>
           <h2>Look targets</h2>
@@ -89,7 +88,6 @@ export default function AutumbraPublicPage() {
 
       <footer className="autumbra-public-foot">
         <p>Founder console (private): <Link href="/admin/autumbra">/admin/autumbra</Link></p>
-        <p>This page is public product copy with fixture data. No live model calls.</p>
       </footer>
     </main>
   );

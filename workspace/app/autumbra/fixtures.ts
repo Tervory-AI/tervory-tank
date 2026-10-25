@@ -12,7 +12,7 @@ export type PublicThreatReceipt = {
 };
 
 export const PUBLIC_AUTUMBRA_FIXTURE = {
-  banner: "Fixture snapshot — sample Autumbra Watch status for the public product page.",
+  banner: "",
   monitor: { running: true, unavailable_checks: 1 },
   lookTargets: ["workspace", "site", "za", "tank", "base", "tiger", "market lab", "rig", "tisan", "radix", "zenas", "Autumbra Watch"],
   investigations: [
@@ -36,7 +36,7 @@ export const PUBLIC_AUTUMBRA_FIXTURE = {
       action: "propose_shield",
       target: "site",
       severity: "medium",
-      summary: "Advisory match mapped to a shield proposal for founder review (practice / propose-only).",
+      summary: "Advisory match mapped to a shield proposal for founder review (propose-only).",
       status: "propose_only",
       cve_ids: ["CVE-2024-0000"],
     },
