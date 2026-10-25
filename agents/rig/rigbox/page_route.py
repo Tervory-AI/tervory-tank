@@ -79,11 +79,22 @@ def _shopper_html() -> HTMLResponse:
 def mount_page(application: FastAPI) -> None:
     @application.get("/", include_in_schema=False)
     async def search_page() -> HTMLResponse:
-        return _shopper_html()
+        # Root is the built Rig product surface (v5 shopper, Archon fixtures).
+        return _v5_html("rig")
 
     @application.get("/product/{product_id}", include_in_schema=False)
     async def product_page(product_id: str) -> HTMLResponse:
         del product_id
+        return _shopper_html()
+
+    @application.get("/cn-classic", include_in_schema=False)
+    async def cn_classic_page() -> HTMLResponse:
+        """Classic Custom Nation sheet UI (rk_pub_customnation). Secondary path."""
+        return _shopper_html()
+
+    @application.get("/house", include_in_schema=False)
+    async def house_page() -> HTMLResponse:
+        """Alias of /cn-classic for the house catalogue page."""
         return _shopper_html()
 
     @application.get("/v5", include_in_schema=False)

@@ -22,6 +22,7 @@ from rigbox.store import MemoryStore  # noqa: E402
 
 EXAMPLE = ROOT / "agents" / "rig" / "catalogues" / "example"
 DEMO = ROOT / "agents" / "rig" / "catalogues" / "customnation"
+ARCHON = ROOT / "agents" / "rig" / "catalogues" / "archon"
 PAGE = ROOT / "agents" / "rig" / "rigbox" / "page"
 ORIGIN = "https://rig.tervory.com"
 PRODUCT = "Example Rifle 308 20in"
@@ -109,7 +110,12 @@ def test_page_assets_use_the_brand_and_the_official_logo() -> None:
     assert "COPY rig/rigbox /app/rigbox" in dockerfile
 
 
+def _archon_publish() -> dict:
+    return json.loads((ARCHON / "publish.json").read_text(encoding="utf-8"))
+
+
 def test_rig_app_serves_a_search_page() -> None:
+    """Root serves the v5 Rig product surface (Archon fixtures), not the classic shell."""
     import asyncio
 
     rig_app = _load_rig_app()
@@ -117,16 +123,17 @@ def test_rig_app_serves_a_search_page() -> None:
     assert status == 200
     assert content_type.startswith("text/html")
     html = body.decode()
-    assert 'type="search"' in html
-    assert 'role="search"' in html
-    assert "__RIG_PUBLISHABLE_KEY__" not in html
-    assert json.dumps(_demo_publish()["keys"][0]["key"]) in html
+    assert "What are you building?" in html
+    assert 'data-skin="rig"' in html
+    assert "__RIG_KEY__" not in html
+    assert "__RIG_SKIN__" not in html
+    assert json.dumps(_archon_publish()["keys"][0]["key"]) in html
     assert _publish()["keys"][0]["key"] not in html
-    assert "Custom Nation" not in html
-    assert 'src="/page/search.js"' in html
-    assert 'src="/page/tervory-logo-on-white.png"' in html
+    assert "live distributor keys are off" not in html
+    assert "Demo · keys off" not in html
+    assert "Archon Type B" in html
+    assert 'src="/page/v5/rig.js"' in html
     assert "api-base" not in html
-    assert "mock" not in html
 
 
 @pytest.mark.asyncio
@@ -135,8 +142,10 @@ async def test_search_on_the_page_uses_the_demo_catalogue() -> None:
     service = Service(store, Models(), RecordingHandoff())
     demo = await service.load_folder(DEMO)
     example = await service.load_folder(EXAMPLE)
+    archon = await service.load_folder(ARCHON)
     assert demo["keys"] == 1
     assert example["keys"] == 1
+    assert archon["keys"] == 1
     app = FastAPI()
     app.state.rig = service
     mount(app)
@@ -144,12 +153,21 @@ async def test_search_on_the_page_uses_the_demo_catalogue() -> None:
     client = TestClient(app)
     page = client.get("/")
     assert page.status_code == 200
+    archon_key = _archon_publish()["keys"][0]["key"]
     demo_key = _demo_publish()["keys"][0]["key"]
     example_key = _publish()["keys"][0]["key"]
-    assert json.dumps(demo_key) in page.text
+    assert json.dumps(archon_key) in page.text
     assert example_key not in page.text
-    assert "Custom Nation" not in page.text
+    assert "What are you building?" in page.text
+    assert "live distributor keys are off" not in page.text
+    assert "Demo · keys off" not in page.text
     assert 'alt="Tervory"' in page.text
+    # Classic house sheet stays on a secondary path with the CN publishable key.
+    classic = client.get("/cn-classic")
+    assert classic.status_code == 200
+    assert json.dumps(demo_key) in classic.text
+    assert "Custom Nation" not in classic.text
+    assert client.get("/house").status_code == 200
     found = client.get(
         "/v1/rig/search",
         params={"q": "Staccato", "limit": 12},
@@ -159,6 +177,13 @@ async def test_search_on_the_page_uses_the_demo_catalogue() -> None:
     names = [item["name"] for item in found.json()["results"]]
     assert names[0] == "Staccato C2"
     assert all("Example" not in name for name in names)
+    archon_hit = client.get(
+        "/v1/rig/search",
+        params={"q": "Archon Type B", "limit": 12},
+        headers={"X-Rig-Key": archon_key, "Origin": ORIGIN},
+    )
+    assert archon_hit.status_code == 200
+    assert any(item["id"] == "ARCHON-TYPE-B" for item in archon_hit.json()["results"])
     other = client.get(
         "/v1/rig/search",
         params={"q": "Rifle", "limit": 12},
@@ -294,16 +319,21 @@ async def test_shopper_and_dealer_pages_and_only_approved_fits_show() -> None:
     shopper = {"X-Rig-Key": key, "Origin": ORIGIN}
 
     home = client.get("/")
+    classic = client.get("/cn-classic")
     product_page = client.get(f"/product/{RIFLE}")
     dealer = client.get("/admin")
-    assert home.status_code == product_page.status_code == dealer.status_code == 200
-    assert "See compatible accessories" in home.text
-    assert "Compare prices" in home.text
-    assert "See compatible accessories" in product_page.text
-    assert "Market average" not in home.text
-    assert json.dumps(_demo_publish()["keys"][0]["key"]) in home.text
+    assert home.status_code == product_page.status_code == dealer.status_code == classic.status_code == 200
+    assert "What are you building?" in home.text
+    assert "live distributor keys are off" not in home.text
+    assert "Demo · keys off" not in home.text
+    assert json.dumps(_archon_publish()["keys"][0]["key"]) in home.text
     assert key not in home.text
-    assert "Custom Nation" not in home.text
+    assert "See compatible accessories" in classic.text
+    assert "Compare prices" in classic.text
+    assert "See compatible accessories" in product_page.text
+    assert "Market average" not in classic.text
+    assert json.dumps(_demo_publish()["keys"][0]["key"]) in classic.text
+    assert "Custom Nation" not in classic.text
     assert "Nothing waiting for review" in dealer.text
     assert "Suggest new fits" in dealer.text
     assert "rk_pub_" not in dealer.text
