@@ -90,7 +90,8 @@ def test_page_address_is_skala():
 def test_product_header_skips_sign_in_and_sign_up():
     assert "OrganizationSwitcher" not in LAYOUT
     body = SHELL.split("export function Shell", 1)[1]
-    assert body.index("if (usesOwnShell(pathname)) return") < body.index("OrganizationSwitcher")
+    assert body.index("if (usesOwnShell(shownPath)) return") < body.index("OrganizationSwitcher")
+    assert "const shownPath = productHostRewritePath(host, pathname) ?? pathname;" in body
     assert "headerLinks(founder)" not in SHELL
     squad = _text(APP / "squad-links.tsx")
     assert 'aria-controls="squad-popout"' in SHELL or 'aria-controls="squad-popout"' in squad or (

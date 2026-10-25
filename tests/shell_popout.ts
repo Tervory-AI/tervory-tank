@@ -20,6 +20,9 @@ export function actualShellHtml(founder: boolean): string {
       compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
     }).outputText;
   }
+  modules["@/lib/product-hosts"] = ts.transpileModule(readFileSync(new URL("workspace/lib/product-hosts.ts", root), "utf8"), {
+    compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, esModuleInterop: true },
+  }).outputText;
   modules["next/navigation"] = 'exports.usePathname=()=>"/base/records";exports.useSearchParams=()=>new URLSearchParams();';
   modules["next/link"] = 'module.exports=(props)=>require("react").createElement("a",props);';
   modules["@clerk/nextjs"] = 'exports.useAuth=()=>({isLoaded:false});exports.SignedIn=({children})=>children;exports.OrganizationSwitcher=()=>"Example workspace";exports.UserButton=()=>null;';

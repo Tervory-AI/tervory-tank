@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
 import { auth } from "@clerk/nextjs/server";
+import { headers } from "next/headers";
 import { isListedFounder } from "./review/founder";
 import { Shell, type ShellAccess } from "./shell";
 import { inter, jost, mono } from "./fonts";
@@ -25,11 +26,12 @@ async function readAccess(): Promise<ShellAccess> {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const access = await accessForRequest();
+  const host = (await headers()).get("host") ?? "";
   return (
     <ClerkProvider>
       <html lang="en" className={`${jost.variable} ${inter.variable} ${mono.variable}`}>
         <body>
-          <Shell founder={access.founder} reviewer={access.reviewer} readAccess={readAccess}>{children}</Shell>
+          <Shell host={host} founder={access.founder} reviewer={access.reviewer} readAccess={readAccess}>{children}</Shell>
         </body>
       </html>
     </ClerkProvider>

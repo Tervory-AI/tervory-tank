@@ -15,15 +15,18 @@ import {
   type NavLink,
 } from "./product-nav";
 import { InAppShell, SquadFounderProvider, SquadLinks } from "./squad-links";
+import { productHostRewritePath } from "@/lib/product-hosts";
 
 export type ShellAccess = { founder: boolean; reviewer: boolean };
 
 export function Shell({
+  host = "",
   founder: initialFounder,
   reviewer: initialReviewer,
   readAccess,
   children,
 }: {
+  host?: string;
   founder: boolean;
   reviewer: boolean;
   readAccess: () => Promise<ShellAccess>;
@@ -58,7 +61,10 @@ export function Shell({
     setMenu(false);
   }, [pathname]);
 
-  if (usesOwnShell(pathname)) return (
+  // On a product host (tiger.tervory.com/ and so on) the browser path is "/", but the page
+  // shown is the product root (/tiger), which renders its own left panel.
+  const shownPath = productHostRewritePath(host, pathname) ?? pathname;
+  if (usesOwnShell(shownPath)) return (
     <SquadFounderProvider founder={founder}>
       <main>{children}</main>
     </SquadFounderProvider>
