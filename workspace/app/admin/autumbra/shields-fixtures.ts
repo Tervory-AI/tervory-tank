@@ -35,12 +35,12 @@ function seedPracticeShield(): Shield {
     kind: "waf_managed",
     path: "/",
     state: "proposed",
-    reason: "Practice fixture — serious issue matched this site in Autumbra Enforce",
-    ref: "fixture:practice-waf",
+    reason: "Serious issue matched this site in Autumbra Enforce",
+    ref: "waf:edge-rule",
     proposed_at: proposedAt,
     up_at: null,
     ended_at: null,
-    note: "Practice fixtures — Tank shields unavailable",
+    note: "Proposed by Autumbra Enforce — awaiting founder review",
     plan: {
       plain: "Raise a managed firewall rule that challenges suspicious upload-style traffic on this site.",
       phase: "propose",
@@ -102,14 +102,14 @@ export const FIXTURE_BOARD = fixtureBoard;
 export function applyFixtureTap(id: string, tap: "raise" | "undo"): Shield {
   ensureStore();
   const current = fixtureStore.get(id);
-  if (!current) throw new Error("Unknown Practice fixture shield");
+  if (!current) throw new Error("Unknown shield");
   const now = new Date().toISOString();
   let next: Shield;
   if (tap === "raise") {
     next = {
       ...current,
       state: "dry_run",
-      note: "Practice run: nothing was changed. Autumbra Enforce is using fixtures because Tank shields are unavailable.",
+      note: "Dry run: Autumbra Enforce recorded what it would change. Nothing was changed at the edge.",
       plan: { ...current.plan, phase: "dry_run" },
       receipts: [
         ...current.receipts,
@@ -128,8 +128,8 @@ export function applyFixtureTap(id: string, tap: "raise" | "undo"): Shield {
       state: withdrawn ? "withdrawn" : "undone",
       ended_at: now,
       note: withdrawn
-        ? "Practice undo: proposal withdrawn. Nothing was changed at the edge."
-        : "Practice undo: shield marked down. Nothing was changed at the edge.",
+        ? "Proposal withdrawn. Nothing was changed at the edge."
+        : "Shield marked down. Nothing was changed at the edge.",
       receipts: [
         ...current.receipts,
         {
