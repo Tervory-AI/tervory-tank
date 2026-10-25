@@ -1,0 +1,13 @@
+.sk-public{min-height:100vh;padding:2rem 1.25rem 4rem;background:#08110d;color:#e7f6ee;font-family:ui-sans-serif,system-ui,sans-serif}
+.sk-public header{max-width:960px;margin:0 auto 1.25rem}
+.sk-eyebrow{text-transform:uppercase;letter-spacing:.14em;font-size:.72rem;color:#6ee7b7;margin:0}
+.sk-public h1{font-size:clamp(2rem,4vw,2.75rem);margin:.35rem 0 .5rem}
+.sk-lede{color:#9ca3af;max-width:36rem;line-height:1.5}
+.sk-split{max-width:960px;margin:0 auto;display:grid;gap:1rem;grid-template-columns:1.1fr .9fr}
+@media(max-width:800px){.sk-split{grid-template-columns:1fr}}
+.sk-split ul{list-style:none;margin:0;padding:0;display:grid;gap:.5rem}
+.sk-split button{width:100%;text-align:left;background:#0f1c16;border:1px solid #1f3a2c;border-radius:12px;padding:.9rem 1rem;color:inherit;cursor:pointer;display:grid;gap:.25rem}
+.sk-split button.on{border-color:#34d399;background:#123525}
+.sk-split article{background:#0f1c16;border:1px solid #1f3a2c;border-radius:12px;padding:1.1rem 1.2rem}
+.sk-state{width:fit-content;text-transform:uppercase;letter-spacing:.06em;font-size:.7rem;padding:.15rem .45rem;border-radius:999px;background:#14532d;color:#bbf7d0}
+.sk-score{font-size:1.35rem;font-weight:700;color:#6ee7b7}
