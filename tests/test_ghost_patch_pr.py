@@ -11,7 +11,6 @@ from agents.ghost.app import create_app
 from agents.ghost.patch_brief import (
     BURN_DETAIL,
     SCHEMA_VERSION,
-    PatchBrief,
     PatchBurned,
     accept_patch_brief,
     passes_severity_bar,
@@ -197,7 +196,6 @@ async def test_patch_route_asgi(tmp_path, monkeypatch):
     app = create_app()
     # Avoid lifespan: set minimal state like threat payload tests.
     from agents.ghost.store import Store
-    from unittest.mock import AsyncMock
     import asyncio
 
     store = Store(tmp_path / "ghost.sqlite3")
