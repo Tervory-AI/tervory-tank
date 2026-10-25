@@ -3,12 +3,23 @@
 > Written by Claude, Sun 25 Oct 2026, 14:25 PT, from a check of every page in the founder's own signed-in browser. **This replaces `BUILD-LISTS-2026-10-25.md`.**
 >
 > **What counts as done (no exceptions):**
+> - it matches its approved Figma frame;
 > - the page is opened signed in on its own domain;
 > - every button does its real job;
 > - every number is real (or the page says plainly that there's nothing yet);
 > - there's no demo data, no build codes (like "GHOST-1") and no model names on client screens.
 >
 > Claude checks it in the founder's browser, and the founder sees the screenshot, before anything is called done. **Tests passing and a deploy finishing are not "done".**
+
+## The two hard rules (founder, 25 Oct). These come before everything below.
+1. **Figma first. Nothing goes onto any site without Figma.**
+   - Every page, and every change to a page (the homepage and marketing pages included), is designed and approved in Figma first, then built to match that frame exactly.
+   - A page with no approved frame isn't built.
+   - A builder who changes a design, adds a section, or "improves" a layout without a frame has deviated.
+2. **Deviate once and the thread is deleted.**
+   - A builder thread that steps outside its brief or its Figma frame is deleted, and the work starts again in a new thread.
+   - The same goes for a thread that breaks something when told to deploy.
+   - No second chances inside a thread, and no arguing it.
 
 ## What the founder's browser showed (25 Oct, 14:20 PT)
 | Page | Today |
@@ -19,6 +30,9 @@
 | Rig (admin) | Test catalogue; no real store |
 | Zenas | Says "South Africa" though ZA is stopped. No matters |
 | Control panel | Health, case study and Ghost "unavailable" or "not linked"; buttons carry build codes; "Paying clients 8" is wrong |
+
+## Step 0: the homepage and marketing pages, in Figma
+- [ ] The founder runs a dedicated Figma thread for the homepage and marketing pages. Nothing is built for the site until those frames are approved. Then a builder builds them to match exactly, and the result is checked side by side against the frames in the founder's browser.
 
 ## Step 1: take the demo data off (today)
 - [ ] **#325, the restore.** The founder merges it once CI is green. Claude then re-checks all seven pages in the founder's browser, and this table gets a new row per page showing what the *real* page does.
