@@ -9,7 +9,7 @@ from .app import require_tank
 from .models import Look
 from .probes import browser_check
 
-app = FastAPI(title="Ghost's browser")
+app = FastAPI(title="Autumbra Watch browser")
 lock = asyncio.Lock()
 
 

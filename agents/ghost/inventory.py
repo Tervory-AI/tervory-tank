@@ -417,7 +417,7 @@ async def fetch_headers(http, app: str, host: str) -> list[Component]:
     from .probes import public_addresses
     import asyncio
     if host not in WATCHED_SITES.values():
-        raise ValueError("Ghost only reads headers from its own watched sites.")
+        raise ValueError("Autumbra Watch only reads headers from its own watched sites.")
     await asyncio.wait_for(asyncio.to_thread(public_addresses, host), timeout=10)
     response = await http.get(f"https://{host}/", follow_redirects=False, timeout=15)
     return header_components(app, host, {k: response.headers.get(k, "") for k in ("server", "x-powered-by", "cf-ray")

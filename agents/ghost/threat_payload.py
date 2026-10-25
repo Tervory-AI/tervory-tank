@@ -177,3 +177,58 @@ def threat_to_shield_request(payload: ThreatPayload) -> ShieldRequest:
         match_id=payload.match_id,
         reason=payload.reason or f"triage:{payload.severity.value}",
     )
+
+
+def match_to_threat_payload(match: dict, kind: str, path: str | None = None) -> ThreatPayload:
+    """Convert an open advisory match into a ThreatPayload for propose_shield.
+
+    Burns when the match is not allowlisted / not shield-worthy. Never applies
+    anything — caller must still propose → founder Shield tap.
+    """
+    if not isinstance(match, dict) or kind not in KINDS:
+        raise ThreatBurned()
+    affected = match.get("affected") or {}
+    app = affected.get("app") if isinstance(affected, dict) else None
+    if not isinstance(app, str) or not app:
+        raise ThreatBurned()
+    site = WATCHED_SITES.get(app)
+    if site is None:
+        raise ThreatBurned()
+    severity = match.get("severity") if isinstance(match.get("severity"), dict) else {}
+    if severity.get("known_exploited"):
+        sev = ThreatSeverity.known_exploited
+    else:
+        label = str(severity.get("label") or "unknown")
+        try:
+            sev = ThreatSeverity(label)
+        except ValueError:
+            sev = ThreatSeverity.unknown
+    # Serious matches only — same bar as proposals_for_match.
+    if sev not in {ThreatSeverity.known_exploited, ThreatSeverity.critical, ThreatSeverity.high}:
+        raise ThreatBurned()
+    source_ids = match.get("source_ids") if isinstance(match.get("source_ids"), list) else []
+    cves: list[str] = []
+    for item in source_ids:
+        if isinstance(item, str) and CVE_RE.fullmatch(item) and item not in cves:
+            cves.append(item)
+    advisory_id = match.get("advisory_id")
+    if isinstance(advisory_id, str) and CVE_RE.fullmatch(advisory_id) and advisory_id not in cves:
+        cves.insert(0, advisory_id)
+    match_id = match.get("id")
+    if match_id is not None and not isinstance(match_id, str):
+        raise ThreatBurned()
+    # Fixed plain reason — never copy free-form advisory summary (injection surface).
+    reason = f"{advisory_id or 'advisory'} on {app}"
+    raw = {
+        "schema_version": SCHEMA_VERSION,
+        "action": ThreatAction.propose_shield.value,
+        "site": site,
+        "kind": kind,
+        "path": path,
+        "match_id": match_id,
+        "cve_ids": cves[:20],
+        "severity": sev.value,
+        "reason": reason[:300],
+        "confidence": 1.0 if sev is ThreatSeverity.known_exploited else 0.85,
+    }
+    return accept_threat_payload(raw)

@@ -37,7 +37,7 @@ class Investigator:
         item["previous"] = await self.store.recall(PLATFORM_TENANT, f"{item['target']}:{item['signal']}")
         await self.record(item, "recall")
         if request.signal == Signal.human_check:
-            item.update(state="human_required", summary="A human check needs a person. Ghost has stopped.")
+            item.update(state="human_required", summary="A human check needs a person. Autumbra Watch has stopped.")
             await self.record(item, "human_required")
             return item
         try:
@@ -52,7 +52,7 @@ class Investigator:
         item["evidence"] = evidence.model_dump(mode="json")
         await self.record(item, "reproduce")
         if evidence.signal == Signal.human_check:
-            item.update(state="human_required", summary="A human check needs a person. Ghost has stopped.")
+            item.update(state="human_required", summary="A human check needs a person. Autumbra Watch has stopped.")
         elif not evidence.failing:
             item.update(state="not_reproduced", summary="The check passed. The reported problem was not reproduced.")
         else:
@@ -68,7 +68,7 @@ class Investigator:
                 "title": f"Investigate {item['signal']} on {item['target']}",
                 "problem": item["evidence"], "cause": "Not yet confirmed",
                 "instructions": ["Reproduce the recorded failure and confirm the cause.",
-                                 "Ask Tank to hand code to sealed Radix; Ghost must not scan code.",
+                                 "Ask Tank to hand code to sealed Radix; Autumbra Watch must not scan code.",
                                  "Implement only the founder-approved file scope in a worker branch.",
                                  "Open a PR with regression tests and receipts. Never merge or deploy."],
                 "files_you_may_change": [], "receipt_ids": [s["ledger_id"] for s in item["steps"]]}
