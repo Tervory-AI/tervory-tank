@@ -1,8 +1,10 @@
 /**
  * Product-per-host map for *.tervory.com.
- * app.tervory.com stays the client workspace home.
- * protect / autumbra land on the Autumbra founder console.
- * Squad product hosts land on their existing workspace paths.
+ * app.tervory.com stays the client workspace home (matters / chats / squad).
+ * protect / autumbra land on the public Autumbra product page.
+ * Founder console remains at /admin/autumbra.
+ * zenas.tervory.com is the Zenas product host — Moot watch at /moot, full
+ * Zenas panel at /zenas. Squad product hosts land on their workspace paths.
  * Separate Coolify services (rig, mcp, site, coolify) are not rewritten here.
  */
 
@@ -18,9 +20,10 @@ export type ProductHost = {
 
 /** Hosts served by the Coolify workspace service (same as app.tervory.com). */
 export const WORKSPACE_PRODUCT_HOSTS: readonly ProductHost[] = [
-  { host: "protect.tervory.com", rootPath: "/admin/autumbra", product: "Autumbra", founderOnly: true },
-  { host: "autumbra.tervory.com", rootPath: "/admin/autumbra", product: "Autumbra", founderOnly: true },
-  { host: "zenas.tervory.com", rootPath: "/zenas", product: "Zenas" },
+  { host: "protect.tervory.com", rootPath: "/autumbra", product: "Autumbra" },
+  { host: "autumbra.tervory.com", rootPath: "/autumbra", product: "Autumbra" },
+  /** Moot is part of Zenas — public watch lands on /moot; /zenas stays available. */
+  { host: "zenas.tervory.com", rootPath: "/moot", product: "Zenas" },
   { host: "base.tervory.com", rootPath: "/base", product: "Base" },
   { host: "tiger.tervory.com", rootPath: "/tiger", product: "Tiger" },
   { host: "market-lab.tervory.com", rootPath: "/market-lab", product: "Market Lab" },
@@ -31,6 +34,25 @@ export const WORKSPACE_PRODUCT_HOSTS: readonly ProductHost[] = [
 ] as const;
 
 const BY_HOST = new Map(WORKSPACE_PRODUCT_HOSTS.map((row) => [row.host, row]));
+
+/** Client workspace host — matters / chats / squad stay here; Moot does not. */
+export const APP_WORKSPACE_HOST = "app.tervory.com";
+
+/** Canonical Zenas product host (Moot + Zenas panel). */
+export const ZENAS_PRODUCT_HOST = "zenas.tervory.com";
+
+/** Product paths that must stay public on host roots (no auth wall). */
+const PUBLIC_PRODUCT_ROOTS = [
+  "/autumbra",
+  "/moot",
+  "/base",
+  "/tiger",
+  "/market-lab",
+  "/tisan",
+  "/radix",
+  "/skala",
+  "/tank",
+] as const;
 
 /** Strip port and lowercase; empty when missing. */
 export function normalizeHost(raw: string | null | undefined): string {
@@ -43,6 +65,12 @@ export function productHostFor(hostHeader: string | null | undefined): ProductHo
   const host = normalizeHost(hostHeader);
   if (!host) return null;
   return BY_HOST.get(host) ?? null;
+}
+
+/** True when pathname is a public product surface (host root rewrite targets). */
+export function isPublicProductPath(pathname: string): boolean {
+  const path = pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname || "/";
+  return PUBLIC_PRODUCT_ROOTS.some((root) => path === root || path.startsWith(`${root}/`));
 }
 
 /**
@@ -75,4 +103,22 @@ export function productHostRewritePath(
 export function isAutumbraHost(hostHeader: string | null | undefined): boolean {
   const product = productHostFor(hostHeader);
   return product?.product === "Autumbra";
+}
+
+/**
+ * Canonical URL when Moot is hit on the client workspace host.
+ * Moot belongs on zenas.tervory.com; app keeps matters / chats / squad.
+ * Returns null when no redirect is needed.
+ */
+export function mootCanonicalRedirectUrl(
+  hostHeader: string | null | undefined,
+  pathname: string,
+  search = "",
+): string | null {
+  const host = normalizeHost(hostHeader);
+  if (host !== APP_WORKSPACE_HOST) return null;
+  const path = pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname || "/";
+  if (path !== "/moot" && !path.startsWith("/moot/")) return null;
+  const qs = search && search !== "?" ? search : "";
+  return `https://${ZENAS_PRODUCT_HOST}${path}${qs}`;
 }

@@ -3,6 +3,8 @@ import { test } from "node:test";
 import {
   WORKSPACE_PRODUCT_HOSTS,
   isAutumbraHost,
+  isPublicProductPath,
+  mootCanonicalRedirectUrl,
   normalizeHost,
   productHostFor,
   productHostRewritePath,
@@ -21,9 +23,9 @@ test("every mapped product host rewrites root to its path", () => {
   }
 });
 
-test("protect and autumbra both land on Autumbra console", () => {
-  assert.equal(productHostRewritePath("protect.tervory.com", "/"), "/admin/autumbra");
-  assert.equal(productHostRewritePath("autumbra.tervory.com", "/"), "/admin/autumbra");
+test("protect and autumbra both land on public Autumbra product page", () => {
+  assert.equal(productHostRewritePath("protect.tervory.com", "/"), "/autumbra");
+  assert.equal(productHostRewritePath("autumbra.tervory.com", "/"), "/autumbra");
   assert.equal(isAutumbraHost("protect.tervory.com"), true);
   assert.equal(isAutumbraHost("autumbra.tervory.com"), true);
   assert.equal(isAutumbraHost("zenas.tervory.com"), false);
@@ -44,12 +46,44 @@ test("public and deep paths on product hosts are not rewritten", () => {
   assert.equal(productHostRewritePath("base.tervory.com", "/base"), null);
   assert.equal(productHostRewritePath("base.tervory.com", "/base/foo"), null);
   assert.equal(productHostRewritePath("protect.tervory.com", "/admin/autumbra"), null);
+  assert.equal(productHostRewritePath("protect.tervory.com", "/autumbra"), null);
   assert.equal(productHostRewritePath("protect.tervory.com", "/admin/ghost"), null);
+  assert.equal(productHostRewritePath("zenas.tervory.com", "/moot"), null);
+  assert.equal(productHostRewritePath("zenas.tervory.com", "/moot/fixture-published"), null);
+  assert.equal(productHostRewritePath("zenas.tervory.com", "/zenas"), null);
 });
 
-test("squad product roots match product-nav paths", () => {
-  assert.equal(productHostRewritePath("zenas.tervory.com", "/"), "/zenas");
+test("zenas product host root lands on Moot; Zenas panel stays a deep link", () => {
+  assert.equal(productHostRewritePath("zenas.tervory.com", "/"), "/moot");
   assert.equal(productHostRewritePath("market-lab.tervory.com", "/"), "/market-lab");
   assert.equal(productHostRewritePath("skala.tervory.com", "/"), "/skala");
   assert.equal(productHostRewritePath("tank.tervory.com", "/"), "/tank");
+});
+
+test("app /moot redirects canonically to zenas host", () => {
+  assert.equal(
+    mootCanonicalRedirectUrl("app.tervory.com", "/moot"),
+    "https://zenas.tervory.com/moot",
+  );
+  assert.equal(
+    mootCanonicalRedirectUrl("app.tervory.com", "/moot/fixture-published", "?x=1"),
+    "https://zenas.tervory.com/moot/fixture-published?x=1",
+  );
+  assert.equal(mootCanonicalRedirectUrl("zenas.tervory.com", "/moot"), null);
+  assert.equal(mootCanonicalRedirectUrl("app.tervory.com", "/matters"), null);
+  assert.equal(mootCanonicalRedirectUrl("app.tervory.com", "/zenas"), null);
+});
+
+test("squad product paths are public product surfaces", () => {
+  assert.equal(isPublicProductPath("/base"), true);
+  assert.equal(isPublicProductPath("/tiger"), true);
+  assert.equal(isPublicProductPath("/market-lab"), true);
+  assert.equal(isPublicProductPath("/tisan"), true);
+  assert.equal(isPublicProductPath("/radix"), true);
+  assert.equal(isPublicProductPath("/skala"), true);
+  assert.equal(isPublicProductPath("/tank"), true);
+  assert.equal(isPublicProductPath("/autumbra"), true);
+  assert.equal(isPublicProductPath("/moot"), true);
+  assert.equal(isPublicProductPath("/admin/autumbra"), false);
+  assert.equal(isPublicProductPath("/dashboard"), false);
 });

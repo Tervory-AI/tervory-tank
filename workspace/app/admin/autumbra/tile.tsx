@@ -13,7 +13,7 @@ const kinds: Record<string, string> = {
   challenge_bots: "Ask suspicious bots to prove themselves",
 };
 const states: Record<string, string> = {
-  proposed: "Proposed", dry_run: "Practice run shown", brief: "Written up for a worker", up: "Up",
+  proposed: "Proposed", dry_run: "Staged", brief: "Written up for a worker", up: "Up",
   auto_undone: "Taken down: site failed its check", refused: "Not raised: site was already failing",
   failed: "Change refused", undone: "Down", withdrawn: "Withdrawn", not_needed: "No longer needed",
   undo_failed: "Needs removing by hand",
@@ -65,8 +65,11 @@ export function ShieldsTile({ board, act }: { board: ShieldBoard | null; act: Ac
   if (!board) return <section className="ghost-tile" aria-label="Shields"><h2>Shields</h2><p className="ghost-error">Shield numbers are unavailable. An unavailable count is not a clean result.</p></section>;
   const t = board.tile;
   const open = Object.entries(t.open_by_severity);
+  const modeLabel = t.mode === "live"
+    ? "Live: shields change the edge"
+    : "Autumbra Enforce · staged until you Shield";
   return <section className="ghost-tile" aria-label="Shields">
-    <div className="ghost-section-title"><h2>Shields</h2><span>{t.mode === "live" ? "Live: shields change the edge" : "Practice mode: Autumbra Watch shows what it would change and changes nothing"}</span></div>
+    <div className="ghost-section-title"><h2>Shields</h2><span>{modeLabel}</span></div>
     <dl className="ghost-numbers">
       <div><dt>Open issues</dt><dd>{t.open_total}</dd><p>{open.length ? open.map(([k, n]) => `${n} ${severity[k] ?? k}`).join(" · ") : "Nothing open"}</p></div>
       <div><dt>Time to know</dt><dd>{duration(t.time_to_know_seconds.worst)}</dd><p>{sloLine(t.time_to_know_seconds, "under 1 h")}</p></div>
@@ -74,6 +77,6 @@ export function ShieldsTile({ board, act }: { board: ShieldBoard | null; act: Ac
       <div><dt>Sites broken by a shield</dt><dd>{t.sites_broken_by_a_shield}</dd><p>Goal 0 · a failed check takes the shield down</p></div>
       <div><dt>Cost this month</dt><dd>${t.cost_this_month_usd.toFixed(4)}</dd><p>From {t.receipts_this_month} receipts</p></div>
     </dl>
-    {board.shields.length ? board.shields.map((item) => <ShieldRow key={item.id} item={item} act={act} />) : <p className="ghost-empty">No shields proposed. Autumbra Watch proposes one when a serious issue matches one of our sites.</p>}
+    {board.shields.length ? board.shields.map((item) => <ShieldRow key={item.id} item={item} act={act} />) : <p className="ghost-empty">No shields proposed. Autumbra Enforce proposes one when a serious issue matches one of our sites.</p>}
   </section>;
 }

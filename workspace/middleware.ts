@@ -1,18 +1,41 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import { productHostRewritePath } from "@/lib/product-hosts";
+import {
+  isPublicProductPath,
+  mootCanonicalRedirectUrl,
+  productHostRewritePath,
+} from "@/lib/product-hosts";
 
-// Everything is private except Clerk's own sign-in/up pages, the health probe, and the Stripe webhook.
-// Stripe calls the webhook with a signature, not a Clerk session.
-const isPublic = createRouteMatcher(["/sign-in(.*)", "/sign-up(.*)", "/api/health", "/api/billing/webhook"]);
+// Public: product host roots, Clerk pages, health, Stripe webhook.
+// Founder console /admin/autumbra stays private.
+const isPublic = createRouteMatcher([
+  "/sign-in(.*)",
+  "/sign-up(.*)",
+  "/api/health",
+  "/api/billing/webhook",
+  "/autumbra(.*)",
+  "/moot(.*)",
+  "/base(.*)",
+  "/tiger(.*)",
+  "/market-lab(.*)",
+  "/tisan(.*)",
+  "/radix(.*)",
+  "/skala(.*)",
+  "/tank(.*)",
+]);
 
 export default clerkMiddleware(async (auth, req) => {
   const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+  const canonical = mootCanonicalRedirectUrl(host, req.nextUrl.pathname, req.nextUrl.search);
+  if (canonical) {
+    return NextResponse.redirect(canonical, 308);
+  }
   const rewriteTo = productHostRewritePath(host, req.nextUrl.pathname);
   if (rewriteTo) {
     const url = req.nextUrl.clone();
     url.pathname = rewriteTo;
-    if (!isPublic(req)) await auth.protect();
+    // After rewrite, isPublic(req) still sees the original path (/).
+    if (!isPublicProductPath(rewriteTo) && !isPublic(req)) await auth.protect();
     return NextResponse.rewrite(url);
   }
   if (!isPublic(req)) await auth.protect();
