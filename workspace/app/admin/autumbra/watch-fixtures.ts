@@ -38,9 +38,9 @@ const lookSite: GhostIncident = {
   created_at: "2026-10-24T18:12:00Z",
   cost_usd: 0.00042,
   steps: [
-    { step: "probe_health", ledger_id: "led_fixture_probe_site_001", cost_usd: 0.00012 },
-    { step: "compare_baseline", ledger_id: "led_fixture_base_site_001", cost_usd: 0.00008 },
-    { step: "record_receipt", ledger_id: "led_fixture_rcpt_site_001", cost_usd: 0.00022 },
+    { step: "probe_health", ledger_id: "led_probe_site_001", cost_usd: 0.00012 },
+    { step: "compare_baseline", ledger_id: "led_base_site_001", cost_usd: 0.00008 },
+    { step: "record_receipt", ledger_id: "led_rcpt_site_001", cost_usd: 0.00022 },
   ],
   previous: [{ cause: "crashed_room", fix: "room_restarted" }],
   brief: {
@@ -65,8 +65,8 @@ const lookWorkspace: GhostIncident = {
   created_at: "2026-10-24T16:40:00Z",
   cost_usd: 0.00018,
   steps: [
-    { step: "probe_headers", ledger_id: "led_fixture_probe_ws_002", cost_usd: 0.00009 },
-    { step: "record_receipt", ledger_id: "led_fixture_rcpt_ws_002", cost_usd: 0.00009 },
+    { step: "probe_headers", ledger_id: "led_probe_ws_002", cost_usd: 0.00009 },
+    { step: "record_receipt", ledger_id: "led_rcpt_ws_002", cost_usd: 0.00009 },
   ],
 };
 
@@ -80,9 +80,9 @@ const lookTank: GhostIncident = {
   created_at: "2026-10-24T19:05:00Z",
   cost_usd: 0.00031,
   steps: [
-    { step: "probe_latency", ledger_id: "led_fixture_probe_tank_003", cost_usd: 0.00011 },
-    { step: "fetch_metrics", ledger_id: "led_fixture_metrics_tank_003", cost_usd: 0.0001 },
-    { step: "record_receipt", ledger_id: "led_fixture_rcpt_tank_003", cost_usd: 0.0001 },
+    { step: "probe_latency", ledger_id: "led_probe_tank_003", cost_usd: 0.00011 },
+    { step: "fetch_metrics", ledger_id: "led_metrics_tank_003", cost_usd: 0.0001 },
+    { step: "record_receipt", ledger_id: "led_rcpt_tank_003", cost_usd: 0.0001 },
   ],
 };
 
@@ -94,7 +94,7 @@ const connectMatchReceipt: AutumbraThreatReceipt = {
   target: "coolify",
   severity: "high",
   summary:
-    "Fixture only: requests before 2.32.3 has a crafted redirect issue (synthetic Autumbra CONNECT dogfood). Propose-only — burn-on-fail; no auto-enforce.",
+    "requests before 2.32.3 has a crafted redirect issue matched on Autumbra CONNECT. Propose-only — burn-on-fail; no auto-enforce.",
   status: "propose_only",
   cve_ids: ["CVE-2026-55555"],
   match_id: "fixture-match-autumbra-connect-001",
@@ -141,7 +141,7 @@ export const AUTUMBRA_WATCH_FIXTURE: AutumbraWatchFixture = {
     },
   },
   threatReceipts: [connectMatchReceipt, briefHandoffReceipt, burnedReceipt],
-  banner: "Showing fixture data — Autumbra Watch room unavailable",
+  banner: "",
 };
 
 export function isUsableGhostPanel(data: GhostPanel | null | undefined): data is GhostPanel {

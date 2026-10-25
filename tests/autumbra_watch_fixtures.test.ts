@@ -51,9 +51,8 @@ test("Watch fixture exposes ThreatPayload / advisory receipts (propose-only)", (
   assert.ok(connect.cve_ids?.includes("CVE-2026-55555"));
 });
 
-test("fixture banner names Autumbra Watch and marks demo data", () => {
-  assert.match(AUTUMBRA_WATCH_FIXTURE.banner, /fixture/i);
-  assert.match(AUTUMBRA_WATCH_FIXTURE.banner, /Autumbra Watch/);
+test("no Demo/Practice/Fixture framing in user-facing banner", () => {
+  assert.equal(AUTUMBRA_WATCH_FIXTURE.banner, "");
   assert.ok(!/Ghost|Wraith/.test(AUTUMBRA_WATCH_FIXTURE.banner));
 });
 

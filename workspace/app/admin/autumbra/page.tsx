@@ -23,8 +23,6 @@ export default async function AutumbraPage() {
         <AutumbraConsole
           data={fixture.panel}
           threatReceipts={fixture.threatReceipts}
-          fixtureBanner={fixture.banner}
-          error="Autumbra’s room returned unusable panel data. Fixture Watch surface is shown below."
           look={look}
           resolve={resolve}
           tile={tile}
@@ -38,8 +36,6 @@ export default async function AutumbraPage() {
       <AutumbraConsole
         data={fixture.panel}
         threatReceipts={fixture.threatReceipts}
-        fixtureBanner={fixture.banner}
-        error="Autumbra’s room is unavailable. Check the room and its Tank connection."
         look={look}
         resolve={resolve}
         tile={tile}
