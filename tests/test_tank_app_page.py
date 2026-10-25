@@ -89,10 +89,10 @@ def test_page_matches_the_panel_and_hides_keys():
     assert "loadLabPlugins" not in chat
 
     nav = NAV.read_text(encoding="utf-8")
-    own = nav.split("const OWN_SHELL = ", 1)[1].split(";", 1)[0]
-    assert '"/tank"' not in own
+    own = nav.split("const OWN_SHELL = ", 1)[1].split("] as const", 1)[0]
+    assert '"/tank"' in own
     routes = nav.split("export const SHELL_ROUTES", 1)[1].split("];", 1)[0]
-    assert '"/tank"' in routes
+    assert '"/tank"' not in routes
 
     assert not (PAGE / "models.ts").exists()
     assert "process.env" not in view

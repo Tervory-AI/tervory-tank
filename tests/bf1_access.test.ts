@@ -37,11 +37,11 @@ test("the sidebar keeps Billing, and Skala and Tank stay in the founder squad li
   assert.ok(customer.indexOf("Squad") < customer.indexOf("Ledger"));
 });
 
-test("sign-in and sign-up skip the shell; every signed-in page uses it", () => {
-  for (const path of ["/sign-in", "/sign-in/", "/sign-in/factor-one", "/sign-up", "/sign-up/verify"]) {
+test("auth and squad product roots skip the workspace shell; shared pages keep it", () => {
+  for (const path of ["/sign-in", "/sign-in/", "/sign-in/factor-one", "/sign-up", "/sign-up/verify", "/base", "/tiger", "/market-lab", "/market-lab/", "/rig", "/tisan", "/radix", "/zenas", "/skala", "/tank"]) {
     assert.equal(usesOwnShell(path), true, path);
   }
-  for (const path of ["/", "/tasks", "/data", "/skala", "/ledger", "/billing", "/tank", "/admin", "/review", "/onboarding", "/onboarding/", "/base", "/tiger", "/market-lab", "/market-lab/", "/rig", "/tisan", "/radix", "/zenas", "/prices", "/matters"]) {
+  for (const path of ["/", "/tasks", "/data", "/ledger", "/billing", "/admin", "/review", "/onboarding", "/onboarding/", "/prices", "/matters", "/zenas/feeds", "/skala/gold"]) {
     assert.equal(usesOwnShell(path), false, path);
   }
 });
