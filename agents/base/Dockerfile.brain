@@ -1,4 +1,4 @@
-FROM python:3.14-slim
+FROM python:3.12-slim
 # Advisory overrides (PR grok/d-advisory-pins): hermes-agent at this commit exact-pins
 # certifi 2026.5.20 (PYSEC-2026-4320), PyJWT 2.13.0 (fixed in 2.15.0) and Pillow 12.3.0
 # (fixed in 13.0.0; browser-harness also pins 12.3.0), so pip cannot resolve the fixed
