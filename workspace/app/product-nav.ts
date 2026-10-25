@@ -82,7 +82,7 @@ export const SHELL_ROUTES: readonly string[] = [
   "/review",
 ];
 
-const OWN_SHELL = ["/sign-in", "/sign-up"];
+const OWN_SHELL = ["/sign-in", "/sign-up", "/tiger"];
 
 export function cleanPath(pathname: string): string {
   if (!pathname) return "/";

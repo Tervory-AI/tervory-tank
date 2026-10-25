@@ -109,7 +109,7 @@ export function TigerApp({
         <nav className="panel-account" aria-label="Account">
           <p className="account">{accountName?.trim() || "Your account"}</p>
           <a className="nav" href="/">Dashboard</a>
-          <a className="nav" href="/tasks" onClick={() => setMenuOpen(false)}>Projects</a>
+          <a className="nav" href="/matters" onClick={() => setMenuOpen(false)}>Projects</a>
           <a className="nav" href="/" onClick={() => setMenuOpen(false)}>Chats</a>
         </nav>
         <SquadLinks className="panel-account squad-nav" linkClassName="nav" />
