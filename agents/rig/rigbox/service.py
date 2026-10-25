@@ -38,6 +38,7 @@ from rigbox.logic import fitting_parts
 from rigbox.logic import graph as build_graph
 from rigbox.logic import options_for
 from rigbox.logic import product_detail
+from rigbox.logic import _active
 from rigbox.logic import _limit
 from rigbox.logic import public_product
 from rigbox.logic import reprice
@@ -281,6 +282,38 @@ class Service:
             if len(tenants) == 1:
                 return {"tenant_id": tenants[0], "kind": "admin", "origins": []}
         raise RigError("unauthorized", "That key is not valid.", 401)
+
+    async def browse(
+        self,
+        tenant_id: str,
+        limit: int | None,
+        category: str = "",
+        brand: str = "",
+    ) -> dict[str, Any]:
+        """Capped list of active products for this tenant, with category and brand chips."""
+        rows = [row for row in await self.store.products(tenant_id) if _active(row)]
+        categories: dict[str, int] = {}
+        brands: dict[str, int] = {}
+        for row in rows:
+            for bucket, key in ((categories, "category"), (brands, "brand")):
+                value = str(row.get(key) or "").strip()
+                if value:
+                    bucket[value] = bucket.get(value, 0) + 1
+        wanted_category = category.strip().casefold()
+        wanted_brand = brand.strip().casefold()
+        if wanted_category:
+            rows = [row for row in rows if str(row.get("category") or "").strip().casefold() == wanted_category]
+        if wanted_brand:
+            rows = [row for row in rows if str(row.get("brand") or "").strip().casefold() == wanted_brand]
+        rows.sort(key=lambda row: (str(row.get("category") or "").casefold(), str(row.get("name") or "").casefold()))
+        cap = _limit(limit)
+        return {
+            "results": [public_product(row) for row in rows[:cap]],
+            "total": len(rows),
+            "categories": [{"name": name, "count": categories[name]} for name in sorted(categories, key=str.casefold)],
+            "brands": [{"name": name, "count": brands[name]} for name in sorted(brands, key=str.casefold)],
+            "demo": True,
+        }
 
     async def search(
         self,

@@ -81,6 +81,10 @@ def mount_page(application: FastAPI) -> None:
     async def search_page() -> HTMLResponse:
         return _shopper_html()
 
+    @application.get("/demo", include_in_schema=False)
+    async def demo_page() -> HTMLResponse:
+        return _shopper_html()
+
     @application.get("/product/{product_id}", include_in_schema=False)
     async def product_page(product_id: str) -> HTMLResponse:
         del product_id

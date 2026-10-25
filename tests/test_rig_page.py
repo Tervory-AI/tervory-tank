@@ -356,3 +356,45 @@ async def test_shopper_and_dealer_pages_and_only_approved_fits_show() -> None:
     assert WIDGET not in after_setups.text
     assert after_setups.json()["setups"][0]["total"]["amount"] == 35297
     assert models.calls == []
+
+
+@pytest.mark.asyncio
+async def test_home_and_demo_browse_fixture_products_without_a_query() -> None:
+    store = MemoryStore()
+    service = Service(store, Models(), RecordingHandoff())
+    await service.load_folder(DEMO)
+    await service.load_folder(EXAMPLE)
+    app = FastAPI()
+    app.state.rig = service
+    mount(app)
+    mount_page(app)
+    client = TestClient(app)
+    demo_key = _demo_publish()["keys"][0]["key"]
+    example_key = _publish()["keys"][0]["key"]
+    for path in ("/", "/demo"):
+        page = client.get(path)
+        assert page.status_code == 200
+        assert json.dumps(demo_key) in page.text
+        assert "not a live quote" in page.text
+        assert 'id="filters"' in page.text
+    assert "/v1/rig/browse" in client.get("/page/search.js").text
+    headers = {"X-Rig-Key": demo_key, "Origin": ORIGIN}
+    listed = client.get("/v1/rig/browse", headers=headers)
+    assert listed.status_code == 200
+    body = listed.json()
+    assert body["results"]
+    assert body["total"] >= len(body["results"])
+    assert body["categories"]
+    assert any(item["name"] == "Staccato C2" for item in client.get("/v1/rig/browse?limit=50", headers=headers).json()["results"])
+    category = body["categories"][0]["name"]
+    chosen = client.get("/v1/rig/browse", params={"category": category}, headers=headers).json()
+    assert chosen["results"]
+    assert all(item["category"] == category for item in chosen["results"])
+    capped = client.get("/v1/rig/browse", params={"limit": 2}, headers=headers).json()
+    assert len(capped["results"]) == 2
+    other = client.get("/v1/rig/browse", headers={"X-Rig-Key": example_key, "Origin": ORIGIN}).json()
+    assert PRODUCT in [item["name"] for item in other["results"]]
+    assert all("Staccato" not in item["name"] for item in other["results"])
+    found = client.get("/v1/rig/search", params={"q": "Staccato"}, headers=headers)
+    assert found.json()["results"][0]["name"] == "Staccato C2"
+    assert client.get("/v1/rig/browse").status_code in (401, 403)

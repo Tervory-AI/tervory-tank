@@ -2,6 +2,7 @@ const form = document.querySelector("form.search");
 const query = document.querySelector("#q");
 const status = document.querySelector("#status");
 const results = document.querySelector("#results");
+const filters = document.querySelector("#filters");
 const searchView = document.querySelector("#search");
 const productView = document.querySelector("#product");
 const main = document.querySelector("#main");
@@ -16,6 +17,7 @@ const compareLines = document.querySelector("#compare-lines");
 
 let currentSetup = null;
 let currentGraph = null;
+let filtersBuilt = false;
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -43,11 +45,60 @@ window.addEventListener("popstate", () => {
 });
 
 if (pathProduct()) void openProduct(pathProduct(), false);
+else void browse("");
+
+async function browse(category) {
+  results.replaceChildren();
+  status.textContent = "Loading products…";
+  const params = new URLSearchParams({ limit: "48" });
+  if (category) params.set("category", category);
+  let response;
+  try {
+    response = await rigFetch("/v1/rig/browse?" + params.toString());
+  } catch {
+    status.textContent = "Products did not load. Try a search.";
+    return;
+  }
+  if (!response.ok) {
+    status.textContent = "Products did not load. Try a search.";
+    return;
+  }
+  const body = await response.json();
+  const items = Array.isArray(body.results) ? body.results : [];
+  if (!filtersBuilt && Array.isArray(body.categories)) {
+    filtersBuilt = true;
+    buildFilters(body.categories);
+  }
+  for (const chip of filters.querySelectorAll("button")) {
+    chip.setAttribute("aria-pressed", String((chip.dataset.category || "") === category));
+  }
+  const total = Number(body.total) || items.length;
+  status.textContent = total + (total === 1 ? " product" : " products");
+  for (const item of items) results.append(card(item));
+}
+
+function buildFilters(categories) {
+  const names = [{ name: "", label: "All" }].concat(
+    categories.map((item) => ({ name: item.name, label: item.name })),
+  );
+  for (const item of names) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "chip";
+    chip.dataset.category = item.name;
+    chip.textContent = item.label;
+    chip.addEventListener("click", () => {
+      query.value = "";
+      void browse(item.name);
+    });
+    filters.append(chip);
+  }
+}
 
 async function run(q) {
   results.replaceChildren();
   if (!q) {
-    status.textContent = "Type a name to search.";
+    void browse("");
     return;
   }
   status.textContent = "Searching…";
@@ -344,6 +395,7 @@ function showSearch() {
   productView.hidden = true;
   searchView.hidden = false;
   main.classList.remove("wide");
+  if (results.children.length === 0) void browse("");
 }
 
 function pathProduct() {

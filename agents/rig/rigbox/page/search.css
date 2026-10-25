@@ -419,3 +419,34 @@ td button + button {
     margin-left: 8px;
   }
 }
+
+.banner {
+  margin: 0 0 16px;
+  padding: 8px 12px;
+  background: #F4F6FB;
+  border: 1px solid #B8BFD0;
+  color: #001840;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 13px;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+.filters .chip {
+  padding: 6px 12px;
+  background: #F4F6FB;
+  border: 1px solid #B8BFD0;
+  color: #001840;
+  font: inherit;
+  cursor: pointer;
+}
+
+.filters .chip[aria-pressed="true"] {
+  background: #001840;
+  color: #fff;
+}

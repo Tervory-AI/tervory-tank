@@ -186,6 +186,13 @@ async def search(
     return _ok(request, body)
 
 
+@router.get("/browse")
+async def browse(request: Request, limit: int = 24, category: str = "", brand: str = "") -> Response:
+    await _auth(request)
+    body = await _service(request).browse(_tenant(request), limit, category, brand)
+    return _ok(request, body)
+
+
 @router.post("/search-events")
 async def settled_search(request: Request, payload: SearchEventIn) -> Response:
     await _auth(request)

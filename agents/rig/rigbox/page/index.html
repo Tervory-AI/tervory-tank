@@ -19,12 +19,14 @@
     <main id="main">
       <section id="search">
         <h1>Find a product</h1>
-        <p class="lead">Search this catalogue. Each price is indicative.</p>
+        <p class="lead">Search or browse this catalogue.</p>
+        <p class="banner" role="note">Demo catalogue. Prices are indicative, not a live quote.</p>
         <form class="search" role="search">
           <label for="q">Search</label>
           <input id="q" name="q" type="search" autocomplete="off" enterkeyhint="search" placeholder="Search by name" />
           <button type="submit">Search</button>
         </form>
+        <div id="filters" class="filters" aria-label="Browse by category"></div>
         <p id="status" class="status" role="status"></p>
         <ul id="results" class="results"></ul>
       </section>
