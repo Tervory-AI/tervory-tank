@@ -118,7 +118,7 @@ export function FounderConsole({
           </nav>
           <Link className="back" href="/admin/feeds">Zenas feeds</Link>
           <Link className="back" href="/admin/homes">Home region</Link>
-          <Link className="back" href="/admin/ghost">Autumbra Watch · onsite checks</Link>
+          <Link className="back" href="/admin/autumbra">Autumbra Watch · onsite checks</Link>
           <Link className="back" href="/">Back to the workspace</Link>
         </div>
       </header>
