@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 /** Presentational watch panel — used by the public page and viewport fixture tests. */
 
 export type WatchAuthority = { name: string; source_url?: string };
@@ -20,6 +22,13 @@ export type WatchRecord = {
 export function WatchPanel({ row }: { row: WatchRecord }) {
   return (
     <main className="moot-watch" aria-label="Moot watch">
+      <header className="moot-brand">
+        <Link href="/zenas" className="moot-brand-link" aria-label="Zenas panel">
+          <img src="/brand/zenas-on-dark.png" alt="Zenas" width={197} height={70} />
+        </Link>
+        <Link href="/moot" className="moot-panel-link">All matches</Link>
+        <Link href="/zenas" className="moot-panel-link">Open Zenas panel</Link>
+      </header>
       <h1>{row.title}</h1>
       <p>Public watch page (text edition). Nothing spoken here — that is later work.</p>
 

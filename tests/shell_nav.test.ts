@@ -73,9 +73,10 @@ test("workspace routes use the shared shell; auth and squad product roots use th
   for (const path of SHELL_ROUTES) assert.equal(usesOwnShell(path), false, path);
   assert.equal(usesOwnShell("/sign-in"), true);
   assert.equal(usesOwnShell("/sign-up/verify"), true);
-  for (const path of ["/base", "/tiger", "/market-lab", "/rig", "/tisan", "/radix", "/zenas", "/skala", "/tank"]) {
+  for (const path of ["/base", "/tiger", "/market-lab", "/rig", "/tisan", "/radix", "/zenas", "/skala", "/tank", "/moot"]) {
     assert.equal(usesOwnShell(path), true, path);
   }
+  assert.equal(usesOwnShell("/moot/fixture-published"), true);
   assert.equal(usesOwnShell("/zenas/feeds"), false);
   assert.equal(usesOwnShell("/skala/gold"), false);
 });
