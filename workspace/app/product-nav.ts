@@ -54,7 +54,7 @@ export const FOUNDER_LINKS: readonly NavLink[] = [
 
 export const REVIEW_LINK: NavLink = { href: "/review", label: "Review" };
 
-/** Signed-in routes that share this shell. */
+/** Signed-in routes that share the workspace sidebar shell. */
 export const SHELL_ROUTES: readonly string[] = [
   "/",
   "/matters",
@@ -64,16 +64,7 @@ export const SHELL_ROUTES: readonly string[] = [
   "/prices",
   "/data",
   "/onboarding",
-  "/base",
-  "/tiger",
-  "/market-lab",
-  "/rig",
-  "/tisan",
-  "/radix",
-  "/zenas",
-  "/skala",
   "/skala/gold",
-  "/tank",
   "/admin",
   "/admin/autumbra",
   "/admin/feeds",
@@ -82,17 +73,33 @@ export const SHELL_ROUTES: readonly string[] = [
   "/review",
 ];
 
-const OWN_SHELL = ["/sign-in", "/sign-up"];
+/** Clerk auth and Figma squad product roots that already render their own left panel. */
+const OWN_SHELL = [
+  "/sign-in",
+  "/sign-up",
+  "/base",
+  "/tiger",
+  "/market-lab",
+  "/rig",
+  "/tisan",
+  "/radix",
+  "/zenas",
+  "/skala",
+  "/tank",
+] as const;
+
+/** Only auth keeps nested Clerk screens under the same own-shell root. */
+const OWN_SHELL_NESTED = new Set<string>(["/sign-in", "/sign-up"]);
 
 export function cleanPath(pathname: string): string {
   if (!pathname) return "/";
   return pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
 }
 
-/** Sign-in and sign-up keep Clerk's own screen. Every other page uses the sidebar. */
+/** Auth and Figma squad product roots skip the workspace sidebar. Nested founder pages like /zenas/feeds and /skala/gold stay on it. */
 export function usesOwnShell(pathname: string): boolean {
   const path = cleanPath(pathname);
-  return OWN_SHELL.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
+  return OWN_SHELL.some((route) => path === route || (OWN_SHELL_NESTED.has(route) && path.startsWith(`${route}/`)));
 }
 
 export function squadMembers(founder: boolean): SquadMember[] {
