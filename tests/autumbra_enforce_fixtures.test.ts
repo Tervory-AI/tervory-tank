@@ -8,7 +8,7 @@ import {
   resetFixtureStore,
 } from "../workspace/app/admin/autumbra/shields-fixtures.ts";
 
-test("fixture board is dry_run Practice with at least one proposed shield", () => {
+test("fixture board is dry_run with at least one proposed shield", () => {
   resetFixtureStore();
   const board = fixtureBoard();
   assert.equal(board.tile.mode, "dry_run");

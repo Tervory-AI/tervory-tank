@@ -1,4 +1,4 @@
-// Practice fixtures for Autumbra Enforce when Tank shields API is unavailable.
+// Silent fixtures for Autumbra Enforce when Tank shields API is unavailable.
 // No Cloudflare apply. No Hugging Face. dry_run only.
 
 export type ShieldReceipt = { step: string; at: string; ledger_id: string; status: string };
@@ -22,12 +22,12 @@ export type ShieldTile = {
 };
 export type ShieldBoard = { tile: ShieldTile; shields: Shield[] };
 
-/** Stable Practice shield id (UUID) so taps stay on the fixture path. */
+/** Stable fixture shield id (UUID) so taps stay on the fixture path. */
 export const PRACTICE_SHIELD_ID = "a1111111-1111-4111-8111-111111111111";
 
 const fixtureStore = new Map<string, Shield>();
 
-function seedPracticeShield(): Shield {
+function seedFixtureShield(): Shield {
   const proposedAt = "2026-10-24T18:00:00.000Z";
   return {
     id: PRACTICE_SHIELD_ID,
@@ -63,7 +63,7 @@ function seedPracticeShield(): Shield {
 
 function ensureStore(): void {
   if (fixtureStore.size === 0) {
-    fixtureStore.set(PRACTICE_SHIELD_ID, seedPracticeShield());
+    fixtureStore.set(PRACTICE_SHIELD_ID, seedFixtureShield());
   }
 }
 
@@ -109,7 +109,7 @@ export function applyFixtureTap(id: string, tap: "raise" | "undo"): Shield {
     next = {
       ...current,
       state: "dry_run",
-      note: "Dry run: Autumbra Enforce recorded what it would change. Nothing was changed at the edge.",
+      note: "Autumbra Enforce recorded what it would change. Nothing was changed at the edge.",
       plan: { ...current.plan, phase: "dry_run" },
       receipts: [
         ...current.receipts,
@@ -149,7 +149,7 @@ export function applyFixtureTap(id: string, tap: "raise" | "undo"): Shield {
   };
 }
 
-/** Test helper: clear and re-seed the in-process Practice store. */
+/** Test helper: clear and re-seed the in-process fixture store. */
 export function resetFixtureStore(): void {
   fixtureStore.clear();
   ensureStore();

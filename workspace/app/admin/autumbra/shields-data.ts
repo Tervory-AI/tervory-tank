@@ -13,7 +13,7 @@ export type { Shield, ShieldBoard, ShieldReceipt, ShieldTile } from "./shields-f
 export { FIXTURE_BOARD, PRACTICE_SHIELD_ID, fixtureBoard, isFixtureShield } from "./shields-fixtures";
 
 // Autumbra Enforce shields: founder-only reads and taps through Tank (`/v1/ghost/shields/*`).
-// Server-side only (uses TANK_API_KEY). When Tank is down, Practice fixtures keep the board usable.
+// Server-side only (uses TANK_API_KEY). When Tank is down, silent fixtures keep the board usable.
 const TANK_URL = process.env.TANK_URL ?? "http://tank:8000";
 const TANK_API_KEY = process.env.TANK_API_KEY ?? "";
 
@@ -26,7 +26,7 @@ async function call<T>(path: string, userId: string, method: "GET" | "POST"): Pr
   return (await res.json()) as T;
 }
 
-/** Never rejects: live Tank board when available, else Practice fixtures (dry_run). */
+/** Never rejects: live Tank board when available, else silent fixtures (dry_run). */
 export async function shieldBoard(userId: string): Promise<ShieldBoard> {
   try {
     const [tile, list] = await Promise.all([
