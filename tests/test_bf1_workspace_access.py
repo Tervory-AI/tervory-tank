@@ -77,7 +77,10 @@ def test_page_address_is_skala():
     config = _text(ROOT / "workspace" / "next.config.ts")
     middleware = _text(ROOT / "workspace" / "middleware.ts")
     assert "redirect" not in config
-    assert "redirect" not in middleware
+    # The only redirects allowed in middleware: /moot to the Zenas host (#303)
+    # and signed-out visitors to sign-in (#319). Nothing redirects /skala.
+    assert middleware.count("NextResponse.redirect(") == 1
+    assert "NextResponse.redirect(canonical, 308)" in middleware
     client = _text(ROOT / "workspace" / "lib" / "tank.ts")
     assert "/v1/skala" in client
     assert (APP / "skala" / "page.tsx").is_file()

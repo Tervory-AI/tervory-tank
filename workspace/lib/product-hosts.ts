@@ -41,19 +41,6 @@ export const APP_WORKSPACE_HOST = "app.tervory.com";
 /** Canonical Zenas product host (Moot + Zenas panel). */
 export const ZENAS_PRODUCT_HOST = "zenas.tervory.com";
 
-/** Product paths that must stay public on host roots (no auth wall). */
-const PUBLIC_PRODUCT_ROOTS = [
-  "/autumbra",
-  "/moot",
-  "/base",
-  "/tiger",
-  "/market-lab",
-  "/tisan",
-  "/radix",
-  "/skala",
-  "/tank",
-] as const;
-
 /** Strip port and lowercase; empty when missing. */
 export function normalizeHost(raw: string | null | undefined): string {
   if (!raw) return "";
@@ -65,12 +52,6 @@ export function productHostFor(hostHeader: string | null | undefined): ProductHo
   const host = normalizeHost(hostHeader);
   if (!host) return null;
   return BY_HOST.get(host) ?? null;
-}
-
-/** True when pathname is a public product surface (host root rewrite targets). */
-export function isPublicProductPath(pathname: string): boolean {
-  const path = pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname || "/";
-  return PUBLIC_PRODUCT_ROOTS.some((root) => path === root || path.startsWith(`${root}/`));
 }
 
 /**
