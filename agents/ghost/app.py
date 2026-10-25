@@ -26,6 +26,7 @@ from . import wraith as wraith_room
 from . import rails as airgap_rails
 from . import watch_oss as watch_oss_room
 from .watch_oss import AnomalyEvent, handoff_threat, propose_from_anomaly
+from . import enforce_oss as enforce_oss_room
 from .probes import Probes
 from .store import Store
 
@@ -310,6 +311,14 @@ def create_app() -> FastAPI:
         except ThreatBurned:
             raise HTTPException(422, BURN_DETAIL) from None
         return wraith_room.would_enforce(payload)
+
+    @app.get("/ghost/enforce/oss", dependencies=[Depends(require_tank)])
+    async def enforce_oss_status():
+        """Autumbra Enforce OSS adapter status (Ansible + Terraform stubs). Always readable.
+
+        Does not enable weapons. Live edge changes still require founder Shield tap.
+        """
+        return enforce_oss_room.status()
 
     @app.post("/ghost/shields/propose", dependencies=[Depends(require_tank)])
     async def shields_propose(request: Request):
