@@ -156,4 +156,6 @@ def test_status_autumbra_copy_not_live():
         assert "vault_sha" in meta
     # Naming law: no Ghost/Wraith product claims in this status blob.
     blob = str(body)
+    assert "vault_primary" in body
+    assert "2.25.250.28" in body["vault_primary"]
     assert "Wraith" not in blob

@@ -5,9 +5,19 @@
 **Code path:** `agents/ghost/watch_oss/` (short-term room name unchanged).  
 **Flag:** `WATCH_OSS_ENABLED` / `GHOST_WATCH_OSS_ENABLED` (default **OFF**).
 
-## Vault pins (do not re-clone)
+This is the **Watch customise** PR called for in [`AUTUMBRA-OSS.md`](./AUTUMBRA-OSS.md) (#289 shopping list). Docs-only staging stays on #289; this PR adds thin Tank adapters.
 
-Staged at `/workspace/autumbra-oss-vault/` by Autumbra · Build. Customise from those trees; do not vendor multi-GB upstream into Tank.
+## Vault (primary vs cache)
+
+| Location | Role |
+|----------|------|
+| Boston `ammosync@2.25.250.28:/home/ammosync/code-vault/autumbra-oss/` | **Primary** vault (~1.3G, synced 2026-10-24) |
+| Bot box `/workspace/autumbra-oss-vault/` | Working **cache** — customise from here; do not re-clone |
+| ZA `41.222.36.225` / `dev.ammosync.co.za` | **Abandoned** for this vault |
+
+Do not vendor multi-GB upstream trees into Tank. Prefer primary vault + adapters.
+
+## Vault pins (Watch lane)
 
 | Adapter | Upstream | Vault SHA | Stronger-than-stock |
 |---------|----------|-----------|---------------------|
@@ -36,6 +46,7 @@ Staged at `/workspace/autumbra-oss-vault/` by Autumbra · Build. Customise from 
 
 ## Related drafts
 
+- #289 `AUTUMBRA-OSS.md` + clone helper (shopping list / vault truth)
 - #281 ThreatPayload + SLO (base of this branch)
 - #284 air-gap + Enforce stub (parallel; does not own these adapters)
 - Air Gap / Enforce customise PRs come from other lanes

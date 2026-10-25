@@ -52,7 +52,8 @@ def status() -> dict:
             "Adapters and presets only. Upstream daemons are not started by this "
             "module. Dual-LLM / Wazuh triage are not live here."
         ),
-        "vault_hint": os.environ.get(
+        "vault_primary": "ammosync@2.25.250.28:/home/ammosync/code-vault/autumbra-oss/",
+        "vault_cache": os.environ.get(
             "AUTUMBRA_OSS_VAULT", "/workspace/autumbra-oss-vault"
         ),
     }
