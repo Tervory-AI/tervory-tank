@@ -3,7 +3,7 @@
 > Written by Claude, Sun 25 Oct 2026, 14:25 PT, from a check of every page in the founder's own signed-in browser. **This replaces `BUILD-LISTS-2026-10-25.md`.**
 >
 > **What counts as done (no exceptions):**
-> - it matches its approved Figma frame;
+> - it matches its approved Figma frame **exactly, character for character**;
 > - the page is opened signed in on its own domain;
 > - every button does its real job;
 > - every number is real (or the page says plainly that there's nothing yet);
@@ -16,8 +16,10 @@
    - Every page, and every change to a page (the homepage and marketing pages included), is designed and approved in Figma first, then built to match that frame exactly.
    - A page with no approved frame isn't built.
    - A builder who changes a design, adds a section, or "improves" a layout without a frame has deviated.
-2. **Deviate once and the thread is deleted.**
-   - A builder thread that steps outside its brief or its Figma frame is deleted, and the work starts again in a new thread.
+   - **Exact to the character.** Every word, full stop, capital letter, digit and space on a page must match the Figma frame. A builder who adds, removes or changes even one character that isn't in Figma has deviated.
+2. **Deviate once and the thread is deleted, with all of its work.**
+   - Everything that thread produced is thrown away, and the work starts again in a new thread.
+   - This applies to any thread that steps outside its brief or its Figma frame.
    - The same goes for a thread that breaks something when told to deploy.
    - No second chances inside a thread, and no arguing it.
 
