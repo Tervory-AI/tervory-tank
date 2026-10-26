@@ -53,7 +53,7 @@ def test_panel_stays_fixed_and_split_in_three():
 def test_tiger_tabs_and_plugins_popup():
     source = _source()
     assert "Overview" in source
-    assert "Ask Tiger" in source
+    assert "Ask Tiger" not in source
     assert "Alerts" in source
     assert "Watch list" in source
     assert "Can't read" in source
@@ -62,8 +62,8 @@ def test_tiger_tabs_and_plugins_popup():
     assert "Source links" in source
     assert "MCP connections" in source
     assert "Integrations" not in source
-    # The word Sources is the label on an answer, not a nav tab.
-    assert 'className="sources-label">Sources:' in source
+    # The unfinished Ask UI and its promise of sourced answers are removed.
+    assert "Every answer lists its sources" not in source
     assert '"Sources"' not in source
     assert 'label: "Sources"' not in source
     assert 'href="/plugins"' not in source

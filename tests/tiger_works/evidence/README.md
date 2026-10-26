@@ -6,8 +6,11 @@ They do not claim a Clerk login, a live store check, or a deployed service.
 The harness copies Workspace to a temporary directory and substitutes Clerk
 there only. The dummy publishable and secret keys match `.github/workflows/ci.yml`.
 The repository's authentication and middleware are unchanged. The real add-watch
-server action calls the real tenant-scoped Tank proxy routes and Tiger handlers.
-The test uses `MemoryStore` and invokes `run_check` in place of a scheduled job.
+server action calls the actual `tank.app` served by uvicorn and the real Tiger
+handlers. It no longer copies selected routes into a separate FastAPI app.
+Infrastructure startup is disabled in this local harness: the room transport is
+provided directly, `MemoryStore` replaces Postgres, and `run_check` replaces the
+scheduled trigger. Tank's registered routes and request authentication are intact.
 Chromium renders the saved HTML with network requests blocked; production browser
 serialization, deterministic extraction, observation storage and alert logic run.
 No model, paid service or live account is used.
@@ -26,6 +29,10 @@ has no price or alert. The final five observations and two alerts are saved in
 The harness checks 0/1/2 alert and search counts, singular/plural overview labels,
 the Can't-read `Page` header, hostname link and full URL title, and the absence of
 the inactive `Check again` button. The scheduled-check explanation remains.
+The third-review checks also verify that the inactive date/older-alert controls,
+watch-list next-page label and Ask UI are absent. An old `?tab=ask` link opens
+Overview, the mobile card says **Not checked yet**, and the remaining All/Price/
+Stock alert filters change the displayed rows.
 
 | Step | Evidence |
 | --- | --- |
@@ -36,6 +43,7 @@ the inactive `Check again` button. The scheduled-check explanation remains.
 | One price alert: 120.00 → 115.00 | [05-alert.png](proof/05-alert.png) |
 | Two alerts after one more fixture price change | [06-two-alerts.png](proof/06-two-alerts.png) |
 | Blocked page: hostname link, full URL on hover, scheduled-check message | [07-cant-read.png](proof/07-cant-read.png) |
+| Newly added watch on mobile: Not checked yet | [08-not-checked.png](proof/08-not-checked.png) |
 | Saved observations and alert | [observations.json](proof/observations.json) |
 
 With Python dependencies from `tank/requirements.txt` and
@@ -57,11 +65,12 @@ in the founder's browser; this local harness does not perform that step.
 ## Independent review
 
 `test_two_tenants_cannot_read_or_remove_each_others_saved_page_job` exercises the
-actual authenticated Tank routes and Tiger handlers with two tenants watching the
+actual authenticated Tank app and Tiger handlers with two tenants watching the
 same URL. Each tenant gets different fixture prices and its own alert. The test
 checks watch/history/alert reads, cross-tenant deletion, conflicting body/query
-tenant IDs, and rejection without the Workspace key. `MemoryStore` replaces only
-the database; the deterministic reader and route implementations are real.
+tenant IDs, and rejection without the Workspace key. `MemoryStore` replaces the
+database; infrastructure startup is not invoked. The deterministic reader and
+registered routes are real, including Tank authentication and tenant checks.
 
 ## Public-page policy
 
@@ -91,10 +100,9 @@ rejection and the absence of raw HTML in ordinary/model results. Existing
 
 ## CI comparison
 
-[CI failure comparison](ci-baseline.md) lists the three failures on reviewed head
-`483211e`: sidebar fixture loading, Rig catalogue dates and Rig search timing.
-The first two reproduce on main `65067a4`; the timing test passes locally on both
-main and this branch. No CI retry was requested.
+[CI failure comparison](ci-baseline.md) lists the two failures on reviewed head
+`e1601bb`: sidebar fixture loading and Rig catalogue dates. Both reproduce on
+main `65067a4`. No CI retry was requested.
 
 ## Founder must decide: client's own session
 
@@ -104,6 +112,12 @@ in `watch.py`. Implementing a genuine client-network/session transport is a
 separate decision; this change does not claim or simulate that path. Claude's
 signed-in live proof remains a step after the founder deploys the branch.
 
-The Base thread must decide alignment of the two unchanged `TervoryBase/0.1`
-clients at `tank/main.py:670` and `workspace/app/api/base/route.ts:129`; both are
-outside this lane. The shared browser and Tiger already use the truthful Tervory UA.
+The owning threads must decide alignment of the unchanged older identities at
+`tank/main.py:670`, `workspace/app/api/base/route.ts:129`, and root `tiger/app.py:36,81`.
+The first two use `TervoryBase/0.1`; the root browser rewrites HeadlessChrome and
+appends `TervoryTiger/0.1`. The shared browser and Tiger agent already use the
+truthful Tervory UA.
+
+Deleting a watch currently retains its observations and alerts. Alerts for a
+removed URL can still appear under its hostname. Retention and deletion semantics
+remain a founder decision; this change does not remove stored data.

@@ -2,11 +2,10 @@ import type { TigerAlert, TigerObservation, TigerWatch } from "@/lib/tank";
 import { everyLabel, stockLabel, watchTitle } from "../prices/format";
 import type { ReadStatus } from "./copy";
 
-export type Section = "overview" | "ask" | "alerts" | "watch" | "history" | "unread" | "plugins";
+export type Section = "overview" | "alerts" | "watch" | "history" | "unread" | "plugins";
 
 export const SECTIONS: { id: Section; label: string }[] = [
   { id: "overview", label: "Overview" },
-  { id: "ask", label: "Ask Tiger" },
   { id: "alerts", label: "Alerts" },
   { id: "watch", label: "Watch list" },
   { id: "history", label: "History" },

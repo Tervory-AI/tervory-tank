@@ -8,8 +8,6 @@ import { Plugins } from "./plugins";
 import type { PluginPanel } from "./plugins-data";
 import { SquadLinks } from "../squad-links";
 
-type AskTurn = { who: "You"; text: string } | { who: "Tiger"; text: string; sources: string[] };
-
 function SearchIcon() {
   return (
     <svg className="search-icon" viewBox="0 0 16 16" aria-hidden="true">
@@ -46,8 +44,6 @@ export function TigerApp({
   const [query, setQuery] = useState("");
   const [hidden, setHidden] = useState<string[]>([]);
   const [help, setHelp] = useState(false);
-  const [thread, setThread] = useState<AskTurn[]>([]);
-  const [askDraft, setAskDraft] = useState("");
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -63,8 +59,7 @@ export function TigerApp({
   const products = data.products.filter((row) => !hidden.includes(row.id));
   const visible: TigerData = { ...data, products };
   const hit = searchTiger(visible, query);
-  const popup = pluginsOpen || addOpen;
-  const headerRed = !addOpen && !(pluginsOpen && plugins.enabled) && !(section === "ask" && !hit);
+  const headerRed = !addOpen && !(pluginsOpen && plugins.enabled);
 
   function show(next: Section) {
     setMenuOpen(false);
@@ -79,17 +74,6 @@ export function TigerApp({
     setAddOpen(false);
     setPluginsOpen(true);
     setSection("plugins");
-  }
-
-  function sendAsk() {
-    const text = askDraft.trim();
-    if (!text) return;
-    setAskDraft("");
-    setThread((current) => [
-      ...current,
-      { who: "You", text },
-      { who: "Tiger", text: "Tiger cannot answer from this page yet. Use Add a product to watch a page.", sources: [] },
-    ]);
   }
 
   const rootClass = ["tiger", pluginsOpen ? "plugins-open" : "", addOpen ? "add-open" : "", menuOpen ? "menu-open" : ""].filter(Boolean).join(" ");
@@ -158,9 +142,6 @@ export function TigerApp({
 
         {hit ? <Results hit={hit} /> : null}
         {!hit && section === "overview" ? <Overview data={visible} onWatch={() => show("watch")} onAlerts={() => show("alerts")} /> : null}
-        {!hit && section === "ask" ? (
-          <Ask thread={thread} draft={askDraft} setDraft={setAskDraft} onSend={sendAsk} sendClass={addOpen ? "line" : "primary"} />
-        ) : null}
         {!hit && section === "alerts" ? <Alerts rows={data.alerts} example={data.example} /> : null}
         {!hit && section === "watch" ? (
           <Watch rows={products} note={data.listNote} onHide={(id) => setHidden((current) => [...current, id])} />
@@ -218,7 +199,7 @@ function Overview({ data, onWatch, onAlerts }: { data: TigerData; onWatch: () =>
                 <p className="price">{row.price} · {row.stock}</p>
               )}
               <p className="fine">{row.store}</p>
-              <p className="fine">Checked {row.checked}{data.example ? " · Example" : ""}</p>
+              <p className="fine">{row.status === "Not checked" ? "Not checked yet" : `Checked ${row.checked}`}{data.example ? " · Example" : ""}</p>
             </li>
           ))}
         </ul>
@@ -287,57 +268,8 @@ function Overview({ data, onWatch, onAlerts }: { data: TigerData; onWatch: () =>
   );
 }
 
-function Ask({
-  thread,
-  draft,
-  setDraft,
-  onSend,
-  sendClass,
-}: {
-  thread: AskTurn[];
-  draft: string;
-  setDraft: (value: string) => void;
-  onSend: () => void;
-  sendClass: string;
-}) {
-  return (
-    <section className="block">
-      <div className="title-row">
-        <h2>Ask Tiger</h2>
-      </div>
-      <p className="intro">Ask about your watched products, prices and alerts. Every answer lists its sources.</p>
-      <div className="thread">
-        {thread.map((turn, index) => (
-          turn.who === "You" ? (
-            <article className="you" key={`you-${index}`}>
-              <h3>You</h3>
-              <p>{turn.text}</p>
-            </article>
-          ) : (
-            <article className="tiger-msg" key={`tiger-${index}`}>
-              <h3>Tiger</h3>
-              <p>{turn.text}</p>
-              <hr />
-              <div className="sources">
-                <p className="sources-label">Sources:</p>
-                {turn.sources.length > 0 ? turn.sources.map((source) => <p key={source}>{source}</p>) : <p>No sources for this answer.</p>}
-              </div>
-            </article>
-          )
-        ))}
-      </div>
-      <form className="composer" onSubmit={(event) => { event.preventDefault(); onSend(); }}>
-        <input aria-label="Ask Tiger" placeholder="Ask Tiger about a product, a price or an alert…" value={draft} onChange={(event) => setDraft(event.target.value)} />
-        <button type="submit" className={sendClass}>Send</button>
-      </form>
-      <p className="fine">Tiger reads public pages only. If it can’t read a page, it says so instead of guessing.</p>
-    </section>
-  );
-}
-
 function Alerts({ rows, example }: { rows: AlertRow[]; example: boolean }) {
   const [kind, setKind] = useState<"All" | "Price" | "Stock">("All");
-  const [week, setWeek] = useState(true);
   const listed = rows.filter((row) => kind === "All" || row.kind === kind);
   return (
     <section className="block">
@@ -350,7 +282,6 @@ function Alerts({ rows, example }: { rows: AlertRow[]; example: boolean }) {
         {(["All", "Price", "Stock"] as const).map((item) => (
           <button key={item} type="button" className={kind === item ? "chip on" : "chip"} onClick={() => setKind(item)}>{item}</button>
         ))}
-        <button type="button" className={week ? "chip on" : "chip"} onClick={() => setWeek((value) => !value)}>Last 7 days ▾</button>
       </div>
       <div className="table-wrap">
         <table>
@@ -370,8 +301,7 @@ function Alerts({ rows, example }: { rows: AlertRow[]; example: boolean }) {
         </table>
       </div>
       <div className="table-foot">
-        <span>{listed.length} {listed.length === 1 ? "alert" : "alerts"}{example ? " in the last 7 days · Example" : ""}</span>
-        <button type="button" className="text" onClick={() => setWeek(false)}>Load older alerts</button>
+        <span>{listed.length} {listed.length === 1 ? "alert" : "alerts"}{example ? " · Example" : ""}</span>
       </div>
       <article className="note-card">
         <h3>How alerts work</h3>
@@ -418,7 +348,6 @@ function Watch({ rows, note, onHide }: { rows: ProductRow[]; note: string | null
       </div>
       <div className="table-foot">
         <span>{note ?? `${rows.length} on the watch list`}</span>
-        <span className="text">Next page →</span>
       </div>
     </section>
   );

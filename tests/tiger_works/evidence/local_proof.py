@@ -19,7 +19,6 @@ import tempfile
 import uuid
 
 import httpx
-from fastapi import FastAPI
 from playwright.async_api import async_playwright
 import uvicorn
 
@@ -80,10 +79,11 @@ async def main() -> None:
     tiger._store = lambda: store
     room_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=tiger.app))
     tank._http = room_client
-    app = FastAPI()
-    app.router.routes.extend(route for route in tank.app.routes if getattr(route, "path", "").startswith("/v1/tiger/"))
     tank_port, workspace_port = free_port(), free_port()
-    service = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=tank_port, log_level="warning"))
+    # Serve the actual Tank app. Only infrastructure startup is omitted because
+    # this fixture harness provides the room HTTP transport and MemoryStore.
+    service = uvicorn.Server(uvicorn.Config(tank.app, host="127.0.0.1", port=tank_port,
+                                          log_level="warning", lifespan="off"))
     server_task = asyncio.create_task(service.serve())
     origin = f"http://localhost:{workspace_port}"
     process = None
@@ -140,10 +140,14 @@ export default { devIndicators: false, webpack(config) {
                         await page.get_by_role("button", name="Clear", exact=True).click()
                     await page.goto(origin + "/tiger?tab=watch")
                     await page.get_by_text("No products watched yet.").wait_for()
+                    assert await page.get_by_role("button", name="Ask Tiger", exact=True).count() == 0
+                    assert await page.get_by_text("Next page →", exact=True).count() == 0
                     await shot("01-empty.png")
                     await search_count("no matching fixture", "0 matches")
                     await page.get_by_role("button", name="Alerts", exact=True).click()
                     await page.get_by_text("0 alerts", exact=True).wait_for()
+                    assert await page.get_by_role("button", name="Last 7 days ▾", exact=True).count() == 0
+                    assert await page.get_by_role("button", name="Load older alerts", exact=True).count() == 0
                     await page.get_by_role("button", name="Watch list", exact=True).click()
                     await page.get_by_role("button", name="Add a product", exact=True).click()
                     await page.locator('input[name="url"]').fill(URL)
@@ -158,6 +162,17 @@ export default { devIndicators: false, webpack(config) {
                     assert watch["alert_price"] and not watch["alert_stock"]
                     await shot("02-watch-added.png")
                     await search_count("Not checked", "1 match")
+                    # Old Ask links must land on a usable tab, without a question
+                    # box or a promise of answers that the page cannot provide.
+                    await page.goto(origin + "/tiger?tab=ask")
+                    await page.get_by_role("heading", name="Latest reads", exact=True).wait_for()
+                    assert await page.get_by_role("textbox", name="Ask Tiger", exact=True).count() == 0
+                    assert "Every answer lists its sources" not in await page.locator("body").inner_text()
+                    assert "Checked Not yet" not in await page.locator("body").text_content()
+                    await page.set_viewport_size({"width": 390, "height": 844})
+                    await page.get_by_text("Not checked yet", exact=True).wait_for()
+                    await shot("08-not-checked.png")
+                    await page.set_viewport_size({"width": 1440, "height": 1050})
                     reader_context = await chromium.new_context(java_script_enabled=False)
                     await reader_context.route("**/*", lambda route: route.abort())
                     reader_page = await reader_context.new_page()
@@ -187,6 +202,14 @@ export default { devIndicators: false, webpack(config) {
                     await shot("04-history.png")
                     await page.goto(origin + "/tiger?tab=alerts")
                     await page.get_by_text("1 alert", exact=True).wait_for()
+                    assert await page.get_by_role("button", name="Last 7 days ▾", exact=True).count() == 0
+                    assert await page.get_by_role("button", name="Load older alerts", exact=True).count() == 0
+                    await page.get_by_role("button", name="Stock", exact=True).click()
+                    await page.get_by_text("0 alerts", exact=True).wait_for()
+                    assert await page.locator("tbody tr").count() == 0
+                    await page.get_by_role("button", name="Price", exact=True).click()
+                    await page.get_by_text("1 alert", exact=True).wait_for()
+                    await page.get_by_role("button", name="All", exact=True).click()
                     await shot("05-alert.png")
                     (output / "observations.json").write_text(json.dumps({"scope": "local, fixture page", "watch": watch,
                         "observations": store.observations, "alerts": store.alerts}, indent=2, default=str) + "\n")
@@ -228,6 +251,7 @@ export default { devIndicators: false, webpack(config) {
                     await chromium.close()
             print(f"PASS: form → Tank → Tiger → 3 saved-page readings → 1 alert; screenshots: {output}")
             print("PASS: 0/1/2 alert and search counts, overview grammar, blocked row Page link, no inactive retry button")
+            print("PASS: actual Tank app; inactive date/load/paging/Ask controls removed; legacy Ask link and Not checked yet card")
     finally:
         if process and process.returncode is None:
             process.terminate()
