@@ -452,3 +452,28 @@ def test_savings_page_limit_and_caches() -> None:
     assert "esbuild@0.28.2" in pinned
     assert "1.64.1" in steps[caches["~/.npm"]]["with"]["key"]
     assert "0.28.2" in steps[caches["~/.npm"]]["with"]["key"]
+
+
+def test_playwright_and_action_pins_match_latest_stable_hosts() -> None:
+    # Playwright 1.55 does not know Ubuntu 26.04. 1.64.1 is the latest stable
+    # release and ships an ubuntu26.04 host. The Tisan gate installs whatever
+    # package.json pins; the tank job installs requirements-dev.txt.
+    package = json.loads((ROOT / "agents/tisan/templates/next-site/package.json").read_text())
+    assert package["devDependencies"]["@playwright/test"] == "1.64.1"
+    assert package["overrides"]["playwright"] == "1.64.1"
+    assert "playwright==1.64.1" in (ROOT / "tank/requirements-dev.txt").read_text()
+    node20_actions = (
+        "actions/checkout@v4",
+        "actions/setup-node@v4",
+        "actions/setup-python@v5",
+        "actions/upload-artifact@v4",
+        "actions/cache@v4",
+    )
+    workflow_files = list(WORKFLOWS.glob("*.yml"))
+    workflow_files.append(ROOT / "agents/tisan/templates/next-site/.github/workflows/ci.yml")
+    for path in workflow_files:
+        text = path.read_text(encoding="utf-8")
+        for pin in node20_actions:
+            assert pin not in text, f"{path} still pins {pin}"
+        if "playwright@" in text:
+            assert "playwright@1.64.1" in text
