@@ -18,10 +18,10 @@
   "citations": [
     {
       "statement": "Population, California: 110 persons (2023-01-01).",
-      "href": "/market-lab/sources/d753f1e5-d187-45f8-9997-f4b3b99639ff?row=1#point-1",
+      "href": "/market-lab/sources/b0c408ad-f791-4368-ba9d-2619da4e797c?row=1#point-1",
       "storedRow": [
         "Population, California",
-        "06",
+        "California",
         "2023-01-01",
         "110",
         "persons"
@@ -29,10 +29,10 @@
     },
     {
       "statement": "Population, Los Angeles County, California: 50 persons (2023-01-01).",
-      "href": "/market-lab/sources/d753f1e5-d187-45f8-9997-f4b3b99639ff?row=4#point-4",
+      "href": "/market-lab/sources/b0c408ad-f791-4368-ba9d-2619da4e797c?row=4#point-4",
       "storedRow": [
         "Population, Los Angeles County, California",
-        "06037",
+        "Los Angeles County, California",
         "2023-01-01",
         "50",
         "persons"
