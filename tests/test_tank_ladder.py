@@ -19,6 +19,11 @@ async def ladder(boundary, monkeypatch):  # noqa: F811 -- pytest fixture injecti
     await b.tank.register_packages()
     async with b.pool.acquire() as conn:
         await conn.execute("UPDATE tank.skills SET state='approved' WHERE id IN ('base.normalize','base.extract')")
+        # The fixture explicitly approves and selects code. Fresh production seeds
+        # leave unapproved versions on the automatic Luna fallback.
+        await conn.execute("""UPDATE tank.policy SET model='skill:'||task_type||'@'||
+            CASE task_type WHEN 'base.normalize' THEN '1.0.0' ELSE '2.0.0' END
+            WHERE tenant_id IS NULL AND task_type IN ('base.normalize','base.extract')""")
         await conn.execute("UPDATE tank.policy SET cache_scope='none' WHERE task_type='base.normalize'")
     b.sent = []
 
@@ -84,7 +89,7 @@ async def test_code_escalates_with_receipt_and_no_raw_html(ladder, monkeypatch, 
 
     monkeypatch.setattr(b.tank, "_run_code_candidate", code)
     for tenant in b.tenants:
-        result = await b.tank.run_route(request(b, tenant, text=json.dumps({"text": "<p>visible</p><script>secret</script>", "html": "<html>raw</html>"})))
+        result = await b.tank.run_route(request(b, tenant, text=json.dumps({"text": "visible", "html": "<p>raw</p><script>secret</script>"})))
         assert result.rung == 2 and result.model == "luna"
         assert result.escalation[0]["reason"] == kind
         sent = json.dumps(b.sent[-1])
@@ -162,10 +167,9 @@ async def test_version_ownership_and_cancellation_stay_closed(ladder):
     async with b.pool.acquire() as conn:
         await conn.execute("UPDATE tank.skills SET state='retired' WHERE id='base.normalize'")
     for tenant in b.tenants:
-        with pytest.raises(HTTPException) as retired:
-            await b.tank.run_route(request(b, tenant))
-        assert retired.value.status_code == 409
-    assert b.sent == []
+        result = await b.tank.run_route(request(b, tenant))
+        assert result.rung == 2 and result.escalation[0]["reason"] == "skill_not_approved"
+    assert len(b.sent) == 2
 
 
 @pytest.mark.asyncio

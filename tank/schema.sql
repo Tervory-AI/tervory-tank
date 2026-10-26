@@ -1701,12 +1701,18 @@ BEGIN
         -- Luna is the existing funded cheap roster model. Never approve code here.
         UPDATE tank.policy SET escalation_model='luna',rung=3,cache_scope='tenant',updated_at=now()
         WHERE tenant_id IS NULL AND task_type IN ('base.extract','base.business_data','agent.base.think');
-        UPDATE tank.policy SET model='skill:base.extract@2.0.0'
+        UPDATE tank.policy SET model=CASE WHEN EXISTS (
+            SELECT 1 FROM tank.skills WHERE id='base.extract' AND version='2.0.0' AND state='approved'
+        ) THEN 'skill:base.extract@2.0.0' ELSE 'luna' END
         WHERE tenant_id IS NULL AND task_type='base.extract';
-        UPDATE tank.policy SET model='skill:base.business_data@2.0.0',confidence_floor=0.4
+        UPDATE tank.policy SET model=CASE WHEN EXISTS (
+            SELECT 1 FROM tank.skills WHERE id='base.business_data' AND version='2.0.0' AND state='approved'
+        ) THEN 'skill:base.business_data@2.0.0' ELSE 'luna' END,confidence_floor=0.4
         WHERE tenant_id IS NULL AND task_type='base.business_data';
         INSERT INTO tank.policy(task_type,rung,model,escalation_model,cache_scope,confidence_floor)
-        VALUES ('base.normalize',3,'skill:base.normalize@1.0.0','luna','tenant',0.8)
+        VALUES ('base.normalize',3,CASE WHEN EXISTS (
+            SELECT 1 FROM tank.skills WHERE id='base.normalize' AND version='1.0.0' AND state='approved'
+        ) THEN 'skill:base.normalize@1.0.0' ELSE 'luna' END,'luna','tenant',0.8)
         ON CONFLICT DO NOTHING;
         -- Existing funded roster entry; no new provider or key. Matter keys are
         -- mandatory for semantic reuse; no reference means a semantic miss.
@@ -1724,3 +1730,21 @@ ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS batch_baseline_cost_usd numeric
 ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS batch_discount_usd numeric(18,8);
 ALTER TABLE tank.batches ADD COLUMN IF NOT EXISTS request_hash text NOT NULL DEFAULT '';
 ALTER TABLE tank.batch_items ADD COLUMN IF NOT EXISTS position integer NOT NULL DEFAULT 0;
+
+-- Repair only the three original platform seed pins on boxes that already ran
+-- v1. Never approve a package, alter tenant overrides or overwrite later choices.
+DO $$
+BEGIN
+    PERFORM pg_advisory_xact_lock(hashtextextended('one-door-approved-seeds-v2',0));
+    IF NOT EXISTS (SELECT 1 FROM tank.policy_seeds WHERE name='one-door-approved-seeds-v2') THEN
+        UPDATE tank.policy p SET model='luna',updated_at=now()
+        FROM (VALUES ('base.normalize','1.0.0'),('base.extract','2.0.0'),
+                     ('base.business_data','2.0.0')) AS seed(skill_id,version)
+        WHERE p.tenant_id IS NULL AND p.task_type=seed.skill_id
+          AND p.rung=3 AND p.escalation_model='luna'
+          AND p.model='skill:'||seed.skill_id||'@'||seed.version
+          AND NOT EXISTS (SELECT 1 FROM tank.skills s
+            WHERE s.id=seed.skill_id AND s.version=seed.version AND s.state='approved');
+        INSERT INTO tank.policy_seeds(name) VALUES('one-door-approved-seeds-v2');
+    END IF;
+END $$;

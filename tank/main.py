@@ -659,6 +659,19 @@ class Feedback(BaseModel):
 SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema.sql")
 
 
+async def _warn_unapproved_policy_pins() -> None:
+    async with pool().acquire() as conn:
+        rows = await conn.fetch("""SELECT p.task_type,p.tenant_id,p.model,s.state
+            FROM tank.policy p LEFT JOIN tank.skills s
+              ON s.id=split_part(substr(p.model,7),'@',1)
+              AND s.version=split_part(substr(p.model,7),'@',2)
+            WHERE p.model LIKE 'skill:%' AND s.state IS DISTINCT FROM 'approved'
+            ORDER BY p.task_type,p.tenant_id""")
+    for row in rows:
+        log.warning("Policy pins non-approved skill: task=%s tenant=%s model=%s state=%s; code cannot serve",
+                    row["task_type"], row["tenant_id"] or "platform", row["model"], row["state"] or "missing")
+
+
 @app.on_event("startup")
 async def _startup() -> None:
     """Open the pool, then apply the schema. Every statement in schema.sql is
@@ -689,6 +702,7 @@ async def _startup() -> None:
         _redis = None
     _packages = skala.load_packages()
     await register_packages()
+    await _warn_unapproved_policy_pins()
     global _batch_task
     _batch_task = asyncio.create_task(_batch_loop())
 
@@ -870,19 +884,11 @@ def override_allowed(task_type: str) -> bool:
 
 
 def _plain_value(value: Any) -> Any:
-    """Reduce HTML locally before any model call or learning transcript."""
+    """Drop explicitly labelled HTML fields; never parse or rewrite prompt text."""
     if isinstance(value, dict):
         return {k: _plain_value(v) for k, v in value.items() if str(k).lower() not in {"html", "raw_html"}}
     if isinstance(value, list):
         return [_plain_value(v) for v in value]
-    if not isinstance(value, str):
-        return value
-    if re.search(r"<\s*(?:!doctype|/?[a-z][\w:-]*(?:\s|/?>))", value, re.I):
-        from selectolax.parser import HTMLParser
-        tree = HTMLParser(value)
-        for node in tree.css("script,style,noscript,template"):
-            node.decompose()
-        return tree.text(separator=" ", strip=True)
     return value
 
 
@@ -895,8 +901,60 @@ def _plain_messages(messages: list[dict[str, str]]) -> list[dict[str, str]]:
         except (ValueError, TypeError):
             value = text
         clean = _plain_value(value)
-        result.append({"role": message["role"], "content": clean if isinstance(clean, str) else json.dumps(clean)})
+        # Preserve the original bytes unless labelled HTML fields were removed.
+        result.append({"role": message["role"], "content": text if clean == value else json.dumps(clean)})
     return result
+
+
+def _contains_html(value: Any) -> bool:
+    """Recognize explicit markup, not mathematical '<' text or invented tag names.
+
+    This is a refusal check, never an HTML parser or prompt transformation.
+    Labelled html/raw_html fields are removed separately by _plain_value.
+    """
+    if isinstance(value, dict):
+        return any(_contains_html(v) for v in value.values())
+    if isinstance(value, list):
+        return any(_contains_html(v) for v in value)
+    if not isinstance(value, str):
+        return False
+    tags = "html|head|body|title|script|style|template|div|span|p|a|b|i|em|strong|table|tr|td|th|ul|ol|li|h[1-6]|form|button|section|article|pre|code"
+    attributes = r'''(?:\s+[a-z_:][\w:.-]*\s*=\s*(?:"[^"]*"|'[^']*'))*\s*'''
+    return bool(re.search(
+        rf"<!doctype\s+html\b|<!--.*?-->|<(?P<tag>{tags})(?:\s+[^<>]*?)?>.*?</(?P=tag)\s*>|<(?:br|hr|img|input|meta|link){attributes}/?>",
+        value, re.I | re.S,
+    ))
+
+
+def _storage_mask(value: Any) -> Any:
+    """Never fail a completed call while retaining its transcript; redact on failure."""
+    try:
+        if _contains_html(value):
+            return "[omitted: HTML]"
+        return _screen_mask(_plain_value(value))
+    except Exception:
+        return "[omitted: masking unavailable]"
+
+
+async def _refuse_input(req: RouteRequest, policy: dict[str, Any], error: str,
+                        task_id: uuid.UUID | None = None) -> None:
+    receipt = await _record_local(req, policy, model=str(policy.get("model", "skill")),
+                                  rung=int(policy.get("rung", 3)), content="", outcome="failed",
+                                  error=error, task_id=task_id, masked_messages=[])
+    raise HTTPException(422, {"error": error, "ledger_id": str(receipt.ledger_id),
+                              "receipt": receipt.model_dump(mode="json")})
+
+
+async def _preflight_mask(req: RouteRequest, policy: dict[str, Any], messages: list[dict[str, str]],
+                          task_id: uuid.UUID | None = None) -> Any:
+    try:
+        original = _screen_mask(_plain_messages([m.model_dump() for m in req.messages]))
+        # Include policy/system text before any code or paid execution.
+        _screen_mask(_plain_messages(messages))
+        json.dumps(original)
+        return original
+    except Exception:
+        await _refuse_input(req, policy, "Input could not be masked; no execution was started", task_id)
 
 
 async def _check_route_task(req: RouteRequest, task_id: uuid.UUID | None) -> None:
@@ -919,11 +977,12 @@ async def _check_route_task(req: RouteRequest, task_id: uuid.UUID | None) -> Non
 async def _record_local(req: RouteRequest, policy: dict[str, Any], *, model: str, rung: int,
                         content: str, task_id: uuid.UUID | None = None, outcome: str = "delivered",
                         escalation: list[dict[str, Any]] | None = None, latency_ms: int = 0,
-                        error: str | None = None, route_seat: str | None = None) -> RouteResponse:
+                        error: str | None = None, route_seat: str | None = None,
+                        masked_messages: Any = None) -> RouteResponse:
     ledger_id = uuid.uuid4()
     # Retain an example even for code/cache runs, but never raw identifiers/HTML.
-    clean = _screen_mask(_plain_messages([m.model_dump() for m in req.messages]))
-    output = _screen_mask(_plain_value(content))
+    clean = masked_messages if masked_messages is not None else _storage_mask(_plain_messages([m.model_dump() for m in req.messages]))
+    output = _storage_mask(content)
     async with pool().acquire() as conn:
         async with conn.transaction():
             await conn.execute(
@@ -1082,18 +1141,23 @@ async def run_route(
     if blocked and int(policy["rung"]) not in {3, 4}:
         raise HTTPException(status_code=403, detail=blocked)
 
-    # Validate code ownership/version before either cache reuse or execution.
+    # Validate ownership/version before reuse; an unavailable approval escalates.
+    code_problem = None
     if graduate.is_skill(model):
         parsed = graduate.parse_skill(model)
         pkg = get_package(*parsed)
         await __import__("agent_skills").guard_submission_owner(__import__("sys").modules[__name__], pkg, req.tenant_id)
-        problem = graduate.code_candidate_problem(model, state=await skill_state(*parsed), task_type=pkg.task_type, on_disk=True)
-        if problem:
+        state = await skill_state(*parsed)
+        problem = graduate.code_candidate_problem(model, state=state, task_type=pkg.task_type, on_disk=True)
+        if state != "approved":
+            code_problem = "skill_not_approved"
+        elif problem:
             raise HTTPException(409, problem)
         if int(policy["rung"]) != 3:
             raise HTTPException(409, "A skill policy must start at rung 3")
+    transcript_messages = await _preflight_mask(req, policy, messages, task_id)
     identity = _cache_identity(req, policy, messages, max_tokens, route_seat)
-    if not holds_identifier:
+    if not holds_identifier and code_problem is None:
         hit = await _cache_read(req, policy, identity)
         if hit is not None:
             await _check_route_task(req, task_id)
@@ -1106,8 +1170,8 @@ async def run_route(
     if int(policy["rung"]) == 3:
         started_code = time.perf_counter()
         content = ""
-        reason = "no_code_skill"
-        if graduate.is_skill(model):
+        reason = code_problem or "no_code_skill"
+        if graduate.is_skill(model) and code_problem is None:
             try:
                 async with asyncio.timeout(30):
                     content, _cost = await _run_code_candidate(req, model, messages)
@@ -1122,7 +1186,7 @@ async def run_route(
         if reason is None:
             result = await _record_local(req, policy, model=model, rung=3, content=content, task_id=task_id,
                                          latency_ms=int((time.perf_counter()-started_code)*1000))
-            if not holds_identifier and _screen_mask(_plain_value(content)) == content:
+            if not holds_identifier and _storage_mask(content) == content:
                 await _cache_write(req, policy, identity, result.ledger_id)
             return result
         escalation.append({"from_rung": 3, "to_rung": 2, "reason": reason, "model": model})
@@ -1135,8 +1199,10 @@ async def run_route(
         policy = {**policy, "model": model, "rung": 2}
         generation = case_facts_generation(model) if req.task_type == "zenas.case_facts" else {}
 
-    # Code may parse HTML. Only reduced text may reach a model, including escalation.
+    # Code may parse labelled HTML. Prompt text is never parsed or rewritten.
     messages = _plain_messages(messages)
+    if _contains_html(messages):
+        await _refuse_input(req, policy, "HTML must be supplied in html/raw_html fields with separately extracted text", task_id)
     sent = "\n".join(m["content"] for m in messages)
     blocked = model_call_refusal(sent, model, box=box, tenant_id=str(req.tenant_id),
                                  task_type=req.task_type, caller=caller, skill=req.skill, pool_read=pool_read)
@@ -1227,15 +1293,16 @@ async def run_route(
         _background.add(t)
         t.add_done_callback(_background.discard)
 
+    masked_content = _storage_mask(content)
     if not holds_identifier:
         async with pool().acquire() as conn:
             await conn.execute(
                 "INSERT INTO tank.transcripts (ledger_id,tenant_id,task_type,messages,content) VALUES($1,$2,$3,$4::jsonb,$5)",
                 ledger_id, req.tenant_id, req.task_type,
-                json.dumps(_screen_mask(_plain_messages([m.model_dump() for m in req.messages]))),
-                _screen_mask(_plain_value(content))[:20000],
+                json.dumps(transcript_messages),
+                masked_content[:20000],
             )
-    if content and not holds_identifier and _screen_mask(_plain_value(content)) == content:
+    if content and not holds_identifier and masked_content == content:
         await _cache_write(req, policy, identity, ledger_id)
     return RouteResponse(
         ledger_id=ledger_id, model=answered, rung=policy["rung"], content=content,
@@ -1246,6 +1313,9 @@ async def run_route(
 
 async def _llm(model: str, messages: list[dict[str, str]], max_tokens: int) -> tuple[str, float]:
     messages = _plain_messages(messages)
+    if _contains_html(messages):
+        raise ValueError("HTML is not model input; supply extracted text")
+    _screen_mask(messages)
     await __import__("controls").refuse_paid(path="_llm")
     async with httpx.AsyncClient(timeout=120) as client:
         r = await client.post(
@@ -1491,8 +1561,8 @@ async def _shadow(req: RouteRequest, policy: dict[str, Any], messages: list[dict
         )
         if code:
             await conn.execute("INSERT INTO tank.transcripts(ledger_id,tenant_id,task_type,messages,content) VALUES($1,$2,$3,$4::jsonb,$5)",
-                shadow_ledger, req.tenant_id, req.task_type+"#shadow", json.dumps(_screen_mask(_plain_messages(messages))),
-                _screen_mask(_plain_value(cand_content or ""))[:20000])
+                shadow_ledger, req.tenant_id, req.task_type+"#shadow", json.dumps(_storage_mask(_plain_messages(messages))),
+                _storage_mask(cand_content or "")[:20000])
         await _add_spend(conn, req.task_type, cand_cost)
     await _move_task(req.task_type)
 
@@ -1722,15 +1792,13 @@ async def _code_quotes(conn: Any) -> list[graduate.Quote]:
 
 
 def _screen_mask(value: Any) -> Any:
-    """Mask structured approved examples locally; never send HTML for screening."""
+    """Mask identifiers/email in text without interpreting angle brackets."""
     if isinstance(value, dict):
         return {_screen_mask(k): _screen_mask(v) for k, v in value.items()}
     if isinstance(value, list):
         return [_screen_mask(v) for v in value]
     if not isinstance(value, str):
         return value
-    if re.search(r"<\s*(?:!doctype|/?[a-z][\w:-]*(?:\s|/?>))", value, re.I):
-        raise ValueError("HTML is not a screening example")
     masked = pii_module().detect(value)["text"]
     return re.sub(r"[\w.+-]+@[\w.-]+\.[a-z]{2,}", "[EMAIL]", masked, flags=re.I)
 
@@ -1758,6 +1826,8 @@ async def _screen_cases(conn: Any, task_type: str) -> list[tuple[Any, list[dict[
                 expected = json.loads(expected)
             except json.JSONDecodeError:
                 pass
+        if _contains_html([payload, expected]):
+            continue
         try:
             payload, expected = _screen_mask(payload), _screen_mask(expected)
         except ValueError:
@@ -1794,6 +1864,8 @@ async def _screen_skill(pkg: skala.SkillPackage, cases: list[tuple[Any, list[dic
 async def _screen_model(name: str, task_type: str, cases: list[tuple[Any, list[dict[str, str]], dict[str, Any]]], tolerance: float, max_tokens: int) -> float | None:
     scores: list[float] = []
     for expected, messages, _payload in cases:
+        if _contains_html([messages, expected]):
+            continue
         try:
             messages, expected = _screen_mask(messages), _screen_mask(expected)
         except ValueError:
@@ -2461,7 +2533,7 @@ async def _batch_result(conn: Any, batch: Any, item: Any, result: dict[str, Any]
         )
         await conn.execute("""INSERT INTO tank.transcripts(ledger_id,tenant_id,task_type,messages,content)
             VALUES($1,$2,$3,$4::jsonb,$5)""", ledger_id, req.tenant_id, req.task_type,
-            json.dumps(_screen_mask(_plain_messages([m.model_dump() for m in req.messages]))), _screen_mask(_plain_value(content))[:20000])
+            json.dumps(_storage_mask(_plain_messages([m.model_dump() for m in req.messages]))), _storage_mask(content)[:20000])
         await conn.execute("""UPDATE tank.batch_items SET status='completed',ledger_id=$4,reserved_usd=$5
             WHERE batch_id=$1 AND tenant_id=$2 AND item_id=$3""", batch["id"], req.tenant_id, item["item_id"], ledger_id, actual)
 
@@ -3017,6 +3089,7 @@ async def _run_one_skill(
         if exc.status_code != 404:
             raise
         receipt_policy = {"priority": "standard", "acceptance_window_s": 86400}
+    await _preflight_mask(request, receipt_policy, [m.model_dump() for m in request.messages], ctx.task_id)
     try:
         out = await skala.run_skill(pkg, body.input, ctx)
     except Exception:

@@ -162,6 +162,10 @@ async def collect_ledger(conn, tenant: uuid.UUID) -> None:
         """SELECT l.*,t.messages,t.content FROM tank.ledger l
         JOIN tank.transcripts t ON t.ledger_id=l.id AND t.tenant_id=l.tenant_id
         WHERE l.tenant_id=$1 AND l.region=$2 AND l.outcome='delivered' AND l.task_type NOT LIKE '%#shadow'
+          -- A response whose mask failed still has a receipt, but the storage
+          -- placeholder is not a client answer and must never become training.
+          AND jsonb_typeof(t.messages)='array'
+          AND t.content NOT IN ('[omitted: masking unavailable]','[omitted: HTML]')
           AND (l.feedback='rejected' OR coalesce(l.accept_after,l.ts+interval '1 day')<=now())
           AND NOT EXISTS (SELECT 1 FROM tank.training_pairs p WHERE p.tenant_id=$1 AND p.region=$2
             AND p.source_ref=l.id::text AND p.source=CASE WHEN l.feedback='rejected'
