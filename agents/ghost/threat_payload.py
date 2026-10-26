@@ -79,8 +79,9 @@ class ThreatPayload(Strict):
     schema_version: Literal["ghost.threat.v1"] = SCHEMA_VERSION
     action: ThreatAction
     site: str = Field(min_length=1, max_length=80)
-    kind: Literal["waf_managed", "rate_limit", "block_multipart_post", "challenge_bots"] | None = None
+    kind: Literal["waf_managed", "rate_limit", "block_multipart_post", "challenge_bots", "block_ip", "revoke_sessions"] | None = None
     path: str | None = Field(default=None, max_length=120, pattern=r"^/[A-Za-z0-9._~/-]*$")
+    address: str | None = Field(default=None, max_length=64, pattern=r"^[0-9A-Fa-f:.]*$")
     match_id: str | None = Field(default=None, max_length=200)
     cve_ids: list[str] = Field(default_factory=list, max_length=20)
     severity: ThreatSeverity = ThreatSeverity.unknown
@@ -174,6 +175,7 @@ def threat_to_shield_request(payload: ThreatPayload) -> ShieldRequest:
         site=site,
         kind=payload.kind,
         path=payload.path,
+        address=payload.address,
         match_id=payload.match_id,
         reason=payload.reason or f"triage:{payload.severity.value}",
     )

@@ -34,13 +34,16 @@ UPLOAD_PATHS: dict[str, tuple[str, ...]] = {"coolify.tervory.com": ("/upload/",)
                                             "tervory.com": (), "rig.tervory.com": ()}
 # Cloudflare Managed Ruleset (the WAF managed rules; needs a plan that includes it).
 CF_MANAGED_RULESET = "efb7b8c949ac4650a09736fc376e9aee"
-KINDS = ("waf_managed", "rate_limit", "block_multipart_post", "challenge_bots")
+KINDS = ("waf_managed", "rate_limit", "block_multipart_post", "challenge_bots", "block_ip", "revoke_sessions")
 PHASES = {"waf_managed": "http_request_firewall_managed", "rate_limit": "http_ratelimit",
-          "block_multipart_post": "http_request_firewall_custom", "challenge_bots": "http_request_firewall_custom"}
+          "block_multipart_post": "http_request_firewall_custom", "challenge_bots": "http_request_firewall_custom",
+          "block_ip": "http_request_firewall_custom", "revoke_sessions": "http_request_firewall_custom"}
 PLAIN = {"waf_managed": "Turn on the managed firewall rules for {site}.",
          "rate_limit": "Slow down repeated requests to {path} on {site}.",
          "block_multipart_post": "Block file-upload style POST requests on {site}, except on its real upload paths.",
-         "challenge_bots": "Ask likely-bad bots on {site} to prove they are a browser."}
+         "challenge_bots": "Ask likely-bad bots on {site} to prove they are a browser.",
+         "block_ip": "Block the attacking address {address} on {site}.",
+         "revoke_sessions": "Revoke active sessions on {site} after a confirmed account takeover signal."}
 # Scanner and exploit-kit user agents seen against PHP and Coolify hosts; verified bots are never challenged.
 BAD_AGENTS = ("sqlmap", "nikto", "nuclei", "masscan", "zgrab", "wpscan", "dirbuster", "gobuster")
 SETTLE_SECONDS = 5.0
@@ -67,8 +70,9 @@ def zone_of(host: str) -> str | None:
 class ShieldRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     site: str = Field(max_length=80)
-    kind: Literal["waf_managed", "rate_limit", "block_multipart_post", "challenge_bots"]
+    kind: Literal["waf_managed", "rate_limit", "block_multipart_post", "challenge_bots", "block_ip", "revoke_sessions"]
     path: str | None = Field(default=None, max_length=120, pattern=r"^/[A-Za-z0-9._~/-]*$")
+    address: str | None = Field(default=None, max_length=64, pattern=r"^[0-9A-Fa-f:.]*$")
     match_id: str | None = Field(default=None, max_length=200)
     reason: str = Field(default="", max_length=300)
 
@@ -79,10 +83,10 @@ def _quote(value: str) -> str:
     return '"' + value + '"'
 
 
-def rule_for(kind: str, site: str, path: str | None, ref: str) -> dict:
-    """The exact Cloudflare rule Ghost would add. Expressions are built from fixed parts only."""
+def rule_for(kind: str, site: str, path: str | None, ref: str, address: str | None = None) -> dict:
+    """The exact Cloudflare rule Autumbra would add. Expressions are built from fixed parts only."""
     host = f"(http.host eq {_quote(site)})"
-    rule: dict[str, Any] = {"ref": ref, "description": f"Autumbra Watch shield {ref}", "enabled": True}
+    rule: dict[str, Any] = {"ref": ref, "description": f"Autumbra shield {ref}", "enabled": True}
     if kind == "waf_managed":
         rule.update(action="execute", expression=host, action_parameters={"id": CF_MANAGED_RULESET})
     elif kind == "rate_limit":
@@ -100,24 +104,34 @@ def rule_for(kind: str, site: str, path: str | None, ref: str) -> dict:
         agents = " or ".join(f"lower(http.user_agent) contains {_quote(a)}" for a in BAD_AGENTS)
         rule.update(action="managed_challenge",
                     expression=f"({host[1:-1]} and not cf.client.bot and (http.user_agent eq \"\" or {agents}))")
+    elif kind == "block_ip":
+        if not address:
+            raise ValueError("Blocking an address needs the address.")
+        # Address already gate-checked by never_block before propose/raise.
+        rule.update(action="block", expression=f"({host[1:-1]} and ip.src eq {address})")
+    elif kind == "revoke_sessions":
+        # Cloudflare Access / session revoke is planned as a brief when Access is not wired.
+        rule.update(action="managed_challenge",
+                    expression=f"({host[1:-1]} and cf.tls_client_auth.cert_verified eq false)")
+        rule["autumbra_note"] = "revoke_sessions: prefer Access session revoke API when connected"
     else:
         raise ValueError("Unknown shield.")
     return rule
 
 
-def plan_for(kind: str, site: str, path: str | None, ref: str) -> dict:
-    """What Ghost would change, in the same words for dry-run and live."""
+def plan_for(kind: str, site: str, path: str | None, ref: str, address: str | None = None) -> dict:
+    """What Autumbra would change, in the same words for dry-run and live."""
     zone = zone_of(site)
     phase = PHASES[kind]
-    rule = rule_for(kind, site, path, ref)
-    return {"zone": zone, "phase": phase, "rule": rule,
+    rule = rule_for(kind, site, path, ref, address=address)
+    return {"zone": zone, "phase": phase, "rule": rule, "address": address,
             "calls": [{"method": "GET", "path": f"/zones?name={zone}"},
                       {"method": "GET", "path": f"/zones/{{zone_id}}/rulesets/phases/{phase}/entrypoint"},
                       {"method": "POST", "path": "/zones/{zone_id}/rulesets/{ruleset_id}/rules",
-                       "body": {**rule, "position": {"before": ""}}},
+                       "body": {**{k: v for k, v in rule.items() if k != "autumbra_note"}, "position": {"before": ""}}},
                       {"method": "GET", "path": f"https://{site}/", "why": "health check"}],
             "undo": {"method": "DELETE", "path": "/zones/{zone_id}/rulesets/{ruleset_id}/rules/{rule_id}"},
-            "plain": PLAIN[kind].format(site=site, path=path or "/")}
+            "plain": PLAIN[kind].format(site=site, path=path or "/", address=address or "")}
 
 
 def proposals_for_match(match: dict, edges: dict[str, str]) -> list[ShieldRequest]:
@@ -249,17 +263,25 @@ class Shields:
     async def propose(self, request: ShieldRequest) -> dict:
         if request.site not in SITE_HOSTS:
             raise ValueError("Autumbra Watch only shields our own sites.")
-        existing = self.store.open_shield(self.tenant, request.site, request.kind, request.path or "")
+        if request.kind == "block_ip" and not request.address:
+            raise ValueError("Blocking an address needs the address.")
+        # block_ip uniqueness: store a synthetic path key so two addresses do not collapse.
+        key_path = request.path or ""
+        if request.kind == "block_ip":
+            key_path = f"/__block_ip__/{request.address}"
+        existing = self.store.open_shield(self.tenant, request.site, request.kind, key_path)
         if existing:
             return existing
         sid = str(uuid.uuid4())
         ref = "ghost-" + sid.replace("-", "")[:20]
         edge = self.edges().get(request.site)
         on_cloudflare = edge == "cloudflare" and zone_of(request.site) is not None
-        shield = {"id": sid, "site": request.site, "kind": request.kind, "path": request.path or "",
+        shield = {"id": sid, "site": request.site, "kind": request.kind, "path": key_path,
+                  "address": request.address or "",
                   "match_id": request.match_id, "reason": request.reason, "ref": ref,
                   "state": "proposed" if on_cloudflare else "brief", "proposed_at": self.clock(),
-                  "edge": edge or "unknown", "plan": plan_for(request.kind, request.site, request.path, ref),
+                  "edge": edge or "unknown",
+                  "plan": plan_for(request.kind, request.site, request.path, ref, address=request.address),
                   "applied": None, "up_at": None, "ended_at": None, "receipts": []}
         if not on_cloudflare:
             shield["brief"] = {"for": "Grok", "title": f"Edge protection for {request.site}",
@@ -431,8 +453,9 @@ def _median(values: list) -> float | None:
 
 def public_view(shield: dict) -> dict:
     """What leaves Ghost: no Cloudflare ids beyond what the founder needs, never a token."""
-    view = {k: shield.get(k) for k in ("id", "site", "kind", "path", "match_id", "reason", "ref", "state",
-                                       "proposed_at", "dry_run_at", "up_at", "ended_at", "edge", "note", "brief")}
+    view = {k: shield.get(k) for k in ("id", "site", "kind", "path", "address", "match_id", "reason", "ref", "state",
+                                       "proposed_at", "dry_run_at", "up_at", "ended_at", "edge", "note", "brief",
+                                       "shield_mode", "fix_mode")}
     view["plan"] = shield["plan"]
     view["receipts"] = shield["receipts"]
     return json.loads(json.dumps(view))

@@ -30,6 +30,12 @@ from . import rails as airgap_rails
 from . import watch_oss as watch_oss_room
 from .watch_oss import AnomalyEvent, handoff_threat, propose_from_anomaly
 from . import enforce_oss as enforce_oss_room
+from .client_settings import ClientAutumbraSettings, load_settings, save_settings, active_halves
+from .source_registry import registry_with_weights, sources_accepting_support
+from .webhooks import WebhookRejected, accept_signed, drop_counts
+from .red_team import list_exercises, run_exercise
+from .enforce_lifecycle import plan_create, plan_destroy, receipt_for
+from .owner_email import build_owner_update
 from .probes import Probes
 from .store import Store
 
@@ -499,6 +505,122 @@ def create_app() -> FastAPI:
             "brief": brief.model_dump(mode="json"),
             **result,
         }
+
+
+    # ---------- Autumbra product surfaces (settings, sources, webhooks, lifecycle) ----------
+
+    @app.get("/ghost/autumbra/settings", dependencies=[Depends(require_tank)])
+    async def autumbra_settings_get(tenant_id: str = Query(default=PLATFORM_TENANT)):
+        settings = load_settings(app.state.store, tenant_id)
+        return {"settings": settings.model_dump(), "halves": active_halves(settings),
+                "copy": {"logs": "We read your logs, acted, and deleted them. Nothing from your logs was kept.",
+                         "empty": "No work yet",
+                         "perimeter": "Autumbra watches the edge as events pass. It does not import, copy or store your data."}}
+
+    @app.post("/ghost/autumbra/settings", dependencies=[Depends(require_tank)])
+    async def autumbra_settings_set(request: Request):
+        raw = await bounded_json(request, 8_000)
+        try:
+            data = json.loads(raw.decode("utf-8"))
+            settings = ClientAutumbraSettings.model_validate(data)
+        except Exception:
+            raise HTTPException(422, "Settings were not understood.") from None
+        saved = save_settings(app.state.store, settings)
+        return {"settings": saved.model_dump(), "halves": active_halves(saved)}
+
+    @app.get("/ghost/autumbra/sources", dependencies=[Depends(require_tank)])
+    async def autumbra_sources(tenant_id: str = Query(default=PLATFORM_TENANT)):
+        return {"sources": registry_with_weights(app.state.store, tenant_id),
+                "accepts_support": sources_accepting_support()}
+
+    @app.post("/ghost/autumbra/webhooks/{provider}", dependencies=[Depends(require_tank)])
+    async def autumbra_webhook(provider: str, request: Request):
+        """Signature-checked at the Watch edge before parse. Unsigned dropped, never stored."""
+        raw = await request.body()
+        if len(raw) > 64_000:
+            raise HTTPException(413, "Too large.")
+        signature = request.headers.get("x-autumbra-signature") or request.headers.get("cf-webhook-signature")
+        timestamp = request.headers.get("x-autumbra-timestamp")
+        try:
+            envelope = accept_signed(provider, raw, signature=signature, timestamp=timestamp)
+        except WebhookRejected:
+            return JSONResponse({"accepted": False, "stored": False, "drops": drop_counts()}, status_code=401)
+        # Working memory only — do not persist raw body.
+        return {"accepted": True, "stored": False, "provider": envelope["provider"], "bytes": envelope["bytes"]}
+
+    @app.get("/ghost/autumbra/exercises", dependencies=[Depends(require_tank)])
+    async def autumbra_exercises():
+        return {"exercises": list_exercises(), "note": "Tervory's own sites only; client needs written permission."}
+
+    @app.post("/ghost/autumbra/exercises/run", dependencies=[Depends(require_tank)])
+    async def autumbra_exercise_run(request: Request):
+        raw = await bounded_json(request, 8_000)
+        try:
+            data = json.loads(raw.decode("utf-8"))
+        except Exception:
+            raise HTTPException(422, "Exercise was not understood.") from None
+        tenant_id = str(data.get("tenant_id") or PLATFORM_TENANT)
+        settings = load_settings(app.state.store, tenant_id)
+        try:
+            receipt = run_exercise(
+                str(data.get("exercise_id") or ""),
+                target_site=str(data.get("target_site") or ""),
+                settings=settings,
+                fixture_log=str(data.get("fixture_log") or ""),
+            )
+        except PermissionError as exc:
+            raise HTTPException(403, str(exc)) from None
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from None
+        return receipt
+
+    @app.post("/ghost/autumbra/enforce/plan-create", dependencies=[Depends(require_tank)])
+    async def autumbra_enforce_plan_create(request: Request):
+        raw = await bounded_json(request, 4_000)
+        try:
+            data = json.loads(raw.decode("utf-8"))
+            tenant_id = str(data["tenant_id"])
+            existing = int(data.get("existing_count") or 0)
+        except Exception:
+            raise HTTPException(422, "Create plan was not understood.") from None
+        try:
+            plan = plan_create(tenant_id, existing_count=existing)
+        except (ValueError, RuntimeError) as exc:
+            raise HTTPException(422, str(exc)) from None
+        return {"plan": plan, "receipt": receipt_for(plan)}
+
+    @app.post("/ghost/autumbra/enforce/plan-destroy", dependencies=[Depends(require_tank)])
+    async def autumbra_enforce_plan_destroy(request: Request):
+        raw = await bounded_json(request, 4_000)
+        try:
+            data = json.loads(raw.decode("utf-8"))
+            plan = plan_destroy(str(data["tenant_id"]))
+        except Exception:
+            raise HTTPException(422, "Destroy plan was not understood.") from None
+        return {"plan": plan, "receipt": receipt_for(plan)}
+
+    @app.post("/ghost/autumbra/owner-update", dependencies=[Depends(require_tank)])
+    async def autumbra_owner_update(request: Request):
+        """Build the owner email from receipts in code. No model."""
+        raw = await bounded_json(request, 20_000)
+        try:
+            data = json.loads(raw.decode("utf-8"))
+            settings = ClientAutumbraSettings.model_validate(data["settings"])
+            email = build_owner_update(
+                settings=settings,
+                site_name=str(data.get("site_name") or settings.site_name),
+                threats_found=int(data.get("threats_found") or 0),
+                critical=list(data.get("critical") or []),
+                shield=data.get("shield"),
+                fix_report_url=str(data.get("fix_report_url") or ""),
+                pr_url=str(data.get("pr_url") or ""),
+                undo_fix_url=str(data.get("undo_fix_url") or ""),
+                undo_shield_url=str(data.get("undo_shield_url") or ""),
+                receipt_url=str(data.get("receipt_url") or ""),
+            )
+        except Exception:
+            raise HTTPException(422, "Owner update was not understood.") from None
+        return email
 
     @app.get("/ghost/summary", dependencies=[Depends(require_tank)])
     async def ghost_summary():

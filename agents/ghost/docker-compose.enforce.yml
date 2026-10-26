@@ -1,0 +1,40 @@
+# Per-client Autumbra Enforce. One project per client (Coolify by name).
+# Internal network only. No public ports. No Docker socket. No host mounts.
+# Holds only this client's zone-scoped Cloudflare credential as a named Coolify secret.
+# Substitute TENANT_ID before deploy. Never paste a secret value into this file.
+services:
+  enforce:
+    build:
+      context: ..
+      dockerfile: ghost/Dockerfile
+    restart: unless-stopped
+    mem_limit: 256m
+    cpus: 0.25
+    environment:
+      AGENT_NAME: autumbra-enforce
+      AUTUMBRA_ROLE: enforce
+      TENANT_ID: ${TENANT_ID}
+      # Named secret only — value injected by Coolify; never committed.
+      CLOUDFLARE_API_TOKEN_ENFORCE: ${CLOUDFLARE_API_TOKEN_ENFORCE:-}
+      THREAT_PAYLOAD_QUEUE: ${THREAT_PAYLOAD_QUEUE}
+      DATA_DIR: /data
+      # Enforce never calls a model. No TANK_KEY here on purpose.
+    volumes:
+      - enforce_data:/data
+    networks: [enforce_internal]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    tmpfs: ["/tmp"]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    # No ports: / no expose to public. Reachable only on the internal network + queue.
+volumes:
+  enforce_data:
+networks:
+  enforce_internal:
+    internal: true
+    name: ${ENFORCE_NETWORK_NAME}

@@ -1,4 +1,5 @@
-# Separate Coolify resource, base /agents/ghost, isolated network only.
+# Autumbra Watch — shared, tenant-scoped. Gateway network + browser.
+# Reaches Tank and public threat sources. No Cloudflare write credential.
 # No production DB login, model key, control-plane key or Docker socket.
 services:
   agent-ghost:
@@ -16,8 +17,8 @@ services:
       # GHOST-2 inventory: read-only Coolify API token, by name only. Empty = not connected.
       COOLIFY_TOKEN_GHOST: ${COOLIFY_TOKEN_GHOST:-}
       COOLIFY_URL_GHOST: ${COOLIFY_URL_GHOST:-}
-      # GHOST-2 Shields Up: Cloudflare token limited to zone firewall rules, by name only. Empty = dry-run.
-      CLOUDFLARE_API_TOKEN_GHOST: ${CLOUDFLARE_API_TOKEN_GHOST:-}
+      # Air gap: Watch has NO Cloudflare write credential. Per-client Enforce holds
+      # CLOUDFLARE_API_TOKEN_ENFORCE_<TENANT> by Coolify name only (see docker-compose.enforce.yml).
     volumes:
       - agent_ghost_data:/data
     networks: [gw]
