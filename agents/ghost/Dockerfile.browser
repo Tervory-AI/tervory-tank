@@ -1,8 +1,14 @@
 # Same browser version as the existing Tiger image; private to Ghost.
 FROM mcr.microsoft.com/playwright/python:v1.47.0-jammy@sha256:f3a3d2e0332df4c7b6992db0ad0687df1653efd4671612b8ca1be6ae5fc06448
 WORKDIR /app
-COPY _chassis/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt playwright==1.47.0 \
+COPY _chassis/requirements-ghost-browser.lock ./requirements.lock
+RUN --mount=type=secret,id=system_ca \
+    if [ -s /run/secrets/system_ca ]; then \
+      export PIP_CERT=/run/secrets/system_ca SSL_CERT_FILE=/run/secrets/system_ca \
+        REQUESTS_CA_BUNDLE=/run/secrets/system_ca CURL_CA_BUNDLE=/run/secrets/system_ca \
+        NODE_EXTRA_CA_CERTS=/run/secrets/system_ca GIT_SSL_CAINFO=/run/secrets/system_ca; \
+    fi; \
+    pip install --no-cache-dir --require-hashes -r requirements.lock \
     && mkdir -p /data && chown pwuser:pwuser /data
 COPY ghost /app/ghost
 USER pwuser

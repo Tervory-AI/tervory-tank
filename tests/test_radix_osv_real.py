@@ -153,8 +153,9 @@ def test_dockerfiles_are_collected_from_a_tree(tmp_path: Path) -> None:
 
 def test_osv_is_fetched_only_at_build_and_the_seal_is_unchanged() -> None:
     text = (RADIX / "Dockerfile").read_text(encoding="utf-8")
-    bake_stage, final = text.split("\nFROM python:3.12-slim\n", 1)
-    assert "FROM python:3.12-slim AS osv" in bake_stage
+    base = "python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704"
+    bake_stage, final = text.split(f"\nFROM {base}\n", 1)
+    assert f"FROM {base} AS osv" in bake_stage
     assert "https://osv-vulnerabilities.storage.googleapis.com" in bake_stage
     assert "ADD ${OSV_BUCKET}/PyPI/all.zip" in bake_stage and "ADD ${OSV_BUCKET}/npm/all.zip" in bake_stage
     assert "osv-vulnerabilities" not in final and "all.zip" not in final

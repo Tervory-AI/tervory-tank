@@ -1,0 +1,9 @@
+# Canonical archives of the existing hash-verified GPU sources, including submodules.
+# Created with the exact tar normalization flags in Dockerfile.trellis2.
+flash-attn @ file:///opt/locked-sources/flash-attn.tar --hash=sha256:4076fcd305f744a7c11c88c8381b8fc81336447f18b3df8af23d1fd2628711d7
+nvdiffrast @ file:///opt/locked-sources/nvdiffrast.tar --hash=sha256:10c7b946d96af4e4f7544a5d411d605bcf27c58a41333aeb9fdf3980bc7d4ad1
+nvdiffrec-render @ file:///opt/locked-sources/nvdiffrec.tar --hash=sha256:4c0a01ccfb73e63b4b018ae58a23b58a27b7e61f3b4fe14bc11e225701af118c
+cumesh @ file:///opt/locked-sources/cumesh.tar --hash=sha256:b3c673b78e5218e093236d4a67ce58570aa261a4ae8d1186f752d452c702a080
+flex-gemm @ file:///opt/locked-sources/flexgemm.tar --hash=sha256:37dd975d8567ddc5cce3370ee6ac30e46a7e44f2b2693808c206fb9de5fd20ec
+utils3d @ file:///opt/locked-sources/utils3d.tar --hash=sha256:f9a2915aab5884596989f196fffe3033401da1be6b31296581731a7c20fbcab2
+o-voxel @ file:///opt/locked-sources/trellis2-o-voxel.tar --hash=sha256:1381ff594f1d24e8dc0e10da061807f8450d25bb76a9edc134b596ca65520085

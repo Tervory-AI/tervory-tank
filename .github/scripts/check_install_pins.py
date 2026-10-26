@@ -9,10 +9,24 @@ import re
 import shlex
 import subprocess
 import sys
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]
 DIGEST = re.compile(r"@sha256:[a-f0-9]{64}$")
 PYTHON_PIN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*(?:\[[^]]+\])?==[^\s,;*<>=]+(?:\s*;[^\n]+)?$")
+
+
+def archive_requirement(requirement: str) -> bool:
+    match = re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*\s+@\s+(\S+)", requirement)
+    if not match:
+        return False
+    url = urlsplit(match[1])
+    return (
+        url.scheme in ("https", "file") and not url.username and not url.password
+        and not url.query and not url.fragment
+        and (bool(url.hostname) if url.scheme == "https" else not url.netloc and url.path.startswith("/"))
+        and url.path.endswith((".whl", ".tar", ".tar.gz", ".tar.bz2", ".tar.xz", ".zip"))
+    )
 
 
 def logical_lines(text: str):
@@ -38,7 +52,7 @@ def lock_errors(text: str) -> list[tuple[int, str]]:
             continue
         requirement = re.split(r"\s+--hash=", line, maxsplit=1)[0]
         hashes = re.findall(r"--hash=([^\s]+)", line)
-        if not PYTHON_PIN.fullmatch(requirement) or not hashes or any(
+        if not (PYTHON_PIN.fullmatch(requirement) or archive_requirement(requirement)) or not hashes or any(
             not re.fullmatch(r"sha256:[a-f0-9]{64}", value) for value in hashes
         ):
             errors.append((number, "Python lock entry needs an exact version and SHA256 hashes"))

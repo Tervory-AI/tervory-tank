@@ -1,7 +1,13 @@
 FROM python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704
 WORKDIR /app
-COPY _chassis/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt \
+COPY _chassis/requirements.lock .
+RUN --mount=type=secret,id=system_ca \
+    if [ -s /run/secrets/system_ca ]; then \
+      export PIP_CERT=/run/secrets/system_ca SSL_CERT_FILE=/run/secrets/system_ca \
+        REQUESTS_CA_BUNDLE=/run/secrets/system_ca CURL_CA_BUNDLE=/run/secrets/system_ca \
+        NODE_EXTRA_CA_CERTS=/run/secrets/system_ca GIT_SSL_CAINFO=/run/secrets/system_ca; \
+    fi; \
+    pip install --require-hashes --no-cache-dir -r requirements.lock \
     && useradd --create-home --uid 1000 agent \
     && mkdir -p /data /opt/npm-cache \
     && chown agent:agent /data
@@ -17,8 +23,14 @@ COPY tisan/templates /app/templates
 # Node 22 LTS, pinned to an exact patch. The hashes come from
 # https://nodejs.org/dist/v22.23.4/SHASUMS256.txt; the build fails if the tarball does not match.
 ARG NODE_VERSION=22.23.4
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl xz-utils \
+RUN --mount=type=secret,id=system_ca \
+    if [ -s /run/secrets/system_ca ]; then \
+      export PIP_CERT=/run/secrets/system_ca SSL_CERT_FILE=/run/secrets/system_ca \
+        REQUESTS_CA_BUNDLE=/run/secrets/system_ca CURL_CA_BUNDLE=/run/secrets/system_ca \
+        NODE_EXTRA_CA_CERTS=/run/secrets/system_ca GIT_SSL_CAINFO=/run/secrets/system_ca; \
+    fi; \
+    apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates=20250419+deb13u1 curl=8.14.1-2+deb13u7 xz-utils=5.8.1-1+deb13u2 \
     && arch="$(uname -m)" \
     && case "$arch" in \
          x86_64) node_arch=x64; node_sha256=1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce ;; \

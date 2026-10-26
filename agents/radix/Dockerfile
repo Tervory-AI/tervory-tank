@@ -27,14 +27,21 @@ ARG PIP_AUDIT_VERSION=2.10.1
 ARG TARGETARCH
 
 WORKDIR /app
-COPY _chassis/requirements.txt .
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl git tar \
-    && pip install --no-cache-dir -r requirements.txt \
+COPY _chassis/requirements.lock .
+COPY _chassis/requirements-semgrep.lock _chassis/requirements-audit.lock /tmp/
+RUN --mount=type=secret,id=system_ca \
+    if [ -s /run/secrets/system_ca ]; then \
+      export PIP_CERT=/run/secrets/system_ca SSL_CERT_FILE=/run/secrets/system_ca \
+        REQUESTS_CA_BUNDLE=/run/secrets/system_ca CURL_CA_BUNDLE=/run/secrets/system_ca \
+        NODE_EXTRA_CA_CERTS=/run/secrets/system_ca GIT_SSL_CAINFO=/run/secrets/system_ca; \
+    fi; \
+    apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates=20250419+deb13u1 curl=8.14.1-2+deb13u7 git=1:2.47.3-0+deb13u1 tar=1.35+dfsg-3.1 \
+    && pip install --require-hashes --no-cache-dir -r requirements.lock \
     && python -m venv /opt/semgrep \
-    && /opt/semgrep/bin/pip install --no-cache-dir "semgrep==${SEMGREP_VERSION}" \
+    && /opt/semgrep/bin/pip install --require-hashes --no-cache-dir -r /tmp/requirements-semgrep.lock \
     && python -m venv /opt/audit \
-    && /opt/audit/bin/pip install --no-cache-dir "pip-audit==${PIP_AUDIT_VERSION}" \
+    && /opt/audit/bin/pip install --require-hashes --no-cache-dir -r /tmp/requirements-audit.lock \
     && arch="${TARGETARCH:-amd64}" \
     && case "$arch" in \
          amd64) gl_arch=x64; gl_sha="${GITLEAKS_SHA_X64}" ;; \

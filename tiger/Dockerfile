@@ -2,8 +2,14 @@
 # runs its JavaScript and waits for it to settle. Internal only; Tank's skills call it.
 FROM mcr.microsoft.com/playwright/python:v1.47.0-jammy@sha256:f3a3d2e0332df4c7b6992db0ad0687df1653efd4671612b8ca1be6ae5fc06448
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.lock .
+RUN --mount=type=secret,id=system_ca \
+    if [ -s /run/secrets/system_ca ]; then \
+      export PIP_CERT=/run/secrets/system_ca SSL_CERT_FILE=/run/secrets/system_ca \
+        REQUESTS_CA_BUNDLE=/run/secrets/system_ca CURL_CA_BUNDLE=/run/secrets/system_ca \
+        NODE_EXTRA_CA_CERTS=/run/secrets/system_ca GIT_SSL_CAINFO=/run/secrets/system_ca; \
+    fi; \
+    pip install --require-hashes --no-cache-dir -r requirements.lock
 # Playwright 1.47's driver bundles Node 20.17.0, which no longer gets security fixes.
 # Install Node 22 LTS (exact patch, SHA256 from https://nodejs.org/dist/v22.23.4/SHASUMS256.txt;
 # the build fails on a mismatch) and point Playwright at it with PLAYWRIGHT_NODEJS_PATH.
@@ -24,8 +30,14 @@ RUN arch="$(uname -m)" \
     && /usr/local/bin/node -v | grep -qx "v${NODE_VERSION}" \
     && "$driver/node" -v | grep -qx "v${NODE_VERSION}"
 ENV PLAYWRIGHT_NODEJS_PATH=/usr/local/bin/node
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends tesseract-ocr \
+RUN --mount=type=secret,id=system_ca \
+    if [ -s /run/secrets/system_ca ]; then \
+      export PIP_CERT=/run/secrets/system_ca SSL_CERT_FILE=/run/secrets/system_ca \
+        REQUESTS_CA_BUNDLE=/run/secrets/system_ca CURL_CA_BUNDLE=/run/secrets/system_ca \
+        NODE_EXTRA_CA_CERTS=/run/secrets/system_ca GIT_SSL_CAINFO=/run/secrets/system_ca; \
+    fi; \
+    apt-get update \
+    && apt-get install -y --no-install-recommends tesseract-ocr=4.1.1-2.1build1 \
     && rm -rf /var/lib/apt/lists/*
 COPY app.py pool.py ocr.py ./
 EXPOSE 3000

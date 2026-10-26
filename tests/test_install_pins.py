@@ -83,6 +83,30 @@ def node_manifests():
     return package, lock
 
 
+def test_source_archive_locks_require_hashes_and_reject_editable_directories():
+    for location in ("file:///opt/locked-sources/cumesh.tar", "https://example.org/source.tar.gz"):
+        requirement = "cumesh @ " + location
+        assert pins.lock_errors(requirement)
+        assert not pins.lock_errors(requirement + " --hash=sha256:" + "a" * 64)
+    for location in ("file:///opt/cumesh", "git+https://example.org/source.git", "https://example.org/source.tar.gz?download=1"):
+        assert pins.lock_errors("cumesh @ " + location + " --hash=sha256:" + "a" * 64)
+
+
+def test_secrets_workflow_covers_docs_only_pull_requests():
+    import yaml
+
+    workflow = yaml.safe_load((SCRIPT.parents[2] / ".github/workflows/secrets.yml").read_text())
+    triggers = workflow.get("on", workflow.get(True))
+    assert "pull_request" in triggers
+    assert not triggers["pull_request"]
+    job = workflow["jobs"]["gitleaks"]
+    assert "if" not in job and not job.get("continue-on-error")
+    scan = next(step for step in job["steps"] if step.get("name") == "Gitleaks")
+    assert "if" not in scan and not scan.get("continue-on-error")
+    assert "sha256sum --check --status" in scan["run"]
+    assert "--redact" in scan["run"] and "--exit-code 1" in scan["run"]
+
+
 def test_node_requires_transitive_integrity_and_manifest_agreement():
     package, lock = node_manifests()
     assert not pins.node_lock_errors(package, lock)
