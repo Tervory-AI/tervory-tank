@@ -112,4 +112,5 @@ def test_image_packages_route_and_fixtures():
     assert 'COPY radix/gold_sources.py /app/gold_sources.py' in dockerfile
     assert 'COPY radix/evals/gold /app/evals/gold' in dockerfile
     from test_rx1_scans import _load_app
-    assert '/gold/candidates' in {route.path for route in _load_app().app.routes}
+    from http_routes import http_paths
+    assert '/gold/candidates' in http_paths(_load_app().app.routes)

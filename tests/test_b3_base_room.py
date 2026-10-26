@@ -366,7 +366,9 @@ def test_room_is_wired_and_client_queries_are_tenant_scoped() -> None:
     image = (ROOT / "agents" / "base" / "Dockerfile").read_text(encoding="utf-8")
     assert "pipeline.py" in image and "room.py" in image and "app.py" in image
 
-    paths = {getattr(route, "path", "") for route in base_app.app.routes}
+    from http_routes import http_paths
+
+    paths = http_paths(base_app.app.routes)
     for path in ("/v1/base/run", "/v1/base/retry", "/v1/base/rerun", "/v1/base/batches", "/v1/base/engines", "/v1/base/records", "/health"):
         assert path in paths
     assert base_app.app.state.handlers.keys() == {"ping", "gold.nightly"}

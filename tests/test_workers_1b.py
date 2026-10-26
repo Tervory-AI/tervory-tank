@@ -272,7 +272,9 @@ def test_tank_panel_reads_the_heartbeat_not_the_old_workers_url(monkeypatch: pyt
 
 
 def test_the_workers_route_is_get_only_and_keyed() -> None:
-    routes = [r for r in main.app.routes if getattr(r, "path", "") == "/v1/workers"]
+    from http_routes import iter_http_routes
+
+    routes = [r for r in iter_http_routes(main.app.routes) if r.path == "/v1/workers"]
     assert len(routes) == 1
     assert routes[0].methods == {"GET"}
     assert any(dep.call is main.require_key for dep in routes[0].dependant.dependencies)

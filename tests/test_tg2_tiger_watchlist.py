@@ -119,7 +119,9 @@ def test_tiger_routes_use_the_workspace_key(monkeypatch: pytest.MonkeyPatch) -> 
 
     monkeypatch.setenv("TANK_KEY_TIGER", "tiger-secret")
     paths: dict[str, set[str]] = {}
-    for route in tank.app.routes:
+    from http_routes import iter_http_routes
+
+    for route in iter_http_routes(tank.app.routes):
         path = getattr(route, "path", "")
         if not str(path).startswith("/v1/tiger"):
             continue
