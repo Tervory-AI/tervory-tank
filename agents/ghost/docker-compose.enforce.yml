@@ -1,4 +1,5 @@
 # Per-client Autumbra Enforce. One project per client (Coolify by name).
+# Own entrypoint: ghost.enforce_app:app — NOT ghost.app. No TANK_KEY.
 # Internal network only. No public ports. No Docker socket. No host mounts.
 # Optional edge credential: secret NAME held until a real connected edge client (agnostic; no CF name yet).
 # mem_limit below is a provisional placeholder — replace after ops/autumbra-enforce-memory-measure.sh on test host.
@@ -8,6 +9,7 @@ services:
     build:
       context: ..
       dockerfile: ghost/Dockerfile
+    command: ["uvicorn", "ghost.enforce_app:app", "--host", "127.0.0.1", "--port", "8000", "--no-access-log"]
     restart: unless-stopped
     # PROVISIONAL until dogfood RSS measured — do not treat 256m as the founder cap
     mem_limit: 256m

@@ -15,6 +15,7 @@ from agents.ghost.enforce_lifecycle import (
     plan_destroy,
     receipt_for,
 )
+from agents.ghost.fixture_edge import FixtureEdgeControl
 from agents.ghost.perimeter import assert_no_client_payload, stack_inventory_only
 from agents.ghost.rails import ensure_threat_payload_before_enforce
 from agents.ghost.speed_budgets import budgets_ok
@@ -30,6 +31,8 @@ def test_two_fixture_clients_isolated_plans():
     b = plan_create(TENANT_B, existing_count=1)
     assert_tenant_isolation(a, b)
     assert a["network"]["internal"] is True
+    assert a["volume"] != b["volume"]
+    assert a["entrypoint"] == "ghost.enforce_app:app"
     assert a["isolation"]["shares_network_with_tank"] is False
     assert a["isolation"]["public_internet"] is False
     assert a["credential_secret_name"] is None  # held until real edge client
@@ -106,9 +109,10 @@ def test_airgap_injection_quarantines_enforce_sees_fields_only():
         shield_mode=ApplyMode.approve_each,
         site_name="coolify.tervory.com",
     )
-    receipt = apply_from_payload(payload, settings=settings, decision_seconds=0.05, apply_seconds=0.2, health_seconds=0.3)
+    receipt = apply_from_payload(payload, settings=settings)
     assert receipt["raw_log_seen"] is False
     assert receipt["outcome"] == "awaiting_approval"
+    assert receipt["applied"] is False
     assert "ignore previous" not in json.dumps(receipt)
     ok, fails = budgets_ok(receipt)
     assert ok, fails

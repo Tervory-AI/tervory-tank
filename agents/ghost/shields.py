@@ -1,12 +1,9 @@
-"""GHOST-2 Shields Up v1: safe, reversible edge shields for our own Cloudflare-fronted sites.
+"""GHOST-2 Shields Up: propose / dry-run / withdraw for Autumbra Watch.
 
-Every shield follows the same steps: proposed -> the founder taps Shield -> applied through the
-Cloudflare API -> health check straight after -> undone automatically if the site fails. One-tap
-Undo removes it. Every step has a receipt.
-
-Dry-run is the default: with CLOUDFLARE_API_TOKEN_GHOST empty, Ghost shows exactly what it would
-change and makes no network call at all (not even the health check). Sites not on Cloudflare, and
-anything on our own hosts, become a written brief for Grok; Ghost never touches a host.
+Watch has no edge write credential and never calls a provider API. Founder tap
+moves a proposal to dry_run (shows the plan) or withdrawn. Live apply/undo of
+shields runs in per-client Enforce against a fixture control until a real
+connected hand exists. Every step has a receipt.
 """
 from __future__ import annotations
 
@@ -24,10 +21,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from .inventory import WATCHED_SITES
 from .models import PLATFORM_TENANT
 
-CF_API = "https://api.cloudflare.com/client/v4"
-TOKEN_ENV = "CLOUDFLARE_API_TOKEN_GHOST"
-# Named zones only. A host outside these is never sent to Cloudflare.
+# Named zones only — plan shape for dogfood own sites. Watch does not write.
 ALLOWED_ZONES = frozenset({"tervory.com"})
+# Historical env name kept so older tests can clear it; Watch never reads it for writes.
+TOKEN_ENV = "CLOUDFLARE_API_TOKEN_GHOST"
+CF_API = ""  # No Watch write path to any edge API.
 SITE_HOSTS = frozenset(WATCHED_SITES.values())
 # Paths that legitimately take file uploads; the multipart block leaves them alone.
 UPLOAD_PATHS: dict[str, tuple[str, ...]] = {"coolify.tervory.com": ("/upload/",), "app.tervory.com": ("/api/upload",),
@@ -54,11 +52,12 @@ def now_iso() -> str:
 
 
 def token() -> str:
-    return os.environ.get(TOKEN_ENV, "").strip()
+    """Watch never holds an edge write credential (ignores TOKEN_ENV)."""
+    return ""
 
 
 def mode() -> str:
-    return "live" if token() else "dry_run"
+    return "dry_run"
 
 
 def zone_of(host: str) -> str | None:
@@ -158,64 +157,26 @@ class CloudflareError(RuntimeError):
 
 
 class Cloudflare:
-    """api.cloudflare.com only, the named zones only, rules only. The token never leaves this class."""
+    """Removed Watch write path. Instantiating or calling raises.
+
+    Live edge apply lives in Autumbra Enforce (fixture control until a real hand).
+    """
 
     def __init__(self, http, api_token: str):
-        if not api_token:
-            raise CloudflareError("The edge network is not connected.")
-        self.http, self._token = http, api_token
+        raise CloudflareError("Autumbra Watch has no edge write path.")
 
     async def call(self, method: str, path: str, *, params=None, body=None) -> Any:
-        if method not in {"GET", "POST", "PUT", "DELETE"} or not path.startswith("/zones"):
-            raise CloudflareError("Autumbra Watch only edits firewall rules in named zones.")
-        url = CF_API + path
-        if urlparse(url).hostname != "api.cloudflare.com":
-            raise CloudflareError("Autumbra Watch only talks to the edge network.")
-        try:
-            response = await self.http.request(method, url, params=params, json=body, timeout=30, follow_redirects=False,
-                                               headers={"Authorization": f"Bearer {self._token}",
-                                                        "Content-Type": "application/json"})
-        except Exception:
-            raise CloudflareError("The edge network did not answer.") from None
-        if response.status_code == 404:
-            return None
-        try:
-            data = response.json()
-        except ValueError:
-            raise CloudflareError("The edge network sent something unreadable.") from None
-        if response.status_code >= 400 or not isinstance(data, dict) or not data.get("success"):
-            raise CloudflareError("The edge network refused the change.")
-        return data.get("result")
+        raise CloudflareError("Autumbra Watch has no edge write path.")
 
     async def zone_id(self, zone: str) -> str:
-        if zone not in ALLOWED_ZONES:
-            raise CloudflareError("That zone is not one Autumbra Watch may change.")
-        result = await self.call("GET", "/zones", params={"name": zone})
-        ids = [z.get("id") for z in result or [] if isinstance(z, dict) and z.get("name") == zone]
-        if len(ids) != 1 or not re.fullmatch(r"[0-9a-f]{32}", str(ids[0])):
-            raise CloudflareError("The zone was not found.")
-        return ids[0]
+        raise CloudflareError("Autumbra Watch has no edge write path.")
 
     async def add_rule(self, zone_id: str, phase: str, rule: dict) -> tuple[str, str]:
-        entry = await self.call("GET", f"/zones/{zone_id}/rulesets/phases/{phase}/entrypoint")
-        if entry is None:
-            # No entry point yet: create it holding only our rule (nothing else to overwrite).
-            result = await self.call("PUT", f"/zones/{zone_id}/rulesets/phases/{phase}/entrypoint",
-                                     body={"rules": [rule]})
-        else:
-            result = await self.call("POST", f"/zones/{zone_id}/rulesets/{entry['id']}/rules",
-                                     body={**rule, "position": {"before": ""}})
-        ruleset = (result or {}).get("id")
-        ours = [r.get("id") for r in (result or {}).get("rules") or [] if r.get("ref") == rule["ref"]]
-        if not ruleset or len(ours) != 1:
-            raise CloudflareError("The change could not be confirmed.")
-        return ruleset, ours[0]
+        raise CloudflareError("Autumbra Watch has no edge write path.")
 
     async def delete_rule(self, zone_id: str, ruleset_id: str, rule_id: str) -> None:
-        for value in (zone_id, ruleset_id, rule_id):
-            if not re.fullmatch(r"[0-9a-f]{32}", value):
-                raise CloudflareError("Invalid rule reference.")
-        await self.call("DELETE", f"/zones/{zone_id}/rulesets/{ruleset_id}/rules/{rule_id}")
+        raise CloudflareError("Autumbra Watch has no edge write path.")
+
 
 
 async def site_health(http, site: str) -> bool:
@@ -339,55 +300,25 @@ class Shields:
         await self.propose_for_matches()
 
     async def raise_shield(self, shield_id: str) -> dict:
+        """Watch dry-run only. Live apply is Enforce + fixture/real hand."""
         shield = self.store.shield(self.tenant, shield_id)
         if shield is None:
             raise LookupError("Shield not found.")
         if shield["state"] not in {"proposed", "dry_run"}:
             return shield
-        if not token():
-            # Dry-run: show exactly what would change. No network call of any kind.
-            shield["state"], shield["dry_run_at"] = "dry_run", self.clock()
-            await self._receipt(shield, "dry_run", "delivered")
-            return shield
-        if not await self.health(shield["site"]):
-            shield["state"], shield["ended_at"] = "refused", self.clock()
-            shield["note"] = "The site was already failing its health check, so the shield was not raised."
-            await self._receipt(shield, "refused", "failed")
-            return shield
-        cf = Cloudflare(self.http, token())
-        plan = shield["plan"]
-        try:
-            zone_id = await cf.zone_id(plan["zone"])
-            ruleset_id, rule_id = await cf.add_rule(zone_id, plan["phase"], plan["rule"])
-        except CloudflareError as error:
-            shield["state"], shield["note"] = "failed", str(error)
-            await self._receipt(shield, "failed", "failed")
-            return shield
-        shield["applied"] = {"zone_id": zone_id, "ruleset_id": ruleset_id, "rule_id": rule_id}
-        shield["state"], shield["up_at"] = "up", self.clock()
-        await self._receipt(shield, "applied", "delivered")
-        await self.pause(SETTLE_SECONDS)
-        healthy = await self.health(shield["site"])
-        if healthy:
-            await self.pause(SETTLE_SECONDS)
-            healthy = await self.health(shield["site"])
-        if healthy:
-            await self._receipt(shield, "health_passed", "delivered")
-            return shield
-        await self._receipt(shield, "health_failed", "failed")
-        return await self._take_down(shield, "auto_undone")
+        # Dry-run: show exactly what would change. No provider network call.
+        shield["state"], shield["dry_run_at"] = "dry_run", self.clock()
+        await self._receipt(shield, "dry_run", "delivered")
+        return shield
 
     async def _take_down(self, shield: dict, state: str) -> dict:
-        applied = shield["applied"]
-        try:
-            await Cloudflare(self.http, token()).delete_rule(applied["zone_id"], applied["ruleset_id"], applied["rule_id"])
-        except CloudflareError:
-            shield["state"], shield["ended_at"] = "undo_failed", self.clock()
-            shield["note"] = f"Autumbra Watch could not remove rule {shield['ref']}. Remove it by hand in the firewall rules."
-            await self._receipt(shield, "undo_failed", "failed")
-            return shield
-        shield["state"], shield["ended_at"] = state, self.clock()
-        await self._receipt(shield, state, "delivered")
+        """Watch cannot take down a live edge rule — no write path."""
+        shield["state"], shield["ended_at"] = "undo_failed", self.clock()
+        shield["note"] = (
+            f"Autumbra Watch has no edge write path for rule {shield['ref']}. "
+            "Undo live shields from Enforce."
+        )
+        await self._receipt(shield, "undo_failed", "failed")
         return shield
 
     async def undo(self, shield_id: str) -> dict:
@@ -399,10 +330,6 @@ class Shields:
             await self._receipt(shield, "withdrawn", "delivered")
             return shield
         if shield["state"] not in {"up", "undo_failed"} or not shield.get("applied"):
-            return shield
-        if not token():
-            shield["note"] = "The edge network is not connected, so the rule must be removed by hand."
-            self.store.save_shield(self.tenant, shield)
             return shield
         return await self._take_down(shield, "undone")
 
@@ -423,7 +350,7 @@ class Shields:
             mid = s.get("match_id")
             if mid not in flagged:
                 continue
-            # Live apply, or founder Shield tap in dry-run (dogfood default when CF token empty).
+            # Founder Shield tap in dry-run (Watch never writes the edge).
             stamped = None
             if s.get("up_at") and s["state"] in {"up", "undone"}:
                 stamped = s["up_at"]

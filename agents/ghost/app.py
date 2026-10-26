@@ -39,12 +39,11 @@ from .client_settings import (
     save_settings,
     set_hand,
 )
-from .market_lab_intel import accept_ioc_bundle, receipt_for_bundle_consume
-from .source_registry import backend_status as intel_backend_status
+from .market_lab_intel import accept_ioc_bundle, backend_status as intel_backend_status, receipt_for_bundle_consume
 from .webhooks import WebhookRejected, accept_signed, drop_counts
 from .red_team import list_exercises, run_exercise
-from .enforce_lifecycle import plan_create, plan_destroy, receipt_for
-from .owner_email import build_owner_update
+from .enforce_lifecycle import FixtureComposeBackend, plan_create, plan_destroy, receipt_for
+from .owner_email import DEFAULT_FIXTURE_TRANSPORT, build_owner_update, send_owner_update
 from .probes import Probes
 from .store import Store
 
@@ -269,7 +268,7 @@ def create_app() -> FastAPI:
         rows = app.state.store.matches(PLATFORM_TENANT, None if state == "all" else state)
         return {"matches": rows, "last_cycle": app.state.store.get_state(PLATFORM_TENANT, "last_cycle")}
 
-    # ---------- GHOST-2 D3: Shields Up (dry-run unless CLOUDFLARE_API_TOKEN_GHOST is set) ----------
+    # ---------- GHOST-2 D3: Shields Up (Watch dry-run only; live apply is Enforce) ----------
 
     @app.get("/ghost/shields", dependencies=[Depends(require_tank)])
     async def shields_list():
@@ -516,7 +515,7 @@ def create_app() -> FastAPI:
         }
 
 
-    # ---------- Autumbra product surfaces (settings, sources, webhooks, lifecycle) ----------
+    # ---------- Autumbra product surfaces (settings, intel consume, webhooks, lifecycle) ----------
 
     @app.get("/ghost/autumbra/settings", dependencies=[Depends(require_tank)])
     async def autumbra_settings_get(tenant_id: str = Query(default=PLATFORM_TENANT)):
@@ -538,11 +537,20 @@ def create_app() -> FastAPI:
         except Exception:
             raise HTTPException(422, "Settings were not understood.") from None
         saved = save_settings(app.state.store, settings)
+        receipt = {
+            "product": "Autumbra",
+            "kind": "settings_change",
+            "tenant_id": saved.tenant_id,
+            "shield_mode": saved.shield_mode.value,
+            "fix_mode": saved.fix_mode.value,
+            "undo": {"restore_defaults": True},
+        }
         return {
             "settings": saved.model_dump(),
             "halves": active_halves(saved),
             "hands": list_hands(saved),
             "copy": connect_copy(saved),
+            "receipt": receipt,
         }
 
     @app.get("/ghost/autumbra/hands", dependencies=[Depends(require_tank)])
@@ -657,13 +665,21 @@ def create_app() -> FastAPI:
             data = json.loads(raw.decode("utf-8"))
             tenant_id = str(data["tenant_id"])
             existing = int(data.get("existing_count") or 0)
+            execute = bool(data.get("execute"))
         except Exception:
             raise HTTPException(422, "Create plan was not understood.") from None
         try:
             plan = plan_create(tenant_id, existing_count=existing)
         except (ValueError, RuntimeError) as exc:
             raise HTTPException(422, str(exc)) from None
-        return {"plan": plan, "receipt": receipt_for(plan)}
+        if execute:
+            root = os.environ.get("AUTUMBRA_FIXTURE_COMPOSE_ROOT", "").strip()
+            if not root:
+                raise HTTPException(422, "Fixture compose root is not configured.")
+            receipt = FixtureComposeBackend(Path(root)).create(plan)
+        else:
+            receipt = receipt_for(plan)
+        return {"plan": plan, "receipt": receipt}
 
     @app.post("/ghost/autumbra/enforce/plan-destroy", dependencies=[Depends(require_tank)])
     async def autumbra_enforce_plan_destroy(request: Request):
@@ -671,13 +687,21 @@ def create_app() -> FastAPI:
         try:
             data = json.loads(raw.decode("utf-8"))
             plan = plan_destroy(str(data["tenant_id"]))
+            execute = bool(data.get("execute"))
         except Exception:
             raise HTTPException(422, "Destroy plan was not understood.") from None
-        return {"plan": plan, "receipt": receipt_for(plan)}
+        if execute:
+            root = os.environ.get("AUTUMBRA_FIXTURE_COMPOSE_ROOT", "").strip()
+            if not root:
+                raise HTTPException(422, "Fixture compose root is not configured.")
+            receipt = FixtureComposeBackend(Path(root)).destroy(plan)
+        else:
+            receipt = receipt_for(plan)
+        return {"plan": plan, "receipt": receipt}
 
     @app.post("/ghost/autumbra/owner-update", dependencies=[Depends(require_tank)])
     async def autumbra_owner_update(request: Request):
-        """Build the owner email from receipts in code. No model."""
+        """Build the owner email from receipts in code and call the sender. No model."""
         raw = await bounded_json(request, 20_000)
         try:
             data = json.loads(raw.decode("utf-8"))
@@ -693,10 +717,13 @@ def create_app() -> FastAPI:
                 undo_fix_url=str(data.get("undo_fix_url") or ""),
                 undo_shield_url=str(data.get("undo_shield_url") or ""),
                 receipt_url=str(data.get("receipt_url") or ""),
+                checks_run=data.get("checks_run"),
             )
+            to = str(data.get("to") or settings.owner_email or "owner@example.test")
         except Exception:
             raise HTTPException(422, "Owner update was not understood.") from None
-        return email
+        sent = send_owner_update(email, to=to, transport=DEFAULT_FIXTURE_TRANSPORT)
+        return {**email, **sent}
 
     @app.get("/ghost/summary", dependencies=[Depends(require_tank)])
     async def ghost_summary():

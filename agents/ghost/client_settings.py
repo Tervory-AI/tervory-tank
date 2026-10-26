@@ -26,6 +26,7 @@ class ClientAutumbraSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
     tenant_id: str = Field(min_length=1, max_length=80)
     site_name: str = Field(default="", max_length=120)
+    owner_email: str = Field(default="", max_length=200)
     # Separately for shields and for code fixes.
     shield_mode: ApplyMode = DEFAULT_MODE
     fix_mode: ApplyMode = DEFAULT_MODE
