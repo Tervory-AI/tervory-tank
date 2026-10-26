@@ -86,17 +86,18 @@ const OWN_SHELL = [
   "/zenas",
   "/skala",
   "/tank",
+  "/moot",
 ] as const;
 
-/** Only auth keeps nested Clerk screens under the same own-shell root. */
-const OWN_SHELL_NESTED = new Set<string>(["/sign-in", "/sign-up"]);
+/** Auth Clerk screens and Moot watch keep nested paths under the same own-shell root. */
+const OWN_SHELL_NESTED = new Set<string>(["/sign-in", "/sign-up", "/moot"]);
 
 export function cleanPath(pathname: string): string {
   if (!pathname) return "/";
   return pathname.length > 1 && pathname.endsWith("/") ? pathname.slice(0, -1) : pathname;
 }
 
-/** Auth and Figma squad product roots skip the workspace sidebar. Nested founder pages like /zenas/feeds and /skala/gold stay on it. */
+/** Auth, Figma squad product roots, and Moot watch (zenas.tervory.com host root) skip the workspace sidebar. Nested founder pages like /zenas/feeds and /skala/gold stay on it. */
 export function usesOwnShell(pathname: string): boolean {
   const path = cleanPath(pathname);
   return OWN_SHELL.some((route) => path === route || (OWN_SHELL_NESTED.has(route) && path.startsWith(`${route}/`)));

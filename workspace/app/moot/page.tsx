@@ -8,18 +8,21 @@ export const metadata: Metadata = {
   description: "Public Moot watch — text edition. Training only; nothing here is a filed matter.",
 };
 
-/** Public Moot index on zenas.tervory.com (product host). */
+/** Public Moot index on zenas.tervory.com (product host). Own shell — no workspace sidebar. */
 export default function MootIndexPage() {
   const rows = listPublishedMatches();
   return (
     <main className="moot-watch" aria-label="Moot Court">
+      <header className="moot-brand">
+        <Link href="/zenas" className="moot-brand-link" aria-label="Zenas panel">
+          <img src="/brand/zenas-on-dark.png" alt="Zenas" width={197} height={70} />
+        </Link>
+        <Link href="/zenas" className="moot-panel-link">Open Zenas panel</Link>
+      </header>
       <h1>Moot Court</h1>
       <p>
         This is where Zenas trains in text. Public watch pages only — nothing spoken here yet.
         Law students will use it later, for free.
-      </p>
-      <p>
-        Full Zenas panel: <Link href="/zenas">zenas.tervory.com/zenas</Link>
       </p>
       <section aria-label="Published matches">
         <h2>Published matches</h2>

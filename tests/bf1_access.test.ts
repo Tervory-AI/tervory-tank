@@ -38,7 +38,7 @@ test("the sidebar keeps Billing, and Skala and Tank stay in the founder squad li
 });
 
 test("auth and squad product roots skip the workspace shell; shared pages keep it", () => {
-  for (const path of ["/sign-in", "/sign-in/", "/sign-in/factor-one", "/sign-up", "/sign-up/verify", "/base", "/tiger", "/market-lab", "/market-lab/", "/rig", "/tisan", "/radix", "/zenas", "/skala", "/tank"]) {
+  for (const path of ["/sign-in", "/sign-in/", "/sign-in/factor-one", "/sign-up", "/sign-up/verify", "/base", "/tiger", "/market-lab", "/market-lab/", "/rig", "/tisan", "/radix", "/zenas", "/skala", "/tank", "/moot", "/moot/", "/moot/fixture-published"]) {
     assert.equal(usesOwnShell(path), true, path);
   }
   for (const path of ["/", "/tasks", "/data", "/ledger", "/billing", "/admin", "/review", "/onboarding", "/onboarding/", "/prices", "/matters", "/zenas/feeds", "/skala/gold"]) {

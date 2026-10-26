@@ -44,3 +44,29 @@
   color: #0b3d91;
   word-break: break-word;
 }
+
+.moot-brand {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.25rem;
+  margin: 0 0 1.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #c9d2dc;
+}
+.moot-brand img {
+  display: block;
+  height: 40px;
+  width: auto;
+  background: #0b1c2c;
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+}
+.moot-brand-link {
+  text-decoration: none;
+}
+.moot-panel-link {
+  font-family: system-ui, sans-serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
