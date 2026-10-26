@@ -96,7 +96,7 @@ def everything(store, receipts, *responses):
 
 @pytest.mark.asyncio
 async def test_dry_run_with_empty_token_makes_no_network_call_at_all(tmp_path, monkeypatch, no_sockets):
-    monkeypatch.setenv(sh.TOKEN_ENV, "")
+    monkeypatch.delenv("CLOUDFLARE_API_TOKEN_GHOST", raising=False)
     cf, health = FakeCloudflare(), Health(True)
     store, http, receipts, shields = make(tmp_path, cf, health)
     try:
@@ -121,45 +121,38 @@ async def test_dry_run_with_empty_token_makes_no_network_call_at_all(tmp_path, m
 
 
 @pytest.mark.asyncio
-async def test_live_shield_is_applied_then_health_checked_and_kept(tmp_path, monkeypatch):
-    monkeypatch.setenv(sh.TOKEN_ENV, TOKEN)
+async def test_watch_never_writes_edge_even_if_token_env_set(tmp_path, monkeypatch):
+    """Watch write path removed — raise is always dry_run; live apply is Enforce."""
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN_GHOST", TOKEN)
     cf, health = FakeCloudflare(), Health(True)
     store, http, receipts, shields = make(tmp_path, cf, health)
     try:
         shield = await shields.propose(sh.ShieldRequest(site="coolify.tervory.com", kind="block_multipart_post"))
         done = await shields.raise_shield(shield["id"])
-        assert done["state"] == "up" and done["applied"]["rule_id"] == RULE
-        assert [(r.method, r.url.path.removeprefix("/client/v4")) for r in cf.calls] == [
-            ("GET", "/zones"), ("GET", f"/zones/{ZONE}/rulesets/phases/http_request_firewall_custom/entrypoint"),
-            ("POST", f"/zones/{ZONE}/rulesets/{RULESET}/rules")]
-        added = json.loads(cf.calls[-1].content)
-        assert added["ref"] == shield["ref"] and added["position"] == {"before": ""}
-        assert health.calls == ["coolify.tervory.com"] * 3  # Before, and twice after.
-        assert [r["step"] for r in done["receipts"]] == ["proposed", "applied", "health_passed"]
-        # One-tap Undo removes exactly our rule.
+        assert done["state"] == "dry_run"
+        assert sh.mode() == "dry_run"
+        assert sh.token() == ""
+        assert cf.calls == [] and health.calls == []
+        assert [r["step"] for r in done["receipts"]] == ["proposed", "dry_run"]
         undone = await shields.undo(shield["id"])
-        assert undone["state"] == "undone"
-        assert (cf.calls[-1].method, cf.calls[-1].url.path) == (
-            "DELETE", f"/client/v4/zones/{ZONE}/rulesets/{RULESET}/rules/{RULE}")
-        assert TOKEN not in everything(store, receipts, sh.public_view(undone))
+        assert undone["state"] == "withdrawn" and cf.calls == []
     finally:
         await http.aclose()
         store.close()
 
 
 @pytest.mark.asyncio
-async def test_failed_health_check_undoes_the_shield_automatically(tmp_path, monkeypatch, caplog):
+async def test_watch_raise_is_dry_run_without_health_or_provider_calls(tmp_path, monkeypatch, caplog):
     caplog.set_level(logging.DEBUG)
-    monkeypatch.setenv(sh.TOKEN_ENV, TOKEN)
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN_GHOST", TOKEN)
     cf, health = FakeCloudflare(), Health(True, False)
     store, http, receipts, shields = make(tmp_path, cf, health)
     try:
         shield = await shields.propose(sh.ShieldRequest(site="coolify.tervory.com", kind="challenge_bots"))
         done = await shields.raise_shield(shield["id"])
-        assert done["state"] == "auto_undone"
-        assert cf.calls[-1].method == "DELETE" and cf.calls[-1].url.path.endswith(f"/rules/{RULE}")
-        assert [r["step"] for r in done["receipts"]] == ["proposed", "applied", "health_failed", "auto_undone"]
-        assert shields.summary()["sites_broken_by_a_shield"] == 1
+        assert done["state"] == "dry_run"
+        assert cf.calls == [] and health.calls == []
+        assert shields.summary()["sites_broken_by_a_shield"] == 0
         assert TOKEN not in everything(store, receipts, sh.public_view(done)) + caplog.text
     finally:
         await http.aclose()
@@ -167,34 +160,33 @@ async def test_failed_health_check_undoes_the_shield_automatically(tmp_path, mon
 
 
 @pytest.mark.asyncio
-async def test_site_already_down_is_refused_and_missing_entrypoint_is_created_with_only_our_rule(tmp_path, monkeypatch):
-    monkeypatch.setenv(sh.TOKEN_ENV, TOKEN)
+async def test_watch_dry_run_ignores_site_health_and_never_creates_provider_rules(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN_GHOST", TOKEN)
     cf, health = FakeCloudflare(entrypoint=False), Health(False)
     store, http, receipts, shields = make(tmp_path, cf, health)
     try:
         shield = await shields.propose(sh.ShieldRequest(site="coolify.tervory.com", kind="waf_managed"))
-        refused = await shields.raise_shield(shield["id"])
-        assert refused["state"] == "refused" and cf.calls == []
-        health.answers = [True]
+        done = await shields.raise_shield(shield["id"])
+        assert done["state"] == "dry_run" and cf.calls == []
         other = await shields.propose(sh.ShieldRequest(site="coolify.tervory.com", kind="rate_limit", path="/login"))
-        assert (await shields.raise_shield(other["id"]))["state"] == "up"
-        put = [r for r in cf.calls if r.method == "PUT"]
-        assert len(put) == 1 and [r["ref"] for r in json.loads(put[0].content)["rules"]] == [other["ref"]]
-        assert json.loads(put[0].content)["rules"][0]["ratelimit"]["period"] == 10
+        assert (await shields.raise_shield(other["id"]))["state"] == "dry_run"
+        assert cf.calls == []
     finally:
         await http.aclose()
         store.close()
 
 
 @pytest.mark.asyncio
-async def test_cloudflare_refusal_is_generic_and_never_echoes_the_token(tmp_path, monkeypatch):
-    monkeypatch.setenv(sh.TOKEN_ENV, TOKEN)
+async def test_cloudflare_helper_has_no_watch_write_path(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN_GHOST", TOKEN)
     cf, health = FakeCloudflare(refuse=True), Health(True)
     store, http, receipts, shields = make(tmp_path, cf, health)
     try:
+        with pytest.raises(sh.CloudflareError, match="no edge write path"):
+            sh.Cloudflare(http, TOKEN)
         shield = await shields.propose(sh.ShieldRequest(site="coolify.tervory.com", kind="waf_managed"))
         failed = await shields.raise_shield(shield["id"])
-        assert failed["state"] == "failed" and failed["note"] == "The edge network refused the change."
+        assert failed["state"] == "dry_run"
         assert TOKEN not in everything(store, receipts, sh.public_view(failed))
     finally:
         await http.aclose()
@@ -213,16 +205,11 @@ async def test_sites_not_on_cloudflare_get_a_brief_and_are_never_touched(tmp_pat
         assert cf.calls == [] and health.calls == []
         with pytest.raises(ValueError):
             await shields.propose(sh.ShieldRequest(site="example.com", kind="waf_managed"))
-        cloudflare = sh.Cloudflare(http, TOKEN)
-        with pytest.raises(sh.CloudflareError):
-            await cloudflare.zone_id("example.com")
-        with pytest.raises(sh.CloudflareError):
-            await cloudflare.call("GET", "/accounts")
-        with pytest.raises(sh.CloudflareError):
-            await cloudflare.delete_rule(ZONE, RULESET, "../../everything")
-        assert cf.calls == []
-        with pytest.raises(sh.CloudflareError):
+        with pytest.raises(sh.CloudflareError, match="no edge write path"):
+            sh.Cloudflare(http, TOKEN)
+        with pytest.raises(sh.CloudflareError, match="no edge write path"):
             sh.Cloudflare(http, "")
+        assert cf.calls == []
         with pytest.raises(ValueError):
             sh.rule_for("rate_limit", 'x" or true or "', "/", "ghost-x")
     finally:
@@ -249,7 +236,7 @@ async def test_health_check_only_reaches_our_sites_over_public_addresses(monkeyp
 async def test_php2shell_replay_flags_proposes_dry_run_shield_and_resolves(tmp_path, monkeypatch, caplog, no_sockets):
     caplog.set_level(logging.DEBUG)
     monkeypatch.setenv("TANK_KEY", "ghost-test")
-    monkeypatch.setenv(sh.TOKEN_ENV, "")
+    monkeypatch.delenv("CLOUDFLARE_API_TOKEN_GHOST", raising=False)
     monkeypatch.setenv("COOLIFY_TOKEN_GHOST", "coolify-sentinel-77")
     sources, cf = Sources(), FakeCloudflare()
 
@@ -318,8 +305,15 @@ async def test_php2shell_replay_flags_proposes_dry_run_shield_and_resolves(tmp_p
         store.close()
 
 
-def test_compose_carries_the_cloudflare_token_by_name_only():
+def test_compose_airgap_watch_has_no_cf_write_token():
+    """Air gap correction: Watch has no Cloudflare write credential; Enforce does (by name)."""
     compose = (ROOT / "agents/ghost/docker-compose.yml").read_text()
-    assert "CLOUDFLARE_API_TOKEN_GHOST: ${CLOUDFLARE_API_TOKEN_GHOST:-}" in compose
+    assert "CLOUDFLARE_API_TOKEN_GHOST" not in compose
+    assert "TANK_KEY: ${TANK_KEY_GHOST:-}" in compose
+    enforce = (ROOT / "agents/ghost/docker-compose.enforce.yml").read_text()
+    assert "AUTUMBRA_EDGE_CREDENTIAL: ${AUTUMBRA_EDGE_CREDENTIAL:-}" in enforce
+    assert "internal: true" in enforce
     env = (ROOT / ".env.example").read_text()
-    assert "\nCLOUDFLARE_API_TOKEN_GHOST=\n" in env
+    assert "\nAUTUMBRA_EDGE_CREDENTIAL=\n" in env
+    assert "AUTUMBRA_EDGE_WEBHOOK_SECRET=" in env
+    assert "AUTUMBRA_CF_WEBHOOK_SECRET=" not in env  # held — no CF names yet

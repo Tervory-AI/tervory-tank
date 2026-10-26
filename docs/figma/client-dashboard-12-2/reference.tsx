@@ -1,9 +1,10 @@
 // Figma's own code for frame 12:2, exported 25 Oct 2026 with get_design_context, word for word.
 // Re-exported 25 Oct 2026, 16:20 PT, after the founder's approved answers (dollars, logo, team names).
+// Re-exported 25 Oct 2026, 17:10 PT: Credits left and Waiting on you removed (no real source), and the
+// "Waiting on you" job status removed (jobs are only queued, in progress, ready or failed).
 // NOT production code: it's the measurement sheet. Rebuild it in the Workspace's own CSS so the result looks the same.
 // The only change from Figma: the temporary Figma image links now point to the files in ./assets/.
 // Every text below marked as DATA in SPEC.md is sample data. Fill it from the real source.
-const imgStatusDot = "./assets/status-dot-waiting.svg";
 const imgStatusDot1 = "./assets/status-dot-ready.svg";
 const imgStatusDot2 = "./assets/status-dot-in-progress.svg";
 
@@ -83,46 +84,8 @@ export default function ClientDashboardCleanNorthwindLawZa() {
               $8,557
             </p>
           </div>
-          <div className="bg-white border border-[#b8bfd0] border-solid content-stretch flex flex-[1_0_0] flex-col gap-[6px] items-start min-w-px overflow-clip p-[22px] relative rounded-[16px]" data-node-id="12:35" data-name="Credits left">
-            <p className="font-['Inter:Regular'] font-normal not-italic relative shrink-0 text-[#3d4a66] text-[14px]" data-node-id="12:36">
-              Credits left
-            </p>
-            <p className="font-['Jost:Light'] font-light relative shrink-0 text-[#001840] text-[40px]" data-node-id="12:37">
-              18,420
-            </p>
-          </div>
         </div>
         <div className="content-stretch flex gap-[16px] items-start overflow-clip relative shrink-0 w-full" data-node-id="12:38" data-name="Two columns">
-          <div className="bg-white border border-[#b8bfd0] border-solid content-stretch flex flex-[1_0_0] flex-col gap-[10px] items-start min-w-px overflow-clip p-[22px] relative rounded-[16px]" data-node-id="12:39" data-name="Waiting on you">
-            <p className="[word-break:break-word] font-['Inter:Semi_Bold'] font-semibold leading-[normal] not-italic relative shrink-0 text-[#001840] text-[17px] whitespace-nowrap" data-node-id="12:40">
-              Waiting on you
-            </p>
-            <div className="content-stretch flex gap-[8px] items-center overflow-clip py-[6px] relative shrink-0 w-full" data-node-id="12:41" data-name="Item">
-              <p className="[word-break:break-word] flex-[1_0_0] font-['Inter:Regular'] font-normal leading-[normal] min-w-px not-italic relative text-[#001840] text-[15px]" data-node-id="12:42">
-                Search the web for 212 businesses? About $20
-              </p>
-              <div className="bg-[#001840] content-stretch flex items-start overflow-clip px-[14px] py-[8px] relative rounded-[10px] shrink-0" data-node-id="12:43" data-name="Button: Yes">
-                <p className="[word-break:break-word] font-['Inter:Semi_Bold'] font-semibold leading-[normal] not-italic relative shrink-0 text-[13px] text-white whitespace-nowrap" data-node-id="12:44">
-                  Yes
-                </p>
-              </div>
-              <div className="bg-white border border-[#b8bfd0] border-solid content-stretch flex items-start overflow-clip px-[14px] py-[8px] relative rounded-[10px] shrink-0" data-node-id="12:45" data-name="Button: No">
-                <p className="[word-break:break-word] font-['Inter:Semi_Bold'] font-semibold leading-[normal] not-italic relative shrink-0 text-[#001840] text-[13px] whitespace-nowrap" data-node-id="12:46">
-                  No
-                </p>
-              </div>
-            </div>
-            <div className="content-stretch flex gap-[8px] items-center overflow-clip py-[6px] relative shrink-0 w-full" data-node-id="12:47" data-name="Item">
-              <p className="[word-break:break-word] flex-[1_0_0] font-['Inter:Regular'] font-normal leading-[normal] min-w-px not-italic relative text-[#001840] text-[15px]" data-node-id="12:48">
-                Lease review is ready to read
-              </p>
-              <div className="bg-[#001840] content-stretch flex items-start overflow-clip px-[14px] py-[8px] relative rounded-[10px] shrink-0" data-node-id="12:49" data-name="Button: Open">
-                <p className="[word-break:break-word] font-['Inter:Semi_Bold'] font-semibold leading-[normal] not-italic relative shrink-0 text-[13px] text-white whitespace-nowrap" data-node-id="12:50">
-                  Open
-                </p>
-              </div>
-            </div>
-          </div>
           <div className="bg-white border border-[#b8bfd0] border-solid content-stretch flex flex-[1_0_0] flex-col gap-[10px] items-start min-w-px overflow-clip p-[22px] relative rounded-[16px]" data-node-id="12:51" data-name="Recent work">
             <p className="[word-break:break-word] font-['Inter:Semi_Bold'] font-semibold leading-[normal] not-italic relative shrink-0 text-[#001840] text-[17px] whitespace-nowrap" data-node-id="12:52">
               Recent work
@@ -132,10 +95,10 @@ export default function ClientDashboardCleanNorthwindLawZa() {
                 Delaware dealer list
               </p>
               <div className="relative shrink-0 size-[10px]" data-node-id="12:55" data-name="Status dot">
-                <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgStatusDot} />
+                <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgStatusDot1} />
               </div>
               <p className="[word-break:break-word] font-['Inter:Regular'] font-normal leading-[normal] not-italic relative shrink-0 text-[#3d4a66] text-[14px] whitespace-nowrap" data-node-id="12:56">
-                Waiting on you
+                Ready
               </p>
             </div>
             <div className="content-stretch flex gap-[10px] items-center overflow-clip py-[6px] relative shrink-0 w-full" data-node-id="12:57" data-name="Job">
