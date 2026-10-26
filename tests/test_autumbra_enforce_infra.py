@@ -127,8 +127,12 @@ def test_never_block_refuses_on_enforce_path():
         "confidence": 0.9,
     }
     settings = ClientAutumbraSettings(tenant_id=TENANT_A, shield_mode=ApplyMode.auto_when_checks_pass)
-    receipt = apply_from_payload(clean, settings=settings)
+    payload = accept_threat_payload(clean)
+    receipt = apply_from_payload(payload, settings=settings)
     assert receipt["outcome"] == "refused_never_block"
+    # Enforce refuses raw / unvalidated input (air gap).
+    with pytest.raises(TypeError, match="ThreatPayload only"):
+        apply_from_payload(clean, settings=settings)  # type: ignore[arg-type]
 
 
 def test_perimeter_residual_and_stack_inventory_only():

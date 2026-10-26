@@ -6,6 +6,14 @@
 #   bash ops/autumbra-enforce-memory-measure.sh <enforce-container-name>
 #
 # Prints Peak RSS (MiB) and a suggested mem_limit headroom (+50%).
+#
+# Expected stdout (success):
+#   docker_stats_mem_usage=...
+#   cgroup_memory_peak_bytes=...
+#   cgroup_memory_peak_mib=...
+#   suggested_mem_limit_mib=... (peak * 1.5)
+#   NOTE: paste this into PR #337 ...
+# Exit 2 if container missing. Cap stays held_until_measured until a number lands.
 set -euo pipefail
 
 container="${1:?usage: bash ops/autumbra-enforce-memory-measure.sh <enforce-container>}"

@@ -22,6 +22,7 @@ def build_owner_update(
     undo_fix_url: str = "",
     undo_shield_url: str = "",
     receipt_url: str = "",
+    checks_run: int | None = None,
 ) -> dict[str, str]:
     """Exact founder wording. Numbers must link to the receipt behind them."""
     site = site_name or settings.site_name or "your site"
@@ -29,12 +30,22 @@ def build_owner_update(
     c = len(critical)
     subject = f"Autumbra update for {site}: {n} threats found, {c} critical"
 
+    # Quiet week — brief requires this exact shape when nothing fired.
+    if n == 0 and c == 0 and not shield:
+        checks = int(checks_run if checks_run is not None else 0)
+        body = (
+            f"Quiet week. {_link(str(checks), receipt_url) if receipt_url else str(checks)} "
+            f"checks, 0 threats, 0 actions.\n\n"
+            "Nothing from your logs was kept. We read them, acted, and deleted them. "
+            f"{_link('Full receipt', receipt_url) if receipt_url else '[Link to the full receipt]'}"
+        )
+        return {"subject": subject, "body": body}
+
     stacks = []
     for item in critical:
         name = str(item.get("stack") or item.get("name") or "software")
         stacks.append(name)
     stack_list = ", ".join(stacks) if stacks else "software"
-    # "and" before last when 3+
     if len(stacks) >= 2:
         stack_list = ", ".join(stacks[:-1]) + " and " + stacks[-1]
 
@@ -44,11 +55,14 @@ def build_owner_update(
         label = str(item.get("advisory_id") or "advisory")
         if url:
             advisory_bits.append(_link(label, url))
-    advisory_clause = (
-        " (Each one is linked to its public advisory.)"
-        if advisory_bits
-        else ""
-    )
+    if advisory_bits:
+        advisory_clause = (
+            " (Each one is linked to its public advisory: "
+            + "; ".join(advisory_bits)
+            + ".)"
+        )
+    else:
+        advisory_clause = ""
 
     body_lines = [
         f"This week we found {_link(str(n), receipt_url) if receipt_url else str(n)} "
@@ -103,7 +117,6 @@ def build_owner_update(
         f"{_link('Full receipt', receipt_url) if receipt_url else '[Link to the full receipt]'}",
     ])
 
-    # Critical wording rule: only when a public advisory rates it critical.
     for item in critical:
         rating = str(item.get("rating") or "").lower()
         if rating and rating not in {"critical", "known_exploited"}:

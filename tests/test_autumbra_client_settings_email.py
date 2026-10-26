@@ -1,7 +1,7 @@
 """Client apply modes and owner update email paragraphs."""
 from pathlib import Path
 
-from agents.ghost.client_settings import ApplyMode, ClientAutumbraSettings, active_halves, load_settings, save_settings
+from agents.ghost.client_settings import ApplyMode, ClientAutumbraSettings, active_halves, connect_copy, list_hands, load_settings, save_settings, set_hand
 from agents.ghost.owner_email import build_owner_update
 from agents.ghost.store import Store
 
@@ -117,3 +117,62 @@ def test_three_fixture_clients_get_matching_paragraphs():
         )
         assert needle in mail["body"]
         assert "Nothing from your logs was kept" in mail["body"]
+
+
+def test_quiet_week_owner_email():
+    settings = ClientAutumbraSettings(
+        tenant_id="00000000-0000-0000-0000-0000000000q1",
+        site_name="coolify.tervory.com",
+    )
+    mail = build_owner_update(
+        settings=settings,
+        site_name="coolify.tervory.com",
+        threats_found=0,
+        critical=[],
+        checks_run=128,
+        receipt_url="https://protect.tervory.com/receipts/quiet",
+    )
+    assert "Quiet week." in mail["body"]
+    assert "128" in mail["body"]
+    assert "0 threats" in mail["body"]
+    assert "approve fixes yourself" not in mail["body"]
+
+
+def test_advisory_links_appear_in_body():
+    settings = ClientAutumbraSettings(
+        tenant_id="00000000-0000-0000-0000-0000000000q2",
+        fix_mode=ApplyMode.approve_each,
+    )
+    mail = build_owner_update(
+        settings=settings,
+        site_name="coolify.tervory.com",
+        threats_found=1,
+        critical=[{
+            "stack": "PHP", "rating": "critical", "advisory_id": "CVE-2026-109618",
+            "advisory_url": "https://example.test/cve",
+        }],
+        receipt_url="https://protect.tervory.com/receipts/r1",
+        pr_url="https://github.com/example/pr/1",
+    )
+    assert "https://example.test/cve" in mail["body"]
+    assert "CVE-2026-109618" in mail["body"]
+
+
+def test_block_in_seconds_copy_gated_on_hand():
+    bare = ClientAutumbraSettings(tenant_id="00000000-0000-0000-0000-0000000000h1")
+    copy = connect_copy(bare)
+    assert copy["block_in_seconds"] is None
+    assert copy["block_in_seconds_gated"]
+    assert "Pro" not in (copy.get("no_pro") or "")
+    lit = set_hand(bare, "host_firewall", connected=True)
+    lit_copy = connect_copy(lit)
+    assert lit_copy["block_in_seconds"]
+    assert lit_copy["block_in_seconds_gated"] is None
+    assert active_halves(lit)["block_in_seconds"] is True
+
+
+def test_agnostic_hands_catalog_no_required_provider():
+    settings = ClientAutumbraSettings(tenant_id="00000000-0000-0000-0000-0000000000h2")
+    hands = list_hands(settings)
+    assert {h["hand"] for h in hands} >= {"cloudflare", "shopify", "host_firewall", "google_workspace"}
+    assert all(h["required"] is False and h["pro_required"] is False for h in hands)

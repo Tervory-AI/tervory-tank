@@ -79,3 +79,83 @@ def active_halves(settings: ClientAutumbraSettings) -> dict[str, bool]:
         "stack": True,  # inventory / advisories / fix PRs / receipts always available
         "block_in_seconds": edge,  # plain copy: lights up when a hand is connected
     }
+
+
+# Optional connect hands — client choice. No assumed provider. No Pro tier.
+OPTIONAL_HANDS: tuple[str, ...] = (
+    "cloudflare",
+    "google_workspace",
+    "shopify",
+    "host_firewall",
+)
+
+_HAND_FIELD = {
+    "cloudflare": "cloudflare_connected",
+    "google_workspace": "google_workspace_connected",
+    "shopify": "shopify_connected",
+    "host_firewall": "host_firewall_connected",
+}
+
+
+def list_hands(settings: ClientAutumbraSettings) -> list[dict[str, Any]]:
+    """Agnostic connect catalog. Never requires Cloudflare/Shopify/Google or Pro."""
+    return [
+        {
+            "hand": hand,
+            "connected": bool(getattr(settings, _HAND_FIELD[hand])),
+            "required": False,
+            "pro_required": False,
+            "note": "Optional. You choose what to connect.",
+        }
+        for hand in OPTIONAL_HANDS
+    ]
+
+
+def set_hand(
+    settings: ClientAutumbraSettings,
+    hand: str,
+    *,
+    connected: bool,
+) -> ClientAutumbraSettings:
+    """Toggle one optional hand. Unknown hand fails. No Pro upsell."""
+    key = str(hand or "").strip().lower()
+    if key not in _HAND_FIELD:
+        raise ValueError(
+            f"Unknown hand {hand!r}. Optional hands: {', '.join(OPTIONAL_HANDS)}."
+        )
+    data = settings.model_dump()
+    data[_HAND_FIELD[key]] = bool(connected)
+    return ClientAutumbraSettings.model_validate(data)
+
+
+def connect_copy(settings: ClientAutumbraSettings) -> dict[str, str | None]:
+    """Client-facing copy. 'Block in seconds' claim only when an edge hand is connected."""
+    halves = active_halves(settings)
+    copy: dict[str, str | None] = {
+        "logs": "We read your logs, acted, and deleted them. Nothing from your logs was kept.",
+        "empty": "No work yet",
+        "perimeter": (
+            "Autumbra watches the edge as events pass. "
+            "It does not import, copy or store your data."
+        ),
+        "agnostic": (
+            "Autumbra is your 24/7 security guard. Cloudflare, Google, Shopify and "
+            "host tools are optional — you choose what to connect."
+        ),
+        "cloudflare": (
+            "A free Cloudflare account is enough for address blocks. "
+            "We do not sell Cloudflare."
+        ),
+        "no_pro": "We never require a paid edge plan. Free is enough when you connect.",
+    }
+    if halves["block_in_seconds"]:
+        copy["block_in_seconds"] = (
+            "Blocking an attack in seconds is on — an edge tool is connected."
+        )
+        copy["block_in_seconds_gated"] = None
+    else:
+        copy["block_in_seconds"] = None
+        copy["block_in_seconds_gated"] = (
+            "Blocking an attack in seconds lights up when you connect an edge tool."
+        )
+    return copy

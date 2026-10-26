@@ -1,8 +1,10 @@
 """Autumbra Enforce apply path — ThreatPayload fields only. Never raw logs.
 
-Watch quarantines dirty text into ThreatPayload. Enforce reads the payload and
-applies (or dry-plans) shields according to the client's shield_mode. A model is
-never called from Enforce.
+Watch quarantines dirty text into ThreatPayload. Enforce reads the validated
+ThreatPayload type only (not raw bytes/str) and applies (or dry-plans) shields
+according to the client's shield_mode. A model is never called from Enforce.
+Market Lab source credits may be stamped on the receipt; Autumbra does not own
+the feed registry.
 """
 from __future__ import annotations
 
@@ -11,7 +13,6 @@ from typing import Any
 
 from .client_settings import ApplyMode, ClientAutumbraSettings
 from .never_block import classify_never_block
-from .rails import ensure_threat_payload_before_enforce
 from .shields import plan_for
 from .speed_budgets import stamp_budget
 from .threat_payload import ThreatPayload
@@ -29,26 +30,24 @@ def payload_fields_only(payload: ThreatPayload) -> dict[str, Any]:
 
 
 def apply_from_payload(
-    raw_payload: bytes | str | dict[str, Any] | ThreatPayload,
+    payload: ThreatPayload,
     *,
     settings: ClientAutumbraSettings,
+    source_credits: list[dict[str, str]] | None = None,
     decision_seconds: float = 0.01,
     apply_seconds: float = 0.01,
     health_seconds: float = 0.01,
 ) -> dict[str, Any]:
-    """Validate → never-block → respect client shield_mode → dry plan or propose apply.
+    """ThreatPayload only → never-block → client shield_mode → dry plan.
 
-    Live Cloudflare calls stay behind the Enforce token env (empty = dry). This
-    function never accepts a raw log argument.
+    Live edge calls stay behind the Enforce token env (empty = dry). This
+    function never accepts raw logs, bytes, or unvalidated dicts — Watch must
+    hand a ThreatPayload. Optional source_credits come from Market Lab consume.
     """
-    if isinstance(raw_payload, ThreatPayload):
-        payload = raw_payload
-    elif isinstance(raw_payload, dict):
-        import json
-        payload = ensure_threat_payload_before_enforce(json.dumps(raw_payload))
-    else:
-        # Rails burn anything that is not a ThreatPayload shape.
-        payload = ensure_threat_payload_before_enforce(raw_payload)
+    if not isinstance(payload, ThreatPayload):
+        raise TypeError(
+            "Enforce accepts ThreatPayload only. Quarantine dirty input in Watch first."
+        )
 
     fields = payload_fields_only(payload)
     receipt: dict[str, Any] = {
@@ -62,6 +61,9 @@ def apply_from_payload(
         "raw_log_seen": False,
         **settings.receipt_stamp(),
     }
+    if source_credits:
+        receipt["sources"] = source_credits
+        receipt["intel_via"] = "Market Lab"
     stamp_budget(receipt, stage="event_to_decision", seconds=decision_seconds)
 
     if payload.kind == "block_ip":
@@ -82,7 +84,6 @@ def apply_from_payload(
     if payload.kind:
         receipt["plan"] = plan_for(
             payload.kind,
-            # site may be app key; plan_for needs host — caller/Watch maps first.
             payload.site if "." in payload.site else payload.site,
             payload.path,
             ref="enforce-dry",

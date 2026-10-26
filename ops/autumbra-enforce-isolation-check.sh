@@ -4,6 +4,11 @@
 #
 # Usage:
 #   bash ops/autumbra-enforce-isolation-check.sh <enforce-container-name>
+#
+# Expected stdout (pass):
+#   network=<name> internal=true
+#   JSON from enforce_isolation_probe with ok=true and no Tank/Workspace/other-client reachability
+# Exit 1 if no internal:true network. Exit 2 if container missing.
 set -euo pipefail
 
 container="${1:?usage: bash ops/autumbra-enforce-isolation-check.sh <enforce-container>}"
