@@ -66,9 +66,10 @@ the job status, including a failing model-check report.
 
 ## GPU configuration, built now and enabled last
 
-Coolify settings `HF_JOBS_TOKEN` and `HF_JOBS_NAMESPACE` remain empty until the
-Tervory account is connected. Forge holds the job-scoped token; neither the brain
-nor the remote job receives it. **No R2 credentials reach a GPU job.** Forge signs
+Do **not** leave empty Coolify rows for `HF_JOBS_TOKEN` / `HF_JOBS_NAMESPACE`
+(placeholders are forbidden and get deleted). When the founder enables GPU jobs,
+add those names as **SET** values on the agent-rig Coolify app for forge only.
+Forge holds the job-scoped token; neither the brain nor the remote job receives it. **No R2 credentials reach a GPU job.** Forge signs
 GET URLs for that job's exact inputs and PUT URLs for only `gpu/result.glb` and
 `gpu/source.zip`; both last the job timeout plus five minutes (at most 65
 minutes), so a queued job can still read its photos. These expiring capabilities
