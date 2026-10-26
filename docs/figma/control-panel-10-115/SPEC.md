@@ -1,6 +1,6 @@
 # Founder control panel: Figma frames 10:115 and 20:44
 
-> Final export, Sun 25 Oct 2026, 17:10 PT. The founder's decision: **only what is real is on the page.** Everything with nothing behind it was removed. Every text in `reference.tsx` and `states.tsx` was checked against Figma by script: 68 texts, 0 differences.
+> Final export, Sun 25 Oct 2026, 17:10 PT. The founder's decision: **only what is real is on the page.** Everything with nothing behind it was removed. Every text in `reference.tsx` and `states.tsx` was checked against Figma by script: 68 texts, 0 differences. The Approve all states (25:2, 25:13) were added on 26 Oct, 01:25 PT, word for word from the live component.
 
 ## Where it is
 - **Figma:**
@@ -40,6 +40,7 @@
 | Section titles | `Needs you`, `Squad`, `Latest sign-ups`, `Controls` |
 | "Needs you" buttons | `Approve all`; `Switch` and `Later`; `Start` |
 | "Needs you" empty | `Nothing needs you.` (20:83), with no count |
+| Approve all | Opens the dialog 25:2: `Approve these versions?`, `Room-authored skills need individual source review and are excluded.`, one line per version (`id · version · score% · N/3 runs` or `· code skill`), `Confirm listed approvals`, `Cancel`. While checking the button reads `Checking…`. Empty list `No versions are ready.` After confirming `N versions approved. Each approval was recorded.` Errors `Approval could not be confirmed. Reload the list.` / `Approval could not be reached.` (25:13). This is the existing `ApproveAllReady` component: reuse it as is (SKALA-2 rule 5) |
 | Squad names | `Base`, `Tiger`, `Market Lab`, `Rig`, `Tisan`, `Radix`, `Zenas` |
 | Controls | `Squad workers` with `Pause workers`, or `Resume workers` while paused (22:27). Buttons `Open the window` (→ `/chats`) and `Proof report` (→ `/tank/proof`) |
 
