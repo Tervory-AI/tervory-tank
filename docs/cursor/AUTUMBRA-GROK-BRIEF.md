@@ -1,88 +1,87 @@
-# Autumbra (Protect) — Grok living brief
+# Autumbra (Protect) — Builder brief for Grok
 
-> **Canonical brief with corrections (win on conflict):** `ops/BUILDER-BRIEFS-2026-10-26/04-GROK-AUTUMBRA.md`
+Product host: protect.tervory.com. Code room: `agents/ghost` (short-term). Branch: `grok/autumbra`. Draft PR: https://github.com/zenascapetown-code/tervory-tank/pull/337
 
+**Never merge. Never deploy live Boston. Coolify by name only. Tank is the only model door. No CloudAgent. No Clerk. No demo copy.**
 
-Product host: protect.tervory.com. Code room: `agents/ghost` (short-term). Branch: `grok/autumbra`. Never merge. Never deploy live Boston. Coolify by name only. Tank is the only model door. Later founder prompts win when they conflict.
+Later founder prompts win when they conflict with older body text. **Where this body and the Corrections section conflict, the Corrections win.**
 
-Draft PR: https://github.com/zenascapetown-code/tervory-tank/pull/337
+## Body (product shape)
 
-## Agreed with founder (2026-10-26) — Zenas + Tervory
+1. **Agnostic product.** Autumbra does **not** assume Cloudflare, Google Workspace, Shopify, or Woo. It is a **24/7 AI security guard**. Optional connects are **client choice**.
+2. **One clear SMB price** for the full product. Second tier: **Enterprise FROM** after infra assessment. Goal: show receipts.
+3. **Free Cloudflare is enough** for IP-block shields when they connect CF. Never require Pro. **We do not sell Cloudflare.**
+4. **Without any connect:** stack + advisories + fix PRs + receipts still work. **"Block in seconds" lights up when a hand is connected.**
+5. **Air gap:** Watch may read dirty text. Enforce reads **ThreatPayload only**. Keys for edge apply live only on per-client Enforce.
+6. **Isolation:** Client Enforce never shares network/volume/secret with Tank, Workspace, tervory.com, or another client.
+7. **Apply modes (fixes AND shields, separate):** approve-each (default) | auto-when-checks-pass | never. Tervory never changes them. **Client modes are the only clamp** — no separate Enforce "strength".
+8. **Owner update email:** every act + weekly; **built by code from receipts**; exact wording below; three fix paragraphs by setting; tested with three fixture clients.
+9. **Training:** receipt→rule first (Atomic Red Team / Caldera on own sites). GPU/HF fine-tune later **via Tank only**. HF = temporary dogfood/learning only — not permanent Enforce home.
+10. **Red team:** standing exercises on Tervory's own sites; receipts marked `exercise`. Client only with written permission.
+11. **Partners / hands:** use each provider's own APIs when connected; never disable or work around them.
 
-1. **Agnostic product.** Autumbra does **not** assume Cloudflare, Google Workspace, Shopify, or Woo. It is a **24/7 AI security guard**. Optional connects (CF, Shopify, Google, host firewall, etc.) are **client choice**, like linking a tool in Claude.
-2. **One clear SMB price for the full product.** If a client skips connects they chose a smaller Autumbra — not false advertising. Second tier: **Enterprise FROM** price after infra assessment. Goal: show receipts. No tier fluff.
-3. **Free Cloudflare is enough** for IP-block shields when they connect CF. Never require Pro / $20 to use Autumbra. **We do not sell Cloudflare.**
-4. **Without any connect:** stack half + advisories + fix PRs + receipts still work. **"Block in seconds" lights up when a hand is connected.** Say that plainly in product copy.
-5. **Differentiation (tip of the spear):** air gap (Watch dirty / Enforce ThreatPayload-only + keys) + receipts + zero-keep logs + one price + optional hands. **IP filing for the air gap is serious** (delay competitors, force acknowledgment → traffic).
-6. **Training:** receipt→rule loop first (Atomic Red Team / Caldera on own sites). GPU / HF fine-tune later **via Tank only**. Founder-approved capacity (names only): HF monthly allowance + unused 1TB storage bucket — document as launch capacity, no secrets. **Case studies: 5 exist** — launch assets.
-7. **Founder recommendations** (corrections win): Enforce cap **held until measured**; test host not Boston; extend seal-check after clean dogfood; paid feeds off; **no CF secret names yet**; Market Lab owns intel (no Autumbra feed registry); Reddit in / YouTube+Instagram out; guardrails off except named exercise.
+### Owner update email — exact wording
 
-## Product shape (infra + behaviour)
+Subject: `Autumbra update for {site}: {n} threats found, {c} critical`
 
-- **Air gap:** Watch may read dirty text. Enforce reads **ThreatPayload only**. Any raw byte into Enforce = fail. Keys for edge apply live only on per-client Enforce.
-- **Optional hands:** CF / Google / Shopify / host firewall / etc. — client choice. Watch stays shared and tenant-scoped. Enforce = **one container per client** when an edge hand needs it; internal network; own ThreatPayload queue; **edge secret names held until a real edge client**; disconnect destroys container + secret binding.
-- **Isolation:** Client container never shares network/volume/secret with Tank, Workspace, tervory.com, or another client.
-- **Perimeter not import:** Stream events → act per settings → discard. Receipt = what Tervory did only. Stack inventory = versions / package names. Copy: we read logs, acted, deleted them — nothing kept.
-- **Apply modes (fixes AND shields, separate):** approve-each (default) | auto-when-checks-pass | never. Tervory never changes them.
-- **Owner email:** every act + weekly; code-built from receipts; three fix paragraphs by setting.
-- **Partners / hands:** use each provider’s own APIs when connected; never disable, replace, or work around them. We do not sell Cloudflare.
-- **Sources:** Market Lab is the intel backend. Autumbra consumes ML IOC bundles and names the source on the receipt. **No Autumbra feed list / source registry.** Public + ML only at launch. No dark web / no onion. No YouTube / Instagram. Paid feeds off.
-- **Speed:** rule decision <2s; shield <10s; health <30s; auto-undo <60s e2e; model off shield critical path. “Block in seconds” requires a connected hand.
-- **Red team / training:** standing exercises on Tervory’s own sites (Atomic Red Team / Caldera → receipt→rule). Client only with written permission. GPU/HF fine-tune later through Tank only.
+Opening (numbers link to the receipt):
 
-## Inventory
+> This week we found {n} threats to {site}. {c} were critical: out-of-date {stack_list} with known holes serious enough to take down a company's whole IT system. (Each one is linked to its public advisory.)
 
-### On main before this branch (switched off / dry) — KEEP
-ThreatPayload, Enforce stub (`wraith.py`), rails, guardrails (OFF), Shields Up, inventory/advisories, patch-as-PR, Watch OSS, Enforce OSS, airgap dogfood, isolation corridor, seal-check (base/radix/tiger/rig).
+**Fix paragraph — auto when checks pass:**
 
-### Landed on `grok/autumbra` (draft #337)
-1. Tank one-door dogfood + `tests/test_tank_one_door.py` (Base `run_code_first` runtime skips until that lane lands).
-2. Watch compose: no edge write credential. Per-client `docker-compose.enforce.yml` (`internal: true`).
-3. Edge secret **names held** until a real edge client (compose env `AUTUMBRA_EDGE_CREDENTIAL` reserved).
-4. Never-block + IP-in-log + action cap; `block_ip` / `revoke_sessions`.
-5. Client apply settings + optional hands (`cloudflare`, `google_workspace`, `shopify`, `host_firewall`) + `block_in_seconds` half.
-6. Owner email builder; Market Lab intel consumer (no Autumbra feed registry); signed webhooks; red-team own-sites exercise pass; enforce lifecycle plans; isolation probe; perimeter residual; speed budgets; Enforce ThreatPayload-only apply; `/ghost/autumbra/*` routes; fixture-attack test.
+> You chose to let us fix this kind of problem automatically, so we did. {stack_list} are now on patched versions and your site passed its own checks afterwards. Here is the report; you can send it to your IT manager, who can reverse our change with one click. {Undo}
 
-### Still open for Claude / founder
-- Product copy: one SMB price; Enterprise FROM; plain “block in seconds when a hand is connected”; empty “No work yet”.
-- IP filing for air gap (legal / ops — founder).
-- Case-study packaging (5 exist) + launch assets list.
-- Document Founder-approved resources by **name only**: HF monthly allowance, unused 1TB storage bucket (no secrets, no spend without yes).
-- Live dogfood on own sites on **test host**; seal-check paste from host.
-- Explicit yes/no on each Founder recommendation below.
-- Independent reviewer from fresh clone.
+**Fix paragraph — I approve each one:**
 
-## Intel (Market Lab backend — not Autumbra)
-Autumbra does **not** own this list. Market Lab publishes versioned IOC bundles. Launch public sources (for ML, not an Autumbra registry): abuse.ch URLhaus/ThreatFox/Feodo, LevelBlue OTX, CISA KEV; Reddit best threads; X public. Out: YouTube, Instagram, paid at launch.
+> You chose to approve fixes yourself. We have built the fix and it is waiting for your approval here. {Approve the fix} Until you approve it, the hole is still open; we have reduced the risk at the edge as described below.
 
-## Founder recommendations (pending explicit yes on each)
-| # | Recommendation |
-| --- | --- |
-| 1 | Enforce container cap **held until measured** dogfood/Boston RSS |
-| 2 | Server work on **test host**, never live Boston; smallest Enforce option = separate Coolify compose resource on existing test host |
-| 3 | Extend `ops/seal-check.sh` EXPECTED_SEALED for Autumbra Watch / enforce-* before live |
-| 4 | Paid threat feeds **off** until named |
-| 5 | Edge secret names **held** until a real connected edge client (agnostic; no CF name yet) |
-| 6 | `ALLOWED_ZONES` stay **tervory.com** until own-site dogfood passes |
-| 7 | Guardrails **off** except a named dogfood exercise |
+**Fix paragraph — Never:**
 
-## Founder-approved resources (names only — no secrets)
-- Hugging Face monthly allowance (inference / jobs capacity for later Tank-only fine-tune — not wired; no spend without go).
-- Unused **1TB** storage bucket (launch capacity — not wired).
-- Case studies: **5** exist (launch assets).
+> You chose that we never touch your code. Here is exactly what to fix and how. {Report} We have reduced the risk at the edge as described below.
 
-## Pytest (local last run)
+**Shield paragraph (when a shield ran):**
+
+> We also stopped an attack in progress. It was blocking addresses known to be part of a widely reported campaign ({source}). We blocked {n} addresses that were attacking your site. Your own addresses, your payment provider and Cloudflare were never blocked. If this caused any problem, undo it here with one tap. {Undo}
+
+Closing:
+
+> Nothing from your logs was kept. We read them, acted, and deleted them. {Full receipt}
+
+Critical wording only when a public advisory rates it critical / known_exploited.
+
+### Carry-on jobs (until independent review lands)
+
+1. Owner update email from receipts — exact wording above; three client-mode paragraphs; tests with three fixture clients.
+2. Red-team exercise against our own sites as a receipt marked `exercise`.
+3. Measure Enforce memory on dogfood so the container cap is a number, not a guess.
+4. Isolation network test from inside a fixture client's container.
+
+## Corrections (founder 2026-10-26 — **win on conflict**)
+
+Zenas accepted these. They override any conflicting body text above and any older brief / PR wording.
+
+1. **Market Lab is Autumbra's intel backend.** Do **not** build a feed list or a source registry in Autumbra. **Consume Market Lab's output** and **name the source on the receipt**. Clients never see the feed list (backend job).
+2. **Launch intel: public + Market Lab only — no paid buy.** Paying is for speed; we do not buy if it is not faster. Public at launch includes abuse.ch (URLhaus / ThreatFox / Feodo when data exists), LevelBlue OTX, CISA KEV. Escalation only via Tank after a measured gap.
+3. **Reddit in** for speed (best threads curated in Market Lab). **YouTube never. Instagram never** (clickbait / AI ads poison Market Lab).
+4. **Main Market Lab** learns skills and spins them to product clones. **Autumbra / AmmoSync / TNGO each get their own Market Lab clone.** Reddit lists live in clone notes, not this PR.
+5. **HF = temporary dogfood / learning only**, not permanent Enforce home. Permanent Enforce on our VPS/cloud.
+6. **No Cloudflare secret names yet** — hold until a real CF (or other edge) client. Agnostic.
+7. **Enforce: dogfood first, then open to clients** (not a fixed zone list).
+8. **No separate Enforce "strength"** — only client modes: do the work / report only / send for approval.
+9. **Enforce container cap: hold until measured dogfood / Boston RSS** — do not guess 6, 8, or 20.
+10. Pin `EXPECTED_SEALED` after first clean dogfood.
+11. Independent review of draft #337 from a fresh clone against this brief; one finding = fail. Do not wait on the comment — work the four jobs in parallel. Never ask to merge.
+
+## Pytest focus
+
+```bash
+cd /workspace/ghost-build/tervory-tank
+source /workspace/tank-venv/bin/activate
+PYTHONPATH=. python3 -m pytest -q \
+  tests/test_autumbra_*.py \
+  tests/test_ghost_*.py \
+  tests/test_tank_one_door.py
 ```
-PYTHONPATH=. python3 -m pytest -q tests/test_autumbra_*.py tests/test_ghost_*.py tests/test_tank_one_door.py
-# ~281 passed, skips for live dogfood + Base run_code_first
-```
-seal-check: exit 2 on builder box (no Docker socket). Re-run on Coolify test host.
 
-## Claude handoff checklist
-- [ ] Read this brief + PR #337 “Agreed with founder” section first
-- [ ] Keep air gap + optional hands; never require CF Pro; never assume a connect
-- [ ] Product copy: one SMB price; Enterprise FROM; block-in-seconds only when hand connected
-- [ ] No merge / no Boston deploy / Coolify by name only / Tank only for models
-- [ ] Training: receipt→rule first; GPU/HF later via Tank; document approved resources by name only
-- [ ] Get explicit yes on each Founder recommendation before spending or enabling flags
-- [ ] Independent review from fresh clone; one finding = fail
+seal-check / live Docker: builder box has no Docker socket for this worker — re-run memory + isolation on Coolify **test** host (never live Boston).

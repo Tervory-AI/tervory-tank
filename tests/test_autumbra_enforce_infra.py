@@ -15,7 +15,6 @@ from agents.ghost.enforce_lifecycle import (
     plan_destroy,
     receipt_for,
 )
-from agents.ghost.fixture_edge import FixtureEdgeControl
 from agents.ghost.perimeter import assert_no_client_payload, stack_inventory_only
 from agents.ghost.rails import ensure_threat_payload_before_enforce
 from agents.ghost.speed_budgets import budgets_ok
