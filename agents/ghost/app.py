@@ -31,7 +31,7 @@ from . import watch_oss as watch_oss_room
 from .watch_oss import AnomalyEvent, handoff_threat, propose_from_anomaly
 from . import enforce_oss as enforce_oss_room
 from .client_settings import ClientAutumbraSettings, load_settings, save_settings, active_halves
-from .source_registry import registry_with_weights, sources_accepting_support
+from .source_registry import backend_status as intel_backend_status
 from .webhooks import WebhookRejected, accept_signed, drop_counts
 from .red_team import list_exercises, run_exercise
 from .enforce_lifecycle import plan_create, plan_destroy, receipt_for
@@ -533,8 +533,9 @@ def create_app() -> FastAPI:
 
     @app.get("/ghost/autumbra/sources", dependencies=[Depends(require_tank)])
     async def autumbra_sources(tenant_id: str = Query(default=PLATFORM_TENANT)):
-        return {"sources": registry_with_weights(app.state.store, tenant_id),
-                "accepts_support": sources_accepting_support()}
+        # Clients never see a feed list. Intel backend is Market Lab.
+        _ = tenant_id
+        return {"sources": [], "client_visible_feed_list": False, **intel_backend_status()}
 
     @app.post("/ghost/autumbra/webhooks/{provider}", dependencies=[Depends(require_tank)])
     async def autumbra_webhook(provider: str, request: Request):

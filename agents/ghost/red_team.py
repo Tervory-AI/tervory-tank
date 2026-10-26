@@ -92,3 +92,24 @@ def run_exercise(
         receipt["learning"].append("supply-chain watch should open a match against the planted lockfile version")
 
     return receipt
+
+
+def run_own_sites_exercise_pass(
+    exercise_id: str = "credential_stuffing_fixture",
+    *,
+    fixture_log: str = "stuffing from 203.0.113.9 against /login",
+    own_sites: frozenset[str] = OWN_SITES,
+) -> list[dict[str, Any]]:
+    """Run one fixture exercise against every Tervory own site. Receipts marked exercise."""
+    receipts: list[dict[str, Any]] = []
+    for site in sorted(own_sites):
+        receipt = run_exercise(
+            exercise_id,
+            target_site=site,
+            fixture_log=fixture_log,
+            own_sites=own_sites,
+        )
+        if receipt.get("kind") != "exercise":
+            raise AssertionError("receipt must be marked exercise")
+        receipts.append(receipt)
+    return receipts

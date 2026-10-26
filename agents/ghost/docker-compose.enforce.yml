@@ -1,6 +1,7 @@
 # Per-client Autumbra Enforce. One project per client (Coolify by name).
 # Internal network only. No public ports. No Docker socket. No host mounts.
-# Holds only this client's optional edge credential (Coolify name AUTUMBRA_CF_API_TOKEN_<tenant_slug>).
+# Optional edge credential: secret NAME held until a real connected edge client (agnostic; no CF name yet).
+# mem_limit below is a provisional placeholder — replace after ops/autumbra-enforce-memory-measure.sh on test host.
 # Substitute TENANT_ID before deploy. Never paste a secret value into this file.
 services:
   enforce:
@@ -8,14 +9,15 @@ services:
       context: ..
       dockerfile: ghost/Dockerfile
     restart: unless-stopped
+    # PROVISIONAL until dogfood RSS measured — do not treat 256m as the founder cap
     mem_limit: 256m
     cpus: 0.25
     environment:
       AGENT_NAME: autumbra-enforce
       AUTUMBRA_ROLE: enforce
       TENANT_ID: ${TENANT_ID}
-      # Named secret only — Coolify injects AUTUMBRA_CF_API_TOKEN_<tenant_slug> as this env; never committed.
-      AUTUMBRA_CF_API_TOKEN: ${AUTUMBRA_CF_API_TOKEN:-}
+      # Edge credential env reserved; Coolify secret NAME held until a real edge client. Never commit values.
+      AUTUMBRA_EDGE_CREDENTIAL: ${AUTUMBRA_EDGE_CREDENTIAL:-}
       THREAT_PAYLOAD_QUEUE: ${THREAT_PAYLOAD_QUEUE}
       DATA_DIR: /data
       # Enforce never calls a model. No TANK_KEY here on purpose.

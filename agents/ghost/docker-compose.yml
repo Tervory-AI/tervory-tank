@@ -18,7 +18,7 @@ services:
       COOLIFY_TOKEN_GHOST: ${COOLIFY_TOKEN_GHOST:-}
       COOLIFY_URL_GHOST: ${COOLIFY_URL_GHOST:-}
       # Air gap: Watch has NO edge write credential. Per-client Enforce holds
-      # AUTUMBRA_CF_API_TOKEN_<tenant_slug> by Coolify name only when the client chose Cloudflare.
+      # Edge credential names held until a real connected edge client (agnostic).
     volumes:
       - agent_ghost_data:/data
     networks: [gw]

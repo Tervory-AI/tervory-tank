@@ -83,3 +83,37 @@ def test_owner_email_three_fix_paragraphs():
             if other_mode is mode:
                 continue
             assert other_needle not in mail["body"]
+
+
+def test_three_fixture_clients_get_matching_paragraphs():
+    """Three fixture clients — one per client mode — each get the matching paragraph."""
+    fixtures = [
+        ("00000000-0000-0000-0000-0000000000f1", ApplyMode.auto_when_checks_pass,
+         "let us fix this kind of problem automatically"),
+        ("00000000-0000-0000-0000-0000000000f2", ApplyMode.approve_each,
+         "approve fixes yourself"),
+        ("00000000-0000-0000-0000-0000000000f3", ApplyMode.never,
+         "never touch your code"),
+    ]
+    critical = [{
+        "stack": "PHP", "rating": "critical", "advisory_id": "CVE-2026-109618",
+        "advisory_url": "https://example.test/cve",
+    }]
+    for tenant, mode, needle in fixtures:
+        settings = ClientAutumbraSettings(
+            tenant_id=tenant,
+            site_name=f"fixture-{tenant[-2:]}.tervory.com",
+            fix_mode=mode,
+        )
+        mail = build_owner_update(
+            settings=settings,
+            site_name=settings.site_name,
+            threats_found=2,
+            critical=critical,
+            receipt_url="https://protect.tervory.com/receipts/r-fixture",
+            pr_url="https://github.com/example/pr/1",
+            fix_report_url="https://protect.tervory.com/report/1",
+            undo_fix_url="https://protect.tervory.com/undo/fix",
+        )
+        assert needle in mail["body"]
+        assert "Nothing from your logs was kept" in mail["body"]

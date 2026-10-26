@@ -6,7 +6,7 @@ import time
 import pytest
 
 from agents.ghost.client_settings import ClientAutumbraSettings
-from agents.ghost.red_team import list_exercises, run_exercise
+from agents.ghost.red_team import list_exercises, run_exercise, run_own_sites_exercise_pass, OWN_SITES
 from agents.ghost.webhooks import (
     CF_SECRET_ENV,
     WebhookRejected,
@@ -54,3 +54,10 @@ def test_red_team_own_sites_and_permission():
     )
     ok = run_exercise("path_scan_fixture", target_site="client.example", settings=settings)
     assert ok["kind"] == "exercise"
+
+
+def test_own_sites_exercise_pass_receipts_marked_exercise():
+    receipts = run_own_sites_exercise_pass()
+    assert len(receipts) == len(OWN_SITES)
+    assert {r["target_site"] for r in receipts} == set(OWN_SITES)
+    assert all(r["kind"] == "exercise" for r in receipts)
