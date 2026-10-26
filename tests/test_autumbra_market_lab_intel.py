@@ -1,11 +1,16 @@
 """Autumbra consumes Market Lab IOC bundles — no Autumbra-owned feed registry."""
 import pytest
 
+import json
+
+from agents.ghost.client_settings import ClientAutumbraSettings
+from agents.ghost.enforce_apply import apply_from_payload
 from agents.ghost.market_lab_intel import (
     accept_ioc_bundle,
     receipt_for_bundle_consume,
     source_credits_on_receipt,
 )
+from agents.ghost.threat_payload import accept_threat_payload
 from agents.ghost.source_registry import backend_status, registry_public
 
 
@@ -51,3 +56,28 @@ def test_autumbra_does_not_own_feed_list():
     status = backend_status()
     assert status["autumbra_owns_feed_list"] is False
     assert status["owner"] == "Market Lab"
+
+
+def test_source_credits_on_enforce_receipt():
+    bundle = accept_ioc_bundle(_bundle())
+    credits = source_credits_on_receipt(bundle, source_ids=["urlhaus"])
+    payload = accept_threat_payload({
+        "schema_version": "ghost.threat.v1",
+        "action": "propose_shield",
+        "site": "coolify.tervory.com",
+        "kind": "block_ip",
+        "address": "203.0.113.44",
+        "path": None,
+        "match_id": "ml-fixture-1",
+        "cve_ids": ["CVE-2026-109618"],
+        "severity": "critical",
+        "reason": "Market Lab indicator",
+        "confidence": 0.9,
+    })
+    receipt = apply_from_payload(
+        payload,
+        settings=ClientAutumbraSettings(tenant_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+        source_credits=credits,
+    )
+    assert receipt["intel_via"] == "Market Lab"
+    assert receipt["sources"][0]["credit"] == "abuse.ch URLhaus"

@@ -1,4 +1,8 @@
-"""Signed inbound webhooks only (Cloudflare and Google). Unsigned dropped and counted, never stored."""
+"""Signed inbound webhooks only. Unsigned dropped and counted, never stored.
+
+Founder correction: no Cloudflare-named secrets yet. Env names are agnostic
+(edge / mailbox). Values never appear in code.
+"""
 from __future__ import annotations
 
 import hashlib
@@ -12,11 +16,18 @@ class WebhookRejected(ValueError):
     """Unsigned or badly signed — drop, count, never store the body."""
 
 
-# Coolify secret names only — values never appear in code.
-CF_SECRET_ENV = "AUTUMBRA_CF_WEBHOOK_SECRET"
-GOOGLE_SECRET_ENV = "AUTUMBRA_GOOGLE_WEBHOOK_SECRET"
+# Coolify secret names only — agnostic; no AUTUMBRA_CF_* until a real CF client.
+EDGE_WEBHOOK_SECRET_ENV = "AUTUMBRA_EDGE_WEBHOOK_SECRET"
+MAILBOX_WEBHOOK_SECRET_ENV = "AUTUMBRA_MAILBOX_WEBHOOK_SECRET"
+# Back-compat aliases for tests / older Coolify rows while names migrate.
+_LEGACY_CF = "AUTUMBRA_CF_WEBHOOK_SECRET"
+_LEGACY_GOOGLE = "AUTUMBRA_GOOGLE_WEBHOOK_SECRET"
 
-_drops: dict[str, int] = {"cloudflare": 0, "google": 0, "unknown": 0}
+# Public constant kept for older tests that imported CF_SECRET_ENV.
+CF_SECRET_ENV = EDGE_WEBHOOK_SECRET_ENV
+GOOGLE_SECRET_ENV = MAILBOX_WEBHOOK_SECRET_ENV
+
+_drops: dict[str, int] = {"edge": 0, "mailbox": 0, "cloudflare": 0, "google": 0, "unknown": 0}
 
 
 def drop_counts() -> dict[str, int]:
@@ -28,70 +39,93 @@ def reset_drop_counts() -> None:
         _drops[key] = 0
 
 
-def _secret(env_name: str) -> str:
-    return os.environ.get(env_name, "").strip()
+def _secret(*env_names: str) -> str:
+    for name in env_names:
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value
+    return ""
 
 
-def verify_cloudflare(
+def _verify(
+    body: bytes,
+    *,
+    secret: str,
+    signature: str | None,
+    timestamp: str | None,
+    bucket: str,
+    max_skew_seconds: int = 300,
+) -> None:
+    if not secret:
+        _drops[bucket] += 1
+        raise WebhookRejected(f"{bucket} webhook secret is not configured.")
+    if not signature:
+        _drops[bucket] += 1
+        raise WebhookRejected("missing signature")
+    if timestamp is not None:
+        try:
+            ts = int(timestamp)
+        except (TypeError, ValueError) as exc:
+            _drops[bucket] += 1
+            raise WebhookRejected("bad timestamp") from exc
+        if abs(int(time.time()) - ts) > max_skew_seconds:
+            _drops[bucket] += 1
+            raise WebhookRejected("stale timestamp")
+    expected = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
+    provided = signature.removeprefix("sha256=").strip()
+    if not hmac.compare_digest(expected, provided):
+        _drops[bucket] += 1
+        raise WebhookRejected("bad signature")
+
+
+def verify_edge(
     body: bytes,
     *,
     signature: str | None,
     timestamp: str | None = None,
     max_skew_seconds: int = 300,
 ) -> None:
-    """HMAC-SHA256 over body with the named Coolify secret. No parse before verify."""
-    secret = _secret(CF_SECRET_ENV)
-    if not secret:
-        _drops["cloudflare"] += 1
-        raise WebhookRejected("Cloudflare webhook secret is not configured.")
-    if not signature:
-        _drops["cloudflare"] += 1
-        raise WebhookRejected("missing signature")
-    if timestamp is not None:
-        try:
-            ts = int(timestamp)
-        except (TypeError, ValueError) as exc:
-            _drops["cloudflare"] += 1
-            raise WebhookRejected("bad timestamp") from exc
-        if abs(int(time.time()) - ts) > max_skew_seconds:
-            _drops["cloudflare"] += 1
-            raise WebhookRejected("stale timestamp")
-    expected = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
-    provided = signature.removeprefix("sha256=").strip()
-    if not hmac.compare_digest(expected, provided):
-        _drops["cloudflare"] += 1
-        raise WebhookRejected("bad signature")
+    """HMAC-SHA256 over body with the agnostic edge webhook secret."""
+    secret = _secret(EDGE_WEBHOOK_SECRET_ENV, _LEGACY_CF)
+    try:
+        _verify(
+            body,
+            secret=secret,
+            signature=signature,
+            timestamp=timestamp,
+            bucket="edge",
+            max_skew_seconds=max_skew_seconds,
+        )
+    finally:
+        # Keep legacy counter in sync for older dashboards/tests.
+        _drops["cloudflare"] = _drops["edge"]
 
 
-def verify_google_workspace(
+def verify_mailbox(
     body: bytes,
     *,
     signature: str | None,
     timestamp: str | None = None,
     max_skew_seconds: int = 300,
 ) -> None:
-    """Same shape for Google Workspace alert webhooks (channel token HMAC)."""
-    secret = _secret(GOOGLE_SECRET_ENV)
-    if not secret:
-        _drops["google"] += 1
-        raise WebhookRejected("Google webhook secret is not configured.")
-    if not signature:
-        _drops["google"] += 1
-        raise WebhookRejected("missing signature")
-    if timestamp is not None:
-        try:
-            ts = int(timestamp)
-        except (TypeError, ValueError) as exc:
-            _drops["google"] += 1
-            raise WebhookRejected("bad timestamp") from exc
-        if abs(int(time.time()) - ts) > max_skew_seconds:
-            _drops["google"] += 1
-            raise WebhookRejected("stale timestamp")
-    expected = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
-    provided = signature.removeprefix("sha256=").strip()
-    if not hmac.compare_digest(expected, provided):
-        _drops["google"] += 1
-        raise WebhookRejected("bad signature")
+    """HMAC-SHA256 for mailbox / Workspace-style alert webhooks."""
+    secret = _secret(MAILBOX_WEBHOOK_SECRET_ENV, _LEGACY_GOOGLE)
+    try:
+        _verify(
+            body,
+            secret=secret,
+            signature=signature,
+            timestamp=timestamp,
+            bucket="mailbox",
+            max_skew_seconds=max_skew_seconds,
+        )
+    finally:
+        _drops["google"] = _drops["mailbox"]
+
+
+# Back-compat names.
+verify_cloudflare = verify_edge
+verify_google_workspace = verify_mailbox
 
 
 def accept_signed(
@@ -102,15 +136,19 @@ def accept_signed(
     timestamp: str | None = None,
 ) -> dict[str, Any]:
     """Verify then return a tiny envelope. Body is not persisted by this helper."""
-    if provider == "cloudflare":
-        verify_cloudflare(body, signature=signature, timestamp=timestamp)
-    elif provider == "google":
-        verify_google_workspace(body, signature=signature, timestamp=timestamp)
+    key = str(provider or "").strip().lower()
+    if key in {"cloudflare", "edge", "host_firewall"}:
+        verify_edge(body, signature=signature, timestamp=timestamp)
+        named = "edge"
+    elif key in {"google", "google_workspace", "mailbox"}:
+        verify_mailbox(body, signature=signature, timestamp=timestamp)
+        named = "mailbox"
     else:
         _drops["unknown"] += 1
         raise WebhookRejected("unknown provider")
     return {
-        "provider": provider,
+        "provider": named,
+        "requested_provider": key,
         "bytes": len(body),
         "accepted": True,
         "stored": False,

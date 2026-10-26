@@ -30,7 +30,16 @@ from . import rails as airgap_rails
 from . import watch_oss as watch_oss_room
 from .watch_oss import AnomalyEvent, handoff_threat, propose_from_anomaly
 from . import enforce_oss as enforce_oss_room
-from .client_settings import ClientAutumbraSettings, load_settings, save_settings, active_halves
+from .client_settings import (
+    ClientAutumbraSettings,
+    active_halves,
+    connect_copy,
+    list_hands,
+    load_settings,
+    save_settings,
+    set_hand,
+)
+from .market_lab_intel import accept_ioc_bundle, receipt_for_bundle_consume
 from .source_registry import backend_status as intel_backend_status
 from .webhooks import WebhookRejected, accept_signed, drop_counts
 from .red_team import list_exercises, run_exercise
@@ -512,13 +521,13 @@ def create_app() -> FastAPI:
     @app.get("/ghost/autumbra/settings", dependencies=[Depends(require_tank)])
     async def autumbra_settings_get(tenant_id: str = Query(default=PLATFORM_TENANT)):
         settings = load_settings(app.state.store, tenant_id)
-        return {"settings": settings.model_dump(), "halves": active_halves(settings),
-                "copy": {"logs": "We read your logs, acted, and deleted them. Nothing from your logs was kept.",
-                         "empty": "No work yet",
-                         "perimeter": "Autumbra watches the edge as events pass. It does not import, copy or store your data.",
-                         "agnostic": "Autumbra is your 24/7 security guard. Cloudflare, Google, Shopify and host tools are optional — you choose what to connect.",
-                         "block_in_seconds": "Blocking an attack in seconds lights up when you connect an edge tool.",
-                         "cloudflare": "A free Cloudflare account is enough for address blocks. We do not sell Cloudflare."}}
+        halves = active_halves(settings)
+        return {
+            "settings": settings.model_dump(),
+            "halves": halves,
+            "hands": list_hands(settings),
+            "copy": connect_copy(settings),
+        }
 
     @app.post("/ghost/autumbra/settings", dependencies=[Depends(require_tank)])
     async def autumbra_settings_set(request: Request):
@@ -529,13 +538,76 @@ def create_app() -> FastAPI:
         except Exception:
             raise HTTPException(422, "Settings were not understood.") from None
         saved = save_settings(app.state.store, settings)
-        return {"settings": saved.model_dump(), "halves": active_halves(saved)}
+        return {
+            "settings": saved.model_dump(),
+            "halves": active_halves(saved),
+            "hands": list_hands(saved),
+            "copy": connect_copy(saved),
+        }
+
+    @app.get("/ghost/autumbra/hands", dependencies=[Depends(require_tank)])
+    async def autumbra_hands_get(tenant_id: str = Query(default=PLATFORM_TENANT)):
+        """Agnostic optional connects. No assumed provider. No Pro."""
+        settings = load_settings(app.state.store, tenant_id)
+        return {
+            "hands": list_hands(settings),
+            "halves": active_halves(settings),
+            "copy": connect_copy(settings),
+            "note": "Optional hands only. Stack/advisories/receipts work with zero connects.",
+        }
+
+    @app.post("/ghost/autumbra/hands", dependencies=[Depends(require_tank)])
+    async def autumbra_hands_set(request: Request):
+        """Connect or disconnect one optional hand. Client modes stay the only clamp."""
+        raw = await bounded_json(request, 4_000)
+        try:
+            data = json.loads(raw.decode("utf-8"))
+            tenant_id = str(data.get("tenant_id") or PLATFORM_TENANT)
+            hand = str(data["hand"])
+            connected = bool(data["connected"])
+        except Exception:
+            raise HTTPException(422, "Hand change was not understood.") from None
+        settings = load_settings(app.state.store, tenant_id)
+        try:
+            updated = set_hand(settings, hand, connected=connected)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from None
+        saved = save_settings(app.state.store, updated)
+        return {
+            "settings": saved.model_dump(),
+            "hands": list_hands(saved),
+            "halves": active_halves(saved),
+            "copy": connect_copy(saved),
+        }
 
     @app.get("/ghost/autumbra/sources", dependencies=[Depends(require_tank)])
     async def autumbra_sources(tenant_id: str = Query(default=PLATFORM_TENANT)):
         # Clients never see a feed list. Intel backend is Market Lab.
         _ = tenant_id
         return {"sources": [], "client_visible_feed_list": False, **intel_backend_status()}
+
+    @app.post("/ghost/autumbra/intel/consume", dependencies=[Depends(require_tank)])
+    async def autumbra_intel_consume(request: Request):
+        """Consume a Market Lab IOC bundle. Name sources on the receipt. No Autumbra registry."""
+        raw = await bounded_json(request, 64_000)
+        try:
+            data = json.loads(raw.decode("utf-8"))
+            tenant_id = str(data.get("tenant_id") or PLATFORM_TENANT)
+            bundle_raw = data.get("bundle") if isinstance(data.get("bundle"), dict) else data
+        except Exception:
+            raise HTTPException(422, "Intel bundle was not understood.") from None
+        try:
+            bundle = accept_ioc_bundle(bundle_raw)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from None
+        receipt = receipt_for_bundle_consume(bundle, tenant_id=tenant_id)
+        return {
+            "accepted": True,
+            "bundle_id": bundle["bundle_id"],
+            "indicator_count": len(bundle.get("indicators") or []),
+            "receipt": receipt,
+            "client_visible_feed_list": False,
+        }
 
     @app.post("/ghost/autumbra/webhooks/{provider}", dependencies=[Depends(require_tank)])
     async def autumbra_webhook(provider: str, request: Request):

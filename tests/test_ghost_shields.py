@@ -328,4 +328,5 @@ def test_compose_airgap_watch_has_no_cf_write_token():
     assert "internal: true" in enforce
     env = (ROOT / ".env.example").read_text()
     assert "\nAUTUMBRA_EDGE_CREDENTIAL=\n" in env
-    assert "AUTUMBRA_CF_WEBHOOK_SECRET=" in env
+    assert "AUTUMBRA_EDGE_WEBHOOK_SECRET=" in env
+    assert "AUTUMBRA_CF_WEBHOOK_SECRET=" not in env  # held — no CF names yet
