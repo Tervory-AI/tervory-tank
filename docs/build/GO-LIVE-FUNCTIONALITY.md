@@ -5,9 +5,9 @@
 > On 25 Oct the founder took everything with nothing behind it off the dashboard and the control panel. **This is the list of those things, built for real.** Each one is a back-end job first. Its part of the page returns to Figma only once the back end exists. Then it's built to the frame, and the assessor checks it live.
 
 ## Founder, 26 Oct 01:11 PT: product first
-**Pricing, keys and Stripe come when there is something to pay for.** G1 (paid-step confirmation), G2 (plans or credits), G3 (spend cap) and G5 (savings total) are **parked**. They aren't built until the founder says so.
+**Pricing, keys and Stripe come when there is something to pay for.** G1 (paid-step confirmation), G2 (plans or credits) and G3 (spend cap) are **parked**. They aren't built until the founder says so.
 
-**The work now:** every product does its real job, end to end, live. G4 (health) and G6 to G10 stay on the list below, after that.
+**The work now:** every product does its real job, end to end, live. **Savings is the product.** Every receipt shows what the work cost and what it would have cost, so **G5 (Saved this month, all clients) is built now**, alongside the product jobs. G4 (health) and G6 to G10 stay on the list below, after that.
 
 ## Parked list (kept for later)
 ## Must exist before go-live (customers and money)
