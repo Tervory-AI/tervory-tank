@@ -60,12 +60,41 @@ def sensitive_literal(value: str) -> bool:
     return False
 
 
+def python_evidence(node: ast.AST) -> str:
+    """Canonical syntax, independent of ast.dump defaults and source location.
+
+    Python 3.13 stopped displaying some empty fields in ast.dump. Encode AST
+    fields ourselves, sorting names and omitting absent/empty optional fields.
+    Keep every nonempty field, including call arguments, keywords and literals.
+    ast.iter_fields excludes line/column attributes and the parser's filename.
+    """
+    def encode(value: object) -> object:
+        if isinstance(value, ast.AST):
+            return {"node": type(value).__name__, "fields": {
+                name: encode(item) for name, item in ast.iter_fields(value)
+                if item is not None and item != []
+            }}
+        if isinstance(value, list):
+            return [encode(item) for item in value]
+        if isinstance(value, bytes):
+            return {"bytes": value.hex()}
+        if isinstance(value, complex):
+            return {"complex": [value.real, value.imag]}
+        if value is Ellipsis:
+            return {"ellipsis": True}
+        if value is None or isinstance(value, (str, int, float, bool)):
+            return value
+        raise TypeError(f"Unsupported AST value: {type(value).__name__}")
+
+    return json.dumps(encode(node), sort_keys=True, ensure_ascii=True, separators=(",", ":"))
+
+
 def python_findings(path: str, text: str) -> list[Finding]:
     tree = ast.parse(text, filename=path)
     findings = []
 
     def add(node: ast.AST, kind: str) -> None:
-        findings.append(Finding(path, node.lineno, kind, ast.dump(node, include_attributes=False)))
+        findings.append(Finding(path, node.lineno, kind, python_evidence(node)))
 
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
@@ -154,73 +183,73 @@ def scan(root: Path) -> list[Finding]:
     return findings
 
 
-# Exact AST/token fingerprints and occurrence counts, never a whole-file waiver.
+# Canonical AST/token fingerprints and occurrence counts, never a whole-file waiver.
 # A changed or additional call in an audited file needs a fresh review.
 EXCEPTIONS: dict[tuple[str, str, str], tuple[int, str]] = {
-    ('agents/_brain/runner.py', 'model invocation', '90f24680902f34d8'): (1, 'Hermes is configured only for Tank /v1/agents/base; task agent.base.think.'),
-    ('agents/base/app.py', 'provider/brain setting', '831f7c1c6901dfd6'): (3, 'Brain-enabled preview rejection and receipt display; no model call.'),
-    ('agents/base/base_brain.py', 'provider/brain setting', '3734f96ed160f2b6'): (4, 'Recovery orchestration only; the Base brain sends model work to Tank after the free pass.'),
+    ('agents/_brain/runner.py', 'model invocation', 'e9a2464540ffec9e'): (1, 'Hermes is configured only for Tank /v1/agents/base; task agent.base.think.'),
+    ('agents/base/app.py', 'provider/brain setting', '1a672692cf88e898'): (3, 'Brain-enabled preview rejection and receipt display; no model call.'),
+    ('agents/base/base_brain.py', 'provider/brain setting', '1855ed0c659a0982'): (4, 'Recovery orchestration only; the Base brain sends model work to Tank after the free pass.'),
     ('agents/base/docker-compose.yml', 'configured endpoint', 'a0f34ba16fc832ef'): (1, 'Local Base recovery process address; its only model backend is Tank.'),
     ('agents/base/pilot/recording.json', 'model/paid endpoint', 'b66c19e42a77a35b'): (4, 'Saved pilot HTTP transcript, not executable provider traffic.'),
     ('agents/base/pilot/recording.json', 'model/paid endpoint', 'ba87316f64cb9f26'): (4, 'Saved pilot HTTP transcript, not executable provider traffic.'),
-    ('agents/base/room.py', 'provider/brain setting', '831f7c1c6901dfd6'): (1, 'Selects the code-first worker entry point when recovery is configured.'),
-    ('agents/base/sources/context_dev.py', 'model/paid endpoint', '192552ca3f4ca0ee'): (1, 'DEFERRED F2: direct paid Context.dev call; Base sources are outside this brief.'),
-    ('agents/base/sources/context_dev.py', 'provider/brain setting', '91d27d8abcf0ec68'): (1, 'DEFERRED F2: direct paid Context.dev call; Base sources are outside this brief.'),
-    ('agents/rig/forge/gpu.py', 'paid compute reference', 'b96746da2bb14495'): (1, 'DEFERRED F3: Tank reserves/claims spend, but Forge holds the HF key and submits directly.'),
-    ('agents/rig/forge/gpu.py', 'provider import', 'cede1545b9e6578f'): (1, 'DEFERRED F3: Tank reserves/claims spend, but Forge holds the HF key and submits directly.'),
-    ('agents/rig/forge/gpu.py', 'provider/brain setting', 'f257e6fa1235ee47'): (1, 'DEFERRED F3: Tank reserves/claims spend, but Forge holds the HF key and submits directly.'),
-    ('agents/rig/forge/gpu/reconstruct.py', 'model invocation', '1df496be11429cf1'): (1, 'Local Trellis weights inside the licensed GPU job; paid submission remains DEFERRED F3.'),
-    ('agents/rig/forge/service.py', 'assembled endpoint', '84b00a482df76b97'): (1, 'Local Forge relay reaches Tank through the Rig brain, not a model endpoint.'),
-    ('agents/rig/forge/service.py', 'model/paid endpoint', '7cb505ce9b9a087b'): (1, 'Local Forge relay reaches Tank through the Rig brain, not a model endpoint.'),
-    ('agents/rig/rig_brain/runner.py', 'model invocation', '01ac9148e4f41fd2'): (1, 'Hermes is configured only for Tank /v1/agents/rig; task agent.rig.think.'),
-    ('agents/rig/rigbox/three_d/forge.py', 'assembled endpoint', '631947c3d125dc97'): (1, 'Local job submission; paid GPU authorization is relayed to Tank before execution.'),
-    ('agents/rig/rigbox/three_d/forge.py', 'model/paid endpoint', 'f51a9f62438e052c'): (1, 'Local job submission; paid GPU authorization is relayed to Tank before execution.'),
+    ('agents/base/room.py', 'provider/brain setting', '1a672692cf88e898'): (1, 'Selects the code-first worker entry point when recovery is configured.'),
+    ('agents/base/sources/context_dev.py', 'model/paid endpoint', '7735a424ce9d0d3f'): (1, 'DEFERRED F2: direct paid Context.dev call; Base sources are outside this brief.'),
+    ('agents/base/sources/context_dev.py', 'provider/brain setting', 'a5649e4d8387b5e8'): (1, 'DEFERRED F2: direct paid Context.dev call; Base sources are outside this brief.'),
+    ('agents/rig/forge/gpu.py', 'paid compute reference', 'dc11d2a58a65cb92'): (1, 'DEFERRED F3: Tank reserves/claims spend, but Forge holds the HF key and submits directly.'),
+    ('agents/rig/forge/gpu.py', 'provider import', 'bb1b5c7642961828'): (1, 'DEFERRED F3: Tank reserves/claims spend, but Forge holds the HF key and submits directly.'),
+    ('agents/rig/forge/gpu.py', 'provider/brain setting', '4c4b6b6ca2b00df6'): (1, 'DEFERRED F3: Tank reserves/claims spend, but Forge holds the HF key and submits directly.'),
+    ('agents/rig/forge/gpu/reconstruct.py', 'model invocation', '29597e63ca04bae9'): (1, 'Local Trellis weights inside the licensed GPU job; paid submission remains DEFERRED F3.'),
+    ('agents/rig/forge/service.py', 'assembled endpoint', '96e439ee16a10ce8'): (1, 'Local Forge relay reaches Tank through the Rig brain, not a model endpoint.'),
+    ('agents/rig/forge/service.py', 'model/paid endpoint', '7cf1d0b66e64bc02'): (1, 'Local Forge relay reaches Tank through the Rig brain, not a model endpoint.'),
+    ('agents/rig/rig_brain/runner.py', 'model invocation', 'bad065cced900afa'): (1, 'Hermes is configured only for Tank /v1/agents/rig; task agent.rig.think.'),
+    ('agents/rig/rigbox/three_d/forge.py', 'assembled endpoint', '81fa7a6be8ffecb8'): (1, 'Local job submission; paid GPU authorization is relayed to Tank before execution.'),
+    ('agents/rig/rigbox/three_d/forge.py', 'model/paid endpoint', '6ccb0ebfdccd8aa5'): (1, 'Local job submission; paid GPU authorization is relayed to Tank before execution.'),
     ('docker-compose.yml', 'configured endpoint', '29a2f8b609b5bf88'): (1, 'Tank alone receives the internal LiteLLM origin in this stack.'),
     ('docker-compose.za.yml', 'configured endpoint', '29a2f8b609b5bf88'): (1, 'ZA Tank alone receives the internal LiteLLM origin in this stack.'),
-    ('hermes/embeddings.py', 'model invocation', 'bab8d65d49255201'): (1, 'Free local CPU embedding model; client text is not sent to an inference API.'),
-    ('jobs/train/run.py', 'paid compute', '7031495de3954e37'): (1, 'DEFERRED F4: platform training CLI submits paid HF jobs and writes the ledger directly.'),
-    ('jobs/train/run.py', 'paid compute reference', '8faf4f0a7af908c3'): (1, 'DEFERRED F4: platform training CLI submits paid HF jobs and writes the ledger directly.'),
-    ('jobs/train/run.py', 'provider import', 'cede1545b9e6578f'): (1, 'DEFERRED F4: platform training CLI submits paid HF jobs and writes the ledger directly.'),
-    ('jobs/train/run.py', 'provider/brain setting', 'aa69b9f5c0666833'): (2, 'DEFERRED F4: platform training CLI submits paid HF jobs and writes the ledger directly.'),
-    ('jobs/train/train.py', 'provider import', '36aad997c7ad2e00'): (1, 'Training job downloads artifacts and uploads private weights; no inference API call.'),
-    ('jobs/train/train.py', 'provider import', 'ad83b7003b5a2a6c'): (1, 'Training job downloads artifacts and uploads private weights; no inference API call.'),
-    ('jobs/train/train.py', 'provider import', 'cede1545b9e6578f'): (1, 'Training job downloads artifacts and uploads private weights; no inference API call.'),
-    ('jobs/train/train.py', 'provider/brain setting', 'aa69b9f5c0666833'): (1, 'Training job downloads artifacts and uploads private weights; no inference API call.'),
+    ('hermes/embeddings.py', 'model invocation', '492ac2d72f738687'): (1, 'Free local CPU embedding model; client text is not sent to an inference API.'),
+    ('jobs/train/run.py', 'paid compute', '9383fcb131f6eb27'): (1, 'DEFERRED F4: platform training CLI submits paid HF jobs and writes the ledger directly.'),
+    ('jobs/train/run.py', 'paid compute reference', '951be89b581263a9'): (1, 'DEFERRED F4: platform training CLI submits paid HF jobs and writes the ledger directly.'),
+    ('jobs/train/run.py', 'provider import', 'bb1b5c7642961828'): (1, 'DEFERRED F4: platform training CLI submits paid HF jobs and writes the ledger directly.'),
+    ('jobs/train/run.py', 'provider/brain setting', 'fc74ec3718038794'): (2, 'DEFERRED F4: platform training CLI submits paid HF jobs and writes the ledger directly.'),
+    ('jobs/train/train.py', 'provider import', '4ea94efc39f7e458'): (1, 'Training job downloads artifacts and uploads private weights; no inference API call.'),
+    ('jobs/train/train.py', 'provider import', '14eddeff25615d4c'): (1, 'Training job downloads artifacts and uploads private weights; no inference API call.'),
+    ('jobs/train/train.py', 'provider import', 'bb1b5c7642961828'): (1, 'Training job downloads artifacts and uploads private weights; no inference API call.'),
+    ('jobs/train/train.py', 'provider/brain setting', 'fc74ec3718038794'): (1, 'Training job downloads artifacts and uploads private weights; no inference API call.'),
     ('litellm/config.yaml', 'configured endpoint', '4eca9db60dcd6816'): (14, 'The Tank-owned provider backend roster; keys are environment references.'),
     ('litellm/config.za.yaml', 'configured endpoint', '4eca9db60dcd6816'): (14, 'The ZA Tank-owned provider backend roster; keys are environment references.'),
-    ('tests/test_agent1_brain_route.py', 'model/paid endpoint', '08227cba77e63840'): (1, 'In-process Tank brain-route requests with mocked provider responses.'),
-    ('tests/test_agent1_brain_route.py', 'model/paid endpoint', '2af2a03f2c5ee673'): (7, 'In-process Tank brain-route requests with mocked provider responses.'),
-    ('tests/test_agent1_hermes_runtime.py', 'model/paid endpoint', '2af2a03f2c5ee673'): (1, 'Local fake Tank endpoint asserts the Hermes backend contract.'),
-    ('tests/test_agent1_hermes_runtime.py', 'model/paid endpoint', '352d96eda3620c83'): (1, 'Local fake Tank endpoint asserts the Hermes backend contract.'),
-    ('tests/test_agent1_isolation.py', 'model/paid endpoint', 'c916f9b9928a3b37'): (3, 'Mocked local recovery URL and URL-rejection fixtures.'),
-    ('tests/test_agent1_pilot.py', 'model/paid endpoint', '2af2a03f2c5ee673'): (1, 'Opt-in pilot uses recorded provider responses and a local recovery service.'),
-    ('tests/test_agent1_pilot.py', 'model/paid endpoint', '352d96eda3620c83'): (1, 'Opt-in pilot uses recorded provider responses and a local recovery service.'),
-    ('tests/test_agent1_skills.py', 'provider/brain setting', '9aa2189ee9084d45'): (1, 'In-process brain skill/receipt contract fixture.'),
-    ('tests/test_b3_base_room.py', 'model/paid endpoint', 'f598015b96924387'): (1, 'Asserts the configured internal recovery service; no inference call.'),
-    ('tests/test_b3_base_room.py', 'provider/brain setting', '387d34d382dce602'): (1, 'Asserts the configured internal recovery service; no inference call.'),
-    ('tests/test_dashboards.py', 'model/paid endpoint', '650f0508439c020d'): (1, 'Tests Tank response destinations and failed-provider accounting with fakes.'),
-    ('tests/test_dashboards.py', 'model/paid endpoint', '8fea251131ae9da4'): (1, 'Tests Tank response destinations and failed-provider accounting with fakes.'),
-    ('tests/test_ledger_sql_param.py', 'model/paid endpoint', '08227cba77e63840'): (1, 'In-process mocked model requests exercise parameterized ledger writes.'),
-    ('tests/test_models3_open_weight.py', 'model/paid endpoint', '7975d910f7eca723'): (1, 'Asserts the configured backend roster and provider URL, not a live call.'),
-    ('tests/test_models3_open_weight.py', 'model/paid endpoint', 'b8534f2003245cb6'): (1, 'Asserts the configured backend roster and provider URL, not a live call.'),
-    ('tests/test_perplexity_litellm_contract.py', 'model/paid endpoint', '80faac04ee963b47'): (1, 'Opt-in contract harness with a fake provider and gated LiteLLM container.'),
-    ('tests/test_perplexity_litellm_contract.py', 'model/paid endpoint', 'd417c10ac7dcbfb2'): (1, 'Opt-in contract harness with a fake provider and gated LiteLLM container.'),
-    ('tests/test_perplexity_litellm_contract.py', 'provider import', '197c7185fc9fccaa'): (1, 'Opt-in contract harness with a fake provider and gated LiteLLM container.'),
-    ('tests/test_perplexity_litellm_contract.py', 'provider import', '20f25f8e0e1a1047'): (1, 'Opt-in contract harness with a fake provider and gated LiteLLM container.'),
-    ('tests/test_perplexity_litellm_contract.py', 'provider import', '542500d0073d3c29'): (1, 'Opt-in contract harness with a fake provider and gated LiteLLM container.'),
-    ('tests/test_perplexity_litellm_contract.py', 'provider import', '702d65b5108b61bd'): (1, 'Opt-in contract harness with a fake provider and gated LiteLLM container.'),
-    ('tests/test_perplexity_research.py', 'model/paid endpoint', '0f6b0949a1569218'): (1, 'Mock-transport research/provider contract fixtures.'),
-    ('tests/test_perplexity_research.py', 'model/paid endpoint', '3ec65d4e1a817ebd'): (1, 'Mock-transport research/provider contract fixtures.'),
-    ('tests/test_perplexity_research.py', 'model/paid endpoint', '5c5b877220f0cfb6'): (1, 'Mock-transport research/provider contract fixtures.'),
-    ('tests/test_rig_box.py', 'model/paid endpoint', '5fcf41e258708b62'): (1, 'Assertions for the Rig brain model request boundary.'),
-    ('tests/test_rig_box_runtime.py', 'model/paid endpoint', '352d96eda3620c83'): (1, 'Local fake Tank HTTP handler used by the Rig runtime test.'),
-    ('tests/test_rig_box_runtime.py', 'model/paid endpoint', '6b33be13b765d3f7'): (1, 'Local fake Tank HTTP handler used by the Rig runtime test.'),
-    ('tests/test_rig_box_tank.py', 'model/paid endpoint', '6b33be13b765d3f7'): (4, 'In-process Tank endpoint tests with mocked upstream completion.'),
-    ('tests/test_searxng_ferry.py', 'provider/brain setting', '995ee6ccdf9f6f89'): (1, 'Service URL in a network-isolation rejection fixture.'),
-    ('tests/test_tiger.py', 'model/paid endpoint', 'd56e43650240a367'): (1, 'Internal LiteLLM URL is a rejected SSRF target.'),
-    ('tests/test_workers_1.py', 'model/paid endpoint', '5d03fe33c97e3f2a'): (1, 'Provider host is a refused worker destination.'),
-    ('tests/test_za_region.py', 'model/paid endpoint', '7975d910f7eca723'): (1, 'Checks a configured backend URL in a region contract fixture.'),
-    ('workers/task/__main__.py', 'model/paid endpoint', '352d96eda3620c83'): (1, 'Inbound loopback compatibility endpoint; forward_chat only sends to Tank /v1/route.'),
+    ('tests/test_agent1_brain_route.py', 'model/paid endpoint', '7b7967ff1233927e'): (1, 'In-process Tank brain-route requests with mocked provider responses.'),
+    ('tests/test_agent1_brain_route.py', 'model/paid endpoint', '73e132bd91c9775c'): (7, 'In-process Tank brain-route requests with mocked provider responses.'),
+    ('tests/test_agent1_hermes_runtime.py', 'model/paid endpoint', '73e132bd91c9775c'): (1, 'Local fake Tank endpoint asserts the Hermes backend contract.'),
+    ('tests/test_agent1_hermes_runtime.py', 'model/paid endpoint', '7c773e03813fb599'): (1, 'Local fake Tank endpoint asserts the Hermes backend contract.'),
+    ('tests/test_agent1_isolation.py', 'model/paid endpoint', '72dfc3d226875ce8'): (3, 'Mocked local recovery URL and URL-rejection fixtures.'),
+    ('tests/test_agent1_pilot.py', 'model/paid endpoint', '73e132bd91c9775c'): (1, 'Opt-in pilot uses recorded provider responses and a local recovery service.'),
+    ('tests/test_agent1_pilot.py', 'model/paid endpoint', '7c773e03813fb599'): (1, 'Opt-in pilot uses recorded provider responses and a local recovery service.'),
+    ('tests/test_agent1_skills.py', 'provider/brain setting', 'b0f534957fc90b06'): (1, 'In-process brain skill/receipt contract fixture.'),
+    ('tests/test_b3_base_room.py', 'model/paid endpoint', '8b3004f74fc9b2db'): (1, 'Asserts the configured internal recovery service; no inference call.'),
+    ('tests/test_b3_base_room.py', 'provider/brain setting', 'edace169b84d753c'): (1, 'Asserts the configured internal recovery service; no inference call.'),
+    ('tests/test_dashboards.py', 'model/paid endpoint', '78462f840ad17f59'): (1, 'Tests Tank response destinations and failed-provider accounting with fakes.'),
+    ('tests/test_dashboards.py', 'model/paid endpoint', '59e8bceb3a71b2e2'): (1, 'Tests Tank response destinations and failed-provider accounting with fakes.'),
+    ('tests/test_ledger_sql_param.py', 'model/paid endpoint', '7b7967ff1233927e'): (1, 'In-process mocked model requests exercise parameterized ledger writes.'),
+    ('tests/test_models3_open_weight.py', 'model/paid endpoint', '41e71010f55fab11'): (1, 'Asserts the configured backend roster and provider URL, not a live call.'),
+    ('tests/test_models3_open_weight.py', 'model/paid endpoint', '570598ef1a7d1ba1'): (1, 'Asserts the configured backend roster and provider URL, not a live call.'),
+    ('tests/test_perplexity_litellm_contract.py', 'model/paid endpoint', 'cee8dacdf06392eb'): (1, 'Opt-in contract harness with a fake provider and gated LiteLLM container.'),
+    ('tests/test_perplexity_litellm_contract.py', 'model/paid endpoint', '0db03dc7f50f86e0'): (1, 'Opt-in contract harness with a fake provider and gated LiteLLM container.'),
+    ('tests/test_perplexity_litellm_contract.py', 'provider import', '0666fda020abbadd'): (1, 'Opt-in contract harness with a fake provider and gated LiteLLM container.'),
+    ('tests/test_perplexity_litellm_contract.py', 'provider import', '6fd775f92210e598'): (1, 'Opt-in contract harness with a fake provider and gated LiteLLM container.'),
+    ('tests/test_perplexity_litellm_contract.py', 'provider import', '201cdc5cb428035b'): (1, 'Opt-in contract harness with a fake provider and gated LiteLLM container.'),
+    ('tests/test_perplexity_litellm_contract.py', 'provider import', 'f15a299b70d7bd45'): (1, 'Opt-in contract harness with a fake provider and gated LiteLLM container.'),
+    ('tests/test_perplexity_research.py', 'model/paid endpoint', '69a0f485f0e252d9'): (1, 'Mock-transport research/provider contract fixtures.'),
+    ('tests/test_perplexity_research.py', 'model/paid endpoint', 'a3db9fdfc7b3230c'): (1, 'Mock-transport research/provider contract fixtures.'),
+    ('tests/test_perplexity_research.py', 'model/paid endpoint', '798dbc19232a4c1f'): (1, 'Mock-transport research/provider contract fixtures.'),
+    ('tests/test_rig_box.py', 'model/paid endpoint', 'eb51fe7da3e7f13c'): (1, 'Assertions for the Rig brain model request boundary.'),
+    ('tests/test_rig_box_runtime.py', 'model/paid endpoint', '7c773e03813fb599'): (1, 'Local fake Tank HTTP handler used by the Rig runtime test.'),
+    ('tests/test_rig_box_runtime.py', 'model/paid endpoint', '002e2d93cf20a64b'): (1, 'Local fake Tank HTTP handler used by the Rig runtime test.'),
+    ('tests/test_rig_box_tank.py', 'model/paid endpoint', '002e2d93cf20a64b'): (4, 'In-process Tank endpoint tests with mocked upstream completion.'),
+    ('tests/test_searxng_ferry.py', 'provider/brain setting', 'ec23636177f7c561'): (1, 'Service URL in a network-isolation rejection fixture.'),
+    ('tests/test_tiger.py', 'model/paid endpoint', '91b5d315e825c7a3'): (1, 'Internal LiteLLM URL is a rejected SSRF target.'),
+    ('tests/test_workers_1.py', 'model/paid endpoint', '19dbe6b9d49db063'): (1, 'Provider host is a refused worker destination.'),
+    ('tests/test_za_region.py', 'model/paid endpoint', '41e71010f55fab11'): (1, 'Checks a configured backend URL in a region contract fixture.'),
+    ('workers/task/__main__.py', 'model/paid endpoint', '7c773e03813fb599'): (1, 'Inbound loopback compatibility endpoint; forward_chat only sends to Tank /v1/route.'),
 }
 
 
@@ -232,6 +261,46 @@ def test_no_new_tank_bypass() -> None:
     assert not unexpected, "Unaudited model/paid calls outside Tank:\n" + "\n".join(
         f"{item.path}:{item.line}: {item.kind} [{item.identity[2]}]" for item in unexpected)
     assert not stale, f"Remove or re-audit stale exceptions: {stale}"
+
+
+def test_python_evidence_ignores_ast_display_defaults_and_locations() -> None:
+    source = 'os.environ.get("BASE_BRAIN_URL")'
+    original = ast.parse(source, filename="/checkout/one/agent.py").body[0].value
+    relocated = ast.parse("\n# formatting only\n" + source, filename="/different/checkout/agent.py").body[0].value
+    # These produce different ast.dump text across 3.12/3.13 but mean the same
+    # call: no keyword arguments and no Constant.kind marker.
+    del relocated.keywords
+    relocated.args[0].kind = None
+    assert python_evidence(original) == python_evidence(relocated)
+    # A real destination/default/keyword change must still need a new audit.
+    for changed in (
+        'os.environ.get("RIG_BRAIN_URL")',
+        'os.environ.get("BASE_BRAIN_URL", "fallback")',
+        'os.environ.get("BASE_BRAIN_URL", default="fallback")',
+    ):
+        assert python_evidence(original) != python_evidence(ast.parse(changed).body[0].value)
+
+
+def test_audited_sites_are_independent_of_checkout_root(tmp_path: Path) -> None:
+    paths = {
+        "agents/_brain/runner.py", "agents/base/app.py", "agents/base/room.py",
+        "agents/base/sources/context_dev.py", "agents/rig/forge/gpu/reconstruct.py",
+    }
+    expected = Counter({identity: count for identity, (count, _) in EXCEPTIONS.items() if identity[0] in paths})
+    for directory, prefix in (("clone-one", ""), ("different parent/clone-two", "\n# relocated checkout\n")):
+        checkout = tmp_path / directory
+        checkout.mkdir(parents=True)
+        subprocess.run(["git", "init", "--quiet", str(checkout)], check=True)
+        for path in paths:
+            file = checkout / path
+            file.parent.mkdir(parents=True, exist_ok=True)
+            file.write_text(prefix + (ROOT / path).read_text(encoding="utf-8"), encoding="utf-8")
+        assert Counter(item.identity for item in scan(checkout)) == expected
+        # A new occurrence in an already-audited file is not covered by the
+        # exception's existing count, even if its syntax is identical.
+        with (checkout / "agents/base/app.py").open("a", encoding="utf-8") as file:
+            file.write('\nos.environ.get("BASE_BRAIN_URL")\n')
+        assert Counter(item.identity for item in scan(checkout)) - expected
 
 
 @pytest.mark.parametrize("source", [
