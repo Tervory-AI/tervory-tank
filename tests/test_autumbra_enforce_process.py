@@ -166,4 +166,35 @@ def test_compose_uses_enforce_app_not_ghost_app():
     assert "ghost.app:app" not in text
     assert "No TANK_KEY" in text
     assert "TANK_KEY:" not in text and "TANK_KEY=" not in text
+    assert "THREAT_PAYLOAD_QUEUE: /queue" in text
+    assert "threat_queue:/queue" in text
+
+
+def test_drain_once_for_enforce_process_entrypoint(tmp_path, monkeypatch):
+    """Enforce process drain entrypoint drains the queue (not library-only)."""
+    from agents.ghost.enforce_app import create_enforce_app, drain_once_for_enforce
+    from agents.ghost.threat_queue import ThreatPayloadQueue, watch_enqueue_fixture_attack
+
+    qpath = tmp_path / "q"
+    monkeypatch.setenv("THREAT_PAYLOAD_QUEUE", str(qpath))
+    monkeypatch.setenv("TENANT_ID", TENANT)
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    reset_default_control()
+    queue = ThreatPayloadQueue(qpath)
+    watch_enqueue_fixture_attack(
+        queue=queue,
+        raw_log="src=198.51.100.30 attacking",
+        site="coolify.tervory.com",
+        address="198.51.100.30",
+    )
+    app = create_enforce_app()
+    app.state.settings = ClientAutumbraSettings(
+        tenant_id=TENANT,
+        shield_mode=ApplyMode.auto_when_checks_pass,
+    )
+    app.state.threat_queue = queue
+    receipt = drain_once_for_enforce(app=app)
+    assert receipt is not None
+    assert receipt["address"] == "198.51.100.30"
+    assert receipt["raw_log_seen"] is False
 

@@ -2,12 +2,16 @@
 
 Own entrypoint — not ghost.app. Starts without a Tank key. Does not parse raw
 logs: HTTP apply/undo never read request bodies; in-process callers hand a
-ThreatPayload (or the prior apply receipt for undo). Fixture edge control makes
-apply/undo real for dogfood. Client shield mode is loaded for TENANT_ID.
+ThreatPayload (or the prior apply receipt for undo). The production product
+path drains ThreatPayloads from THREAT_PAYLOAD_QUEUE (background loop +
+drain_once_for_enforce). Fixture edge control makes apply/undo real for
+dogfood. Client shield mode is loaded for TENANT_ID.
 """
 from __future__ import annotations
 
+import asyncio
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -17,8 +21,10 @@ from fastapi.responses import JSONResponse
 from .client_settings import ClientAutumbraSettings, load_settings
 from .enforce_apply import apply_from_payload, undo_applied
 from .fixture_edge import DEFAULT_CONTROL
+from .never_block import ActionCap
 from .store import Store
 from .threat_payload import ThreatPayload
+from .threat_queue import ThreatPayloadQueue, enforce_drain_once, queue_root_from_env
 
 
 def _content_length(request: Request) -> int:
@@ -39,7 +45,9 @@ def _refuse_raw_http() -> JSONResponse:
             "detail": (
                 "Enforce does not parse request bodies. "
                 "Hand a ThreatPayload object via submit_payload(), "
-                "or the prior apply receipt via submit_undo()."
+                "or the prior apply receipt via submit_undo(). "
+                "Production path drains THREAT_PAYLOAD_QUEUE via "
+                "drain_once_for_enforce()."
             ),
         },
         status_code=415,
@@ -70,10 +78,108 @@ def load_enforce_client_settings() -> ClientAutumbraSettings:
     return settings
 
 
+def queue_configured() -> bool:
+    return bool((os.environ.get("THREAT_PAYLOAD_QUEUE") or "").strip())
+
+
+def enforce_threat_queue() -> ThreatPayloadQueue:
+    """Production Enforce queue door — path from THREAT_PAYLOAD_QUEUE."""
+    return ThreatPayloadQueue(queue_root_from_env())
+
+
+def drain_once_for_enforce(
+    *,
+    app: FastAPI | None = None,
+    queue: ThreatPayloadQueue | None = None,
+    settings: ClientAutumbraSettings | None = None,
+    control=None,
+    action_cap: ActionCap | None = None,
+    source_credits: list[dict[str, str]] | None = None,
+) -> dict[str, Any] | None:
+    """Production Enforce drain entrypoint used by the process drain loop.
+
+    Reads one ThreatPayload from the queue door, then shield → health →
+    auto-undo on fail → receipt. Never parses raw/str bodies.
+    """
+    target = app
+    if target is None:
+        # Lazy: prefer the module-level app when the drain loop is running.
+        target = globals().get("app")
+    q = queue
+    if q is None:
+        if target is not None and getattr(target.state, "threat_queue", None) is not None:
+            q = target.state.threat_queue
+        else:
+            q = enforce_threat_queue()
+    cfg = settings
+    if cfg is None and target is not None:
+        cfg = getattr(target.state, "settings", None)
+    if cfg is None:
+        cfg = load_enforce_client_settings()
+    edge = control
+    if edge is None and target is not None:
+        edge = getattr(target.state, "control", None)
+    if edge is None:
+        edge = DEFAULT_CONTROL
+    cap = action_cap
+    if cap is None and target is not None:
+        cap = getattr(target.state, "action_cap", None)
+    if cap is None:
+        cap = ActionCap()
+    return enforce_drain_once(
+        q,
+        settings=cfg,
+        control=edge,
+        action_cap=cap,
+        source_credits=source_credits,
+    )
+
+
+async def _queue_drain_loop(app: FastAPI) -> None:
+    """Background loop: drain ThreatPayload queue while the process is up."""
+    interval = float(os.environ.get("ENFORCE_DRAIN_INTERVAL_SEC") or "1.0")
+    if interval < 0.05:
+        interval = 0.05
+    while True:
+        # Sleep first so an explicit /v1/drain-once (or startup attach) is not raced.
+        await asyncio.sleep(interval)
+        try:
+            if getattr(app.state, "threat_queue", None) is not None:
+                drain_once_for_enforce(app=app)
+        except Exception:
+            # Keep the process alive; next tick retries. No raw body parse.
+            pass
+
+
 def create_enforce_app() -> FastAPI:
-    app = FastAPI(title="Autumbra Enforce", docs_url=None, redoc_url=None)
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        app.state.control = DEFAULT_CONTROL
+        app.state.settings = load_enforce_client_settings()
+        app.state.action_cap = ActionCap()
+        app.state.threat_queue = None
+        app.state.drain_loop_running = False
+        drain_task: asyncio.Task | None = None
+        if queue_configured():
+            app.state.threat_queue = enforce_threat_queue()
+            drain_task = asyncio.create_task(_queue_drain_loop(app))
+            app.state.drain_loop_running = True
+        try:
+            yield
+        finally:
+            app.state.drain_loop_running = False
+            if drain_task is not None:
+                drain_task.cancel()
+                await asyncio.gather(drain_task, return_exceptions=True)
+
+    app = FastAPI(title="Autumbra Enforce", docs_url=None, redoc_url=None, lifespan=lifespan)
+    # Defaults for callers that construct routes without entering lifespan
+    # (unit helpers). Lifespan overwrites these when the process runs.
     app.state.control = DEFAULT_CONTROL
     app.state.settings = load_enforce_client_settings()
+    app.state.action_cap = ActionCap()
+    app.state.threat_queue = None
+    app.state.drain_loop_running = False
 
     @app.get("/health")
     async def health() -> dict[str, Any]:
@@ -86,6 +192,9 @@ def create_enforce_app() -> FastAPI:
             "blocked": len(app.state.control.list_blocked()),
             "shield_mode": app.state.settings.shield_mode.value,
             "tenant_id": app.state.settings.tenant_id,
+            "threat_payload_queue_configured": queue_configured(),
+            "drain_loop_running": bool(getattr(app.state, "drain_loop_running", False)),
+            "drain_entrypoint": "ghost.enforce_app:drain_once_for_enforce",
         }
 
     @app.post("/v1/apply")
@@ -102,6 +211,18 @@ def create_enforce_app() -> FastAPI:
         if _content_length(request) != 0:
             return _refuse_raw_http()
         raise HTTPException(415, "Enforce does not parse request bodies.")
+
+    @app.post("/v1/drain-once")
+    async def drain_once_http(request: Request) -> JSONResponse:
+        """Explicit process drain door. No body parse — queue only."""
+        if _content_length(request) != 0:
+            return _refuse_raw_http()
+        if not queue_configured() and getattr(app.state, "threat_queue", None) is None:
+            raise HTTPException(503, "THREAT_PAYLOAD_QUEUE is not configured.")
+        receipt = drain_once_for_enforce(app=app)
+        if receipt is None:
+            return JSONResponse({"drained": False, "receipt": None})
+        return JSONResponse({"drained": True, "receipt": receipt})
 
     return app
 
