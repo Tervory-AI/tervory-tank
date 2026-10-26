@@ -232,7 +232,9 @@ def test_gold_route_accepts_only_the_room_key(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setenv("TANK_REGION", "us-east")
     monkeypatch.setenv("CATALOGUE_DIR", str(CATALOGUES))
     module = _app()
-    paths = {getattr(route, "path", None) for route in module.app.routes}
+    from http_routes import http_paths
+
+    paths = http_paths(module.app.routes)
     assert "/gold/candidates" in paths
     missing = _call(module, "/gold/candidates?limit=2", {})
     assert missing[0] == 401

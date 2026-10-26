@@ -116,9 +116,9 @@ def test_skill_engines_match_the_radix_scanners() -> None:
 
 def test_image_pins_scanners_and_does_not_scan_over_the_network() -> None:
     text = (ROOT / "agents" / "radix" / "Dockerfile").read_text(encoding="utf-8")
-    assert "GITLEAKS_VERSION=8.28.0" in text
-    assert "a65b5253807a68ac0cafa4414031fd740aeb55f54fb7e55f386acb52e6a840eb" in text
-    assert "SEMGREP_VERSION=1.181.0" in text
+    assert "GITLEAKS_VERSION=8.30.1" in text
+    assert "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb" in text
+    assert "SEMGREP_VERSION=1.182.1" in text
     assert "PIP_AUDIT_VERSION=2.10.1" in text
     assert "RADIX_USE_SYSTEM_TOOLS=1" in text
     assert "RADIX_OSV_DIR=/opt/osv" in text

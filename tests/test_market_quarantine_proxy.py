@@ -76,7 +76,9 @@ def _install(monkeypatch: pytest.MonkeyPatch, room: Room):
 
 def test_routes_are_founder_only() -> None:
     paths: dict[str, set[str]] = {}
-    for route in tank.app.routes:
+    from http_routes import iter_http_routes
+
+    for route in iter_http_routes(tank.app.routes):
         path = str(getattr(route, "path", ""))
         if not path.startswith("/v1/market/quarantine"):
             continue
