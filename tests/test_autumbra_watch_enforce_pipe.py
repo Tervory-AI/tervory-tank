@@ -108,3 +108,112 @@ def test_action_cap_used_on_product_path(tmp_path: Path):
     second = enforce_drain_once(queue, settings=settings, control=control, action_cap=cap)
     assert second["outcome"] == "refused_action_cap"
     assert second["applied"] is False
+
+
+def test_process_wiring_watch_enqueue_enforce_drain(tmp_path: Path, monkeypatch):
+    """Product path via app.py + enforce_app.py process doors — not library-only."""
+    from agents.ghost.app import enqueue_fixture_attack_for_watch
+    from agents.ghost.enforce_app import create_enforce_app, drain_once_for_enforce
+    from agents.ghost.client_settings import ApplyMode, ClientAutumbraSettings
+    from agents.ghost.fixture_edge import FixtureEdgeControl
+    from agents.ghost.never_block import ActionCap
+    from agents.ghost.threat_queue import ThreatPayloadQueue
+
+    qpath = tmp_path / "product-q"
+    monkeypatch.setenv("THREAT_PAYLOAD_QUEUE", str(qpath))
+    monkeypatch.setenv("TENANT_ID", TENANT)
+    monkeypatch.setenv("DATA_DIR", str(tmp_path / "edata"))
+    queue = ThreatPayloadQueue(qpath)
+    watch = enqueue_fixture_attack_for_watch(
+        raw_log="2026-10-26T12:00:01Z src=203.0.113.200 path=/admin scanner=nuclei",
+        site="coolify.tervory.com",
+        address="203.0.113.200",
+        queue=queue,
+    )
+    assert watch["queued"] is True
+    assert watch["raw_log_kept"] is False
+    control = FixtureEdgeControl(tenant_id=TENANT)
+    settings = ClientAutumbraSettings(
+        tenant_id=TENANT,
+        site_name="coolify.tervory.com",
+        shield_mode=ApplyMode.auto_when_checks_pass,
+    )
+    app = create_enforce_app()
+    app.state.control = control
+    app.state.settings = settings
+    app.state.action_cap = ActionCap(limit=100)
+    app.state.threat_queue = queue
+    receipt = drain_once_for_enforce(app=app)
+    assert receipt is not None
+    assert receipt["applied"] is True
+    assert receipt["raw_log_seen"] is False
+    assert receipt["address"] == "203.0.113.200"
+    assert len(control.list_blocked()) == 1
+    assert len(queue.list_receipts()) == 1
+
+
+def test_watch_http_enqueue_and_enforce_http_drain(tmp_path: Path, monkeypatch):
+    """HTTP process doors: Watch fixture-attack route + Enforce /v1/drain-once."""
+    from fastapi.testclient import TestClient
+
+    from agents.ghost.app import create_app
+    from agents.ghost.enforce_app import create_enforce_app
+    from agents.ghost.client_settings import ApplyMode, ClientAutumbraSettings
+    from agents.ghost.fixture_edge import FixtureEdgeControl, reset_default_control
+    from agents.ghost.never_block import ActionCap
+
+    qpath = tmp_path / "http-q"
+    monkeypatch.setenv("TANK_KEY", "test-tank-key")
+    monkeypatch.setenv("DATA_DIR", str(tmp_path / "wdata"))
+    monkeypatch.setenv("THREAT_PAYLOAD_QUEUE", str(qpath))
+    monkeypatch.setenv("TENANT_ID", TENANT)
+    # Keep background drain from racing the explicit /v1/drain-once proof.
+    monkeypatch.setenv("ENFORCE_DRAIN_INTERVAL_SEC", "3600")
+    reset_default_control()
+    watch_app = create_app()
+    with TestClient(watch_app) as watch_client:
+        res = watch_client.post(
+            "/ghost/autumbra/queue/fixture-attack",
+            headers={"X-Tank-Key": "test-tank-key"},
+            json={
+                "raw_log": "src=203.0.113.77 path=/wp-login.php",
+                "site": "coolify.tervory.com",
+                "address": "203.0.113.77",
+            },
+        )
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert body["queued"] is True
+        assert body["raw_log_kept"] is False
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path / "edata"))
+    control = FixtureEdgeControl(tenant_id=TENANT)
+    settings = ClientAutumbraSettings(
+        tenant_id=TENANT,
+        shield_mode=ApplyMode.auto_when_checks_pass,
+        site_name="coolify.tervory.com",
+    )
+    enforce_app = create_enforce_app()
+    with TestClient(enforce_app) as enforce_client:
+        # Lifespan attaches queue from env; re-bind modes/control for auto-apply.
+        enforce_app.state.control = control
+        enforce_app.state.settings = settings
+        enforce_app.state.action_cap = ActionCap(limit=100)
+        health = enforce_client.get("/health").json()
+        assert health["threat_payload_queue_configured"] is True
+        assert health["drain_loop_running"] is True
+        assert health["drain_entrypoint"] == "ghost.enforce_app:drain_once_for_enforce"
+        drained = enforce_client.post("/v1/drain-once")
+        assert drained.status_code == 200, drained.text
+        payload = drained.json()
+        assert payload["drained"] is True
+        receipt = payload["receipt"]
+        assert receipt["applied"] is True
+        assert receipt["raw_log_seen"] is False
+        assert receipt["address"] == "203.0.113.77"
+        # Empty queue + no body parse.
+        empty = enforce_client.post("/v1/drain-once")
+        assert empty.status_code == 200
+        assert empty.json()["drained"] is False
+        refuse = enforce_client.post("/v1/drain-once", content=b'{"raw_log":"nope"}')
+        assert refuse.status_code == 415

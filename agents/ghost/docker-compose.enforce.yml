@@ -1,6 +1,7 @@
 # Per-client Autumbra Enforce. One project per client (Coolify by name).
 # Own entrypoint: ghost.enforce_app:app — NOT ghost.app. No TANK_KEY.
 # Internal network only. No public ports. No Docker socket. No host mounts.
+# THREAT_PAYLOAD_QUEUE mounts the per-client ThreatPayload queue volume (Watch writes, Enforce drains).
 # Optional edge credential: secret NAME held until a real connected edge client (agnostic; no CF name yet).
 # mem_limit below is a provisional placeholder — replace after ops/autumbra-enforce-memory-measure.sh on test host.
 # Substitute TENANT_ID before deploy. Never paste a secret value into this file.
@@ -20,11 +21,12 @@ services:
       TENANT_ID: ${TENANT_ID}
       # Edge credential env reserved; Coolify secret NAME held until a real edge client. Never commit values.
       AUTUMBRA_EDGE_CREDENTIAL: ${AUTUMBRA_EDGE_CREDENTIAL:-}
-      THREAT_PAYLOAD_QUEUE: ${THREAT_PAYLOAD_QUEUE}
+      THREAT_PAYLOAD_QUEUE: /queue
       DATA_DIR: /data
       # Enforce never calls a model. No TANK_KEY here on purpose.
     volumes:
       - enforce_data:/data
+      - threat_queue:/queue
     networks: [enforce_internal]
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -38,6 +40,8 @@ services:
     # No ports: / no expose to public. Reachable only on the internal network + queue.
 volumes:
   enforce_data:
+  threat_queue:
+    name: ${THREAT_PAYLOAD_QUEUE_VOLUME}
 networks:
   enforce_internal:
     internal: true

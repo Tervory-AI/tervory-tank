@@ -46,6 +46,7 @@ from .enforce_lifecycle import FixtureComposeBackend, plan_create, plan_destroy,
 from .owner_email import DEFAULT_FIXTURE_TRANSPORT, build_owner_update, send_owner_update
 from .probes import Probes
 from .store import Store
+from .threat_queue import ThreatPayloadQueue, queue_root_from_env, watch_enqueue_fixture_attack
 
 
 async def require_tank(x_tank_key: str = Header(default="")) -> None:
@@ -149,6 +150,34 @@ async def bounded_json(request: Request, limit: int) -> bytes:
     return raw
 
 
+def watch_queue_configured() -> bool:
+    return bool((os.environ.get("THREAT_PAYLOAD_QUEUE") or "").strip())
+
+
+def watch_threat_queue() -> ThreatPayloadQueue:
+    """Production Watch queue door — path from THREAT_PAYLOAD_QUEUE."""
+    return ThreatPayloadQueue(queue_root_from_env())
+
+
+def enqueue_fixture_attack_for_watch(
+    *,
+    raw_log: str,
+    site: str,
+    address: str,
+    reason: str = "fixture attacking address",
+    queue: ThreatPayloadQueue | None = None,
+) -> dict:
+    """Production Watch enqueue entrypoint used by /ghost/autumbra/queue/fixture-attack.
+
+    Validates via never-block rules, then puts a ThreatPayload on the queue door.
+    Does not call Enforce. Never keeps the raw log on the queue.
+    """
+    q = queue or watch_threat_queue()
+    return watch_enqueue_fixture_attack(
+        queue=q, raw_log=raw_log, site=site, address=address, reason=reason
+    )
+
+
 def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -166,6 +195,7 @@ def create_app() -> FastAPI:
             app.state.advisory_lock = asyncio.Lock()
             app.state.watcher = advisory_watch.Watcher(store, advisory_watch.Feeds(http), tank)
             app.state.shields = shield_room.Shields(store, http, tank)
+            app.state.threat_queue = watch_threat_queue() if watch_queue_configured() else None
             tasks = [asyncio.create_task(watch(app)), asyncio.create_task(nightly(app)),
                      asyncio.create_task(advisory_watch.watch(app))]
             try:
@@ -670,6 +700,35 @@ def create_app() -> FastAPI:
             raise HTTPException(403, str(exc)) from None
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from None
+        return receipt
+
+
+    @app.post("/ghost/autumbra/queue/fixture-attack", dependencies=[Depends(require_tank)])
+    async def autumbra_queue_fixture_attack(request: Request):
+        """Watch product door: dirty log → ThreatPayload → THREAT_PAYLOAD_QUEUE.
+
+        Does not call Enforce. Enforce drains the queue in its own process via
+        drain_once_for_enforce / background drain loop.
+        """
+        if not watch_queue_configured() and getattr(app.state, "threat_queue", None) is None:
+            raise HTTPException(503, "THREAT_PAYLOAD_QUEUE is not configured.")
+        raw = await bounded_json(request, 32_000)
+        try:
+            data = json.loads(raw.decode("utf-8"))
+            raw_log = str(data["raw_log"])
+            site = str(data["site"])
+            address = str(data["address"])
+            reason = str(data.get("reason") or "fixture attacking address")
+        except Exception:
+            raise HTTPException(422, "Fixture attack was not understood.") from None
+        queue = getattr(app.state, "threat_queue", None)
+        receipt = enqueue_fixture_attack_for_watch(
+            raw_log=raw_log,
+            site=site,
+            address=address,
+            reason=reason,
+            queue=queue,
+        )
         return receipt
 
     @app.post("/ghost/autumbra/enforce/plan-create", dependencies=[Depends(require_tank)])

@@ -1,7 +1,9 @@
 """Per-client Enforce containers. Coolify API by name only — never type/see/store secrets.
 
 Watch stays shared and tenant-scoped. Each client gets its own Enforce container on an
-internal network, with its own ThreatPayload queue and receipts. Optional edge
+internal network, with its own ThreatPayload queue volume + THREAT_PAYLOAD_QUEUE env
+and receipts (routes_to_queue_only). Queues are per-client — not shared across
+clients; networks, secrets, and data volumes stay isolated. Optional edge
 credentials are named only after a real connected hand exists (agnostic — hold CF
 secret names until a real CF client). Disconnect destroys the container and any
 secret name binding.
@@ -151,6 +153,13 @@ def receipt_for(plan: dict[str, Any], *, outcome: str = "planned") -> dict[str, 
         "project": plan["project"],
         "network": plan.get("network"),
         "volume": plan.get("volume"),
+        "threat_payload_queue": plan.get("threat_payload_queue"),
+        "routes_to_queue_only": True,
+        "queue_shared_across_clients": False,
+        "queue_note": (
+            "Per-client ThreatPayload queue volume + THREAT_PAYLOAD_QUEUE=/queue. "
+            "Clients do not share queue, network, data volume, or secret name."
+        ),
         "credential_secret_name": plan["credential_secret_name"],
         "secret_value_present": False,
     }
@@ -201,15 +210,28 @@ class FixtureComposeBackend:
         (project_dir / "volume.name").write_text(plan["volume"] + "\n")
         secret = plan["credential_secret_name"]
         (project_dir / "secret.name").write_text(("HELD" if secret is None else secret) + "\n")
+        (project_dir / "queue.name").write_text(plan["threat_payload_queue"] + "\n")
+        # Per-client queue volume + env so routes_to_queue_only is real in the fixture.
+        # Queue is NOT shared across clients (see assert_tenant_isolation).
         compose = (
             f"# fixture project for {plan['tenant_id']}\n"
+            f"# routes_to_queue_only: ThreatPayload queue door (per-client volume)\n"
             f"name: {plan['project']}\n"
             f"networks:\n  enforce_internal:\n    name: {plan['network']['name']}\n    internal: true\n"
-            f"volumes:\n  enforce_data:\n    name: {plan['volume']}\n"
+            f"volumes:\n"
+            f"  enforce_data:\n    name: {plan['volume']}\n"
+            f"  threat_queue:\n    name: {plan['threat_payload_queue']}\n"
             f"services:\n  enforce:\n    image: autumbra-enforce-fixture\n"
             f"    command: [\"uvicorn\", \"ghost.enforce_app:app\", \"--host\", \"127.0.0.1\", \"--port\", \"8000\"]\n"
+            f"    environment:\n"
+            f"      TENANT_ID: {plan['tenant_id']}\n"
+            f"      THREAT_PAYLOAD_QUEUE: /queue\n"
+            f"      DATA_DIR: /data\n"
+            f"      AUTUMBRA_ROLE: enforce\n"
             f"    networks: [enforce_internal]\n"
-            f"    volumes: [enforce_data:/data]\n"
+            f"    volumes:\n"
+            f"      - enforce_data:/data\n"
+            f"      - threat_queue:/queue\n"
         )
         (project_dir / "docker-compose.yml").write_text(compose)
         return receipt_for(plan, outcome="created")
@@ -233,4 +255,5 @@ class FixtureComposeBackend:
             "volume": meta["volume"],
             "secret_name": meta["credential_secret_name"],
             "project": meta["project"],
+            "threat_payload_queue": meta.get("threat_payload_queue"),
         }
