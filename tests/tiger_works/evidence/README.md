@@ -16,7 +16,16 @@ The source is the existing saved Adafruit Raspberry Pi 4 product page at
 `tests/tiger_alert_page/fixtures/live/www-adafruit-com--product-4296.html`.
 Its original reading is USD 120.00, in stock. The harness changes the saved price
 to USD 115.00 for the second and third checks. That change is a test mutation,
-not a claim about the current price on Adafruit. Three readings create one alert.
+not a claim about the current price on Adafruit. Three readings create one alert,
+saved in `observations.json`. The extended screen check changes the fixture to
+110.00, creating a second alert, then reads the saved refusal page at
+`tests/fixtures/uncitral/cloudfront-blocked.html` as a 403. That blocked observation
+has no price or alert. The final five observations and two alerts are saved in
+[review2-observations.json](proof/review2-observations.json).
+
+The harness checks 0/1/2 alert and search counts, singular/plural overview labels,
+the Can't-read `Page` header, hostname link and full URL title, and the absence of
+the inactive `Check again` button. The scheduled-check explanation remains.
 
 | Step | Evidence |
 | --- | --- |
@@ -25,6 +34,8 @@ not a claim about the current price on Adafruit. Three readings create one alert
 | First reading: USD 120.00, in stock | [03-first-reading.png](proof/03-first-reading.png) |
 | History: 120.00 → 115.00 → 115.00 | [04-history.png](proof/04-history.png) |
 | One price alert: 120.00 → 115.00 | [05-alert.png](proof/05-alert.png) |
+| Two alerts after one more fixture price change | [06-two-alerts.png](proof/06-two-alerts.png) |
+| Blocked page: hostname link, full URL on hover, scheduled-check message | [07-cant-read.png](proof/07-cant-read.png) |
 | Saved observations and alert | [observations.json](proof/observations.json) |
 
 With Python dependencies from `tank/requirements.txt` and
@@ -80,9 +91,10 @@ rejection and the absence of raw HTML in ordinary/model results. Existing
 
 ## CI comparison
 
-[CI failure comparison and replay instructions](ci-baseline.md) lists every
-failure on reviewed head `596585e`, the results on main `65067a4`, and the
-explicitly enabled savings replay plugin. It is not part of normal test collection.
+[CI failure comparison](ci-baseline.md) lists the three failures on reviewed head
+`483211e`: sidebar fixture loading, Rig catalogue dates and Rig search timing.
+The first two reproduce on main `65067a4`; the timing test passes locally on both
+main and this branch. No CI retry was requested.
 
 ## Founder must decide: client's own session
 
@@ -91,3 +103,7 @@ The founder explicitly excluded the client's-own-session path from this brief.
 in `watch.py`. Implementing a genuine client-network/session transport is a
 separate decision; this change does not claim or simulate that path. Claude's
 signed-in live proof remains a step after the founder deploys the branch.
+
+The Base thread must decide alignment of the two unchanged `TervoryBase/0.1`
+clients at `tank/main.py:670` and `workspace/app/api/base/route.ts:129`; both are
+outside this lane. The shared browser and Tiger already use the truthful Tervory UA.

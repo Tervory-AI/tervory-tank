@@ -1,111 +1,69 @@
 # CI failure comparison
 
-The reviewed PR head was `596585e5e28c1f98487187c287f7d91cccd11add`.
-Its [tank CI job](https://github.com/zenascapetown-code/tervory-tank/actions/runs/40338108767/job/121625135804)
-**failed: 3 failed, 3,445 passed, 20 skipped, 437 subtests passed**.
-The existing log was downloaded; no CI rerun was requested.
+The second review checked PR head
+`483211e21885e90ac57d71bd0a712e238c9276fe`.
+Its [tank CI job](https://github.com/zenascapetown-code/tervory-tank/actions/runs/40347190881/job/121657271661)
+**failed: 3 failed, 3,476 passed, 20 skipped, 437 subtests passed in 661.82s**.
+These are the three failures on that head. The completed log was downloaded;
+no CI retry or manual workflow run was requested.
 
-The baseline is the exact main commit
-`65067a43a0d27d54b48633bf6db4f3fc211ec05f`, exported with `git archive`.
-The failing tests and their implementation files are byte-identical between
-that baseline and this branch. Local comparisons use Python 3.12, Node 22,
-Chromium and a disposable Postgres 16 service, with `PYTHONPATH=tank`.
+## Every failing CI test on 483211e
 
-## Every failing CI test
+| Test | Cause | Local comparison |
+| --- | --- | --- |
+| `tests/test_shell_nav.py:23` — `test_pages_do_not_scroll_sideways_and_squad_does_not_grow_the_sidebar` | The assertion at line 33 sees a failed Node subprocess. `tests/shell_browser.ts:263` times out loading `/fixtures/actual-1440.html`. | The same fixture-load failure was reproduced on exact main `65067a4` during the first review fixes. |
+| `tests/test_rig_postgres.py:92` — `test_rig_startup_loads_catalogues_on_postgres` | The date assertion at line 155 expects every row to be `2026-03-01`; the committed Archon catalogue includes `2026-10-18`. | The same date mismatch was reproduced on exact main `65067a4` during the first review fixes. |
+| `tests/test_rig_pr90_independent.py:738` — `test_gate_5_search_speed` | The assertion at line 762 requires both p95 and maximum latency below 300 ms. CI measured 200 searches: p50 **5.992 ms**, p95 **6.973 ms**, maximum **374.590 ms**, **one** request over 300 ms. | Passes locally on both this branch and `65067a4`; this is a timing failure, not a reproducible functional search failure. No Rig code or timing threshold was changed. |
 
-1. `tests/test_core2_savings.py::test_exports_reconcile_and_keep_precise_decimals`.
-   The decorator is at **line 174**, function at **175**, assertion at **184**.
-   CI's exact failure was `'777' not in csv`: the valid row UUID
-   `02e777e0-3dd7-4788-a60b-24402391fe39` contains that substring. Both expected
-   decimal amounts were present. This is a substring assertion over a whole
-   CSV, including random IDs; the cited occurrence is not a foreign price.
-2. `tests/test_rig_postgres.py::test_rig_startup_loads_catalogues_on_postgres`.
-   `_assert_imported` asserts at line 155 that every market date to be `2026-03-01`;
-   the committed Archon catalogue includes `2026-10-18`. CI and the unmodified
-   main baseline both fail with `assert '2026-10-18' == '2026-03-01'`.
-3. `tests/test_shell_nav.py::test_pages_do_not_scroll_sideways_and_squad_does_not_grow_the_sidebar`.
-   The subprocess assertion at line 33 fails because `tests/shell_browser.ts:263`
-   throws `Page did not load http://127.0.0.1:<port>/fixtures/actual-1440.html`.
-   CI and the unmodified main baseline fail at the same navigation step.
+The baseline is `65067a43a0d27d54b48633bf6db4f3fc211ec05f`, exported with
+`git archive`. The three test files and their relevant Rig/sidebar implementation
+files are unchanged between that baseline and this branch.
 
-The plain three-test baseline run returned **2 failed, 1 passed in 12.02s**:
-Rig and sidebar failed as above; savings passed. Ten further plain local savings
-runs passed, consistent with the intermittent UUID condition. Those passes are
-not presented as reproduction of the CI failure.
+## Local timing comparison
 
-## Deterministic savings replay
-
-[ci_savings_replay.py](ci_savings_replay.py) is an explicitly enabled pytest
-plugin, not a collected test or runtime dependency. It fixes only the first
-fixture ledger row's database-generated UUID to
-`00000000-0000-4777-8000-000000000001`. The UUID stays last in the existing export
-sort order. All foreign-key receipts, prices, tenants, export code and the test's
-assertions remain intact. This reproduces the same valid-ID substring condition
-seen in CI without waiting for random UUIDs.
-
-On both the untouched main export and this branch:
-
-```text
-E  '777' is contained here:
-E  ledger,<fixture tenant>,us-east,,00000000-0000-4777-8000-000000000001,job_id,...
-tests/test_core2_savings.py:184: AssertionError
-FAILED tests/test_core2_savings.py::test_exports_reconcile_and_keep_precise_decimals
-1 failed
-```
-
-Main: **1 failed in 1.19s**. Branch: **1 failed in 1.16s**. No application code or
-savings test file was edited for either comparison.
-
-## Reproduce locally
-
-Set `POOL_SCHEMA_DATABASE_URL` to a disposable Postgres 16 database with permission
-to create test databases. Set `READ1_CHROMIUM_EXECUTABLE` to Chromium and use Node
-22 on PATH. Install the repository's test dependencies and Workspace packages.
-From either checkout, run:
+Python 3.12, existing Workspace dependencies, the unchanged test's in-memory
+ranker, no network or Postgres:
 
 ```sh
-PYTHONPATH=tank python -m pytest -q \
-  tests/test_core2_savings.py::test_exports_reconcile_and_keep_precise_decimals \
+PYTHONPATH=tank python -m pytest -q -s \
+  tests/test_rig_pr90_independent.py::test_gate_5_search_speed
+```
+
+- Branch: **1 passed in 1.64s**; 200 searches; p50 **5.245 ms**, p95 **10.568 ms**,
+  maximum **72.062 ms**, none over 300 ms.
+- Main `65067a4`: **1 passed in 1.39s**; 200 searches; p50 **4.813 ms**, p95
+  **7.110 ms**, maximum **73.949 ms**, none over 300 ms.
+
+These local passes do not erase the CI failure or establish that its timing
+condition cannot recur. The CI job on the reviewed head remains failed.
+
+## Reproduce the other two failures
+
+Use Python 3.12 and Node 22 with the repository's test dependencies and Workspace
+packages. Set `POOL_SCHEMA_DATABASE_URL` to a disposable Postgres 16 database
+with permission to create test databases, and install Chromium. From either
+checkout:
+
+```sh
+PYTHONPATH=tank READ1_CHROMIUM_EXECUTABLE=/usr/bin/chromium python -m pytest -q \
   tests/test_rig_postgres.py::test_rig_startup_loads_catalogues_on_postgres \
   tests/test_shell_nav.py::test_pages_do_not_scroll_sideways_and_squad_does_not_grow_the_sidebar
 ```
 
-For the savings replay, add this branch's **absolute evidence directory** to
-PYTHONPATH while keeping `tank` relative to the checkout under test:
+The earlier main comparison failed with:
 
-```sh
-PYTHONPATH=tank:/path/to/tiger-branch/tests/tiger_works/evidence \
-  python -m pytest -q -p ci_savings_replay \
-  tests/test_core2_savings.py::test_exports_reconcile_and_keep_precise_decimals
+```text
+tests/test_rig_postgres.py:155: AssertionError
+assert '2026-10-18' == '2026-03-01'
+
+tests/test_shell_nav.py:33: AssertionError
+Error: Page did not load http://127.0.0.1:<port>/fixtures/actual-1440.html
 ```
 
-The replay intentionally fails the unchanged assertion; it is evidence, not an
-extra CI test. Ordinary pytest collection does not load the plugin.
+## Founder must decide: Base user agents
 
-## Additional local tool failures
-
-The local environment has Blender but no `gltf-transform`, `gltfpack` or `toktx`.
-That enables the forge image tests, which stop at their first missing executable:
-
-- `tests/test_rig_forge_pipeline.py::test_neutral_samples_pass_all_real_tools[ai-sample.glb]`
-- `tests/test_rig_forge_pipeline.py::test_neutral_samples_pass_all_real_tools[scan.obj]`
-
-Both were run on unmodified main `65067a4` and failed identically:
-`agents/rig/forge/pipeline.py:51: StageFailed: dedup failed; the result is not eligible for approval.`
-The baseline command returned **2 failed in 5.58s**. The `dedup` stage invokes
-`gltf-transform` at `agents/rig/forge/pipeline.py:82`. These are local environment
-failures, not additional failures claimed for the reviewed tank CI job.
-
-```sh
-PYTHONPATH=tank python -m pytest -q \
-  tests/test_rig_forge_pipeline.py::test_neutral_samples_pass_all_real_tools
-```
-
-## Smoke collection check
-
-`test_smoke.py` passed in the full `PYTHONPATH=tank` suite. An additional isolated
-`pytest tests/test_smoke.py` invocation raises `KeyError: 'tank_main'` during
-collection, because its importlib harness relies on registration performed by
-other collected modules. That same isolated invocation fails identically on
-`65067a4` (`tank/main.py:3097`). No smoke test or unrelated Tank code was changed.
-This is not counted as a failure of the full suite or of the reviewed CI job.
+The shared browser and Tiger identify as `Tervory/1.0 (+https://tervory.com)`.
+Two Base paths still identify as `TervoryBase/0.1`: `tank/main.py:670` (the shared
+HTTP client includes the website suffix) and `workspace/app/api/base/route.ts:129`.
+Both are unchanged and outside the Tiger lane. The Base thread must handle any
+alignment of those clients.

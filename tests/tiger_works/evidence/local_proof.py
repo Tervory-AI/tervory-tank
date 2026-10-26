@@ -132,9 +132,19 @@ export default { devIndicators: false, webpack(config) {
                           document.body.append(label);
                         }''')
                         await page.screenshot(path=str(output / name), full_page=True)
+                    async def search_count(query, expected):
+                        field = page.get_by_role("textbox", name="Search watched products, reads and alerts")
+                        await field.fill(query)
+                        await field.press("Enter")
+                        await page.get_by_text(expected + " in your watched products, reads and alerts.", exact=True).wait_for()
+                        await page.get_by_role("button", name="Clear", exact=True).click()
                     await page.goto(origin + "/tiger?tab=watch")
                     await page.get_by_text("No products watched yet.").wait_for()
                     await shot("01-empty.png")
+                    await search_count("no matching fixture", "0 matches")
+                    await page.get_by_role("button", name="Alerts", exact=True).click()
+                    await page.get_by_text("0 alerts", exact=True).wait_for()
+                    await page.get_by_role("button", name="Watch list", exact=True).click()
                     await page.get_by_role("button", name="Add a product", exact=True).click()
                     await page.locator('input[name="url"]').fill(URL)
                     await page.locator('input[name="label"]').fill(LABEL)
@@ -147,6 +157,7 @@ export default { devIndicators: false, webpack(config) {
                     watch = store.watches[0]
                     assert watch["alert_price"] and not watch["alert_stock"]
                     await shot("02-watch-added.png")
+                    await search_count("Not checked", "1 match")
                     reader_context = await chromium.new_context(java_script_enabled=False)
                     await reader_context.route("**/*", lambda route: route.abort())
                     reader_page = await reader_context.new_page()
@@ -163,6 +174,8 @@ export default { devIndicators: false, webpack(config) {
                     await check("120")
                     await page.goto(origin + "/tiger")
                     await page.get_by_text("$120.00", exact=True).first.wait_for()
+                    await page.get_by_text("Watched product", exact=True).wait_for()
+                    await search_count("$120.00", "2 matches")
                     await shot("03-first-reading.png")
                     await check("115")
                     await check("115")
@@ -173,13 +186,48 @@ export default { devIndicators: false, webpack(config) {
                     assert await page.get_by_text("$120.00", exact=True).count() == 1
                     await shot("04-history.png")
                     await page.goto(origin + "/tiger?tab=alerts")
-                    await page.get_by_text("1 alerts", exact=True).wait_for()
+                    await page.get_by_text("1 alert", exact=True).wait_for()
                     await shot("05-alert.png")
-                    assert not errors, errors
                     (output / "observations.json").write_text(json.dumps({"scope": "local, fixture page", "watch": watch,
                         "observations": store.observations, "alerts": store.alerts}, indent=2, default=str) + "\n")
+                    await page.goto(origin + "/tiger")
+                    await page.get_by_text("Change today", exact=True).wait_for()
+                    await check("110")
+                    await page.goto(origin + "/tiger?tab=alerts")
+                    await page.get_by_text("2 alerts", exact=True).wait_for()
+                    await shot("06-two-alerts.png")
+                    await page.goto(origin + "/tiger")
+                    await page.get_by_text("Changes today", exact=True).wait_for()
+
+                    # A saved refusal page produces an actual blocked observation,
+                    # then Tank/Tiger's read routes supply the Can't-read row.
+                    blocked_html = (ROOT / "tests/fixtures/uncitral/cloudfront-blocked.html").read_text()
+                    await reader_page.set_content(blocked_html)
+                    blocked = await browser.public_result(reader_page,
+                        {**browser.blocked_result(URL), "status": 403}, blocked_html,
+                        Path(temp), str(uuid.uuid4()), price_reader=True)
+                    async def blocked_render(*args): return blocked
+                    observed = await run_check(store, watch["tenant_id"], watch, "tiger", blocked_render,
+                        no_paid_call, no_paid_call, no_paid_call, DomainLimiter(0))
+                    assert observed["status"] == "blocked" and observed["alerts"] == []
+                    await page.goto(origin + "/tiger?tab=unread")
+                    try:
+                        await page.get_by_role("columnheader", name="Page", exact=True).wait_for(timeout=10000)
+                    except Exception:
+                        await shot("failed.png")
+                        (output / "failed.html").write_text(await page.content())
+                        raise
+                    link = page.get_by_role("link", name="www.adafruit.com", exact=True)
+                    assert await link.get_attribute("href") == URL
+                    assert await link.get_attribute("title") == URL
+                    assert await page.get_by_role("button", name="Check again", exact=True).count() == 0
+                    await shot("07-cant-read.png")
+                    (output / "review2-observations.json").write_text(json.dumps({"scope": "local, fixture page", "watch": watch,
+                        "observations": store.observations, "alerts": store.alerts}, indent=2, default=str) + "\n")
+                    assert not errors, errors
                     await chromium.close()
             print(f"PASS: form → Tank → Tiger → 3 saved-page readings → 1 alert; screenshots: {output}")
+            print("PASS: 0/1/2 alert and search counts, overview grammar, blocked row Page link, no inactive retry button")
     finally:
         if process and process.returncode is None:
             process.terminate()

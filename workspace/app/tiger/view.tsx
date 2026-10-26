@@ -46,7 +46,6 @@ export function TigerApp({
   const [query, setQuery] = useState("");
   const [hidden, setHidden] = useState<string[]>([]);
   const [help, setHelp] = useState(false);
-  const [checkedNote, setCheckedNote] = useState("");
   const [thread, setThread] = useState<AskTurn[]>([]);
   const [askDraft, setAskDraft] = useState("");
 
@@ -156,7 +155,6 @@ export function TigerApp({
 
         {notice ? <p className="notice">{notice}</p> : null}
         {help ? <p className="notice">Tiger checks public product pages and tells you when a price or stock changes. It never logs in, and it does not guess a price it could not read.</p> : null}
-        {checkedNote ? <p className="notice">{checkedNote}</p> : null}
 
         {hit ? <Results hit={hit} /> : null}
         {!hit && section === "overview" ? <Overview data={visible} onWatch={() => show("watch")} onAlerts={() => show("alerts")} /> : null}
@@ -177,7 +175,7 @@ export function TigerApp({
           </section>
         ) : null}
         {!hit && section === "unread" ? (
-          <Unread rows={data.unread} onCheck={() => setCheckedNote("Tiger tries this page again at its next check. Nothing was guessed.")} />
+          <Unread rows={data.unread} />
         ) : null}
 
         <footer className="foot">
@@ -197,8 +195,8 @@ function Overview({ data, onWatch, onAlerts }: { data: TigerData; onWatch: () =>
   return (
     <>
       <section className="counts" aria-label="Counts">
-        <article className="count"><b>{data.watchedCount}</b><strong>Watched products</strong><p className="fine">Product pages Tiger checks.</p></article>
-        <article className="count"><b>{data.changesToday}</b><strong>Changes today</strong><p className="fine">Real price or stock changes since midnight.</p></article>
+        <article className="count"><b>{data.watchedCount}</b><strong>{data.watchedCount === 1 ? "Watched product" : "Watched products"}</strong><p className="fine">Product pages Tiger checks.</p></article>
+        <article className="count"><b>{data.changesToday}</b><strong>{data.changesToday === 1 ? "Change today" : "Changes today"}</strong><p className="fine">Real price or stock changes since midnight.</p></article>
         <article className="count"><b>{data.unreadCount}</b><strong>Can&apos;t read</strong><p className="fine">Pages Tiger could not read. Nothing was guessed.</p></article>
       </section>
       <section className="block">
@@ -372,7 +370,7 @@ function Alerts({ rows, example }: { rows: AlertRow[]; example: boolean }) {
         </table>
       </div>
       <div className="table-foot">
-        <span>{example ? `${listed.length} alerts in the last 7 days · Example` : `${listed.length} alerts`}</span>
+        <span>{listed.length} {listed.length === 1 ? "alert" : "alerts"}{example ? " in the last 7 days · Example" : ""}</span>
         <button type="button" className="text" onClick={() => setWeek(false)}>Load older alerts</button>
       </div>
       <article className="note-card">
@@ -426,7 +424,7 @@ function Watch({ rows, note, onHide }: { rows: ProductRow[]; note: string | null
   );
 }
 
-function Unread({ rows, onCheck }: { rows: UnreadRow[]; onCheck: () => void }) {
+function Unread({ rows }: { rows: UnreadRow[] }) {
   return (
     <section className="block">
       <div className="title-row">
@@ -436,15 +434,14 @@ function Unread({ rows, onCheck }: { rows: UnreadRow[]; onCheck: () => void }) {
       {rows.length === 0 ? <p className="empty">No pages Tiger could not read.</p> : null}
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Product</th><th>Store</th><th>Why Tiger could not read it</th><th>Since</th><th /></tr></thead>
+          <thead><tr><th scope="col">Product</th><th scope="col">Page</th><th scope="col">Why Tiger could not read it</th><th scope="col">Since</th></tr></thead>
           <tbody>
             {rows.map((row) => (
               <tr key={row.id}>
                 <td className="name">{row.product}</td>
-                <td className="muted"><a href={row.url} target="_blank" rel="noreferrer">{row.url}</a></td>
+                <td className="muted"><a href={row.url} title={row.url} target="_blank" rel="noreferrer">{row.store}</a></td>
                 <td>{row.why}</td>
                 <td className="muted">{row.since}</td>
-                <td><button type="button" className="line small" onClick={onCheck}>Check again</button></td>
               </tr>
             ))}
           </tbody>
@@ -464,7 +461,7 @@ function Results({ hit }: { hit: NonNullable<ReturnType<typeof searchTiger>> }) 
       <div className="title-row">
         <h2>Results for “{hit.query}”</h2>
       </div>
-      <p className="intro">{hit.total} matches in your watched products, reads and alerts.</p>
+      <p className="intro">{hit.total} {hit.total === 1 ? "match" : "matches"} in your watched products, reads and alerts.</p>
       <h3 className="group">Watched products</h3>
       <SimpleTable
         heads={["Product", "Page link", "Stock"]}

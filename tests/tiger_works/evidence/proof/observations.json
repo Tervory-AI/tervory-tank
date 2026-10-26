@@ -1,7 +1,7 @@
 {
   "scope": "local, fixture page",
   "watch": {
-    "id": "4fc74d4c-cff8-45c0-8899-94b13d024f34",
+    "id": "3dc1f1ee-06fd-46b7-841e-5bb0d044f78e",
     "tenant_id": "ab4e3ad2-83d9-5c53-94ee-667e25b05a15",
     "url": "https://www.adafruit.com/product/4296",
     "label": "Raspberry Pi 4 Model B - 4 GB RAM",
@@ -14,10 +14,10 @@
   },
   "observations": [
     {
-      "id": "cc345c9e-f630-4ab8-8d3d-f69019bdaf95",
+      "id": "404361f4-acce-4b27-bb5f-7c547cadbcdb",
       "tenant_id": "ab4e3ad2-83d9-5c53-94ee-667e25b05a15",
       "url": "https://www.adafruit.com/product/4296",
-      "ts": "2026-10-26T13:22:48.447655+00:00",
+      "ts": "2026-10-26T18:45:45.905392+00:00",
       "price": "120.00",
       "currency": "USD",
       "availability": "InStock",
@@ -25,10 +25,10 @@
       "evidence": "{\"method\": \"jsonld\", \"price\": \"120.00\", \"file\": null, \"stock\": \"InStock\", \"layout\": {\"primary\": \"jsonld\"}}"
     },
     {
-      "id": "cd31edf6-cb57-4d5c-93f5-728b4b13dd33",
+      "id": "f044b909-6ea2-45de-9f69-75a6e6447716",
       "tenant_id": "ab4e3ad2-83d9-5c53-94ee-667e25b05a15",
       "url": "https://www.adafruit.com/product/4296",
-      "ts": "2026-10-26T13:22:50.401285+00:00",
+      "ts": "2026-10-26T18:45:47.286689+00:00",
       "price": "115.00",
       "currency": "USD",
       "availability": "InStock",
@@ -36,10 +36,10 @@
       "evidence": "{\"method\": \"jsonld\", \"price\": \"115.00\", \"file\": null, \"stock\": \"InStock\", \"layout\": {\"primary\": \"jsonld\"}}"
     },
     {
-      "id": "5570ef3c-670e-477f-91a8-c6fd5ab9e8cc",
+      "id": "b4506e1c-5ced-406b-b189-11ce33e908bc",
       "tenant_id": "ab4e3ad2-83d9-5c53-94ee-667e25b05a15",
       "url": "https://www.adafruit.com/product/4296",
-      "ts": "2026-10-26T13:22:50.863584+00:00",
+      "ts": "2026-10-26T18:45:47.592067+00:00",
       "price": "115.00",
       "currency": "USD",
       "availability": "InStock",
@@ -49,10 +49,10 @@
   ],
   "alerts": [
     {
-      "id": "7f77134f-c383-4f4e-b997-ead061721e69",
+      "id": "e6e2ba68-32db-4cf5-8949-bf9d98d24cbd",
       "tenant_id": "ab4e3ad2-83d9-5c53-94ee-667e25b05a15",
       "url": "https://www.adafruit.com/product/4296",
-      "ts": "2026-10-26T13:22:50.401560+00:00",
+      "ts": "2026-10-26T18:45:47.286957+00:00",
       "kind": "price",
       "before": "120.00",
       "after": "115.00"
