@@ -2949,7 +2949,7 @@ async def tiger_create_watch(request: Request) -> Response:
     body = await _tiger_body(request)
     tenant_id = _tiger_tenant(request, body)
     forwarded: dict[str, Any] = {"tenant_id": str(tenant_id)}
-    for key in ("url", "label", "engine", "every", "enabled", "threshold"):
+    for key in ("url", "label", "engine", "every", "enabled", "threshold", "alert_price", "alert_stock"):
         if key in body:
             forwarded[key] = body[key]
     resp = await _tiger_call("POST", "/watchlist", [], json.dumps(forwarded).encode())

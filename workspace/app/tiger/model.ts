@@ -2,13 +2,14 @@ import type { TigerAlert, TigerObservation, TigerWatch } from "@/lib/tank";
 import { everyLabel, stockLabel, watchTitle } from "../prices/format";
 import type { ReadStatus } from "./copy";
 
-export type Section = "overview" | "ask" | "alerts" | "watch" | "unread" | "plugins";
+export type Section = "overview" | "ask" | "alerts" | "watch" | "history" | "unread" | "plugins";
 
 export const SECTIONS: { id: Section; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "ask", label: "Ask Tiger" },
   { id: "alerts", label: "Alerts" },
   { id: "watch", label: "Watch list" },
+  { id: "history", label: "History" },
   { id: "unread", label: "Can't read" },
   { id: "plugins", label: "Plugins" },
 ];
@@ -41,7 +42,7 @@ export type AlertRow = {
   today: boolean;
   live?: boolean;
 };
-export type UnreadRow = { id: string; product: string; store: string; why: string; since: string };
+export type UnreadRow = { id: string; product: string; store: string; url: string; why: string; since: string };
 
 export type TigerData = {
   example: boolean;
@@ -165,7 +166,7 @@ function latestAlert(alerts: TigerAlert[], url: string): TigerAlert | null {
 function unread(obs: TigerObservation | undefined): boolean {
   if (!obs) return false;
   const method = (obs.method ?? "").toLowerCase();
-  if (method === "blocked" || method === "unread" || method === "can't read") return true;
+  if (SKIPPED.has(method) || method === "can't read") return true;
   const stock = (obs.availability ?? "").toLowerCase();
   return stock.includes("can't read") || stock.includes("cant read");
 }
@@ -174,12 +175,11 @@ function whyUnread(obs: TigerObservation): string {
   const method = obs.method ?? "";
   if (method === "blocked") return "The store blocked automatic checks. Recorded and skipped.";
   if (method === "robots") return "This site asks not to be checked automatically.";
-  const evidence = (obs.evidence ?? "").trim();
-  if (evidence && evidence.length <= 160 && !evidence.includes("<")) return evidence;
   return "The page could not be read clearly.";
 }
 
 function statusFor(obs: TigerObservation | undefined, alert: TigerAlert | null): ReadStatus {
+  if (!obs) return "Not checked";
   if (unread(obs)) return "Can't read";
   if (alert?.kind === "price") return "Price changed";
   if (alert?.kind === "stock") return "Stock changed";
@@ -227,7 +227,9 @@ export function fromTiger(
       checked: obs ? whenLabel(obs.ts) : "Not yet",
       status,
       every: everyLabel(watch.every),
-      alertOn: "Price and stock",
+      alertOn: watch.alert_price !== false
+        ? (watch.alert_stock !== false ? "Price and stock" : "Price")
+        : (watch.alert_stock !== false ? "Stock" : "No alerts"),
       live: true,
     };
   });
@@ -264,6 +266,7 @@ export function fromTiger(
         id: row.id,
         product: row.name,
         store: row.store,
+        url: row.url,
         why: obs ? whyUnread(obs) : "The page could not be read clearly.",
         since: row.checked,
       };

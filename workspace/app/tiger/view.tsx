@@ -167,6 +167,15 @@ export function TigerApp({
         {!hit && section === "watch" ? (
           <Watch rows={products} note={data.listNote} onHide={(id) => setHidden((current) => [...current, id])} />
         ) : null}
+        {!hit && section === "history" ? (
+          <section className="block">
+            <div className="title-row"><h2>History</h2></div>
+            <p className="intro">The latest 40 readings from your watched pages.</p>
+            <SimpleTable heads={["When", "Product", "Price", "Stock"]}
+              rows={data.reads.map((row) => [row.when, row.product, row.price, row.stock])}
+              empty="No readings yet." priceCol={2} />
+          </section>
+        ) : null}
         {!hit && section === "unread" ? (
           <Unread rows={data.unread} onCheck={() => setCheckedNote("Tiger tries this page again at its next check. Nothing was guessed.")} />
         ) : null}
@@ -390,7 +399,7 @@ function Watch({ rows, note, onHide }: { rows: ProductRow[]; note: string | null
             {rows.map((row) => (
               <tr key={row.id}>
                 <td className="name">{row.name}</td>
-                <td>{row.path}</td>
+                <td><a href={row.url} target="_blank" rel="noreferrer">{row.path}</a></td>
                 <td className="muted">{row.every}</td>
                 <td className="muted">{row.alertOn}</td>
                 <td><Pill status={row.status === "Price changed" || row.status === "Stock changed" ? "Read" : row.status} /></td>
@@ -432,7 +441,7 @@ function Unread({ rows, onCheck }: { rows: UnreadRow[]; onCheck: () => void }) {
             {rows.map((row) => (
               <tr key={row.id}>
                 <td className="name">{row.product}</td>
-                <td className="muted">{row.store}</td>
+                <td className="muted"><a href={row.url} target="_blank" rel="noreferrer">{row.url}</a></td>
                 <td>{row.why}</td>
                 <td className="muted">{row.since}</td>
                 <td><button type="button" className="line small" onClick={onCheck}>Check again</button></td>

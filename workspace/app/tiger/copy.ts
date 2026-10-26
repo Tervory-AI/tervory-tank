@@ -6,7 +6,7 @@ export const FOOT =
   "Public pages only. Tiger checks one page at a time, slowly, and never logs in. A store that blocks checks is recorded and skipped.";
 export const FOOT_SMALL = "Tiger only lists pages you asked it to watch.";
 
-export type ReadStatus = "Read" | "Price changed" | "Stock changed" | "Can't read";
+export type ReadStatus = "Not checked" | "Read" | "Price changed" | "Stock changed" | "Can't read";
 
 export const EVERY_OPTIONS = [
   { value: "15m", label: "Every 15 minutes" },

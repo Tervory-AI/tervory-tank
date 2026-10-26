@@ -89,6 +89,7 @@ AGE_BUTTON = re.compile(r"^(?:yes[,! ]*)?(?:i am|i'm|i confirm i am) (?:over |at
 class Page(BaseModel):
     url: str = Field(max_length=2048)
     screenshot: bool = False
+    price_reader: bool = False
     settle_ms: int = Field(default=2000, ge=0, le=10000)
     max_ms: int = Field(default=90000, ge=1000, le=150000)
 
@@ -330,7 +331,7 @@ async def visit(body, tenant, task, origin):
             if private:
                 result.update(await portal_result(item.page, policy))
             if not private:
-                result = await public_result(item.page, result, html, directory, task)
+                result = await public_result(item.page, result, html, directory, task, price_reader=body.price_reader)
             await dispose(handle)
             return result
     from playwright.async_api import async_playwright
@@ -441,7 +442,8 @@ async def visit(body, tenant, task, origin):
                 raise HTTPException(403, "Connection is no longer available.")
             if not private:
                 result = await public_result(page if result.get('content_type') != 'application/pdf' else None,
-                                             result, html if result.get('content_type') != 'application/pdf' else '', directory, task)
+                                             result, html if result.get('content_type') != 'application/pdf' else '', directory, task,
+                                             price_reader=body.price_reader)
             if body.screenshot and not private and not result.get("challenge") and result.get("ok"):
                 result["png_base64"] = base64.b64encode(await page.screenshot(type="png")).decode()
             return result
@@ -470,7 +472,7 @@ async def visit(body, tenant, task, origin):
             last_visit[site] = time.monotonic()
 
 
-async def public_result(page, result, html, directory, task):
+async def public_result(page, result, html, directory, task, *, price_reader: bool = False):
     result['evidence'] = await stage(directory.parent.parent, directory, task,
         html=html if result.get('content_type') != 'application/pdf' else '',
         pdf=result.pop('pdf_data', None), page=page if result.get('content_type') != 'application/pdf' else None)
@@ -486,6 +488,11 @@ async def public_result(page, result, html, directory, task):
     result["page"]["facts"]["age_gate"] |= bool(result.get("age_confirmation"))
     result["page"]["extraction_ms"] = round((time.perf_counter() - extraction_started) * 1000 + result.pop("pdf_extraction_ms", 0), 3)
     result.pop("html", None)
+    # Only Tiger's deterministic price reader requests markup. Normal browser
+    # tools keep the bounded page report; the model adapter also uses that report.
+    if (price_reader and access_room() == "tiger" and result.get("ok")
+            and not result.get("challenge") and result.get("content_type") != "application/pdf"):
+        result["html"] = source[:600000]
     result.pop("text", None)
     result.pop("links", None)
     return result

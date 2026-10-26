@@ -33,25 +33,25 @@ _INTERVAL = re.compile(r"^(\d+)(s|m|h|d)$")
 _SKIP_METHODS = {"blocked", "robots", "error", "none", "unread"}
 
 SQL_LIST_WATCHES = """
-SELECT id, tenant_id, url, label, engine, every, enabled, threshold
+SELECT id, tenant_id, url, label, engine, every, enabled, threshold, alert_price, alert_stock
 FROM {schema}.watchlist
 WHERE tenant_id = $1
 ORDER BY url
 """
 SQL_GET_WATCH = """
-SELECT id, tenant_id, url, label, engine, every, enabled, threshold
+SELECT id, tenant_id, url, label, engine, every, enabled, threshold, alert_price, alert_stock
 FROM {schema}.watchlist
 WHERE tenant_id = $1 AND url = $2
 """
 SQL_GET_WATCH_ID = """
-SELECT id, tenant_id, url, label, engine, every, enabled, threshold
+SELECT id, tenant_id, url, label, engine, every, enabled, threshold, alert_price, alert_stock
 FROM {schema}.watchlist
 WHERE tenant_id = $1 AND id = $2
 """
 SQL_INSERT_WATCH = """
-INSERT INTO {schema}.watchlist (tenant_id, url, label, engine, every, enabled, threshold)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, tenant_id, url, label, engine, every, enabled, threshold
+INSERT INTO {schema}.watchlist (tenant_id, url, label, engine, every, enabled, threshold, alert_price, alert_stock)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING id, tenant_id, url, label, engine, every, enabled, threshold, alert_price, alert_stock
 """
 SQL_DELETE_WATCH = """
 DELETE FROM {schema}.watchlist
@@ -120,6 +120,10 @@ class DuplicateWatch(Exception):
 
 class BadWatch(ValueError):
     """The watch fields are not usable."""
+
+
+class FeedUnavailable(RuntimeError):
+    """The official feed lookup failed; a policy-checked page read can follow."""
 
 
 def session_for_url(url: str) -> str:
@@ -334,12 +338,15 @@ def alerts_for(
     current: dict,
     threshold: Any,
     stock_before: Any = _UNSET,
+    *,
+    price_enabled: bool = True,
+    stock_enabled: bool = True,
 ) -> list[dict[str, str]]:
     if not _comparable(previous) or not _comparable(current):
         return []
     assert previous is not None
     found: list[dict[str, str]] = []
-    if price_moved(previous.get("price"), current.get("price"), threshold):
+    if price_enabled and price_moved(previous.get("price"), current.get("price"), threshold):
         found.append({
             "kind": "price",
             "before": str(previous.get("price")),
@@ -351,7 +358,8 @@ def alerts_for(
         stock_before = None
     after_stock = stock_reading(current.get("availability"))
     if (
-        stock_before
+        stock_enabled
+        and stock_before
         and after_stock
         and after_stock != "can't read"
         and stock_before != after_stock
@@ -500,9 +508,13 @@ async def ensure_tables(conn: Any, schema: str = SCHEMA) -> None:
             every text NOT NULL,
             enabled boolean NOT NULL DEFAULT true,
             threshold numeric NOT NULL DEFAULT 0,
+            alert_price boolean NOT NULL DEFAULT true,
+            alert_stock boolean NOT NULL DEFAULT true,
             UNIQUE (tenant_id, url)
         )
         """,
+        f"ALTER TABLE {schema}.watchlist ADD COLUMN IF NOT EXISTS alert_price boolean NOT NULL DEFAULT true",
+        f"ALTER TABLE {schema}.watchlist ADD COLUMN IF NOT EXISTS alert_stock boolean NOT NULL DEFAULT true",
         f"""
         CREATE TABLE IF NOT EXISTS {schema}.observations (
             id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -544,6 +556,8 @@ def _watch_out(row: Any) -> dict[str, Any]:
         "every": row["every"],
         "enabled": bool(row["enabled"]),
         "threshold": _plain(Decimal(str(row["threshold"]))),
+        "alert_price": bool(row.get("alert_price", True)),
+        "alert_stock": bool(row.get("alert_stock", True)),
     }
 
 
@@ -594,6 +608,8 @@ class PgStore:
                     row["every"],
                     bool(row["enabled"]),
                     Decimal(str(row["threshold"])),
+                    bool(row.get("alert_price", True)),
+                    bool(row.get("alert_stock", True)),
                 )
             except asyncpg.UniqueViolationError as exc:
                 raise DuplicateWatch(row["url"]) from exc
@@ -630,7 +646,7 @@ class PgStore:
         merged.update(fields)
         assignments = []
         values: list[Any] = [uuid.UUID(str(tenant_id)), uuid.UUID(str(watch_id))]
-        for column in ("url", "label", "engine", "every", "enabled", "threshold"):
+        for column in ("url", "label", "engine", "every", "enabled", "threshold", "alert_price", "alert_stock"):
             if column not in fields:
                 continue
             values.append(Decimal(str(merged[column])) if column == "threshold" else merged[column])
@@ -640,7 +656,7 @@ class PgStore:
         sql = (
             f"UPDATE {self.schema}.watchlist SET " + ", ".join(assignments)
             + " WHERE tenant_id = $1 AND id = $2"
-            + " RETURNING id, tenant_id, url, label, engine, every, enabled, threshold"
+            + " RETURNING id, tenant_id, url, label, engine, every, enabled, threshold, alert_price, alert_stock"
         )
         async with self.pool.acquire() as conn:
             try:
@@ -759,6 +775,8 @@ class MemoryStore:
             "every": row["every"],
             "enabled": bool(row["enabled"]),
             "threshold": _plain(Decimal(str(row["threshold"]))),
+            "alert_price": bool(row.get("alert_price", True)),
+            "alert_stock": bool(row.get("alert_stock", True)),
         }
         self.watches.append(saved)
         await self._ensure_dispatch(saved["tenant_id"])
@@ -899,7 +917,9 @@ async def external_observation(store, tenant_id, watch, item, method, receipt, c
     current = await store.add_observation(_obs(tenant_id, url, clock(), item.get("price"), item.get("currency"),
         availability, method, json.dumps({"method": method, "receipt": receipt}, default=str)))
     previous = await store.previous_observation(tenant_id, url, current["id"])
-    found = alerts_for(previous, current, watch.get("threshold") or 0)
+    stock_before = await _last_known_stock(store, tenant_id, url, current["id"])
+    found = alerts_for(previous, current, watch.get("threshold") or 0, stock_before,
+                       price_enabled=watch.get("alert_price", True), stock_enabled=watch.get("alert_stock", True))
     saved = [await store.add_alert({"tenant_id": tenant_id, "url": url, "ts": clock(), **alert}) for alert in found]
     return {"status": "observed", "url": url, "method": method, "price": item.get("price"),
             "stock": availability, "alerts": saved, "observation": current, "receipt": receipt}
@@ -924,7 +944,10 @@ async def run_check(
     if str(watch.get("tenant_id")) != str(tenant_id):
         return {"status": "skipped", "url": url, "alerts": []}
     if feed is not None:
-        official = await feed(str(tenant_id), url)
+        try:
+            official = await feed(str(tenant_id), url)
+        except FeedUnavailable:
+            official = {"found": False}
         if official.get("found") is True:
             return await external_observation(store, tenant_id, watch, official["item"], "official_feed", official["receipt"], clock)
         if official.get("found") is not False:
@@ -997,7 +1020,8 @@ async def run_check(
     ))
     previous = await store.previous_observation(tenant_id, url, current["id"])
     stock_before = await _last_known_stock(store, tenant_id, url, current["id"])
-    found = alerts_for(previous, current, watch.get("threshold") or 0, stock_before)
+    found = alerts_for(previous, current, watch.get("threshold") or 0, stock_before,
+                       price_enabled=watch.get("alert_price", True), stock_enabled=watch.get("alert_stock", True))
     saved_alerts = []
     for alert in found:
         saved_alerts.append(await store.add_alert({
