@@ -42,3 +42,41 @@ on exit. `workspace.log` is a local diagnostic file, not part of the proof bundl
 
 The founder deploys the branch when ready. Claude takes the signed-in live proof
 in the founder's browser; this local harness does not perform that step.
+
+## Independent review
+
+`test_two_tenants_cannot_read_or_remove_each_others_saved_page_job` exercises the
+actual authenticated Tank routes and Tiger handlers with two tenants watching the
+same URL. Each tenant gets different fixture prices and its own alert. The test
+checks watch/history/alert reads, cross-tenant deletion, conflicting body/query
+tenant IDs, and rejection without the Workspace key. `MemoryStore` replaces only
+the database; the deterministic reader and route implementations are real.
+
+## Founder must decide: revised public-page policy
+
+The founder's update on 26 October defines a public page as one a person can open
+without signing in or paying, with robots.txt advisory. It requires one truthful
+Tervory user agent, host rate limiting, a site stop on CAPTCHA/403/block, and
+continuation only through the client's own connection after the client acts.
+This supersedes the original brief's robots policy. **That revised workflow is not
+implemented by the HTML fix or demonstrated by these fixture screenshots.**
+
+The unchanged file restriction permits `agents/_brain/browser.py` edits only to
+the HTML return path. The remaining dependencies are outside that permitted path:
+
+- The shared browser enforces `require_allowed` before navigation and on routed
+  requests, including PDF reads; its policy lives in `agents/_brain/robots.py`.
+  Removing only the watch-level robots check would still leave public reads blocked.
+- The browser uses `TervoryBase/1.0`; Tiger's robots request uses
+  `TervoryTiger/0.1`. A single identity needs the browser request setup changed.
+- In `watch.py`, `client_connection` is only the source label on a `portal_item`
+  receipt. The existing human handoff controls a held server browser session;
+  it does not run through the client's own network connection. There is no client
+  connection transport here to wire into a persistent per-site stop/resume flow.
+
+The browser/access owner must supply that scoped public policy and genuine client
+connection contract, or the lane must be expanded to implement them. No robot
+policy bypass, automatic CAPTCHA action, anonymous retry around a block, or
+stand-in client connection has been added. The existing implementation remains
+unchanged pending that dependency; this draft must not be treated as completing
+the revised public-page policy.

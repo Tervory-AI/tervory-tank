@@ -133,6 +133,67 @@ async def test_alert_preferences_reach_tank_and_tiger_routes(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_two_tenants_cannot_read_or_remove_each_others_saved_page_job(monkeypatch):
+    from fastapi import FastAPI
+    from test_tg2_tiger_watchlist import URL_A
+    import main as tank
+
+    # Use a public literal IP so watch creation does not need network/DNS.
+    url = "https://8.8.8.8/item"
+    store = MemoryStore()
+    monkeypatch.setattr(tiger, "_store", lambda: store)
+    gateway = FastAPI()
+    gateway.router.routes.extend(route for route in tank.app.routes
+                                 if getattr(route, "path", "").startswith("/v1/tiger/"))
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=tiger.app)) as room:
+        monkeypatch.setattr(tank, "_http", room)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=gateway), base_url="http://tank",
+                                     headers={"X-Tank-Key": tank.TANK_API_KEY}) as client:
+            ids = {}
+            for tenant, prices in ((TENANT_A, ("120", "115")), (TENANT_B, ("200", "210"))):
+                created = await client.post("/v1/tiger/watchlist", json={
+                    **_watch(tenant), "url": url, "label": tenant, "alert_stock": False,
+                })
+                assert created.status_code == 201
+                watch = created.json()
+                ids[tenant] = watch["id"]
+                for index, price in enumerate(prices):
+                    async def render(*args):
+                        assert args[-1] == tenant
+                        return {"ok": True, "html": saved_page(price)}
+                    checked = await run_check(store, tenant, watch, "tiger", render, extract, no_paid_call,
+                                              robots_fixture, DomainLimiter(0), now=lambda: NOW + timedelta(minutes=index))
+                    assert checked["price"] == price + ".00"
+
+            for tenant, other, prices in ((TENANT_A, TENANT_B, {"120.00", "115.00"}),
+                                          (TENANT_B, TENANT_A, {"200.00", "210.00"})):
+                for path, key, extra in (("watchlist", "watches", {}),
+                                         ("observations", "observations", {"url": url}),
+                                         ("alerts", "alerts", {})):
+                    response = await client.get(f"/v1/tiger/{path}", params={"tenant_id": tenant, **extra})
+                    assert response.status_code == 200
+                    rows = response.json()[key]
+                    assert rows and all(row["tenant_id"] == tenant for row in rows)
+                    assert other not in response.text
+                    if key == "watches":
+                        assert [row["id"] for row in rows] == [ids[tenant]]
+                    elif key == "observations":
+                        assert {row["price"] for row in rows} == prices
+                    else:
+                        assert len(rows) == 1 and {rows[0]["before"], rows[0]["after"]} == prices
+                denied = await client.delete(f"/v1/tiger/watchlist/{ids[other]}", params={"tenant_id": tenant})
+                assert denied.status_code == 404
+                mismatch = await client.post("/v1/tiger/watchlist", params={"tenant_id": tenant},
+                                             json={**_watch(other), "url": URL_A})
+                assert mismatch.status_code == 403
+            assert len(store.watches) == 2
+            assert len(store.observations) == 4 and len(store.alerts) == 2
+            unauthenticated = await client.get("/v1/tiger/watchlist", params={"tenant_id": TENANT_A},
+                                               headers={"X-Tank-Key": ""})
+            assert unauthenticated.status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_pg_preferences_and_additive_migration():
     statements = []
     class Connection:
