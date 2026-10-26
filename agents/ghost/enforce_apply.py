@@ -16,7 +16,7 @@ from .shields import plan_for
 from .speed_budgets import stamp_budget
 from .threat_payload import ThreatPayload
 
-ENFORCE_TOKEN_ENV = "AUTUMBRA_CF_API_TOKEN"
+ENFORCE_TOKEN_ENV = "AUTUMBRA_EDGE_CREDENTIAL"
 
 
 def enforce_token_configured() -> bool:

@@ -32,17 +32,25 @@ def test_two_fixture_clients_isolated_plans():
     assert a["network"]["internal"] is True
     assert a["isolation"]["shares_network_with_tank"] is False
     assert a["isolation"]["public_internet"] is False
-    assert "TANK" not in a["credential_secret_name"]
-    assert credential_secret_name(TENANT_A) != credential_secret_name(TENANT_B)
+    assert a["credential_secret_name"] is None  # held until real edge client
+    assert a["edge_secret_name_held"] is True
+    assert credential_secret_name(TENANT_A) is None and credential_secret_name(TENANT_B) is None
     ra = receipt_for(a)
     assert ra["secret_value_present"] is False
     destroy = plan_destroy(TENANT_A)
     assert destroy["action"] == "destroy_enforce"
 
 
-def test_container_cap_refuses():
+def test_container_cap_held_until_measured():
+    # Founder: do not guess a cap. Default is None (held).
+    assert DEFAULT_CONTAINER_CAP is None
+    plan = plan_create(TENANT_A, existing_count=0)
+    assert plan["cap"]["status"] == "held_until_measured"
+    assert plan["credential_secret_name"] is None
+    assert plan["edge_secret_name_held"] is True
+    # Explicit measured cap still refuses above it.
     with pytest.raises(RuntimeError, match="cap"):
-        plan_create(TENANT_A, existing_count=DEFAULT_CONTAINER_CAP)
+        plan_create(TENANT_A, existing_count=3, cap=3)
 
 
 def test_watch_compose_has_no_cf_write_token():
@@ -60,7 +68,8 @@ def test_enforce_compose_internal_no_model_key():
     env = svc["environment"]
     assert "TANK_KEY" not in env
     assert env.get("AUTUMBRA_ROLE") == "enforce"
-    assert "AUTUMBRA_CF_API_TOKEN" in env
+    assert "AUTUMBRA_EDGE_CREDENTIAL" in env
+    assert "AUTUMBRA_CF_API_TOKEN" not in env
     assert "ports" not in svc
     assert svc.get("cap_drop") == ["ALL"]
     assert "privileged" not in svc
