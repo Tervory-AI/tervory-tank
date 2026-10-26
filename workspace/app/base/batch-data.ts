@@ -1,10 +1,11 @@
 import { baseRecords, type BaseRecord } from "@/lib/tank";
-import { evidence, resultStatus } from "./evidence";
+import { blockedSources, evidence, resultStatus } from "./evidence";
 import { csvCell } from "./csv";
 
 export type BatchResultRow = {
   id: string; name: string; website: string; phone: string; emails: string; description: string;
   status: "verified" | "failed" | "pending"; reason: string; sourceUrl: string | null; checkedAt: string | null;
+  blockedUrls: string[];
 };
 export type BatchResult = {
   batch: string; total: number; verified: number; failed: number; pending: number;
@@ -28,7 +29,7 @@ export function resultRow(record: BaseRecord): BatchResultRow {
     website: value(record, "website"), phone: sitePhone ? value(record, "phone") : "",
     emails: emails?.source === "site" ? value(record, "emails") : "",
     description: description?.source === "site:code" ? value(record, "description") : "", ...resultStatus(record),
-    sourceUrl: checked?.sourceUrl ?? null, checkedAt: checked?.checkedAt ?? null };
+    sourceUrl: checked?.sourceUrl ?? null, checkedAt: checked?.checkedAt ?? null, blockedUrls: blockedSources(record) };
 }
 
 /** Read this tenant's exact batch, without the old export's silent 20,000-row truncation. */

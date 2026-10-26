@@ -95,6 +95,12 @@ global.fetch = async (input, init) => {
   assert.equal(safeFields.emails, '');
   assert.equal(safeFields.description, '');
   assert.match(proof.resultStatus(record('blocked', { passes: { '2b': { error: 'blocked by human check' } } })).reason, /human access/);
+  const blocked = record('blocked-url', { passes: { '2b': { error: 'blocked', access_error: {
+    status: 'blocked', url: 'https://business.example/contact', next: 'client_connection',
+  } } } });
+  assert.deepEqual(batchData.resultRow(blocked).blockedUrls, ['https://business.example/contact']);
+  assert.equal(batchData.resultRow(blocked).status, 'failed');
+  assert.equal(batchData.verifiedCsv([batchData.resultRow(blocked)]).trim().split('\r\n').length, 1);
   assert.match(proof.resultStatus(record('archived', { passes: { '2b': { archive_date: '2020-01-01' } } })).reason, /archived/);
   assert.match(proof.resultStatus(record('timeout', { status: 'failed', error: 'request timed out' })).reason, /respond in time/);
   const actions = load('workspace/app/base/job-actions.ts');

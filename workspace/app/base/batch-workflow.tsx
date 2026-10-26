@@ -72,8 +72,9 @@ export function BatchWorkflow({ signedIn, selected, onSelect }: { signedIn: bool
           {result.reasons.length > 0 && <ul>{result.reasons.map(({ reason, count }) => <li key={reason}>{count} {count === 1 ? "row" : "rows"}: {reason}</li>)}</ul>}
           {result.total > result.rows.length && <p>Showing the first {result.rows.length} of {result.total} rows. The download includes every verified row.</p>}
           <ul className="bcp-list">{result.rows.map((row) => <li key={row.id} className="bcp-result-row">
-            <p className="bcp-row-title">{row.name} · {row.status === "verified" ? "Verified" : row.status === "pending" ? "Waiting" : "Check failed"}</p>
+            <p className="bcp-row-title">{row.name} · {row.blockedUrls.length ? "Blocked" : row.status === "verified" ? "Verified" : row.status === "pending" ? "Waiting" : "Check failed"}</p>
             {row.reason && <p className="bcp-row-copy">{row.reason}</p>}
+            {row.blockedUrls.map((url) => <p key={url} className="bcp-row-copy">Blocked page: <a href={url} target="_blank" rel="noopener noreferrer">{url}</a></p>)}
             {row.sourceUrl && row.checkedAt && <p className="bcp-row-copy"><a href={row.sourceUrl} target="_blank" rel="noopener noreferrer">{row.sourceUrl}</a> · Checked <time dateTime={row.checkedAt}>{row.checkedAt}</time></p>}
           </li>)}</ul>
         </>}

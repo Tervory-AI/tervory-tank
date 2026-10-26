@@ -29,13 +29,22 @@ export function evidence(record: EvidenceRecord): { sourceUrl: string; checkedAt
   return { sourceUrl: url, checkedAt: date };
 }
 
+export function blockedSources(record: EvidenceRecord): string[] {
+  const access = record.passes?.["2b"]?.access_error;
+  const urls = access && typeof access === "object" && !Array.isArray(access)
+    && (access as Record<string, unknown>).status === "blocked"
+    ? [(access as Record<string, unknown>).url] : [];
+  const found = record.passes?.["2a"]?.blocked_by_check;
+  if (Array.isArray(found)) urls.push(...found);
+  return [...new Set(urls.map(sourceUrl).filter((url): url is string => Boolean(url)))];
+}
+
 export function resultStatus(record: EvidenceRecord): { status: "verified" | "failed" | "pending"; reason: string } {
-  if (record.status === "queued" || record.status === "running") return { status: "pending", reason: record.status === "queued" ? "Waiting to be checked." : "Checking this business." };
   const scrape = record.passes?.["2b"];
   const failure = String(scrape?.error ?? record.error ?? "").toLowerCase();
-  if (/robots/.test(failure)) return { status: "failed", reason: "The website's robots.txt rules do not allow this check." };
-  if (/captcha|human check|access denied|login/.test(failure) || record.passes?.["2a"]?.blocked_by_check)
-    return { status: "failed", reason: "The website requires a human access check." };
+  if (/captcha|human check|access denied|login|blocked/.test(failure) || blockedSources(record).length)
+    return { status: "failed", reason: "Blocked: the website requires a human access check or restricts this page. Automatic reads have stopped." };
+  if (record.status === "queued" || record.status === "running") return { status: "pending", reason: record.status === "queued" ? "Waiting to be checked." : "Checking this business." };
   if (scrape?.archive_date) return { status: "failed", reason: "Only an archived copy was available; current details could not be checked." };
   if (/timeout|timed out/.test(failure)) return { status: "failed", reason: "The website or verification service did not respond in time." };
   if (record.status !== "done") return { status: "failed", reason: "A verification step failed; the result could not be checked." };
