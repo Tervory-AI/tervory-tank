@@ -190,8 +190,8 @@ services:
       R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
       R2_ACCESS_KEY_ID_RIG: ${R2_ACCESS_KEY_ID_RIG:-}
       R2_SECRET_ACCESS_KEY_RIG: ${R2_SECRET_ACCESS_KEY_RIG:-}
-      HF_JOBS_TOKEN: ${HF_JOBS_TOKEN:-}
-      HF_JOBS_NAMESPACE: ${HF_JOBS_NAMESPACE:-}
+      # Do not declare HF_JOBS_* here. Empty Coolify rows are forbidden (Tank is the
+      # LLM door; forge GPU credentials are founder-SET only when RIG-5F is enabled).
       HTTP_PROXY: http://rig-forge-egress:8080
       HTTPS_PROXY: http://rig-forge-egress:8080
       NO_PROXY: rig-brain,localhost,127.0.0.1
