@@ -1,12 +1,13 @@
 """Public request guard and optional advisory robots parsing.
 
 Public navigation does not fetch or enforce robots.txt. Host blocks belong to
-one room/tenant/task run; they are never used as permission to access a login.
+one check run; they are never used as permission to access a login.
 """
 from __future__ import annotations
 
 import time
 import re
+from dataclasses import dataclass, field
 from urllib.parse import quote, urljoin, urlsplit
 
 from brain.security import public_url
@@ -15,8 +16,12 @@ CACHE_SECONDS = 86400
 USER_AGENT = "Tervory/1.0 (+https://tervory.com)"
 MAX_ROBOTS_BYTES = 256_000
 cache: dict[str, tuple[float, Policy]] = {}
-Run = tuple[str, str, str]
-stopped_hosts: set[tuple[Run, str]] = set()
+
+
+@dataclass
+class Run:
+    """Fresh for each check, shared only by that check's requests/redirects."""
+    stopped_hosts: set[str] = field(default_factory=set)
 
 
 class HostBlocked(ValueError):
@@ -26,12 +31,12 @@ class HostBlocked(ValueError):
 def stop_host(run: Run | None, url: str) -> None:
     if run is not None:
         host, _ = public_url(url)
-        stopped_hosts.add((run, host.rstrip('.').removeprefix('www.')))
+        run.stopped_hosts.add(host.rstrip('.').removeprefix('www.'))
 
 
 def host_stopped(run: Run | None, url: str) -> bool:
     host, _ = public_url(url)
-    return run is not None and (run, host.rstrip('.').removeprefix('www.')) in stopped_hosts
+    return run is not None and host.rstrip('.').removeprefix('www.') in run.stopped_hosts
 
 
 def normalized_path(value: str) -> str:

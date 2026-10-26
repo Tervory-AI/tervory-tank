@@ -1,6 +1,6 @@
 """Local fixture proof, never a production auth bypass.
 
-Run from the repository: PYTHONPATH=tank:tests python tests/tiger_works/local_proof.py
+Run from the repository: PYTHONPATH=tank:tests python tests/tiger_works/evidence/local_proof.py
 Requires Workspace npm dependencies, Node 22 and Playwright Chromium.
 Only a temporary Workspace copy replaces Clerk with a local identity. Actual
 server actions, tenant derivation, Tank proxy routes and Tiger handlers run.
@@ -73,7 +73,7 @@ async def ready(url: str, process=None) -> None:
 
 
 async def main() -> None:
-    output = Path(os.environ.get("TIGER_PROOF_DIR", ROOT / "tests/tiger_works/proof")).resolve()
+    output = Path(os.environ.get("TIGER_PROOF_DIR", ROOT / "tests/tiger_works/evidence/proof")).resolve()
     output.mkdir(parents=True, exist_ok=True)
     store = MemoryStore()
     tiger = _load("tiger_local_proof", ROOT / "agents/tiger/app.py")

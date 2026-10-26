@@ -32,7 +32,7 @@ With Python dependencies from `tank/requirements.txt` and
 
 ```sh
 PYTHONPATH=tank READ1_CHROMIUM_EXECUTABLE=/usr/bin/chromium python -m pytest -q tests/test_tiger_works.py
-PYTHONPATH=tank:tests READ1_CHROMIUM_EXECUTABLE=/usr/bin/chromium python tests/tiger_works/local_proof.py
+PYTHONPATH=tank:tests READ1_CHROMIUM_EXECUTABLE=/usr/bin/chromium python tests/tiger_works/evidence/local_proof.py
 ```
 
 The harness replaces its own screenshots and observations on each run. Set
@@ -62,17 +62,27 @@ changes in the shared browser program, run in each room's own container:
   robots gate does not permit signing in or opening a paywall through public reads.
 - Browser contexts and direct document requests use
   `Tervory/1.0 (+https://tervory.com)`.
-- CAPTCHA, HTTP 403 and other refusals stop automated requests to that host for
-  the run. The stop is keyed by room, tenant and task ID, covers redirects and
-  queued/subresource requests, and returns `blocked` with the URL. Tiger stores a
-  blocked observation without a price or alert. The browser never ticks a CAPTCHA.
+- Only a main page document CAPTCHA, HTTP 403/429 or other page refusal stops
+  automated requests to its host for that check. A script, image, font, tracker
+  or iframe refusal does not block the public page. Stops cover redirects and
+  further requests in that check, return `blocked` with the URL, and never click
+  a CAPTCHA. Tiger stores a blocked observation without a price or alert.
+- Each `/render` check creates fresh stop state, even if the task ID is reused or
+  omitted. Requests belonging to an earlier check retain that check's own state;
+  starting another check cannot clear it. There is no process-global stop set.
+- Every visit writes one `history.jsonl` audit entry, including blocked returns
+  before browser startup or after waiting for the per-host lock.
 
-`tests/test_tiger_public_policy.py` covers these changes, including isolation of
-stops between rooms, tenants and tasks, private-target rejection, and the absence
-of raw HTML in ordinary/model results. An omitted task ID shares the room/tenant's
-unscoped run. Stop state lives in that browser process; no persistent site-wide
-pause or client-session transport is introduced. Existing `ACCESS_ROOM` policy and
-client handoff code are retained.
+`tests/test_tiger_public_policy.py` covers document versus subresource refusals,
+fresh checks, stop isolation, audit entries, public identity, private-target
+rejection and the absence of raw HTML in ordinary/model results. Existing
+`ACCESS_ROOM` policy and client handoff code are retained.
+
+## CI comparison
+
+[CI failure comparison and replay instructions](ci-baseline.md) lists every
+failure on reviewed head `596585e`, the results on main `65067a4`, and the
+explicitly enabled savings replay plugin. It is not part of normal test collection.
 
 ## Founder must decide: client's own session
 

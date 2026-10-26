@@ -306,12 +306,32 @@ async def render(body: Page, x_tank_key: str = Header(default=""), x_tenant_id: 
     return await visit(body, tenant, x_task_id, site)
 
 
-async def visit(body, tenant, task, origin):
+async def visit(body, tenant, task, origin, *, run=None):
     host, _ = public_url(body.url)
-    run = (access_room(), tenant, task)
+    directory = tenant_dir(Path(os.environ.get("BROWSER_DATA_DIR", "/browser-data")), tenant)
+    # A check starts empty even when its task ID is reused or omitted. No
+    # process-global stop state can leak into another tenant/room/check.
+    run = Run() if run is None else run
+    result = {"ok": False, "challenge": False}
+    try:
+        result = await _visit(body, tenant, task, origin, run, directory)
+        return result
+    finally:
+        with (directory / "history.jsonl").open("a") as history:
+            history.write(json.dumps({"time": int(time.time()), "tenant_id": tenant,
+                "task_id": str(uuid.UUID(task)) if task else None,
+                "action": "browser", "host": host, "human_check": bool(result.get("challenge")),
+                "needs_person": "needs a person" if result.get("challenge") else None,
+                "age_confirmation": bool(result.get("age_confirmation")), "ok": result.get("ok", False),
+                "reason": result.get("reason"),
+                # Sealed connection audits must not expose private URL paths.
+                "url": origin if access_configured() else result.get("url", body.url)}) + "\n")
+
+
+async def _visit(body, tenant, task, origin, run, directory):
+    host, _ = public_url(body.url)
     if host_stopped(run, body.url):
         return blocked_result(body.url)
-    directory = tenant_dir(Path(os.environ.get("BROWSER_DATA_DIR", "/browser-data")), tenant)
     storage = storage_for(tenant, origin)
     secure = access_configured()
     policy = await access_rpc(tenant, origin, "policy") if secure else {"state": "public"}
@@ -407,7 +427,10 @@ async def visit(body, tenant, task, origin):
                 page = await context.new_page()
                 pdfs = []
                 def notice_response(response):
-                    if response.status in {403, 429} and not human_navigation(navigation):
+                    if (response.status in {403, 429}
+                            and response.request.resource_type == "document"
+                            and response.frame == page.main_frame
+                            and not human_navigation(navigation)):
                         stop_host(run, response.url)
                     if ("application/pdf" in response.headers.get("content-type", "")
                             and response.request.resource_type == "document"):
@@ -489,12 +512,6 @@ async def visit(body, tenant, task, origin):
                 finally:
                     if browser: await browser.close()
                     await manager.__aexit__(None, None, None)
-            with (directory / "history.jsonl").open("a") as history:
-                history.write(json.dumps({"time": int(time.time()), "tenant_id": tenant,
-                    "task_id": str(uuid.UUID(task)) if task else None,
-                    "action": "browser", "host": host, "human_check": bool(result.get("challenge")),
-                    "needs_person": "needs a person" if result.get("challenge") else None,
-                    "age_confirmation": bool(result.get("age_confirmation")), "ok": result.get("ok", False)}) + "\n")
             last_visit[site] = time.monotonic()
 
 

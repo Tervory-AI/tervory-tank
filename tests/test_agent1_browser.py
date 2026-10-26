@@ -16,18 +16,17 @@ from brain import robots
 @pytest.fixture
 def visitor(monkeypatch, tmp_path):
     h=SimpleNamespace(started=[], gate=asyncio.Event(), html='<p>Public business page</p>',
-                      redirect=None, status=200, aborted=0, continued=0, scrolls=0, robots_text="User-agent: *\nAllow: /", robots_calls=[], request_options=[])
+                      redirect=None, status=200, responses=[], aborted=0, continued=0, scrolls=0, robots_text="User-agent: *\nAllow: /", robots_calls=[], request_options=[])
     key=uuid.uuid4().hex
     monkeypatch.setenv('TANK_KEY',key)
     monkeypatch.setenv('BROWSER_DATA_DIR',str(tmp_path))
     monkeypatch.setenv('TANK_REGION','us-east')
     monkeypatch.setattr(browser,'site_locks',{})
     monkeypatch.setattr(robots, 'cache', {})
-    monkeypatch.setattr(robots, 'stopped_hosts', set())
     monkeypatch.setattr(browser,'last_visit',{})
     monkeypatch.setattr(browser,'concurrency',asyncio.Semaphore(4))
     class Page:
-        def __init__(self,context): self.context=context; self.handlers={}
+        def __init__(self,context): self.context=context; self.handlers={}; self.main_frame=object()
         def on(self,event,handler): self.handlers[event]=handler
         async def goto(self,url,**kwargs):
             self.url=url;h.started.append(url)
@@ -41,8 +40,14 @@ def visitor(monkeypatch, tmp_path):
                 if h.continued:
                     self.url=h.redirect
             await h.gate.wait()
-            response=SimpleNamespace(status=h.status,url=self.url,headers={},request=SimpleNamespace(resource_type='document'))
-            if 'response' in self.handlers: self.handlers['response'](response)
+            response=SimpleNamespace(status=h.status,url=self.url,headers={},frame=self.main_frame,
+                                     request=SimpleNamespace(resource_type='document'))
+            if 'response' in self.handlers:
+                self.handlers['response'](response)
+                for resource_type, status, url in h.responses:
+                    self.handlers['response'](SimpleNamespace(status=status,url=url,headers={},
+                        frame=object() if resource_type == 'document' else self.main_frame,
+                        request=SimpleNamespace(resource_type=resource_type)))
             return response
         async def content(self): return h.html
         async def evaluate(self,*args):
@@ -82,8 +87,11 @@ def visitor(monkeypatch, tmp_path):
     monkeypatch.setitem(sys.modules,'playwright',package)
     monkeypatch.setitem(sys.modules,'playwright.async_api',api)
     tenant=str(uuid.uuid4())
-    async def visit(url, *, task=None, tenant_id=None):
-        return await browser.render(browser.Page(url=url),key,tenant_id or tenant,'us-east',task or str(uuid.uuid4()))
+    async def visit(url, *, task=None, tenant_id=None, run=None):
+        owner, identifier = tenant_id or tenant, task if task is not None else str(uuid.uuid4())
+        if run is not None:
+            return await browser.visit(browser.Page(url=url), owner, identifier, browser.site_origin(url), run=run)
+        return await browser.render(browser.Page(url=url),key,owner,'us-east',identifier)
     h.visit=visit
     return h
 
