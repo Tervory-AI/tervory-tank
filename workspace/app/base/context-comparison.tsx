@@ -35,7 +35,7 @@ export function ContextComparison({ report: storedReport, canRunTrial = false }:
         <p>No trial results yet. Selected public businesses can be compared once the trial key is set.</p>
       ) : (
         <>
-          <p className="bcp-copy">{latestReport ? "This press" : "Latest 200 platform records"}: records sent: {report.records}. Credits used: {report.creditsUsed.toFixed(2)}{report.unknownCharges ? " confirmed" : ""}. Credits per record: {report.creditsPerRecord?.toFixed(2) ?? "Not known"}.</p>
+          <p className="bcp-copy">{latestReport ? "This press" : "Latest 200 records in this workspace"}: records sent: {report.records}. Credits used: {report.creditsUsed.toFixed(2)}{report.unknownCharges ? " confirmed" : ""}. Credits per record: {report.creditsPerRecord?.toFixed(2) ?? "Not known"}.</p>
           {report.noTruth > 0 && <p>{report.noTruth} records: no truth yet. Credits counted; accuracy not scored.</p>}
           {report.unknownCharges > 0 && <p>{report.unknownCharges} charges need confirmation.</p>}
           {report.fields.length === 0 ? <p>No checked answers yet.</p> : (

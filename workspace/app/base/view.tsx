@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { formatCount, type BatchRow, type PageModel } from "./model";
+import { batchLabel, formatCount, type BatchRow, type PageModel } from "./model";
 import { AskBase, RecordSearch, type AskAction, type SearchAction } from "./ask";
 import type { PluginPanel } from "./plugin-panel";
 import { PluginsDialog, type PluginsTab } from "./plugins";
 import { SquadLinks } from "../squad-links";
+import { BatchWorkflow } from "./batch-workflow";
 import { ContextComparison } from "./context-comparison";
 
 export const WORKSPACE_HREF = "/";
@@ -62,6 +63,7 @@ export function BaseView({
   search,
   ask,
   canRunTrial = false,
+  signedIn = false,
 }: {
   model: PageModel;
   plugins: PluginPanel;
@@ -70,7 +72,9 @@ export function BaseView({
   search: SearchAction;
   ask: AskAction;
   canRunTrial?: boolean;
+  signedIn?: boolean;
 }) {
+  const [selectedBatch, setSelectedBatch] = useState<string | null>(null);
   const [active, setActive] = useState<string>("overview");
   const [menu, setMenu] = useState(false);
   const [plugins, setPlugins] = useState<PluginsTab | null>(null);
@@ -121,7 +125,7 @@ export function BaseView({
     { id: "ask", label: "Ask Base", count: null },
     { id: "batches", label: "Batches", count: model.loadError ? null : model.batches.length },
     { id: "skills", label: "Skills", count: model.skillsError ? null : model.skills.length },
-  ];
+  ].filter((item) => item.id !== "skills" || canRunTrial);
   const dialogOpen = plugins !== null;
 
   return (
@@ -212,8 +216,7 @@ export function BaseView({
               </p>
               <h1>Base</h1>
               <p className="bcp-lead">
-                Base fills in business records: website, email, phone, size and a short description. Every field shows where it
-                came from and how sure Base is.
+                Upload a business list to check its details and download the results with source links and check dates.
               </p>
             </div>
             <div className="bcp-refresh">
@@ -265,9 +268,9 @@ export function BaseView({
           <section id="batches" className="bcp-section">
             <h2>Batches</h2>
             <p className="bcp-copy">
-              Each list you upload is a batch. Skipped steps are parts Base could not finish, such as a description or a size. They
-              wait for a re-run and cost nothing until then.
+              Each uploaded list is a batch. Open a batch to see verified rows, failed checks and their reasons, then download the verified CSV.
             </p>
+            <BatchWorkflow signedIn={signedIn} selected={selectedBatch} onSelect={setSelectedBatch} />
             {model.loadError ? null : model.empty ? (
               <div className="bcp-state">
                 <h3>No batches yet</h3>
@@ -286,7 +289,7 @@ export function BaseView({
                 </div>
                 {model.batches.map((row) => (
                   <div key={row.name} className="bcp-tr bcp-batch-cols" role="row">
-                    <span role="cell" className="bcp-name">{row.name}</span>
+                    <span role="cell" className="bcp-name"><button type="button" className="bcp-secondary" onClick={() => setSelectedBatch(row.name)}>{batchLabel(row.name)}</button></span>
                     <span role="cell" data-label="Records">{formatCount(row.total)}</span>
                     <span role="cell" data-label="Finished">{formatCount(row.finished)}</span>
                     <span role="cell" data-label="With a website">{formatCount(row.withSite)}</span>
@@ -301,9 +304,9 @@ export function BaseView({
             )}
           </section>
 
-          <ContextComparison report={model.contextTrial} canRunTrial={canRunTrial} />
+          {canRunTrial && <ContextComparison report={model.contextTrial} canRunTrial={canRunTrial} />}
 
-          <section id="skills" className="bcp-section">
+          {canRunTrial && <section id="skills" className="bcp-section">
             <h2>Skills</h2>
             <p className="bcp-copy">
               Base runs only approved skill versions. A new version waits in Skala until it is approved, and an approved version is
@@ -344,9 +347,9 @@ export function BaseView({
                 ))}
               </div>
             )}
-          </section>
+          </section>}
 
-          <p className="bcp-footer">Base runs only approved skills. Keys are stored in Tank, on the server, never in the app code.</p>
+          <p className="bcp-footer">Your lists and results belong to your workspace.</p>
         </div>
       </div>
 

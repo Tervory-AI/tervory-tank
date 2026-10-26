@@ -1314,3 +1314,12 @@ body:has(.bcp) main {
 .bcp-context-cols {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
+
+/* Controls needed to upload a list and inspect its verified result. */
+.bcp-workflow { margin: 20px 0; }
+.bcp-upload { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
+.bcp-upload label { display: grid; gap: 6px; flex: 1 1 220px; min-width: 0; }
+.bcp-upload .bcp-input { width: 100%; box-sizing: border-box; }
+.bcp-upload .bcp-copy { flex-basis: 100%; }
+.bcp-batch-result { margin-top: 24px; }
+.bcp-result-row { padding: 12px 0; border-bottom: 1px solid #b8bfd0; overflow-wrap: anywhere; }

@@ -32,5 +32,5 @@ export default async function BasePage() {
   // Plugins read base.vault through Tank. While the vault is off, Tank returns no items and the tab says so.
   const plugins = signedIn ? await loadBasePlugins() : offPanel(SIGN_IN_MESSAGE);
   const model = await loadBase();
-  return <BaseView model={model} plugins={plugins} accountName={accountName} refresh={refreshBase} search={searchBase} ask={askBase} canRunTrial={isFounder(userId)} />;
+  return <BaseView model={model} plugins={plugins} accountName={accountName} refresh={refreshBase} search={searchBase} ask={askBase} signedIn={Boolean(userId)} canRunTrial={isFounder(userId)} />;
 }
