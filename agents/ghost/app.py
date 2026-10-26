@@ -617,20 +617,34 @@ def create_app() -> FastAPI:
             "client_visible_feed_list": False,
         }
 
-    @app.post("/ghost/autumbra/webhooks/{provider}", dependencies=[Depends(require_tank)])
+    @app.post("/ghost/autumbra/webhooks/{provider}")
     async def autumbra_webhook(provider: str, request: Request):
-        """Signature-checked at the Watch edge before parse. Unsigned dropped, never stored."""
+        """Signature check FIRST — before any Tank auth that would 404.
+
+        Real edge/mailbox senders cannot send X-Tank-Key. Unsigned or bad
+        signatures are dropped and counted; body is never stored.
+        """
         raw = await request.body()
         if len(raw) > 64_000:
             raise HTTPException(413, "Too large.")
-        signature = request.headers.get("x-autumbra-signature") or request.headers.get("cf-webhook-signature")
+        signature = request.headers.get("x-autumbra-signature") or request.headers.get(
+            "cf-webhook-signature"
+        )
         timestamp = request.headers.get("x-autumbra-timestamp")
         try:
             envelope = accept_signed(provider, raw, signature=signature, timestamp=timestamp)
         except WebhookRejected:
-            return JSONResponse({"accepted": False, "stored": False, "drops": drop_counts()}, status_code=401)
+            return JSONResponse(
+                {"accepted": False, "stored": False, "drops": drop_counts()},
+                status_code=401,
+            )
         # Working memory only — do not persist raw body.
-        return {"accepted": True, "stored": False, "provider": envelope["provider"], "bytes": envelope["bytes"]}
+        return {
+            "accepted": True,
+            "stored": False,
+            "provider": envelope["provider"],
+            "bytes": envelope["bytes"],
+        }
 
     @app.get("/ghost/autumbra/exercises", dependencies=[Depends(require_tank)])
     async def autumbra_exercises():
@@ -706,6 +720,9 @@ def create_app() -> FastAPI:
         try:
             data = json.loads(raw.decode("utf-8"))
             settings = ClientAutumbraSettings.model_validate(data["settings"])
+            to = str(settings.owner_email or "").strip()
+            if not to:
+                raise ValueError("recipient must come from the client's settings")
             email = build_owner_update(
                 settings=settings,
                 site_name=str(data.get("site_name") or settings.site_name),
@@ -719,11 +736,16 @@ def create_app() -> FastAPI:
                 receipt_url=str(data.get("receipt_url") or ""),
                 checks_run=data.get("checks_run"),
             )
-            to = str(data.get("to") or settings.owner_email or "owner@example.test")
         except Exception:
             raise HTTPException(422, "Owner update was not understood.") from None
         sent = send_owner_update(email, to=to, transport=DEFAULT_FIXTURE_TRANSPORT)
         return {**email, **sent}
+
+    @app.get("/ghost/autumbra/jobs", dependencies=[Depends(require_tank)])
+    async def autumbra_jobs():
+        """Scheduled Autumbra jobs (weekly owner update is a real entry)."""
+        from .owner_email_jobs import list_jobs
+        return {"jobs": list_jobs()}
 
     @app.get("/ghost/summary", dependencies=[Depends(require_tank)])
     async def ghost_summary():

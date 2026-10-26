@@ -24,6 +24,7 @@ class FixtureEdgeControl:
     tenant_id: str
     site: str = ""
     blocked: dict[str, dict[str, Any]] = field(default_factory=dict)
+    healthy: bool = True
     _lock: Lock = field(default_factory=Lock)
 
     def apply_block_ip(self, *, site: str, address: str, ref: str) -> dict[str, Any]:
@@ -55,6 +56,16 @@ class FixtureEdgeControl:
     def list_blocked(self) -> list[dict[str, Any]]:
         with self._lock:
             return [dict(v) for v in self.blocked.values()]
+
+    def set_healthy(self, value: bool) -> None:
+        with self._lock:
+            self.healthy = bool(value)
+
+    def health_check(self) -> bool:
+        """Fixture site health. False triggers Enforce auto-undo."""
+        with self._lock:
+            _ = list(self.blocked.values())
+            return bool(self.healthy)
 
 
 # Default dogfood control (one per Enforce process).

@@ -4,7 +4,9 @@ import hmac
 import time
 
 import pytest
+from fastapi.testclient import TestClient
 
+from agents.ghost.app import create_app
 from agents.ghost.client_settings import ClientAutumbraSettings
 from agents.ghost.red_team import list_exercises, run_exercise, run_own_sites_exercise_pass, OWN_SITES
 from agents.ghost.webhooks import (
@@ -34,6 +36,34 @@ def test_signed_webhook_accepted_not_stored(monkeypatch):
     assert envelope["accepted"] is True and envelope["stored"] is False
 
 
+def test_webhook_route_signature_before_tank_auth(monkeypatch, tmp_path):
+    """Unsigned/bad signatures are dropped+counted without needing X-Tank-Key."""
+    reset_drop_counts()
+    secret = "edge-secret"
+    monkeypatch.setenv(CF_SECRET_ENV, secret)
+    monkeypatch.setenv("TANK_KEY", "tank-key-value")
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    app = create_app()
+    client = TestClient(app)
+    body = b'{"event":"waf"}'
+    # No Tank key, no signature -> 401 drop (not 404).
+    bad = client.post("/ghost/autumbra/webhooks/edge", content=body)
+    assert bad.status_code == 401
+    assert bad.json()["accepted"] is False
+    assert bad.json()["stored"] is False
+    assert bad.json()["drops"]["edge"] >= 1
+    # Correct signature, still no Tank key -> 200.
+    sig = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    ok = client.post(
+        "/ghost/autumbra/webhooks/edge",
+        content=body,
+        headers={"X-Autumbra-Signature": sig, "X-Autumbra-Timestamp": str(int(time.time()))},
+    )
+    assert ok.status_code == 200
+    assert ok.json()["accepted"] is True
+    assert ok.json()["stored"] is False
+
+
 def test_red_team_own_sites_and_permission():
     exercises = list_exercises()
     assert any(e["id"] == "forged_webhook_fixture" for e in exercises)
@@ -46,7 +76,6 @@ def test_red_team_own_sites_and_permission():
     assert receipt["addresses_seen"] == ["203.0.113.9"]
     with pytest.raises(PermissionError):
         run_exercise("path_scan_fixture", target_site="evil.example")
-    # Client with written permission + matching site.
     settings = ClientAutumbraSettings(
         tenant_id="00000000-0000-0000-0000-0000000000ee",
         site_name="client.example",

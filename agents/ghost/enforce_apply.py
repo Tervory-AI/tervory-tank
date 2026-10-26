@@ -18,8 +18,6 @@ from .shields import plan_for
 from .speed_budgets import stamp_budget
 from .threat_payload import ThreatPayload
 
-ENFORCE_TOKEN_ENV = "AUTUMBRA_EDGE_CREDENTIAL"
-
 
 def payload_fields_only(payload: ThreatPayload) -> dict[str, Any]:
     """The only input Enforce may see."""
@@ -41,12 +39,13 @@ def apply_from_payload(
     settings: ClientAutumbraSettings,
     control: FixtureEdgeControl | None = None,
     source_credits: list[dict[str, str]] | None = None,
+    auto_undo_on_health_fail: bool = True,
 ) -> dict[str, Any]:
     """ThreatPayload only → never-block → client shield_mode → fixture apply.
 
     Speed budgets are measured here with perf_counter. Live provider APIs stay
     behind a real connected hand; until then the fixture control mutates state
-    so applied/undo are real.
+    so applied/undo are real. Failed health check auto-undoes an applied shield.
     """
     t0 = time.perf_counter()
     raw_log_seen = _measure_raw_log_seen(payload)
@@ -119,12 +118,28 @@ def apply_from_payload(
     elif mode is ApplyMode.approve_each and payload.kind == "block_ip" and payload.address:
         # Still a real plan against the fixture; not applied until approved.
         receipt["undo"] = {"rule_id": None, "control": "fixture_edge", "pending": True}
+    elif mode is ApplyMode.never:
+        receipt["undo"] = {"rule_id": None, "control": "fixture_edge", "report_only": True}
     stamp_budget(receipt, stage="decision_to_shield", seconds=time.perf_counter() - t1)
 
     t2 = time.perf_counter()
-    # Fixture health: control answers locally.
-    _ = edge.list_blocked()
+    healthy = edge.health_check()
     stamp_budget(receipt, stage="health_check", seconds=time.perf_counter() - t2)
+    receipt["health_ok"] = healthy
+
+    if applied and auto_undo_on_health_fail and not healthy:
+        t3 = time.perf_counter()
+        undone = undo_applied(receipt, control=edge)
+        stamp_budget(undone, stage="auto_undo_e2e", seconds=time.perf_counter() - t3)
+        receipt["outcome"] = "auto_undone_health_failed"
+        receipt["applied"] = False
+        receipt["auto_undo"] = undone
+        receipt["budgets"] = {
+            **(receipt.get("budgets") or {}),
+            **(undone.get("budgets") or {}),
+        }
+        receipt["control"] = "fixture_edge"
+        return receipt
 
     receipt["applied"] = applied
     receipt["control"] = "fixture_edge"
@@ -136,9 +151,16 @@ def undo_applied(
     *,
     control: FixtureEdgeControl | None = None,
 ) -> dict[str, Any]:
-    """One-tap undo for an Enforce receipt that was applied on the fixture control."""
+    """One-tap undo for an Enforce receipt that was applied on the fixture control.
+
+    Callers hand the prior receipt object from apply — never raw HTTP bytes.
+    """
     t0 = time.perf_counter()
+    if not isinstance(receipt, dict):
+        raise TypeError("undo_applied accepts the prior Enforce receipt dict only.")
     undo = receipt.get("undo") or {}
+    if not isinstance(undo, dict):
+        raise TypeError("undo_applied: receipt.undo must be a dict.")
     rule_id = undo.get("rule_id")
     if not rule_id:
         raise LookupError("no applied shield to undo")

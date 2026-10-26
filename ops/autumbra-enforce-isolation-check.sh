@@ -7,7 +7,7 @@
 #
 # Expected stdout (pass):
 #   network=<name> internal=true
-#   JSON from enforce_isolation_probe with ok=true and no Tank/Workspace/other-client reachability
+#   JSON from ghost.enforce_isolation_probe (probe + report; report.ok=true)
 # Exit 1 if no internal:true network. Exit 2 if container missing.
 set -euo pipefail
 
@@ -32,4 +32,6 @@ if [ "$internal_ok" -ne 1 ]; then
   exit 1
 fi
 
-docker exec -e PYTHONPATH=/app:/workspace "$container" python -m agents.ghost.enforce_isolation_probe
+# Inside the Enforce image the package is imported as `ghost.*` (see compose CMD).
+docker exec -e PYTHONPATH=/app -e AUTUMBRA_ROLE=enforce "$container" \
+  python -m ghost.enforce_isolation_probe
