@@ -45,13 +45,19 @@ async def ping(ctx: JobContext) -> dict:
 async def refresh(ctx: JobContext) -> dict:
     fixtures = ctx.input.get("fixtures") or os.environ.get("FEEDS_FIXTURES") or None
     async with _ledger() as ledger:
-        return await perform_refresh(
-            tenant_id=ctx.tenant_id,
-            engine=str(ctx.input.get("engine") or ""),
-            ledger=ledger,
-            fixtures=None if not fixtures else str(fixtures),
-            live=not fixtures,
-        )
+        lock = ctx.tenant_id + ":market-collect"
+        await ledger.conn.execute("SELECT pg_advisory_lock(hashtextextended($1, 0))", lock)
+        try:
+            return await perform_refresh(
+                tenant_id=ctx.tenant_id,
+                engine=str(ctx.input.get("engine") or ""),
+                ledger=ledger,
+                fixtures=None if not fixtures else str(fixtures),
+                live=not fixtures,
+                backfill=bool(ctx.input.get("backfill")),
+            )
+        finally:
+            await ledger.conn.execute("SELECT pg_advisory_unlock(hashtextextended($1, 0))", lock)
 
 
 async def opportunities(ctx: JobContext) -> dict:
@@ -165,6 +171,7 @@ app = create_app(
         "research": research,
     },
     schedules=_schedules(),
+    job_timeouts={"refresh": 86400},
 )
 
 
@@ -256,3 +263,8 @@ async def quarantine_reject(batch_id: str, x_tank_key: str = Header(default=""))
 @app.post("/quarantine/{batch_id}/remove")
 async def quarantine_remove(batch_id: str, x_tank_key: str = Header(default="")) -> dict:
     return await _batch_action(batch_id, "remove", x_tank_key)
+
+
+from core.http import build_router as market_router
+
+app.include_router(market_router(key_ok=_room_key_ok, ledger_context=_ledger))

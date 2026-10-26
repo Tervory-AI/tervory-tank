@@ -224,15 +224,16 @@ def census_population_urls(key: str, years: list[int]) -> list[tuple[str, str]]:
 def census_trade_urls(key: str, months: list[str], codes: list[str], flow: str) -> list[tuple[str, str]]:
     path = "imports" if flow == "import" else "exports"
     value = "GEN_VAL_MO" if flow == "import" else "ALL_VAL_MO"
+    commodity = "I_COMMODITY" if flow == "import" else "E_COMMODITY"
     urls: list[tuple[str, str]] = []
     for month in months:
         for code in codes:
             query = urllib.parse.urlencode(
                 {
-                    "get": f"I_COMMODITY,CTY_NAME,{value},DIST_NAME,time",
+                    "get": f"{commodity},CTY_NAME,{value},DIST_NAME,time",
                     "COMM_LVL": "HS6",
                     "time": month,
-                    "I_COMMODITY": code,
+                    commodity: code,
                     "key": key,
                 }
             )

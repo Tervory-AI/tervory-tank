@@ -1155,3 +1155,9 @@ body:has(.ml) main {
   font-family: var(--font-jetbrains), "JetBrains Mono", ui-monospace, monospace;
   font-size: 12px;
 }
+
+/* Stored evidence needs scrolling and a readable table; the feeds page is unchanged. */
+.ml.ml-source { overflow: auto; }
+.ml-source table { border-collapse: collapse; width: 100%; }
+.ml-source th, .ml-source td { padding: 8px; border-bottom: 1px solid #b8bfd0; text-align: left; }
+.ml-source tr:target, .ml-source article:target { background: #fff; outline: 2px solid #001840; }

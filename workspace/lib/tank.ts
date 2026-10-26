@@ -1013,3 +1013,31 @@ export function mootStudentMatch(body: {
 }): Promise<Record<string, unknown>> {
   return tank<Record<string, unknown>>("/v1/zenas/moot/matches/student", { method: "POST", body: JSON.stringify(body) });
 }
+
+// Market Lab: the server derives tenantId from Clerk before calling this corridor.
+export type MarketFeed = {
+  id: string; name: string; kind: "copy" | "linked"; rows: number;
+  state: "on" | "off"; note: string; checked_at: string | null; document_id: string | null;
+};
+export type MarketOverview = { feeds: MarketFeed[]; on_count: number; refresh_status: string | null };
+export type MarketFact = { text: string; href: string; name: string };
+export type MarketAnswer = { content: string; facts: MarketFact[]; sources: { name: string; href: string }[] };
+export type MarketDocument = {
+  offset: number; point_count: number; event_count: number;
+  id: string; name: string; fetched_at: string; licence: string; terms_checked_at: string;
+  downloads: { url: string; sha256: string }[];
+  points: { title: string; geo: string; date: string; value: string; unit: string; revision: string; withdrawn?: boolean }[];
+  events: { title: string; body: string; date: string; url: string; kind: string }[];
+};
+export async function marketLabRequest<T>(
+  tenantId: string, operation: "overview" | "ask" | "document" | "refresh",
+  payload: { question?: string; document_id?: string; offset?: number } = {},
+): Promise<T> {
+  const response = await fetch(`${TANK_URL}/v1/market-lab/${operation}`, {
+    method: "POST", cache: "no-store", redirect: "error", signal: AbortSignal.timeout(35000),
+    headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY },
+    body: JSON.stringify({ ...payload, tenant_id: tenantId }),
+  });
+  if (!response.ok) throw new Error("Market Lab could not read its stored sources.");
+  return await response.json() as T;
+}

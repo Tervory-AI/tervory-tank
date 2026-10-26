@@ -50,3 +50,25 @@ def normalize_label(text: str) -> str:
 STATE_BY_NAME = {normalize_label(name): code for code, name in _STATE_NAMES.items()}
 STATE_BY_NAME["districtofcolumbia"] = "DC"
 STATE_BY_NAME["washingtondc"] = "DC"
+
+
+def mentioned_states(question: str) -> set[str]:
+    """Recognize complete state names and explicit uppercase postal codes."""
+    import re
+
+    codes = set(re.findall(r"\b[A-Z]{2}\b", question)) & US_POSTAL_SET
+    remaining = question.lower()
+    for code, name in sorted(_STATE_NAMES.items(), key=lambda item: len(item[1]), reverse=True):
+        pattern = r"\b" + re.escape(name.lower()) + r"\b"
+        if re.search(pattern, remaining):
+            codes.add(code)
+            remaining = re.sub(pattern, " ", remaining)
+    return codes
+
+
+def state_for_area(area: str) -> str | None:
+    if area in US_POSTAL_SET:
+        return area
+    if area.isdigit() and len(area) in {2, 5}:
+        return next((code for code, fips in STATE_FIPS.items() if area[:2] == fips), None)
+    return STATE_BY_NAME.get(normalize_label(area))

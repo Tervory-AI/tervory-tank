@@ -12,6 +12,9 @@ import type { Notice, PriceLine } from "./parse";
 
 /** One feed's latest reading. Off feeds are ignored even if a reading is passed in. */
 export type FeedReading = {
+  rows?: number;
+  documentId?: string | null;
+  note?: string;
   headline?: string | null;
   detail?: string | null;
   lines?: PriceLine[];
@@ -27,6 +30,7 @@ export type LinkCheck = {
 };
 
 export type OnCard = {
+  sourceHref?: string;
   id: string;
   title: string;
   summary: string;
@@ -41,6 +45,7 @@ export type OnCard = {
 };
 
 export type OffRow = {
+  reason?: string;
   id: string;
   title: string;
   summary: string;
@@ -63,6 +68,7 @@ export type LinkGroupView = {
 };
 
 export type PageModel = {
+  refreshStatus?: string | null;
   refreshedLabel: string;
   onCount: number;
   offCount: number;
@@ -74,29 +80,6 @@ export type PageModel = {
   off: OffRow[];
   groups: LinkGroupView[];
 };
-
-const FRED_TITLE = "FRED economic series (7)";
-const FRED_SUMMARY =
-  "Freight index and its monthly change, plus copper, zinc, lead, cotton and diesel prices. Read live from FRED, never stored.";
-
-const GRID_ORDER = [
-  "noaa_alerts",
-  "listing_counts",
-  "check_counts",
-  "ecfr",
-  "world_bank_commodities",
-  "bts_freight",
-  "port_los_angeles",
-  "licence_holders",
-  "census_population",
-  "census_trade",
-  "noaa_climate",
-  "legiscan",
-];
-
-const OFF_COPY_ORDER = ["census_population", "census_trade", "eia_diesel", "noaa_climate", "legiscan"];
-
-const byId = new Map(CATALOG.map((item) => [item.id, item]));
 
 export function isOn(item: CatalogItem, flags: KeyFlags): boolean {
   if (!item.keyName) return true;
@@ -145,6 +128,7 @@ function dated(reading: FeedReading | undefined): string | null {
 function cardFor(item: CatalogItem, reading: FeedReading | undefined): OnCard {
   const shown = shownReading(reading);
   return {
+    sourceHref: reading?.documentId ? `/market-lab/sources/${reading.documentId}` : undefined,
     id: item.id,
     title: item.title,
     summary: item.summary,
@@ -163,39 +147,6 @@ function hasContent(card: OnCard): boolean {
   return Boolean(card.headline || card.detail || card.lines.length || card.notices.length || card.problem);
 }
 
-function fredCard(flags: KeyFlags, readings: Record<string, FeedReading>): OnCard | null {
-  const series = CATALOG.filter((item) => item.kind === "fred");
-  const first = series[0];
-  if (!first || !isOn(first, flags)) return null;
-  const lines: PriceLine[] = [];
-  let problem: string | null = null;
-  let asOf: string | null = null;
-  for (const item of series) {
-    if (!asOf) asOf = dated(readings[item.id]);
-    const shown = shownReading(readings[item.id]);
-    if (!problem && shown.failed) problem = problemFor(shown);
-    if (shown.lines && shown.lines.length) {
-      lines.push(...shown.lines);
-      continue;
-    }
-    const headline = clean(shown.headline);
-    if (headline) lines.push({ label: item.short || item.title, value: headline });
-  }
-  return {
-    id: "fred",
-    title: FRED_TITLE,
-    summary: FRED_SUMMARY,
-    sourceLabel: "FRED",
-    cadence: "Monthly",
-    headline: null,
-    detail: lines.length ? "Read live, not stored." : null,
-    lines,
-    notices: [],
-    problem,
-    asOf,
-  };
-}
-
 function linkNote(item: CatalogItem, check: LinkCheck | undefined): string {
   if (item.linkNote) return item.linkNote;
   const events = check?.events ?? 0;
@@ -211,41 +162,17 @@ export function buildPage(
   linkChecks: Record<string, LinkCheck>,
   options: { error?: boolean; refreshedAt?: string | null } = {},
 ): PageModel {
-  const fredOn = CATALOG.some((item) => item.kind === "fred" && isOn(item, flags));
-  const onCopy = CATALOG.filter((item) => item.kind === "copy" && isOn(item, flags)).length;
-  const offCopy = CATALOG.filter((item) => item.kind === "copy" && !isOn(item, flags)).length;
-  const fredCount = CATALOG.filter((item) => item.kind === "fred").length;
+  const copies = CATALOG.filter((item) => item.kind === "copy");
+  const hasRows = (id: string) => Boolean(readings[id]?.documentId && (readings[id]?.rows ?? 0) > 0 && !readings[id]?.failed);
   const linked = CATALOG.filter((item) => item.kind === "linked");
-
-  const featured: OnCard[] = [];
-  for (const id of FEATURED_IDS) {
-    const item = byId.get(id);
-    if (!item || !isOn(item, flags)) continue;
-    featured.push(cardFor(item, readings[id]));
-  }
-
-  const cards: OnCard[] = [];
-  for (const id of GRID_ORDER) {
-    const item = byId.get(id);
-    if (!item || item.kind !== "copy" || !isOn(item, flags)) continue;
-    if ((FEATURED_IDS as readonly string[]).includes(id)) continue;
-    cards.push(cardFor(item, readings[id]));
-  }
-  const fred = fredCard(flags, readings);
-  if (fred) cards.push(fred);
-
+  const featured = copies.filter((item) => (FEATURED_IDS as readonly string[]).includes(item.id) && hasRows(item.id)).map((item) => cardFor(item, readings[item.id]));
+  const cards = copies.filter((item) => !(FEATURED_IDS as readonly string[]).includes(item.id) && hasRows(item.id)).map((item) => cardFor(item, readings[item.id]));
   const onCards = [...featured, ...cards];
   const loadError = Boolean(options.error);
-  const off: OffRow[] = [];
-  if (!fredOn) {
-    off.push({ id: "fred", title: FRED_TITLE, summary: FRED_SUMMARY, keyName: "FRED_API_KEY" });
-  }
-  for (const id of OFF_COPY_ORDER) {
-    const item = byId.get(id);
-    if (!item || isOn(item, flags)) continue;
-    off.push({ id: item.id, title: item.title, summary: item.summary, keyName: item.keyName });
-  }
-
+  const off = copies.filter((item) => !hasRows(item.id)).map((item) => ({
+    id: item.id, title: item.title, summary: item.summary, keyName: item.keyName,
+    reason: readings[item.id]?.note || "Off, not fetched yet",
+  }));
   const groups: LinkGroupView[] = LINK_GROUPS.map((group) => ({
     id: group.id,
     title: group.title,
@@ -261,12 +188,18 @@ export function buildPage(
       })),
   }));
 
+  const restricted = CATALOG.filter((item) => item.kind === "fred");
+  groups.push({
+    id: "economic", title: "Economic series", cadence: "Monthly",
+    lead: "These sources do not permit a stored copy. Their numbers are not used in briefs.",
+    pages: restricted.map((item) => ({ id: item.id, label: item.title, href: item.href || "", note: "Open source" })),
+  });
   const refreshedAt = options.refreshedAt ?? "";
   return {
     refreshedLabel: refreshedAt ? formatRefreshed(refreshedAt) : "Not refreshed yet",
-    onCount: onCopy + (fredOn ? fredCount : 0),
-    offCount: offCopy + (fredOn ? 0 : fredCount),
-    linkedCount: linked.length,
+    onCount: onCards.length,
+    offCount: off.length,
+    linkedCount: linked.length + restricted.length,
     onEmpty: !loadError && onCards.every((card) => !hasContent(card)),
     loadError,
     featured,

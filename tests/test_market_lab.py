@@ -173,7 +173,8 @@ async def test_listing_counts_store_and_fred_does_not() -> None:
         now=NOW,
     )
     assert second["listings_stored"] == 0
-    assert len(ledger.points_for(TENANT)) == 4
+    assert len([point for point in ledger.points_for(TENANT) if ":listing_counts:count:state:" in point["series_id"]]) == 4
+    assert {row["source"] for row in ledger.series_for(TENANT)} >= {"listing_counts", "check_counts", "census_population"}
     assert ledger.points_for(OTHER) == []
 
 

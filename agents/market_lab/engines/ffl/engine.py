@@ -35,7 +35,11 @@ RESPONSE_TARGETS = {"increase": 5.0, "hold": 3.0, "reduce": 1.0}
 
 
 def plan() -> dict[str, Any]:
+    from feeds.catalog import sources
+
     return {
+        "feeds": [source.id for source in sources("ffl") if source.allow_bulk],
+        "linked_pages": [source.id for source in sources("ffl") if not source.allow_bulk],
         "engine": "ffl",
         "supply": [
             {

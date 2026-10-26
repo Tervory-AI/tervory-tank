@@ -44,8 +44,6 @@ const SECTIONS = [
   { id: "linked", label: "Linked pages" },
 ] as const;
 
-const KEYED_ON = new Set(["eia_diesel", "fred", "census_population", "census_trade", "noaa_climate", "legiscan"]);
-
 // No Dashboard, Projects, Settings, or Support pages exist yet.
 // These point at the nearest existing workspace routes.
 const TOP_LINKS = [
@@ -59,7 +57,8 @@ const BOTTOM_LINKS = [
   { href: "/", label: "Support" },
 ] as const;
 
-type Turn = { role: "user" | "assistant"; content: string; sources?: AnswerSource[]; error?: boolean };
+type Fact = { text: string; href: string; name: string };
+type Turn = { facts?: Fact[]; role: "user" | "assistant"; content: string; sources?: AnswerSource[]; error?: boolean };
 
 function RefreshButton() {
   const { pending } = useFormStatus();
@@ -87,15 +86,6 @@ function scrollToSection(id: string) {
   root.scrollTo({ top, behavior: "smooth" });
 }
 
-function linkLabel(href: string): string {
-  try {
-    const url = new URL(href);
-    return `${url.host}${url.pathname === "/" ? "" : url.pathname}`;
-  } catch {
-    return href;
-  }
-}
-
 function OnCardView({ card }: { card: OnCard }) {
   const bare = !card.headline && card.lines.length === 0 && card.notices.length === 0 && !card.problem;
   const meta = [card.cadence, card.asOf ? `Updated ${card.asOf}` : null, card.sourceLabel].filter(Boolean).join(" · ");
@@ -109,7 +99,7 @@ function OnCardView({ card }: { card: OnCard }) {
         </span>
       </div>
       <p className="ml-summary">{card.summary}</p>
-      {card.headline ? <p className="ml-value">{card.headline}</p> : null}
+      {card.headline ? <p className="ml-value"><a href={card.sourceHref}>{card.headline}</a></p> : null}
       {card.detail ? <p className="ml-detail">{card.detail}</p> : null}
       {card.lines.length ? (
         <ul className="ml-lines">
@@ -150,16 +140,16 @@ function ChatBox() {
     setDraft("");
     setSending(true);
     try {
-      const res = await fetch("/api/market-lab/chat", {
+      const res = await fetch("/market-lab/ask", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ messages: next.map(({ role, content }) => ({ role, content })) }),
+        body: JSON.stringify({ question: text }),
       });
-      const data = (await res.json().catch(() => null)) as { content?: string; error?: string; sources?: AnswerSource[] } | null;
+      const data = (await res.json().catch(() => null)) as { content?: string; error?: string; facts?: Fact[]; sources?: AnswerSource[] } | null;
       if (!res.ok || !data?.content) {
         setTurns([...next, { role: "assistant", content: data?.error || "Market Lab could not answer.", error: true, sources: [] }]);
       } else {
-        setTurns([...next, { role: "assistant", content: data.content, sources: data.sources ?? [] }]);
+        setTurns([...next, { role: "assistant", content: data.content, facts: data.facts ?? [], sources: data.sources ?? [] }]);
       }
     } catch {
       setTurns([...next, { role: "assistant", content: "Market Lab could not answer. Nothing was changed.", error: true, sources: [] }]);
@@ -183,6 +173,7 @@ function ChatBox() {
               <div className="ml-bubble ml-answer" key={`lab-${index}`}>
                 <p className="ml-who">Market Lab</p>
                 <p className="ml-said">{turn.content}</p>
+                {turn.facts?.length ? <ul className="ml-lines">{turn.facts.map((fact) => <li key={fact.href}><a href={fact.href}>{fact.text}</a></li>)}</ul> : null}
                 <div className="ml-refs">
                   <p className="ml-refs-label">{REFERENCE_LABEL}</p>
                   {turn.sources && turn.sources.length ? turn.sources.map((source) => (
@@ -190,7 +181,7 @@ function ChatBox() {
                       <span className="ml-ref-name">{source.name}</span>
                       {source.href ? (
                         <a className="ml-ref-link" href={source.href}>
-                          {linkLabel(source.href)}
+                          Open stored source
                         </a>
                       ) : (
                         <span />
@@ -673,7 +664,6 @@ export function MarketLabView({
     .filter((group) => group.pages.length > 0);
   const searching = query.trim().length > 0;
   const noHits = searching && onCards.length === 0 && groups.length === 0;
-  const anyKeyedOn = [...model.featured, ...model.cards].some((card) => KEYED_ON.has(card.id));
   const accountName = workspaceName?.trim() || "Your account";
 
   function openSection(id: string) {
@@ -776,6 +766,7 @@ export function MarketLabView({
             </div>
           </header>
           <ChatBox />
+          <RefreshStatus status={model.refreshStatus} />
           <div className="ml-counts">
             <article>
               <p className="ml-count">{model.onCount}</p>
@@ -796,9 +787,7 @@ export function MarketLabView({
           <section id="on" className="ml-section">
             <h2>On</h2>
             <p className="ml-lead">
-              {anyKeyedOn
-                ? "These feeds are on. Each shows its latest value."
-                : "These feeds need no key. They read public data and show their latest value."}
+              These feeds stored observations in their last refresh. Open a feed to check its sources.
             </p>
             {model.onEmpty && !searching ? (
               <div className="ml-note">
@@ -813,6 +802,12 @@ export function MarketLabView({
               </div>
             ) : null}
           </section>
+          {model.off.length ? <section className="ml-section" aria-label="Off feeds">
+            <h2>Off</h2>
+            <div className="ml-grid">{model.off.map((feed) => <article className="ml-card" key={feed.id}>
+              <h3>{feed.title}</h3><p>{feed.reason}</p>
+            </article>)}</div>
+          </section> : null}
           <section id="linked" className="ml-section">
             <h2>Linked pages</h2>
             <p className="ml-lead">Other pages that use these feeds.</p>
@@ -830,7 +825,7 @@ export function MarketLabView({
           {quarantine}
           <footer className="ml-foot">
             <p>
-              Public data only. FRED data is read live and never stored.{" "}
+              Stored public observations only. Sources that do not permit storage stay linked.{" "}
               {model.refreshedLabel === "Not refreshed yet" ? "Not refreshed yet." : `Last refreshed ${model.refreshedLabel}.`}
             </p>
             <form action={refresh}>
@@ -913,4 +908,17 @@ function GroupCard({ group, open, onToggle }: { group: LinkGroupView; open: bool
       ) : null}
     </article>
   );
+}
+
+function RefreshStatus({ status }: { status?: string | null }) {
+  const router = useRouter();
+  const busy = status === "queued" || status === "running";
+  useEffect(() => {
+    if (!busy) return;
+    const timer = setInterval(() => router.refresh(), 10000);
+    return () => clearInterval(timer);
+  }, [busy, router]);
+  if (busy) return <p role="status">The feeds are refreshing. Stored observations appear as each feed finishes.</p>;
+  if (status === "failed") return <p role="status">The refresh stopped before it finished. You can try Refresh feeds again.</p>;
+  return null;
 }
