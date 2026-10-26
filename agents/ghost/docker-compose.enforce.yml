@@ -1,6 +1,6 @@
 # Per-client Autumbra Enforce. One project per client (Coolify by name).
 # Internal network only. No public ports. No Docker socket. No host mounts.
-# Holds only this client's zone-scoped Cloudflare credential as a named Coolify secret.
+# Holds only this client's optional edge credential (Coolify name AUTUMBRA_CF_API_TOKEN_<tenant_slug>).
 # Substitute TENANT_ID before deploy. Never paste a secret value into this file.
 services:
   enforce:
@@ -14,8 +14,8 @@ services:
       AGENT_NAME: autumbra-enforce
       AUTUMBRA_ROLE: enforce
       TENANT_ID: ${TENANT_ID}
-      # Named secret only — value injected by Coolify; never committed.
-      CLOUDFLARE_API_TOKEN_ENFORCE: ${CLOUDFLARE_API_TOKEN_ENFORCE:-}
+      # Named secret only — Coolify injects AUTUMBRA_CF_API_TOKEN_<tenant_slug> as this env; never committed.
+      AUTUMBRA_CF_API_TOKEN: ${AUTUMBRA_CF_API_TOKEN:-}
       THREAT_PAYLOAD_QUEUE: ${THREAT_PAYLOAD_QUEUE}
       DATA_DIR: /data
       # Enforce never calls a model. No TANK_KEY here on purpose.

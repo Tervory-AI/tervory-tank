@@ -60,7 +60,7 @@ def test_enforce_compose_internal_no_model_key():
     env = svc["environment"]
     assert "TANK_KEY" not in env
     assert env.get("AUTUMBRA_ROLE") == "enforce"
-    assert "CLOUDFLARE_API_TOKEN_ENFORCE" in env
+    assert "AUTUMBRA_CF_API_TOKEN" in env
     assert "ports" not in svc
     assert svc.get("cap_drop") == ["ALL"]
     assert "privileged" not in svc

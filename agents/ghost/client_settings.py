@@ -1,7 +1,9 @@
-"""Per-client Autumbra apply choices for shields and code fixes.
+"""Per-client Autumbra apply choices and optional connect hands.
 
-Three choices, stored per client. Tervory never changes them. Default is
-"I approve each one". Shown on every receipt.
+Autumbra is agnostic: Cloudflare, Google Workspace, Shopify, host firewall,
+etc. are optional client choices — not required. Three apply choices, stored
+per client. Tervory never changes them. Default is "I approve each one".
+Shown on every receipt.
 """
 from __future__ import annotations
 
@@ -33,8 +35,11 @@ class ClientAutumbraSettings(BaseModel):
     own_cidrs: list[str] = Field(default_factory=list, max_length=64)
     # Written-permission flag for red-team exercises against this client.
     red_team_permission: bool = False
+    # Optional "hands" — client choice, like linking a tool. Autumbra stays agnostic.
     cloudflare_connected: bool = False
     google_workspace_connected: bool = False
+    shopify_connected: bool = False
+    host_firewall_connected: bool = False
 
     def receipt_stamp(self) -> dict[str, str]:
         """What every receipt must show about the client's choice."""
@@ -62,9 +67,15 @@ def save_settings(store, settings: ClientAutumbraSettings) -> ClientAutumbraSett
 
 
 def active_halves(settings: ClientAutumbraSettings) -> dict[str, bool]:
-    """Which product halves are active when CF/Google may be missing."""
+    """Which hands are lit. Stack always works; "block in seconds" needs an edge hand."""
+    edge = bool(
+        settings.cloudflare_connected
+        or settings.host_firewall_connected
+        or settings.shopify_connected
+    )
     return {
-        "edge": bool(settings.cloudflare_connected),
+        "edge": edge,
         "mailbox": bool(settings.google_workspace_connected),
-        "stack": True,  # inventory / advisories / fixes always available
+        "stack": True,  # inventory / advisories / fix PRs / receipts always available
+        "block_in_seconds": edge,  # plain copy: lights up when a hand is connected
     }

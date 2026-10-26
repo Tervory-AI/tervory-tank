@@ -35,11 +35,16 @@ def project_name(tenant_id: str) -> str:
     return f"{PROJECT_PREFIX}-{tenant_id.lower()}"
 
 
-def credential_secret_name(tenant_id: str) -> str:
-    """Coolify secret NAME only. Never a value."""
+def tenant_slug(tenant_id: str) -> str:
+    """Stable Coolify slug from tenant UUID. Never a secret value."""
     if not TENANT_RE.fullmatch(tenant_id):
         raise ValueError("tenant_id must be a UUID.")
-    return f"CLOUDFLARE_API_TOKEN_ENFORCE_{tenant_id.upper().replace('-', '_')}"
+    return tenant_id.lower().replace("-", "_")
+
+
+def credential_secret_name(tenant_id: str) -> str:
+    """Coolify secret NAME only. Pattern agreed 2026-10-26: AUTUMBRA_CF_API_TOKEN_<tenant_slug>."""
+    return f"AUTUMBRA_CF_API_TOKEN_{tenant_slug(tenant_id)}"
 
 
 def queue_name(tenant_id: str) -> str:

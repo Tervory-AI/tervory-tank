@@ -17,8 +17,8 @@ services:
       # GHOST-2 inventory: read-only Coolify API token, by name only. Empty = not connected.
       COOLIFY_TOKEN_GHOST: ${COOLIFY_TOKEN_GHOST:-}
       COOLIFY_URL_GHOST: ${COOLIFY_URL_GHOST:-}
-      # Air gap: Watch has NO Cloudflare write credential. Per-client Enforce holds
-      # CLOUDFLARE_API_TOKEN_ENFORCE_<TENANT> by Coolify name only (see docker-compose.enforce.yml).
+      # Air gap: Watch has NO edge write credential. Per-client Enforce holds
+      # AUTUMBRA_CF_API_TOKEN_<tenant_slug> by Coolify name only when the client chose Cloudflare.
     volumes:
       - agent_ghost_data:/data
     networks: [gw]
