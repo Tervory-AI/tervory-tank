@@ -61,14 +61,14 @@ SCOPE = "($1::uuid IS NULL OR tenant_id=$1) AND region=$2 AND ($3::text IS NULL 
 WINDOW = "($4::timestamptz IS NULL OR ts >= $4) AND ts < $5"
 TOTALS = """count(*)::int AS calls,
     count(standard_cost_usd)::int AS priced_calls,
-    coalesce(sum(cost_usd) FILTER (WHERE research_cost_status IS DISTINCT FROM 'unknown'),0) AS actual_usd,
+    coalesce(sum(cost_usd) FILTER (WHERE research_cost_status IS DISTINCT FROM 'unknown' AND cost_status='set'),0) AS actual_usd,
     coalesce(sum(cost_usd) FILTER (WHERE standard_cost_usd IS NOT NULL),0) AS compared_actual_usd,
-    count(*) FILTER (WHERE research_cost_status='unknown')::int AS unknown_cost_calls,
+    count(*) FILTER (WHERE (research_cost_status='unknown' OR cost_status='not_set'))::int AS unknown_cost_calls,
     coalesce(sum(standard_cost_usd),0) AS baseline_usd,
     coalesce(sum(standard_cost_usd-cost_usd),0) AS saved_usd,
     count(*) FILTER (WHERE baseline_status='backfilled' AND standard_cost_usd IS NOT NULL)::int AS backfilled_calls,
     count(*) FILTER (WHERE standard_cost_usd IS NULL)::int AS unpriced_calls,
-    count(*) FILTER (WHERE rung=3 AND NOT cache_hit AND cost_usd=0 AND outcome='delivered' AND research_cost_status IS DISTINCT FROM 'unknown')::int AS code_calls,
+    count(*) FILTER (WHERE rung=3 AND NOT cache_hit AND cost_usd=0 AND outcome='delivered' AND research_cost_status IS DISTINCT FROM 'unknown' AND cost_status='set')::int AS code_calls,
     bool_or(NOT EXISTS(SELECT 1 FROM tank.shadow sh JOIN tank.ledger sl ON sl.id=sh.ledger_id AND sl.tenant_id=sh.tenant_id
       WHERE sh.tenant_id=receipts.tenant_id AND sh.task_type=receipts.task_type AND sl.region=receipts.region)) AS quality_pending,
     array_remove(array_agg(DISTINCT standard_model),NULL) AS standards,
@@ -87,7 +87,7 @@ def receipt_source(tenant: str | None, region: str, end: str, clients_only: bool
     return f"""(SELECT r.* FROM tank.ledger raw LEFT JOIN LATERAL (SELECT comparison FROM tank.comparison_history h
           WHERE h.ledger_id=raw.id AND h.tenant_id=raw.tenant_id AND h.region=raw.region
             AND h.valid_from <= {end} AND h.valid_until > {end} ORDER BY h.valid_until LIMIT 1) h ON true
-        CROSS JOIN LATERAL jsonb_populate_record(NULL::tank.ledger,to_jsonb(raw)||coalesce(h.comparison,'{{}}'::jsonb)) r
+        CROSS JOIN LATERAL jsonb_populate_record(NULL::tank.ledger,to_jsonb(raw)||coalesce(h.comparison,'{{}}'::jsonb)||CASE WHEN raw.cost_status='not_set' THEN jsonb_build_object('cost_usd',NULL,'standard_cost_usd',NULL,'top_cost_usd',NULL,'baseline_cost_usd',NULL) ELSE '{{}}'::jsonb END) r
         WHERE {scope}raw.region={region} AND raw.ts < {end})"""
 
 
@@ -112,7 +112,9 @@ async def snapshot(tenant: uuid.UUID | None, task: str | None = None,
         all_total = dict(await conn.fetchrow(f"SELECT {TOTALS} FROM {receipt_source(None,'$1','$2',clients_only)} receipts WHERE region=$1 AND ts < $2 AND {LIVE}", region, end))
         tenants = [str(r['tenant_id']) for r in await conn.fetch("SELECT DISTINCT tenant_id FROM tank.ledger WHERE region=$1 UNION SELECT '00000000-0000-0000-0000-000000000001'::uuid ORDER BY tenant_id", region)]
         ledger = [dict(r) for r in await conn.fetch(f"""SELECT l.id,l.tenant_id,l.ts,l.task_type,l.agent,l.model,l.rung,l.tokens_in,l.tokens_out,
-            CASE WHEN l.research_cost_status='unknown' THEN NULL ELSE l.cost_usd END AS cost_usd,l.research_cost_status,l.baseline_model,l.baseline_cost_usd,l.baseline_status,l.baseline_priced_at,l.cache_hit,l.outcome,
+            CASE WHEN (l.research_cost_status='unknown' OR l.cost_status='not_set') THEN NULL ELSE l.cost_usd END AS cost_usd,
+            CASE WHEN l.cost_status='not_set' THEN 'price not set' ELSE l.cost_status END AS cost_status,
+            l.vendor,l.units,l.vendor_cost_status,l.vendor_list_cost_usd,l.research_cost_status,l.baseline_model,l.baseline_cost_usd,l.baseline_status,l.baseline_priced_at,l.cache_hit,l.outcome,
             l.standard_cost_usd-l.cost_usd AS saved_usd, l.standard_model,l.standard_cost_usd,l.top_model,l.top_cost_usd,
             l.baseline_cost_usd < l.cost_usd AS baseline_below_actual,
             (SELECT a.family<>b.family FROM tank.proof_prices a,tank.proof_prices b
@@ -254,6 +256,7 @@ SAVINGS_BODY = """), linked AS (
       AND l.agent NOT IN ('bench','shadow') AND l.task_type NOT LIKE '%#shadow'
 ), checked AS (
     SELECT *, CASE
+      WHEN cost_status='not_set' THEN 'price not set'
       WHEN research_cost_status='unknown' THEN 'Unknown actual cost'
       WHEN vendor IS NOT NULL OR model LIKE 'vendor:%' THEN 'Fee without a comparable baseline'
       WHEN standard_cost_usd IS NULL OR baseline_status NOT IN ('measured','backfilled','no_tokens','re-priced')
@@ -356,8 +359,8 @@ async def savings_snapshot(tenant: uuid.UUID | None, end: datetime | None = None
         if founder:
             # No payment amount is stored in billing_events. A price-book rate is
             # not proof of payment, so neither paid nor margin can be inferred.
-            cost_totals = """coalesce(sum(cost_usd) FILTER (WHERE research_cost_status IS DISTINCT FROM 'unknown'),0) AS actual,
-                count(*) FILTER (WHERE research_cost_status='unknown')::int AS unknown_costs,
+            cost_totals = """coalesce(sum(cost_usd) FILTER (WHERE research_cost_status IS DISTINCT FROM 'unknown' AND cost_status='set'),0) AS actual,
+                count(*) FILTER (WHERE (research_cost_status='unknown' OR cost_status='not_set'))::int AS unknown_costs,
                 coalesce(sum(standard_cost_usd),0) AS baseline, array_remove(array_agg(DISTINCT standard_model),NULL) AS standards,
                 count(*) FILTER (WHERE standard_cost_usd IS NULL)::int AS unknown_baselines"""
             costs = dict(await conn.fetchrow(cte+f'SELECT {cost_totals} FROM checked', *args))
@@ -385,7 +388,7 @@ async def savings_rows(tenant: uuid.UUID | None, end: datetime, page: int = 0,
     async with runtime().pool().acquire() as conn, conn.transaction(isolation='repeatable_read', readonly=True):
         total = dict(await conn.fetchrow(cte+f'SELECT {SAVINGS_TOTALS} '+where, *args))
         fields = """job_id,job_title,member,(ts AT TIME ZONE 'UTC')::date::text AS day,
-            CASE WHEN research_cost_status='unknown' THEN NULL ELSE cost_usd END AS spent,
+            CASE WHEN (research_cost_status='unknown' OR cost_status='not_set') THEN NULL ELSE cost_usd END AS spent,
             standard_cost_usd AS would_have_cost,standard_cost_usd-cost_usd AS saved,free_work,
             standard_model AS standard_name,top_model AS top_name,
             CASE WHEN top_valid THEN top_cost_usd ELSE NULL END AS top_cost,

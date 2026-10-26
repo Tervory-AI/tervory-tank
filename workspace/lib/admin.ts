@@ -9,6 +9,7 @@ const TANK_API_KEY = process.env["TANK_API_KEY"] ?? "";
 export type Metrics = {
   calls: number;
   spend_usd: number;
+  unpriced_calls?: number;
   outcomes: number;
   booked_usd: number;
   margin_pct: number | null;
@@ -43,7 +44,8 @@ export type Counters = {
     independence_pct: number | null;
     margin_pct: number | null;
     booked_usd: number;
-    spend_usd: number;
+    spend_usd: number | null;
+    unpriced_calls?: number;
     cost_per_outcome: number | null;
   };
   routes: RouteEvidence[];
@@ -57,6 +59,7 @@ export type Point = {
   off_paid_calls: number;
   calls_by_rung: { "1": number; "2": number; "3": number; "4": number };
   spend_usd: number;
+  unpriced_calls?: number;
   outcomes: number;
   booked_usd: number;
   margin_pct: number | null;
@@ -70,6 +73,7 @@ export type Total = {
   key: string;
   calls: number;
   spend_usd: number;
+  unpriced_calls?: number;
   outcomes: number;
   booked_usd: number;
   margin_pct: number | null;
@@ -87,6 +91,7 @@ export type FocusRow = {
   rung: number;
   calls: number;
   spend_usd: number;
+  unpriced_calls?: number;
   share_of_paid_spend_pct: number;
   cache_hit_rate_pct: number | null;
   candidate_model: string | null;
@@ -180,7 +185,8 @@ export type PriceRow = {
   id: string;
   tenant_id: string | null;
   outcome_type: string;
-  unit_price: number;
+  unit_price: number | null;
+  price_status?: "set" | "not_set";
   currency: string;
   effective_from: string | null;
   effective_to: string | null;

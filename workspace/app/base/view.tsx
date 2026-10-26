@@ -9,6 +9,7 @@ import { PluginsDialog, type PluginsTab } from "./plugins";
 import { SquadLinks } from "../squad-links";
 import { BatchWorkflow } from "./batch-workflow";
 import { ContextComparison } from "./context-comparison";
+import { ReferenceWorkflow } from "./reference-workflow";
 
 export const WORKSPACE_HREF = "/";
 
@@ -216,7 +217,7 @@ export function BaseView({
               </p>
               <h1>Base</h1>
               <p className="bcp-lead">
-                Upload a business list to check its details and download the results with source links and check dates.
+                Start with the ATF reference or your business list. Check contact details, their sources and the cost of each verified record.
               </p>
             </div>
             <div className="bcp-refresh">
@@ -226,6 +227,8 @@ export function BaseView({
               <p className="bcp-refreshed-label">Last refreshed {model.refreshedLabel}</p>
             </div>
           </section>
+
+          <ReferenceWorkflow signedIn={signedIn} />
 
           {model.loadError ? (
             <div className="bcp-state">
@@ -268,9 +271,9 @@ export function BaseView({
           <section id="batches" className="bcp-section">
             <h2>Batches</h2>
             <p className="bcp-copy">
-              Each uploaded list is a batch. Open a batch to see verified rows, failed checks and their reasons, then download the verified CSV.
+              Each list is a batch. Open a batch to see the fields, their sources and check dates, or the reasons a field was not found. Download those results as CSV.
             </p>
-            <BatchWorkflow signedIn={signedIn} selected={selectedBatch} onSelect={setSelectedBatch} />
+            <BatchWorkflow signedIn={signedIn} selected={selectedBatch} />
             {model.loadError ? null : model.empty ? (
               <div className="bcp-state">
                 <h3>No batches yet</h3>

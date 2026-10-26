@@ -15,6 +15,7 @@ from typing import Any
 from weakref import WeakKeyDictionary
 
 import httpx
+from base_evidence import observations, observe
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 # Match the existing Base browser identity, including its version and contact.
@@ -152,6 +153,8 @@ class PublicPageHTTP:
                 reason = blocked_reason(response.status_code, response.headers, response.text)
                 if reason:
                     return self._refusal(target, self._block(target, reason, aliases))
+                if response.status_code == 200 and "html" in response.headers.get("content-type", ""):
+                    observe(str(target), response.text)
             if not follow or not response.has_redirect_location:
                 return response
             aliases.append(target)
@@ -188,6 +191,8 @@ class PublicPageHTTP:
             if reason:
                 final = result.get("final_url") or result.get("url") or str(target)
                 return self._refusal(target, self._block(final, reason, [target]), browser=True)
+            if result.get("ok") and result.get("html"):
+                observe(str(result.get("final_url") or result.get("url") or target), str(result["html"]))
             return response
 
 
@@ -219,12 +224,14 @@ class BaseBlockResponse:
             return
         blocks: list[dict[str, str]] = []
         token = _records.set(blocks)
+        seen: list[dict[str, Any]] = []
+        observed_token = observations.set(seen)
         start: Message | None = None
         body = bytearray()
 
         async def capture(message: Message) -> None:
             nonlocal start
-            if not blocks:
+            if not blocks and not seen:
                 await send(message)
             elif message["type"] == "http.response.start":
                 start = message
@@ -233,7 +240,8 @@ class BaseBlockResponse:
                 if not message.get("more_body"):
                     assert start is not None
                     result = json.loads(body)
-                    output = json.dumps(blocked_result(result, blocks)).encode()
+                    result = blocked_result(result, blocks) if blocks else {**result, "_base_observations": seen}
+                    output = json.dumps(result).encode()
                     headers = [(k, v) for k, v in start["headers"] if k.lower() != b"content-length"]
                     await send({**start, "headers": [*headers, (b"content-length", str(len(output)).encode())]})
                     await send({"type": "http.response.body", "body": output})
@@ -243,3 +251,4 @@ class BaseBlockResponse:
             await self.app(scope, receive, capture)
         finally:
             _records.reset(token)
+            observations.reset(observed_token)

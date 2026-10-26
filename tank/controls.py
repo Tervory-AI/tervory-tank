@@ -19,7 +19,6 @@ PLATFORM = uuid.UUID('00000000-0000-0000-0000-000000000001')
 log = logging.getLogger('tank.controls')
 STATE_TIMEOUT_S = 2.0
 AUDIT_TIMEOUT_S = 1.0
-PAID_TOOL_HOSTS = frozenset({'api.search.brave.com'})
 _task: ContextVar[str | None] = ContextVar('paid_work_task', default=None)
 
 router = APIRouter(prefix='/v1/controls', dependencies=[Depends(require_admin)])
@@ -78,9 +77,16 @@ async def refuse_paid(*, paid: bool = True, task: str | None = None, path: str =
 
 
 async def paid_host_hook(request: httpx.Request) -> None:
+    import vendor_meter
     host = request.url.host.lower()
-    if host in PAID_TOOL_HOSTS:
+    if host in vendor_meter.PAID_HOSTS:
         await refuse_paid(path=f"HTTP host:{host}", task=_task.get() or "base.find_site (HTTP client has no run ID)")
+        await vendor_meter.request_hook(request)
+
+
+async def paid_response_hook(response: httpx.Response) -> None:
+    import vendor_meter
+    await vendor_meter.response_hook(response)
 
 
 async def workers_paused() -> bool:

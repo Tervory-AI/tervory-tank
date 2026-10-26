@@ -194,7 +194,7 @@ def test_readonly_controls_have_no_write_path(client):
 
 def test_only_approved_narrow_main_hooks_and_no_approved_skill_edits():
     source = (ROOT / 'tank/main.py').read_text()
-    assert 'event_hooks={"request": [__import__("controls").paid_host_hook]}' in source
+    assert 'event_hooks={"request": [__import__("controls").paid_host_hook], "response": [__import__("controls").paid_response_hook]}' in source
     assert 'refuse_paid(paid=True, task=req.task_type, path="route")' in source
 
 @pytest.mark.asyncio

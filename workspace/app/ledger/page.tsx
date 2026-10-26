@@ -41,7 +41,7 @@ export default async function LedgerPage() {
           <b>{summary.accepted} / {summary.rejected}</b>
           <span>accepted / rejected{summary.acceptance_rate != null ? ` · ${Math.round(summary.acceptance_rate * 100)}%` : ""}</span>
         </div>
-        <div className="tile"><b>${summary.cost_usd.toFixed(4)}</b><span>model spend</span></div>
+        <div className="tile"><b>{summary.unpriced && summary.cost_usd === 0 ? "price not set" : `$${summary.cost_usd.toFixed(8)}`}</b><span>Recorded spend · {summary.unpriced} calls excluded: price not set</span></div>
         <div className="tile">
           <b>{summary.cost_per_delivered_usd == null ? "—" : `$${summary.cost_per_delivered_usd.toFixed(5)}`}</b>
           <span>per delivered answer</span>
@@ -79,7 +79,7 @@ export default async function LedgerPage() {
             <tr key={`${m.model}-${m.rung}`}>
               <td>{m.model}</td><td>{m.rung}</td><td>{m.calls}</td><td>{m.accepted}</td><td>{m.rejected}</td>
               <td>{Number(m.tokens_in).toLocaleString()}</td><td>{Number(m.tokens_out).toLocaleString()}</td>
-              <td>${Number(m.cost_usd).toFixed(5)}</td>
+              <td>{m.cost_usd == null ? "price not set" : `$${Number(m.cost_usd).toFixed(8)}`}{m.unpriced > 0 && m.cost_usd != null ? ` · ${m.unpriced} excluded: price not set` : ""}</td>
             </tr>
           ))}
           {summary.by_model.length === 0 && (

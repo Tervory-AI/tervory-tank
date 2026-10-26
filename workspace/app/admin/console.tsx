@@ -24,6 +24,7 @@ type Day = {
   proven: number;
   off: number;
   spend: number;
+  unpriced: number;
   booked: number;
   outcomes: number;
   rungs: [number, number, number, number];
@@ -34,8 +35,12 @@ const RUNG_LABELS = ["Paid model", "Our model", "Code", "Cache"] as const;
 function money(value: number | null | undefined, digits = 2): string {
   if (value == null || Number.isNaN(value)) return "—";
   const abs = Math.abs(value);
-  const places = abs !== 0 && abs < 0.01 ? 4 : digits;
+  const places = abs !== 0 && abs < 0.01 ? Math.max(4, digits) : digits;
   return `${value < 0 ? "−" : ""}$${abs.toFixed(places)}`;
+}
+
+function recordedSpend(value: number, unpriced = 0): string {
+  return unpriced ? `${value === 0 ? "price not set" : money(value)} · ${unpriced} calls excluded: price not set` : money(value);
 }
 
 function pct(value: number | null | undefined): string {
@@ -55,12 +60,13 @@ function byDay(points: Point[]): Day[] {
   const map = new Map<string, Day>();
   for (const point of points) {
     const row = map.get(point.day) ?? {
-      day: point.day, calls: 0, proven: 0, off: 0, spend: 0, booked: 0, outcomes: 0, rungs: [0, 0, 0, 0],
+      day: point.day, calls: 0, proven: 0, off: 0, spend: 0, unpriced: 0, booked: 0, outcomes: 0, rungs: [0, 0, 0, 0],
     };
     row.calls += point.calls;
     row.proven += point.proven_calls;
     row.off += point.off_paid_calls;
     row.spend += point.spend_usd;
+    row.unpriced += point.unpriced_calls || 0;
     row.booked += point.booked_usd;
     row.outcomes += point.outcomes;
     row.rungs[0] += point.calls_by_rung["1"] ?? 0;
@@ -124,6 +130,7 @@ export function FounderConsole({
       </header>
       <p className="lede">How much of the work is proven, what it earns, and what it costs.</p>
       <p className="note">{counters.note}</p>
+      {Boolean(counters.lifetime.unpriced_calls) && <p className="flag">{counters.lifetime.unpriced_calls} calls excluded from all recorded spend and savings: price not set. Complete cost and margin are unavailable for affected periods.</p>}
 
       {lost.length > 0 && (
         <div className="flags">
@@ -140,7 +147,7 @@ export function FounderConsole({
         <Counter label="Off paid models" value={pct(counters.last_30_days.off_paid_pct)} change={move(counters.change.off_paid_pct, "pts")} extra={`Lifetime ${pct(counters.lifetime.off_paid_pct)}`} />
         <Counter label="Margin" value={pct(counters.last_30_days.margin_pct)} change={move(counters.change.margin_pct, "pts")} extra={`Lifetime ${pct(counters.lifetime.margin_pct)}`} />
         <Counter label="Booked revenue" value={money(counters.last_30_days.booked_usd)} change={move(counters.change.booked_usd, "usd")} extra={`Lifetime ${money(counters.lifetime.booked_usd)}`} />
-        <Counter label="Model spend" value={money(counters.last_30_days.spend_usd)} change={move(counters.change.spend_usd, "usd")} extra={`Lifetime ${money(counters.lifetime.spend_usd)}`} />
+        <Counter label="Recorded spend" value={recordedSpend(counters.last_30_days.spend_usd, counters.last_30_days.unpriced_calls)} change={move(counters.change.spend_usd, "usd")} extra={`Lifetime ${recordedSpend(counters.lifetime.spend_usd, counters.lifetime.unpriced_calls)}`} />
         <Counter label="Cost per outcome" value={money(counters.last_30_days.cost_per_outcome, 4)} change={move(counters.change.cost_per_outcome, "usd")} extra={`Lifetime ${money(counters.lifetime.cost_per_outcome, 4)}`} />
       </section>
 
@@ -157,7 +164,7 @@ export function FounderConsole({
                 </div>
                 <div className="track" aria-hidden><i style={{ width: `${(row.spend_usd / maxSpend) * 100}%` }} /></div>
                 <div className="focus-top">
-                  <span className="num">{money(row.spend_usd)} · {row.share_of_paid_spend_pct.toFixed(1)}% of paid spend · {row.calls} calls</span>
+                  <span className="num">{recordedSpend(row.spend_usd, row.unpriced_calls)} · {row.share_of_paid_spend_pct.toFixed(1)}% of paid spend · {row.calls} calls</span>
                   <span className="evidence">{row.next_step}</span>
                 </div>
                 <p className="evidence">{evidenceLine(row)}</p>
@@ -286,7 +293,7 @@ export function FounderConsole({
 
       <section className="section">
         <h2>Price book</h2>
-        <p className="hint">Saving adds a new row and older prices stay. A price counts for outcomes from its effective date, past days included, after the next hourly refresh.</p>
+        <p className="hint">Saving adds a new row and older prices stay. Outcome prices apply from their effective date. Tool expenses use the price recorded when each new call starts; setting a price never changes older receipts.</p>
         <div className="price-grid">
           <PriceForm action={savePrice} />
           <div className="table-wrap">
@@ -296,7 +303,7 @@ export function FounderConsole({
                 {prices.length === 0 ? <tr><td colSpan={4}>No prices yet. Booked revenue stays at zero until you add one.</td></tr> : prices.map((row) => (
                   <tr key={row.id}>
                     <td>{row.outcome_type}{row.note ? <span className="evidence"> · {row.note}</span> : null}</td>
-                    <td className="num">{money(row.unit_price, 4)} {row.currency}</td>
+                    <td className="num">{row.price_status === "not_set" || row.unit_price === null ? "price not set" : `${money(row.unit_price, 8)} ${row.currency}`}</td>
                     <td>{row.effective_from ? row.effective_from.slice(0, 10) : "—"}</td>
                     <td>{row.current ? "Current" : "Earlier"}</td>
                   </tr>
@@ -434,6 +441,7 @@ function MoneyChart({ days }: { days: Day[] }) {
   const padB = 24;
   const innerW = W - padL - padR;
   const innerH = H - padT - padB;
+  if (days.some(day => day.unpriced)) return <p>price not set. Complete cost and margin history is unavailable while calls are unpriced.</p>;
   const max = Math.max(1, ...days.map((day) => Math.max(day.booked, day.spend)));
   const gap = innerW / days.length;
   const xAt = (index: number) => padL + gap * index + gap / 2;
@@ -491,7 +499,7 @@ function SortTable({ title, rows, picked, onPick }: { title: string; rows: Total
                 <td className="num">{row.calls}</td>
                 <td className="num">{pct(row.proven_pct)}</td>
                 <td className="num">{pct(row.independence_pct)}</td>
-                <td className="num">{money(row.spend_usd)}</td>
+                <td className="num">{recordedSpend(row.spend_usd, row.unpriced_calls)}</td>
                 <td className="num">{row.outcomes}</td>
                 <td className="num">{money(row.cost_per_outcome, 4)}</td>
                 <td className="num">{pct(row.margin_pct)}</td>
@@ -528,10 +536,14 @@ function PriceForm({ action }: { action: Save }) {
           <option value="rig.setup_quoted" />
           <option value="zenas.document_released" />
           <option value="tier0.answer_accepted" />
+          <option value="apollo.contact" />
+          <option value="brave.search.query" />
+          <option value="google.places.request" />
+          <option value="context.dev.credit" />
         </datalist>
       </label>
       <label>Unit price
-        <input name="unit_price" type="number" min="0" step="0.0001" required />
+        <input name="unit_price" type="number" min="0" step="0.00000001" required />
       </label>
       <label>Currency
         <input name="currency" defaultValue="USD" maxLength={3} />

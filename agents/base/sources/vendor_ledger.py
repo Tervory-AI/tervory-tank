@@ -84,13 +84,13 @@ class TankVendorLedger:
             verified_units = isinstance(credits, (int, float)) and 0 < credits <= 1000
             outcome = "unverified" if not verified_units else "delivered" if result["status"] == "candidate" else "failed"
             response = await self.http.post(
-                os.environ.get("TANK_URL", "http://tank:8000").rstrip("/") + "/v1/ledger/vendor",
+                os.environ.get("TANK_URL", "http://tank:8000").rstrip("/") + "/v1/base-product/context-dev",
                 headers={"X-Tank-Key": os.environ.get("TANK_KEY", "")},
                 json={
                     "id": str(row["call_id"]), "tenant_id": PLATFORM_TENANT,
-                    "agent": "base", "task_type": "base.context_dev", "vendor": "context.dev",
+                    "record_id": str(row["record_id"]), "run_id": str(self.run_id),
                     "units": credits if verified_units else row["reserved_credits"],
-                    "cost_usd": 0, "outcome": outcome, "region": row["region"],
+                    "outcome": outcome, "region": row["region"],
                 },
                 timeout=30, follow_redirects=False,
             )

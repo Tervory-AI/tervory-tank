@@ -1,6 +1,14 @@
 /* Base page. The navy panel is fixed to the viewport. Only [data-scroll-root] scrolls.
    Navy #001840 · Red #E80008 (one primary action) · Lines #B8BFD0 · Tint #F4F6FB · Jost Light headings · Inter body */
 
+.bcp-reference { margin: 24px 0; overflow-wrap: anywhere; }
+.bcp-product-table { max-width: 100%; overflow-x: auto; margin: 16px 0; }
+.bcp-product-table table { width: 100%; border-collapse: collapse; text-align: left; }
+.bcp-product-table th, .bcp-product-table td { padding: 10px; border-bottom: 1px solid #b8bfd0; }
+.bcp-text-button { border: 0; background: transparent; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; font: inherit; }
+.bcp-reference dt { font-weight: 600; text-transform: capitalize; }
+.bcp-reference dd { margin: 4px 0 12px; }
+
 html:has(.bcp),
 body:has(.bcp) {
   height: 100%;

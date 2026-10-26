@@ -200,7 +200,7 @@ def receipt_row(ledger: dict, step_id: str) -> dict:
     baseline = ledger.get("baseline_cost_usd")
     baseline_model = ledger.get("baseline_model")
     pending = baseline is None or baseline_model is None
-    cost = None if ledger.get("research_cost_status") == "unknown" else float(ledger["cost_usd"])
+    cost = None if ledger.get("research_cost_status") == "unknown" or ledger.get("cost_status") == "not_set" else float(ledger["cost_usd"])
     return {
         "step_id": step_id, "model": ledger["model"],
         "tokens_in": ledger["tokens_in"], "tokens_out": ledger["tokens_out"],
@@ -208,7 +208,7 @@ def receipt_row(ledger: dict, step_id: str) -> dict:
         "baseline_model": baseline_model,
         "baseline_cost_usd": float(baseline) if baseline is not None else None,
         "saved_usd": float(baseline) - cost if not pending and cost is not None else None,
-        "cost_status": "pending" if cost is None else "recorded",
+        "cost_status": "price not set" if ledger.get("cost_status") == "not_set" else "pending" if cost is None else "recorded",
         "baseline_status": "baseline pending" if pending else "recorded",
     }
 

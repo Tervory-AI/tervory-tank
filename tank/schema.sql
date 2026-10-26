@@ -1748,3 +1748,124 @@ BEGIN
         INSERT INTO tank.policy_seeds(name) VALUES('one-door-approved-seeds-v2');
     END IF;
 END $$;
+
+-- BASE-WORKS: immutable public reference snapshots and private client results.
+CREATE TABLE IF NOT EXISTS tank.base_reference_files (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    owner_id uuid NOT NULL CHECK(owner_id='00000000-0000-0000-0000-000000000001'),
+    published_on date NOT NULL UNIQUE,
+    source_url text NOT NULL,
+    sha256 text NOT NULL,
+    checked_at timestamptz NOT NULL,
+    adopted boolean NOT NULL DEFAULT false,
+    row_count integer NOT NULL CHECK(row_count > 0),
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS tank.base_reference_entries (
+    file_id uuid NOT NULL REFERENCES tank.base_reference_files(id),
+    licence_key text NOT NULL,
+    licence_number text NOT NULL,
+    state text NOT NULL,
+    licence_type text NOT NULL,
+    name text NOT NULL,
+    address jsonb NOT NULL,
+    legacy_record_id uuid,
+    raw jsonb,
+    PRIMARY KEY(file_id,licence_key),
+    CHECK (legacy_record_id IS NOT NULL OR raw IS NOT NULL)
+);
+CREATE INDEX IF NOT EXISTS base_reference_selection ON tank.base_reference_entries(file_id,state,licence_type);
+CREATE TABLE IF NOT EXISTS tank.base_reference_checks (
+    owner_id uuid PRIMARY KEY CHECK(owner_id='00000000-0000-0000-0000-000000000001'),
+    checked_at timestamptz NOT NULL,
+    status text NOT NULL,
+    message text
+);
+CREATE TABLE IF NOT EXISTS tank.base_campaigns (
+    tenant_id uuid NOT NULL,
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    request_id uuid NOT NULL,
+    name text NOT NULL,
+    file_id uuid REFERENCES tank.base_reference_files(id),
+    selection jsonb NOT NULL,
+    created_by text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,id),
+    UNIQUE(tenant_id,request_id)
+);
+CREATE TABLE IF NOT EXISTS tank.base_campaign_states (
+    tenant_id uuid NOT NULL,
+    campaign_id uuid NOT NULL,
+    state text NOT NULL,
+    ordinal integer NOT NULL,
+    batch text NOT NULL,
+    task_id uuid,
+    status text NOT NULL DEFAULT 'waiting',
+    records_count integer NOT NULL,
+    csv_records jsonb,
+    started_at timestamptz,
+    finished_at timestamptz,
+    error text,
+    PRIMARY KEY(tenant_id,campaign_id,state),
+    FOREIGN KEY(tenant_id,campaign_id) REFERENCES tank.base_campaigns(tenant_id,id),
+    UNIQUE(tenant_id,batch)
+);
+CREATE TABLE IF NOT EXISTS tank.base_record_results (
+    tenant_id uuid NOT NULL,
+    record_id uuid NOT NULL,
+    task_id uuid,
+    batch text,
+    licence_key text,
+    state text NOT NULL,
+    licence_type text NOT NULL,
+    name text NOT NULL,
+    status text NOT NULL,
+    fields jsonb NOT NULL,
+    source_revision text NOT NULL,
+    attempted_at timestamptz NOT NULL,
+    checked_at timestamptz NOT NULL,
+    PRIMARY KEY(tenant_id,record_id)
+);
+CREATE INDEX IF NOT EXISTS base_results_dimensions ON tank.base_record_results(tenant_id,state,licence_type,checked_at);
+CREATE TABLE IF NOT EXISTS tank.base_ledger_links (
+    tenant_id uuid NOT NULL,
+    record_id uuid NOT NULL,
+    ledger_id uuid NOT NULL REFERENCES tank.ledger(id),
+    PRIMARY KEY(tenant_id,record_id,ledger_id)
+);
+CREATE TABLE IF NOT EXISTS tank.base_apollo_imports (
+    tenant_id uuid NOT NULL,
+    id uuid NOT NULL,
+    sha256 text NOT NULL,
+    imported_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,id),
+    UNIQUE(tenant_id,sha256)
+);
+CREATE TABLE IF NOT EXISTS tank.base_apollo_records (
+    tenant_id uuid NOT NULL,
+    import_id uuid NOT NULL,
+    licence_key text NOT NULL,
+    fields jsonb NOT NULL,
+    PRIMARY KEY(tenant_id,import_id,licence_key),
+    FOREIGN KEY(tenant_id,import_id) REFERENCES tank.base_apollo_imports(tenant_id,id)
+);
+ALTER TABLE tank.base_apollo_records ADD COLUMN IF NOT EXISTS base_snapshot jsonb;
+
+-- Founder decision: retain NOT NULL; a not_set amount is storage only, never spend.
+ALTER TABLE tank.price_book ALTER COLUMN unit_price TYPE numeric(18,8);
+ALTER TABLE tank.ledger ALTER COLUMN cost_usd TYPE numeric(18,8);
+ALTER TABLE tank.price_book ADD COLUMN IF NOT EXISTS price_status text NOT NULL DEFAULT 'set' CHECK(price_status IN ('set','not_set'));
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS cost_status text NOT NULL DEFAULT 'set' CHECK(cost_status IN ('set','not_set'));
+ALTER TABLE tank.econ_daily ADD COLUMN IF NOT EXISTS unpriced_calls integer NOT NULL DEFAULT 0;
+ALTER TABLE tank.price_book ADD COLUMN IF NOT EXISTS free_pass boolean NOT NULL DEFAULT false;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS vendor_cost_status text;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS vendor_unit_price numeric(20,10);
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS vendor_price_id uuid;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS vendor_list_cost_usd numeric(20,10);
+INSERT INTO tank.price_book(id,tenant_id,outcome_type,unit_price,price_status,currency,effective_from,note)
+VALUES
+ ('ba5e0000-0000-4000-8000-000000000001','00000000-0000-0000-0000-000000000001','apollo.contact',0,'not_set','USD','2026-10-01','Expense per contact; price not set. Founder-supplied CSV comparison requires no API call.'),
+ ('ba5e0000-0000-4000-8000-000000000002','00000000-0000-0000-0000-000000000001','brave.search.query',0,'not_set','USD','2026-10-01','Expense per successful query; price not set.'),
+ ('ba5e0000-0000-4000-8000-000000000003','00000000-0000-0000-0000-000000000001','google.places.request',0,'not_set','USD','2026-10-01','Expense per successful Places request; price not set.'),
+ ('ba5e0000-0000-4000-8000-000000000004','00000000-0000-0000-0000-000000000001','context.dev.credit',0.000792,'set','USD','2026-10-21','Pro list price: $99 / 125000 credits; https://www.context.dev/pricing checked 2026-10-21. Free pass only when founder explicitly sets it.')
+ON CONFLICT(id) DO NOTHING;
