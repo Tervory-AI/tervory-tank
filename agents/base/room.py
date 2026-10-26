@@ -457,8 +457,8 @@ async def base_loop(pool: Any, skills: SkillClient) -> None:
                 )
                 call = skills.bind(versions, bool(cfg.get("preview")), str(row["tenant_id"]))
                 if os.environ.get("BASE_BRAIN_URL"):
-                    from base_brain import drive_batch
-                    await drive_batch(pool, skills, row["id"], cfg, call)
+                    from base_brain import run_code_first
+                    await run_code_first(pool, skills, row["id"], cfg, call)
                 else:
                     await _run_batch(pool, row["id"], cfg, call)
             except Exception as exc:  # noqa: BLE001 — one bad batch must not stop the queue
