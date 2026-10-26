@@ -36,6 +36,7 @@
   border-radius: 8px;
   font-size: 15px;
   font-weight: 500;
+  line-height: 18px;
   white-space: nowrap;
 }
 .client-dashboard-sidebar > a[aria-current="page"] { background: #22345a; }
@@ -121,14 +122,14 @@
 .client-dashboard-saved { color: #1e7a46; }
 .client-dashboard h2 { font: 600 17px / normal var(--font-inter), sans-serif; white-space: nowrap; }
 .client-dashboard-job { display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 0; overflow: clip; }
-.client-dashboard-job-title { flex: 1 0 0; min-width: 1px; overflow-wrap: break-word; }
+.client-dashboard-job-title { flex: 1 0 0; min-width: 1px; line-height: 18px; overflow-wrap: break-word; }
 .client-dashboard-status { flex-shrink: 0; color: #3d4a66; font-size: 14px; white-space: nowrap; }
 .client-dashboard-dot { flex: 0 0 10px; width: 10px; height: 10px; border-radius: 50%; }
 .client-dashboard-dot-queued { background: #8c94a6; }
 .client-dashboard-dot-running { background: #001840; }
 .client-dashboard-dot-done { background: #1e7a46; }
 .client-dashboard-dot-failed { background: #e80008; }
-.client-dashboard-empty { color: #3d4a66; font-size: 15px; }
+.client-dashboard-empty { color: #3d4a66; font-size: 15px; line-height: 18px; }
 .client-dashboard-team { display: flex; gap: 12px; width: 100%; }
 .client-dashboard-member {
   display: flex;
@@ -143,7 +144,7 @@
   overflow: clip;
   white-space: nowrap;
 }
-.client-dashboard-member > p:first-child { font-size: 15px; font-weight: 600; }
+.client-dashboard-member > p:first-child { font-size: 15px; font-weight: 600; line-height: 18px; }
 .client-dashboard-member > p:last-child { color: #3d4a66; font-size: 13px; }
 
 /* Only the dashboard replaces the shared shell with its approved sidebar. */
