@@ -2,6 +2,20 @@
 
 Audited against `65067a43a0d27d54b48633bf6db4f3fc211ec05f` on 26 October 2026, with this branch's Base/Autumbra fixes. **The launch invariant is not yet satisfied.** The guard prevents new recognized bypasses; its deferred exceptions do not certify the existing defects as acceptable. This is a source and local runtime audit, not evidence of the production environment or a signed-in client's completed job.
 
+## Part A: tenant boundaries corrected
+
+On 26 October 2026 the founder extended the lane for these four fixes. The original findings below describe the base revision; F1a, F1b, F1c and F9 are now corrected in this branch.
+
+| Item | Implementation | Contract and proof |
+| --- | --- | --- |
+| A1 / F1a | `tank/main.py:2780`, `evals_summary` | `tenant_id` is required; SQL filters it. Explicit `all_tenants=true` requires the Workspace service key **and** a Clerk identity in Tank's `TERVORY_ADMIN_USER_IDS`, checked by existing `admin.require_admin`. A role label or unknown identity fails. |
+| A2 / F1b | `tank/main.py:2276`, `list_skills` | Public packages plus this tenant's submitted packages in this region. No tenant means public packages only. `all_tenants=true` uses the same Tank founder identity gate. Call costs use the selected tenant (platform for the public view). |
+| A3 / F1c | `tank/main.py:2454`, `_run_one_skill`; `tank/agent_skills.py:490`, `guard_submission_owner` | Ownership and region checked before execution for Workspace, Base and shared room keys, including preview. Base's existing restrictions also remain. No founder execution bypass. |
+| A4 / F9 | `tank/main.py:1519`, `_screen_mask`; `:1533`, `_screen_cases`; `:1589`, `_screen_model` | Global screening reads checked platform gold in this box's region, excludes holdouts and unapproved auto labels, and never reads client evals/transcripts. It masks identifiers/email locally, rejects HTML, and checks the platform provider allow-list/home-region policy before model submission. Reviewers must approve only de-identified platform examples; automatic masking is additional protection, not a promise to identify every name. |
+| Regression evidence | `tests/test_tank_tenant_boundaries.py:18` | Isolated real PostgreSQL and real Tank HTTP handlers, two tenants, both directions, Workspace/Base/Ghost keys, previews, foreign region, false founder claims, approved/candidate/holdout/client examples, HTML and provider refusal. No provider call or production data. |
+
+Before the fix, the main handlers (unchanged from `65067a43`) produced **5 failed, 1 passed**: A1 total 3 instead of 1; A2 foreign submission returned; A3 Workspace and Ghost returned 200 instead of 403; A4 returned five client-derived cases. Base's existing ownership guard was the passing control. After the fix, the two-tenant tests plus the one-door guard, existing submission/export, scope, call-cost, graduation and approval-safety suites report **92 passed**. `ruff check tank tests --select E9,F` (with the existing base.socials F401 exception) and `git diff --check` pass. Schema, queue worker and Skala lifecycle were unchanged in Part A.
+
 ## Tenant defects first
 
 | ID | Exact boundary | Evidence and required correction |
@@ -10,7 +24,7 @@ Audited against `65067a43a0d27d54b48633bf6db4f3fc211ec05f` on 26 October 2026, w
 | F1b | `tank/main.py:2257`, `list_skills`, GET `/v1/skala` | `SELECT * FROM tank.skills` includes metadata for private submissions whose owner is in `tank.agent_skill_submissions` (`agent_skills.py:397`). A local A request using the Workspace service key, with no founder identity, returned B's submitted skill and description. Filter submitted packages by owner/region or enforce founder authorization in Tank. Workspace currently supplies a founder gate (`workspace/app/api/skala/route.ts:9`); a browser exploit was **not** demonstrated. |
 | F1c | `tank/main.py:2420`, `_run_one_skill` | Submission ownership is enforced only for `caller == 'base'` (`main.py:2447`, `agent_skills.py:489`). The Workspace-key path has `caller=None`, so it can run/preview a foreign tenant's submitted package with the supplied tenant. Global founder tooling needs an explicit Tank founder gate; ordinary execution needs the ownership check independent of caller. Source-confirmed authorization gap; execution against private production packages was not attempted. |
 
-These are protected engine files, so this branch documents them rather than editing them. Local proof used generated tenant IDs and a transaction that was rolled back. The defects concern Tank's service boundary; shared service keys are not tenant credentials and are never treated as browser credentials in this audit.
+These findings describe the audited base. The founder subsequently authorized the Part A fixes below. Local proof used generated tenant IDs and a transaction that was rolled back. The defects concern Tank's service boundary; shared service keys are not tenant credentials and are never treated as browser credentials in this audit.
 
 ## The intended ladder and what changed
 
@@ -115,7 +129,7 @@ Local validation (Python 3.12, no live paid calls):
 
 Required owner actions before asserting the launch invariant:
 
-1. **Engine/Skala:** fix F1a/F1b/F1c and F9 in the protected main/lifecycle paths; define founder access separately from ordinary tenant access and use approved, masked examples for global evaluation. Review the platform cache's public-input contract.
+1. **Part A completed:** F1a/F1b/F1c and F9 are corrected as described above. Platform cache behavior is covered by the separately authorized Part B.
 2. **Base owner:** move Context.dev execution/key into a tenant-scoped Tank adapter (F2); preserve credit limits and durable receipts. `agents/base/sources/**` is not in this brief. Coordinate the code-first worker change here with `codex/base-works`; isolate provider cooldown from free batches separately.
 3. **Rig owner + training owner:** move HF submission/poll/cancel and credentials behind Tank (F3/F4), preserving fail-closed reservations and never repeating uncertain submissions. Local reconstruction/training can remain executors with narrowly scoped artifact access.
 4. **Engine:** implement foreground code/cache/search/browser execution and safe chat cache semantics (F5). No edit to `run_route`, queue worker, Skala lifecycle or cache was made here. Existing founder promotion switches must not become a per-request wait for a person.

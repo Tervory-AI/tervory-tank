@@ -1516,14 +1516,31 @@ async def _code_quotes(conn: Any) -> list[graduate.Quote]:
     return quotes
 
 
+def _screen_mask(value: Any) -> Any:
+    """Mask structured approved examples locally; never send HTML for screening."""
+    if isinstance(value, dict):
+        return {_screen_mask(k): _screen_mask(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_screen_mask(v) for v in value]
+    if not isinstance(value, str):
+        return value
+    if re.search(r"<\s*(?:!doctype|/?[a-z][\w:-]*(?:\s|/?>))", value, re.I):
+        raise ValueError("HTML is not a screening example")
+    masked = pii_module().detect(value)["text"]
+    return re.sub(r"[\w.+-]+@[\w.-]+\.[a-z]{2,}", "[EMAIL]", masked, flags=re.I)
+
+
 async def _screen_cases(conn: Any, task_type: str) -> list[tuple[Any, list[dict[str, str]], dict[str, Any]]]:
+    # A global policy must never learn by replaying a client's conversations.
+    # Approval and platform ownership are both required; holdouts remain unseen.
     evals = await conn.fetch(
-        "SELECT input, expected FROM tank.evals WHERE task_type=$1 ORDER BY created_at DESC LIMIT 12",
-        task_type,
-    )
-    transcripts = await conn.fetch(
-        "SELECT messages, content FROM tank.transcripts WHERE task_type=$1 ORDER BY created_at DESC LIMIT 8",
-        task_type,
+        """SELECT g.input,g.expected FROM tank.gold_examples g
+        WHERE g.tenant_id=$1 AND g.region=$2 AND g.status='checked'
+          AND g.checked_by IS NOT NULL AND g.checked_at IS NOT NULL
+          AND NOT g.holdout AND (NOT g.auto_label OR g.auto_approved)
+          AND EXISTS (SELECT 1 FROM tank.skills s WHERE s.id=g.skill_id AND s.task_type=$3)
+        ORDER BY g.created_at DESC,g.id LIMIT 20""",
+        PLATFORM_TENANT, box_region(), task_type,
     )
     cases: list[tuple[Any, list[dict[str, str]], dict[str, Any]]] = []
     for row in evals:
@@ -1536,17 +1553,13 @@ async def _screen_cases(conn: Any, task_type: str) -> list[tuple[Any, list[dict[
                 expected = json.loads(expected)
             except json.JSONDecodeError:
                 pass
-        body = payload if isinstance(payload, dict) else {"text": str(payload)}
-        messages = [{"role": "user", "content": json.dumps(body) if isinstance(payload, dict) else str(payload)}]
-        cases.append((expected, messages, body))
-    for row in transcripts:
-        messages = row["messages"]
-        if isinstance(messages, str):
-            messages = json.loads(messages)
-        if not isinstance(messages, list):
+        try:
+            payload, expected = _screen_mask(payload), _screen_mask(expected)
+        except ValueError:
             continue
-        clean = [{"role": str(m.get("role") or "user"), "content": str(m.get("content") or "")} for m in messages if isinstance(m, dict)]
-        cases.append((row["content"], clean, graduate.skill_payload(clean)))
+        body = payload if isinstance(payload, dict) else {"text": str(payload)}
+        messages = [{"role": "user", "content": json.dumps(body)}]
+        cases.append((expected, messages, body))
     return cases
 
 
@@ -1576,6 +1589,12 @@ async def _screen_skill(pkg: skala.SkillPackage, cases: list[tuple[Any, list[dic
 async def _screen_model(name: str, task_type: str, cases: list[tuple[Any, list[dict[str, str]], dict[str, Any]]], tolerance: float, max_tokens: int) -> float | None:
     scores: list[float] = []
     for expected, messages, _payload in cases:
+        try:
+            messages, expected = _screen_mask(messages), _screen_mask(expected)
+        except ValueError:
+            continue
+        if model_call_refusal(json.dumps(messages), name, box=box_region(), tenant_id=str(PLATFORM_TENANT)):
+            continue
         if not await _shadow_budget_open(task_type):
             break
         content, cost = await _llm(name, messages, max_tokens)
@@ -2254,11 +2273,26 @@ async def vendor_ledger(body: VendorCall, agent: str | None = Depends(require_ke
 
 
 @app.get("/v1/skala", dependencies=[Depends(require_key)])
-async def list_skills() -> list[dict[str, Any]]:
-    """Every skill, plus the platform tenant's average cost per call on this box over 30 days."""
+async def list_skills(
+    tenant_id: uuid.UUID | None = None,
+    all_tenants: bool = False,
+    x_tank_key: str = Header(default=""),
+    x_tervory_admin: str = Header(default=""),
+) -> list[dict[str, Any]]:
+    """Public packages and this tenant's submissions; all submissions require founder identity."""
+    if all_tenants:
+        await __import__("admin").require_admin(x_tank_key, x_tervory_admin)
     async with pool().acquire() as conn:
-        rows = await conn.fetch("SELECT * FROM tank.skills ORDER BY agent, id, version")
-        costs = await skill_costs.fetch_call_costs(conn, PLATFORM_TENANT, box_region())
+        rows = await conn.fetch(
+            """SELECT s.* FROM tank.skills s
+            LEFT JOIN tank.agent_skill_submissions p ON p.skill_id=s.id AND p.version=s.version
+            WHERE p.skill_id IS NULL OR (p.tenant_id=$1 AND p.region=$2) OR $3
+            ORDER BY s.agent,s.id,s.version""", tenant_id, box_region(), all_tenants,
+        )
+        if tenant_id is None:
+            costs = await skill_costs.fetch_call_costs(conn, PLATFORM_TENANT, box_region())
+        else:
+            costs = await skill_costs.fetch_call_costs(conn, tenant_id, box_region())
     return skill_costs.attach_call_costs([dict(r) for r in rows], costs)
 
 
@@ -2424,6 +2458,9 @@ async def _run_one_skill(
 ) -> dict[str, Any]:
     version = body.version or await _pick_version(skill_id, body.preview)
     pkg = get_package(skill_id, version)
+    await __import__("agent_skills").guard_submission_owner(
+        __import__("sys").modules[__name__], pkg, body.tenant_id,
+    )
     if caller:
         shared: list[str] = []
         try:
@@ -2740,8 +2777,17 @@ async def ledger_feedback(ledger_id: uuid.UUID, body: Feedback) -> dict[str, Any
 
 
 @app.get("/v1/evals/summary", dependencies=[Depends(require_key)])
-async def evals_summary() -> list[dict[str, Any]]:
-    """Golden cases per task type, split by where they came from and the verdict."""
+async def evals_summary(
+    tenant_id: uuid.UUID | None = None,
+    all_tenants: bool = False,
+    x_tank_key: str = Header(default=""),
+    x_tervory_admin: str = Header(default=""),
+) -> list[dict[str, Any]]:
+    """One tenant's cases; a cross-tenant total requires Tank's founder identity gate."""
+    if all_tenants:
+        await __import__("admin").require_admin(x_tank_key, x_tervory_admin)
+    elif tenant_id is None:
+        raise HTTPException(422, "tenant_id is required")
     async with pool().acquire() as conn:
         rows = await conn.fetch(
             """
@@ -2749,8 +2795,9 @@ async def evals_summary() -> list[dict[str, Any]]:
                    count(*) FILTER (WHERE source='tester_feedback' AND verdict='accepted') AS accepted,
                    count(*) FILTER (WHERE source='tester_feedback' AND verdict='rejected') AS rejected,
                    count(*) FILTER (WHERE source='manual') AS manual
-            FROM tank.evals GROUP BY task_type ORDER BY task_type
-            """
+            FROM tank.evals WHERE tenant_id=$1 OR $2
+            GROUP BY task_type ORDER BY task_type
+            """, tenant_id, all_tenants,
         )
     return [dict(r) for r in rows]
 

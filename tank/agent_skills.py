@@ -487,14 +487,19 @@ class BaseSkillHTTP:
         return await self.client.post(url, **kwargs)
 
 
+async def guard_submission_owner(tank: Any, pkg: Any, tenant_id: uuid.UUID) -> None:
+    """Private submitted code is executable only in its owning tenant and region."""
+    async with tank.pool().acquire() as conn:
+        owner = await conn.fetchrow("SELECT tenant_id,region FROM tank.agent_skill_submissions WHERE skill_id=$1 AND version=$2", pkg.id, pkg.version)
+    if owner and (owner["tenant_id"] != tenant_id or owner["region"] != tank.box_region()):
+        raise HTTPException(403, "This skill belongs to another tenant or region.")
+
+
 async def guard_base_run(tank: Any, pkg: Any, body: Any, ctx: Any) -> None:
     local_region(tank, body.home_region)
     if pkg.agent != ROOM or body.preview or await tank.skill_state(pkg.id, pkg.version) != "approved":
         raise HTTPException(403, "Base may run only its own approved skills; preview is founder-only.")
-    async with tank.pool().acquire() as conn:
-        owner = await conn.fetchrow("SELECT tenant_id,region FROM tank.agent_skill_submissions WHERE skill_id=$1 AND version=$2", pkg.id, pkg.version)
-    if owner and (owner["tenant_id"] != body.tenant_id or owner["region"] != tank.box_region()):
-        raise HTTPException(403, "This skill belongs to another tenant or region.")
+    await guard_submission_owner(tank, pkg, body.tenant_id)
     task = body.input.pop("_base_brain_task", None)
     if task is not None:
         try:
