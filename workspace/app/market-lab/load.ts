@@ -22,7 +22,7 @@ export async function loadMarketLab(tenantId?: string): Promise<PageModel> {
       readings[feed.id] = {
         rows: feed.rows, note: feed.note, checkedAt: feed.checked_at,
         documentId: feed.document_id,
-        headline: feed.rows > 0 ? `${feed.rows.toLocaleString("en-US")} stored observations` : null,
+        headline: feed.rows > 0 ? `${feed.rows.toLocaleString("en-US")} stored ${feed.rows === 1 ? "observation" : "observations"}` : null,
       };
     }
     const refreshedAt = data.feeds.map((feed) => feed.checked_at).filter((date): date is string => Boolean(date)).sort().at(-1);

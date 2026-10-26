@@ -17,7 +17,7 @@ from fastapi import FastAPI, HTTPException
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "agents/market_lab"))
 sys.path.insert(0, str(ROOT / "tank"))
-from core.evidence import answer, document, latest_checks, overview, save_check
+from core.evidence import answer, document, document_page, latest_checks, overview, save_check
 from core.jobs import perform_refresh
 from core.ledger import MemoryLedger
 from engines.ffl.engine import plan
@@ -59,6 +59,10 @@ async def test_each_figure_links_to_an_exact_immutable_stored_row():
         index = int(href.split("#point-")[1])
         doc = await document(ledger, OWNER, ident, fixtures=True)
         point = doc["points"][index]
+        page = await document_page(ledger, OWNER, ident, fixtures=True)
+        shown = page["points"][index]
+        assert shown["geo_name"] == point["title"].removeprefix("Population, ")
+        assert shown["geo"] == point["geo"]  # Raw provenance remains unchanged.
         assert point["title"] in fact["text"]
         assert point["date"] in fact["text"]
         assert point["value"] in fact["text"].replace(",", "")

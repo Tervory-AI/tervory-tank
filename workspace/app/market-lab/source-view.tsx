@@ -1,4 +1,5 @@
 import type { MarketDocument } from "@/lib/tank";
+import { formatRefreshed } from "./format";
 
 /** Shared by the signed-in route and the isolated local fixture proof. */
 export function SourceDocumentView({ source }: { source: MarketDocument }) {
@@ -6,14 +7,14 @@ export function SourceDocumentView({ source }: { source: MarketDocument }) {
   return <main className="ml ml-source"><div className="ml-body">
     <a href="/market-lab">Back to Market Lab</a>
     <h1>{source.name}</h1>
-    <p>Stored on {source.fetched_at}. This document preserves the observations collected in that refresh. Counts may be calculated from the source records.</p>
+    <p>Stored on {formatRefreshed(source.fetched_at)}. This document preserves the observations collected in that refresh. Counts may be calculated from the source records.</p>
     <p>{source.licence}</p>
-    <h2>Source downloads</h2>
-    <ul>{source.downloads.map((download, index) => <li key={`${download.url}-${index}`}><a href={download.url} rel="noreferrer" target="_blank">{download.url}</a></li>)}</ul>
+    {source.downloads.length ? <><h2>Source downloads</h2>
+    <ul>{source.downloads.map((download, index) => <li key={`${download.url}-${index}`}><a href={download.url} rel="noreferrer" target="_blank">{download.url}</a></li>)}</ul></> : null}
     {source.points.length ? <><h2>Stored observations</h2><div className="ml-source-table" role="region" aria-label="Stored observations" tabIndex={0}><table>
       <thead><tr><th scope="col">Observation</th><th scope="col">Area</th><th scope="col">Date</th><th scope="col">Value</th><th scope="col">Unit</th></tr></thead>
       <tbody>{source.points.map((point, index) => <tr id={`point-${index + source.offset}`} key={index}>
-        <th scope="row">{point.title}{point.withdrawn ? " — withdrawn from answers" : ""}</th><td>{point.geo}</td><td>{point.date}</td><td>{point.value}</td><td>{point.unit}</td>
+        <th scope="row">{point.title}{point.withdrawn ? " — withdrawn from answers" : ""}</th><td>{point.geo_name}</td><td>{point.date}</td><td>{point.value}</td><td>{point.unit}</td>
       </tr>)}</tbody>
     </table></div></> : null}
     {source.events.length ? <><h2>Stored notices</h2>{source.events.map((event, index) => <article id={`event-${index + source.offset}`} key={index}>

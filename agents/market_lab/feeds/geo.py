@@ -72,3 +72,20 @@ def state_for_area(area: str) -> str | None:
     if area.isdigit() and len(area) in {2, 5}:
         return next((code for code, fips in STATE_FIPS.items() if area[:2] == fips), None)
     return STATE_BY_NAME.get(normalize_label(area))
+
+
+def area_label(area: str, level: str, title: str) -> str:
+    """Readable location without changing the stored geographic identifier."""
+    if level == "county":
+        # Census population titles retain the publisher's complete NAME field.
+        if title.startswith("Population, "):
+            return title.removeprefix("Population, ")
+        return "County not named in source"
+    if level == "state":
+        code = state_for_area(area)
+        return _STATE_NAMES[code] if code else "State not named in source"
+    if area.upper() in {"US", "USA"}:
+        return "United States"
+    if area.upper() in {"WORLD", "GLOBAL"}:
+        return "Worldwide"
+    return area if area and not area.isdigit() else "Place not named in source"

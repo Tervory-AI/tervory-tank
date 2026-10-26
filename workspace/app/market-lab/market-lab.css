@@ -1163,6 +1163,7 @@ body:has(.ml) main {
 .ml-source table { border-collapse: collapse; width: 100%; overflow-wrap: normal; }
 .ml-source th, .ml-source td { padding: 8px; border-bottom: 1px solid #b8bfd0; text-align: left; }
 .ml-source td, .ml-source th[scope="col"] { white-space: nowrap; }
+.ml-source td:first-of-type { white-space: normal; }
 .ml-source tr:target, .ml-source article:target { background: #fff; outline: 2px solid #001840; }
 @media (max-width: 600px) {
   .ml-source table { font-size: 13px; }

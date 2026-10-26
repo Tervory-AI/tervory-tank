@@ -84,10 +84,10 @@ def test_page_does_not_invent_numbers_or_store_keys():
     assert re.search(r"\.ml-main\s*\{[^}]*overflow-y:\s*auto", css)
     nav = (ROOT / "workspace" / "app" / "product-nav.ts").read_text(encoding="utf-8")
     assert '"/market-lab"' in nav
-    chat = (ROOT / "workspace" / "app" / "api" / "market-lab" / "chat" / "route.ts").read_text(encoding="utf-8")
-    assert "scrubSecrets" in chat
-    assert "route(" in chat
-    assert "console." not in chat
+    assert not (ROOT / "workspace/app/api/market-lab/chat/route.ts").exists()
+    ask = (PAGE / "ask/route.ts").read_text(encoding="utf-8")
+    assert 'marketLabRequest' in ask and '"ask"' in ask
+    assert 'tier0.answer' not in text and 'route(' not in ask
     view = (PAGE / "view.tsx").read_text(encoding="utf-8")
     assert "Help" not in view
     assert "WORKSPACE_HREF" not in view

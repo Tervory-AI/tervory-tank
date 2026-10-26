@@ -10,7 +10,7 @@ from decimal import Decimal
 
 from feeds.catalog import sources
 from feeds.keys import bind_key, missing_key
-from feeds.geo import mentioned_states, state_for_area
+from feeds.geo import area_label, mentioned_states, state_for_area
 
 
 def _decode(value: Any) -> Any:
@@ -98,7 +98,8 @@ async def document_page(ledger: Any, tenant_id: str, document_id: str, offset: i
         return None
     active = {index for index, _ in await usable_points(ledger, tenant_id, doc)}
     return {**doc, "offset": offset, "point_count": len(doc["points"]), "event_count": len(doc["events"]),
-            "points": [{**point, "withdrawn": index not in active} for index, point in enumerate(doc["points"])
+            "points": [{**point, "geo_name": area_label(point["geo"], point["geo_level"], point["title"]),
+                        "withdrawn": index not in active} for index, point in enumerate(doc["points"])
                        if offset <= index < offset + 200], "events": doc["events"][offset:offset + 200]}
 
 
