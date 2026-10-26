@@ -515,7 +515,10 @@ def create_app() -> FastAPI:
         return {"settings": settings.model_dump(), "halves": active_halves(settings),
                 "copy": {"logs": "We read your logs, acted, and deleted them. Nothing from your logs was kept.",
                          "empty": "No work yet",
-                         "perimeter": "Autumbra watches the edge as events pass. It does not import, copy or store your data."}}
+                         "perimeter": "Autumbra watches the edge as events pass. It does not import, copy or store your data.",
+                         "agnostic": "Autumbra is your 24/7 security guard. Cloudflare, Google, Shopify and host tools are optional — you choose what to connect.",
+                         "block_in_seconds": "Blocking an attack in seconds lights up when you connect an edge tool.",
+                         "cloudflare": "A free Cloudflare account is enough for address blocks. We do not sell Cloudflare."}}
 
     @app.post("/ghost/autumbra/settings", dependencies=[Depends(require_tank)])
     async def autumbra_settings_set(request: Request):

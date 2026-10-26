@@ -324,8 +324,8 @@ def test_compose_airgap_watch_has_no_cf_write_token():
     assert "CLOUDFLARE_API_TOKEN_GHOST" not in compose
     assert "TANK_KEY: ${TANK_KEY_GHOST:-}" in compose
     enforce = (ROOT / "agents/ghost/docker-compose.enforce.yml").read_text()
-    assert "CLOUDFLARE_API_TOKEN_ENFORCE: ${CLOUDFLARE_API_TOKEN_ENFORCE:-}" in enforce
+    assert "AUTUMBRA_CF_API_TOKEN: ${AUTUMBRA_CF_API_TOKEN:-}" in enforce
     assert "internal: true" in enforce
     env = (ROOT / ".env.example").read_text()
-    assert "\nCLOUDFLARE_API_TOKEN_ENFORCE=\n" in env
+    assert "\nAUTUMBRA_CF_API_TOKEN=\n" in env
     assert "AUTUMBRA_CF_WEBHOOK_SECRET=" in env

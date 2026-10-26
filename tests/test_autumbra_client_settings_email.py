@@ -29,7 +29,8 @@ def test_client_can_change_modes_tervory_does_not(tmp_path: Path):
     assert loaded.shield_mode is ApplyMode.auto_when_checks_pass
     assert loaded.fix_mode is ApplyMode.never
     halves = active_halves(saved)
-    assert halves == {"edge": True, "mailbox": False, "stack": True}
+    assert halves["edge"] is True and halves["mailbox"] is False and halves["stack"] is True
+    assert halves["block_in_seconds"] is True
 
 
 def test_owner_email_three_fix_paragraphs():
