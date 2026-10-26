@@ -663,9 +663,9 @@ async def _warn_unapproved_policy_pins() -> None:
     async with pool().acquire() as conn:
         rows = await conn.fetch("""SELECT p.task_type,p.tenant_id,p.model,s.state
             FROM tank.policy p LEFT JOIN tank.skills s
-              ON s.id=split_part(substr(p.model,7),'@',1)
-              AND s.version=split_part(substr(p.model,7),'@',2)
-            WHERE p.model LIKE 'skill:%' AND s.state IS DISTINCT FROM 'approved'
+              ON s.id=split_part(substr(btrim(p.model),7),'@',1)
+              AND s.version=split_part(substr(btrim(p.model),7),'@',2)
+            WHERE btrim(p.model) LIKE 'skill:%' AND s.state IS DISTINCT FROM 'approved'
             ORDER BY p.task_type,p.tenant_id""")
     for row in rows:
         log.warning("Policy pins non-approved skill: task=%s tenant=%s model=%s state=%s; code cannot serve",

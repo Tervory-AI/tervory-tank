@@ -162,8 +162,9 @@ async def test_fresh_seeds_only_pin_approved_versions_and_preserve_overrides(lad
 async def test_startup_logs_every_unapproved_policy_pin(ladder, monkeypatch, caplog):  # noqa: F811
     from types import SimpleNamespace
     b = ladder
-    for tenant in b.tenants:
-        await policy(b, tenant, model="skill:base.extract@2.0.0")
+    for i, tenant in enumerate(b.tenants):
+        # Routing strips policy whitespace; the startup audit must do so too.
+        await policy(b, tenant, model="skill:base.extract@2.0.0" if i == 0 else " skill:base.extract@2.0.0 ")
     async with b.pool.acquire() as conn:
         await conn.execute("UPDATE tank.skills SET state='candidate' WHERE id='base.extract'")
         await conn.execute("UPDATE tank.policy SET model='skill:missing.package@1.0.0' WHERE task_type='reason.brief' AND tenant_id IS NULL")
