@@ -1,6 +1,5 @@
 FROM python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704
 WORKDIR /app
-COPY _chassis/requirements.txt /tmp/chassis-requirements.txt
 COPY _chassis/requirements.lock /tmp/chassis-requirements.lock
 COPY market_lab/feeds/requirements.txt /tmp/feeds-requirements.txt
 COPY market_lab/feeds/requirements.lock /tmp/feeds-requirements.lock
@@ -10,7 +9,7 @@ RUN --mount=type=secret,id=system_ca \
         REQUESTS_CA_BUNDLE=/run/secrets/system_ca CURL_CA_BUNDLE=/run/secrets/system_ca \
         NODE_EXTRA_CA_CERTS=/run/secrets/system_ca GIT_SSL_CAINFO=/run/secrets/system_ca; \
     fi; \
-    pip install --require-hashes --no-cache-dir -r /tmp/chassis-requirements.lock -r /tmp/feeds-requirements.lock -c /tmp/chassis-requirements.txt -c /tmp/feeds-requirements.txt \
+    pip install --require-hashes --no-cache-dir -r /tmp/chassis-requirements.lock -r /tmp/feeds-requirements.lock -c /tmp/feeds-requirements.txt \
     && useradd --create-home --uid 1000 agent \
     && mkdir -p /data \
     && chown agent:agent /data
