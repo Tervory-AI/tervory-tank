@@ -48,7 +48,8 @@ jobs:
   gate:
     needs: changes
     if: needs.changes.outputs.tisan == 'true'
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest is now 26.04, and Playwright 1.55.1 can't install Chromium there.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     defaults:
       run:
