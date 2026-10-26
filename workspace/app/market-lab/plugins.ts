@@ -25,11 +25,11 @@ const KEY_ROWS: { name: KeyName; title: string; summary: string }[] = [
   {
     name: "FRED_API_KEY",
     title: "FRED",
-    summary: "Freight index and its monthly change, plus copper, zinc, lead, cotton and diesel. Read live, never stored.",
+    summary: "Price and freight figures published by the Federal Reserve Bank of St. Louis. These pages are linked only; their figures are not used in saved-feed answers.",
   },
   { name: "CENSUS_API_KEY", title: "Census", summary: "Census population and Census trade." },
-  { name: "EIA_API_KEY", title: "EIA", summary: "Weekly on-highway diesel price." },
-  { name: "NOAA_TOKEN", title: "NOAA", summary: "Monthly climate. Weather alerts need no key." },
+  { name: "EIA_API_KEY", title: "U.S. Energy Information Administration", summary: "Weekly diesel prices." },
+  { name: "NOAA_TOKEN", title: "National Oceanic and Atmospheric Administration", summary: "Monthly climate. Weather alerts need no key." },
   { name: "LEGISCAN_API_KEY", title: "LegiScan", summary: "Status changes on state bills about firearms and ammunition." },
 ];
 

@@ -91,6 +91,7 @@ def collect(source: Any, *, fixtures: str | None, backfill: bool, client: Eviden
     result = {"source_id": spec.id, "name": spec.name, "cadence": spec.cadence,
               "kind": "copy" if spec.allow_bulk else "linked", "licence": spec.licence,
               "terms_checked_at": spec.terms_checked_at, "url": public_url(spec.url),
+              "presentation": spec.config.get("presentation", {}),
               "points": [], "events": [], "downloads": [], "note": "", "fixture": bool(fixtures)}
     if not spec.enabled:
         return {**result, "note": "Off, disabled"}

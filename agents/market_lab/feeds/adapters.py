@@ -358,9 +358,12 @@ def run_world_bank(source: SourceSpec, reader: FixtureReader, store: Store, *, b
             if code not in wanted or row.get("value") is None:
                 continue
             date = _world_bank_date(str(row.get("date")))
-            title = str(indicator.get("value") or code)
+            metadata = next((item for item in source.config.get("columns", {}).values() if item["ref"] == code), None)
+            if not metadata:
+                raise ValueError("A commodity needs its published unit")
+            title = str(metadata["title"])
             inserted += _point(
-                store, source, code, title, "index", "national", "WLD", "monthly", date, row["value"], _revision_of(entry),
+                store, source, code, title, str(metadata["unit"]), "national", "WLD", "monthly", date, row["value"], _revision_of(entry),
             )
     return inserted
 

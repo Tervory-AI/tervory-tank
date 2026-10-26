@@ -81,7 +81,7 @@ test("linked pages count checks without inventing a change", () => {
   assert.equal(carrier?.pages.length, 4);
   assert.equal(carrier?.pages[0]?.note, "Not checked yet");
   assert.equal(carrier?.pages[1]?.note, "Checked 14 Oct 2026");
-  assert.equal(carrier?.pages[2]?.note, "Changed 2 Oct 2026");
+  assert.equal(carrier?.pages[2]?.note, "Checked 2 Oct 2026");
   const ports = page.groups.find((group) => group.id === "ports");
   assert.equal(ports?.pages[0]?.note, "Opens polb.com");
   assert.equal(ports?.pages[1]?.note, "Opens data.ny.gov");
@@ -121,7 +121,7 @@ test("search hits feeds and linked pages, and skips a question with no reading",
   const weather = searchMarketLab(page, "weather alerts");
   assert.equal(weather.onIds.includes("noaa_alerts"), true);
   assert.equal(weather.offIds.includes("eia_diesel"), false);
-  const diesel = searchMarketLab(page, "on-highway");
+  const diesel = searchMarketLab(page, "diesel");
   assert.deepEqual(diesel.offIds, ["eia_diesel"]);
   const seasons = searchMarketLab(page, "California");
   assert.equal(seasons.linkIds.includes("season_ca"), true);
@@ -212,4 +212,14 @@ test("plugin errors and statuses use client words", () => {
   assert.equal(panel.files[0].status, "Saved");
   assert.equal(panel.links[0].status, "Not checked yet");
   assert.equal(panel.connections[0].status, "Sign-in needed");
+});
+
+test("a blocked linked page does not reuse its previous successful status", () => {
+  const page = buildPage(emptyFlags(), {}, {
+    ups_hazmat: { events: 0, latest: "2026-10-26", note: "Off, blocked" },
+    fedex_hazmat: { events: 1, latest: "2026-10-25", note: "" },
+  });
+  const carrier = page.groups.find(group => group.id === "carrier")!;
+  assert.equal(carrier.pages[0].note, "Not checked: blocked");
+  assert.equal(carrier.pages[1].note, "Checked 25 Oct 2026");
 });

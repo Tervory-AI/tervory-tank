@@ -115,7 +115,7 @@ export async function addLabConnection(name: string, serverUrl: string, authType
   if (!name.trim() || !serverUrl.trim()) return { ok: false, message: "Add a name and a server address first. Nothing was saved." };
   try {
     await addVaultConnection(VAULT, SQUAD, tenant.tenantId, tenant.userId, name, serverUrl, authType, token);
-    return done("Saved. A token is hidden and will not be shown again.");
+    return done("Saved. An access key is hidden and will not be shown again.");
   } catch (error) {
     return { ok: false, message: safe(error, "The connection was not saved.") };
   }

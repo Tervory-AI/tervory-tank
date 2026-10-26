@@ -12,7 +12,7 @@ from decimal import Decimal
 from feeds.catalog import sources
 from feeds.keys import bind_key, missing_key
 from feeds.geo import area_label, mentioned_states, state_for_area
-from feeds.presentation import observation_label, unit_label
+from feeds.presentation import observation_label, unit_label, period_label, event_label
 
 
 def _decode(value: Any) -> Any:
@@ -99,10 +99,20 @@ def current_revisions(points: list[dict]) -> dict[tuple[str, str], int]:
     return {(point["series_id"], point["date"]): index for index, point in enumerate(points)}
 
 
-async def document_page(ledger: Any, tenant_id: str, document_id: str, offset: int = 0, *, fixtures: bool = False) -> dict | None:
+def presented_document(doc: dict, engine: str | None) -> dict:
+    # Refresh wording for earlier immutable documents without changing their data.
+    if engine:
+        spec = next((source for source in sources(engine) if source.id == doc["source_id"]), None)
+        if spec:
+            return {**doc, "name": spec.name, "presentation": spec.config.get("presentation", {})}
+    return doc
+
+
+async def document_page(ledger: Any, tenant_id: str, document_id: str, offset: int = 0, *, fixtures: bool = False, engine: str | None = None) -> dict | None:
     doc = await document(ledger, tenant_id, document_id, fixtures=fixtures)
     if doc is None:
         return None
+    doc = presented_document(doc, engine)
     active = {index for index, _ in await usable_points(ledger, tenant_id, doc)}
     current = current_revisions(doc["points"])
     counts = Counter((p["series_id"], p["date"]) for p in doc["points"])
@@ -110,12 +120,13 @@ async def document_page(ledger: Any, tenant_id: str, document_id: str, offset: i
         key = (point["series_id"], point["date"])
         label = "Current figure" if current[key] == index else "Earlier figure"
         return {**point, "geo_name": area_label(point["geo"], point["geo_level"], point["title"]),
-                "display_title": observation_label(point),
+                "display_title": observation_label(point, doc.get("presentation")),
+                "date_label": period_label(point["date"], point.get("frequency", "")),
                 "unit_label": unit_label(point["value"], point["unit"]), "withdrawn": index not in active,
                 "revision_label": (f'{label} ({point["revision"]})' if point["revision"] else label) if counts[key] > 1 else ""}
     return {**doc, "offset": offset, "point_count": len(doc["points"]), "event_count": len(doc["events"]),
             "points": [shown(index, point) for index, point in enumerate(doc["points"])
-                       if offset <= index < offset + 200], "events": doc["events"][offset:offset + 200]}
+                       if offset <= index < offset + 200], "events": [{**event, "display_title": event_label(event, doc.get("presentation")), "date_label": period_label(event["date"])} for event in doc["events"][offset:offset + 200]]}
 
 
 async def overview(ledger: Any, tenant_id: str, engine: str | None = None, *, fixtures: bool = False) -> dict:
@@ -137,25 +148,45 @@ async def overview(ledger: Any, tenant_id: str, engine: str | None = None, *, fi
 
 
 def _words(text: str) -> set[str]:
-    stop = {"a", "an", "the", "what", "which", "how", "is", "are", "was", "were", "in", "of", "for", "to", "and", "my", "market", "latest", "show", "me", "has", "changed", "with", "from", "about"}
-    return {word for word in re.findall(r"[a-z0-9]+", text.lower()) if word not in stop}
+    stop = {"a", "an", "the", "what", "which", "how", "is", "are", "was", "were", "in", "of", "for", "to", "and", "my", "market", "latest", "show", "me", "has", "changed", "with", "from", "about", "state", "states", "county", "counties", "figure", "figures", "count", "counts", "monthly", "weekly", "annual", "data", "current"}
+    words = {word for word in re.findall(r"[a-z0-9]+", text.lower()) if word not in stop}
+    return words | {word[:-1] for word in words if len(word) > 3 and word.endswith("s") and not word.endswith("ss")}
 
 
-async def answer(ledger: Any, tenant_id: str, question: str, *, fixtures: bool = False) -> dict:
+async def answer(ledger: Any, tenant_id: str, question: str, *, fixtures: bool = False, engine: str | None = None) -> dict:
     terms = _words(question)
     states = mentioned_states(question)
     years = set(re.findall(r"\b(?:19|20)\d{2}\b", question))
     ranked = []
+    documents = []
     for check in await latest_checks(ledger, tenant_id, fixtures=fixtures):
-        if not check["document_id"] or not check["rows"]:
-            continue
-        doc = await document(ledger, tenant_id, check["document_id"], fixtures=fixtures)
-        if not doc:
-            continue
+        if check["document_id"] and check["rows"]:
+            doc = await document(ledger, tenant_id, check["document_id"], fixtures=fixtures)
+            if doc:
+                documents.append(presented_document(doc, engine))
+    # The caller's catalogue may distinguish a question about notices from
+    # measurements mentioned in it (for example a bill about a measurement).
+    focused = [doc for doc in documents if any(re.search(r"\b" + re.escape(topic) + r"\b", question, re.I)
+               for topic in doc.get("presentation", {}).get("answer_topics", []))]
+    if focused:
+        documents = focused
+    counties = set()
+    for doc in documents:
+        for point in doc["points"]:
+            if point["geo_level"] != "county" or point["geo"] == "unmatched":
+                continue
+            name = area_label(point["geo"], "county", point["title"]).split(",")[0]
+            name = re.sub(r" (County|Parish|Borough|Census Area|Municipality)$", "", name, flags=re.I)
+            if name and re.search(r"\b" + re.escape(name) + r"\b", question, re.I):
+                counties.add(point["geo"])
+    for doc in documents:
+        source_words = _words(doc["name"] + " " + " ".join(doc.get("presentation", {}).get("answer_topics", [])))
         latest = {}
         current = current_revisions(doc["points"])
         for index, point in await usable_points(ledger, tenant_id, doc):
             if current[(point["series_id"], point["date"])] != index:
+                continue
+            if counties and point["geo"] not in counties:
                 continue
             if states and state_for_area(point["geo"]) not in states:
                 continue
@@ -165,23 +196,26 @@ async def answer(ledger: Any, tenant_id: str, question: str, *, fixtures: bool =
             if key not in latest or point["date"] >= latest[key][1]["date"]:
                 latest[key] = (index, point)
         for index, point in latest.values():
-            words = _words(f'{doc["name"]} {point["title"]} {point["geo"]} {point["unit"]}')
-            score = len(terms & words)
+            words = _words(f'{observation_label(point, doc.get("presentation"))} {point["unit"]}')
+            score = 3 * len(terms & words) + len(terms & source_words)
             if not score:
                 continue
             value = format(Decimal(str(point["value"])), ",f").rstrip("0").rstrip(".") if "." in str(point["value"]) else format(Decimal(str(point["value"])), ",f")
-            text = f'{observation_label(point)}: {value} {unit_label(point["value"], point["unit"])} ({point["date"]}).'
+            text = f'{observation_label(point, doc.get("presentation"))}: {value} {unit_label(point["value"], point["unit"])} ({period_label(point["date"], point.get("frequency", ""))}).'
             ranked.append((score, point["date"], {"text": text, "href": f'/market-lab/sources/{doc["id"]}?row={index}#point-{index}', "name": doc["name"]}))
         for index, event in enumerate(doc["events"]):
+            if counties and event["geo"] not in counties:
+                continue
             if states and state_for_area(event["geo"]) not in states:
                 continue
             if years and event["date"][:4] not in years:
                 continue
             if event["kind"] == "changed":
                 continue
-            score = len(terms & _words(f'{doc["name"]} {event["title"]} {event["geo"]}'))
+            score = 3 * len(terms & _words(f'{event_label(event, doc.get("presentation"))} {event["body"]}')) + len(terms & source_words)
             if score:
-                ranked.append((score, event["date"], {"text": f'{event["title"]} ({event["date"]}).', "href": f'/market-lab/sources/{doc["id"]}?row={index}#event-{index}', "name": doc["name"]}))
+                ranked.append((score, event["date"], {"text": f'{event_label(event, doc.get("presentation"))} ({period_label(event["date"])}).', "href": f'/market-lab/sources/{doc["id"]}?row={index}#event-{index}', "name": doc["name"]}))
     ranked.sort(key=lambda row: (row[0], row[1]), reverse=True)
-    facts = [row[2] for row in ranked[:5]]
-    return {"content": "Here is what the saved sources show. These figures do not explain why something happened or predict what comes next." if facts else "No saved source answers that question yet. Refresh the feeds or ask about a feed shown below.", "facts": facts, "sources": [{"name": fact["name"], "href": fact["href"]} for fact in facts]}
+    best = ranked[0][0] if ranked else 0
+    facts = [row[2] for row in ranked if row[0] == best][:5]
+    return {"content": "Here is what the saved sources show. This information does not explain why something happened or predict what comes next." if facts else "No saved source answers that question yet. Refresh the feeds or ask about a feed shown below.", "facts": facts, "sources": [{"name": fact["name"], "href": fact["href"]} for fact in facts]}

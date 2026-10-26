@@ -1,6 +1,6 @@
 import { marketLabRequest, type MarketOverview } from "../../lib/tank";
 import { KEY_NAMES, emptyFlags, type KeyFlags } from "./catalog";
-import { buildPage, type FeedReading, type PageModel } from "./model";
+import { buildPage, type FeedReading, type LinkCheck, type PageModel } from "./model";
 
 export function readFlags(env: NodeJS.ProcessEnv = process.env): KeyFlags {
   const flags = emptyFlags();
@@ -18,7 +18,9 @@ export async function loadMarketLab(tenantId?: string): Promise<PageModel> {
     if (!tenantId) return buildPage(emptyFlags(), {}, {}, { error: true });
     const data = await marketLabRequest<MarketOverview>(tenantId, "overview");
     const readings: Record<string, FeedReading> = {};
+    const linkChecks: Record<string, LinkCheck> = {};
     for (const feed of data.feeds) {
+      if (feed.kind === "linked") linkChecks[feed.id] = { events: feed.rows, latest: feed.checked_at, note: feed.note };
       readings[feed.id] = {
         rows: feed.rows, note: feed.note, checkedAt: feed.checked_at,
         documentId: feed.document_id,
@@ -26,7 +28,7 @@ export async function loadMarketLab(tenantId?: string): Promise<PageModel> {
       };
     }
     const refreshedAt = data.feeds.map((feed) => feed.checked_at).filter((date): date is string => Boolean(date)).sort().at(-1);
-    return { ...buildPage(emptyFlags(), readings, {}, { refreshedAt }), refreshStatus: data.refresh_status };
+    return { ...buildPage(emptyFlags(), readings, linkChecks, { refreshedAt }), refreshStatus: data.refresh_status };
   } catch {
     return buildPage(emptyFlags(), {}, {}, { error: true });
   }

@@ -44,17 +44,14 @@ const SECTIONS = [
   { id: "linked", label: "Linked pages" },
 ] as const;
 
-// No Dashboard, Projects, Settings, or Support pages exist yet.
-// These point at the nearest existing workspace routes.
 const TOP_LINKS = [
-  { href: "/ledger", label: "Dashboard" },
-  { href: "/tasks", label: "Projects" },
+  { href: "/ledger", label: "Usage" },
+  { href: "/tasks", label: "Tasks" },
   { href: "/", label: "Chats" },
 ] as const;
 
 const BOTTOM_LINKS = [
-  { href: "/onboarding", label: "Settings" },
-  { href: "/", label: "Support" },
+  { href: "/onboarding", label: "Workspace setup" },
 ] as const;
 
 type Fact = { text: string; href: string; name: string };
@@ -502,7 +499,7 @@ function PluginsDialog({
         ) : tab === "Source links" ? (
           <div className="ml-tab-body">
             <h3 className="ml-subhead">Source links</h3>
-            <p className="ml-lead">Pages Market Lab checks for changes, such as rule pages, season dates or port stats.</p>
+            <p className="ml-lead">Save useful pages here. Saved links are not included in answers from public feeds.</p>
             <form className="ml-linkform" onSubmit={onAddLink}>
               <label>
                 Link
@@ -513,7 +510,7 @@ function PluginsDialog({
                 <input name="label" type="text" placeholder="e.g. Texas seasons" disabled={busy} />
               </label>
               <div>
-                <p className="ml-field-label">How often to check</p>
+                <p className="ml-field-label">Preferred check frequency</p>
                 <div className="ml-choice">
                   <button className={cadence === "Daily" ? "active" : ""} type="button" onClick={() => setCadence("Daily")}>
                     Daily
@@ -580,21 +577,21 @@ function PluginsDialog({
                       Sign in with the provider
                     </button>
                     <button className={signIn === "token" ? "active" : ""} type="button" onClick={() => setSignIn("token")}>
-                      Token
+                      Access key
                     </button>
                   </div>
                 </div>
                 {signIn === "token" ? (
                   <label>
-                    Token
-                    <input type="password" autoComplete="off" placeholder="Paste token (hidden once saved)" disabled={busy} />
+                    Access key
+                    <input type="password" autoComplete="off" placeholder="Paste access key (hidden once saved)" disabled={busy} />
                   </label>
                 ) : null}
                 <button className="ml-primary" type="submit" disabled={busy}>
                   Add connection
                 </button>
               </div>
-              <p className="ml-fine">A saved token is shown only as dots, and is never shown again.</p>
+              <p className="ml-fine">A saved access key is shown only as dots, and is never shown again.</p>
             </form>
           </div>
         )}
@@ -785,11 +782,11 @@ export function MarketLabView({
             </section>
           ) : null}
           {noHits ? <p className="ml-none">Nothing in Market Lab matches that.</p> : null}
-          <section id="on" className="ml-section">
+          {(!searching || onCards.length > 0) ? <section id="on" className="ml-section">
             <h2>On</h2>
-            <p className="ml-lead">
+            {onCards.length > 0 ? <p className="ml-lead">
               These feeds stored observations in their last refresh. Open a feed to check its sources.
-            </p>
+            </p> : null}
             {model.onEmpty && !searching ? (
               <div className="ml-note">
                 <h3>No feed data yet</h3>
@@ -802,14 +799,14 @@ export function MarketLabView({
                 ))}
               </div>
             ) : null}
-          </section>
+          </section> : null}
           {offFeeds.length ? <section className="ml-section" aria-label="Off feeds">
             <h2>Off</h2>
             <div className="ml-grid">{offFeeds.map((feed) => <article className="ml-card" key={feed.id}>
               <h3>{feed.title}</h3><p>{feed.reason}</p>
             </article>)}</div>
           </section> : null}
-          <section id="linked" className="ml-section">
+          {groups.length > 0 ? <section id="linked" className="ml-section">
             <h2>Linked pages</h2>
             <p className="ml-lead">Open these sources on their publishers’ websites. Their figures are not included in answers from stored feeds.</p>
             <div className="ml-links">
@@ -822,7 +819,7 @@ export function MarketLabView({
                 />
               ))}
             </div>
-          </section>
+          </section> : null}
           {quarantine}
           <footer className="ml-foot">
             <p>
@@ -878,7 +875,7 @@ function ConnectionRow({ item, busy, onRemove }: { item: ConnectionMeta; busy: b
       <h3>{item.name}</h3>
       <p>{item.serverUrl}</p>
       <p className="ml-fine">
-        {item.authType === "token" ? "Token" : "Sign in with the provider"} · {item.status}
+        {item.authType === "token" ? "Access key" : "Sign in with the provider"} · {item.status}
         {item.hasToken ? " · ••••••••" : ""}
         {item.lastUsed ? ` · ${formatDay(item.lastUsed)}` : ""}
       </p>

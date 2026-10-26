@@ -33,14 +33,14 @@ def build_router(*, key_ok, ledger_context, engine: str | None = None):
                 if operation == "document":
                     if body.document_id is None:
                         raise HTTPException(422, "A source is required")
-                    found = await document_page(ledger, tenant, str(body.document_id), body.offset)
+                    found = await document_page(ledger, tenant, str(body.document_id), body.offset, engine=engine)
                     if found is None:
                         raise HTTPException(404, "Source not found")
                     return found
                 if operation == "ask":
                     if not body.question.strip():
                         raise HTTPException(422, "A question is required")
-                    return await answer(ledger, tenant, body.question)
+                    return await answer(ledger, tenant, body.question, engine=engine)
                 if operation == "refresh":
                     async with ledger.conn.transaction():
                         await ledger.conn.execute("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", tenant + ":market-refresh")

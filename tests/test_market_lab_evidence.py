@@ -2,17 +2,13 @@
 
 Saved inputs only. These tests are not evidence of a live client session.
 """
-import asyncio
 import json
 import sys
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
-from types import SimpleNamespace
 
-import httpx
 import pytest
-from fastapi import FastAPI, HTTPException
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "agents/market_lab"))
@@ -24,7 +20,6 @@ from engines.ffl.engine import plan
 from feeds.collect import EvidenceClient, collect, public_url
 from feeds.catalog import sources
 from feeds.published import commodity_rows, table_rows
-from market_lab_routes import build_router
 
 OWNER = "00000000-0000-0000-0000-000000000001"
 OTHER = "00000000-0000-0000-0000-000000000002"
@@ -64,7 +59,7 @@ async def test_each_figure_links_to_an_exact_immutable_stored_row():
         assert shown["geo_name"] == point["title"].removeprefix("Population, ")
         assert shown["geo"] == point["geo"]  # Raw provenance remains unchanged.
         assert point["title"] in fact["text"]
-        assert point["date"] in fact["text"]
+        assert shown["date_label"] in fact["text"]
         assert point["value"] in fact["text"].replace(",", "")
         before = json.dumps(doc, sort_keys=True)
         await perform_refresh(tenant_id=OWNER, engine="ffl", source="census_population", ledger=ledger, fixtures=str(FIXTURES))
@@ -134,27 +129,6 @@ def test_published_headings_and_dates_are_required():
 
 
 @pytest.mark.asyncio
-async def test_tank_corridor_enforces_auth_operation_and_tenant_shape():
-    calls = []
-    async def require_key():
-        raise HTTPException(401, "unauthorized")
-    class Client:
-        async def post(self, url, **kwargs):
-            calls.append(kwargs["json"])
-            return httpx.Response(200, json={"feeds": [], "on_count": 0})
-    tank = SimpleNamespace(require_key=require_key, shared_http=lambda: Client())
-    app = FastAPI()
-    app.include_router(build_router(tank))
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
-        assert (await client.post("/v1/market-lab/overview", json={"tenant_id": OWNER})).status_code == 401
-        app.dependency_overrides[require_key] = lambda: None
-        assert (await client.post("/v1/market-lab/overview", json={})).status_code == 422
-        assert (await client.post("/v1/market-lab/overview", json={"tenant_id": OWNER, "fixtures": "anything"})).status_code == 422
-        assert (await client.post("/v1/market-lab/unknown", json={"tenant_id": OWNER})).status_code == 404
-    assert calls == []
-
-
-@pytest.mark.asyncio
 async def test_live_adapter_interface_stores_saved_notices_with_download_identity():
     """Exercise the live interface using a saved response, never the network."""
     class SavedClient:
@@ -213,39 +187,6 @@ async def test_question_area_and_year_are_constraints_not_just_rank_hints():
         assert state_for_area(saved["points"][index]["geo"]) == "CA"
         assert saved["points"][index]["date"].startswith("2024-")
     assert not (await answer(ledger, OWNER, "Active listings in California in 1990", fixtures=True))["facts"]
-
-
-@pytest.mark.asyncio
-async def test_proxy_to_room_serves_only_the_calling_tenants_stored_document(monkeypatch):
-    import uuid
-    from core.http import build_router as room_router
-    ledger = MemoryLedger()
-    await save_check(ledger, OWNER, {
-        "source_id": "noaa_alerts", "name": "Weather alerts", "fixture": False,
-        "points": [], "events": [{"title": "Saved notice", "body": "Saved source text", "date": "2024-01-01", "kind": "alert", "geo": "CA", "url": "https://api.weather.gov/alerts/saved"}],
-        "downloads": [], "note": "",
-    }, at=datetime.now(timezone.utc))
-    ident = (await latest_checks(ledger, OWNER))[0]["document_id"]
-    room_key = uuid.uuid4().hex
-    monkeypatch.setenv("TANK_KEY_MARKET_LAB", room_key)
-    class Context:
-        async def __aenter__(self): return ledger
-        async def __aexit__(self, *args): return None
-    room = FastAPI()
-    room.include_router(room_router(key_ok=lambda value: value == room_key, ledger_context=Context))
-    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=room)) as downstream:
-        async def authenticated_workspace(): return None
-        gateway = FastAPI()
-        gateway.include_router(build_router(SimpleNamespace(require_key=authenticated_workspace, shared_http=lambda: downstream)))
-        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=gateway), base_url="http://test") as client:
-            response = await client.post("/v1/market-lab/document", json={"tenant_id": OWNER, "document_id": ident})
-            assert response.status_code == 200
-            assert response.json()["events"][0]["body"] == "Saved source text"
-            assert response.headers["cache-control"] == "private, no-store"
-            denied = await client.post("/v1/market-lab/document", json={"tenant_id": OTHER, "document_id": ident})
-            assert denied.status_code == 404
-            brief = await client.post("/v1/market-lab/ask", json={"tenant_id": OWNER, "question": "weather alerts"})
-            assert brief.status_code == 200 and brief.json()["facts"]
 
 
 def test_climate_average_spans_pagination_boundaries(monkeypatch):

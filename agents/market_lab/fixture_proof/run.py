@@ -8,14 +8,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import secrets
 import signal
 import subprocess
 import sys
 import tempfile
-import time
 from pathlib import Path
-from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[3]
 WORKSPACE = ROOT / "workspace"
@@ -60,46 +57,22 @@ def main() -> None:
     args = parser.parse_args()
     sys.path.insert(0, str(ROOT / "agents/market_lab"))
     sys.path.insert(0, str(ROOT / "tank"))
-    from fixture_proof.server import database_url
-    database_url()
-    env = {**os.environ, "PYTHONPATH": os.pathsep.join([str(ROOT / "agents/market_lab"), str(ROOT / "tank")]),
-           "TANK_API_KEY": secrets.token_hex(32), "TANK_KEY_MARKET_LAB": secrets.token_hex(32),
-           "TANK_URL": f"http://127.0.0.1:{args.api_port}", "NEXT_TELEMETRY_DISABLED": "1"}
-    # The fixture proof does not need public-feed or sign-in credentials.
-    for name in list(env):
-        if name.startswith(("CLERK_", "NEXT_PUBLIC_CLERK_")) or name in {"FRED_API_KEY", "CENSUS_API_KEY", "LEGISCAN_API_KEY", "EIA_API_KEY", "NOAA_TOKEN"}:
-            env.pop(name)
-    children = []
-    with tempfile.TemporaryDirectory(prefix="market-lab-fixture-") as raw:
+    from fixture_proof.server import services
+    with services(args.api_port) as env, tempfile.TemporaryDirectory(prefix="market-lab-fixture-") as raw:
         folder = Path(raw)
         prepare(folder)
+        web = subprocess.Popen(["node", str(WORKSPACE / "node_modules/next/dist/bin/next"), "dev", "--hostname", "127.0.0.1", "--port", str(args.port)], cwd=folder, env=env)
         try:
-            backend = subprocess.Popen([sys.executable, "-m", "uvicorn", "fixture_proof.server:app", "--host", "127.0.0.1", "--port", str(args.api_port), "--no-access-log"], cwd=ROOT, env=env)
-            children.append(backend)
-            for _ in range(60):
-                if backend.poll() is not None:
-                    raise RuntimeError("Fixture database startup failed")
-                try:
-                    with urlopen(f"http://127.0.0.1:{args.api_port}/health", timeout=1) as response:
-                        if json.load(response).get("fixture"):
-                            break
-                except OSError:
-                    time.sleep(0.5)
-            else:
-                raise RuntimeError("Fixture server did not become ready")
-            web = subprocess.Popen(["node", str(WORKSPACE / "node_modules/next/dist/bin/next"), "dev", "--hostname", "127.0.0.1", "--port", str(args.port)], cwd=folder, env=env)
-            children.append(web)
-            print("Local fixture page started; no sign-in or live feed requests. Ctrl-C stops both services.", flush=True)
+            print("Local fixture page started through real Tank and room routes. Refresh proves queueing only; no worker or public feeds run. Ctrl-C stops all services.", flush=True)
             web.wait()
         finally:
-            for child in reversed(children):
-                if child.poll() is None:
-                    child.terminate()
-                    try:
-                        child.wait(timeout=10)
-                    except subprocess.TimeoutExpired:
-                        child.kill()
-                        child.wait()
+            if web.poll() is None:
+                web.terminate()
+                try:
+                    web.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    web.kill()
+                    web.wait()
 
 
 if __name__ == "__main__":

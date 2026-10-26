@@ -112,7 +112,7 @@ def sources() -> list[SourceSpec]:
         ),
         _copy(
             id="federal_register",
-            name="Federal Register notices for the engine's agencies",
+            name="Federal notices about firearms and hazardous-materials shipping",
             kind="events",
             url="https://www.federalregister.gov/api/v1/documents.json",
             licence=licences.FEDERAL_REGISTER,
@@ -123,7 +123,7 @@ def sources() -> list[SourceSpec]:
         ),
         _copy(
             id="ecfr",
-            name="49 CFR parts on the engine's list",
+            name="Federal rules for shipping hazardous materials",
             kind="events",
             url="https://www.ecfr.gov/current/title-49",
             licence=licences.ECFR,
@@ -138,7 +138,7 @@ def sources() -> list[SourceSpec]:
         ),
         _copy(
             id="census_trade",
-            name="Census trade by code, partner, and port",
+            name="Census trade: imports and exports by product, country and port",
             kind="series",
             url="https://api.census.gov/data/timeseries/intltrade/imports/hs",
             licence=licences.CENSUS,
@@ -156,7 +156,7 @@ def sources() -> list[SourceSpec]:
         ),
         _copy(
             id="eia_diesel",
-            name="EIA on-highway diesel",
+            name="U.S. diesel prices",
             kind="series",
             url="https://api.eia.gov/v2/petroleum/pri/gnd/data/",
             licence=licences.EIA,
@@ -230,7 +230,7 @@ def sources() -> list[SourceSpec]:
         ),
         _copy(
             id="bts_freight",
-            name="BTS freight transportation services index",
+            name="Freight volumes compared with 2000",
             kind="series",
             url="https://www.bts.gov/freight-transportation-services-index-tsi",
             licence=licences.BTS_FREIGHT,
@@ -247,7 +247,7 @@ def sources() -> list[SourceSpec]:
         ),
         _copy(
             id="licence_holders",
-            name="Paid licence holders by state",
+            name="Paid hunting licence holders by state",
             kind="series",
             url="https://www.fws.gov/program/wildlife-and-sport-fish-restoration/apportionments-and-licenses-data",
             licence=licences.USFWS,
@@ -294,4 +294,29 @@ def sources() -> list[SourceSpec]:
         rows.append(_link(source_id, name, url, licences.PAGE_LINK, "weekly", watch=True))
     for source_id, name, url in lists.SEASON_PAGES:
         rows.append(_link(source_id, name, url, licences.PAGE_LINK, "weekly", watch=True))
-    return rows
+    # Industry meanings and publisher attribution belong to this engine.
+    presentation = {
+        "listing_counts": {"publisher": "Bureau of Alcohol, Tobacco, Firearms and Explosives", "listing_types": {
+            "01": "Firearms dealers", "02": "Firearms pawnbrokers", "03": "Collectors of historic firearms",
+            "06": "Ammunition manufacturers", "07": "Firearms manufacturers", "08": "Firearms importers",
+            "09": "Dealers in destructive devices", "10": "Manufacturers of destructive devices",
+            "11": "Importers of destructive devices"},
+            "explanation": "Counts of entries in the licence register, grouped by place or licence type. Added and removed entries do not necessarily mean businesses opened or closed."},
+        "check_counts": {"publisher": "Federal Bureau of Investigation", "check_types": {"Permit": "Checks for permits", "Permit recheck": "Repeat checks for permits"}, "explanation": "These are checks for firearm purchases or permits. Repeat permit checks concern existing permits. Checks are not a count of sales; one check may cover more than one firearm."},
+        "census_population": {"publisher": "U.S. Census Bureau", "notice": "This product uses the Census Bureau Data API but is not endorsed or certified by the Census Bureau."},
+        "census_trade": {"publisher": "U.S. Census Bureau", "answer_topics": ["trade", "import", "imports", "export", "exports"], "notice": "This product uses the Census Bureau Data API but is not endorsed or certified by the Census Bureau.", "trade_products": {
+            "930630": "Cartridges and parts (excluding shotgun cartridges)", "930621": "Shotgun cartridges",
+            "360100": "Propellant powders", "360300": "Igniters, detonators and percussion caps",
+            "930599": "Other firearm parts and accessories"}},
+        "legiscan": {"publisher": "LegiScan", "answer_topics": ["bill", "bills", "legislation"], "notice": "Bill information from LegiScan, shared under the Creative Commons Attribution 4.0 licence."},
+        "federal_register": {"publisher": "Federal Register", "notice": "This saved copy is not the official version. Read the original notice for the full legal text."},
+        "ecfr": {"publisher": "Electronic Code of Federal Regulations", "answer_topics": ["regulation", "regulations"], "event_titles": {"49 CFR 171": "General rules for shipping hazardous materials", "49 CFR 172": "Identifying hazardous materials and labelling shipments", "49 CFR 173": "Packing requirements for hazardous materials", "49 CFR 177": "Transporting hazardous materials by road"}, "explanation": "Rules for identifying, packing, labelling and transporting hazardous materials. Read the original regulation before making a shipping decision."},
+        "eia_diesel": {"publisher": "U.S. Energy Information Administration"},
+        "world_bank_commodities": {"publisher": "World Bank", "notice": "The World Bank: Commodity prices (pink sheet monthly). Shared under the Creative Commons Attribution 4.0 licence."},
+        "noaa_alerts": {"publisher": "National Weather Service"},
+        "noaa_climate": {"publisher": "National Oceanic and Atmospheric Administration"},
+        "port_los_angeles": {"publisher": "Port of Los Angeles", "explanation": "Volume is measured in 20-foot container units. A 40-foot container counts as two units."},
+        "bts_freight": {"publisher": "Bureau of Transportation Statistics", "explanation": "The average freight volume in 2000 is set to 100. A reading of 110 means 10% more freight than that baseline; it is not a price."},
+        "licence_holders": {"publisher": "U.S. Fish and Wildlife Service"},
+    }
+    return [replace(row, config={**row.config, "presentation": presentation.get(row.id, {})}) for row in rows]

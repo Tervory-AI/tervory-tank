@@ -92,14 +92,14 @@ def test_page_does_not_invent_numbers_or_store_keys():
     assert "Help" not in view
     assert "WORKSPACE_HREF" not in view
     assert "headerLinks" not in view
-    assert 'label: "Dashboard"' in view
+    assert 'label: "Usage"' in view
     assert 'href: "/ledger"' in view
-    assert 'label: "Projects"' in view
+    assert 'label: "Tasks"' in view
     assert 'href: "/tasks"' in view
     assert 'label: "Chats"' in view
-    assert 'label: "Settings"' in view
+    assert 'label: "Workspace setup"' in view
     assert 'href: "/onboarding"' in view
-    assert 'label: "Support"' in view
+    assert 'label: "Support"' not in view
     brand = view.index('className="ml-brand"')
     bottom = view.index('className="ml-bottom"')
     settings = view.index('aria-label="Workspace"')
@@ -107,7 +107,7 @@ def test_page_does_not_invent_numbers_or_store_keys():
     assert "MARKET_LAB_LOGO_SRC" in view[brand:bottom]
     assert "tervory-logo-reversed.png" in view[bottom:settings]
     assert "Market Lab logo, added later" not in view
-    for old in ("Chat", "Tasks", "Data", "Ledger", "Skills", "Tank"):
+    for old in ("Chat", "Data", "Ledger", "Skills", "Tank"):
         assert f'label: "{old}"' not in view
     plugins = (PAGE / "plugins.ts").read_text(encoding="utf-8")
     assert "Plugins are not available yet. Ask your workspace administrator to enable them." in plugins

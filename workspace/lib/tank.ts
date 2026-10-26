@@ -1025,9 +1025,10 @@ export type MarketAnswer = { content: string; facts: MarketFact[]; sources: { na
 export type MarketDocument = {
   offset: number; point_count: number; event_count: number;
   id: string; name: string; fetched_at: string; licence: string; terms_checked_at: string;
+  url: string; presentation?: { publisher?: string; notice?: string; explanation?: string };
   downloads: { url: string; sha256: string }[];
-  points: { title: string; display_title: string; geo: string; geo_name: string; date: string; value: string; unit: string; unit_label: string; revision: string; revision_label: string; withdrawn?: boolean }[];
-  events: { title: string; body: string; date: string; url: string; kind: string }[];
+  points: { title: string; display_title: string; date_label: string; geo: string; geo_name: string; date: string; value: string; unit: string; unit_label: string; revision: string; revision_label: string; withdrawn?: boolean }[];
+  events: { title: string; display_title: string; date_label: string; body: string; date: string; url: string; kind: string }[];
 };
 export async function marketLabRequest<T>(
   tenantId: string, operation: "overview" | "ask" | "document" | "refresh",

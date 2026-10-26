@@ -25,6 +25,7 @@ export type FeedReading = {
 };
 
 export type LinkCheck = {
+  note?: string;
   events: number;
   latest?: string | null;
 };
@@ -149,11 +150,10 @@ function hasContent(card: OnCard): boolean {
 
 function linkNote(item: CatalogItem, check: LinkCheck | undefined): string {
   if (item.linkNote) return item.linkNote;
-  const events = check?.events ?? 0;
+  if (check?.note?.startsWith("Off,")) return check.note.replace("Off,", "Not checked:");
   const latest = clean(check?.latest);
-  if (events <= 0 || !latest) return "Not checked yet";
-  if (events === 1) return `Checked ${formatDay(latest)}`;
-  return `Changed ${formatDay(latest)}`;
+  if (!latest || !check?.events) return "Not checked yet";
+  return `Checked ${formatDay(latest)}`;
 }
 
 export function buildPage(
@@ -190,9 +190,9 @@ export function buildPage(
 
   const restricted = CATALOG.filter((item) => item.kind === "fred");
   groups.push({
-    id: "economic", title: "Economic series", cadence: "Monthly",
+    id: "economic", title: "Prices and freight on other websites", cadence: "Monthly",
     lead: "These sources do not permit a stored copy. Their numbers are not used in briefs.",
-    pages: restricted.map((item) => ({ id: item.id, label: item.title, href: item.href || "", note: "Open source" })),
+    pages: restricted.map((item) => ({ id: item.id, label: item.title, href: item.href || "", note: "Opens the publisher’s website" })),
   });
   const refreshedAt = options.refreshedAt ?? "";
   return {

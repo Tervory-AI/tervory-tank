@@ -50,11 +50,23 @@ try{
         const source=await context.newPage();
         assert.equal((await source.goto(new URL(href,base).href)).status(),200);
         const visible=await source.locator('main').innerText();
-        assert(!/County not named in source|\bPRCP\b|\bTAVG\b/.test(visible));
+        assert(!/County not named in source|\bPRCP\b|\bTAVG\b|source category|engine's|Engrossed|930630|\b\d{4}-\d{2}-\d{2}\b|Terms checked|Counts may be calculated/.test(visible));
         report.sourcePagesRead.push({href,title:await source.locator('h1').innerText()});
         await source.close();
       }
     }
+    await page.getByPlaceholder('Search feeds and linked pages').fill('zzzz no match');
+    await page.getByText('Nothing in Market Lab matches that.',{exact:true}).waitFor();
+    assert.equal(await page.getByRole('heading',{name:'On',exact:true}).count(),0);
+    assert.equal(await page.getByRole('heading',{name:'Linked pages',exact:true}).count(),0);
+    await screenshot('no-match');
+    await page.getByPlaceholder('Search feeds and linked pages').fill('');
+    const carrier=page.locator('.ml-linkcard').filter({has:page.getByRole('heading',{name:'Carrier rules',exact:true})});
+    await carrier.getByRole('button',{name:'Show links'}).click();
+    assert.match(await carrier.locator('li').first().innerText(), /Checked \d/);
+    assert.match(await carrier.locator('li').nth(1).innerText(), /Not checked yet/);
+    await carrier.getByRole('button',{name:'Hide links'}).click();
+    await page.locator('h1').evaluate(node=>node.scrollIntoView({block:'start'}));
     await screenshot('feeds');
     await page.getByRole('textbox',{name:'Ask Market Lab',exact:true}).fill(question);
     await screenshot('question');
@@ -112,7 +124,7 @@ try{
     const listingResponse=page.waitForResponse(r=>r.url()===new URL('/market-lab/ask',base).href&&r.request().method()==='POST');
     await page.getByRole('button',{name:'Send',exact:true}).click();
     const listing=await (await listingResponse).json();
-    const fact=listing.facts.find(f=>f.text.startsWith('Active listings in Alameda:'));
+    const fact=listing.facts.find(f=>f.text.startsWith('Active listings in Alameda County, California:'));
     assert(fact && fact.text.includes(': 1 listing ('),'Singular listing in the real answer');
     await page.locator('.ml-answer .ml-lines a').first().waitFor();
     await page.locator('.ml-chat').evaluate(node=>node.scrollIntoView({block:'start'}));
@@ -136,7 +148,7 @@ try{
     await listingRow.evaluate(node=>node.scrollIntoView({block:'center'}));
     const cells=await listingRow.locator('th,td').allTextContents();
     cells[3]=await listingRow.locator('.ml-source-value').innerText();
-    assert.equal(cells[1],'Alameda, California');
+    assert.equal(cells[1],'Alameda County, California');
     assert.equal(cells[3],'1');
     assert.equal(cells[4],'listing');
     await screenshot('listing-source');

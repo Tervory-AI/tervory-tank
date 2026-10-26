@@ -23,10 +23,10 @@ def build_router(tank):
         if operation not in {"overview", "ask", "document", "refresh"}:
             raise HTTPException(404, "Not found")
         key = os.environ.get("TANK_KEY_MARKET_LAB", "")
-        if not key:
+        if not key or tank._http is None:
             raise HTTPException(503, "Market Lab is not connected")
         try:
-            response = await tank.shared_http().post(
+            response = await tank._http.post(
                 "http://agent-market-lab:8000/market/" + operation,
                 json=body.model_dump(mode="json"), headers={"x-tank-key": key}, timeout=30,
             )

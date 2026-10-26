@@ -83,6 +83,8 @@ def area_label(area: str, level: str, title: str) -> str:
         for prefix in ("Population, ", "Active listings in "):
             if title.startswith(prefix):
                 name = title.removeprefix(prefix).strip()
+                if prefix == "Active listings in " and not any(word in name.lower() for word in ("county", "parish", "borough", "census area", "municipality")):
+                    name += " County"
                 code = state_for_area(area)
                 state = _STATE_NAMES.get(code, "")
                 return f"{name}, {state}" if state and state not in name else name
@@ -94,4 +96,7 @@ def area_label(area: str, level: str, title: str) -> str:
         return "United States"
     if area.upper() in {"WORLD", "GLOBAL", "WLD"}:
         return "Worldwide"
+    if level == "port" and ", " in area:
+        name, code = area.rsplit(", ", 1)
+        return f"{name}, {_STATE_NAMES.get(code, code)}"
     return area if area and not area.isdigit() else "Place not named in source"
