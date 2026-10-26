@@ -10,35 +10,153 @@
     "question-1440.png",
     "brief-1440.png",
     "source-1440.png",
+    "listing-brief-1440.png",
+    "listing-source-1440.png",
     "feeds-375.png",
     "question-375.png",
     "brief-375.png",
-    "source-375.png"
+    "source-375.png",
+    "listing-brief-375.png",
+    "listing-source-375.png"
   ],
   "citations": [
     {
-      "statement": "Population, California: 110 persons (2023-01-01).",
-      "href": "/market-lab/sources/b0c408ad-f791-4368-ba9d-2619da4e797c?row=1#point-1",
+      "statement": "Population, California: 110 people (2023-01-01).",
+      "href": "/market-lab/sources/27a81e29-1bb3-4bbd-97b6-c76c8fa2a77f?row=1#point-1",
       "storedRow": [
         "Population, California",
         "California",
         "2023-01-01",
         "110",
-        "persons"
+        "people"
       ]
     },
     {
-      "statement": "Population, Los Angeles County, California: 50 persons (2023-01-01).",
-      "href": "/market-lab/sources/b0c408ad-f791-4368-ba9d-2619da4e797c?row=4#point-4",
+      "statement": "Population, Los Angeles County, California: 50 people (2023-01-01).",
+      "href": "/market-lab/sources/27a81e29-1bb3-4bbd-97b6-c76c8fa2a77f?row=4#point-4",
       "storedRow": [
         "Population, Los Angeles County, California",
         "Los Angeles County, California",
         "2023-01-01",
         "50",
-        "persons"
+        "people"
+      ]
+    },
+    {
+      "statement": "Active listings in Alameda: 1 listing (2024-02-01).",
+      "href": "/market-lab/sources/de2c5e98-d61e-4769-a353-dd627eb87d27?row=5#point-5",
+      "storedRow": [
+        "Active listings in Alameda",
+        "Alameda, California",
+        "2024-02-01",
+        "1",
+        "listing"
+      ]
+    },
+    {
+      "statement": "Active listings in California: 2 listings (2024-02-01).",
+      "href": "/market-lab/sources/de2c5e98-d61e-4769-a353-dd627eb87d27?row=1#point-1",
+      "storedRow": [
+        "Active listings in California",
+        "California",
+        "2024-02-01",
+        "2",
+        "listings"
+      ]
+    },
+    {
+      "statement": "Active listings in Texas: 2 listings (2024-02-01).",
+      "href": "/market-lab/sources/de2c5e98-d61e-4769-a353-dd627eb87d27?row=3#point-3",
+      "storedRow": [
+        "Active listings in Texas",
+        "Texas",
+        "2024-02-01",
+        "2",
+        "listings"
+      ]
+    },
+    {
+      "statement": "Active listings in Los Angeles: 1 listing (2024-02-01).",
+      "href": "/market-lab/sources/de2c5e98-d61e-4769-a353-dd627eb87d27?row=7#point-7",
+      "storedRow": [
+        "Active listings in Los Angeles",
+        "Los Angeles, California",
+        "2024-02-01",
+        "1",
+        "listing"
+      ]
+    },
+    {
+      "statement": "Active listings in Harris: 2 listings (2024-02-01).",
+      "href": "/market-lab/sources/de2c5e98-d61e-4769-a353-dd627eb87d27?row=9#point-9",
+      "storedRow": [
+        "Active listings in Harris",
+        "Harris, Texas",
+        "2024-02-01",
+        "2",
+        "listings"
       ]
     }
   ],
+  "sourcePagesRead": [
+    {
+      "href": "/market-lab/sources/0dbe178d-ab3f-4157-a64b-9602e5ea4474",
+      "title": "Federal Register notices for the engine's agencies"
+    },
+    {
+      "href": "/market-lab/sources/7227328a-4fc9-4f33-8c4f-eaaa285768fc",
+      "title": "EIA on-highway diesel"
+    },
+    {
+      "href": "/market-lab/sources/de2c5e98-d61e-4769-a353-dd627eb87d27",
+      "title": "Monthly licence listings, counts by place and type"
+    },
+    {
+      "href": "/market-lab/sources/e28171db-1ca1-49d0-8884-a581409bbabd",
+      "title": "Monthly background-check counts by state and type"
+    },
+    {
+      "href": "/market-lab/sources/27a81e29-1bb3-4bbd-97b6-c76c8fa2a77f",
+      "title": "Census population by state and county"
+    },
+    {
+      "href": "/market-lab/sources/e91fc054-9a78-4d0c-a4ec-d9a61f90413d",
+      "title": "State bill status changes"
+    },
+    {
+      "href": "/market-lab/sources/bcdd3d83-39a7-4a9a-8a43-5456a8dc0cc6",
+      "title": "49 CFR parts on the engine's list"
+    },
+    {
+      "href": "/market-lab/sources/20589eb7-9d98-4768-b8a3-cfc3cc896c0f",
+      "title": "Census trade by code, partner, and port"
+    },
+    {
+      "href": "/market-lab/sources/60e16e15-059e-4e24-a13e-a96f57317f36",
+      "title": "World Bank monthly commodity prices"
+    },
+    {
+      "href": "/market-lab/sources/bf0e8d29-a7bf-4a71-a7b5-db493666d2a0",
+      "title": "Severe-weather alerts"
+    },
+    {
+      "href": "/market-lab/sources/75b19b37-888a-49d9-b097-a796207b05ed",
+      "title": "Monthly temperature and precipitation by state"
+    },
+    {
+      "href": "/market-lab/sources/08e6948e-48fc-422d-9127-1ce4d64fde6d",
+      "title": "Port of Los Angeles container volume"
+    },
+    {
+      "href": "/market-lab/sources/28bc11e3-14cc-4d09-ac3a-31f7ce2a8c11",
+      "title": "BTS freight transportation services index"
+    },
+    {
+      "href": "/market-lab/sources/aec464ec-5862-4ca1-a458-cfc2588d06d3",
+      "title": "Paid licence holders by state"
+    }
+  ],
+  "listingQuestion": "Active listings in Alameda",
   "browserErrors": [],
   "externalRequests": [],
   "result": "passed"

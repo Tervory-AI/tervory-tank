@@ -1,7 +1,7 @@
 # Market Lab local review
 
 Branch: `codex/market-lab-works`. Keep the PR draft.
-The evidence below comes from a clean clone of implementation commit `6780b1c`,
+The evidence below comes from a clean clone of implementation commit `5639cae`,
 fresh Python and JavaScript dependencies, and a new empty local Postgres database.
 It covers fixtures only. Finding 5, the client's own signed-in session, is outside
 this brief and remains under **Founder must decide**.
@@ -17,20 +17,22 @@ Intended client journey; the signed-in journey has not been verified here:
 
 ## What changed
 
-- `agents/market_lab/core/jobs.py:39`, `core/evidence.py:20` and `schema.sql:137` collect feed records into tenant-owned Postgres documents and collection results. The fixture suite covers all 14 copyable feeds in the plan. Answers use stored rows and stable document links.
-- `tank/market_lab_routes.py:18` and `workspace/lib/tank.ts:1032` provide the tenant-scoped server path. `tank/main.py` and `tank/Dockerfile` remain unchanged from the approved `73be8e6` versions.
-- Findings 1–3: `workspace/app/market-lab/source-view.tsx:5` formats the collection timestamp and omits downloads when there are none. `agents/market_lab/feeds/geo.py:77` and `core/evidence.py:95` supply readable place names while preserving raw identifiers in the stored document.
-- Finding 4: `workspace/app/market-lab/load.ts:25` renders **1 stored observation** and plural counts correctly.
-- Finding 6: `workspace/app/api/market-lab/chat/route.ts` is deleted entirely. `/market-lab/ask` reads stored evidence; it does not call a model. The regression test and production build manifest verify that the legacy route is absent.
-- Finding 7: `agents/market_lab/fixture_proof/package.json` pins its own browser-test dependency; `requirements.txt` names the full Python review dependencies. `capture.mjs` now checks findings 1–4 as well as citation links. The commands below need no sibling repository or existing virtual environment.
+- `agents/market_lab/core/jobs.py:39`, `core/evidence.py:22` and `schema.sql:137` store tenant-owned source documents and collection results. Fixtures cover all 14 copyable feeds. Answers use saved rows and stable citations. The legacy model-calling `/api/market-lab/chat` route is deleted.
+- Review finding 1: `agents/market_lab/feeds/geo.py:77` handles both county-producing title patterns: Census population and active listings. Alameda, Los Angeles and Harris are named with their states. Tests enumerate every county row produced by the complete fixture run.
+- Review finding 2: `agents/market_lab/feeds/presentation.py` formats count-dependent units for both answers and source pages: **1 listing**, **2 listings**, **1 person**, **2 people**, and the other stored units. Source units remain unchanged in storage.
+- Review finding 3: `agents/market_lab/core/evidence.py:97` selects the last stored version for each observation/date. Answers use that version. `workspace/app/market-lab/source-view.tsx:5` labels **Current figure (acs-v2)** and **Earlier figure (acs-v1)** while retaining old row anchors. Tests cover immutable originals, older citations, page boundaries and a later version that returns to an earlier value.
+- Review finding 4: `agents/market_lab/core/http.py:19` and `core/evidence.py` receive the engine from their caller, with a default of `None`. Unconfigured refresh/overview requests fail without a database write. `agents/market_lab/app.py` supplies its selected engine's plan. Tests check a different caller-supplied engine, the queued job payload and the absence of every engine name in all core Python files.
+- Client-text review: `workspace/app/market-lab/view.tsx`, `plugins.ts`, `plugin-actions.ts`, `vault-server.ts`, `quarantine-view.tsx` and `feeds/presentation.py` replace internal errors and unexplained codes with plain words. Search now names and filters the feeds and linked pages it actually searches; saved keys say **Key provided**; connection statuses explain when sign-in is needed; file/page counts use singular forms; the review panel formats its dates. Publisher notices and licence text remain intact.
+- `tank/main.py` and `tank/Dockerfile` remain unchanged from their approved `73be8e6` versions. Changes to `workspace/lib/tank.ts` remain limited to Market Lab's types/helper.
 
 **Decisions I made**
 
-- Display the collection time in the page's existing Pacific-time format. Resolve state codes from the existing state map and county names from the Census name preserved in the stored title. Keep geographic identifiers intact in storage.
-- Remove the old model route under the founder's explicit instruction. No replacement model endpoint, new paid service or key is added.
-- Keep the proof isolated and labelled **local, fixture page**. It mounts the real view, source renderer, server-side helper and Tank proxy over fixture-marked Postgres records. It supplies a fixed local tenant in separate test entry points. It does not exercise Clerk or the production sign-in entry points.
-- Follow the founder's public-page rule: one truthful Tervory user agent, per-host pacing, no robots gate, stop a blocked host, skip feeds missing a named key. The tests use saved responses; live availability is not claimed.
-- Report only the commands and results reproduced below. Document identifiers and collection timestamps change on another run. Keep finding 5 outside this brief and the PR draft.
+- Treat collection order as revision order, matching how the source adapters append versions. Do not sort version labels as text or assume the largest number is newest. Compute the current version across the whole document before paging. Retain earlier figures with explicit labels and stable citation links.
+- Format names and units for display while preserving the original title, geographic code, unit, value and revision in storage. Translate climate codes into measurement names; identify numeric categories as source categories rather than guessing their meaning.
+- Keep engine selection in the room caller. Core has no implicit industry or engine name. No model, paid service, key or replacement endpoint is added.
+- Review the page, answer/empty/error states, source pages, Plugins tabs and founder feed-review text. The browser proof opens all fourteen saved source documents and checks both population and listing questions; it does not claim authenticated Plugins or founder actions.
+- Follow the existing public-page rule: truthful Tervory identity, per-host pacing, stop blocked hosts, skip missing named keys. Live availability is not claimed.
+- Keep the fixture proof isolated and labelled **local, fixture page**. Its test entry points supply a fixed tenant; production sign-in entry points are unchanged. The PR stays draft, and finding 5 from the first review remains outside this brief.
 
 ## How it was tested
 
@@ -58,7 +60,7 @@ The validation checkout was cloned locally from the same Git commit before it wa
 PYTHONPATH=tank .venv/bin/python -m pytest -q tests/test_market*.py tests/test_feeds*.py
 ```
 
-Result: **144 passed, 1 skipped, 5 warnings**. The skipped test requires a local database and passes separately below. The 12 TypeScript model tests run within this suite. The warnings are existing FastAPI startup-handler deprecations.
+Result: **174 passed, 1 skipped, 5 warnings**. The skipped test requires a local database and passes separately below. The 13 TypeScript model tests run within this suite. The warnings are existing FastAPI startup-handler deprecations.
 
 **Empty local Postgres** — this temporary database contains no production data or credentials. The published port is loopback only:
 
@@ -114,13 +116,14 @@ After the local page reports ready, run in a second cloud terminal at the same r
 node agents/market_lab/fixture_proof/capture.mjs --browser /usr/bin/chromium
 ```
 
-Result: **Local fixture page: 8 screenshots, 2 exact citations, no external browser requests or errors.**
+Result: **Local fixture page: 12 screenshots, 7 exact citations, no external browser requests or errors.**
 The page is `http://127.0.0.1:3046/market-lab`. The fixture server first stores the saved feed inputs in Postgres; browser requests then read those records. The capture rejects external browser requests and checks:
 
 - 14 On cards and correct singular/plural observation counts;
-- a real question submitted through the local page;
+- both population and active-listings questions submitted through the local page;
 - every number in the answer inside a source link;
-- every citation opening with matching title, date, value and unit;
+- every citation in both answers opening with matching title, date, value and displayed unit;
+- all fourteen source documents opening, county names present on listing rows, singular listing units, and current/earlier population revisions clearly labelled;
 - readable collection timestamps and place names, and no heading over an empty downloads list;
 - screenshots at 375px and 1440px, each carrying the local-fixture label.
 
@@ -135,9 +138,11 @@ These are **local, fixture page** captures from the clean checkout, not a signed
 | Feed page | [Feeds](evidence/feeds-375.png) | [Feeds](evidence/feeds-1440.png) |
 | Entered question | [Question](evidence/question-375.png) | [Question](evidence/question-1440.png) |
 | Cited brief | [Brief](evidence/brief-375.png) | [Brief](evidence/brief-1440.png) |
-| Stored source | [Source](evidence/source-375.png) | [Source](evidence/source-1440.png) |
+| Population source and revisions | [Source](evidence/source-375.png) | [Source](evidence/source-1440.png) |
+| Listing brief | [Listing brief](evidence/listing-brief-375.png) | [Listing brief](evidence/listing-brief-1440.png) |
+| County and listing source | [Listing source](evidence/listing-source-375.png) | [Listing source](evidence/listing-source-1440.png) |
 
-[Browser receipt](evidence/browser-proof.json) records the actual source identifiers and rendered rows. Local fixture tenant: `00000000-0000-0000-0000-000000000905`. The values 110 and 50 persons are saved test inputs, not real population claims. Each new run creates new stored-document identifiers and timestamps; use that run's receipt.
+[Browser receipt](evidence/browser-proof.json) records the actual source identifiers and rendered rows. Local fixture tenant: `00000000-0000-0000-0000-000000000905`. The values 110 and 50 people are saved test inputs, not real population claims. Each new run creates new stored-document identifiers and timestamps; use that run's receipt.
 
 ## Founder must decide
 
@@ -151,4 +156,4 @@ python -m feeds run --engine ffl --tenant '<the signed-in workspace tenant UUID>
 
 Use the workspace UUID derived by `workspace/lib/tenant.ts`. Do not pass secret values as arguments. Live source availability is not verified by the fixture run. Missing keys remain off and are skipped; blocked sites are recorded and stopped.
 
-After deploy, Claude checks `/market-lab`: refresh, ask, open each `/market-lab/sources/<UUID>?row=<index>#point-<index>`, then switch workspace and confirm access is denied. `POST /v1/market-lab/overview` must match the page's On count and the tenant's latest `agent_market_lab.feed_checks` rows. Check `agent_market_lab.feed_documents` with `fixture = false`: each linked statement must match that document's tenant, date, value and unit.
+After deploy, Claude checks `/market-lab`: start a refresh, verify the queued job completes and the page updates, ask, open each `/market-lab/sources/<UUID>?row=<index>#point-<index>`, then switch workspace and confirm access is denied. `POST /v1/market-lab/overview` must match the page's On count and the tenant's latest `agent_market_lab.feed_checks` rows. Check `agent_market_lab.feed_documents` with `fixture = false`: each linked statement must match that document's tenant, date, value and unit.
