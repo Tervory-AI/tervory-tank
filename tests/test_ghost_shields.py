@@ -318,8 +318,14 @@ async def test_php2shell_replay_flags_proposes_dry_run_shield_and_resolves(tmp_p
         store.close()
 
 
-def test_compose_carries_the_cloudflare_token_by_name_only():
+def test_compose_airgap_watch_has_no_cf_write_token():
+    """Air gap correction: Watch has no Cloudflare write credential; Enforce does (by name)."""
     compose = (ROOT / "agents/ghost/docker-compose.yml").read_text()
-    assert "CLOUDFLARE_API_TOKEN_GHOST: ${CLOUDFLARE_API_TOKEN_GHOST:-}" in compose
+    assert "CLOUDFLARE_API_TOKEN_GHOST" not in compose
+    assert "TANK_KEY: ${TANK_KEY_GHOST:-}" in compose
+    enforce = (ROOT / "agents/ghost/docker-compose.enforce.yml").read_text()
+    assert "CLOUDFLARE_API_TOKEN_ENFORCE: ${CLOUDFLARE_API_TOKEN_ENFORCE:-}" in enforce
+    assert "internal: true" in enforce
     env = (ROOT / ".env.example").read_text()
-    assert "\nCLOUDFLARE_API_TOKEN_GHOST=\n" in env
+    assert "\nCLOUDFLARE_API_TOKEN_ENFORCE=\n" in env
+    assert "AUTUMBRA_CF_WEBHOOK_SECRET=" in env
