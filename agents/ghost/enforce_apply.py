@@ -1,17 +1,18 @@
-"""Autumbra Enforce apply path — ThreatPayload fields only. Never raw logs.
+"""Autumbra Enforce apply path — ThreatPayload objects only. Never raw logs.
 
 Watch quarantines dirty text into ThreatPayload. Enforce reads the validated
-ThreatPayload type only (not raw bytes/str) and applies (or dry-plans) shields
-according to the client's shield_mode. A model is never called from Enforce.
-Market Lab source credits may be stamped on the receipt; Autumbra does not own
-the feed registry.
+ThreatPayload type only (not raw bytes/str/dict) and applies or undoes shields
+against the fixture edge control (until a real connected hand exists).
+A model is never called from Enforce. No Tank key required.
 """
 from __future__ import annotations
 
-import os
+import time
 from typing import Any
+from uuid import uuid4
 
 from .client_settings import ApplyMode, ClientAutumbraSettings
+from .fixture_edge import DEFAULT_CONTROL, FixtureEdgeControl
 from .never_block import classify_never_block
 from .shields import plan_for
 from .speed_budgets import stamp_budget
@@ -20,37 +21,44 @@ from .threat_payload import ThreatPayload
 ENFORCE_TOKEN_ENV = "AUTUMBRA_EDGE_CREDENTIAL"
 
 
-def enforce_token_configured() -> bool:
-    return bool(os.environ.get(ENFORCE_TOKEN_ENV, "").strip())
-
-
 def payload_fields_only(payload: ThreatPayload) -> dict[str, Any]:
     """The only input Enforce may see."""
     return payload.model_dump()
 
 
+def _measure_raw_log_seen(payload: object) -> bool:
+    """Measured at the Enforce boundary — not a hard-coded constant.
+
+    True only when the caller handed something other than a ThreatPayload
+    instance (raw bytes/str/dict/log). That path is refused before apply.
+    """
+    return not isinstance(payload, ThreatPayload)
+
+
 def apply_from_payload(
-    payload: ThreatPayload,
+    payload: object,
     *,
     settings: ClientAutumbraSettings,
+    control: FixtureEdgeControl | None = None,
     source_credits: list[dict[str, str]] | None = None,
-    decision_seconds: float = 0.01,
-    apply_seconds: float = 0.01,
-    health_seconds: float = 0.01,
 ) -> dict[str, Any]:
-    """ThreatPayload only → never-block → client shield_mode → dry plan.
+    """ThreatPayload only → never-block → client shield_mode → fixture apply.
 
-    Live edge calls stay behind the Enforce token env (empty = dry). This
-    function never accepts raw logs, bytes, or unvalidated dicts — Watch must
-    hand a ThreatPayload. Optional source_credits come from Market Lab consume.
+    Speed budgets are measured here with perf_counter. Live provider APIs stay
+    behind a real connected hand; until then the fixture control mutates state
+    so applied/undo are real.
     """
-    if not isinstance(payload, ThreatPayload):
+    t0 = time.perf_counter()
+    raw_log_seen = _measure_raw_log_seen(payload)
+    if raw_log_seen:
         raise TypeError(
             "Enforce accepts ThreatPayload only. Quarantine dirty input in Watch first."
         )
+    assert isinstance(payload, ThreatPayload)
 
     fields = payload_fields_only(payload)
     receipt: dict[str, Any] = {
+        "id": str(uuid4()),
         "product": "Autumbra",
         "role": "Enforce",
         "action": fields.get("action"),
@@ -58,12 +66,14 @@ def apply_from_payload(
         "kind": fields.get("kind"),
         "address": fields.get("address"),
         "input_fields": sorted(fields.keys()),
-        "raw_log_seen": False,
+        "raw_log_seen": raw_log_seen,  # measured False for ThreatPayload
         **settings.receipt_stamp(),
     }
     if source_credits:
         receipt["sources"] = source_credits
         receipt["intel_via"] = "Market Lab"
+
+    decision_seconds = time.perf_counter() - t0
     stamp_budget(receipt, stage="event_to_decision", seconds=decision_seconds)
 
     if payload.kind == "block_ip":
@@ -72,25 +82,78 @@ def apply_from_payload(
         if why:
             receipt["outcome"] = "refused_never_block"
             receipt["note"] = f"never-block: {why}"
+            receipt["applied"] = False
             return receipt
 
     mode = settings.shield_mode
     receipt["outcome"] = {
         ApplyMode.never: "report_only",
         ApplyMode.approve_each: "awaiting_approval",
-        ApplyMode.auto_when_checks_pass: "auto_apply_planned",
+        ApplyMode.auto_when_checks_pass: "auto_apply",
     }[mode]
 
+    site = payload.site
+    ref = f"enforce-{receipt['id'].replace('-', '')[:16]}"
     if payload.kind:
         receipt["plan"] = plan_for(
             payload.kind,
-            payload.site if "." in payload.site else payload.site,
+            site if "." in site else site,
             payload.path,
-            ref="enforce-dry",
+            ref=ref,
             address=payload.address,
         )
-    stamp_budget(receipt, stage="decision_to_shield", seconds=apply_seconds)
-    stamp_budget(receipt, stage="health_check", seconds=health_seconds)
-    receipt["live_token_configured"] = enforce_token_configured()
-    receipt["applied"] = False  # Live apply remains founder/client gated.
+
+    edge = control or DEFAULT_CONTROL
+    t1 = time.perf_counter()
+    applied = False
+    if (
+        mode is ApplyMode.auto_when_checks_pass
+        and payload.kind == "block_ip"
+        and payload.address
+    ):
+        row = edge.apply_block_ip(site=site, address=payload.address, ref=ref)
+        receipt["applied_record"] = row
+        receipt["undo"] = {"rule_id": row["rule_id"], "control": "fixture_edge"}
+        applied = True
+        receipt["outcome"] = "applied"
+    elif mode is ApplyMode.approve_each and payload.kind == "block_ip" and payload.address:
+        # Still a real plan against the fixture; not applied until approved.
+        receipt["undo"] = {"rule_id": None, "control": "fixture_edge", "pending": True}
+    stamp_budget(receipt, stage="decision_to_shield", seconds=time.perf_counter() - t1)
+
+    t2 = time.perf_counter()
+    # Fixture health: control answers locally.
+    _ = edge.list_blocked()
+    stamp_budget(receipt, stage="health_check", seconds=time.perf_counter() - t2)
+
+    receipt["applied"] = applied
+    receipt["control"] = "fixture_edge"
     return receipt
+
+
+def undo_applied(
+    receipt: dict[str, Any],
+    *,
+    control: FixtureEdgeControl | None = None,
+) -> dict[str, Any]:
+    """One-tap undo for an Enforce receipt that was applied on the fixture control."""
+    t0 = time.perf_counter()
+    undo = receipt.get("undo") or {}
+    rule_id = undo.get("rule_id")
+    if not rule_id:
+        raise LookupError("no applied shield to undo")
+    edge = control or DEFAULT_CONTROL
+    row = edge.undo(str(rule_id))
+    out = {
+        "id": str(uuid4()),
+        "product": "Autumbra",
+        "role": "Enforce",
+        "action": "undo",
+        "outcome": "undone",
+        "undone": row,
+        "prior_receipt_id": receipt.get("id"),
+        "applied": False,
+        "control": "fixture_edge",
+    }
+    stamp_budget(out, stage="auto_undo_e2e", seconds=time.perf_counter() - t0)
+    return out

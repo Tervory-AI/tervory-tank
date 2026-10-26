@@ -6,11 +6,11 @@ from agents.ghost.client_settings import ClientAutumbraSettings
 from agents.ghost.enforce_apply import apply_from_payload
 from agents.ghost.market_lab_intel import (
     accept_ioc_bundle,
+    backend_status,
     receipt_for_bundle_consume,
     source_credits_on_receipt,
 )
 from agents.ghost.threat_payload import accept_threat_payload
-from agents.ghost.source_registry import backend_status, registry_public
 
 
 def _bundle(**extra):
@@ -51,7 +51,6 @@ def test_reject_paid_and_forbidden_sources():
 
 
 def test_autumbra_does_not_own_feed_list():
-    assert registry_public() == []
     status = backend_status()
     assert status["autumbra_owns_feed_list"] is False
     assert status["owner"] == "Market Lab"

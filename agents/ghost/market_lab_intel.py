@@ -110,3 +110,18 @@ def receipt_for_bundle_consume(
         "client_visible_feed_list": False,
         "note": "Intel backend is Market Lab; Autumbra does not own a source registry.",
     }
+
+
+def backend_status() -> dict[str, Any]:
+    """Autumbra does not own a feed list — Market Lab does."""
+    return {
+        "owner": "Market Lab",
+        "autumbra_owns_feed_list": False,
+        "client_visible_feed_list": False,
+        "note": (
+            "Intel backend is Market Lab. Autumbra consumes ML IOC bundles and "
+            "names the source on the receipt. Clients never see a feed list."
+        ),
+        "consume_module": "agents.ghost.market_lab_intel",
+        "credit_helper": "agents.ghost.market_lab_intel.source_credits_on_receipt",
+    }

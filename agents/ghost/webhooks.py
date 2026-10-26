@@ -16,15 +16,10 @@ class WebhookRejected(ValueError):
     """Unsigned or badly signed — drop, count, never store the body."""
 
 
-# Coolify secret names only — agnostic; no AUTUMBRA_CF_* until a real CF client.
+# Coolify secret names only — agnostic; no Cloudflare-named secrets until a real CF client.
 EDGE_WEBHOOK_SECRET_ENV = "AUTUMBRA_EDGE_WEBHOOK_SECRET"
 MAILBOX_WEBHOOK_SECRET_ENV = "AUTUMBRA_MAILBOX_WEBHOOK_SECRET"
-# Back-compat aliases for tests / older Coolify rows while names migrate.
-_LEGACY_CF = "AUTUMBRA_CF_WEBHOOK_SECRET"
-_LEGACY_GOOGLE = "AUTUMBRA_GOOGLE_WEBHOOK_SECRET"
-
-# Public constant kept for older tests that imported CF_SECRET_ENV.
-CF_SECRET_ENV = EDGE_WEBHOOK_SECRET_ENV
+CF_SECRET_ENV = EDGE_WEBHOOK_SECRET_ENV  # alias name only; value from EDGE env
 GOOGLE_SECRET_ENV = MAILBOX_WEBHOOK_SECRET_ENV
 
 _drops: dict[str, int] = {"edge": 0, "mailbox": 0, "cloudflare": 0, "google": 0, "unknown": 0}
@@ -86,7 +81,7 @@ def verify_edge(
     max_skew_seconds: int = 300,
 ) -> None:
     """HMAC-SHA256 over body with the agnostic edge webhook secret."""
-    secret = _secret(EDGE_WEBHOOK_SECRET_ENV, _LEGACY_CF)
+    secret = _secret(EDGE_WEBHOOK_SECRET_ENV)
     try:
         _verify(
             body,
@@ -109,7 +104,7 @@ def verify_mailbox(
     max_skew_seconds: int = 300,
 ) -> None:
     """HMAC-SHA256 for mailbox / Workspace-style alert webhooks."""
-    secret = _secret(MAILBOX_WEBHOOK_SECRET_ENV, _LEGACY_GOOGLE)
+    secret = _secret(MAILBOX_WEBHOOK_SECRET_ENV)
     try:
         _verify(
             body,

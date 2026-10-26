@@ -123,3 +123,43 @@ def build_owner_update(
             raise ValueError("critical paragraph requires a critical public advisory rating")
 
     return {"subject": subject, "body": "\n".join(body_lines)}
+
+
+class FixtureEmailTransport:
+    """In-memory sender used by tests and dogfood. Records every send."""
+
+    def __init__(self) -> None:
+        self.sent: list[dict[str, str]] = []
+
+    def send(self, *, to: str, subject: str, body: str) -> dict[str, Any]:
+        row = {"to": to, "subject": subject, "body": body}
+        self.sent.append(row)
+        return {"sent": True, "transport": "fixture", "to": to, "subject": subject}
+
+
+DEFAULT_FIXTURE_TRANSPORT = FixtureEmailTransport()
+
+
+def send_owner_update(
+    email: dict[str, str],
+    *,
+    to: str,
+    transport: Any | None = None,
+) -> dict[str, Any]:
+    """Call the sender. Weekly/quiet-week paths use the same door."""
+    sender = transport or DEFAULT_FIXTURE_TRANSPORT
+    result = sender.send(to=to, subject=email["subject"], body=email["body"])
+    return {
+        "sent": bool(result.get("sent")),
+        "transport": result.get("transport") or type(sender).__name__,
+        "to": to,
+        "subject": email["subject"],
+        "body": email["body"],
+        "receipt": {
+            "product": "Autumbra",
+            "kind": "owner_email",
+            "to": to,
+            "subject": email["subject"],
+            "transport": result.get("transport") or type(sender).__name__,
+        },
+    }

@@ -2,7 +2,7 @@
 from pathlib import Path
 
 from agents.ghost.client_settings import ApplyMode, ClientAutumbraSettings, active_halves, connect_copy, list_hands, load_settings, save_settings, set_hand
-from agents.ghost.owner_email import build_owner_update
+from agents.ghost.owner_email import FixtureEmailTransport, build_owner_update, send_owner_update
 from agents.ghost.store import Store
 
 
@@ -176,3 +176,41 @@ def test_agnostic_hands_catalog_no_required_provider():
     hands = list_hands(settings)
     assert {h["hand"] for h in hands} >= {"cloudflare", "shopify", "host_firewall", "google_workspace"}
     assert all(h["required"] is False and h["pro_required"] is False for h in hands)
+
+
+def test_owner_email_sender_is_called_for_three_fixture_clients():
+    transport = FixtureEmailTransport()
+    critical = [{
+        "stack": "PHP", "rating": "critical", "advisory_id": "CVE-2026-109618",
+        "advisory_url": "https://example.test/cve",
+    }]
+    fixtures = [
+        ("00000000-0000-0000-0000-0000000000f1", ApplyMode.auto_when_checks_pass,
+         "let us fix this kind of problem automatically", "auto@example.test"),
+        ("00000000-0000-0000-0000-0000000000f2", ApplyMode.approve_each,
+         "approve fixes yourself", "approve@example.test"),
+        ("00000000-0000-0000-0000-0000000000f3", ApplyMode.never,
+         "never touch your code", "never@example.test"),
+    ]
+    for tenant, mode, needle, to in fixtures:
+        settings = ClientAutumbraSettings(
+            tenant_id=tenant, site_name="fixture.tervory.com", fix_mode=mode, owner_email=to,
+        )
+        mail = build_owner_update(
+            settings=settings,
+            site_name=settings.site_name,
+            threats_found=1,
+            critical=critical,
+            receipt_url="https://protect.tervory.com/r",
+            pr_url="https://github.com/example/pr/1",
+            fix_report_url="https://protect.tervory.com/report",
+            undo_fix_url="https://protect.tervory.com/undo",
+        )
+        sent = send_owner_update(mail, to=to, transport=transport)
+        assert sent["sent"] is True
+        assert needle in sent["body"]
+        assert "https://example.test/cve" in sent["body"]
+    assert len(transport.sent) == 3
+    assert {row["to"] for row in transport.sent} == {
+        "auto@example.test", "approve@example.test", "never@example.test",
+    }
