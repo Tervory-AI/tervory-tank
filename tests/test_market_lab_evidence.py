@@ -102,18 +102,21 @@ def test_missing_keys_never_start_a_fetch(monkeypatch):
     assert result["points"] == []
 
 
-def test_robots_denial_prevents_download_and_allowed_get_has_provenance():
-    class SavedClient:
-        delay = 2
-        def __init__(self): self.calls = []
-        def get(self, url, headers=None):
-            self.calls.append(url)
-            return b"User-agent: *\nDisallow: /private\n" if url.endswith("/robots.txt") else b'{"saved":true}'
-    raw = SavedClient()
-    client = EvidenceClient(raw)
-    with pytest.raises(RuntimeError): client.get("https://data.publisher.test/private")
-    assert len(raw.calls) == 1
+def test_public_read_does_not_require_a_robots_fetch():
+    from feeds.live import PoliteClient, USER_AGENT
+    calls = []
+    class Response:
+        status = 200
+        def __enter__(self): return self
+        def __exit__(self, *args): return None
+        def read(self): return b'{"saved":true}'
+    def opener(request, **kwargs):
+        calls.append(request)
+        return Response()
+    client = EvidenceClient(PoliteClient(opener=opener, delay=0))
     assert client.get_text("https://data.publisher.test/public") == '{"saved":true}'
+    assert [call.full_url for call in calls] == ["https://data.publisher.test/public"]
+    assert calls[0].get_header("User-agent") == USER_AGENT
     assert len(client.documents[0]["sha256"]) == 64
     assert public_url("https://data.publisher.test/table?key=unused#frag") == "https://data.publisher.test/table"
     with pytest.raises(ValueError): public_url("http://localhost/private")

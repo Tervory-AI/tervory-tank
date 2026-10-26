@@ -9,7 +9,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "agents/market_lab"))
-from core.evidence import answer, document, latest_checks, overview
+from core.evidence import answer, document, document_page, latest_checks, overview
 from core.jobs import perform_refresh
 from core.ledger import PostgresLedger
 
@@ -41,6 +41,9 @@ async def test_real_postgres_round_trip_and_tenant_isolation():
         ident = response["facts"][0]["href"].split("/")[-1].split("?")[0]
         assert await document(ledger, owner, ident, fixtures=True)
         assert await document(ledger, other, ident, fixtures=True) is None
+        assert await document_page(ledger, owner, ident) is None
+        assert await document_page(ledger, owner, ident, fixtures=True)
+        assert await document_page(ledger, other, ident, fixtures=True) is None
         assert not (await answer(ledger, other, "latest population", fixtures=True))["facts"]
         previous = await document(ledger, owner, ident, fixtures=True)
         await perform_refresh(tenant_id=owner, engine="ffl", ledger=ledger, source="census_population", fixtures=str(ROOT / "tests/fixtures/feeds"))

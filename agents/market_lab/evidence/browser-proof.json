@@ -1,0 +1,45 @@
+{
+  "label": "local, fixture page",
+  "question": "What are the latest population figures for California?",
+  "widths": [
+    1440,
+    375
+  ],
+  "screenshots": [
+    "feeds-1440.png",
+    "question-1440.png",
+    "brief-1440.png",
+    "source-1440.png",
+    "feeds-375.png",
+    "question-375.png",
+    "brief-375.png",
+    "source-375.png"
+  ],
+  "citations": [
+    {
+      "statement": "Population, California: 110 persons (2023-01-01).",
+      "href": "/market-lab/sources/d753f1e5-d187-45f8-9997-f4b3b99639ff?row=1#point-1",
+      "storedRow": [
+        "Population, California",
+        "06",
+        "2023-01-01",
+        "110",
+        "persons"
+      ]
+    },
+    {
+      "statement": "Population, Los Angeles County, California: 50 persons (2023-01-01).",
+      "href": "/market-lab/sources/d753f1e5-d187-45f8-9997-f4b3b99639ff?row=4#point-4",
+      "storedRow": [
+        "Population, Los Angeles County, California",
+        "06037",
+        "2023-01-01",
+        "50",
+        "persons"
+      ]
+    }
+  ],
+  "browserErrors": [],
+  "externalRequests": [],
+  "result": "passed"
+}

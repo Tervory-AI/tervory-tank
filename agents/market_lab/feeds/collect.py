@@ -11,13 +11,12 @@ import urllib.request
 from typing import Any
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
-from urllib.robotparser import RobotFileParser
 
 from feeds.adapters import ADAPTERS
 from feeds.db import apply_schema, connect
 from feeds.fetch import fetch_source, watch_page
 from feeds.keys import bind_key, missing_key, redact
-from feeds.live import PoliteClient, USER_AGENT
+from feeds.live import BlockedSite, PoliteClient, login_boundary
 from feeds.reader import FixtureReader
 from feeds.store import Store
 
@@ -39,7 +38,7 @@ def public_url(url: str) -> str:
 
 
 class EvidenceClient:
-    """Keep download identities, respect robots, and retain no credential values."""
+    """Read public pages, retain provenance, and stop at access boundaries."""
 
     def __init__(self, client: PoliteClient | None = None, *, allowed_domains: set[str] | None = None) -> None:
         self.allowed_domains = allowed_domains
@@ -49,14 +48,14 @@ class EvidenceClient:
             class CheckedRedirect(urllib.request.HTTPRedirectHandler):
                 def redirect_request(self, request, fp, code, message, headers, newurl):
                     evidence._destination(newurl)
-                    if not getattr(evidence, "_checking_robots", False):
-                        evidence._allowed(newurl)
+                    evidence._allowed(newurl)
+                    if login_boundary(newurl):
+                        raise BlockedSite(urlsplit(newurl).hostname or "")
                     evidence.client._wait(urlsplit(newurl).hostname or "")
                     return super().redirect_request(request, fp, code, message, headers, newurl)
             opener = urllib.request.build_opener(CheckedRedirect())
             self.client.opener = opener.open
         self.documents: list[dict] = []
-        self.robots: dict[str, RobotFileParser] = {}
 
     def _destination(self, url: str) -> str:
         clean = public_url(url)
@@ -66,30 +65,8 @@ class EvidenceClient:
         return clean
 
     def _allowed(self, url: str) -> None:
-        clean = self._destination(url)
-        parts = urlsplit(clean)
-        origin = f"{parts.scheme}://{parts.netloc}"
-        if origin not in self.robots:
-            parser = RobotFileParser()
-            try:
-                self._checking_robots = True
-                try:
-                    body = self.client.get(origin + "/robots.txt")
-                finally:
-                    self._checking_robots = False
-            except RuntimeError as exc:
-                # Only a missing robots file is permission to proceed. An outage,
-                # access denial or captcha is not permission to ignore a policy.
-                if "HTTP 404 " not in str(exc):
-                    raise RuntimeError("Source access policy could not be checked") from None
-                body = b"User-agent: *\nAllow: /\n"
-            parser.parse(body.decode("utf-8", errors="replace").splitlines())
-            self.robots[origin] = parser
-        policy = self.robots[origin]
-        if not policy.can_fetch(USER_AGENT, clean):
-            raise RuntimeError("Source access policy does not allow this download")
-        delay = policy.crawl_delay(USER_AGENT) or policy.crawl_delay("*") or 0
-        self.client.delay = max(self.client.delay, float(delay))
+        self._destination(url)
+        self.client.ensure_open(url)
 
     def get_text(self, url: str, headers: dict | None = None) -> str:
         return self.get(url, headers).decode("utf-8-sig", errors="replace")
@@ -140,6 +117,8 @@ def collect(source: Any, *, fixtures: str | None, backfill: bool, client: Eviden
         result["points"] = [{**meta[point["series_id"]], **point} for point in store._staged]
         result["events"] = [dict(row) for row in conn.execute("SELECT * FROM events ORDER BY date, id")]
         result["downloads"] = list(client.documents)
+    except BlockedSite:
+        result.update(points=[], events=[], downloads=[], note="Off, blocked")
     except Exception:
         # Adapter exceptions can contain source data, URLs or credentials.
         result.update(points=[], events=[], downloads=[], note="Off, source could not be read")

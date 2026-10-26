@@ -11,7 +11,7 @@ from feeds.catalog import sources
 from feeds.keys import bind_key, missing_key, redact
 from feeds.db import apply_schema, connect
 from feeds.fetch import fetch_source, watch_page
-from feeds.live import NeedsKey, PoliteClient
+from feeds.live import BlockedSite, NeedsKey, PoliteClient
 from feeds.models import SourceSpec
 from feeds.reader import FixtureReader
 from feeds.store import Store, utc_now
@@ -108,6 +108,11 @@ def run(
                 adapter = ADAPTERS[spec.adapter]
                 rows = adapter(spec, reader, store, backfill=backfill)
             store.finish_batch()
+        except BlockedSite:
+            conn.rollback()
+            store.clear_batch()
+            rows = 0
+            error = "blocked"
         except NeedsKey:
             conn.rollback()
             store.clear_batch()

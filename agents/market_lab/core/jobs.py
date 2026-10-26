@@ -57,6 +57,7 @@ async def perform_refresh(
         raise RuntimeError("fred terms allow a copy; refusing to run")
     from core.evidence import save_check
     from feeds.collect import EvidenceClient, collect
+    from feeds.live import BlockedSite
     from feeds.catalog import sources
 
     if not fixtures and not live:
@@ -112,7 +113,11 @@ async def perform_refresh(
     for cost in spec["costs"]:
         body = None if fred_bodies is None else fred_bodies.get(cost["ref"])
         if body is None and live:
-            body = await _live_fred(str(cost["ref"]))
+            try:
+                body = await _live_fred(str(cost["ref"]), pacing=getattr(http, "client", None))
+            except BlockedSite:
+                fred_read.append({**_fred_off(str(cost["ref"])), "note": "blocked"})
+                break
         if body is None:
             if live:
                 fred_read.append(_fred_off(str(cost["ref"])))
@@ -318,13 +323,14 @@ def _fred_off(ref: str) -> dict[str, Any]:
     }
 
 
-async def _live_fred(series_id: str) -> dict[str, Any] | None:
+async def _live_fred(series_id: str, *, pacing: Any = None) -> dict[str, Any] | None:
     """Read one FRED series. Returns None when the key is missing.
 
     The body is for the caller to turn into points. It is not written here.
     A failure names the host only, never the key or the request URL.
     """
     from feeds.keys import FRED_KEY
+    from feeds.live import BlockedSite, USER_AGENT, blocked_page
 
     key = os.environ.get(FRED_KEY, "").strip()
     if not key:
@@ -332,11 +338,16 @@ async def _live_fred(series_id: str) -> dict[str, Any] | None:
     import httpx
 
     try:
-        async with httpx.AsyncClient(timeout=30) as http:
+        if pacing is not None:
+            pacing.ensure_open("https://api.stlouisfed.org/")
+            await asyncio.to_thread(pacing._wait, "api.stlouisfed.org")
+        async with httpx.AsyncClient(timeout=30, headers={"User-Agent": USER_AGENT}, follow_redirects=False) as http:
             response = await http.get(
                 "https://api.stlouisfed.org/fred/series/observations",
                 params={"series_id": series_id, "api_key": key, "file_type": "json"},
             )
+        if response.status_code in {301, 302, 303, 307, 308, 401, 402, 403, 429} or blocked_page(getattr(response, "content", b"")):
+            raise BlockedSite("api.stlouisfed.org")
         if response.status_code >= 400:
             raise RuntimeError("fred read failed")
         body = response.json()

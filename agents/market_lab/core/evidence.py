@@ -92,8 +92,8 @@ async def usable_points(ledger: Any, tenant_id: str, doc: dict) -> list[tuple[in
     return [(index, point) for index, point in enumerate(doc["points"]) if point["batch_id"] in allowed]
 
 
-async def document_page(ledger: Any, tenant_id: str, document_id: str, offset: int = 0) -> dict | None:
-    doc = await document(ledger, tenant_id, document_id)
+async def document_page(ledger: Any, tenant_id: str, document_id: str, offset: int = 0, *, fixtures: bool = False) -> dict | None:
+    doc = await document(ledger, tenant_id, document_id, fixtures=fixtures)
     if doc is None:
         return None
     active = {index for index, _ in await usable_points(ledger, tenant_id, doc)}
