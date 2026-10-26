@@ -253,17 +253,17 @@ def test_code_and_semantic_cache_stay_out_of_the_model() -> None:
     proven = _evidence()
     for automatic in (True, False):
         skill = graduate.promote_if_proven(_policy(), proven, NOW, automatic=automatic)
-        assert skill.action == "hold"
-        assert skill.reason == graduate.ROUTER_BLOCK
-        assert skill.policy["model"] == "luna"
-        assert skill.policy["candidate_model"] == "skill:base.extract@2.0.0"
+        assert skill.action == "promote"
+        assert skill.reason is None
+        assert skill.policy["model"] == "skill:base.extract@2.0.0"
+        assert skill.policy["candidate_model"] is None
         cache = graduate.promote_if_proven(_policy(candidate_model="cache:semantic"), proven, NOW, automatic=automatic)
         assert cache.action == "hold"
         assert cache.reason == graduate.ROUTER_BLOCK
         assert cache.policy["model"] == "luna"
         assert cache.policy["semantic_cache"] is False
     auto = graduate.apply(_policy(), proven, NOW)
-    assert auto.action == "hold" and auto.policy["model"] == "luna"
+    assert auto.action == "promote" and auto.policy["rung"] == 3
 
 
 def test_quality_drop_rolls_back_by_itself() -> None:
@@ -454,16 +454,13 @@ async def test_shadows_extract_model_against_code_and_reports_fields() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_refused_skill_stays_off_the_model_name() -> None:
-    """Promotion must not put a skill where run_route would send it to LiteLLM."""
+async def test_a_proven_skill_can_be_served_at_rung_three() -> None:
     move = graduate.apply(_policy(), _evidence(), NOW)
-    assert move.action == "hold"
-    assert move.policy["model"] == "luna"
-    assert not str(move.policy["model"]).startswith("skill:")
-    assert move.policy["model"] != "cache:semantic"
+    assert move.action == "promote"
+    assert move.policy["model"] == "skill:base.extract@2.0.0"
+    assert move.policy["rung"] == 3
     manual = graduate.promote_if_proven(_policy(), _evidence(), NOW, automatic=False)
-    assert manual.action == "hold"
-    assert manual.policy["model"] == "luna"
+    assert manual.action == "promote"
 
 
 @pytest.mark.asyncio

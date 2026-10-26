@@ -348,6 +348,25 @@ def test_route_overwrites_agent_with_the_authenticated_caller(monkeypatch: pytes
 
 # ---------- skill gate ----------
 
+@pytest.fixture(autouse=True)
+def public_skill_storage(request, monkeypatch):
+    if not (request.node.name.startswith("test_skill_gate_") or request.node.name == "test_workspace_key_does_not_change_the_skill_agent"):
+        return
+
+    class PublicStorage:
+        def acquire(self): return self
+        def transaction(self): return self
+        async def __aenter__(self): return self
+        async def __aexit__(self, *args): pass
+        async def fetchrow(self, sql, *args):
+            if "agent_skill_submissions" in sql:
+                return None  # these agent-ACL fixtures are public packages
+            return {"priority": "standard", "acceptance_window_s": 86400}
+        async def execute(self, *args): return "INSERT 0 1"
+
+    monkeypatch.setattr(TANK, "pool", lambda: PublicStorage())
+
+
 def _package(tmp_path: Path, agent: str, shared: list[str] | None = None):
     folder = tmp_path / agent
     folder.mkdir()
@@ -356,7 +375,7 @@ def _package(tmp_path: Path, agent: str, shared: list[str] | None = None):
         lines.append("shared_with:\n")
         lines.extend(f"  - {item}\n" for item in shared)
     (folder / "skill.yaml").write_text("".join(lines), encoding="utf-8")
-    return SimpleNamespace(agent=agent, path=folder, ref=f"{agent}.demo@1.0.0")
+    return SimpleNamespace(id=f"{agent}.demo",version="1.0.0",task_type=None,agent=agent,path=folder,ref=f"{agent}.demo@1.0.0")
 
 
 def _body():
@@ -388,7 +407,7 @@ def test_skill_gate_allows_own_skill_and_stamps_the_caller(tmp_path: Path, monke
         return "approved"
 
     def make_ctx(package, tenant_id, task_id=None, preview=False):
-        return SimpleNamespace(agent=package.agent, cost_usd=0.0, tenant_id=tenant_id)
+        return SimpleNamespace(agent=package.agent, cost_usd=0.0, tenant_id=tenant_id, calls=0,task_id=task_id)
 
     async def run_skill(package, payload, ctx):
         seen["agent"] = ctx.agent
@@ -415,7 +434,7 @@ def test_skill_gate_allows_shared_with(tmp_path: Path, monkeypatch: pytest.Monke
         return "approved"
 
     def make_ctx(package, tenant_id, task_id=None, preview=False):
-        return SimpleNamespace(agent=package.agent, cost_usd=0.0)
+        return SimpleNamespace(agent=package.agent, cost_usd=0.0,calls=0,task_id=task_id)
 
     async def run_skill(package, payload, ctx):
         seen["agent"] = ctx.agent
@@ -441,7 +460,7 @@ def test_workspace_key_does_not_change_the_skill_agent(tmp_path: Path, monkeypat
         return "approved"
 
     def make_ctx(package, tenant_id, task_id=None, preview=False):
-        return SimpleNamespace(agent=package.agent, cost_usd=0.0)
+        return SimpleNamespace(agent=package.agent, cost_usd=0.0,calls=0,task_id=task_id)
 
     async def run_skill(package, payload, ctx):
         seen["agent"] = ctx.agent

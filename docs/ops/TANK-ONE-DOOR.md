@@ -8,10 +8,10 @@ On 26 October 2026 the founder extended the lane for these four fixes. The origi
 
 | Item | Implementation | Contract and proof |
 | --- | --- | --- |
-| A1 / F1a | `tank/main.py:2780`, `evals_summary` | `tenant_id` is required; SQL filters it. Explicit `all_tenants=true` requires the Workspace service key **and** a Clerk identity in Tank's `TERVORY_ADMIN_USER_IDS`, checked by existing `admin.require_admin`. A role label or unknown identity fails. |
-| A2 / F1b | `tank/main.py:2276`, `list_skills` | Public packages plus this tenant's submitted packages in this region. No tenant means public packages only. `all_tenants=true` uses the same Tank founder identity gate. Call costs use the selected tenant (platform for the public view). |
-| A3 / F1c | `tank/main.py:2454`, `_run_one_skill`; `tank/agent_skills.py:490`, `guard_submission_owner` | Ownership and region checked before execution for Workspace, Base and shared room keys, including preview. Base's existing restrictions also remain. No founder execution bypass. |
-| A4 / F9 | `tank/main.py:1519`, `_screen_mask`; `:1533`, `_screen_cases`; `:1589`, `_screen_model` | Global screening reads checked platform gold in this box's region, excludes holdouts and unapproved auto labels, and never reads client evals/transcripts. It masks identifiers/email locally, rejects HTML, and checks the platform provider allow-list/home-region policy before model submission. Reviewers must approve only de-identified platform examples; automatic masking is additional protection, not a promise to identify every name. |
+| A1 / F1a | `tank/main.py:3332`, `evals_summary` | `tenant_id` is required; SQL filters it. Explicit `all_tenants=true` requires the Workspace service key **and** a Clerk identity in Tank's `TERVORY_ADMIN_USER_IDS`, checked by existing `admin.require_admin`. A role label or unknown identity fails. |
+| A2 / F1b | `tank/main.py:2801`, `list_skills` | Public packages plus this tenant's submitted packages in this region. No tenant means public packages only. `all_tenants=true` uses the same Tank founder identity gate. Call costs use the selected tenant (platform for the public view). |
+| A3 / F1c | `tank/main.py:2979`, `_run_one_skill`; `tank/agent_skills.py:490`, `guard_submission_owner` | Ownership and region checked before execution for Workspace, Base and shared room keys, including preview. Base's existing restrictions also remain. No founder execution bypass. |
+| A4 / F9 | `tank/main.py:1724`, `_screen_mask`; `:1738`, `_screen_cases`; `:1794`, `_screen_model` | Global screening reads checked platform gold in this box's region, excludes holdouts and unapproved auto labels, and never reads client evals/transcripts. It masks identifiers/email locally, rejects HTML, and checks the platform provider allow-list/home-region policy before model submission. Reviewers must approve only de-identified platform examples; automatic masking is additional protection, not a promise to identify every name. |
 | Regression evidence | `tests/test_tank_tenant_boundaries.py:18` | Isolated real PostgreSQL and real Tank HTTP handlers, two tenants, both directions, Workspace/Base/Ghost keys, previews, foreign region, false founder claims, approved/candidate/holdout/client examples, HTML and provider refusal. No provider call or production data. |
 
 Before the fix, the main handlers (unchanged from `65067a43`) produced **5 failed, 1 passed**: A1 total 3 instead of 1; A2 foreign submission returned; A3 Workspace and Ghost returned 200 instead of 403; A4 returned five client-derived cases. Base's existing ownership guard was the passing control. After the fix, the two-tenant tests plus the one-door guard, existing submission/export, scope, call-cost, graduation and approval-safety suites report **92 passed**. `ruff check tank tests --select E9,F` (with the existing base.socials F401 exception) and `git diff --check` pass. Schema, queue worker and Skala lifecycle were unchanged in Part A.
@@ -132,7 +132,85 @@ Required owner actions before asserting the launch invariant:
 1. **Part A completed:** F1a/F1b/F1c and F9 are corrected as described above. Platform cache behavior is covered by the separately authorized Part B.
 2. **Base owner:** move Context.dev execution/key into a tenant-scoped Tank adapter (F2); preserve credit limits and durable receipts. `agents/base/sources/**` is not in this brief. Coordinate the code-first worker change here with `codex/base-works`; isolate provider cooldown from free batches separately.
 3. **Rig owner + training owner:** move HF submission/poll/cancel and credentials behind Tank (F3/F4), preserving fail-closed reservations and never repeating uncertain submissions. Local reconstruction/training can remain executors with narrowly scoped artifact access.
-4. **Engine:** implement foreground code/cache/search/browser execution and safe chat cache semantics (F5). No edit to `run_route`, queue worker, Skala lifecycle or cache was made here. Existing founder promotion switches must not become a per-request wait for a person.
+4. **Part B completed for `/v1/route`:** approved code and tenant-scoped exact/semantic cache now execute in the foreground, with automatic escalation and receipts (F5). The separate streaming brain-chat adapter still follows its existing protocol; caller-specific free search/browser ordering remains with the product owners. The queue worker and Skala lifecycle remain unchanged.
 5. **Rig, Zenas, Market Lab, MCP and skill owners:** implement the precise F6/F7 ordering changes above using new skill versions where needed. Product-owned files were left alone.
 6. **Source owners:** verify deployed LegiScan/Laws.Africa/CourtListener subscription terms and the other source integrations (F8); any paid access must move behind Tank before use. The repository identifies credential names and HTTP calls, not account invoices; this audit does not label unknown billing as free.
 7. **Security/deployment owner:** verify actual deployed environment bindings and browser bundles. PR #329 owns dependency, Dockerfile, lockfile and secret/install CI changes; none were edited here.
+
+
+## Part B: foreground ladder and learning
+
+Part A was committed and pushed as `f837117` before Part B began. All Part B runtime changes stay in the founder's extended files; no queue worker, approved skill source, Skala lifecycle, Workspace, dependency, CI configuration or inference credential was changed.
+
+| Item | Implementation | Behavior |
+| --- | --- | --- |
+| B1 | `tank/main.py:1000` (`run_route`), `:1409` (`_run_code_candidate`), `tank/graduate.py:384` | A pinned approved, model-free skill runs in the foreground at policy rung 3. Owner/region/version checks precede cache reuse and execution. Model/tool names remain excluded from code. Task cancellation is checked before starting and after code completes. |
+| B2 | `tank/main.py:957` (`_cache_read`), `:984` (`_cache_write`), `tank/graduate.py:417` | Exact and enabled semantic reuse are foreground operations, with a fresh $0 ledger receipt and transcript. All scopes, including old `platform` and `region` policies, use tenant-local storage. |
+| B3 | `tank/graduate.py:397` (`code_failure`), `tank/main.py:1000` | Not-answerable, refusal, exception, timeout or confidence below the policy floor produces a $0 unverified code-attempt row, then proceeds to rung 2. Both the attempt and delivered model receipt record the escalation and its reason. Authorization failures are refused; code cannot acquire inference credentials or call a model. |
+| B4 | `tank/schema.sql:1637` | Additive, once-only seeds below. Operator changes and tenant overrides survive repeated schema application. No seed approves a skill. |
+| B5 | `tank/main.py:919` (`_record_local`), `:2979` (`_run_one_skill`), `:3293` (`ledger_feedback`), `tank/training.py:146` | Foreground/direct code and cache calls write $0 receipts plus masked transcripts. Code-shadow evidence stays in its originating tenant. The existing training maintenance loop collects client signals after the task's acceptance window; rejection is immediate. |
+| B6 | `tank/main.py:2293` (`route_batch`), `:2367` (`batch_status`), `:2534` (`process_batches_once`), `tank/schema.sql:1637` | Durable tenant-scoped batches, per-item results and positions, baseline/actual/discount receipts, one capped normal retry, restart ambiguity handling and a 24-hour provider completion window. This runner is separate from the existing task queue worker. |
+| B7 | `tests/test_tank_ladder.py:172`, `docs/ops/FIRST-GRADUATION.md:1` | 30 independent fixture samples across two tenants; automatic promotion; subsequent rung-3 serving. The record explicitly distinguishes fixture costs from real spend. |
+
+### Cache scope and invalidation
+
+The new `tank.route_cache` holds keys and references to tenant-owned ledger/transcript rows. A key includes tenant, box region, task, the complete effective policy (including `updated_at`, model/pinned version, system prompt, confidence and acceptance settings), request skill, output-token limit, MoA seat and `case_ref`. All messages participate in exact keys; non-user messages also partition semantic lookup. No request without a `case_ref` can reuse a matter-matching policy's cache. A retired or foreign-owned skill is rejected before cache lookup.
+
+Entries expire after `TANK_CACHE_TTL_S` (the existing default is seven days). A policy/model/version/prompt/matter change changes the key immediately. A rejected source receipt is never eligible, and any rejection clears that tenant/task's cache. Other tenants' entries remain untouched. Prompts with detected identifiers are not cached; output that would change under local transcript masking is not cached either. There is no Redis-to-Postgres migration or cross-tenant reuse of old platform Redis entries.
+
+Semantic reuse is deliberately conservative and entirely local: preserve word order, names, numbers, negation and punctuation; equate request-politeness prefixes and a small documented set of spelling variants. The stable local vector comparison still enforces the 0.97 threshold, after canonical-form equality and tenant/context checks. Broader paraphrases miss. This does not claim an uninstalled embedding model or a new embedding service. Stale entries are harmless after expiry; storage cleanup can be performed independently of serving.
+
+### Seeded rows
+
+All seeds are platform defaults. Existing tenant overrides are unchanged. `tank.policy_seeds` records `one-door-ladder-v1` so later schema applications cannot undo a founder's subsequent choice. The code floor uses fractions; existing Base skills reporting percentages are converted. Missing confidence in an approved deterministic result is not treated as a guessed low score.
+
+| Task | Starting route | Code floor | Escalation/cache/batch policy |
+| --- | --- | --- | --- |
+| `base.normalize` | rung 3, `skill:base.normalize@1.0.0` | 0.80 | Existing funded `luna` at rung 2; tenant exact cache; no provider batching needed for successful code |
+| `base.extract` | rung 3, `skill:base.extract@2.0.0` | 0.80 | `luna` at rung 2; tenant exact cache; remaining noninteractive model work batch-eligible |
+| `base.business_data` | rung 3, `skill:base.business_data@2.0.0` | 0.40 | `luna` at rung 2; tenant exact cache; remaining noninteractive model work batch-eligible; lower floor reflects this skill's explicitly bounded estimates |
+| `agent.base.think` | rung 3 decision, existing model retained as metadata | 0.80 | No approved general planning skill exists in this lane. Records `no_code_skill` and immediately escalates to existing `luna` at rung 2; never substitutes a record-extraction skill for a planner. Tenant exact cache; automatic promotion remains at its existing setting. |
+| `zenas.scope` | rung 1, `astra` | n/a | Tenant cache, semantic reuse and matter matching enabled |
+| `zenas.rule_card` | rung 1, `astra` | n/a | Same; noninteractive work batch-eligible |
+| `zenas.case_facts` | rung 1, `astra` | n/a | Same; noninteractive archive conversion batch-eligible |
+| `zenas.apply` | rung 1, `astra` | n/a | Tenant cache, semantic reuse and matter matching enabled |
+| `zenas.compose` | rung 1, `astra` | n/a | Same |
+| `zenas.plain_language` | rung 1, `astra` | n/a | Same |
+| `zenas.draft` | rung 1, `astra` | n/a | Same |
+| `zenas.review` | rung 1, `astra` | n/a | Same |
+| `zenas.selftest` | rung 1, `astra` | n/a | Same; noninteractive work batch-eligible |
+
+`luna` and `astra` are existing OpenAI roster entries with existing LiteLLM-owned credentials. The founder authorized these starting/escalation choices. The policy API also exposes the confidence floor, acceptance window, semantic/matter switches, escalation model and per-request cost cap.
+
+### Client learning
+
+Delivered code/cache/model receipts carry `accept_after` from `acceptance_window_s` (default 86400 seconds). After that window, a delivered result without rejection becomes `source='client_accepted'`, `polarity='positive'`, `gold_id=NULL`. An explicit acceptance also observes the window. A rejection immediately revokes the positive pair and writes a separate `client_rejected` negative pair. Negatives are retained with `active=false` so existing positive-completion exports cannot train on rejected answers. Neither signal is promoted into reviewed `gold_examples`.
+
+A first rejection raises only that tenant/task's shadow rate by 0.1, capped at 1. If the tenant inherited the platform row, Tank first copies the effective policy into a tenant override. Repeating the same rejection does not raise the rate again. Code-shadow runs are not client acceptances. The five-minute existing collector provides eventual collection without requiring another request or a human decision.
+
+### Batch contract and limits
+
+`POST /v1/route/batch` accepts `{id?, requests: RouteRequest[]}` for one tenant and one task type. Requests default to `interactive=true`; the caller must explicitly submit work that can wait. At or above `TANK_BATCH_MIN` (default 50), an eligible noninteractive batch automatically runs free code/cache work first and submits remaining model work. Below the threshold, with any interactive request, or for an ineligible task, results run in the foreground. The existing single-request `/v1/route` remains synchronous; callers submit bulk work to the batch endpoint to enable automatic batching.
+
+Provider batches are currently enabled for the existing **OpenAI** roster through LiteLLM's `/v1/files` and `/v1/batches` APIs, with the roster alias supplied in `x-litellm-model`. This covers the seeded Base escalation and Zenas routes. A source check of LiteLLM's batch implementation found Anthropic batch creation still raises `NotImplementedError` and Gemini is absent from that create API. Those and other unsupported providers execute ordinary capped calls with **no claimed batch discount**. No native provider key is introduced into Tank or an agent. Broader provider support requires a working gateway adapter; this branch does not pretend that sending a different provider name enables it.
+
+`GET /v1/route/batch/{id}?tenant_id=...` returns only that tenant's items, ordered by original position, with the 24-hour completion window, errors, ledger IDs, content, normal token/cost fields and baseline versus actual discount. Reusing a queued batch ID with a different payload is refused. A batch receipt's baseline is that selected model's standard token price; separate additive `batch_baseline_cost_usd`/`batch_discount_usd` fields preserve the existing core savings baseline machinery. Provider batch cost uses the snapshotted standard rate times 0.5. Normal retries claim zero batch discount. Ledger dollar amounts retain the existing six-decimal precision.
+
+Each item reserves a conservative UTF-8 token bound plus framing and the policy's output limit against `max_cost_usd` (default $1 per request). Failed/expired items get at most one normal retry, with the remaining cap and provider fallback disabled so a different model cannot invalidate that price bound. A policy or allow-list change is rechecked before submission/retry. Above 24 hours Tank requests cancellation and reports that state; it waits for the provider's terminal confirmation before retrying. A restart during an uncertain submission or normal retry records an explicit interrupted-attempt failure and never silently submits the same paid work twice.
+
+### Part B validation and changed-file index
+
+Real isolated PostgreSQL, two tenants, real Tank handlers/SQL, and provider fixtures cover code receipts, code failure/escalation, HTML reduction, ownership/version/cancellation, exact/semantic/matter isolation, policy invalidation, expiry, rejection, acceptance windows, negative pairs, shadow-rate isolation, repeated schema application, seeded rows, batch discounts, idempotency, interactive exclusion, cost caps, expiry and restart ambiguity. No live provider request was made.
+
+The combined Part A/B and related routing, region, MoA, training, graduation, submission/export, approval-safety and one-door suites report **214 passed**. Earlier failures included obsolete assertions that code could never be served, fixture SQL interfaces that lacked the new ownership read, and a batch-price integration bug caused by the existing core pricing trigger replacing supplied baseline fields; the final implementation uses dedicated batch-price fields and exact decimal arithmetic.
+
+The expanded command/chassis/dashboard and A/B regression set also reports **176 passed**, including the fix for cache receipts retaining their Command/MoA seat.
+
+Additional changed test locations: `tests/test_tank_batches.py:13` (durable batch cases); `tests/test_tank_ladder.py:59` (foreground code, cache and learning cases); `tests/test_t6_graduate.py:252` and `:455` (pinned-code promotion); `tests/test_bf2_tank_guards.py:244` (malformed names still blocked, pinned code allowed); `tests/test_moa_integration.py:27` and `:442` (receipt seat preservation and missing-package refusal before seats); `tests/test_train1.py:161` (acceptance-window/negative provenance); `tests/test_za_region.py:388` and `:570` (ownership-read fixtures preserve region/privacy regression coverage).
+
+
+The remaining Part B entry points are `tank/main.py:575` (room-key batch authorization), `:600` (interactive request flag), `:615` (receipt metadata), `:621` and `:764` (policy validation and persistence), `:692` and `:698` (separate batch-loop startup/shutdown), `:872` (local HTML reduction), `:904` (task cancellation/ownership), `:1247` (auxiliary model HTML reduction), `:1437` (tenant-owned code-shadow evidence), `:1646` (automatic approved-code promotion), `:1702` (public/platform-only global code candidates), `:1738` (pure-code gold task matching), and `:2227` (foreground code bypasses MoA). Batch fallback receipts, including a failed normal retry, retain their batch ID, escalation and zero claimed discount.
+
+Fixture compatibility changes are `tests/test_agent_chassis.py:351` (ownership reads and code receipts), `tests/test_bf3_industry_words.py:241` (public-package ownership lookup), `tests/test_command.py:768` (transactional receipt and cache fixtures; seat preservation across every ledger outcome), and `tests/test_dashboards.py:141` (the paid pause still permits free foreground cache). The independent two-tenant SQL tests enforce the actual boundaries; these adapters let existing isolated unit tests exercise their original behavior. This document records policy rows, invalidation and limitations; `docs/ops/FIRST-GRADUATION.md:1` is the dated fixture patent record.
+
+Final retry/receipt checks: **123 passed** across batch, Command and MoA suites. The additional identifier-bearing bulk-request cap check also verifies both tenants cannot escape the cap when a request must stay out of durable batching.

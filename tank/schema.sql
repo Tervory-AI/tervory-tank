@@ -1633,3 +1633,94 @@ CREATE TABLE IF NOT EXISTS tank.rig_forge_jobs (
     PRIMARY KEY (tenant_id,id)
 );
 -- End RIG-5F.
+
+-- ONE-DOOR Part B: foreground ladder, tenant cache, learning windows and batches.
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS escalation_model text;
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS confidence_floor numeric(5,4) NOT NULL DEFAULT 0.8;
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS acceptance_window_s integer NOT NULL DEFAULT 86400;
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS matter_matching boolean NOT NULL DEFAULT false;
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS max_cost_usd numeric(12,6) NOT NULL DEFAULT 1;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS escalation jsonb NOT NULL DEFAULT '[]';
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS accept_after timestamptz;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS batch boolean NOT NULL DEFAULT false;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS batch_id uuid;
+ALTER TABLE tank.training_pairs ADD COLUMN IF NOT EXISTS polarity text NOT NULL DEFAULT 'positive';
+CREATE TABLE IF NOT EXISTS tank.route_cache (
+    tenant_id uuid NOT NULL,
+    region text NOT NULL,
+    task_type text NOT NULL,
+    context_hash text NOT NULL,
+    input_hash text NOT NULL,
+    semantic_form text NOT NULL,
+    vector jsonb NOT NULL,
+    ledger_id uuid NOT NULL REFERENCES tank.ledger(id),
+    expires_at timestamptz NOT NULL,
+    PRIMARY KEY (tenant_id,region,task_type,context_hash,input_hash)
+);
+CREATE INDEX IF NOT EXISTS route_cache_expiry ON tank.route_cache(expires_at);
+CREATE TABLE IF NOT EXISTS tank.batches (
+    id uuid PRIMARY KEY,
+    tenant_id uuid NOT NULL,
+    region text NOT NULL,
+    task_type text NOT NULL,
+    model text NOT NULL,
+    count integer NOT NULL,
+    status text NOT NULL DEFAULT 'queued',
+    provider text NOT NULL,
+    provider_id text,
+    input_file_id text,
+    submitted_at timestamptz,
+    finished_at timestamptz,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    estimated_cost_usd numeric(18,8) NOT NULL DEFAULT 0,
+    actual_cost_usd numeric(18,8) NOT NULL DEFAULT 0,
+    error text,
+    caller text,
+    UNIQUE (tenant_id,id)
+);
+CREATE TABLE IF NOT EXISTS tank.batch_items (
+    batch_id uuid NOT NULL REFERENCES tank.batches(id),
+    tenant_id uuid NOT NULL,
+    item_id uuid NOT NULL,
+    request jsonb NOT NULL,
+    policy jsonb NOT NULL,
+    prices jsonb NOT NULL,
+    status text NOT NULL DEFAULT 'queued',
+    attempts integer NOT NULL DEFAULT 0,
+    reserved_usd numeric(18,8) NOT NULL DEFAULT 0,
+    ledger_id uuid REFERENCES tank.ledger(id),
+    error text,
+    PRIMARY KEY (batch_id,item_id)
+);
+CREATE INDEX IF NOT EXISTS batches_pending ON tank.batches(status,created_at);
+CREATE TABLE IF NOT EXISTS tank.policy_seeds (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now());
+DO $$
+BEGIN
+    PERFORM pg_advisory_xact_lock(hashtextextended('one-door-ladder-v1',0));
+    IF NOT EXISTS (SELECT 1 FROM tank.policy_seeds WHERE name='one-door-ladder-v1') THEN
+        -- Luna is the existing funded cheap roster model. Never approve code here.
+        UPDATE tank.policy SET escalation_model='luna',rung=3,cache_scope='tenant',updated_at=now()
+        WHERE tenant_id IS NULL AND task_type IN ('base.extract','base.business_data','agent.base.think');
+        UPDATE tank.policy SET model='skill:base.extract@2.0.0'
+        WHERE tenant_id IS NULL AND task_type='base.extract';
+        UPDATE tank.policy SET model='skill:base.business_data@2.0.0',confidence_floor=0.4
+        WHERE tenant_id IS NULL AND task_type='base.business_data';
+        INSERT INTO tank.policy(task_type,rung,model,escalation_model,cache_scope,confidence_floor)
+        VALUES ('base.normalize',3,'skill:base.normalize@1.0.0','luna','tenant',0.8)
+        ON CONFLICT DO NOTHING;
+        -- Existing funded roster entry; no new provider or key. Matter keys are
+        -- mandatory for semantic reuse; no reference means a semantic miss.
+        UPDATE tank.policy SET model='astra',rung=1,semantic_cache=true,matter_matching=true,
+            cache_scope='tenant',updated_at=now()
+        WHERE tenant_id IS NULL AND task_type IN
+          ('zenas.scope','zenas.rule_card','zenas.case_facts','zenas.apply','zenas.compose',
+           'zenas.plain_language','zenas.draft','zenas.review','zenas.selftest');
+        UPDATE tank.policy SET batch_eligible=true WHERE tenant_id IS NULL
+          AND task_type IN ('base.extract','base.business_data','zenas.case_facts','zenas.rule_card','zenas.selftest');
+        INSERT INTO tank.policy_seeds(name) VALUES('one-door-ladder-v1');
+    END IF;
+END $$;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS batch_baseline_cost_usd numeric(18,8);
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS batch_discount_usd numeric(18,8);
+ALTER TABLE tank.batches ADD COLUMN IF NOT EXISTS request_hash text NOT NULL DEFAULT '';
+ALTER TABLE tank.batch_items ADD COLUMN IF NOT EXISTS position integer NOT NULL DEFAULT 0;
