@@ -402,11 +402,23 @@ async def test_schema_applies_twice_and_preserves_policy(harness):
         migrated = await conn.fetch("SELECT * FROM tank.policy ORDER BY task_type,tenant_id")
         await conn.execute(schema)
         after = await conn.fetch("SELECT * FROM tank.policy ORDER BY task_type,tenant_id")
-        # CORE-2 clears the old reporting baseline once; MoA only adds fields.
-        # Preserve every other prior value and the full migrated row on reapply.
-        assert len(before) == len(after)
-        assert [{**dict(row), "baseline_model": None} for row in before] == [
-            {key: new[key] for key in old.keys()} for old, new in zip(before, after)]
+        # CORE-2 clears old baselines; ONE-DOOR seeds the authorized Base/Zenas
+        # starting routes once. Every unrelated field/row still survives, and
+        # reapplication must preserve the entire migrated policy exactly.
+        seeded = {"base.extract", "base.business_data", "agent.base.think",
+                  "zenas.scope", "zenas.rule_card", "zenas.case_facts", "zenas.apply",
+                  "zenas.compose", "zenas.plain_language", "zenas.draft", "zenas.review", "zenas.selftest"}
+        current = {(row["task_type"], row["tenant_id"]): row for row in after}
+        assert set(current) == {(r["task_type"], r["tenant_id"]) for r in before} | {("base.normalize", None)}
+        for old in before:
+            new = current[old["task_type"], old["tenant_id"]]
+            changed = {"baseline_model"}
+            if old["tenant_id"] is None and old["task_type"] in seeded:
+                changed |= {"model", "rung", "cache_scope", "semantic_cache", "batch_eligible", "updated_at"}
+                assert new["rung"] == (1 if old["task_type"].startswith("zenas.") else 3)
+            assert new["baseline_model"] is None
+            assert {k: old[k] for k in old.keys() if k not in changed} == {
+                k: new[k] for k in old.keys() if k not in changed}
         assert migrated == after
         assert all(row["moa_enabled"] is False and json.loads(row["moa_config"]) == {} for row in after)
         rows = await conn.fetch("SELECT outcome_type,unit_price FROM tank.price_book WHERE tenant_id=$1 AND outcome_type LIKE 'perplexity.%'", main.PLATFORM_TENANT)
