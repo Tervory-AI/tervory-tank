@@ -1,7 +1,6 @@
 """Autumbra consumes Market Lab IOC bundles — no Autumbra-owned feed registry."""
 import pytest
 
-import json
 
 from agents.ghost.client_settings import ClientAutumbraSettings
 from agents.ghost.enforce_apply import apply_from_payload
