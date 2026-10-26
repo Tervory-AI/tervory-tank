@@ -692,7 +692,7 @@ async def _startup() -> None:
             "WHERE status IN ('queued','running') AND task_type <> 'base.enrich'"
         )
     global _http, _packages
-    _http = httpx.AsyncClient(headers={"User-Agent": "TervoryBase/0.1 (+https://tervory.com)"}, timeout=15, event_hooks={"request": [__import__("controls").paid_host_hook], "response": [__import__("controls").paid_response_hook]})
+    _http = httpx.AsyncClient(headers={"User-Agent": "Tervory/1.0 (+https://tervory.com)"}, timeout=15, event_hooks={"request": [__import__("controls").paid_host_hook], "response": [__import__("controls").paid_response_hook]})
     global _redis
     try:
         _redis = aioredis.from_url(REDIS_URL, decode_responses=True, socket_connect_timeout=2)

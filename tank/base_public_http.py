@@ -19,7 +19,7 @@ from base_evidence import observations, observe
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 # Match the existing Base browser identity, including its version and contact.
-USER_AGENT = "TervoryBase/1.0 (+https://tervory.com)"
+USER_AGENT = "Tervory/1.0 (+https://tervory.com)"
 HOST_INTERVAL = 3.0
 BROWSER_RENDER = "http://base-browser-gateway:3000/render"
 _records: ContextVar[list[dict[str, str]] | None] = ContextVar("base_public_blocks", default=None)

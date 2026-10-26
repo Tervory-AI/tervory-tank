@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 
 from .atf_gold import Links, LISTING, MAX_BYTES, licence_id
 
-USER_AGENT = "TervoryBase/1.0 (+https://tervory.com)"
+USER_AGENT = "Tervory/1.0 (+https://tervory.com)"
 STATES = "AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY".split()
 TYPES = {"01", "02", "03", "06", "07", "08", "09", "10", "11"}
 _lock = asyncio.Lock()
