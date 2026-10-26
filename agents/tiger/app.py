@@ -35,7 +35,7 @@ AGENT = os.environ.get("AGENT_NAME", "tiger")
 TIGER_URL = os.environ.get("TIGER_URL", "http://tiger:3000")
 HEARTBEAT_TENANT = "00000000-0000-0000-0000-000000000001"
 INTERVAL_S = float(os.environ.get("DOMAIN_INTERVAL_S", "10"))
-ROBOTS_UA = "TervoryTiger/0.1 (+https://tervory.com)"
+ROBOTS_UA = "Tervory/1.0 (+https://tervory.com)"
 
 log = logging.getLogger("agent")
 _limiter = DomainLimiter(INTERVAL_S)
@@ -67,7 +67,8 @@ async def _render(url: str, session: str, agent: str, tenant: str, task: str = "
         timeout=50,
     )
     if response.status_code >= 400:
-        return {"ok": False, "challenge": False, "error": f"browser answered {response.status_code}"}
+        return {"ok": False, "url": url, "challenge": response.status_code in {401, 403, 429},
+                "error": f"browser answered {response.status_code}"}
     data = response.json()
     if not isinstance(data, dict):
         return {"ok": False, "challenge": False, "error": "browser answer was not an object"}

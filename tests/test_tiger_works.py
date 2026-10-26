@@ -59,8 +59,7 @@ async def test_agent_requests_markup_and_preserves_tenant(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("failure", ["miss", "http", "timeout", "json", "shape"])
-@pytest.mark.parametrize("robots_allowed", [True, False])
-async def test_failed_or_missing_feed_falls_through_but_respects_robots(monkeypatch, failure, robots_allowed):
+async def test_failed_or_missing_feed_reads_public_page_without_robots_gate(monkeypatch, failure):
     calls = []
     async def answer(request):
         if failure == "timeout":
@@ -74,15 +73,14 @@ async def test_failed_or_missing_feed_falls_through_but_respects_robots(monkeypa
         calls.append(args)
         return {"ok": True, "html": saved_page()}
     async def robots(url):
-        return "User-agent: *\n" + ("Allow: /" if robots_allowed else "Disallow: /")
+        raise AssertionError("Public reads must not fetch robots.txt")
     async with httpx.AsyncClient(transport=httpx.MockTransport(answer)) as client:
         monkeypatch.setattr(tiger.app.state, "http", client, raising=False)
         result = await run_check(MemoryStore(), TENANT_A, {**_watch(), "url": URL}, "tiger", render,
                                  extract, no_paid_call, robots, DomainLimiter(0), feed=tiger.official_feed)
-    assert result["status"] == ("observed" if robots_allowed else "robots")
-    assert len(calls) == int(robots_allowed)
-    if robots_allowed:
-        assert result["price"] == "120.00"
+    assert result["status"] == "observed"
+    assert len(calls) == 1
+    assert result["price"] == "120.00"
 
 
 @pytest.mark.asyncio

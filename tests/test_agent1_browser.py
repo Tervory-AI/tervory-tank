@@ -16,18 +16,19 @@ from brain import robots
 @pytest.fixture
 def visitor(monkeypatch, tmp_path):
     h=SimpleNamespace(started=[], gate=asyncio.Event(), html='<p>Public business page</p>',
-                      redirect=None, aborted=0, continued=0, scrolls=0, robots_text="User-agent: *\nAllow: /", robots_calls=[])
+                      redirect=None, status=200, aborted=0, continued=0, scrolls=0, robots_text="User-agent: *\nAllow: /", robots_calls=[], request_options=[])
     key=uuid.uuid4().hex
     monkeypatch.setenv('TANK_KEY',key)
     monkeypatch.setenv('BROWSER_DATA_DIR',str(tmp_path))
     monkeypatch.setenv('TANK_REGION','us-east')
     monkeypatch.setattr(browser,'site_locks',{})
     monkeypatch.setattr(robots, 'cache', {})
+    monkeypatch.setattr(robots, 'stopped_hosts', set())
     monkeypatch.setattr(browser,'last_visit',{})
     monkeypatch.setattr(browser,'concurrency',asyncio.Semaphore(4))
     class Page:
-        def __init__(self,context): self.context=context
-        def on(self,*args): pass
+        def __init__(self,context): self.context=context; self.handlers={}
+        def on(self,event,handler): self.handlers[event]=handler
         async def goto(self,url,**kwargs):
             self.url=url;h.started.append(url)
             if h.redirect:
@@ -37,8 +38,12 @@ def visitor(monkeypatch, tmp_path):
                     async def continue_(self): h.continued+=1
                     async def fallback(self): h.continued+=1
                 await self.context.handler(Route())
+                if h.continued:
+                    self.url=h.redirect
             await h.gate.wait()
-            return SimpleNamespace(status=200)
+            response=SimpleNamespace(status=h.status,url=self.url,headers={},request=SimpleNamespace(resource_type='document'))
+            if 'response' in self.handlers: self.handlers['response'](response)
+            return response
         async def content(self): return h.html
         async def evaluate(self,*args):
             if "({width: Math.max" in args[0]:
@@ -58,15 +63,16 @@ def visitor(monkeypatch, tmp_path):
     class Request:
         async def get(self, url, **kwargs):
             h.robots_calls.append(url)
+            h.request_options.append(kwargs)
             async def body(): return h.robots_text.encode()
-            return SimpleNamespace(status=200, headers={}, body=body)
+            return SimpleNamespace(status=h.status, headers={}, body=body)
     class Context:
         request = Request()
-        async def route(self,pattern,handler): self.handler=handler
+        async def route(self,pattern,handler): self.handler=handler; h.request_handler=handler
         async def new_page(self): return Page(self)
         async def storage_state(self,**kwargs): pass
     class Browser:
-        async def new_context(self,**kwargs): return Context()
+        async def new_context(self,**kwargs): h.context_options=kwargs; return Context()
         async def close(self): pass
     async def launch(**kwargs): return Browser()
     @asynccontextmanager
@@ -76,8 +82,8 @@ def visitor(monkeypatch, tmp_path):
     monkeypatch.setitem(sys.modules,'playwright',package)
     monkeypatch.setitem(sys.modules,'playwright.async_api',api)
     tenant=str(uuid.uuid4())
-    async def visit(url):
-        return await browser.render(browser.Page(url=url),key,tenant,'us-east',str(uuid.uuid4()))
+    async def visit(url, *, task=None, tenant_id=None):
+        return await browser.render(browser.Page(url=url),key,tenant_id or tenant,'us-east',task or str(uuid.uuid4()))
     h.visit=visit
     return h
 

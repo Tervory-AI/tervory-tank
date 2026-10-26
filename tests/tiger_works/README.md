@@ -52,31 +52,32 @@ checks watch/history/alert reads, cross-tenant deletion, conflicting body/query
 tenant IDs, and rejection without the Workspace key. `MemoryStore` replaces only
 the database; the deterministic reader and route implementations are real.
 
-## Founder must decide: revised public-page policy
+## Public-page policy
 
-The founder's update on 26 October defines a public page as one a person can open
-without signing in or paying, with robots.txt advisory. It requires one truthful
-Tervory user agent, host rate limiting, a site stop on CAPTCHA/403/block, and
-continuation only through the client's own connection after the client acts.
-This supersedes the original brief's robots policy. **That revised workflow is not
-implemented by the HTML fix or demonstrated by these fixture screenshots.**
+The founder explicitly extended the lane on 26 October to implement these three
+changes in the shared browser program, run in each room's own container:
 
-The unchanged file restriction permits `agents/_brain/browser.py` edits only to
-the HTML return path. The remaining dependencies are outside that permitted path:
+- Public HTML and PDF reads do not request or enforce robots.txt. URL/DNS safety,
+  access controls and existing per-host throttling remain in place. Removing the
+  robots gate does not permit signing in or opening a paywall through public reads.
+- Browser contexts and direct document requests use
+  `Tervory/1.0 (+https://tervory.com)`.
+- CAPTCHA, HTTP 403 and other refusals stop automated requests to that host for
+  the run. The stop is keyed by room, tenant and task ID, covers redirects and
+  queued/subresource requests, and returns `blocked` with the URL. Tiger stores a
+  blocked observation without a price or alert. The browser never ticks a CAPTCHA.
 
-- The shared browser enforces `require_allowed` before navigation and on routed
-  requests, including PDF reads; its policy lives in `agents/_brain/robots.py`.
-  Removing only the watch-level robots check would still leave public reads blocked.
-- The browser uses `TervoryBase/1.0`; Tiger's robots request uses
-  `TervoryTiger/0.1`. A single identity needs the browser request setup changed.
-- In `watch.py`, `client_connection` is only the source label on a `portal_item`
-  receipt. The existing human handoff controls a held server browser session;
-  it does not run through the client's own network connection. There is no client
-  connection transport here to wire into a persistent per-site stop/resume flow.
+`tests/test_tiger_public_policy.py` covers these changes, including isolation of
+stops between rooms, tenants and tasks, private-target rejection, and the absence
+of raw HTML in ordinary/model results. An omitted task ID shares the room/tenant's
+unscoped run. Stop state lives in that browser process; no persistent site-wide
+pause or client-session transport is introduced. Existing `ACCESS_ROOM` policy and
+client handoff code are retained.
 
-The browser/access owner must supply that scoped public policy and genuine client
-connection contract, or the lane must be expanded to implement them. No robot
-policy bypass, automatic CAPTCHA action, anonymous retry around a block, or
-stand-in client connection has been added. The existing implementation remains
-unchanged pending that dependency; this draft must not be treated as completing
-the revised public-page policy.
+## Founder must decide: client's own session
+
+The founder explicitly excluded the client's-own-session path from this brief.
+`client_connection` remains the source label on an existing `portal_item` receipt
+in `watch.py`. Implementing a genuine client-network/session transport is a
+separate decision; this change does not claim or simulate that path. Claude's
+signed-in live proof remains a step after the founder deploys the branch.

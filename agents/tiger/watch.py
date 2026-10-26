@@ -953,18 +953,11 @@ async def run_check(
         if official.get("found") is not False:
             raise ValueError("Official feed did not confirm whether the product exists.")
     host = host_of(url)
-    await limiter.wait(host)
-    try:
-        robots = await fetch_text(robots_url_for(url))
-    except Exception:  # noqa: BLE001 — a missing robots file does not block the page
-        robots = ""
-    if robots and not robots_allows(str(robots), url):
-        row = await store.add_observation(_obs(tenant_id, url, clock(), None, None, None, "robots", "robots"))
-        return {"status": "robots", "url": url, "alerts": [], "observation": row}
-
+    # Public reads do not fetch or enforce robots.txt. The browser keeps the
+    # access boundary and stops blocked hosts for the room/tenant/task run.
     await limiter.wait(host)
     page = await render(url, session_for_url(url), agent, str(tenant_id))
-    if page.get("challenge"):
+    if page.get("challenge") or page.get("blocked_by_check") or page.get("status") in {401, 403, 429}:
         row = await store.add_observation(_obs(tenant_id, url, clock(), None, None, None, "blocked", "blocked"))
         return {"status": "blocked", "url": url, "alerts": [], "observation": row}
     if page.get("portal_item"):
