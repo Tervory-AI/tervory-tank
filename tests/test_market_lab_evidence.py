@@ -38,9 +38,9 @@ async def test_every_public_feed_has_rows_but_fixtures_never_appear_in_the_clien
     by_source = {row["source_id"]: row for row in result["feeds"]}
     assert all(by_source[source]["rows"] > 0 for source in plan()["feeds"])
     assert all(by_source[source]["rows"] == 0 for source in plan()["linked_pages"])
-    assert (await overview(ledger, OWNER))["on_count"] == 0
-    assert (await overview(ledger, OWNER, fixtures=True))["on_count"] == len(plan()["feeds"])
-    assert (await overview(ledger, OTHER, fixtures=True))["on_count"] == 0
+    assert (await overview(ledger, OWNER, "ffl"))["on_count"] == 0
+    assert (await overview(ledger, OWNER, "ffl", fixtures=True))["on_count"] == len(plan()["feeds"])
+    assert (await overview(ledger, OTHER, "ffl", fixtures=True))["on_count"] == 0
     assert await document(ledger, OTHER, by_source["check_counts"]["document_id"], fixtures=True) is None
     assert await document(ledger, OWNER, by_source["check_counts"]["document_id"]) is None
 
@@ -80,7 +80,7 @@ async def test_failed_last_run_turns_off_without_destroying_old_documents():
     old = await document(ledger, OWNER, check["document_id"], fixtures=True)
     await save_check(ledger, OWNER, {"source_id": "check_counts", "points": [], "events": [], "fixture": True,
                                    "note": "Off, source could not be read"}, at=datetime.now(timezone.utc))
-    assert (await overview(ledger, OWNER, fixtures=True))["on_count"] == 0
+    assert (await overview(ledger, OWNER, "ffl", fixtures=True))["on_count"] == 0
     assert not (await answer(ledger, OWNER, "check counts", fixtures=True))["facts"]
     assert await document(ledger, OWNER, check["document_id"], fixtures=True) == old
 
@@ -164,7 +164,7 @@ async def test_live_adapter_interface_stores_saved_notices_with_download_identit
             return (FIXTURES / "noaa/alerts.json").read_text()
     ledger = MemoryLedger()
     await perform_refresh(tenant_id=OWNER, engine="ffl", source="noaa_alerts", ledger=ledger, live=True, client=SavedClient())
-    data = await overview(ledger, OWNER)
+    data = await overview(ledger, OWNER, "ffl")
     assert data["on_count"] == 1
     check = next(feed for feed in data["feeds"] if feed["id"] == "noaa_alerts")
     saved = await document(ledger, OWNER, check["document_id"])

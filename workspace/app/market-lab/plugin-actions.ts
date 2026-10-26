@@ -11,8 +11,10 @@ import {
   removeVaultSecret,
   saveVaultSecret,
   uploadVaultFiles,
-  VAULT_OFF_MESSAGE,
+  VAULT_OFF_MESSAGE as SERVER_VAULT_OFF_MESSAGE,
 } from "@/lib/tank";
+
+import { VAULT_OFF_MESSAGE } from "./plugins";
 
 const VAULT = "lab.vault";
 const SQUAD = "market_lab";
@@ -27,7 +29,7 @@ async function actor() {
 
 function safe(error: unknown, fallback: string): string {
   const text = error instanceof Error ? error.message : "";
-  if (text.includes(VAULT_OFF_MESSAGE)) return VAULT_OFF_MESSAGE;
+  if (text.includes(SERVER_VAULT_OFF_MESSAGE)) return VAULT_OFF_MESSAGE;
   if (text.includes("Only CSV, XLSX, and PDF")) return "Only CSV, XLSX, and PDF files can be uploaded.";
   if (text.includes("Sign in")) return "Sign in to change Plugins.";
   return fallback;
@@ -110,7 +112,7 @@ export async function removeLabLink(linkId: string): Promise<PluginResult> {
 export async function addLabConnection(name: string, serverUrl: string, authType: string, token: string): Promise<PluginResult> {
   const tenant = await actor();
   if (!tenant) return { ok: false, message: "Sign in to change Plugins." };
-  if (!name.trim() || !serverUrl.trim()) return { ok: false, message: "Add a name and a server URL first. Nothing was saved." };
+  if (!name.trim() || !serverUrl.trim()) return { ok: false, message: "Add a name and a server address first. Nothing was saved." };
   try {
     await addVaultConnection(VAULT, SQUAD, tenant.tenantId, tenant.userId, name, serverUrl, authType, token);
     return done("Saved. A token is hidden and will not be shown again.");

@@ -54,7 +54,7 @@ async def fixture_operation(operation: str, body: RequestBody, x_tank_key: str =
     async with ledger_context() as ledger:
         tenant = str(body.tenant_id)
         if operation == "overview":
-            return {**await overview(ledger, tenant, fixtures=True), "refresh_status": "done"}
+            return {**await overview(ledger, tenant, "ffl", fixtures=True), "refresh_status": "done"}
         if operation == "ask":
             if not body.question.strip():
                 raise HTTPException(422, "A question is required")

@@ -347,7 +347,7 @@ function PluginsDialog({
         <div className="ml-plugins-head">
           <div>
             <h2 id={titleId}>{POPUP_TITLE}</h2>
-            <p>Everything Market Lab reads from. Add a key, upload a file, paste a link, or connect a tool.</p>
+            <p>Manage saved keys, files, links and connections. Answers on this page use the public feeds shown below.</p>
           </div>
           <button className="ml-text" type="button" onClick={onClose}>
             Close
@@ -373,9 +373,9 @@ function PluginsDialog({
         {note ? <p className="ml-status">{note}</p> : null}
         {!plugins.enabled ? (
           <p className="ml-lead">{plugins.message || VAULT_OFF_MESSAGE}</p>
-        ) : tab === "API keys" ? (
+        ) : tab === "Access keys" ? (
           <div className="ml-tab-body">
-            <p className="ml-lead">Keys for public feeds and your suppliers. A key is write-only: once saved it is never shown again.</p>
+            <p className="ml-lead">Keys supplied by public data providers and your suppliers. Once saved, a key is hidden and cannot be read back.</p>
             <div className="ml-plist">
               {feedKeyCatalog().map((row) => {
                 const saved = secretFor(plugins.secrets, row.name);
@@ -387,12 +387,12 @@ function PluginsDialog({
                       <h3>{row.title}</h3>
                       <span className={connected ? "ml-chip" : "ml-chip ml-chip-off"}>
                         <span className="ml-dot" aria-hidden="true" />
-                        {connected ? "Connected" : "Not set"}
+                        {connected ? "Key provided" : "Not set"}
                       </span>
                     </div>
                     <p>{row.summary}</p>
                     {saved ? <p className="ml-secret">{saved.mask} Saved {saved.savedAt ? formatDay(saved.savedAt) : ""}</p> : null}
-                    {fromEnv ? <p className="ml-secret">set in the environment</p> : null}
+                    {fromEnv ? <p className="ml-secret">Provided by your workspace administrator</p> : null}
                     <div className="ml-keyline">
                       <label className="ml-sr" htmlFor={`key-${row.name}`}>
                         {row.title} key
@@ -446,7 +446,7 @@ function PluginsDialog({
               }}
             >
               <h3>Add a supplier key</h3>
-              <p>For a supplier that gives you an API key.</p>
+              <p>For a supplier that gives you an access key.</p>
               <div className="ml-keyline">
                 <label>
                   Supplier name
@@ -461,7 +461,7 @@ function PluginsDialog({
                 </button>
               </div>
             </form>
-            <p className="ml-fine">Keys are stored on the server, never in the app code.</p>
+            <p className="ml-fine">Saved keys are hidden and cannot be read back.</p>
           </div>
         ) : tab === "Files" ? (
           <div className="ml-tab-body">
@@ -549,8 +549,8 @@ function PluginsDialog({
           </div>
         ) : (
           <div className="ml-tab-body">
-            <h3 className="ml-subhead">MCP connections</h3>
-            <p className="ml-lead">Connections to outside tools and data servers that Market Lab can read from.</p>
+            <h3 className="ml-subhead">Connections</h3>
+            <p className="ml-lead">Save connection details for outside tools and data sources.</p>
             {plugins.connections.length ? (
               <div className="ml-plist">
                 {plugins.connections.map((item) => (
@@ -568,7 +568,7 @@ function PluginsDialog({
                   <input name="connection-name" type="text" placeholder="e.g. Supplier catalogue" disabled={busy} />
                 </label>
                 <label>
-                  Server URL
+                  Server address
                   <input name="server" type="url" placeholder="https://…" disabled={busy} />
                 </label>
               </div>
@@ -621,7 +621,7 @@ export function MarketLabView({
   const [menu, setMenu] = useState(false);
   const [active, setActive] = useState("overview");
   const [pluginsOpen, setPluginsOpen] = useState(false);
-  const [tab, setTab] = useState<PluginTab>("API keys");
+  const [tab, setTab] = useState<PluginTab>("Access keys");
   const [query, setQuery] = useState("");
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const searchId = useId();
@@ -662,8 +662,9 @@ export function MarketLabView({
   const groups = model.groups
     .map((group) => ({ ...group, pages: group.pages.filter((page) => scope.linkIds.includes(page.id)) }))
     .filter((group) => group.pages.length > 0);
+  const offFeeds = model.off.filter((feed) => scope.offIds.includes(feed.id));
   const searching = query.trim().length > 0;
-  const noHits = searching && onCards.length === 0 && groups.length === 0;
+  const noHits = searching && onCards.length === 0 && offFeeds.length === 0 && groups.length === 0;
   const accountName = workspaceName?.trim() || "Your account";
 
   function openSection(id: string) {
@@ -727,7 +728,7 @@ export function MarketLabView({
               type="button"
               onClick={() => openSection("quarantine")}
             >
-              Quarantine
+              Feed review
             </button>
           ) : null}
         </nav>
@@ -761,7 +762,7 @@ export function MarketLabView({
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search feeds, signals, files, links, predictions"
+                placeholder="Search feeds and linked pages"
               />
             </div>
           </header>
@@ -792,7 +793,7 @@ export function MarketLabView({
             {model.onEmpty && !searching ? (
               <div className="ml-note">
                 <h3>No feed data yet</h3>
-                <p>The feeds have not run yet. Their data shows here after the first refresh.</p>
+                <p>No observations are stored from the latest refresh. Choose Refresh feeds to collect data.</p>
               </div>
             ) : onCards.length ? (
               <div className="ml-grid">
@@ -802,15 +803,15 @@ export function MarketLabView({
               </div>
             ) : null}
           </section>
-          {model.off.length ? <section className="ml-section" aria-label="Off feeds">
+          {offFeeds.length ? <section className="ml-section" aria-label="Off feeds">
             <h2>Off</h2>
-            <div className="ml-grid">{model.off.map((feed) => <article className="ml-card" key={feed.id}>
+            <div className="ml-grid">{offFeeds.map((feed) => <article className="ml-card" key={feed.id}>
               <h3>{feed.title}</h3><p>{feed.reason}</p>
             </article>)}</div>
           </section> : null}
           <section id="linked" className="ml-section">
             <h2>Linked pages</h2>
-            <p className="ml-lead">Other pages that use these feeds.</p>
+            <p className="ml-lead">Open these sources on their publishers’ websites. Their figures are not included in answers from stored feeds.</p>
             <div className="ml-links">
               {groups.map((group) => (
                 <GroupCard
@@ -855,7 +856,7 @@ function isFeedKey(name: string): boolean {
 }
 
 function FileRow({ file, busy, onRemove }: { file: FileMeta; busy: boolean; onRemove: () => void }) {
-  const count = file.rows != null ? `${file.rows} rows` : file.pages != null ? `${file.pages} pages` : "";
+  const count = file.rows != null ? `${file.rows} ${file.rows === 1 ? "row" : "rows"}` : file.pages != null ? `${file.pages} ${file.pages === 1 ? "page" : "pages"}` : "";
   return (
     <div className="ml-prow">
       <h3>{file.name}</h3>
@@ -894,7 +895,7 @@ function GroupCard({ group, open, onToggle }: { group: LinkGroupView; open: bool
       <h3>{group.title}</h3>
       <p>{group.lead}</p>
       <button className="ml-expand" type="button" onClick={onToggle} aria-expanded={open}>
-        Open page →
+        {open ? "Hide links" : "Show links"}
       </button>
       {open ? (
         <ul>

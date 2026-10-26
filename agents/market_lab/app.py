@@ -17,7 +17,7 @@ from core.jobs import (
     perform_resolve,
 )
 from core.ledger import PostgresLedger
-from engines.ffl.engine import schedules as case_schedules
+from engines.ffl.engine import schedules as case_schedules, plan as case_plan
 
 AGENT = os.environ.get("AGENT_NAME", "market_lab")
 HEARTBEAT_TENANT = "00000000-0000-0000-0000-000000000001"
@@ -267,4 +267,4 @@ async def quarantine_remove(batch_id: str, x_tank_key: str = Header(default=""))
 
 from core.http import build_router as market_router
 
-app.include_router(market_router(key_ok=_room_key_ok, ledger_context=_ledger))
+app.include_router(market_router(key_ok=_room_key_ok, ledger_context=_ledger, engine=case_plan()["engine"]))

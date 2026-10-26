@@ -69,7 +69,7 @@ def test_page_does_not_invent_numbers_or_store_keys():
     assert "Nothing was stored" in text
     assert "Nothing was saved" in text
     assert "•••• saved" not in text
-    assert "set in the environment" in text
+    assert "Provided by your workspace administrator" in text
     assert 'type="password"' in text
     assert "console." not in text
     readers = (PAGE / "load.ts").read_text(encoding="utf-8") + (PAGE / "page.tsx").read_text(encoding="utf-8")
@@ -110,7 +110,7 @@ def test_page_does_not_invent_numbers_or_store_keys():
     for old in ("Chat", "Tasks", "Data", "Ledger", "Skills", "Tank"):
         assert f'label: "{old}"' not in view
     plugins = (PAGE / "plugins.ts").read_text(encoding="utf-8")
-    assert "This vault is off. Turn it on in Tank." in plugins
+    assert "Plugins are not available yet. Ask your workspace administrator to enable them." in plugins
     for name in ("vault-server.ts", "plugin-actions.ts"):
         server = (PAGE / name).read_text(encoding="utf-8")
         assert 'const VAULT = "lab.vault"' in server

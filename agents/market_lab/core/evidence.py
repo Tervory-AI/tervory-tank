@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import re
 import uuid
+from collections import Counter
 from datetime import datetime
 from typing import Any
 from decimal import Decimal
@@ -11,6 +12,7 @@ from decimal import Decimal
 from feeds.catalog import sources
 from feeds.keys import bind_key, missing_key
 from feeds.geo import area_label, mentioned_states, state_for_area
+from feeds.presentation import observation_label, unit_label
 
 
 def _decode(value: Any) -> Any:
@@ -92,18 +94,33 @@ async def usable_points(ledger: Any, tenant_id: str, doc: dict) -> list[tuple[in
     return [(index, point) for index, point in enumerate(doc["points"]) if point["batch_id"] in allowed]
 
 
+def current_revisions(points: list[dict]) -> dict[tuple[str, str], int]:
+    """Collection order preserves versions, including a return to an old value."""
+    return {(point["series_id"], point["date"]): index for index, point in enumerate(points)}
+
+
 async def document_page(ledger: Any, tenant_id: str, document_id: str, offset: int = 0, *, fixtures: bool = False) -> dict | None:
     doc = await document(ledger, tenant_id, document_id, fixtures=fixtures)
     if doc is None:
         return None
     active = {index for index, _ in await usable_points(ledger, tenant_id, doc)}
+    current = current_revisions(doc["points"])
+    counts = Counter((p["series_id"], p["date"]) for p in doc["points"])
+    def shown(index: int, point: dict) -> dict:
+        key = (point["series_id"], point["date"])
+        label = "Current figure" if current[key] == index else "Earlier figure"
+        return {**point, "geo_name": area_label(point["geo"], point["geo_level"], point["title"]),
+                "display_title": observation_label(point),
+                "unit_label": unit_label(point["value"], point["unit"]), "withdrawn": index not in active,
+                "revision_label": (f'{label} ({point["revision"]})' if point["revision"] else label) if counts[key] > 1 else ""}
     return {**doc, "offset": offset, "point_count": len(doc["points"]), "event_count": len(doc["events"]),
-            "points": [{**point, "geo_name": area_label(point["geo"], point["geo_level"], point["title"]),
-                        "withdrawn": index not in active} for index, point in enumerate(doc["points"])
+            "points": [shown(index, point) for index, point in enumerate(doc["points"])
                        if offset <= index < offset + 200], "events": doc["events"][offset:offset + 200]}
 
 
-async def overview(ledger: Any, tenant_id: str, engine: str = "ffl", *, fixtures: bool = False) -> dict:
+async def overview(ledger: Any, tenant_id: str, engine: str | None = None, *, fixtures: bool = False) -> dict:
+    if not engine:
+        raise ValueError("A feed plan is required")
     checks = {row["source_id"]: row for row in await latest_checks(ledger, tenant_id, fixtures=fixtures)}
     feeds = []
     for source in sources(engine):
@@ -136,7 +153,10 @@ async def answer(ledger: Any, tenant_id: str, question: str, *, fixtures: bool =
         if not doc:
             continue
         latest = {}
+        current = current_revisions(doc["points"])
         for index, point in await usable_points(ledger, tenant_id, doc):
+            if current[(point["series_id"], point["date"])] != index:
+                continue
             if states and state_for_area(point["geo"]) not in states:
                 continue
             if years and point["date"][:4] not in years:
@@ -150,7 +170,7 @@ async def answer(ledger: Any, tenant_id: str, question: str, *, fixtures: bool =
             if not score:
                 continue
             value = format(Decimal(str(point["value"])), ",f").rstrip("0").rstrip(".") if "." in str(point["value"]) else format(Decimal(str(point["value"])), ",f")
-            text = f'{point["title"]}: {value} {point["unit"]} ({point["date"]}).'
+            text = f'{observation_label(point)}: {value} {unit_label(point["value"], point["unit"])} ({point["date"]}).'
             ranked.append((score, point["date"], {"text": text, "href": f'/market-lab/sources/{doc["id"]}?row={index}#point-{index}', "name": doc["name"]}))
         for index, event in enumerate(doc["events"]):
             if states and state_for_area(event["geo"]) not in states:
@@ -164,4 +184,4 @@ async def answer(ledger: Any, tenant_id: str, question: str, *, fixtures: bool =
                 ranked.append((score, event["date"], {"text": f'{event["title"]} ({event["date"]}).', "href": f'/market-lab/sources/{doc["id"]}?row={index}#event-{index}', "name": doc["name"]}))
     ranked.sort(key=lambda row: (row[0], row[1]), reverse=True)
     facts = [row[2] for row in ranked[:5]]
-    return {"content": "Here is what the stored sources show. These observations do not establish a cause or a forecast." if facts else "No stored evidence answers that question yet. Refresh the feeds or ask about a feed shown below.", "facts": facts, "sources": [{"name": fact["name"], "href": fact["href"]} for fact in facts]}
+    return {"content": "Here is what the saved sources show. These figures do not explain why something happened or predict what comes next." if facts else "No saved source answers that question yet. Refresh the feeds or ask about a feed shown below.", "facts": facts, "sources": [{"name": fact["name"], "href": fact["href"]} for fact in facts]}

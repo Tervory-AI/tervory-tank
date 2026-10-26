@@ -199,3 +199,17 @@ test("key flags are booleans and secret text is stripped before it can leave the
   assert.equal(clean.headline.includes("example-key"), false);
   assert.equal(clean.note.includes("example-key"), false);
 });
+
+test("plugin errors and statuses use client words", () => {
+  const unavailable = mapVaultPayload({ enabled: false, message: "This vault is off. Turn it on in Tank." });
+  assert.equal(unavailable.message, "Plugins are not available yet. Ask your workspace administrator to enable them.");
+  const panel = mapVaultPayload({
+    enabled: true,
+    files: [{ id: "file", name: "inventory.csv", status: "ready" }],
+    links: [{ id: "link", url: "https://example.com", status: "not_checked" }],
+    connections: [{ id: "connection", name: "Supplier", status: "needs_auth" }],
+  });
+  assert.equal(panel.files[0].status, "Saved");
+  assert.equal(panel.links[0].status, "Not checked yet");
+  assert.equal(panel.connections[0].status, "Sign-in needed");
+});

@@ -77,15 +77,21 @@ def state_for_area(area: str) -> str | None:
 def area_label(area: str, level: str, title: str) -> str:
     """Readable location without changing the stored geographic identifier."""
     if level == "county":
-        # Census population titles retain the publisher's complete NAME field.
-        if title.startswith("Population, "):
-            return title.removeprefix("Population, ")
+        if area == "unmatched":
+            return "County could not be matched"
+        # Both county-producing adapters retain the publisher's place name.
+        for prefix in ("Population, ", "Active listings in "):
+            if title.startswith(prefix):
+                name = title.removeprefix(prefix).strip()
+                code = state_for_area(area)
+                state = _STATE_NAMES.get(code, "")
+                return f"{name}, {state}" if state and state not in name else name
         return "County not named in source"
     if level == "state":
         code = state_for_area(area)
         return _STATE_NAMES[code] if code else "State not named in source"
     if area.upper() in {"US", "USA"}:
         return "United States"
-    if area.upper() in {"WORLD", "GLOBAL"}:
+    if area.upper() in {"WORLD", "GLOBAL", "WLD"}:
         return "Worldwide"
     return area if area and not area.isdigit() else "Place not named in source"

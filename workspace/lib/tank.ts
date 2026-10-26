@@ -1026,7 +1026,7 @@ export type MarketDocument = {
   offset: number; point_count: number; event_count: number;
   id: string; name: string; fetched_at: string; licence: string; terms_checked_at: string;
   downloads: { url: string; sha256: string }[];
-  points: { title: string; geo: string; geo_name: string; date: string; value: string; unit: string; revision: string; withdrawn?: boolean }[];
+  points: { title: string; display_title: string; geo: string; geo_name: string; date: string; value: string; unit: string; unit_label: string; revision: string; revision_label: string; withdrawn?: boolean }[];
   events: { title: string; body: string; date: string; url: string; kind: string }[];
 };
 export async function marketLabRequest<T>(

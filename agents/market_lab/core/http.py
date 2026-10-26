@@ -1,4 +1,5 @@
 """Private room interface used only by the authenticated Tank proxy."""
+import json
 from uuid import UUID
 
 from fastapi import APIRouter, Header, HTTPException
@@ -15,7 +16,7 @@ class RequestBody(BaseModel):
     offset: int = Field(default=0, ge=0, le=10000000)
 
 
-def build_router(*, key_ok, ledger_context):
+def build_router(*, key_ok, ledger_context, engine: str | None = None):
     router = APIRouter()
 
     @router.post("/market/{operation}")
@@ -24,6 +25,8 @@ def build_router(*, key_ok, ledger_context):
             raise HTTPException(401, "Room key required")
         if operation not in {"overview", "ask", "document", "refresh"}:
             raise HTTPException(404, "Not found")
+        if operation in {"overview", "refresh"} and not engine:
+            raise HTTPException(503, "Market Lab's feeds have not been configured.")
         try:
             async with ledger_context() as ledger:
                 tenant = str(body.tenant_id)
@@ -48,10 +51,10 @@ def build_router(*, key_ok, ledger_context):
                         if existing is None:
                             await ledger.conn.execute("""
                                 INSERT INTO agent_market_lab.jobs (tenant_id, kind, input, status, run_at, timeout_s)
-                                VALUES ($1, 'refresh', '{"engine":"ffl"}'::jsonb, 'queued', now(), 86400)
-                            """, body.tenant_id)
+                                VALUES ($1, 'refresh', $2::jsonb, 'queued', now(), 86400)
+                            """, body.tenant_id, json.dumps({"engine": engine}))
                     return {"status": "queued"}
-                result = await overview(ledger, tenant)
+                result = await overview(ledger, tenant, engine)
                 status = await ledger.conn.fetchval("""
                     SELECT status FROM agent_market_lab.jobs WHERE tenant_id = $1 AND kind = 'refresh'
                     ORDER BY created_at DESC LIMIT 1

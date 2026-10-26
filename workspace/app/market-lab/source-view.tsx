@@ -11,10 +11,13 @@ export function SourceDocumentView({ source }: { source: MarketDocument }) {
     <p>{source.licence}</p>
     {source.downloads.length ? <><h2>Source downloads</h2>
     <ul>{source.downloads.map((download, index) => <li key={`${download.url}-${index}`}><a href={download.url} rel="noreferrer" target="_blank">{download.url}</a></li>)}</ul></> : null}
-    {source.points.length ? <><h2>Stored observations</h2><div className="ml-source-table" role="region" aria-label="Stored observations" tabIndex={0}><table>
+    {source.points.length ? <><h2>Stored observations</h2>
+    {source.points.some((point) => point.revision_label) ? <p>For each date, Current figure is the latest version in this saved document. Earlier figures are labelled with the source’s version.</p> : null}
+    <div className="ml-source-table" role="region" aria-label="Stored observations" tabIndex={0}><table>
       <thead><tr><th scope="col">Observation</th><th scope="col">Area</th><th scope="col">Date</th><th scope="col">Value</th><th scope="col">Unit</th></tr></thead>
       <tbody>{source.points.map((point, index) => <tr id={`point-${index + source.offset}`} key={index}>
-        <th scope="row">{point.title}{point.withdrawn ? " — withdrawn from answers" : ""}</th><td>{point.geo_name}</td><td>{point.date}</td><td>{point.value}</td><td>{point.unit}</td>
+        <th scope="row">{point.display_title}{point.withdrawn ? " — not used in answers" : ""}</th><td>{point.geo_name}</td><td>{point.date}</td>
+        <td><span className="ml-source-value">{point.value}</span>{point.revision_label ? <small className="ml-source-revision">{point.revision_label}</small> : null}</td><td>{point.unit_label}</td>
       </tr>)}</tbody>
     </table></div></> : null}
     {source.events.length ? <><h2>Stored notices</h2>{source.events.map((event, index) => <article id={`event-${index + source.offset}`} key={index}>
