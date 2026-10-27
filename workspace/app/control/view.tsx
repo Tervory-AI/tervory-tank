@@ -38,6 +38,7 @@ export function FounderDashboard({ view, squads }: { view: FounderView; squads?:
   const today = new Date().toISOString().slice(0, 10);
   const daily = data?.daily ?? [];
   const day = daily.find(row => row.day === today);
+  const unpriced = daily.reduce((sum, row) => sum + (row.unpriced || 0), 0);
   const spent = data ? daily.reduce((sum, row) => sum + Number(row.spent), 0) : null;
   const code = day && day.delivered > 0 ? `${Math.round(day.code / day.delivered * 100)}% by code` : "No completed calls today.";
   return <div className="dashboard-root dash-control">
@@ -47,7 +48,7 @@ export function FounderDashboard({ view, squads }: { view: FounderView; squads?:
       <Card label="Sign-ups" value={signups?.total ?? "—"} note={signups ? "From Clerk" : "Clerk unavailable"} values={signups?.days.map(day => day.value)} />
       <Card label="Paying clients" value={paying ?? "—"} note={paying == null ? "Stripe unavailable" : "Distinct customers · active paid plans"} />
       <Card label="Work done today" value={data ? day?.delivered ?? 0 : "—"} note={code} values={data?.daily.map(row => row.delivered)} />
-      <Card label="Spent this month" value={money(spent)} note="Budget source not connected" values={data?.daily.map(row => Number(row.spent))} />
+      <Card label="Recorded spend this month" value={unpriced && spent === 0 ? "price not set" : money(spent)} note={unpriced ? `${unpriced} calls excluded: price not set` : "Budget source not connected"} values={unpriced ? undefined : data?.daily.map(row => Number(row.spent))} />
       <Card label="Saved this month" value={money(data?.saved_usd)} note="No recorded baseline to compare" green />
     </div>
     <div className="dash-middle">

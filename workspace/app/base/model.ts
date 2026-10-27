@@ -170,3 +170,8 @@ export function buildModel(input: { batches: BatchIn[] | null; skills: SkillIn[]
     refreshedLabel: refreshedLabel(input.now),
   };
 }
+
+/** Strip only the private uniqueness suffix generated for uploads. */
+export function batchLabel(batch: string): string {
+  return batch.replace(/ · [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, "");
+}
