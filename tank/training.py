@@ -1,7 +1,7 @@
 """Local collection, scheduled re-tests and optional private exports.
 
-The background collector reads only existing accepted/released sources. Rooms
-need no hooks and keep their own credentials. Exports preserve reviewed content.
+The background collector reads accepted/released sources and private Rig events.
+Rooms keep their own credentials. Exports preserve reviewed content.
 """
 from __future__ import annotations
 
@@ -259,12 +259,35 @@ async def collect_fits(conn, tenant: uuid.UUID) -> None:
     )
 
 
+async def collect_rig_events(conn, tenant: uuid.UUID) -> None:
+    """Drain a tenant's durable room events through the canonical pair writer."""
+    region = runtime().box_region()
+    rows = await conn.fetch("""SELECT * FROM agent_rig.training_events
+        WHERE tenant_id=$1 AND region=$2 ORDER BY created_at LIMIT 500 FOR UPDATE""", tenant, region)
+    for row in rows:
+        value, output = obj(row["input"]), obj(row["output"])
+        currency, _ = regional_labels({"input": value, "output": output})
+        await save_pair(conn, tenant=tenant, agent="rig",
+                        task="rig.search" if row["source"] == "rig_no_result" else "rig.quote",
+                        value=value, output=output, approved_by="system:rig-event",
+                        source=row["source"], ref=row["source_ref"], region=region,
+                        client_matter=True, public=False, currency=currency, unit="quote" if currency else None)
+        await conn.execute("""DELETE FROM agent_rig.training_events
+            WHERE tenant_id=$1 AND region=$2 AND source=$3 AND source_ref=$4""",
+            tenant, region, row["source"], row["source_ref"])
+
+
 async def collect_once() -> None:
     rt = runtime()
     async with rt.pool().acquire() as conn:
         if not await conn.fetchval("SELECT pg_try_advisory_lock(871222)"):
             return
         try:
+            if await conn.fetchval("SELECT to_regclass('agent_rig.training_events')"):
+                tenants = await conn.fetch("SELECT DISTINCT tenant_id FROM agent_rig.training_events WHERE region=$1", rt.box_region())
+                for row in tenants:
+                    async with conn.transaction():
+                        await collect_rig_events(conn, row["tenant_id"])
             # Tenant discovery is internal maintenance, never a response or export.
             tenants = await conn.fetch("SELECT DISTINCT tenant_id FROM tank.ledger WHERE region=$1", rt.box_region())
             for row in tenants:

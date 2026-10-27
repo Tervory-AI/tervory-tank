@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { changeRetailer, retailerIdentity } from "../actions";
 import type { AdminOperation } from "../types";
 
-const operations = new Set(["connect", "import", "refresh", "mapping", "confirm-mapping", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest"]);
+const operations = new Set(["connect", "import", "refresh", "mapping", "confirm-mapping", "settings", "embed-keys", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest"]);
 
 // Feed files use a bounded route body instead of Next's 1 MB server-action limit.
 export async function POST(request: NextRequest) {

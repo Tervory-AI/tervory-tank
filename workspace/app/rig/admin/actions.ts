@@ -22,6 +22,10 @@ export async function changeRetailer(operation: AdminOperation, data: Record<str
       const mapping = await rigAdminAction<MappingPreview>(actor, operation, data);
       return { ok: true, message: "Check each field and confirm the mapping before saving.", mapping };
     }
+    if (operation === "embed-keys") {
+      const embed = await rigAdminAction<NonNullable<AdminResult["embed"]>>(actor, operation, data);
+      return { ok: true, message: "Copy your snippet now. The key is only shown once.", embed };
+    }
     const result = await rigAdminAction<{ ok?: boolean; suggestions?: string; receipt?: { added: number; updated: number; rejected: number } }>(actor, operation, data);
     if (result.ok === false) return { ok: false, message: "Nothing was imported. Check the file, private price rule and founder-set exchange rate.", panel: await rigAdminPanel<RetailerPanel>(actor) };
     const message = result.receipt

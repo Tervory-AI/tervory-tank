@@ -1,0 +1,113 @@
+diff --git a/tests/rig4.test.ts b/tests/rig4.test.ts
+index 884811b..91369d5 100644
+--- a/tests/rig4.test.ts
++++ b/tests/rig4.test.ts
+@@ -28 +28 @@ describe("RIG-4 live data and delivery", () => {
+-  it.each(["results", "explore"] as const)("labels %s only when sample is true", (screen) => {
++  it.each(["results", "explore"] as const)("omits retired badges on %s regardless of data flags", (screen) => {
+@@ -30 +30 @@ describe("RIG-4 live data and delivery", () => {
+-    expect(renderView(view(true, screen))).toContain("SAMPLE DATA");
++    expect(renderView(view(true, screen))).not.toContain("SAMPLE DATA");
+@@ -75 +75 @@ it("uses themed delivery text, including requests needing store attention", () =
+-it("has one sample label, selected state, and singular setup wording", () => {
++it("has no retired labels, preserves selection and singular setup wording", () => {
+@@ -77 +77 @@ it("has one sample label, selected state, and singular setup wording", () => {
+-  expect(renderView(state).match(/SAMPLE DATA/g)).toHaveLength(1);
++  expect(renderView(state)).not.toContain("SAMPLE DATA");
+@@ -83 +83 @@ it("has one sample label, selected state, and singular setup wording", () => {
+-  expect(renderView(state).match(/SAMPLE DATA/g)).toHaveLength(1);
++  expect(renderView(state)).not.toContain("SAMPLE DATA");
+@@ -87 +87 @@ it("has one sample label, selected state, and singular setup wording", () => {
+-  expect(renderView(state).match(/SAMPLE DATA/g)).toHaveLength(1);
++  expect(renderView(state)).not.toContain("SAMPLE DATA");
+diff --git a/tests/smoke.spec.ts b/tests/smoke.spec.ts
+index f457783..873f6f4 100644
+--- a/tests/smoke.spec.ts
++++ b/tests/smoke.spec.ts
+@@ -50 +50 @@ test("main path at 1440 and 390", async ({ page }) => {
+-    await expect(page.getByText("SAMPLE DATA").first()).toBeVisible();
++    await expect(page.getByText("SAMPLE DATA")).toHaveCount(0);
+diff --git a/widget/src/mock/unavailable.ts b/widget/src/mock/unavailable.ts
+index e551a60..c4eba52 100644
+--- a/widget/src/mock/unavailable.ts
++++ b/widget/src/mock/unavailable.ts
+@@ -2,2 +2,2 @@
+-// Stand-in for the sample catalogue in the script-tag (UMD) bundle.
+-// Retailer embeds must never ship sample data, so api-base="mock" is refused
++// Unconfigured API fallback for the script-tag (UMD) bundle.
++// Retailer embeds require a real API, so api-base="mock" is refused
+@@ -19 +19 @@ function refuse(): never {
+-    "Sample data is not part of this bundle. Set api-base to your Rig API.",
++    "Set api-base to your Rig API.",
+diff --git a/widget/src/theme/themes.ts b/widget/src/theme/themes.ts
+index 14e516d..fc107d0 100644
+--- a/widget/src/theme/themes.ts
++++ b/widget/src/theme/themes.ts
+@@ -107 +106,0 @@ export type Theme = {
+-    sampleLabel: string;
+@@ -164 +163 @@ export const customNation: Theme = {
+-      "One indicative total per setup. We confirm stock, permits and the final quotation in your client space. Prices shown are sample data until the US feeds are connected.",
++      "One indicative total per setup. We confirm stock, permits and the final quotation in your client space.",
+@@ -220 +218,0 @@ export const customNation: Theme = {
+-    sampleLabel: "SAMPLE DATA",
+@@ -276 +274 @@ export const neutral: Theme = {
+-    finePrint: "One indicative total per setup. The shop confirms stock and the final quotation. Prices shown are sample data.",
++    finePrint: "One indicative total per setup. The shop confirms stock and the final quotation.",
+@@ -332 +329,0 @@ export const neutral: Theme = {
+-    sampleLabel: "SAMPLE DATA",
+diff --git a/widget/src/three/index.html b/widget/src/three/index.html
+index 113c0f1..108b511 100644
+--- a/widget/src/three/index.html
++++ b/widget/src/three/index.html
+@@ -4 +4 @@
+-<body><main><h1>3D product view</h1><p>Sample models. Design review page.</p>
++<body><main><h1>3D product view</h1>
+diff --git a/widget/src/three/viewer.ts b/widget/src/three/viewer.ts
+index 9625631..573a4de 100644
+--- a/widget/src/three/viewer.ts
++++ b/widget/src/three/viewer.ts
+@@ -26 +26 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-    .rig-3d.kiosk h2{grid-column:1/-1;grid-row:1;margin:0}.rig-3d.kiosk .sample{grid-column:1/-1;grid-row:2;margin:0}
++    .rig-3d.kiosk h2{grid-column:1/-1;grid-row:1;margin:0}
+@@ -36 +35,0 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
+-  if (initial.sample) { const sample = node("p", "SAMPLE DATA"); sample.className = "sample"; root.append(sample); }
+diff --git a/widget/src/ui/render.ts b/widget/src/ui/render.ts
+index f466d03..eb584a4 100644
+--- a/widget/src/ui/render.ts
++++ b/widget/src/ui/render.ts
+@@ -2 +2 @@ import type { Contact, GraphResponse, Price, Product, RequestAck, Setup, SetupPa
+-import { detailOf, formatPrice, isSample, matchNote, summaryOf, whyLines } from "../api/format";
++import { detailOf, formatPrice, matchNote, summaryOf, whyLines } from "../api/format";
+@@ -119 +118,0 @@ function results(view: View): string {
+-      ${view.results.some(isSample) ? sampleBadge(copy.sampleLabel) : ""}
+@@ -190 +188,0 @@ function setupScreen(view: View): string {
+-        ${isSample(product) || view.setups.some((setup) => setup.parts.some((part) => isSample(part.product))) ? sampleBadge(copy.sampleLabel) : ""}
+@@ -330,2 +327,0 @@ function explore(view: View): string {
+-    ${[...(product ? [product] : []), ...branches.flatMap((branch) => branch.products)].some(isSample)
+-      ? sampleBadge(copy.sampleLabel, "sample sample-float") : ""}
+@@ -427,3 +422,0 @@ function photo(product: Product, view: View, size: string): string {
+-function sampleBadge(label: string, className = "sample"): string {
+-  return `<span class="${className}">${esc(label)}</span>`;
+-}
+diff --git a/widget/src/ui/styles.ts b/widget/src/ui/styles.ts
+index 4a645fe..52b7acb 100644
+--- a/widget/src/ui/styles.ts
++++ b/widget/src/ui/styles.ts
+@@ -183,11 +182,0 @@ h1.title {
+-.sample {
+-  display: inline-block;
+-  background: var(--rig-badge);
+-  color: var(--rig-muted);
+-  font-size: 9px;
+-  font-weight: 600;
+-  letter-spacing: 0.08em;
+-  padding: 3px 6px;
+-  border-radius: var(--rig-radius);
+-  white-space: nowrap;
+-}
+@@ -301 +289,0 @@ h1.title {
+-.setup-head .sample:last-child { margin-left: auto; }
+@@ -653 +640,0 @@ h1.title {
+-.sample-float { position: absolute; left: 32px; bottom: 20px; background: rgba(255, 255, 255, 0.08); color: var(--rig-graph-muted); }
+@@ -666 +652,0 @@ h1.title {
+-  .sample-float { position: static; margin: 0 16px 16px; }

@@ -74,7 +74,9 @@ class Retailer:
 
     async def panel(self, tenant: str) -> dict[str, Any]:
         settings = await self.store.rule(tenant)
+        retailer = await self.store.retailer(tenant) or {}
         return {
+            "settings": {"name": retailer.get("name", ""), "email": retailer.get("email") or ""},
             "price_configured": bool(settings),
             "currency": (settings or {}).get("shop_currency", "ZAR"),
             "templates": await self.store.templates_for(tenant),
@@ -83,6 +85,29 @@ class Retailer:
             "receipts": await self.store.receipts(tenant),
             "products": len(await self.store.products(tenant)),
         }
+
+    async def set_settings(self, tenant: str, data: dict[str, Any]) -> dict[str, bool]:
+        name = data.get("name", "")
+        email = data.get("email", "")
+        if (not isinstance(name, str) or not 1 <= len(name.strip()) <= 120
+                or not isinstance(email, str) or len(email) > 254
+                or not re.fullmatch(r"[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+", email)):
+            raise ValueError("Enter a store name and delivery email address.")
+        previous = await self.store.retailer(tenant) or {}
+        await self.store.put_retailer(tenant, previous.get("slug") or tenant, email,
+                                      previous.get("webhook"), name.strip())
+        return {"saved": True}
+
+    async def embed_key(self, tenant: str, data: dict[str, Any]) -> dict:
+        from rigbox.quotes.keys import embed_snippet, issue_embed_key
+
+        retailer = await self.store.retailer(tenant) or {}
+        if not retailer.get("email") or not await self.store.products(tenant):
+            raise RigError("invalid", "Save a delivery email and publish your catalogue first.", 422)
+        # Verify the shipped asset before issuing a key that cannot be installed.
+        embed_snippet("")
+        result = await issue_embed_key(self.store, tenant, data.get("origins"))
+        return {**result, "snippet": embed_snippet(result["publishable_key"])}
 
     async def reprice(self, store: Any, tenant: str) -> None:
         settings = await store.rule(tenant)
