@@ -31,6 +31,7 @@
 5. **Savings is core.** Every finished job shows what it cost and what it would have cost.
 6. **Done** means the live page matches Figma and does its real job in the founder's browser. Tests passing is not done.
 7. **The founder merges.** Never type, see or create secrets. Never weaken a seal.
+8. **Use what already exists and is free; never recode it** (founder, 27 Oct). Where a free, open-source tool does the job, use it. Our own code only fills the gaps no tool covers.
 
 ---
 
@@ -108,18 +109,50 @@ The rest of what the pages show:
 | Perplexity in the research seat (founder) | Part, off | The Perplexity presets and `/v1/research` (`tank/research.py:145–200`) are off until the founder promotes `market.research` | Perplexity is barred from MoA seats in code (`tank/moa.py:68–72`), so there is no research seat |
 | Commercial: credits, bring-your-own-key with gain-share, outcome pricing | Parked | Pricing is parked by the founder's rule 1 | Recorded only |
 
-## 4. Decisions only the founder can make
-These are places where the plans disagree with each other or with the code. Nothing should be built on them until the founder decides.
-1. **Paid step approval.** Your ladder rule (pause before a paid step such as Brave, unless that step is set to auto) conflicts with AGENTS.md rule 10, "No run waits for a person". The code has only a global pause on all paid work (`tank/controls.py:44–80`).
+## 4. Founder decisions: five already made, three open
+I first listed eight "open decisions". Five of them you had already made, and the code or the plan has to follow you.
+
+**Already decided by the founder:**
+1. **The free tools, never our own code where a tool exists** (confirmed 27 Oct). You adopted the Gemini infrastructure, built on LiteLLM, RouteLLM, DeepEval, Langfuse and LangGraph. The builders replaced RouteLLM, DeepEval and Langfuse with our own code. That is a deviation to fix, and section 4b lists every place it happened.
+2. **Zenas review stays off.** You decided lawyer approval is not a gate. `ZENAS_REVIEW` defaulting off (`agents/zenas/core/review_switch.py:16`) follows that.
+3. **Memory: the wall stays.** Every squad member has its own memory and shares nothing. Learning is shared through Skala skills. Build Pack v2's de-identified platform memory is superseded.
+4. **No event bus.** Each agent talks only to Tank and Skala (`plan/squad-learning-plan.md`, 20 Oct). Market Lab pulling Tiger data through Tank (`tank/market_lab_routes.py:115`) fits that. Build Pack v2's Redis Streams events are superseded.
+5. **Autumbra #345 is on main by your merge** (27 Oct, 05:45 PT). It stays unless you say otherwise. Its live public page still breaks the no-sample-data rule (section 0).
+
+**Still open:**
+1. **Paid steps.** Your ladder rule (pause for admin approval before a paid step such as Brave, unless that step is set to auto) conflicts with AGENTS.md rule 10, "No run waits for a person" (set 14 Oct, #41). The code has only a global pause (`tank/controls.py:44–80`).
+   - *Recommendation:* each paid step gets an "auto" or "ask first" setting, auto by default for steps you've already funded, with the global pause kept as the master switch.
 2. **The graduation bar:** 30 samples at 97% (the code), 1,000 calls at 97% (Build Pack v2), or a sustained 99% (Gemini).
-3. **The Gemini tools.** RouteLLM, DeepEval, Langfuse and Grafana were replaced by our own code. LangGraph is used. Keep our own code, or adopt the tools?
-4. **Mixture of Agents:** switch it on for which tasks, once the bench shows it is cheaper?
-5. **Zenas review.** The review switch defaults off (`agents/zenas/core/review_switch.py:16`). Answers that pass the cite check go to the client with no reviewer. That fits your decision that lawyer approval is not a gate, so it needs your confirmation that this stands.
-6. **Memory.** Build Pack v2 plans a de-identified platform memory that every client teaches. Today there is a hard wall: client data never reaches the platform, and no publish step exists. Build the publish step, or keep the wall?
-7. **The event bus.** Build Pack v2 plans Redis Streams with six typed events. None exists. Market Lab pulls Tiger data through Tank instead (`tank/market_lab_routes.py:115`). Build the bus, or keep the pulls?
-8. **Autumbra #345** merged on 27 Oct. Its own brief says nothing merges until you say the whole product is ready (`docs/cursor/AUTUMBRA-GROK-BRIEF.md:3`). Keep it on main or revert it?
+   - *Recommendation:* 99% agreement over at least 200 checked samples, plus your approval.
+   - *Why:* 30 samples is too few to prove anything, and 1,000 calls would keep most tasks from ever switching.
+3. **Mixture of Agents:** which tasks?
+   - *Recommendation:* none until the bench shows a mixture shape cheaper than the single model at the same quality. Then you switch it on per task from the graduation page.
 
 ---
+
+## 4b. Swap our own code for the free tools (founder, 27 Oct)
+"It is stupidity to recode what's already done and free to use." In each place below, a builder wrote its own version of a free tool that the plans named. Each one moves to the tool, keeping today's behaviour and tests.
+
+| Where | What we wrote ourselves | The free tool to use | Plan |
+|---|---|---|---|
+| Tank routing | Per-task policy only; no complexity scoring (`tank/main.py:1103`) | **RouteLLM** | Gemini |
+| Skala judge | Own judge with one 0–100 score (`tank/main.py:1528`, `tank/graduate.py:201`) | **DeepEval** (faithfulness, structure, tone) | Gemini |
+| Receipts and tracing | Ledger and transcripts only (`tank/schema.sql:7`, `:93`) | **Langfuse**, self-hosted, beside the ledger | Gemini |
+| Cost dashboards | Own dashboards (`tank/dashboards.py`, `tank/admin.py:819`) | **Grafana + Prometheus**, fed from the ledger | Build Pack v2 |
+| Semantic cache | Postgres table with a homemade bag-of-words vector (`tank/graduate.py:417–440`) | **Qdrant** (already running for memory) | Build Pack v2 |
+| Batch queue | Postgres queue (`tank/schema.sql:1661`) | **Redis** (already running), plus each provider's batch API, not OpenAI only | Build Pack v2 |
+| Scheduling | Chassis cron per room (`agents/market_lab/app.py:158`); nightly jobs with no trigger | **Airflow** (one instance for all agents) | Build Pack v1 and v2 |
+| Base web reading | Own `scrape_site` (`tank/skills/base.scrape_site`) | **Firecrawl**, self-hosted | Build Pack v2 |
+| Tiger watch-and-diff | Own diff (`agents/tiger/watch.py:337`) and httpx | **ChangeDetection.io** and **curl-cffi** | Build Pack v1 and v2 |
+| Market Lab research | Perplexity presets only (`tank/research.py`) | **GPT-Researcher** over **SearXNG** (SearXNG is already deployed) | Build Pack v1 and v2 |
+| Zenas drafting | Own clause library (`agents/zenas/core/drafting.py:15`) | **Docassemble** | Build Pack v2 |
+| Tisan visual check | Own frame scorer (`agents/tisan/templates/next-site/e2e/visual.spec.ts`) | **pixelmatch** | Build Pack v2 |
+| CI secret scan | Own regex test (`tests/test_secrets.py`) | **Gitleaks** and **Semgrep** in CI (both already in the Radix image) | Build Pack v2 |
+| Uptime | GitHub watchdog (`.github/scripts/watchdog.py`) | **Uptime Kuma** | Build Pack v2 |
+
+Already on the tools, so nothing to do: **LiteLLM** (gateway), **LangGraph** (Mixture of Agents, `tank/moa.py:300`), **Playwright**, **Semgrep**, **Gitleaks** and **OSV** (Radix scanning), and **Hermes Agent** (the Base and Rig brains).
+
+Two tools are still to add where nothing exists yet: **Nuclei** and **OWASP ZAP** for Radix.
 
 ## 5. Product by product: what is left, in order
 
@@ -275,9 +308,10 @@ These are places where the plans disagree with each other or with the code. Noth
 ---
 
 ## 6. Order of work: parallel lanes
-These run at the same time, one thread each, after the founder's answers on section 4:
+These run at the same time, one thread each. Only the paid-step and graduation items wait on section 4's open questions:
 1. **Rule 3 cleanup (one thread, today):** remove the fixtures and internal words from rig.tervory.com `/`, the Workspace `/rig`, zenas.tervory.com Moot, protect.tervory.com, and the Market Lab feed review.
 2. **Tank:** chats on the ladder and in savings; real priority; Tier 0 classify-first.
+2b. **The tool swap (section 4b):** one thread per tool, starting with RouteLLM, DeepEval and Langfuse in Tank.
 3. **Base:** merge the ATF download, fewest-first order, the C5 frame, one real state, the audit tool.
 4. **Rig:** set SMTP in Coolify, then one real store and 3 quote emails.
 5. **Workspace:** the dashboard and control panel to Figma; feedback with "wrong" and a note.
