@@ -9,7 +9,7 @@ The four-row reference and public observations are explicit fixtures, never seed
 
 From a fresh clone, run `pip install -r tank/requirements.txt -r tank/requirements-dev.txt playwright`
 in a Python environment, install Chromium at `/usr/bin/chromium`, and run
-`npm ci --prefix workspace`. All commands run on the cloud machine.
+`npm install --no-package-lock --prefix workspace`. All commands run on the cloud machine.
 
 ```
 PYTHONPATH=tank:tests python -m pytest -q tests/test_base_product.py tests/test_base_vendor_meter.py tests/test_base_public_http.py
@@ -44,8 +44,37 @@ adoption, dated refresh, selection without an upload, private pairs through
 the unchanged training writer, founder-only prices, exact credit costs and
 unchanged historical receipts after a price is set.
 
-Validated in the cloud on 26 October 2026: 286 Base and affected cost-reader
-regression tests passed with the local database checks enabled (zero skips);
-the production Workspace build passed. The browser script passed the reference
-batch, per-field evidence, CSV upload/download, saved batch link and Apollo flow
-at 375 and 1440 pixels. These results do not claim live account access.
+Review proof refreshed on 27 October 2026 (UTC). The browser checks both widths,
+reference selection, field source/date display, CSV upload and download, Apollo,
+and the saved batch link. It imports the downloaded CSV to assert that
+`+15125550101` is unchanged. The explicit fixture now includes a priced search,
+an unpriced search, and a blocked uploaded business. It checks the exclusion
+link, singular wording, human dates/reasons and the absence of raw provider codes.
+The PostgreSQL tests separately exercise the real repository, SQL calculations,
+founder-only unpriced drilldowns and tenant isolation. The collector lifecycle
+test proves exactly one task runs and releases its connection before Tank shuts
+down the shared pool; the prior event-hook implementation fails that test.
+Two price-status PDF fixtures keep founder receipt identifiers searchable across
+line boundaries; both fail on the prior formatter, which split them at hyphens.
+This browser harness uses FixtureStore, not the Base worker; it does not claim a
+live account or a real-agent run. The independent review of #339 at f7124a6 separately proved the real Tank,
+Base agent and Workspace flow with external providers stubbed.
+
+Full-suite comparison and exact commit IDs are recorded in `full-suite-results.md`.
+The selector `.github/scripts/ci_scope.py` returns `tests=["."]` for this lane.
+Install the Python dependencies in the same order as `.github/workflows/ci.yml`
+(including Forge's hash-pinned requirements), install Workspace dependencies in
+each fresh clone, and run the same command on main and the branch. Use separate
+local PostgreSQL databases for each checkout:
+
+```sh
+PYTHONPATH=tank READ1_CHROMIUM_EXECUTABLE=/usr/bin/chromium \
+POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:55443/pooltest \
+ZENAS_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:55443/pooltest \
+BASE_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55443/basetest \
+TRAINING_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:55443/basetest \
+python -m pytest -q -p no:cacheprovider --junitxml=/tmp/base-full.xml .
+```
+
+The comparison includes the founder’s main revert of the Autumbra change; the
+branch preserves that revert. Both runs use CI’s Node 22 major version. Actions are not rerun while billing is paused.
