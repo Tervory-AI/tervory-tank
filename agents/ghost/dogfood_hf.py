@@ -1,50 +1,34 @@
-"""Autumbra dogfood: optional Hugging Face Inference for Watch triage.
+"""Synthetic Autumbra dogfood; optional model work goes through Tank.
 
-Zero-ingestion: synthetic/fixture logs ONLY — never send client payloads to HF.
-Burn / ThreatPayload validation always stays local on Tank.
-
-Token from env `HF_INFERENCE_TOKEN` (preferred) or `HF_TOKEN`. If unset, callers
-and tests skip — CI stays green.
-
-Live HF is **hard-gated**: requires `AUTUMBRA_HF_LIVE=1` *and* `live=True`.
-Default / Zenas STOP (2026-10-24): fixtures-only — no Inference / GPU spend until
-he tops up credits and explicitly says go.
-
-Load secrets (never print values):
-  source /home/box/agent-data/agents/bd32fdb6-b222-4404-a278-ac58baaf52fd/.env.hf
-  # or: source /workspace/autumbra-oss-vault/_tervory/load-hf-env.sh
-
-API: Hugging Face Inference Providers via OpenAI-compatible router
-(`https://router.huggingface.co/v1/chat/completions`). Legacy
-`api-inference.huggingface.co` is SSL-broken from this box.
+The historical HF-named CLI and receipt fields remain compatible. The agent
+never reads provider credentials or chooses a model. AUTUMBRA_HF_LIVE=1 and
+live=True still gate any paid work; the default exercises only local code.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import httpx
 
+from .models import PLATFORM_TENANT
 from .threat_payload import ThreatBurned, accept_threat_payload
 
 FIXTURES_DIR = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "autumbra_dogfood"
-# Default chat model on Inference Providers; override with AUTUMBRA_HF_MODEL.
-DEFAULT_MODEL = os.environ.get("AUTUMBRA_HF_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
-HF_CHAT_URL = "https://router.huggingface.co/v1/chat/completions"
+TASK_TYPE = "reason.brief"  # Existing Tank policy; no new provider or paid route.
 
 
 class HfDogfoodError(RuntimeError):
-    """Live HF call failed (credits, model, network). Not a Tank burn."""
+    """The optional Tank call could not finish; never include upstream bodies."""
 
 
-def hf_token() -> str | None:
-    for name in ("HF_INFERENCE_TOKEN", "HF_TOKEN"):
-        val = os.environ.get(name, "").strip()
-        if val:
-            return val
-    return None
+def hf_token() -> bool:
+    """Legacy availability probe. Checks Tank access; returns no credential."""
+    return bool(os.environ.get("TANK_KEY", "").strip())
 
 
 def live_armed() -> bool:
@@ -75,41 +59,36 @@ def build_watch_prompt(events: list[dict[str, Any]]) -> str:
     )
 
 
-def call_hf_inference(prompt: str, *, model: str | None = None, timeout: float = 60.0) -> str:
-    """Call HF Inference Providers chat completions. Raises if live disarmed or token missing."""
+async def call_tank_inference(prompt: str, *, timeout: float = 60.0) -> dict[str, Any]:
+    """Use the room's existing Tank client and require a durable receipt."""
+    from .app import Tank
+
     if not live_armed():
-        raise HfDogfoodError(
-            "Live HF STOPPED — set AUTUMBRA_HF_LIVE=1 only after Zenas tops up and says go"
-        )
-    token = hf_token()
-    if not token:
-        raise HfDogfoodError("HF_INFERENCE_TOKEN / HF_TOKEN unset — skip live dogfood")
-    model_id = model or DEFAULT_MODEL
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    payload = {
-        "model": model_id,
-        "messages": [
-            {"role": "system", "content": "Autumbra Watch dogfood. Synthetic fixtures only."},
-            {"role": "user", "content": prompt},
-        ],
-        "max_tokens": 200,
-        "temperature": 0.2,
-    }
-    with httpx.Client(timeout=timeout) as client:
-        resp = client.post(HF_CHAT_URL, headers=headers, json=payload)
-    if resp.status_code == 402:
-        raise HfDogfoodError(
-            "HF Inference Providers: no remaining credits (402). "
-            "Token is valid; top up credits to run live dogfood."
-        )
-    if resp.status_code >= 400:
-        # Never echo Authorization. Body may name the model — OK for ops.
-        raise HfDogfoodError(f"HF chat HTTP {resp.status_code}: {resp.text[:240]}")
-    data = resp.json()
+        raise HfDogfoodError("Live dogfood STOPPED; AUTUMBRA_HF_LIVE requires explicit authorization.")
+    if not hf_token():
+        raise HfDogfoodError("Autumbra's Tank key is not configured.")
     try:
-        return str(data["choices"][0]["message"]["content"])
-    except (KeyError, IndexError, TypeError) as exc:
-        raise HfDogfoodError(f"Unexpected HF response shape: {str(data)[:240]}") from exc
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            data = await Tank(client).call("POST", "/v1/route", {
+                "tenant_id": PLATFORM_TENANT, "agent": "ghost", "task_type": TASK_TYPE, "max_tokens": 200,
+                "messages": [
+                    {"role": "system", "content": "Autumbra Watch dogfood. Synthetic fixtures only."},
+                    {"role": "user", "content": prompt},
+                ],
+            })
+        UUID(str(data["ledger_id"]))
+        if not isinstance(data["content"], str):
+            raise ValueError("Missing content")
+        return data
+    except (RuntimeError, httpx.HTTPError, KeyError, TypeError, ValueError):
+        raise HfDogfoodError("Tank could not complete the dogfood request with a receipt.") from None
+
+
+def call_hf_inference(prompt: str, *, model: str | None = None, timeout: float = 60.0) -> str:
+    """Synchronous CLI compatibility; model selection belongs to Tank."""
+    if model is not None:
+        raise HfDogfoodError("Model overrides are not accepted; Tank selects the model.")
+    return asyncio.run(call_tank_inference(prompt, timeout=timeout))["content"]
 
 
 def dogfood_watch_triage(
@@ -118,11 +97,11 @@ def dogfood_watch_triage(
     fixtures_path: Path | None = None,
     soft_live: bool = True,
 ) -> dict[str, Any]:
-    """Run synthetic dogfood. Local burn path always; HF only when live+token.
+    """Run synthetic dogfood. Local burn path always; Tank only when live+room-key.
 
     Returns a receipt dict suitable for tests/docs. Never uploads client payloads.
-    When soft_live=True, credit/network errors are recorded in the receipt instead
-    of raising (so CI / dogfood scripts stay usable until HF credits are topped up).
+    When soft_live=True, Tank/network errors are recorded in the receipt instead
+    of raising (so CI / dogfood scripts stay usable without a live connection).
     """
     events = load_synthetic_fixtures(fixtures_path)
     receipt: dict[str, Any] = {
@@ -169,18 +148,22 @@ def dogfood_watch_triage(
         receipt["hf_error"] = "AUTUMBRA_HF_LIVE not set — refusing live call"
         return receipt
     if not hf_token():
-        receipt["note"] = "HF token unset — local-only dogfood"
+        receipt["note"] = "Tank key unset — local-only dogfood"
         return receipt
     prompt = build_watch_prompt(events)
     try:
-        text = call_hf_inference(prompt)
+        answer = asyncio.run(call_tank_inference(prompt))
+        text = answer["content"]
     except (HfDogfoodError, httpx.HTTPError) as exc:
         receipt["hf_error"] = str(exc)[:300]
-        receipt["note"] = "Live HF attempted; see hf_error (token may be OK; credits/model)."
+        receipt["note"] = "Tank request did not finish; see hf_error."
         if not soft_live:
             raise
         return receipt
-    receipt["live_hf"] = True
+    receipt["live_hf"] = True  # Historical field: a live model call completed via Tank.
+    receipt["tank_ledger_id"] = answer["ledger_id"]
+    receipt["task_type"] = TASK_TYPE
+    receipt["cost_usd"] = answer.get("cost_usd")
     # Do not store raw prompt with secrets; only a short model reply excerpt.
     receipt["hf_text"] = text[:500]
     return receipt

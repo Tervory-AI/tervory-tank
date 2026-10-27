@@ -147,8 +147,8 @@ async def test_main_call_stops_after_cache_miss_and_cache_still_runs(conn, monke
     monkeypatch.setattr(main, 'zenas_pool_prompt', AsyncMock(return_value=False))
     monkeypatch.setattr(main, 'model_call_refusal', lambda *a, **kw: None)
     monkeypatch.setenv('TANK_REGION', 'us-east')
-    cache = SimpleNamespace(get=AsyncMock(return_value=None))
-    monkeypatch.setattr(main, '_redis', cache)
+    cache = AsyncMock(return_value=None)
+    monkeypatch.setattr(main, '_cache_read', cache)
     conn.value = True
     gateway = Mock(side_effect=AssertionError('paused call reached the gateway'))
     monkeypatch.setattr(main.httpx, 'AsyncClient', gateway)
@@ -156,7 +156,7 @@ async def test_main_call_stops_after_cache_miss_and_cache_still_runs(conn, monke
     with pytest.raises(HTTPException, match='paid work is paused'):
         await main.run_route(request)
     gateway.assert_not_called()
-    cache.get.return_value = '{"content":"already answered"}'
+    cache.return_value = 'already answered'
     result = await main.run_route(request)
     assert result.content == 'already answered' and result.rung == 4 and result.cost_usd == 0
 

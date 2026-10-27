@@ -38,7 +38,7 @@ async def test_one_override_hook_preserves_full_receipt(monkeypatch,task,seat):
     response=await main.run_route(req(task),model_override='selected')
     assert response.model=='selected' and _OkGateway.calls==['selected']
     receipt=next(q for q in conn.executes if 'INSERT INTO tank.ledger' in q[0])
-    assert receipt[-1]==seat and receipt[2]==TENANT
+    assert receipt[17]==seat and receipt[2]==TENANT
     assert conn.queries[0][1][0]==('fixture' if seat=='logic' else 'command.turn')
 
 
@@ -439,8 +439,7 @@ async def test_stale_config_logs_and_falls_back_to_single_route(monkeypatch, cap
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('enabled', [False, True])
-async def test_code_policy_retains_core_refusal_without_running_skill_or_seats(monkeypatch, enabled):
-    import graduate
+async def test_missing_code_package_stays_refused_without_running_seats(monkeypatch, enabled):
     row = _policy_row(model='skill:base.fixture@1.0.0', moa_enabled=enabled,
                       moa_config=policy().model_dump())
     async def load(*args): return row
@@ -453,7 +452,7 @@ async def test_code_policy_retains_core_refusal_without_running_skill_or_seats(m
     monkeypatch.setattr(moa, 'run_mixture', forbidden)
     with pytest.raises(HTTPException) as error:
         await main.route(req().model_copy(update={'complex_request': True, 'interactive': False}), None)
-    assert error.value.status_code == 400 and error.value.detail == graduate.ROUTER_BLOCK
+    assert error.value.status_code == 404 and 'no package' in error.value.detail
 
 
 @pytest.mark.asyncio
