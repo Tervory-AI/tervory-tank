@@ -5,6 +5,7 @@ See docs/ops/self-hosted-runner.md. These tests read the workflow YAML and run t
 """
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -90,7 +91,8 @@ def test_ci_carries_no_production_secrets() -> None:
     text = CI.read_text(encoding="utf-8")
     for banned in ("COOLIFY", "TANK_KEY", "TANK_API_KEY", "DATABASE_URL: postgresql://tank", "GITHUB_APP_PRIVATE_KEY"):
         assert banned not in text
-    secrets = {part.split("}")[0].strip() for part in text.split("secrets.")[1:]}
+    # Only ${{ secrets.NAME }} expressions; the file name tests/test_secrets.py is not a secret.
+    secrets = set(re.findall(r"\$\{\{\s*secrets\.([A-Z0-9_]+)\s*\}\}", text))
     assert secrets == {"RUNNER_STATUS_TOKEN"}
 
 
@@ -198,7 +200,7 @@ def _scope_module():
 
 @pytest.mark.parametrize("paths", [[], ["README.md"], ["docs/spec.json", "agents/rig/README.md"]])
 def test_docs_select_no_checks(paths):
-    assert _scope_module().select(paths) == {"run": False, "full": False, "tisan": False, "tests": []}
+    assert _scope_module().select(paths) == {"run": False, "full": False, "tisan": False, "tests": [], "savings": False}
 
 
 @pytest.mark.parametrize("room", ["base", "tiger", "market_lab", "radix", "rig", "tisan", "zenas"])
@@ -223,8 +225,22 @@ def test_room_changes_keep_safety_without_unrelated_room_tests(room):
                                   "agents/_template/app.py", "agents/vshop/app.py", "agents/check_isolation.sh",
                                   ".github/workflows/ci.yml", "tests/test_rig.py", "docker-compose.yml"])
 def test_shared_or_unknown_paths_run_everything(path):
-    assert _scope_module().select(["agents/rig/app.py", path]) == {
-        "run": True, "full": True, "tisan": True, "tests": ["."]}
+    scope = _scope_module().select(["agents/rig/app.py", path])
+    scope.pop("savings")
+    assert scope == {"run": True, "full": True, "tisan": True, "tests": ["."]}
+
+
+@pytest.mark.parametrize(("paths", "expected"), [
+    (["workspace/app/page.tsx"], True),
+    (["workspace/app/tank/proof/view.tsx"], True),
+    (["tests/test_core2_savings_page.mjs"], True),
+    (["workspace/app/tiger/view.tsx"], False),
+    (["tank/main.py"], False),
+    (["agents/rig/app.py"], False),
+    (["docs/notes.md"], False),
+])
+def test_savings_page_runs_only_when_its_pages_change(paths, expected):
+    assert _scope_module().select(paths)["savings"] is expected
 
 
 def test_multiple_rooms_select_union():
@@ -270,9 +286,10 @@ def test_workflows_use_scope_and_do_not_hide_failed_detection():
         assert changes["steps"][1]["run"] == "python3 .github/scripts/ci_scope.py"
     assert "needs.changes.result == 'success'" in ci["tank"]["if"]
     assert "needs.changes.outputs.full == 'true'" in ci["workspace"]["if"]
-    step = next(step for step in ci["tank"]["steps"] if step.get("name") == "Secret scan and tests")
-    assert step["run"] == "python3 .github/scripts/ci_scope.py test"
-    assert step["env"]["TEST_TARGETS"] == "${{ needs.changes.outputs.tests }}"
+    # Founder, 27 Oct (#351): the merge check is lint, the secret scan and Tank start only.
+    step = next(step for step in ci["tank"]["steps"] if step.get("name") == "Secret scan and Tank starts")
+    assert step["run"] == "python3 -m pytest -q tests/test_secrets.py tests/test_tank_boots.py"
+    assert "needs.changes.outputs.savings == 'true'" in ci["savings-page"]["if"]
 
 
 @pytest.mark.parametrize("room", ["base", "tiger", "market_lab", "radix", "rig", "tisan", "zenas"])
