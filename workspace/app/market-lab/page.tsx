@@ -7,6 +7,7 @@ import { quarantinePageError } from "./quarantine";
 import { loadQuarantine } from "./quarantine-server";
 import { QuarantinePanel } from "./quarantine-view";
 import { loadLabPlugins } from "./vault-server";
+import { WarningSection } from "./warnings-server";
 import { MarketLabView } from "./view";
 import "./market-lab.css";
 
@@ -32,6 +33,7 @@ export default async function MarketLabPage({
   const quarantine = await loadQuarantine();
   return (
     <MarketLabView
+      warnings={<WarningSection tenantId={tenant.tenantId} />}
       model={model}
       plugins={plugins}
       envKeys={envKeys}

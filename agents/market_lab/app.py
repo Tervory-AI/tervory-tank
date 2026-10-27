@@ -48,7 +48,7 @@ async def refresh(ctx: JobContext) -> dict:
         lock = ctx.tenant_id + ":market-collect"
         await ledger.conn.execute("SELECT pg_advisory_lock(hashtextextended($1, 0))", lock)
         try:
-            return await perform_refresh(
+            result = await perform_refresh(
                 tenant_id=ctx.tenant_id,
                 engine=str(ctx.input.get("engine") or ""),
                 ledger=ledger,
@@ -56,6 +56,9 @@ async def refresh(ctx: JobContext) -> dict:
                 live=not fixtures,
                 backfill=bool(ctx.input.get("backfill")),
             )
+            from core.warning_http import refresh as refresh_warnings
+            result["warnings"] = await refresh_warnings(ledger, ctx.tenant_id, str(ctx.input.get("engine") or ""))
+            return result
         finally:
             await ledger.conn.execute("SELECT pg_advisory_unlock(hashtextextended($1, 0))", lock)
 
@@ -70,12 +73,16 @@ async def opportunities(ctx: JobContext) -> dict:
             signals=ctx.input.get("signals"),
             memory=_SafeMemory(ctx.memory),
         )
+        from core.warning_http import refresh as refresh_warnings
+        await refresh_warnings(ledger, ctx.tenant_id, str(ctx.input.get("engine") or ""))
     return {"top_area": result["top_area"], "top_recommendation": result["top_recommendation"]}
 
 
 async def resolve(ctx: JobContext) -> dict:
     async with _ledger() as ledger:
-        return await perform_resolve(tenant_id=ctx.tenant_id, ledger=ledger)
+        from core.warning_http import refresh as refresh_warnings
+        warning_result = await refresh_warnings(ledger, ctx.tenant_id, str(ctx.input.get("engine") or ""))
+        return {**(await perform_resolve(tenant_id=ctx.tenant_id, ledger=ledger)), "warnings": warning_result}
 
 
 def _has_source_passages(value: object) -> bool:
@@ -268,3 +275,7 @@ async def quarantine_remove(batch_id: str, x_tank_key: str = Header(default=""))
 from core.http import build_router as market_router
 
 app.include_router(market_router(key_ok=_room_key_ok, ledger_context=_ledger, engine=case_plan()["engine"]))
+
+from core.warning_http import build_router as warning_router
+
+app.include_router(warning_router(key_ok=_room_key_ok, ledger_context=_ledger, engine=case_plan()["engine"]))

@@ -1,8 +1,10 @@
 import type { MarketDocument } from "@/lib/tank";
+import { WarningEvidence } from "./warning-evidence";
 import { formatRefreshed } from "./format";
 
 /** Shared by the signed-in route and the isolated local fixture proof. */
 export function SourceDocumentView({ source }: { source: MarketDocument }) {
+  if (source.calculation) return <WarningEvidence source={source} />;
   const offset = source.offset;
   return <main className="ml ml-source"><div className="ml-body">
     <a href="/market-lab">Back to Market Lab</a>
@@ -19,7 +21,7 @@ export function SourceDocumentView({ source }: { source: MarketDocument }) {
       <thead><tr><th scope="col">Observation</th><th scope="col">Area</th><th scope="col">Period</th><th scope="col">Value</th><th scope="col">Unit</th></tr></thead>
       <tbody>{source.points.map((point, index) => <tr id={`point-${index + source.offset}`} key={index}>
         <th scope="row">{point.display_title}{point.withdrawn ? " — not used in answers" : ""}</th><td>{point.geo_name}</td><td>{point.date_label}</td>
-        <td><span className="ml-source-value">{point.value}</span>{point.revision_label ? <small className="ml-source-revision">{point.revision_label}</small> : null}</td><td>{point.unit_label}</td>
+        <td><span className="ml-source-value">{point.display_value ?? point.value}</span>{point.revision_label ? <small className="ml-source-revision">{point.revision_label}</small> : null}</td><td>{point.unit_label}</td>
       </tr>)}</tbody>
     </table></div></> : null}
     {source.events.length ? <><h2>Stored notices</h2>{source.events.map((event, index) => <article id={`event-${index + source.offset}`} key={index}>

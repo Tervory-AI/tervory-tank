@@ -1171,3 +1171,18 @@ body:has(.ml) main {
   .ml-source table { font-size: 13px; }
   .ml-source th, .ml-source td { padding: 8px 4px; }
 }
+
+.ml-warnings { margin: 24px 0; }
+.ml-warning { margin: 18px 0; padding: 24px; border: 1px solid #B8BFD0; border-radius: 14px; background: white; }
+.ml-warning h3 { margin-top: 0; }
+.ml-warning a, .ml-warning-history a { color: #001840; text-decoration: underline; text-underline-offset: 3px; }
+.ml-warning-actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.ml-warning-actions button { padding: 10px 16px; border: 1px solid #B8BFD0; border-radius: 8px; background: #F4F6FB; color: #001840; cursor: pointer; font: inherit; }
+.ml-warning-actions button[aria-pressed="true"] { background: #001840; color: white; }
+.ml-warning-actions button:disabled { opacity: .6; cursor: wait; }
+.ml-warning-history summary { cursor: pointer; }
+.ml-warning-evidence article { padding: 16px 0; border-top: 1px solid #B8BFD0; }
+.ml-warning-evidence :target { outline: 2px solid #001840; outline-offset: 4px; }
+
+.ml-warnings { scroll-margin-top: 84px; }
+.ml-warning-evidence a { text-decoration: underline; text-underline-offset: 3px; }

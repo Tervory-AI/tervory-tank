@@ -4,7 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 
 class MarketRequest(BaseModel):
@@ -17,6 +17,7 @@ class MarketRequest(BaseModel):
 
 def build_router(tank):
     router = APIRouter()
+    _warning_routes(router, tank)
 
     @router.post("/v1/market-lab/{operation}", dependencies=[Depends(tank.require_key)])
     async def call(operation: str, body: MarketRequest):
@@ -40,3 +41,88 @@ def build_router(tank):
             raise HTTPException(502, "Market Lab could not complete this request") from None
 
     return router
+
+
+class WarningRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tenant_id: UUID
+    warning_id: UUID | None = None
+    event_id: UUID | None = None
+    useful: StrictBool | None = None
+    actor: str = Field(default="", max_length=200)
+
+
+class WarningInternal(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tenant_id: UUID
+    event_id: UUID | None = None
+
+
+def _warning_routes(router, tank):
+    from fastapi import Header
+    import hmac
+
+    async def room_only(x_tank_key: str = Header(default="")):
+        key = os.environ.get("TANK_KEY_MARKET_LAB", "")
+        if not key or not x_tank_key or not hmac.compare_digest(key.encode(), x_tank_key.encode()):
+            raise HTTPException(401, "Room key required")
+
+    async def room(operation: str, body: dict):
+        key = os.environ.get("TANK_KEY_MARKET_LAB", "")
+        if not key or tank._http is None:
+            raise HTTPException(503, "Warnings are unavailable")
+        try:
+            response = await tank._http.post("http://agent-market-lab:8000/market/warnings/" + operation,
+                json=body, headers={"x-tank-key": key}, timeout=120)
+            if response.status_code >= 400:
+                raise HTTPException(response.status_code if response.status_code in {404,409,422,503} else 502, "Warnings could not be read or saved")
+            return response.json()
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(502, "Warnings are unavailable") from None
+
+    @router.post("/v1/market-lab/warnings/{operation}", dependencies=[Depends(tank.require_key)])
+    async def workspace(operation: str, body: WarningRequest):
+        if operation not in {"list", "feedback"}:
+            raise HTTPException(404, "Not found")
+        return JSONResponse(await room(operation, body.model_dump(mode="json")), headers={"Cache-Control":"private, no-store"})
+
+    @router.post("/v1/market-lab/internal/training", dependencies=[Depends(room_only)])
+    async def training(body: WarningInternal):
+        from training import save_pair
+        if body.event_id is None:
+            raise HTTPException(422, "An event is required")
+        event = await room("pair", body.model_dump(mode="json"))
+        if str(event.get("tenant_id")) != str(body.tenant_id) or str(event.get("id")) != str(body.event_id):
+            raise HTTPException(502, "Invalid event owner")
+        if tank._pool is None:
+            raise HTTPException(503, "Learning records are unavailable")
+        async with tank._pool.acquire() as conn, conn.transaction():
+            await save_pair(conn, tenant=body.tenant_id, agent="market_lab", task="market.warning." + event["kind"],
+                value=event["input"], output=event["output"], approved_by=event["actor"], source="market_lab_warning",
+                ref=str(body.event_id), client_matter=True, public=False)
+            # Keep feedback for later review. This brief does not activate training.
+            await conn.execute("""UPDATE tank.training_pairs SET active=false,public=false,
+                polarity=CASE WHEN $3 THEN 'negative' ELSE 'positive' END
+                WHERE tenant_id=$1 AND source='market_lab_warning' AND source_ref=$2""", body.tenant_id, str(body.event_id),
+                event["output"].get("useful") is False or event["output"].get("outcome") == "miss")
+        return {"stored": True}
+
+    @router.post("/v1/market-lab/internal/series", dependencies=[Depends(room_only)])
+    async def series(body: WarningInternal):
+        # Use the existing Tank-owned Tiger transport and tenant filter. Never
+        # expose another room's URL/key, or let the caller select an HTTP target.
+        response = await tank._tiger_call("GET", "/watchlist", [("tenant_id", str(body.tenant_id))], None)
+        if response.status_code != 200:
+            raise HTTPException(503, "Saved product observations are unavailable")
+        watches = tank._tiger_keep(response.json(), body.tenant_id).get("watches", [])
+        result, unavailable = [], False
+        for watch in watches:
+            data = await tank._tiger_call("GET", "/observations", [("tenant_id", str(body.tenant_id)), ("url", watch["url"])], None)
+            if data.status_code != 200:
+                unavailable = True
+                continue
+            rows = tank._tiger_keep(data.json(), body.tenant_id).get("observations", [])
+            result.append({"watch": watch, "observations": [row for row in rows if row.get("url") == watch["url"]]})
+        return {"series": result, "problem": "Some watched product histories could not be read. Existing warnings keep their saved evidence; new warnings wait for those observations." if unavailable else None}

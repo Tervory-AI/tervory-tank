@@ -157,3 +157,32 @@ CREATE TABLE IF NOT EXISTS agent_market_lab.feed_checks (
 );
 CREATE INDEX IF NOT EXISTS feed_checks_tenant_source_idx
     ON agent_market_lab.feed_checks (tenant_id, source_id, checked_at DESC);
+
+-- A warning freezes the prediction and the evidence used to issue it.
+CREATE TABLE IF NOT EXISTS agent_market_lab.warning_pairs (
+    tenant_id uuid NOT NULL, pair_key text NOT NULL, document_id uuid NOT NULL,
+    summary jsonb NOT NULL, updated_at timestamptz NOT NULL,
+    PRIMARY KEY (tenant_id, pair_key)
+);
+CREATE TABLE IF NOT EXISTS agent_market_lab.warnings (
+    tenant_id uuid NOT NULL, id uuid NOT NULL, pair_key text NOT NULL,
+    event_date date NOT NULL, prediction_id uuid NOT NULL, document_id uuid NOT NULL,
+    downstream_id text NOT NULL, config jsonb NOT NULL, baseline jsonb NOT NULL,
+    window_start date NOT NULL, window_end date NOT NULL, created_at timestamptz NOT NULL,
+    PRIMARY KEY (tenant_id, id), UNIQUE (tenant_id, pair_key, event_date)
+);
+CREATE TABLE IF NOT EXISTS agent_market_lab.warning_resolutions (
+    tenant_id uuid NOT NULL, warning_id uuid NOT NULL, prediction_id uuid NOT NULL,
+    document_id uuid NOT NULL, outcome text NOT NULL, score numeric,
+    resolved_at timestamptz NOT NULL, PRIMARY KEY (tenant_id, warning_id),
+    FOREIGN KEY (tenant_id, warning_id) REFERENCES agent_market_lab.warnings (tenant_id, id)
+);
+CREATE TABLE IF NOT EXISTS agent_market_lab.warning_training (
+    tenant_id uuid NOT NULL, id uuid NOT NULL, warning_id uuid NOT NULL,
+    kind text NOT NULL, actor text NOT NULL, input jsonb NOT NULL, output jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(), delivered_at timestamptz,
+    PRIMARY KEY (tenant_id, id),
+    FOREIGN KEY (tenant_id, warning_id) REFERENCES agent_market_lab.warnings (tenant_id, id)
+);
+CREATE INDEX IF NOT EXISTS warning_training_pending
+    ON agent_market_lab.warning_training (tenant_id, created_at) WHERE delivered_at IS NULL;

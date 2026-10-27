@@ -112,6 +112,8 @@ async def document_page(ledger: Any, tenant_id: str, document_id: str, offset: i
     doc = await document(ledger, tenant_id, document_id, fixtures=fixtures)
     if doc is None:
         return None
+    if doc.get("kind") == "warning_evidence":
+        return {**doc, "offset": 0, "point_count": 0, "event_count": 0}
     doc = presented_document(doc, engine)
     active = {index for index, _ in await usable_points(ledger, tenant_id, doc)}
     current = current_revisions(doc["points"])
@@ -231,7 +233,8 @@ async def answer(ledger: Any, tenant_id: str, question: str, *, fixtures: bool =
             if not score:
                 continue
             value = format(Decimal(str(point["value"])), ",f").rstrip("0").rstrip(".") if "." in str(point["value"]) else format(Decimal(str(point["value"])), ",f")
-            text = f'{observation_label(point, doc.get("presentation"))}: {value} {unit_label(point["value"], point["unit"])} ({period_label(point["date"], point.get("frequency", ""))}).'
+            shown_value = point.get("display_value") or f'{value} {unit_label(point["value"], point["unit"])}'
+            text = f'{observation_label(point, doc.get("presentation"))}: {shown_value} ({period_label(point["date"], point.get("frequency", ""))}).'
             ranked.append((score, point["date"], {"text": text, "href": f'/market-lab/sources/{doc["id"]}?row={index}#point-{index}', "name": doc["name"]}))
         for index, event in enumerate(doc["events"]):
             if counties and event["geo"] not in counties:

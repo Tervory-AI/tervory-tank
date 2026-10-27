@@ -102,3 +102,13 @@ def schedules() -> list[dict[str, Any]]:
         {**base, "cron": "40 6 1 * *", "kind": "opportunities"},
         {**base, "cron": "10 7 * * *", "kind": "resolve"},
     ]
+
+
+def warning_plan() -> dict[str, Any]:
+    from engines.ffl.warnings import plan
+    return plan()
+
+
+def warning_series(watch: dict, observations: list[dict]) -> list[dict]:
+    from engines.ffl.warnings import product_series
+    return product_series(watch, observations)
