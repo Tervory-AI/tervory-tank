@@ -32,7 +32,7 @@ def test_local_dogfood_threatpayload_without_hf():
 
 
 def test_live_true_refused_without_autumbra_hf_live(monkeypatch):
-    """Zenas STOP: live=True alone must not spend via Tank."""
+    """Zenas STOP: live=True alone must not spend HF credits."""
     monkeypatch.delenv("AUTUMBRA_HF_LIVE", raising=False)
     receipt = dogfood_watch_triage(live=True, fixtures_path=FIXTURE, soft_live=True)
     assert receipt["live_hf"] is False
@@ -44,17 +44,16 @@ def test_live_true_refused_without_autumbra_hf_live(monkeypatch):
 
 @pytest.mark.integration
 def test_live_hf_dogfood_when_armed():
-    """Only when Zenas says go: AUTUMBRA_HF_LIVE=1 + Tank key."""
+    """Only when Zenas says go: AUTUMBRA_HF_LIVE=1 + token."""
     if not live_armed():
         pytest.skip("AUTUMBRA_HF_LIVE!=1 — fixtures-only until Zenas tops up and says go")
     if not hf_token():
-        pytest.skip("TANK_KEY unset")
+        pytest.skip("HF_INFERENCE_TOKEN / HF_TOKEN unset")
     receipt = dogfood_watch_triage(live=True, fixtures_path=FIXTURE, soft_live=True)
     assert receipt["zero_ingestion"] is True
     assert receipt["threat_payload_local"]["accepted"] is True
     assert receipt["live_hf"] or receipt.get("hf_error")
-    # Never echo Tank key or provider tokens in the receipt.
-    for name in ("TANK_KEY", "HF_INFERENCE_TOKEN", "HF_TOKEN"):
+    for name in ("HF_INFERENCE_TOKEN", "HF_TOKEN"):
         val = os.environ.get(name, "")
         if val:
             assert val not in (receipt.get("hf_text") or "")

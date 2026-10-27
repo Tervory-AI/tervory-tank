@@ -30,23 +30,8 @@ from . import rails as airgap_rails
 from . import watch_oss as watch_oss_room
 from .watch_oss import AnomalyEvent, handoff_threat, propose_from_anomaly
 from . import enforce_oss as enforce_oss_room
-from .client_settings import (
-    ClientAutumbraSettings,
-    active_halves,
-    connect_copy,
-    list_hands,
-    load_settings,
-    save_settings,
-    set_hand,
-)
-from .market_lab_intel import accept_ioc_bundle, backend_status as intel_backend_status, receipt_for_bundle_consume
-from .webhooks import WebhookRejected, accept_signed, drop_counts
-from .red_team import list_exercises, run_exercise
-from .enforce_lifecycle import FixtureComposeBackend, plan_create, plan_destroy, receipt_for
-from .owner_email import DEFAULT_FIXTURE_TRANSPORT, build_owner_update, send_owner_update
 from .probes import Probes
 from .store import Store
-from .threat_queue import ThreatPayloadQueue, queue_root_from_env, watch_enqueue_fixture_attack
 
 
 async def require_tank(x_tank_key: str = Header(default="")) -> None:
@@ -150,34 +135,6 @@ async def bounded_json(request: Request, limit: int) -> bytes:
     return raw
 
 
-def watch_queue_configured() -> bool:
-    return bool((os.environ.get("THREAT_PAYLOAD_QUEUE") or "").strip())
-
-
-def watch_threat_queue() -> ThreatPayloadQueue:
-    """Production Watch queue door — path from THREAT_PAYLOAD_QUEUE."""
-    return ThreatPayloadQueue(queue_root_from_env())
-
-
-def enqueue_fixture_attack_for_watch(
-    *,
-    raw_log: str,
-    site: str,
-    address: str,
-    reason: str = "fixture attacking address",
-    queue: ThreatPayloadQueue | None = None,
-) -> dict:
-    """Production Watch enqueue entrypoint used by /ghost/autumbra/queue/fixture-attack.
-
-    Validates via never-block rules, then puts a ThreatPayload on the queue door.
-    Does not call Enforce. Never keeps the raw log on the queue.
-    """
-    q = queue or watch_threat_queue()
-    return watch_enqueue_fixture_attack(
-        queue=q, raw_log=raw_log, site=site, address=address, reason=reason
-    )
-
-
 def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -195,7 +152,6 @@ def create_app() -> FastAPI:
             app.state.advisory_lock = asyncio.Lock()
             app.state.watcher = advisory_watch.Watcher(store, advisory_watch.Feeds(http), tank)
             app.state.shields = shield_room.Shields(store, http, tank)
-            app.state.threat_queue = watch_threat_queue() if watch_queue_configured() else None
             tasks = [asyncio.create_task(watch(app)), asyncio.create_task(nightly(app)),
                      asyncio.create_task(advisory_watch.watch(app))]
             try:
@@ -298,7 +254,7 @@ def create_app() -> FastAPI:
         rows = app.state.store.matches(PLATFORM_TENANT, None if state == "all" else state)
         return {"matches": rows, "last_cycle": app.state.store.get_state(PLATFORM_TENANT, "last_cycle")}
 
-    # ---------- GHOST-2 D3: Shields Up (Watch dry-run only; live apply is Enforce) ----------
+    # ---------- GHOST-2 D3: Shields Up (dry-run unless CLOUDFLARE_API_TOKEN_GHOST is set) ----------
 
     @app.get("/ghost/shields", dependencies=[Depends(require_tank)])
     async def shields_list():
@@ -543,268 +499,6 @@ def create_app() -> FastAPI:
             "brief": brief.model_dump(mode="json"),
             **result,
         }
-
-
-    # ---------- Autumbra product surfaces (settings, intel consume, webhooks, lifecycle) ----------
-
-    @app.get("/ghost/autumbra/settings", dependencies=[Depends(require_tank)])
-    async def autumbra_settings_get(tenant_id: str = Query(default=PLATFORM_TENANT)):
-        settings = load_settings(app.state.store, tenant_id)
-        halves = active_halves(settings)
-        return {
-            "settings": settings.model_dump(),
-            "halves": halves,
-            "hands": list_hands(settings),
-            "copy": connect_copy(settings),
-        }
-
-    @app.post("/ghost/autumbra/settings", dependencies=[Depends(require_tank)])
-    async def autumbra_settings_set(request: Request):
-        raw = await bounded_json(request, 8_000)
-        try:
-            data = json.loads(raw.decode("utf-8"))
-            settings = ClientAutumbraSettings.model_validate(data)
-        except Exception:
-            raise HTTPException(422, "Settings were not understood.") from None
-        saved = save_settings(app.state.store, settings)
-        receipt = {
-            "product": "Autumbra",
-            "kind": "settings_change",
-            "tenant_id": saved.tenant_id,
-            "shield_mode": saved.shield_mode.value,
-            "fix_mode": saved.fix_mode.value,
-            "undo": {"restore_defaults": True},
-        }
-        return {
-            "settings": saved.model_dump(),
-            "halves": active_halves(saved),
-            "hands": list_hands(saved),
-            "copy": connect_copy(saved),
-            "receipt": receipt,
-        }
-
-    @app.get("/ghost/autumbra/hands", dependencies=[Depends(require_tank)])
-    async def autumbra_hands_get(tenant_id: str = Query(default=PLATFORM_TENANT)):
-        """Agnostic optional connects. No assumed provider. No Pro."""
-        settings = load_settings(app.state.store, tenant_id)
-        return {
-            "hands": list_hands(settings),
-            "halves": active_halves(settings),
-            "copy": connect_copy(settings),
-            "note": "Optional hands only. Stack/advisories/receipts work with zero connects.",
-        }
-
-    @app.post("/ghost/autumbra/hands", dependencies=[Depends(require_tank)])
-    async def autumbra_hands_set(request: Request):
-        """Connect or disconnect one optional hand. Client modes stay the only clamp."""
-        raw = await bounded_json(request, 4_000)
-        try:
-            data = json.loads(raw.decode("utf-8"))
-            tenant_id = str(data.get("tenant_id") or PLATFORM_TENANT)
-            hand = str(data["hand"])
-            connected = bool(data["connected"])
-        except Exception:
-            raise HTTPException(422, "Hand change was not understood.") from None
-        settings = load_settings(app.state.store, tenant_id)
-        try:
-            updated = set_hand(settings, hand, connected=connected)
-        except ValueError as exc:
-            raise HTTPException(422, str(exc)) from None
-        saved = save_settings(app.state.store, updated)
-        return {
-            "settings": saved.model_dump(),
-            "hands": list_hands(saved),
-            "halves": active_halves(saved),
-            "copy": connect_copy(saved),
-        }
-
-    @app.get("/ghost/autumbra/sources", dependencies=[Depends(require_tank)])
-    async def autumbra_sources(tenant_id: str = Query(default=PLATFORM_TENANT)):
-        # Clients never see a feed list. Intel backend is Market Lab.
-        _ = tenant_id
-        return {"sources": [], "client_visible_feed_list": False, **intel_backend_status()}
-
-    @app.post("/ghost/autumbra/intel/consume", dependencies=[Depends(require_tank)])
-    async def autumbra_intel_consume(request: Request):
-        """Consume a Market Lab IOC bundle. Name sources on the receipt. No Autumbra registry."""
-        raw = await bounded_json(request, 64_000)
-        try:
-            data = json.loads(raw.decode("utf-8"))
-            tenant_id = str(data.get("tenant_id") or PLATFORM_TENANT)
-            bundle_raw = data.get("bundle") if isinstance(data.get("bundle"), dict) else data
-        except Exception:
-            raise HTTPException(422, "Intel bundle was not understood.") from None
-        try:
-            bundle = accept_ioc_bundle(bundle_raw)
-        except ValueError as exc:
-            raise HTTPException(422, str(exc)) from None
-        receipt = receipt_for_bundle_consume(bundle, tenant_id=tenant_id)
-        return {
-            "accepted": True,
-            "bundle_id": bundle["bundle_id"],
-            "indicator_count": len(bundle.get("indicators") or []),
-            "receipt": receipt,
-            "client_visible_feed_list": False,
-        }
-
-    @app.post("/ghost/autumbra/webhooks/{provider}")
-    async def autumbra_webhook(provider: str, request: Request):
-        """Signature check FIRST — before any Tank auth that would 404.
-
-        Real edge/mailbox senders cannot send X-Tank-Key. Unsigned or bad
-        signatures are dropped and counted; body is never stored.
-        """
-        raw = await request.body()
-        if len(raw) > 64_000:
-            raise HTTPException(413, "Too large.")
-        signature = request.headers.get("x-autumbra-signature") or request.headers.get(
-            "cf-webhook-signature"
-        )
-        timestamp = request.headers.get("x-autumbra-timestamp")
-        try:
-            envelope = accept_signed(provider, raw, signature=signature, timestamp=timestamp)
-        except WebhookRejected:
-            return JSONResponse(
-                {"accepted": False, "stored": False, "drops": drop_counts()},
-                status_code=401,
-            )
-        # Working memory only — do not persist raw body.
-        return {
-            "accepted": True,
-            "stored": False,
-            "provider": envelope["provider"],
-            "bytes": envelope["bytes"],
-        }
-
-    @app.get("/ghost/autumbra/exercises", dependencies=[Depends(require_tank)])
-    async def autumbra_exercises():
-        return {"exercises": list_exercises(), "note": "Tervory's own sites only; client needs written permission."}
-
-    @app.post("/ghost/autumbra/exercises/run", dependencies=[Depends(require_tank)])
-    async def autumbra_exercise_run(request: Request):
-        raw = await bounded_json(request, 8_000)
-        try:
-            data = json.loads(raw.decode("utf-8"))
-        except Exception:
-            raise HTTPException(422, "Exercise was not understood.") from None
-        tenant_id = str(data.get("tenant_id") or PLATFORM_TENANT)
-        settings = load_settings(app.state.store, tenant_id)
-        try:
-            receipt = run_exercise(
-                str(data.get("exercise_id") or ""),
-                target_site=str(data.get("target_site") or ""),
-                settings=settings,
-                fixture_log=str(data.get("fixture_log") or ""),
-            )
-        except PermissionError as exc:
-            raise HTTPException(403, str(exc)) from None
-        except ValueError as exc:
-            raise HTTPException(422, str(exc)) from None
-        return receipt
-
-
-    @app.post("/ghost/autumbra/queue/fixture-attack", dependencies=[Depends(require_tank)])
-    async def autumbra_queue_fixture_attack(request: Request):
-        """Watch product door: dirty log → ThreatPayload → THREAT_PAYLOAD_QUEUE.
-
-        Does not call Enforce. Enforce drains the queue in its own process via
-        drain_once_for_enforce / background drain loop.
-        """
-        if not watch_queue_configured() and getattr(app.state, "threat_queue", None) is None:
-            raise HTTPException(503, "THREAT_PAYLOAD_QUEUE is not configured.")
-        raw = await bounded_json(request, 32_000)
-        try:
-            data = json.loads(raw.decode("utf-8"))
-            raw_log = str(data["raw_log"])
-            site = str(data["site"])
-            address = str(data["address"])
-            reason = str(data.get("reason") or "fixture attacking address")
-        except Exception:
-            raise HTTPException(422, "Fixture attack was not understood.") from None
-        queue = getattr(app.state, "threat_queue", None)
-        receipt = enqueue_fixture_attack_for_watch(
-            raw_log=raw_log,
-            site=site,
-            address=address,
-            reason=reason,
-            queue=queue,
-        )
-        return receipt
-
-    @app.post("/ghost/autumbra/enforce/plan-create", dependencies=[Depends(require_tank)])
-    async def autumbra_enforce_plan_create(request: Request):
-        raw = await bounded_json(request, 4_000)
-        try:
-            data = json.loads(raw.decode("utf-8"))
-            tenant_id = str(data["tenant_id"])
-            existing = int(data.get("existing_count") or 0)
-            execute = bool(data.get("execute"))
-        except Exception:
-            raise HTTPException(422, "Create plan was not understood.") from None
-        try:
-            plan = plan_create(tenant_id, existing_count=existing)
-        except (ValueError, RuntimeError) as exc:
-            raise HTTPException(422, str(exc)) from None
-        if execute:
-            root = os.environ.get("AUTUMBRA_FIXTURE_COMPOSE_ROOT", "").strip()
-            if not root:
-                raise HTTPException(422, "Fixture compose root is not configured.")
-            receipt = FixtureComposeBackend(Path(root)).create(plan)
-        else:
-            receipt = receipt_for(plan)
-        return {"plan": plan, "receipt": receipt}
-
-    @app.post("/ghost/autumbra/enforce/plan-destroy", dependencies=[Depends(require_tank)])
-    async def autumbra_enforce_plan_destroy(request: Request):
-        raw = await bounded_json(request, 4_000)
-        try:
-            data = json.loads(raw.decode("utf-8"))
-            plan = plan_destroy(str(data["tenant_id"]))
-            execute = bool(data.get("execute"))
-        except Exception:
-            raise HTTPException(422, "Destroy plan was not understood.") from None
-        if execute:
-            root = os.environ.get("AUTUMBRA_FIXTURE_COMPOSE_ROOT", "").strip()
-            if not root:
-                raise HTTPException(422, "Fixture compose root is not configured.")
-            receipt = FixtureComposeBackend(Path(root)).destroy(plan)
-        else:
-            receipt = receipt_for(plan)
-        return {"plan": plan, "receipt": receipt}
-
-    @app.post("/ghost/autumbra/owner-update", dependencies=[Depends(require_tank)])
-    async def autumbra_owner_update(request: Request):
-        """Build the owner email from receipts in code and call the sender. No model."""
-        raw = await bounded_json(request, 20_000)
-        try:
-            data = json.loads(raw.decode("utf-8"))
-            settings = ClientAutumbraSettings.model_validate(data["settings"])
-            to = str(settings.owner_email or "").strip()
-            if not to:
-                raise ValueError("recipient must come from the client's settings")
-            email = build_owner_update(
-                settings=settings,
-                site_name=str(data.get("site_name") or settings.site_name),
-                threats_found=int(data.get("threats_found") or 0),
-                critical=list(data.get("critical") or []),
-                shield=data.get("shield"),
-                fix_report_url=str(data.get("fix_report_url") or ""),
-                pr_url=str(data.get("pr_url") or ""),
-                undo_fix_url=str(data.get("undo_fix_url") or ""),
-                undo_shield_url=str(data.get("undo_shield_url") or ""),
-                receipt_url=str(data.get("receipt_url") or ""),
-                checks_run=data.get("checks_run"),
-            )
-        except Exception:
-            raise HTTPException(422, "Owner update was not understood.") from None
-        sent = send_owner_update(email, to=to, transport=DEFAULT_FIXTURE_TRANSPORT)
-        return {**email, **sent}
-
-    @app.get("/ghost/autumbra/jobs", dependencies=[Depends(require_tank)])
-    async def autumbra_jobs():
-        """Scheduled Autumbra jobs (weekly owner update is a real entry)."""
-        from .owner_email_jobs import list_jobs
-        return {"jobs": list_jobs()}
 
     @app.get("/ghost/summary", dependencies=[Depends(require_tank)])
     async def ghost_summary():
