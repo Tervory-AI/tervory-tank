@@ -44,9 +44,16 @@ def test_real_tank_routes_to_real_room_and_postgres(tmp_path):
                 assert response.json()["on_count"] == 14
                 assert response.headers["cache-control"] == "private, no-store"
                 assert request("overview", tenant=other).json()["on_count"] == 0
+                listings = request("ask", question="How many listings are there in Texas?")
+                assert listings.status_code == 200 and listings.json()["facts"]
                 brief = request("ask", question="What are the latest population figures for California?")
                 assert brief.status_code == 200 and brief.json()["facts"]
                 assert request("ask", question=" ").status_code == 422
+                unrelated = json.loads((ROOT / "tests/fixtures/market_lab_questions.json").read_text())["unrelated"]
+                for question in unrelated:
+                    response = request("ask", question=question)
+                    assert response.status_code == 200
+                    assert response.json() == {"content": "No stored data matches this question", "facts": [], "sources": []}, question
                 assert request("ask", tenant=other, question="population").json()["facts"] == []
                 for fact in brief.json()["facts"]:
                     ident = fact["href"].split("/")[-1].split("?")[0]

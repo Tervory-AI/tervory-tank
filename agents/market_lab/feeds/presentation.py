@@ -86,3 +86,13 @@ def unit_label(value: str, unit: str) -> str:
     }
     singular, plural = forms.get(unit, (unit, unit))
     return singular if abs(Decimal(str(value))) == 1 else plural
+
+
+def notice_link(event: dict, presentation: dict | None = None) -> dict:
+    """Keep transport URLs in evidence, but send people to readable pages."""
+    from urllib.parse import urlsplit
+    target = urlsplit(event["url"])
+    machine = (target.hostname or "").startswith("api.") or any(part in target.path for part in ("/api/", "/webservices/", ".json"))
+    if machine:
+        return {"display_url": (presentation or {}).get("publisher_url", ""), "link_label": "View current notices on the publisher’s website"}
+    return {"display_url": event["url"] if target.scheme == "https" else "", "link_label": "Original notice"}

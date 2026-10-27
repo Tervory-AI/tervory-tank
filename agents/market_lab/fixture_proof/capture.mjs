@@ -14,7 +14,7 @@ const output=path.resolve(values.output || path.join(root,'agents/market_lab/evi
 await fs.mkdir(output,{recursive:true});
 const browser=await chromium.launch({executablePath:values.browser,headless:true,args:['--no-sandbox']});
 const question='What are the latest population figures for California?';
-const report={label:'local, fixture page',question,widths:[],screenshots:[],citations:[],sourcePagesRead:[],listingQuestion:'Active listings in Alameda',browserErrors:[],externalRequests:[]};
+const report={label:'local, fixture page',question,widths:[],screenshots:[],citations:[],sourcePagesRead:[],unrelatedQuestions:[],missingSourceChecked:false,listingQuestion:'Active listings in Alameda',browserErrors:[],externalRequests:[]};
 const seenCitations=new Set();
 try{
   for(const width of [1440,375]){
@@ -51,7 +51,11 @@ try{
         assert.equal((await source.goto(new URL(href,base).href)).status(),200);
         const visible=await source.locator('main').innerText();
         assert(!/County not named in source|\bPRCP\b|\bTAVG\b|source category|engine's|Engrossed|930630|\b\d{4}-\d{2}-\d{2}\b|Terms checked|Counts may be calculated/.test(visible));
-        report.sourcePagesRead.push({href,title:await source.locator('h1').innerText()});
+        const publisherHref=await source.locator('.ml-source p').filter({hasText:/^Source:/}).locator('a').getAttribute('href');
+        const publisher=new URL(publisherHref);
+        assert.equal(publisher.protocol,'https:');
+        assert(!publisher.hostname.startsWith('api.') && !/\/api\/|\/webservices\/|\.json/.test(publisher.pathname),'Publisher links must be readable dataset pages');
+        report.sourcePagesRead.push({href,title:await source.locator('h1').innerText(),publisherHref});
         await source.close();
       }
     }
@@ -68,6 +72,30 @@ try{
     await carrier.getByRole('button',{name:'Hide links'}).click();
     await page.locator('h1').evaluate(node=>node.scrollIntoView({block:'start'}));
     await screenshot('feeds');
+    const unrelated=JSON.parse(await fs.readFile(path.join(root,'tests/fixtures/market_lab_questions.json'),'utf8')).unrelated;
+    for(const [index,query] of unrelated.entries()){
+      await page.getByRole('textbox',{name:'Ask Market Lab',exact:true}).fill(query);
+      const received=page.waitForResponse(r=>r.url()===new URL('/market-lab/ask',base).href&&r.request().method()==='POST');
+      await page.getByRole('button',{name:'Send',exact:true}).click();
+      const response=await received;
+      assert.equal(response.status(),200);
+      assert.deepEqual(await response.json(),{content:'No stored data matches this question',facts:[],sources:[]});
+      await page.getByText('No stored data matches this question',{exact:true}).waitFor();
+      assert.equal(await page.locator('.ml-answer .ml-lines a').count(),0);
+      if(width===1440)report.unrelatedQuestions.push(query);
+      if(index===0){
+        await page.locator('.ml-chat').evaluate(node=>node.scrollIntoView({block:'start'}));
+        await screenshot('no-data');
+      }
+      await page.goto(new URL('/market-lab',base).href);
+    }
+    const missing=await page.goto(new URL('/market-lab/sources/00000000-0000-0000-0000-000000000000',base).href);
+    assert.equal(missing.status(),404);
+    await page.getByRole('heading',{name:"This source page doesn't exist",exact:true}).waitFor();
+    assert(!((await page.locator('main').innerText()).includes('Try again shortly')));
+    await screenshot('missing-source');
+    report.missingSourceChecked=true;
+    await page.goto(new URL('/market-lab',base).href);
     await page.getByRole('textbox',{name:'Ask Market Lab',exact:true}).fill(question);
     await screenshot('question');
     const received=page.waitForResponse(r=>r.url()===new URL('/market-lab/ask',base).href&&r.request().method()==='POST');

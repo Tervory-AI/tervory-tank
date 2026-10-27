@@ -319,4 +319,23 @@ def sources() -> list[SourceSpec]:
         "bts_freight": {"publisher": "Bureau of Transportation Statistics", "explanation": "The average freight volume in 2000 is set to 100. A reading of 110 means 10% more freight than that baseline; it is not a price."},
         "licence_holders": {"publisher": "U.S. Fish and Wildlife Service"},
     }
+    # Human-readable dataset pages, separate from the transport/API URLs above.
+    publisher_pages = {
+        "listing_counts": lists.LISTING_URL,
+        "check_counts": "https://www.fbi.gov/how-we-can-help-you/more-fbi-services-and-information/nics",
+        "census_population": "https://www.census.gov/programs-surveys/acs/data.html",
+        "legiscan": "https://legiscan.com/",
+        "federal_register": "https://www.federalregister.gov/",
+        "ecfr": "https://www.ecfr.gov/current/title-49",
+        "census_trade": "https://www.census.gov/foreign-trade/data/index.html",
+        "eia_diesel": "https://www.eia.gov/petroleum/gasdiesel/",
+        "world_bank_commodities": "https://www.worldbank.org/en/research/commodity-markets",
+        "noaa_alerts": "https://www.weather.gov/alerts",
+        "noaa_climate": "https://www.ncei.noaa.gov/access/monitoring/climate-at-a-glance/statewide/time-series",
+        "port_los_angeles": "https://www.portoflosangeles.org/business/statistics/container-statistics",
+        "bts_freight": "https://www.bts.gov/freight-transportation-services-index-tsi",
+        "licence_holders": "https://www.fws.gov/program/wildlife-and-sport-fish-restoration/apportionments-and-licenses-data",
+    }
+    for source_id, info in presentation.items():
+        info["publisher_url"] = publisher_pages[source_id]
     return [replace(row, config={**row.config, "presentation": presentation.get(row.id, {})}) for row in rows]

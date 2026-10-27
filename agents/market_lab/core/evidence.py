@@ -12,7 +12,7 @@ from decimal import Decimal
 from feeds.catalog import sources
 from feeds.keys import bind_key, missing_key
 from feeds.geo import area_label, mentioned_states, state_for_area
-from feeds.presentation import observation_label, unit_label, period_label, event_label
+from feeds.presentation import observation_label, unit_label, period_label, event_label, notice_link
 
 
 def _decode(value: Any) -> Any:
@@ -126,7 +126,7 @@ async def document_page(ledger: Any, tenant_id: str, document_id: str, offset: i
                 "revision_label": (f'{label} ({point["revision"]})' if point["revision"] else label) if counts[key] > 1 else ""}
     return {**doc, "offset": offset, "point_count": len(doc["points"]), "event_count": len(doc["events"]),
             "points": [shown(index, point) for index, point in enumerate(doc["points"])
-                       if offset <= index < offset + 200], "events": [{**event, "display_title": event_label(event, doc.get("presentation")), "date_label": period_label(event["date"])} for event in doc["events"][offset:offset + 200]]}
+                       if offset <= index < offset + 200], "events": [{**event, "display_title": event_label(event, doc.get("presentation")), "date_label": period_label(event["date"]), **notice_link(event, doc.get("presentation"))} for event in doc["events"][offset:offset + 200]]}
 
 
 async def overview(ledger: Any, tenant_id: str, engine: str | None = None, *, fixtures: bool = False) -> dict:
@@ -148,15 +148,45 @@ async def overview(ledger: Any, tenant_id: str, engine: str | None = None, *, fi
 
 
 def _words(text: str) -> set[str]:
-    stop = {"a", "an", "the", "what", "which", "how", "is", "are", "was", "were", "in", "of", "for", "to", "and", "my", "market", "latest", "show", "me", "has", "changed", "with", "from", "about", "state", "states", "county", "counties", "figure", "figures", "count", "counts", "monthly", "weekly", "annual", "data", "current"}
-    words = {word for word in re.findall(r"[a-z0-9]+", text.lower()) if word not in stop}
-    return words | {word[:-1] for word in words if len(word) > 3 and word.endswith("s") and not word.endswith("ss")}
+    # Function words cannot establish a topic. Keep meaningful qualifiers (such
+    # as an unknown place, object or date), so they must match the stored fact.
+    stop = set("""a an the and or but is are was were be been being am do does did
+        has have had can could may might should would will shall what which who
+        whom whose why when where how show tell give find get me my our your
+        their its about for from to with without within at in on of by as into
+        over under between than then also there here this that these those it
+        they them he she i we you any all some each every many much please
+        market latest current state states county counties figure figures count
+        counts monthly weekly annual data stored saved""".split())
+    words = {word for word in re.findall(r"[a-z0-9]+", text.lower()) if word not in stop and (len(word) > 1 or word.isdigit())}
+    return {word[:-1] if len(word) > 4 and word.endswith("s") and not word.endswith("ss") else word for word in words}
+
+
+def _match_score(terms: set[str], text: str, source_words: set[str], place: str, period: str, frequency: str = "", units: str = "") -> int:
+    words = _words(text)
+    readable_period = period_label(period, frequency)
+    if frequency != "annual":
+        try:
+            readable_period += " " + datetime.fromisoformat(period[:10]).strftime("%B")
+        except ValueError:
+            pass
+    context = _words(place + " " + readable_period)
+    topics = {word for word in words | source_words if word not in context and not word.isdigit()}
+    context |= _words(units)
+    # Every meaningful qualifier must be supported by this observation, and
+    # there must be a topic beyond a date, place, or conversational filler.
+    if not terms or not terms <= words | source_words | context or not terms & topics:
+        return 0
+    return 3 * len(terms & words) + len(terms & source_words)
 
 
 async def answer(ledger: Any, tenant_id: str, question: str, *, fixtures: bool = False, engine: str | None = None) -> dict:
     terms = _words(question)
     states = mentioned_states(question)
     years = set(re.findall(r"\b(?:19|20)\d{2}\b", question))
+    # A comparison baseline in a measurement's title is not its reporting year.
+    comparison_years = set(re.findall(r"(?:compared (?:with|to)|base year|relative to)\s+((?:19|20)\d{2})\b", question, re.I))
+    years -= comparison_years
     ranked = []
     documents = []
     for check in await latest_checks(ledger, tenant_id, fixtures=fixtures):
@@ -196,8 +226,8 @@ async def answer(ledger: Any, tenant_id: str, question: str, *, fixtures: bool =
             if key not in latest or point["date"] >= latest[key][1]["date"]:
                 latest[key] = (index, point)
         for index, point in latest.values():
-            words = _words(f'{observation_label(point, doc.get("presentation"))} {point["unit"]}')
-            score = 3 * len(terms & words) + len(terms & source_words)
+            score = _match_score(terms, observation_label(point, doc.get("presentation")),
+                                 source_words, area_label(point["geo"], point["geo_level"], point["title"]) + " " + point["geo"], point["date"], point.get("frequency", ""), unit_label(point["value"], point["unit"]))
             if not score:
                 continue
             value = format(Decimal(str(point["value"])), ",f").rstrip("0").rstrip(".") if "." in str(point["value"]) else format(Decimal(str(point["value"])), ",f")
@@ -212,10 +242,11 @@ async def answer(ledger: Any, tenant_id: str, question: str, *, fixtures: bool =
                 continue
             if event["kind"] == "changed":
                 continue
-            score = 3 * len(terms & _words(f'{event_label(event, doc.get("presentation"))} {event["body"]}')) + len(terms & source_words)
+            score = _match_score(terms, f'{event_label(event, doc.get("presentation"))} {event["body"]}',
+                                 source_words, area_label(event["geo"], "state", event["title"]) + " " + event["geo"], event["date"])
             if score:
                 ranked.append((score, event["date"], {"text": f'{event_label(event, doc.get("presentation"))} ({period_label(event["date"])}).', "href": f'/market-lab/sources/{doc["id"]}?row={index}#event-{index}', "name": doc["name"]}))
     ranked.sort(key=lambda row: (row[0], row[1]), reverse=True)
     best = ranked[0][0] if ranked else 0
     facts = [row[2] for row in ranked if row[0] == best][:5]
-    return {"content": "Here is what the saved sources show. This information does not explain why something happened or predict what comes next." if facts else "No saved source answers that question yet. Refresh the feeds or ask about a feed shown below.", "facts": facts, "sources": [{"name": fact["name"], "href": fact["href"]} for fact in facts]}
+    return {"content": "Here is what the saved sources show. This information does not explain why something happened or predict what comes next." if facts else "No stored data matches this question", "facts": facts, "sources": [{"name": fact["name"], "href": fact["href"]} for fact in facts]}

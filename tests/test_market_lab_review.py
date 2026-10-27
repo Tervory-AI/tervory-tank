@@ -242,3 +242,81 @@ async def test_repeat_checks_do_not_mix_with_initial_checks_in_a_brief():
     result = await answer(ledger, TENANT, "Repeat checks for permits", fixtures=True)
     assert len(result["facts"]) == 1
     assert result["facts"][0]["text"].startswith("Repeat checks for permits in California:")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("question", json.loads((ROOT / "tests/fixtures/market_lab_questions.json").read_text())["unrelated"])
+async def test_unrelated_questions_need_a_real_topic_and_supported_qualifiers(question):
+    ledger = MemoryLedger()
+    await perform_refresh(tenant_id=TENANT, engine="ffl", ledger=ledger, fixtures=FIXTURES)
+    result = await answer(ledger, TENANT, question, fixtures=True)
+    assert result == {"content": "No stored data matches this question", "facts": [], "sources": []}
+
+
+@pytest.mark.asyncio
+async def test_publisher_links_are_human_dataset_pages_and_transport_urls_stay_stored():
+    from urllib.parse import urlsplit
+    from feeds.catalog import sources
+    ledger = MemoryLedger()
+    await perform_refresh(tenant_id=TENANT, engine="ffl", ledger=ledger, fixtures=FIXTURES)
+    specs = {source.id: source for source in sources("ffl")}
+    checked = set()
+    for check in await latest_checks(ledger, TENANT, fixtures=True):
+        if not check["document_id"]:
+            continue
+        original = await document(ledger, TENANT, check["document_id"], fixtures=True)
+        page = await document_page(ledger, TENANT, check["document_id"], fixtures=True, engine="ffl")
+        spec = specs[check["source_id"]]
+        assert urlsplit(original["url"]).netloc == urlsplit(spec.url).netloc
+        assert urlsplit(original["url"]).path == urlsplit(spec.url).path
+        assert not urlsplit(original["url"]).query
+        target = urlsplit(page["presentation"]["publisher_url"])
+        assert target.scheme == "https"
+        assert not target.hostname.startswith("api.")
+        assert not any(part in target.path for part in ("/api/", "/webservices/", ".json"))
+        if spec.id in {"census_population", "census_trade", "federal_register", "eia_diesel", "world_bank_commodities", "noaa_alerts", "noaa_climate"}:
+            assert page["presentation"]["publisher_url"] != original["url"]
+            checked.add(spec.id)
+    assert len(checked) == 7
+
+
+@pytest.mark.asyncio
+async def test_comparison_baseline_in_stored_title_is_not_a_requested_date():
+    ledger = MemoryLedger()
+    await perform_refresh(tenant_id=TENANT, engine="ffl", ledger=ledger, fixtures=FIXTURES)
+    result = await answer(ledger, TENANT, "Freight volumes compared with 2000", fixtures=True)
+    assert len(result["facts"]) == 1
+    assert "141.4 points (average in 2000 = 100)" in result["facts"][0]["text"]
+    assert not (await answer(ledger, TENANT, "Freight volumes in 2000", fixtures=True))["facts"]
+
+
+@pytest.mark.asyncio
+async def test_weather_notice_keeps_api_provenance_but_links_to_readable_current_notices():
+    ledger = MemoryLedger()
+    await perform_refresh(tenant_id=TENANT, engine="ffl", ledger=ledger, source="noaa_alerts", fixtures=FIXTURES)
+    check = (await latest_checks(ledger, TENANT, fixtures=True))[0]
+    page = await document_page(ledger, TENANT, check["document_id"], fixtures=True)
+    event = page["events"][0]
+    assert event["url"].startswith("https://api.weather.gov/")
+    assert event["display_url"] == "https://www.weather.gov/alerts"
+    assert event["link_label"] == "View current notices on the publisher’s website"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("month", ["Jan", "January"])
+async def test_question_can_use_the_month_shown_on_its_source_page(month):
+    ledger = MemoryLedger()
+    await perform_refresh(tenant_id=TENANT, engine="ffl", ledger=ledger, fixtures=FIXTURES)
+    result = await answer(ledger, TENANT, f"What was the average temperature in California in {month} 2024?", fixtures=True)
+    assert len(result["facts"]) == 1
+    assert "55 degrees Fahrenheit (Jan 2024)" in result["facts"][0]["text"]
+    assert not (await answer(ledger, TENANT, "What was the average temperature in California in February 2024?", fixtures=True))["facts"]
+
+
+@pytest.mark.asyncio
+async def test_named_count_topic_still_matches_when_it_is_also_the_unit():
+    ledger = MemoryLedger()
+    await perform_refresh(tenant_id=TENANT, engine="ffl", ledger=ledger, fixtures=FIXTURES)
+    result = await answer(ledger, TENANT, "How many listings are there in Texas?", fixtures=True)
+    assert result["facts"]
+    assert all("Texas" in fact["text"] for fact in result["facts"])

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { emptyFlags } from "./catalog";
+import { CATALOG, emptyFlags } from "./catalog";
 import { formatDay, formatRefreshed } from "./format";
 import { readFlags, scrubSecrets } from "./load";
 import { buildPage, feedsToCall } from "./model";
@@ -222,4 +222,13 @@ test("a blocked linked page does not reuse its previous successful status", () =
   const carrier = page.groups.find(group => group.id === "carrier")!;
   assert.equal(carrier.pages[0].note, "Not checked: blocked");
   assert.equal(carrier.pages[1].note, "Checked 25 Oct 2026");
+});
+
+
+test("stored freight and linked freight have distinct client titles", () => {
+  const stored = CATALOG.find(item => item.id === "bts_freight")!;
+  const linked = CATALOG.find(item => item.id === "fred_tsifrght")!;
+  assert.notEqual(stored.title, linked.title);
+  assert.match(stored.title, /stored figures/);
+  assert.match(linked.title, /Federal Reserve Bank of St. Louis/);
 });

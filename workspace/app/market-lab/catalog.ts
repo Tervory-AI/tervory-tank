@@ -164,7 +164,7 @@ export const CATALOG: CatalogItem[] = [
   },
   {
     id: "bts_freight",
-    title: "Freight volumes compared with 2000",
+    title: "U.S. freight volumes — stored figures",
     summary: "Freight volume compared with the year 2000. A reading of 110 means 10% more freight than in 2000.",
     sourceLabel: "Bureau of Transportation Statistics",
     cadence: "monthly",
@@ -206,7 +206,7 @@ export const CATALOG: CatalogItem[] = [
   },
   {
     id: "fred_tsifrght",
-    title: "Freight volumes compared with 2000",
+    title: "Freight volumes — Federal Reserve Bank of St. Louis",
     summary: "Open the publisher’s website to read these figures. They are not used in saved-feed answers.",
     sourceLabel: "FRED",
     cadence: "monthly",

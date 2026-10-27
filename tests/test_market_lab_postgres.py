@@ -9,7 +9,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "agents/market_lab"))
-from core.evidence import answer, document, document_page, latest_checks, overview
+from core.evidence import answer, document, document_page, overview
 from core.jobs import perform_refresh
 from core.ledger import PostgresLedger
 

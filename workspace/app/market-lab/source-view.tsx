@@ -8,7 +8,7 @@ export function SourceDocumentView({ source }: { source: MarketDocument }) {
     <a href="/market-lab">Back to Market Lab</a>
     <h1>{source.name}</h1>
     <p>Stored on {formatRefreshed(source.fetched_at)}. These are the figures and notices saved during that refresh.</p>
-    {source.presentation?.publisher ? <p>Source: <a href={source.url} rel="noreferrer" target="_blank">{source.presentation.publisher}</a>.</p> : null}
+    {source.presentation?.publisher ? <p>Source: {source.presentation.publisher_url ? <a href={source.presentation.publisher_url} rel="noreferrer" target="_blank">{source.presentation.publisher}</a> : source.presentation.publisher}.</p> : null}
     {source.presentation?.notice ? <p>{source.presentation.notice}{source.presentation.notice.includes("Creative Commons") ? <> <a href="https://creativecommons.org/licenses/by/4.0/" rel="noreferrer" target="_blank">Read the reuse licence</a>.</> : null}</p> : null}
     {source.presentation?.explanation ? <p>{source.presentation.explanation}</p> : null}
     {source.downloads.length ? <><h2>Source downloads</h2>
@@ -24,7 +24,7 @@ export function SourceDocumentView({ source }: { source: MarketDocument }) {
     </table></div></> : null}
     {source.events.length ? <><h2>Stored notices</h2>{source.events.map((event, index) => <article id={`event-${index + source.offset}`} key={index}>
       <h3>{event.display_title}</h3><p>{event.date_label}</p>{event.kind === "changed" ? <p>The linked page was checked for changes. Its text is not stored.</p> : event.body ? <details><summary>Publisher’s original wording</summary><p>{event.body}</p></details> : null}
-      {event.url.startsWith("https://") ? <a href={event.url} rel="noreferrer" target="_blank">Original notice</a> : null}
+      {event.display_url.startsWith("https://") ? <a href={event.display_url} rel="noreferrer" target="_blank">{event.link_label}</a> : null}
     </article>)}</> : null}
     <nav aria-label="Source pages">
       {offset > 0 ? <a href={`?row=${Math.max(0, offset - 200)}`}>Previous observations</a> : null}{" "}

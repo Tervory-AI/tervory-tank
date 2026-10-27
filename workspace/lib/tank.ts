@@ -1025,11 +1025,19 @@ export type MarketAnswer = { content: string; facts: MarketFact[]; sources: { na
 export type MarketDocument = {
   offset: number; point_count: number; event_count: number;
   id: string; name: string; fetched_at: string; licence: string; terms_checked_at: string;
-  url: string; presentation?: { publisher?: string; notice?: string; explanation?: string };
+  url: string; presentation?: { publisher?: string; publisher_url?: string; notice?: string; explanation?: string };
   downloads: { url: string; sha256: string }[];
   points: { title: string; display_title: string; date_label: string; geo: string; geo_name: string; date: string; value: string; unit: string; unit_label: string; revision: string; revision_label: string; withdrawn?: boolean }[];
-  events: { title: string; display_title: string; date_label: string; body: string; date: string; url: string; kind: string }[];
+  events: { title: string; display_title: string; date_label: string; display_url: string; link_label: string; body: string; date: string; url: string; kind: string }[];
 };
+export class MarketLabRequestError extends Error {
+  readonly status: number;
+  constructor(status: number) {
+    super("Market Lab could not read its stored sources.");
+    this.name = "MarketLabRequestError";
+    this.status = status;
+  }
+}
 export async function marketLabRequest<T>(
   tenantId: string, operation: "overview" | "ask" | "document" | "refresh",
   payload: { question?: string; document_id?: string; offset?: number } = {},
@@ -1039,6 +1047,6 @@ export async function marketLabRequest<T>(
     headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY },
     body: JSON.stringify({ ...payload, tenant_id: tenantId }),
   });
-  if (!response.ok) throw new Error("Market Lab could not read its stored sources.");
+  if (!response.ok) throw new MarketLabRequestError(response.status);
   return await response.json() as T;
 }

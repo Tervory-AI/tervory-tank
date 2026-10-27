@@ -44,10 +44,10 @@ export default async function Page(){{return <MarketLabView model={{await loadMa
     write("app/market-lab/ask/route.ts", f'''import {{NextResponse}} from "next/server";
 import {{marketLabRequest}} from "@/lib/tank";
 export async function POST(request:Request){{const body=await request.json();if(Object.keys(body).some(key=>key!=="question")||typeof body.question!=="string"||!body.question.trim()||body.question.length>2000)return NextResponse.json({{error:"A question is required"}},{{status:400}});return NextResponse.json(await marketLabRequest("{TENANT}","ask",{{question:body.question}}));}}''')
-    write("app/market-lab/sources/[id]/page.tsx", '''import {SourceDocumentView} from "@/app/market-lab/source-view";
-import {marketLabRequest,type MarketDocument} from "@/lib/tank";
+    write("app/market-lab/sources/[id]/page.tsx", '''import {StoredSourcePage} from "@/app/market-lab/source-page";
 export const dynamic="force-dynamic";
-export default async function Page({params,searchParams}:{params:Promise<{id:string}>,searchParams:Promise<{row?:string}>}){const {id}=await params;const row=Number((await searchParams).row??0);const offset=Number.isSafeInteger(row)&&row>=0?Math.floor(row/200)*200:0;const source=await marketLabRequest<MarketDocument>("''' + TENANT + '''","document",{document_id:id,offset});return <SourceDocumentView source={source}/>;}''')
+export default async function Page({params,searchParams}:{params:Promise<{id:string}>,searchParams:Promise<{row?:string}>}){const {id}=await params;const {row}=await searchParams;return <StoredSourcePage tenantId="''' + TENANT + '''" id={id} row={row}/>;}''')
+    write("app/market-lab/sources/[id]/not-found.tsx", 'export {default} from "@/app/market-lab/source-not-found";')
 
 
 def main() -> None:
