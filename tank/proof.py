@@ -212,7 +212,7 @@ def pdf_export(data: dict) -> bytes:
     for section in ('metadata','tasks','ledger','shadows','runs','cases','promotions','policies','state'):
         lines.append(section.upper())
         for row in ([{k:v for k,v in data.items() if k not in ('tasks','ledger','shadows','runs','cases','promotions','policies','state')}] if section=='metadata' else data[section]):
-            lines.extend(textwrap.wrap(json.dumps(row, sort_keys=True, ensure_ascii=False), width=110) or [''])
+            lines.extend(textwrap.wrap(json.dumps(row, sort_keys=True, ensure_ascii=False), width=110, break_on_hyphens=False) or [''])
     if data.get('headline'):
         lines[1:1]=textwrap.wrap(data['headline'],110)
     from savings_export import PDF

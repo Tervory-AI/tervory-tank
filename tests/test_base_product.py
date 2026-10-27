@@ -179,6 +179,19 @@ def test_partial_cost_metrics_keep_priced_margin_and_cost_per_outcome():
     assert value["unpriced_calls"] == 1
 
 
+@pytest.mark.parametrize("status", ["set", "price not set"])
+def test_price_status_receipt_remains_searchable_in_founder_pdf(status):
+    from io import BytesIO
+    from pypdf import PdfReader
+    from proof import pdf_export
+    receipt = "ff9ef974-6eca-43ea-bb93-da93b3d3c30f"
+    data = {"tenant_id": str(TENANT), "region": "us-east",
+            **{section: [] for section in ("tasks", "ledger", "shadows", "runs", "cases", "promotions", "policies", "state")}}
+    data["ledger"] = [{"baseline_status": "backfilled", "cost_status": status, "cost_usd": None, "id": receipt}]
+    text = "".join(page.extract_text() for page in PdfReader(BytesIO(pdf_export(data))).pages)
+    assert status in text and receipt in text
+
+
 @pytest.mark.asyncio
 async def test_uploaded_records_without_licence_type_can_download_their_count(monkeypatch):
     monkeypatch.setenv("TANK_API_KEY", "local-fixture")
