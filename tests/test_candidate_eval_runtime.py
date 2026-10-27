@@ -82,7 +82,7 @@ async def main():
                     {"date": "2024-02-01", "value": 2.0}], listing
         package = root / "skills/market.series_fetch" / version
         if version != "1.0.0":
-            cases = runpy.run_path(str(package / "evals/test_feeds.py"))
+            cases = runpy.run_path(str(package / "evals/feed_cases.py"))
             suite = unittest.defaultTestLoader.loadTestsFromTestCase(cases["BundledFeedCases"])
             result = unittest.TextTestRunner(verbosity=2).run(suite)
             assert result.wasSuccessful() and result.testsRun == 10

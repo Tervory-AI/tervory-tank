@@ -19,9 +19,11 @@ hashes match those used by Skala's approval gate; float/int rewrites must not
 silently replace earlier cases. The real eval runner passes all seven cases
 with no HTTP/model calls.
 
-`evals/test_feeds.py` holds ten ordinary offline tests. Missing-engine and
+`evals/feed_cases.py` holds ten ordinary offline tests. Missing-engine and
 unknown-adapter exceptions are tested here, outside the imported case file.
-The other eight tests cover every refreshed bundled module:
+The module is invoked by the isolated runtime test rather than pytest
+autocollection, which has no bundle import path. The other eight tests cover
+every refreshed bundled module:
 
 | Module | Regression evidence |
 | --- | --- |
