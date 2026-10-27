@@ -2,9 +2,9 @@
 export default async function WeeklyReceiptPage({
   params,
 }: {
-  params: Promise<{ tenant: string }> | { tenant: string };
+  params: Promise<{ tenant: string }>;
 }) {
-  const resolved = await Promise.resolve(params);
+  const resolved = await params;
   const tenant = resolved.tenant;
   return (
     <main style={{ fontFamily: "system-ui, sans-serif", padding: "2rem", maxWidth: 720 }}>

@@ -2,9 +2,9 @@
 export default async function UndoPage({
   params,
 }: {
-  params: Promise<{ id: string }> | { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const resolved = await Promise.resolve(params);
+  const resolved = await params;
   return (
     <main style={{ fontFamily: "system-ui, sans-serif", padding: "2rem", maxWidth: 720 }}>
       <h1>Undo Autumbra shield</h1>

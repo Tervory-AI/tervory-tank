@@ -1,6 +1,4 @@
 """Signed webhooks and red-team exercises."""
-import hashlib
-import hmac
 import time
 
 import pytest
