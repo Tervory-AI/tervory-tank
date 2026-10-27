@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
+import httpx
 from fastapi import Header, HTTPException, Query
 from gold_sources import candidates
 from pydantic import BaseModel
@@ -20,6 +21,7 @@ from watch import (
     BadWatch,
     DomainLimiter,
     DuplicateWatch,
+    FeedUnavailable,
     PgStore,
     check_every,
     check_text,
@@ -33,7 +35,7 @@ AGENT = os.environ.get("AGENT_NAME", "tiger")
 TIGER_URL = os.environ.get("TIGER_URL", "http://tiger:3000")
 HEARTBEAT_TENANT = "00000000-0000-0000-0000-000000000001"
 INTERVAL_S = float(os.environ.get("DOMAIN_INTERVAL_S", "10"))
-ROBOTS_UA = "TervoryTiger/0.1 (+https://tervory.com)"
+ROBOTS_UA = "Tervory/1.0 (+https://tervory.com)"
 
 log = logging.getLogger("agent")
 _limiter = DomainLimiter(INTERVAL_S)
@@ -59,13 +61,14 @@ async def ping(ctx: JobContext) -> dict:
 async def _render(url: str, session: str, agent: str, tenant: str, task: str = "") -> dict[str, Any]:
     response = await app.state.http.post(
         f"{TIGER_URL.rstrip('/')}/render",
-        json={"url": url, "screenshot": True, "settle_ms": 10000, "max_ms": 25000},
+        json={"url": url, "screenshot": True, "settle_ms": 10000, "max_ms": 25000, "price_reader": True},
         headers={"X-Tank-Key": os.environ.get("TANK_KEY", ""), "X-Tenant-ID": tenant,
                  "X-Home-Region": os.environ.get("TANK_REGION", "us-east"), "X-Task-ID": task},
         timeout=50,
     )
     if response.status_code >= 400:
-        return {"ok": False, "challenge": False, "error": f"browser answered {response.status_code}"}
+        return {"ok": False, "url": url, "challenge": response.status_code in {401, 403, 429},
+                "error": f"browser answered {response.status_code}"}
     data = response.json()
     if not isinstance(data, dict):
         return {"ok": False, "challenge": False, "error": "browser answer was not an object"}
@@ -96,15 +99,21 @@ async def official_feed(tenant: str, url: str) -> dict:
     from urllib.parse import urlsplit
     parsed = urlsplit(url)
     if parsed.scheme != "https": return {"found": False}
-    response = await app.state.http.get(
-        os.environ.get("TANK_URL", "http://tank:8000") + "/v1/access/feeds/price",
-        params={"tenant_id": tenant, "site": parsed.scheme + "://" + parsed.netloc, "url": url},
-        headers={"X-Tank-Key": os.environ.get("TANK_KEY", "")}, timeout=30)
+    try:
+        response = await app.state.http.get(
+            os.environ.get("TANK_URL", "http://tank:8000") + "/v1/access/feeds/price",
+            params={"tenant_id": tenant, "site": parsed.scheme + "://" + parsed.netloc, "url": url},
+            headers={"X-Tank-Key": os.environ.get("TANK_KEY", "")}, timeout=30)
+    except httpx.HTTPError as exc:
+        raise FeedUnavailable("Official feed lookup is unavailable.") from exc
     if response.status_code != 200:
-        raise RuntimeError("Official feeds are unavailable; no scrape was substituted.")
-    data = response.json()
+        raise FeedUnavailable("Official feed lookup is unavailable.")
+    try:
+        data = response.json()
+    except ValueError as exc:
+        raise FeedUnavailable("Official feed lookup returned an unreadable answer.") from exc
     if not isinstance(data, dict) or type(data.get("found")) is not bool:
-        raise RuntimeError("Official feeds returned an invalid answer; no scrape was substituted.")
+        raise FeedUnavailable("Official feed lookup returned an unreadable answer.")
     return data
 
 
@@ -166,6 +175,8 @@ class WatchIn(BaseModel):
     every: str
     enabled: bool = True
     threshold: float = 0
+    alert_price: bool = True
+    alert_stock: bool = True
 
 
 class WatchPatch(BaseModel):
@@ -176,6 +187,8 @@ class WatchPatch(BaseModel):
     every: str | None = None
     enabled: bool | None = None
     threshold: float | None = None
+    alert_price: bool | None = None
+    alert_stock: bool | None = None
 
 
 def _store() -> PgStore:
@@ -206,6 +219,10 @@ def _fields(body: WatchIn | WatchPatch, partial: bool) -> dict[str, Any]:
             fields["enabled"] = True if body.enabled is None else bool(body.enabled)
         if body.threshold is not None or not partial:
             fields["threshold"] = check_threshold(0 if body.threshold is None else body.threshold)
+        for name in ("alert_price", "alert_stock"):
+            value = getattr(body, name)
+            if value is not None or not partial:
+                fields[name] = True if value is None else value
         return fields
     except BadWatch as exc:
         raise _watch_http(exc) from exc

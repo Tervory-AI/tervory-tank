@@ -1,0 +1,728 @@
+{
+  "observed_utc": "2026-10-26/2026-10-27",
+  "code_and_tests_commit": "fe62268ca6c4f53f0213b213ce26f77d8474e194",
+  "baseline_test_source_commit": "fe62268ca6c4f53f0213b213ce26f77d8474e194",
+  "environment": {
+    "packages": {
+      "pytest": "9.0.3",
+      "pytest-asyncio": "1.3.0",
+      "pytest-subtests": "not separately installed",
+      "asyncpg": "0.30.0",
+      "fastapi": "0.133.1",
+      "httpx": "0.28.1",
+      "PyYAML": "6.0.2",
+      "playwright": "1.55.0",
+      "numpy": "2.2.6",
+      "trimesh": "4.9.0",
+      "huggingface-hub": "0.35.3"
+    },
+    "python": "Python 3.12.14",
+    "node": "v22.23.4",
+    "chromium": "Chromium 154.0.8037.57 built on Debian GNU/Linux 13 (trixie)",
+    "pytest_plugins": [
+      {
+        "name": "anyio",
+        "module": "anyio.pytest_plugin"
+      },
+      {
+        "name": "asyncio",
+        "module": "pytest_asyncio.plugin"
+      },
+      {
+        "name": "langsmith_plugin",
+        "module": "langsmith.pytest_plugin"
+      }
+    ]
+  },
+  "results": [
+    {
+      "id": "review",
+      "commit": "fe62268ca6c4f53f0213b213ce26f77d8474e194",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--tb=short",
+        "--disable-warnings",
+        "tests/test_tank_review_regressions.py",
+        "tests/test_tank_tenant_boundaries.py",
+        "tests/test_tank_ladder.py",
+        "tests/test_tank_batches.py",
+        "tests/test_tank_one_door.py"
+      ],
+      "exit_code": 0,
+      "summary": "73 passed, 5 warnings in 53.04s"
+    },
+    {
+      "id": "related",
+      "commit": "fe62268ca6c4f53f0213b213ce26f77d8474e194",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--tb=short",
+        "--disable-warnings",
+        "tests/test_command.py",
+        "tests/test_agent_chassis.py",
+        "tests/test_bf3_industry_words.py",
+        "tests/test_dashboards.py",
+        "tests/test_bf2_tank_guards.py",
+        "tests/test_moa_integration.py",
+        "tests/test_t6_graduate.py",
+        "tests/test_train1.py",
+        "tests/test_za_region.py",
+        "tests/test_perplexity_research.py",
+        "tests/test_agent1_skills.py",
+        "tests/test_skala_approval_safety.py",
+        "tests/test_skala_call_cost.py"
+      ],
+      "exit_code": 0,
+      "summary": "326 passed, 16 warnings in 66.45s (0:01:06)"
+    },
+    {
+      "id": "learning",
+      "commit": "fe62268ca6c4f53f0213b213ce26f77d8474e194",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--tb=short",
+        "--disable-warnings",
+        "tests/test_tank_review_regressions.py",
+        "tests/test_train1.py"
+      ],
+      "exit_code": 0,
+      "summary": "31 passed, 5 warnings in 29.57s"
+    },
+    {
+      "id": "guard_dogfood",
+      "commit": "fe62268ca6c4f53f0213b213ce26f77d8474e194",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--tb=short",
+        "--disable-warnings",
+        "tests/test_tank_one_door.py",
+        "tests/test_autumbra_dogfood_hf.py"
+      ],
+      "exit_code": 0,
+      "summary": "30 passed, 1 skipped, 1 warning in 12.31s"
+    },
+    {
+      "id": "base_wiring",
+      "commit": "fe62268ca6c4f53f0213b213ce26f77d8474e194",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--tb=short",
+        "--disable-warnings",
+        "tests/test_b3_base_room.py",
+        "tests/test_b3b_base_wiring.py",
+        "tests/test_agent1_isolation.py",
+        "tests/test_agent1_brain_route.py",
+        "tests/test_autumbra_dogfood_hf.py",
+        "tests/test_ghost_routes.py"
+      ],
+      "exit_code": 0,
+      "summary": "77 passed, 1 skipped, 18 warnings in 235.10s (0:03:55)"
+    },
+    {
+      "id": "agent_worker",
+      "commit": "fe62268ca6c4f53f0213b213ce26f77d8474e194",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--tb=short",
+        "--disable-warnings",
+        "tests/test_agent1_skills.py",
+        "tests/test_base_context_dev.py",
+        "tests/test_base_context_trial.py",
+        "tests/test_base_engine_terms_approved.py",
+        "tests/test_base_gold_nightly.py",
+        "tests/test_base_gold_sources.py",
+        "tests/test_base_page.py",
+        "tests/test_base_trial_launch.py",
+        "tests/test_ghost_advisories.py",
+        "tests/test_ghost_airgap_slo_wraith.py",
+        "tests/test_ghost_enforce_connections.py",
+        "tests/test_ghost_enforce_oss.py",
+        "tests/test_ghost_gold.py",
+        "tests/test_ghost_guardrails.py",
+        "tests/test_ghost_incidents.py",
+        "tests/test_ghost_inventory.py",
+        "tests/test_ghost_isolation_profile.py",
+        "tests/test_ghost_patch_connect.py",
+        "tests/test_ghost_patch_pr.py",
+        "tests/test_ghost_redis.py",
+        "tests/test_ghost_routes.py",
+        "tests/test_ghost_schema.py",
+        "tests/test_ghost_shield_routes.py",
+        "tests/test_ghost_shields.py",
+        "tests/test_ghost_threat_payload.py",
+        "tests/test_ghost_versions.py",
+        "tests/test_ghost_watch_oss_intake.py",
+        "tests/test_ghost_watch_oss_wire.py",
+        "tests/test_autumbra_dogfood_airgap.py",
+        "tests/test_workers_1.py",
+        "tests/test_workers_1b.py",
+        "tests/test_dashboards.py",
+        "tests/test_ledger_sql_param.py"
+      ],
+      "exit_code": 0,
+      "summary": "405 passed, 16 warnings in 13.78s"
+    },
+    {
+      "id": "part_a",
+      "commit": "fe62268ca6c4f53f0213b213ce26f77d8474e194",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--tb=short",
+        "--disable-warnings",
+        "tests/test_tank_tenant_boundaries.py",
+        "tests/test_tank_one_door.py",
+        "tests/test_agent1_skills.py",
+        "tests/test_tenant_scoping.py",
+        "tests/test_skala_call_cost.py",
+        "tests/test_t6_graduate.py",
+        "tests/test_grad1_graduation_table.py",
+        "tests/test_skala_approval_safety.py"
+      ],
+      "exit_code": 0,
+      "summary": "92 passed, 5 warnings in 42.81s"
+    },
+    {
+      "id": "part_b",
+      "commit": "fe62268ca6c4f53f0213b213ce26f77d8474e194",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--tb=short",
+        "--disable-warnings",
+        "tests/test_tank_ladder.py",
+        "tests/test_tank_batches.py",
+        "tests/test_tank_tenant_boundaries.py",
+        "tests/test_tank_one_door.py",
+        "tests/test_train1.py",
+        "tests/test_za_region.py",
+        "tests/test_moa_integration.py",
+        "tests/test_bf2_tank_guards.py",
+        "tests/test_agent1_skills.py",
+        "tests/test_t6_graduate.py",
+        "tests/test_tenant_scoping.py",
+        "tests/test_skala_call_cost.py",
+        "tests/test_grad1_graduation_table.py",
+        "tests/test_skala_approval_safety.py"
+      ],
+      "exit_code": 0,
+      "summary": "217 passed, 5 warnings in 93.63s (0:01:33)"
+    },
+    {
+      "id": "expanded",
+      "commit": "fe62268ca6c4f53f0213b213ce26f77d8474e194",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--tb=short",
+        "--disable-warnings",
+        "tests/test_tank_ladder.py",
+        "tests/test_tank_batches.py",
+        "tests/test_tank_tenant_boundaries.py",
+        "tests/test_tank_one_door.py",
+        "tests/test_command.py",
+        "tests/test_agent_chassis.py",
+        "tests/test_bf3_industry_words.py",
+        "tests/test_dashboards.py"
+      ],
+      "exit_code": 0,
+      "summary": "178 passed, 16 warnings in 70.22s (0:01:10)"
+    },
+    {
+      "id": "retry",
+      "commit": "fe62268ca6c4f53f0213b213ce26f77d8474e194",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--tb=short",
+        "--disable-warnings",
+        "tests/test_tank_batches.py",
+        "tests/test_command.py",
+        "tests/test_moa_integration.py"
+      ],
+      "exit_code": 0,
+      "summary": "124 passed, 5 warnings in 47.58s"
+    },
+    {
+      "id": "research",
+      "commit": "fe62268ca6c4f53f0213b213ce26f77d8474e194",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--tb=short",
+        "--disable-warnings",
+        "tests/test_perplexity_research.py"
+      ],
+      "exit_code": 0,
+      "summary": "47 passed, 5 warnings in 1.94s"
+    },
+    {
+      "id": "batch",
+      "commit": "fe62268ca6c4f53f0213b213ce26f77d8474e194",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--tb=short",
+        "--disable-warnings",
+        "tests/test_tank_batches.py"
+      ],
+      "exit_code": 0,
+      "summary": "11 passed, 5 warnings in 12.09s"
+    },
+    {
+      "id": "graduation",
+      "commit": "fe62268ca6c4f53f0213b213ce26f77d8474e194",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--tb=short",
+        "--disable-warnings",
+        "-s",
+        "tests/test_tank_ladder.py::test_first_fixture_graduation_promotes_itself_and_serves_two_tenants"
+      ],
+      "exit_code": 0,
+      "summary": "1 passed, 5 warnings in 1.89s"
+    },
+    {
+      "id": "baseline_review",
+      "commit": "90a2a77dcd300a085d38db230f3829e1170a11e1",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--tb=short",
+        "--disable-warnings",
+        "tests/test_tank_review_regressions.py"
+      ],
+      "exit_code": 1,
+      "summary": "16 failed, 3 passed, 5 warnings in 15.44s"
+    },
+    {
+      "id": "main_boundaries",
+      "commit": "65067a43a0d27d54b48633bf6db4f3fc211ec05f",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--tb=short",
+        "--disable-warnings",
+        "tests/test_tank_tenant_boundaries.py"
+      ],
+      "exit_code": 1,
+      "summary": "5 failed, 1 passed, 5 warnings in 4.25s"
+    },
+    {
+      "id": "full",
+      "commit": "fe62268ca6c4f53f0213b213ce26f77d8474e194",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--tb=short",
+        "--disable-warnings",
+        "tests"
+      ],
+      "exit_code": 1,
+      "summary": "4 failed, 3367 passed, 15 skipped, 53 warnings, 437 subtests passed in 755.99s (0:12:35)"
+    },
+    {
+      "id": "main_known_failures",
+      "commit": "65067a43a0d27d54b48633bf6db4f3fc211ec05f",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--tb=short",
+        "tests/test_rig_postgres.py::test_rig_startup_loads_catalogues_on_postgres",
+        "tests/test_shell_nav.py",
+        "tests/test_rig_forge_pipeline.py",
+        "-k",
+        "startup_loads or shell or neutral_samples"
+      ],
+      "exit_code": 1,
+      "summary": "4 failed, 1 passed, 4 deselected, 1 warning in 22.02s"
+    },
+    {
+      "id": "guard_current_313",
+      "argv": [
+        "python3.13",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--tb=short",
+        "tests/test_tank_one_door.py"
+      ],
+      "exit_code": 0,
+      "summary": "27 passed in 18.77s",
+      "commit": "fe62268ca6c4f53f0213b213ce26f77d8474e194"
+    },
+    {
+      "id": "guard_plant",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--tb=short",
+        "tests/test_tank_one_door.py::test_no_new_tank_bypass"
+      ],
+      "exit_code": 1,
+      "summary": "1 failed in 19.04s",
+      "commit": "fe62268ca6c4f53f0213b213ce26f77d8474e194"
+    },
+    {
+      "id": "guard_current_312",
+      "argv": [
+        "python",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "--tb=short",
+        "tests/test_tank_one_door.py"
+      ],
+      "exit_code": 0,
+      "summary": "27 passed in 19.04s",
+      "commit": "fe62268ca6c4f53f0213b213ce26f77d8474e194"
+    }
+  ],
+  "source_facts": {
+    "guard_exception_entries": 64,
+    "guard_exception_occurrences": 113,
+    "ci_room_lanes": [
+      "base",
+      "market_lab",
+      "radix",
+      "rig",
+      "tiger",
+      "tisan",
+      "zenas"
+    ],
+    "cache_ttl_s": 604800,
+    "batch_min": 50,
+    "semantic_vector_dimensions": 256,
+    "files": {
+      "tests/test_tank_review_regressions.py": "cc4b2d7411afaf83683fc46dc498c0de44cc51fa3d17306b688f2a4ea5fcaaaf",
+      "tests/test_tank_tenant_boundaries.py": "9e79f64c894b67b210bf82b641f4cab9ac83492f2939f36bb161d7ec8567f8f7",
+      "tests/test_tank_one_door.py": "3d9c6d6f06b80ee3bfe4d38243edf2b9586cc04616fcad51941ceda80c52ee01"
+    },
+    "postgres": "16.15 (Debian 16.15-1.pgdg13+2)",
+    "seeded_policies": [
+      {
+        "task_type": "agent.base.think",
+        "rung": 3,
+        "model": "luna",
+        "escalation_model": "luna",
+        "confidence_floor": "0.8000",
+        "cache_scope": "tenant",
+        "semantic_cache": false,
+        "matter_matching": false,
+        "acceptance_window_s": 86400,
+        "max_cost_usd": "1.000000",
+        "batch_eligible": false
+      },
+      {
+        "task_type": "base.business_data",
+        "rung": 3,
+        "model": "luna",
+        "escalation_model": "luna",
+        "confidence_floor": "0.4000",
+        "cache_scope": "tenant",
+        "semantic_cache": false,
+        "matter_matching": false,
+        "acceptance_window_s": 86400,
+        "max_cost_usd": "1.000000",
+        "batch_eligible": true
+      },
+      {
+        "task_type": "base.extract",
+        "rung": 3,
+        "model": "luna",
+        "escalation_model": "luna",
+        "confidence_floor": "0.8000",
+        "cache_scope": "tenant",
+        "semantic_cache": false,
+        "matter_matching": false,
+        "acceptance_window_s": 86400,
+        "max_cost_usd": "1.000000",
+        "batch_eligible": true
+      },
+      {
+        "task_type": "base.normalize",
+        "rung": 3,
+        "model": "luna",
+        "escalation_model": "luna",
+        "confidence_floor": "0.8000",
+        "cache_scope": "tenant",
+        "semantic_cache": false,
+        "matter_matching": false,
+        "acceptance_window_s": 86400,
+        "max_cost_usd": "1.000000",
+        "batch_eligible": false
+      },
+      {
+        "task_type": "zenas.apply",
+        "rung": 1,
+        "model": "astra",
+        "escalation_model": null,
+        "confidence_floor": "0.8000",
+        "cache_scope": "tenant",
+        "semantic_cache": true,
+        "matter_matching": true,
+        "acceptance_window_s": 86400,
+        "max_cost_usd": "1.000000",
+        "batch_eligible": false
+      },
+      {
+        "task_type": "zenas.case_facts",
+        "rung": 1,
+        "model": "astra",
+        "escalation_model": null,
+        "confidence_floor": "0.8000",
+        "cache_scope": "tenant",
+        "semantic_cache": true,
+        "matter_matching": true,
+        "acceptance_window_s": 86400,
+        "max_cost_usd": "1.000000",
+        "batch_eligible": true
+      },
+      {
+        "task_type": "zenas.compose",
+        "rung": 1,
+        "model": "astra",
+        "escalation_model": null,
+        "confidence_floor": "0.8000",
+        "cache_scope": "tenant",
+        "semantic_cache": true,
+        "matter_matching": true,
+        "acceptance_window_s": 86400,
+        "max_cost_usd": "1.000000",
+        "batch_eligible": false
+      },
+      {
+        "task_type": "zenas.draft",
+        "rung": 1,
+        "model": "astra",
+        "escalation_model": null,
+        "confidence_floor": "0.8000",
+        "cache_scope": "tenant",
+        "semantic_cache": true,
+        "matter_matching": true,
+        "acceptance_window_s": 86400,
+        "max_cost_usd": "1.000000",
+        "batch_eligible": false
+      },
+      {
+        "task_type": "zenas.plain_language",
+        "rung": 1,
+        "model": "astra",
+        "escalation_model": null,
+        "confidence_floor": "0.8000",
+        "cache_scope": "tenant",
+        "semantic_cache": true,
+        "matter_matching": true,
+        "acceptance_window_s": 86400,
+        "max_cost_usd": "1.000000",
+        "batch_eligible": false
+      },
+      {
+        "task_type": "zenas.review",
+        "rung": 1,
+        "model": "astra",
+        "escalation_model": null,
+        "confidence_floor": "0.8000",
+        "cache_scope": "tenant",
+        "semantic_cache": true,
+        "matter_matching": true,
+        "acceptance_window_s": 86400,
+        "max_cost_usd": "1.000000",
+        "batch_eligible": false
+      },
+      {
+        "task_type": "zenas.rule_card",
+        "rung": 1,
+        "model": "astra",
+        "escalation_model": null,
+        "confidence_floor": "0.8000",
+        "cache_scope": "tenant",
+        "semantic_cache": true,
+        "matter_matching": true,
+        "acceptance_window_s": 86400,
+        "max_cost_usd": "1.000000",
+        "batch_eligible": true
+      },
+      {
+        "task_type": "zenas.scope",
+        "rung": 1,
+        "model": "astra",
+        "escalation_model": null,
+        "confidence_floor": "0.8000",
+        "cache_scope": "tenant",
+        "semantic_cache": true,
+        "matter_matching": true,
+        "acceptance_window_s": 86400,
+        "max_cost_usd": "1.000000",
+        "batch_eligible": false
+      },
+      {
+        "task_type": "zenas.selftest",
+        "rung": 1,
+        "model": "astra",
+        "escalation_model": null,
+        "confidence_floor": "0.8000",
+        "cache_scope": "tenant",
+        "semantic_cache": true,
+        "matter_matching": true,
+        "acceptance_window_s": 86400,
+        "max_cost_usd": "1.000000",
+        "batch_eligible": true
+      }
+    ],
+    "schema_reapplication_unchanged": true
+  },
+  "browser_import_graph": {
+    "client_roots": 52,
+    "key_modules": [
+      "app/admin/autumbra/shields-data.ts",
+      "app/admin/ghost/shields-data.ts",
+      "app/api/zenas/tank.ts",
+      "app/control/workers.ts",
+      "app/market-lab/quarantine-actions.ts",
+      "app/market-lab/quarantine-server.ts",
+      "app/radix/tests/browser.mjs",
+      "app/rig/vault-server.ts",
+      "app/tank/proof/server.ts",
+      "app/tank/workers-server.ts",
+      "lib/admin.ts",
+      "lib/tank.ts"
+    ],
+    "client_import_paths_to_keys": []
+  },
+  "graduation_output": "FIRST_GRADUATION {\"task\": \"base.normalize\", \"date\": \"2026-10-27T00:06:50.761001+00:00\", \"skill\": \"skill:base.normalize@1.0.0\", \"samples\": 30, \"tenants\": 2, \"agreement\": 1.0, \"before_usd_per_call\": 0.001, \"after_usd_per_call\": 0, \"automatic\": true, \"traffic\": \"independent synthetic fixtures; provider stub; actual provider spend zero\"}",
+  "ci_at_tested_head": [
+    {
+      "conclusion": "success",
+      "html_url": "https://github.com/zenascapetown-code/tervory-tank/actions/runs/40382328418/job/121781908797",
+      "id": 121781908797,
+      "name": "workspace"
+    },
+    {
+      "conclusion": "success",
+      "html_url": "https://github.com/zenascapetown-code/tervory-tank/actions/runs/40382328418/job/121781908713",
+      "id": 121781908713,
+      "name": "savings-page"
+    },
+    {
+      "conclusion": "failure",
+      "html_url": "https://github.com/zenascapetown-code/tervory-tank/actions/runs/40382328418/job/121781908526",
+      "id": 121781908526,
+      "name": "tank"
+    },
+    {
+      "conclusion": "success",
+      "html_url": "https://github.com/zenascapetown-code/tervory-tank/actions/runs/40382328418/job/121781783719",
+      "id": 121781783719,
+      "name": "changes"
+    },
+    {
+      "conclusion": "skipped",
+      "html_url": "https://github.com/zenascapetown-code/tervory-tank/actions/runs/40382328418/job/121781783525",
+      "id": 121781783525,
+      "name": "pick runner"
+    },
+    {
+      "conclusion": "failure",
+      "html_url": "https://github.com/zenascapetown-code/tervory-tank/actions/runs/40382328623/job/121781630960",
+      "id": 121781630960,
+      "name": "gate"
+    },
+    {
+      "conclusion": "success",
+      "html_url": "https://github.com/zenascapetown-code/tervory-tank/actions/runs/40382328473/job/121781601754",
+      "id": 121781601754,
+      "name": "forge-image"
+    },
+    {
+      "conclusion": "success",
+      "html_url": "https://github.com/zenascapetown-code/tervory-tank/actions/runs/40382328623/job/121781544621",
+      "id": 121781544621,
+      "name": "changes"
+    }
+  ],
+  "historical_first_graduation_output": "FIRST_GRADUATION {\"task\": \"base.normalize\", \"date\": \"2026-10-26T15:10:53.415849+00:00\", \"skill\": \"skill:base.normalize@1.0.0\", \"samples\": 30, \"tenants\": 2, \"agreement\": 1.0, \"before_usd_per_call\": 0.001, \"after_usd_per_call\": 0, \"automatic\": true, \"traffic\": \"independent synthetic fixtures; provider stub; actual provider spend zero\"}"
+}

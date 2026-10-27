@@ -1,6 +1,8 @@
 import { releaseBatch, rejectBatch, removeBatch } from "./quarantine-actions";
 import { quarantineActions, type QuarantineBatch } from "./quarantine";
 
+import { formatRefreshed } from "./format";
+
 const ACTIONS = {
   Release: releaseBatch,
   Reject: rejectBatch,
@@ -27,7 +29,7 @@ function BatchTable({ rows }: { rows: QuarantineBatch[] }) {
               <td>{batch.region}</td>
               <td>{batch.currency}</td>
               <td>{batch.unit}</td>
-              <td className="ml-mono">{batch.fetchedAt}</td>
+              <td className="ml-mono">{formatRefreshed(batch.fetchedAt)}</td>
               <td>{batch.reason || "Waiting for review"}</td>
               <td>
                 {quarantineActions(batch.status).map((label) => (
@@ -61,8 +63,8 @@ export function QuarantinePanel({
   const closed = batches.filter((batch) => batch.status === "rejected" || batch.status === "removed");
   return (
     <section id="quarantine" className="ml-quarantine" aria-labelledby="quarantine-title">
-      <h2 id="quarantine-title">Quarantine</h2>
-      <p>A new batch waits here until it matches the series. Rejected batches stay out of the pool.</p>
+      <h2 id="quarantine-title">Feed review</h2>
+      <p>Review records that differ from earlier data before allowing them into answers. Rejected records remain excluded.</p>
       {error ? (
         <p className="ml-quarantine-error" role="alert">
           {error}
@@ -72,12 +74,12 @@ export function QuarantinePanel({
         <>
           <h3>Waiting</h3>
           <BatchTable rows={held} />
-          <h3>In the pool</h3>
-          <p>Remove drops the batch from the pool. Gold from it is retired.</p>
+          <h3>In use</h3>
+          <p>Remove stops these records and their related examples from being used.</p>
           <BatchTable rows={pooled} />
           {closed.length ? (
             <>
-              <h3>Closed</h3>
+              <h3>Excluded</h3>
               <BatchTable rows={closed} />
             </>
           ) : null}

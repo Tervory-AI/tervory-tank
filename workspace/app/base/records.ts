@@ -1,3 +1,6 @@
+import { evidence } from "./evidence";
+import { batchLabel } from "./model";
+
 /**
  * Search and Ask Base over this product's own records. Plain data only: no network, no keys, no writes.
  * Record fields follow BaseRecord in workspace/lib/tank.ts and the columns in /api/base/export.
@@ -11,9 +14,10 @@ export type RecordIn = {
   raw?: Record<string, unknown> | null;
   profile?: Record<string, Field | undefined> | null;
   status?: string;
+  passes?: Record<string, Record<string, unknown>>;
 };
 
-export type FoundValue = { value: string; source: string | null };
+export type FoundValue = { value: string; source: string | null; sourceUrl?: string | null; checkedAt?: string | null };
 
 export type RecordHit = {
   id: string;
@@ -26,7 +30,7 @@ export type RecordHit = {
 };
 
 /** A reference that came back with an answer. Only answers carry Sources. */
-export type AnswerSource = { title: string; detail: string; source: string | null };
+export type AnswerSource = { title: string; detail: string; source: string | null; checkedAt?: string | null };
 
 export type Answer = { text: string; sources: AnswerSource[]; matched: number };
 
@@ -44,7 +48,12 @@ function field(record: RecordIn, key: string): FoundValue | null {
   const f = record.profile?.[key];
   const value = text(f?.value);
   if (!value) return null;
-  return { value, source: f?.source ? String(f.source) : null };
+  const proof = evidence(record);
+  const siteField = key === "website" || String(f?.source ?? "").startsWith("site");
+  return { value, source: f?.source ? String(f.source) : null,
+    sourceUrl: siteField ? proof?.sourceUrl ?? null : null,
+    checkedAt: siteField ? proof?.checkedAt ?? null : null };
+
 }
 
 function rawText(record: RecordIn, keys: string[]): string {
@@ -58,7 +67,7 @@ function rawText(record: RecordIn, keys: string[]): string {
 function firstEmail(value: FoundValue | null): FoundValue | null {
   if (!value) return null;
   const first = value.value.split(/[;,\s]+/).find((part) => part.includes("@"));
-  return first ? { value: first, source: value.source } : null;
+  return first ? { ...value, value: first } : null;
 }
 
 export function recordHit(record: RecordIn): RecordHit {
@@ -69,7 +78,7 @@ export function recordHit(record: RecordIn): RecordHit {
     id: record.id,
     name,
     place: [city, state].filter(Boolean).join(", "),
-    batch: record.batch || "No batch",
+    batch: record.batch ? batchLabel(record.batch) : "No batch",
     website: field(record, "website"),
     email: firstEmail(field(record, "emails") ?? field(record, "email")),
     phone: field(record, "phone"),
@@ -190,7 +199,8 @@ export function answerRequest(records: RecordIn[], request: string): Answer {
     sources: shown.map((hit) => ({
       title: hit.name,
       detail: [hit.place, hit.website ? hostOf(hit.website.value) : "No website", hit.batch].filter(Boolean).join(" · "),
-      source: hit.website?.source ?? null,
+      source: hit.website?.sourceUrl ?? null,
+      checkedAt: hit.website?.checkedAt ?? null,
     })),
   };
 }

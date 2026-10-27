@@ -85,6 +85,7 @@ _skill_home: contextvars.ContextVar[str | None] = contextvars.ContextVar("zenas_
 app = FastAPI(title="Tervory Tank", version="0.2.0")
 _pool: asyncpg.Pool | None = None
 _background: set[asyncio.Task[None]] = set()
+_batch_task: asyncio.Task[None] | None = None
 _http: httpx.AsyncClient | None = None
 _redis: aioredis.Redis | None = None
 REDIS_URL = os.environ.get("REDIS_URL", "redis://redis:6379/0")
@@ -571,7 +572,8 @@ async def require_key(request: Request, x_tank_key: str = Header(default="")) ->
     skill_run = path.startswith("/v1/skala/") and path.endswith("/run") and path.count("/") == 4
     ghost_route = matched == "ghost" and (request.method, path) in __import__("ghost_routes").ROOM_METHODS
     vendor_write = request.method == "POST" and path == "/v1/ledger/vendor"
-    if path not in {"/health", "/v1/route"} and not skill_run and not vendor_write and not ghost_route:
+    batch_route = path == "/v1/route/batch" or (request.method == "GET" and path.startswith("/v1/route/batch/"))
+    if path not in {"/health", "/v1/route"} and not batch_route and not skill_run and not vendor_write and not ghost_route:
         raise HTTPException(status_code=403, detail="This agent key cannot call that.")
     return matched
 
@@ -595,7 +597,7 @@ class RouteRequest(BaseModel):
     home_region: str | None = None
     case_ref: str | None = None          # isolates internal bench samples in the cache
     messages: list[Message] = Field(min_length=1)
-    max_tokens: int | None = None          # a skill may ask for fewer than the policy's cap
+    max_tokens: int | None = Field(default=None, ge=1)          # a skill may ask for fewer than the policy's cap
 
 
 class RouteResponse(BaseModel):
@@ -610,12 +612,16 @@ class RouteResponse(BaseModel):
     moa_run_id: uuid.UUID | None = None
     moa: dict[str, Any] | None = None
     finish_reason: str = ""
+    escalation: list[dict[str, Any]] = Field(default_factory=list)
+    batch: bool = False
+    baseline_cost_usd: float | None = None
+    discount_usd: float | None = None
 
 
 class PolicyRow(BaseModel):
     task_type: str
     tenant_id: uuid.UUID | None = None
-    rung: int = 1
+    rung: int = Field(default=1, ge=1, le=4)
     model: str
     priority: str = "standard"
     batch_eligible: bool = False
@@ -623,6 +629,12 @@ class PolicyRow(BaseModel):
     max_tokens_out: int = 1024
     system_prompt: str | None = None
     eval_threshold: float = 0.97
+    escalation_model: str | None = None
+    confidence_floor: float = Field(default=0.8, ge=0, le=1)
+    acceptance_window_s: int = Field(default=86400, ge=0, le=2592000)
+    semantic_cache: bool = False
+    matter_matching: bool = False
+    max_cost_usd: float = Field(default=1, gt=0)
 
 
 class TaskCreate(BaseModel):
@@ -647,6 +659,19 @@ class Feedback(BaseModel):
 SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema.sql")
 
 
+async def _warn_unapproved_policy_pins() -> None:
+    async with pool().acquire() as conn:
+        rows = await conn.fetch("""SELECT p.task_type,p.tenant_id,p.model,s.state
+            FROM tank.policy p LEFT JOIN tank.skills s
+              ON s.id=split_part(substr(btrim(p.model),7),'@',1)
+              AND s.version=split_part(substr(btrim(p.model),7),'@',2)
+            WHERE btrim(p.model) LIKE 'skill:%' AND s.state IS DISTINCT FROM 'approved'
+            ORDER BY p.task_type,p.tenant_id""")
+    for row in rows:
+        log.warning("Policy pins non-approved skill: task=%s tenant=%s model=%s state=%s; code cannot serve",
+                    row["task_type"], row["tenant_id"] or "platform", row["model"], row["state"] or "missing")
+
+
 @app.on_event("startup")
 async def _startup() -> None:
     """Open the pool, then apply the schema. Every statement in schema.sql is
@@ -667,7 +692,7 @@ async def _startup() -> None:
             "WHERE status IN ('queued','running') AND task_type <> 'base.enrich'"
         )
     global _http, _packages
-    _http = httpx.AsyncClient(headers={"User-Agent": "TervoryBase/0.1 (+https://tervory.com)"}, timeout=15, event_hooks={"request": [__import__("controls").paid_host_hook]})
+    _http = httpx.AsyncClient(headers={"User-Agent": "Tervory/1.0 (+https://tervory.com)"}, timeout=15, event_hooks={"request": [__import__("controls").paid_host_hook], "response": [__import__("controls").paid_response_hook]})
     global _redis
     try:
         _redis = aioredis.from_url(REDIS_URL, decode_responses=True, socket_connect_timeout=2)
@@ -677,10 +702,16 @@ async def _startup() -> None:
         _redis = None
     _packages = skala.load_packages()
     await register_packages()
+    await _warn_unapproved_policy_pins()
+    global _batch_task
+    _batch_task = asyncio.create_task(_batch_loop())
 
 
 @app.on_event("shutdown")
 async def _shutdown() -> None:
+    if _batch_task:
+        _batch_task.cancel()
+        await asyncio.gather(_batch_task, return_exceptions=True)
     if _redis:
         await _redis.aclose()
     if _http:
@@ -747,22 +778,32 @@ async def list_policy(tenant_id: uuid.UUID) -> list[dict[str, Any]]:
 async def put_policy(task_type: str, body: PolicyRow) -> dict[str, Any]:
     if body.task_type != task_type:
         raise HTTPException(status_code=400, detail="task_type in path and body differ")
-    if graduate.router_cannot_serve(body.model):
+    body.model = body.model.strip()
+    if graduate.router_cannot_serve(body.model) or (graduate.is_skill(body.model) and body.rung != 3):
         raise HTTPException(status_code=400, detail=graduate.ROUTER_BLOCK)
+    if graduate.is_skill(body.model):
+        parsed = graduate.parse_skill(body.model)
+        pkg = get_package(*parsed)
+        await __import__("agent_skills").guard_submission_owner(__import__("sys").modules[__name__], pkg, body.tenant_id or PLATFORM_TENANT)
+        problem = graduate.code_candidate_problem(body.model, state=await skill_state(*parsed), task_type=pkg.task_type, on_disk=True)
+        if problem:
+            raise HTTPException(409, problem)
     async with pool().acquire() as conn:
         await conn.execute(
             """
             INSERT INTO tank.policy
               (task_type, tenant_id, rung, model, priority, batch_eligible, cache_scope,
-               max_tokens_out, system_prompt, eval_threshold, updated_at)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, now())
+               max_tokens_out, system_prompt, eval_threshold, escalation_model,confidence_floor,acceptance_window_s,semantic_cache,matter_matching,max_cost_usd,updated_at)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16, now())
             ON CONFLICT (task_type, COALESCE(tenant_id, '00000000-0000-0000-0000-000000000000'::uuid))
             DO UPDATE SET rung=$3, model=$4, priority=$5, batch_eligible=$6, cache_scope=$7,
-                          max_tokens_out=$8, system_prompt=$9, eval_threshold=$10, updated_at=now()
+                          max_tokens_out=$8, system_prompt=$9, eval_threshold=$10, escalation_model=$11,confidence_floor=$12,
+                          acceptance_window_s=$13,semantic_cache=$14,matter_matching=$15,max_cost_usd=$16,updated_at=now()
             """,
             body.task_type, body.tenant_id, body.rung, body.model, body.priority,
             body.batch_eligible, body.cache_scope, body.max_tokens_out, body.system_prompt,
-            body.eval_threshold,
+            body.eval_threshold, body.escalation_model, body.confidence_floor, body.acceptance_window_s,
+            body.semantic_cache, body.matter_matching, body.max_cost_usd,
         )
     return {"ok": True}
 
@@ -842,15 +883,193 @@ def override_allowed(task_type: str) -> bool:
     return task_type in MODEL_OVERRIDE_TASK_TYPES or MOA_SEAT_TASK.fullmatch(task_type) is not None
 
 
+def _plain_value(value: Any) -> Any:
+    """Drop explicitly labelled HTML fields; never parse or rewrite prompt text."""
+    if isinstance(value, dict):
+        return {k: _plain_value(v) for k, v in value.items() if str(k).lower() not in {"html", "raw_html"}}
+    if isinstance(value, list):
+        return [_plain_value(v) for v in value]
+    return value
+
+
+def _plain_messages(messages: list[dict[str, str]]) -> list[dict[str, str]]:
+    result = []
+    for message in messages:
+        text = message["content"]
+        try:
+            value = json.loads(text)
+        except (ValueError, TypeError):
+            value = text
+        clean = _plain_value(value)
+        # Preserve the original bytes unless labelled HTML fields were removed.
+        result.append({"role": message["role"], "content": text if clean == value else json.dumps(clean)})
+    return result
+
+
+def _contains_html(value: Any) -> bool:
+    """Recognize explicit markup, not mathematical '<' text or invented tag names.
+
+    This is a refusal check, never an HTML parser or prompt transformation.
+    Labelled html/raw_html fields are removed separately by _plain_value.
+    """
+    if isinstance(value, dict):
+        return any(_contains_html(v) for v in value.values())
+    if isinstance(value, list):
+        return any(_contains_html(v) for v in value)
+    if not isinstance(value, str):
+        return False
+    tags = "html|head|body|title|script|style|template|div|span|p|a|b|i|em|strong|table|tr|td|th|ul|ol|li|h[1-6]|form|button|section|article|pre|code"
+    attributes = r'''(?:\s+[a-z_:][\w:.-]*\s*=\s*(?:"[^"]*"|'[^']*'))*\s*'''
+    return bool(re.search(
+        rf"<!doctype\s+html\b|<!--.*?-->|<(?P<tag>{tags})(?:\s+[^<>]*?)?>.*?</(?P=tag)\s*>|<(?:br|hr|img|input|meta|link){attributes}/?>",
+        value, re.I | re.S,
+    ))
+
+
+def _storage_mask(value: Any) -> Any:
+    """Never fail a completed call while retaining its transcript; redact on failure."""
+    try:
+        if _contains_html(value):
+            return "[omitted: HTML]"
+        return _screen_mask(_plain_value(value))
+    except Exception:
+        return "[omitted: masking unavailable]"
+
+
+async def _refuse_input(req: RouteRequest, policy: dict[str, Any], error: str,
+                        task_id: uuid.UUID | None = None) -> None:
+    receipt = await _record_local(req, policy, model=str(policy.get("model", "skill")),
+                                  rung=int(policy.get("rung", 3)), content="", outcome="failed",
+                                  error=error, task_id=task_id, masked_messages=[])
+    raise HTTPException(422, {"error": error, "ledger_id": str(receipt.ledger_id),
+                              "receipt": receipt.model_dump(mode="json")})
+
+
+async def _preflight_mask(req: RouteRequest, policy: dict[str, Any], messages: list[dict[str, str]],
+                          task_id: uuid.UUID | None = None) -> Any:
+    try:
+        original = _screen_mask(_plain_messages([m.model_dump() for m in req.messages]))
+        # Include policy/system text before any code or paid execution.
+        _screen_mask(_plain_messages(messages))
+        json.dumps(original)
+        return original
+    except Exception:
+        await _refuse_input(req, policy, "Input could not be masked; no execution was started", task_id)
+
+
+async def _check_route_task(req: RouteRequest, task_id: uuid.UUID | None) -> None:
+    if task_id is None:
+        return
+    async with pool().acquire() as conn:
+        status = await conn.fetchval("SELECT status FROM tank.tasks WHERE id=$1 AND tenant_id=$2", task_id, req.tenant_id)
+        if status is None and req.agent == "base":
+            status = await conn.fetchval("SELECT status FROM agent_base.tasks WHERE id=$1 AND tenant_id=$2", task_id, req.tenant_id)
+            # The Base brain continues after its free pipeline marks the batch
+            # done. Explicit cancellation/failure still stops further work.
+            if status == "done":
+                return
+    if status is None:
+        raise HTTPException(404, "No task for this tenant")
+    if status in {"cancelled", "canceled", "failed", "done"}:
+        raise HTTPException(409, "Task is no longer running")
+
+
+async def _record_local(req: RouteRequest, policy: dict[str, Any], *, model: str, rung: int,
+                        content: str, task_id: uuid.UUID | None = None, outcome: str = "delivered",
+                        escalation: list[dict[str, Any]] | None = None, latency_ms: int = 0,
+                        error: str | None = None, route_seat: str | None = None,
+                        masked_messages: Any = None) -> RouteResponse:
+    ledger_id = uuid.uuid4()
+    # Retain an example even for code/cache runs, but never raw identifiers/HTML.
+    clean = masked_messages if masked_messages is not None else _storage_mask(_plain_messages([m.model_dump() for m in req.messages]))
+    output = _storage_mask(content)
+    async with pool().acquire() as conn:
+        async with conn.transaction():
+            await conn.execute(
+                """INSERT INTO tank.ledger(id,tenant_id,region,agent,skill,task_type,rung,model,priority,
+                cost_usd,latency_ms,cache_hit,outcome,task_id,error,escalation,accept_after,route_seat)
+                VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,0,$10,$11,$12,$13,$14,$15::jsonb,
+                now()+make_interval(secs=>$16),$17)""",
+                ledger_id, req.tenant_id, box_region(), req.agent, req.skill, req.task_type, rung, model,
+                req.priority or policy.get("priority", "standard"), latency_ms, rung == 4, outcome,
+                task_id, error, json.dumps(escalation or []), int(policy.get("acceptance_window_s", 86400)), route_seat,
+            )
+            await conn.execute(
+                "INSERT INTO tank.transcripts(ledger_id,tenant_id,task_type,messages,content) VALUES($1,$2,$3,$4::jsonb,$5)",
+                ledger_id, req.tenant_id, req.task_type, json.dumps(clean), output[:20000],
+            )
+    return RouteResponse(ledger_id=ledger_id, model=model, rung=rung, content=content, tokens_in=0,
+                         tokens_out=0, cost_usd=0, latency_ms=latency_ms, escalation=escalation or [])
+
+
+def _cache_identity(req: RouteRequest, policy: dict[str, Any], messages: list[dict[str, str]],
+                    max_tokens: int, route_seat: str | None) -> tuple[str, str, str]:
+    # Whole policy revision, pinned skill, system messages, matter and generation
+    # limits participate. Even legacy platform/region scopes stay tenant-local.
+    context = [policy, req.skill, req.case_ref, route_seat, max_tokens, box_region(),
+               [m for m in messages if m["role"] != "user"]]
+    context_hash = hashlib.sha256(json.dumps(context, sort_keys=True, default=str).encode()).hexdigest()
+    exact = hashlib.sha256(json.dumps(messages, sort_keys=True).encode()).hexdigest()
+    return context_hash, exact, graduate.semantic_form(messages)
+
+
+async def _cache_read(req: RouteRequest, policy: dict[str, Any], identity: tuple[str, str, str]) -> str | None:
+    if (policy.get("cache_scope") not in {"tenant", "platform", "region"}
+            or (policy.get("matter_matching") and not req.case_ref)):
+        return None
+    context, exact, form = identity
+    async with pool().acquire() as conn:
+        rows = await conn.fetch(
+            """SELECT c.input_hash,c.semantic_form,c.vector,c.tenant_id,t.content
+            FROM tank.route_cache c JOIN tank.ledger l ON l.id=c.ledger_id AND l.tenant_id=c.tenant_id
+            JOIN tank.transcripts t ON t.ledger_id=l.id AND t.tenant_id=c.tenant_id
+            WHERE c.tenant_id=$1 AND c.region=$2 AND c.task_type=$3 AND c.context_hash=$4
+              AND c.expires_at>now() AND l.outcome='delivered' AND l.feedback IS DISTINCT FROM 'rejected'
+              AND (c.input_hash=$5 OR ($6 AND c.semantic_form=$7))
+            ORDER BY (c.input_hash=$5) DESC LIMIT 1""",
+            req.tenant_id, box_region(), req.task_type, context, exact,
+            bool(policy.get("semantic_cache")) and (not policy.get("matter_matching") or bool(req.case_ref)), form,
+        )
+    if not rows:
+        return None
+    row = dict(rows[0])
+    if row["input_hash"] == exact:
+        return row["content"]
+    row["vector"] = json.loads(row["vector"]) if isinstance(row["vector"], str) else row["vector"]
+    hit = graduate.semantic_lookup(graduate.semantic_vector(form), [row], tenant_id=str(req.tenant_id), scope="tenant")
+    return hit["content"] if hit else None
+
+
+async def _cache_write(req: RouteRequest, policy: dict[str, Any], identity: tuple[str, str, str], ledger_id: uuid.UUID) -> None:
+    if (policy.get("cache_scope") not in {"tenant", "platform", "region"}
+            or (policy.get("matter_matching") and not req.case_ref)):
+        return
+    context, exact, form = identity
+    async with pool().acquire() as conn:
+        await conn.execute(
+            """INSERT INTO tank.route_cache(tenant_id,region,task_type,context_hash,input_hash,semantic_form,vector,ledger_id,expires_at)
+            VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,now()+make_interval(secs=>$9))
+            ON CONFLICT(tenant_id,region,task_type,context_hash,input_hash) DO UPDATE
+            SET ledger_id=EXCLUDED.ledger_id,vector=EXCLUDED.vector,semantic_form=EXCLUDED.semantic_form,expires_at=EXCLUDED.expires_at""",
+            req.tenant_id, box_region(), req.task_type, context, exact, form,
+            json.dumps(graduate.semantic_vector(form)), ledger_id, CACHE_TTL_S,
+        )
+
+
 async def run_route(
     req: RouteRequest,
     task_id: uuid.UUID | None = None,
     caller: str | None = None,
     *,
     model_override: str | None = None,
+    _defer_paid: bool = False,
+    _paid_policy: dict[str, Any] | None = None,
+    _prior_escalation: list[dict[str, Any]] | None = None,
+    _paid_limit: float | None = None,
 ) -> RouteResponse:
     """Pick the model from policy, call it through LiteLLM, write the ledger row.
     Used directly by /v1/route and in the background by tasks."""
+    await _check_route_task(req, task_id)
     box = box_region()
     foreign = home_region_refusal(call_home(req.home_region, box), box)
     if foreign:
@@ -882,11 +1101,13 @@ async def run_route(
         if model_override not in {row["name"] for row in await list_models()}:
             raise HTTPException(status_code=422, detail="Model is not on the roster")
     policy = await load_policy(req.task_type.partition("#moa.")[0], req.tenant_id)
+    if _paid_policy is not None:
+        policy = _paid_policy
     if model_override is not None:
         policy = {**policy, "model": model_override, "rung": 1, "candidate_model": None, "shadow_rate": 0}
     route_seat = req.task_type.partition("#moa.")[2] if seat else (
         "pinned" if req.task_type == "command.turn" and model_override is not None else None)
-    model = policy["model"]
+    model = str(policy["model"]).strip()
     # skill: and cache: are not model names. Do not send them to LiteLLM.
     if graduate.router_cannot_serve(model):
         raise HTTPException(status_code=400, detail=graduate.ROUTER_BLOCK)
@@ -909,7 +1130,7 @@ async def run_route(
     holds_identifier = prompt_has_identifier(sent)
     blocked = model_call_refusal(
         sent,
-        model,
+        None if graduate.is_skill(model) or int(policy["rung"]) == 3 else model,
         box=box,
         tenant_id=str(req.tenant_id),
         task_type=req.task_type,
@@ -917,45 +1138,84 @@ async def run_route(
         skill=req.skill,
         pool_read=pool_read,
     )
-    if blocked:
+    if blocked and int(policy["rung"]) not in {3, 4}:
         raise HTTPException(status_code=403, detail=blocked)
 
-    # ---- rung 4: the cache. Same task type, model and messages → the answer we already paid for.
-    # Scope comes from policy: 'tenant' keys include the tenant (answers never cross tenants);
-    # 'platform' is shared (only for task types whose answers hold nothing tenant-specific).
-    cache_key = None
-    if not holds_identifier and _redis is not None and policy.get("cache_scope") in ("tenant", "platform"):
-        scope = str(req.tenant_id) if policy["cache_scope"] == "tenant" else "platform"
-        digest_parts: list[Any] = [req.task_type, model, max_tokens, messages]
-        if route_seat is not None:
-            digest_parts.append(route_seat)
-            if seat and req.case_ref:
-                digest_parts.append(req.case_ref)
-        if generation:
-            digest_parts.append(generation)
-        digest = hashlib.sha256(json.dumps(digest_parts, sort_keys=True).encode()).hexdigest()
-        cache_key = f"tank:cache:{scope}:{digest}"
-        try:
-            hit = await _redis.get(cache_key)
-        except Exception:  # noqa: BLE001
-            hit = None
-        if hit:
-            cached = json.loads(hit)
-            ledger_id = uuid.uuid4()
-            async with pool().acquire() as conn:
-                await conn.execute(
-                    """
-                    INSERT INTO tank.ledger
-                      (id, tenant_id, region, agent, skill, task_type, rung, model, priority,
-                       tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, route_seat)
-                    VALUES ($1,$2,$3,$4,$5,$6,4,$7,$8,0,0,0,0,true,'delivered',$9,$10)
-                    """,
-                    ledger_id, req.tenant_id, req.region or DEFAULT_REGION, req.agent, req.skill,
-                    req.task_type, model, priority, task_id, route_seat,
-                )
-            return RouteResponse(ledger_id=ledger_id, model=model, rung=4, content=cached["content"],
-                                 tokens_in=0, tokens_out=0, cost_usd=0.0, latency_ms=0)
+    # Validate ownership/version before reuse; an unavailable approval escalates.
+    code_problem = None
+    if graduate.is_skill(model):
+        parsed = graduate.parse_skill(model)
+        pkg = get_package(*parsed)
+        await __import__("agent_skills").guard_submission_owner(__import__("sys").modules[__name__], pkg, req.tenant_id)
+        state = await skill_state(*parsed)
+        problem = graduate.code_candidate_problem(model, state=state, task_type=pkg.task_type, on_disk=True)
+        if state != "approved":
+            code_problem = "skill_not_approved"
+        elif problem:
+            raise HTTPException(409, problem)
+        if int(policy["rung"]) != 3:
+            raise HTTPException(409, "A skill policy must start at rung 3")
+    transcript_messages = await _preflight_mask(req, policy, messages, task_id)
+    identity = _cache_identity(req, policy, messages, max_tokens, route_seat)
+    if not holds_identifier and code_problem is None:
+        hit = await _cache_read(req, policy, identity)
+        if hit is not None:
+            await _check_route_task(req, task_id)
+            return await _record_local(req, policy, model=model, rung=4, content=hit, task_id=task_id, route_seat=route_seat)
 
+    escalation: list[dict[str, Any]] = list(_prior_escalation or [])
+    if int(policy["rung"]) == 4:
+        escalation.append({"from_rung": 4, "to_rung": 3, "reason": "cache_miss", "model": model})
+        policy = {**policy, "rung": 3}
+    if int(policy["rung"]) == 3:
+        started_code = time.perf_counter()
+        content = ""
+        reason = code_problem or "no_code_skill"
+        if graduate.is_skill(model) and code_problem is None:
+            try:
+                async with asyncio.timeout(30):
+                    content, _cost = await _run_code_candidate(req, model, messages)
+                reason = graduate.code_failure(json.loads(content), float(policy.get("confidence_floor", 0.8)))
+            except HTTPException as exc:
+                if exc.status_code in {403, 404, 409}:
+                    raise
+                reason = "skill_error"
+            except Exception:
+                reason = "skill_error"
+        await _check_route_task(req, task_id)
+        if reason is None:
+            result = await _record_local(req, policy, model=model, rung=3, content=content, task_id=task_id,
+                                         latency_ms=int((time.perf_counter()-started_code)*1000))
+            if not holds_identifier and _storage_mask(content) == content:
+                await _cache_write(req, policy, identity, result.ledger_id)
+            return result
+        escalation.append({"from_rung": 3, "to_rung": 2, "reason": reason, "model": model})
+        attempt = await _record_local(req, policy, model=model, rung=3, content=content, task_id=task_id,
+                                      outcome="unverified", escalation=escalation, error=reason)
+        escalation[-1]["ledger_id"] = str(attempt.ledger_id)
+        model = policy.get("escalation_model") or policy.get("previous_model") or (model if not graduate.is_skill(model) else None)
+        if not model or graduate.is_skill(model) or graduate.router_cannot_serve(model):
+            raise HTTPException(409, {"ledger_id": str(attempt.ledger_id), "error": "No paid escalation model in policy"})
+        policy = {**policy, "model": model, "rung": 2}
+        generation = case_facts_generation(model) if req.task_type == "zenas.case_facts" else {}
+
+    # Code may parse labelled HTML. Prompt text is never parsed or rewritten.
+    messages = _plain_messages(messages)
+    if _contains_html(messages):
+        await _refuse_input(req, policy, "HTML must be supplied in html/raw_html fields with separately extracted text", task_id)
+    sent = "\n".join(m["content"] for m in messages)
+    blocked = model_call_refusal(sent, model, box=box, tenant_id=str(req.tenant_id),
+                                 task_type=req.task_type, caller=caller, skill=req.skill, pool_read=pool_read)
+    if blocked:
+        raise HTTPException(403, blocked)
+    await _check_route_task(req, task_id)
+    if _defer_paid and not holds_identifier:
+        raise _DeferredRoute(req, policy, messages, max_tokens, generation, escalation)
+    if _paid_limit is not None:
+        prices = await _batch_price(model)
+        if _call_upper(messages, max_tokens, prices) > _paid_limit:
+            raise HTTPException(409, "Task cost cap prevents another call")
+        generation = {**generation, "disable_fallbacks": True}
     await __import__("controls").refuse_paid(paid=True, task=req.task_type, path="route")
     started = time.perf_counter()
     try:
@@ -975,11 +1235,11 @@ async def run_route(
                 """
                 INSERT INTO tank.ledger
                   (id, tenant_id, region, agent, skill, task_type, rung, model, priority,
-                   tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, error, route_seat)
-                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,0,0,$10,false,'failed',$11,$12,$13)
+                   tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, error, route_seat, escalation)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,0,0,$10,false,'failed',$11,$12,$13,$14::jsonb)
                 """,
                 ledger_id, req.tenant_id, req.region or DEFAULT_REGION, req.agent, req.skill,
-                req.task_type, policy["rung"], model, priority, latency_ms, task_id, err, route_seat,
+                req.task_type, policy["rung"], model, priority, latency_ms, task_id, err, route_seat, json.dumps(escalation),
             )
         raise HTTPException(status_code=502, detail={"ledger_id": str(ledger_id), "upstream": err}) from exc
     latency_ms = int((time.perf_counter() - started) * 1000)
@@ -1014,23 +1274,17 @@ async def run_route(
             """
             INSERT INTO tank.ledger
               (id, tenant_id, region, agent, skill, task_type, rung, model, priority,
-               tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, error, route_seat)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,$14,$15,$16,$17)
+               tokens_in, tokens_out, cost_usd, latency_ms, cache_hit, outcome, task_id, error, route_seat,escalation,accept_after)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,$14,$15,$16,$17,$18::jsonb,now()+make_interval(secs=>$19))
             """,
             ledger_id, req.tenant_id, req.region or DEFAULT_REGION, req.agent, req.skill,
             req.task_type, policy["rung"], answered, priority, tokens_in, tokens_out, cost_usd,
-            latency_ms, outcome, task_id, error, route_seat,
+            latency_ms, outcome, task_id, error, route_seat, json.dumps(escalation), int(policy.get("acceptance_window_s", 86400)),
         )
 
     if outcome == "failed":
         upstream: Any = "provider error" if holds_identifier else (data or r.text[:500])
         raise HTTPException(status_code=502, detail={"ledger_id": str(ledger_id), "upstream": upstream})
-
-    if cache_key and content:
-        try:
-            await _redis.set(cache_key, json.dumps({"content": content, "ledger_id": str(ledger_id)}), ex=CACHE_TTL_S)
-        except Exception:  # noqa: BLE001
-            pass
 
     # Graduation: shadow the candidate on a share of calls; it never affects this answer.
     # An identifier prompt is not copied to a second provider or into the transcript.
@@ -1039,23 +1293,29 @@ async def run_route(
         _background.add(t)
         t.add_done_callback(_background.discard)
 
-    # The learning corpus: what was asked, what came back (system prompt stays in policy).
-    # Personal identifiers are never written here, even when an SA-hosted model saw them.
+    masked_content = _storage_mask(content)
     if not holds_identifier:
         async with pool().acquire() as conn:
             await conn.execute(
-                "INSERT INTO tank.transcripts (ledger_id, tenant_id, task_type, messages, content) VALUES ($1,$2,$3,$4::jsonb,$5)",
-                ledger_id, req.tenant_id, req.task_type, json.dumps([m.model_dump() for m in req.messages]), content[:20000],
+                "INSERT INTO tank.transcripts (ledger_id,tenant_id,task_type,messages,content) VALUES($1,$2,$3,$4::jsonb,$5)",
+                ledger_id, req.tenant_id, req.task_type,
+                json.dumps(transcript_messages),
+                masked_content[:20000],
             )
-
+    if content and not holds_identifier and masked_content == content:
+        await _cache_write(req, policy, identity, ledger_id)
     return RouteResponse(
         ledger_id=ledger_id, model=answered, rung=policy["rung"], content=content,
         tokens_in=tokens_in, tokens_out=tokens_out, cost_usd=cost_usd, latency_ms=latency_ms,
-        finish_reason=finish_reason,
+        finish_reason=finish_reason, escalation=escalation,
     )
 
 
 async def _llm(model: str, messages: list[dict[str, str]], max_tokens: int) -> tuple[str, float]:
+    messages = _plain_messages(messages)
+    if _contains_html(messages):
+        raise ValueError("HTML is not model input; supply extracted text")
+    _screen_mask(messages)
     await __import__("controls").refuse_paid(path="_llm")
     async with httpx.AsyncClient(timeout=120) as client:
         r = await client.post(
@@ -1223,6 +1483,7 @@ async def _run_code_candidate(req: RouteRequest, cand: str, messages: list[dict[
         raise RuntimeError("a code candidate looks like skill:id@version")
     skill_id, version = parsed
     pkg = get_package(skill_id, version)
+    await __import__("agent_skills").guard_submission_owner(__import__("sys").modules[__name__], pkg, req.tenant_id)
     state = await skill_state(skill_id, version)
     problem = graduate.code_candidate_problem(cand, state=state, task_type=pkg.task_type, on_disk=True)
     if problem:
@@ -1235,11 +1496,11 @@ async def _run_code_candidate(req: RouteRequest, cand: str, messages: list[dict[
 
     ctx = skala.SkillContext(
         tenant_id=req.tenant_id, skill_ref=pkg.ref, agent=pkg.agent, task_id=None,
-        _model=_forbid, http=_http, env=dict(SKILL_ENV),
+        _model=_forbid, http=_http, env={k: v for k, v in SKILL_ENV.items() if not k.endswith(("_KEY", "_TOKEN"))},
     )
     out = await skala.run_skill(pkg, graduate.skill_payload(messages), ctx)
-    if ctx.calls:
-        raise RuntimeError("code candidate called a model")
+    if ctx.calls or ctx.cost_usd:
+        raise RuntimeError("code candidate attempted paid work")
     return json.dumps(out), 0.0
 
 
@@ -1288,16 +1549,20 @@ async def _shadow(req: RouteRequest, policy: dict[str, Any], messages: list[dict
             ledger_id, req.tenant_id, req.task_type, policy["model"], cand, primary[:20000],
             (cand_content or "")[:20000], cand_cost, primary_cost, agreement, method, json.dumps(fields),
         )
-        # The candidate's spend is platform R&D: logged, visible, not on the client's bill.
-        await conn.execute(
+        # Paid R&D stays on platform. Zero-cost code evidence remains tenant-owned.
+        shadow_ledger = await conn.fetchval(
             """
             INSERT INTO tank.ledger (tenant_id, region, agent, task_type, rung, model, priority, tokens_in, tokens_out,
                                      cost_usd, latency_ms, cache_hit, outcome)
-            VALUES ($1,$2,'tank',$3,$4,$5,'batch',0,0,$6,0,false,$7)
+            VALUES ($1,$2,'tank',$3,$4,$5,'batch',0,0,$6,0,false,$7) RETURNING id
             """,
-            PLATFORM_TENANT, DEFAULT_REGION, f"{req.task_type}#shadow", 3 if code else 1, cand, cand_cost,
+            req.tenant_id if code else PLATFORM_TENANT, DEFAULT_REGION, f"{req.task_type}#shadow", 3 if code else 1, cand, cand_cost,
             "delivered" if cand_content is not None else "failed",
         )
+        if code:
+            await conn.execute("INSERT INTO tank.transcripts(ledger_id,tenant_id,task_type,messages,content) VALUES($1,$2,$3,$4::jsonb,$5)",
+                shadow_ledger, req.tenant_id, req.task_type+"#shadow", json.dumps(_storage_mask(_plain_messages(messages))),
+                _storage_mask(cand_content or "")[:20000])
         await _add_spend(conn, req.task_type, cand_cost)
     await _move_task(req.task_type)
 
@@ -1456,6 +1721,14 @@ async def _move_task(task_type: str, *, by: str = "tank", automatic: bool = True
             if row is None:
                 return None
             policy = dict(row)
+            if graduate.is_skill(policy.get("candidate_model")):
+                problem = await _check_code_candidate(conn, policy["candidate_model"])
+                if problem:
+                    return graduate.Move("hold", policy, problem)
+                skill_id, version = graduate.parse_skill(policy["candidate_model"])
+                owner = await conn.fetchrow("SELECT tenant_id,region FROM tank.agent_skill_submissions WHERE skill_id=$1 AND version=$2", skill_id, version)
+                if owner and (owner["tenant_id"] != PLATFORM_TENANT or owner["region"] != box_region()):
+                    return graduate.Move("hold", policy, "Private code cannot become a global policy")
             evidence = await _load_evidence(conn, policy)
             now = datetime.now(timezone.utc)
             if automatic:
@@ -1499,9 +1772,11 @@ def _note(row: Any) -> str | None:
 async def _code_quotes(conn: Any) -> list[graduate.Quote]:
     rows = await conn.fetch(
         """
-        SELECT id, version FROM tank.skills
-        WHERE state='approved' AND present AND task_type IS NULL
-        """
+        SELECT s.id,s.version FROM tank.skills s
+        LEFT JOIN tank.agent_skill_submissions p ON p.skill_id=s.id AND p.version=s.version
+        WHERE s.state='approved' AND s.present AND s.task_type IS NULL
+          AND (p.skill_id IS NULL OR (p.tenant_id=$1 AND p.region=$2))
+        """, PLATFORM_TENANT, box_region(),
     )
     quotes: list[graduate.Quote] = []
     for row in rows:
@@ -1516,14 +1791,29 @@ async def _code_quotes(conn: Any) -> list[graduate.Quote]:
     return quotes
 
 
+def _screen_mask(value: Any) -> Any:
+    """Mask identifiers/email in text without interpreting angle brackets."""
+    if isinstance(value, dict):
+        return {_screen_mask(k): _screen_mask(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_screen_mask(v) for v in value]
+    if not isinstance(value, str):
+        return value
+    masked = pii_module().detect(value)["text"]
+    return re.sub(r"[\w.+-]+@[\w.-]+\.[a-z]{2,}", "[EMAIL]", masked, flags=re.I)
+
+
 async def _screen_cases(conn: Any, task_type: str) -> list[tuple[Any, list[dict[str, str]], dict[str, Any]]]:
+    # A global policy must never learn by replaying a client's conversations.
+    # Approval and platform ownership are both required; holdouts remain unseen.
     evals = await conn.fetch(
-        "SELECT input, expected FROM tank.evals WHERE task_type=$1 ORDER BY created_at DESC LIMIT 12",
-        task_type,
-    )
-    transcripts = await conn.fetch(
-        "SELECT messages, content FROM tank.transcripts WHERE task_type=$1 ORDER BY created_at DESC LIMIT 8",
-        task_type,
+        """SELECT g.input,g.expected FROM tank.gold_examples g
+        WHERE g.tenant_id=$1 AND g.region=$2 AND g.status='checked'
+          AND g.checked_by IS NOT NULL AND g.checked_at IS NOT NULL
+          AND NOT g.holdout AND (NOT g.auto_label OR g.auto_approved)
+          AND (g.skill_id=$3 OR EXISTS (SELECT 1 FROM tank.skills s WHERE s.id=g.skill_id AND s.task_type=$3))
+        ORDER BY g.created_at DESC,g.id LIMIT 20""",
+        PLATFORM_TENANT, box_region(), task_type,
     )
     cases: list[tuple[Any, list[dict[str, str]], dict[str, Any]]] = []
     for row in evals:
@@ -1536,17 +1826,15 @@ async def _screen_cases(conn: Any, task_type: str) -> list[tuple[Any, list[dict[
                 expected = json.loads(expected)
             except json.JSONDecodeError:
                 pass
-        body = payload if isinstance(payload, dict) else {"text": str(payload)}
-        messages = [{"role": "user", "content": json.dumps(body) if isinstance(payload, dict) else str(payload)}]
-        cases.append((expected, messages, body))
-    for row in transcripts:
-        messages = row["messages"]
-        if isinstance(messages, str):
-            messages = json.loads(messages)
-        if not isinstance(messages, list):
+        if _contains_html([payload, expected]):
             continue
-        clean = [{"role": str(m.get("role") or "user"), "content": str(m.get("content") or "")} for m in messages if isinstance(m, dict)]
-        cases.append((row["content"], clean, graduate.skill_payload(clean)))
+        try:
+            payload, expected = _screen_mask(payload), _screen_mask(expected)
+        except ValueError:
+            continue
+        body = payload if isinstance(payload, dict) else {"text": str(payload)}
+        messages = [{"role": "user", "content": json.dumps(body)}]
+        cases.append((expected, messages, body))
     return cases
 
 
@@ -1576,6 +1864,14 @@ async def _screen_skill(pkg: skala.SkillPackage, cases: list[tuple[Any, list[dic
 async def _screen_model(name: str, task_type: str, cases: list[tuple[Any, list[dict[str, str]], dict[str, Any]]], tolerance: float, max_tokens: int) -> float | None:
     scores: list[float] = []
     for expected, messages, _payload in cases:
+        if _contains_html([messages, expected]):
+            continue
+        try:
+            messages, expected = _screen_mask(messages), _screen_mask(expected)
+        except ValueError:
+            continue
+        if model_call_refusal(json.dumps(messages), name, box=box_region(), tenant_id=str(PLATFORM_TENANT)):
+            continue
         if not await _shadow_budget_open(task_type):
             break
         content, cost = await _llm(name, messages, max_tokens)
@@ -2009,11 +2305,331 @@ async def route(body: RouteRequest, caller: str | None = Depends(require_key)):
     if "#moa." in body.task_type:
         raise HTTPException(403, "Submit the original task; MoA seats are internal")
     row = await load_policy(body.task_type, body.tenant_id)
-    if not row.get("moa_enabled"):
+    if not row.get("moa_enabled") or int(row.get("rung", 1)) in {3, 4} or graduate.is_skill(row.get("model")):
         return await run_route(body, caller=caller)
     return await __import__("moa").routed_request(
         body, caller, row=row, complex_request=body.complex_request, interactive=body.interactive
     )
+
+
+# ---------- provider batches (independent of the task queue worker) ----------
+
+class _DeferredRoute(Exception):
+    def __init__(self, req, policy, messages, max_tokens, generation, escalation):
+        self.req, self.policy = req, policy
+        self.messages, self.max_tokens = messages, max_tokens
+        self.generation, self.escalation = generation, escalation
+
+
+class BatchRequest(BaseModel):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4)
+    requests: list[RouteRequest] = Field(min_length=1, max_length=1000)
+
+
+def _batch_min() -> int:
+    return max(1, int(os.environ.get("TANK_BATCH_MIN", "50")))
+
+
+async def _batch_price(model: str) -> dict[str, Any]:
+    row = next((r for r in await _roster_models() if r["model_name"] == model), None)
+    if not row:
+        raise HTTPException(409, "No price for the selected model")
+    info = row["model_info"]
+    if info.get("input_cost_per_token") is None or info.get("output_cost_per_token") is None:
+        raise HTTPException(409, "No price for the selected model")
+    native = row["litellm_params"]["model"]
+    provider, _, name = native.partition("/")
+    return {"input": float(info["input_cost_per_token"]), "output": float(info["output_cost_per_token"]),
+            "provider": provider, "native": name, "discount": 0.5}
+
+
+def _call_upper(messages: list[dict[str, str]], max_tokens: int, prices: dict[str, Any]) -> float:
+    # UTF-8 bytes bound BPE tokens; reserve additional framing tokens. No provider
+    # fallback in a capped retry, since a different model has a different price.
+    tokens = len(json.dumps(messages, ensure_ascii=False).encode()) + 1024
+    return tokens * prices["input"] + max_tokens * prices["output"]
+
+
+async def _batch_gateway(method: str, path: str, *, model: str | None = None, **kwargs) -> httpx.Response:
+    await __import__("controls").refuse_paid(path="route/batch")
+    async with httpx.AsyncClient(timeout=60) as client:
+        headers = {"Authorization": f"Bearer {LITELLM_MASTER_KEY}"}
+        if model:
+            headers["x-litellm-model"] = model
+        response = await client.request(method, f"{LITELLM_URL}{path}", headers=headers, **kwargs)
+    response.raise_for_status()
+    return response
+
+
+@app.post("/v1/route/batch")
+async def route_batch(body: BatchRequest, caller: str | None = Depends(require_key)) -> dict[str, Any]:
+    tenant = body.requests[0].tenant_id
+    task = body.requests[0].task_type
+    if any(r.tenant_id != tenant or r.task_type != task for r in body.requests):
+        raise HTTPException(422, "A batch has one tenant and one task type")
+    if "#moa." in task or override_allowed(task):
+        raise HTTPException(422, "This task requires the foreground route")
+    fingerprint = hashlib.sha256(json.dumps(body.model_dump(mode="json", exclude={"id"}), sort_keys=True).encode()).hexdigest()
+    async with pool().acquire() as conn:
+        existing = await conn.fetchrow("SELECT id,request_hash FROM tank.batches WHERE id=$1 AND tenant_id=$2", body.id, tenant)
+    if existing:
+        if existing["request_hash"] != fingerprint:
+            raise HTTPException(409, "Batch id already has different requests")
+        return await batch_status(body.id, tenant)
+    policy = await load_policy(task, tenant)
+    eligible = bool(policy.get("batch_eligible")) and not policy.get("moa_enabled")
+    eligible = eligible and len(body.requests) >= _batch_min() and not any(r.interactive for r in body.requests)
+    local, deferred = [], []
+    for position, req in enumerate(body.requests):
+        if caller:
+            req = req.model_copy(update={"agent": caller})
+        try:
+            result = await run_route(req, caller=caller, _defer_paid=eligible,
+                                     _paid_limit=float(policy["max_cost_usd"]))
+            local.append({**result.model_dump(mode="json"), "position": position, "item_id": str(uuid.uuid5(body.id, str(position)))})
+        except _DeferredRoute as item:
+            item.position = position
+            deferred.append(item)
+    if not deferred:
+        return {"id": str(body.id), "status": "completed", "results": local, "batch": False}
+    # Free/code/cache results have already finished. Only work still needing a
+    # model is submitted; no interactive request enters this durable queue.
+    prices = await _batch_price(deferred[0].policy["model"])
+    if prices["provider"] not in {"openai"}:
+        for item in deferred:
+            result = await run_route(item.req, caller=caller, _paid_policy=item.policy,
+                                     _prior_escalation=item.escalation, _paid_limit=float(item.policy["max_cost_usd"]))
+            local.append({**result.model_dump(mode="json"), "position": item.position, "item_id": str(uuid.uuid5(body.id, str(item.position)))})
+        return {"id": str(body.id), "status": "completed", "results": local, "batch": False}
+    reservations = [_call_upper(d.messages, d.max_tokens, prices) * prices["discount"] for d in deferred]
+    if any(cost > float(item.policy["max_cost_usd"]) for item, cost in zip(deferred, reservations)):
+        raise HTTPException(409, "Task cost cap prevents this batch")
+    async with pool().acquire() as conn:
+        async with conn.transaction():
+            inserted = await conn.fetchval(
+                """INSERT INTO tank.batches(id,tenant_id,region,task_type,model,count,provider,estimated_cost_usd,caller,request_hash)
+                VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT DO NOTHING RETURNING id""",
+                body.id, tenant, box_region(), task, deferred[0].policy["model"], len(body.requests), prices["provider"], sum(reservations), caller, fingerprint,
+            )
+            if inserted:
+                for item, reservation in zip(deferred, reservations):
+                    snapshot = {"routing": item.policy, "messages": item.messages, "max_tokens": item.max_tokens,
+                                "generation": item.generation, "escalation": item.escalation}
+                    clean_req = item.req.model_copy(update={"messages": [Message(**m) for m in _plain_messages([m.model_dump() for m in item.req.messages])]})
+                    await conn.execute(
+                        """INSERT INTO tank.batch_items(batch_id,tenant_id,item_id,request,policy,prices,reserved_usd,position)
+                        VALUES($1,$2,$3,$4::jsonb,$5::jsonb,$6::jsonb,$7,$8)""",
+                        body.id, tenant, uuid.uuid5(body.id, str(item.position)), clean_req.model_dump_json(), json.dumps(snapshot, default=str), json.dumps(prices), reservation, item.position,
+                    )
+                for result in local:
+                    await conn.execute("""INSERT INTO tank.batch_items(batch_id,tenant_id,item_id,request,policy,prices,status,ledger_id,position)
+                        VALUES($1,$2,$3,'{}','{}','{}','completed',$4,$5)""",
+                        body.id, tenant, uuid.UUID(result["item_id"]), uuid.UUID(result["ledger_id"]), result["position"])
+                    await conn.execute("UPDATE tank.ledger SET batch=true,batch_id=$3,batch_baseline_cost_usd=0,batch_discount_usd=0 WHERE id=$1 AND tenant_id=$2",
+                        uuid.UUID(result["ledger_id"]), tenant, body.id)
+            else:
+                winner = await conn.fetchrow("SELECT request_hash FROM tank.batches WHERE id=$1 AND tenant_id=$2", body.id, tenant)
+                if winner is None or winner["request_hash"] != fingerprint:
+                    raise HTTPException(409, "Batch id is unavailable or has different requests")
+    result = await batch_status(body.id, tenant)
+    return result
+
+
+@app.get("/v1/route/batch/{batch_id}", dependencies=[Depends(require_key)])
+async def batch_status(batch_id: uuid.UUID, tenant_id: uuid.UUID) -> dict[str, Any]:
+    async with pool().acquire() as conn:
+        row = await conn.fetchrow("SELECT * FROM tank.batches WHERE id=$1 AND tenant_id=$2 AND region=$3", batch_id, tenant_id, box_region())
+        if row is None:
+            raise HTTPException(404, "No batch for this tenant")
+        items = await conn.fetch(
+            """SELECT i.item_id,i.position,i.status,i.error,l.id AS ledger_id,l.model,l.rung,l.cost_usd,
+            coalesce(l.batch_baseline_cost_usd,l.baseline_cost_usd) AS baseline_cost_usd,
+            l.tokens_in,l.tokens_out,l.latency_ms,l.batch,l.escalation,t.content
+            FROM tank.batch_items i LEFT JOIN tank.ledger l ON l.id=i.ledger_id AND l.tenant_id=i.tenant_id
+            LEFT JOIN tank.transcripts t ON t.ledger_id=l.id AND t.tenant_id=i.tenant_id
+            WHERE i.batch_id=$1 AND i.tenant_id=$2 ORDER BY i.position""", batch_id, tenant_id,
+        )
+    results = []
+    for item in items:
+        value = dict(item)
+        baseline, actual = value.get("baseline_cost_usd"), value.get("cost_usd")
+        value["discount_usd"] = float(baseline - actual) if baseline is not None and actual is not None else None
+        results.append(value)
+    return {**dict(row), "completion_window": "24h", "results": results}
+
+
+def _batch_obj(value: Any) -> Any:
+    return json.loads(value) if isinstance(value, str) else value
+
+
+async def _batch_fallback(conn: Any, batch: Any, item: Any) -> None:
+    """Claim exactly one normal retry. Unknown/in-flight submissions are never retried."""
+    claimed = await conn.fetchval(
+        """UPDATE tank.batch_items SET attempts=1,status='retrying' WHERE batch_id=$1 AND tenant_id=$2
+        AND item_id=$3 AND attempts=0 AND ledger_id IS NULL RETURNING item_id""",
+        batch["id"], batch["tenant_id"], item["item_id"],
+    )
+    if not claimed:
+        return
+    snapshot = _batch_obj(item["policy"])
+    req = RouteRequest.model_validate(_batch_obj(item["request"]))
+    remaining = float(snapshot["routing"]["max_cost_usd"]) - float(item["reserved_usd"])
+    try:
+        current = await load_policy(req.task_type, req.tenant_id)
+        if str(current["updated_at"]) != str(snapshot["routing"]["updated_at"]):
+            raise HTTPException(409, "Policy changed before retry")
+        remaining = min(remaining, float(current["max_cost_usd"])-float(item["reserved_usd"]))
+        result = await run_route(req, caller=batch["caller"], _paid_policy=snapshot["routing"],
+                                 _prior_escalation=snapshot["escalation"], _paid_limit=remaining)
+        await conn.execute("""UPDATE tank.ledger SET batch=true,batch_id=$3,
+            batch_baseline_cost_usd=cost_usd,batch_discount_usd=0 WHERE id=$1 AND tenant_id=$2""",
+            result.ledger_id, req.tenant_id, batch["id"])
+        await conn.execute("""UPDATE tank.batch_items SET status='completed',ledger_id=$4
+            WHERE batch_id=$1 AND tenant_id=$2 AND item_id=$3""", batch["id"], req.tenant_id, item["item_id"], result.ledger_id)
+    except Exception as exc:
+        # Errors are operational codes, never echoed provider/client text.
+        reason = "cost_cap" if isinstance(exc, HTTPException) and exc.status_code == 409 else "normal_retry_failed"
+        receipt = exc.detail.get("ledger_id") if isinstance(exc, HTTPException) and isinstance(exc.detail, dict) else None
+        ledger_id = uuid.UUID(str(receipt)) if receipt else None
+        if ledger_id:
+            await conn.execute("""UPDATE tank.ledger SET batch=true,batch_id=$3,
+                batch_baseline_cost_usd=cost_usd,batch_discount_usd=0 WHERE id=$1 AND tenant_id=$2""",
+                ledger_id, req.tenant_id, batch["id"])
+        await conn.execute("""UPDATE tank.batch_items SET status='failed',error=$4,ledger_id=$5
+            WHERE batch_id=$1 AND tenant_id=$2 AND item_id=$3""", batch["id"], req.tenant_id, item["item_id"], reason, ledger_id)
+
+
+async def _batch_result(conn: Any, batch: Any, item: Any, result: dict[str, Any]) -> None:
+    response = result.get("response") or {}
+    data = response.get("body") or {}
+    if response.get("status_code") != 200 or not isinstance(data, dict):
+        await _batch_fallback(conn, batch, item)
+        return
+    content, finish = _choice_answer(data)
+    if not content:
+        await _batch_fallback(conn, batch, item)
+        return
+    usage = data.get("usage") or {}
+    tokens_in, tokens_out = int(usage.get("prompt_tokens") or 0), int(usage.get("completion_tokens") or 0)
+    prices, snapshot = _batch_obj(item["prices"]), _batch_obj(item["policy"])
+    baseline = Decimal(tokens_in)*Decimal(str(prices["input"])) + Decimal(tokens_out)*Decimal(str(prices["output"]))
+    actual = baseline*Decimal(str(prices["discount"]))
+    req = RouteRequest.model_validate(_batch_obj(item["request"]))
+    ledger_id = uuid.uuid4()
+    async with conn.transaction():
+        # Item lock plus unique ledger assignment makes repeated provider polls idempotent.
+        locked = await conn.fetchrow("SELECT ledger_id,status FROM tank.batch_items WHERE batch_id=$1 AND tenant_id=$2 AND item_id=$3 FOR UPDATE", batch["id"], req.tenant_id, item["item_id"])
+        if locked["ledger_id"] is not None or locked["status"] in {"failed", "retrying"}:
+            return
+        await conn.execute(
+            """INSERT INTO tank.ledger(id,tenant_id,region,agent,skill,task_type,rung,model,priority,
+            tokens_in,tokens_out,cost_usd,latency_ms,outcome,batch,batch_id,baseline_model,baseline_cost_usd,
+            baseline_status,escalation,accept_after,batch_baseline_cost_usd,batch_discount_usd)
+            VALUES($1,$2,$3,$4,$5,$6,$7,$8,'batch',$9,$10,$11,0,'delivered',true,$12,$8,$13,'measured',$14::jsonb,
+                   now()+make_interval(secs=>$15),$13,$13::numeric-$11::numeric)""",
+            ledger_id, req.tenant_id, box_region(), req.agent, req.skill, req.task_type,
+            snapshot["routing"]["rung"], batch["model"], tokens_in, tokens_out, actual,
+            batch["id"], baseline, json.dumps(snapshot["escalation"]), int(snapshot["routing"]["acceptance_window_s"]),
+        )
+        await conn.execute("""INSERT INTO tank.transcripts(ledger_id,tenant_id,task_type,messages,content)
+            VALUES($1,$2,$3,$4::jsonb,$5)""", ledger_id, req.tenant_id, req.task_type,
+            json.dumps(_storage_mask(_plain_messages([m.model_dump() for m in req.messages]))), _storage_mask(content)[:20000])
+        await conn.execute("""UPDATE tank.batch_items SET status='completed',ledger_id=$4,reserved_usd=$5
+            WHERE batch_id=$1 AND tenant_id=$2 AND item_id=$3""", batch["id"], req.tenant_id, item["item_id"], ledger_id, actual)
+
+
+async def _process_batch(conn: Any, batch: Any) -> None:
+    items = await conn.fetch("SELECT * FROM tank.batch_items WHERE batch_id=$1 AND tenant_id=$2 ORDER BY item_id", batch["id"], batch["tenant_id"])
+    if batch["status"] == "queued":
+        # Lock holder marks the submission boundary before contacting a provider.
+        # A crash here is visibly uncertain; it must not silently buy the work twice.
+        await conn.execute("UPDATE tank.batches SET status='submitting',submitted_at=now() WHERE id=$1 AND tenant_id=$2", batch["id"], batch["tenant_id"])
+        lines = []
+        for item in items:
+            if item["ledger_id"] is not None:
+                continue
+            snapshot, prices = _batch_obj(item["policy"]), _batch_obj(item["prices"])
+            req = RouteRequest.model_validate(_batch_obj(item["request"]))
+            current = await load_policy(req.task_type, req.tenant_id)
+            if str(current["updated_at"]) != str(snapshot["routing"]["updated_at"]):
+                raise ValueError("policy_changed")
+            blocked = model_call_refusal(json.dumps(snapshot["messages"]), batch["model"], box=box_region(), tenant_id=str(req.tenant_id))
+            if blocked:
+                raise ValueError("provider_not_allowed")
+            lines.append(json.dumps({"custom_id": str(item["item_id"]), "method": "POST", "url": "/v1/chat/completions",
+                "body": {"model": prices["native"], "messages": snapshot["messages"], "max_tokens": snapshot["max_tokens"], **snapshot["generation"]}}))
+        uploaded = await _batch_gateway("POST", "/v1/files", model=batch["model"], data={"purpose": "batch", "custom_llm_provider": batch["provider"]},
+            files={"file": ("requests.jsonl", ("\n".join(lines)+"\n").encode(), "application/jsonl")})
+        file_id = uploaded.json()["id"]
+        created = await _batch_gateway("POST", "/v1/batches", model=batch["model"], json={"input_file_id": file_id,
+            "endpoint": "/v1/chat/completions", "completion_window": "24h", "custom_llm_provider": batch["provider"],
+            "metadata": {"tank_batch_id": str(batch["id"])}})
+        await conn.execute("""UPDATE tank.batches SET status='submitted',provider_id=$3,input_file_id=$4
+            WHERE id=$1 AND tenant_id=$2""", batch["id"], batch["tenant_id"], created.json()["id"], file_id)
+        return
+    if batch["status"] in {"submitting", "retrying"}:
+        # Only a restarted process can see these states while holding the batch
+        # advisory lock. Surface uncertainty, and never repeat a submitted call.
+        await conn.execute("UPDATE tank.batch_items SET status='failed',error='interrupted_attempt' WHERE batch_id=$1 AND tenant_id=$2 AND ledger_id IS NULL", batch["id"], batch["tenant_id"])
+    else:
+        response = await _batch_gateway("GET", f"/v1/batches/{batch['provider_id']}", model=batch["model"], params={"custom_llm_provider": batch["provider"]})
+        state = response.json()
+        if state["status"] not in {"completed", "failed", "expired", "cancelled"}:
+            if (datetime.now(timezone.utc)-batch["submitted_at"]).total_seconds() >= 86400:
+                if batch["error"] != "24h deadline exceeded; awaiting provider cancellation":
+                    await _batch_gateway("POST", f"/v1/batches/{batch['provider_id']}/cancel", model=batch["model"], json={"custom_llm_provider": batch["provider"]})
+                    await conn.execute("UPDATE tank.batches SET error='24h deadline exceeded; awaiting provider cancellation' WHERE id=$1 AND tenant_id=$2", batch["id"], batch["tenant_id"])
+            return
+        outputs = {}
+        if state.get("output_file_id"):
+            raw = await _batch_gateway("GET", f"/v1/files/{state['output_file_id']}/content", model=batch["model"], params={"custom_llm_provider": batch["provider"]})
+            outputs = {row["custom_id"]: row for row in (json.loads(line) for line in raw.text.splitlines() if line.strip())}
+        await conn.execute("UPDATE tank.batches SET status='retrying' WHERE id=$1 AND tenant_id=$2", batch["id"], batch["tenant_id"])
+        for item in items:
+            if item["ledger_id"] is not None or item["status"] == "failed":
+                continue
+            result = outputs.get(str(item["item_id"]))
+            if result:
+                await _batch_result(conn, batch, item, result)
+            else:
+                await _batch_fallback(conn, batch, item)
+    await conn.execute(
+        """UPDATE tank.batches b SET finished_at=now(),
+        status=CASE WHEN EXISTS(SELECT 1 FROM tank.batch_items i WHERE i.batch_id=b.id AND i.tenant_id=b.tenant_id AND i.status='failed')
+          THEN 'failed' ELSE 'completed' END,
+        actual_cost_usd=(SELECT coalesce(sum(l.cost_usd),0) FROM tank.batch_items i JOIN tank.ledger l ON l.id=i.ledger_id AND l.tenant_id=i.tenant_id WHERE i.batch_id=b.id AND i.tenant_id=b.tenant_id),
+        error=CASE WHEN EXISTS(SELECT 1 FROM tank.batch_items i WHERE i.batch_id=b.id AND i.tenant_id=b.tenant_id AND i.status='failed') THEN 'Some items failed; see item errors' ELSE NULL END
+        WHERE b.id=$1 AND b.tenant_id=$2""", batch["id"], batch["tenant_id"],
+    )
+
+
+async def process_batches_once() -> None:
+    async with pool().acquire() as conn:
+        rows = await conn.fetch("SELECT id,tenant_id FROM tank.batches WHERE region=$1 AND status IN ('queued','submitting','submitted','retrying') ORDER BY created_at LIMIT 20", box_region())
+        for row in rows:
+            lock = int.from_bytes(row["id"].bytes[:8], "big", signed=True)
+            if not await conn.fetchval("SELECT pg_try_advisory_lock($1)", lock):
+                continue
+            try:
+                batch = await conn.fetchrow("SELECT * FROM tank.batches WHERE id=$1 AND tenant_id=$2", row["id"], row["tenant_id"])
+                if batch["status"] not in {"queued", "submitting", "submitted", "retrying"}:
+                    continue
+                await _process_batch(conn, batch)
+            except (httpx.HTTPError, ValueError, KeyError):
+                # Poll failures are retriable; submission ambiguity is surfaced
+                # on the next pass, with no second provider submission.
+                await conn.execute("UPDATE tank.batches SET error='Provider operation interrupted; retrying status check' WHERE id=$1 AND tenant_id=$2", row["id"], row["tenant_id"])
+            finally:
+                await conn.execute("SELECT pg_advisory_unlock($1)", lock)
+
+
+async def _batch_loop() -> None:
+    while True:
+        try:
+            await process_batches_once()
+        except Exception:
+            log.warning("Batch maintenance failed; retrying")
+        await asyncio.sleep(10)
 
 
 # ---------- tasks: the board ----------
@@ -2254,11 +2870,26 @@ async def vendor_ledger(body: VendorCall, agent: str | None = Depends(require_ke
 
 
 @app.get("/v1/skala", dependencies=[Depends(require_key)])
-async def list_skills() -> list[dict[str, Any]]:
-    """Every skill, plus the platform tenant's average cost per call on this box over 30 days."""
+async def list_skills(
+    tenant_id: uuid.UUID | None = None,
+    all_tenants: bool = False,
+    x_tank_key: str = Header(default=""),
+    x_tervory_admin: str = Header(default=""),
+) -> list[dict[str, Any]]:
+    """Public packages and this tenant's submissions; all submissions require founder identity."""
+    if all_tenants:
+        await __import__("admin").require_admin(x_tank_key, x_tervory_admin)
     async with pool().acquire() as conn:
-        rows = await conn.fetch("SELECT * FROM tank.skills ORDER BY agent, id, version")
-        costs = await skill_costs.fetch_call_costs(conn, PLATFORM_TENANT, box_region())
+        rows = await conn.fetch(
+            """SELECT s.* FROM tank.skills s
+            LEFT JOIN tank.agent_skill_submissions p ON p.skill_id=s.id AND p.version=s.version
+            WHERE p.skill_id IS NULL OR (p.tenant_id=$1 AND p.region=$2) OR $3
+            ORDER BY s.agent,s.id,s.version""", tenant_id, box_region(), all_tenants,
+        )
+        if tenant_id is None:
+            costs = await skill_costs.fetch_call_costs(conn, PLATFORM_TENANT, box_region())
+        else:
+            costs = await skill_costs.fetch_call_costs(conn, tenant_id, box_region())
     return skill_costs.attach_call_costs([dict(r) for r in rows], costs)
 
 
@@ -2424,6 +3055,9 @@ async def _run_one_skill(
 ) -> dict[str, Any]:
     version = body.version or await _pick_version(skill_id, body.preview)
     pkg = get_package(skill_id, version)
+    await __import__("agent_skills").guard_submission_owner(
+        __import__("sys").modules[__name__], pkg, body.tenant_id,
+    )
     if caller:
         shared: list[str] = []
         try:
@@ -2446,7 +3080,28 @@ async def _run_one_skill(
         ctx.agent = caller
     if caller == "base":
         await __import__("agent_skills").guard_base_run(__import__("sys").modules[__name__], pkg, body, ctx)
-    out = await skala.run_skill(pkg, body.input, ctx)
+    request = RouteRequest(tenant_id=body.tenant_id, agent=caller or pkg.agent,
+                           task_type=pkg.task_type or pkg.id, skill=pkg.ref,
+                           messages=[Message(role="user", content=json.dumps(body.input))])
+    try:
+        receipt_policy = await load_policy(request.task_type, body.tenant_id)
+    except HTTPException as exc:
+        if exc.status_code != 404:
+            raise
+        receipt_policy = {"priority": "standard", "acceptance_window_s": 86400}
+    await _preflight_mask(request, receipt_policy, [m.model_dump() for m in request.messages], ctx.task_id)
+    try:
+        out = await skala.run_skill(pkg, body.input, ctx)
+    except Exception:
+        if pkg.task_type is None and not ctx.calls and not ctx.cost_usd:
+            await _record_local(request, receipt_policy, model="skill:"+pkg.ref, rung=3,
+                                content="", outcome="failed", error="skill_error", task_id=ctx.task_id)
+        raise
+    if not ctx.calls and not ctx.cost_usd:
+        receipt = await _record_local(request, receipt_policy, model="skill:"+pkg.ref, rung=3,
+                                      content=json.dumps(out), outcome="unverified" if body.preview else "delivered", task_id=ctx.task_id)
+        out["_ledger_id"] = str(receipt.ledger_id)
+        out["_receipt"] = receipt.model_dump(mode="json")
     out["_cost_usd"] = round(ctx.cost_usd, 6)
     return out
 
@@ -2736,12 +3391,28 @@ async def ledger_feedback(ledger_id: uuid.UUID, body: Feedback) -> dict[str, Any
             """,
             ledger_id, body.feedback, body.note,
         )
+    async with pool().acquire() as conn:
+        async with conn.transaction():
+            await __import__("training").collect_ledger(conn, body.tenant_id)
+            if body.feedback == "rejected":
+                await conn.execute("""DELETE FROM tank.route_cache c WHERE c.tenant_id=$1
+                    AND c.task_type=(SELECT task_type FROM tank.ledger WHERE tenant_id=$1 AND id=$2)""",
+                    body.tenant_id, ledger_id)
     return {"ok": True, "ledger_id": str(ledger_id), "feedback": body.feedback}
 
 
 @app.get("/v1/evals/summary", dependencies=[Depends(require_key)])
-async def evals_summary() -> list[dict[str, Any]]:
-    """Golden cases per task type, split by where they came from and the verdict."""
+async def evals_summary(
+    tenant_id: uuid.UUID | None = None,
+    all_tenants: bool = False,
+    x_tank_key: str = Header(default=""),
+    x_tervory_admin: str = Header(default=""),
+) -> list[dict[str, Any]]:
+    """One tenant's cases; a cross-tenant total requires Tank's founder identity gate."""
+    if all_tenants:
+        await __import__("admin").require_admin(x_tank_key, x_tervory_admin)
+    elif tenant_id is None:
+        raise HTTPException(422, "tenant_id is required")
     async with pool().acquire() as conn:
         rows = await conn.fetch(
             """
@@ -2749,8 +3420,9 @@ async def evals_summary() -> list[dict[str, Any]]:
                    count(*) FILTER (WHERE source='tester_feedback' AND verdict='accepted') AS accepted,
                    count(*) FILTER (WHERE source='tester_feedback' AND verdict='rejected') AS rejected,
                    count(*) FILTER (WHERE source='manual') AS manual
-            FROM tank.evals GROUP BY task_type ORDER BY task_type
-            """
+            FROM tank.evals WHERE tenant_id=$1 OR $2
+            GROUP BY task_type ORDER BY task_type
+            """, tenant_id, all_tenants,
         )
     return [dict(r) for r in rows]
 
@@ -2781,7 +3453,8 @@ async def ledger_summary(tenant_id: uuid.UUID, days: int = 30) -> dict[str, Any]
             """
             SELECT model, rung, count(*) AS calls,
                    sum(tokens_in) AS tokens_in, sum(tokens_out) AS tokens_out,
-                   sum(cost_usd) AS cost_usd,
+                   sum(cost_usd) FILTER (WHERE cost_status='set') AS cost_usd,
+                   count(*) FILTER (WHERE cost_status='not_set') AS unpriced,
                    count(*) FILTER (WHERE outcome = 'delivered') AS delivered,
                    count(*) FILTER (WHERE feedback = 'accepted') AS accepted,
                    count(*) FILTER (WHERE feedback = 'rejected') AS rejected
@@ -2793,7 +3466,8 @@ async def ledger_summary(tenant_id: uuid.UUID, days: int = 30) -> dict[str, Any]
         )
         totals = await conn.fetchrow(
             """
-            SELECT count(*) AS calls, coalesce(sum(cost_usd),0) AS cost_usd,
+            SELECT count(*) AS calls, coalesce(sum(cost_usd) FILTER (WHERE cost_status='set'),0) AS cost_usd,
+                   count(*) FILTER (WHERE cost_status='not_set') AS unpriced,
                    count(*) FILTER (WHERE outcome = 'delivered') AS delivered,
                    count(*) FILTER (WHERE feedback = 'accepted') AS accepted,
                    count(*) FILTER (WHERE feedback = 'rejected') AS rejected
@@ -2816,6 +3490,7 @@ async def ledger_summary(tenant_id: uuid.UUID, days: int = 30) -> dict[str, Any]
         "rejected": rejected,
         "acceptance_rate": round(accepted / rated, 4) if rated else None,
         "cost_usd": round(cost, 6),
+        "unpriced": int(totals["unpriced"] or 0),
         "cost_per_delivered_usd": round(cost / delivered, 6) if delivered else None,
         "cost_per_accepted_usd": round(cost / accepted, 6) if accepted else None,
         "by_model": [dict(r) for r in by_model],
@@ -2949,7 +3624,7 @@ async def tiger_create_watch(request: Request) -> Response:
     body = await _tiger_body(request)
     tenant_id = _tiger_tenant(request, body)
     forwarded: dict[str, Any] = {"tenant_id": str(tenant_id)}
-    for key in ("url", "label", "engine", "every", "enabled", "threshold"):
+    for key in ("url", "label", "engine", "every", "enabled", "threshold", "alert_price", "alert_stock"):
         if key in body:
             forwarded[key] = body[key]
     resp = await _tiger_call("POST", "/watchlist", [], json.dumps(forwarded).encode())
@@ -3095,6 +3770,7 @@ app.include_router(__import__("bench").router)
 app.include_router(__import__("proof").router)
 app.include_router(__import__("proof").client_router)
 app.include_router(__import__("agent_skills").build_router(__import__("sys").modules[__name__]))
+app.include_router(__import__("base_product").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("rig_brain_routes").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("moa").router)
 
@@ -3423,3 +4099,5 @@ app.include_router(__import__("rig_forge_routes").build_router(__import__("sys")
 
 # RIG-5: additive Workspace proxy registration.
 app.include_router(__import__("rig_three_d").build_router(__import__("sys").modules[__name__]))
+
+app.include_router(__import__("market_lab_routes").build_router(__import__("sys").modules[__name__]))

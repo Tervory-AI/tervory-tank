@@ -28,16 +28,14 @@ export async function addProduct(formData: FormData): Promise<void> {
   const label = String(formData.get("label") ?? "").trim();
   const every = String(formData.get("every") ?? "").trim();
   const priceOn = formData.get("price") === "on";
+  const stockOn = formData.get("stock") === "on";
   if (!url) redirect(back("Enter the product page link."));
   if (!/^https?:\/\//i.test(url) || url.length > 2000) redirect(back("The address needs to be a public http or https page."));
   if (label.length > 200) redirect(back("The name is too long."));
   if (!EVERY.has(every)) redirect(back("Choose how often to check."));
-  // Tiger stores one price threshold. 0 means any price change. Stock changes still alert.
-  // A price box left empty uses a high threshold so small price moves do not alert.
-  const threshold = priceOn ? 0 : 1;
   try {
     const tenant = await currentTenant();
-    await createTigerWatch(tenant.tenantId, { url, label, every, threshold });
+    await createTigerWatch(tenant.tenantId, { url, label, every, threshold: 0, alert_price: priceOn, alert_stock: stockOn });
   } catch (err) {
     redirect(back(plainError(err)));
   }

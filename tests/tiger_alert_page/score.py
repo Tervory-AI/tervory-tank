@@ -359,7 +359,11 @@ async def _score_pages(cases: list[dict[str, Any]], extract: Any) -> dict[str, A
             box["challenge"] = False
             box["ocr"] = False
             first = await _watch(store, url, "0", parts, clock)
-            if first.get("price") != case.get("known_price") or first.get("status") != "observed":
+            initial_issue = case.get("initial_issue")
+            initial_ok = (first.get("status") == "can't read" and first.get("price") is None
+                          and not first.get("alerts") and first.get("observation", {}).get("issue") == initial_issue) if initial_issue else (
+                              first.get("price") == case.get("known_price") and first.get("status") == "observed")
+            if not initial_ok:
                 bucket["n"] += 1
                 rows.append({
                     "id": case["id"],
@@ -367,7 +371,7 @@ async def _score_pages(cases: list[dict[str, Any]], extract: Any) -> dict[str, A
                     "split": split,
                     "source": case.get("source"),
                     "what": case.get("what"),
-                    "expected": f"learn {case.get('known_price')}",
+                    "expected": f"flag {initial_issue}" if initial_issue else f"learn {case.get('known_price')}",
                     "actual": f"learned {first.get('status')} {first.get('price')}",
                     "verified": "no",
                     "pass": False,

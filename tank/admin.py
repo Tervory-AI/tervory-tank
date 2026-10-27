@@ -280,7 +280,7 @@ def unit_price(rows: list[dict[str, Any]], outcome_type: str, tenant_id: Any, at
     if not pool:
         return None
     best = max(pool, key=_price_order)
-    return float(best["unit_price"])
+    return None if best.get("price_status") == "not_set" else float(best["unit_price"])
 
 
 def _price_order(row: dict[str, Any]) -> tuple[datetime, datetime]:
@@ -355,7 +355,7 @@ def base_outcome_rows(records: list[dict[str, Any]], existing_refs: set[tuple[st
 
 
 def _empty_call() -> dict[str, float]:
-    return {"calls": 0, "cost": 0.0, "cache_hits": 0}
+    return {"calls": 0, "cost": 0.0, "cache_hits": 0, "unpriced_calls": 0}
 
 
 def aggregate_calls(ledger_rows: list[dict[str, Any]]) -> dict[Key, dict[str, float]]:
@@ -366,16 +366,18 @@ def aggregate_calls(ledger_rows: list[dict[str, Any]]) -> dict[Key, dict[str, fl
         day = as_day(row.get("day") or row["ts"])
         tenant = str(row["tenant_id"])
         model = str(row["model"])
-        cost = num(row.get("cost_usd", row.get("cost")))
+        cost = 0.0 if row.get("cost_status") == "not_set" else num(row.get("cost_usd", row.get("cost")))
         if task.endswith("#shadow"):
             key = (day, tenant, "tank", task, 1, model)
             slot = out.setdefault(key, _empty_call())
             slot["cost"] += cost
+            slot["unpriced_calls"] += int(row.get("cost_status") == "not_set")
             continue
         key = (day, tenant, str(row["agent"]), task, int(row["rung"]), model)
         slot = out.setdefault(key, _empty_call())
         slot["calls"] += 0 if row["agent"] == "bench" else int(row.get("calls") or 1)
         slot["cost"] += cost
+        slot["unpriced_calls"] += int(row.get("cost_status") == "not_set")
         if row.get("cache_hit") and row["agent"] != "bench":
             slot["cache_hits"] += int(row.get("calls") or 1)
     return out
@@ -439,6 +441,7 @@ def _kept_row(prev: dict[str, Any]) -> dict[str, Any]:
         "outcomes": round(float(prev.get("outcomes") or 0), 4),
         "booked": round(float(prev.get("booked") or 0), 6),
         "proven_calls": int(prev.get("proven_calls") or 0),
+        "unpriced_calls": int(prev.get("unpriced_calls") or 0),
     }
 
 
@@ -482,6 +485,7 @@ def merge_econ(
         merged[key] = {
             "calls": calls,
             "cost": round(cost, 6),
+            "unpriced_calls": int((call_updates.get(key) if replace else prev or {}).get("unpriced_calls", 0)) if (call_updates.get(key) if replace else prev) else 0,
             "cache_hits": cache_hits,
             "outcomes": round(outcomes, 4),
             "booked": round(booked, 6),
@@ -511,11 +515,12 @@ def roll_forward(
     return merge_econ(existing, calls, outcome_updates, proven_keys, replace_from)
 
 
-def pack_metrics(calls: int, proven_calls: int, off_paid_calls: int, spend: float, outcomes: float, booked: float) -> dict[str, Any]:
+def pack_metrics(calls: int, proven_calls: int, off_paid_calls: int, spend: float, outcomes: float, booked: float, unpriced: int = 0) -> dict[str, Any]:
     off = round(100 * off_paid_calls / calls, 2) if calls else None
     return {
         "calls": calls,
         "spend_usd": round(spend, 6),
+        "unpriced_calls": unpriced,
         "outcomes": round(outcomes, 4),
         "booked_usd": round(booked, 4),
         "margin_pct": round(100 * (booked - spend) / booked, 2) if booked else None,
@@ -527,7 +532,7 @@ def pack_metrics(calls: int, proven_calls: int, off_paid_calls: int, spend: floa
 
 
 def _accumulate(rows: list[dict[str, Any]], start: date | None, end: date | None) -> dict[str, Any]:
-    calls = proven = off = 0
+    calls = proven = off = unpriced = 0
     spend = outcomes = booked = 0.0
     for row in rows:
         day = row["day"]
@@ -541,10 +546,11 @@ def _accumulate(rows: list[dict[str, Any]], start: date | None, end: date | None
             proven += int(row["proven_calls"])
             if rung in OFF_PAID_RUNGS:
                 off += int(row["calls"])
+        unpriced += int(row.get("unpriced_calls", 0))
         spend += float(row["cost"])
         outcomes += float(row["outcomes"])
         booked += float(row["booked"])
-    return pack_metrics(calls, proven, off, spend, outcomes, booked)
+    return pack_metrics(calls, proven, off, spend, outcomes, booked, unpriced)
 
 
 def window_bounds(today: date, days: int) -> tuple[date, date]:
@@ -589,7 +595,7 @@ def series_report(rows: list[dict[str, Any]], today: date, days: int, group: str
 
     def bucket(key: str) -> dict[str, Any]:
         return totals.setdefault(key, {
-            "calls": 0, "proven_calls": 0, "off_paid_calls": 0, "spend": 0.0, "outcomes": 0.0, "booked": 0.0,
+            "calls": 0, "proven_calls": 0, "off_paid_calls": 0, "spend": 0.0, "outcomes": 0.0, "booked": 0.0, "unpriced_calls": 0,
         })
 
     for row in rows:
@@ -604,7 +610,7 @@ def series_report(rows: list[dict[str, Any]], today: date, days: int, group: str
             gkey = str(row["task_type"])
         rung = int(row["rung"])
         point = points.setdefault((day, gkey), {
-            "calls": 0, "proven_calls": 0, "off_paid_calls": 0, "spend": 0.0, "outcomes": 0.0, "booked": 0.0,
+            "calls": 0, "proven_calls": 0, "off_paid_calls": 0, "spend": 0.0, "outcomes": 0.0, "booked": 0.0, "unpriced_calls": 0,
             "calls_by_rung": {"1": 0, "2": 0, "3": 0, "4": 0},
         })
         total = bucket(gkey)
@@ -616,6 +622,7 @@ def series_report(rows: list[dict[str, Any]], today: date, days: int, group: str
             target["proven_calls"] += proven_calls
             target["off_paid_calls"] += off_calls
             target["spend"] += float(row["cost"])
+            target["unpriced_calls"] += int(row.get("unpriced_calls", 0))
             target["outcomes"] += float(row["outcomes"])
             target["booked"] += float(row["booked"])
         if rung in (1, 2, 3, 4):
@@ -623,7 +630,7 @@ def series_report(rows: list[dict[str, Any]], today: date, days: int, group: str
 
     point_rows = []
     for (day, gkey), point in sorted(points.items()):
-        packed = pack_metrics(point["calls"], point["proven_calls"], point["off_paid_calls"], point["spend"], point["outcomes"], point["booked"])
+        packed = pack_metrics(point["calls"], point["proven_calls"], point["off_paid_calls"], point["spend"], point["outcomes"], point["booked"], point["unpriced_calls"])
         point_rows.append({
             "day": day.isoformat(),
             "key": gkey,
@@ -634,7 +641,7 @@ def series_report(rows: list[dict[str, Any]], today: date, days: int, group: str
         })
     total_rows = []
     for gkey, total in sorted(totals.items(), key=lambda item: (-item[1]["spend"], item[0])):
-        packed = pack_metrics(total["calls"], total["proven_calls"], total["off_paid_calls"], total["spend"], total["outcomes"], total["booked"])
+        packed = pack_metrics(total["calls"], total["proven_calls"], total["off_paid_calls"], total["spend"], total["outcomes"], total["booked"], total["unpriced_calls"])
         total_rows.append({"key": gkey, **packed})
     return {"days": days, "group": group, "points": point_rows, "totals": total_rows}
 
@@ -676,7 +683,7 @@ def focus_list(
         task = str(row["task_type"])
         if task.endswith("#shadow"):
             continue
-        slot = stats.setdefault(task, {"calls": 0, "spend": 0.0, "cache_hits": 0, "paid_spend": 0.0})
+        slot = stats.setdefault(task, {"calls": 0, "spend": 0.0, "cache_hits": 0, "paid_spend": 0.0, "unpriced_calls": 0})
         rung = int(row["rung"])
         if rung != 0:
             slot["calls"] += int(row["calls"])
@@ -684,6 +691,7 @@ def focus_list(
         if rung == 1:
             slot["paid_spend"] += float(row["cost"])
         slot["spend"] += float(row["cost"])
+        slot["unpriced_calls"] += int(row.get("unpriced_calls", 0))
     paid = [p for p in policies if int(p.get("rung") or 1) == 1 and not str(p["task_type"]).endswith("#shadow")]
     total_paid = sum(stats.get(str(p["task_type"]), {}).get("paid_spend", 0.0) for p in paid)
     rows = []
@@ -691,7 +699,7 @@ def focus_list(
         task = str(policy["task_type"])
         model = str(policy["model"])
         rung = int(policy["rung"])
-        slot = stats.get(task, {"calls": 0, "spend": 0.0, "cache_hits": 0, "paid_spend": 0.0})
+        slot = stats.get(task, {"calls": 0, "spend": 0.0, "cache_hits": 0, "paid_spend": 0.0, "unpriced_calls": 0})
         candidate = policy.get("candidate_model") or None
         sample_size, agreement = by_shadow.get((task, candidate), (0, None)) if candidate else (0, None)
         minimum = int(policy["min_shadow_samples"]) if policy.get("min_shadow_samples") is not None else DEFAULT_MIN_SHADOW
@@ -712,6 +720,7 @@ def focus_list(
             "rung": rung,
             "calls": calls,
             "spend_usd": round(paid_spend, 6),
+            "unpriced_calls": int(slot["unpriced_calls"]),
             "share_of_paid_spend_pct": round(100 * paid_spend / total_paid, 2) if total_paid else 0.0,
             "cache_hit_rate_pct": round(100 * slot["cache_hits"] / calls, 2) if calls else None,
             "candidate_model": candidate,
@@ -790,6 +799,7 @@ def _econ_map(rows: list[dict[str, Any]]) -> dict[Key, dict[str, Any]]:
         mapped[key] = {
             "calls": int(row["calls"]),
             "cost": num(row["cost_usd"]),
+            "unpriced_calls": int(row.get("unpriced_calls", 0)),
             "cache_hits": int(row["cache_hits"]),
             "outcomes": num(row["outcomes"]),
             "booked": num(row["booked_usd"]),
@@ -840,16 +850,17 @@ SELECT
     CASE WHEN task_type LIKE '%#shadow' THEN 1 ELSE rung END AS rung,
     model,
     count(*) FILTER (WHERE task_type NOT LIKE '%#shadow' AND agent <> 'bench')::int AS calls,
-    coalesce(sum(cost_usd), 0) AS cost,
+    coalesce(sum(cost_usd) FILTER (WHERE cost_status='set'), 0) AS cost,
+    count(*) FILTER (WHERE cost_status='not_set')::int AS unpriced_calls,
     count(*) FILTER (WHERE cache_hit AND agent <> 'bench' AND task_type NOT LIKE '%#shadow')::int AS cache_hits
 FROM tank.ledger
 """
 
 LEDGER_CALLS_SINCE_SQL = (
     "INSERT INTO tank.econ_daily ("
-    "day, tenant_id, agent, task_type, rung, model, calls, cost_usd, outcomes, booked_usd, cache_hits, proven_calls"
+    "day, tenant_id, agent, task_type, rung, model, calls, cost_usd, outcomes, booked_usd, cache_hits, proven_calls, unpriced_calls"
     ") SELECT s.day, s.tenant_id, s.agent, s.task_type, s.rung, s.model, s.calls, s.cost, 0, 0, s.cache_hits, "
-    "CASE WHEN e.proven IS TRUE THEN s.calls ELSE 0 END "
+    "CASE WHEN e.proven IS TRUE THEN s.calls ELSE 0 END, s.unpriced_calls "
     "FROM (" + _CALL_SELECT + " WHERE ts >= $1::timestamptz GROUP BY 1, 2, 3, 4, 5, 6) s "
     "LEFT JOIN tank.route_evidence e ON e.task_type = s.task_type AND e.model = s.model AND e.rung = s.rung AND e.proven "
     "WHERE s.calls <> 0 OR s.cost <> 0 OR s.cache_hits <> 0"
@@ -857,9 +868,9 @@ LEDGER_CALLS_SINCE_SQL = (
 
 LEDGER_CALLS_ALL_SQL = (
     "INSERT INTO tank.econ_daily ("
-    "day, tenant_id, agent, task_type, rung, model, calls, cost_usd, outcomes, booked_usd, cache_hits, proven_calls"
+    "day, tenant_id, agent, task_type, rung, model, calls, cost_usd, outcomes, booked_usd, cache_hits, proven_calls, unpriced_calls"
     ") SELECT s.day, s.tenant_id, s.agent, s.task_type, s.rung, s.model, s.calls, s.cost, 0, 0, s.cache_hits, "
-    "CASE WHEN e.proven IS TRUE THEN s.calls ELSE 0 END "
+    "CASE WHEN e.proven IS TRUE THEN s.calls ELSE 0 END, s.unpriced_calls "
     "FROM (" + _CALL_SELECT + " GROUP BY 1, 2, 3, 4, 5, 6) s "
     "LEFT JOIN tank.route_evidence e ON e.task_type = s.task_type AND e.model = s.model AND e.rung = s.rung AND e.proven "
     "WHERE s.calls <> 0 OR s.cost <> 0 OR s.cache_hits <> 0"
@@ -878,7 +889,7 @@ SELECT
 FROM tank.outcomes o
 LEFT JOIN tank.ledger g ON g.id = o.ledger_ids[1]
 LEFT JOIN LATERAL (
-    SELECT p.unit_price
+    SELECT CASE WHEN p.price_status='set' THEN p.unit_price ELSE NULL END AS unit_price
     FROM tank.price_book p
     WHERE p.outcome_type = o.outcome_type
       AND p.effective_from <= o.ts
@@ -1108,7 +1119,8 @@ def _price_out(row: dict[str, Any], current_ids: set[Any]) -> dict[str, Any]:
         "id": str(row["id"]),
         "tenant_id": str(row["tenant_id"]) if row["tenant_id"] is not None else None,
         "outcome_type": row["outcome_type"],
-        "unit_price": num(row["unit_price"]),
+        "unit_price": None if row.get("price_status") == "not_set" else num(row["unit_price"]),
+        "price_status": row.get("price_status", "set"),
         "currency": row["currency"],
         "effective_from": iso(row["effective_from"]),
         "effective_to": iso(row["effective_to"]),
@@ -1237,7 +1249,7 @@ async def get_price_book() -> list[dict[str, Any]]:
     async with _pool().acquire() as conn:
         rows = _records(await conn.fetch(
             """
-            SELECT id, tenant_id, outcome_type, unit_price, currency, effective_from, effective_to, note
+            SELECT id, tenant_id, outcome_type, unit_price, price_status, currency, effective_from, effective_to, note
             FROM tank.price_book
             ORDER BY outcome_type, effective_from DESC, created_at DESC
             """
@@ -1256,12 +1268,17 @@ async def put_price_book(body: PriceBody) -> dict[str, Any]:
         starts = price_start(body.effective_from, utc_today())
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
+    if body.outcome_type.strip() in {"apollo.contact", "brave.search.query", "google.places.request", "context.dev.credit"}:
+        # Expense prices belong to the platform. Receipts snapshot them on each
+        # new call; even a backdated price never edits historic vendor spend.
+        from vendor_meter import PLATFORM
+        body.tenant_id = PLATFORM
     async with _pool().acquire() as conn:
         row = await conn.fetchrow(
             """
             INSERT INTO tank.price_book (tenant_id, outcome_type, unit_price, currency, effective_from, note)
             VALUES ($1, $2, $3, $4, COALESCE($5, now()), $6)
-            RETURNING id, tenant_id, outcome_type, unit_price, currency, effective_from, effective_to, note
+            RETURNING id, tenant_id, outcome_type, unit_price, price_status, currency, effective_from, effective_to, note
             """,
             body.tenant_id, body.outcome_type.strip(), body.unit_price, body.currency.upper(), starts, body.note,
         )

@@ -382,16 +382,62 @@ def _wants_auto(policy: dict[str, Any]) -> bool:
 
 
 def router_cannot_serve(candidate: str | None) -> bool:
-    """run_route posts policy.model to LiteLLM. A skill or a cache name is not a model name."""
+    """Only pinned skills have a foreground runner; cache policies still name a model."""
     if candidate is None:
         return False
     name = str(candidate).strip()
     if not name:
         return False
-    return is_skill(name) or is_semantic_cache(name) or name.startswith("cache:")
+    return (is_skill(name) and parse_skill(name) is None) or name.startswith(("cache:", "tool:"))
 
 
-ROUTER_BLOCK = "the router cannot serve this name with no LiteLLM call yet"
+ROUTER_BLOCK = "use a pinned skill:id@version or a model with cache enabled in policy"
+
+
+def code_failure(output: dict[str, Any], floor: float) -> str | None:
+    """Skills may report a fraction or the existing Base 0..100 confidence scale."""
+    if not output or output.get("answerable") is False or output.get("not_answerable") or output.get("refused"):
+        return "not_answerable"
+    if output.get("status") in {"not-answerable", "not_answerable", "error", "failed"} or output.get("error"):
+        return "not_answerable"
+    scores = []
+    if "confidence" in output:
+        scores.append(output["confidence"])
+    elif isinstance(output.get("fields"), dict):
+        scores.extend(v["confidence"] for v in output["fields"].values() if isinstance(v, dict) and "confidence" in v)
+    try:
+        values = [float(v) / (100 if float(v) > 1 else 1) for v in scores]
+    except (TypeError, ValueError):
+        return "invalid_confidence"
+    if values and (any(not 0 <= v <= 1 for v in values) or min(values) < floor):
+        return "low_confidence"
+    return None
+
+
+def semantic_form(messages: list[dict[str, str]]) -> str:
+    """Conservative local equivalence, preserving word order, names, numbers and negation.
+
+    No embedding service/key. Only spelling and request-politeness variants are
+    equated; wider paraphrases deliberately miss until a local encoder is proven.
+    """
+    synonyms = {"summarise": "summarize", "summarising": "summarizing", "colour": "color"}
+    rows = []
+    for message in messages:
+        text = message.get("content", "")
+        text = re.sub(r"^\s*(?:please\s+|could you\s+|can you\s+)", "", text, flags=re.I)
+        words = re.findall(r"\w+|[^\w\s]", text.casefold())
+        rows.append([message.get("role"), [synonyms.get(word, word) for word in words]])
+    return json.dumps(rows, ensure_ascii=False, separators=(",", ":"))
+
+
+def semantic_vector(form: str) -> list[float]:
+    # Stable across processes/Python versions; used only after equivalence and
+    # tenant/context checks, so a hash collision cannot authorize a cache hit.
+    vector = [0.0] * 256
+    for word in re.findall(r"\w+", form):
+        index = int.from_bytes(hashlib.sha256(word.encode()).digest()[:2], "big") % len(vector)
+        vector[index] += 1
+    return vector
 
 
 def promote_if_proven(policy: dict[str, Any], evidence: Evidence, now: datetime, *, automatic: bool) -> Move:

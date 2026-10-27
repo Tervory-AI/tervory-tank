@@ -255,7 +255,7 @@ async def test_put_policy_refuses_skill_and_cache_names(monkeypatch: pytest.Monk
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("name", ["skill:base.extract@2.0.0", "cache:semantic"])
+@pytest.mark.parametrize("name", ["skill:base.extract", "cache:semantic"])
 async def test_rollback_refuses_a_name_litellm_cannot_call(monkeypatch: pytest.MonkeyPatch, name: str) -> None:
     conn = _Conn(row={"model": "luna", "previous_model": name})
     monkeypatch.setattr(main, "pool", lambda: _Pool(conn))
@@ -276,18 +276,18 @@ async def test_rollback_still_writes_a_real_model(monkeypatch: pytest.MonkeyPatc
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("name", ["skill:base.extract@2.0.0", "cache:semantic"])
+@pytest.mark.parametrize("name", ["skill:base.extract", "cache:semantic"])
 async def test_promote_refuses_a_name_litellm_cannot_call(monkeypatch: pytest.MonkeyPatch, name: str) -> None:
     conn = _Conn(row=_move_policy(name))
     monkeypatch.setattr(main, "pool", lambda: _Pool(conn))
     with pytest.raises(HTTPException) as caught:
         await main.promote("base.extract", main.PromoteBody(by="founder"))
-    assert caught.value.status_code == 400
-    assert caught.value.detail == graduate.ROUTER_BLOCK
+    assert caught.value.status_code == (409 if name.startswith("skill:") else 400)
+    assert caught.value.detail == ("a code candidate looks like skill:id@version" if name.startswith("skill:") else graduate.ROUTER_BLOCK)
     assert conn.executes == []
 
 
-def test_a_dropped_promotion_does_not_roll_back_onto_a_skill() -> None:
+def test_a_dropped_promotion_can_restore_a_pinned_skill() -> None:
     policy = {
         "task_type": "base.extract",
         "model": "luna",
@@ -296,9 +296,9 @@ def test_a_dropped_promotion_does_not_roll_back_onto_a_skill() -> None:
         "promoted_at": NOW - timedelta(days=1),
     }
     move = graduate.rollback_if_dropped(policy, graduate.Evidence(live_agreement=0.2), NOW)
-    assert move.action == "hold"
-    assert move.reason == graduate.ROUTER_BLOCK
-    assert move.policy["model"] == "luna"
+    assert move.action == "rollback"
+    assert move.policy["model"] == "skill:base.extract@2.0.0"
+    assert move.policy["rung"] == 3
     cache = {**policy, "previous_model": "cache:semantic"}
     held = graduate.rollback_if_dropped(cache, graduate.Evidence(rejected=4, judged=10), NOW)
     assert held.action == "hold"
@@ -306,7 +306,7 @@ def test_a_dropped_promotion_does_not_roll_back_onto_a_skill() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("name", ["skill:base.extract@2.0.0", "cache:semantic", "cache:other"])
+@pytest.mark.parametrize("name", ["skill:base.extract", "cache:semantic", "cache:other"])
 async def test_run_route_does_not_call_litellm(monkeypatch: pytest.MonkeyPatch, name: str) -> None:
     monkeypatch.setenv("TANK_REGION", "us-east")
     monkeypatch.delenv("TANK_PROVIDER_ALLOW", raising=False)

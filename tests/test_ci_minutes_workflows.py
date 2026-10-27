@@ -16,7 +16,6 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 CI = WORKFLOWS / "ci.yml"
-TISAN = WORKFLOWS / "tisan-site.yml"
 DOC = ROOT / "docs" / "ops" / "self-hosted-runner.md"
 
 FORK_GUARD = "github.event.pull_request.head.repo.full_name == github.repository"
@@ -33,7 +32,7 @@ def _triggers(workflow: dict) -> dict:
     return workflow.get("on", workflow.get(True))
 
 
-@pytest.mark.parametrize("path", [CI, TISAN], ids=lambda p: p.name)
+@pytest.mark.parametrize("path", [CI], ids=lambda p: p.name)
 def test_docs_only_changes_skip_on_push_and_pull_request(path: Path) -> None:
     triggers = _triggers(_load(path))
     assert set(triggers) == {"pull_request", "push"}
@@ -46,7 +45,7 @@ def test_docs_only_changes_skip_on_push_and_pull_request(path: Path) -> None:
     assert triggers["push"]["branches"] == ["main"]
 
 
-@pytest.mark.parametrize("path", [CI, TISAN], ids=lambda p: p.name)
+@pytest.mark.parametrize("path", [CI], ids=lambda p: p.name)
 def test_no_workflow_uses_pull_request_target(path: Path) -> None:
     # pull_request_target runs fork code with this repository's secrets.
     assert "pull_request_target" not in _triggers(_load(path))
@@ -85,11 +84,6 @@ def test_main_jobs_fall_back_to_ubuntu_latest(name: str) -> None:
     assert FORK_GUARD in runs_on
     # An empty output (preflight skipped) must short-circuit before fromJSON.
     assert runs_on.index("needs.runner.outputs.runner &&") < runs_on.index("fromJSON(")
-
-
-def test_tisan_site_stays_on_github_hosted() -> None:
-    # playwright install --with-deps needs sudo, which the self-hosted runner user must not have.
-    assert _load(TISAN)["jobs"]["gate"]["runs-on"] == "ubuntu-latest"
 
 
 def test_ci_carries_no_production_secrets() -> None:
@@ -270,13 +264,12 @@ def test_changed_paths_includes_deletions_and_both_sides_of_rename(tmp_path, mon
 
 def test_workflows_use_scope_and_do_not_hide_failed_detection():
     ci = _load(CI)["jobs"]
-    for path in (CI, TISAN):
+    for path in (CI,):
         changes = _load(path)["jobs"]["changes"]
         assert changes["steps"][0]["with"]["fetch-depth"] == 0
         assert changes["steps"][1]["run"] == "python3 .github/scripts/ci_scope.py"
     assert "needs.changes.result == 'success'" in ci["tank"]["if"]
     assert "needs.changes.outputs.full == 'true'" in ci["workspace"]["if"]
-    assert "needs.changes.outputs.tisan == 'true'" in _load(TISAN)["jobs"]["gate"]["if"]
     step = next(step for step in ci["tank"]["steps"] if step.get("name") == "Secret scan and tests")
     assert step["run"] == "python3 .github/scripts/ci_scope.py test"
     assert step["env"]["TEST_TARGETS"] == "${{ needs.changes.outputs.tests }}"
@@ -355,7 +348,7 @@ def _github(event: str, *, pr: int | None = None, head_repo: str = "Tervory-AI/t
     return ctx
 
 
-@pytest.mark.parametrize("path", [CI, TISAN], ids=lambda p: p.name)
+@pytest.mark.parametrize("path", [CI], ids=lambda p: p.name)
 def test_workflow_level_concurrency_block(path: Path) -> None:
     workflow = _load(path)
     assert workflow["concurrency"] == {
@@ -378,7 +371,7 @@ def _cancels(path: Path, github: dict) -> bool:
     return _eval(_load(path)["concurrency"]["cancel-in-progress"], github=github) is True
 
 
-@pytest.mark.parametrize("path", [CI, TISAN], ids=lambda p: p.name)
+@pytest.mark.parametrize("path", [CI], ids=lambda p: p.name)
 def test_second_push_to_pull_request_cancels_the_first(path: Path) -> None:
     first = _github("pull_request", pr=254, run_id="1")
     second = _github("pull_request", pr=254, run_id="2")
@@ -388,7 +381,7 @@ def test_second_push_to_pull_request_cancels_the_first(path: Path) -> None:
     assert _group(path, _github("pull_request", pr=255)) != _group(path, first)
 
 
-@pytest.mark.parametrize("path", [CI, TISAN], ids=lambda p: p.name)
+@pytest.mark.parametrize("path", [CI], ids=lambda p: p.name)
 def test_main_runs_are_never_cancelled_or_replaced(path: Path) -> None:
     first = _github("push", run_id="9001")
     second = _github("push", run_id="9002")
@@ -398,13 +391,6 @@ def test_main_runs_are_never_cancelled_or_replaced(path: Path) -> None:
     assert _group(path, first) != _group(path, second)
     # A pull request can never share a group with a main run.
     assert _group(path, _github("pull_request", pr=1)) not in {_group(path, first), _group(path, second)}
-
-
-def test_concurrency_groups_differ_per_workflow() -> None:
-    # ci and tisan-site must not cancel each other on the same pull request.
-    pr = _github("pull_request", pr=7)
-    assert _group(CI, pr) == "ci-7"
-    assert _group(TISAN, {**pr, "workflow": "tisan-site"}) == "tisan-site-7"
 
 
 def _runs_on(job: str, github: dict, runner_output: str) -> object:
