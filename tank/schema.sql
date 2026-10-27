@@ -1887,3 +1887,6 @@ VALUES
  ('ba5e0000-0000-4000-8000-000000000003','00000000-0000-0000-0000-000000000001','google.places.request',0,'not_set','USD','2026-10-01','Expense per successful Places request; price not set.'),
  ('ba5e0000-0000-4000-8000-000000000004','00000000-0000-0000-0000-000000000001','context.dev.credit',0.000792,'set','USD','2026-10-21','Pro list price: $99 / 125000 credits; https://www.context.dev/pricing checked 2026-10-21. Free pass only when founder explicitly sets it.')
 ON CONFLICT(id) DO NOTHING;
+
+-- Count duplicate source rows without changing the platform-owned originals.
+ALTER TABLE tank.base_reference_files ADD COLUMN IF NOT EXISTS duplicate_count integer NOT NULL DEFAULT 0 CHECK (duplicate_count >= 0);

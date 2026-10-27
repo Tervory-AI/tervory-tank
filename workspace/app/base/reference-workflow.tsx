@@ -96,7 +96,9 @@ export function ReferenceWorkflow({ signedIn }: { signedIn: boolean }) {
   return <section className="bcp-workflow bcp-reference" aria-label="Reference licences and verified results">
     <h2>Reference licences</h2>
     {reference?.file ? <p><strong>{countLabel(reference.total_all, "ATF licence")}</strong> · File dated {dateLabel(reference.file.published_on)} · <a href={reference.file.source_url} target="_blank" rel="noopener noreferrer">Official source</a>. Includes {countLabel(reference.collectors, "Type 03 collector")}, excluded from your selection by default. New ATF files are checked daily.</p>
-      : <p>{reference ? "The platform reference is not available yet." : "Loading the platform reference…"}</p>}
+      : <p role={reference?.refresh?.message ? "alert" : undefined}>{reference ? reference.refresh?.message || "The platform reference is not available yet." : "Loading the platform reference…"}</p>}
+    {reference?.file && <p>{countLabel(reference.duplicate_count || 0, "duplicate row")} {reference.duplicate_count === 1 ? "was" : "were"} found. The newest row for each licence is used.</p>}
+    {reference?.file && reference.refresh?.message && <p role="alert">{reference.refresh.message}</p>}
     {error && <p role="alert">{reasonLabel(error)}</p>}{message && <p role="status">{message}</p>}
     {reference?.refresh && <p>Latest reference check: {dateLabel(reference.refresh.checked_at)} · {refreshLabel(reference.refresh.status)}</p>}
     <form className="bcp-upload" onSubmit={start}>

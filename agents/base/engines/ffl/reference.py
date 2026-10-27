@@ -30,7 +30,10 @@ _blocked = False
 
 
 def project(row: dict[str, Any]) -> dict[str, Any]:
-    values = {str(k).lower().strip(): str(v or "").strip() for k, v in row.items()}
+    values = {re.sub(r"[\s-]+", "_", str(k).lower().strip()): str(v or "").strip() for k, v in row.items()}
+    # Stored ATF imports use both PREM_* and PREMISE_* headers, in either case.
+    for suffix in ("street", "city", "state", "zip_code"):
+        values["premise_" + suffix] = values.get("premise_" + suffix) or values.get("prem_" + suffix, "")
     number = licence_id(values)
     if not number:
         number = values.get("licence_number") or values.get("license_number", "")

@@ -10,6 +10,7 @@ import uuid
 
 from base_evidence import row_fields
 from base_metrics import obj
+from base_reference_status import ReferenceFailure, SAFE_DETAILS
 from vendor_meter import PLATFORM
 
 SEED_DATE = date(2026, 9, 1)
@@ -28,18 +29,28 @@ class BaseStore:
         response = await self.rt._http.post(self.rt.BASE_AGENT_URL.rstrip("/") + "/reference/ffl", json=payload,
             headers={"X-Tank-Key": os.environ.get("TANK_KEY_BASE", "")}, timeout=180, follow_redirects=False)
         if response.status_code != 200:
+            reason = f"The Base reference service returned HTTP {response.status_code}."
             try:
                 detail = response.json().get("detail", "")
-                if isinstance(detail, str) and detail.startswith("blocked:"):
-                    from urllib.parse import urlsplit
-                    address = urlsplit(detail.removeprefix("blocked:").strip())
-                    url = address._replace(query="", fragment="").geturl() if address.hostname in {"atf.gov", "www.atf.gov"} else REFERENCE_URL
-                    await self.reference_check("blocked", "blocked: " + url)
-                    raise ValueError("ATF blocked this site's public read; automatic reads have stopped.")
-            except (TypeError, AttributeError):
-                pass
-            raise ValueError("The official reference service is unavailable.")
-        return response.json()
+            except (AttributeError, ValueError):
+                detail = ""
+            if isinstance(detail, str) and detail.startswith("blocked:"):
+                reason += " ATF did not allow the read. Automatic checks have stopped."
+                # Preserve the stop even when the founder invokes refresh
+                # directly, outside the background check's exception handler.
+                operation = "loaded" if "rows" in payload else "updated"
+                await self.reference_check("blocked", f"The reference could not be {operation}: {reason}")
+                raise ReferenceFailure(reason, blocked=True)
+            if isinstance(detail, str) and detail in SAFE_DETAILS:
+                reason += " " + SAFE_DETAILS[detail]
+            raise ReferenceFailure(reason)
+        try:
+            answer = response.json()
+        except ValueError:
+            raise ReferenceFailure("The Base reference service returned unreadable data (HTTP 200).") from None
+        if not isinstance(answer, dict):
+            raise ReferenceFailure("The Base reference service returned an unexpected response (HTTP 200).")
+        return answer
 
     async def latest_file(self) -> dict[str, Any] | None:
         async with self.rt.pool().acquire() as conn:
@@ -50,21 +61,30 @@ class BaseStore:
         if await self.latest_file():
             return
         async with self.rt.pool().acquire() as conn:
-            rows = await conn.fetch("""SELECT id,raw,created_at FROM base.records WHERE tenant_id=$1
-                AND (raw ? 'LIC_REGN' OR raw ? 'lic_regn' OR raw ? 'licence_number' OR raw ? 'license_number') ORDER BY id""", PLATFORM)
+            rows = await conn.fetch("""SELECT id,raw,created_at,updated_at FROM base.records WHERE tenant_id=$1
+                AND EXISTS (SELECT 1 FROM jsonb_object_keys(
+                    CASE WHEN jsonb_typeof(raw)='object' THEN raw ELSE '{}'::jsonb END) AS fields(name)
+                    WHERE regexp_replace(lower(btrim(name)), '[[:space:]-]+', '_', 'g')
+                        IN ('lic_regn','licence_number','license_number'))
+                ORDER BY updated_at DESC,created_at DESC,id DESC""", PLATFORM)
         if not rows:
-            return  # Never replace the founder's existing set with a download.
-        projected = []
+            # Never replace the founder's existing set with a download.
+            raise ReferenceFailure("There are no saved ATF licence rows in the platform reference.")
+        projected = {}
         for offset in range(0, len(rows), 2000):
             chunk = rows[offset:offset + 2000]
-            converted = (await self.engine({"rows": [obj(row["raw"]) for row in chunk]}))["rows"]
-            if len(converted) != len(chunk):
+            converted = (await self.engine({"rows": [obj(row["raw"]) for row in chunk]})).get("rows")
+            if not isinstance(converted, list) or len(converted) != len(chunk):
                 raise ValueError("The reference projection did not preserve every licence.")
-            projected.extend({**item, "legacy_record_id": str(row["id"])} for row, item in zip(chunk, converted))
+            for row, item in zip(chunk, converted):
+                # Ordered newest first, globally across chunks. Keep pointers to
+                # the original rows; never delete, rewrite or copy their data.
+                projected.setdefault(item["licence_key"], {**item, "legacy_record_id": str(row["id"])})
         await self.install({"published_on": SEED_DATE.isoformat(), "source_url": REFERENCE_URL,
-                            "checked_at": max(row["created_at"] for row in rows).isoformat(),
+                            "checked_at": max(row["updated_at"] for row in rows).isoformat(),
                             "sha256": hashlib.sha256(encoded([(str(row["id"]), obj(row["raw"])) for row in rows]).encode()).hexdigest(),
-                            "rows": projected}, adopted=True)
+                            "rows": list(projected.values()), "duplicate_count": len(rows) - len(projected)}, adopted=True)
+        await self.reference_check("adopted")
 
     async def install(self, file: dict[str, Any], *, adopted: bool = False) -> dict[str, Any]:
         published = date.fromisoformat(file["published_on"])
@@ -81,9 +101,9 @@ class BaseStore:
                         return dict(previous)
                     raise ValueError("A reference file cannot replace an existing dated snapshot.")
                 await conn.execute("""INSERT INTO tank.base_reference_files
-                    (id,owner_id,published_on,source_url,sha256,checked_at,adopted,row_count)
-                    VALUES($1,$2,$3,$4,$5,$6,$7,$8)""", file_id, PLATFORM, published, file["source_url"], file["sha256"],
-                    datetime.fromisoformat(file["checked_at"]), adopted, len(rows))
+                    (id,owner_id,published_on,source_url,sha256,checked_at,adopted,row_count,duplicate_count)
+                    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)""", file_id, PLATFORM, published, file["source_url"], file["sha256"],
+                    datetime.fromisoformat(file["checked_at"]), adopted, len(rows), file.get("duplicate_count", 0))
                 await conn.executemany("""INSERT INTO tank.base_reference_entries
                     (file_id,licence_key,licence_number,state,licence_type,name,address,legacy_record_id,raw)
                     VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9::jsonb)""",
@@ -91,7 +111,8 @@ class BaseStore:
                       encoded(row["address"]), uuid.UUID(row["legacy_record_id"]) if adopted else None,
                       None if adopted else encoded(row["raw"])) for row in rows])
         return {"id": file_id, "owner_id": PLATFORM, "published_on": published, "row_count": len(rows),
-                "source_url": file["source_url"], "checked_at": file["checked_at"], "sha256": file["sha256"], "adopted": adopted}
+                "source_url": file["source_url"], "checked_at": file["checked_at"], "sha256": file["sha256"], "adopted": adopted,
+                "duplicate_count": file.get("duplicate_count", 0)}
 
     async def reference(self, file_id: uuid.UUID | None = None, *, inputs: bool = False,
                         states: list[str] | None = None, types: list[str] | None = None) -> list[dict[str, Any]]:
@@ -118,11 +139,12 @@ class BaseStore:
     async def reference_check(self, status: str, message: str | None = None) -> None:
         async with self.rt.pool().acquire() as conn:
             await conn.execute("""INSERT INTO tank.base_reference_checks(owner_id,checked_at,status,message) VALUES($1,now(),$2,$3)
-                ON CONFLICT(owner_id) DO UPDATE SET checked_at=now(),status=$2,message=$3""", PLATFORM, status, message)
+                ON CONFLICT(owner_id) DO UPDATE SET checked_at=now(),status=$2,message=$3
+                WHERE tank.base_reference_checks.status<>'blocked' OR EXCLUDED.status='blocked'""", PLATFORM, status, message)
 
     async def due_refresh(self) -> bool:
         async with self.rt.pool().acquire() as conn:
-            return not bool(await conn.fetchval("SELECT 1 FROM tank.base_reference_checks WHERE owner_id=$1 AND (status='blocked' OR checked_at>now()-interval '24 hours')", PLATFORM))
+            return not bool(await conn.fetchval("SELECT 1 FROM tank.base_reference_checks WHERE owner_id=$1 AND (status='blocked' OR (status<>'adopted' AND checked_at>now()-interval '24 hours'))", PLATFORM))
 
     async def refresh(self) -> dict[str, Any]:
         async with self.rt.pool().acquire() as conn:

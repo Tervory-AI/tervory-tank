@@ -113,8 +113,11 @@ async def numbers(store: Any, tenant: uuid.UUID, states: list[str], kinds: list[
 
 async def reference_page(store: Any, states: list[str], kinds: list[str], collectors: bool, offset: int, limit: int) -> dict:
     files = await store.reference_history()
+    async with store.rt.pool().acquire() as conn:
+        check = await conn.fetchrow("SELECT checked_at,status,message FROM tank.base_reference_checks WHERE owner_id=$1", PLATFORM)
+    health = {"refresh": dict(check) if check else None, "duplicate_count": files[0].get("duplicate_count", 0) if files else 0}
     if not files:
-        return {"file": None, "total_all": 0, "selected": 0, "collectors": 0, "groups": [], "rows": [], "changes": [], "history": []}
+        return {"file": None, "total_all": 0, "selected": 0, "collectors": 0, "groups": [], "rows": [], "changes": [], "history": [], **health}
     file = files[0]
     async with store.rt.pool().acquire() as conn:
         groups = [dict(row) for row in await conn.fetch(f"""SELECT state,licence_type,count(*)::int AS licensees FROM tank.base_reference_entries
@@ -122,7 +125,6 @@ async def reference_page(store: Any, states: list[str], kinds: list[str], collec
         rows = [dict(row) for row in await conn.fetch(f"""SELECT licence_key,licence_number,state,licence_type,name,address FROM tank.base_reference_entries
             WHERE file_id=$1 AND {FILTER} ORDER BY state,licence_type,licence_key OFFSET $5 LIMIT $6""", file["id"], states, kinds, collectors, offset, limit)]
         collector_count = await conn.fetchval("SELECT count(*) FROM tank.base_reference_entries WHERE file_id=$1 AND licence_type='03'", file["id"])
-        check = await conn.fetchrow("SELECT checked_at,status,message FROM tank.base_reference_checks WHERE owner_id=$1", PLATFORM)
         changes = []
         if len(files) > 1:
             changes = [dict(row) for row in await conn.fetch("""WITH before AS (SELECT * FROM tank.base_reference_entries WHERE file_id=$1),
@@ -135,4 +137,4 @@ async def reference_page(store: Any, states: list[str], kinds: list[str], collec
     for row in rows:
         row.update(source_url=file["source_url"], checked_at=file["checked_at"], published_on=file["published_on"], address=obj(row["address"]))
     return {"file": file, "total_all": file["row_count"], "selected": sum(row["licensees"] for row in groups), "collectors": collector_count,
-            "groups": groups, "rows": rows, "changes": changes, "history": files, "refresh": dict(check) if check else None}
+            "groups": groups, "rows": rows, "changes": changes, "history": files, **health}
