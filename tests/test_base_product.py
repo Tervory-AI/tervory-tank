@@ -153,8 +153,71 @@ async def test_csv_reason_is_a_sentence_and_dates_remain_iso(monkeypatch, reason
     assert records[0]["website_reason"] == sentence
     assert records[0]["website_source_url"] == row["fields"]["website"]["source_url"]
     assert records[0]["website_checked_at"] == records[0]["phone_checked_at"] == AT
-    assert records[0]["phone_value"] == "+15125550101"
+    assert records[0]["phone"] == "+15125550101"
     assert row["fields"]["website"]["reason"] == reason
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("email_count", [2, 3])
+async def test_download_has_plain_contacts_and_each_values_own_evidence(monkeypatch, email_count):
+    import csv
+    import io
+    from base_evidence import field
+    monkeypatch.setenv("TANK_API_KEY", "local-fixture")
+    app, store = fixture_app()
+    row = finished(reference.project(raw()))
+    row["name"] = "=1+1"
+    row["fields"]["phone"]["value"] = "+15125550101"
+    emails = [field(address, f"https://shop.example/{i}", f"2026-10-{25+i}T10:00:00+00:00")
+              for i, address in enumerate(["info@shop.example", "sales@shop.example", "support@shop.example"][:email_count])]
+    row["fields"]["email"] = {**field([item["value"] for item in emails], "https://shop.example/", AT),
+                               "items": [field("unverified@shop.example"), *emails, emails[0]]}
+    links = {"facebook": "https://www.facebook.com/shop", "instagram": "https://instagram.com/shop",
+             "x": "https://twitter.com/shop", "linkedin": "https://www.linkedin.com/company/shop",
+             "youtube": "https://youtu.be/fixture"}
+    socials = [field(url, f"https://shop.example/{network}", f"2026-10-{20+i}T11:00:00+00:00")
+               for i, (network, url) in enumerate(links.items())]
+    row["fields"]["socials"] = {**field(list(links.values()), "https://shop.example/", AT), "items": socials}
+    store.rows[TENANT].extend([row, finished(reference.project(raw(2)))])
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://fixture", headers={"X-Tank-Key": "local-fixture"}) as client:
+        response = await client.get("/v1/base-product/records.csv", params={"tenant_id": str(TENANT), "metric": "email_and_phone"})
+    assert response.status_code == 200
+    assert "attachment" in response.headers["content-disposition"]
+    # Inspect the actual downloaded text, then the cells an importer receives.
+    assert not any(mark in response.text for mark in ('[', ']', '{', '}'))
+    rows = list(csv.DictReader(io.StringIO(response.text.lstrip("\ufeff"))))
+    result = next(item for item in rows if item["record_id"] == str(row["record_id"]))
+    assert result["email"] == "info@shop.example"
+    assert result["other_emails"] == "; ".join(item["value"] for item in emails[1:])
+    assert result["email_source_url"] == emails[0]["source_url"]
+    assert result["email_checked_at"] == emails[0]["checked_at"]
+    for part in ("source_url", "checked_at"):
+        assert result[f"other_emails_{part}"] == "; ".join(item[part] for item in emails[1:])
+    for (network, url), evidence in zip(links.items(), socials):
+        assert result[network] == url
+        assert result[f"{network}_source_url"] == evidence["source_url"]
+        assert result[f"{network}_checked_at"] == evidence["checked_at"]
+    assert result["website"] == row["fields"]["website"]["value"]
+    assert result["phone"] == "+15125550101" and result["phone_checked_at"] == AT
+    assert result["name"] == "'=1+1"
+    assert not any(key.endswith(("_items", "_value")) or key.startswith("socials") for key in result)
+    for item in rows:
+        assert all(not any(mark in item[key] for mark in ('[', ']', '"')) for key in ("email", "other_emails", *links))
+    single = next(item for item in rows if item["record_id"] != str(row["record_id"]))
+    assert single["other_emails"] == single["other_emails_source_url"] == ""
+    for network in ("instagram", "x", "linkedin", "youtube"):
+        assert single[network] == single[f"{network}_source_url"] == single[f"{network}_checked_at"] == ""
+
+
+def test_social_export_does_not_mislabel_lookalike_hosts():
+    from base_evidence import field
+    from base_metrics import social_network
+    assert social_network("https://facebook.com.evil.example/shop") is None
+    assert social_network("https://m.facebook.com/shop") == "facebook"
+    row = finished(reference.project(raw()))
+    row["fields"]["email"] = field(reason="blocked", source="https://shop.example/")
+    text = export_records([row])
+    assert "The store blocked automated checks." in text and "[" not in text
 
 
 def test_unpriced_cost_is_excluded_and_comparison_uses_same_record():

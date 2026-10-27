@@ -95,6 +95,14 @@ async def test_existing_platform_adoption_refresh_batch_pairs_and_isolation(data
             task = (await store.campaigns(TENANT))[0]["task_id"]
             for entry in submitted[0]["records"]:
                 row = finished(project(entry))
+                site = row["profile"]["website"]["value"]
+                extra = "sales@" + urlsplit(site).hostname
+                row["profile"]["emails"]["value"].append(extra)
+                row["profile"]["socials"]["value"]["instagram"] = "https://instagram.com/fixture-business"
+                row["passes"]["2b"]["field_observations"].append({
+                    "source_url": site + "team", "checked_at": "2026-10-27T10:00:00+00:00", "emails": [extra],
+                    "phones": [], "links": ["https://instagram.com/fixture-business"],
+                })
                 await conn.execute("""INSERT INTO agent_base.records(id,tenant_id,task_id,batch,raw,profile,passes,status,updated_at)
                     VALUES($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,'done',$8)""",
                     row["id"], TENANT, task, submitted[0]["batch"], encoded(entry), encoded(row["profile"]), encoded(row["passes"]), datetime.fromisoformat(AT))
@@ -106,6 +114,16 @@ async def test_existing_platform_adoption_refresh_batch_pairs_and_isolation(data
             assert texas["attempted"] == texas["website"] == texas["phone"] == texas["email_and_phone"] == 2
             csv = await client.get("/v1/base-product/records.csv", params={"tenant_id": str(TENANT), "metric": "email_and_phone"})
             assert csv.status_code == 200 and "/contact" in csv.text and "phone_checked_at" in csv.text
+            import csv as csv_reader
+            import io
+            exported = list(csv_reader.DictReader(io.StringIO(csv.text.lstrip("\ufeff"))))
+            assert len(exported) == 2 and "[" not in csv.text and "{" not in csv.text
+            for item in exported:
+                assert item["email"].startswith("info@") and item["other_emails"].startswith("sales@")
+                assert item["email_source_url"] == item["website"] + "contact"
+                assert item["other_emails_source_url"] == item["instagram_source_url"] == item["website"] + "team"
+                assert item["other_emails_checked_at"] == item["instagram_checked_at"] == "2026-10-27T10:00:00+00:00"
+                assert item["instagram"] == "https://instagram.com/fixture-business" and item["x"] == ""
             pairs = await conn.fetch("SELECT * FROM tank.training_pairs WHERE tenant_id=$1 AND source='base_verified'", TENANT)
             assert len(pairs) == 8 and all(pair["gold_id"] is None and not pair["public"] for pair in pairs)
             private = await client.get("/v1/base-product/pairs", params={"tenant_id": str(OTHER)})

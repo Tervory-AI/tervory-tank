@@ -22,6 +22,15 @@ async def dispatch_with_price_examples(tenant):
     for row in new_rows:
         row["profile"]["phone"]["value"] = "+15125550101"
         row["passes"]["2b"]["field_observations"][1]["phones"] = ["5125550101"]
+        site = row["profile"]["website"]["value"]
+        from urllib.parse import urlsplit
+        extra = "sales@" + urlsplit(site).hostname
+        row["profile"]["emails"]["value"].append(extra)
+        row["profile"]["socials"]["value"]["instagram"] = "https://instagram.com/fixture-business"
+        row["passes"]["2b"]["field_observations"].append({
+            "source_url": site + "team", "checked_at": "2026-10-27T10:00:00+00:00", "emails": [extra],
+            "phones": [], "links": ["https://instagram.com/fixture-business"],
+        })
         if row["licence_type"] == "unspecified":
             row["passes"]["2b"]["access_error"] = {"status": "blocked", "url": "https://upload.example/"}
         row["fields"] = row_fields(row)

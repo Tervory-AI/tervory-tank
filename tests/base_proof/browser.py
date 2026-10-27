@@ -47,7 +47,15 @@ async def main():
         import csv as csv_reader
         import io
         imported = list(csv_reader.DictReader(io.StringIO(csv.lstrip("\ufeff"))))
-        assert all(row["phone_value"] == "+15125550101" for row in imported)
+        assert all(row["phone"] == "+15125550101" for row in imported)
+        assert "[" not in csv and "]" not in csv and "{" not in csv
+        for row in imported:
+            assert row["email"].startswith("info@") and row["other_emails"].startswith("sales@")
+            assert row["other_emails_source_url"] == row["instagram_source_url"] == row["website"] + "team"
+            assert row["email_checked_at"] == "2026-10-26T10:00:00+00:00"
+            assert row["other_emails_checked_at"] == "2026-10-27T10:00:00+00:00"
+            assert row["x"] == row["linkedin"] == row["youtube"] == ""
+            assert all('"' not in row[key] for key in ("email", "other_emails", "facebook", "instagram", "x", "linkedin", "youtube"))
         await page.get_by_label("Business CSV").set_input_files({"name": "fixture-businesses.csv", "mimeType": "text/csv", "buffer": b"name,state,website\nFixture Upload,CA,https://upload.example/\n"})
         await page.get_by_role("button", name="Upload and verify", exact=True).first.click()
         await page.get_by_role("status").filter(has_text="Your list was received").wait_for()

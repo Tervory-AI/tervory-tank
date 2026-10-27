@@ -56,5 +56,8 @@ The independent review at 886074f separately confirmed the real Tank + Base +
 Workspace job and the previous fixes. The screenshots remain explicitly local
 fixture pages. Signed-in live proof is reserved for Claude after deployment.
 
-This comparison supersedes the older 3261163 baseline. Later commits record proof
-documentation only. No Actions reruns; PR #339 remains a draft.
+This comparison supersedes the older 3261163 baseline. The later plain-column CSV follow-up changes the exporter and its tests; this
+full-suite comparison remains evidence for the exact commits above, not a claim
+of a new full-suite run. That follow-up passed 32 targeted product/database/
+Workspace tests, CI Ruff and the 375/1440 local fixture browser proof. See README.md
+and the updated downloaded CSV. No Actions reruns; PR #339 remains a draft.

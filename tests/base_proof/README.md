@@ -44,10 +44,12 @@ adoption, dated refresh, selection without an upload, private pairs through
 the unchanged training writer, founder-only prices, exact credit costs and
 unchanged historical receipts after a price is set.
 
-Browser proof captured on 26 October 2026 (Pacific). The browser checks both widths,
+Browser proof refreshed on 27 October 2026 (Pacific). The browser checks both widths,
 reference selection, field source/date display, CSV upload and download, Apollo,
 and the saved batch link. It imports the downloaded CSV to assert that
-`+15125550101` is unchanged. The explicit fixture now includes a priced search,
+`+15125550101` is unchanged. Each verified row has two emails: plain `email` and
+`other_emails`, with their own source URLs and ISO dates. The actual downloaded
+text has no JSON, brackets or `_items` columns. The explicit fixture now includes a priced search,
 an unpriced search, and a blocked uploaded business. It checks the exclusion
 link, singular wording, human dates/reasons and the absence of raw provider codes.
 The PostgreSQL tests separately exercise the real repository, SQL calculations,
@@ -99,3 +101,30 @@ database, checks `/health` each time and reapplies the full schema on the second
 start. The captured startup tail comes from that test helper’s returned output;
 there is no stand-in Tank. Redis is deliberately pointed to closed loopback port 9
 by the test, so its cache-off warning is expected.
+
+CSV import contract (founder decision before merge): `email`, `other_emails`,
+`phone`, `website`, `facebook`, `instagram`, `x`, `linkedin`, `youtube`. Each has
+matching `_source_url`, `_checked_at` and `_reason` columns. Primary email and
+social links use the first independently verified item in the stored order;
+unverified items are excluded. Additional email values, sources and dates use
+`; ` in the same order, including repeated source URLs/dates where appropriate.
+Twitter maps to `x`, youtu.be to `youtube`; hostname suffixes are checked at domain
+boundaries. Missing networks have empty value/source/date cells, with a plain
+reason where available. The header is fixed across streamed pages. `_value` and
+JSON `_items` columns are removed. The existing formula guard still protects all
+cells and preserves plain phone numbers.
+
+The CSV follow-up passed 32 tests:
+
+```sh
+PYTHONPATH=tank:tests \
+BASE_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55443/basetest \
+python -m pytest -q tests/test_base_product.py tests/test_base_database.py tests/test_base_workflow.py
+```
+
+This includes two- and three-email fixtures, distinct provenance per value,
+unverified/duplicate rejection, all five networks, empty cells, ISO dates,
+formula protection, and the PostgreSQL-backed streaming download. The local
+Workspace browser proof also passed at 375 and 1440 pixels. Its latest CSV and
+screenshots are committed here. No production app code changed outside the CSV
+exporter; the older full-suite comparison remains pinned to its tested commit.

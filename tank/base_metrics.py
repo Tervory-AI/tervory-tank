@@ -155,14 +155,71 @@ def csv_reason(reason: str | None, field: str) -> str | None:
     return reason
 
 
+SOCIAL_NETWORKS = {
+    "facebook": ("facebook.com", "fb.com", "fb.me"),
+    "instagram": ("instagram.com",),
+    "x": ("x.com", "twitter.com"),
+    "linkedin": ("linkedin.com",),
+    "youtube": ("youtube.com", "youtu.be"),
+}
+
+
+def verified_contacts(field: dict[str, Any]) -> list[dict[str, str]]:
+    """Keep verification order and each value's own evidence; never borrow from a sibling."""
+    if not field.get("verified"):
+        return []
+    found, seen = [], set()
+    for item in field.get("items") or [field]:
+        if not item.get("verified", True) or not item.get("source_url") or not item.get("checked_at"):
+            continue
+        values = item.get("value")
+        for value in values if isinstance(values, list) else [values]:
+            if not isinstance(value, str) or not value.strip() or value in seen:
+                continue
+            seen.add(value)
+            found.append({"value": value, "source_url": item["source_url"], "checked_at": item["checked_at"]})
+    return found
+
+
+def social_network(url: str) -> str | None:
+    try:
+        host = (urlsplit(url).hostname or "").lower()
+    except ValueError:
+        return None
+    return next((name for name, hosts in SOCIAL_NETWORKS.items()
+                 if any(host == domain or host.endswith("." + domain) for domain in hosts)), None)
+
+
 def export_records(rows: list[dict[str, Any]]) -> str:
-    columns = ["record_id", "licence_key", "state", "licence_type", "name"]
-    columns += [f"{field}_{part}" for field in FIELDS for part in ("value", "source_url", "checked_at", "reason", "items")]
+    identity = ["record_id", "licence_key", "state", "licence_type", "name"]
+    contacts = ["email", "other_emails", "phone", "website", *SOCIAL_NETWORKS]
+    columns = identity + contacts
+    columns += [f"{name}_{part}" for name in contacts for part in ("source_url", "checked_at", "reason")]
     exported = []
     for row in rows:
         fields = obj(row["fields"])
-        exported.append({**row, **{f"{name}_{part}": csv_reason(fields[name].get(part), name) if part == "reason" else fields[name].get(part) for name in FIELDS
-                                  for part in ("value", "source_url", "checked_at", "reason", "items")}})
+        record = {name: row.get(name) for name in identity}
+
+        def write(name: str, values: list[dict[str, str]], reason: str | None = None,
+                  missing: dict[str, Any] | None = None) -> None:
+            record[name] = "; ".join(item["value"] for item in values)
+            for part in ("source_url", "checked_at"):
+                record[f"{name}_{part}"] = "; ".join(item[part] for item in values) if values else (missing or {}).get(part)
+            record[f"{name}_reason"] = reason if not values else None
+
+        emails = verified_contacts(fields["email"])
+        write("email", emails[:1], csv_reason(fields["email"].get("reason"), "email"),
+              fields["email"] if not fields["email"].get("verified") else None)
+        write("other_emails", emails[1:])
+        for name in ("phone", "website"):
+            write(name, verified_contacts(fields[name])[:1], csv_reason(fields[name].get("reason"), name),
+                  fields[name] if not fields[name].get("verified") else None)
+        socials = verified_contacts(fields["socials"])
+        for network in SOCIAL_NETWORKS:
+            values = [item for item in socials if social_network(item["value"]) == network]
+            reason = csv_reason(fields["socials"].get("reason"), "socials") or f"No verified {network} link found for this business."
+            write(network, values[:1], reason, fields["socials"] if not fields["socials"].get("verified") else None)
+        exported.append(record)
     return csv_text(exported, columns)
 
 
