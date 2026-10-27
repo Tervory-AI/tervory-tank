@@ -42,25 +42,24 @@ def test_panel_stays_fixed_and_split_in_three():
     assert "Your account" in source
     assert "Account name" not in source
     assert "Dashboard" in source
-    assert "Projects" in source
+    assert "Tasks" in source
     assert "Chats" in source
-    assert "Settings" in source
+    assert "Settings" not in (PAGE / "view.tsx").read_text(encoding="utf-8")
     assert "Support" in source
     assert 'href="/"' in source
     assert "/brand/tervory-logo-reversed.png" in source
 
 
-def test_tiger_tabs_and_plugins_popup():
-    source = _source()
+def test_tiger_tabs_exclude_unavailable_controls():
+    source = "\n".join((PAGE / name).read_text(encoding="utf-8")
+                       for name in ("page.tsx", "view.tsx", "model.ts"))
     assert "Overview" in source
     assert "Ask Tiger" not in source
     assert "Alerts" in source
     assert "Watch list" in source
     assert "Can't read" in source
-    assert "Plugins" in source
-    assert "API keys" in source
-    assert "Source links" in source
-    assert "MCP connections" in source
+    assert "plugins" not in source.lower()
+    assert "vault" not in source.lower()
     assert "Integrations" not in source
     # The unfinished Ask UI and its promise of sourced answers are removed.
     assert "Every answer lists its sources" not in source

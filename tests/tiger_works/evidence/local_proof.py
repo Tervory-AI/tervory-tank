@@ -140,6 +140,27 @@ export default { devIndicators: false, webpack(config) {
                         await page.get_by_role("button", name="Clear", exact=True).click()
                     await page.goto(origin + "/tiger?tab=watch")
                     await page.get_by_text("No products watched yet.").wait_for()
+                    panel = page.get_by_role("complementary", name="Tiger", exact=True)
+                    assert await panel.get_by_role("link").evaluate_all(
+                        "links => links.map(link => [link.textContent.trim(), link.getAttribute('href')])"
+                    ) == [["Dashboard", "/"], ["Tasks", "/tasks"], ["Chats", "/chats"]]
+                    for route in ("", "tasks", "chats"):
+                        assert (ROOT / "workspace/app" / route / "page.tsx").is_file()
+                    assert await panel.get_by_role("button", name="Plugins", exact=True).count() == 0
+                    assert await panel.get_by_role("link", name="Settings", exact=True).count() == 0
+                    await panel.get_by_role("button", name="Support", exact=True).click()
+                    await page.get_by_text("Tiger checks public product pages and tells you when a price or stock changes.", exact=False).wait_for()
+                    await panel.get_by_role("button", name="Support", exact=True).click()
+                    await panel.get_by_role("button", name="Squad", exact=True).click()
+                    squad = page.get_by_role("dialog", name="Squad", exact=True)
+                    links = await squad.get_by_role("link").evaluate_all(
+                        "links => links.map(link => [link.querySelector('.squad-name').textContent, link.getAttribute('href')])"
+                    )
+                    assert links == [["Base", "/base"], ["Tiger", "/tiger"], ["Market Lab", "/market-lab"],
+                                     ["Rig", "/rig"], ["Tisan", "/tisan"], ["Radix", "/radix"], ["Zenas", "/zenas"]]
+                    for _, route in links:
+                        assert (ROOT / "workspace/app" / route.lstrip("/") / "page.tsx").is_file()
+                    await squad.get_by_role("button", name="Close", exact=True).click()
                     assert await page.get_by_role("button", name="Ask Tiger", exact=True).count() == 0
                     assert await page.get_by_text("Next page →", exact=True).count() == 0
                     await shot("01-empty.png")
@@ -169,6 +190,11 @@ export default { devIndicators: false, webpack(config) {
                     assert await page.get_by_role("textbox", name="Ask Tiger", exact=True).count() == 0
                     assert "Every answer lists its sources" not in await page.locator("body").inner_text()
                     assert "Checked Not yet" not in await page.locator("body").text_content()
+                    await page.goto(origin + "/tiger?tab=plugins")
+                    await page.get_by_role("heading", name="Latest reads", exact=True).wait_for()
+                    assert await page.get_by_role("dialog", name="Plugins", exact=True).count() == 0
+                    for internal in ("vault", "MCP connections", "Plugins could not be loaded from Tank"):
+                        assert internal not in await page.locator("body").inner_text()
                     await page.set_viewport_size({"width": 390, "height": 844})
                     await page.get_by_text("Not checked yet", exact=True).wait_for()
                     await shot("08-not-checked.png")
@@ -252,6 +278,7 @@ export default { devIndicators: false, webpack(config) {
             print(f"PASS: form → Tank → Tiger → 3 saved-page readings → 1 alert; screenshots: {output}")
             print("PASS: 0/1/2 alert and search counts, overview grammar, blocked row Page link, no inactive retry button")
             print("PASS: actual Tank app; inactive date/load/paging/Ask controls removed; legacy Ask link and Not checked yet card")
+            print("PASS: left-panel destinations, Squad and Support; Plugins and Settings absent; legacy Plugins link opens Overview")
     finally:
         if process and process.returncode is None:
             process.terminate()

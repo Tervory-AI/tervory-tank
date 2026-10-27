@@ -34,6 +34,15 @@ watch-list next-page label and Ask UI are absent. An old `?tab=ask` link opens
 Overview, the mobile card says **Not checked yet**, and the remaining All/Price/
 Stock alert filters change the displayed rows.
 
+The fourth-review checks inspect every link in Tiger's left panel: Dashboard
+opens `/`, Tasks opens the actual `/tasks` queue (renamed from Projects), and
+Chats opens `/chats`. There is no general settings page, so Settings is removed.
+Plugins and its page-load vault request are removed; an old `?tab=plugins` link
+opens Overview without the unavailable popup or its internal error text. The
+harness also checks every client Squad destination against its existing page and
+opens/closes Squad and Support. The remaining Tiger buttons open their named
+sections during the saved-page job. The shared navigation files are unchanged.
+
 | Step | Evidence |
 | --- | --- |
 | Empty watch list | [01-empty.png](proof/01-empty.png) |
@@ -100,9 +109,11 @@ rejection and the absence of raw HTML in ordinary/model results. Existing
 
 ## CI comparison
 
-[CI failure comparison](ci-baseline.md) lists the two failures on reviewed head
-`e1601bb`: sidebar fixture loading and Rig catalogue dates. Both reproduce on
-main `65067a4`. No CI retry was requested.
+[CI failure comparison](ci-baseline.md) records the completed tank job for reviewed
+head `61606ab`: sidebar fixture loading, Rig catalogue dates and seven room-seal
+failures. All nine have the same cause in main `417eaad`'s completed tank job;
+room-seal tests pass in the branch checkout. The earlier `e1601bb` result is also
+retained. No CI retry was requested.
 
 ## Founder must decide: client's own session
 

@@ -1,7 +1,7 @@
 {
   "scope": "local, fixture page",
   "watch": {
-    "id": "9fe5f975-9b5a-4c31-9bcf-a519785c7345",
+    "id": "4aa6e8a6-b444-49ed-8f90-41d068016607",
     "tenant_id": "ab4e3ad2-83d9-5c53-94ee-667e25b05a15",
     "url": "https://www.adafruit.com/product/4296",
     "label": "Raspberry Pi 4 Model B - 4 GB RAM",
@@ -14,10 +14,10 @@
   },
   "observations": [
     {
-      "id": "f17f6e8b-0eca-4d77-9777-a9fa8887f0ae",
+      "id": "ddfcefbb-6356-442e-8806-27016aaebd4a",
       "tenant_id": "ab4e3ad2-83d9-5c53-94ee-667e25b05a15",
       "url": "https://www.adafruit.com/product/4296",
-      "ts": "2026-10-26T23:51:05.286425+00:00",
+      "ts": "2026-10-27T00:23:25.697460+00:00",
       "price": "120.00",
       "currency": "USD",
       "availability": "InStock",
@@ -25,10 +25,10 @@
       "evidence": "{\"method\": \"jsonld\", \"price\": \"120.00\", \"file\": null, \"stock\": \"InStock\", \"layout\": {\"primary\": \"jsonld\"}}"
     },
     {
-      "id": "84ff004a-ceed-4f5c-a259-d34128524464",
+      "id": "40cf8bc3-6bc1-419c-8287-bc10ff3b8311",
       "tenant_id": "ab4e3ad2-83d9-5c53-94ee-667e25b05a15",
       "url": "https://www.adafruit.com/product/4296",
-      "ts": "2026-10-26T23:51:06.520943+00:00",
+      "ts": "2026-10-27T00:23:27.315062+00:00",
       "price": "115.00",
       "currency": "USD",
       "availability": "InStock",
@@ -36,10 +36,10 @@
       "evidence": "{\"method\": \"jsonld\", \"price\": \"115.00\", \"file\": null, \"stock\": \"InStock\", \"layout\": {\"primary\": \"jsonld\"}}"
     },
     {
-      "id": "1b5e679b-be8c-4b99-9ece-b7cbe47f3ee3",
+      "id": "c948be4c-4209-4613-95cf-5a95bf27ed64",
       "tenant_id": "ab4e3ad2-83d9-5c53-94ee-667e25b05a15",
       "url": "https://www.adafruit.com/product/4296",
-      "ts": "2026-10-26T23:51:06.850496+00:00",
+      "ts": "2026-10-27T00:23:27.666478+00:00",
       "price": "115.00",
       "currency": "USD",
       "availability": "InStock",
@@ -47,10 +47,10 @@
       "evidence": "{\"method\": \"jsonld\", \"price\": \"115.00\", \"file\": null, \"stock\": \"InStock\", \"layout\": {\"primary\": \"jsonld\"}}"
     },
     {
-      "id": "050102c6-f3a8-434f-91ed-77299a5b4a13",
+      "id": "93aeb2c0-1785-4f07-9ce7-430d6f01b878",
       "tenant_id": "ab4e3ad2-83d9-5c53-94ee-667e25b05a15",
       "url": "https://www.adafruit.com/product/4296",
-      "ts": "2026-10-26T23:51:09.768679+00:00",
+      "ts": "2026-10-27T00:23:31.200597+00:00",
       "price": "110.00",
       "currency": "USD",
       "availability": "InStock",
@@ -58,10 +58,10 @@
       "evidence": "{\"method\": \"jsonld\", \"price\": \"110.00\", \"file\": null, \"stock\": \"InStock\", \"layout\": {\"primary\": \"jsonld\"}}"
     },
     {
-      "id": "ad3b6382-e27b-480b-a7ae-6b82a7ebdfbe",
+      "id": "65acb425-8105-41ee-8281-52c3bdd15273",
       "tenant_id": "ab4e3ad2-83d9-5c53-94ee-667e25b05a15",
       "url": "https://www.adafruit.com/product/4296",
-      "ts": "2026-10-26T23:51:11.321611+00:00",
+      "ts": "2026-10-27T00:23:32.952917+00:00",
       "price": null,
       "currency": null,
       "availability": null,
@@ -71,19 +71,19 @@
   ],
   "alerts": [
     {
-      "id": "86104628-b44b-4ba8-a2f3-7760172b6503",
+      "id": "1d4ddea9-b23f-4ced-b6ac-975fe5d38ac8",
       "tenant_id": "ab4e3ad2-83d9-5c53-94ee-667e25b05a15",
       "url": "https://www.adafruit.com/product/4296",
-      "ts": "2026-10-26T23:51:06.521190+00:00",
+      "ts": "2026-10-27T00:23:27.315399+00:00",
       "kind": "price",
       "before": "120.00",
       "after": "115.00"
     },
     {
-      "id": "6cd0a8b7-30ed-46c6-b1f0-8043b13735e6",
+      "id": "f9904d47-0737-4a45-bff3-f9f2a3b1e69a",
       "tenant_id": "ab4e3ad2-83d9-5c53-94ee-667e25b05a15",
       "url": "https://www.adafruit.com/product/4296",
-      "ts": "2026-10-26T23:51:09.768776+00:00",
+      "ts": "2026-10-27T00:23:31.200708+00:00",
       "kind": "price",
       "before": "115.00",
       "after": "110.00"

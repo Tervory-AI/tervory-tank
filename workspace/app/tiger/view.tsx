@@ -4,8 +4,6 @@ import { useEffect, useState } from "react";
 import { addProduct, removeProduct } from "./actions";
 import { EVERY_OPTIONS, FOOT, FOOT_SMALL, LEDE } from "./copy";
 import { SECTIONS, searchTiger, type AlertRow, type ProductRow, type ReadRow, type Section, type TigerData, type UnreadRow } from "./model";
-import { Plugins } from "./plugins";
-import type { PluginPanel } from "./plugins-data";
 import { SquadLinks } from "../squad-links";
 
 function SearchIcon() {
@@ -27,17 +25,14 @@ export function TigerApp({
   data,
   notice,
   initialTab,
-  plugins,
   accountName,
 }: {
   data: TigerData;
   notice: string;
   initialTab: Section;
-  plugins: PluginPanel;
   accountName: string | null;
 }) {
-  const [section, setSection] = useState<Section>(initialTab === "plugins" ? "overview" : initialTab);
-  const [pluginsOpen, setPluginsOpen] = useState(initialTab === "plugins");
+  const [section, setSection] = useState<Section>(initialTab);
   const [addOpen, setAddOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [draft, setDraft] = useState("");
@@ -48,7 +43,6 @@ export function TigerApp({
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
-      setPluginsOpen(false);
       setAddOpen(false);
       setMenuOpen(false);
     }
@@ -59,24 +53,16 @@ export function TigerApp({
   const products = data.products.filter((row) => !hidden.includes(row.id));
   const visible: TigerData = { ...data, products };
   const hit = searchTiger(visible, query);
-  const headerRed = !addOpen && !(pluginsOpen && plugins.enabled);
+  const headerRed = !addOpen;
 
   function show(next: Section) {
     setMenuOpen(false);
-    setPluginsOpen(false);
     setAddOpen(false);
     setQuery("");
     setSection(next);
   }
 
-  function openPlugins() {
-    setMenuOpen(false);
-    setAddOpen(false);
-    setPluginsOpen(true);
-    setSection("plugins");
-  }
-
-  const rootClass = ["tiger", pluginsOpen ? "plugins-open" : "", addOpen ? "add-open" : "", menuOpen ? "menu-open" : ""].filter(Boolean).join(" ");
+  const rootClass = ["tiger", addOpen ? "add-open" : "", menuOpen ? "menu-open" : ""].filter(Boolean).join(" ");
 
   return (
     <div className={rootClass}>
@@ -92,23 +78,21 @@ export function TigerApp({
         <nav className="panel-account" aria-label="Account">
           <p className="account">{accountName?.trim() || "Your account"}</p>
           <a className="nav" href="/">Dashboard</a>
-          <a className="nav" href="/tasks" onClick={() => setMenuOpen(false)}>Projects</a>
-          <a className="nav" href="/" onClick={() => setMenuOpen(false)}>Chats</a>
+          <a className="nav" href="/tasks" onClick={() => setMenuOpen(false)}>Tasks</a>
+          <a className="nav" href="/chats" onClick={() => setMenuOpen(false)}>Chats</a>
         </nav>
         <SquadLinks className="panel-account squad-nav" linkClassName="nav" />
         <div className="panel-own">
           <nav aria-label="Tiger sections">
-            {SECTIONS.filter((item) => item.id !== "plugins").map((item) => (
-              <button key={item.id} type="button" className={item.id === section && !pluginsOpen ? "nav on" : "nav"} onClick={() => show(item.id)}>
+            {SECTIONS.map((item) => (
+              <button key={item.id} type="button" className={item.id === section ? "nav on" : "nav"} onClick={() => show(item.id)}>
                 {item.label}
               </button>
             ))}
-            <button type="button" className={pluginsOpen ? "nav on" : "nav"} onClick={openPlugins}>Plugins</button>
           </nav>
         </div>
         <div className="panel-bottom">
           <img src="/brand/tervory-logo-reversed.png" alt="Tervory" width={186} height={34} />
-          <a className="nav" href="/onboarding" onClick={() => setMenuOpen(false)}>Settings</a>
           <button type="button" className="nav" onClick={() => { setHelp((open) => !open); setMenuOpen(false); }}>Support</button>
         </div>
       </aside>
@@ -134,7 +118,7 @@ export function TigerApp({
             <h1>Tiger</h1>
             <p className="lede">{LEDE}</p>
           </div>
-          <button type="button" className={headerRed ? "primary" : "line"} onClick={() => { setAddOpen(true); setPluginsOpen(false); }}>Add a product</button>
+          <button type="button" className={headerRed ? "primary" : "line"} onClick={() => setAddOpen(true)}>Add a product</button>
         </header>
 
         {notice ? <p className="notice">{notice}</p> : null}
@@ -165,7 +149,6 @@ export function TigerApp({
         </footer>
       </div>
 
-      {pluginsOpen ? <Plugins plugins={plugins} onClose={() => { setPluginsOpen(false); setSection("overview"); }} /> : null}
       {addOpen ? <AddProduct onClose={() => setAddOpen(false)} /> : null}
     </div>
   );

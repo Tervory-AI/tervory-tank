@@ -2,7 +2,7 @@ import type { TigerAlert, TigerObservation, TigerWatch } from "@/lib/tank";
 import { everyLabel, stockLabel, watchTitle } from "../prices/format";
 import type { ReadStatus } from "./copy";
 
-export type Section = "overview" | "alerts" | "watch" | "history" | "unread" | "plugins";
+export type Section = "overview" | "alerts" | "watch" | "history" | "unread";
 
 export const SECTIONS: { id: Section; label: string }[] = [
   { id: "overview", label: "Overview" },
@@ -10,7 +10,6 @@ export const SECTIONS: { id: Section; label: string }[] = [
   { id: "watch", label: "Watch list" },
   { id: "history", label: "History" },
   { id: "unread", label: "Can't read" },
-  { id: "plugins", label: "Plugins" },
 ];
 
 export type ProductRow = {
