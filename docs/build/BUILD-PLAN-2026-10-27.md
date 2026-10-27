@@ -173,6 +173,27 @@ Two tools are still to add where nothing exists yet: **Nuclei** and **OWASP ZAP*
 - **Built:** the states, version pinning, Approve all ready and rollback (#223).
 - **Left:** the 30-day wait before an old version retires (it retires at once today, `tank/skala.py:502–519`), and the control panel to frame 10:115 (branch `codex/control-panel`).
 
+### The window: a chat that does the work (COMMAND-1, like this chat)
+The founder's ask (20 Oct): a conversation window where you say what you want, and Tervory plans it, runs the squad and the build workers, shows progress live, asks before anything that can't be undone, and puts a receipt on every turn. The window replaces tickets. Brief: `docs/cursor/COMMAND-1-the-window.md`.
+- **Built** (#224, #225, 21 Oct; live at app.tervory.com/chats):
+  - saved threads;
+  - a model picker (Auto or any roster model);
+  - attachments;
+  - Confirm/Cancel cards before anything that changes or costs something;
+  - the live steps panel;
+  - receipts per turn;
+  - squad tools per tenant (`tank/command.py:30–41`).
+- **Not connected:** builds from the chat.
+  - Tank has the build queue (`POST /v1/command/build`, `GET /v1/command/builds/next`, progress and follow-ups, `tank/command.py:501–682`).
+  - The workers never read it: nothing in `workers/` calls `/v1/command`, so they still take GitHub issues only.
+  - This is the part that makes it "like this chat": you ask for a change and a worker writes the code, opens the PR and reports back in the thread.
+- **Missing:**
+  - a read-only repo tool (briefs, PRs, CI) in the tool list;
+  - real streaming (the answer arrives whole, `tank/command.py:408`);
+  - chats on the cache and in savings (Tank section);
+  - the CLI (CLI-1, not started).
+- **Done when:** the founder types a change in `/chats`, confirms the card, and a worker's PR, CI status and the reviewer's verdict appear in the same thread.
+
 ### Workspace
 - **Dashboard and control panel:** merge `codex/dashboard` and `codex/control-panel` once checked against 12:2 and 10:115.
 - **Feedback:** add "wrong" and a note box, on chats and agent results as well as `/tasks` (`workspace/app/feedback-buttons.tsx:5`).
@@ -303,6 +324,12 @@ Two tools are still to add where nothing exists yet: **Nuclei** and **OWASP ZAP*
 - **The bus:** none, and by the founder's decision none is needed (section 4).
 
 ### Infrastructure
+- **Storage split** (founder, 27 Oct: all records in the cloud):
+  - files go to R2, as now;
+  - Postgres and Qdrant run on the box, with a nightly copy to R2;
+  - the cache stays local.
+  - First job: switch on the nightly copy, add a Qdrant snapshot, and run one restore drill (target under 4 hours). The same goes for the ZA Zenas box, with its own bucket.
+  - Reference page in Notion: "Storage, inference and cache, explained".
 - **The backup to R2** is off unless the `r2-backup` profile is enabled (`docker-compose.yml:271`). There's no Qdrant snapshot, no second offsite copy and no restore drill.
 - **No Postgres row-level security** on `tenant_id`, and Qdrant uses one shared key.
 - **CI** uses a home-grown secret test, not Gitleaks, and has no Semgrep. Radix doesn't gate our own repo.
@@ -319,7 +346,10 @@ Two tools are still to add where nothing exists yet: **Nuclei** and **OWASP ZAP*
 ## 6. Order of work: parallel lanes
 These run at the same time, one thread each. Only the paid-step and graduation items wait on section 4's open questions:
 1. **Rule 3 cleanup (one thread, today):** remove the fixtures and internal words from rig.tervory.com `/`, the Workspace `/rig`, zenas.tervory.com Moot, protect.tervory.com, and the Market Lab feed review.
+0. **Backups first (Grok, today):** switch on the nightly Postgres copy to R2, add the Qdrant snapshot, run one restore drill.
 2. **Tank:** chats on the ladder and in savings; real priority; Tier 0 classify-first.
+2c. **The window:** connect the workers to the window's build queue, so a change asked for in `/chats` becomes a PR reported in the same thread; add the repo-read tool.
+2d. **The rule cache across every product:** "rule" as its own rung on the ladder (see the Notion reference page).
 2b. **The tool swap (section 4b):** one thread per tool, starting with RouteLLM, DeepEval and Langfuse in Tank.
 3. **Base:** merge the ATF download, fewest-first order, the C5 frame, one real state, the audit tool.
 4. **Rig:** set SMTP in Coolify, then one real store and 3 quote emails.
