@@ -127,6 +127,36 @@ async def test_texas_type01_without_upload_numbers_download_and_tenant_isolation
         assert (await client.post("/v1/base-product/comparison", json={"tenant_id": str(OTHER), "csv": "licence_key,email\n5-74-00001,other@example.com\n"})).status_code == 422
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reason,sentence", [
+    ("blocked", "The store blocked automated checks."),
+    ("no_website", "No website found for this business."),
+    ("not_found", "No website found for this business."),
+    ("http_403", "The store blocked automated checks."),
+    ("unknown_check_code", "This detail could not be verified."),
+    ("Only an archived page was available.", "Only an archived page was available."),
+])
+async def test_csv_reason_is_a_sentence_and_dates_remain_iso(monkeypatch, reason, sentence):
+    import csv
+    import io
+    monkeypatch.setenv("TANK_API_KEY", "local-fixture")
+    app, store = fixture_app()
+    row = finished(reference.project(raw()))
+    row["fields"]["website"].update(value=None, verified=False, reason=reason)
+    row["fields"]["phone"]["value"] = "+15125550101"
+    store.rows[TENANT].append(row)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://fixture", headers={"X-Tank-Key": "local-fixture"}) as client:
+        response = await client.get("/v1/base-product/records.csv", params={"tenant_id": str(TENANT), "metric": "failed", "reason": reason})
+    assert response.status_code == 200
+    records = list(csv.DictReader(io.StringIO(response.text.lstrip("\ufeff"))))
+    assert len(records) == 1
+    assert records[0]["website_reason"] == sentence
+    assert records[0]["website_source_url"] == row["fields"]["website"]["source_url"]
+    assert records[0]["website_checked_at"] == records[0]["phone_checked_at"] == AT
+    assert records[0]["phone_value"] == "+15125550101"
+    assert row["fields"]["website"]["reason"] == reason
+
+
 def test_unpriced_cost_is_excluded_and_comparison_uses_same_record():
     row = finished(reference.project(raw()))
     ledger = [{"id": uuid.uuid4(), "record_id": row["id"], "ts": AT, "rung": 1, "cost_usd": Decimal("99"), "cost_status": "not_set"},

@@ -129,13 +129,39 @@ def csv_text(rows: list[dict[str, Any]], columns: list[str]) -> str:
     return "\ufeff" + stream.getvalue()
 
 
+def csv_reason(reason: str | None, field: str) -> str | None:
+    """Readable export copy; stored reasons and count filters keep their codes."""
+    if not reason:
+        return None
+    reasons = {
+        "blocked": "The store blocked automated checks.",
+        "active_block": "The store requires a human access check; automated checks stopped.",
+        "login_required": "The page requires sign-in, so it was not read.",
+        "paywall": "The page requires payment, so it was not read.",
+        "unavailable": "The website could not be reached.",
+        "no_website": "No website found for this business.",
+        "no_website_found": "No website found for this business.",
+    }
+    code = reason.strip().lower()
+    if code in reasons:
+        return reasons[code]
+    if code.startswith("blocked:") or code in {"http_403", "http_429", "http_451"}:
+        return reasons["blocked"]
+    if code == "not_found":
+        detail = {"website": "website", "phone": "phone number", "email": "email address", "socials": "social links"}[field]
+        return f"No {detail} found for this business."
+    if re.fullmatch(r"[\w.:-]+", reason.strip()):
+        return "This detail could not be verified."
+    return reason
+
+
 def export_records(rows: list[dict[str, Any]]) -> str:
     columns = ["record_id", "licence_key", "state", "licence_type", "name"]
     columns += [f"{field}_{part}" for field in FIELDS for part in ("value", "source_url", "checked_at", "reason", "items")]
     exported = []
     for row in rows:
         fields = obj(row["fields"])
-        exported.append({**row, **{f"{name}_{part}": fields[name].get(part) for name in FIELDS
+        exported.append({**row, **{f"{name}_{part}": csv_reason(fields[name].get(part), name) if part == "reason" else fields[name].get(part) for name in FIELDS
                                   for part in ("value", "source_url", "checked_at", "reason", "items")}})
     return csv_text(exported, columns)
 
