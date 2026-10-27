@@ -120,12 +120,13 @@ def test_retention_expires_old_and_caps_room_total_without_touching_cookies(tmp_
 
 
 @pytest.mark.asyncio
-async def test_browser_skips_disallowed_page_before_navigation(visitor):  # noqa: F811
+async def test_browser_reads_public_page_without_a_robots_gate(visitor):  # noqa: F811
     visitor.robots_text = 'User-agent: *\nDisallow: /blocked'
+    visitor.gate.set()
     result = await visitor.visit('https://shop.example/blocked')
-    assert result['skipped'] and result['reason'] == 'robots.txt'
-    assert result['page']['facts']['skip_reason'] == 'robots.txt'
-    assert not visitor.started
+    assert result['ok'] and not result.get('challenge')
+    assert visitor.started == ['https://shop.example/blocked']
+    assert visitor.robots_calls == []
 
 
 @pytest.mark.asyncio
@@ -156,17 +157,24 @@ async def test_robots_cache_and_expiry_and_private_redirect(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_robots_disallowed_pdf_is_never_downloaded(monkeypatch):
+async def test_public_pdf_does_not_fetch_robots(monkeypatch):
+    import io
+    from pypdf import PdfWriter
+    writer = PdfWriter()
+    writer.add_blank_page(width=100, height=100)
+    content = io.BytesIO()
+    writer.write(content)
     monkeypatch.setattr(robots, 'cache', {})
     calls = []
     class Request:
         async def get(self, url, **kwargs):
             calls.append(url)
-            async def body(): return b'User-agent: *\nDisallow: /file.pdf'
+            assert kwargs['headers']['User-Agent'] == robots.USER_AGENT
+            async def body(): return content.getvalue()
             return SimpleNamespace(status=200, headers={}, body=body)
-    with pytest.raises(robots.RobotsDenied):
-        await browser.read_pdf(SimpleNamespace(request=Request()), 'https://shop.example/file.pdf', 1000)
-    assert calls == ['https://shop.example/robots.txt']
+    result = await browser.read_pdf(SimpleNamespace(request=Request()), 'https://shop.example/file.pdf', 1000)
+    assert result['ok']
+    assert calls == ['https://shop.example/file.pdf']
 
 
 @pytest.fixture

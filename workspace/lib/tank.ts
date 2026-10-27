@@ -371,6 +371,8 @@ export type TigerWatch = {
   every: string;
   enabled: boolean;
   threshold: number | string;
+  alert_price?: boolean;
+  alert_stock?: boolean;
 };
 
 export type TigerObservation = {
@@ -415,7 +417,7 @@ export function listTigerWatches(tenantId: string): Promise<{ watches: TigerWatc
 
 export function createTigerWatch(
   tenantId: string,
-  input: { url: string; label: string; every: string; threshold: number },
+  input: { url: string; label: string; every: string; threshold: number; alert_price?: boolean; alert_stock?: boolean },
 ): Promise<TigerWatch> {
   return tigerCall<TigerWatch>("/v1/tiger/watchlist", {
     method: "POST",
@@ -425,6 +427,8 @@ export function createTigerWatch(
       label: input.label,
       every: input.every,
       threshold: input.threshold,
+      alert_price: input.alert_price ?? true,
+      alert_stock: input.alert_stock ?? true,
       enabled: true,
       engine: "",
     }),

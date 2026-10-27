@@ -1,15 +1,42 @@
-"""Public-web robots policy, checked before page/PDF navigation, cached for 24h."""
+"""Public request guard and optional advisory robots parsing.
+
+Public navigation does not fetch or enforce robots.txt. Host blocks belong to
+one check run; they are never used as permission to access a login.
+"""
 from __future__ import annotations
 
 import time
 import re
+from dataclasses import dataclass, field
 from urllib.parse import quote, urljoin, urlsplit
 
 from brain.security import public_url
 
 CACHE_SECONDS = 86400
+USER_AGENT = "Tervory/1.0 (+https://tervory.com)"
 MAX_ROBOTS_BYTES = 256_000
 cache: dict[str, tuple[float, Policy]] = {}
+
+
+@dataclass
+class Run:
+    """Fresh for each check, shared only by that check's requests/redirects."""
+    stopped_hosts: set[str] = field(default_factory=set)
+
+
+class HostBlocked(ValueError):
+    """This run already encountered a block at the requested host."""
+
+
+def stop_host(run: Run | None, url: str) -> None:
+    if run is not None:
+        host, _ = public_url(url)
+        run.stopped_hosts.add(host.rstrip('.').removeprefix('www.'))
+
+
+def host_stopped(run: Run | None, url: str) -> bool:
+    host, _ = public_url(url)
+    return run is not None and host.rstrip('.').removeprefix('www.') in run.stopped_hosts
 
 
 def normalized_path(value: str) -> str:
@@ -85,18 +112,20 @@ class RobotsDenied(ValueError):
 
 
 async def allowed(context, url: str, timeout: int = 10000) -> bool:
+    """Advisory parser for explicit callers; never a navigation gate."""
     public_url(url)
     parsed = urlsplit(url)
     origin = f'{parsed.scheme}://{parsed.netloc}'
     saved = cache.get(origin)
     if saved and time.monotonic() - saved[0] < CACHE_SECONDS:
-        return saved[1].can_fetch('TervoryBase', url)
+        return saved[1].can_fetch('Tervory', url)
     policy = Policy()
     target = origin + '/robots.txt'
     try:
         for _ in range(8):
             public_url(target)
-            response = await context.request.get(target, timeout=timeout, max_redirects=0)
+            response = await context.request.get(target, timeout=timeout, max_redirects=0,
+                                                 headers={"User-Agent": USER_AGENT})
             if response.status in {301, 302, 303, 307, 308}:
                 target = urljoin(target, response.headers.get('location', ''))
                 continue
@@ -116,12 +145,14 @@ async def allowed(context, url: str, timeout: int = 10000) -> bool:
             if len(cache) >= 1024:
                 cache.pop(min(cache, key=lambda host: cache[host][0]))
             cache[origin] = (time.monotonic(), policy)
-            return policy.can_fetch('TervoryBase', url)
+            return policy.can_fetch('Tervory', url)
     except Exception:
         return False
     return False
 
 
-async def require_allowed(context, url: str, timeout: int = 10000) -> None:
-    if not await allowed(context, url, timeout):
-        raise RobotsDenied('robots.txt')
+async def require_allowed(context, url: str, timeout: int = 10000, run: Run | None = None) -> None:
+    """Keep URL safety and run-scoped stops, without requesting robots.txt."""
+    public_url(url)
+    if host_stopped(run, url):
+        raise HostBlocked(url)
