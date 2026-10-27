@@ -1,11 +1,8 @@
 # Market Lab local review
 
-Branch: `codex/market-lab-works`. PR remains draft. This supersedes the evidence
-rejected in [fourth review](https://github.com/zenascapetown-code/tervory-tank/pull/336#issuecomment-6429901048), head `52b4bd1`.
-Validation below used a clean clone of implementation `8351de0`, freshly installed
-dependencies and a new empty local Postgres database. The fourth reviewer verified
-the real-Tank job with three tenants and the real worker; this follow-up addresses
-the five listed defects and the unrelated-question ask path.
+Branch: `codex/market-lab-works`. PR remains draft. The [fifth review](https://github.com/zenascapetown-code/tervory-tank/pull/336#issuecomment-6430543827), head `bf14c9c`, confirmed the five previous fixes and the complete job against real Tank. Its remaining finding was the stale skill bundle. This follow-up adds `market.series_fetch/1.2.0` and preserves every older version.
+
+Fresh-clone lint, candidate-runtime, skill-contract and product tests below ran at implementation `a63a29468ce8aff2a3a6495163c2c4c5d1ec7919`, with newly installed dependencies. The existing page screenshots, production build and Postgres proof remain from `8351de0`; no page or route changed in this follow-up. The room's only source change here removes one unused import.
 
 ## The job, step by step, as a client does it
 
@@ -17,6 +14,12 @@ Intended client journey; the client's own signed-in session has not been verifie
 4. Open a statement to compare its value, place, reporting period, unit and revision with the stored document. Publisher links lead to readable dataset pages. A missing document says **This source page doesn't exist**.
 
 ## What changed
+
+- **Fifth-review finding, versioned bundle:** added `tank/skills/market.series_fetch/1.2.0/` as a copy of 1.1.0 with the updated 21-file feed dependency closure, including the newly required `published.py`. `skill.yaml`, `CHANGELOG.md` and `BUNDLE.md` describe the new candidate. `run.py`, `pure.py` and the three listing fixtures remain identical to 1.1.0. Versions 1.0.0, 1.1.0 and 1.1.1 are untouched.
+- **Bundle regressions:** `tests/test_candidate_eval_runtime.py` compares the newest version to the source, retains the legacy runtime test, and runs the new version in a separate Tank-only interpreter. Eight Skala cases cover the preserved adapters, county/state counts and refusal cases; eight package-local feed cases cover all six refreshed modules plus the published-table dependency. All sockets are blocked and imported feed modules must belong to the selected bundle.
+- **Lint for copied code:** removed the unused `world_bank_url` import from `agents/market_lab/feeds/fetch.py` and its 1.2.0 copy, preserving byte parity and the existing lint rule.
+
+The following changes were confirmed fixed by the fifth reviewer:
 
 - **Finding 1, lint:** removed the unused `latest_checks` import in `tests/test_market_lab_postgres.py`. The exact CI lint command passes locally. The CI section below distinguishes actual GitHub execution from local tests.
 - **Finding 2, unrelated questions:** `core/evidence.py` removes conversational words before matching and requires a supported topic plus every meaningful qualifier. Places, dates and units cannot establish the topic by themselves. This prevents Mars, Atlantis, penguins, unsupported dates and unit-only questions from receiving unrelated figures. Supported short/full month names and comparison baselines remain usable. Ten negative cases run both against stored fixtures and through real Tank; matching population, weather, freight, permits and listings questions remain covered.
@@ -31,7 +34,7 @@ file changed by the whole PR, including previous commits. Binary images have no
 text lines; deleted code links to its former lines.
 
 <details>
-<summary>Changed files and line references (78 files)</summary>
+<summary>Changed files and line references (110 files)</summary>
 
 | Changed file | Line references |
 | --- | --- |
@@ -66,7 +69,7 @@ text lines; deleted code links to its former lines.
 | [agents/market_lab/feeds/cli.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/agents/market_lab/feeds/cli.py#L5) | 5, 15, 38–39, 42–50 |
 | [agents/market_lab/feeds/collect.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/agents/market_lab/feeds/collect.py#L1) | 1–138 |
 | [agents/market_lab/feeds/engines/ffl/sources.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/agents/market_lab/feeds/engines/ffl/sources.py#L115) | 115, 126, 141, 150, 159, 180–187, 227–228, 233, 235, 245, 250, 264–265, 297–341 |
-| [agents/market_lab/feeds/fetch.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/agents/market_lab/feeds/fetch.py#L149) | 149–154, 165, 181–186, 200, 219, 222, 224–227, 236–251, 263–265, 267–269, 274–285, 304–309, 320, 338–351 |
+| [agents/market_lab/feeds/fetch.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/agents/market_lab/feeds/fetch.py#L37) | 37, 148–153, 164, 180–185, 199, 218, 221, 223–226, 235–250, 262–264, 266–268, 273–284, 303–308, 319, 337–350 |
 | [agents/market_lab/feeds/geo.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/agents/market_lab/feeds/geo.py#L53) | 53–102 |
 | [agents/market_lab/feeds/live.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/agents/market_lab/feeds/live.py#L36) | 36–56, 77, 103–128, 149, 158, 162, 165, 177, 186, 195, 198, 200–202, 210, 286, 292, 295 |
 | [agents/market_lab/feeds/postgres_cli.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/agents/market_lab/feeds/postgres_cli.py#L1) | 1–36 |
@@ -84,8 +87,40 @@ text lines; deleted code links to its former lines.
 | [tank/Dockerfile](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/Dockerfile#L5) | 5 |
 | [tank/main.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/main.py#L3426) | 3426–3427 |
 | [tank/market_lab_routes.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/market_lab_routes.py#L1) | 1–42 |
+| [tank/skills/market.series_fetch/1.2.0/BUNDLE.md](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/BUNDLE.md#L1) | 1–42 |
+| [tank/skills/market.series_fetch/1.2.0/CHANGELOG.md](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/CHANGELOG.md#L1) | 1–14 |
+| [tank/skills/market.series_fetch/1.2.0/evals/cases.jsonl](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/evals/cases.jsonl#L1) | 1–8 |
+| [tank/skills/market.series_fetch/1.2.0/evals/test_feeds.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/evals/test_feeds.py#L1) | 1–146 |
+| [tank/skills/market.series_fetch/1.2.0/feeds/__init__.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/feeds/__init__.py#L1) | 1–3 |
+| [tank/skills/market.series_fetch/1.2.0/feeds/adapters.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/feeds/adapters.py#L1) | 1–705 |
+| [tank/skills/market.series_fetch/1.2.0/feeds/batch_guard.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/feeds/batch_guard.py#L1) | 1–352 |
+| [tank/skills/market.series_fetch/1.2.0/feeds/catalog.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/feeds/catalog.py#L1) | 1–20 |
+| [tank/skills/market.series_fetch/1.2.0/feeds/db.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/feeds/db.py#L1) | 1–77 |
+| [tank/skills/market.series_fetch/1.2.0/feeds/engines/__init__.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/feeds/engines/__init__.py#L1) | 1 |
+| [tank/skills/market.series_fetch/1.2.0/feeds/engines/ffl/__init__.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/feeds/engines/ffl/__init__.py#L1) | 1–5 |
+| [tank/skills/market.series_fetch/1.2.0/feeds/engines/ffl/lists.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/feeds/engines/ffl/lists.py#L1) | 1–116 |
+| [tank/skills/market.series_fetch/1.2.0/feeds/engines/ffl/sources.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/feeds/engines/ffl/sources.py#L1) | 1–341 |
+| [tank/skills/market.series_fetch/1.2.0/feeds/fetch.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/feeds/fetch.py#L1) | 1–423 |
+| [tank/skills/market.series_fetch/1.2.0/feeds/geo.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/feeds/geo.py#L1) | 1–102 |
+| [tank/skills/market.series_fetch/1.2.0/feeds/keys.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/feeds/keys.py#L1) | 1–91 |
+| [tank/skills/market.series_fetch/1.2.0/feeds/licence.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/feeds/licence.py#L1) | 1–16 |
+| [tank/skills/market.series_fetch/1.2.0/feeds/licences.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/feeds/licences.py#L1) | 1–123 |
+| [tank/skills/market.series_fetch/1.2.0/feeds/live.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/feeds/live.py#L1) | 1–365 |
+| [tank/skills/market.series_fetch/1.2.0/feeds/models.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/feeds/models.py#L1) | 1–24 |
+| [tank/skills/market.series_fetch/1.2.0/feeds/published.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/feeds/published.py#L1) | 1–200 |
+| [tank/skills/market.series_fetch/1.2.0/feeds/reader.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/feeds/reader.py#L1) | 1–60 |
+| [tank/skills/market.series_fetch/1.2.0/feeds/runner.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/feeds/runner.py#L1) | 1–169 |
+| [tank/skills/market.series_fetch/1.2.0/feeds/schema.sql](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/feeds/schema.sql#L1) | 1–118 |
+| [tank/skills/market.series_fetch/1.2.0/feeds/store.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/feeds/store.py#L1) | 1–513 |
+| [tank/skills/market.series_fetch/1.2.0/pure.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/pure.py#L1) | 1–765 |
+| [tank/skills/market.series_fetch/1.2.0/run.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/run.py#L1) | 1–53 |
+| [tank/skills/market.series_fetch/1.2.0/skill.yaml](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/skill.yaml#L1) | 1–31 |
+| [tank/skills/market.series_fetch/1.2.0/tests/fixtures/feeds/geo/zip_county.csv](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/tests/fixtures/feeds/geo/zip_county.csv#L1) | 1–4 |
+| [tank/skills/market.series_fetch/1.2.0/tests/fixtures/feeds/listing/2024-01.tsv](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/tests/fixtures/feeds/listing/2024-01.tsv#L1) | 1–5 |
+| [tank/skills/market.series_fetch/1.2.0/tests/fixtures/feeds/listing/2024-02.tsv](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/tests/fixtures/feeds/listing/2024-02.tsv#L1) | 1–5 |
 | [tests/fixtures/feeds/checks/counts.csv](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tests/fixtures/feeds/checks/counts.csv#L2) | 2–5 |
 | [tests/fixtures/market_lab_questions.json](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tests/fixtures/market_lab_questions.json#L1) | 1–14 |
+| [tests/test_candidate_eval_runtime.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tests/test_candidate_eval_runtime.py#L16) | 16–17, 37, 39, 62, 65, 73, 83–92, 126, 128–129, 140–150, 160, 163 |
 | [tests/test_market_lab.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tests/test_market_lab.py#L176) | 176–177 |
 | [tests/test_market_lab_evidence.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tests/test_market_lab_evidence.py#L1) | 1–215 |
 | [tests/test_market_lab_page.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tests/test_market_lab_page.py#L72) | 72, 87–90, 95, 97, 100, 102, 110, 113 |
@@ -118,6 +153,10 @@ text lines; deleted code links to its former lines.
 
 **Decisions I made**
 
+- Use the founder's exact lane extension: a new 1.2.0 package and the candidate-runtime test. Do not edit an approved package, its fixtures, Tank's Dockerfile or Tank's main module.
+- Retain the existing bundled dependency closure and add `published.py`, which the updated fetch functions now import. Leave unrelated CLI/Postgres/page modules outside this skill, as in the previous bundle.
+- Exercise changed feed behavior with package-local offline cases and the real Skala runner in fresh processes. Byte parity alone would miss missing dependencies or invalid results.
+
 - Prefer no answer when the question contains an unsupported meaningful qualifier. Matching stays deterministic and uses the saved observation, its source and its reporting period; no model is called.
 - Require a subject from the observation/source. Unit words are only qualifiers unless they also genuinely name the observation, as “listings” does. Keep both positive and negative ask-path regressions.
 - Keep readable publisher pages separate from original transport URLs. Preserve required attribution and raw provenance. Do not present a current alerts page as an archived original alert.
@@ -129,7 +168,7 @@ text lines; deleted code links to its former lines.
 
 **GitHub CI evidence**
 
-For reviewed head `52b4bd128180af51632ea33f2a215df5e7bc84cf`, GitHub's [Tank job](https://github.com/zenascapetown-code/tervory-tank/actions/runs/40382540762/job/121782397339) failed at **Lint** and **Secret scan and tests was skipped**. The [Workspace job](https://github.com/zenascapetown-code/tervory-tank/actions/runs/40382540762/job/121782397281) passed. The gate failed. Those results do not count as Python tests having run.
+For reviewed head `bf14c9c604a125fc2a47c829667561b7c71736ef`, GitHub's [Tank job](https://github.com/zenascapetown-code/tervory-tank/actions/runs/40424323187/job/121926257139) passed **Lint** and failed **Secret scan and tests**. The fifth reviewer reproduced the stale-bundle failure in `test_candidate_eval_runtime.py` and identified other main-branch failures separately. The Workspace, savings-page and rig-admin checks passed. The gate failed while installing Chromium; browser tests and Lighthouse were skipped. Those are previous-head results, not claims for this follow-up.
 
 <!-- HEAD_CI_STATUS -->
 The PR body records the actual check names, steps and outcomes observed for its
@@ -153,6 +192,34 @@ npm_config_cache=/tmp/market-lab-review-npm npm --prefix agents/market_lab/fixtu
 
 The validation checkout was cloned locally from the same Git commit before it was pushed. Both dependency installations started empty. The explicit npm cache keeps writes within the cloud workspace's permitted temporary directory.
 
+**Fresh-clone candidate-runtime regression** — run after the setup above:
+
+```bash
+PYTHONPATH=tank .venv/bin/python -m pytest -q tests/test_candidate_eval_runtime.py
+```
+
+Actual output from the clean clone at `a63a294`:
+
+```text
+.....                                                                    [100%]
+5 passed in 1.45s
+```
+
+This includes the formerly failing bundle comparison, all 8/8 new-version Skala cases, all 8/8 bundled feed cases, and the preserved legacy cases in separate interpreters containing only Tank's shipped files. No external HTTP or model call is allowed. The new feed cases cover county names, publisher links, commodity units, published-table dates/values, pagination refusal, import/export fields and persistent blocked-site handling.
+
+```bash
+PYTHONPATH=tank .venv/bin/python -m pytest -q tests/test_skala_eval_contract.py -k 'market.series_fetch or latest_packages_have_at_least_five_cases'
+```
+
+```text
+...                                                                      [100%]
+3 passed, 69 deselected in 1.01s
+```
+
+The clean clone was created with `git clone --no-local --branch codex/market-lab-works /workspace/tervory-tank /workspace/market-lab-bundle-review` before the normal push, at the implementation SHA above. Its virtual environment and Workspace packages were installed from scratch. Later changes in this follow-up only record this proof. The original fresh-clone commands work against the pushed branch.
+
+The Git tree for `tank/skills/market.series_fetch/1.1.0` is still `6ba5757e452ebb4279aaa65b8653a7e8e09630db`, identical to reviewed head `bf14c9c`. Trees for 1.0.0 and 1.1.1 and blobs for `tank/main.py`/`tank/Dockerfile` also match that reviewed head. No older skill version changed.
+
 **CI lint command** — the exact command used by the Tank CI job:
 
 ```bash
@@ -167,7 +234,11 @@ Result: **All checks passed!** The unused `latest_checks` import is removed.
 PYTHONPATH=tank .venv/bin/python -m pytest -q tests/test_market*.py tests/test_feeds*.py
 ```
 
-Result: **196 passed, 2 skipped, 5 warnings**. The two skipped tests require a local database and pass separately below. The 15 TypeScript model tests run within this suite. The warnings are existing FastAPI startup-handler deprecations.
+Result on the new clean clone at `a63a294`: **196 passed, 2 skipped, 5 warnings in 10.42s**. The two skipped tests require a local database and pass separately below. The 15 TypeScript model tests run within this suite. The warnings are existing FastAPI startup-handler deprecations.
+
+**Retained proof from `8351de0`: Postgres, build and page**
+
+These checks and captures below were not rerun for this bundle-only follow-up. The fifth reviewer independently confirmed the real-Tank job at `bf14c9c`. Their exact reproduction commands and observed results remain here.
 
 **Empty local Postgres** — this temporary database contains no production data or credentials. The published port is loopback only:
 
