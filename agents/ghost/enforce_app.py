@@ -89,9 +89,11 @@ def load_enforce_client_settings(
         mirrored = load_mirrored_settings(qroot, fallback_tenant_id=tenant_id)
         if mirrored is not None:
             if not mirrored.site_name and site_name:
-                return ClientAutumbraSettings.model_validate(
+                mirrored = ClientAutumbraSettings.model_validate(
                     {**mirrored.model_dump(), "site_name": site_name}
                 )
+            from .threat_payload import sync_client_watched_hosts_from_settings
+            sync_client_watched_hosts_from_settings(mirrored)
             return mirrored
     # 2) Legacy local store (compat only).
     data_dir = data_dir_path()
@@ -105,6 +107,8 @@ def load_enforce_client_settings(
         settings = ClientAutumbraSettings.model_validate(
             {**settings.model_dump(), "site_name": site_name}
         )
+    from .threat_payload import sync_client_watched_hosts_from_settings
+    sync_client_watched_hosts_from_settings(settings)
     return settings
 
 

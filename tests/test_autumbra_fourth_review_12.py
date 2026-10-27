@@ -160,6 +160,7 @@ def test_finding4_non_uuid_tenant_is_4xx(tmp_path: Path, monkeypatch):
 
 
 def test_finding5_7_8_9_owner_email_from_receipts_not_request(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("AUTUMBRA_UNDO_TOKEN_SECRET", "test-undo-secret-fourth")
     monkeypatch.setenv("TANK_KEY", KEY)
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     root = tmp_path / "queues"
@@ -200,7 +201,8 @@ def test_finding5_7_8_9_owner_email_from_receipts_not_request(tmp_path: Path, mo
         assert "/receipts/weekly/" + TENANT not in body.replace("/autumbra/receipts/weekly/", "")
 
 
-def test_finding8_weekly_covers_every_owner_from_receipts(tmp_path: Path):
+def test_finding8_weekly_covers_every_owner_from_receipts(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("AUTUMBRA_UNDO_TOKEN_SECRET", "test-undo-secret-fourth")
     store = Store(tmp_path / "g.sqlite3")
     a = ClientAutumbraSettings(
         tenant_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaa00a1",

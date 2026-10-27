@@ -1,7 +1,6 @@
 """Fifth FAIL return on #345: receipts auth, undo token-only, act email, IOC rating, weekly links."""
 from __future__ import annotations
 
-import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path

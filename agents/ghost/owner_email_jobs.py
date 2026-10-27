@@ -37,16 +37,18 @@ PROTECT_HOST = "https://protect.tervory.com"
 
 
 def default_receipt_url(tenant_id: str) -> str:
-    """Weekly receipt page with a signed token for that tenant (email credential)."""
+    """Weekly receipt page with a signed token for that tenant (email credential).
+
+    Empty when AUTUMBRA_UNDO_TOKEN_SECRET is unset — never emit a dead token-less link.
+    """
     tid = (tenant_id or "").strip()
-    base = f"{PROTECT_HOST}/autumbra/receipts/weekly/{tid}"
     if not tid:
-        return base
+        return ""
     try:
         token = sign_receipts_token(tenant_id=tid)
     except Exception:
-        # Host without undo/receipts secret: page URL still exists; handler refuses unsigned.
-        return base
+        return ""
+    base = f"{PROTECT_HOST}/autumbra/receipts/weekly/{tid}"
     return f"{base}?{urlencode({'token': token})}"
 
 
@@ -57,10 +59,12 @@ def default_undo_url(
     rule_id: str = "",
     site: str = "",
 ) -> str:
-    """Undo landing page with a signed token naming tenant + shield."""
-    base = f"{PROTECT_HOST}/autumbra/undo/{receipt_id}"
+    """Undo landing page with a signed token naming tenant + shield.
+
+    Empty when the secret is unset or inputs are incomplete — never a dead link.
+    """
     if not tenant_id or not receipt_id:
-        return base
+        return ""
     try:
         token = sign_undo_token(
             tenant_id=tenant_id,
@@ -69,8 +73,8 @@ def default_undo_url(
             site=site,
         )
     except Exception:
-        # Host without undo secret: still point at the page; API will refuse cleanly.
-        return base
+        return ""
+    base = f"{PROTECT_HOST}/autumbra/undo/{receipt_id}"
     return f"{base}?{urlencode({'token': token})}"
 
 
@@ -243,16 +247,20 @@ def week_stats_from_receipts(
             rule_id=undo_rule_id,
             site=undo_site,
         )
+    # Signed links only — never a token-less URL the owner cannot use.
+    if undo_url and "token=" not in undo_url:
+        undo_url = ""
     # undo_fix_url only when a code fix PR exists — never the shield undo link
     # (an IP block must not trigger the "patched versions" auto-fix paragraph).
     undo_fix = undo_url if fix_pr_url else ""
+    receipt_url = default_receipt_url(tenant_id)
     return {
         "threats_found": threats,
         "critical": critical,
         "shield": shield,
         "checks_run": checks,
         "undo_shield_url": undo_url,
-        "receipt_url": default_receipt_url(tenant_id),
+        "receipt_url": receipt_url,
         # Empty unless a real fix PR / dedicated report exists on a receipt.
         "fix_report_url": "",
         "pr_url": fix_pr_url,
@@ -348,8 +356,12 @@ def run_weekly_owner_updates(
             receipt_url = default_receipt_url(settings.tenant_id)
         shield = row.get("shield")
         undo_shield = str(row.get("undo_shield_url") or "")
-        if shield and not undo_shield:
-            undo_shield = receipt_url
+        # Never substitute a receipts page (or any unsigned URL) as Undo.
+        if undo_shield and "token=" not in undo_shield:
+            undo_shield = ""
+        # Unsigned weekly receipts page is dead — omit rather than email a broken link.
+        if receipt_url and "token=" not in receipt_url and "/autumbra/receipts/" in receipt_url:
+            receipt_url = ""
         email = build_owner_update(
             settings=settings,
             site_name=settings.site_name or "your site",

@@ -7,10 +7,11 @@ Shown on every receipt.
 """
 from __future__ import annotations
 
+import re
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ApplyMode(str, Enum):
@@ -32,6 +33,9 @@ class ClientAutumbraSettings(BaseModel):
     fix_mode: ApplyMode = DEFAULT_MODE
     # When True, a single threat source may trigger a shield (default False = cross-check).
     act_on_single_source: bool = False
+    # Hostnames this tenant has registered for shielding (e.g. shop-a.example.com).
+    # ThreatPayload accepts dogfood Tervory hosts OR these registered client hosts.
+    watched_hosts: list[str] = Field(default_factory=list, max_length=32)
     # Client's own CIDRs that must never be blocked.
     own_cidrs: list[str] = Field(default_factory=list, max_length=64)
     # Written-permission flag for red-team exercises against this client.
@@ -41,6 +45,26 @@ class ClientAutumbraSettings(BaseModel):
     google_workspace_connected: bool = False
     shopify_connected: bool = False
     host_firewall_connected: bool = False
+
+    @field_validator("watched_hosts")
+    @classmethod
+    def hosts_must_be_shaped(cls, values: list[str]) -> list[str]:
+        """Hostname labels only — no URLs, paths, or bare words."""
+        host_re = re.compile(
+            r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$"
+        )
+        out: list[str] = []
+        for item in values or []:
+            if not isinstance(item, str):
+                raise ValueError("watched host must be a string")
+            host = item.strip().lower().rstrip(".")
+            if host.startswith("http://") or host.startswith("https://") or "/" in host:
+                raise ValueError("watched host must be a hostname, not a URL")
+            if not host_re.fullmatch(host):
+                raise ValueError("watched host is not a valid hostname")
+            if host not in out:
+                out.append(host)
+        return out
 
     def receipt_stamp(self) -> dict[str, str]:
         """What every receipt must show about the client's choice."""
@@ -53,17 +77,27 @@ class ClientAutumbraSettings(BaseModel):
 def load_settings(store, tenant_id: str) -> ClientAutumbraSettings:
     raw = store.get_state(tenant_id, "autumbra_client_settings", None)
     if not isinstance(raw, dict):
-        return ClientAutumbraSettings(tenant_id=tenant_id)
+        settings = ClientAutumbraSettings(tenant_id=tenant_id)
+    else:
+        try:
+            settings = ClientAutumbraSettings.model_validate({**raw, "tenant_id": tenant_id})
+        except Exception:
+            settings = ClientAutumbraSettings(tenant_id=tenant_id)
     try:
-        return ClientAutumbraSettings.model_validate({**raw, "tenant_id": tenant_id})
+        from .threat_payload import sync_client_watched_hosts_from_settings
+        sync_client_watched_hosts_from_settings(settings)
     except Exception:
-        return ClientAutumbraSettings(tenant_id=tenant_id)
+        pass
+    return settings
 
 
 def save_settings(store, settings: ClientAutumbraSettings) -> ClientAutumbraSettings:
     """Client (or founder-as-client) writes. Tervory automation must not call this."""
     payload: dict[str, Any] = settings.model_dump()
     store.set_state(settings.tenant_id, "autumbra_client_settings", payload)
+    # Register this tenant's hosts so ThreatPayload can accept them.
+    from .threat_payload import sync_client_watched_hosts_from_settings
+    sync_client_watched_hosts_from_settings(settings)
     return settings
 
 

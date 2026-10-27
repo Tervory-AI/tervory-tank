@@ -110,7 +110,8 @@ def test_enforce_lifecycle_execute_isolated(client, tmp_path):
     assert destroy.json()["receipt"]["outcome"] == "destroyed"
 
 
-def test_owner_update_calls_sender_from_client_settings(client):
+def test_owner_update_calls_sender_from_client_settings(client, monkeypatch):
+    monkeypatch.setenv("AUTUMBRA_UNDO_TOKEN_SECRET", "test-undo-secret-tenant")
     # Store owner_email in client settings first — request cannot name recipient.
     # Counts come from receipts, never from the request body.
     client.post(

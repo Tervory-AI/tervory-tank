@@ -16,6 +16,8 @@ services:
       DATA_DIR: /data
       # Per-client queues live under this root as <tenant_id>/ (never one shared inbox).
       THREAT_PAYLOAD_QUEUE_ROOT: /queues
+      # Same shared secret as Workspace + Enforce (Coolify NAME). Signs Undo / receipts email links.
+      AUTUMBRA_UNDO_TOKEN_SECRET: ${AUTUMBRA_UNDO_TOKEN_SECRET:-}
       # GHOST-2 inventory: read-only Coolify API token, by name only. Empty = not connected.
       COOLIFY_TOKEN_GHOST: ${COOLIFY_TOKEN_GHOST:-}
       COOLIFY_URL_GHOST: ${COOLIFY_URL_GHOST:-}

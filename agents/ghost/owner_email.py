@@ -31,6 +31,30 @@ def _assert_no_placeholders(body: str) -> None:
         raise ValueError("owner email body must not contain [...] placeholders")
 
 
+_DASHBOARD_URL = "https://protect.tervory.com/autumbra"
+
+
+def _count_link(label: str, receipt_url: str) -> str:
+    """Link a count to the signed receipts page, or the signed-in dashboard if unsigned."""
+    url = (receipt_url or "").strip()
+    if url and "token=" in url:
+        return _link(label, url)
+    return _link(label, _DASHBOARD_URL)
+
+
+def _receipt_footer(receipt_url: str) -> str:
+    url = (receipt_url or "").strip()
+    if url and "token=" in url:
+        return (
+            "Nothing from your logs was kept. We read them, acted, and deleted them. "
+            f"{_link('Full receipt', url)}"
+        )
+    return (
+        "Nothing from your logs was kept. We read them, acted, and deleted them. "
+        f"Sign in at {_link('your Autumbra dashboard', _DASHBOARD_URL)} to see your receipts."
+    )
+
+
 def build_owner_update(
     *,
     settings: ClientAutumbraSettings,
@@ -65,17 +89,13 @@ def build_owner_update(
     c = len(cleaned_critical)
     subject = f"Autumbra update for {site}: {n} threats found, {c} critical"
 
-    if not receipt_url:
-        raise ValueError("owner update requires receipt_url (no placeholders)")
-
     # Quiet week — brief: "Quiet week. [1,204] checks, 0 threats, 0 actions."
     if n == 0 and c == 0 and not shield:
         checks = int(checks_run if checks_run is not None else 0)
         body = (
-            f"Quiet week. {_link(_fmt_count(checks), receipt_url)} "
+            f"Quiet week. {_count_link(_fmt_count(checks), receipt_url)} "
             f"checks, 0 threats, 0 actions.\n\n"
-            "Nothing from your logs was kept. We read them, acted, and deleted them. "
-            f"{_link('Full receipt', receipt_url)}"
+            f"{_receipt_footer(receipt_url)}"
         )
         _assert_no_placeholders(body)
         return {"subject": subject, "body": body}
@@ -99,12 +119,12 @@ def build_owner_update(
     # Lead sentence always states what happened. Critical / fix-PR / campaign
     # sentences are omitted unless the matching proof exists.
     lead = (
-        f"This week we found {_link(str(n), receipt_url)} "
+        f"This week we found {_count_link(str(n), receipt_url)} "
         f"threats to {site}."
     )
     if c > 0:
         lead += (
-            f" {_link(str(c), receipt_url)} were critical: out-of-date "
+            f" {_count_link(str(c), receipt_url)} were critical: out-of-date "
             f"{stack_list_linked} with known holes serious enough to "
             f"take down a company's whole IT system. "
             f"(Each linked to its public advisory.)"
@@ -174,8 +194,6 @@ def build_owner_update(
         blocked = int(shield.get("blocked_addresses") or 0)
         source_url = str(shield.get("source_url") or "").strip()
         source_name = str(shield.get("source_name") or "public source").strip()
-        if not undo_shield_url:
-            raise ValueError("shield paragraph requires undo_shield_url (no placeholders)")
         campaign = _is_matched_public_source(source_url)
         if campaign:
             public_source = _link(source_name, source_url)
@@ -184,20 +202,32 @@ def build_owner_update(
             )
         else:
             campaign_clause = ""
+        signed_undo = (undo_shield_url or "").strip()
+        if signed_undo and "token=" not in signed_undo:
+            signed_undo = ""
+        if signed_undo:
+            undo_clause = (
+                "If this caused any problem, undo it here with one tap. "
+                f"{_link('Undo', signed_undo)}"
+            )
+        else:
+            # Secret unset or signing failed — never promise a dead one-tap link.
+            undo_clause = (
+                "If this caused any problem, sign in at "
+                f"{_link('your Autumbra dashboard', _DASHBOARD_URL)} "
+                "or reply to this email and we will remove the block."
+            )
         body_lines.extend([
             "",
             f"We also stopped an attack in progress. {campaign_clause}"
-            f"We blocked {_link(str(blocked), receipt_url)} "
+            f"We blocked {_count_link(str(blocked), receipt_url)} "
             f"addresses that were attacking your site. Your own addresses, your payment "
-            f"provider and Cloudflare were never blocked. If this caused any problem, undo "
-            f"it here with one tap. "
-            f"{_link('Undo', undo_shield_url)}",
+            f"provider and Cloudflare were never blocked. {undo_clause}",
         ])
 
     body_lines.extend([
         "",
-        "Nothing from your logs was kept. We read them, acted, and deleted them. "
-        f"{_link('Full receipt', receipt_url)}",
+        _receipt_footer(receipt_url),
     ])
 
     body = "\n".join(body_lines)

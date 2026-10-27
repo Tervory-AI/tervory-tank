@@ -199,6 +199,7 @@ def test_04_approve_and_expire(tmp_path: Path):
 
 
 def test_05_07_receipts_and_owner_email_recipient(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("AUTUMBRA_UNDO_TOKEN_SECRET", "test-undo-secret-third")
     monkeypatch.setenv("TANK_KEY", KEY)
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     root = tmp_path / "queues"

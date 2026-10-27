@@ -1,4 +1,5 @@
 import { mayReadWeeklyReceipts } from "@/lib/autumbra-receipts-access";
+import { describeReceipt } from "@/lib/autumbra-copy";
 import { loadWeeklyReceipts } from "@/lib/autumbra-weekly";
 
 /** Weekly owner-update receipt page — token or signed-in owner of THAT tenant. No workspace menu. */
@@ -31,30 +32,30 @@ export default async function WeeklyReceiptPage({
         This is the receipt page linked from your Autumbra owner email. It lists what Autumbra
         checked, what it found, and what it did for your site this week.
       </p>
-      <p style={{ color: "#4b5563" }}>
-        Client reference: <code>{tenant}</code>
-      </p>
       {note && receipts.length === 0 ? <p style={{ color: "#6b7280" }}>{note}</p> : null}
       {receipts.length === 0 ? (
         <p>No receipts for this week yet.</p>
       ) : (
-        <ul style={{ paddingLeft: "1.25rem", lineHeight: 1.6 }}>
-          {receipts.map((row) => {
-            const id = row.id || "receipt";
-            // Prefer signed undo URL from Watch; never a token-less /autumbra/undo/<id>.
+        <ul style={{ paddingLeft: "1.25rem", lineHeight: 1.6, listStyle: "disc" }}>
+          {receipts.map((row, index) => {
+            const id = row.id || `receipt-${index}`;
             const href = row.url && row.url.includes("token=") ? row.url : "";
-            const label = [row.outcome, row.severity, row.site].filter(Boolean).join(" · ") || id;
+            const { title, when } = describeReceipt(row);
             return (
-              <li key={id} style={{ marginBottom: "0.75rem" }}>
-                {href ? <a href={href}>{label}</a> : <span>{label}</span>}
-                {row.timestamp ? (
-                  <span style={{ color: "#6b7280" }}> — {row.timestamp}</span>
+              <li key={id} style={{ marginBottom: "1rem" }}>
+                <div>{title}</div>
+                {when ? (
+                  <div style={{ color: "#6b7280", fontSize: "0.95rem" }}>{when}</div>
                 ) : null}
                 {row.advisory_url ? (
-                  <>
-                    {" "}
-                    · <a href={row.advisory_url}>public advisory</a>
-                  </>
+                  <div>
+                    <a href={row.advisory_url}>Public advisory</a>
+                  </div>
+                ) : null}
+                {href ? (
+                  <div style={{ marginTop: "0.25rem" }}>
+                    <a href={href}>Undo this block</a>
+                  </div>
                 ) : null}
               </li>
             );
@@ -63,7 +64,7 @@ export default async function WeeklyReceiptPage({
       )}
       <p style={{ marginTop: "1.5rem", fontSize: "0.95rem", color: "#6b7280" }}>
         Nothing from your logs is kept — we read them, acted, and deleted them. If a shield
-        caused a problem, use the Undo link in that same email.
+        caused a problem, use Undo this block above or the Undo link in that same email.
       </p>
     </main>
   );

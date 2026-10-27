@@ -22,6 +22,8 @@ services:
       TENANT_ID: ${TENANT_ID}
       # Edge credential env reserved; Coolify secret NAME held until a real edge client. Never commit values.
       AUTUMBRA_EDGE_CREDENTIAL: ${AUTUMBRA_EDGE_CREDENTIAL:-}
+      # Same shared secret as Workspace + Watch (Coolify NAME). Act-email Undo links.
+      AUTUMBRA_UNDO_TOKEN_SECRET: ${AUTUMBRA_UNDO_TOKEN_SECRET:-}
       THREAT_PAYLOAD_QUEUE: /queue
       DATA_DIR: /data
       # Enforce never calls a model. No TANK_KEY here on purpose.

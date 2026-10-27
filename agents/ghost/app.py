@@ -901,6 +901,14 @@ def create_app() -> FastAPI:
                 raise HTTPException(400, "tenant_id must be a UUID") from None
             except Exception as exc:
                 raise HTTPException(422, str(exc)) from None
+            # Register this tenant's watched hosts before ThreatPayload accept.
+            try:
+                from .threat_payload import sync_client_watched_hosts_from_settings
+                sync_client_watched_hosts_from_settings(
+                    load_settings(app.state.store, tenant_id)
+                )
+            except Exception:
+                pass
         else:
             queue = getattr(app.state, "threat_queue", None)
         try:
@@ -1019,7 +1027,7 @@ def create_app() -> FastAPI:
         x_tank_key: str = Header(default=""),
     ):
         """Weekly receipts — tank key OR valid receipts token for THIS tenant. Else 401 empty."""
-        from .owner_email_jobs import PROTECT_HOST, default_undo_url, week_bounds, _parse_receipt_time
+        from .owner_email_jobs import default_undo_url, week_bounds, _parse_receipt_time
 
         try:
             tid = _require_tenant_uuid(tenant_id)
@@ -1062,7 +1070,8 @@ def create_app() -> FastAPI:
                 "severity": receipt.get("severity"),
                 "advisory_url": receipt.get("advisory_url"),
                 "site": receipt.get("site"),
-                "url": undo_url,
+                "address": receipt.get("address"),
+                "url": undo_url if (undo_url and "token=" in undo_url) else "",
                 "receipt": receipt,
             })
         return {

@@ -22,9 +22,65 @@ from .shields import KINDS, ShieldRequest
 
 SCHEMA_VERSION = "ghost.threat.v1"
 BURN_DETAIL = "Threat payload burned. No action was taken."
-# Site keys and hosts Ghost is allowed to name.
+# Site keys and hosts Ghost is allowed to name (Tervory dogfood).
 ALLOWED_SITES = frozenset({*WATCHED_SITES.keys(), *WATCHED_SITES.values()})
+# Tenant-registered client hosts (e.g. shop-a.example.com). Populated from
+# ClientAutumbraSettings.watched_hosts / hostname-shaped site_name — never open-world.
+_REGISTERED_CLIENT_HOSTS: set[str] = set()
+_HOST_RE = re.compile(
+    r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$"
+)
 CVE_RE = re.compile(r"^CVE-\d{4}-\d{4,}$")
+
+
+def _normalize_host(value: str) -> str | None:
+    host = (value or "").strip().lower().rstrip(".")
+    if not host or "/" in host or host.startswith("http:") or host.startswith("https:"):
+        return None
+    if not _HOST_RE.fullmatch(host):
+        return None
+    return host
+
+
+def register_client_watched_hosts(hosts) -> list[str]:
+    """Add tenant-registered hostnames to the ThreatPayload allowlist."""
+    added: list[str] = []
+    for item in hosts or []:
+        host = _normalize_host(str(item))
+        if host and host not in _REGISTERED_CLIENT_HOSTS:
+            _REGISTERED_CLIENT_HOSTS.add(host)
+            added.append(host)
+        elif host:
+            added.append(host)
+    return added
+
+
+def clear_client_watched_hosts() -> None:
+    """Test helper — empty the client-host registry."""
+    _REGISTERED_CLIENT_HOSTS.clear()
+
+
+def sync_client_watched_hosts_from_settings(settings) -> list[str]:
+    """Register watched_hosts and a hostname-shaped site_name from client settings."""
+    hosts: list[str] = []
+    raw = getattr(settings, "watched_hosts", None) or []
+    hosts.extend(str(h) for h in raw)
+    site_name = str(getattr(settings, "site_name", "") or "")
+    if _normalize_host(site_name):
+        hosts.append(site_name)
+    return register_client_watched_hosts(hosts)
+
+
+def is_allowed_site(site: str) -> bool:
+    """True for Tervory dogfood keys/hosts or a tenant-registered client host."""
+    s = (site or "").strip().lower()
+    if not s:
+        return False
+    if s in {x.lower() for x in ALLOWED_SITES}:
+        return True
+    if s in _REGISTERED_CLIENT_HOSTS:
+        return True
+    return False
 # Patterns that mean "this is not a structured threat fact" — burn without parsing further.
 INJECTION_MARKERS = (
     "ignore previous",
@@ -100,7 +156,7 @@ class ThreatPayload(Strict):
     @classmethod
     def site_must_be_ours(cls, value: str) -> str:
         site = value.strip().lower()
-        if site not in {s.lower() for s in ALLOWED_SITES}:
+        if not is_allowed_site(site):
             raise ValueError("site not allowlisted")
         return site
 

@@ -8,6 +8,7 @@ export type WeeklyReceipt = {
   severity?: string;
   advisory_url?: string;
   site?: string;
+  address?: string;
   url?: string;
 };
 
