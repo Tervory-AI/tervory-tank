@@ -51,7 +51,14 @@ The rest of what the pages show:
 - **Market Lab:** 5 feeds are on with real stored data (EIA diesel, Census population, World Bank commodities, NWS alerts, NOAA climate). 10 are off: "blocked", "needs key" or "source could not be read".
 - **Tiger, Radix and Tisan** load empty, with nothing watched, scanned or built.
 
-**Merge check:** since #351 (27 Oct), the merge check is lint, the secret scan and Tank start only. A Workspace production build has to come back into it, so a page-breaking change can't merge again.
+**Checks (founder, 27 Oct 16:13):** two checks, both with no model calls.
+1. **Machine checks on every PR:** lint, the secret scan, Tank start, and the Workspace build for Workspace changes.
+2. **A live page check after every deploy** (`docs/cursor/LIVE-CHECK-1-every-host-after-deploy.md`).
+
+The Workspace build already runs in CI and passed #341: the crash was a runtime error that only a real browser sees. A Claude review runs only on risky PRs (secrets, sign-in and tenant isolation, seals, money, deleting data). Branch `ci/fast-checks`:
+- the savings page and rig-forge checks run only when their files change;
+- the deploy runs straight after the merge;
+- the Cursor workflow is removed.
 
 ## 1. Why nobody could find the work
 - **The 21 Oct two-day plan** lives only in the project (`plan/two-day-build.md`), never in the repo.
