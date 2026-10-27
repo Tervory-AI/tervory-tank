@@ -227,7 +227,9 @@ async def test_billing_events_on_current_main_schema_with_agent_roles() -> None:
 
 def _routes() -> dict[str, object]:
     found: dict[str, object] = {}
-    for route in main.app.routes:
+    from http_routes import iter_http_routes
+
+    for route in iter_http_routes(main.app.routes):
         path = getattr(route, "path", "")
         if path in BILLING_ROUTES:
             found[path] = route

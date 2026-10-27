@@ -57,7 +57,7 @@ export default async function Page(){const tenant=await localTenant();return <Ma
         """import {StoredSourcePage} from "@/app/market-lab/source-page";
 import {localTenant} from "../../../../tenant";
 export const dynamic="force-dynamic";
-export default async function Page({params,searchParams}:{params:Promise<{id:string}>,searchParams:Promise<{row?:string}>}){const {id}=await params;const {row}=await searchParams;return <StoredSourcePage tenantId={await localTenant()} id={id} row={row}/>;}""",
+export default async function Page({params,searchParams}:{params:Promise<{id:string}>,searchParams:Promise<{row?:string;page?:string;kind?:string}>}){const {id}=await params;const {row,page,kind}=await searchParams;return <StoredSourcePage tenantId={await localTenant()} id={id} row={row} page={page} kind={kind}/>;}""",
     )
     # The real client control and Tank transport are used. This local-only wrapper
     # supplies the account identity; it cannot change production authentication.

@@ -1,0 +1,25 @@
+Real Tank, local fixture PostgreSQL; two starts on the same database.
+Captured from tests/test_tank_boots.py. Redis is intentionally unavailable
+at loopback port 9 in that test; both /health checks return 200.
+
+INFO:     Started server process [340518]
+INFO:     Waiting for application startup.
+redis unavailable, rung-4 cache off: Error 111 connecting to 127.0.0.1:9. Connection refused.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:36107 (Press CTRL+C to quit)
+INFO:     127.0.0.1:41128 - "GET /health HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [340518]
+
+INFO:     Started server process [340530]
+INFO:     Waiting for application startup.
+redis unavailable, rung-4 cache off: Error 111 connecting to 127.0.0.1:9. Connection refused.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:56959 (Press CTRL+C to quit)
+INFO:     127.0.0.1:49286 - "GET /health HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [340530]

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { contextReport, loadContextReport, PLATFORM_TENANT } from "./context-report";
+import { contextReport, loadContextReport } from "./context-report";
 
 test("unlabelled records count credits but never accuracy", () => {
   const record = { profile: {}, passes: {
@@ -31,15 +31,20 @@ test("official phone and address truth score even when vendor fields are absent"
 import type { BaseRecord } from "@/lib/tank";
 import { approvedSkills, batchStatus, buildModel, refreshedLabel, shortDate, type BatchIn, type SkillIn } from "./model";
 
-test("trial report reads only platform records", async () => {
+test("context reports cannot read a different tenant's records", async () => {
   const calls: string[] = [];
-  await loadContextReport(async (tenantId, options) => {
-    calls.push(tenantId);
-    assert.equal(options.limit, 200);
-    assert.notEqual(tenantId, "client-tenant");
-    return [];
-  });
-  assert.deepEqual(calls, [PLATFORM_TENANT]);
+  for (const tenant of ["tenant-a", "tenant-b"]) {
+    const report = await loadContextReport(tenant, async (tenantId, options) => {
+      calls.push(tenantId);
+      assert.equal(tenantId, tenant);
+      assert.equal(options.limit, 200);
+      return tenantId === "tenant-a"
+        ? [{ profile: {}, passes: { context_dev: { status: "candidate", credits: 10 } } } as unknown as BaseRecord]
+        : [];
+    });
+    assert.equal(report.records, tenant === "tenant-a" ? 1 : 0);
+  }
+  assert.deepEqual(calls, ["tenant-a", "tenant-b"]);
 });
 
 test("credit cap reached is shown without counting an uncalled record as a charge", () => {

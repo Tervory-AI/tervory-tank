@@ -56,7 +56,7 @@ export function ProofView({ data, task }: { data: Proof; task?: string }) {
       {row.quality_note && <p>{row.quality_note}</p>}
       <dl><div><dt>Money saved vs standard ({baselineNames(row.standards)})</dt><dd><a href={url(row.task_type,"receipts")}>{usd(row.saved_usd)}</a></dd></div>
         <div><dt>Standard ({baselineNames(row.standards)}) / compared spend</dt><dd><a href={url(row.task_type,"receipts")}>{usd(row.baseline_usd)} / {usd(row.compared_actual_usd)}</a></dd></div>
-        <div><dt>Total recorded spend, including fees · standard ({baselineNames(row.standards)}) comparison</dt><dd><a href={url(row.task_type,"receipts")}>{usd(row.actual_usd)} · {row.unknown_cost_calls} unknown costs excluded</a></dd></div>
+        <div><dt>Total recorded spend, including fees · standard ({baselineNames(row.standards)}) comparison</dt><dd><a href={url(row.task_type,"receipts")}>{row.unknown_cost_calls && Number(row.actual_usd) === 0 ? "price not set" : usd(row.actual_usd)} · {row.unknown_cost_calls} unknown costs excluded</a></dd></div>
         <div><dt>Calls served by code</dt><dd><a href={url(row.task_type,"receipts")}>{percent(row.code_share)} ({row.code_calls} / {row.calls})</a></dd></div>
         <div><dt>Receipt coverage</dt><dd><a href={url(row.task_type,"receipts")}>{row.priced_calls} priced · {row.backfilled_calls} backfilled · {row.unpriced_calls} unpriced</a></dd></div></dl>
       <p className="proof-links"><a href={url(row.task_type,"benchmarks")}>Tests and cost per call</a><a href={url(row.task_type,"promotions")}>Promotion dates</a></p>

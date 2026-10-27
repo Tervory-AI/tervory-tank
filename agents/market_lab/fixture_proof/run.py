@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import signal
 import subprocess
 import sys
@@ -46,7 +45,8 @@ import {{marketLabRequest}} from "@/lib/tank";
 export async function POST(request:Request){{const body=await request.json();if(Object.keys(body).some(key=>key!=="question")||typeof body.question!=="string"||!body.question.trim()||body.question.length>2000)return NextResponse.json({{error:"A question is required"}},{{status:400}});return NextResponse.json(await marketLabRequest("{TENANT}","ask",{{question:body.question}}));}}''')
     write("app/market-lab/sources/[id]/page.tsx", '''import {StoredSourcePage} from "@/app/market-lab/source-page";
 export const dynamic="force-dynamic";
-export default async function Page({params,searchParams}:{params:Promise<{id:string}>,searchParams:Promise<{row?:string}>}){const {id}=await params;const {row}=await searchParams;return <StoredSourcePage tenantId="''' + TENANT + '''" id={id} row={row}/>;}''')
+export {sourceMetadata as metadata} from "@/app/market-lab/source-page";
+export default async function Page({params,searchParams}:{params:Promise<{id:string}>,searchParams:Promise<{row?:string;page?:string;kind?:string}>}){const {id}=await params;const {row,page,kind}=await searchParams;return <StoredSourcePage tenantId="''' + TENANT + '''" id={id} row={row} page={page} kind={kind}/>;}''')
     write("app/market-lab/sources/[id]/not-found.tsx", 'export {default} from "@/app/market-lab/source-not-found";')
 
 
@@ -54,11 +54,12 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=3046)
     parser.add_argument("--api-port", type=int, default=8046)
+    parser.add_argument("--history", action="store_true", help="Use saved port-volume input with 67 yearly observations for pagination proof")
     args = parser.parse_args()
     sys.path.insert(0, str(ROOT / "agents/market_lab"))
     sys.path.insert(0, str(ROOT / "tank"))
     from fixture_proof.server import services
-    with services(args.api_port) as env, tempfile.TemporaryDirectory(prefix="market-lab-fixture-") as raw:
+    with services(args.api_port, history=args.history) as env, tempfile.TemporaryDirectory(prefix="market-lab-fixture-") as raw:
         folder = Path(raw)
         prepare(folder)
         web = subprocess.Popen(["node", str(WORKSPACE / "node_modules/next/dist/bin/next"), "dev", "--hostname", "127.0.0.1", "--port", str(args.port)], cwd=folder, env=env)

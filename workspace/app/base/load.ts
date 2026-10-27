@@ -12,7 +12,7 @@ export async function loadBase(): Promise<PageModel> {
     const { tenantId } = await currentTenant();
     batches = await baseBatches(tenantId);
     try {
-      contextTrial = await loadContextReport(baseRecords);
+      contextTrial = await loadContextReport(tenantId, baseRecords);
     } catch {
       contextTrial = null;
     }

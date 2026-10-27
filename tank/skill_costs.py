@@ -14,7 +14,7 @@ from typing import Any
 CALL_COST_SQL = """
 SELECT skill,
        count(*)::int AS calls_30d,
-       avg(cost_usd) AS avg_cost_usd
+       avg(cost_usd) FILTER (WHERE cost_status='set') AS avg_cost_usd
 FROM tank.ledger
 WHERE tenant_id = $1
   AND region = $2

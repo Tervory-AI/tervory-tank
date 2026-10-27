@@ -381,7 +381,9 @@ def test_public_app_drops_jobs_and_docs() -> None:
     rig_app = _load_rig_app()
     assert Path(rig_app.__file__).resolve() == (ROOT / "agents" / "rig" / "app.py").resolve()
 
-    paths = {getattr(route, "path", None) for route in rig_app.app.routes}
+    from http_routes import http_paths
+
+    paths = http_paths(rig_app.app.routes)
     assert "/health" in paths
     assert "/v1/rig/search" in paths
     assert rig_app.app.openapi_url is None

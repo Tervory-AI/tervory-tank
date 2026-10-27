@@ -37,6 +37,8 @@ DOCKER="${DOCKER:-docker}"
 
 # Rooms whose compose files declare sealed services; each must be found and sealed.
 EXPECTED_SEALED=(agent-base agent-radix agent-tiger agent-rig)
+# Autumbra rooms: checked when present (pin into EXPECTED_SEALED after first clean dogfood).
+AUTUMBRA_SEALED_PREFIXES=(agent-ghost autumbra-watch autumbra-enforce)
 
 # service name -> the one non-internal network it may also join
 declare -A CORRIDOR=(
@@ -217,4 +219,40 @@ for room in "${EXPECTED_SEALED[@]}"; do
     status=1
   fi
 done
+
+# --- Autumbra rooms (Watch + per-client Enforce): fail if present and leaky; missing is OK until dogfood. ---
+autumbra_checked=0
+autumbra_leaks=0
+for uuid in "${APPS[@]+"${APPS[@]}"}"; do
+  [[ -z "${uuid:-}" ]] && continue
+  room="${APP_RESOURCE[$uuid]:-}"
+  if [[ -z "$room" ]]; then
+    room="${APP_ROOM[$uuid]:-}"
+  fi
+  [[ -z "$room" ]] && continue
+  for prefix in "${AUTUMBRA_SEALED_PREFIXES[@]}"; do
+    if [[ "$room" == "$prefix" || "$room" == "$prefix"-* ]]; then
+      autumbra_checked=$((autumbra_checked + 1))
+      if [[ -n "${APP_LEAKS[$uuid]:-}" ]]; then
+        echo "autumbra ($room / $uuid): LEAK: ${APP_LEAKS[$uuid]}"
+        autumbra_leaks=$((autumbra_leaks + 1))
+      elif [[ "${APP_SEALED[$uuid]:-0}" -gt 0 ]]; then
+        echo "autumbra ($room / $uuid): sealed"
+      else
+        echo "autumbra ($room / $uuid): NOT SEALED: no container on an internal network"
+        autumbra_leaks=$((autumbra_leaks + 1))
+      fi
+      break
+    fi
+  done
+done
+if [[ "$autumbra_checked" -eq 0 ]]; then
+  echo "autumbra: no Watch/Enforce rooms running (ok until dogfood; pin EXPECTED_SEALED after first clean run)"
+elif [[ "$autumbra_leaks" -gt 0 ]]; then
+  echo "autumbra: $autumbra_leaks leak(s) in $autumbra_checked room(s)" >&2
+  status=1
+else
+  echo "autumbra: $autumbra_checked room(s) sealed"
+fi
+
 exit "$status"

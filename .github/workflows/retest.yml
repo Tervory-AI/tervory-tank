@@ -22,11 +22,11 @@ jobs:
         ports: ['5432:5432']
         options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
       - run: pip install -r tank/requirements.txt -r tank/requirements-dev.txt
@@ -60,7 +60,7 @@ jobs:
           TRAIN1_ESBUILD_PATH: ${{ runner.temp }}/train1-browser/node_modules/esbuild
           TRAIN1_PLAYWRIGHT_PATH: ${{ runner.temp }}/train1-browser/node_modules/playwright
           TRAIN1_SCREENSHOT_DIR: ${{ runner.temp }}/train1-screenshots
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: squad-training-screenshots
           path: ${{ runner.temp }}/train1-screenshots

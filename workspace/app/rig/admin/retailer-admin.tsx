@@ -111,7 +111,8 @@ export function RetailerAdmin({ initial, act = sendRetailer }: { initial: Retail
         {panel.feeds.map(feed => <div className="retailer-feed" key={feed.provider + feed.site + feed.feed_id}><div><strong>{providerName(feed.provider)}</strong><small>{feed.site} {feed.feed_id}</small><small>{feed.country} · {feed.currency} · {feed.price_basis === "selling" ? "Selling price" : "Supplier cost"}</small></div><div><button disabled={busy || !feed.mapping_confirmed} onClick={() => reuseFeed(feed)}>Use saved mapping</button>{feed.next_refresh && <button disabled={busy} onClick={() => run("refresh", { distributor: feed.provider, site: feed.site, feed_id: feed.feed_id || "" })}>Refresh now</button>}</div></div>)}
         {!panel.feeds.length && <p className="retailer-empty">No feed connected yet. Start with a sample file.</p>}
         <form ref={feedForm} onSubmit={submitFeed} onChange={e => {
-          const name = (e.target as HTMLInputElement).name;
+          const control = e.target;
+          const name = control instanceof HTMLInputElement || control instanceof HTMLSelectElement || control instanceof HTMLTextAreaElement ? control.name : "";
           if (name === "confirmed") return;
           setConfirmed(false);
           if (name && (name !== "file" || mapping?.preview_id)) setMapping(null);

@@ -108,27 +108,46 @@ def presented_document(doc: dict, engine: str | None) -> dict:
     return doc
 
 
-async def document_page(ledger: Any, tenant_id: str, document_id: str, offset: int = 0, *, fixtures: bool = False, engine: str | None = None) -> dict | None:
+DOCUMENT_PAGE_SIZE = 50
+
+
+def number_label(value: Any) -> str:
+    formatted = format(Decimal(str(value)), ",f")
+    return formatted.rstrip("0").rstrip(".") if "." in formatted else formatted
+
+
+async def document_page(ledger: Any, tenant_id: str, document_id: str, offset: int = 0, *, row: int | None = None, row_kind: str | None = None, fixtures: bool = False, engine: str | None = None) -> dict | None:
     doc = await document(ledger, tenant_id, document_id, fixtures=fixtures)
     if doc is None:
         return None
     if doc.get("kind") == "warning_evidence":
-        return {**doc, "offset": 0, "point_count": 0, "event_count": 0}
+        return {**doc, "offset": 0, "page_size": DOCUMENT_PAGE_SIZE, "point_count": 0, "event_count": 0}
     doc = presented_document(doc, engine)
     active = {index for index, _ in await usable_points(ledger, tenant_id, doc)}
     current = current_revisions(doc["points"])
     counts = Counter((p["series_id"], p["date"]) for p in doc["points"])
+    # Sort a view of the immutable rows; citations keep their original indexes.
+    points = sorted(enumerate(doc["points"]), key=lambda item: (item[1]["date"], item[0]), reverse=True)
+    events = sorted(enumerate(doc["events"]), key=lambda item: (item[1]["date"], item[0]), reverse=True)
+    if row is not None:
+        selected = events if row_kind == "event" else points if row_kind == "point" else points or events
+        offset = next((position for position, (index, _) in enumerate(selected) if index == row), 0)
+    last_offset = max(0, (max(len(points), len(events)) - 1) // DOCUMENT_PAGE_SIZE * DOCUMENT_PAGE_SIZE)
+    offset = min(max(0, offset // DOCUMENT_PAGE_SIZE * DOCUMENT_PAGE_SIZE), last_offset)
     def shown(index: int, point: dict) -> dict:
         key = (point["series_id"], point["date"])
         label = "Current figure" if current[key] == index else "Earlier figure"
-        return {**point, "geo_name": area_label(point["geo"], point["geo_level"], point["title"]),
+        return {**point, "index": index, "display_value": point.get("display_value") or number_label(point["value"]),
+                "geo_name": area_label(point["geo"], point["geo_level"], point["title"]),
                 "display_title": observation_label(point, doc.get("presentation")),
                 "date_label": period_label(point["date"], point.get("frequency", "")),
                 "unit_label": unit_label(point["value"], point["unit"]), "withdrawn": index not in active,
                 "revision_label": (f'{label} ({point["revision"]})' if point["revision"] else label) if counts[key] > 1 else ""}
-    return {**doc, "offset": offset, "point_count": len(doc["points"]), "event_count": len(doc["events"]),
-            "points": [shown(index, point) for index, point in enumerate(doc["points"])
-                       if offset <= index < offset + 200], "events": [{**event, "display_title": event_label(event, doc.get("presentation")), "date_label": period_label(event["date"]), **notice_link(event, doc.get("presentation"))} for event in doc["events"][offset:offset + 200]]}
+    return {**doc, "offset": offset, "page_size": DOCUMENT_PAGE_SIZE, "point_count": len(points), "event_count": len(events),
+            "points": [shown(index, point) for index, point in points[offset:offset + DOCUMENT_PAGE_SIZE]],
+            "events": [{**event, "index": index, "display_title": event_label(event, doc.get("presentation")),
+                        "date_label": period_label(event["date"]), **notice_link(event, doc.get("presentation"))}
+                       for index, event in events[offset:offset + DOCUMENT_PAGE_SIZE]]}
 
 
 async def overview(ledger: Any, tenant_id: str, engine: str | None = None, *, fixtures: bool = False) -> dict:
@@ -232,7 +251,7 @@ async def answer(ledger: Any, tenant_id: str, question: str, *, fixtures: bool =
                                  source_words, area_label(point["geo"], point["geo_level"], point["title"]) + " " + point["geo"], point["date"], point.get("frequency", ""), unit_label(point["value"], point["unit"]))
             if not score:
                 continue
-            value = format(Decimal(str(point["value"])), ",f").rstrip("0").rstrip(".") if "." in str(point["value"]) else format(Decimal(str(point["value"])), ",f")
+            value = number_label(point["value"])
             shown_value = point.get("display_value") or f'{value} {unit_label(point["value"], point["unit"])}'
             text = f'{observation_label(point, doc.get("presentation"))}: {shown_value} ({period_label(point["date"], point.get("frequency", ""))}).'
             ranked.append((score, point["date"], {"text": text, "href": f'/market-lab/sources/{doc["id"]}?row={index}#point-{index}', "name": doc["name"]}))
@@ -248,7 +267,7 @@ async def answer(ledger: Any, tenant_id: str, question: str, *, fixtures: bool =
             score = _match_score(terms, f'{event_label(event, doc.get("presentation"))} {event["body"]}',
                                  source_words, area_label(event["geo"], "state", event["title"]) + " " + event["geo"], event["date"])
             if score:
-                ranked.append((score, event["date"], {"text": f'{event_label(event, doc.get("presentation"))} ({period_label(event["date"])}).', "href": f'/market-lab/sources/{doc["id"]}?row={index}#event-{index}', "name": doc["name"]}))
+                ranked.append((score, event["date"], {"text": f'{event_label(event, doc.get("presentation"))} ({period_label(event["date"])}).', "href": f'/market-lab/sources/{doc["id"]}?row={index}&kind=event#event-{index}', "name": doc["name"]}))
     ranked.sort(key=lambda row: (row[0], row[1]), reverse=True)
     best = ranked[0][0] if ranked else 0
     facts = [row[2] for row in ranked if row[0] == best][:5]

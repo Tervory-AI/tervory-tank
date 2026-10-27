@@ -60,13 +60,23 @@ def verify(env: dict) -> dict:
                         json={
                             "tenant_id": OWNER,
                             "document_id": target,
-                            "offset": point["row"] // 200 * 200,
+                            "row": point["row"],
                         },
                     )
                     assert stored.status_code == 200
+                    assert stored.json()["page_size"] == 50
                     rows = stored.json()["points"]
+                    if point.get("display_value"):
+                        assert (
+                            next(p for p in rows if p["index"] == point["row"])[
+                                "display_value"
+                            ]
+                            == point["display_value"]
+                        )
                     assert any(
-                        str(p["value"]) == point["value"] and p["date"] == point["date"]
+                        p["index"] == point["row"]
+                        and str(p["value"]) == point["value"]
+                        and p["date"] == point["date"]
                         for p in rows
                     )
             assert (

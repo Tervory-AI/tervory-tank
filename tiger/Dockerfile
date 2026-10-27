@@ -1,13 +1,13 @@
 # Tiger: Tervory's browser. A real Chromium that loads a page the way a person's browser does,
 # runs its JavaScript and waits for it to settle. Internal only; Tank's skills call it.
-FROM mcr.microsoft.com/playwright/python:v1.47.0-jammy
+FROM mcr.microsoft.com/playwright/python:v1.64.1-jammy
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-# Playwright 1.47's driver bundles Node 20.17.0, which no longer gets security fixes.
-# Install Node 22 LTS (exact patch, SHA256 from https://nodejs.org/dist/v22.23.4/SHASUMS256.txt;
+# Playwright 1.64.1's driver bundles Node 24.22.1. This repo stays on Node 22.
+# Install Node 22.23.4 (exact patch, SHA256 from https://nodejs.org/dist/v22.23.4/SHASUMS256.txt;
 # the build fails on a mismatch) and point Playwright at it with PLAYWRIGHT_NODEJS_PATH.
-# The bundled binary is replaced by a link to the same node, so nothing can run Node 20.
+# The bundled binary is replaced by a link to the same node, so the container runs one Node.
 ARG NODE_VERSION=22.23.4
 RUN arch="$(uname -m)" \
     && case "$arch" in \

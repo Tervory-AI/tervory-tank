@@ -47,7 +47,7 @@ jobs:
       PROJECT_UUID: dguxczrbmbqvezo3qib0twge
       ENVIRONMENT_NAME: production
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Check inputs
         run: |
           case "$COOLIFY_URL" in https://*) ;; *) echo "::error::COOLIFY_URL must be an https:// address"; exit 1 ;; esac

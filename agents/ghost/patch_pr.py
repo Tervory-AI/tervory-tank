@@ -62,7 +62,7 @@ def plan_bump(brief: PatchBrief) -> dict[str, Any]:
     title = f"Autumbra: bump {brief.package} {brief.from_version} → {brief.to_version} ({eco})"
     body = "\n".join(
         [
-            f"## Autumbra dependency bump (draft)",
+            "## Autumbra dependency bump (draft)",
             "",
             f"- **Package:** `{brief.package}` ({eco})",
             f"- **From:** `{brief.from_version}` → **To:** `{brief.to_version}`",

@@ -4,6 +4,17 @@
 const TANK_URL = process.env.TANK_URL ?? "http://tank:8000";
 const TANK_API_KEY = process.env.TANK_API_KEY ?? "";
 
+/** Base product only. Identity and allowed operations are resolved server-side. */
+export async function baseProductRequest(tenantId: string, path: string, query: URLSearchParams = new URLSearchParams(), body?: Record<string, unknown>): Promise<Response> {
+  const parameters = new URLSearchParams(query);
+  parameters.set("tenant_id", tenantId);
+  return fetch(`${TANK_URL}/v1/base-product/${path}${body ? "" : `?${parameters}`}`, {
+    method: body ? "POST" : "GET", cache: "no-store", redirect: "error",
+    headers: { "Content-Type": "application/json", "X-Tank-Key": TANK_API_KEY },
+    ...(body ? { body: JSON.stringify({ ...body, tenant_id: tenantId }) } : {}),
+  });
+}
+
 // RIG-5: all 3D Workspace traffic, including private previews, stays server-side.
 export type RigThreeDOperation = "capabilities" | "dashboard" | "submit" | "approve" | "mounts" | "reset" | "preview" | "runtime";
 export async function rigThreeDRequest(
@@ -176,6 +187,7 @@ export function sendFeedback(
 // ---- ledger ----
 
 export type LedgerSummary = {
+  unpriced: number;
   tenant_id: string;
   days: number;
   calls: number;
@@ -187,12 +199,13 @@ export type LedgerSummary = {
   cost_per_delivered_usd: number | null;
   cost_per_accepted_usd: number | null;
   by_model: {
+    unpriced: number;
     model: string;
     rung: number;
     calls: number;
     tokens_in: number;
     tokens_out: number;
-    cost_usd: number;
+    cost_usd: number | null;
     delivered: number;
     accepted: number;
     rejected: number;
@@ -801,7 +814,7 @@ export function rigProxy(
 }
 
 // DASH-1: server-only dashboard reads and founder control calls.
-export type DashboardDay = { day: string; calls: number; code: number; delivered: number; spent: number };
+export type DashboardDay = { day: string; calls: number; code: number; delivered: number; spent: number | null; unpriced?: number };
 export type DashboardRead = {
   daily: DashboardDay[];
   jobs_done: number;
@@ -1031,12 +1044,12 @@ export type MarketFact = { text: string; href: string; name: string };
 export type MarketAnswer = { content: string; facts: MarketFact[]; sources: { name: string; href: string }[] };
 export type MarketDocument = {
   calculation?: WarningCalculation;
-  offset: number; point_count: number; event_count: number;
+  offset: number; page_size: number; point_count: number; event_count: number;
   id: string; name: string; fetched_at: string; licence: string; terms_checked_at: string;
   url: string; presentation?: { publisher?: string; publisher_url?: string; notice?: string; explanation?: string };
   downloads: { url: string; sha256: string }[];
-  points: { title: string; display_title: string; date_label: string; geo: string; geo_name: string; date: string; value: string; display_value?: string | null; unit: string; unit_label: string; revision: string; revision_label: string; withdrawn?: boolean }[];
-  events: { title: string; display_title: string; date_label: string; display_url: string; link_label: string; body: string; date: string; url: string; kind: string }[];
+  points: { index: number; title: string; display_title: string; date_label: string; geo: string; geo_name: string; date: string; value: string; display_value: string; unit: string; unit_label: string; revision: string; revision_label: string; withdrawn?: boolean }[];
+  events: { index: number; title: string; display_title: string; date_label: string; display_url: string; link_label: string; body: string; date: string; url: string; kind: string }[];
 };
 export class MarketLabRequestError extends Error {
   readonly status: number;
@@ -1048,7 +1061,7 @@ export class MarketLabRequestError extends Error {
 }
 export async function marketLabRequest<T>(
   tenantId: string, operation: "overview" | "ask" | "document" | "refresh",
-  payload: { question?: string; document_id?: string; offset?: number } = {},
+  payload: { question?: string; document_id?: string; offset?: number; row?: number; row_kind?: "point" | "event" } = {},
 ): Promise<T> {
   const response = await fetch(`${TANK_URL}/v1/market-lab/${operation}`, {
     method: "POST", cache: "no-store", redirect: "error", signal: AbortSignal.timeout(35000),

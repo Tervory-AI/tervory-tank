@@ -692,7 +692,7 @@ async def _startup() -> None:
             "WHERE status IN ('queued','running') AND task_type <> 'base.enrich'"
         )
     global _http, _packages
-    _http = httpx.AsyncClient(headers={"User-Agent": "TervoryBase/0.1 (+https://tervory.com)"}, timeout=15, event_hooks={"request": [__import__("controls").paid_host_hook]})
+    _http = httpx.AsyncClient(headers={"User-Agent": "Tervory/1.0 (+https://tervory.com)"}, timeout=15, event_hooks={"request": [__import__("controls").paid_host_hook], "response": [__import__("controls").paid_response_hook]})
     global _redis
     try:
         _redis = aioredis.from_url(REDIS_URL, decode_responses=True, socket_connect_timeout=2)
@@ -3453,7 +3453,8 @@ async def ledger_summary(tenant_id: uuid.UUID, days: int = 30) -> dict[str, Any]
             """
             SELECT model, rung, count(*) AS calls,
                    sum(tokens_in) AS tokens_in, sum(tokens_out) AS tokens_out,
-                   sum(cost_usd) AS cost_usd,
+                   sum(cost_usd) FILTER (WHERE cost_status='set') AS cost_usd,
+                   count(*) FILTER (WHERE cost_status='not_set') AS unpriced,
                    count(*) FILTER (WHERE outcome = 'delivered') AS delivered,
                    count(*) FILTER (WHERE feedback = 'accepted') AS accepted,
                    count(*) FILTER (WHERE feedback = 'rejected') AS rejected
@@ -3465,7 +3466,8 @@ async def ledger_summary(tenant_id: uuid.UUID, days: int = 30) -> dict[str, Any]
         )
         totals = await conn.fetchrow(
             """
-            SELECT count(*) AS calls, coalesce(sum(cost_usd),0) AS cost_usd,
+            SELECT count(*) AS calls, coalesce(sum(cost_usd) FILTER (WHERE cost_status='set'),0) AS cost_usd,
+                   count(*) FILTER (WHERE cost_status='not_set') AS unpriced,
                    count(*) FILTER (WHERE outcome = 'delivered') AS delivered,
                    count(*) FILTER (WHERE feedback = 'accepted') AS accepted,
                    count(*) FILTER (WHERE feedback = 'rejected') AS rejected
@@ -3488,6 +3490,7 @@ async def ledger_summary(tenant_id: uuid.UUID, days: int = 30) -> dict[str, Any]
         "rejected": rejected,
         "acceptance_rate": round(accepted / rated, 4) if rated else None,
         "cost_usd": round(cost, 6),
+        "unpriced": int(totals["unpriced"] or 0),
         "cost_per_delivered_usd": round(cost / delivered, 6) if delivered else None,
         "cost_per_accepted_usd": round(cost / accepted, 6) if accepted else None,
         "by_model": [dict(r) for r in by_model],
@@ -3767,6 +3770,7 @@ app.include_router(__import__("bench").router)
 app.include_router(__import__("proof").router)
 app.include_router(__import__("proof").client_router)
 app.include_router(__import__("agent_skills").build_router(__import__("sys").modules[__name__]))
+app.include_router(__import__("base_product").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("rig_brain_routes").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("moa").router)
 

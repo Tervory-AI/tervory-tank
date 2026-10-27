@@ -204,8 +204,8 @@ async def prepare_batch(
     inputs: list[dict[str, Any]] = []
     engine_rows: list[dict[str, Any] | None] = []
     if engine:
-        for raw in raws:
-            ingested = await call(f"{engine}.ingest", raw)
+        for index, raw in enumerate(raws):
+            ingested = await call(f"{engine}.ingest", {**raw, "_base_record_id": str(rec_ids[index])})
             cost += cost_of(ingested)
             inputs.append(ingested.get("record") or dict(raw))
             engine_rows.append(ingested.get("engine") or None)
@@ -216,7 +216,7 @@ async def prepare_batch(
     if registry is None:
         built: list[dict[str, Any]] = []
         for index, record in enumerate(inputs):
-            normalised = await call("base.normalize", record)
+            normalised = await call("base.normalize", {**record, "_base_record_id": str(rec_ids[index])})
             cost += cost_of(normalised)
             fields = normalised.get("fields") or {}
             built.append({
@@ -254,6 +254,14 @@ async def enrich_one(
         if refs and refs.get(skill_id):
             return refs[skill_id]
         return skill_id
+
+    original_call = call
+    record_id = raw_input.get("_base_record_id")
+
+    async def attributed_call(skill_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return await original_call(skill_id, {**payload, **({"_base_record_id": record_id} if record_id else {})})
+
+    call = attributed_call
 
     try:
         norm = await call("base.normalize", raw_input)
@@ -326,18 +334,26 @@ async def enrich_one(
                 # Historical facts stay dated; never label them current or use them as gold.
                 scr["text"] = ""
             if scr.get("emails"):
-                profile["emails"] = {"value": scr["emails"][:5], "source": src, "confidence": 80}
+                profile["emails"] = {"value": scr["emails"], "source": src, "confidence": 80}
             if scr.get("phones"):
                 merge(profile, {"phone": {"value": scr["phones"][0], "source": src, "confidence": 80}})
-                profile["phones"] = {"value": scr["phones"][:3], "source": src, "confidence": 80}
+                profile["phones"] = {"value": scr["phones"], "source": src, "confidence": 80}
             if scr.get("socials"):
                 profile["socials"] = {"value": scr["socials"], "source": src, "confidence": 85}
+            # Legacy primary values still feed existing checks. The complete
+            # collections retain independently observed contacts for the client.
+            for target, key in (("websites", "websites"), ("social_links", "socials")):
+                found = [item for page in scr.get("_base_observations") or [] for item in page.get(key, [])]
+                if found:
+                    profile[target] = {"value": list(dict.fromkeys(([url] if target == "websites" else []) + found)),
+                                       "source": src, "confidence": 85}
             passes["2b"] = {
                 "skill": named("base.scrape_site", scr),
                 "ms": scr.get("_ms"),
                 "pages": len(scr.get("pages") or []),
                 "error": scr.get("error"),
                 "via": scr.get("via"),
+                "field_observations": scr.get("_base_observations") or [],
                 **{key: scr[key] for key in ("archive_date", "archive_source", "access_error") if scr.get(key)},
             }
             observed = None if scr.get("archived") else observation(url, scr)
@@ -544,7 +560,7 @@ async def enrich_queued(
                 reg = registry
             else:
                 reg = [row for row in registry if row.get("id") != str(rec_ids[index])]
-            outcome = await enrich_one(inputs[index], engine_rows[index], reg, engine, call, refs, engine_version)
+            outcome = await enrich_one({**inputs[index], "_base_record_id": str(rec_ids[index])}, engine_rows[index], reg, engine, call, refs, engine_version)
             results.append((index, outcome))
 
     await asyncio.gather(*(one(index) for index in indexes))

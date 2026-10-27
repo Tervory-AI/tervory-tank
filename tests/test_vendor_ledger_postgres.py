@@ -96,6 +96,7 @@ async def test_schema_and_durable_trial(monkeypatch, upgrade):
         monkeypatch.setenv("CONTEXT_DEV_MAX_CREDITS", "20")
         monkeypatch.setenv("TANK_REGION", "us-east")
         monkeypatch.setenv("TANK_KEY", "base-placeholder")
+        monkeypatch.setenv("TANK_KEY_BASE", "base-placeholder")
         monkeypatch.setenv("TANK_URL", "http://tank.test")
         calls, posted = [], []
         unavailable = True
@@ -105,12 +106,21 @@ async def test_schema_and_durable_trial(monkeypatch, upgrade):
         monkeypatch.setenv("TANK_API_KEY", "workspace-placeholder")
         import main as tank
 
+        async def record_through_tank(body):
+            # Exercise the actual priced-credit route, including corridor auth,
+            # instead of calling the legacy zero-cost vendor handler directly.
+            async with httpx.AsyncClient(transport=httpx.ASGITransport(app=tank.app), base_url="http://fixture") as api:
+                response = await api.post("/v1/base-product/context-dev", json=body, headers={"X-Tank-Key": "base-placeholder"})
+            assert response.status_code == 200, response.text
+            return response.json()
+
         async def transport(request):
             if request.url.host == "tank.test":
                 body = json.loads(request.content)
                 if unavailable:
                     return httpx.Response(503)
-                response = await tank.vendor_ledger(tank.VendorCall(**body), agent="base")
+                assert request.url.path == "/v1/base-product/context-dev"
+                response = await record_through_tank(body)
                 posted.append(body)
                 return httpx.Response(200, json=response)
             assert await conn.fetchval(
@@ -167,12 +177,16 @@ async def test_schema_and_durable_trial(monkeypatch, upgrade):
                 await run_trial(base_pool, http, str(tenant), str(run), selected)
                 assert len(calls) == 2
                 assert len(posted) == 2
-                duplicate = await tank.vendor_ledger(tank.VendorCall(**posted[0]), agent="base")
+                duplicate = await record_through_tank(posted[0])
                 assert duplicate["recorded"] is True
                 assert await conn.fetchval(
                     "SELECT count(*) FROM tank.ledger WHERE tenant_id=$1 AND vendor='context.dev'",
                     tank.PLATFORM_TENANT,
                 ) == 2
+                assert str(await conn.fetchval(
+                    "SELECT sum(cost_usd) FROM tank.ledger WHERE tenant_id=$1 AND vendor='context.dev' AND cost_status='set'",
+                    tenant,
+                )) == "0.01584000"  # 20 measured credits at the named price; never $20.
                 profile = await conn.fetchval(
                     "SELECT profile FROM agent_base.records WHERE tenant_id=$1 AND id=$2", tenant, ids[0],
                 )
