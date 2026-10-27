@@ -1,45 +1,49 @@
-# Independent owner-language read
+# Independent owner-language read after fourth review
 
-A separate Codex reviewer read the local fixture pages independently of the
-implementer. The final read covered the implementation committed as `c1a1597`.
-This is a local text review, not the founder's fresh-clone review, a signed-in
-session, or live-provider proof.
+This report supersedes the earlier nine-question audit. That read missed the
+unrelated Mars answer, API publisher links and duplicate freight titles. A
+separate Codex reader repeated the audit against the implementation committed as
+`8351de0`, with a broader set of unrelated questions and inspection of link
+**destinations**, not just their labels.
 
 ## What was read
 
-- The overview with all 14 stored-feed cards.
-- Every one of the 14 source pages, including each publisher-wording disclosure.
-- Nine question/brief flows: California population, Alameda listings, copper,
-  trade, freight, bills, shipping rules, weather, and repeat-permit checks.
-- All five linked-page groups, containing 20 links.
-- A no-match search and the Plugins off state.
-- Mobile cards and the trade source at 375px.
-- Enabled plugin tabs, error messages, empty-feed text and founder-only visibility
-  in code. Authenticated plugin actions and founder actions were not performed.
+- Overview and all 14 stored-source pages, including publisher-wording disclosures.
+- All five linked groups and their 20 links; no-match search and Plugins off.
+- 25 rendered ask flows: 12 supported questions and 13 unrelated/unsupported ones.
+- Both malformed and nonexistent source IDs through the shared production loader:
+  HTTP 404, **This source page doesn't exist**, without temporary-error wording.
+- Overview and trade-source layout at 375px, with no horizontal page overflow.
+- Enabled plugin tabs, error text and founder visibility in code only.
 
-## Additional findings and resolutions
+Supported asks included population, Alameda and Texas listings, copper, trade,
+freight, a bill, shipping rules, weather, repeat permits, the freight baseline
+name, and short/full month wording. Unrelated cases included Mars, penguins,
+Atlantis, football, cake, filler-only requests, unsupported dates/months, an
+award, US-only and dollars-only questions. Every negative response contained
+exactly **No stored data matches this question**, with empty facts and sources.
 
-| Finding from the independent reader | Resolution checked on the final pass |
+## Findings during this repeat and fixes checked
+
+| Finding | Resolution re-read |
 | --- | --- |
-| Navigation labels did not describe their destinations. | Usage, Tasks and Workspace setup name the existing pages; the unsupported Support link is removed. |
-| Linked-page descriptions promised missing states/ports or live prices. | Descriptions name the pages actually listed and explain that linked prices are not used in saved-feed answers. |
-| Numeric check categories had no defined meaning. | Saved checks now use named permit categories; licence-type meanings remain in the engine and are never assigned to background-check types. |
-| Regulation notices still showed bare legal codes. | Notice and answer titles describe the shipping requirement; original legal wording remains in its labelled disclosure. |
-| A bill question returned unrelated counts/temperature. | The engine identifies notice topics, and matching includes the displayed title and notice body. The bill question returns the saved bill. |
-| Alameda listings included other counties. | Named counties constrain the answer. The Alameda question returns only its stored county observation. |
-| Repeat-permit questions mixed in initial checks. | Displayed terms participate in matching; only the strongest matching observations are used. |
-| Weather warnings omitted the stored state. | California appears in the warning title and answer. |
-| Linked publisher names, “token”, raw download URLs and internal licence notes needed context. | Publisher names and access-key wording are used; downloads have named links; source attribution is separate from internal licence notes. |
-| Empty-feed and notice-only wording contradicted the content. | The On lead requires actual cards; the answer introduction says “This information”. |
+| Weather's Original notice still opened an API. | Raw URL stays in evidence; the visible link points to the readable publisher page and says it shows current notices. |
+| The freight comparison year was interpreted as an observation year. | Comparison baselines are distinct from requested reporting years. The exact stored title returns the current freight fact; a request for observations in 2000 returns no data. |
+| Jan/January did not match a displayed Jan 2024 period. | Short and full month labels match the stored period; the wrong month returns no data. |
+| US-only/dollars-only wording established a false topic via units. | Units qualify a subject; they cannot create one. A unit that is also in the actual title, such as listings, remains a supported subject. |
 
-## Remaining findings
+All 14 publisher links use readable dataset pages. The stored freight card and
+Federal Reserve linked page have distinct titles. Both missing-source cases use
+the requested wording. Texas listings still return four clearly labelled facts.
 
-**None found in the inspected scope on the final independent read.** Units,
-periods, revisions, counties, legal titles, notice relevance and weather geography
-were checked again after the fixes. The reviewer recorded zero browser errors and
-zero external browser requests. Original publisher language is deliberately
-retained behind a labelled disclosure; the required Census attribution is kept.
+## Remaining findings and limits
 
-Live availability, client authentication, actual refresh-worker completion and
-production layout are not established by this local fixture audit. Finding 5
-remains with the founder and Claude as documented in `../LAUNCH.md`.
+No remaining findings were reported in the inspected scope on the final pass.
+The browser recorded zero errors and zero external requests. External destinations
+were inspected as links and were **not fetched**. This is not a claim of publisher
+availability, a signed-in client session, enabled plugin actions, live collection,
+or GitHub CI success. Those limits were not tested away by this owner read.
+
+The reproducible capture and real-Tank tests are documented in `../LAUNCH.md`.
+Finding 5 stays under Founder must decide there. The new scoped review remains
+with the founder's reviewer.
