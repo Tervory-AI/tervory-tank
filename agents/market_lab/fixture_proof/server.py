@@ -64,6 +64,9 @@ async def seed(*, history: bool = False) -> None:
         # Never use this script against any deployed or shared database.
         for table in ("feed_checks", "feed_documents"):
             await conn.execute(f"UPDATE agent_market_lab.{table} SET fixture = false WHERE tenant_id = $1 AND fixture = true", UUID(TENANT))
+        if history:
+            from fixture_proof.mixed_source import seed_mixed_source
+            await seed_mixed_source(ledger, TENANT)
         # A saved external page-check result, to prove linked-page status reaches
         # the UI. Other unvisited linked pages must still say Not checked yet.
         await save_check(ledger, TENANT, {"source_id": "ups_hazmat", "name": "UPS hazardous materials",

@@ -80,6 +80,17 @@ def test_real_tank_routes_to_real_room_and_postgres(tmp_path):
                 assert request("document", document_id=ident, offset=0).json() == first
                 assert request("document", document_id=ident, row=0).json() == second
                 assert request("document", tenant=other, document_id=ident, row=0).status_code == 404
+                for index in (5, 59):
+                    notice = request("ask", question=f"Harbor notice {1960 + index}").json()["facts"][0]
+                    assert f"?row={index}&kind=event#event-{index}" in notice["href"]
+                    mixed_id = notice["href"].split("/")[-1].split("?")[0]
+                for kind, index, offset in [("event", 5, 50), ("event", 59, 0), ("point", 0, 100), ("point", 122, 0)]:
+                    page = request("document", document_id=mixed_id, row=index, row_kind=kind).json()
+                    assert page["point_count"] == 123 and page["event_count"] == 60
+                    assert page["offset"] == offset
+                    assert index in [row["index"] for row in page["events" if kind == "event" else "points"]]
+                    assert request("document", tenant=other, document_id=mixed_id, row=index, row_kind=kind).status_code == 404
+                assert request("document", document_id=mixed_id, row=5, row_kind="invalid").status_code == 422
                 for _ in range(2):
                     refreshed = request("refresh", tenant=other)
                     assert refreshed.status_code == 200 and refreshed.json() == {"status": "queued"}

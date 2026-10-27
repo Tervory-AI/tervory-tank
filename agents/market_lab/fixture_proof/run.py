@@ -46,7 +46,7 @@ export async function POST(request:Request){{const body=await request.json();if(
     write("app/market-lab/sources/[id]/page.tsx", '''import {StoredSourcePage} from "@/app/market-lab/source-page";
 export const dynamic="force-dynamic";
 export {sourceMetadata as metadata} from "@/app/market-lab/source-page";
-export default async function Page({params,searchParams}:{params:Promise<{id:string}>,searchParams:Promise<{row?:string;page?:string}>}){const {id}=await params;const {row,page}=await searchParams;return <StoredSourcePage tenantId="''' + TENANT + '''" id={id} row={row} page={page}/>;}''')
+export default async function Page({params,searchParams}:{params:Promise<{id:string}>,searchParams:Promise<{row?:string;page?:string;kind?:string}>}){const {id}=await params;const {row,page,kind}=await searchParams;return <StoredSourcePage tenantId="''' + TENANT + '''" id={id} row={row} page={page} kind={kind}/>;}''')
     write("app/market-lab/sources/[id]/not-found.tsx", 'export {default} from "@/app/market-lab/source-not-found";')
 
 

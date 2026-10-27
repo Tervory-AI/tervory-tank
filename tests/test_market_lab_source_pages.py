@@ -66,3 +66,21 @@ async def test_notice_citations_also_keep_their_original_indexes():
     assert len(page["events"]) == 50 and page["events"][0]["index"] == 66
     earlier = await document_page(ledger, OWNER, check["document_id"], row=0, fixtures=True)
     assert earlier["offset"] == 50 and earlier["events"][-1]["index"] == 0
+
+
+@pytest.mark.asyncio
+async def test_mixed_document_focuses_the_cited_kind_and_answer_marks_notices():
+    from core.evidence import answer
+    from fixture_proof.mixed_source import seed_mixed_source
+    ledger = MemoryLedger()
+    ident = await seed_mixed_source(ledger, OWNER, fixtures=True)
+    for kind, index, offset in [("event", 5, 50), ("event", 59, 0), ("point", 0, 100), ("point", 122, 0)]:
+        page = await document_page(ledger, OWNER, ident, row=index, row_kind=kind, fixtures=True)
+        assert page["point_count"] == 123 and page["event_count"] == 60
+        assert page["offset"] == offset
+        assert index in [row["index"] for row in page["events" if kind == "event" else "points"]]
+        assert await document_page(ledger, OTHER, ident, row=index, row_kind=kind, fixtures=True) is None
+    for index in (5, 59):
+        response = await answer(ledger, OWNER, f"Harbor notice {1960 + index}", fixtures=True)
+        assert len(response["facts"]) == 1
+        assert response["facts"][0]["href"] == f"/market-lab/sources/{ident}?row={index}&kind=event#event-{index}"

@@ -116,7 +116,7 @@ def number_label(value: Any) -> str:
     return formatted.rstrip("0").rstrip(".") if "." in formatted else formatted
 
 
-async def document_page(ledger: Any, tenant_id: str, document_id: str, offset: int = 0, *, row: int | None = None, fixtures: bool = False, engine: str | None = None) -> dict | None:
+async def document_page(ledger: Any, tenant_id: str, document_id: str, offset: int = 0, *, row: int | None = None, row_kind: str | None = None, fixtures: bool = False, engine: str | None = None) -> dict | None:
     doc = await document(ledger, tenant_id, document_id, fixtures=fixtures)
     if doc is None:
         return None
@@ -128,7 +128,8 @@ async def document_page(ledger: Any, tenant_id: str, document_id: str, offset: i
     points = sorted(enumerate(doc["points"]), key=lambda item: (item[1]["date"], item[0]), reverse=True)
     events = sorted(enumerate(doc["events"]), key=lambda item: (item[1]["date"], item[0]), reverse=True)
     if row is not None:
-        offset = next((position for position, (index, _) in enumerate(points or events) if index == row), 0)
+        selected = events if row_kind == "event" else points if row_kind == "point" else points or events
+        offset = next((position for position, (index, _) in enumerate(selected) if index == row), 0)
     last_offset = max(0, (max(len(points), len(events)) - 1) // DOCUMENT_PAGE_SIZE * DOCUMENT_PAGE_SIZE)
     offset = min(max(0, offset // DOCUMENT_PAGE_SIZE * DOCUMENT_PAGE_SIZE), last_offset)
     def shown(index: int, point: dict) -> dict:
@@ -263,7 +264,7 @@ async def answer(ledger: Any, tenant_id: str, question: str, *, fixtures: bool =
             score = _match_score(terms, f'{event_label(event, doc.get("presentation"))} {event["body"]}',
                                  source_words, area_label(event["geo"], "state", event["title"]) + " " + event["geo"], event["date"])
             if score:
-                ranked.append((score, event["date"], {"text": f'{event_label(event, doc.get("presentation"))} ({period_label(event["date"])}).', "href": f'/market-lab/sources/{doc["id"]}?row={index}#event-{index}', "name": doc["name"]}))
+                ranked.append((score, event["date"], {"text": f'{event_label(event, doc.get("presentation"))} ({period_label(event["date"])}).', "href": f'/market-lab/sources/{doc["id"]}?row={index}&kind=event#event-{index}', "name": doc["name"]}))
     ranked.sort(key=lambda row: (row[0], row[1]), reverse=True)
     best = ranked[0][0] if ranked else 0
     facts = [row[2] for row in ranked if row[0] == best][:5]

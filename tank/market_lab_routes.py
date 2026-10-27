@@ -1,6 +1,7 @@
 """Workspace's tenant-scoped Market Lab corridor. It never routes a model call."""
 import os
 from uuid import UUID
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
@@ -14,6 +15,7 @@ class MarketRequest(BaseModel):
     document_id: UUID | None = None
     offset: int = Field(default=0, ge=0, le=10000000)
     row: int | None = Field(default=None, ge=0, le=10000000)
+    row_kind: Literal["point", "event"] | None = None
 
 
 def build_router(tank):

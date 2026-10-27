@@ -1,6 +1,8 @@
 # Market Lab source-page polish
 
 Branch `codex/market-lab-polish`, created from `origin/main` at `2b12945`.
+The original proof below is from `cfa8ccf`. The independent-review citation fix
+and new head validation are documented in [the mixed-source proof](evidence/polish/mixed/README.md).
 This proof covers the three source-page fixes: grouped numbers, the browser
 heading `Market Lab · Tervory`, and 50 observations per page, newest first.
 

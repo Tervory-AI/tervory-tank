@@ -1044,7 +1044,7 @@ export class MarketLabRequestError extends Error {
 }
 export async function marketLabRequest<T>(
   tenantId: string, operation: "overview" | "ask" | "document" | "refresh",
-  payload: { question?: string; document_id?: string; offset?: number; row?: number } = {},
+  payload: { question?: string; document_id?: string; offset?: number; row?: number; row_kind?: "point" | "event" } = {},
 ): Promise<T> {
   const response = await fetch(`${TANK_URL}/v1/market-lab/${operation}`, {
     method: "POST", cache: "no-store", redirect: "error", signal: AbortSignal.timeout(35000),
