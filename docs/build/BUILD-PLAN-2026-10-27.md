@@ -379,7 +379,7 @@ Claude's suggestions, 27 Oct 13:20 PT. None is built until the founder decides. 
 | Hermes Agent | Each agent's own brain, browser and sandbox | Base and Rig In; Tiger, Market Lab, Radix, Tisan and Zenas Add | Part |
 | Airflow | One scheduler for every agent's nightly and daily jobs | All | Swap |
 | Grafana and Prometheus | Founder cost dashboards from the ledger | Founder (Tank) | Swap |
-| Hugging Face | LoRA training of our own small models | All (rung 2) | In (training only) |
+| Hugging Face | LoRA training of our own small models, run as HF Jobs (`jobs/train`) on the PRO plan's monthly compute credits (founder, 27 Oct) | All (rung 2) | In (training only; the billed amount is entered by hand from HF billing, `jobs/train/README.md`) |
 | Together, Groq or Ollama | Serving our own trained models | All (rung 2) | Add |
 | Perplexity Sonar | Tank research route (the research seat) | Market Lab first | Off |
 
