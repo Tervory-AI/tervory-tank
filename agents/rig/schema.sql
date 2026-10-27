@@ -19,6 +19,19 @@
 
 CREATE SCHEMA IF NOT EXISTS agent_rig;
 
+-- Durable handoff to Tank's save_pair collector. No contact details or keys.
+-- Events are removed only in the same transaction that stores the training pair.
+CREATE TABLE IF NOT EXISTS agent_rig.training_events (
+    tenant_id uuid NOT NULL,
+    region text NOT NULL,
+    source text NOT NULL CHECK (source IN ('rig_no_result', 'rig_quote')),
+    source_ref text NOT NULL,
+    input jsonb NOT NULL,
+    output jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, region, source, source_ref)
+);
+
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 CREATE TABLE IF NOT EXISTS agent_rig.products (

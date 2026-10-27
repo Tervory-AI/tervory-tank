@@ -3,14 +3,13 @@
 import base64
 from datetime import date, datetime, timedelta, timezone
 import json
-import secrets
-from urllib.parse import urlsplit
 
 from fastapi import APIRouter, FastAPI, Query, Request
 from pydantic import BaseModel, Field
 
 from rigbox.api import _admin, _ok, _service, _tenant
-from rigbox.service import RigError, hash_key
+from rigbox.service import RigError
+from .keys import issue_embed_key
 
 router = APIRouter(prefix="/v1/rig/admin")
 
@@ -89,17 +88,7 @@ async def resume(request: Request, quote_id: str):
 @router.post("/embed-keys")
 async def embed_key(request: Request, payload: EmbedOrigins):
     await _admin(request)
-    for origin in payload.origins:
-        try:
-            parsed = urlsplit(origin)
-        except ValueError:
-            raise RigError("invalid", "List exact HTTPS origins without paths.", 422) from None
-        if (parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password
-                or parsed.path or parsed.query or parsed.fragment or "*" in origin):
-            raise RigError("invalid", "List exact HTTPS origins without paths.", 422)
-    key = "rk_pub_" + secrets.token_hex(24)
-    await _service(request).store.put_key(_tenant(request), hash_key(key), "publishable", payload.origins)
-    return _ok(request, {"publishable_key": key, "origins": payload.origins})
+    return _ok(request, await issue_embed_key(_service(request).store, _tenant(request), payload.origins))
 
 
 def mount(application: FastAPI) -> None:

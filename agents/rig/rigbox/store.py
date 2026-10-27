@@ -236,6 +236,7 @@ class MemoryStore(RetailerMemoryStore):
         self.fit_why: dict[tuple[str, str, str], list[str]] = {}
         self.market: dict[tuple[str, str, str], dict[str, Any]] = {}
         self.searches: list[dict[str, Any]] = []
+        self.training_events: list[dict[str, Any]] = []
 
     def _drop_answers(self, tenant_id: str) -> None:
         tenant = str(tenant_id)
@@ -342,6 +343,7 @@ class MemoryStore(RetailerMemoryStore):
         self.quotes.append(
             {"tenant_id": str(tenant_id), "id": quote_id, "payload": payload, "contact": contact, "sent_at": None}
         )
+        await self.training_event(tenant_id, "rig_quote", quote_id, payload, {"request_id": quote_id})
 
     async def mark_sent(self, tenant_id: str, quote_id: str) -> None:
         for row in self.quotes:
@@ -402,6 +404,10 @@ class MemoryStore(RetailerMemoryStore):
 
     async def put_fit_why(self, tenant_id: str, fit_id: str, rule_hash: str, why: list[str]) -> None:
         self.fit_why[(str(tenant_id), fit_id, rule_hash)] = [str(line) for line in why]
+
+    async def training_event(self, tenant: str, source: str, ref: str, value: dict, output: dict) -> None:
+        self.training_events.append({"tenant_id": tenant, "source": source, "source_ref": ref,
+                                     "input": copy.deepcopy(value), "output": copy.deepcopy(output)})
 
     async def add_search(self, tenant_id: str, version: str, row: dict[str, Any]) -> None:
         self.searches.append(
@@ -819,7 +825,9 @@ class PgStore(RetailerPgStore):
         return [str(row["tenant_id"]) for row in rows]
 
     async def add_quote(self, tenant_id: str, quote_id: str, payload: dict[str, Any], contact: dict[str, Any]) -> None:
-        async with self.pool.acquire() as conn:
+        from rigbox.training import enqueue
+
+        async with self.pool.acquire() as conn, conn.transaction():
             await conn.execute(
                 """
                 INSERT INTO agent_rig.quotes (tenant_id, id, payload, contact)
@@ -830,6 +838,7 @@ class PgStore(RetailerPgStore):
                 _json(payload),
                 _json(contact),
             )
+            await enqueue(conn, tenant_id, "rig_quote", quote_id, payload, {"request_id": quote_id})
 
     async def mark_sent(self, tenant_id: str, quote_id: str) -> None:
         async with self.pool.acquire() as conn:
@@ -983,6 +992,12 @@ class PgStore(RetailerPgStore):
                 rule_hash,
                 _json(list(why)),
             )
+
+    async def training_event(self, tenant: str, source: str, ref: str, value: dict, output: dict) -> None:
+        from rigbox.training import enqueue
+
+        async with self.pool.acquire() as conn:
+            await enqueue(conn, tenant, source, ref, value, output)
 
     async def add_search(self, tenant_id: str, version: str, row: dict[str, Any]) -> None:
         created = row.get("created_at")

@@ -921,7 +921,7 @@ class RigAdminAction(Body):
 @router.post("/rig/admin/{operation}")
 async def rig_admin_action(operation: str, request: Request, actor: Actor = Depends(identity)):
     permit_feed(actor, "rig", "shopify")
-    if operation not in {"import", "connect", "refresh", "mapping", "confirm-mapping", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest"}:
+    if operation not in {"import", "connect", "refresh", "mapping", "confirm-mapping", "settings", "embed-keys", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest"}:
         raise HTTPException(404, "Unknown retailer operation.")
     if operation == "exchange-rate" and not actor.founder:
         raise HTTPException(403, "Only the founder may set exchange rates.")

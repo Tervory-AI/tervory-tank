@@ -289,6 +289,20 @@ class Service:
         limit: int | None,
         filters: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        result = await self._search(tenant_id, query, limit, filters)
+        if (query or "").strip() and not result.get("results"):
+            # Include cached misses: each completed search is a distinct event.
+            await self.store.training_event(tenant_id, "rig_no_result", uuid4().hex,
+                                            {"query": query.strip(), "filters": filters or {}}, {"results": []})
+        return result
+
+    async def _search(
+        self,
+        tenant_id: str,
+        query: str,
+        limit: int | None,
+        filters: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         text = (query or "").strip()
         shop = await self._shop(tenant_id)
         if shop.get("search"):
