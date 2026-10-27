@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { batchLabel } from "./model";
+import { countLabel, fieldLabels, stateLabel } from "./display";
 import { Evidence } from "./reference-workflow";
 import type { VerifiedRow } from "./product-types";
 
@@ -31,10 +32,10 @@ export function BatchWorkflow({ signedIn, selected }: { signedIn: boolean; selec
     <h3>{batchLabel(selected)}</h3>
     {error && <p role="alert">{error}</p>}
     {!result ? <p>Loading results…</p> : <>
-      <p>{result.total} attempted records. Sources, check dates and missing-field reasons update automatically.</p>
+      <p>{countLabel(result.total, "attempted record")}. Sources, check dates and missing-field reasons update automatically.</p>
       <a className="bcp-secondary" href={`/base/download?batch=${encodeURIComponent(selected)}`}>Download batch fields and sources</a>
-      <p className="bcp-copy">Showing the first {result.rows.length} records. The download includes all matching records, with unverified values left blank and their reasons included.</p>
-      {result.rows.map(row => <article key={row.record_id}><h4>{row.name} · {row.state}</h4><dl>{Object.entries(row.fields).map(([name, value]) => <div key={name}><dt>{name}</dt><dd><Evidence field={value} /></dd></div>)}</dl></article>)}
+      <p className="bcp-copy">Showing the first {countLabel(result.rows.length, "record")}. The download includes all matching records, with unverified values left blank and their reasons included.</p>
+      {result.rows.map(row => <article key={row.record_id}><h4>{row.name} · {stateLabel(row.state)}</h4><dl>{Object.entries(row.fields).map(([name, value]) => <div key={name}><dt>{fieldLabels[name]}</dt><dd><Evidence field={value} /></dd></div>)}</dl></article>)}
     </>}
   </section>;
 }

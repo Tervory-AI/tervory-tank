@@ -101,7 +101,7 @@ from base_brain import register as register_brain  # noqa: E402
 from browser_evidence import register as register_browser_evidence  # noqa: E402
 register_brain(app)
 register_browser_evidence(app)
-from engines.ffl.reference import register as register_reference  # noqa: E402
+from base_gold.ffl.reference import register as register_reference  # noqa: E402
 register_reference(app)
 
 

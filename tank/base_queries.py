@@ -32,7 +32,7 @@ async def record_page(store: Any, tenant: uuid.UUID, states: list[str], kinds: l
 
 
 async def ledger_page(store: Any, tenant: uuid.UUID, state: str | None, month: str | None,
-                      rung: int | None, kinds: list[str], collectors: bool, offset: int, limit: int) -> dict:
+                      rung: int | None, kinds: list[str], collectors: bool, offset: int, limit: int, cost_status: str | None = None) -> dict:
     async with store.rt.pool().acquire() as conn:
         rows = await conn.fetch("""SELECT l.id,b.record_id,l.ts,l.rung,l.cache_hit,
             CASE WHEN l.cost_status='set' THEN l.cost_usd ELSE NULL END AS cost_usd,
@@ -44,8 +44,8 @@ async def ledger_page(store: Any, tenant: uuid.UUID, state: str | None, month: s
             AND ($3::text IS NULL OR to_char(l.ts AT TIME ZONE 'UTC','YYYY-MM')=$3)
             AND ($4::int IS NULL OR CASE WHEN l.cache_hit THEN 4 ELSE l.rung END=$4)
             AND (cardinality($5::text[])=0 OR r.licence_type=ANY($5))
-            AND ($6 OR r.licence_type IS NULL OR r.licence_type<>'03')
-            ORDER BY l.ts,l.id OFFSET $7 LIMIT $8""", tenant, state, month, rung, kinds, collectors, offset, limit)
+            AND ($6 OR r.licence_type IS NULL OR r.licence_type<>'03') AND ($9::text IS NULL OR l.cost_status=$9)
+            ORDER BY l.ts,l.id OFFSET $7 LIMIT $8""", tenant, state, month, rung, kinds, collectors, offset, limit, cost_status)
     return {"total": rows[0]["total"] if rows else 0, "rows": [dict(row) for row in rows]}
 
 
@@ -87,7 +87,8 @@ async def numbers(store: Any, tenant: uuid.UUID, states: list[str], kinds: list[
                 SELECT r.state,to_char(l.ts AT TIME ZONE 'UTC','YYYY-MM') AS month,
                     CASE WHEN l.cache_hit THEN 4 ELSE l.rung END AS rung,
                     sum(l.cost_usd) FILTER(WHERE l.cost_status='set') AS known,
-                    count(*) FILTER(WHERE l.cost_status='not_set')::int AS unpriced
+                    count(*) FILTER(WHERE l.cost_status='not_set')::int AS unpriced,
+                    array_agg(DISTINCT coalesce(l.vendor,'')) AS vendors
                 FROM tank.ledger l JOIN tank.base_ledger_links b ON b.tenant_id=$1 AND b.ledger_id=l.id
                 JOIN results r ON r.record_id=b.record_id WHERE l.tenant_id=$1 AND l.agent='base'
                 GROUP BY r.state,month,CASE WHEN l.cache_hit THEN 4 ELSE l.rung END)
@@ -103,8 +104,8 @@ async def numbers(store: Any, tenant: uuid.UUID, states: list[str], kinds: list[
         known, n = row["known"] or 0, row["verified_records"]
         amounts.append({"state": row["state"], "month": row["month"], "rung": row["rung"], "rung_label": RUNGS.get(row["rung"], "other"),
             "known_cost_usd": str(known), "cost_usd": None if row["unpriced"] else str(known),
-            "verified_records": n, "unpriced": row["unpriced"],
-            "cost_per_verified_record": str(known / n) if n and not row["unpriced"] and not row["missing_receipts"] else None,
+            "verified_records": n, "unpriced": row["unpriced"], "vendors": row["vendors"],
+            "cost_per_verified_record": str(known / n) if n and not row["missing_receipts"] else None,
             "status": "price not set" if row["unpriced"] else "receipts unavailable" if row["missing_receipts"] else "no verified records" if not n else "priced"})
     return {"groups": [groups[key] for key in sorted(groups)], "costs": amounts,
             "unattributed_calls": unattributed, "records_without_receipts": missing}

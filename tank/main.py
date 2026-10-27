@@ -3491,8 +3491,8 @@ async def ledger_summary(tenant_id: uuid.UUID, days: int = 30) -> dict[str, Any]
         "acceptance_rate": round(accepted / rated, 4) if rated else None,
         "cost_usd": round(cost, 6),
         "unpriced": int(totals["unpriced"] or 0),
-        "cost_per_delivered_usd": round(cost / delivered, 6) if delivered and not totals["unpriced"] else None,
-        "cost_per_accepted_usd": round(cost / accepted, 6) if accepted and not totals["unpriced"] else None,
+        "cost_per_delivered_usd": round(cost / delivered, 6) if delivered else None,
+        "cost_per_accepted_usd": round(cost / accepted, 6) if accepted else None,
         "by_model": [dict(r) for r in by_model],
     }
 

@@ -258,3 +258,8 @@ export function saveAutoPromote(userId: string, taskType: string, auto: boolean)
     body: JSON.stringify({ auto_promote: auto, by: userId }),
   });
 }
+
+export type UnpricedCalls = { total: number; rows: { id: string; tenant_id: string; ts: string; agent: string; task_type: string; vendor: string | null; units: string | null; cost_status: string }[] };
+export function readUnpricedCalls(userId: string, query: URLSearchParams): Promise<UnpricedCalls> {
+  return adminFetch(userId, `/v1/base-product/founder/unpriced?${query}`);
+}

@@ -24,17 +24,30 @@ async def main():
         await page.get_by_role("button", name="Start from reference", exact=True).wait_for(state="visible")
         await page.screenshot(path=str(OUTPUT / "02-reference-batch-1440.png"))
         await page.get_by_role("button", name="View verified fields and sources").click()
-        await page.get_by_role("region", name="Reference licences and verified results").get_by_text("website", exact=True).first.wait_for()
+        await page.get_by_role("region", name="Reference licences and verified results").get_by_text("Website", exact=True).first.wait_for()
         detail = page.locator('[aria-label="Verified fields"]')
         await detail.scroll_into_view_if_needed()
         await page.screenshot(path=str(OUTPUT / "03-field-sources-1440.png"))
         assert await detail.get_by_text("Checked", exact=False).count() >= 4
+        await page.get_by_role("button", name="excludes 1 unpriced call", exact=True).first.click()
+        expenses = page.get_by_label("Cost receipts")
+        await expenses.get_by_text("Showing 1 of 1 call.", exact=True).wait_for()
+        visible = await expenses.inner_text()
+        assert "Web search" in visible and "price not set" in visible
+        assert "brave.search" not in visible and "Receipt " not in visible and "T10:" not in visible
+        await expenses.scroll_into_view_if_needed()
+        await page.screenshot(path=str(OUTPUT / "08-unpriced-calls-1440.png"))
+
         async with page.expect_download() as pending:
             await page.locator('a[href*="metric=email_and_phone"]').first.click()
         download = await pending.value
         await download.save_as(str(OUTPUT / "verified-records.csv"))
         csv = (OUTPUT / "verified-records.csv").read_text()
         assert "phone_source_url" in csv and "/contact" in csv and "2026-10-26" in csv
+        import csv as csv_reader
+        import io
+        imported = list(csv_reader.DictReader(io.StringIO(csv.lstrip("\ufeff"))))
+        assert all(row["phone_value"] == "+15125550101" for row in imported)
         await page.get_by_label("Business CSV").set_input_files({"name": "fixture-businesses.csv", "mimeType": "text/csv", "buffer": b"name,state,website\nFixture Upload,TX,https://upload.example/\n"})
         await page.get_by_role("button", name="Upload and verify", exact=True).first.click()
         await page.get_by_role("status").filter(has_text="Your list was received").wait_for()

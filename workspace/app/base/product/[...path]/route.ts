@@ -4,7 +4,7 @@ import { baseProductRequest } from "@/lib/tank";
 export const dynamic = "force-dynamic";
 const READ = new Set(["reference", "numbers", "records", "records.csv", "ledger", "comparison"]);
 const WRITE = new Set(["reference/batches", "uploads", "comparison"]);
-const FILTERS = new Set(["states", "types", "include_collectors", "metric", "reason", "offset", "limit", "state", "month", "rung", "batch"]);
+const FILTERS = new Set(["states", "types", "include_collectors", "metric", "reason", "offset", "limit", "state", "month", "rung", "batch", "cost_status"]);
 type Context = { params: Promise<{ path: string[] }> };
 
 async function route(request: Request, context: Context): Promise<Response> {

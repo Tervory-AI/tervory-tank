@@ -39,8 +39,12 @@ function money(value: number | null | undefined, digits = 2): string {
   return `${value < 0 ? "−" : ""}$${abs.toFixed(places)}`;
 }
 
-function recordedSpend(value: number, unpriced = 0): string {
-  return unpriced ? `${value === 0 ? "price not set" : money(value)} · ${unpriced} calls excluded: price not set` : money(value);
+function recordedSpend(value: number, _unpriced = 0): string {
+  return money(value);
+}
+
+function UnpricedNote({ count, query = "" }: { count?: number; query?: string }) {
+  return count ? <a href={`/admin/unpriced${query ? `?${query}` : ""}`} onClick={event => event.stopPropagation()}>excludes {count} unpriced {count === 1 ? "call" : "calls"}</a> : null;
 }
 
 function pct(value: number | null | undefined): string {
@@ -130,7 +134,7 @@ export function FounderConsole({
       </header>
       <p className="lede">How much of the work is proven, what it earns, and what it costs.</p>
       <p className="note">{counters.note}</p>
-      {Boolean(counters.lifetime.unpriced_calls) && <p className="flag">{counters.lifetime.unpriced_calls} calls excluded from all recorded spend and savings: price not set. Complete cost and margin are unavailable for affected periods.</p>}
+      {Boolean(counters.lifetime.unpriced_calls) && <p className="flag">Costs and margins use priced calls only. <UnpricedNote count={counters.lifetime.unpriced_calls} />.</p>}
 
       {lost.length > 0 && (
         <div className="flags">
@@ -145,10 +149,10 @@ export function FounderConsole({
       <section className="counters" aria-label="Last 30 days">
         <Counter label="Proven" value={pct(counters.last_30_days.proven_pct)} change={move(counters.change.proven_pct, "pts")} extra={`Lifetime ${pct(counters.lifetime.proven_pct)}`} />
         <Counter label="Off paid models" value={pct(counters.last_30_days.off_paid_pct)} change={move(counters.change.off_paid_pct, "pts")} extra={`Lifetime ${pct(counters.lifetime.off_paid_pct)}`} />
-        <Counter label="Margin" value={pct(counters.last_30_days.margin_pct)} change={move(counters.change.margin_pct, "pts")} extra={`Lifetime ${pct(counters.lifetime.margin_pct)}`} />
+        <Counter excluded={counters.last_30_days.unpriced_calls} label="Margin" value={pct(counters.last_30_days.margin_pct)} change={move(counters.change.margin_pct, "pts")} extra={`Lifetime ${pct(counters.lifetime.margin_pct)}`} />
         <Counter label="Booked revenue" value={money(counters.last_30_days.booked_usd)} change={move(counters.change.booked_usd, "usd")} extra={`Lifetime ${money(counters.lifetime.booked_usd)}`} />
-        <Counter label="Recorded spend" value={recordedSpend(counters.last_30_days.spend_usd, counters.last_30_days.unpriced_calls)} change={move(counters.change.spend_usd, "usd")} extra={`Lifetime ${recordedSpend(counters.lifetime.spend_usd, counters.lifetime.unpriced_calls)}`} />
-        <Counter label="Cost per outcome" value={money(counters.last_30_days.cost_per_outcome, 4)} change={move(counters.change.cost_per_outcome, "usd")} extra={`Lifetime ${money(counters.lifetime.cost_per_outcome, 4)}`} />
+        <Counter excluded={counters.last_30_days.unpriced_calls} label="Recorded spend" value={recordedSpend(counters.last_30_days.spend_usd, counters.last_30_days.unpriced_calls)} change={move(counters.change.spend_usd, "usd")} extra={`Lifetime ${recordedSpend(counters.lifetime.spend_usd, counters.lifetime.unpriced_calls)}`} />
+        <Counter excluded={counters.last_30_days.unpriced_calls} label="Cost per outcome" value={money(counters.last_30_days.cost_per_outcome, 4)} change={move(counters.change.cost_per_outcome, "usd")} extra={`Lifetime ${money(counters.lifetime.cost_per_outcome, 4)}`} />
       </section>
 
       <section className="section">
@@ -157,7 +161,7 @@ export function FounderConsole({
         {focus.length === 0 ? <p className="empty">No paid routes yet.</p> : (
           <div className="focus">
             {focus.map((row) => (
-              <button key={row.task_type} type="button" className={task === row.task_type ? "focus-row on" : "focus-row"} onClick={() => setTask(row.task_type)}>
+              <div key={row.task_type} className={task === row.task_type ? "focus-row on" : "focus-row"}><button type="button" onClick={() => setTask(row.task_type)} className="focus-name">Show task details</button>
                 <div className="focus-top">
                   <span className="focus-name">{row.task_type} <span className="evidence">· {row.model}</span></span>
                   <span className={`chip ${chipClass(row.status)}`}>{row.status}</span>
@@ -167,8 +171,8 @@ export function FounderConsole({
                   <span className="num">{recordedSpend(row.spend_usd, row.unpriced_calls)} · {row.share_of_paid_spend_pct.toFixed(1)}% of paid spend · {row.calls} calls</span>
                   <span className="evidence">{row.next_step}</span>
                 </div>
-                <p className="evidence">{evidenceLine(row)}</p>
-              </button>
+                <UnpricedNote count={row.unpriced_calls} query={`days=${days}&task=${encodeURIComponent(row.task_type)}`} /><p className="evidence">{evidenceLine(row)}</p>
+              </div>
             ))}
           </div>
         )}
@@ -224,7 +228,7 @@ export function FounderConsole({
 
       <section className="section">
         <h2>Revenue and spend</h2>
-        <p className="hint">Booked revenue against model spend. The shaded gap is the margin.</p>
+        <p className="hint">Booked revenue against the cost of priced calls. The shaded gap is the margin based on those calls.</p>
         <ChartCard>
           <MoneyChart days={daily} />
         </ChartCard>
@@ -234,8 +238,8 @@ export function FounderConsole({
         <h2>By agent and by task</h2>
         <p className="hint">Click a task to see its own graph and graduations. Independence is the share of calls off a paid model.</p>
         <div className="tables">
-          <SortTable title="By agent" rows={agentSeries.totals} picked={null} onPick={null} />
-          <SortTable title="By task type" rows={taskSeries.totals} picked={task} onPick={setTask} />
+          <SortTable days={days} title="By agent" rows={agentSeries.totals} picked={null} onPick={null} />
+          <SortTable days={days} title="By task type" rows={taskSeries.totals} picked={task} onPick={setTask} />
         </div>
         {task && (
           <div className="drill">
@@ -318,11 +322,11 @@ export function FounderConsole({
   );
 }
 
-function Counter({ label, value, change, extra }: { label: string; value: string; change: string; extra: string }) {
+function Counter({ label, value, change, extra, excluded }: { label: string; value: string; change: string; extra: string; excluded?: number }) {
   return (
     <article className="counter">
       <span>{label}</span>
-      <b className="num">{value}</b>
+      <b className="num">{value}</b><UnpricedNote count={excluded} query="days=30" />
       <em className="num">{change}</em>
       <em className="num">{extra}</em>
     </article>
@@ -441,7 +445,6 @@ function MoneyChart({ days }: { days: Day[] }) {
   const padB = 24;
   const innerW = W - padL - padR;
   const innerH = H - padT - padB;
-  if (days.some(day => day.unpriced)) return <p>price not set. Complete cost and margin history is unavailable while calls are unpriced.</p>;
   const max = Math.max(1, ...days.map((day) => Math.max(day.booked, day.spend)));
   const gap = innerW / days.length;
   const xAt = (index: number) => padL + gap * index + gap / 2;
@@ -453,13 +456,13 @@ function MoneyChart({ days }: { days: Day[] }) {
     return `L${xAt(index).toFixed(1)},${yAt(day.spend).toFixed(1)}`;
   }).join(" ");
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Booked revenue and model spend">
+    <><svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Booked revenue and model spend">
       <path d={`${forward} ${back} Z`} fill="var(--ink)" opacity="0.12" />
       <path d={line((day) => day.booked)} fill="none" stroke="var(--ink)" strokeWidth="2" />
       <path d={line((day) => day.spend)} fill="none" stroke="var(--ink)" strokeWidth="2" strokeDasharray="4 3" />
       <text x={4} y={padT + 8} fill="currentColor" fontSize="10" opacity="0.6">{money(max, 0)}</text>
       <text x={padL} y={H - 6} fill="currentColor" fontSize="10" opacity="0.6">{days[0]?.day} · solid revenue, dashed spend</text>
-    </svg>
+    </svg><table aria-label="Daily priced costs and margins"><thead><tr><th>Day</th><th>Priced spend</th><th>Margin</th><th>Excluded calls</th></tr></thead><tbody>{days.map(day => <tr key={day.day}><td>{day.day}</td><td>{money(day.spend, 6)}</td><td>{day.booked ? pct(100 * (day.booked - day.spend) / day.booked) : "—"}</td><td><UnpricedNote count={day.unpriced} query={`day=${day.day}`} /></td></tr>)}</tbody></table></>
   );
 }
 
@@ -474,7 +477,7 @@ const COLUMNS: { key: keyof Total; label: string }[] = [
   { key: "margin_pct", label: "Margin" },
 ];
 
-function SortTable({ title, rows, picked, onPick }: { title: string; rows: Total[]; picked: string | null; onPick: ((key: string) => void) | null }) {
+function SortTable({ title, rows, picked, onPick, days }: { days: number; title: string; rows: Total[]; picked: string | null; onPick: ((key: string) => void) | null }) {
   const [sort, setSort] = useState<{ key: keyof Total; dir: number }>({ key: "spend_usd", dir: -1 });
   const sorted = [...rows].sort((a, b) => compare(a[sort.key], b[sort.key]) * sort.dir);
   function choose(key: keyof Total) {
@@ -499,7 +502,7 @@ function SortTable({ title, rows, picked, onPick }: { title: string; rows: Total
                 <td className="num">{row.calls}</td>
                 <td className="num">{pct(row.proven_pct)}</td>
                 <td className="num">{pct(row.independence_pct)}</td>
-                <td className="num">{recordedSpend(row.spend_usd, row.unpriced_calls)}</td>
+                <td className="num">{recordedSpend(row.spend_usd, row.unpriced_calls)} <UnpricedNote count={row.unpriced_calls} query={`days=${days}&${title === "By agent" ? "agent" : "task"}=${encodeURIComponent(row.key)}`} /></td>
                 <td className="num">{row.outcomes}</td>
                 <td className="num">{money(row.cost_per_outcome, 4)}</td>
                 <td className="num">{pct(row.margin_pct)}</td>

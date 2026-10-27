@@ -1852,8 +1852,26 @@ CREATE TABLE IF NOT EXISTS tank.base_apollo_records (
 ALTER TABLE tank.base_apollo_records ADD COLUMN IF NOT EXISTS base_snapshot jsonb;
 
 -- Founder decision: retain NOT NULL; a not_set amount is storage only, never spend.
-ALTER TABLE tank.price_book ALTER COLUMN unit_price TYPE numeric(18,8);
-ALTER TABLE tank.ledger ALTER COLUMN cost_usd TYPE numeric(18,8);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema='tank' AND table_name='price_book' AND column_name='unit_price'
+          AND numeric_precision=18 AND numeric_scale=8
+    ) THEN
+        ALTER TABLE tank.price_book ALTER COLUMN unit_price TYPE numeric(18,8);
+    END IF;
+END $$;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema='tank' AND table_name='ledger' AND column_name='cost_usd'
+          AND numeric_precision=18 AND numeric_scale=8
+    ) THEN
+        ALTER TABLE tank.ledger ALTER COLUMN cost_usd TYPE numeric(18,8);
+    END IF;
+END $$;
 ALTER TABLE tank.price_book ADD COLUMN IF NOT EXISTS price_status text NOT NULL DEFAULT 'set' CHECK(price_status IN ('set','not_set'));
 ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS cost_status text NOT NULL DEFAULT 'set' CHECK(cost_status IN ('set','not_set'));
 ALTER TABLE tank.econ_daily ADD COLUMN IF NOT EXISTS unpriced_calls integer NOT NULL DEFAULT 0;

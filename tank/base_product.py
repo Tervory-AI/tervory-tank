@@ -5,7 +5,7 @@ import asyncio
 from collections import defaultdict
 from contextlib import suppress
 import csv
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 import hashlib
 import hmac
@@ -72,7 +72,7 @@ def dimensions(states: str | list[str], kinds: str | list[str]) -> tuple[list[st
     kinds = kinds.split(",") if isinstance(kinds, str) else kinds
     states = sorted({value.strip().upper() for value in states if value.strip()})
     kinds = sorted({value.strip().zfill(2) for value in kinds if value.strip()})
-    if any(not re.fullmatch(r"[A-Z]{2}", value) for value in states) or any(not re.fullmatch(r"\d{2}", value) for value in kinds):
+    if any(value != "UNSPECIFIED" and not re.fullmatch(r"[A-Z]{2}", value) for value in states) or any(value != "unspecified" and not re.fullmatch(r"\d{2}", value) for value in kinds):
         raise HTTPException(422, "Choose valid state and licence type codes.")
     return states, kinds
 
@@ -236,17 +236,20 @@ def build_router(rt: Any, store: BaseStore | None = None, *, background: bool = 
     @router.get("/ledger", dependencies=[Depends(workspace)])
     async def ledger_rows(tenant_id: uuid.UUID, state: str | None = None, month: str | None = None,
                           rung: int | None = Query(None, ge=1, le=4), include_collectors: bool = False, types: str = "",
-                          offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500)) -> dict[str, Any]:
+                          offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500),
+                          cost_status: str | None = Query(None, pattern="^(set|not_set)$")) -> dict[str, Any]:
         regions, kinds = dimensions(state or "", types)
         state = regions[0] if regions else None
         if month and not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", month):
             raise HTTPException(422, "Choose a valid month.")
         if isinstance(store, BaseStore):
             from base_queries import ledger_page
-            return clean(await ledger_page(store, tenant_id, state, month, rung, kinds, include_collectors, offset, limit))
+            return clean(await ledger_page(store, tenant_id, state, month, rung, kinds, include_collectors, offset, limit, cost_status))
         results = {str(row["record_id"]): row for row in await store.results(tenant_id)}
         rows = []
         for row in await store.ledger(tenant_id):
+            if cost_status and row.get("cost_status") != cost_status:
+                continue
             record = results.get(str(row.get("record_id")))
             if record and not include_collectors and record["licence_type"] == "03":
                 continue
@@ -274,7 +277,7 @@ def build_router(rt: Any, store: BaseStore | None = None, *, background: bool = 
             row = {key.strip().lower().replace(" ", "_"): value.strip() for key, value in raw.items()}
             key = row.get("licence_key", "")
             if key not in known or key in seen:
-                raise HTTPException(422, "Each Apollo row needs a unique licence_key from this workspace's Base records.")
+                raise HTTPException(422, "Each Apollo row needs a unique matching licence number from this workspace’s Base records.")
             seen.add(key)
             rows.append({"licence_key": key, "base_snapshot": {name: known[key][name] for name in
                          ("record_id", "licence_key", "state", "licence_type", "fields", "checked_at")},
@@ -308,6 +311,25 @@ def build_router(rt: Any, store: BaseStore | None = None, *, background: bool = 
     @router.post("/reference/refresh", dependencies=[Depends(workspace), Depends(require_admin)])
     async def refresh() -> dict[str, Any]:
         return clean(await store.refresh())
+
+    @router.get("/founder/unpriced", dependencies=[Depends(workspace), Depends(require_admin)])
+    async def founder_unpriced(tenant_id: uuid.UUID | None = None, days: int | None = Query(None, ge=1, le=36500),
+                               day: date | None = None, task: str | None = None, agent: str | None = None,
+                               offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500)) -> dict[str, Any]:
+        # Only the founder may request the all-tenant cost evidence used by the
+        # existing admin totals. A tenant filter is honoured when supplied.
+        today = datetime.now(timezone.utc).date()
+        start = day or (today - timedelta(days=days - 1) if days else None)
+        end = day + timedelta(days=1) if day else today + timedelta(days=1)
+        async with rt.pool().acquire() as conn:
+            rows = await conn.fetch("""SELECT id,tenant_id,ts,agent,task_type,vendor,units,
+                    NULL::numeric AS cost_usd,'price not set'::text AS cost_status,count(*) OVER() AS total
+                FROM tank.ledger WHERE ($1::uuid IS NULL OR tenant_id=$1) AND region=$2 AND cost_status='not_set'
+                    AND ($3::date IS NULL OR ts >= ($3::date::timestamp AT TIME ZONE 'UTC'))
+                    AND ts < ($4::date::timestamp AT TIME ZONE 'UTC')
+                    AND ($5::text IS NULL OR task_type=$5) AND ($6::text IS NULL OR agent=$6)
+                ORDER BY ts DESC,id OFFSET $7 LIMIT $8""", tenant_id, rt.box_region(), start, end, task, agent, offset, limit)
+        return clean({"total": rows[0]["total"] if rows else 0, "rows": [dict(row) for row in rows]})
 
     @router.get("/prices", dependencies=[Depends(workspace), Depends(require_admin)])
     async def prices() -> dict[str, Any]:

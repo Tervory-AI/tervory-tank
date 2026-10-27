@@ -16,7 +16,7 @@ import pytest_asyncio
 from fastapi import FastAPI
 
 from base_product_fixtures import AT, TENANT, OTHER, raw, finished
-from engines.ffl.reference import project
+from agents.base.engines.ffl.reference import project
 from base_repository import BaseStore, encoded
 from base_product import build_router
 import vendor_meter as meter
@@ -150,6 +150,24 @@ async def test_status_prices_precise_receipts_founder_only_and_history(database,
             assert pages[str(old["id"])]["cost_usd"] is None and pages[str(old["id"])]["status"] == "price not set"
             assert Decimal(pages[str(new["id"])]["cost_usd"]) == Decimal("0.000792")
             assert (await client.get("/v1/base-product/ledger", params={"tenant_id": str(OTHER)})).json()["rows"] == []
+            excluded = (await client.get("/v1/base-product/ledger", params={"tenant_id": str(TENANT), "cost_status": "not_set"})).json()
+            assert excluded["total"] == 1 and excluded["rows"][0]["id"] == str(old["id"])
+            assert excluded["rows"][0]["status"] == "price not set"
+            assert (await client.get("/v1/base-product/ledger", params={"tenant_id": str(OTHER), "cost_status": "not_set"})).json()["rows"] == []
+            endpoint = "/v1/base-product/founder/unpriced"
+            assert (await client.get(endpoint)).status_code == 404
+            assert (await client.get(endpoint, headers={"X-Tervory-Admin": "not-founder"})).status_code == 404
+            founder = {"X-Tervory-Admin": "fixture-founder"}
+            params = {"tenant_id": str(TENANT), "day": old["ts"].date().isoformat(), "task": "base.find_site", "agent": "base"}
+            response = await client.get(endpoint, params=params, headers=founder)
+            assert response.status_code == 200, response.text
+            evidence = response.json()
+            assert evidence["total"] == 1 and evidence["rows"][0]["id"] == str(old["id"])
+            assert evidence["rows"][0]["cost_usd"] is None and evidence["rows"][0]["cost_status"] == "price not set"
+            for changed in ({"tenant_id": str(OTHER)}, {"day": "2020-01-01"}, {"task": "different"}, {"agent": "different"}, {"offset": 1}):
+                assert (await client.get(endpoint, params={**params, **changed}, headers=founder)).json()["rows"] == []
+            assert (await client.get(endpoint, params={"days": 30, "tenant_id": str(TENANT)}, headers=founder)).json()["total"] == 1
+
             import proof
             monkeypatch.setattr(proof, "runtime", lambda: rt)
             report = await proof.snapshot(TENANT)
@@ -203,7 +221,7 @@ async def test_context_observer_links_model_and_code_receipts_without_changing_r
 
 @pytest.mark.asyncio
 async def test_fifty_states_are_submitted_one_after_another(database):
-    from engines.ffl.reference import STATES
+    from agents.base.engines.ffl.reference import STATES
     conn, rt = database
     store = BaseStore(rt)
     await store.install({"published_on": "2026-09-01", "source_url": "https://www.atf.gov/fixture-september", "checked_at": AT,

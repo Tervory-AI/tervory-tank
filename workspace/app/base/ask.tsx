@@ -1,4 +1,5 @@
 "use client";
+import { dateLabel } from "./display";
 
 /*
  * Search and Ask Base sit in the body. Both only read Base records: they never start, re-run or change anything.
@@ -19,7 +20,7 @@ function Value({ label, found }: { label: string; found: FoundValue | null }) {
       {found ? (
         <>
           <span className="bcp-hit-value">{found.value}</span>
-          {found.sourceUrl && found.checkedAt ? <span className="bcp-hit-source"><a href={found.sourceUrl} target="_blank" rel="noopener noreferrer">Source link</a> · Checked <time dateTime={found.checkedAt}>{found.checkedAt}</time></span> : <span className="bcp-hit-source">Source and check date not recorded.</span>}
+          {found.sourceUrl && found.checkedAt ? <span className="bcp-hit-source"><a href={found.sourceUrl} target="_blank" rel="noopener noreferrer">Source link</a> · Checked <time dateTime={found.checkedAt}>{dateLabel(found.checkedAt)}</time></span> : <span className="bcp-hit-source">Source and check date not recorded.</span>}
         </>
       ) : (
         <span className="bcp-hit-none">None found</span>
@@ -155,7 +156,7 @@ export function AskBase({ ask }: { ask: AskAction }) {
                       <li key={i}>
                         <span className="bcp-row-title">{source.title}</span>
                         <span className="bcp-row-copy">{source.detail}</span>
-                        {source.source && source.checkedAt ? <span className="bcp-hit-source"><a href={source.source} target="_blank" rel="noopener noreferrer">Source link</a> · Checked <time dateTime={source.checkedAt}>{source.checkedAt}</time></span> : null}
+                        {source.source && source.checkedAt ? <span className="bcp-hit-source"><a href={source.source} target="_blank" rel="noopener noreferrer">Source link</a> · Checked <time dateTime={source.checkedAt}>{dateLabel(source.checkedAt)}</time></span> : null}
                       </li>
                     ))}
                   </ol>

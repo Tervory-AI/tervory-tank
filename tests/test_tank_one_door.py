@@ -186,6 +186,10 @@ def scan(root: Path) -> list[Finding]:
 # Canonical AST/token fingerprints and occurrence counts, never a whole-file waiver.
 # A changed or additional call in an audited file needs a fresh review.
 EXCEPTIONS: dict[tuple[str, str, str], tuple[int, str]] = {
+    ('tests/test_base_database.py', 'model/paid endpoint', '78462f840ad17f59'): (2, 'Offline httpx.Request/Response values passed directly to Tank receipt hooks; no request is sent to Brave.'),
+    ('tests/test_base_vendor_meter.py', 'model/paid endpoint', '78462f840ad17f59'): (3, 'Offline vendor-meter tests use MockTransport or call hooks directly; no provider traffic.'),
+    ('tests/test_base_vendor_meter.py', 'model/paid endpoint', '47bc5ec6af477dfc'): (1, 'Offline blocked-site test with MockTransport proves Brave cannot be called after a site block.'),
+
     ('agents/_brain/runner.py', 'model invocation', 'e9a2464540ffec9e'): (1, 'Hermes is configured only for Tank /v1/agents/base; task agent.base.think.'),
     ('agents/base/app.py', 'provider/brain setting', '1a672692cf88e898'): (3, 'Brain-enabled preview rejection and receipt display; no model call.'),
     ('agents/base/base_brain.py', 'provider/brain setting', '1855ed0c659a0982'): (4, 'Recovery orchestration only; the Base brain sends model work to Tank after the free pass.'),

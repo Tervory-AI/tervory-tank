@@ -75,7 +75,50 @@ global.fetch = async (input, init) => {
     assert.throws(() => csv.parseBusinessCsv(invalid));
   }
   assert.equal(csv.csvCell('=1+1'), "'=1+1");
+  for (const phone of ['+15125550101', '+442079460018', '15125550101']) assert.equal(csv.csvCell(phone), phone);
+  for (const formula of ['=HYPERLINK("https://evil.example/","click")', '+SUM(1,2)', '-1+2', '@SUM(1,2)', '  =1+1']) {
+    const exported = csv.csvCell(formula);
+    const parsed = csv.parseBusinessCsv('name,phone\nExample,' + exported);
+    assert.equal(parsed[0].phone, "'" + formula);
+  }
+  for (const heading of ['__proto__', 'constructor', 'prototype']) assert.throws(() => csv.parseBusinessCsv('name,' + heading + '\nExample,test'));
+  const display = load('workspace/app/base/display.ts');
+  assert.equal(display.dateLabel('2026-10-26T23:44:00+00:00'), '26 Oct 2026, 4:44 pm');
+  assert.equal(display.dateLabel('2026-10-26'), '26 Oct 2026');
+  assert.equal(display.dateLabel(null), 'Date not recorded');
+  assert.equal(display.selectionLabel('CA', 'unspecified'), 'California, licence type not given');
+  assert.equal(display.countLabel(1, 'call'), '1 call');
+  assert.equal(display.countLabel(2, 'call'), '2 calls');
+  assert.equal(display.receiptLabel({vendor: 'brave.search', rung: 1}), 'Web search');
+  assert.equal(display.costStep({vendors: ['brave.search'], rung: 1}), 'Web search');
+  assert.equal(display.reasonLabel('blocked'), 'This website does not allow automatic reads. We stopped checking it.');
+  assert(!display.refreshLabel('unavailable').includes('unavailable'));
+  const trend = load('workspace/app/base/cost-trend.ts').costTrend([
+    {state: 'TX', month: '2026-09', cost_per_verified_record: '0.002', unpriced: 0},
+    {state: 'TX', month: '2026-10', cost_per_verified_record: '0.000792', unpriced: 1},
+  ]);
+  assert.equal(trend[1].cost, 0.000792);
+  assert.equal(trend[1].unpriced, 1);
+  assert.equal(trend[1].change, '$0.001208 less than September 2026');
+
   assert.equal(csv.csvCell('a,"b"'), '"a,""b"""');
+
+  const React = workspaceRequire('react');
+  const {renderToStaticMarkup} = workspaceRequire('react-dom/server');
+  mocks['next/link'] = {default: ({children, ...props}) => React.createElement('a', props, children)};
+  const {FounderConsole} = load('workspace/app/admin/console.tsx');
+  const metric = {calls: 2, unpriced_calls: 1, spend_usd: 0.000792, booked_usd: 1, outcomes: 1, margin_pct: 99.92,
+    cost_per_outcome: 0.000792, proven_pct: 0, off_paid_pct: 0, independence_pct: 0};
+  const rendered = renderToStaticMarkup(React.createElement(FounderConsole, {
+    days: 30, counters: {note: 'Fixture', routes: [], lifetime: metric, last_30_days: metric, change: metric},
+    taskSeries: {points: [{...metric, key: 'base.find_site', day: '2026-10-26', calls_by_rung: {'1': 2}}], totals: [{...metric, key: 'base.find_site'}]},
+    agentSeries: {totals: [{...metric, key: 'base'}]}, focus: [], graduations: [], prices: [], ladders: [], savePrice: async () => null, setAutoPromote: async () => {},
+  }));
+  assert(rendered.includes('Daily priced costs and margins'));
+  assert(rendered.includes('$0.000792') && rendered.includes('99.9%'));
+  assert(rendered.includes('excludes 1 unpriced call') && !rendered.includes('excludes 1 unpriced calls'));
+  assert(rendered.includes('/admin/unpriced?day=2026-10-26'));
+  assert(rendered.includes('/admin/unpriced?days=30&amp;task=base.find_site'));
   const proof = load('workspace/app/base/evidence.ts');
   assert.equal(proof.resultStatus(record('1')).status, 'verified');
   for (const observation of [{}, { source_url: 'javascript:alert(1)', observed_on: '2026-10-26', status: 200, blocked: false },

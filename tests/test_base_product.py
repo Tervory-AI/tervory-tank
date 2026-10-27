@@ -10,7 +10,7 @@ import pytest
 from base_product_fixtures import AT, TENANT, OTHER, atf_bytes, raw, finished, fixture_app
 from base_evidence import observations, observe, row_fields
 from base_metrics import compare, cost_rows, export_records
-from engines.ffl import reference
+from agents.base.engines.ffl import reference
 
 
 def test_atf_fixture_refresh_keeps_collectors_and_tracks_identity_across_move():
@@ -133,7 +133,7 @@ def test_unpriced_cost_is_excluded_and_comparison_uses_same_record():
               {"id": uuid.uuid4(), "record_id": row["id"], "ts": AT, "rung": 1, "cost_usd": Decimal("0.000792"), "cost_status": "set"}]
     amount = cost_rows([row], ledger)[0]
     assert amount["known_cost_usd"] == "0.000792"
-    assert amount["cost_usd"] is None and amount["cost_per_verified_record"] is None
+    assert amount["cost_usd"] is None and Decimal(amount["cost_per_verified_record"]) == Decimal("0.000792")
     assert amount["status"] == "price not set"
     comparison = compare([row], [{"licence_key": row["licence_key"], "fields": {"website": row["profile"]["website"]["value"], "phone": "2125550199"}}])
     assert comparison["states"][0]["website"]["matches"] == 1
@@ -154,3 +154,41 @@ async def test_apollo_import_retains_the_base_snapshot(monkeypatch):
         compared = (await client.get("/v1/base-product/comparison", params={"tenant_id": str(TENANT)})).json()
         assert compared["states"][0]["phone"]["matches"] == 1
         assert compared["rows"][0]["base"]["phone"]["value"] == "212-555-0101"
+
+
+def test_csv_spreadsheet_import_keeps_phones_and_neutralises_formulas():
+    import csv
+    import io
+    from base_metrics import csv_text
+    phones = ["+15125550101", "+442079460018", "15125550101"]
+    formulas = ['=HYPERLINK("https://evil.example/","click")', "+SUM(1,2)", "-1+2", "@SUM(1,2)", "  =1+1"]
+    output = csv_text([{"phone": phone} for phone in phones + formulas], ["phone"])
+    values = [row["phone"] for row in csv.DictReader(io.StringIO(output.lstrip("\ufeff")))]
+    # These are the actual cell contents a CSV importer receives: no apostrophe
+    # added to phone values; dangerous expressions import as literal text.
+    assert values[:len(phones)] == phones
+    assert values[len(phones):] == ["'" + formula for formula in formulas]
+
+
+def test_partial_cost_metrics_keep_priced_margin_and_cost_per_outcome():
+    from admin import pack_metrics
+    value = pack_metrics(3, 0, 0, 0.000792, 2, 1, unpriced=1)
+    assert value["spend_usd"] == 0.000792
+    assert value["cost_per_outcome"] == 0.000396
+    assert value["margin_pct"] == pytest.approx(99.92)
+    assert value["unpriced_calls"] == 1
+
+
+@pytest.mark.asyncio
+async def test_uploaded_records_without_licence_type_can_download_their_count(monkeypatch):
+    monkeypatch.setenv("TANK_API_KEY", "local-fixture")
+    app, store = fixture_app()
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://fixture", headers={"X-Tank-Key": "local-fixture"}) as client:
+        uploaded = await client.post("/v1/base-product/uploads", json={"tenant_id": str(TENANT), "request_id": str(uuid.uuid4()),
+            "created_by": "fixture", "records": [{"name": "Uploaded business", "state": "CA"}]})
+        assert uploaded.status_code == 200, uploaded.text
+        params = {"tenant_id": str(TENANT), "states": "CA", "types": "unspecified", "metric": "attempted"}
+        downloaded = await client.get("/v1/base-product/records.csv", params=params)
+        assert downloaded.status_code == 200 and "Uploaded business" in downloaded.text
+        other = await client.get("/v1/base-product/records.csv", params={**params, "tenant_id": str(OTHER)})
+        assert other.status_code == 200 and "Uploaded business" not in other.text

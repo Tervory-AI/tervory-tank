@@ -4,12 +4,9 @@ from __future__ import annotations
 from collections import defaultdict
 from copy import deepcopy
 import hashlib
-from pathlib import Path
-import sys
 import uuid
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agents/base"))
-from engines.ffl.reference import parse_file
+from agents.base.engines.ffl.reference import parse_file
 from base_evidence import row_fields
 
 AT = "2026-10-26T10:00:00+00:00"

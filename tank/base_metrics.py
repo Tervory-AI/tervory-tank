@@ -89,8 +89,9 @@ def cost_rows(results: list[dict[str, Any]], ledger: list[dict[str, Any]]) -> li
             continue
         key = (record["state"], str(entry["ts"])[:7], 4 if entry.get("cache_hit") else int(entry["rung"]))
         item = groups.setdefault(key, {"state": key[0], "month": key[1], "rung": key[2], "rung_label": RUNGS.get(key[2], "other"),
-                                       "known_cost": Decimal(0), "unpriced": 0, "ledger_ids": []})
+                                       "known_cost": Decimal(0), "unpriced": 0, "ledger_ids": [], "vendors": set()})
         item["ledger_ids"].append(identity)
+        item["vendors"].add(entry.get("vendor") or "")
         if entry.get("cost_status") == "not_set" or entry["cost_usd"] is None:
             item["unpriced"] += 1
         else:
@@ -102,7 +103,8 @@ def cost_rows(results: list[dict[str, Any]], ledger: list[dict[str, Any]]) -> li
         total = None if item["unpriced"] else known
         out.append({**item, "verified_records": n, "known_cost_usd": str(known),
                     "cost_usd": str(total) if total is not None else None,
-                    "cost_per_verified_record": str(total / n) if total is not None and n else None,
+                    "cost_per_verified_record": str(known / n) if n else None,
+                    "vendors": sorted(item["vendors"]),
                     "status": "price not set" if item["unpriced"] else "no verified records" if not n else "priced"})
     return out
 
@@ -120,7 +122,7 @@ def csv_text(rows: list[dict[str, Any]], columns: list[str]) -> str:
         for column in columns:
             value = row.get(column)
             text = json.dumps(value, ensure_ascii=False) if isinstance(value, (list, dict)) else "" if value is None else str(value)
-            if re.match(r"^[\s\ufeff]*[=+@-]|^[\t\r\n]", text):
+            if re.match(r"^[\s\ufeff]*[=+@-]|^[\t\r\n]", text) and not re.fullmatch(r"\+?[1-9][0-9]{6,14}", text):
                 text = "'" + text
             cells.append(text)
         writer.writerow(cells)
