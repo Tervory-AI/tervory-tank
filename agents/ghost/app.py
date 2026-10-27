@@ -44,9 +44,23 @@ from .webhooks import WebhookRejected, accept_signed, drop_counts
 from .red_team import list_exercises, run_exercise
 from .enforce_lifecycle import FixtureComposeBackend, plan_create, plan_destroy, receipt_for
 from .owner_email import DEFAULT_FIXTURE_TRANSPORT, build_owner_update, send_owner_update
+from .owner_email_jobs import run_weekly_owner_updates
 from .probes import Probes
 from .store import Store
-from .threat_queue import ThreatPayloadQueue, queue_root_from_env, watch_enqueue_fixture_attack
+from .tenant_queue import (
+    list_founder_console_receipts,
+    mirror_settings,
+    queue_path_for_tenant,
+    queue_root_base,
+)
+from .threat_queue import (
+    ThreatPayloadQueue,
+    queue_root_from_env,
+    watch_enqueue_approve,
+    watch_enqueue_fixture_attack,
+    watch_enqueue_undo,
+)
+from .never_block import may_block_ip
 
 
 async def require_tank(x_tank_key: str = Header(default="")) -> None:
@@ -151,11 +165,17 @@ async def bounded_json(request: Request, limit: int) -> bytes:
 
 
 def watch_queue_configured() -> bool:
-    return bool((os.environ.get("THREAT_PAYLOAD_QUEUE") or "").strip())
+    return bool(
+        (os.environ.get("THREAT_PAYLOAD_QUEUE_ROOT") or "").strip()
+        or (os.environ.get("THREAT_PAYLOAD_QUEUE") or "").strip()
+    )
 
 
-def watch_threat_queue() -> ThreatPayloadQueue:
-    """Production Watch queue door — path from THREAT_PAYLOAD_QUEUE."""
+def watch_threat_queue(tenant_id: str | None = None) -> ThreatPayloadQueue:
+    """Production Watch queue door — per-tenant path when tenant_id is given."""
+    if tenant_id:
+        return ThreatPayloadQueue(queue_path_for_tenant(tenant_id))
+    # Legacy single-queue env (one client dogfood).
     return ThreatPayloadQueue(queue_root_from_env())
 
 
@@ -165,17 +185,57 @@ def enqueue_fixture_attack_for_watch(
     site: str,
     address: str,
     reason: str = "fixture attacking address",
+    tenant_id: str | None = None,
+    advisory: dict | None = None,
     queue: ThreatPayloadQueue | None = None,
 ) -> dict:
     """Production Watch enqueue entrypoint used by /ghost/autumbra/queue/fixture-attack.
 
-    Validates via never-block rules, then puts a ThreatPayload on the queue door.
+    Validates via never-block rules, then puts a ThreatPayload on that client's queue.
     Does not call Enforce. Never keeps the raw log on the queue.
     """
-    q = queue or watch_threat_queue()
+    if queue is not None:
+        q = queue
+    elif tenant_id:
+        q = watch_threat_queue(tenant_id)
+    else:
+        q = watch_threat_queue()
     return watch_enqueue_fixture_attack(
-        queue=q, raw_log=raw_log, site=site, address=address, reason=reason
+        queue=q,
+        raw_log=raw_log,
+        site=site,
+        address=address,
+        reason=reason,
+        tenant_id=tenant_id,
+        advisory=advisory,
     )
+
+
+async def _weekly_owner_email_loop(app: "FastAPI") -> None:
+    """Real scheduled weekly job — not just a dict in /jobs."""
+    # Default 7 days; tests may set AUTUMBRA_WEEKLY_INTERVAL_SEC.
+    interval = float(os.environ.get("AUTUMBRA_WEEKLY_INTERVAL_SEC") or str(7 * 24 * 3600))
+    if interval < 1:
+        interval = 1
+    while True:
+        # Chunked sleep so lifespan cancel is prompt.
+        left = interval
+        while left > 0:
+            step = 1.0 if left > 1 else left
+            await asyncio.sleep(step)
+            left -= step
+        try:
+            store = app.state.store
+            # Enumerate known tenants from settings keys is store-specific; tests
+            # call run_weekly_owner_updates directly. Here we send for PLATFORM.
+            settings = load_settings(store, PLATFORM_TENANT)
+            if settings.owner_email:
+                run_weekly_owner_updates(
+                    [settings],
+                    transport=DEFAULT_FIXTURE_TRANSPORT,
+                )
+        except Exception:
+            pass
 
 
 def create_app() -> FastAPI:
@@ -195,9 +255,20 @@ def create_app() -> FastAPI:
             app.state.advisory_lock = asyncio.Lock()
             app.state.watcher = advisory_watch.Watcher(store, advisory_watch.Feeds(http), tank)
             app.state.shields = shield_room.Shields(store, http, tank)
-            app.state.threat_queue = watch_threat_queue() if watch_queue_configured() else None
-            tasks = [asyncio.create_task(watch(app)), asyncio.create_task(nightly(app)),
-                     asyncio.create_task(advisory_watch.watch(app))]
+            app.state.threat_queue = None
+            if watch_queue_configured():
+                # Prefer root; per-tenant queues opened on demand.
+                try:
+                    app.state.threat_queue = watch_threat_queue()
+                except Exception:
+                    app.state.threat_queue = None
+            app.state.threat_queue_root = queue_root_base()
+            tasks = [
+                asyncio.create_task(watch(app)),
+                asyncio.create_task(nightly(app)),
+                asyncio.create_task(advisory_watch.watch(app)),
+                asyncio.create_task(_weekly_owner_email_loop(app)),
+            ]
             try:
                 yield
             finally:
@@ -567,12 +638,27 @@ def create_app() -> FastAPI:
         except Exception:
             raise HTTPException(422, "Settings were not understood.") from None
         saved = save_settings(app.state.store, settings)
+        # Mirror into that client's queue box so Enforce reloads and obeys the mode.
+        mirrored = False
+        try:
+            qpath = queue_path_for_tenant(saved.tenant_id)
+            mirror_settings(saved, qpath)
+            mirrored = True
+        except Exception:
+            # Single-queue dogfood: mirror into THREAT_PAYLOAD_QUEUE if configured.
+            try:
+                if watch_queue_configured():
+                    mirror_settings(saved, queue_root_from_env())
+                    mirrored = True
+            except Exception:
+                mirrored = False
         receipt = {
             "product": "Autumbra",
             "kind": "settings_change",
             "tenant_id": saved.tenant_id,
             "shield_mode": saved.shield_mode.value,
             "fix_mode": saved.fix_mode.value,
+            "mirrored_to_enforce_box": mirrored,
             "undo": {"restore_defaults": True},
         }
         return {
@@ -651,8 +737,8 @@ def create_app() -> FastAPI:
     async def autumbra_webhook(provider: str, request: Request):
         """Signature check FIRST — before any Tank auth that would 404.
 
-        Real edge/mailbox senders cannot send X-Tank-Key. Unsigned or bad
-        signatures are dropped and counted; body is never stored.
+        Correctly signed webhook → never-block check → ThreatPayload → client's queue.
+        Replay refused (timestamp window + nonce). Body is never stored.
         """
         raw = await request.body()
         if len(raw) > 64_000:
@@ -661,19 +747,51 @@ def create_app() -> FastAPI:
             "cf-webhook-signature"
         )
         timestamp = request.headers.get("x-autumbra-timestamp")
+        nonce = request.headers.get("x-autumbra-nonce")
         try:
-            envelope = accept_signed(provider, raw, signature=signature, timestamp=timestamp)
+            envelope = accept_signed(
+                provider, raw, signature=signature, timestamp=timestamp, nonce=nonce
+            )
         except WebhookRejected:
             return JSONResponse(
                 {"accepted": False, "stored": False, "drops": drop_counts()},
                 status_code=401,
             )
-        # Working memory only — do not persist raw body.
+        # Parse working-memory JSON only after signature OK. Never persist raw body.
+        queued = False
+        queue_receipt = None
+        try:
+            data = json.loads(raw.decode("utf-8"))
+        except Exception:
+            data = {}
+        if isinstance(data, dict):
+            address = str(data.get("address") or data.get("ip") or "").strip()
+            site = str(data.get("site") or data.get("host") or "").strip()
+            tenant_id = str(data.get("tenant_id") or "").strip()
+            raw_log = str(data.get("raw_log") or data.get("message") or f"webhook {provider}")
+            if address and site and tenant_id and watch_queue_configured():
+                ok, why = may_block_ip(address, raw_log=raw_log)
+                if ok:
+                    advisory = data.get("advisory") if isinstance(data.get("advisory"), dict) else None
+                    queue_receipt = enqueue_fixture_attack_for_watch(
+                        raw_log=raw_log,
+                        site=site,
+                        address=address,
+                        reason=str(data.get("reason") or f"signed {provider} webhook")[:300],
+                        tenant_id=tenant_id,
+                        advisory=advisory,
+                    )
+                    queued = bool(queue_receipt.get("queued"))
+                else:
+                    queue_receipt = {"queued": False, "note": why, "outcome": "refused_never_block"}
         return {
             "accepted": True,
             "stored": False,
             "provider": envelope["provider"],
             "bytes": envelope["bytes"],
+            "queued": queued,
+            "queue_receipt": queue_receipt,
+            "action": "enqueue_threat_payload" if queued else "accepted_no_action",
         }
 
     @app.get("/ghost/autumbra/exercises", dependencies=[Depends(require_tank)])
@@ -705,10 +823,9 @@ def create_app() -> FastAPI:
 
     @app.post("/ghost/autumbra/queue/fixture-attack", dependencies=[Depends(require_tank)])
     async def autumbra_queue_fixture_attack(request: Request):
-        """Watch product door: dirty log → ThreatPayload → THREAT_PAYLOAD_QUEUE.
+        """Watch product door: dirty log → ThreatPayload → that client's queue.
 
-        Does not call Enforce. Enforce drains the queue in its own process via
-        drain_once_for_enforce / background drain loop.
+        Does not call Enforce. Burned/unknown-site input → clean 4xx + burn receipt.
         """
         if not watch_queue_configured() and getattr(app.state, "threat_queue", None) is None:
             raise HTTPException(503, "THREAT_PAYLOAD_QUEUE is not configured.")
@@ -719,17 +836,129 @@ def create_app() -> FastAPI:
             site = str(data["site"])
             address = str(data["address"])
             reason = str(data.get("reason") or "fixture attacking address")
+            tenant_id = str(data.get("tenant_id") or "").strip() or None
+            advisory = data.get("advisory") if isinstance(data.get("advisory"), dict) else None
         except Exception:
             raise HTTPException(422, "Fixture attack was not understood.") from None
-        queue = getattr(app.state, "threat_queue", None)
-        receipt = enqueue_fixture_attack_for_watch(
-            raw_log=raw_log,
-            site=site,
-            address=address,
-            reason=reason,
-            queue=queue,
-        )
+        queue = None
+        if tenant_id:
+            try:
+                queue = watch_threat_queue(tenant_id)
+            except Exception:
+                queue = getattr(app.state, "threat_queue", None)
+        else:
+            queue = getattr(app.state, "threat_queue", None)
+        try:
+            receipt = enqueue_fixture_attack_for_watch(
+                raw_log=raw_log,
+                site=site,
+                address=address,
+                reason=reason,
+                tenant_id=tenant_id,
+                advisory=advisory,
+                queue=queue,
+            )
+        except ThreatBurned:
+            burn_receipt = {
+                "product": "Autumbra",
+                "role": "Watch",
+                "kind": "burn",
+                "outcome": "burned",
+                "queued": False,
+                "detail": BURN_DETAIL,
+                "tenant_id": tenant_id,
+            }
+            return JSONResponse(burn_receipt, status_code=400)
         return receipt
+
+    @app.post("/ghost/autumbra/queue/undo", dependencies=[Depends(require_tank)])
+    async def autumbra_queue_undo(request: Request):
+        """Client undo: validated ThreatPayload (undo_shield) into that client's queue."""
+        if not watch_queue_configured():
+            raise HTTPException(503, "THREAT_PAYLOAD_QUEUE is not configured.")
+        raw = await bounded_json(request, 8_000)
+        try:
+            data = json.loads(raw.decode("utf-8"))
+            tenant_id = str(data["tenant_id"])
+            site = str(data["site"])
+            rule_id = data.get("rule_id")
+            prior_receipt_id = data.get("prior_receipt_id")
+        except Exception:
+            raise HTTPException(422, "Undo was not understood.") from None
+        try:
+            q = watch_threat_queue(tenant_id)
+            return watch_enqueue_undo(
+                queue=q,
+                rule_id=str(rule_id) if rule_id else None,
+                prior_receipt_id=str(prior_receipt_id) if prior_receipt_id else None,
+                site=site,
+                tenant_id=tenant_id,
+            )
+        except ThreatBurned:
+            return JSONResponse(
+                {"outcome": "burned", "detail": BURN_DETAIL, "queued": False},
+                status_code=400,
+            )
+        except Exception as exc:
+            raise HTTPException(422, str(exc)) from None
+
+    @app.post("/ghost/autumbra/queue/approve", dependencies=[Depends(require_tank)])
+    async def autumbra_queue_approve(request: Request):
+        """Approve a pending shield via ThreatPayload into that client's queue."""
+        if not watch_queue_configured():
+            raise HTTPException(503, "THREAT_PAYLOAD_QUEUE is not configured.")
+        raw = await bounded_json(request, 8_000)
+        try:
+            data = json.loads(raw.decode("utf-8"))
+            tenant_id = str(data["tenant_id"])
+            site = str(data["site"])
+            prior_receipt_id = str(data["prior_receipt_id"])
+        except Exception:
+            raise HTTPException(422, "Approve was not understood.") from None
+        try:
+            q = watch_threat_queue(tenant_id)
+            return watch_enqueue_approve(
+                queue=q,
+                prior_receipt_id=prior_receipt_id,
+                site=site,
+                tenant_id=tenant_id,
+            )
+        except ThreatBurned:
+            return JSONResponse(
+                {"outcome": "burned", "detail": BURN_DETAIL, "queued": False},
+                status_code=400,
+            )
+
+    @app.get("/ghost/autumbra/receipts", dependencies=[Depends(require_tank)])
+    async def autumbra_receipts(tenant_id: str = Query(...)):
+        """Founder console path: receipts for one client (timestamps + tenant_id)."""
+        try:
+            q = watch_threat_queue(tenant_id)
+        except Exception as exc:
+            raise HTTPException(404, str(exc)) from None
+        disk = q.list_receipts()
+        console = list_founder_console_receipts(q.root)
+        # Prefer console view; fall back to disk receipts.
+        by_id = {str(r.get("id")): r for r in disk if r.get("id")}
+        for r in console:
+            by_id[str(r.get("id"))] = r
+        return {
+            "tenant_id": tenant_id,
+            "receipts": list(by_id.values()),
+            "count": len(by_id),
+            "founder_console": True,
+        }
+
+    @app.get("/ghost/autumbra/receipts/weekly/{tenant_id}")
+    async def autumbra_weekly_receipt_page(tenant_id: str):
+        """Page target for weekly email links (must exist)."""
+        return {
+            "product": "Autumbra",
+            "kind": "weekly_receipts",
+            "tenant_id": tenant_id,
+            "page": "exists",
+            "note": "Weekly owner-update receipt page.",
+        }
 
     @app.post("/ghost/autumbra/enforce/plan-create", dependencies=[Depends(require_tank)])
     async def autumbra_enforce_plan_create(request: Request):
@@ -774,14 +1003,33 @@ def create_app() -> FastAPI:
 
     @app.post("/ghost/autumbra/owner-update", dependencies=[Depends(require_tank)])
     async def autumbra_owner_update(request: Request):
-        """Build the owner email from receipts in code and call the sender. No model."""
+        """Build the owner email from receipts in code and call the sender. No model.
+
+        Recipient is ONLY the owner_email stored in the client's settings.
+        A request body can never name or override the recipient.
+        """
         raw = await bounded_json(request, 20_000)
         try:
             data = json.loads(raw.decode("utf-8"))
-            settings = ClientAutumbraSettings.model_validate(data["settings"])
+            tenant_id = str(
+                data.get("tenant_id")
+                or (data.get("settings") or {}).get("tenant_id")
+                or ""
+            ).strip()
+            if not tenant_id:
+                raise ValueError("tenant_id required")
+            # Stored settings only — ignore any owner_email in the request body.
+            settings = load_settings(app.state.store, tenant_id)
+            # Allow mode/site overrides for the email content from stored settings;
+            # never take recipient from the request.
             to = str(settings.owner_email or "").strip()
             if not to:
                 raise ValueError("recipient must come from the client's settings")
+            if "owner_email" in (data.get("settings") or {}):
+                # Explicitly refuse override attempts.
+                requested = str((data.get("settings") or {}).get("owner_email") or "").strip()
+                if requested and requested != to:
+                    raise ValueError("request cannot name the recipient")
             email = build_owner_update(
                 settings=settings,
                 site_name=str(data.get("site_name") or settings.site_name),

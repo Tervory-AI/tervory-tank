@@ -15,6 +15,7 @@ from agents.ghost.webhooks import (
     accept_signed,
     drop_counts,
     reset_drop_counts,
+    sign_body,
 )
 
 
@@ -31,8 +32,12 @@ def test_signed_webhook_accepted_not_stored(monkeypatch):
     secret = "test-secret"
     monkeypatch.setenv(CF_SECRET_ENV, secret)
     body = b'{"event":"waf"}'
-    sig = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
-    envelope = accept_signed("cloudflare", body, signature=sig, timestamp=str(int(time.time())))
+    ts = str(int(time.time()))
+    nonce = "nonce-1"
+    sig = sign_body(secret=secret, body=body, timestamp=ts, nonce=nonce)
+    envelope = accept_signed(
+        "cloudflare", body, signature=sig, timestamp=ts, nonce=nonce
+    )
     assert envelope["accepted"] is True and envelope["stored"] is False
 
 
@@ -52,12 +57,18 @@ def test_webhook_route_signature_before_tank_auth(monkeypatch, tmp_path):
     assert bad.json()["accepted"] is False
     assert bad.json()["stored"] is False
     assert bad.json()["drops"]["edge"] >= 1
-    # Correct signature, still no Tank key -> 200.
-    sig = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    # Correct signature (timestamp+nonce+body), still no Tank key -> 200.
+    ts = str(int(time.time()))
+    nonce = "route-nonce-1"
+    sig = sign_body(secret=secret, body=body, timestamp=ts, nonce=nonce)
     ok = client.post(
         "/ghost/autumbra/webhooks/edge",
         content=body,
-        headers={"X-Autumbra-Signature": sig, "X-Autumbra-Timestamp": str(int(time.time()))},
+        headers={
+            "X-Autumbra-Signature": sig,
+            "X-Autumbra-Timestamp": ts,
+            "X-Autumbra-Nonce": nonce,
+        },
     )
     assert ok.status_code == 200
     assert ok.json()["accepted"] is True

@@ -1,6 +1,6 @@
 # Autumbra Enforce isolation check
 
-Proves a fixture client's Enforce container cannot reach Tank, Workspace, tervory.com, or another client's network.
+Proves a fixture client's Enforce container cannot **resolve** (DNS) Tank, Workspace, or another client's internal hostnames on its isolated network. This is DNS resolution only — not a TCP reachability probe. It does **not** claim `tervory.com` is unreachable (public DNS may resolve that name).
 
 ## One command (Coolify **test** host only — never live Boston)
 

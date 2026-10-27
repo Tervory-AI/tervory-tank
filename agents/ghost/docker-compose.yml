@@ -14,6 +14,8 @@ services:
       TANK_KEY: ${TANK_KEY_GHOST:-}
       TANK_REGION: ${TANK_REGION:-us-east}
       DATA_DIR: /data
+      # Per-client queues live under this root as <tenant_id>/ (never one shared inbox).
+      THREAT_PAYLOAD_QUEUE_ROOT: /queues
       # GHOST-2 inventory: read-only Coolify API token, by name only. Empty = not connected.
       COOLIFY_TOKEN_GHOST: ${COOLIFY_TOKEN_GHOST:-}
       COOLIFY_URL_GHOST: ${COOLIFY_URL_GHOST:-}
@@ -21,6 +23,7 @@ services:
       # Edge credential names held until a real connected edge client (agnostic).
     volumes:
       - agent_ghost_data:/data
+      - threat_queues:/queues
     networks: [gw]
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -53,6 +56,7 @@ services:
 volumes:
   agent_ghost_data:
   ghost_browser_data:
+  threat_queues:
 networks:
   gw:
     external: true

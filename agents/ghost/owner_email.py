@@ -1,6 +1,6 @@
 """Owner update email — built by code from receipts. No model. Plain English only.
 
-Exact founder wording from ops/BUILDER-BRIEFS-2026-10-26/04-GROK-AUTUMBRA.md. "critical" only
+Exact founder wording (item 8 phrases). In-repo brief copy may lag the Project brief. "critical" only
 with a linked advisory rating. No literal "[...]" placeholders in a sent body.
 Recipient from client settings. Weekly schedule is a real job entry.
 """
@@ -96,7 +96,7 @@ def build_owner_update(
         stack_list = ", ".join(stacks[:-1]) + " and " + stacks[-1]
         stack_list_linked = ", ".join(linked_stacks[:-1]) + " and " + linked_stacks[-1]
 
-    advisory_clause = " (Each one is linked to its public advisory.)"
+    advisory_clause = " (Each linked to its public advisory.)"
 
     body_lines = [
         f"This week we found {_link(str(n), receipt_url)} "
@@ -146,8 +146,8 @@ def build_owner_update(
         public_source = _link(source_name, source_url)
         body_lines.extend([
             "",
-            f"We also stopped an attack in progress. It was blocking addresses known to be "
-            f"part of a widely reported campaign ({public_source}). "
+            f"We also stopped an attack in progress. It was part of a widely reported "
+            f"campaign ({public_source}). "
             f"We blocked {_link(str(blocked), receipt_url)} "
             f"addresses that were attacking your site. Your own addresses, your payment "
             f"provider and Cloudflare were never blocked. If this caused any problem, undo "

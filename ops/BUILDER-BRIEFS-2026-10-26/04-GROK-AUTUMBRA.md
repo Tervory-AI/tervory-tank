@@ -1,5 +1,7 @@
 # Autumbra (Protect) — Builder brief for Grok
 
+> **Brief-source note (2026-10-26):** Full founder Project brief text was not recoverable from git/stores/Drive on this box. Email item-8 phrases below match the founder-stated wording character-for-character; remaining body may still lag the Project copy.
+
 Product host: protect.tervory.com. Code room: `agents/ghost` (short-term). Branch: `grok/autumbra`. Draft PR: https://github.com/zenascapetown-code/tervory-tank/pull/337
 
 **Never merge. Never deploy live Boston. Coolify by name only. Tank is the only model door. No CloudAgent. No Clerk. No demo copy.**
@@ -26,7 +28,7 @@ Subject: `Autumbra update for {site}: {n} threats found, {c} critical`
 
 Opening (numbers link to the receipt):
 
-> This week we found {n} threats to {site}. {c} were critical: out-of-date {stack_list} with known holes serious enough to take down a company's whole IT system. (Each one is linked to its public advisory.)
+> This week we found {n} threats to {site}. {c} were critical: out-of-date {stack_list} with known holes serious enough to take down a company's whole IT system. (Each linked to its public advisory.)
 
 **Fix paragraph — auto when checks pass:**
 
@@ -42,7 +44,7 @@ Opening (numbers link to the receipt):
 
 **Shield paragraph (when a shield ran):**
 
-> We also stopped an attack in progress. It was blocking addresses known to be part of a widely reported campaign ({source}). We blocked {n} addresses that were attacking your site. Your own addresses, your payment provider and Cloudflare were never blocked. If this caused any problem, undo it here with one tap. {Undo}
+> We also stopped an attack in progress. It was part of a widely reported campaign ({source}). We blocked {n} addresses that were attacking your site. Your own addresses, your payment provider and Cloudflare were never blocked. If this caused any problem, undo it here with one tap. {Undo}
 
 Closing:
 

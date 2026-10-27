@@ -58,6 +58,8 @@ class ThreatAction(str, Enum):
     propose_shield = "propose_shield"
     open_match = "open_match"
     write_brief = "write_brief"
+    undo_shield = "undo_shield"
+    approve_shield = "approve_shield"
 
 
 class ThreatSeverity(str, Enum):
@@ -87,6 +89,12 @@ class ThreatPayload(Strict):
     severity: ThreatSeverity = ThreatSeverity.unknown
     reason: str = Field(default="", max_length=300)
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    # Undo / approve door fields (ThreatPayload-only; never raw HTTP bytes).
+    rule_id: str | None = Field(default=None, max_length=64, pattern=r"^[0-9A-Fa-f]*$")
+    prior_receipt_id: str | None = Field(default=None, max_length=80)
+    tenant_id: str | None = Field(default=None, max_length=80)
+    advisory_url: str | None = Field(default=None, max_length=500)
+    queued_at: str | None = Field(default=None, max_length=40)
 
     @field_validator("site")
     @classmethod
@@ -157,6 +165,12 @@ def accept_threat_payload(raw: bytes | str | dict[str, Any]) -> ThreatPayload:
         raise ThreatBurned() from None
     if payload.action == ThreatAction.propose_shield:
         if payload.kind is None or payload.kind not in KINDS:
+            raise ThreatBurned()
+    if payload.action == ThreatAction.undo_shield:
+        if not (payload.rule_id or payload.prior_receipt_id):
+            raise ThreatBurned()
+    if payload.action == ThreatAction.approve_shield:
+        if not payload.prior_receipt_id:
             raise ThreatBurned()
     return payload
 
