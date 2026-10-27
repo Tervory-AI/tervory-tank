@@ -4,15 +4,9 @@ import { useState } from "react";
 
 export function UndoButton({
   receiptId,
-  tenantId,
-  site,
-  ruleId,
   token,
 }: {
   receiptId: string;
-  tenantId?: string;
-  site?: string;
-  ruleId?: string;
   token?: string;
 }) {
   const [status, setStatus] = useState<"idle" | "working" | "done" | "error">("idle");
@@ -21,20 +15,17 @@ export function UndoButton({
   async function onUndo() {
     setStatus("working");
     setMessage("");
+    const signed = (token || "").trim();
+    if (!signed) {
+      setStatus("error");
+      setMessage("This undo link is invalid or has expired.");
+      return;
+    }
     try {
       const res = await fetch("/api/autumbra/undo", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(
-          token
-            ? { token }
-            : {
-                receipt_id: receiptId,
-                tenant_id: tenantId || "",
-                site: site || "coolify.tervory.com",
-                rule_id: ruleId || "",
-              },
-        ),
+        body: JSON.stringify({ token: signed }),
       });
       const data = (await res.json()) as { ok?: boolean; detail?: string };
       if (!res.ok || !data.ok) {
@@ -55,7 +46,7 @@ export function UndoButton({
       <button
         type="button"
         onClick={onUndo}
-        disabled={status === "working" || status === "done"}
+        disabled={status === "working" || status === "done" || !(token || "").trim()}
         style={{
           fontSize: "1.05rem",
           padding: "0.75rem 1.25rem",
@@ -63,7 +54,7 @@ export function UndoButton({
           border: "none",
           background: status === "done" ? "#1b7f4a" : "#111827",
           color: "white",
-          cursor: status === "working" || status === "done" ? "default" : "pointer",
+          cursor: status === "working" || status === "done" || !(token || "").trim() ? "default" : "pointer",
         }}
       >
         {status === "working" ? "Undoing…" : status === "done" ? "Undone" : "Undo this shield"}
@@ -73,6 +64,12 @@ export function UndoButton({
           {message}
         </p>
       ) : null}
+      {!token ? (
+        <p style={{ marginTop: "0.75rem", color: "#b91c1c" }}>
+          This undo link is invalid or has expired. Use the Undo link from your Autumbra email.
+        </p>
+      ) : null}
+      <p style={{ display: "none" }} aria-hidden data-receipt={receiptId} />
     </div>
   );
 }

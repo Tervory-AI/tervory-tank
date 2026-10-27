@@ -18,7 +18,7 @@ from .owner_email import (
     build_owner_update,
     send_owner_update,
 )
-from .undo_token import sign_undo_token
+from .undo_token import sign_receipts_token, sign_undo_token
 
 # Real job entry (discovered by ops / hermes-style schedulers).
 WEEKLY_OWNER_UPDATE_JOB: dict[str, Any] = {
@@ -37,8 +37,17 @@ PROTECT_HOST = "https://protect.tervory.com"
 
 
 def default_receipt_url(tenant_id: str) -> str:
-    """Weekly receipt page that exists under /autumbra on protect.tervory.com."""
-    return f"{PROTECT_HOST}/autumbra/receipts/weekly/{tenant_id}"
+    """Weekly receipt page with a signed token for that tenant (email credential)."""
+    tid = (tenant_id or "").strip()
+    base = f"{PROTECT_HOST}/autumbra/receipts/weekly/{tid}"
+    if not tid:
+        return base
+    try:
+        token = sign_receipts_token(tenant_id=tid)
+    except Exception:
+        # Host without undo/receipts secret: page URL still exists; handler refuses unsigned.
+        return base
+    return f"{base}?{urlencode({'token': token})}"
 
 
 def default_undo_url(
@@ -234,6 +243,9 @@ def week_stats_from_receipts(
             rule_id=undo_rule_id,
             site=undo_site,
         )
+    # undo_fix_url only when a code fix PR exists — never the shield undo link
+    # (an IP block must not trigger the "patched versions" auto-fix paragraph).
+    undo_fix = undo_url if fix_pr_url else ""
     return {
         "threats_found": threats,
         "critical": critical,
@@ -244,7 +256,7 @@ def week_stats_from_receipts(
         # Empty unless a real fix PR / dedicated report exists on a receipt.
         "fix_report_url": "",
         "pr_url": fix_pr_url,
-        "undo_fix_url": undo_url or "",
+        "undo_fix_url": undo_fix,
         "week_start": week_start.isoformat().replace("+00:00", "Z"),
         "week_end": week_end.isoformat().replace("+00:00", "Z"),
     }

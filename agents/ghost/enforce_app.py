@@ -253,18 +253,38 @@ async def _queue_drain_loop(app: FastAPI) -> None:
 
 
 def _default_on_act_email(receipt: dict[str, Any], settings: ClientAutumbraSettings) -> None:
-    """When Autumbra acts: build owner email from the receipt and send to stored owner."""
+    """When Autumbra acts: build owner email from this week's receipts and send to owner."""
     to = (settings.owner_email or "").strip()
     if not to:
         return
     from .owner_email import DEFAULT_FIXTURE_TRANSPORT, send_owner_update
-    from .owner_email_jobs import build_owner_update_from_receipts, default_receipt_url, default_undo_url
+    from .owner_email_jobs import build_owner_update_from_receipts, default_undo_url
 
+    # Counts from the week's receipts (same source as the weekly email), not one receipt.
+    receipts: list[dict[str, Any]] = [receipt]
+    try:
+        q = enforce_threat_queue()
+        listed = q.list_receipts()
+        if listed:
+            by_id = {str(r.get("id")): r for r in listed if isinstance(r, dict) and r.get("id")}
+            rid = str(receipt.get("id") or "")
+            if rid:
+                by_id[rid] = receipt
+            receipts = list(by_id.values())
+    except Exception:
+        receipts = [receipt]
+
+    undo = default_undo_url(
+        str(receipt.get("id") or ""),
+        tenant_id=settings.tenant_id,
+        rule_id=str((receipt.get("undo") or {}).get("rule_id") or ""),
+        site=str(receipt.get("site") or ""),
+    )
     email = build_owner_update_from_receipts(
         settings=settings,
-        receipts=[receipt],
-        receipt_url=default_receipt_url(settings.tenant_id),
-        undo_shield_url=default_undo_url(str(receipt.get("id") or "")),
+        receipts=receipts,
+        # Signed undo only — never an unsigned legacy URL that overrides week_stats.
+        undo_shield_url=undo if "token=" in undo else "",
     )
     send_owner_update(email, to=to, transport=DEFAULT_FIXTURE_TRANSPORT)
 

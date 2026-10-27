@@ -1,19 +1,16 @@
 import { UndoButton } from "../UndoButton";
 
-/** One-tap undo landing — linked from the owner update email. Plain English. */
+/** One-tap undo landing — linked from the owner update email. Token is the credential. */
 export default async function UndoPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams?: Promise<{ token?: string; tenant?: string; site?: string; rule?: string }>;
+  searchParams?: Promise<{ token?: string }>;
 }) {
   const resolved = await params;
   const query = searchParams ? await searchParams : {};
   const token = typeof query.token === "string" ? query.token : "";
-  const tenantId = typeof query.tenant === "string" ? query.tenant : "";
-  const site = typeof query.site === "string" ? query.site : "coolify.tervory.com";
-  const ruleId = typeof query.rule === "string" ? query.rule : "";
 
   return (
     <main style={{ fontFamily: "system-ui, sans-serif", padding: "2rem", maxWidth: 720 }}>
@@ -25,13 +22,7 @@ export default async function UndoPage({
       <p style={{ color: "#4b5563" }}>
         Reference: <code>{resolved.id}</code>
       </p>
-      <UndoButton
-        receiptId={resolved.id}
-        tenantId={tenantId}
-        site={site}
-        ruleId={ruleId}
-        token={token}
-      />
+      <UndoButton receiptId={resolved.id} token={token} />
       <p style={{ marginTop: "2rem", fontSize: "0.95rem", color: "#6b7280" }}>
         Nothing from your logs is kept. If you need help, reply to your Autumbra update email.
       </p>

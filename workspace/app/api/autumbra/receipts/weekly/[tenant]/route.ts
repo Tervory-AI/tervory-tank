@@ -1,16 +1,27 @@
 import { NextResponse } from "next/server";
+import { mayReadWeeklyReceipts } from "@/lib/autumbra-receipts-access";
 
-/** Public weekly receipt list for the owner email page. Secrets stay server-side. */
+/**
+ * Weekly receipt list for the owner email page.
+ * Requires signed-in owner of THAT tenant OR a valid receipts token for THAT tenant.
+ * No token / forged / expired / other-tenant → 401 with nothing returned.
+ */
 const TANK_URL = process.env.TANK_URL ?? "http://tank:8000";
 const TANK_API_KEY = process.env.TANK_API_KEY ?? "";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ tenant: string }> },
 ) {
   const { tenant } = await context.params;
   if (!tenant) {
     return NextResponse.json({ ok: false, detail: "Missing client id." }, { status: 400 });
+  }
+  const url = new URL(request.url);
+  const token = url.searchParams.get("token");
+  const allowed = await mayReadWeeklyReceipts(tenant, token);
+  if (!allowed) {
+    return new NextResponse(null, { status: 401 });
   }
   if (!TANK_API_KEY) {
     return NextResponse.json(
@@ -19,10 +30,15 @@ export async function GET(
     );
   }
   try {
-    const res = await fetch(
+    const upstream = new URL(
       `${TANK_URL}/v1/ghost/autumbra/receipts/weekly/${encodeURIComponent(tenant)}`,
-      { method: "GET", cache: "no-store", headers: { "x-tank-key": TANK_API_KEY } },
     );
+    if (token) upstream.searchParams.set("token", token);
+    const res = await fetch(upstream.toString(), {
+      method: "GET",
+      cache: "no-store",
+      headers: { "x-tank-key": TANK_API_KEY },
+    });
     const text = await res.text();
     let data: unknown = null;
     try {
@@ -31,6 +47,9 @@ export async function GET(
       data = { detail: text.slice(0, 200) };
     }
     if (!res.ok) {
+      if (res.status === 401) {
+        return new NextResponse(null, { status: 401 });
+      }
       return NextResponse.json(
         { ok: false, detail: "Could not load this week's receipts.", receipts: [] },
         { status: res.status >= 500 ? 502 : res.status },

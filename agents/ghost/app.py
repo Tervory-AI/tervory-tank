@@ -71,6 +71,7 @@ from .threat_queue import (
     watch_enqueue_undo,
 )
 from .never_block import may_block_ip
+from .undo_token import verify_receipts_token
 
 
 async def require_tank(x_tank_key: str = Header(default="")) -> None:
@@ -1012,14 +1013,34 @@ def create_app() -> FastAPI:
         }
 
     @app.get("/ghost/autumbra/receipts/weekly/{tenant_id}")
-    async def autumbra_weekly_receipt_page(tenant_id: str):
-        """Page target for weekly email links — lists that week's receipts, each linked."""
-        from .owner_email_jobs import PROTECT_HOST, week_bounds, _parse_receipt_time
+    async def autumbra_weekly_receipt_page(
+        tenant_id: str,
+        token: str = Query(default=""),
+        x_tank_key: str = Header(default=""),
+    ):
+        """Weekly receipts — tank key OR valid receipts token for THIS tenant. Else 401 empty."""
+        from .owner_email_jobs import PROTECT_HOST, default_undo_url, week_bounds, _parse_receipt_time
 
         try:
             tid = _require_tenant_uuid(tenant_id)
         except ValueError:
             raise HTTPException(400, "tenant_id must be a UUID") from None
+
+        expected = os.environ.get("TANK_KEY", "")
+        tank_ok = bool(expected) and hmac.compare_digest(
+            expected.encode(), (x_tank_key or "").encode()
+        )
+        token_ok = False
+        raw_token = (token or "").strip()
+        if raw_token:
+            try:
+                payload = verify_receipts_token(raw_token)
+                token_ok = payload.get("tenant_id") == tid
+            except Exception:
+                token_ok = False
+        if not tank_ok and not token_ok:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
         week_start, week_end = week_bounds()
         rows = []
         for receipt in _receipts_for_tenant(tid):
@@ -1027,6 +1048,13 @@ def create_app() -> FastAPI:
             if moment is None or moment < week_start or moment > week_end:
                 continue
             rid = str(receipt.get("id") or "")
+            rule_id = str((receipt.get("undo") or {}).get("rule_id") or "")
+            site = str(receipt.get("site") or "")
+            undo_url = ""
+            if rid:
+                undo_url = default_undo_url(
+                    rid, tenant_id=tid, rule_id=rule_id, site=site
+                )
             rows.append({
                 "id": rid,
                 "timestamp": receipt.get("timestamp") or receipt.get("at"),
@@ -1034,7 +1062,7 @@ def create_app() -> FastAPI:
                 "severity": receipt.get("severity"),
                 "advisory_url": receipt.get("advisory_url"),
                 "site": receipt.get("site"),
-                "url": f"{PROTECT_HOST}/autumbra/undo/{rid}" if rid else "",
+                "url": undo_url,
                 "receipt": receipt,
             })
         return {

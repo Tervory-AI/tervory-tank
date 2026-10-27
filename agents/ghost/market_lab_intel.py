@@ -61,6 +61,11 @@ def accept_ioc_bundle(raw: dict[str, Any]) -> dict[str, Any]:
             "kind": kind,
             "value": value,
             "source_ids": [str(s) for s in (ind.get("source_ids") or [])],
+            # Keep advisory rating / component so register_advisories_from_ioc_bundle
+            # can stamp critical receipts from the product's own intake.
+            "rating": str(ind.get("rating") or ind.get("severity") or "").strip().lower(),
+            "component": str(ind.get("component") or ind.get("stack") or "").strip(),
+            "url": str(ind.get("url") or ind.get("advisory_url") or "").strip(),
         })
     return {
         "schema_version": BUNDLE_SCHEMA,
@@ -178,11 +183,11 @@ def register_advisories_from_ioc_bundle(bundle: dict[str, Any]) -> int:
         src = sources.get(src_ids[0]) if src_ids else None
         rows.append({
             "advisory_id": value,
-            "url": str((src or {}).get("url") or ind.get("url") or ""),
+            "url": str(ind.get("url") or (src or {}).get("url") or ""),
             "rating": str(ind.get("rating") or ind.get("severity") or "").lower(),
             "component": str(ind.get("component") or ""),
             "source_name": str((src or {}).get("name") or "Market Lab"),
-            "source_url": str((src or {}).get("url") or ""),
+            "source_url": str(ind.get("url") or (src or {}).get("url") or ""),
         })
     if rows:
         # Merge with existing catalog (by advisory_id/url).

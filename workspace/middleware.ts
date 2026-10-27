@@ -2,7 +2,9 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { mootCanonicalRedirectUrl, productHostRewritePath } from "@/lib/product-hosts";
 
-// Public: Clerk pages, health, Stripe webhook, Autumbra product page, Moot watch.
+// Public: Clerk pages, health, Stripe webhook, Autumbra product/owner pages, Moot watch.
+// Autumbra receipts + undo stay reachable signed-out ONLY so email tokens work;
+// each handler token-gates (no token / forged / expired / other-tenant → 401).
 // The squad consoles (/base, /tiger, /market-lab, /tisan, /radix, /skala, /tank) need sign-in.
 // Founder console /admin/autumbra stays private.
 const isPublic = createRouteMatcher([
