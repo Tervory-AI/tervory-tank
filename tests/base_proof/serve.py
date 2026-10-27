@@ -21,7 +21,9 @@ async def dispatch_with_price_examples(tenant):
     from base_evidence import row_fields
     for row in new_rows:
         row["profile"]["phone"]["value"] = "+15125550101"
-        row["passes"]["2b"]["field_observations"][1]["phones"] = ["15125550101"]
+        row["passes"]["2b"]["field_observations"][1]["phones"] = ["5125550101"]
+        if row["licence_type"] == "unspecified":
+            row["passes"]["2b"]["access_error"] = {"status": "blocked", "url": "https://upload.example/"}
         row["fields"] = row_fields(row)
     if new_rows:
         # Explicit offline examples: one priced search and one unpriced search.

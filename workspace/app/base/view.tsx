@@ -239,7 +239,7 @@ export function BaseView({
             <div className="bcp-stats">
               <div className="bcp-stat">
                 <b>{formatCount(model.totals.records)}</b>
-                <span>records in all batches</span>
+                <span>{model.totals.records === 1 ? "record" : "records"} in all batches</span>
               </div>
               <div className="bcp-stat">
                 <b>{formatCount(model.totals.withSite)}</b>

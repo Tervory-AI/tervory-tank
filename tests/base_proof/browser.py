@@ -48,10 +48,19 @@ async def main():
         import io
         imported = list(csv_reader.DictReader(io.StringIO(csv.lstrip("\ufeff"))))
         assert all(row["phone_value"] == "+15125550101" for row in imported)
-        await page.get_by_label("Business CSV").set_input_files({"name": "fixture-businesses.csv", "mimeType": "text/csv", "buffer": b"name,state,website\nFixture Upload,TX,https://upload.example/\n"})
+        await page.get_by_label("Business CSV").set_input_files({"name": "fixture-businesses.csv", "mimeType": "text/csv", "buffer": b"name,state,website\nFixture Upload,CA,https://upload.example/\n"})
         await page.get_by_role("button", name="Upload and verify", exact=True).first.click()
         await page.get_by_role("status").filter(has_text="Your list was received").wait_for()
         await page.locator('a[href*="types=unspecified"]').first.wait_for()
+        await page.get_by_text("California, licence type not given", exact=True).wait_for()
+        await page.get_by_role("button", name="View verified fields and sources").click()
+        await page.get_by_text("This website does not allow automatic reads. We stopped checking it.", exact=False).first.wait_for()
+        visible = await page.locator("body").inner_text()
+        import re
+        assert not re.search(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}", visible)
+        assert "licence_key" not in visible and "brave.search" not in visible and "1 calls" not in visible
+        assert "CA / unspecified" not in visible and "paid model" not in visible
+
         await page.screenshot(path=str(OUTPUT / "04-csv-upload-1440.png"))
         await page.get_by_label("Apollo CSV").set_input_files({"name": "apollo-fixture.csv", "mimeType": "text/csv", "buffer": b"licence_key,website,phone,email\n5-74-00001,https://business-5-74-00001.example/,2125550199,\n"})
         await page.get_by_role("button", name="Compare the same licences").click()

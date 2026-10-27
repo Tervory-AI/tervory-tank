@@ -269,3 +269,31 @@ async def test_in_progress_attempt_is_counted_but_not_saved_as_failed_training(d
     await conn.execute("UPDATE agent_base.records SET status='failed',updated_at=now()+interval '1 second' WHERE tenant_id=$1 AND id=$2", TENANT, row["id"])
     assert await store.collect(TENANT) == 1
     assert await conn.fetchval("SELECT count(*) FROM tank.training_pairs WHERE tenant_id=$1 AND source='base_verified'", TENANT) == 4
+
+
+@pytest.mark.asyncio
+async def test_sql_numbers_keep_priced_cost_and_link_only_excluded_receipts(database):
+    from base_queries import numbers, ledger_page
+    conn, rt = database
+    row = finished(project(raw()))
+    await conn.execute("""INSERT INTO agent_base.records(id,tenant_id,raw,profile,passes,status,updated_at)
+        VALUES($1,$2,$3::jsonb,$4::jsonb,$5::jsonb,'done',$6)""", row["id"], TENANT,
+        encoded(row["raw"]), encoded(row["profile"]), encoded(row["passes"]), datetime.fromisoformat(AT))
+    store = BaseStore(rt)
+    await store.collect(TENANT)
+    excluded = uuid.uuid4()
+    for identity, status, amount in ((uuid.uuid4(), "set", Decimal("0.000792")), (excluded, "not_set", Decimal(0))):
+        await conn.execute("""INSERT INTO tank.ledger(id,tenant_id,ts,agent,task_type,model,vendor,rung,cost_usd,cost_status)
+            VALUES($1,$2,$3,'base','base.find_site','vendor:brave.search','brave.search',1,$4,$5)""",
+            identity, TENANT, datetime.fromisoformat(AT), amount, status)
+        await conn.execute("INSERT INTO tank.base_ledger_links(tenant_id,record_id,ledger_id) VALUES($1,$2,$3)", TENANT, row["id"], identity)
+    result = await numbers(store, TENANT, ["TX"], ["01"], False)
+    cost = result["costs"][0]
+    assert cost["unpriced"] == 1 and cost["verified_records"] == 1
+    assert cost["vendors"] == ["brave.search"]
+    assert Decimal(cost["known_cost_usd"]) == Decimal(cost["cost_per_verified_record"]) == Decimal("0.000792")
+    assert cost["cost_usd"] is None and cost["status"] == "price not set"
+    assert (await numbers(store, OTHER, ["TX"], ["01"], False))["costs"] == []
+    receipts = await ledger_page(store, TENANT, "TX", "2026-10", 1, ["01"], False, 0, 100, "not_set")
+    assert receipts["total"] == 1 and receipts["rows"][0]["id"] == excluded
+    assert receipts["rows"][0]["cost_usd"] is None and receipts["rows"][0]["status"] == "price not set"
