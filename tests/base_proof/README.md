@@ -44,7 +44,7 @@ adoption, dated refresh, selection without an upload, private pairs through
 the unchanged training writer, founder-only prices, exact credit costs and
 unchanged historical receipts after a price is set.
 
-Review proof refreshed on 27 October 2026 (UTC). The browser checks both widths,
+Browser proof captured on 26 October 2026 (Pacific). The browser checks both widths,
 reference selection, field source/date display, CSV upload and download, Apollo,
 and the saved batch link. It imports the downloaded CSV to assert that
 `+15125550101` is unchanged. The explicit fixture now includes a priced search,
@@ -76,5 +76,26 @@ TRAINING_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:55443/basetest \
 python -m pytest -q -p no:cacheprovider --junitxml=/tmp/base-full.xml .
 ```
 
-The comparison includes the founder’s main revert of the Autumbra change; the
-branch preserves that revert. Both runs use CI’s Node 22 major version. Actions are not rerun while billing is paused.
+The current comparison uses main `2b12945`, including Tiger #335, Tank #334,
+Market Lab #336 and the real Tank startup test. The rebased branch retains Tiger’s
+browser byte for byte, every Docker COPY entry from both sides, and all of main’s
+schema before the additive Base block. Both runs use CI’s Node 22 major version.
+Actions are not rerun while billing is paused.
+
+The CSV endpoint tests download failure counts with the stored reason-code filter,
+then assert plain sentences in the file, exact ISO dates, source URLs and unchanged
+phone values. The stored reasons remain unchanged for counts and training pairs.
+
+Real Tank startup proof is in `tank-startup.txt`. Run the unmodified startup test:
+
+```sh
+PYTHONPATH=tank \
+POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:55443/pooltest \
+python -m pytest -q tests/test_tank_boots.py
+```
+
+It runs the real `uvicorn main:app` process twice against one empty disposable
+database, checks `/health` each time and reapplies the full schema on the second
+start. The captured startup tail comes from that test helper’s returned output;
+there is no stand-in Tank. Redis is deliberately pointed to closed loopback port 9
+by the test, so its cache-off warning is expected.
