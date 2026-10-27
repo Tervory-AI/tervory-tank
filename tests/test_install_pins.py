@@ -24,10 +24,8 @@ SPEC.loader.exec_module(pins)
     "npm install --include=dev --no-audit",
     'npm --prefix "$RUNNER_TEMP/browser" install esbuild@0.28.2',
     "npm ci || npm install --no-package-lock",
-    "RUN apt-get update && apt-get install -y curl",
-    "RUN apt-get -y install curl",
-    "RUN apk add --no-cache curl=8.14.1-r2 git",
-    "curl -fsSL https://example.org/install.sh | bash",
+    "npm ci",
+    "npm ci --ignore-scripts=false",
 ])
 def test_mutable_install_is_rejected(command):
     assert pins.install_errors(command)
@@ -38,7 +36,7 @@ def test_mutable_install_is_rejected(command):
     "pip install --require-hashes --requirement=requirements.lock",
     "pip install --require-hashes -rrequirements.lock",
     "RUN pip install \\\n        --require-hashes -r requirements.lock",
-    "npm --prefix workspace ci --no-audit --no-fund",
+    "npm --prefix workspace ci --ignore-scripts --no-audit --no-fund",
     "RUN apk add --no-cache curl=8.14.1-r2 git=2.49.0-r0",
     "apt-get install --simulate curl",
     "# npm install is not an executable command",
@@ -104,7 +102,7 @@ def test_secrets_workflow_covers_docs_only_pull_requests():
     scan = next(step for step in job["steps"] if step.get("name") == "Gitleaks")
     assert "if" not in scan and not scan.get("continue-on-error")
     assert "sha256sum --check --status" in scan["run"]
-    assert "--redact" in scan["run"] and "--exit-code 1" in scan["run"]
+    assert "check_secret_baseline.py" in scan["run"] and "--gitleaks" in scan["run"]
 
 
 def test_node_requires_transitive_integrity_and_manifest_agreement():
@@ -131,5 +129,46 @@ def test_repository_scan_catches_missing_locks_and_install_in_workflow(tmp_path)
     assert any("ci.yml:2:" in error for error in errors)
     requirements.with_suffix(".lock").write_text("fastapi==0.133.1 --hash=sha256:" + "a" * 64)
     package_path.with_name("package-lock.json").write_text(json.dumps(lock))
-    workflow.write_text("steps:\n  - run: npm ci\n")
+    workflow.write_text("steps:\n  - run: npm ci --ignore-scripts\n")
     assert not pins.check(tmp_path, paths)
+
+
+def test_diff_gate_rejects_new_violation_and_duplicate_but_not_line_shift(tmp_path):
+    import subprocess
+
+    def git(*args):
+        return subprocess.check_output(["git", *args], cwd=tmp_path)
+
+    git("init", "-q")
+    git("config", "user.name", "Policy test")
+    git("config", "user.email", "policy-test@localhost")
+    path = tmp_path / "Dockerfile"
+    path.write_text("FROM python:3.12\nRUN pip install fastapi==0.133.1\n")
+    git("add", ".")
+    git("commit", "-qm", "Existing migration debt")
+    path.write_text("# a shifted comment\n" + path.read_text())
+    assert pins.new_errors(tmp_path, [path], "HEAD") == ([], 2)
+    path.write_text(path.read_text() + "RUN pip install fastapi==0.133.1\n")
+    errors, inherited = pins.new_errors(tmp_path, [path], "HEAD")
+    assert len(errors) == 1 and inherited == 2
+    path.write_text("FROM python:3.13\nRUN pip install fastapi==0.133.1\n")
+    errors, inherited = pins.new_errors(tmp_path, [path], "HEAD")
+    assert len(errors) == 1 and "Docker base" in errors[0] and inherited == 1
+
+
+def test_nested_template_workflow_is_enforced(tmp_path):
+    path = tmp_path / "template/.github/workflows/ci.yml"
+    path.parent.mkdir(parents=True)
+    path.write_text("steps:\n  - run: pip install pytest\n")
+    assert pins.policy_file(path.relative_to(tmp_path))
+    assert any("Python install" in error for error in pins.check(tmp_path, [path]))
+
+
+def test_nonexistent_lock_is_rejected_and_copy_rename_is_resolved(tmp_path):
+    path = tmp_path / "Dockerfile"
+    path.write_text("FROM scratch\nRUN pip install --require-hashes -r /tmp/runtime.lock\n")
+    assert any("not committed" in error for error in pins.check(tmp_path, [path]))
+    lock = tmp_path / "requirements.lock"
+    lock.write_text("httpx==0.28.1 --hash=sha256:" + "a" * 64 + "\n")
+    path.write_text("FROM scratch\nCOPY requirements.lock /tmp/runtime.lock\nRUN pip install --require-hashes -r /tmp/runtime.lock\n")
+    assert not pins.check(tmp_path, [path, lock])

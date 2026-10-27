@@ -13,12 +13,3 @@ pypdf==6.21.2
 
 # READ-1 visibility regressions must execute in a real browser in CI.
 playwright==1.55.0
-
-# The same Forge test dependencies already installed by ci.yml. Resolve them
-# with Tank so a second install cannot downgrade the patched FastAPI/Starlette.
-trimesh==4.9.0
-manifold3d==3.2.1
-numpy==2.2.6
-networkx==3.4.2
-huggingface-hub==0.35.3
-boto3==1.40.47

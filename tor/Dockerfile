@@ -1,13 +1,7 @@
 # Ferry leaves through this Tor client. Internal only. Not a relay.
 # curl is the health check: the same Tor Project check SearXNG runs before it serves.
-FROM alpine:3.22@sha256:2e0b81d60597f449baa56dc25d355367869d2dca4cd57e866f1e2b52af3eb55f
-RUN --mount=type=secret,id=system_ca \
-    if [ -s /run/secrets/system_ca ]; then \
-      export PIP_CERT=/run/secrets/system_ca SSL_CERT_FILE=/run/secrets/system_ca \
-        REQUESTS_CA_BUNDLE=/run/secrets/system_ca CURL_CA_BUNDLE=/run/secrets/system_ca \
-        NODE_EXTRA_CA_CERTS=/run/secrets/system_ca GIT_SSL_CAINFO=/run/secrets/system_ca; \
-    fi; \
-    apk add --no-cache tor curl \
+FROM alpine:3.22
+RUN apk add --no-cache tor curl \
     && mkdir -p /var/lib/tor \
     && chown -R tor:tor /var/lib/tor
 COPY torrc /etc/tor/torrc

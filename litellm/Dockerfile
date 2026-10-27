@@ -5,6 +5,6 @@
 # version on purpose in its own PR, never by a moving tag.
 # v1.106.3 (2026-10-24): same-minor pin for GHOST-2 haste rebuild (Node security
 # release path + image-signing key rotation upstream). Verify node -v after deploy.
-FROM ghcr.io/berriai/litellm:v1.106.3@sha256:74d0696a9f0afcc993c7659d246f0c542f003368298633e852228250779f1032
+FROM ghcr.io/berriai/litellm:v1.106.3
 COPY config.yaml /app/config.yaml
 COPY config.za.yaml /app/config.za.yaml

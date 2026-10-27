@@ -1,13 +1,7 @@
-FROM python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704
+FROM python:3.12-slim
 WORKDIR /app
-COPY agents/_chassis/requirements.lock .
-RUN --mount=type=secret,id=system_ca \
-    if [ -s /run/secrets/system_ca ]; then \
-      export PIP_CERT=/run/secrets/system_ca SSL_CERT_FILE=/run/secrets/system_ca \
-        REQUESTS_CA_BUNDLE=/run/secrets/system_ca CURL_CA_BUNDLE=/run/secrets/system_ca \
-        NODE_EXTRA_CA_CERTS=/run/secrets/system_ca GIT_SSL_CAINFO=/run/secrets/system_ca; \
-    fi; \
-    pip install --require-hashes --no-cache-dir -r requirements.lock \
+COPY agents/_chassis/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt \
     && useradd --create-home --uid 1000 agent \
     && mkdir -p /data /browser-evidence \
     && chown agent:agent /data /browser-evidence

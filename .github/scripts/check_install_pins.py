@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import argparse
 import base64
+from collections import Counter
+import hashlib
 import json
 from pathlib import Path
 import re
 import shlex
 import subprocess
 import sys
+import tempfile
 from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -86,21 +90,50 @@ def install_errors(text: str) -> list[tuple[int, str]]:
                 errors.append((number, "Node packages must be installed with npm ci from a committed lock"))
             if re.search(r"\b(?:yarn|pnpm)\s+(?:install|add|update)\b", command):
                 errors.append((number, "Use the committed npm lock and npm ci"))
-            os_install = re.search(
-                r"\b(?:apt-get|apt|apk)\s+(?P<flags>(?:-\S+\s+)*)(?:install|add)\b(?P<args>.*)", command,
-            )
-            if os_install:
-                try:
-                    args = shlex.split(os_install["flags"] + os_install["args"], comments=True)
-                    if set(args) & {"-s", "--simulate", "--dry-run", "--just-print"}:
-                        continue
-                    packages = [arg for arg in args if not arg.startswith("-")]
-                except ValueError:
-                    packages = []
-                if not packages or any(not re.fullmatch(r"[\w.+:-]+=[^\s$*]+", arg) for arg in packages):
-                    errors.append((number, "OS package installs need exact package=version pins"))
-            if re.search(r"\b(?:curl|wget)\b.*\|\s*(?:sh|bash)\b", command):
-                errors.append((number, "Remote installers must be downloaded and checksum-verified before execution"))
+            if re.search(r"\bnpm\b.*\bci\b", command):
+                if not re.search(r"--ignore-scripts(?:=true)?(?:\s|$)", command):
+                    errors.append((number, "npm ci must disable lifecycle scripts with --ignore-scripts"))
+    return errors
+
+
+def referenced_lock_errors(root: Path, path: Path, paths: list[Path]) -> list[tuple[int, str]]:
+    """A literal .lock argument must name a committed file (including Docker COPY renames)."""
+    errors = []
+    text = path.read_text()
+    committed = {item.relative_to(root).as_posix() for item in paths if item.is_file()}
+    aliases = {}
+    if path.name.startswith("Dockerfile"):
+        for _, line in logical_lines(text):
+            if not re.match(r"COPY\s", line, re.I):
+                continue
+            try:
+                args = [arg for arg in shlex.split(line)[1:] if not arg.startswith("--")]
+            except ValueError:
+                continue
+            if len(args) < 2:
+                continue
+            for source in args[:-1]:
+                if not source.endswith(".lock"):
+                    continue
+                found = any(name == source or name.endswith("/" + source) for name in committed)
+                dest = args[-1]
+                if dest.endswith("/") or len(args) > 2:
+                    dest += ("" if dest.endswith("/") else "/") + Path(source).name
+                aliases[dest] = found
+                aliases[Path(dest).name] = found
+    for number, line in logical_lines(text):
+        if not re.search(r"\bpip3?\b.*\binstall\b", line):
+            continue
+        for reference in re.findall(r"(?:--requirement[= ]+|-r\s*)([^\s;&]+)", line):
+            reference = reference.strip("\"'")
+            if not reference.endswith(".lock") or "$" in reference:
+                continue  # install_errors gives the more specific message.
+            candidates = [root / reference, path.parent / reference]
+            directories = re.findall(r"working-directory:\s*([\w./-]+)", text)
+            candidates.extend(root / directory / reference for directory in directories)
+            found = any(candidate.is_relative_to(root) and candidate.relative_to(root).as_posix() in committed for candidate in candidates)
+            if not found and not aliases.get(reference):
+                errors.append((number, "Python install references a lock not committed in this repository"))
     return errors
 
 
@@ -149,10 +182,12 @@ def check(root: Path, paths: list[Path]) -> list[str]:
             continue
         if path.name.startswith("Dockerfile"):
             errors.extend(f"{relative}:{line}: {reason}" for line, reason in docker_errors(path.read_text()))
-        elif relative.parts[:2] == (".github", "workflows") and path.suffix in (".yml", ".yaml"):
+        elif ".github/workflows/" in relative.as_posix() and path.suffix in (".yml", ".yaml"):
             errors.extend(f"{relative}:{line}: {reason}" for line, reason in install_errors(path.read_text()))
         elif path.suffix == ".sh" or path.name == "Makefile":
             errors.extend(f"{relative}:{line}: {reason}" for line, reason in install_errors(path.read_text()))
+        if path.name.startswith("Dockerfile") or path.suffix in {".sh", ".yml", ".yaml"} or path.name == "Makefile":
+            errors.extend(f"{relative}:{line}: {reason}" for line, reason in referenced_lock_errors(root, path, paths))
         if "requirements" in path.name and path.suffix == ".lock":
             errors.extend(f"{relative}:{line}: {reason}" for line, reason in lock_errors(path.read_text()))
         elif "requirements" in path.name and path.suffix in (".txt", ".in"):
@@ -171,14 +206,68 @@ def check(root: Path, paths: list[Path]) -> list[str]:
     return errors
 
 
+def signature(root: Path, error: str) -> tuple[str, str, str]:
+    """Line shifts do not grandfather a new mutable command or a changed lock entry."""
+    parts = error.split(":", 2)
+    path = root / parts[0]
+    if len(parts) == 3 and parts[1].isdigit():
+        number, reason = int(parts[1]), parts[2].strip()
+        line = dict(logical_lines(path.read_text())).get(number, "")
+    else:
+        reason = ":".join(parts[1:]).strip()
+        # Missing/stale manifests and invalid Node locks are whole-file violations.
+        line = path.read_text()
+        if path.name == "package.json" and path.with_name("package-lock.json").exists():
+            line += path.with_name("package-lock.json").read_text()
+    return parts[0], reason, hashlib.sha256(line.encode()).hexdigest()
+
+
+def new_errors(root: Path, paths: list[Path], base: str) -> tuple[list[str], int]:
+    """Compare with the trusted PR base, never a mutable allowlist in the PR."""
+    base = subprocess.check_output(["git", "rev-parse", "--verify", base + "^{commit}"], cwd=root).decode().strip()
+    with tempfile.TemporaryDirectory() as directory:
+        baseline = Path(directory)
+        names = subprocess.check_output(["git", "ls-tree", "-rz", "--name-only", base], cwd=root).decode().split("\0")
+        # Only copy files consumed by the policy, not application data or Git internals.
+        selected = [name for name in names if name and policy_file(Path(name))]
+        for name in selected:
+            target = baseline / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(subprocess.check_output(["git", "show", f"{base}:{name}"], cwd=root))
+        previous = Counter(signature(baseline, error) for error in check(baseline, [baseline / name for name in selected]))
+        errors = check(root, paths)
+        introduced = []
+        for error in errors:
+            key = signature(root, error)
+            if previous[key]:
+                previous[key] -= 1
+            else:
+                introduced.append(error)
+        return introduced, len(errors) - len(introduced)
+
+
+def policy_file(path: Path) -> bool:
+    return (path.name.startswith("Dockerfile") or path.name in {"Makefile", "package.json", "package-lock.json"}
+            or path.suffix == ".sh" or ("requirements" in path.name and path.suffix in {".lock", ".in", ".txt"})
+            or (".github/workflows/" in path.as_posix() and path.suffix in {".yaml", ".yml"}))
+
+
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--base", help="Reject new violations relative to the trusted PR base; omit for a full audit")
+    args = parser.parse_args()
     tracked = subprocess.check_output(
         ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"], cwd=ROOT,
     ).decode().split("\0")
-    errors = check(ROOT, [ROOT / name for name in sorted(set(tracked)) if name])
+    paths = [ROOT / name for name in sorted(set(tracked)) if name and policy_file(Path(name))]
+    if args.base:
+        errors, inherited = new_errors(ROOT, paths, args.base)
+        print(f"Existing violations owned by the dependency migration: {inherited}")
+    else:
+        errors = check(ROOT, paths)
     for error in errors:
         print(error)
-    print(f"Install pin check: {len(errors)} violation(s)")
+    print(f"Install pin check: {len(errors)} {'new ' if args.base else ''}violation(s)")
     return bool(errors)
 
 

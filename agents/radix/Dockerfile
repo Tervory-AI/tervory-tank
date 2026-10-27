@@ -3,7 +3,7 @@
 # redeploy picks up new advisories. osv_bake.py opens no socket; it turns the two
 # zips into one indexed /out/osv.sqlite (~35 MB). The zips stay in this stage.
 # Radix itself never downloads anything at runtime: the room has no internet route.
-FROM python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704 AS osv
+FROM python:3.12-slim AS osv
 ARG OSV_BUCKET=https://osv-vulnerabilities.storage.googleapis.com
 ADD ${OSV_BUCKET}/PyPI/all.zip /osv/PyPI.zip
 ADD ${OSV_BUCKET}/npm/all.zip /osv/npm.zip
@@ -12,7 +12,7 @@ COPY radix/osv_bake.py /bake/osv_bake.py
 RUN mkdir -p /out \
     && python /bake/osv_bake.py /out/osv.sqlite PyPI=/osv/PyPI.zip npm=/osv/npm.zip
 
-FROM python:3.12-slim@sha256:a0f57064cbdcd6285fa45f51237ab0b35ea8ebaed06a1f5973e89e19dfb86704
+FROM python:3.12-slim
 
 # Pinned scanners. The downloads run at image build. A scan does not use the network.
 # Gitleaks 8.28.0 checksums are from the upstream checksums file for that tag.
@@ -27,21 +27,14 @@ ARG PIP_AUDIT_VERSION=2.10.1
 ARG TARGETARCH
 
 WORKDIR /app
-COPY _chassis/requirements.lock .
-COPY _chassis/requirements-semgrep.lock _chassis/requirements-audit.lock /tmp/
-RUN --mount=type=secret,id=system_ca \
-    if [ -s /run/secrets/system_ca ]; then \
-      export PIP_CERT=/run/secrets/system_ca SSL_CERT_FILE=/run/secrets/system_ca \
-        REQUESTS_CA_BUNDLE=/run/secrets/system_ca CURL_CA_BUNDLE=/run/secrets/system_ca \
-        NODE_EXTRA_CA_CERTS=/run/secrets/system_ca GIT_SSL_CAINFO=/run/secrets/system_ca; \
-    fi; \
-    apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates=20250419+deb13u1 curl=8.14.1-2+deb13u7 git=1:2.47.3-0+deb13u1 tar=1.35+dfsg-3.1 \
-    && pip install --require-hashes --no-cache-dir -r requirements.lock \
+COPY _chassis/requirements.txt .
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl git tar \
+    && pip install --no-cache-dir -r requirements.txt \
     && python -m venv /opt/semgrep \
-    && /opt/semgrep/bin/pip install --require-hashes --no-cache-dir -r /tmp/requirements-semgrep.lock \
+    && /opt/semgrep/bin/pip install --no-cache-dir "semgrep==${SEMGREP_VERSION}" \
     && python -m venv /opt/audit \
-    && /opt/audit/bin/pip install --require-hashes --no-cache-dir -r /tmp/requirements-audit.lock \
+    && /opt/audit/bin/pip install --no-cache-dir "pip-audit==${PIP_AUDIT_VERSION}" \
     && arch="${TARGETARCH:-amd64}" \
     && case "$arch" in \
          amd64) gl_arch=x64; gl_sha="${GITLEAKS_SHA_X64}" ;; \

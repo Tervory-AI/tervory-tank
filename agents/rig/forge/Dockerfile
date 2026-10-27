@@ -11,8 +11,8 @@ RUN --mount=type=secret,id=system_ca \
     if [ -s /run/secrets/system_ca ]; then export SSL_CERT_FILE=/run/secrets/system_ca PIP_CERT=/run/secrets/system_ca; fi; \
     if [ -s /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; \
     apt-get update; \
-    apt-get install -y --no-install-recommends ca-certificates=20250419~deb12u2 libgl1=1.6.0-1 libegl1=1.6.0-1 libglib2.0-0=2.74.6-2+deb12u9 \
-      libx11-6=2:1.8.4-2+deb12u2 libxi6=2:1.8-1+b1 libxrender1=1:0.9.10-1.1 libxfixes3=1:6.0.0-2 libxxf86vm1=1:1.1.4-1+b2 libxkbcommon0=1.5.0-1 libsm6=2:1.2.3-1 libgomp1=12.2.0-14+deb12u1; \
+    apt-get install -y --no-install-recommends ca-certificates libgl1 libegl1 libglib2.0-0 \
+      libx11-6 libxi6 libxrender1 libxfixes3 libxxf86vm1 libxkbcommon0 libsm6 libgomp1; \
     python -m pip install --no-cache-dir --require-hashes -r requirements.lock -r requirements-test.lock; \
     python install_tools.py /opt/forge-tools; \
     node /usr/local/lib/node_modules/npm/bin/npm-cli.js ci --ignore-scripts --strict-ssl=true --no-audit --no-fund; \

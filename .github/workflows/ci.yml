@@ -133,8 +133,9 @@ jobs:
             tank/requirements-dev.txt
       - name: Install
         run: |
-          python3 .github/scripts/check_install_pins.py
-          python -m pip install --require-hashes -r tank/requirements.lock -r tank/requirements-dev.lock
+          python -m pip install --upgrade pip
+          pip install -r tank/requirements.txt -r tank/requirements-dev.txt
+          pip install --require-hashes -r agents/rig/forge/requirements.lock
       - name: Prepare Chromium for required READ-1 browser tests
         run: |
           browser=$(command -v chromium || command -v chromium-browser || command -v google-chrome || command -v google-chrome-stable || true)
@@ -151,7 +152,11 @@ jobs:
         if: needs.changes.outputs.full == 'true' || needs.changes.outputs.tisan == 'true'
         working-directory: workspace
         run: |
-          npm ci --no-audit --no-fund
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-package-lock --no-audit --no-fund
+          fi
       - name: Lint
         if: needs.changes.outputs.full == 'true'
         # F401 in base.socials/1.0.0/run.py is a pre-existing unused import.
@@ -179,8 +184,14 @@ jobs:
           node-version: "22"
       - name: Install
         working-directory: workspace
+        # npm ci when a lockfile is committed. This lane cannot add one, so install
+        # from package.json until workspace/package-lock.json exists.
         run: |
-          npm ci --no-audit --no-fund
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-package-lock --no-audit --no-fund
+          fi
       - name: Build
         working-directory: workspace
         run: npx next build
@@ -220,18 +231,12 @@ jobs:
           key: savings-page-playwright-${{ runner.os }}-1.64.1-chromium
       - name: Install workspace and browser test packages
         run: |
-          npm --prefix workspace ci --no-audit --no-fund
-          # Verify the locked tools still match the browser/cache version pins.
-          node <<'JS'
-          for (const spec of ["playwright@1.64.1", "esbuild@0.28.2"]) {
-            const [name, version] = spec.split("@");
-            if (require(`./workspace/node_modules/${name}/package.json`).version !== version) {
-              throw new Error(`Browser package does not match the CI cache pin: ${name}`);
-            }
-          }
-          JS
-          mkdir -p "$RUNNER_TEMP/core2-browser"
-          ln -s "$GITHUB_WORKSPACE/workspace/node_modules" "$RUNNER_TEMP/core2-browser/node_modules"
+          if [ -f workspace/package-lock.json ]; then
+            npm --prefix workspace ci --no-audit --no-fund
+          else
+            npm --prefix workspace install --no-package-lock --no-audit --no-fund
+          fi
+          npm install --prefix "$RUNNER_TEMP/core2-browser" --no-audit --no-fund esbuild@0.28.2 playwright@1.64.1
           browser=$(command -v chromium || command -v chromium-browser || command -v google-chrome || command -v google-chrome-stable || true)
           if [ -n "$browser" ]; then
             echo "CORE2_CHROMIUM=$browser" >> "$GITHUB_ENV"

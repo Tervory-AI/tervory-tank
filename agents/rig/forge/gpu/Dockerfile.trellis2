@@ -8,23 +8,12 @@ COPY --from=weights / /opt/models/
 ENV TORCH_CUDA_ARCH_LIST="8.0;8.6;8.9;9.0" MAX_JOBS=2 \
     FLASH_ATTENTION_FORCE_BUILD=TRUE FORCE_CUDA=1 CUDA_HOME=/usr/local/cuda \
     LIBRARY_PATH=/usr/local/cuda/lib64/stubs
-RUN --mount=type=secret,id=system_ca \
-    if [ -s /run/secrets/system_ca ]; then \
-      export PIP_CERT=/run/secrets/system_ca SSL_CERT_FILE=/run/secrets/system_ca \
-        REQUESTS_CA_BUNDLE=/run/secrets/system_ca CURL_CA_BUNDLE=/run/secrets/system_ca \
-        NODE_EXTRA_CA_CERTS=/run/secrets/system_ca GIT_SSL_CAINFO=/run/secrets/system_ca; \
-    fi; \
-    apt-get update && apt-get install -y --no-install-recommends ca-certificates=20260816ubuntu0.22.04.1 git=1:2.34.1-1ubuntu1.18 build-essential=12.9ubuntu3 libjpeg-dev=8c-2ubuntu10 libgl1=1.4.0-1 \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git build-essential libjpeg-dev libgl1 \
     && python -m pip install --no-cache-dir --require-hashes -r gpu/requirements.lock \
     && python gpu/install_sources.py gpu/sources.lock.json \
     && python -c "from gpu.install_sources import install; import json; from pathlib import Path; install(json.loads(Path('gpu/flash-attn.lock.json').read_text()), Path('/opt/flash-attn'))" \
-    && mkdir -p /opt/locked-sources \
-    && for source in flash-attn nvdiffrast nvdiffrec cumesh flexgemm utils3d trellis2/o-voxel; do \
-         archive=$(printf '%s' "$source" | tr / -); \
-         tar --sort=name --format=gnu --mtime=@0 --owner=0 --group=0 --numeric-owner \
-           --mode=u=rwX,go=rX -cf "/opt/locked-sources/$archive.tar" -C "/opt/$source" .; \
-       done \
-    && python -m pip install --no-deps --no-build-isolation --require-hashes -r gpu/requirements-sources.lock \
+    && python -m pip install --no-deps --no-build-isolation /opt/flash-attn /opt/nvdiffrast \
+       /opt/nvdiffrec /opt/cumesh /opt/flexgemm /opt/utils3d /opt/trellis2/o-voxel \
     && python gpu/prepare_models.py \
     && rm -rf /var/lib/apt/lists/* /root/.cache/pip && useradd --uid 1000 --create-home forge \
     && chmod -R a+rX /opt/forge /opt/models /opt/trellis2
