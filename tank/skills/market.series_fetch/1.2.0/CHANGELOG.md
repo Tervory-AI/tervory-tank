@@ -1,14 +1,12 @@
 # market.series_fetch
 
 ## 1.2.0
-- Refresh the bundled feed dependency closure from Market Lab: county labels, readable publisher pages, commodity units and published-table parsing, history pagination and blocked-site handling. Include the newly required `published.py`.
-- Preserve the skill entry point, pure series logic and three saved listing fixtures. No new provider, key or dependency. Versions 1.0.0, 1.1.0 and 1.1.1 are unchanged.
-- Add saved county/state listing cases and refusal cases, plus offline feed regressions for every changed bundled module. Run the new candidate in a separate Tank-only interpreter so cached legacy imports cannot hide bundle failures.
+- Build from 1.1.1 and preserve all five of its eval cases verbatim, including decimal CSV observations and empty-input refusal. Add county and Texas listing cases using the same input/expected shape required by Tank's startup importer.
+- Keep missing-engine and unknown-adapter exception checks in ordinary package-local tests, outside the imported eval case file.
+- Refresh the feed dependency closure from Market Lab, including the new published-table helper. Preserve the entry point, pure series logic and three listing/geography fixtures from 1.1.1. No new provider, key, dependency or schema change.
+- Test baseline case hashes, startup-compatible case shapes, bundled-file parity, isolated eval execution and the real Tank startup against local Postgres.
+- Versions 1.0.0, 1.1.0 and 1.1.1 remain untouched.
 
-## 1.1.0
-- Hold a batch that fails the series checks before it is stored. `1.0.0` is unchanged and stays in service until this version passes evals and a founder approves it.
-- The feeds copy in this package includes the batch guard. Listing counts that stay inside the jump limit still store.
+## 1.1.1
 
-## 1.0.0
-- First version. CSV and XLSX uploads, a monthly listing count through the feeds package, and a FRED read that is never stored.
-- Candidate eval fix: ship the unchanged feeds dependency closure and three listing fixtures inside this package, which Tank already copies into its image. Resolve the bundled pure module consistently in repository and Tank runs. All three evals run without network access.
+Eval-only patch: adds refusal evidence and deterministic expectations. Runtime code is copied unchanged from 1.1.0. Existing versions are untouched.

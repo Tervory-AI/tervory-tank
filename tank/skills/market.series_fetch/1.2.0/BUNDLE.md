@@ -1,8 +1,8 @@
 # Candidate runtime bundle
 
-`market.series_fetch` 1.2.0 copies 1.1.0 into a new version. Versions 1.0.0,
-1.1.0 and 1.1.1 are untouched. The skill entry point, pure series logic and
-three synthetic listing/geography fixtures are unchanged from 1.1.0.
+`market.series_fetch` 1.2.0 is built from the latest version, 1.1.1. Versions
+1.0.0, 1.1.0 and 1.1.1 are untouched. The skill entry point, pure series logic
+and three synthetic listing/geography fixtures are unchanged from 1.1.1.
 
 Tank ships `skills/`, without repository `agents/` or `tests/`. All 21 Python/SQL
 files in this version's `feeds/` byte-match `agents/market_lab/feeds/`: the prior
@@ -11,11 +11,17 @@ The CLI, Postgres collector and page-only presentation helpers are not runtime
 dependencies of this skill and are not bundled. No new provider, key, installed
 dependency, production schema or Dockerfile change is needed.
 
-`evals/cases.jsonl` retains the original three cases and adds county and Texas
-listing counts, empty-input refusal, missing-engine refusal and unknown-adapter
-refusal. The real Skala runner must pass all eight cases with no HTTP/model calls.
+`evals/cases.jsonl` preserves all five 1.1.1 cases verbatim, including decimal
+CSV observations and empty-input refusal, then adds county and Texas listings.
+All seven cases have `input` and `expected` objects, as Tank's Gold startup
+importer requires. No imported case uses `expected_error`. The baseline case
+hashes match those used by Skala's approval gate; float/int rewrites must not
+silently replace earlier cases. The real eval runner passes all seven cases
+with no HTTP/model calls.
 
-`evals/test_feeds.py` adds eight offline cases for every changed bundled module:
+`evals/test_feeds.py` holds ten ordinary offline tests. Missing-engine and
+unknown-adapter exceptions are tested here, outside the imported case file.
+The other eight tests cover every refreshed bundled module:
 
 | Module | Regression evidence |
 | --- | --- |
@@ -27,16 +33,25 @@ refusal. The real Skala runner must pass all eight cases with no HTTP/model call
 | `live.py` | Import/export fields; one request to a blocked host, then refusal |
 | `runner.py` | Blocked result persisted with zero stored rows across repeated runs |
 
-From the repository root, after installing `tank/requirements.txt` and
-`tank/requirements-dev.txt`:
+After installing `tank/requirements.txt` and `tank/requirements-dev.txt`:
 
 ```bash
 PYTHONPATH=tank python -m pytest -q tests/test_candidate_eval_runtime.py
 ```
 
-This includes byte-for-byte bundle/fixture comparison, the unchanged legacy
-evals, and the newest version in its own fresh interpreter. Each interpreter
-receives only Tank's top-level modules and skills. Sockets are blocked; saved
-publisher responses replace external providers only. Assertions check every
-imported `feeds` module came from the selected package, preventing a cached
-legacy bundle or repository import from concealing missing dependencies.
+The test checks startup case shapes, all five baseline hashes, byte parity,
+legacy evals and the newest version in separate Tank-only interpreters. Sockets
+are blocked; saved publisher responses replace external providers only. Every
+imported feed module must come from the selected package.
+
+The real startup and job check also needs a local Postgres database whose name
+ends in `_test`; install `agents/market_lab/fixture_proof/requirements.txt` and
+follow `agents/market_lab/LAUNCH.md` for that database and the startup log:
+
+```bash
+PYTHONPATH=tank python -m pytest -q tests/test_market_lab_real_tank.py
+```
+
+That test runs `python -m uvicorn main:app` from `tank/`, with Tank's actual
+startup, schema, pool, package registration and Gold import. It then exercises
+Market Lab through the real HTTP client and checks imported candidate cases.

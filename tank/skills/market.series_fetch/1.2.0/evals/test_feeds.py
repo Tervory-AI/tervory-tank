@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import runpy
 import tempfile
 import unittest
 import urllib.error
@@ -34,6 +35,16 @@ class SavedPublisher:
 
 
 class BundledFeedCases(unittest.TestCase):
+    def test_listing_requires_a_caller_selected_engine(self) -> None:
+        series_fetch = runpy.run_path(str(Path(__file__).resolve().parents[1] / "pure.py"))["series_fetch"]
+        with self.assertRaisesRegex(ValueError, "^engine is required$"):
+            series_fetch({"adapter": "listing", "ref": "count:state:CA"})
+
+    def test_unknown_adapter_is_refused(self) -> None:
+        series_fetch = runpy.run_path(str(Path(__file__).resolve().parents[1] / "pure.py"))["series_fetch"]
+        with self.assertRaisesRegex(ValueError, "^unknown adapter unknown$"):
+            series_fetch({"adapter": "unknown"})
+
     def setUp(self) -> None:
         self.sources = {source.id: source for source in sources("ffl")}
         self.conn = connect(":memory:")

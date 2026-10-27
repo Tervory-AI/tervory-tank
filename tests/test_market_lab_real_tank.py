@@ -17,6 +17,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "agents/market_lab"))
 from fixture_proof.server import TENANT, database_url, free_port, services
+from fixture_proof.boot_tank import verify_imported_cases
 
 
 def test_real_tank_routes_to_real_room_and_postgres(tmp_path):
@@ -35,6 +36,7 @@ def test_real_tank_routes_to_real_room_and_postgres(tmp_path):
                     return client.post(f"/v1/market-lab/{operation}", json={"tenant_id": tenant, **payload}, headers={"x-tank-key": env["TANK_API_KEY"]})
 
                 assert client.get("/health").json()["ok"] is True  # Tank's actual pool.
+                asyncio.run(verify_imported_cases())  # The full Gold lifespan completed.
                 assert client.post("/v1/market-lab/overview", json={"tenant_id": TENANT}).status_code == 401
                 assert client.post("/v1/market-lab/overview", json={"tenant_id": TENANT}, headers={"x-tank-key": env["TANK_KEY_MARKET_LAB"]}).status_code == 403
                 assert request("unknown").status_code == 404

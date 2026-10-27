@@ -70,7 +70,7 @@ async def main():
                 contexts.append(ctx)
                 return ctx
             result = await skala.run_evals(pkg, context)
-            expected = (3 if version == "1.0.0" else 8) if name == "market.series_fetch" else 7
+            expected = (3 if version == "1.0.0" else 7) if name == "market.series_fetch" else 7
             assert result["total"] == expected, result
             assert result["passed"] == expected and result["score"] == 1.0, result
             assert all(ctx.calls == 0 and ctx.cost_usd == 0 for ctx in contexts)
@@ -85,7 +85,7 @@ async def main():
             cases = runpy.run_path(str(package / "evals/test_feeds.py"))
             suite = unittest.defaultTestLoader.loadTestsFromTestCase(cases["BundledFeedCases"])
             result = unittest.TextTestRunner(verbosity=2).run(suite)
-            assert result.wasSuccessful() and result.testsRun == 8
+            assert result.wasSuccessful() and result.testsRun == 10
             summaries["bundled_feed_cases"] = {"passed": result.testsRun, "total": result.testsRun}
         for name, module in list(sys.modules.items()):
             if name == "feeds" or name.startswith("feeds."):
@@ -97,6 +97,31 @@ asyncio.run(main())
 
 
 class CandidateEvalRuntimeTests(unittest.TestCase):
+    def test_every_package_case_has_the_gold_startup_import_shape(self):
+        import skala
+
+        for pkg in skala.load_packages(ROOT / "tank/skills").values():
+            for case in pkg.cases:
+                with self.subTest(package=pkg.ref, case=case.get("name")):
+                    self.assertIsInstance(case["input"], dict)
+                    self.assertIsInstance(case["expected"], dict)
+        cases = [json.loads(line) for line in (PACKAGE / "evals/cases.jsonl").read_text().splitlines()]
+        self.assertTrue(all("expected_error" not in case for case in cases))
+
+    def test_newest_package_preserves_every_latest_baseline_case_hash(self):
+        import skala
+
+        packages = skala.load_packages(ROOT / "tank/skills")
+        baseline = packages[("market.series_fetch", "1.1.1")]
+        candidate = packages[("market.series_fetch", PACKAGE.name)]
+        self.assertEqual(len(baseline.cases), 5)
+        self.assertIn("decimal CSV observation", {case["name"] for case in baseline.cases})
+        # Approval compares the entire case, including JSON number types.
+        previous = {skala.evidence_hash(case) for case in baseline.cases}
+        current = {skala.evidence_hash(case) for case in candidate.cases}
+        self.assertEqual(previous - current, set())
+        self.assertEqual(len(current - previous), 2)
+
     def test_radix_eval_rows_and_source_links_all_use_platform_tenant(self):
         tenant = platform_tenant()
         files = sorted((ROOT / "tank/skills").glob("radix.*/1.0.0/evals/cases.jsonl"))
@@ -144,8 +169,8 @@ class CandidateEvalRuntimeTests(unittest.TestCase):
     def test_newest_eval_runner_and_feed_cases_in_tank_only_process(self):
         report = self.run_isolated(PACKAGE.name)
         self.assertEqual(len(report), 7)
-        self.assertEqual(report["market.series_fetch"], {"passed": 8, "total": 8})
-        self.assertEqual(report["bundled_feed_cases"], {"passed": 8, "total": 8})
+        self.assertEqual(report["market.series_fetch"], {"passed": 7, "total": 7})
+        self.assertEqual(report["bundled_feed_cases"], {"passed": 10, "total": 10})
 
     def run_isolated(self, version):
         with tempfile.TemporaryDirectory(prefix="tank-eval-runtime-") as folder:
