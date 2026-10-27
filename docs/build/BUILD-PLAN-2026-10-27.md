@@ -1,6 +1,6 @@
 # Tervory build plan, 27 Oct 2026: the whole project, what is done and what is left
 
-> Written by Claude on Tue 27 Oct 2026, first at 09:20 PT, extended at 13:10 PT at the founder's request to cover the entire project. **This replaces every earlier build list.**
+> Written by Claude on Tue 27 Oct 2026: first at 09:20 PT, extended at 13:10 PT to cover the entire project, and the tool map (section 8) added at 13:20 PT, all at the founder's request. **This replaces every earlier build list.**
 >
 > **What was planned** (every point traced in the appendix):
 > - **Build Pack v2** (11 Oct, artifact "Tervory AI — Build Pack v2"): read in full.
@@ -97,13 +97,13 @@ The rest of what the pages show:
 | Gemini point | Status | Where | What is left |
 |---|---|---|---|
 | Tank classifies each query and sends deterministic ones to plain code | Part | Code and cache rungs skip the model (`tank/main.py:1160–1191`). The path is chosen per task type by policy (`:1103`) | There is no per-query complexity scoring. A bypass happens only where a policy already points at a skill or the cache |
-| RouteLLM as the routing classifier | Not started | No RouteLLM anywhere | Decide: adopt it, or keep routing per task type with bench-chosen candidates (`tank/bench.py:68`) |
+| RouteLLM as the routing classifier | Not started | No RouteLLM anywhere | Add RouteLLM (rule 8, section 4b) |
 | Skala shadow test: the same query run in the background on a cheap open-weights model | Built, mostly off | Async shadow (`tank/main.py:1291`, `:1507`). Open-weight models are in the roster (#230) | `shadow_rate` defaults to 0 (`tank/schema.sql:54`). Only `reason.brief` is seeded with a candidate |
-| LLM-as-judge on accuracy, structure and tone (DeepEval) | Replaced | Our own judge, `tank.judge` (`tank/schema.sql:153`, `tank/main.py:1528`). Field agreement in `tank/graduate.py:201–235` | It gives one 0–100 score. Structure and tone aren't scored separately |
-| Switch only after a sustained 99% equivalence over a batch | Part | `tank/graduate.py:301`. Promotion writes the policy (`tank/main.py:1670`) | The default bar is 97% over 30 samples (`tank/graduate.py:23–24`). Build Pack v2 says 1,000 calls at 97%; Gemini says 99%. The founder picks one |
+| LLM-as-judge on accuracy, structure and tone (DeepEval) | Replaced | Our own judge, `tank.judge` (`tank/schema.sql:153`, `tank/main.py:1528`). Field agreement in `tank/graduate.py:201–235` | Move to DeepEval (section 4b): today it gives one 0–100 score, with no separate structure or tone score |
+| Switch only after a sustained 99% equivalence over a batch | Part | `tank/graduate.py:301`. Promotion writes the policy (`tank/main.py:1670`) | The default bar is 97% over 30 samples (`tank/graduate.py:23–24`). Build Pack v2 says 1,000 calls at 97%; Gemini says 99%. The founder picks one (section 4) |
 | Mixture of Agents: 4 proposers and an aggregator, with timeouts, retries and degradation (LangGraph) | Part, off | `tank/moa.py:282–336` (LangGraph StateGraph, retry and timeout policies, circuit breaker), #228 | `moa_enabled` is false and no policy turns it on (`tank/schema.sql:1526`) |
 | Aggregator steps down when the proposers agree | Part, off | `tank/moa.py:317–318` | The same switch as above |
-| Langfuse as the immutable receipt | Replaced | Ledger and transcripts per call (`tank/schema.sql:7`, `:93`), MoA receipts, the founder's proof page (`tank/proof.py:94–178`) | Nothing, unless the founder wants Langfuse itself |
+| Langfuse as the immutable receipt | Replaced | Ledger and transcripts per call (`tank/schema.sql:7`, `:93`), MoA receipts, the founder's proof page (`tank/proof.py:94–178`) | Add Langfuse beside the ledger (section 4b) |
 | LiteLLM: keys, load balancing, failover | Part | Failover chains, cheapest first (`litellm/config.yaml:644–697`) | No load balancing (one deployment per model) |
 | Day 1 / Day 30 / Day 60 cost per query | Part | Actual against "would have cost" per call (`tank/proof.py`). MoA receipts show saved against frontier | No staged view of the cost falling over time |
 | Perplexity in the research seat (founder) | Part, off | The Perplexity presets and `/v1/research` (`tank/research.py:145–200`) are off until the founder promotes `market.research` | Perplexity is barred from MoA seats in code (`tank/moa.py:68–72`), so there is no research seat |
@@ -164,7 +164,7 @@ Two tools are still to add where nothing exists yet: **Nuclei** and **OWASP ZAP*
 3. **Batch** works only for OpenAI models (`tank/main.py:2398`). Add the other providers' batch APIs. There is no off-peak scheduler.
 4. **Rung 2: serve the trained models** (TRAIN-2). LoRA training exists (`jobs/train/train.py`); nothing serves the result.
 5. **Re-run Skala skill evals when a model changes.** `models_validated` is never written (`tank/schema.sql:175`).
-6. **The founder decisions** in section 4, items 1–4.
+6. **The open questions in section 4:** paid steps, the graduation bar and Mixture of Agents.
 - **Done when:** a test client asks the same question twice in `/chats`. The second answer comes from the cache at $0, and both turns appear in that client's savings.
 
 ### Skala
@@ -284,14 +284,14 @@ Two tools are still to add where nothing exists yet: **Nuclei** and **OWASP ZAP*
   4. per-client containers;
   5. an AI second opinion;
   6. Cloudflare's and Google's own webhook signatures;
-  7. a public page with no fixtures (decision 8 first).
+  7. a public page with no fixtures.
 - **Done when:** on our own site, a test attack is shielded and undone with one tap, and the receipt reaches the founder.
 
 ### Memory, brains and the bus
 - **Brains:** only Base and Rig have a Hermes brain, a browser and a sandbox. Tiger has a browser only. Market Lab, Radix, Tisan and Zenas have none.
-- **Memory:** vectors in Qdrant per agent per tenant, with one shared key. There is no record row and no platform tier (decision 6).
+- **Memory:** vectors in Qdrant per agent per tenant, with one shared key. There is no record row. There is no platform tier, and by the founder's decision none is needed (section 4).
 - **The nightly cycle:** the bench runs inside Tank, and the gold retests have no trigger. **The morning report doesn't exist.**
-- **The bus:** none (decision 7).
+- **The bus:** none, and by the founder's decision none is needed (section 4).
 
 ### Infrastructure
 - **The backup to R2** is off unless the `r2-backup` profile is enabled (`docker-compose.yml:271`). There's no Qdrant snapshot, no second offsite copy and no restore drill.
@@ -329,6 +329,136 @@ Next: the Radix client upload and deploy gate, the Tisan build flow, brains for 
 | `codex/zenas-backend` (#326) | Zenas back end, Boston-only routing | **Deleted from GitHub, not merged.** Last known commit `75098a9` |
 | `codex/sec-code` (#329) | Code security | Open; its Dockerfile install lines were unpinned at the last review |
 | `docs/go-live-list` | Figma C5 export (still needed), go-live list, break points | The lists are superseded by this file |
+
+## 8. Every tool: where it goes and which agents it serves
+**Status:**
+- **In:** in the code and on.
+- **Off:** in the code, switched off.
+- **Swap:** we coded our own; move to the tool (rule 8).
+- **Add:** planned, no code yet.
+- **Stopped** or **Dropped:** by the founder's decision.
+
+### Core: Tank, Skala, memory (serves every agent)
+| Tool | Goes into | For which agents | Status |
+|---|---|---|---|
+| LiteLLM | Tank gateway: every model call, keys, failover | All | In |
+| RouteLLM | Tank: scores each request and picks the cheapest capable path | All | Add |
+| DeepEval | Skala and Tank: the judge for shadow tests and graduation | All | Swap |
+| Langfuse | Tank: trace and receipt for every call, beside the ledger | All | Add |
+| LangGraph | Tank: Mixture of Agents fan-out and fan-in | All (complex tasks) | Off |
+| PostgreSQL | Tank ledger and policy, each agent's own schema | All | In |
+| Redis | Tank batch queue and cache | All | In (the batch queue is a swap from Postgres) |
+| Qdrant | Tank semantic cache and Hermes memory | All | In for memory; Swap for the cache |
+| Hermes Agent | Each agent's own brain, browser and sandbox | Base and Rig In; Tiger, Market Lab, Radix, Tisan and Zenas Add | Part |
+| Airflow | One scheduler for every agent's nightly and daily jobs | All | Swap |
+| Grafana and Prometheus | Founder cost dashboards from the ledger | Founder (Tank) | Swap |
+| Hugging Face | LoRA training of our own small models | All (rung 2) | In (training only) |
+| Together, Groq or Ollama | Serving our own trained models | All (rung 2) | Add |
+| Perplexity Sonar | Tank research route (the research seat) | Market Lab first | Off |
+
+### Workspace (app.tervory.com and the product hosts)
+| Tool | Goes into | For which agents | Status |
+|---|---|---|---|
+| Next.js | The client app and every product page | All | In |
+| Clerk | Sign-in, one organisation per tenant | All | In |
+| Resend | Email for alerts and reports | Tiger, Market Lab, Zenas, Autumbra | Add (no email code in any of them) |
+| Twilio | Text-message alerts | Zenas | Add |
+
+### Base: verified business lists
+| Tool | Goes into | For which agents | Status |
+|---|---|---|---|
+| Playwright (shared browser) | Reading sites like a person | Base (shared with Tiger) | In |
+| SearXNG | Free search for business websites | Base, Market Lab | In |
+| Brave Search | Paid search rung | Base | In (paid, gated) |
+| RapidFuzz | Matching names and addresses | Base | In |
+| Firecrawl | Reading and structuring websites | Base | Swap (from our own `scrape_site`) |
+| Google Places | Entity match, reviews | Base | Add (priced, never called) |
+| OpenCorporates | Company registry match | Base | Add |
+| Hunter.io | Email patterns | Base | Add |
+| Context.dev | Company data trial | Base | In (trial) |
+| Apollo, ZoomInfo, Clearbit | Learning sprint and case-study comparison | Base | Apollo In (CSV import only); ZoomInfo and Clearbit Add |
+| ATF FFL list | The FFL engine's reference list | Base, Market Lab | In (first download fix on `codex/base-atf-download`) |
+
+### Tiger: price and stock watches
+| Tool | Goes into | For which agents | Status |
+|---|---|---|---|
+| Playwright (shared browser) | Rendered product pages | Tiger (shared with Base) | In |
+| curl-cffi | Fast reads of static pages | Tiger | Swap (from httpx) |
+| ChangeDetection.io | Watch and diff | Tiger | Swap (from our own diff) |
+| Steel.dev | Persistent sessions where terms allow | Tiger | Swap only if a free edition fits; our own saved sessions do the job today |
+| Residential proxies, CapSolver | Blocked sites | Tiger | Dropped (no captcha solving) |
+
+### Market Lab: market research and prediction
+| Tool | Goes into | For which agents | Status |
+|---|---|---|---|
+| GPT-Researcher | Research runs over SearXNG, through Tank | Market Lab | Add |
+| EIA, Census, World Bank, NOAA, NWS | Feeds | Market Lab | In (live, storing data) |
+| FRED | Economic series | Market Lab | Off (needs its key) |
+| Federal Register | Rules feed | Market Lab, Zenas | In code, "could not be read" live |
+| LegiScan | State bill tracking | Market Lab | Off (needs its key) |
+| Census trade, Port of LA, BTS freight | Trade and freight feeds | Market Lab | In code, off live (blocked or could not be read) |
+| UN Comtrade, MarineTraffic, Freightos, USPTO, SEC EDGAR, Reddit, LME | Signal feeds | Market Lab | Add |
+| Qdrant (pattern library) | Matching new signals to past ones | Market Lab | Part |
+
+### Radix: code scanning
+| Tool | Goes into | For which agents | Status |
+|---|---|---|---|
+| Semgrep | Unsafe-code scan | Radix (and CI for our own repo) | In for Radix; Swap into CI |
+| Gitleaks | Secret scan | Radix (and CI for our own repo) | In for Radix; Swap into CI |
+| OSV data | Package advisories | Radix, Autumbra | In |
+| Checkov, Socket.dev | Infrastructure files and supply chain | Radix | Add |
+| OWASP ZAP, Nuclei | Testing a live app | Radix | Add |
+| Nmap, testssl.sh, dnsx | Weekly checks of live sites | Radix | Add |
+| axe-core | Accessibility checks | Radix, Tisan | In for Tisan only; Add for Radix |
+| Uptime Kuma | Uptime of client sites and ours | Radix (and Tervory) | Swap (from our own watchdog) |
+| HIBP, ClamAV, VirusTotal | Breach watch, malware | Radix | Add |
+
+### Tisan: websites for clients
+| Tool | Goes into | For which agents | Status |
+|---|---|---|---|
+| Next.js, Tailwind, TypeScript | The site template | Tisan | In |
+| Figma API / MCP | Reading the locked design | Tisan | Part (recorded fixture only; live read Add) |
+| Aider (through Tank) | Writing the code component by component | Tisan | Add (used today only by Tervory's own build workers) |
+| Playwright, Lighthouse CI | Tests on every build | Tisan | In |
+| pixelmatch | Page against Figma frame | Tisan | Swap (from our own scorer) |
+| k6 | Load test | Tisan | Add |
+| Coolify API | Staging, then production | Tisan | Add |
+
+### Zenas: civil legal research and drafting
+| Tool | Goes into | For which agents | Status |
+|---|---|---|---|
+| CourtListener | US case law | Zenas | In |
+| GovInfo (US Code), eCFR, Federal Register | US law and rules | Zenas | In (the nightly runner has no trigger) |
+| Congress.gov, Justia, EUR-Lex | More law sources | Zenas | Add |
+| SAFLII, gov.za, Government Gazette | South African law | Zenas | Stopped (ZA) |
+| Docassemble | Contracts and letters from templates | Zenas | Swap (from our own clause library) |
+| LlamaIndex with Qdrant | Meaning search over the law library | Zenas | Add (search is a no-op today) |
+
+### Rig: parts finder, quotes, 3D
+| Tool | Goes into | For which agents | Status |
+|---|---|---|---|
+| SMTP (store email) | Quote emails to the store | Rig | In (#353); needs the SMTP settings in Coolify |
+| Odoo | Quotations in the store's Odoo | Rig | Off |
+| three.js | 3D viewer in the widget and kiosk | Rig | In |
+| Blender, gltf-transform, gltfpack, KTX, trimesh, manifold, glTF validator | The 3D forge | Rig | In |
+| Meshroom, TRELLIS 2 (on Hugging Face Jobs) | 3D from photos | Rig | Off (TRELLIS licence switched off) |
+
+### Autumbra: protection for client sites
+| Tool | Goes into | For which agents | Status |
+|---|---|---|---|
+| CISA KEV, OSV, GHSA, NVD | Public threat sources | Autumbra (through Market Lab) | In |
+| Vector, Fluent Bit, Steampipe, OpenCTI | Watch intake | Autumbra | Off |
+| Ansible, Terraform | Enforce changes | Autumbra | Off (plans only) |
+| Cloudflare API | The real shield "hand" | Autumbra | Add (fixture only today) |
+| Google Workspace API | Small-business connect | Autumbra | Add |
+
+### Infrastructure (Tervory itself)
+| Tool | Goes into | For which agents | Status |
+|---|---|---|---|
+| Coolify | Deploys and settings (in place of Doppler, by the founder's choice) | All | In |
+| Cloudflare (DNS, WAF, R2) | Edge, storage, backups | All | In; the R2 backup is off unless its profile is on |
+| Backblaze B2 | Second offsite backup copy | All | Add |
+| GitHub Actions | CI and the watchdog | All | In |
 
 ---
 
