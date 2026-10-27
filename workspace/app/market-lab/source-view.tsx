@@ -4,6 +4,8 @@ import { formatRefreshed } from "./format";
 /** Shared by the signed-in route and the isolated local fixture proof. */
 export function SourceDocumentView({ source }: { source: MarketDocument }) {
   const offset = source.offset;
+  const page = Math.floor(offset / source.page_size) + 1;
+  const pageCount = Math.max(1, Math.ceil(Math.max(source.point_count, source.event_count) / source.page_size));
   return <main className="ml ml-source"><div className="ml-body">
     <a href="/market-lab">Back to Market Lab</a>
     <h1>{source.name}</h1>
@@ -13,22 +15,24 @@ export function SourceDocumentView({ source }: { source: MarketDocument }) {
     {source.presentation?.explanation ? <p>{source.presentation.explanation}</p> : null}
     {source.downloads.length ? <><h2>Source downloads</h2>
     <ul>{source.downloads.map((download, index) => <li key={`${download.url}-${index}`}><a href={download.url} rel="noreferrer" target="_blank">Download original data ({new URL(download.url).hostname})</a></li>)}</ul></> : null}
+    {pageCount > 1 ? <nav className="ml-source-pages" aria-label="Source pages">
+      {page > 1 ? <a href={`?page=${page - 1}`}>Previous</a> : <span aria-disabled="true">Previous</span>}
+      <span>Page {page} of {pageCount}</span>
+      {page < pageCount ? <a href={`?page=${page + 1}`}>Next</a> : <span aria-disabled="true">Next</span>}
+    </nav> : null}
     {source.points.length ? <><h2>Stored observations</h2>
+    <p>{source.point_count === 1 ? "1 stored observation." : `Showing ${(offset + 1).toLocaleString("en-US")}–${(offset + source.points.length).toLocaleString("en-US")} of ${source.point_count.toLocaleString("en-US")} observations. Newest first.`}</p>
     {source.points.some((point) => point.revision_label) ? <p>For each date, Current figure is the latest version in this saved document. Earlier figures are labelled with the source’s version.</p> : null}
     <div className="ml-source-table" role="region" aria-label="Stored observations" tabIndex={0}><table>
       <thead><tr><th scope="col">Observation</th><th scope="col">Area</th><th scope="col">Period</th><th scope="col">Value</th><th scope="col">Unit</th></tr></thead>
-      <tbody>{source.points.map((point, index) => <tr id={`point-${index + source.offset}`} key={index}>
+      <tbody>{source.points.map((point) => <tr id={`point-${point.index}`} key={point.index}>
         <th scope="row">{point.display_title}{point.withdrawn ? " — not used in answers" : ""}</th><td>{point.geo_name}</td><td>{point.date_label}</td>
-        <td><span className="ml-source-value">{point.value}</span>{point.revision_label ? <small className="ml-source-revision">{point.revision_label}</small> : null}</td><td>{point.unit_label}</td>
+        <td><span className="ml-source-value">{point.display_value}</span>{point.revision_label ? <small className="ml-source-revision">{point.revision_label}</small> : null}</td><td>{point.unit_label}</td>
       </tr>)}</tbody>
     </table></div></> : null}
-    {source.events.length ? <><h2>Stored notices</h2>{source.events.map((event, index) => <article id={`event-${index + source.offset}`} key={index}>
+    {source.events.length ? <><h2>Stored notices</h2>{source.events.map((event) => <article id={`event-${event.index}`} key={event.index}>
       <h3>{event.display_title}</h3><p>{event.date_label}</p>{event.kind === "changed" ? <p>The linked page was checked for changes. Its text is not stored.</p> : event.body ? <details><summary>Publisher’s original wording</summary><p>{event.body}</p></details> : null}
       {event.display_url.startsWith("https://") ? <a href={event.display_url} rel="noreferrer" target="_blank">{event.link_label}</a> : null}
     </article>)}</> : null}
-    <nav aria-label="Source pages">
-      {offset > 0 ? <a href={`?row=${Math.max(0, offset - 200)}`}>Previous observations</a> : null}{" "}
-      {offset + 200 < Math.max(source.point_count, source.event_count) ? <a href={`?row=${offset + 200}`}>More observations</a> : null}
-    </nav>
   </div></main>;
 }

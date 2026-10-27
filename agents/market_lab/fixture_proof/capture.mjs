@@ -133,7 +133,7 @@ try{
       assert.equal(await source.locator('#point-1 .ml-source-revision').innerText(),'Current figure (acs-v2)');
       assert(fact.text.includes(cells[0]),'Cited title must match');
       assert(fact.text.includes(cells[2]),'Cited date must match');
-      assert(fact.text.replaceAll(',','').includes(cells[3]),'Cited value must match');
+      assert(fact.text.includes(cells[3]),'Cited formatted value must match');
       assert(fact.text.includes(cells[4]),'Cited unit must match');
       if(!seenCitations.has(fact.href)){
         seenCitations.add(fact.href);
@@ -164,7 +164,7 @@ try{
       const cells=await row.locator('th,td').allTextContents();
       cells[3]=await row.locator('.ml-source-value').innerText();
       assert(item.text.includes(cells[0]) && item.text.includes(cells[2]));
-      assert(item.text.replaceAll(',','').includes(cells[3]) && item.text.includes(cells[4]));
+      assert(item.text.includes(cells[3]) && item.text.includes(cells[4]));
       if(!seenCitations.has(item.href)){
         seenCitations.add(item.href);
         report.citations.push({statement:item.text,href:item.href,storedRow:cells});

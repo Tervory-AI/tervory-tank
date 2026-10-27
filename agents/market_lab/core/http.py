@@ -1,6 +1,7 @@
 """Private room interface used only by the authenticated Tank proxy."""
 import json
 from uuid import UUID
+from typing import Literal
 
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -14,6 +15,8 @@ class RequestBody(BaseModel):
     question: str = Field(default="", max_length=2000)
     document_id: UUID | None = None
     offset: int = Field(default=0, ge=0, le=10000000)
+    row: int | None = Field(default=None, ge=0, le=10000000)
+    row_kind: Literal["point", "event"] | None = None
 
 
 def build_router(*, key_ok, ledger_context, engine: str | None = None):
@@ -33,7 +36,7 @@ def build_router(*, key_ok, ledger_context, engine: str | None = None):
                 if operation == "document":
                     if body.document_id is None:
                         raise HTTPException(422, "A source is required")
-                    found = await document_page(ledger, tenant, str(body.document_id), body.offset, engine=engine)
+                    found = await document_page(ledger, tenant, str(body.document_id), body.offset, row=body.row, row_kind=body.row_kind, engine=engine)
                     if found is None:
                         raise HTTPException(404, "Source not found")
                     return found

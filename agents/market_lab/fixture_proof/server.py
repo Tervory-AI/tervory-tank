@@ -11,12 +11,14 @@ import asyncio
 import http.client
 import os
 import secrets
+import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -37,7 +39,7 @@ def database_url() -> str:
     return target
 
 
-async def seed() -> None:
+async def seed(*, history: bool = False) -> None:
     from uuid import UUID
     from chassis.db import ensure_schema
     from core.jobs import perform_refresh
@@ -49,13 +51,22 @@ async def seed() -> None:
         await ensure_schema(conn, "market_lab")
         ledger = PostgresLedger(conn)
         await ledger.apply_schema()
-        await perform_refresh(tenant_id=TENANT, engine="ffl", ledger=ledger, fixtures=str(FIXTURES))
+        with tempfile.TemporaryDirectory(prefix="market-history-") if history else nullcontext(str(FIXTURES)) as fixtures:
+            if history:
+                shutil.copytree(FIXTURES, fixtures, dirs_exist_ok=True)
+                # Saved publisher-shaped input, parsed and stored by the real job.
+                (Path(fixtures) / "ports/los_angeles.csv").write_text(
+                    "month,total_teu\n" + "".join(f"{year}-01,{14408 + year - 1960}\n" for year in range(1960, 2027)))
+            await perform_refresh(tenant_id=TENANT, engine="ffl", ledger=ledger, fixtures=fixtures)
         # This disposable local database represents production-shaped inputs.
         # Explicitly classify only this tenant's seeded records for the normal
         # serving path. No application read filter or route is overridden.
         # Never use this script against any deployed or shared database.
         for table in ("feed_checks", "feed_documents"):
             await conn.execute(f"UPDATE agent_market_lab.{table} SET fixture = false WHERE tenant_id = $1 AND fixture = true", UUID(TENANT))
+        if history:
+            from fixture_proof.mixed_source import seed_mixed_source
+            await seed_mixed_source(ledger, TENANT)
         # A saved external page-check result, to prove linked-page status reaches
         # the UI. Other unvisited linked pages must still say Not checked yet.
         await save_check(ledger, TENANT, {"source_id": "ups_hazmat", "name": "UPS hazardous materials",
@@ -88,10 +99,10 @@ def wait_ready(url: str, child: subprocess.Popen, *, timeout: float = 45) -> Non
 
 
 @contextmanager
-def services(api_port: int = 8046, log=None):
+def services(api_port: int = 8046, log=None, *, history: bool = False):
     database_url()
     sys.path[:0] = [str(ROOT / "agents/market_lab"), str(ROOT / "agents/_chassis")]
-    asyncio.run(seed())
+    asyncio.run(seed(history=history))
     room_port = free_port()
 
     class Corridor(BaseHTTPRequestHandler):

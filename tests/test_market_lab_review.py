@@ -90,21 +90,22 @@ async def test_revisions_are_labelled_and_only_the_current_value_answers():
     page = await document_page(ledger, TENANT, ident, fixtures=True)
     california = [p for p in page["points"] if p["geo"] == "06"]
     assert [(p["value"], p["revision_label"]) for p in california] == [
-        ("100", "Earlier figure (acs-v1)"), ("110", "Current figure (acs-v2)"),
+        ("110", "Current figure (acs-v2)"), ("100", "Earlier figure (acs-v1)"),
     ]
     result = await answer(ledger, TENANT, "Population in California", fixtures=True)
     assert any(": 110 people (" in fact["text"] for fact in result["facts"])
     assert all(": 100 " not in fact["text"] for fact in result["facts"])
     assert await document(ledger, TENANT, ident, fixtures=True) == original
     # An older citation still opens its original row, explicitly marked earlier.
-    earlier = await document_page(ledger, TENANT, ident, 0, fixtures=True)
-    assert earlier["points"][0]["value"] == "100"
-    assert earlier["points"][0]["revision_label"].startswith("Earlier figure")
+    earlier = await document_page(ledger, TENANT, ident, row=0, fixtures=True)
+    point = next(point for point in earlier["points"] if point["index"] == 0)
+    assert point["value"] == "100"
+    assert point["revision_label"].startswith("Earlier figure")
     # Version order is collection order, not lexical sorting or value magnitude.
     saved = ledger.feed_documents[0]
     newest = {**saved["points"][0], "revision": "acs-v10"}
     saved["points"] += [{**newest, "series_id": f"padding-{i}"} for i in range(195)] + [newest]
-    later = await document_page(ledger, TENANT, ident, 200, fixtures=True)
+    later = await document_page(ledger, TENANT, ident, row=200, fixtures=True)
     assert later["points"][0]["value"] == "100"
     assert later["points"][0]["revision_label"] == "Current figure (acs-v10)"
     result = await answer(ledger, TENANT, "Population in California", fixtures=True)
