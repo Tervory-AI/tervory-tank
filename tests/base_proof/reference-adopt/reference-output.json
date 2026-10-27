@@ -1,0 +1,21 @@
+{
+  "job": "Saved platform rows -> real Tank background adoption -> real Base FFL route -> real Workspace",
+  "fixture": "local, fixture page",
+  "failure_http_status": 401,
+  "failure_on_page": "The reference could not be loaded: The Base reference service returned HTTP 401.",
+  "recovered_without_restarting_tank": true,
+  "platform_source_rows": 4,
+  "reference_licences": 3,
+  "duplicate_rows": 1,
+  "collectors": 1,
+  "default_batch_licences": 2,
+  "newest_row_kept": true,
+  "source_rows_unchanged": true,
+  "shared_reference_for_both_tenants": true,
+  "atf_header_spellings": [
+    "PREMISE_*",
+    "prem_*",
+    "prem *"
+  ],
+  "latest_check": "current"
+}

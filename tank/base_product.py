@@ -24,6 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from admin import require_admin
 from base_metrics import COUNTS, compare, cost_rows, counts, csv_text, export_records, latest, matches, selected
 from base_repository import BaseStore, encoded
+from base_reference_status import check_reference
 from vendor_meter import PLATFORM, price
 
 log = logging.getLogger("tank.base_product")
@@ -392,15 +393,7 @@ def build_router(rt: Any, store: BaseStore | None = None, *, background: bool = 
         while True:
             try:
                 if rt.box_region() == "us-east":
-                    try:
-                        await store.adopt()
-                        if await store.due_refresh():
-                            await store.refresh()
-                    except Exception:
-                        # Preserve a durable site block. A reference outage must
-                        # not prevent independent CSV results from being collected.
-                        if await store.due_refresh():
-                            await store.reference_check("unavailable", "The official reference update could not be completed.")
+                    await check_reference(store)
                     for tenant in await store.tenants():
                         try:
                             await store.collect(tenant)

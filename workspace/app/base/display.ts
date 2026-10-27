@@ -39,7 +39,7 @@ export function reasonLabel(value: string | null | undefined): string {
   return value;
 }
 export function refreshLabel(value: string): string {
-  return ({ current: "The latest published file is already here.", updated: "The latest published file has been added.", blocked: "ATF did not allow the read. Automatic checks have stopped.", unavailable: "We could not check for a newer file. Your existing reference is unchanged." } as Record<string, string>)[value] || "We have not completed the latest reference check.";
+  return ({ adopted: "The saved platform reference has been loaded.", current: "The latest published file is already here.", updated: "The latest published file has been added.", blocked: "ATF did not allow the read. Automatic checks have stopped.", unavailable: "The latest reference check could not be completed." } as Record<string, string>)[value] || "We have not completed the latest reference check.";
 }
 export function batchStatusLabel(value: string): string {
   return ({ waiting: "Waiting to start.", submitting: "Starting this list.", submission_unknown: "We have not received confirmation that this list started. We are checking its progress.", running: "Checking this list.", done: "Checks completed.", failed: "We could not complete this list." } as Record<string, string>)[value] || "We are checking this list's progress.";
