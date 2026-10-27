@@ -119,7 +119,9 @@ I first listed eight "open decisions". Five of them you had already made, and th
 4. **No event bus.** Each agent talks only to Tank and Skala (`plan/squad-learning-plan.md`, 20 Oct). Market Lab pulling Tiger data through Tank (`tank/market_lab_routes.py:115`) fits that. Build Pack v2's Redis Streams events are superseded.
 5. **Autumbra #345 is on main by your merge** (27 Oct, 05:45 PT). It stays unless you say otherwise. Its live public page still breaks the no-sample-data rule (section 0).
 
-**Still open:**
+**Decided 27 Oct 13:21:** paid steps get an Ask/Auto toggle each, and the graduation bar is 99% (section 7b). **Still open:** Mixture of Agents (recommendation in 7b).
+
+**As first listed:**
 1. **Paid steps.** Your ladder rule (pause for admin approval before a paid step such as Brave, unless that step is set to auto) conflicts with AGENTS.md rule 10, "No run waits for a person" (set 14 Oct, #41). The code has only a global pause (`tank/controls.py:44–80`).
    - *Recommendation:* each paid step gets an "auto" or "ask first" setting, auto by default for steps you've already funded, with the global pause kept as the master switch.
 2. **The graduation bar:** 30 samples at 97% (the code), 1,000 calls at 97% (Build Pack v2), or a sustained 99% (Gemini).
@@ -339,9 +341,14 @@ Claude's suggestions, 27 Oct 13:20 PT. None is built until the founder decides. 
 4. **Swap the weak or missing pieces first:** DeepEval, Langfuse, Qdrant for the cache, Gitleaks and Semgrep in CI, Uptime Kuma. Swap working pieces (Tiger's diff, Zenas's clause library, Base's reader, Tisan's scorer) once each product is proven live.
 5. **Langfuse adds load:** it needs ClickHouse and object storage. Check Boston's memory first, or run it on the worker server.
 6. **Check the licences of Firecrawl and Grafana** (believed AGPL) before offering a changed copy to clients.
-7. **Paid steps:** an "auto" or "ask first" setting per step, auto by default for funded steps, with the global pause as the master switch.
-8. **Graduation bar:** 99% agreement over at least 200 checked samples, plus the founder's approval.
-9. **Mixture of Agents:** off until the bench proves a mixture cheaper at the same quality, then switched on per task.
+7. **Paid steps: decided (27 Oct 13:21).** Every paid step gets a toggle button, Ask or Auto. One toggle per step on the control panel, saved per step in Tank, with the global pause as the master switch. Needs a Figma frame first.
+8. **Graduation bar: decided (27 Oct 13:21).** Raised to 99%: 99% agreement over at least 200 checked samples, plus the founder's approval. Change the defaults in `tank/graduate.py:23–24` and `tank/schema.sql:303`.
+9. **Mixture of Agents (recommendation, open):**
+   - **Use it for two tasks only:** Zenas legal analysis (`zenas.apply`, `zenas.compose`) and Market Lab briefs, where a wrong answer costs more than the extra calls.
+   - **Never for** Base, Tiger, Rig, live chat, or anything code or the cache answers.
+   - **Start with "pick the best answer"** (a judge chooses), not "blend all answers". The bench compares one model, the same model three times with a judge, and the mixed seats with the aggregator stepping down.
+   - **Switch on per task** only when it passes the 99% bar over 200 samples and the founder approves, with an On/Off toggle per task.
+   - **Allow Perplexity as Market Lab's research seat** (barred in `tank/moa.py:68–72` today).
 
 ## 8. Every tool: where it goes and which agents it serves
 **Status:**
