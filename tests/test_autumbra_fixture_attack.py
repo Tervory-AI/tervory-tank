@@ -87,8 +87,8 @@ def test_fixture_attack_shield_undo_receipt(tmp_path: Path, monkeypatch):
             undo_shield_url="https://protect.tervory.com/undo/fixture",
         )
         assert "approve fixes yourself" in mail["body"]
-        assert "It was blocking addresses known to be part of a widely reported campaign" in mail["body"]
-        assert "(Each one is linked to its public advisory.)" in mail["body"]
+        assert "It was part of a widely reported campaign" in mail["body"]
+        assert "(Each linked to its public advisory.)" in mail["body"]
         assert "[" not in mail["body"]
         assert "Nothing from your logs was kept" in mail["body"]
         return receipt

@@ -72,8 +72,8 @@ def test_compose_healthcheck_targets_tank_health() -> None:
             assert "healthcheck" in spec, f"{name} {service} has no health check"
     boston = yaml.safe_load((ROOT / "docker-compose.yml").read_text(encoding="utf-8"))
     south_africa = yaml.safe_load((ROOT / "docker-compose.za.yml").read_text(encoding="utf-8"))
-    assert boston["services"]["qdrant"]["image"] == "qdrant/qdrant:v1.19.2"
-    assert south_africa["services"]["qdrant"]["image"] == "qdrant/qdrant:v1.19.2"
+    assert boston["services"]["qdrant"]["image"] == "qdrant/qdrant:v1.20.0"
+    assert south_africa["services"]["qdrant"]["image"] == "qdrant/qdrant:v1.20.0"
 
 
 def _watchdog():

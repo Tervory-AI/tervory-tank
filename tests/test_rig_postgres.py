@@ -150,10 +150,14 @@ async def _assert_imported(url: str) -> None:
         seen = await conn.fetch("SELECT seen_at, price FROM agent_rig.market_prices")
         # customnation market.csv 32 rows + archon market.csv 53 rows
         assert len(seen) == 32 + 53
+        dates: dict[str, int] = {}
         for row in seen:
             assert isinstance(row["seen_at"], datetime)
-            assert row["seen_at"].date().isoformat() == "2026-03-01"
             assert row["price"] is not None
+            day = row["seen_at"].date().isoformat()
+            dates[day] = dates.get(day, 0) + 1
+        # Each catalogue keeps the date its market.csv carries.
+        assert dates == {"2026-03-01": 32, "2026-10-18": 53}
         kind = await conn.fetchval(
             "SELECT jsonb_typeof(attributes) FROM agent_rig.products WHERE sku = $1",
             "STI-C2-9",

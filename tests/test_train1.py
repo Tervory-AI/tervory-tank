@@ -161,8 +161,8 @@ async def test_auth_missing_agent_keys_and_reviewer_boundary(monkeypatch):
 async def accepted_ledger(conn, tenant, accepted=True, region="us-east"):
     ident = uuid.uuid4()
     await conn.execute(
-        """INSERT INTO tank.ledger (id,tenant_id,region,agent,task_type,model,feedback,feedback_by)
-        VALUES ($1,$2,$3,'base','base.fixture','code',$4,'person')""",
+        """INSERT INTO tank.ledger (id,tenant_id,region,agent,task_type,model,feedback,feedback_by,accept_after)
+        VALUES ($1,$2,$3,'base','base.fixture','code',$4,'person',now()-interval '1 second')""",
         ident, tenant, region, "accepted" if accepted else "rejected",
     )
     await conn.execute(
@@ -185,12 +185,14 @@ async def test_accepted_ledger_pair_rejection_and_region(database):
         await training.collect_ledger(conn, tenant)
         await training.collect_ledger(conn, tenant)
         rows = await conn.fetch("SELECT * FROM tank.training_pairs")
-        assert len(rows) == 1 and rows[0]["tenant_id"] == tenant
-        assert rows[0]["source_ref"] == str(accepted)
+        assert len(rows) == 2 and all(row["tenant_id"] == tenant for row in rows)
+        positive = next(row for row in rows if row["source"] == "client_accepted")
+        assert positive["source_ref"] == str(accepted) and positive["gold_id"] is None
         await conn.execute("UPDATE tank.ledger SET feedback='rejected' WHERE id=$1", accepted)
         await training.collect_ledger(conn, tenant)
         assert not await conn.fetchval("SELECT active FROM tank.training_pairs WHERE source_ref=$1", str(accepted))
-        assert await conn.fetchval("SELECT status FROM tank.gold_examples WHERE source_ref=$1", str(accepted)) == "rejected"
+        assert await conn.fetchval("SELECT count(*) FROM tank.gold_examples WHERE source_ref=$1", str(accepted)) == 0
+        assert await conn.fetchval("SELECT polarity FROM tank.training_pairs WHERE source_ref=$1 AND source='client_rejected'", str(accepted)) == "negative"
 
 
 @pytest.mark.asyncio

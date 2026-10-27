@@ -1,7 +1,7 @@
 """Isolation probe as seen from inside a per-client Enforce container.
 
 Run on the Coolify test host (never live Boston):
-  docker exec <enforce-container> python -m agents.ghost.enforce_isolation_probe
+  docker exec <enforce-container> python -m ghost.enforce_isolation_probe
 
 On this builder box Docker socket is unavailable — unit tests evaluate fixture
 probe results instead of a live exec.
@@ -13,7 +13,8 @@ import socket
 from typing import Any
 
 
-# Hosts an Enforce container must NOT resolve / reach (internal network + queue only).
+# Hosts an Enforce container must NOT resolve (DNS only — not TCP reachability).
+# This list does not include tervory.com; public DNS may resolve it without network path.
 FORBIDDEN_RESOLVE = (
     "tank",
     "postgres",

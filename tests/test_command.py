@@ -775,12 +775,13 @@ def shared_router(monkeypatch):
     import main as tank
     policy = {'model': 'fixture-auto', 'priority': 'standard', 'rung': 1, 'system_prompt': 'Policy prompt',
               'max_tokens_out': 32, 'cache_scope': 'tenant', 'candidate_model': None, 'shadow_rate': 0}
-    conn = SimpleNamespace(execute=AsyncMock(), fetchval=AsyncMock(return_value=False))
+    conn = SimpleNamespace(execute=AsyncMock(), fetchval=AsyncMock(return_value=False), fetch=AsyncMock(return_value=[]))
 
     @asynccontextmanager
     async def acquire():
         yield conn
 
+    conn.transaction = acquire
     monkeypatch.setattr(tank, 'pool', lambda: SimpleNamespace(acquire=acquire))
     monkeypatch.setattr(tank, 'load_policy', AsyncMock(return_value=policy))
     monkeypatch.setattr(tank, 'list_models', AsyncMock(return_value=[{'name': 'fixture-pin'}, {'name': 'fixture-auto'}]))
@@ -807,6 +808,37 @@ def shared_router(monkeypatch):
     req = tank.RouteRequest(tenant_id=TENANT, agent='orchestrator', task_type='command.turn', home_region='us-east',
                             max_tokens=1000, messages=[tank.Message(role='user', content='Hello')])
     return tank, conn, calls, policy, req
+
+
+def memory_route_cache(monkeypatch, tank, conn):
+    """Storage seam only; real key construction remains in run_route.
+
+    Postgres persistence/isolation is exercised in test_tank_ladder.
+    """
+    cache = SimpleNamespace(entries={}, keys=[], forced=None)
+
+    async def read(req, policy, identity):
+        key = (str(req.tenant_id), identity[0], identity[1])
+        cache.keys.append(key)
+        return cache.forced if cache.forced is not None else cache.entries.get(key)
+
+    async def write(req, policy, identity, ledger_id):
+        transcript = next(call.args for call in conn.execute.call_args_list
+                          if 'INSERT INTO tank.transcripts' in call.args[0] and call.args[1] == ledger_id)
+        cache.entries[(str(req.tenant_id), identity[0], identity[1])] = transcript[-1]
+
+    monkeypatch.setattr(tank, '_cache_read', read)
+    monkeypatch.setattr(tank, '_cache_write', write)
+    return cache
+
+
+def receipt_seat(args):
+    import re
+    sql = args[0]
+    columns = re.search(r'INSERT INTO tank.ledger\s*\((.*?)\)', sql, re.S)[1].split(',')
+    position = [c.strip() for c in columns].index('route_seat')
+    value = re.search(r'VALUES\s*\((.*)\)', sql, re.S)[1].split(',')[position]
+    return args[int(re.search(r'\$(\d+)', value)[1])]
 
 
 @pytest.mark.asyncio
@@ -853,15 +885,14 @@ async def test_shared_pin_cannot_bypass_existing_guards(shared_router, monkeypat
 @pytest.mark.asyncio
 async def test_shared_pin_uses_model_specific_cache_identity(shared_router, monkeypatch):
     tank, conn, calls, policy, req = shared_router
-    cache = SimpleNamespace(get=AsyncMock(return_value=None), set=AsyncMock())
-    monkeypatch.setattr(tank, '_redis', cache)
+    cache = memory_route_cache(monkeypatch, tank, conn)
     await tank.run_route(req)
     await tank.run_route(req, model_override='fixture-pin')
-    keys = [call.args[0] for call in cache.get.call_args_list]
+    keys = list(cache.keys)
     assert keys[0] != keys[1] and str(TENANT) in keys[1]
-    cache.get.return_value = json.dumps({'content': 'Cached pinned answer'})
+    cache.forced = 'Cached pinned answer'
     answer = await tank.run_route(req, model_override='fixture-pin')
-    assert cache.get.call_args.args[0] == keys[1]
+    assert cache.keys[-1] == keys[1]
     assert len(calls) == 2 and answer.rung == 4 and answer.model == 'fixture-pin'
     assert answer.cost_usd == 0 and answer.content == 'Cached pinned answer'
 
@@ -1019,7 +1050,7 @@ async def test_shared_override_disables_fallback_and_shadow_without_mutating_pol
     assert answer.rung == 1 and policy == original
     shadow.assert_not_called()
     ledger = next(c.args for c in conn.execute.call_args_list if 'INSERT INTO tank.ledger' in c.args[0])
-    assert ledger[7] == 1 and ledger[-1] == 'pinned'
+    assert ledger[7] == 1 and receipt_seat(ledger) == 'pinned'
     # Auto still follows its policy, including the existing shadow mechanism.
     await tank.run_route(req)
     import asyncio
@@ -1042,7 +1073,7 @@ async def test_moa_seat_requires_override_and_loads_parent_policy(shared_router,
     tank.load_policy.assert_awaited_once_with(task_type.partition('#moa.')[0], TENANT)
     assert calls[0]['disable_fallbacks'] is True
     ledger = next(c.args for c in conn.execute.call_args_list if 'INSERT INTO tank.ledger' in c.args[0])
-    assert ledger[6] == task_type and ledger[-1] == task_type.partition('#moa.')[2]
+    assert ledger[6] == task_type and receipt_seat(ledger) == task_type.partition('#moa.')[2]
 
 
 @pytest.mark.asyncio
@@ -1060,24 +1091,16 @@ async def test_malformed_seat_cannot_use_override(shared_router, task_type):
 @pytest.mark.asyncio
 async def test_same_model_auto_pin_and_seats_do_not_share_cache(shared_router, monkeypatch):
     tank, conn, calls, policy, req = shared_router
-    entries = {}
-
-    async def get(key):
-        return entries.get(key)
-
-    async def put(key, value, **kwargs):
-        entries[key] = value
-
-    monkeypatch.setattr(tank, '_redis', SimpleNamespace(get=get, set=put))
+    cache = memory_route_cache(monkeypatch, tank, conn)
     for task, override in [('command.turn', None), ('command.turn', 'fixture-auto'),
                             ('command.turn#moa.writer', 'fixture-auto'), ('command.turn#moa.judge', 'fixture-auto')]:
         req.task_type = task
         first = await tank.run_route(req, model_override=override)
         cached = await tank.run_route(req, model_override=override)
         assert first.rung == 1 and cached.rung == 4
-    assert len(entries) == 4 and len(calls) == 4
+    assert len(cache.entries) == 4 and len(calls) == 4
     ledger = [c.args for c in conn.execute.call_args_list if 'INSERT INTO tank.ledger' in c.args[0]]
-    assert [row[-1] for row in ledger] == [None, None, 'pinned', 'pinned', 'writer', 'writer', 'judge', 'judge']
+    assert [receipt_seat(row) for row in ledger] == [None, None, 'pinned', 'pinned', 'writer', 'writer', 'judge', 'judge']
 
 
 @pytest.mark.asyncio
@@ -1088,7 +1111,7 @@ async def test_route_seat_is_durable_in_every_ledger_insert(shared_router, comma
     tank, conn, calls, policy, req = shared_router
     req.task_type = task
     if mode == 'cache':
-        monkeypatch.setattr(tank, '_redis', SimpleNamespace(get=AsyncMock(return_value=json.dumps({'content': 'Cached'}))))
+        memory_route_cache(monkeypatch, tank, conn).forced = 'Cached'
     elif mode in {'transport', 'provider'}:
         response = httpx.Response(503, json={'error': {'message': 'Unavailable'}})
         post = AsyncMock(side_effect=httpx.ConnectError('unavailable')) if mode == 'transport' else AsyncMock(return_value=response)
@@ -1114,15 +1137,12 @@ async def test_route_seat_is_durable_in_every_ledger_insert(shared_router, comma
 @pytest.mark.asyncio
 async def test_moa_case_ref_separates_bench_samples_without_changing_seat(shared_router, monkeypatch):
     tank, conn, calls, policy, req = shared_router
-    entries = {}
-    async def get(key): return entries.get(key)
-    async def put(key, value, **kwargs): entries[key] = value
-    monkeypatch.setattr(tank, '_redis', SimpleNamespace(get=get, set=put))
+    cache = memory_route_cache(monkeypatch, tank, conn)
     req.task_type = 'command.turn#moa.writer'
     for case in ('first', 'second'):
         req.case_ref = case
         assert (await tank.run_route(req, model_override='fixture-auto')).rung == 1
         assert (await tank.run_route(req, model_override='fixture-auto')).rung == 4
-    assert len(entries) == 2 and len(calls) == 2
+    assert len(cache.entries) == 2 and len(calls) == 2
     ledger = [c.args for c in conn.execute.call_args_list if 'INSERT INTO tank.ledger' in c.args[0]]
-    assert all(row[-1] == 'writer' for row in ledger)
+    assert all(receipt_seat(row) == 'writer' for row in ledger)

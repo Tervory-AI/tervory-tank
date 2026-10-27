@@ -126,7 +126,7 @@ async function fetchCsv(url: string): Promise<{ text: string } | { error: string
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 120_000);
   try {
-    const res = await fetch(directUrl(url), { redirect: "follow", signal: ctrl.signal, headers: { "user-agent": "TervoryBase/0.1" } });
+    const res = await fetch(directUrl(url), { redirect: "follow", signal: ctrl.signal, headers: { "user-agent": "Tervory/1.0 (+https://tervory.com)" } });
     if (!res.ok) return { error: `link answered ${res.status}` };
     const type = res.headers.get("content-type") ?? "";
     if (type.includes("text/html")) {

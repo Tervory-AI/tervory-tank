@@ -9,7 +9,7 @@
 
 services:
   postgres:
-    image: postgres:16
+    image: postgres:16.15
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-tervory}
@@ -35,9 +35,10 @@ services:
       - tervory-gw-ghost
 
   redis:
-    # 7.4.11 fixes CVE-2026-81934 (TLS pending-data use-after-free) and carries the 7.4.9 fix for CVE-2026-23479.
+    # 7.4.12 is the current 7.4 patch. It carries the 7.4.11 fix for CVE-2026-81934
+    # and the 7.4.9 fix for CVE-2026-23479.
     # Multi-arch index digest; keep identical in docker-compose.yml and docker-compose.za.yml.
-    image: redis:7.4.11@sha256:44960b3100c48159a66d28c18b0588c193492e25f7551d60e51dd464fc3eca5b
+    image: redis:7.4.12@sha256:bd28fff4b665fdf1b73e8b5b73ec05d2f858f4fa3c8ea0d7c9bc09f7f6bf7039
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
@@ -50,7 +51,7 @@ services:
 
   qdrant:
     # Same pin as the South Africa stack. :latest made the two regions drift.
-    image: qdrant/qdrant:v1.19.2
+    image: qdrant/qdrant:v1.20.0
     restart: unless-stopped
     environment:
       QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY}
@@ -343,6 +344,8 @@ services:
       TERVORY_TENANT_ALIASES: ${TERVORY_TENANT_ALIASES:-}
       NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+      # Shared with Watch + Enforce: signed owner Undo / receipts email links. Coolify secret NAME only.
+      AUTUMBRA_UNDO_TOKEN_SECRET: ${AUTUMBRA_UNDO_TOKEN_SECRET:-}
       # W-2 billing. Empty until set in Coolify; the billing page then says pricing is being finalised.
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}

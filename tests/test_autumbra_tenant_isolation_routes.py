@@ -1,9 +1,9 @@
 """Tenant isolation on every new Autumbra route."""
 from __future__ import annotations
 
-import hashlib
-import hmac
 import time
+
+from agents.ghost.webhooks import sign_body
 
 import pytest
 from fastapi.testclient import TestClient
@@ -110,19 +110,28 @@ def test_enforce_lifecycle_execute_isolated(client, tmp_path):
     assert destroy.json()["receipt"]["outcome"] == "destroyed"
 
 
-def test_owner_update_calls_sender_from_client_settings(client):
+def test_owner_update_calls_sender_from_client_settings(client, monkeypatch):
+    monkeypatch.setenv("AUTUMBRA_UNDO_TOKEN_SECRET", "test-undo-secret-tenant")
+    # Store owner_email in client settings first — request cannot name recipient.
+    # Counts come from receipts, never from the request body.
+    client.post(
+        "/ghost/autumbra/settings",
+        headers=_h(),
+        json={
+            "tenant_id": TENANT_A,
+            "site_name": "a.example",
+            "fix_mode": ApplyMode.approve_each.value,
+            "owner_email": "owner-a@example.test",
+        },
+    )
+    # Inflated request numbers must be ignored (no receipts yet → quiet week).
     res = client.post(
         "/ghost/autumbra/owner-update",
         headers=_h(),
         json={
-            "settings": {
-                "tenant_id": TENANT_A,
-                "site_name": "a.example",
-                "fix_mode": ApplyMode.approve_each.value,
-                "owner_email": "owner-a@example.test",
-            },
+            "tenant_id": TENANT_A,
             "site_name": "a.example",
-            "threats_found": 1,
+            "threats_found": 99999,
             "critical": [{
                 "stack": "PHP", "rating": "critical",
                 "advisory_id": "CVE-2026-109618",
@@ -137,21 +146,27 @@ def test_owner_update_calls_sender_from_client_settings(client):
     assert body["sent"] is True
     assert body["to"] == "owner-a@example.test"
     assert body["transport"] == "fixture"
-    assert "https://example.test/cve" in body["body"]
-    assert "approve fixes yourself" in body["body"]
+    assert "99999" not in body["subject"]
+    assert "Quiet week." in body["body"]
+    assert f"/autumbra/receipts/weekly/{TENANT_A}" in body["body"]
     assert "[" not in body["body"]
 
 
 def test_owner_update_without_owner_email_fails(client):
+    client.post(
+        "/ghost/autumbra/settings",
+        headers=_h(),
+        json={
+            "tenant_id": TENANT_A,
+            "site_name": "a.example",
+            "fix_mode": ApplyMode.approve_each.value,
+        },
+    )
     res = client.post(
         "/ghost/autumbra/owner-update",
         headers=_h(),
         json={
-            "settings": {
-                "tenant_id": TENANT_A,
-                "site_name": "a.example",
-                "fix_mode": ApplyMode.approve_each.value,
-            },
+            "tenant_id": TENANT_A,
             "threats_found": 0,
             "critical": [],
             "receipt_url": "https://protect.tervory.com/r/1",
@@ -221,10 +236,16 @@ def test_sources_and_jobs_and_webhook_isolated_surface(client):
     # Webhook: no tank key required; bad sig dropped.
     dropped = client.post("/ghost/autumbra/webhooks/edge", content=body)
     assert dropped.status_code == 401
-    sig = hmac.new(b"edge-secret", body, hashlib.sha256).hexdigest()
+    ts = str(int(time.time()))
+    nonce = "tenant-iso-nonce"
+    sig = sign_body(secret="edge-secret", body=body, timestamp=ts, nonce=nonce)
     accepted = client.post(
         "/ghost/autumbra/webhooks/edge",
         content=body,
-        headers={"X-Autumbra-Signature": sig, "X-Autumbra-Timestamp": str(int(time.time()))},
+        headers={
+            "X-Autumbra-Signature": sig,
+            "X-Autumbra-Timestamp": ts,
+            "X-Autumbra-Nonce": nonce,
+        },
     )
     assert accepted.status_code == 200

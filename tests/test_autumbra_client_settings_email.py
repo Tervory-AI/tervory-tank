@@ -85,8 +85,8 @@ def test_owner_email_three_fix_paragraphs():
         assert needle in mail["body"]
         assert "Nothing from your logs was kept" in mail["body"]
         assert "214" in mail["body"]
-        assert "It was blocking addresses known to be part of a widely reported campaign" in mail["body"]
-        assert "(Each one is linked to its public advisory.)" in mail["body"]
+        assert "It was part of a widely reported campaign" in mail["body"]
+        assert "(Each linked to its public advisory.)" in mail["body"]
         assert "https://example.test/cve" in mail["body"]
         assert "[" not in mail["body"]
         assert "payment provider and Cloudflare were never blocked" in mail["body"]
@@ -133,7 +133,7 @@ def test_three_fixture_clients_get_matching_paragraphs():
             undo_fix_url="https://protect.tervory.com/undo/fix",
         )
         assert needle in mail["body"]
-        assert "(Each one is linked to its public advisory.)" in mail["body"]
+        assert "(Each linked to its public advisory.)" in mail["body"]
         assert "[" not in mail["body"]
         assert "Nothing from your logs was kept" in mail["body"]
 
@@ -194,7 +194,7 @@ def test_advisory_links_appear_in_body():
         pr_url="https://github.com/example/pr/1",
     )
     assert "https://example.test/cve" in mail["body"]
-    assert "(Each one is linked to its public advisory.)" in mail["body"]
+    assert "(Each linked to its public advisory.)" in mail["body"]
 
 
 def test_block_in_seconds_copy_gated_on_hand():

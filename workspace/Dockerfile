@@ -4,7 +4,7 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 # Coolify injects build-time variables into every stage. NODE_ENV=production
 # makes npm skip devDependencies. Next then installs the newest TypeScript
-# (7.x), which cannot load next.config.ts. --include=dev keeps the pinned 5.9.2.
+# (7.x), which cannot load next.config.ts. --include=dev keeps the pinned 5.9.3.
 RUN npm install --include=dev --no-audit --no-fund
 
 FROM node:22-slim AS build

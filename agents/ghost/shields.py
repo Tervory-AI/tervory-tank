@@ -9,12 +9,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Literal
-from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field
 

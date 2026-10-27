@@ -132,3 +132,28 @@ CREATE TABLE IF NOT EXISTS agent_market_lab.official_values (
     value       numeric NOT NULL,
     PRIMARY KEY (tenant_id, series_id, date)
 );
+
+-- Immutable, tenant-owned source documents. Fixture documents are never served.
+CREATE TABLE IF NOT EXISTS agent_market_lab.feed_documents (
+    id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    source_id text NOT NULL,
+    fetched_at timestamptz NOT NULL,
+    fixture boolean NOT NULL DEFAULT false,
+    content jsonb NOT NULL,
+    PRIMARY KEY (tenant_id, id)
+);
+CREATE TABLE IF NOT EXISTS agent_market_lab.feed_checks (
+    id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    source_id text NOT NULL,
+    checked_at timestamptz NOT NULL,
+    fixture boolean NOT NULL DEFAULT false,
+    rows integer NOT NULL CHECK (rows >= 0),
+    note text NOT NULL,
+    document_id uuid,
+    PRIMARY KEY (tenant_id, id),
+    FOREIGN KEY (tenant_id, document_id) REFERENCES agent_market_lab.feed_documents (tenant_id, id)
+);
+CREATE INDEX IF NOT EXISTS feed_checks_tenant_source_idx
+    ON agent_market_lab.feed_checks (tenant_id, source_id, checked_at DESC);

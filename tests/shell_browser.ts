@@ -392,7 +392,7 @@ async function main(): Promise<void> {
       await capture("closed");
       if (width === 375) await click("#shell-menu");
       await click("#squad-button");
-      await check('document.activeElement?.dataset.squadHref === "/base"', "Opening must focus current member");
+      await check('document.activeElement?.dataset.squadHref === "/skala"', "Opening must focus current member");
       await check('document.querySelectorAll("[data-squad-member]").length === 9', "Founder must see nine members");
       await check('[...document.querySelectorAll(".squad-row img")].every(i=>i.complete && i.naturalWidth && i.getBoundingClientRect().height===22 && Math.abs(i.getBoundingClientRect().width / 22 - i.naturalWidth/i.naturalHeight)<.02)', "Logos must be loaded at equal 22px heights with original proportions");
       await check('[...document.querySelectorAll(".squad-row")].every(i=>i.getBoundingClientRect().height===56)', "Rows must be 56px");
@@ -404,7 +404,7 @@ async function main(): Promise<void> {
       await check('document.querySelector("[aria-current=page][data-squad-member]")?.getAttribute("aria-current") === "page"', "Current member must be highlighted");
       await capture("open");
       await cdp.send("Input.dispatchKeyEvent", {type:"keyDown",key:"ArrowDown",code:"ArrowDown",windowsVirtualKeyCode:40});
-      await check('document.activeElement?.dataset.squadHref === "/tiger"', "ArrowDown must move to Tiger");
+      await check('document.activeElement?.dataset.squadHref === "/tank"', "ArrowDown must move to the next member (Tank)");
       await click('[aria-label="Close"]');
       await check('document.getElementById("squad-popout").hidden && document.activeElement.id === "squad-button"', "X must close and return focus");
       await click("#squad-button");

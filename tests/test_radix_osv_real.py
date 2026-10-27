@@ -148,7 +148,7 @@ def test_dockerfiles_are_collected_from_a_tree(tmp_path: Path) -> None:
     names = [path for path, _text in dependencies.iter_manifests(tmp_path)]
     assert names == ["svc/Dockerfile", "web.dockerfile"]
     radix = dependencies._packages_from_dockerfile((RADIX / "Dockerfile").read_text())
-    assert ("PyPI", "semgrep", "1.181.0", ) == radix[0][:3]
+    assert ("PyPI", "semgrep", "1.182.1", ) == radix[0][:3]
 
 
 def test_osv_is_fetched_only_at_build_and_the_seal_is_unchanged() -> None:

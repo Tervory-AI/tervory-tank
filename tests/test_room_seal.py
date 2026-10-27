@@ -24,6 +24,12 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 RAW_MARKER = "# coolify: raw compose"
 COOLIFY_APP_NETWORK = "<coolify app network>"
+# Autumbra Watch/Enforce are optional until dogfood; seal-check reports
+# absence without failing. Tests expect that status line so Autumbra coverage stays honest.
+AUTUMBRA_ABSENT_LINE = (
+    "autumbra: no Watch/Enforce rooms running "
+    "(ok until dogfood; pin EXPECTED_SEALED after first clean run)"
+)
 ROOM_FILES = sorted((ROOT / "agents").glob("*/docker-compose*.yml"))
 SEAL_CHECK = ROOT / "ops" / "seal-check.sh"
 FIXTURES = ROOT / "tests" / "fixtures" / "seal_check"
@@ -248,6 +254,7 @@ def test_seal_check_reports_sealed_rooms(tmp_path: Path) -> None:
         "agent-radix (radixuuid): sealed",
         "agent-tiger (tigeruuid): sealed",
         "agent-rig (riguuid): sealed",
+        AUTUMBRA_ABSENT_LINE,
     ]
 
 
@@ -261,6 +268,7 @@ def test_seal_check_names_each_leaking_container_and_network(tmp_path: Path) -> 
         "agent-radix (radixuuid): LEAK: agent-radix-radixuuid on radixuuid",
         "agent-rig (riguuid): sealed",
         "agent-tiger: NOT FOUND",
+        AUTUMBRA_ABSENT_LINE,
     ]
 
 
@@ -283,6 +291,7 @@ def test_seal_check_finds_raw_compose_rooms_by_label_not_container_name(tmp_path
         "agent-radix (radixuuid): sealed",
         "agent-tiger (tigeruuid): NOT SEALED: no container on an internal network",
         "agent-rig (riguuid): sealed",
+        AUTUMBRA_ABSENT_LINE,
     ]
 
 
@@ -316,6 +325,7 @@ def test_seal_check_reports_leaks_in_raw_compose_rooms(tmp_path: Path) -> None:
         "agent-radix (radixuuid): sealed",
         "agent-rig (riguuid): sealed",
         "agent-tiger: NOT FOUND",
+        AUTUMBRA_ABSENT_LINE,
     ]
 
 
@@ -329,6 +339,7 @@ def test_seal_check_fails_when_an_expected_room_is_missing(tmp_path: Path) -> No
         "agent-tiger (tigeruuid): NOT SEALED: no container on an internal network",
         "agent-rig (riguuid): sealed",
         "agent-radix: NOT FOUND",
+        AUTUMBRA_ABSENT_LINE,
     ]
 
 
@@ -342,6 +353,7 @@ def test_seal_check_never_passes_when_only_the_hub_is_running(tmp_path: Path) ->
         "agent-radix: NOT FOUND",
         "agent-tiger: NOT FOUND",
         "agent-rig: NOT FOUND",
+        AUTUMBRA_ABSENT_LINE,
     ]
 
 

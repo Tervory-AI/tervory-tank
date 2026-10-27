@@ -17,7 +17,7 @@ export async function loadLabPlugins(): Promise<PluginPanel> {
   } catch (error) {
     const text = error instanceof Error ? error.message : "";
     if (text.includes(VAULT_OFF_MESSAGE)) return offPanel();
-    return offPanel("Plugins could not be loaded from Tank. No vault data is shown.");
+    return offPanel("Plugins could not be loaded. Your saved items are not shown.");
   }
 }
 

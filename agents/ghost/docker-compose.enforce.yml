@@ -1,3 +1,4 @@
+# coolify: raw compose
 # Per-client Autumbra Enforce. One project per client (Coolify by name).
 # Own entrypoint: ghost.enforce_app:app — NOT ghost.app. No TANK_KEY.
 # Internal network only. No public ports. No Docker socket. No host mounts.
@@ -21,6 +22,8 @@ services:
       TENANT_ID: ${TENANT_ID}
       # Edge credential env reserved; Coolify secret NAME held until a real edge client. Never commit values.
       AUTUMBRA_EDGE_CREDENTIAL: ${AUTUMBRA_EDGE_CREDENTIAL:-}
+      # Same shared secret as Workspace + Watch (Coolify NAME). Act-email Undo links.
+      AUTUMBRA_UNDO_TOKEN_SECRET: ${AUTUMBRA_UNDO_TOKEN_SECRET:-}
       THREAT_PAYLOAD_QUEUE: /queue
       DATA_DIR: /data
       # Enforce never calls a model. No TANK_KEY here on purpose.
@@ -40,6 +43,7 @@ services:
     # No ports: / no expose to public. Reachable only on the internal network + queue.
 volumes:
   enforce_data:
+    name: ${ENFORCE_DATA_VOLUME}
   threat_queue:
     name: ${THREAT_PAYLOAD_QUEUE_VOLUME}
 networks:

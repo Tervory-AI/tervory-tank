@@ -211,8 +211,9 @@ class PostgresLedger:
             official=official,
         )
         last = await self.conn.fetchrow(
-            f"SELECT value FROM {SCHEMA}.points WHERE series_id = $1 ORDER BY date DESC LIMIT 1",
+            f"SELECT p.value FROM {SCHEMA}.points p JOIN {SCHEMA}.series s ON s.id = p.series_id WHERE p.series_id = $1 AND s.tenant_id = $2 ORDER BY p.date DESC LIMIT 1",
             series_id,
+            owner,
         )
         if last is not None:
             book.points.append(

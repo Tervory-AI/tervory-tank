@@ -96,7 +96,9 @@ def test_rig_routes_are_reads_and_use_the_workspace_key(monkeypatch: pytest.Monk
 
     monkeypatch.setenv("TANK_KEY_RIG", ROOM_KEY)
     paths: dict[str, set[str]] = {}
-    for route in tank.app.routes:
+    from http_routes import iter_http_routes
+
+    for route in iter_http_routes(tank.app.routes):
         path = str(getattr(route, "path", ""))
         if not path.startswith("/v1/rig"):
             continue

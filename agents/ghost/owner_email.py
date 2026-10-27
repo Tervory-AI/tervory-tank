@@ -1,13 +1,14 @@
 """Owner update email — built by code from receipts. No model. Plain English only.
 
-Exact founder wording from ops/BUILDER-BRIEFS-2026-10-26/04-GROK-AUTUMBRA.md. "critical" only
-with a linked advisory rating. No literal "[...]" placeholders in a sent body.
-Recipient from client settings. Weekly schedule is a real job entry.
+Exact founder wording (item 8 phrases). Founder brief is in-repo byte-identical.
+"critical" only with a linked advisory rating. No literal "[...]" placeholders in
+a sent body. Recipient from client settings. Weekly schedule is a real job entry.
 """
 from __future__ import annotations
 
 import re
 from typing import Any
+from urllib.parse import urlparse
 
 from .client_settings import ApplyMode, ClientAutumbraSettings
 
@@ -29,6 +30,30 @@ def _fmt_count(n: int) -> str:
 def _assert_no_placeholders(body: str) -> None:
     if _PLACEHOLDER_RE.search(body or ""):
         raise ValueError("owner email body must not contain [...] placeholders")
+
+
+_DASHBOARD_URL = "https://protect.tervory.com/autumbra"
+
+
+def _count_link(label: str, receipt_url: str) -> str:
+    """Link a count to the signed receipts page, or the signed-in dashboard if unsigned."""
+    url = (receipt_url or "").strip()
+    if url and "token=" in url:
+        return _link(label, url)
+    return _link(label, _DASHBOARD_URL)
+
+
+def _receipt_footer(receipt_url: str) -> str:
+    url = (receipt_url or "").strip()
+    if url and "token=" in url:
+        return (
+            "Nothing from your logs was kept. We read them, acted, and deleted them. "
+            f"{_link('Full receipt', url)}"
+        )
+    return (
+        "Nothing from your logs was kept. We read them, acted, and deleted them. "
+        f"Sign in at {_link('your Autumbra dashboard', _DASHBOARD_URL)} to see your receipts."
+    )
 
 
 def build_owner_update(
@@ -65,17 +90,13 @@ def build_owner_update(
     c = len(cleaned_critical)
     subject = f"Autumbra update for {site}: {n} threats found, {c} critical"
 
-    if not receipt_url:
-        raise ValueError("owner update requires receipt_url (no placeholders)")
-
     # Quiet week — brief: "Quiet week. [1,204] checks, 0 threats, 0 actions."
     if n == 0 and c == 0 and not shield:
         checks = int(checks_run if checks_run is not None else 0)
         body = (
-            f"Quiet week. {_link(_fmt_count(checks), receipt_url)} "
+            f"Quiet week. {_count_link(_fmt_count(checks), receipt_url)} "
             f"checks, 0 threats, 0 actions.\n\n"
-            "Nothing from your logs was kept. We read them, acted, and deleted them. "
-            f"{_link('Full receipt', receipt_url)}"
+            f"{_receipt_footer(receipt_url)}"
         )
         _assert_no_placeholders(body)
         return {"subject": subject, "body": body}
@@ -96,69 +117,162 @@ def build_owner_update(
         stack_list = ", ".join(stacks[:-1]) + " and " + stacks[-1]
         stack_list_linked = ", ".join(linked_stacks[:-1]) + " and " + linked_stacks[-1]
 
-    advisory_clause = " (Each one is linked to its public advisory.)"
+    # Lead sentence always states what happened. Critical / fix-PR / campaign
+    # sentences are omitted unless the matching proof exists.
+    lead = (
+        f"This week we found {_count_link(str(n), receipt_url)} "
+        f"threats to {site}."
+    )
+    if c > 0:
+        lead += (
+            f" {_count_link(str(c), receipt_url)} were critical: out-of-date "
+            f"{stack_list_linked} with known holes serious enough to "
+            f"take down a company's whole IT system. "
+            f"(Each linked to its public advisory.)"
+        )
+    body_lines = [lead, ""]
 
-    body_lines = [
-        f"This week we found {_link(str(n), receipt_url)} "
-        f"threats to {site}. {_link(str(c), receipt_url)} "
-        f"were critical: out-of-date {stack_list_linked} with known holes serious enough to "
-        f"take down a company's whole IT system.{advisory_clause}",
-        "",
-    ]
+    def _url_host(url: str) -> str | None:
+        try:
+            parsed = urlparse((url or "").strip())
+        except Exception:
+            return None
+        if parsed.scheme not in {"http", "https"}:
+            return None
+        host = (parsed.hostname or "").lower()
+        return host or None
+
+    def _host_matches(host: str | None, name: str) -> bool:
+        if not host:
+            return False
+        return host == name or host.endswith("." + name)
+
+    def _is_real_pr_url(url: str) -> bool:
+        # Host checks via urlparse — not substring-in-URL (CodeQL).
+        try:
+            parsed = urlparse((url or "").strip())
+        except Exception:
+            return False
+        if parsed.scheme not in {"http", "https"}:
+            return False
+        host = (parsed.hostname or "").lower()
+        if not host:
+            return False
+        if _host_matches(host, "protect.tervory.com"):
+            return False
+        path = (parsed.path or "").lower()
+        if "/autumbra/" in path:
+            return False
+        return _host_matches(host, "github.com") or _host_matches(host, "gitlab.com")
+
+    def _is_matched_public_source(url: str) -> bool:
+        try:
+            parsed = urlparse((url or "").strip())
+        except Exception:
+            return False
+        if parsed.scheme not in {"http", "https"}:
+            return False
+        host = (parsed.hostname or "").lower()
+        if not host:
+            return False
+        # Our own receipt pages are not a matched public campaign source.
+        if _host_matches(host, "protect.tervory.com"):
+            return False
+        path = (parsed.path or "").lower()
+        if _host_matches(host, "tervory.com") and "/autumbra" in path:
+            return False
+        return True
 
     mode = settings.fix_mode
     if mode is ApplyMode.auto_when_checks_pass:
-        if not undo_fix_url:
-            raise ValueError("auto fix paragraph requires undo_fix_url (no placeholders)")
-        body_lines.append(
-            f"You chose to let us fix this kind of problem automatically, so we did. "
-            f"{stack_list} are now on patched versions and your site passed its own "
-            f"checks afterwards. Here is the report; you can send it to your IT manager, "
-            f"who can reverse our change with one click. "
-            f"{_link('Undo', undo_fix_url)}"
-        )
+        # Auto-fix paragraph only when a code fix was applied, with its PR link.
+        # An IP block is described as a block in the shield paragraph — never as a patch.
+        if _is_real_pr_url(pr_url) and undo_fix_url:
+            body_lines.append(
+                f"You chose to let us fix this kind of problem automatically, so we did. "
+                f"{stack_list} are now on patched versions and your site passed its own "
+                f"checks afterwards. Here is the report; you can send it to your IT manager, "
+                f"who can reverse our change with one click. "
+                f"{_link('Fix report', pr_url)} "
+                f"{_link('Undo', undo_fix_url)}"
+            )
     elif mode is ApplyMode.approve_each:
-        if not pr_url:
-            raise ValueError("approve-each paragraph requires pr_url (no placeholders)")
-        body_lines.append(
-            f"You chose to approve fixes yourself. We have built the fix and it is "
-            f"waiting for your approval here. {_link('Approve the fix', pr_url)} "
-            f"Until you approve it, the hole is still open; we have reduced the risk at "
-            f"the edge as described below."
-        )
+        # "we built the fix" only when a real fix PR exists with its link.
+        if _is_real_pr_url(pr_url):
+            body_lines.append(
+                f"You chose to approve fixes yourself. We have built the fix and it is "
+                f"waiting for your approval here. {_link('Approve the fix', pr_url)} "
+                f"Until you approve it, the hole is still open; we have reduced the risk at "
+                f"the edge as described below."
+            )
+        else:
+            body_lines.append(
+                "You chose to approve fixes yourself. "
+                "We have reduced the risk at the edge as described below."
+            )
     else:
-        if not fix_report_url:
-            raise ValueError("never paragraph requires fix_report_url (no placeholders)")
-        body_lines.append(
-            f"You chose that we never touch your code. Here is exactly what to fix and how. "
-            f"{_link('Report', fix_report_url)} "
-            f"We have reduced the risk at the edge as described below."
-        )
+        # Dedicated fix report (not the weekly receipts page) keeps the Report link.
+        report = (fix_report_url or "").strip()
+        report_host = _url_host(report)
+        report_path = ""
+        if report:
+            try:
+                report_path = (urlparse(report).path or "").lower()
+            except Exception:
+                report_path = ""
+        if report and not (
+            _host_matches(report_host, "protect.tervory.com")
+            and "/autumbra/receipts" in report_path
+        ):
+            body_lines.append(
+                f"You chose that we never touch your code. Here is exactly what to fix and how. "
+                f"{_link('Report', report)} "
+                f"We have reduced the risk at the edge as described below."
+            )
+        else:
+            body_lines.append(
+                "You chose that we never touch your code. "
+                "We have reduced the risk at the edge as described below."
+            )
 
     if shield:
         blocked = int(shield.get("blocked_addresses") or 0)
         source_url = str(shield.get("source_url") or "").strip()
         source_name = str(shield.get("source_name") or "public source").strip()
-        if not source_url:
-            raise ValueError("shield paragraph requires source_url (no placeholders)")
-        if not undo_shield_url:
-            raise ValueError("shield paragraph requires undo_shield_url (no placeholders)")
-        public_source = _link(source_name, source_url)
+        campaign = _is_matched_public_source(source_url)
+        if campaign:
+            public_source = _link(source_name, source_url)
+            campaign_clause = (
+                f"It was part of a widely reported campaign ({public_source}). "
+            )
+        else:
+            campaign_clause = ""
+        signed_undo = (undo_shield_url or "").strip()
+        if signed_undo and "token=" not in signed_undo:
+            signed_undo = ""
+        if signed_undo:
+            undo_clause = (
+                "If this caused any problem, undo it here with one tap. "
+                f"{_link('Undo', signed_undo)}"
+            )
+        else:
+            # Secret unset or signing failed — never promise a dead one-tap link.
+            undo_clause = (
+                "If this caused any problem, sign in at "
+                f"{_link('your Autumbra dashboard', _DASHBOARD_URL)} "
+                "or reply to this email and we will remove the block."
+            )
         body_lines.extend([
             "",
-            f"We also stopped an attack in progress. It was blocking addresses known to be "
-            f"part of a widely reported campaign ({public_source}). "
-            f"We blocked {_link(str(blocked), receipt_url)} "
+            f"We also stopped an attack in progress. {campaign_clause}"
+            f"We blocked {_count_link(str(blocked), receipt_url)} "
             f"addresses that were attacking your site. Your own addresses, your payment "
-            f"provider and Cloudflare were never blocked. If this caused any problem, undo "
-            f"it here with one tap. "
-            f"{_link('Undo', undo_shield_url)}",
+            f"provider and Cloudflare were never blocked. {undo_clause}",
         ])
 
     body_lines.extend([
         "",
-        "Nothing from your logs was kept. We read them, acted, and deleted them. "
-        f"{_link('Full receipt', receipt_url)}",
+        _receipt_footer(receipt_url),
     ])
 
     body = "\n".join(body_lines)

@@ -20,6 +20,7 @@ from typing import Any, Literal
 import httpx
 import yaml
 import controls
+from base_public_http import BaseBlockResponse, PublicPageHTTP
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
@@ -466,15 +467,16 @@ async def export_skills(tank: Any, tenant: uuid.UUID, region: str, *, room: str 
     return {"tenant_id": str(tenant), "room": room, "region": region, "skills": skills}
 
 
-class BaseSkillHTTP:
-    """Only the old browser adapter is redirected; all other skill HTTP stays unchanged."""
-    def __init__(self, client: Any, tenant: uuid.UUID, task: uuid.UUID | None):
-        self.client, self.tenant, self.task = client, tenant, task
+class BaseSkillHTTP(PublicPageHTTP):
+    """Base-only public reads and the existing authenticated browser adapter."""
+    def __init__(self, client: Any, tenant: uuid.UUID, task: uuid.UUID | None, services: tuple[str, ...] = ()) -> None:
+        super().__init__(client, tenant, services)
+        self.task = task
 
     def __getattr__(self, name):
         return getattr(self.client, name)
 
-    async def post(self, url: str, **kwargs):
+    async def post(self, url: str, **kwargs: Any) -> httpx.Response:
         if url == "http://base-browser-gateway:3000/render":
             kwargs["timeout"] = 300
             payload = dict(kwargs.get("json") or {})
@@ -484,17 +486,22 @@ class BaseSkillHTTP:
                                  "X-Tenant-ID": str(self.tenant), "X-Home-Region": "us-east"}
             if self.task:
                 kwargs["headers"]["X-Task-ID"] = str(self.task)
-        return await self.client.post(url, **kwargs)
+        return await self.request("POST", url, **kwargs)
+
+
+async def guard_submission_owner(tank: Any, pkg: Any, tenant_id: uuid.UUID) -> None:
+    """Private submitted code is executable only in its owning tenant and region."""
+    async with tank.pool().acquire() as conn:
+        owner = await conn.fetchrow("SELECT tenant_id,region FROM tank.agent_skill_submissions WHERE skill_id=$1 AND version=$2", pkg.id, pkg.version)
+    if owner and (owner["tenant_id"] != tenant_id or owner["region"] != tank.box_region()):
+        raise HTTPException(403, "This skill belongs to another tenant or region.")
 
 
 async def guard_base_run(tank: Any, pkg: Any, body: Any, ctx: Any) -> None:
     local_region(tank, body.home_region)
     if pkg.agent != ROOM or body.preview or await tank.skill_state(pkg.id, pkg.version) != "approved":
         raise HTTPException(403, "Base may run only its own approved skills; preview is founder-only.")
-    async with tank.pool().acquire() as conn:
-        owner = await conn.fetchrow("SELECT tenant_id,region FROM tank.agent_skill_submissions WHERE skill_id=$1 AND version=$2", pkg.id, pkg.version)
-    if owner and (owner["tenant_id"] != body.tenant_id or owner["region"] != tank.box_region()):
-        raise HTTPException(403, "This skill belongs to another tenant or region.")
+    await guard_submission_owner(tank, pkg, body.tenant_id)
     task = body.input.pop("_base_brain_task", None)
     if task is not None:
         try:
@@ -509,10 +516,14 @@ async def guard_base_run(tank: Any, pkg: Any, body: Any, ctx: Any) -> None:
         ctx._model = defer_model
         ctx.env = {k: v for k, v in ctx.env.items() if not k.endswith(("_KEY", "_TOKEN"))}
     ctx.env["TIGER_URL"] = "http://base-browser-gateway:3000"
-    ctx.http = BaseSkillHTTP(ctx.http, body.tenant_id, ctx.task_id)
+    ctx.http = BaseSkillHTTP(ctx.http, body.tenant_id, ctx.task_id, (
+        ctx.env.get("SEARXNG_URL", ""), "https://api.search.brave.com/res/v1/web/search",
+    ))
 
 
 def build_router(tank: Any) -> APIRouter:
+    if app := getattr(tank, "app", None):
+        app.add_middleware(BaseBlockResponse)
     router = APIRouter()
 
     @router.on_event("startup")

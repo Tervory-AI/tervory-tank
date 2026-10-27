@@ -211,7 +211,7 @@ def alert_series() -> list[dict]:
             _p("4.50", "4.50", "The saved page shows $4.50.", alert=False, file="known/pattern.html"),
             _p("4.50", "4.50", "The page still shows $4.50.", alert=False, file="known/pattern.html"),
             _p("4.50", "4.50", "The page still shows $4.50.", alert=False, file="known/pattern.html"),
-            _p("5.25", "5.25", "The price line now says $5.25.", alert=True, kinds=("price",), file="known/pattern.html", edits=[["$4.50", "$5.25"]]),
+            _p("5.25", "5.25", "The price line now says $5.25, but stock is missing. No alert for an incomplete check.", alert=False, file="known/pattern.html", edits=[["$4.50", "$5.25"]]),
         ], "saved-page"),
         _series("ca-og-fixture", "0", "The saved Open Graph page shows $6.25, then $7.10.", [
             _p("6.25", "6.25", "The saved page shows $6.25.", alert=False, file="known/opengraph.html"),
@@ -231,7 +231,7 @@ def alert_series() -> list[dict]:
         _series("ca-web2-live", "0", "The saved second webscraper.io product shows $57.99, then $49.", [
             _p("57.99", "57.99", "The saved page shows $57.99.", alert=False, file="live/webscraper-io--test-sites-e-commerce-allinone-product-2.html"),
             _p("57.99", "57.99", "The page still shows $57.99.", alert=False, file="live/webscraper-io--test-sites-e-commerce-allinone-product-2.html"),
-            _p("49.00", "49.00", "The product price now says $49.00.", alert=True, kinds=("price",), file="live/webscraper-io--test-sites-e-commerce-allinone-product-2.html", edits=[["$57.99", "$49.00"]]),
+            _p("49.00", "49.00", "The product price now says $49.00, but stock is missing. No alert for an incomplete check.", alert=False, file="live/webscraper-io--test-sites-e-commerce-allinone-product-2.html", edits=[["$57.99", "$49.00"]]),
         ], "saved-page"),
         _series("ca-bulbasaur-live", "0", "The saved Bulbasaur page shows 63.00, then 54.00.", [
             _p("63.00", "63.00", "The saved page shows 63.00.", alert=False, file="live/scrapeme-live--shop-bulbasaur.html"),
@@ -329,7 +329,7 @@ def alert_series() -> list[dict]:
         _series("ca-webscraper-live", "0", "The saved webscraper.io product shows $24.99, then $19.99.", [
             _p("24.99", "24.99", "The saved page shows $24.99.", alert=False, file="live/webscraper-io--test-sites-e-commerce-allinone-product-1.html"),
             _p("24.99", "24.99", "The page still shows $24.99.", alert=False, file="live/webscraper-io--test-sites-e-commerce-allinone-product-1.html"),
-            _p("19.99", "19.99", "The product price now says $19.99.", alert=True, kinds=("price",), file="live/webscraper-io--test-sites-e-commerce-allinone-product-1.html", edits=[["$24.99", "$19.99"]]),
+            _p("19.99", "19.99", "The product price now says $19.99, but stock is missing. No alert for an incomplete check.", alert=False, file="live/webscraper-io--test-sites-e-commerce-allinone-product-1.html", edits=[["$24.99", "$19.99"]]),
         ], "saved-page"),
         _series("ca-restock", "0", "The price stays $18. Stock comes back.", [
             _p("18.00", "18.00", "First week is $18, out of stock.", alert=False, availability=out, stock="OutOfStock"),
@@ -560,6 +560,7 @@ def page_cases() -> tuple[list[dict], list[dict], list[dict]]:
                 "mutation": kind,
                 "source": source,
                 "known_price": price,
+                **({"initial_issue": "missing_currency"} if base == "automation" else {}),
                 "price_still_shown": still,
                 "what": what,
                 "expect_status": "can't read",
@@ -578,9 +579,10 @@ def page_cases() -> tuple[list[dict], list[dict], list[dict]]:
             "mutation": "unchanged",
             "source": source,
             "known_price": price,
-            "what": "Same page Tiger just learned. It should still read the known price.",
-            "expect_status": "read",
-            "expect_price": price,
+            "what": ("Rs. has no unambiguous currency code. Record the incomplete check without a price." if base == "automation"
+                     else "Same page Tiger just learned. It should still read the known price."),
+            "expect_status": "can't read" if base == "automation" else "read",
+            "expect_price": None if base == "automation" else price,
             "split": "control",
             "verified": False,
         })

@@ -12,7 +12,7 @@ from agents.ghost.enforce_apply import apply_from_payload, undo_applied
 from agents.ghost.fixture_edge import FixtureEdgeControl, reset_default_control
 from agents.ghost.speed_budgets import budgets_ok
 from agents.ghost.store import Store
-from agents.ghost.threat_payload import accept_threat_payload
+from agents.ghost.threat_payload import ThreatAction, accept_threat_payload
 
 TENANT = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 
@@ -126,7 +126,16 @@ def test_submit_payload_in_process_door(monkeypatch, tmp_path):
     receipt = submit_payload(_payload("198.51.100.20"), app=app, settings=settings)
     assert receipt["applied"] is True
     assert receipt["address"] == "198.51.100.20"
-    undone = submit_undo(receipt, app=app)
+    rule_id = receipt["undo"]["rule_id"]
+    undo_payload = accept_threat_payload({
+        "schema_version": "ghost.threat.v1",
+        "action": ThreatAction.undo_shield.value,
+        "site": "coolify.tervory.com",
+        "rule_id": rule_id,
+        "prior_receipt_id": receipt["id"],
+        "reason": "test undo",
+    })
+    undone = submit_undo(undo_payload, app=app)
     assert undone["outcome"] == "undone"
 
 

@@ -379,7 +379,7 @@ def test_two_tenants_get_separate_rows_and_a_price_change_alerts() -> None:
     asyncio.run(check())
 
 
-def test_blocked_and_robots_do_not_invent_a_price() -> None:
+def test_blocked_pages_do_not_invent_a_price_or_fetch_robots() -> None:
     store = MemoryStore()
     rendered = {"n": 0}
 
@@ -394,10 +394,10 @@ def test_blocked_and_robots_do_not_invent_a_price() -> None:
         raise AssertionError("a blocked page is not read for a price")
 
     async def allow(url: str) -> str:
-        return ""
+        raise AssertionError("Public reads must not fetch robots.txt")
 
     async def deny(url: str) -> str:
-        return "User-agent: *\nDisallow: /\n"
+        raise AssertionError("Public reads must not fetch robots.txt")
 
     async def check() -> None:
         blocked = await run_check(
@@ -410,9 +410,9 @@ def test_blocked_and_robots_do_not_invent_a_price() -> None:
         robots = await run_check(
             store, TENANT_A, _watch(), "tiger", render, extract, ocr, deny, DomainLimiter(0),
         )
-        assert robots["status"] == "robots"
-        assert robots["observation"]["method"] == "robots"
-        assert rendered["n"] == 1
+        assert robots["status"] == "blocked"
+        assert robots["observation"]["method"] == "blocked"
+        assert rendered["n"] == 2
 
     asyncio.run(check())
 

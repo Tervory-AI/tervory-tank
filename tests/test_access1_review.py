@@ -169,7 +169,9 @@ async def test_private_login_prices_and_credentials_never_reach_another_tenant_o
     async def robots(*args): return ""
     watch = {"tenant_id": str(actor.tenant_id), "url": "https://dealer.example/product", "threshold": "0"}
     observed = await run_check(store, str(actor.tenant_id), watch, "tiger", render, forbidden, forbidden, robots, DomainLimiter(0))
-    assert observed["method"] == "private_portal" and observed["price"] == "12.50"
+    assert observed["method"] == "unread" and observed["price"] is None
+    assert observed["observation"]["issue"] == "missing_name" and observed["alerts"] == []
+    assert observed["receipt"]["source"] == "client_connection"
     other = uuid.uuid4()
     assert await store.list_observations(str(other), watch["url"]) == []
     public = await page.read(other)

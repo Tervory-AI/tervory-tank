@@ -7,10 +7,11 @@ Shown on every receipt.
 """
 from __future__ import annotations
 
+import re
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ApplyMode(str, Enum):
@@ -27,11 +28,16 @@ class ClientAutumbraSettings(BaseModel):
     tenant_id: str = Field(min_length=1, max_length=80)
     site_name: str = Field(default="", max_length=120)
     owner_email: str = Field(default="", max_length=200)
+    # IANA time zone for owner-facing pages (empty → UTC, and pages say "UTC").
+    time_zone: str = Field(default="", max_length=80)
     # Separately for shields and for code fixes.
     shield_mode: ApplyMode = DEFAULT_MODE
     fix_mode: ApplyMode = DEFAULT_MODE
     # When True, a single threat source may trigger a shield (default False = cross-check).
     act_on_single_source: bool = False
+    # Hostnames this tenant has registered for shielding (e.g. shop-a.example.com).
+    # ThreatPayload accepts dogfood Tervory hosts OR these registered client hosts.
+    watched_hosts: list[str] = Field(default_factory=list, max_length=32)
     # Client's own CIDRs that must never be blocked.
     own_cidrs: list[str] = Field(default_factory=list, max_length=64)
     # Written-permission flag for red-team exercises against this client.
@@ -42,6 +48,44 @@ class ClientAutumbraSettings(BaseModel):
     shopify_connected: bool = False
     host_firewall_connected: bool = False
 
+    @field_validator("watched_hosts")
+    @classmethod
+    def hosts_must_be_shaped(cls, values: list[str]) -> list[str]:
+        """Hostname labels only — no URLs, paths, or bare words."""
+        host_re = re.compile(
+            r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$"
+        )
+        out: list[str] = []
+        for item in values or []:
+            if not isinstance(item, str):
+                raise ValueError("watched host must be a string")
+            host = item.strip().lower().rstrip(".")
+            if host.startswith("http://") or host.startswith("https://") or "/" in host:
+                raise ValueError("watched host must be a hostname, not a URL")
+            if not host_re.fullmatch(host):
+                raise ValueError("watched host is not a valid hostname")
+            if host not in out:
+                out.append(host)
+        return out
+
+    @field_validator("time_zone")
+    @classmethod
+    def time_zone_must_be_iana_or_empty(cls, value: str) -> str:
+        raw = (value or "").strip()
+        if not raw:
+            return ""
+        try:
+            from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+        except ImportError as exc:  # pragma: no cover
+            raise ValueError("time zone support unavailable") from exc
+        try:
+            ZoneInfo(raw)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError("time zone must be a valid IANA name") from exc
+        except Exception as exc:
+            raise ValueError("time zone must be a valid IANA name") from exc
+        return raw
+
     def receipt_stamp(self) -> dict[str, str]:
         """What every receipt must show about the client's choice."""
         return {
@@ -51,6 +95,7 @@ class ClientAutumbraSettings(BaseModel):
 
 
 def load_settings(store, tenant_id: str) -> ClientAutumbraSettings:
+    """Read saved settings. Does not mutate any process-wide host allowlist."""
     raw = store.get_state(tenant_id, "autumbra_client_settings", None)
     if not isinstance(raw, dict):
         return ClientAutumbraSettings(tenant_id=tenant_id)
@@ -61,10 +106,51 @@ def load_settings(store, tenant_id: str) -> ClientAutumbraSettings:
 
 
 def save_settings(store, settings: ClientAutumbraSettings) -> ClientAutumbraSettings:
-    """Client (or founder-as-client) writes. Tervory automation must not call this."""
+    """Client (or founder-as-client) writes. Tervory automation must not call this.
+
+    A host already registered by another tenant is refused with a plain message.
+    """
+    from .threat_payload import assert_hosts_free_for_tenant
+
+    assert_hosts_free_for_tenant(store, settings)
     payload: dict[str, Any] = settings.model_dump()
     store.set_state(settings.tenant_id, "autumbra_client_settings", payload)
     return settings
+
+
+def owner_time_zone(settings: ClientAutumbraSettings | None) -> str:
+    """IANA zone for owner pages; UTC when unset."""
+    if settings is None:
+        return "UTC"
+    raw = (getattr(settings, "time_zone", "") or "").strip()
+    return raw or "UTC"
+
+
+def format_owner_when(iso: str | None, settings: ClientAutumbraSettings | None = None) -> str:
+    """Format a timestamp in the owner's time zone (label UTC when falling back)."""
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+
+    text = (iso or "").strip()
+    if not text:
+        return ""
+    try:
+        moment = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return ""
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    zone_name = owner_time_zone(settings)
+    try:
+        local = moment.astimezone(ZoneInfo(zone_name))
+    except Exception:
+        local = moment.astimezone(timezone.utc)
+        zone_name = "UTC"
+    # Medium date + short time, then zone label (en-US-ish, portable).
+    hour12 = local.hour % 12 or 12
+    ampm = "AM" if local.hour < 12 else "PM"
+    stamp = f"{local.strftime('%b')} {local.day}, {local.year}, {hour12}:{local.strftime('%M')} {ampm}"
+    return f"{stamp} {zone_name}"
 
 
 def active_halves(settings: ClientAutumbraSettings) -> dict[str, bool]:

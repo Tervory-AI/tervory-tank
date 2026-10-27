@@ -197,7 +197,8 @@
           "ms": 3,
           "pages": 1,
           "error": null,
-          "via": "tiger"
+          "via": "tiger",
+          "field_observations": []
         },
         "2c": {
           "skill": "base.extract@1.0.0",
@@ -431,7 +432,8 @@
           "ms": 3,
           "pages": 1,
           "error": null,
-          "via": "tiger"
+          "via": "tiger",
+          "field_observations": []
         },
         "2c": {
           "skill": "base.extract@1.0.0",
@@ -693,7 +695,8 @@
         "ms": 3,
         "pages": 1,
         "error": null,
-        "via": "tiger"
+        "via": "tiger",
+        "field_observations": []
       },
       "2c": {
         "skill": "base.extract@1.0.0",

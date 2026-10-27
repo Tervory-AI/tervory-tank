@@ -89,7 +89,9 @@ async def test_public_api_has_no_brain_task_routes_even_with_room_key(monkeypatc
     app = _load_rig_app().app
     payload = {"tenant_id": str(uuid.uuid4()), "task_id": str(uuid.uuid4()), "home_region": "us-east", "question": "A catalogue question"}
     params = {"tenant_id": payload["tenant_id"], "home_region": "us-east"}
-    assert "/v1/rig/search" in {route.path for route in app.routes}
+    from http_routes import http_paths
+
+    assert "/v1/rig/search" in http_paths(app.routes)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://rig.tervory.com") as client:
         for headers in ({}, {"X-Rig-Key": uuid.uuid4().hex}, {"X-Tank-Key": key}):
             assert (await client.post("/brain/tasks", json=payload, headers=headers)).status_code == 404

@@ -1,6 +1,7 @@
 """Speed budgets for Autumbra shields. Model opinion never sits on the critical path."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 # Seconds.
@@ -8,11 +9,21 @@ EVENT_TO_DECISION_RULE = 2.0
 DECISION_TO_SHIELD = 10.0
 HEALTH_CHECK = 30.0
 AUTO_UNDO_E2E = 60.0
+QUEUE_TRANSIT = 5.0
+EVENT_TO_SHIELD_E2E = 15.0
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
 def stamp_budget(receipt: dict[str, Any], *, stage: str, seconds: float) -> dict[str, Any]:
     budgets = dict(receipt.get("budgets") or {})
-    budgets[stage] = {"seconds": float(seconds), "at": stage}
+    budgets[stage] = {
+        "seconds": float(seconds),
+        "at": utc_now(),  # real timestamp, not the stage name
+        "stage": stage,
+    }
     receipt["budgets"] = budgets
     return receipt
 
@@ -26,6 +37,8 @@ def budgets_ok(receipt: dict[str, Any]) -> tuple[bool, list[str]]:
         ("decision_to_shield", DECISION_TO_SHIELD),
         ("health_check", HEALTH_CHECK),
         ("auto_undo_e2e", AUTO_UNDO_E2E),
+        ("queue_transit", QUEUE_TRANSIT),
+        ("event_to_shield_e2e", EVENT_TO_SHIELD_E2E),
     )
     for key, limit in checks:
         entry = budgets.get(key)

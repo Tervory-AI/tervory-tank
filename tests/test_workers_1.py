@@ -266,7 +266,7 @@ def test_fresh_podman_container_is_sealed() -> None:
     assert kill_argv("tervory-worker-7-abcd1234") == ["podman", "kill", "tervory-worker-7-abcd1234"]
     text = (ROOT / "workers/task/Dockerfile").read_text(encoding="utf-8")
     assert "node:22-bookworm-slim" in text
-    assert "playwright==1.64.0" in (ROOT / "workers/task/requirements.txt").read_text(encoding="utf-8")
+    assert "playwright==1.64.1" in (ROOT / "workers/task/requirements.txt").read_text(encoding="utf-8")
     assert "aider-chat==0.86.2" in (ROOT / "workers/task/requirements.txt").read_text(encoding="utf-8")
     assert "playwright install --with-deps chromium" in text
     entry = (ROOT / "workers/task/entrypoint.sh").read_text(encoding="utf-8")

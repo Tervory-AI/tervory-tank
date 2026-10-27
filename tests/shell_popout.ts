@@ -20,7 +20,7 @@ export function actualShellHtml(founder: boolean): string {
       compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
     }).outputText;
   }
-  modules["next/navigation"] = 'exports.usePathname=()=>"/base";exports.useSearchParams=()=>new URLSearchParams();';
+  modules["next/navigation"] = 'exports.usePathname=()=>"/skala/gold";exports.useSearchParams=()=>new URLSearchParams();';
   modules["next/link"] = 'module.exports=(props)=>require("react").createElement("a",props);';
   modules["@clerk/nextjs"] = 'exports.useAuth=()=>({isLoaded:false});exports.SignedIn=({children})=>children;exports.OrganizationSwitcher=()=>"Example workspace";exports.UserButton=()=>null;';
   const fonts = `@font-face{font-family:Inter;src:url(${new URL("workspace/app/fonts/Inter-latin.woff2",root).href});font-weight:100 900}

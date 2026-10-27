@@ -386,7 +386,9 @@ async def test_empty_or_unknown_home_makes_no_call(
 
 
 class _Conn:
-    async def fetchrow(self, *_args: object, **_kwargs: object) -> dict[str, object]:
+    async def fetchrow(self, *_args: object, **_kwargs: object) -> dict[str, object] | None:
+        if "agent_skill_submissions" in str(_args[0]):
+            return None
         return {
             "id": uuid.uuid4(),
             "model": "luna",
@@ -566,6 +568,8 @@ class _CourtPool:
         ]
 
     async def fetchrow(self, *_args: object, **_kwargs: object) -> dict[str, object]:
+        if "agent_skill_submissions" in str(_args[0]):
+            return None
         return {
             "id": uuid.uuid4(),
             "model": "luna",

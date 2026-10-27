@@ -15,7 +15,7 @@ from urllib.robotparser import RobotFileParser
 BLOCKED_HOSTS = ("gunbroker.com", "armslist.com", "atf.gov")
 
 LISTING = "https://www.atf.gov/firearms/listing-federal-firearms-licensees/complete"
-USER_AGENT = "Tervory-Base-Gold"
+USER_AGENT = "Tervory/1.0 (+https://tervory.com)"
 MAX_BYTES = 40_000_000
 MONTHS = dict(zip("ABCDEFGHJKLM", range(1, 13)))
 FIELDS = (

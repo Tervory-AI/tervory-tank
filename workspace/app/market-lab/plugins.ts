@@ -5,13 +5,13 @@ import type { OnCard, PageModel } from "./model";
 export const POPUP_TITLE = "Plugins";
 export const REFERENCE_LABEL = "Sources";
 
-export const VAULT_OFF_MESSAGE = "This vault is off. Turn it on in Tank.";
+export const VAULT_OFF_MESSAGE = "Plugins are not available yet. Ask your workspace administrator to enable them.";
 export const NEED_KEY = "Add a key first. Nothing was stored.";
 export const NEED_FILE = "Choose a file first. Nothing was saved.";
 export const NEED_LINK = "Add a link first. Nothing was saved.";
-export const NEED_MCP = "Add a name and a server URL first. Nothing was saved.";
+export const NEED_MCP = "Add a name and a server address first. Nothing was saved.";
 
-export const PLUGIN_TABS = ["API keys", "Files", "Source links", "MCP connections"] as const;
+export const PLUGIN_TABS = ["Access keys", "Files", "Source links", "Connections"] as const;
 export type PluginTab = (typeof PLUGIN_TABS)[number];
 
 export type PublicKeyRow = {
@@ -25,11 +25,11 @@ const KEY_ROWS: { name: KeyName; title: string; summary: string }[] = [
   {
     name: "FRED_API_KEY",
     title: "FRED",
-    summary: "Freight index and its monthly change, plus copper, zinc, lead, cotton and diesel. Read live, never stored.",
+    summary: "Price and freight figures published by the Federal Reserve Bank of St. Louis. These pages are linked only; their figures are not used in saved-feed answers.",
   },
   { name: "CENSUS_API_KEY", title: "Census", summary: "Census population and Census trade." },
-  { name: "EIA_API_KEY", title: "EIA", summary: "Weekly on-highway diesel price." },
-  { name: "NOAA_TOKEN", title: "NOAA", summary: "Monthly climate. Weather alerts need no key." },
+  { name: "EIA_API_KEY", title: "U.S. Energy Information Administration", summary: "Weekly diesel prices." },
+  { name: "NOAA_TOKEN", title: "National Oceanic and Atmospheric Administration", summary: "Monthly climate. Weather alerts need no key." },
   { name: "LEGISCAN_API_KEY", title: "LegiScan", summary: "Status changes on state bills about firearms and ammunition." },
 ];
 
@@ -98,6 +98,16 @@ export function offPanel(message: string = VAULT_OFF_MESSAGE): PluginPanel {
   return { enabled: false, message, secrets: [], files: [], links: [], connections: [] };
 }
 
+function statusLabel(value: string): string {
+  const labels: Record<string, string> = {
+    saved: "Saved", ready: "Saved", pending: "Waiting", processing: "Processing",
+    failed: "Could not complete", error: "Could not complete", connected: "Connected",
+    disconnected: "Not connected", needs_auth: "Sign-in needed", needs_sign_in: "Sign-in needed",
+    not_checked: "Not checked yet", "not checked": "Not checked yet", checked: "Checked",
+  };
+  return labels[value.toLowerCase()] ?? "Status unavailable";
+}
+
 /** Feed flags. An off vault adds nothing, even if names were sent with it. */
 export function flagsWithVault(flags: KeyFlags, vault: { enabled: boolean; names: readonly string[] }): KeyFlags {
   const next = { ...flags };
@@ -148,7 +158,7 @@ export function mapVaultPayload(raw: {
   links?: WireLink[];
   connections?: WireConnection[];
 }): PluginPanel {
-  if (!raw.enabled) return offPanel(raw.message || VAULT_OFF_MESSAGE);
+  if (!raw.enabled) return offPanel();
   return {
     enabled: true,
     message: null,
@@ -165,7 +175,7 @@ export function mapVaultPayload(raw: {
             rows: row.rows ?? null,
             pages: row.pages ?? null,
             uploadedAt: row.uploaded_at ?? "",
-            status: row.status ?? "ready",
+            status: statusLabel(row.status ?? "ready"),
           }]
         : [],
     ),
@@ -177,7 +187,7 @@ export function mapVaultPayload(raw: {
             label: row.label ?? row.url,
             frequency: row.frequency ?? "weekly",
             lastChecked: row.last_checked ?? null,
-            status: row.status ?? "not checked",
+            status: statusLabel(row.status ?? "not checked"),
           }]
         : [],
     ),
@@ -188,7 +198,7 @@ export function mapVaultPayload(raw: {
             name: row.name,
             serverUrl: row.server_url ?? "",
             authType: row.auth_type ?? "provider",
-            status: row.status ?? "saved",
+            status: statusLabel(row.status ?? "saved"),
             lastUsed: row.last_used ?? null,
             hasToken: Boolean(row.has_token),
           }]
