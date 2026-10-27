@@ -1,8 +1,10 @@
 import type { MarketDocument } from "@/lib/tank";
+import { WarningEvidence } from "./warning-evidence";
 import { formatRefreshed } from "./format";
 
 /** Shared by the signed-in route and the isolated local fixture proof. */
 export function SourceDocumentView({ source }: { source: MarketDocument }) {
+  if (source.calculation) return <WarningEvidence source={source} />;
   const offset = source.offset;
   const page = Math.floor(offset / source.page_size) + 1;
   const pageCount = Math.max(1, Math.ceil(Math.max(source.point_count, source.event_count) / source.page_size));

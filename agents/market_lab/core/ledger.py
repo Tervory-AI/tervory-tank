@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -457,16 +458,16 @@ class PostgresLedger:
             """,
             uuid.UUID(str(row["id"])),
             uuid.UUID(str(row["tenant_id"])),
-            row["made_at"],
+            _timestamp(row["made_at"]),
             row["statement"],
             row["metric_series_id"],
             row["comparator"],
             row["target"],
-            row["resolve_by"],
+            _timestamp(row["resolve_by"]),
             row["rationale"],
             json.dumps(row["sources"]),
             row.get("outcome"),
-            row.get("resolved_at"),
+            _timestamp(row.get("resolved_at")),
             row.get("score"),
         )
 
@@ -563,3 +564,7 @@ def _record(row: Any) -> dict[str, Any]:
         elif isinstance(value, str) and key in {"sources", "trend", "evidence", "citations"}:
             data[key] = json.loads(value)
     return data
+
+
+def _timestamp(value: Any) -> datetime | None:
+    return datetime.fromisoformat(value.replace("Z", "+00:00")) if isinstance(value, str) else value

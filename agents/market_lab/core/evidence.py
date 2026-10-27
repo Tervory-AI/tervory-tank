@@ -120,6 +120,8 @@ async def document_page(ledger: Any, tenant_id: str, document_id: str, offset: i
     doc = await document(ledger, tenant_id, document_id, fixtures=fixtures)
     if doc is None:
         return None
+    if doc.get("kind") == "warning_evidence":
+        return {**doc, "offset": 0, "page_size": DOCUMENT_PAGE_SIZE, "point_count": 0, "event_count": 0}
     doc = presented_document(doc, engine)
     active = {index for index, _ in await usable_points(ledger, tenant_id, doc)}
     current = current_revisions(doc["points"])
@@ -135,7 +137,7 @@ async def document_page(ledger: Any, tenant_id: str, document_id: str, offset: i
     def shown(index: int, point: dict) -> dict:
         key = (point["series_id"], point["date"])
         label = "Current figure" if current[key] == index else "Earlier figure"
-        return {**point, "index": index, "display_value": number_label(point["value"]),
+        return {**point, "index": index, "display_value": point.get("display_value") or number_label(point["value"]),
                 "geo_name": area_label(point["geo"], point["geo_level"], point["title"]),
                 "display_title": observation_label(point, doc.get("presentation")),
                 "date_label": period_label(point["date"], point.get("frequency", "")),
@@ -250,7 +252,8 @@ async def answer(ledger: Any, tenant_id: str, question: str, *, fixtures: bool =
             if not score:
                 continue
             value = number_label(point["value"])
-            text = f'{observation_label(point, doc.get("presentation"))}: {value} {unit_label(point["value"], point["unit"])} ({period_label(point["date"], point.get("frequency", ""))}).'
+            shown_value = point.get("display_value") or f'{value} {unit_label(point["value"], point["unit"])}'
+            text = f'{observation_label(point, doc.get("presentation"))}: {shown_value} ({period_label(point["date"], point.get("frequency", ""))}).'
             ranked.append((score, point["date"], {"text": text, "href": f'/market-lab/sources/{doc["id"]}?row={index}#point-{index}', "name": doc["name"]}))
         for index, event in enumerate(doc["events"]):
             if counties and event["geo"] not in counties:

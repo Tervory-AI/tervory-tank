@@ -607,6 +607,7 @@ export function MarketLabView({
   refresh,
   workspaceName,
   quarantine,
+  warnings,
 }: {
   model: PageModel;
   plugins: PluginPanel;
@@ -614,6 +615,7 @@ export function MarketLabView({
   refresh: () => Promise<void>;
   workspaceName: string | null;
   quarantine?: ReactNode;
+  warnings?: ReactNode;
 }) {
   const [menu, setMenu] = useState(false);
   const [active, setActive] = useState("overview");
@@ -763,6 +765,7 @@ export function MarketLabView({
               />
             </div>
           </header>
+          {warnings}
           <ChatBox />
           <RefreshStatus status={model.refreshStatus} />
           <div className="ml-counts">

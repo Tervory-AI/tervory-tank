@@ -1043,6 +1043,7 @@ export type MarketOverview = { feeds: MarketFeed[]; on_count: number; refresh_st
 export type MarketFact = { text: string; href: string; name: string };
 export type MarketAnswer = { content: string; facts: MarketFact[]; sources: { name: string; href: string }[] };
 export type MarketDocument = {
+  calculation?: WarningCalculation;
   offset: number; page_size: number; point_count: number; event_count: number;
   id: string; name: string; fetched_at: string; licence: string; terms_checked_at: string;
   url: string; presentation?: { publisher?: string; publisher_url?: string; notice?: string; explanation?: string };
@@ -1064,6 +1065,30 @@ export async function marketLabRequest<T>(
 ): Promise<T> {
   const response = await fetch(`${TANK_URL}/v1/market-lab/${operation}`, {
     method: "POST", cache: "no-store", redirect: "error", signal: AbortSignal.timeout(35000),
+    headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY },
+    body: JSON.stringify({ ...payload, tenant_id: tenantId }),
+  });
+  if (!response.ok) throw new MarketLabRequestError(response.status);
+  return await response.json() as T;
+}
+
+// Market Lab warnings: tenant identity is supplied by the authenticated server.
+export type MarketWarning = { id: string; title: string; facts: Pick<MarketFact, "text" | "href">[]; status: string; resolution_href: string | null; feedback: boolean | null };
+export type MarketWarnings = { warnings: MarketWarning[]; history: { name: string; text: string; href: string }[]; problem?: string | null; training_pending: boolean };
+export type WarningPoint = { display_value?: string | null; date: string; value: string; unit: string; title: string; href: string };
+export type WarningCalculation = {
+  kind: "history" | "resolution";
+  upstream_name?: string; downstream_name?: string;
+  episode_count?: number; hits?: number; hit_rate?: number | null; lag_min?: number | null; lag_max?: number | null;
+  config?: { min_episodes: number; min_lag_days: number; max_lag_days: number; max_gap_days: number; outcome_pct: number; pct_threshold: number };
+  current?: { start: string; point: WarningPoint; previous: WarningPoint } | null;
+  episodes?: { upstream: WarningPoint; previous: WarningPoint; baseline: WarningPoint; outcome: WarningPoint; observations: WarningPoint[]; hit: boolean; lag_days: number | null; start: string; end: string }[];
+  baseline?: WarningPoint; observations?: WarningPoint[]; selected?: WarningPoint | null; coverage_complete?: boolean; coverage_end?: WarningPoint | null;
+  outcome?: "hit" | "miss" | "not_measurable"; score?: number | null; window_start?: string; window_end?: string; original?: string;
+};
+export async function marketWarningRequest<T>(tenantId: string, operation: "list" | "feedback", payload: { warning_id?: string; event_id?: string; useful?: boolean; actor?: string } = {}): Promise<T> {
+  const response = await fetch(`${TANK_URL}/v1/market-lab/warnings/${operation}`, {
+    method: "POST", cache: "no-store", redirect: "error", signal: AbortSignal.timeout(120000),
     headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY },
     body: JSON.stringify({ ...payload, tenant_id: tenantId }),
   });

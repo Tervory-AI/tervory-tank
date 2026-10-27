@@ -246,6 +246,7 @@ async def perform_resolve(
     ledger: Any,
     points_by_series: dict[str, list[dict[str, Any]]] | None = None,
     now: datetime | None = None,
+    only_ids: set[str] | None = None,
 ) -> dict[str, Any]:
     clock = _clock(now)
     existing = await _call(ledger.predictions_for, tenant_id)
@@ -257,6 +258,9 @@ async def perform_resolve(
     written = 0
     outcomes: list[dict[str, Any]] = []
     for row in existing:
+        is_warning = any(isinstance(source, dict) and source.get("warning_id") for source in row.get("sources") or [])
+        if (only_ids is None and is_warning) or (only_ids is not None and str(row["id"]) not in only_ids):
+            continue
         if row.get("outcome") or str(row["id"]) in resolved_ids:
             continue
         series_id = str(row["metric_series_id"])

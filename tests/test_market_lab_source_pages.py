@@ -84,3 +84,23 @@ async def test_mixed_document_focuses_the_cited_kind_and_answer_marks_notices():
         response = await answer(ledger, OWNER, f"Harbor notice {1960 + index}", fixtures=True)
         assert len(response["facts"]) == 1
         assert response["facts"][0]["href"] == f"/market-lab/sources/{ident}?row={index}&kind=event#event-{index}"
+
+
+@pytest.mark.asyncio
+async def test_paging_preserves_stored_status_labels_and_formats_numeric_values():
+    ledger = MemoryLedger()
+    ledger.pool.batches["saved"] = {"tenant_id": OWNER, "status": "pooled"}
+    points = [{"series_id": "status", "batch_id": "saved", "title": "Saved observation",
+               "date": f"{1960 + index // 12}-{index % 12 + 1:02d}-01", "value": "14474",
+               "unit": "status", "geo": "US", "geo_level": "national", "frequency": "monthly", "revision": "v1"}
+              for index in range(53)]
+    points[0].update(value="2", display_value="Available")
+    check = await save_check(ledger, OWNER, {"source_id": "source", "name": "Saved observations", "points": points,
+        "events": [], "fixture": True, "note": ""}, at=datetime.now(timezone.utc))
+    ident = check["document_id"]
+    numeric = await document_page(ledger, OWNER, ident, row=52, row_kind="point", fixtures=True)
+    assert numeric["offset"] == 0 and numeric["points"][0]["display_value"] == "14,474"
+    status = await document_page(ledger, OWNER, ident, row=0, row_kind="point", fixtures=True)
+    assert status["offset"] == 50 and status["page_size"] == 50
+    row = next(point for point in status["points"] if point["index"] == 0)
+    assert row["value"] == "2" and row["display_value"] == "Available"
