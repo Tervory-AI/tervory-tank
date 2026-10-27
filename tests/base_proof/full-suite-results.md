@@ -58,8 +58,15 @@ fixture pages. Signed-in live proof is reserved for Claude after deployment.
 
 This comparison supersedes the older 3261163 baseline. The later plain-column CSV follow-up changes the exporter and its tests; this
 full-suite comparison remains evidence for the exact commits above, not a claim
-of a new full-suite run. The latest complete-contact CSV follow-up passed 36
+of a new full-suite run. The complete-contact CSV follow-up at 83504e4 passed 36
 targeted product/database/Workspace/startup tests, CI Ruff and the Workspace
 production build. Its 375/1440 browser proof compares 18 rendered values to 18
 CSV values, with identical sources and dates. See README.md
 and the updated downloaded CSV. No Actions reruns; PR #339 remains a draft.
+
+The later pipeline contact-retention fix passed 76 focused tests (6 deprecation
+warnings) in 22.46s, the CI lint command and the Workspace production build.
+Its real Tank/Base/Workspace job completed with eight verified contacts: two
+phones, two websites, two Facebook links, TikTok and an email. Every value and
+its own source/date matched the rendered page and download. See `real-job-output.txt`
+and README.md. This is new focused and real-job evidence, not a new full-suite run.

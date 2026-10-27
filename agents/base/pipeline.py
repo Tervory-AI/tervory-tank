@@ -334,12 +334,19 @@ async def enrich_one(
                 # Historical facts stay dated; never label them current or use them as gold.
                 scr["text"] = ""
             if scr.get("emails"):
-                profile["emails"] = {"value": scr["emails"][:5], "source": src, "confidence": 80}
+                profile["emails"] = {"value": scr["emails"], "source": src, "confidence": 80}
             if scr.get("phones"):
                 merge(profile, {"phone": {"value": scr["phones"][0], "source": src, "confidence": 80}})
-                profile["phones"] = {"value": scr["phones"][:3], "source": src, "confidence": 80}
+                profile["phones"] = {"value": scr["phones"], "source": src, "confidence": 80}
             if scr.get("socials"):
                 profile["socials"] = {"value": scr["socials"], "source": src, "confidence": 85}
+            # Legacy primary values still feed existing checks. The complete
+            # collections retain independently observed contacts for the client.
+            for target, key in (("websites", "websites"), ("social_links", "socials")):
+                found = [item for page in scr.get("_base_observations") or [] for item in page.get(key, [])]
+                if found:
+                    profile[target] = {"value": list(dict.fromkeys(([url] if target == "websites" else []) + found)),
+                                       "source": src, "confidence": 85}
             passes["2b"] = {
                 "skill": named("base.scrape_site", scr),
                 "ms": scr.get("_ms"),

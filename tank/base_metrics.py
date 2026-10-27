@@ -10,7 +10,7 @@ import re
 from typing import Any
 from urllib.parse import urlsplit
 
-from base_evidence import FIELDS, phone
+from base_evidence import FIELDS, SOCIAL_NETWORKS, phone, social_network
 
 COUNTS = ("attempted", "website", "phone", "email", "email_and_phone", "email_only", "phone_only", "neither", "verified", "failed")
 RUNGS = {1: "paid model", 2: "cheaper model", 3: "code", 4: "cache"}
@@ -122,7 +122,7 @@ def csv_text(rows: list[dict[str, Any]], columns: list[str]) -> str:
         for column in columns:
             value = row.get(column)
             text = json.dumps(value, ensure_ascii=False) if isinstance(value, (list, dict)) else "" if value is None else str(value)
-            if re.match(r"^[\s\ufeff]*[=+@-]|^[\t\r\n]", text) and not re.fullmatch(r"\+?[1-9][0-9]{6,14}", text):
+            if re.match(r"^[\s\ufeff]*[=+@-]|^[\t\r\n]", text) and not re.fullmatch(r"\+?[1-9][0-9]{6,14}(?:; \+?[1-9][0-9]{6,14})*", text):
                 text = "'" + text
             cells.append(text)
         writer.writerow(cells)
@@ -155,14 +155,8 @@ def csv_reason(reason: str | None, field: str) -> str | None:
     return reason
 
 
-SOCIAL_NETWORKS = {
-    "facebook": ("facebook.com", "fb.com", "fb.me"),
-    "instagram": ("instagram.com",),
-    "x": ("x.com", "twitter.com"),
-    "linkedin": ("linkedin.com",),
-    "youtube": ("youtube.com", "youtu.be"),
-    "tiktok": ("tiktok.com",),
-}
+SOCIAL_NAMES = {"facebook": "Facebook", "instagram": "Instagram", "x": "X", "linkedin": "LinkedIn",
+                "youtube": "YouTube", "tiktok": "TikTok"}
 
 
 def verified_contacts(field: dict[str, Any]) -> list[dict[str, str]]:
@@ -180,15 +174,6 @@ def verified_contacts(field: dict[str, Any]) -> list[dict[str, str]]:
             seen.add(value)
             found.append({"value": value, "source_url": item["source_url"], "checked_at": item["checked_at"]})
     return found
-
-
-def social_network(url: str) -> str | None:
-    try:
-        host = (urlsplit(url).hostname or "").lower()
-    except ValueError:
-        return None
-    return next((name for name, hosts in SOCIAL_NETWORKS.items()
-                 if any(host == domain or host.endswith("." + domain) for domain in hosts)), None)
 
 
 def export_records(rows: list[dict[str, Any]]) -> str:
@@ -221,7 +206,7 @@ def export_records(rows: list[dict[str, Any]]) -> str:
         socials = verified_contacts(fields["socials"])
         for network in SOCIAL_NETWORKS:
             values = [item for item in socials if social_network(item["value"]) == network]
-            reason = csv_reason(fields["socials"].get("reason"), "socials") or f"No verified {network} link found for this business."
+            reason = csv_reason(fields["socials"].get("reason"), "socials") or f"No verified {SOCIAL_NAMES[network]} link found for this business."
             write(network, values[:1], reason, fields["socials"] if not fields["socials"].get("verified") else None)
             write(f"other_{network}", values[1:])
         exported.append(record)

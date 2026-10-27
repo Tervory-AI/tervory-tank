@@ -116,15 +116,19 @@ Twitter maps to `x`, youtu.be to `youtube`; hostname suffixes are checked at dom
 boundaries. Missing networks have empty value/source/date cells, with a plain
 reason where available. The header is fixed across streamed pages. `_value` and
 JSON `_items` columns are removed. The existing formula guard still protects all
-cells and preserves plain phone numbers.
+cells and preserves plain phone numbers, including cells made only of numbers
+joined by `; `. Three- and four-phone endpoint tests prove that `other_phones`
+has no added apostrophe; mixed phone/formula cells, tabs and newlines stay escaped.
+Missing-network reasons use Facebook, Instagram, X, LinkedIn, YouTube and TikTok.
 
-The complete-contact CSV follow-up passed **36 tests in 26.89s**:
+The pipeline contact-retention follow-up passed **76 tests, 6 deprecation warnings,
+in 22.46s**:
 
 ```sh
 PYTHONPATH=tank:tests \
 BASE_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55443/basetest \
 TANK_BOOT_DATABASE_URL=postgresql://postgres@127.0.0.1:55443/basetest \
-python -m pytest -q tests/test_base_product.py tests/test_base_database.py tests/test_base_workflow.py tests/test_tank_boots.py
+python -m pytest -q tests/test_base_product.py tests/test_base_database.py tests/test_base_workflow.py tests/test_base_public_http.py tests/test_base_engine_terms_approved.py tests/test_b3_base_room.py tests/test_tank_boots.py
 ```
 
 This includes two- and three-email fixtures, distinct provenance per value,
@@ -132,10 +136,9 @@ unverified/duplicate rejection, all six networks and their extras, empty cells,
 ISO dates, formula protection, and the PostgreSQL-backed streaming download.
 An AST check compares CSV networks against both approved pipeline skill lists
 (Twitter maps to X) so an added network cannot silently disappear from exports.
-The local
-Workspace browser proof also passed at 375 and 1440 pixels. Its latest CSV and
-screenshots are committed here. No production app code changed outside the CSV
-exporter; the older full-suite comparison remains pinned to its tested commit.
+The local Workspace browser proof also covers 375 and 1440 pixels. The older
+full-suite comparison remains pinned to its tested commit; these counts are the
+focused run for the latest pipeline, evidence and CSV changes.
 
 The CI lint command and Workspace production build also passed locally:
 
@@ -144,7 +147,7 @@ ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials
 # All checks passed!
 cd workspace
 NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA== CLERK_SECRET_KEY=sk_test_dummy npx next build
-# Compiled successfully in 14.2s; type checks passed; 36/36 static pages generated; exit 0.
+# Compiled successfully in 29.3s; type checks passed; 36/36 static pages generated; exit 0.
 ```
 
 Real Tank + Base worker + Workspace job (27 October 2026, Pacific):
@@ -166,10 +169,20 @@ read live sites. Loopback calls between the real services use real HTTP. Clerk
 is bypassed only in the temporary Workspace copy, with CI's dummy settings.
 No Tank routes, Base steps, collectors or skills are replaced.
 
-The completed job showed **5 verified values on /base and 5 in its download**,
-including TikTok and Facebook, with the same sources/dates. The supplemental
-18-value browser fixture above checks every extra column, including two websites
-and phones, which the current pipeline normally represents as scalar fields.
+The completed job showed **8 verified values on /base and 8 in its download**:
+two phones, two websites, two Facebook links, one TikTok link and an email.
+The second phone, website and Facebook link are found only on the contact page;
+their source URL and checked date differ from the homepage's values. The browser
+compares every rendered value/source/date triple with the actual downloaded CSV.
+The supplementary 18-value fixture checks extras on all six networks.
+
+The pipeline retains uncapped phone/email collections and all observed social
+links and websites. Existing primary values still feed the approved skill checks.
+Additional websites require an explicit `rel="me"` identity link on the verified
+business site. Ordinary navigation and supplier links are not business websites.
+Social share/login links are excluded. Each item keeps its first recorded page
+and check date; nothing borrows a sibling's evidence. No extra reads, models or
+paid routes were added, and no approved skill package was edited.
 The evidence is [real-job-output.txt](real-job-output.txt),
 [download](screenshots/real-job.csv), [1440 px](screenshots/real-job-1440.png),
 and [375 px](screenshots/real-job-375.png). Both screenshots say “local, fixture

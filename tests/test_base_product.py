@@ -330,13 +330,86 @@ def test_csv_spreadsheet_import_keeps_phones_and_neutralises_formulas():
     import io
     from base_metrics import csv_text
     phones = ["+15125550101", "+442079460018", "15125550101"]
-    formulas = ['=HYPERLINK("https://evil.example/","click")', "+SUM(1,2)", "-1+2", "@SUM(1,2)", "  =1+1"]
+    formulas = ['=HYPERLINK("https://evil.example/","click")', "+SUM(1,2)", "-1+2", "@SUM(1,2)", "  =1+1",
+                "+15125550202; =1+1", "+15125550202; +SUM(1,2)", "+15125550202; @SUM(1,2)",
+                "+15125550202; -15125550203", "+15125550202;\t+15125550203", "\t+15125550202", "\r+15125550202", "\n+15125550202"]
     output = csv_text([{"phone": phone} for phone in phones + formulas], ["phone"])
     values = [row["phone"] for row in csv.DictReader(io.StringIO(output.lstrip("\ufeff")))]
     # These are the actual cell contents a CSV importer receives: no apostrophe
     # added to phone values; dangerous expressions import as literal text.
     assert values[:len(phones)] == phones
     assert values[len(phones):] == ["'" + formula for formula in formulas]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("count", [3, 4])
+async def test_download_keeps_three_and_four_phones_identical_to_the_page(monkeypatch, count):
+    import csv
+    import io
+    from base_evidence import field
+    monkeypatch.setenv("TANK_API_KEY", "local-fixture")
+    app, store = fixture_app()
+    row = finished(reference.project(raw()))
+    items = [field(f"+1512555020{i+1}", f"https://shop.example/phone/{i}", f"2026-10-{i+1:02}T10:00:00+00:00") for i in range(count)]
+    row["fields"]["phone"] = {**items[0], "items": items}
+    store.rows[TENANT].append(row)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://fixture",
+                                headers={"X-Tank-Key": "local-fixture"}) as client:
+        params = {"tenant_id": str(TENANT)}
+        shown = (await client.get("/v1/base-product/records", params=params)).json()["rows"][0]["fields"]["phone"]["items"]
+        response = await client.get("/v1/base-product/records.csv", params=params)
+    record = next(csv.DictReader(io.StringIO(response.text.lstrip("\ufeff"))))
+    assert record["phone"] == shown[0]["value"]
+    for part, suffix in (("value", ""), ("source_url", "_source_url"), ("checked_at", "_checked_at")):
+        assert record["other_phones" + suffix] == "; ".join(item[part] for item in shown[1:])
+    assert "'" not in record["other_phones"]
+
+
+def test_csv_missing_network_names_are_client_copy():
+    import csv
+    import io
+    from base_evidence import field
+    row = finished(reference.project(raw()))
+    row["fields"]["socials"] = field()
+    row["fields"]["socials"]["reason"] = None
+    record = next(csv.DictReader(io.StringIO(export_records([row]).lstrip("\ufeff"))))
+    for name in ("Facebook", "Instagram", "X", "LinkedIn", "YouTube", "TikTok"):
+        assert record[f"{name.lower()}_reason"] == f"No verified {name} link found for this business."
+
+
+def test_observed_contacts_retain_all_values_and_their_own_pages():
+    row = finished(reference.project(raw()))
+    row["profile"]["website"]["value"] = "https://shop.example/"
+    row["profile"]["phone"]["value"] = "+15125550201"
+    row["profile"]["socials"]["value"] = {"facebook": "https://facebook.com/shop"}
+    token = observations.set([])
+    try:
+        observe("https://shop.example/", '<p>+1 512 555 0201</p><a href="https://facebook.com/shop">Facebook</a>')
+        observe("https://shop.example/contact", '<p>+1 512 555 0202; +1 512 555 0203</p>'
+                '<a href="tel:+15125550204">Call our service team</a><a href="https://facebook.com/shop-store">Store</a>'
+                '<a href="https://tiktok.com/@shop">TikTok</a><a rel="me" href="https://store.shop.example/">Our store</a>'
+                '<a href="https://unrelated.example/">Supplier</a><a href="https://facebook.com/sharer.php">Share</a>')
+        proof = observations.get()
+        proof[0]["checked_at"], proof[1]["checked_at"] = AT, "2026-10-27T10:00:00+00:00"
+    finally:
+        observations.reset(token)
+    row["passes"]["2b"]["field_observations"] = proof
+    # Even older pipeline rows whose primary profile dropped the extras retain
+    # every contact that is independently present in their page observations.
+    fields = row_fields(row)
+    for name, expected in {
+        "website": ["https://shop.example/", "https://store.shop.example/"],
+        "phone": [f"+1512555020{i}" for i in range(1, 5)],
+        "socials": ["https://facebook.com/shop", "https://facebook.com/shop-store", "https://tiktok.com/@shop"],
+    }.items():
+        assert [item["value"] for item in fields[name]["items"]] == expected
+        assert fields[name]["items"][0]["source_url"] == "https://shop.example/"
+        assert fields[name]["items"][0]["checked_at"] == AT
+        for item in fields[name]["items"][1:]:
+            assert item["source_url"] == "https://shop.example/contact"
+            assert item["checked_at"] == proof[1]["checked_at"]
+    row["passes"]["2b"]["archive_date"] = "2020-01-01"
+    assert all(not item["verified"] for item in row_fields(row).values())
 
 
 def test_partial_cost_metrics_keep_priced_margin_and_cost_per_outcome():

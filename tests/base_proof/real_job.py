@@ -143,21 +143,37 @@ async def main() -> None:
             assert exported["tiktok"] == "https://www.tiktok.com/@fixture-shop"
             assert exported["facebook"] == "https://www.facebook.com/fixture-shop"
             assert exported["email"] == "info@shop.example"
+            assert exported["phone"] == "+15125550101"
+            assert exported["other_phones"] == "+15125550202"
+            assert exported["other_websites"] == "https://store.shop.example/"
+            assert exported["other_facebook"] == "https://www.facebook.com/fixture-shop-store"
+            for column in ("other_phones", "other_websites", "other_facebook"):
+                assert exported[f"{column}_source_url"] == "https://shop.example/contact"
+                assert exported[f"{column}_checked_at"] != exported["website_checked_at"]
             assert not any(mark in text for mark in "[]{}")
             for network in ("tiktok", "facebook"):
                 assert exported[f"{network}_source_url"].startswith("https://shop.example/")
                 assert exported[f"{network}_checked_at"]
-            visible = await detail.locator("dd p").count()
-            values = sum(len(exported[column].split("; ")) for column in exported
-                         if column in {"email", "other_emails", "phone", "other_phones", "website", "other_websites",
-                                       "facebook", "other_facebook", "tiktok", "other_tiktok"} and exported[column])
-            assert visible == values == 5, (visible, values)
+            shown, downloaded = [], []
+            for item in await detail.locator("dd p").all():
+                shown.append(((await item.inner_text()).splitlines()[0], await item.locator("a").get_attribute("href"),
+                              await item.locator("time").get_attribute("datetime")))
+            for column in ("email", "other_emails", "phone", "other_phones", "website", "other_websites",
+                           "facebook", "other_facebook", "tiktok", "other_tiktok"):
+                if exported[column]:
+                    parts = [exported[column + suffix].split("; ") for suffix in ("", "_source_url", "_checked_at")]
+                    assert len({len(part) for part in parts}) == 1
+                    downloaded.extend(zip(*parts))
+            visible, values = len(shown), len(downloaded)
+            assert set(shown) == set(downloaded) and visible == values == 8, (shown, downloaded)
             await page.set_viewport_size({"width": 375, "height": 900})
             await page.screenshot(path=str(output / "real-job-375.png"))
             await browser.close()
             result = {"job": "CSV upload through Workspace -> real Tank -> real Base worker -> Workspace download",
                       "status": status, "verified_values_on_page": visible, "verified_values_in_csv": values,
                       "tiktok": exported["tiktok"], "facebook": exported["facebook"], "fixture": "local, fixture page"}
+            result["additional_contacts"] = {key: exported[key] for key in ("other_phones", "other_websites", "other_facebook")}
+            result["all_value_source_date_triples_match"] = True
             (output / "real-job-output.json").write_text(json.dumps(result, indent=2) + "\n")
             print(json.dumps(result, indent=2))
     finally:
