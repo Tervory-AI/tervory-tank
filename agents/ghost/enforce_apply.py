@@ -148,7 +148,6 @@ def apply_from_payload(
     receipt["health_ok"] = healthy
 
     if applied and auto_undo_on_health_fail and not healthy:
-        t3 = time.perf_counter()
         # Full event→undo window starts at apply begin for budget honesty.
         undone = undo_applied(receipt, control=edge, data_dir=data_dir)
         stamp_budget(undone, stage="auto_undo_e2e", seconds=time.perf_counter() - t0)

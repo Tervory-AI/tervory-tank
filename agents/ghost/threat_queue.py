@@ -53,7 +53,7 @@ class ThreatPayloadQueue:
         return item_id
 
     def take(self) -> tuple[str, ThreatPayload] | None:
-        """Validate before acting. Bad items are quarantined with a receipt; keep flowing."""
+        """Validate via accept_threat_payload (same door as apply/undo). Quarantine bad items."""
         inbox = self.root / "inbox"
         while True:
             files = sorted(inbox.glob("*.json"))
@@ -61,17 +61,32 @@ class ThreatPayloadQueue:
                 return None
             path = files[0]
             item_id = path.stem
+            tenant_hint: str | None = None
             try:
                 raw_text = path.read_text(encoding="utf-8")
                 data = json.loads(raw_text)
-                payload = ThreatPayload.model_validate(data)
+                if isinstance(data, dict):
+                    tid = data.get("tenant_id")
+                    if isinstance(tid, str) and tid.strip():
+                        tenant_hint = tid.strip()
+                # Same validated door as HTTP apply/undo — action rules + injection pre-flight.
+                payload = accept_threat_payload(data if isinstance(data, dict) else raw_text)
             except Exception as exc:
-                self._quarantine(path, item_id, reason=type(exc).__name__)
+                self._quarantine(
+                    path, item_id, reason=type(exc).__name__, tenant_id=tenant_hint
+                )
                 continue
             path.unlink(missing_ok=True)
             return item_id, payload
 
-    def _quarantine(self, path: Path, item_id: str, *, reason: str) -> None:
+    def _quarantine(
+        self,
+        path: Path,
+        item_id: str,
+        *,
+        reason: str,
+        tenant_id: str | None = None,
+    ) -> None:
         dest = self.root / "quarantine" / f"{item_id}.json"
         try:
             shutil.move(str(path), str(dest))
@@ -79,6 +94,8 @@ class ThreatPayloadQueue:
             path.unlink(missing_ok=True)
             dest = self.root / "quarantine" / f"{item_id}.missing.json"
             dest.write_text("{}", encoding="utf-8")
+        # Prefer tenant_id from the bad item; else from this Enforce process env.
+        tid = (tenant_id or "").strip() or (os.environ.get("TENANT_ID") or "").strip() or None
         receipt = {
             "id": str(uuid.uuid4()),
             "product": "Autumbra",
@@ -87,6 +104,7 @@ class ThreatPayloadQueue:
             "outcome": "quarantined",
             "timestamp": utc_now(),
             "queue_item_id": item_id,
+            "tenant_id": tid,
             "note": f"Invalid queue item quarantined ({reason}); queue kept flowing.",
             "applied": False,
             "raw_log_seen": False,
@@ -119,39 +137,88 @@ class ThreatPayloadQueue:
         return sorted(p.name for p in (self.root / "quarantine").glob("*.json"))
 
 
+# Public advisory hosts Watch may link. Caller-invented URLs never stamp severity.
+_PUBLIC_ADVISORY_HOSTS = frozenset({
+    "www.cisa.gov",
+    "cisa.gov",
+    "api.osv.dev",
+    "osv.dev",
+    "api.github.com",
+    "github.com",
+    "services.nvd.nist.gov",
+    "nvd.nist.gov",
+    "www.php.net",
+    "php.net",
+    "nodejs.org",
+    "www.cve.org",
+    "cve.org",
+})
+
+
+def _advisory_url_is_public(url: str) -> bool:
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return False
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    host = (parsed.hostname or "").lower()
+    if not host:
+        return False
+    if host in _PUBLIC_ADVISORY_HOSTS:
+        return True
+    # Allow subdomains of allowlisted registrable hosts (e.g. advisories.github.com).
+    return any(host.endswith("." + h) for h in _PUBLIC_ADVISORY_HOSTS)
+
+
 def _advisory_fields(
     *,
     advisory: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    """Severity / CVE only from a matched public advisory. Never stamp fixed values."""
+    """Severity / CVE only from a real, linked, matched public advisory.
+
+    Never stamp an invented advisory/CVE/critical from caller nonsense.
+    Requires: allowlisted public advisory URL + rating + matched flag (or inventory match id).
+    """
+    unknown = {
+        "severity": ThreatSeverity.unknown.value,
+        "cve_ids": [],
+        "confidence": 0.0,
+        "advisory_url": None,
+    }
     if not advisory or not isinstance(advisory, dict):
-        return {
-            "severity": ThreatSeverity.unknown.value,
-            "cve_ids": [],
-            "confidence": 0.0,
-            "advisory_url": None,
-        }
+        return unknown
     url = str(advisory.get("advisory_url") or advisory.get("url") or "").strip()
     rating = str(advisory.get("rating") or advisory.get("severity") or "").strip().lower()
+    # Matched means Watch tied this to inventory / a real feed row — not a free-form stamp.
+    matched = bool(
+        advisory.get("matched")
+        or advisory.get("match_id")
+        or advisory.get("matched_component")
+        or advisory.get("from_match")
+    )
+    if not url or not rating or not matched:
+        return unknown
+    if not _advisory_url_is_public(url):
+        return unknown
     cve = str(advisory.get("advisory_id") or advisory.get("cve_id") or "").strip()
     cves: list[str] = []
-    if cve.startswith("CVE-"):
+    # Only accept well-shaped CVEs when the advisory is matched + linked.
+    import re
+    cve_re = re.compile(r"^CVE-\d{4}-\d{4,}$")
+    if cve_re.fullmatch(cve):
         cves.append(cve)
     for extra in advisory.get("cve_ids") or []:
-        if isinstance(extra, str) and extra.startswith("CVE-") and extra not in cves:
+        if isinstance(extra, str) and cve_re.fullmatch(extra) and extra not in cves:
             cves.append(extra)
-    if not url or not rating:
-        # No matched public advisory → no severity stamp.
-        return {
-            "severity": ThreatSeverity.unknown.value,
-            "cve_ids": [],
-            "confidence": 0.0,
-            "advisory_url": None,
-        }
     try:
         sev = ThreatSeverity(rating).value
     except ValueError:
-        sev = ThreatSeverity.unknown.value
+        return unknown
+    if sev == ThreatSeverity.unknown.value:
+        return unknown
     return {
         "severity": sev,
         "cve_ids": cves[:20],

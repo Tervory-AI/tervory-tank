@@ -44,7 +44,13 @@ from .webhooks import WebhookRejected, accept_signed, drop_counts
 from .red_team import list_exercises, run_exercise
 from .enforce_lifecycle import FixtureComposeBackend, plan_create, plan_destroy, receipt_for
 from .owner_email import DEFAULT_FIXTURE_TRANSPORT, build_owner_update, send_owner_update
-from .owner_email_jobs import run_weekly_owner_updates
+from .owner_email_jobs import (
+    build_owner_update_from_receipts,
+    default_receipt_url,
+    list_clients_with_owner,
+    run_weekly_owner_updates,
+    week_stats_from_receipts,
+)
 from .probes import Probes
 from .store import Store
 from .tenant_queue import (
@@ -179,6 +185,28 @@ def watch_threat_queue(tenant_id: str | None = None) -> ThreatPayloadQueue:
     return ThreatPayloadQueue(queue_root_from_env())
 
 
+
+def _require_tenant_uuid(tenant_id: str | None) -> str:
+    """Non-UUID tenant_id → ValueError (mapped to clean 4xx by callers)."""
+    tid = (tenant_id or "").strip()
+    try:
+        return str(UUID(tid))
+    except (TypeError, ValueError):
+        raise ValueError("tenant_id must be a UUID") from None
+
+
+def _receipts_for_tenant(tenant_id: str) -> list[dict]:
+    """Load Enforce/Watch receipts for one client from their queue box."""
+    try:
+        q = watch_threat_queue(tenant_id)
+    except Exception:
+        return []
+    try:
+        return list(q.list_receipts())
+    except Exception:
+        return []
+
+
 def enqueue_fixture_attack_for_watch(
     *,
     raw_log: str,
@@ -212,7 +240,7 @@ def enqueue_fixture_attack_for_watch(
 
 
 async def _weekly_owner_email_loop(app: "FastAPI") -> None:
-    """Real scheduled weekly job — not just a dict in /jobs."""
+    """Real scheduled weekly job — every tenant with a stored owner, counts from receipts."""
     # Default 7 days; tests may set AUTUMBRA_WEEKLY_INTERVAL_SEC.
     interval = float(os.environ.get("AUTUMBRA_WEEKLY_INTERVAL_SEC") or str(7 * 24 * 3600))
     if interval < 1:
@@ -226,14 +254,17 @@ async def _weekly_owner_email_loop(app: "FastAPI") -> None:
             left -= step
         try:
             store = app.state.store
-            # Enumerate known tenants from settings keys is store-specific; tests
-            # call run_weekly_owner_updates directly. Here we send for PLATFORM.
-            settings = load_settings(store, PLATFORM_TENANT)
-            if settings.owner_email:
-                run_weekly_owner_updates(
-                    [settings],
-                    transport=DEFAULT_FIXTURE_TRANSPORT,
-                )
+            clients = list_clients_with_owner(store)
+            if not clients:
+                continue
+            receipts_by_tenant = {
+                c.tenant_id: _receipts_for_tenant(c.tenant_id) for c in clients
+            }
+            run_weekly_owner_updates(
+                clients,
+                receipts_by_tenant=receipts_by_tenant,
+                transport=DEFAULT_FIXTURE_TRANSPORT,
+            )
         except Exception:
             pass
 
@@ -840,12 +871,17 @@ def create_app() -> FastAPI:
             advisory = data.get("advisory") if isinstance(data.get("advisory"), dict) else None
         except Exception:
             raise HTTPException(422, "Fixture attack was not understood.") from None
-        queue = None
         if tenant_id:
             try:
+                tenant_id = _require_tenant_uuid(tenant_id)
+            except ValueError:
+                raise HTTPException(400, "tenant_id must be a UUID") from None
+            try:
                 queue = watch_threat_queue(tenant_id)
-            except Exception:
-                queue = getattr(app.state, "threat_queue", None)
+            except ValueError:
+                raise HTTPException(400, "tenant_id must be a UUID") from None
+            except Exception as exc:
+                raise HTTPException(422, str(exc)) from None
         else:
             queue = getattr(app.state, "threat_queue", None)
         try:
@@ -869,6 +905,8 @@ def create_app() -> FastAPI:
                 "tenant_id": tenant_id,
             }
             return JSONResponse(burn_receipt, status_code=400)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from None
         return receipt
 
     @app.post("/ghost/autumbra/queue/undo", dependencies=[Depends(require_tank)])
@@ -886,6 +924,7 @@ def create_app() -> FastAPI:
         except Exception:
             raise HTTPException(422, "Undo was not understood.") from None
         try:
+            tenant_id = _require_tenant_uuid(tenant_id)
             q = watch_threat_queue(tenant_id)
             return watch_enqueue_undo(
                 queue=q,
@@ -899,6 +938,8 @@ def create_app() -> FastAPI:
                 {"outcome": "burned", "detail": BURN_DETAIL, "queued": False},
                 status_code=400,
             )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from None
         except Exception as exc:
             raise HTTPException(422, str(exc)) from None
 
@@ -916,6 +957,7 @@ def create_app() -> FastAPI:
         except Exception:
             raise HTTPException(422, "Approve was not understood.") from None
         try:
+            tenant_id = _require_tenant_uuid(tenant_id)
             q = watch_threat_queue(tenant_id)
             return watch_enqueue_approve(
                 queue=q,
@@ -923,6 +965,8 @@ def create_app() -> FastAPI:
                 site=site,
                 tenant_id=tenant_id,
             )
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from None
         except ThreatBurned:
             return JSONResponse(
                 {"outcome": "burned", "detail": BURN_DETAIL, "queued": False},
@@ -1007,6 +1051,7 @@ def create_app() -> FastAPI:
 
         Recipient is ONLY the owner_email stored in the client's settings.
         A request body can never name or override the recipient.
+        Every count is built from receipts — never from the request body.
         """
         raw = await bounded_json(request, 20_000)
         try:
@@ -1018,31 +1063,25 @@ def create_app() -> FastAPI:
             ).strip()
             if not tenant_id:
                 raise ValueError("tenant_id required")
+            tenant_id = _require_tenant_uuid(tenant_id)
             # Stored settings only — ignore any owner_email in the request body.
             settings = load_settings(app.state.store, tenant_id)
-            # Allow mode/site overrides for the email content from stored settings;
-            # never take recipient from the request.
             to = str(settings.owner_email or "").strip()
             if not to:
                 raise ValueError("recipient must come from the client's settings")
             if "owner_email" in (data.get("settings") or {}):
-                # Explicitly refuse override attempts.
                 requested = str((data.get("settings") or {}).get("owner_email") or "").strip()
                 if requested and requested != to:
                     raise ValueError("request cannot name the recipient")
-            email = build_owner_update(
+            # Counts from receipts only. Request body numbers are ignored.
+            receipts = _receipts_for_tenant(tenant_id)
+            email = build_owner_update_from_receipts(
                 settings=settings,
-                site_name=str(data.get("site_name") or settings.site_name),
-                threats_found=int(data.get("threats_found") or 0),
-                critical=list(data.get("critical") or []),
-                shield=data.get("shield"),
-                fix_report_url=str(data.get("fix_report_url") or ""),
-                pr_url=str(data.get("pr_url") or ""),
-                undo_fix_url=str(data.get("undo_fix_url") or ""),
-                undo_shield_url=str(data.get("undo_shield_url") or ""),
-                receipt_url=str(data.get("receipt_url") or ""),
-                checks_run=data.get("checks_run"),
+                receipts=receipts,
+                receipt_url=default_receipt_url(tenant_id),
             )
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from None
         except Exception:
             raise HTTPException(422, "Owner update was not understood.") from None
         sent = send_owner_update(email, to=to, transport=DEFAULT_FIXTURE_TRANSPORT)

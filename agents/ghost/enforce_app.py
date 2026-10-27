@@ -20,7 +20,13 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from .client_settings import ClientAutumbraSettings, load_settings
-from .durable_shields import load_control, persist_control, restart_drop_receipts
+from .durable_shields import (
+    corrupt_shields_receipt,
+    load_control,
+    persist_control,
+    read_shields_table,
+    restart_drop_receipts,
+)
 from .enforce_apply import expire_pending_approvals
 from .fixture_edge import DEFAULT_CONTROL, FixtureEdgeControl
 from .never_block import ActionCap
@@ -111,36 +117,52 @@ def enforce_threat_queue() -> ThreatPayloadQueue:
 
 
 def _boot_durable_control(app: FastAPI) -> list[dict[str, Any]]:
-    """Restore shields from this client's box. Emit receipts for any silent loss."""
+    """Restore shields from this client's box. Never silently drop on corrupt file."""
     tenant_id = (os.environ.get("TENANT_ID") or "").strip() or "fixture"
     data_dir = data_dir_path()
     data_dir.mkdir(parents=True, exist_ok=True)
-    prior_path = data_dir / "shields.json"
+    table, source = read_shields_table(data_dir)
     prior_blocked: dict[str, dict[str, Any]] = {}
-    if prior_path.exists():
-        import json
-
-        try:
-            raw = json.loads(prior_path.read_text(encoding="utf-8"))
-            if isinstance(raw, dict) and isinstance(raw.get("blocked"), dict):
-                prior_blocked = {str(k): dict(v) for k, v in raw["blocked"].items() if isinstance(v, dict)}
-        except Exception:
-            prior_blocked = {}
+    if isinstance(table, dict) and isinstance(table.get("blocked"), dict):
+        prior_blocked = {
+            str(k): dict(v)
+            for k, v in table["blocked"].items()
+            if isinstance(v, dict)
+        }
+    receipts: list[dict[str, Any]] = []
+    if source == "corrupt":
+        # No usable table at all — prior_blocked empty; still write a receipt.
+        receipts.append(
+            corrupt_shields_receipt(
+                tenant_id=tenant_id,
+                prior_blocked={},
+                restored_from_good=False,
+            )
+        )
+    elif source == "good":
+        # Primary was bad; we kept last good. Receipt names the event.
+        receipts.append(
+            corrupt_shields_receipt(
+                tenant_id=tenant_id,
+                prior_blocked=prior_blocked,
+                restored_from_good=True,
+            )
+        )
     control = load_control(data_dir, tenant_id=tenant_id)
-    # If file was corrupted/empty but we had a prior snapshot in memory of the file
-    # read failure path: restart_drop_receipts compares prior_blocked to restored.
     restored = {r["rule_id"]: r for r in control.list_blocked()}
-    # Also handle: file existed with shields, load failed → empty control.
-    drop_receipts = restart_drop_receipts(
-        prior_blocked=prior_blocked,
-        restored_blocked=restored,
-        tenant_id=tenant_id,
+    # If somehow restored is smaller than the table we read, emit per-shield drops.
+    receipts.extend(
+        restart_drop_receipts(
+            prior_blocked=prior_blocked,
+            restored_blocked=restored,
+            tenant_id=tenant_id,
+        )
     )
-    # Re-persist what we have so the box stays the source of truth.
+    # Re-persist (atomic) so primary + last-good stay aligned with restored table.
     persist_control(data_dir, control)
     app.state.control = control
     app.state.data_dir = data_dir
-    return drop_receipts
+    return receipts
 
 
 def drain_once_for_enforce(
@@ -202,6 +224,9 @@ def drain_once_for_enforce(
         queue_write=q.write_receipt,
     ):
         _ = expired
+    on_act = None
+    if target is not None:
+        on_act = getattr(target.state, "on_act_email", None)
     return enforce_drain_once(
         q,
         settings=cfg,
@@ -209,6 +234,7 @@ def drain_once_for_enforce(
         action_cap=cap,
         source_credits=source_credits,
         data_dir=data_dir,
+        on_act_email=on_act,
     )
 
 
@@ -225,6 +251,24 @@ async def _queue_drain_loop(app: FastAPI) -> None:
             pass
 
 
+
+def _default_on_act_email(receipt: dict[str, Any], settings: ClientAutumbraSettings) -> None:
+    """When Autumbra acts: build owner email from the receipt and send to stored owner."""
+    to = (settings.owner_email or "").strip()
+    if not to:
+        return
+    from .owner_email import DEFAULT_FIXTURE_TRANSPORT, send_owner_update
+    from .owner_email_jobs import build_owner_update_from_receipts, default_receipt_url, default_undo_url
+
+    email = build_owner_update_from_receipts(
+        settings=settings,
+        receipts=[receipt],
+        receipt_url=default_receipt_url(settings.tenant_id),
+        undo_shield_url=default_undo_url(str(receipt.get("id") or "")),
+    )
+    send_owner_update(email, to=to, transport=DEFAULT_FIXTURE_TRANSPORT)
+
+
 def create_enforce_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -232,6 +276,7 @@ def create_enforce_app() -> FastAPI:
         app.state.action_cap = ActionCap()
         app.state.threat_queue = None
         app.state.drain_loop_running = False
+        app.state.on_act_email = _default_on_act_email
         drain_task: asyncio.Task | None = None
         if queue_configured():
             app.state.threat_queue = enforce_threat_queue()
@@ -265,6 +310,7 @@ def create_enforce_app() -> FastAPI:
     app.state.threat_queue = None
     app.state.drain_loop_running = False
     app.state.data_dir = data_dir_path()
+    app.state.on_act_email = _default_on_act_email
 
     @app.get("/health")
     async def health() -> dict[str, Any]:

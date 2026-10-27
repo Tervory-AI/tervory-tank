@@ -223,7 +223,7 @@ def test_05_07_receipts_and_owner_email_recipient(tmp_path: Path, monkeypatch):
                 "settings": {"tenant_id": TENANT, "owner_email": "attacker@evil.test"},
                 "threats_found": 0,
                 "critical": [],
-                "receipt_url": "https://protect.tervory.com/receipts/weekly/" + TENANT,
+                "receipt_url": "https://protect.tervory.com/autumbra/receipts/weekly/" + TENANT,
                 "checks_run": 3,
             },
         )
@@ -233,14 +233,13 @@ def test_05_07_receipts_and_owner_email_recipient(tmp_path: Path, monkeypatch):
             headers=headers,
             json={
                 "tenant_id": TENANT,
-                "threats_found": 0,
-                "critical": [],
-                "receipt_url": f"https://protect.tervory.com/receipts/weekly/{TENANT}",
-                "checks_run": 3,
             },
         )
-        assert ok.status_code == 200
+        assert ok.status_code == 200, ok.text
         assert ok.json()["to"] == "owner-real@tervory.com"
+        # Counts come from receipts, not the request — empty box → quiet week.
+        assert "Quiet week." in ok.json()["body"]
+        assert f"/autumbra/receipts/weekly/{TENANT}" in ok.json()["body"]
 
         q = ThreatPayloadQueue(queue_path_for_tenant(TENANT))
         control = FixtureEdgeControl(tenant_id=TENANT)
@@ -290,7 +289,7 @@ def test_08_email_founder_wording():
         },
         fix_report_url="https://protect.tervory.com/report/1",
         undo_shield_url="https://protect.tervory.com/autumbra/undo/1",
-        receipt_url=f"https://protect.tervory.com/receipts/weekly/{TENANT}",
+        receipt_url=f"https://protect.tervory.com/autumbra/receipts/weekly/{TENANT}",
     )
     assert "(Each linked to its public advisory.)" in mail["body"]
     assert "It was part of a widely reported campaign" in mail["body"]
@@ -409,6 +408,8 @@ def test_14_no_fixed_cve_without_advisory(tmp_path: Path):
             "rating": "critical",
             "advisory_id": "CVE-2026-109618",
             "advisory_url": "https://nvd.nist.gov/vuln/detail/CVE-2026-109618",
+            "matched": True,
+            "match_id": "match-fixture-1",
         },
     )
     assert watch2["severity"] == "critical"

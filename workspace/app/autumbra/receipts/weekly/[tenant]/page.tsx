@@ -1,4 +1,4 @@
-/** Weekly owner-update receipt page — target of protect.tervory.com/receipts/weekly/<tenant> links. */
+/** Weekly owner-update receipt page — target of protect.tervory.com/autumbra/receipts/weekly/<tenant>. */
 export default async function WeeklyReceiptPage({
   params,
 }: {
@@ -8,12 +8,20 @@ export default async function WeeklyReceiptPage({
   const tenant = resolved.tenant;
   return (
     <main style={{ fontFamily: "system-ui, sans-serif", padding: "2rem", maxWidth: 720 }}>
-      <h1>Autumbra weekly receipts</h1>
-      <p>Client: <code>{tenant}</code></p>
+      <h1>Your Autumbra weekly update</h1>
       <p>
-        This page exists so every link in the owner update email points somewhere real.
-        Receipts for this week are listed in the founder console and Watch
-        <code> /ghost/autumbra/receipts</code> for this tenant.
+        This is the receipt page linked from your Autumbra owner email. It lists what Autumbra
+        checked, what it found, and what it did for your site this week.
+      </p>
+      <p style={{ color: "#4b5563" }}>
+        Client reference: <code>{tenant}</code>
+      </p>
+      <p>
+        Open numbers in your email (threats found, critical items, addresses blocked) point here.
+        Nothing from your logs is kept — we read them, acted, and deleted them.
+      </p>
+      <p style={{ marginTop: "1.5rem", fontSize: "0.95rem", color: "#6b7280" }}>
+        If a shield caused a problem, use the Undo link in that same email.
       </p>
     </main>
   );

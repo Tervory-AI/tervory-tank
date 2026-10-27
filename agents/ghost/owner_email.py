@@ -1,8 +1,8 @@
 """Owner update email — built by code from receipts. No model. Plain English only.
 
-Exact founder wording (item 8 phrases). In-repo brief copy may lag the Project brief. "critical" only
-with a linked advisory rating. No literal "[...]" placeholders in a sent body.
-Recipient from client settings. Weekly schedule is a real job entry.
+Exact founder wording (item 8 phrases). Founder brief is in-repo byte-identical.
+"critical" only with a linked advisory rating. No literal "[...]" placeholders in
+a sent body. Recipient from client settings. Weekly schedule is a real job entry.
 """
 from __future__ import annotations
 

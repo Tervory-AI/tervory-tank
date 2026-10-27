@@ -112,6 +112,7 @@ def test_enforce_lifecycle_execute_isolated(client, tmp_path):
 
 def test_owner_update_calls_sender_from_client_settings(client):
     # Store owner_email in client settings first — request cannot name recipient.
+    # Counts come from receipts, never from the request body.
     client.post(
         "/ghost/autumbra/settings",
         headers=_h(),
@@ -122,13 +123,14 @@ def test_owner_update_calls_sender_from_client_settings(client):
             "owner_email": "owner-a@example.test",
         },
     )
+    # Inflated request numbers must be ignored (no receipts yet → quiet week).
     res = client.post(
         "/ghost/autumbra/owner-update",
         headers=_h(),
         json={
             "tenant_id": TENANT_A,
             "site_name": "a.example",
-            "threats_found": 1,
+            "threats_found": 99999,
             "critical": [{
                 "stack": "PHP", "rating": "critical",
                 "advisory_id": "CVE-2026-109618",
@@ -143,8 +145,9 @@ def test_owner_update_calls_sender_from_client_settings(client):
     assert body["sent"] is True
     assert body["to"] == "owner-a@example.test"
     assert body["transport"] == "fixture"
-    assert "https://example.test/cve" in body["body"]
-    assert "approve fixes yourself" in body["body"]
+    assert "99999" not in body["subject"]
+    assert "Quiet week." in body["body"]
+    assert f"/autumbra/receipts/weekly/{TENANT_A}" in body["body"]
     assert "[" not in body["body"]
 
 

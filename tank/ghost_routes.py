@@ -114,6 +114,27 @@ async def shields_tap(shield: uuid.UUID, tap: Literal["raise", "undo"]):
     return Response(response.content, status_code=response.status_code, media_type="application/json")
 
 
+# ---------- Autumbra owner undo (public email link → workspace → Tank → Watch) ----------
+
+@router.post("/autumbra/queue/undo")
+async def autumbra_queue_undo(request: Request, x_tank_key: str = Header(default="")):
+    """Owner one-tap undo. Workspace key or ghost key; proxies ThreatPayload undo to Watch."""
+    agent = await runtime().require_key(request, x_tank_key)
+    if agent not in (None, "ghost"):
+        raise HTTPException(404, "Not found.")
+    raw = await request.body()
+    if len(raw) > 8_000:
+        raise HTTPException(413, "Request too large.")
+    try:
+        body = json.loads(raw) if raw else None
+    except ValueError:
+        raise HTTPException(422, "Undo was not understood.") from None
+    if not isinstance(body, dict):
+        raise HTTPException(422, "Undo was not understood.")
+    response = await call_room("POST", "ghost", "/ghost/autumbra/queue/undo", body=body)
+    return Response(response.content, status_code=response.status_code, media_type="application/json")
+
+
 class Check(BaseModel):
     model_config = ConfigDict(extra="forbid")
     target: str
