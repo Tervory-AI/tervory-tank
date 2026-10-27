@@ -57,7 +57,9 @@ def test_tiger_tabs_exclude_unavailable_controls():
     assert "Ask Tiger" not in source
     assert "Alerts" in source
     assert "Watch list" in source
-    assert "Can't read" in source
+    assert "Can't read" not in source
+    assert "Can’t read" not in source
+    assert "Can&apos;t read" not in source
     assert "plugins" not in source.lower()
     assert "vault" not in source.lower()
     assert "Integrations" not in source

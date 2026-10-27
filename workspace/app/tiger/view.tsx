@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { addProduct, removeProduct } from "./actions";
-import { EVERY_OPTIONS, FOOT, FOOT_SMALL, LEDE } from "./copy";
-import { SECTIONS, searchTiger, type AlertRow, type ProductRow, type ReadRow, type Section, type TigerData, type UnreadRow } from "./model";
+import { EVERY_OPTIONS, FOOT, LEDE } from "./copy";
+import { SECTIONS, searchTiger, type AlertRow, type ProductRow, type ReadRow, type Section, type TigerData } from "./model";
 import { SquadLinks } from "../squad-links";
 
 function SearchIcon() {
@@ -17,8 +17,22 @@ function SearchIcon() {
 
 function Pill({ status }: { status: string }) {
   const solid = status === "Price changed" || status === "Stock changed";
-  const hollow = status === "Can't read";
+  const hollow = status === "Not checked";
   return <span className={solid ? "pill solid" : hollow ? "pill hollow" : "pill"}><i />{status}</span>;
+}
+
+function RowStatus({ row }: { row: ProductRow }) {
+  return row.reason
+    ? <p className="check-status">Not checked — {row.reason}</p>
+    : <Pill status={row.status} />;
+}
+
+function PageLink({ row }: { row: ProductRow }) {
+  return <a href={row.url} title={row.url} target="_blank" rel="noreferrer">{row.store}</a>;
+}
+
+function AttemptTime({ row }: { row: ProductRow }) {
+  return row.attemptedAt ? <time dateTime={row.attemptedAt}>{row.checked}</time> : <>Not yet</>;
 }
 
 export function TigerApp({
@@ -122,7 +136,7 @@ export function TigerApp({
         </header>
 
         {notice ? <p className="notice">{notice}</p> : null}
-        {help ? <p className="notice">Tiger checks public product pages and tells you when a price or stock changes. It never logs in, and it does not guess a price it could not read.</p> : null}
+        {help ? <p className="notice">Manage check intervals and alert preferences when adding a product. Each watch shows its latest check status; completed readings are available in History.</p> : null}
 
         {hit ? <Results hit={hit} /> : null}
         {!hit && section === "overview" ? <Overview data={visible} onWatch={() => show("watch")} onAlerts={() => show("alerts")} /> : null}
@@ -139,13 +153,9 @@ export function TigerApp({
               empty="No readings yet." priceCol={2} />
           </section>
         ) : null}
-        {!hit && section === "unread" ? (
-          <Unread rows={data.unread} />
-        ) : null}
 
         <footer className="foot">
           <p>{FOOT}</p>
-          <p className="small">{FOOT_SMALL}</p>
         </footer>
       </div>
 
@@ -160,29 +170,24 @@ function Overview({ data, onWatch, onAlerts }: { data: TigerData; onWatch: () =>
     <>
       <section className="counts" aria-label="Counts">
         <article className="count"><b>{data.watchedCount}</b><strong>{data.watchedCount === 1 ? "Watched product" : "Watched products"}</strong><p className="fine">Product pages Tiger checks.</p></article>
-        <article className="count"><b>{data.changesToday}</b><strong>{data.changesToday === 1 ? "Change today" : "Changes today"}</strong><p className="fine">Real price or stock changes since midnight.</p></article>
-        <article className="count"><b>{data.unreadCount}</b><strong>Can&apos;t read</strong><p className="fine">Pages Tiger could not read. Nothing was guessed.</p></article>
+        <article className="count"><b>{data.changesToday}</b><strong>{data.changesToday === 1 ? "Change today" : "Changes today"}</strong><p className="fine">Confirmed changes since midnight UTC.</p></article>
       </section>
       <section className="block">
         <div className="title-row">
           <h2>Latest reads</h2>
         </div>
-        <p className="intro">The price and stock Tiger read on each watched page, next to that product’s add-to-cart button.</p>
+        <p className="intro">The latest check for each watched product.</p>
         {data.products.length === 0 ? <p className="empty">No products watched yet.</p> : (
         <ul className="cards">
           {data.products.map((row) => (
             <li key={row.id}>
               <div className="card-top">
                 <strong>{row.name}</strong>
-                <Pill status={row.status} />
+                {!row.reason ? <Pill status={row.status} /> : null}
               </div>
-              {row.status === "Can't read" ? (
-                <p>Not read. Nothing was guessed.</p>
-              ) : (
-                <p className="price">{row.price} · {row.stock}</p>
-              )}
-              <p className="fine">{row.store}</p>
-              <p className="fine">{row.status === "Not checked" ? "Not checked yet" : `Checked ${row.checked}`}{data.example ? " · Example" : ""}</p>
+              {row.reason ? <RowStatus row={row} /> : <p className="price">{row.price} · {row.stock}</p>}
+              <p className="fine"><PageLink row={row} /></p>
+              <p className="fine">{row.attemptedAt ? <>{row.reason ? "Attempted" : "Checked"} <AttemptTime row={row} /></> : "Not checked yet"}</p>
             </li>
           ))}
         </ul>
@@ -191,16 +196,16 @@ function Overview({ data, onWatch, onAlerts }: { data: TigerData; onWatch: () =>
         <>
         <div className="table-wrap overview-table">
           <table>
-            <thead><tr><th>Product</th><th>Store</th><th>Price</th><th>Stock</th><th>Last checked</th><th>Status</th></tr></thead>
+            <thead><tr><th>Product</th><th>Page</th><th>Price</th><th>Stock</th><th>Last attempt</th><th>Status</th></tr></thead>
             <tbody>
               {data.products.map((row) => (
                 <tr key={row.id}>
                   <td className="name">{row.name}</td>
-                  <td className="muted">{row.store}</td>
+                  <td className="muted"><PageLink row={row} /></td>
                   <td className={row.price === "—" ? "muted" : "price"}>{row.price}</td>
                   <td>{row.stock}</td>
-                  <td className="muted">{row.checked}</td>
-                  <td><Pill status={row.status} /></td>
+                  <td className="muted"><AttemptTime row={row} /></td>
+                  <td><RowStatus row={row} /></td>
                 </tr>
               ))}
             </tbody>
@@ -217,7 +222,7 @@ function Overview({ data, onWatch, onAlerts }: { data: TigerData; onWatch: () =>
         <div className="title-row">
           <h2>Recent alerts</h2>
         </div>
-        <p className="intro">Only real changes. A page that can’t be read never sends an alert.</p>
+        <p className="intro">Recent confirmed price and stock changes.</p>
         {recent.length === 0 ? <p className="empty">No alerts yet.</p> : (
         <ul className="cards">
           {recent.map((row) => (
@@ -259,7 +264,7 @@ function Alerts({ rows, example }: { rows: AlertRow[]; example: boolean }) {
       <div className="title-row">
         <h2>Alerts</h2>
       </div>
-      <p className="intro">Real price and stock changes. Tiger only alerts when it read the page clearly. A page that can’t be read never sends an alert.</p>
+      <p className="intro">Confirmed changes from completed product checks.</p>
       {rows.length === 0 ? <p className="empty">No alerts yet.</p> : null}
       <div className="filters">
         {(["All", "Price", "Stock"] as const).map((item) => (
@@ -288,8 +293,8 @@ function Alerts({ rows, example }: { rows: AlertRow[]; example: boolean }) {
       </div>
       <article className="note-card">
         <h3>How alerts work</h3>
-        <p>Price: Tiger reads the price next to the product’s add-to-cart button. If a sale price and a higher price are shown together, it says “can’t read”.</p>
-        <p>Stock: Tiger records stock only for clear wording such as “in stock”, “out of stock”, “sold out” or “only 3 left”. Anything else is “can’t read” and does not alert.</p>
+        <p>Price alerts report a confirmed change in the product price.</p>
+        <p>Stock alerts report a confirmed change in availability.</p>
       </article>
     </section>
   );
@@ -301,19 +306,20 @@ function Watch({ rows, note, onHide }: { rows: ProductRow[]; note: string | null
       <div className="title-row">
         <h2>Watch list</h2>
       </div>
-      <p className="intro">Product pages Tiger checks. Add a product with the red button at the top. Remove a page any time.</p>
+      <p className="intro">Your watched pages, check intervals and alert preferences.</p>
       {rows.length === 0 ? <p className="empty">No products watched yet.</p> : null}
       <div className="table-wrap">
         <table>
-          <thead><tr><th>Product</th><th>Page link</th><th>How often</th><th>Alert me on</th><th>Status</th><th /></tr></thead>
+          <thead><tr><th>Product</th><th>Page</th><th>How often</th><th>Alert me on</th><th>Last attempt</th><th>Status</th><th /></tr></thead>
           <tbody>
             {rows.map((row) => (
               <tr key={row.id}>
                 <td className="name">{row.name}</td>
-                <td><a href={row.url} target="_blank" rel="noreferrer">{row.path}</a></td>
+                <td><PageLink row={row} /></td>
                 <td className="muted">{row.every}</td>
                 <td className="muted">{row.alertOn}</td>
-                <td><Pill status={row.status === "Price changed" || row.status === "Stock changed" ? "Read" : row.status} /></td>
+                <td className="muted"><AttemptTime row={row} /></td>
+                <td><RowStatus row={row} /></td>
                 <td className="end">
                   {row.live ? (
                     <form action={removeProduct}>
@@ -336,37 +342,6 @@ function Watch({ rows, note, onHide }: { rows: ProductRow[]; note: string | null
   );
 }
 
-function Unread({ rows }: { rows: UnreadRow[] }) {
-  return (
-    <section className="block">
-      <div className="title-row">
-        <h2>Can&apos;t read</h2>
-      </div>
-      <p className="intro">Pages Tiger could not read clearly. It records them and skips them. It never guesses a price or stock.</p>
-      {rows.length === 0 ? <p className="empty">No pages Tiger could not read.</p> : null}
-      <div className="table-wrap">
-        <table>
-          <thead><tr><th scope="col">Product</th><th scope="col">Page</th><th scope="col">Why Tiger could not read it</th><th scope="col">Since</th></tr></thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.id}>
-                <td className="name">{row.product}</td>
-                <td className="muted"><a href={row.url} title={row.url} target="_blank" rel="noreferrer">{row.store}</a></td>
-                <td>{row.why}</td>
-                <td className="muted">{row.since}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <article className="note-card">
-        <h3>What happens next</h3>
-        <p>Tiger tries each page again at its next check. Nothing here sends an alert. If a page stays unreadable, you can remove it from the watch list.</p>
-      </article>
-    </section>
-  );
-}
-
 function Results({ hit }: { hit: NonNullable<ReturnType<typeof searchTiger>> }) {
   return (
     <section className="block">
@@ -376,8 +351,8 @@ function Results({ hit }: { hit: NonNullable<ReturnType<typeof searchTiger>> }) 
       <p className="intro">{hit.total} {hit.total === 1 ? "match" : "matches"} in your watched products, reads and alerts.</p>
       <h3 className="group">Watched products</h3>
       <SimpleTable
-        heads={["Product", "Page link", "Stock"]}
-        rows={hit.products.map((row) => [row.name, row.path, row.stock])}
+        heads={["Product", "Page", "Stock", "Last attempt", "Status"]}
+        rows={hit.products.map((row) => [row.name, <PageLink key="page" row={row} />, row.stock, <AttemptTime key="time" row={row} />, <RowStatus key="status" row={row} />])}
         empty="No watched products match."
       />
       <h3 className="group">Reads</h3>
@@ -397,7 +372,7 @@ function Results({ hit }: { hit: NonNullable<ReturnType<typeof searchTiger>> }) 
   );
 }
 
-function SimpleTable({ heads, rows, empty, priceCol }: { heads: string[]; rows: string[][]; empty: string; priceCol?: number }) {
+function SimpleTable({ heads, rows, empty, priceCol }: { heads: string[]; rows: ReactNode[][]; empty: string; priceCol?: number }) {
   if (rows.length === 0) return <p className="fine">{empty}</p>;
   return (
     <div className="table-wrap">
@@ -425,14 +400,14 @@ function AddProduct({ onClose }: { onClose: () => void }) {
           <div className="popup-head">
             <div>
               <h2 id="add-title">Add a product</h2>
-              <p className="sub">Paste the link to a public product page. Tiger reads the price and stock next to that product’s add-to-cart button.</p>
+              <p className="sub">Set the product page, check interval and alert preferences.</p>
             </div>
             <button type="button" className="text" onClick={onClose}>Close</button>
           </div>
           <label>
             Product page link
             <input name="url" type="url" required placeholder="https://store.example/product" autoComplete="off" />
-            <span className="fine">Public pages only. Tiger never logs in.</span>
+            <span className="fine">Use a public page that requires no sign-in or subscription.</span>
           </label>
           <label>
             Name (optional)
@@ -454,7 +429,7 @@ function AddProduct({ onClose }: { onClose: () => void }) {
               <input name="stock" type="checkbox" checked={stockOn} onChange={(event) => setStockOn(event.target.checked)} />
               The stock changes
             </label>
-            <span className="fine">Pages Tiger can’t read are listed under Can’t read. They never send an alert.</span>
+            <span className="fine">Alerts are sent only after a completed check confirms a change.</span>
           </fieldset>
           <div className="actions">
             <button type="button" className="line small" onClick={onClose}>Cancel</button>

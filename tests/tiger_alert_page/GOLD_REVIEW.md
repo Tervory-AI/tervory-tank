@@ -2,8 +2,8 @@
 
 Every gold answer is unverified until Zenas checks it. Scores are provisional.
 
-Change alerts, build set: caught 100.0% (16/16), false alarms 0.0% (0/68).
-Change alerts, held out: caught 100.0% (27/27), false alarms 0.0% (0/101).
+Change alerts, build set: caught 100.0% (14/14), false alarms 0.0% (0/70).
+Change alerts, held out: caught 100.0% (26/26), false alarms 0.0% (0/102).
 Changed pages, build set: 100.0% can't read (68/68), guesses 0.
 Changed pages, held out: 100.0% can't read (32/32), guesses 0.
 
@@ -131,7 +131,7 @@ Columns: case id, what changed, expected outcome, actual outcome, verified.
 | ca-pattern-fixture-s00 | change-alerts | build | saved-page | The saved page shows $4.50. | no alert, price 4.50 | no alert, observed, stock None, price 4.50 | no |
 | ca-pattern-fixture-s01 | change-alerts | build | saved-page | The page still shows $4.50. | no alert, price 4.50 | no alert, observed, stock None, price 4.50 | no |
 | ca-pattern-fixture-s02 | change-alerts | build | saved-page | The page still shows $4.50. | no alert, price 4.50 | no alert, observed, stock None, price 4.50 | no |
-| ca-pattern-fixture-s03 | change-alerts | build | saved-page | The price line now says $5.25. | alert price, price 5.25 | alert price, observed, stock None, price 5.25 | no |
+| ca-pattern-fixture-s03 | change-alerts | build | saved-page | The price line now says $5.25, but stock is missing. No alert for an incomplete check. | no alert, price 5.25 | no alert, observed, stock None, price 5.25 | no |
 | ca-positive-keep-s00 | change-alerts | heldout | synthetic | Held in stock is in stock. No alarm. Decided by Zenas. | no alert, stock InStock, price 10.00 | no alert, observed, stock InStock, price 10.00 | decided by Zenas |
 | ca-positive-keep-s01 | change-alerts | heldout | synthetic | We keep it in stock is in stock. No alarm. Decided by Zenas. | no alert, stock InStock, price 10.00 | no alert, observed, stock InStock, price 10.00 | decided by Zenas |
 | ca-preorder-s00 | change-alerts | heldout | synthetic | First week is $16, in stock. | no alert, stock InStock, price 16.00 | no alert, observed, stock InStock, price 16.00 | no |
@@ -214,10 +214,10 @@ Columns: case id, what changed, expected outcome, actual outcome, verified.
 | ca-two-moves-s03 | change-alerts | build | synthetic | The price rose from $18 to $21. | alert price, price 21.00 | alert price, observed, stock InStock, price 21.00 | no |
 | ca-web2-live-s00 | change-alerts | build | saved-page | The saved page shows $57.99. | no alert, price 57.99 | no alert, observed, stock None, price 57.99 | no |
 | ca-web2-live-s01 | change-alerts | build | saved-page | The page still shows $57.99. | no alert, price 57.99 | no alert, observed, stock None, price 57.99 | no |
-| ca-web2-live-s02 | change-alerts | build | saved-page | The product price now says $49.00. | alert price, price 49.00 | alert price, observed, stock None, price 49.00 | no |
+| ca-web2-live-s02 | change-alerts | build | saved-page | The product price now says $49.00, but stock is missing. No alert for an incomplete check. | no alert, price 49.00 | no alert, observed, stock None, price 49.00 | no |
 | ca-webscraper-live-s00 | change-alerts | heldout | saved-page | The saved page shows $24.99. | no alert, price 24.99 | no alert, observed, stock None, price 24.99 | no |
 | ca-webscraper-live-s01 | change-alerts | heldout | saved-page | The page still shows $24.99. | no alert, price 24.99 | no alert, observed, stock None, price 24.99 | no |
-| ca-webscraper-live-s02 | change-alerts | heldout | saved-page | The product price now says $19.99. | alert price, price 19.99 | alert price, observed, stock None, price 19.99 | no |
+| ca-webscraper-live-s02 | change-alerts | heldout | saved-page | The product price now says $19.99, but stock is missing. No alert for an incomplete check. | no alert, price 19.99 | no alert, observed, stock None, price 19.99 | no |
 | ca-wire-s00 | change-alerts | build | synthetic | First week is $12. Nothing earlier to compare. | no alert, price 12.00 | no alert, observed, stock InStock, price 12.00 | no |
 | ca-wire-s01 | change-alerts | build | synthetic | The wire is still $12. | no alert, price 12.00 | no alert, observed, stock InStock, price 12.00 | no |
 | ca-wire-s02 | change-alerts | build | synthetic | The wire is still $12. | no alert, price 12.00 | no alert, observed, stock InStock, price 12.00 | no |

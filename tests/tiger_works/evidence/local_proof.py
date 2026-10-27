@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import socket
@@ -123,6 +124,7 @@ export default { devIndicators: false, webpack(config) {
                     errors = []
                     page.on("pageerror", lambda error: errors.append(str(error)))
                     async def shot(name):
+                        assert not re.search(r"can['’]?t read", await page.locator("body").inner_text(), re.I)
                         # Every image explicitly identifies the proof's scope.
                         await page.evaluate('''() => {
                           document.getElementById('fixture-proof-label')?.remove();
@@ -149,7 +151,7 @@ export default { devIndicators: false, webpack(config) {
                     assert await panel.get_by_role("button", name="Plugins", exact=True).count() == 0
                     assert await panel.get_by_role("link", name="Settings", exact=True).count() == 0
                     await panel.get_by_role("button", name="Support", exact=True).click()
-                    await page.get_by_text("Tiger checks public product pages and tells you when a price or stock changes.", exact=False).wait_for()
+                    await page.get_by_text("Manage check intervals and alert preferences when adding a product.", exact=False).wait_for()
                     await panel.get_by_role("button", name="Support", exact=True).click()
                     await panel.get_by_role("button", name="Squad", exact=True).click()
                     squad = page.get_by_role("dialog", name="Squad", exact=True)
@@ -248,8 +250,8 @@ export default { devIndicators: false, webpack(config) {
                     await page.goto(origin + "/tiger")
                     await page.get_by_text("Changes today", exact=True).wait_for()
 
-                    # A saved refusal page produces an actual blocked observation,
-                    # then Tank/Tiger's read routes supply the Can't-read row.
+                    # Saved refusal/layout pages and a failed load each create
+                    # an actual attempt, read back through Tank into both views.
                     blocked_html = (ROOT / "tests/fixtures/uncitral/cloudfront-blocked.html").read_text()
                     await reader_page.set_content(blocked_html)
                     blocked = await browser.public_result(reader_page,
@@ -259,24 +261,71 @@ export default { devIndicators: false, webpack(config) {
                     observed = await run_check(store, watch["tenant_id"], watch, "tiger", blocked_render,
                         no_paid_call, no_paid_call, no_paid_call, DomainLimiter(0))
                     assert observed["status"] == "blocked" and observed["alerts"] == []
-                    await page.goto(origin + "/tiger?tab=unread")
-                    try:
-                        await page.get_by_role("columnheader", name="Page", exact=True).wait_for(timeout=10000)
-                    except Exception:
-                        await shot("failed.png")
-                        (output / "failed.html").write_text(await page.content())
-                        raise
-                    link = page.get_by_role("link", name="www.adafruit.com", exact=True)
-                    assert await link.get_attribute("href") == URL
-                    assert await link.get_attribute("title") == URL
-                    assert await page.get_by_role("button", name="Check again", exact=True).count() == 0
-                    await shot("07-cant-read.png")
+                    async def failed_row(reason, overview_shot, watch_shot=None):
+                        attempt = store.observations[-1]
+                        assert len(store.alerts) == 2
+                        for tab in ("overview", "watch"):
+                            # A legacy unread URL must also open Overview.
+                            await page.goto(origin + "/tiger?tab=" + ("unread" if tab == "overview" else tab))
+                            heading = "Latest reads" if tab == "overview" else "Watch list"
+                            await page.get_by_role("heading", name=heading, exact=True).wait_for()
+                            block = page.locator("section.block").filter(has=page.get_by_role("heading", name=heading, exact=True))
+                            row = block.locator("tbody tr").filter(has_text=LABEL)
+                            await row.get_by_text("Not checked — " + reason, exact=True).wait_for()
+                            assert await row.locator("time").get_attribute("datetime") == attempt["ts"]
+                            link = row.get_by_role("link", name="www.adafruit.com", exact=True)
+                            assert await link.get_attribute("href") == URL
+                            assert await link.get_attribute("title") == URL
+                            assert "$" not in await row.inner_text()
+                            assert await page.get_by_role("button", name="Check again", exact=True).count() == 0
+                            if tab == "overview":
+                                assert await page.locator(".counts .count").count() == 2
+                                assert await row.locator("td").nth(2).inner_text() == "—"
+                                await shot(overview_shot)
+                            elif watch_shot:
+                                await shot(watch_shot)
+                        return attempt
+
+                    await failed_row("the store blocked automated checks", "07-blocked-overview.png", "09-blocked-watch.png")
+                    await page.goto(origin + "/tiger")
+                    await page.set_viewport_size({"width": 390, "height": 844})
+                    card = page.locator(".cards li").filter(has_text=LABEL).first
+                    await card.get_by_text("Not checked — the store blocked automated checks", exact=True).wait_for()
+                    assert await card.locator("time").get_attribute("datetime") == store.observations[-1]["ts"]
+                    assert await card.get_by_role("link").get_attribute("href") == URL
+                    assert "$" not in await card.inner_text()
+                    await shot("12-blocked-mobile.png")
+                    await page.set_viewport_size({"width": 1440, "height": 1050})
                     (output / "review2-observations.json").write_text(json.dumps({"scope": "local, fixture page", "watch": watch,
+                        "observations": store.observations, "alerts": store.alerts}, indent=2, default=str) + "\n")
+
+                    layout_html = (ROOT / "tests/tiger_alert_page/fixtures/known/no-price.html").read_text()
+                    await reader_page.set_content(layout_html)
+                    layout_page = await browser.public_result(reader_page, {"ok": True, "url": URL}, layout_html,
+                        Path(temp), str(uuid.uuid4()), price_reader=True)
+                    async def layout_render(*args): return layout_page
+                    changed = await run_check(store, watch["tenant_id"], watch, "tiger", layout_render,
+                        extract, no_paid_call, no_paid_call, DomainLimiter(0))
+                    assert changed["observation"]["method"] == "unread" and changed["alerts"] == []
+                    await failed_row("the page layout changed", "10-layout-changed.png")
+
+                    async def failed_load(*args): return {"ok": False, "error": "timeout"}
+                    failed = await run_check(store, watch["tenant_id"], watch, "tiger", failed_load,
+                        no_paid_call, no_paid_call, no_paid_call, DomainLimiter(0))
+                    assert failed["observation"]["method"] == "error" and failed["alerts"] == []
+                    await failed_row("the page didn't load", "11-page-load.png")
+                    for tab in ("history", "alerts"):
+                        await page.goto(origin + "/tiger?tab=" + tab)
+                        await page.get_by_role("heading", name=tab.title(), exact=True).wait_for()
+                        assert not re.search(r"can['’]?t read", await page.locator("body").inner_text(), re.I)
+                    await page.get_by_role("button", name="Add a product", exact=True).click()
+                    assert not re.search(r"can['’]?t read", await page.get_by_role("dialog").inner_text(), re.I)
+                    (output / "row-status-observations.json").write_text(json.dumps({"scope": "local, fixture page", "watch": watch,
                         "observations": store.observations, "alerts": store.alerts}, indent=2, default=str) + "\n")
                     assert not errors, errors
                     await chromium.close()
             print(f"PASS: form → Tank → Tiger → 3 saved-page readings → 1 alert; screenshots: {output}")
-            print("PASS: 0/1/2 alert and search counts, overview grammar, blocked row Page link, no inactive retry button")
+            print("PASS: 0/1/2 counts; two overview cards; all three failure reasons, attempt times and page links; no failed-check prices or alerts")
             print("PASS: actual Tank app; inactive date/load/paging/Ask controls removed; legacy Ask link and Not checked yet card")
             print("PASS: left-panel destinations, Squad and Support; Plugins and Settings absent; legacy Plugins link opens Overview")
     finally:

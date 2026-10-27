@@ -1,5 +1,30 @@
 # CI failure comparison
 
+## Latest completed head b7607f9
+
+The [tank job for b7607f965541c39262c417d67f58df3525733f80](https://github.com/zenascapetown-code/tervory-tank/actions/runs/40426477980/job/121933452996)
+failed: **11 failed, 3,468 passed, 20 skipped, 53 warnings, 437 subtests passed
+in 900.85s**. The complete existing log was downloaded; no retry was requested.
+The shell-nav fixture load and Rig catalogue-date assertions fail as below.
+Nine other failures all report `FileNotFoundError` for
+`.github/workflows/tisan-site.yml` in the CI checkout:
+
+- `tests/test_ci_minutes_workflows.py::test_docs_only_changes_skip_on_push_and_pull_request[tisan-site.yml]`
+- `tests/test_ci_minutes_workflows.py::test_no_workflow_uses_pull_request_target[tisan-site.yml]`
+- `tests/test_ci_minutes_workflows.py::test_tisan_site_stays_on_github_hosted`
+- `tests/test_ci_minutes_workflows.py::test_workflows_use_scope_and_do_not_hide_failed_detection`
+- `tests/test_ci_minutes_workflows.py::test_workflow_level_concurrency_block[tisan-site.yml]`
+- `tests/test_ci_minutes_workflows.py::test_second_push_to_pull_request_cancels_the_first[tisan-site.yml]`
+- `tests/test_ci_minutes_workflows.py::test_main_runs_are_never_cancelled_or_replaced[tisan-site.yml]`
+- `tests/test_ci_minutes_workflows.py::test_concurrency_groups_differ_per_workflow`
+- `tests/test_tisan_scaffold.py::test_site_gate_runs_in_github_actions`
+
+That workflow file exists in the native branch checkout. This PR changes neither
+these tests nor the workflow. This log comparison does not claim a fresh local
+reproduction of the missing-file failures or the same failure set as `417eaad`.
+The exact `61606ab` versus `417eaad` comparison is retained below. Workspace and
+savings-page jobs succeeded for `b7607f9`.
+
 ## Fourth review: head 61606ab
 
 Reviewed head `61606abc1378d2d390cf95eb7335f5fff67beeb0` has a completed

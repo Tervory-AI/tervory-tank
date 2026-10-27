@@ -1015,6 +1015,9 @@ async def run_check(
     stock_before = await _last_known_stock(store, tenant_id, url, current["id"])
     found = alerts_for(previous, current, watch.get("threshold") or 0, stock_before,
                        price_enabled=watch.get("alert_price", True), stock_enabled=watch.get("alert_stock", True))
+    # An incomplete public-page check must not send a price or stock alert.
+    if _known_stock(availability) is None:
+        found = []
     saved_alerts = []
     for alert in found:
         saved_alerts.append(await store.add_alert({

@@ -26,22 +26,39 @@ saved in `observations.json`. The extended screen check changes the fixture to
 has no price or alert. The final five observations and two alerts are saved in
 [review2-observations.json](proof/review2-observations.json).
 
-The harness checks 0/1/2 alert and search counts, singular/plural overview labels,
-the Can't-read `Page` header, hostname link and full URL title, and the absence of
-the inactive `Check again` button. The scheduled-check explanation remains.
-The third-review checks also verify that the inactive date/older-alert controls,
-watch-list next-page label and Ask UI are absent. An old `?tab=ask` link opens
-Overview, the mobile card says **Not checked yet**, and the remaining All/Price/
-Stock alert filters change the displayed rows.
+The harness checks 0/1/2 alert and search counts and singular/plural labels.
+Overview has exactly two cards: watched products and changes today. Failed checks
+stay on their product row in Latest reads and Watch list, with a page link, full
+URL on hover, attempt timestamp and one of these statuses:
 
-The fourth-review checks inspect every link in Tiger's left panel: Dashboard
-opens `/`, Tasks opens the actual `/tasks` queue (renamed from Projects), and
-Chats opens `/chats`. There is no general settings page, so Settings is removed.
-Plugins and its page-load vault request are removed; an old `?tab=plugins` link
-opens Overview without the unavailable popup or its internal error text. The
-harness also checks every client Squad destination against its existing page and
-opens/closes Squad and Support. The remaining Tiger buttons open their named
-sections during the saved-page job. The shared navigation files are unchanged.
+- **Not checked — the store blocked automated checks** for a block.
+- **Not checked — the page layout changed** when extraction cannot complete.
+- **Not checked — the page didn't load** for a load error.
+
+No price is displayed for that attempt and no new alert is stored. A saved
+no-price page and a simulated timeout extend the proof to seven observations and
+two alerts in [row-status-observations.json](proof/row-status-observations.json).
+The first five observations remain in `review2-observations.json`. The former
+failure tab and card are removed; old `?tab=unread` links open Overview. The
+harness checks that the removed wording does not appear in any screenshot, in
+History, Alerts or the Add a product dialog. Desktop and mobile rows are covered.
+
+The offline Workspace test also checks that an incomplete stock reading hides
+its partial price from Latest reads, History and search. The backend test checks
+a price decrease with missing stock: it creates no alert. The deterministic
+reader's partial price remains in its audit record; it is not presented as a
+completed reading. Existing internal observation values remain compatible.
+
+Inactive date/older-alert controls, watch-list next-page label and Ask UI remain
+absent. Old `?tab=ask` links open Overview, pending watches say **Not checked yet**,
+and All/Price/Stock filters change the displayed alert rows.
+
+Every link in Tiger's left panel is checked: Dashboard opens `/`, Tasks opens
+`/tasks`, and Chats opens `/chats`. Plugins and Settings are removed; old
+`?tab=plugins` links open Overview. The harness checks every client Squad
+destination against its existing page, opens/closes Squad and Support, and
+opens the remaining Tiger sections during the saved-page job. Shared navigation
+is unchanged.
 
 | Step | Evidence |
 | --- | --- |
@@ -51,8 +68,12 @@ sections during the saved-page job. The shared navigation files are unchanged.
 | History: 120.00 → 115.00 → 115.00 | [04-history.png](proof/04-history.png) |
 | One price alert: 120.00 → 115.00 | [05-alert.png](proof/05-alert.png) |
 | Two alerts after one more fixture price change | [06-two-alerts.png](proof/06-two-alerts.png) |
-| Blocked page: hostname link, full URL on hover, scheduled-check message | [07-cant-read.png](proof/07-cant-read.png) |
+| Blocked attempt in Latest reads, with two Overview cards | [07-blocked-overview.png](proof/07-blocked-overview.png) |
 | Newly added watch on mobile: Not checked yet | [08-not-checked.png](proof/08-not-checked.png) |
+| Blocked attempt on its Watch list row | [09-blocked-watch.png](proof/09-blocked-watch.png) |
+| Layout change on its Latest reads row | [10-layout-changed.png](proof/10-layout-changed.png) |
+| Failed page load on its Latest reads row | [11-page-load.png](proof/11-page-load.png) |
+| Mobile blocked row, link and attempt time | [12-blocked-mobile.png](proof/12-blocked-mobile.png) |
 | Saved observations and alert | [observations.json](proof/observations.json) |
 
 With Python dependencies from `tank/requirements.txt` and
@@ -113,7 +134,8 @@ rejection and the absence of raw HTML in ordinary/model results. Existing
 head `61606ab`: sidebar fixture loading, Rig catalogue dates and seven room-seal
 failures. All nine have the same cause in main `417eaad`'s completed tank job;
 room-seal tests pass in the branch checkout. The earlier `e1601bb` result is also
-retained. No CI retry was requested.
+retained. The later `b7607f9` job is also recorded: sidebar fixture loading, Rig
+catalogue dates and nine missing-workflow-file failures. No CI retry was requested.
 
 ## Founder must decide: client's own session
 

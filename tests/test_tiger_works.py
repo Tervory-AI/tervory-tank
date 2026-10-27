@@ -242,3 +242,40 @@ async def test_real_chromium_markup_stores_history_and_one_price_alert(real_chro
         assert [(a["kind"], a["before"], a["after"]) for a in store.alerts] == [("price", "120.00", "115.00")]
     finally:
         await context.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["captcha", "403", "blocked", "timeout", "error", "price_missing", "stock_missing"])
+async def test_failed_page_attempts_never_create_alerts(failure):
+    store = MemoryStore()
+    watch = await store.create_watch({**_watch(), "url": URL})
+    original = (ROOT / "tests/tiger_before_deploy/fixtures/jsonld-shop.html").read_text()
+    page = {"ok": True, "html": original}
+
+    async def render(*args):
+        return page
+
+    await run_check(store, TENANT_A, watch, "tiger", render, extract, no_paid_call,
+                    robots_fixture, DomainLimiter(0), now=lambda: NOW)
+    changed = original.replace("24.00", "19.00")
+    page = {
+        "captcha": {"challenge": True},
+        "403": {"status": 403},
+        "blocked": {"blocked_by_check": True},
+        "timeout": {"ok": False, "error": "timeout"},
+        "error": {"ok": False, "error": "load failed"},
+        "price_missing": {"ok": True, "html": (ROOT / "tests/tiger_alert_page/fixtures/known/no-price.html").read_text()},
+        "stock_missing": {"ok": True, "html": changed.replace("https://schema.org/InStock", "Ships today")},
+    }[failure]
+    result = await run_check(store, TENANT_A, watch, "tiger", render, extract, no_paid_call,
+                             robots_fixture, DomainLimiter(0), now=lambda: NOW + timedelta(minutes=1))
+    assert result["alerts"] == [] and store.alerts == []
+    assert result["observation"]["url"] == URL
+    assert result["observation"]["ts"] == (NOW + timedelta(minutes=1)).isoformat()
+    if failure == "stock_missing":
+        # The reader's partial price stays in its audit record, but the check
+        # sends no alert and Workspace hides the incomplete reading's price.
+        assert result["price"] == "19.00"
+        assert result["stock"] == "can't read"
+    else:
+        assert result["observation"]["price"] is None
