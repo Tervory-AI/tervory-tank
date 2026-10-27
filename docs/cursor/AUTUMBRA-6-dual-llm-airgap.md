@@ -84,7 +84,11 @@ default.
 - Auto-merge (AMMOSYNC / Zenas)
 - Collectors / Wazuh / Vector ingest paths
 
-## Dogfood: Hugging Face Inference (optional)
+## Dogfood: synthetic fixtures via Tank (optional live)
+
+> **Correction (Autumbra branch):** `dogfood_hf.py` no longer holds or reads an HF inference token. Optional live model work goes through Tank (`/v1/route`, task `reason.brief`, `PLATFORM_TENANT`). Historical CLI/receipt field names remain. See `docs/ops/TANK-ONE-DOOR.md`.
+
+## Dogfood: Hugging Face Inference (historical notes)
 
 Optional Watch triage over **synthetic fixtures only** — never client payloads
 (zero-ingestion). Local ThreatPayload burn always runs on Tank; HF is additive.

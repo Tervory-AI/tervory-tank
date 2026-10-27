@@ -106,8 +106,7 @@ jobs:
     if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.run == 'true' }}
     # Self-hosted only when "pick runner" chose it and the change is not from a fork.
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && needs.runner.outputs.runner && fromJSON(needs.runner.outputs.runner) || 'ubuntu-latest' }}
-    # The merged full suite takes over 11 minutes before setup/cleanup.
-    timeout-minutes: 20
+    timeout-minutes: 10
     services:
       postgres:
         image: postgres:16
@@ -136,41 +135,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r tank/requirements.txt -r tank/requirements-dev.txt
           pip install --require-hashes -r agents/rig/forge/requirements.lock
-      - name: Prepare Chromium for required READ-1 browser tests
-        run: |
-          browser=$(command -v chromium || command -v chromium-browser || command -v google-chrome || command -v google-chrome-stable || true)
-          if [ -n "$browser" ]; then
-            echo "READ1_CHROMIUM_EXECUTABLE=$browser" >> "$GITHUB_ENV"
-          else
-            python -m playwright install --with-deps chromium
-          fi
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "22"
-      - name: Install workspace packages for offline billing tests
-        # Also when Tisan changed: tests/test_tisan_gold_actions.py needs workspace's typescript.
-        if: needs.changes.outputs.full == 'true' || needs.changes.outputs.tisan == 'true'
-        working-directory: workspace
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci --no-audit --no-fund
-          else
-            npm install --no-package-lock --no-audit --no-fund
-          fi
       - name: Lint
-        if: needs.changes.outputs.full == 'true'
         # F401 in base.socials/1.0.0/run.py is a pre-existing unused import.
         # This lane cannot edit an approved skill in place.
         run: ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"
-      - name: Secret scan and tests
-        run: python3 .github/scripts/ci_scope.py test
+      - name: Secret scan and Tank starts
+        # Founder, 27 Oct: the full suite no longer gates merges (it took ~15 minutes).
+        # This job checks only lint, secrets, and that the real Tank starts on an empty database.
+        run: python3 -m pytest -q tests/test_secrets.py tests/test_tank_boots.py
         env:
-          TEST_TARGETS: ${{ needs.changes.outputs.tests }}
           PYTHONPATH: tank
-          # One Postgres service. The pool schema test and the ladder schema test
-          # both connect here. The ladder test creates its own databases from this URL.
           POOL_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pooltest
-          ZENAS_SCHEMA_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/pooltest
 
   workspace:
     needs: [changes, runner]
