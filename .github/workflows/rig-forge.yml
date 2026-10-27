@@ -6,7 +6,6 @@ on:
       - agents/rig/rig_brain/**
       - agents/rig/docker-compose.yml
       - tank/rig_forge_routes.py
-      - tank/schema.sql
       - ops/seal-check.sh
       - tests/test_rig_forge*.py
       - .github/workflows/rig-forge.yml

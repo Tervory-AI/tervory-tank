@@ -1,13 +1,16 @@
-# After CI passes on main, deploy only the apps whose code changed.
+# Deploy straight after a merge to main (founder, 27 Oct): the pull request already
+# passed CI, so the deploy no longer waits for the same checks to run again on main.
+# Deploy only the apps whose code changed.
 # The main app goes first; rooms deploy only if main finished. No manual clicks after a merge.
 # The Coolify token lives only in the repo secret COOLIFY_TOKEN and is never printed.
 name: deploy-on-merge
 
 on:
-  workflow_run:
-    workflows: [ci]
-    types: [completed]
+  push:
     branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
 
 permissions:
   contents: read
@@ -18,18 +21,17 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
       COOLIFY_URL: ${{ vars.COOLIFY_URL || 'https://coolify.tervory.com' }}
       COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
       ZA_OFFLINE: ${{ vars.ZA_OFFLINE || '' }}
-      AFTER: ${{ github.event.workflow_run.head_sha }}
+      AFTER: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 50
       - name: Find the previous deployed commit
         run: |

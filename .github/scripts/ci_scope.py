@@ -15,6 +15,14 @@ ROOM_TESTS = {
     "tisan": ("test_tisan*.py",),
     "zenas": ("test_zenas*.py",),
 }
+# The savings-page browser check renders the client dashboard and the founder
+# savings panel. It runs only when one of these paths changes.
+SAVINGS_PATHS = (
+    "workspace/app/page.tsx", "workspace/app/tank/proof/", "workspace/app/dashboard",
+    "workspace/app/savings", "workspace/package.json", "workspace/package-lock.json",
+    "tests/test_core2_savings_page.mjs", "tests/client-copy.cjs",
+    ".github/workflows/ci.yml", ".github/scripts/ci_scope.py", "unknown-change",
+)
 # Always check secrets, room/client isolation, region boundaries, and schema apply.
 SAFETY = (
     "test_secrets.py", "test_agent_chassis.py", "test_agent_roles.py",
@@ -50,8 +58,9 @@ def select(paths: list[str]) -> dict:
                         tests.add(str(path.relative_to(ROOT)))
         for room in rooms:
             tests.update(str(p.relative_to(ROOT)) for p in (ROOT / "agents" / room).rglob("test_*.py"))
+    savings = any(path.startswith(SAVINGS_PATHS) for path in code)
     return {"run": bool(code), "full": full, "tisan": full or "tisan" in rooms,
-            "tests": ["."] if full else sorted(tests)}
+            "tests": ["."] if full else sorted(tests), "savings": savings}
 
 
 def changed_paths() -> list[str]:
