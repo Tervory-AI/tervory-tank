@@ -93,7 +93,9 @@ def test_template_has_the_pages_and_no_analytics() -> None:
     assert "htmlFor=" in contact
 
 
-def test_site_gate_runs_in_github_actions() -> None:
+def test_site_template_carries_its_gate() -> None:
+    # The repo-level tisan-site workflow was removed (founder's decision, #343). Each site
+    # Tisan builds still carries the full gate in its own CI workflow.
     commands = (
         "npm run lint",
         "npm run typecheck",
@@ -104,13 +106,9 @@ def test_site_gate_runs_in_github_actions() -> None:
         "npm run lhci",
     )
     template_ci = (TEMPLATE / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
-    repo_ci = (ROOT / ".github" / "workflows" / "tisan-site.yml").read_text(encoding="utf-8")
     for command in commands:
         assert command in template_ci
-        assert command in repo_ci
     assert template_ci.index("npm run deploy") > template_ci.index("npm run build")
-    assert repo_ci.index("npm run deploy") > repo_ci.index("npm run build")
-    assert "agents/tisan/templates/next-site" in repo_ci
     gate = (TEMPLATE / "scripts" / "deploy-gate.cjs").read_text(encoding="utf-8")
     assert "missing-privacy-notice" in gate
     assert "missing-cookie-notice" in gate
