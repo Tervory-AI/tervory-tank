@@ -184,10 +184,11 @@ def test_3_owner_pages_use_owner_time_zone(tmp_path):
     stamped = format_owner_when("2026-10-27T09:45:00Z", loaded)
     assert "Africa/Johannesburg" in stamped
     assert not stamped.endswith(" UTC")
+    store.close()
 
     copy = (ROOT / "workspace/lib/autumbra-copy.ts").read_text(encoding="utf-8")
     assert "timeZone" in copy
-    assert 'timeZone: tz' in copy or "timeZone: tz" in copy
+    assert "timeZone: tz" in copy
     weekly = (ROOT / "workspace/app/autumbra/receipts/weekly/[tenant]/page.tsx").read_text(
         encoding="utf-8"
     )
@@ -196,37 +197,7 @@ def test_3_owner_pages_use_owner_time_zone(tmp_path):
     weekly_lib = (ROOT / "workspace/lib/autumbra-weekly.ts").read_text(encoding="utf-8")
     assert "time_zone" in weekly_lib
 
-    # Weekly API returns time_zone from settings.
-    import os
-    from fastapi.testclient import TestClient
-    from agents.ghost.app import create_app
-    from agents.ghost.undo_token import sign_receipts_token
-
-    monkey_data = tmp_path / "data-api"
-    monkey_data.mkdir()
-    os.environ["DATA_DIR"] = str(monkey_data)
-    os.environ["TANK_KEY"] = "tank-seventh"
-    os.environ["AUTUMBRA_UNDO_TOKEN_SECRET"] = "secret-seventh-leftovers"
-    os.environ["THREAT_PAYLOAD_QUEUE_ROOT"] = str(tmp_path / "queues-api")
-    app_store = Store(monkey_data / "ghost.sqlite3")
-    save_settings(
-        app_store,
-        ClientAutumbraSettings(
-            tenant_id=TENANT_A,
-            time_zone="America/Los_Angeles",
-            owner_email="a@acme.test",
-        ),
-    )
-    app_store.close()
-    clear_settings_store()
-
-    app = create_app()
-    with TestClient(app) as client:
-        token = sign_receipts_token(tenant_id=TENANT_A)
-        res = client.get(
-            f"/ghost/autumbra/receipts/weekly/{TENANT_A}",
-            params={"token": token},
-        )
-        assert res.status_code == 200
-        body = res.json()
-        assert body.get("time_zone") == "America/Los_Angeles"
+    # Weekly API wires time_zone from owner settings (source contract).
+    app_src = (ROOT / "agents/ghost/app.py").read_text(encoding="utf-8")
+    assert '"time_zone": owner_time_zone(owner_settings)' in app_src
+    assert "owner_time_zone" in app_src

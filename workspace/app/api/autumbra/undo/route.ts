@@ -110,3 +110,56 @@ export async function POST(request: Request) {
     );
   }
 }
+
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const token = String(url.searchParams.get("token") || "").trim();
+  if (!token) {
+    return NextResponse.json(
+      { ok: false, detail: "This undo link is invalid or has expired." },
+      { status: 401 },
+    );
+  }
+  let tenantId = "";
+  let receiptId = "";
+  try {
+    const payload = verifyUndoToken(token);
+    tenantId = payload.tenant_id;
+    receiptId = payload.receipt_id;
+  } catch {
+    return NextResponse.json(
+      { ok: false, detail: "This undo link is invalid or has expired." },
+      { status: 401 },
+    );
+  }
+  if (!TANK_API_KEY) {
+    return NextResponse.json({ ok: true, already_undone: false });
+  }
+  try {
+    const upstream = new URL(`${TANK_URL}/v1/ghost/autumbra/undo/status`);
+    upstream.searchParams.set("tenant_id", tenantId);
+    upstream.searchParams.set("prior_receipt_id", receiptId);
+    const res = await fetch(upstream.toString(), {
+      method: "GET",
+      cache: "no-store",
+      headers: { "x-tank-key": TANK_API_KEY },
+    });
+    const data = (await res.json()) as {
+      already_undone?: boolean;
+      detail?: string;
+      undone_at?: string;
+    };
+    if (!res.ok) {
+      return NextResponse.json({ ok: true, already_undone: false });
+    }
+    return NextResponse.json({
+      ok: true,
+      already_undone: Boolean(data.already_undone),
+      detail: data.detail,
+      undone_at: data.undone_at,
+    });
+  } catch {
+    return NextResponse.json({ ok: true, already_undone: false });
+  }
+}
+
