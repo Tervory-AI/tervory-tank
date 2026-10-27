@@ -27,12 +27,16 @@ function RowStatus({ row }: { row: ProductRow }) {
     : <Pill status={row.status} />;
 }
 
+function ProductIdentifier({ name, url }: { name: string | null; url: string }) {
+  return url ? <a href={url} title={url} target="_blank" rel="noreferrer">{name || url}</a> : name ? <>{name}</> : null;
+}
+
 function PageLink({ row }: { row: ProductRow }) {
-  return <a href={row.url} title={row.url} target="_blank" rel="noreferrer">{row.store}</a>;
+  return row.url ? <a href={row.url} title={row.url} target="_blank" rel="noreferrer">{row.store}</a> : null;
 }
 
 function AttemptTime({ row }: { row: ProductRow }) {
-  return row.attemptedAt ? <time dateTime={row.attemptedAt}>{row.checked}</time> : <>Not yet</>;
+  return row.attemptedAt ? <time dateTime={row.attemptedAt}>{row.checked}</time> : row.reason ? null : <>Not checked yet</>;
 }
 
 export function TigerApp({
@@ -90,7 +94,7 @@ export function TigerApp({
           <img src="/brand/tiger-on-dark.png" alt="Tiger" width={2607} height={801} />
         </div>
         <nav className="panel-account" aria-label="Account">
-          <p className="account">{accountName?.trim() || "Your account"}</p>
+          <p className="account" role={accountName?.trim() ? undefined : "status"}>{accountName?.trim() || "Account name could not be loaded."}</p>
           <a className="nav" href="/">Dashboard</a>
           <a className="nav" href="/tasks" onClick={() => setMenuOpen(false)}>Tasks</a>
           <a className="nav" href="/chats" onClick={() => setMenuOpen(false)}>Chats</a>
@@ -147,9 +151,9 @@ export function TigerApp({
         {!hit && section === "history" ? (
           <section className="block">
             <div className="title-row"><h2>History</h2></div>
-            <p className="intro">The latest 40 readings from your watched pages.</p>
-            <SimpleTable heads={["When", "Product", "Price", "Stock"]}
-              rows={data.reads.map((row) => [row.when, row.product, row.price, row.stock])}
+            <p className="intro">The latest 40 check attempts from your watched pages.</p>
+            <SimpleTable heads={["When", "Product", "Price", "Stock", "Status"]}
+              rows={data.reads.map((row) => [row.when, <ProductIdentifier key="product" name={row.product} url={row.url} />, row.price, row.stock, row.reason ? `Not checked — ${row.reason}` : "Read"])}
               empty="No readings yet." priceCol={2} />
           </section>
         ) : null}
@@ -182,12 +186,12 @@ function Overview({ data, onWatch, onAlerts }: { data: TigerData; onWatch: () =>
           {data.products.map((row) => (
             <li key={row.id}>
               <div className="card-top">
-                <strong>{row.name}</strong>
+                <strong><ProductIdentifier name={row.name} url={row.url} /></strong>
                 {!row.reason ? <Pill status={row.status} /> : null}
               </div>
-              {row.reason ? <RowStatus row={row} /> : <p className="price">{row.price} · {row.stock}</p>}
+              {row.reason ? <RowStatus row={row} /> : row.price ? <p className="price">{row.price} · {row.stock}</p> : null}
               <p className="fine"><PageLink row={row} /></p>
-              <p className="fine">{row.attemptedAt ? <>{row.reason ? "Attempted" : "Checked"} <AttemptTime row={row} /></> : "Not checked yet"}</p>
+              <p className="fine">{row.attemptedAt ? <>{row.reason ? "Attempted" : "Checked"} <AttemptTime row={row} /></> : row.reason ? null : "Not checked yet"}</p>
             </li>
           ))}
         </ul>
@@ -200,9 +204,9 @@ function Overview({ data, onWatch, onAlerts }: { data: TigerData; onWatch: () =>
             <tbody>
               {data.products.map((row) => (
                 <tr key={row.id}>
-                  <td className="name">{row.name}</td>
+                  <td className="name"><ProductIdentifier name={row.name} url={row.url} /></td>
                   <td className="muted"><PageLink row={row} /></td>
-                  <td className={row.price === "—" ? "muted" : "price"}>{row.price}</td>
+                  <td className={row.price == null ? "muted" : "price"}>{row.price}</td>
                   <td>{row.stock}</td>
                   <td className="muted"><AttemptTime row={row} /></td>
                   <td><RowStatus row={row} /></td>
@@ -228,7 +232,7 @@ function Overview({ data, onWatch, onAlerts }: { data: TigerData; onWatch: () =>
           {recent.map((row) => (
             <li key={row.id}>
               <p className="fine">{row.when}</p>
-              <strong>{row.product}</strong>
+              <strong><ProductIdentifier name={row.product} url={row.url} /></strong>
               <p>{row.change}</p>
             </li>
           ))}
@@ -241,7 +245,7 @@ function Overview({ data, onWatch, onAlerts }: { data: TigerData; onWatch: () =>
             <thead><tr><th>When</th><th>Product</th><th>What changed</th></tr></thead>
             <tbody>
               {recent.map((row) => (
-                <tr key={row.id}><td className="muted">{row.when}</td><td className="name">{row.product}</td><td>{row.change}</td></tr>
+                <tr key={row.id}><td className="muted">{row.when}</td><td className="name"><ProductIdentifier name={row.product} url={row.url} /></td><td>{row.change}</td></tr>
               ))}
             </tbody>
           </table>
@@ -278,9 +282,9 @@ function Alerts({ rows, example }: { rows: AlertRow[]; example: boolean }) {
             {listed.map((row) => (
               <tr key={row.id}>
                 <td className="muted">{row.when}</td>
-                <td className="name">{row.product}</td>
+                <td className="name"><ProductIdentifier name={row.product} url={row.url} /></td>
                 <td className="muted">{row.store}</td>
-                <td><Pill status={row.kind} /></td>
+                <td>{row.reason ? <p className="check-status">Not checked — {row.reason}</p> : <Pill status={row.kind} />}</td>
                 <td>{row.before}</td>
                 <td>{row.now}</td>
               </tr>
@@ -314,7 +318,7 @@ function Watch({ rows, note, onHide }: { rows: ProductRow[]; note: string | null
           <tbody>
             {rows.map((row) => (
               <tr key={row.id}>
-                <td className="name">{row.name}</td>
+                <td className="name"><ProductIdentifier name={row.name} url={row.url} /></td>
                 <td><PageLink row={row} /></td>
                 <td className="muted">{row.every}</td>
                 <td className="muted">{row.alertOn}</td>
@@ -352,20 +356,20 @@ function Results({ hit }: { hit: NonNullable<ReturnType<typeof searchTiger>> }) 
       <h3 className="group">Watched products</h3>
       <SimpleTable
         heads={["Product", "Page", "Stock", "Last attempt", "Status"]}
-        rows={hit.products.map((row) => [row.name, <PageLink key="page" row={row} />, row.stock, <AttemptTime key="time" row={row} />, <RowStatus key="status" row={row} />])}
+        rows={hit.products.map((row) => [<ProductIdentifier key="product" name={row.name} url={row.url} />, <PageLink key="page" row={row} />, row.stock, <AttemptTime key="time" row={row} />, <RowStatus key="status" row={row} />])}
         empty="No watched products match."
       />
       <h3 className="group">Reads</h3>
       <SimpleTable
-        heads={["When", "Product", "Price", "Stock"]}
-        rows={hit.reads.map((row: ReadRow) => [row.when, row.product, row.price, row.stock])}
+        heads={["When", "Product", "Price", "Stock", "Status"]}
+        rows={hit.reads.map((row: ReadRow) => [row.when, <ProductIdentifier key="product" name={row.product} url={row.url} />, row.price, row.stock, row.reason ? `Not checked — ${row.reason}` : "Read"])}
         empty="No reads match."
         priceCol={2}
       />
       <h3 className="group">Alerts</h3>
       <SimpleTable
         heads={["When", "Product", "What changed"]}
-        rows={hit.alerts.map((row) => [row.when, row.product, row.change])}
+        rows={hit.alerts.map((row) => [row.when, <ProductIdentifier key="product" name={row.product} url={row.url} />, row.change])}
         empty="No alerts match."
       />
     </section>
@@ -408,10 +412,6 @@ function AddProduct({ onClose }: { onClose: () => void }) {
             Product page link
             <input name="url" type="url" required placeholder="https://store.example/product" autoComplete="off" />
             <span className="fine">Use a public page that requires no sign-in or subscription.</span>
-          </label>
-          <label>
-            Name (optional)
-            <input name="label" type="text" placeholder="Product name" maxLength={200} autoComplete="off" />
           </label>
           <label>
             How often

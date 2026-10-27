@@ -560,6 +560,7 @@ def page_cases() -> tuple[list[dict], list[dict], list[dict]]:
                 "mutation": kind,
                 "source": source,
                 "known_price": price,
+                **({"initial_issue": "missing_currency"} if base == "automation" else {}),
                 "price_still_shown": still,
                 "what": what,
                 "expect_status": "can't read",
@@ -578,9 +579,10 @@ def page_cases() -> tuple[list[dict], list[dict], list[dict]]:
             "mutation": "unchanged",
             "source": source,
             "known_price": price,
-            "what": "Same page Tiger just learned. It should still read the known price.",
-            "expect_status": "read",
-            "expect_price": price,
+            "what": ("Rs. has no unambiguous currency code. Record the incomplete check without a price." if base == "automation"
+                     else "Same page Tiger just learned. It should still read the known price."),
+            "expect_status": "can't read" if base == "automation" else "read",
+            "expect_price": None if base == "automation" else price,
             "split": "control",
             "verified": False,
         })

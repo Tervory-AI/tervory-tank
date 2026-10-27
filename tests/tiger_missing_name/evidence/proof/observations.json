@@ -1,0 +1,105 @@
+{
+  "label": "local, fixture page",
+  "tenant_a": [
+    {
+      "id": "1780ef93-b430-40e7-bf4d-458dd49e6e73",
+      "tenant_id": "9927ab14-5373-5e63-a59e-457d02c03522",
+      "url": "https://8.8.8.8/products/desk-lamp",
+      "ts": "2026-10-27T02:09:04.588989+00:00",
+      "price": "22.00",
+      "currency": "USD",
+      "availability": "InStock",
+      "method": "jsonld",
+      "evidence": "{\"method\": \"jsonld\", \"price\": \"22.00\", \"file\": null, \"stock\": \"InStock\", \"layout\": {\"primary\": \"jsonld\"}, \"product_name\": \"Desk lamp\", \"last_product_name\": \"Desk lamp\", \"issue\": null}",
+      "product_name": "Desk lamp",
+      "last_product_name": "Desk lamp",
+      "issue": null
+    },
+    {
+      "id": "d43d17a2-6268-4149-a1c8-b12041e2fd2b",
+      "tenant_id": "9927ab14-5373-5e63-a59e-457d02c03522",
+      "url": "https://8.8.8.8/products/desk-lamp",
+      "ts": "2026-10-27T02:09:02.506836+00:00",
+      "price": null,
+      "currency": null,
+      "availability": "InStock",
+      "method": "unread",
+      "evidence": "{\"method\": \"unread\", \"price\": null, \"file\": null, \"stock\": \"InStock\", \"layout\": {\"primary\": \"jsonld\"}, \"product_name\": \"Desk lamp\", \"last_product_name\": \"Desk lamp\", \"issue\": \"missing_currency\"}",
+      "product_name": "Desk lamp",
+      "last_product_name": "Desk lamp",
+      "issue": "missing_currency"
+    },
+    {
+      "id": "a25884a7-0d0b-401f-a107-ecc641bb72e6",
+      "tenant_id": "9927ab14-5373-5e63-a59e-457d02c03522",
+      "url": "https://8.8.8.8/products/desk-lamp",
+      "ts": "2026-10-27T02:08:58.325370+00:00",
+      "price": null,
+      "currency": "USD",
+      "availability": "InStock",
+      "method": "unread",
+      "evidence": "{\"method\": \"unread\", \"price\": null, \"file\": null, \"stock\": \"InStock\", \"layout\": {\"primary\": \"jsonld\"}, \"product_name\": null, \"last_product_name\": \"Desk lamp\", \"issue\": \"missing_name\"}",
+      "product_name": null,
+      "last_product_name": "Desk lamp",
+      "issue": "missing_name"
+    },
+    {
+      "id": "2e1adda8-dddf-4bbf-940f-5f09331166cc",
+      "tenant_id": "9927ab14-5373-5e63-a59e-457d02c03522",
+      "url": "https://8.8.8.8/products/desk-lamp",
+      "ts": "2026-10-27T02:08:56.238000+00:00",
+      "price": "23.00",
+      "currency": "USD",
+      "availability": "InStock",
+      "method": "jsonld",
+      "evidence": "{\"method\": \"jsonld\", \"price\": \"23.00\", \"file\": null, \"stock\": \"InStock\", \"layout\": {\"primary\": \"jsonld\"}, \"product_name\": \"Desk lamp\", \"last_product_name\": \"Desk lamp\", \"issue\": null}",
+      "product_name": "Desk lamp",
+      "last_product_name": "Desk lamp",
+      "issue": null
+    },
+    {
+      "id": "2fd8db3d-27c6-4591-a555-147272798c3e",
+      "tenant_id": "9927ab14-5373-5e63-a59e-457d02c03522",
+      "url": "https://8.8.8.8/products/desk-lamp",
+      "ts": "2026-10-27T02:08:54.165185+00:00",
+      "price": "24.00",
+      "currency": "USD",
+      "availability": "InStock",
+      "method": "jsonld",
+      "evidence": "{\"method\": \"jsonld\", \"price\": \"24.00\", \"file\": null, \"stock\": \"InStock\", \"layout\": {\"primary\": \"jsonld\"}, \"product_name\": \"Desk lamp\", \"last_product_name\": \"Desk lamp\", \"issue\": null}",
+      "product_name": "Desk lamp",
+      "last_product_name": "Desk lamp",
+      "issue": null
+    },
+    {
+      "id": "ed4ede40-03ac-4d44-bab0-f3ab2f5cbdd1",
+      "tenant_id": "9927ab14-5373-5e63-a59e-457d02c03522",
+      "url": "https://8.8.8.8/products/desk-lamp",
+      "ts": "2026-10-27T02:08:44.044302+00:00",
+      "price": null,
+      "currency": "USD",
+      "availability": "InStock",
+      "method": "unread",
+      "evidence": "{\"method\": \"unread\", \"price\": null, \"file\": null, \"stock\": \"InStock\", \"layout\": {\"primary\": \"jsonld\"}, \"product_name\": null, \"last_product_name\": null, \"issue\": \"missing_name\"}",
+      "product_name": null,
+      "last_product_name": null,
+      "issue": "missing_name"
+    }
+  ],
+  "tenant_b": [
+    {
+      "id": "8399c871-2058-40e0-b925-9c5f41f4350b",
+      "tenant_id": "22222222-2222-2222-2222-222222222222",
+      "url": "https://8.8.8.8/products/desk-lamp",
+      "ts": "2026-10-27T02:09:00.430723+00:00",
+      "price": null,
+      "currency": "USD",
+      "availability": "InStock",
+      "method": "unread",
+      "evidence": "{\"method\": \"unread\", \"price\": null, \"file\": null, \"stock\": \"InStock\", \"layout\": {\"primary\": \"jsonld\"}, \"product_name\": null, \"last_product_name\": null, \"issue\": \"missing_name\"}",
+      "product_name": null,
+      "last_product_name": null,
+      "issue": "missing_name"
+    }
+  ]
+}

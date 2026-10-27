@@ -378,7 +378,7 @@ Columns: case id, what changed, expected outcome, actual outcome, verified.
 | pc-013 | page-changed-control | control | live-snapshot | Same page Tiger just learned. It should still read the known price. | read 24.99 | read 24.99 | no |
 | pc-014 | page-changed-control | control | live-snapshot | Same page Tiger just learned. It should still read the known price. | read 57.99 | read 57.99 | no |
 | pc-015 | page-changed-control | control | live-snapshot | Same page Tiger just learned. It should still read the known price. | read 63.00 | read 63.00 | no |
-| pc-016 | page-changed-control | control | live-snapshot | Same page Tiger just learned. It should still read the known price. | read 500.00 | read 500.00 | no |
+| pc-016 | page-changed-control | control | live-snapshot | Rs. has no unambiguous currency code. Record the incomplete check without a price. | can't read, no price | can't read | no |
 | pc-017 | page-changed-control | control | synthetic | Same page Tiger just learned. It should still read the known price. | read 42.00 | read 42.00 | no |
 | pc-018 | page-changed-control | control | synthetic | Same page Tiger just learned. It should still read the known price. | read 18.50 | read 18.50 | no |
 | pc-019 | page-changed-control | control | synthetic | Same page Tiger just learned. It should still read the known price. | read 27.00 | read 27.00 | no |
