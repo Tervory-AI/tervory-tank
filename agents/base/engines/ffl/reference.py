@@ -1,7 +1,8 @@
 """Dated ATF reference files. This engine owns all licence-specific mapping.
 
-The September seed is supplied from the existing platform rows, never fetched
-again. Refresh only downloads a strictly newer file advertised by ATF.
+Saved platform rows are adopted without downloading them again. An empty
+reference may start from the latest complete file advertised by ATF. Later
+refreshes download only strictly newer dated files.
 """
 from __future__ import annotations
 
@@ -69,6 +70,10 @@ def parse_file(content: bytes) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     seen: set[str] = set()
     for row in reader:
+        # The published file includes tab-filled separator rows. Ignore only
+        # wholly blank rows, never incomplete licence records.
+        if not any(str(value or "").strip() for value in row.values()):
+            continue
         if None in row or any(value is None for value in row.values()):
             raise ValueError("The ATF file has an incomplete row.")
         entry = project(row)
@@ -113,6 +118,9 @@ async def read_public(http: Any, url: str) -> tuple[bytes, str]:
             await asyncio.sleep(max(0, _last_read + 3 - asyncio.get_running_loop().time()))
             try:
                 async with http.stream("GET", url, headers={"User-Agent": USER_AGENT}, timeout=60, follow_redirects=False) as response:
+                    if response.status_code in {401, 402, 403, 429, 451}:
+                        _blocked = True
+                        raise ValueError(f"blocked: HTTP {response.status_code}")
                     chunks = bytearray()
                     async for chunk in response.aiter_bytes():
                         chunks.extend(chunk)
@@ -122,7 +130,7 @@ async def read_public(http: Any, url: str) -> tuple[bytes, str]:
             finally:
                 _last_read = asyncio.get_running_loop().time()
             sample = content[:20000].lower()
-            if response.status_code in {401, 402, 403, 429, 451} or any(marker in sample for marker in (
+            if any(marker in sample for marker in (
                 b"captcha", b"verify you are human", b"access denied", b"cf-chl-", b"sign in to continue", b"subscribe to read",
             )):
                 _blocked = True
@@ -136,37 +144,45 @@ async def read_public(http: Any, url: str) -> tuple[bytes, str]:
     raise ValueError("The official reference redirected too many times.")
 
 
-async def refresh(http: Any, since: date, today: date) -> dict[str, Any]:
+async def refresh(http: Any, since: date | None, today: date) -> dict[str, Any]:
     content, page = await read_public(http, LISTING)
     links = Links()
     links.feed(content.decode("utf-8", errors="replace"))
     files: dict[date, str] = {}
     for href, title in links.links:
         description = (href + " " + title).lower()
-        stamp = re.search(r"(\d{2})(\d{2})-ffl-list", description)
-        if not stamp or "complete" not in description or ".txt" not in description:
+        # ATF publishes both file names (.txt) and Drupal download slugs (txt).
+        stamp = re.search(r"(?<!\d)(\d{2})(\d{2})-ffl-list-complete\.?txt(?=$|[/?#\s])", description)
+        if not stamp:
             continue
         try:
             published = date(2000 + int(stamp[2]), int(stamp[1]), 1)
         except ValueError:
             continue
         target = urljoin(page, href)
-        if since < published <= today and official_url(target):
+        if (since is None or since < published) and published <= today and official_url(target):
             files[published] = target
     checked_at = datetime.now(timezone.utc).isoformat()
     if not files:
+        if since is None:
+            raise ValueError("No dated complete ATF list was found on the official page.")
         return {"changed": False, "checked_at": checked_at}
+    if since is None:
+        # Initial population needs only the latest file, not the full archive.
+        newest = max(files)
+        files = {newest: files[newest]}
     snapshots = []
     for published, target in sorted(files.items()):
         data, url = await read_public(http, target)
         snapshots.append({"published_on": published.isoformat(), "source_url": url,
             "checked_at": checked_at, "sha256": hashlib.sha256(data).hexdigest(), "rows": parse_file(data)})
-    return {"changed": True, **snapshots[-1], "files": snapshots}
+    return snapshots[0] if since is None else {"changed": True, **snapshots[-1], "files": snapshots}
 
 
 class ReferenceRequest(BaseModel):
     rows: list[dict[str, Any]] | None = Field(default=None, max_length=2000)
     since: date | None = None
+    initial: bool = False
 
 
 def register(app: Any) -> None:
@@ -178,6 +194,10 @@ def register(app: Any) -> None:
         if not expected or not hmac.compare_digest(expected, x_tank_key):
             raise HTTPException(401, "Base corridor required.")
         try:
+            if body.initial:
+                if body.rows is not None or body.since is not None:
+                    raise ValueError("An initial reference download cannot also project or refresh saved rows.")
+                return await refresh(app.state.http, None, date.today())
             if body.rows is not None:
                 return {"rows": [project(row) for row in body.rows]}
             if body.since is None:

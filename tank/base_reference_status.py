@@ -28,6 +28,9 @@ SAFE_DETAILS = {
     "The ATF file has an incomplete row.": "The published ATF file contains an incomplete row.",
     "The ATF file is empty or too large.": "The published ATF file is empty or exceeds the supported size.",
     "The ATF file has no licence rows.": "The published ATF file contains no licences.",
+    "No dated complete ATF list was found on the official page.": "No dated complete ATF list was found on the official page.",
+    "The official reference file is unavailable.": "The ATF website could not provide the reference file.",
+    "The official reference file is too large.": "The published ATF file exceeds the supported size.",
 }
 
 

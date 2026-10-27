@@ -105,12 +105,12 @@ async def test_service_failure_is_logged_and_visible_before_a_file_exists(databa
 
 
 @pytest.mark.asyncio
-async def test_empty_seed_and_connection_failure_have_safe_durable_reasons(database, caplog):
+@pytest.mark.parametrize("saved_rows", [False, True])
+async def test_connection_failure_has_safe_durable_reason_with_or_without_seed(database, caplog, saved_rows):
     conn, rt = database
     store = BaseStore(rt)
-    await check_reference(store)
-    assert "There are no saved ATF licence rows" in caplog.text
-    await seed(conn)
+    if saved_rows:
+        await seed(conn)
     def unavailable(request):
         raise httpx.ConnectError("PRIVATE-CONNECTION-CONTENT", request=request)
     async with httpx.AsyncClient(transport=httpx.MockTransport(unavailable)) as http:

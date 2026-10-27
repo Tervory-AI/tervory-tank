@@ -1,0 +1,84 @@
+{
+  "case": "empty",
+  "fixture": "local, fixture page",
+  "licences": 77611,
+  "published_on": "2025-09-01",
+  "source_url": "https://www.atf.gov/resource-center/docs/report/0925-ffl-list-completetxt/download",
+  "check": {
+    "checked_at": "2026-10-27 15:41:32.153413+00:00",
+    "message": null,
+    "status": "updated"
+  },
+  "atf_requests": 2,
+  "file_downloads": 1,
+  "saved_rows_unchanged": true,
+  "shared_reference_for_both_tenants": true,
+  "blocked_stop_survives_restarts": false
+}
+Real Tank startup tail (empty):
+INFO:     Started server process [399314]
+INFO:     Waiting for application startup.
+redis unavailable, rung-4 cache off: Error 111 connecting to 127.0.0.1:9. Connection refused.
+Room gold response rejected: base
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:57855 (Press CTRL+C to quit)
+The reference could not be loaded: The Base reference service could not be reached. (error type: ConnectError)
+INFO:     127.0.0.1:45242 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:55778 - "GET /v1/vaults/base.vault/plugins?tenant_id=ba5e0000-0000-4000-8000-000000000111 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:55794 - "GET /v1/vaults/base.vault/plugins?tenant_id=ba5e0000-0000-4000-8000-000000000111 HTTP/1.1" 404 Not Found
+{
+  "case": "saved",
+  "fixture": "local, fixture page",
+  "licences": 3,
+  "published_on": "2026-09-01",
+  "source_url": "https://www.atf.gov/firearms/listing-federal-firearms-licensees/complete",
+  "check": {
+    "checked_at": "2026-10-27 15:42:34.239195+00:00",
+    "message": null,
+    "status": "current"
+  },
+  "atf_requests": 1,
+  "file_downloads": 0,
+  "saved_rows_unchanged": true,
+  "shared_reference_for_both_tenants": true,
+  "blocked_stop_survives_restarts": false
+}
+Real Tank startup tail (saved):
+INFO:     Started server process [399694]
+INFO:     Waiting for application startup.
+redis unavailable, rung-4 cache off: Error 111 connecting to 127.0.0.1:9. Connection refused.
+Room gold response rejected: base
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:33137 (Press CTRL+C to quit)
+The reference could not be loaded: The Base reference service could not be reached. (error type: ConnectError)
+INFO:     127.0.0.1:49882 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51464 - "GET /v1/vaults/base.vault/plugins?tenant_id=ba5e0000-0000-4000-8000-000000000111 HTTP/1.1" 404 Not Found
+INFO:     127.0.0.1:51478 - "GET /v1/vaults/base.vault/plugins?tenant_id=ba5e0000-0000-4000-8000-000000000111 HTTP/1.1" 404 Not Found
+{
+  "case": "blocked",
+  "fixture": "local, fixture page",
+  "licences": 0,
+  "published_on": null,
+  "source_url": null,
+  "check": {
+    "checked_at": "2026-10-27 15:43:48.909609+00:00",
+    "message": "The reference could not be loaded: The Base reference service returned HTTP 422. ATF did not allow the read (HTTP 403). Automatic checks have stopped.",
+    "status": "blocked"
+  },
+  "atf_requests": 1,
+  "file_downloads": 0,
+  "saved_rows_unchanged": true,
+  "shared_reference_for_both_tenants": true,
+  "blocked_stop_survives_restarts": true
+}
+Real Tank startup tail (blocked):
+INFO:     Started server process [400027]
+INFO:     Waiting for application startup.
+redis unavailable, rung-4 cache off: Error 111 connecting to 127.0.0.1:9. Connection refused.
+Room gold response rejected: base
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:35451 (Press CTRL+C to quit)
+The reference could not be loaded: The Base reference service could not be reached. (error type: ConnectError)
+INFO:     127.0.0.1:54760 - "GET /health HTTP/1.1" 200 OK
+The reference could not be loaded: The Base reference service returned HTTP 422. ATF did not allow the read (HTTP 403). Automatic checks have stopped. (error type: ReferenceFailure)
+INFO:     127.0.0.1:54878 - "GET /v1/vaults/base.vault/plugins?tenant_id=ba5e0000-0000-4000-8000-000000000111 HTTP/1.1" 404 Not Found
