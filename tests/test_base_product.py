@@ -7,7 +7,7 @@ import uuid
 import httpx
 import pytest
 
-from base_product_fixtures import AT, TENANT, OTHER, atf_bytes, raw, finished, fixture_app
+from base_product_fixtures import AT, TENANT, OTHER, atf_bytes, raw, finished, fixture_app, multiple_contacts
 from base_evidence import observations, observe, row_fields
 from base_metrics import compare, cost_rows, export_records
 from agents.base.engines.ffl import reference
@@ -218,6 +218,82 @@ def test_social_export_does_not_mislabel_lookalike_hosts():
     row["fields"]["email"] = field(reason="blocked", source="https://shop.example/")
     text = export_records([row])
     assert "The store blocked automated checks." in text and "[" not in text
+
+
+def test_csv_networks_match_both_pipeline_skill_lists():
+    import ast
+    from pathlib import Path
+    from base_metrics import SOCIAL_NETWORKS, social_network
+    root = Path(__file__).resolve().parents[1] / "tank/skills"
+    for skill, constant in (("base.business_data/2.0.0", "_SOCIAL_HOSTS"), ("base.scrape_site/1.1.0", "SOCIAL")):
+        module = ast.parse((root / skill / "run.py").read_text())
+        assignment = next(node for node in module.body if isinstance(node, ast.Assign)
+                          and any(isinstance(target, ast.Name) and target.id == constant for target in node.targets))
+        hosts = ast.literal_eval(assignment.value)
+        if isinstance(hosts, dict):
+            hosts = hosts.values()
+        assert {social_network(f"https://{host}/shop") for host in hosts} == set(SOCIAL_NETWORKS)
+
+
+@pytest.mark.asyncio
+async def test_csv_keeps_every_contact_shown_by_base_with_aligned_evidence(monkeypatch):
+    import csv
+    import io
+    from base_metrics import SOCIAL_NETWORKS, social_network
+    monkeypatch.setenv("TANK_API_KEY", "local-fixture")
+    app, store = fixture_app()
+    row = finished(reference.project(raw()))
+    row["fields"] = multiple_contacts()
+    store.rows[TENANT].extend([row, finished(reference.project(raw(2)))])
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://fixture",
+                                headers={"X-Tank-Key": "local-fixture"}) as client:
+        params = {"tenant_id": str(TENANT)}
+        shown = (await client.get("/v1/base-product/records", params=params)).json()["rows"]
+        response = await client.get("/v1/base-product/records.csv", params=params)
+    assert response.status_code == 200
+    assert not any(mark in response.text for mark in ('[', ']', '{', '}'))
+    parsed = list(csv.reader(io.StringIO(response.text.lstrip("\ufeff"))))
+    assert len({len(cells) for cells in parsed}) == 1
+    exported = list(csv.DictReader(io.StringIO(response.text.lstrip("\ufeff"))))
+    for visible, record in zip(shown, exported):
+        expected = {(item["value"], item["source_url"], item["checked_at"])
+                    for field in visible["fields"].values() if field["verified"]
+                    for item in field.get("items", [field])}
+        actual = []
+        for primary, extra in [("email", "other_emails"), ("phone", "other_phones"), ("website", "other_websites"),
+                               *((network, f"other_{network}") for network in SOCIAL_NETWORKS)]:
+            for column in (primary, extra):
+                if record[column]:
+                    values = [record[column + suffix].split("; ") for suffix in ("", "_source_url", "_checked_at")]
+                    assert len({len(value) for value in values}) == 1
+                    actual.extend(zip(*values))
+                    if primary in SOCIAL_NETWORKS:
+                        assert all(social_network(value) == primary for value in values[0])
+        assert set(actual) == expected
+        assert len(actual) == len(expected)
+
+
+def test_every_extra_csv_column_retains_formula_protection():
+    import csv
+    import io
+    from base_metrics import SOCIAL_NETWORKS
+    columns = ["other_emails", "other_phones", "other_websites", *(f"other_{name}" for name in SOCIAL_NETWORKS)]
+    row = finished(reference.project(raw()))
+    row["fields"] = multiple_contacts()
+    # Sources/dates are protected too, even if an upstream source is malformed.
+    for field in row["fields"].values():
+        for item in field["items"][1:]:
+            item.update(source_url="=HYPERLINK(bad)", checked_at="@SUM(1)")
+    row["fields"]["email"]["items"][1]["value"] = "=HYPERLINK(bad)"
+    row["fields"]["phone"]["items"][1]["value"] = "-1+2"
+    row["fields"]["website"]["items"][1]["value"] = "+1+2"
+    record = next(csv.DictReader(io.StringIO(export_records([row]).lstrip("\ufeff"))))
+    for column in columns:
+        assert record[f"{column}_source_url"].startswith("'=HYPERLINK")
+        assert record[f"{column}_checked_at"].startswith("'@SUM")
+    assert record["other_emails"] == "'=HYPERLINK(bad)"
+    assert record["other_phones"] == "'-1+2"
+    assert record["other_websites"] == "'+1+2"
 
 
 def test_unpriced_cost_is_excluded_and_comparison_uses_same_record():

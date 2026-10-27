@@ -49,7 +49,10 @@ reference selection, field source/date display, CSV upload and download, Apollo,
 and the saved batch link. It imports the downloaded CSV to assert that
 `+15125550101` is unchanged. Each verified row has two emails: plain `email` and
 `other_emails`, with their own source URLs and ISO dates. The actual downloaded
-text has no JSON, brackets or `_items` columns. The explicit fixture now includes a priced search,
+text has no JSON, brackets or `_items` columns. One business has two websites,
+two phones and two links for each of the six social networks. The browser reads
+18 rendered values, source links and `<time>` dates and compares them against all
+18 downloaded values and their evidence. The explicit fixture includes a priced search,
 an unpriced search, and a blocked uploaded business. It checks the exclusion
 link, singular wording, human dates/reasons and the absence of raw provider codes.
 The PostgreSQL tests separately exercise the real repository, SQL calculations,
@@ -102,11 +105,12 @@ start. The captured startup tail comes from that test helper’s returned output
 there is no stand-in Tank. Redis is deliberately pointed to closed loopback port 9
 by the test, so its cache-off warning is expected.
 
-CSV import contract (founder decision before merge): `email`, `other_emails`,
-`phone`, `website`, `facebook`, `instagram`, `x`, `linkedin`, `youtube`. Each has
+CSV import contract: `email`, `other_emails`, `phone`, `other_phones`, `website`,
+`other_websites`, plus `facebook`, `instagram`, `x`, `linkedin`, `youtube`, `tiktok`
+and an `other_<network>` column for each of those six networks. Each has
 matching `_source_url`, `_checked_at` and `_reason` columns. Primary email and
 social links use the first independently verified item in the stored order;
-unverified items are excluded. Additional email values, sources and dates use
+unverified items are excluded. All additional values, sources and dates use
 `; ` in the same order, including repeated source URLs/dates where appropriate.
 Twitter maps to `x`, youtu.be to `youtube`; hostname suffixes are checked at domain
 boundaries. Missing networks have empty value/source/date cells, with a plain
@@ -114,17 +118,61 @@ reason where available. The header is fixed across streamed pages. `_value` and
 JSON `_items` columns are removed. The existing formula guard still protects all
 cells and preserves plain phone numbers.
 
-The CSV follow-up passed 32 tests:
+The complete-contact CSV follow-up passed **36 tests in 26.89s**:
 
 ```sh
 PYTHONPATH=tank:tests \
 BASE_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55443/basetest \
-python -m pytest -q tests/test_base_product.py tests/test_base_database.py tests/test_base_workflow.py
+TANK_BOOT_DATABASE_URL=postgresql://postgres@127.0.0.1:55443/basetest \
+python -m pytest -q tests/test_base_product.py tests/test_base_database.py tests/test_base_workflow.py tests/test_tank_boots.py
 ```
 
 This includes two- and three-email fixtures, distinct provenance per value,
-unverified/duplicate rejection, all five networks, empty cells, ISO dates,
-formula protection, and the PostgreSQL-backed streaming download. The local
+unverified/duplicate rejection, all six networks and their extras, empty cells,
+ISO dates, formula protection, and the PostgreSQL-backed streaming download.
+An AST check compares CSV networks against both approved pipeline skill lists
+(Twitter maps to X) so an added network cannot silently disappear from exports.
+The local
 Workspace browser proof also passed at 375 and 1440 pixels. Its latest CSV and
 screenshots are committed here. No production app code changed outside the CSV
 exporter; the older full-suite comparison remains pinned to its tested commit.
+
+The CI lint command and Workspace production build also passed locally:
+
+```sh
+ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"
+# All checks passed!
+cd workspace
+NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA== CLERK_SECRET_KEY=sk_test_dummy npx next build
+# Compiled successfully in 14.2s; type checks passed; 36/36 static pages generated; exit 0.
+```
+
+Real Tank + Base worker + Workspace job (27 October 2026, Pacific):
+
+```sh
+PYTHONPATH=.:tank:tests \
+BASE_TEST_DATABASE_URL=postgresql://postgres@127.0.0.1:55443/basetest \
+BASE_PROOF_OUTPUT=/tmp/base-real-job-evidence \
+python tests/base_proof/real_job.py
+```
+
+Use Python 3.12, Node 22 and `/usr/bin/chromium`. This creates and later removes
+its own empty PostgreSQL database, boots real `tank/main.py`, starts the real
+Base app/worker with the deployed directory layout, seeds approved skill versions
+in that disposable database, and uploads through the real Workspace controls.
+Only outbound public-page/DNS responses are fixtures (`external_pages.py`);
+other external services return unavailable, so the proof cannot spend money or
+read live sites. Loopback calls between the real services use real HTTP. Clerk
+is bypassed only in the temporary Workspace copy, with CI's dummy settings.
+No Tank routes, Base steps, collectors or skills are replaced.
+
+The completed job showed **5 verified values on /base and 5 in its download**,
+including TikTok and Facebook, with the same sources/dates. The supplemental
+18-value browser fixture above checks every extra column, including two websites
+and phones, which the current pipeline normally represents as scalar fields.
+The evidence is [real-job-output.txt](real-job-output.txt),
+[download](screenshots/real-job.csv), [1440 px](screenshots/real-job-1440.png),
+and [375 px](screenshots/real-job-375.png). Both screenshots say “local, fixture
+page”. The startup output retains the expected disconnected-Redis warning and
+startup gold/vault responses; all nine Base skill routes and the download returned
+200. Signed-in production proof remains reserved for the founder's browser.

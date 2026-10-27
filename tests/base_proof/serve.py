@@ -34,6 +34,9 @@ async def dispatch_with_price_examples(tenant):
         if row["licence_type"] == "unspecified":
             row["passes"]["2b"]["access_error"] = {"status": "blocked", "url": "https://upload.example/"}
         row["fields"] = row_fields(row)
+        if row["licence_key"] == "5-74-00001":
+            from base_product_fixtures import multiple_contacts
+            row["fields"] = multiple_contacts()
     if new_rows:
         # Explicit offline examples: one priced search and one unpriced search.
         # No provider is called and these rows never enter a real ledger.

@@ -1,5 +1,6 @@
 """Exercise the actual Workspace controls against the actual fixture Tank routes."""
 import asyncio
+import os
 from pathlib import Path
 from playwright.async_api import async_playwright
 
@@ -13,7 +14,7 @@ async def main():
         page = await browser.new_page(viewport={"width": 1440, "height": 1000})
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
-        await page.goto("http://localhost:3141/base", wait_until="networkidle", timeout=120000)
+        await page.goto(os.environ.get("BASE_PROOF_WORKSPACE_URL", "http://localhost:3141") + "/base", wait_until="networkidle", timeout=120000)
         await page.get_by_text("4 ATF licences", exact=True).wait_for()
         await page.screenshot(path=str(OUTPUT / "01-empty-1440.png"))
         await page.get_by_label("States", exact=True).select_option("TX")
@@ -29,6 +30,13 @@ async def main():
         await detail.scroll_into_view_if_needed()
         await page.screenshot(path=str(OUTPUT / "03-field-sources-1440.png"))
         assert await detail.get_by_text("Checked", exact=False).count() >= 4
+        # Read the actual rendered values and provenance, independently of CSV helpers.
+        rich = detail.locator("article").filter(has=page.get_by_role("heading", name="Fixture Business 1 · Texas"))
+        shown = []
+        for item in await rich.locator("dd p").all():
+            shown.append(((await item.inner_text()).splitlines()[0], await item.locator("a").get_attribute("href"),
+                          await item.locator("time").get_attribute("datetime")))
+        assert len(shown) == 18
         await page.get_by_role("button", name="excludes 1 unpriced call", exact=True).first.click()
         expenses = page.get_by_label("Cost receipts")
         await expenses.get_by_text("Showing 1 of 1 call.", exact=True).wait_for()
@@ -50,11 +58,22 @@ async def main():
         assert all(row["phone"] == "+15125550101" for row in imported)
         assert "[" not in csv and "]" not in csv and "{" not in csv
         for row in imported:
+            if row["name"] == "Fixture Business 1":
+                values = []
+                columns = ("email", "other_emails", "phone", "other_phones", "website", "other_websites",
+                           "facebook", "other_facebook", "instagram", "other_instagram", "x", "other_x",
+                           "linkedin", "other_linkedin", "youtube", "other_youtube", "tiktok", "other_tiktok")
+                for column in columns:
+                    parts = [row[column + suffix].split("; ") for suffix in ("", "_source_url", "_checked_at")]
+                    assert len({len(part) for part in parts}) == 1
+                    values.extend(zip(*parts))
+                assert set(values) == set(shown) and len(values) == len(shown)
+                continue
             assert row["email"].startswith("info@") and row["other_emails"].startswith("sales@")
             assert row["other_emails_source_url"] == row["instagram_source_url"] == row["website"] + "team"
             assert row["email_checked_at"] == "2026-10-26T10:00:00+00:00"
             assert row["other_emails_checked_at"] == "2026-10-27T10:00:00+00:00"
-            assert row["x"] == row["linkedin"] == row["youtube"] == ""
+            assert row["x"] == row["linkedin"] == row["youtube"] == row["tiktok"] == ""
             assert all('"' not in row[key] for key in ("email", "other_emails", "facebook", "instagram", "x", "linkedin", "youtube"))
         await page.get_by_label("Business CSV").set_input_files({"name": "fixture-businesses.csv", "mimeType": "text/csv", "buffer": b"name,state,website\nFixture Upload,CA,https://upload.example/\n"})
         await page.get_by_role("button", name="Upload and verify", exact=True).first.click()
@@ -96,7 +115,7 @@ async def main():
         await page.screenshot(path=str(OUTPUT / "07-downloaded-csv-1440.png"))
         assert not errors, errors
         await browser.close()
-    print("Local fixture browser proof passed: reference batch, per-field evidence, CSV upload/download, Apollo and both widths.")
+    print("Local fixture browser proof passed: 18 rendered values = 18 CSV values with identical sources/dates; reference batch, upload/download, Apollo and both widths.")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,18 @@
+{
+  "job": "CSV upload through Workspace -> real Tank -> real Base worker -> Workspace download",
+  "status": "done",
+  "verified_values_on_page": 5,
+  "verified_values_in_csv": 5,
+  "tiktok": "https://www.tiktok.com/@fixture-shop",
+  "facebook": "https://www.facebook.com/fixture-shop",
+  "fixture": "local, fixture page"
+}
+Real Tank startup tail:
+INFO:     Started server process [381281]
+INFO:     Waiting for application startup.
+redis unavailable, rung-4 cache off: Error 111 connecting to 127.0.0.1:9. Connection refused.
+Room gold response rejected: base
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:53897 (Press CTRL+C to quit)
+INFO:     127.0.0.1:57978 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52824 - "GET /v1/vaults/base.vault/plugins?tenant_id=ba5e0000-0000-4000-8000-000000000111 HTTP/1.1" 404 Not Found

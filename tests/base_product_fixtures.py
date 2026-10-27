@@ -50,6 +50,27 @@ def finished(entry, tenant=TENANT):
             "attempted_at": AT, "created_at": AT, "checked_at": AT, "updated_at": AT}
 
 
+def multiple_contacts():
+    """Independently verified values with distinct pages and dates for CSV/UI parity."""
+    from base_evidence import field
+    values = {
+        "email": ["info@shop.example", "sales@shop.example"],
+        "phone": ["+15125550101", "+15125550102"],
+        "website": ["https://shop.example/", "https://shop.example/store"],
+        "socials": ["https://facebook.com/shop", "https://facebook.com/shop-store",
+                    "https://www.tiktok.com/@shop", "https://instagram.com/shop", "https://instagram.com/shop-store",
+                    "https://x.com/shop", "https://twitter.com/shop-store", "https://linkedin.com/company/shop",
+                    "https://linkedin.com/company/shop-store", "https://youtube.com/@shop", "https://youtu.be/shop-store",
+                    "https://www.tiktok.com/@shop-store"],
+    }
+    fields = {}
+    for name, contacts in values.items():
+        items = [field(value, f"https://shop.example/{name}/{i}", f"2026-10-{i+1:02}T10:00:00+00:00")
+                 for i, value in enumerate(contacts)]
+        fields[name] = {**field(contacts, items[0]["source_url"], items[0]["checked_at"]), "items": items}
+    return fields
+
+
 class FixtureStore:
     def __init__(self):
         self.entries = parse_file(atf_bytes())

@@ -161,6 +161,7 @@ SOCIAL_NETWORKS = {
     "x": ("x.com", "twitter.com"),
     "linkedin": ("linkedin.com",),
     "youtube": ("youtube.com", "youtu.be"),
+    "tiktok": ("tiktok.com",),
 }
 
 
@@ -192,7 +193,8 @@ def social_network(url: str) -> str | None:
 
 def export_records(rows: list[dict[str, Any]]) -> str:
     identity = ["record_id", "licence_key", "state", "licence_type", "name"]
-    contacts = ["email", "other_emails", "phone", "website", *SOCIAL_NETWORKS]
+    contacts = ["email", "other_emails", "phone", "other_phones", "website", "other_websites"]
+    contacts += [name for network in SOCIAL_NETWORKS for name in (network, f"other_{network}")]
     columns = identity + contacts
     columns += [f"{name}_{part}" for name in contacts for part in ("source_url", "checked_at", "reason")]
     exported = []
@@ -212,13 +214,16 @@ def export_records(rows: list[dict[str, Any]]) -> str:
               fields["email"] if not fields["email"].get("verified") else None)
         write("other_emails", emails[1:])
         for name in ("phone", "website"):
-            write(name, verified_contacts(fields[name])[:1], csv_reason(fields[name].get("reason"), name),
+            values = verified_contacts(fields[name])
+            write(name, values[:1], csv_reason(fields[name].get("reason"), name),
                   fields[name] if not fields[name].get("verified") else None)
+            write(f"other_{name}s", values[1:])
         socials = verified_contacts(fields["socials"])
         for network in SOCIAL_NETWORKS:
             values = [item for item in socials if social_network(item["value"]) == network]
             reason = csv_reason(fields["socials"].get("reason"), "socials") or f"No verified {network} link found for this business."
             write(network, values[:1], reason, fields["socials"] if not fields["socials"].get("verified") else None)
+            write(f"other_{network}", values[1:])
         exported.append(record)
     return csv_text(exported, columns)
 
