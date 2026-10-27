@@ -50,3 +50,53 @@ def normalize_label(text: str) -> str:
 STATE_BY_NAME = {normalize_label(name): code for code, name in _STATE_NAMES.items()}
 STATE_BY_NAME["districtofcolumbia"] = "DC"
 STATE_BY_NAME["washingtondc"] = "DC"
+
+
+def mentioned_states(question: str) -> set[str]:
+    """Recognize complete state names and explicit uppercase postal codes."""
+    import re
+
+    codes = set(re.findall(r"\b[A-Z]{2}\b", question)) & US_POSTAL_SET
+    remaining = question.lower()
+    for code, name in sorted(_STATE_NAMES.items(), key=lambda item: len(item[1]), reverse=True):
+        pattern = r"\b" + re.escape(name.lower()) + r"\b"
+        if re.search(pattern, remaining):
+            codes.add(code)
+            remaining = re.sub(pattern, " ", remaining)
+    return codes
+
+
+def state_for_area(area: str) -> str | None:
+    if area in US_POSTAL_SET:
+        return area
+    if area.isdigit() and len(area) in {2, 5}:
+        return next((code for code, fips in STATE_FIPS.items() if area[:2] == fips), None)
+    return STATE_BY_NAME.get(normalize_label(area))
+
+
+def area_label(area: str, level: str, title: str) -> str:
+    """Readable location without changing the stored geographic identifier."""
+    if level == "county":
+        if area == "unmatched":
+            return "County could not be matched"
+        # Both county-producing adapters retain the publisher's place name.
+        for prefix in ("Population, ", "Active listings in "):
+            if title.startswith(prefix):
+                name = title.removeprefix(prefix).strip()
+                if prefix == "Active listings in " and not any(word in name.lower() for word in ("county", "parish", "borough", "census area", "municipality")):
+                    name += " County"
+                code = state_for_area(area)
+                state = _STATE_NAMES.get(code, "")
+                return f"{name}, {state}" if state and state not in name else name
+        return "County not named in source"
+    if level == "state":
+        code = state_for_area(area)
+        return _STATE_NAMES[code] if code else "State not named in source"
+    if area.upper() in {"US", "USA"}:
+        return "United States"
+    if area.upper() in {"WORLD", "GLOBAL", "WLD"}:
+        return "Worldwide"
+    if level == "port" and ", " in area:
+        name, code = area.rsplit(", ", 1)
+        return f"{name}, {_STATE_NAMES.get(code, code)}"
+    return area if area and not area.isdigit() else "Place not named in source"

@@ -35,7 +35,6 @@ from feeds.live import (
     ncei_url,
     nws_alerts_url,
     require_env,
-    world_bank_url,
 )
 from feeds.models import SourceSpec
 from feeds.reader import iter_dicts
@@ -146,7 +145,12 @@ def _one_listing(
     month: int,
 ) -> tuple[str, str] | None:
     page = template.format(year=year, month=month)
-    return complete_listing_link(client.get_text(page), page)
+    try:
+        return complete_listing_link(client.get_text(page), page)
+    except RuntimeError as exc:
+        if "HTTP 404 " in str(exc):
+            return None
+        raise
 
 
 def _live_typed(source: SourceSpec, client: PoliteClient, store: Store, *, backfill: bool) -> int:
@@ -157,7 +161,7 @@ def _live_typed(source: SourceSpec, client: PoliteClient, store: Store, *, backf
 
 def _live_population(source: SourceSpec, client: PoliteClient, store: Store, *, backfill: bool) -> int:
     key = require_env("CENSUS_API_KEY")
-    raw_years = source.config.get("years") or [source.config.get("year", "2023")]
+    raw_years = source.config.get("years") or (range(int(source.config.get("start_year", 2009)), datetime.now(timezone.utc).year - 1) if backfill else [datetime.now(timezone.utc).year - 2])
     years = [int(year) for year in raw_years]
     inserted = 0
     for label, url in census_population_urls(key, years):
@@ -173,7 +177,12 @@ def _live_trade(source: SourceSpec, client: PoliteClient, store: Store, *, backf
     today = datetime.now(timezone.utc).date()
     months = [str(item) for item in source.config.get("months") or []]
     if not months:
-        months = _recent_months(24 if backfill else 1, today)
+        if backfill:
+            first = str(source.config.get("start_month") or "2013-01")
+            count = (today.year - int(first[:4])) * 12 + today.month - int(first[5:7])
+            months = _recent_months(count, today)
+        else:
+            months = _recent_months(1, today)
     codes = [str(code) for code in source.config["codes"]]
     inserted = 0
     for flow in ("import", "export"):
@@ -187,7 +196,7 @@ def _live_trade(source: SourceSpec, client: PoliteClient, store: Store, *, backf
 def _live_legiscan(source: SourceSpec, client: PoliteClient, store: Store, *, backfill: bool) -> int:
     key = require_env("LEGISCAN_API_KEY")
     topics = [str(topic) for topic in source.config.get("topics") or []]
-    cap = 3 if backfill else 1
+    cap = 10000 if backfill else 1
     inserted = 0
     for _label, url in legiscan_urls(key, topics):
         for page in range(1, cap + 1):
@@ -206,10 +215,15 @@ def _live_legiscan(source: SourceSpec, client: PoliteClient, store: Store, *, ba
 
 def _live_register(source: SourceSpec, client: PoliteClient, store: Store, *, backfill: bool) -> int:
     url: str | None = federal_register_url([str(item) for item in source.config.get("agencies") or []])
-    cap = 5 if backfill else 1
+    cap = 10000 if backfill else 1
     inserted = 0
     seen = 0
+    visited = set()
     while url and seen < cap:
+        from urllib.parse import urlsplit
+        if url in visited or urlsplit(url).hostname != "www.federalregister.gov":
+            raise RuntimeError("invalid source pagination")
+        visited.add(url)
         payload = json.loads(client.get_text(url))
         inserted += _json_adapter("federal_register", source, store, payload, f"page-{seen}.json")
         url = payload.get("next_page_url") or None
@@ -218,9 +232,22 @@ def _live_register(source: SourceSpec, client: PoliteClient, store: Store, *, ba
 
 
 def _live_ecfr(source: SourceSpec, client: PoliteClient, store: Store, *, backfill: bool) -> int:
-    url = ecfr_structure_url(str(source.config.get("title_number") or "49"))
-    payload = json.loads(client.get_text(url))
-    return _json_adapter("ecfr", source, store, payload, "structure.json")
+    import re
+    title = str(source.config.get("title_number") or "49")
+    dates = [datetime.now(timezone.utc).date().isoformat()]
+    if backfill:
+        versions = json.loads(client.get_text(f"https://www.ecfr.gov/api/versioner/v1/versions/title-{title}.json"))
+        dates = sorted({str(item.get("date", "")) for item in versions.get("content_versions", [])
+                        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(item.get("date", "")))})
+        if not dates:
+            raise RuntimeError("Source did not supply version dates")
+    inserted = 0
+    for date in dates:
+        url = ecfr_structure_url(title).replace("/current/", f"/{date}/")
+        payload = json.loads(client.get_text(url))
+        payload["date"] = date
+        inserted += _json_adapter("ecfr", source, store, payload, f"structure-{date}.json")
+    return inserted
 
 
 def _live_eia(source: SourceSpec, client: PoliteClient, store: Store, *, backfill: bool) -> int:
@@ -232,19 +259,29 @@ def _live_eia(source: SourceSpec, client: PoliteClient, store: Store, *, backfil
 
 
 def _live_world_bank(source: SourceSpec, client: PoliteClient, store: Store, *, backfill: bool) -> int:
+    from feeds.published import commodity_rows, published_tables
+    config = source.config
+    tables = published_tables(client, config["download_page"], link_terms=("historical", "monthly"))
     inserted = 0
-    for indicator in source.config.get("indicators") or []:
-        payload = json.loads(client.get_text(world_bank_url(str(indicator))))
-        inserted += _json_adapter("world_bank", source, store, payload, f"{indicator}.json")
+    for spec, date, value in commodity_rows(tables, config["columns"]):
+        series = store.ensure_series(source.id, spec["ref"], spec["title"], spec["unit"], "national", "World", "monthly")
+        inserted += store.put_point(series, date, value, date)
     return inserted
 
 
 def _live_alerts(source: SourceSpec, client: PoliteClient, store: Store, *, backfill: bool) -> int:
-    payload = json.loads(client.get_text(
-        nws_alerts_url(),
-        headers={"Accept": "application/geo+json"},
-    ))
-    return ingest_alerts(source, store, payload)
+    from urllib.parse import urlsplit
+    url = "https://api.weather.gov/alerts?status=actual&limit=500" if backfill else nws_alerts_url()
+    visited = set()
+    inserted = 0
+    while url:
+        if url in visited or urlsplit(url).hostname != "api.weather.gov":
+            raise RuntimeError("invalid source pagination")
+        visited.add(url)
+        payload = json.loads(client.get_text(url, headers={"Accept": "application/geo+json"}))
+        inserted += ingest_alerts(source, store, payload)
+        url = (payload.get("pagination") or {}).get("next") if backfill else None
+    return inserted
 
 
 def _live_climate(source: SourceSpec, client: PoliteClient, store: Store, *, backfill: bool) -> int:
@@ -263,10 +300,12 @@ def _live_climate(source: SourceSpec, client: PoliteClient, store: Store, *, bac
         for datatype in datatypes:
             for start, end in windows:
                 url = ncei_url(datatype, fips, start, end)
-                for payload in _climate_pages(client, url, headers):
-                    inserted += ingest_climate(
-                        source, store, payload, state=postal, revision=f"{start}:{end}",
-                    )
+                # A page boundary must not turn one state's monthly mean into
+                # several conflicting partial means.
+                results = [row for page in _climate_pages(client, url, headers) for row in page.get("results", [])]
+                inserted += ingest_climate(
+                    source, store, {"results": results}, state=postal, revision=f"{start}:{end}",
+                )
     return inserted
 
 
@@ -277,7 +316,7 @@ def _climate_pages(
 ) -> list[dict[str, Any]]:
     pages: list[dict[str, Any]] = []
     offset = 1
-    for _ in range(20):
+    for _ in range(10000):
         page_url = url if offset == 1 else f"{url}&offset={offset}"
         payload = json.loads(client.get_text(page_url, headers=headers))
         pages.append(payload)
@@ -295,6 +334,20 @@ def _climate_pages(
 
 
 def _live_table(source: SourceSpec, client: PoliteClient, store: Store, *, backfill: bool) -> int:
+    if source.config.get("headings"):
+        from feeds.published import published_tables, table_rows
+        tables = published_tables(client, str(source.config.get("file_url") or source.url),
+                                  link_terms=tuple(source.config.get("download_terms", [])))
+        inserted = 0
+        for stamp, geo, value in table_rows(tables, source.config):
+            ref = str(source.config.get("ref") or geo)
+            series = store.ensure_series(source.id, ref, str(source.config["title"]).format(geo=geo, year=stamp[:4]),
+                                         source.config["unit"], source.config.get("geo_level", "national"),
+                                         geo, source.config.get("frequency", "monthly"))
+            inserted += store.put_point(series, stamp, value, stamp)
+        if inserted == 0:
+            raise RuntimeError("No matching published table was found")
+        return inserted
     target = str(source.config.get("file_url") or source.url)
     text = client.get_text(target)
     head = text.lstrip()[:300].lower()

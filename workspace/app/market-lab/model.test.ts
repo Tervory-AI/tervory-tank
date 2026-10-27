@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { emptyFlags } from "./catalog";
+import { CATALOG, emptyFlags } from "./catalog";
 import { formatDay, formatRefreshed } from "./format";
 import { readFlags, scrubSecrets } from "./load";
 import { buildPage, feedsToCall } from "./model";
@@ -19,103 +19,37 @@ import {
 } from "./plugins";
 import { exactNumber, parseAlerts, parseEia, parseFred, parseWorldBank } from "./parse";
 
-test("a missing key keeps the feed off, uncalled, and ignores a stored reading", () => {
-  const reading = "4.102";
-  const page = buildPage(emptyFlags(), { eia_diesel: { headline: reading, detail: "week" } }, {}, {});
-  assert.equal(page.onCount, 9);
-  assert.equal(page.offCount, 12);
-  assert.equal(page.linkedCount, 13);
-  assert.equal(page.featured.some((card) => card.id === "eia_diesel"), false);
-  assert.equal(JSON.stringify(page.cards).includes(reading), false);
-  const row = page.off.find((item) => item.id === "eia_diesel");
-  assert.equal(row?.keyName, "EIA_API_KEY");
-  assert.equal(row?.title, "EIA on-highway diesel");
-  assert.equal(feedsToCall(emptyFlags()).includes("eia_diesel"), false);
-  assert.equal(feedsToCall(emptyFlags()).some((id) => id.startsWith("fred_")), false);
-  assert.equal(feedsToCall(emptyFlags()).includes("ups_hazmat"), false);
-  assert.equal(feedsToCall(emptyFlags()).length, 9);
-});
-
-test("a set EIA key turns that feed on and leaves the others off", () => {
+test("keys never count as fetched feeds", () => {
   const flags = emptyFlags();
   flags.EIA_API_KEY = true;
-  const page = buildPage(flags, { eia_diesel: { headline: "$4.102", detail: "dollars per gallon, week of 14 Oct 2026" } }, {}, {});
-  assert.equal(page.onCount, 10);
-  assert.equal(page.offCount, 11);
-  assert.equal(page.off.some((row) => row.id === "eia_diesel"), false);
-  assert.equal(page.featured[0]?.id, "eia_diesel");
-  assert.equal(page.featured[0]?.headline, "$4.102");
-  assert.deepEqual(feedsToCall(flags).filter((id) => id === "eia_diesel"), ["eia_diesel"]);
-});
-
-test("FRED stays one off row of seven series until its key is set", () => {
-  const off = buildPage(emptyFlags(), {}, {}, {});
-  assert.equal(off.off[0]?.id, "fred");
-  assert.equal(off.off[0]?.title, "FRED economic series (7)");
-  assert.equal(off.off[0]?.keyName, "FRED_API_KEY");
-  assert.equal(off.cards.some((card) => card.id === "fred"), false);
-
-  const flags = emptyFlags();
   flags.FRED_API_KEY = true;
-  const on = buildPage(
-    flags,
-    {
-      fred_tsifrght: { headline: "120.5" },
-      fred_gasdesw: { headline: "4.102" },
-    },
-    {},
-    {},
-  );
-  assert.equal(on.onCount, 16);
-  assert.equal(on.offCount, 5);
-  assert.equal(on.off.some((row) => row.id === "fred"), false);
-  const card = on.cards.find((item) => item.id === "fred");
-  assert.equal(card?.lines[0]?.label, "Freight index");
-  assert.equal(card?.lines[0]?.value, "120.5");
-  assert.equal(card?.lines.at(-1)?.label, "Diesel");
-  assert.equal(card?.lines.at(-1)?.value, "4.102");
-  const called = feedsToCall(flags);
-  assert.equal(called.filter((id) => id.startsWith("fred_")).length, 7);
-  assert.equal(called.includes("legiscan"), false);
+  const page = buildPage(flags, { eia_diesel: { headline: "$4.102" } }, {});
+  assert.equal(page.onCount, 0);
+  assert.equal(page.offCount, 14);
+  assert.equal(page.cards.length + page.featured.length, 0);
+  assert.equal(feedsToCall(emptyFlags()).includes("eia_diesel"), false);
 });
 
-test("a failed check keeps the last good value and names both dates", () => {
-  const flags = emptyFlags();
-  flags.EIA_API_KEY = true;
-  const page = buildPage(
-    flags,
-    {
-      eia_diesel: {
-        headline: "$4.102",
-        detail: "dollars per gallon, week of 1 Oct 2026",
-        failed: true,
-        checkedAt: "2026-10-14",
-        goodAt: "2026-10-01",
-      },
-    },
-    {},
-    {},
-  );
-  const card = page.featured[0];
-  assert.equal(card?.headline, "$4.102");
-  assert.equal(
-    card?.problem,
-    "The last check on 14 Oct 2026 did not work. The source did not answer in time. Showing the last good data, from 1 Oct 2026.",
-  );
+test("a successful stored feed counts once and opens its document", () => {
+  const page = buildPage(emptyFlags(), {
+    eia_diesel: { rows: 25, documentId: "stored-document", headline: "25 stored observations", checkedAt: "2026-10-14" },
+  }, {});
+  assert.equal(page.onCount, 1);
+  assert.equal(page.offCount, 13);
+  assert.equal(page.featured[0].sourceHref, "/market-lab/sources/stored-document");
+  assert.equal(page.off.some((feed) => feed.id === "eia_diesel"), false);
 });
 
-test("a failed check with no earlier success shows no number", () => {
-  const page = buildPage(
-    emptyFlags(),
-    { federal_register: { failed: true, checkedAt: "2026-10-14", notices: [{ title: "Invented notice", meta: "Notice" }] } },
-    {},
-    {},
-  );
-  const card = page.featured[0];
-  assert.equal(card?.notices.length, 0);
-  assert.equal(card?.headline, null);
-  assert.match(card?.problem ?? "", /14 Oct 2026/);
-  assert.equal(page.onEmpty, false);
+test("a failed or empty last fetch cannot retain an On badge", () => {
+  for (const reading of [
+    { rows: 0, documentId: "old-document", note: "Off, source could not be read" },
+    { rows: 20, documentId: "old-document", failed: true },
+  ]) {
+    const page = buildPage(emptyFlags(), { eia_diesel: reading }, {});
+    assert.equal(page.onCount, 0);
+    assert.equal(page.featured.length, 0);
+    assert.equal(page.off.some((feed) => feed.id === "eia_diesel"), true);
+  }
 });
 
 test("no readings leave the on section empty, and a store error is its own state", () => {
@@ -147,7 +81,7 @@ test("linked pages count checks without inventing a change", () => {
   assert.equal(carrier?.pages.length, 4);
   assert.equal(carrier?.pages[0]?.note, "Not checked yet");
   assert.equal(carrier?.pages[1]?.note, "Checked 14 Oct 2026");
-  assert.equal(carrier?.pages[2]?.note, "Changed 2 Oct 2026");
+  assert.equal(carrier?.pages[2]?.note, "Checked 2 Oct 2026");
   const ports = page.groups.find((group) => group.id === "ports");
   assert.equal(ports?.pages[0]?.note, "Opens polb.com");
   assert.equal(ports?.pages[1]?.note, "Opens data.ny.gov");
@@ -177,25 +111,17 @@ test("dates do not shift with the timezone", () => {
   assert.equal(formatRefreshed("2026-10-17T12:40:00.000Z"), "17 Oct 2026, 5:40 AM PT");
 });
 
-test("off feeds follow the panel order, with FRED as one row", () => {
-  const page = buildPage(emptyFlags(), {}, {}, {});
-  assert.deepEqual(
-    page.off.map((row) => row.id),
-    ["fred", "census_population", "census_trade", "eia_diesel", "noaa_climate", "legiscan"],
-  );
-});
-
 test("search hits feeds and linked pages, and skips a question with no reading", () => {
   const page = buildPage(
     emptyFlags(),
-    { noaa_alerts: { headline: "12", detail: "active alerts", goodAt: "2026-10-03" } },
+    { noaa_alerts: { rows: 12, documentId: "weather-document", headline: "12", detail: "active alerts", goodAt: "2026-10-03" } },
     {},
     {},
   );
   const weather = searchMarketLab(page, "weather alerts");
   assert.equal(weather.onIds.includes("noaa_alerts"), true);
   assert.equal(weather.offIds.includes("eia_diesel"), false);
-  const diesel = searchMarketLab(page, "on-highway");
+  const diesel = searchMarketLab(page, "diesel");
   assert.deepEqual(diesel.offIds, ["eia_diesel"]);
   const seasons = searchMarketLab(page, "California");
   assert.equal(seasons.linkIds.includes("season_ca"), true);
@@ -272,4 +198,37 @@ test("key flags are booleans and secret text is stripped before it can leave the
   const clean = scrubSecrets({ headline: "value example-key tail", note: "api_key=example-key" }, ["example-key"]);
   assert.equal(clean.headline.includes("example-key"), false);
   assert.equal(clean.note.includes("example-key"), false);
+});
+
+test("plugin errors and statuses use client words", () => {
+  const unavailable = mapVaultPayload({ enabled: false, message: "This vault is off. Turn it on in Tank." });
+  assert.equal(unavailable.message, "Plugins are not available yet. Ask your workspace administrator to enable them.");
+  const panel = mapVaultPayload({
+    enabled: true,
+    files: [{ id: "file", name: "inventory.csv", status: "ready" }],
+    links: [{ id: "link", url: "https://example.com", status: "not_checked" }],
+    connections: [{ id: "connection", name: "Supplier", status: "needs_auth" }],
+  });
+  assert.equal(panel.files[0].status, "Saved");
+  assert.equal(panel.links[0].status, "Not checked yet");
+  assert.equal(panel.connections[0].status, "Sign-in needed");
+});
+
+test("a blocked linked page does not reuse its previous successful status", () => {
+  const page = buildPage(emptyFlags(), {}, {
+    ups_hazmat: { events: 0, latest: "2026-10-26", note: "Off, blocked" },
+    fedex_hazmat: { events: 1, latest: "2026-10-25", note: "" },
+  });
+  const carrier = page.groups.find(group => group.id === "carrier")!;
+  assert.equal(carrier.pages[0].note, "Not checked: blocked");
+  assert.equal(carrier.pages[1].note, "Checked 25 Oct 2026");
+});
+
+
+test("stored freight and linked freight have distinct client titles", () => {
+  const stored = CATALOG.find(item => item.id === "bts_freight")!;
+  const linked = CATALOG.find(item => item.id === "fred_tsifrght")!;
+  assert.notEqual(stored.title, linked.title);
+  assert.match(stored.title, /stored figures/);
+  assert.match(linked.title, /Federal Reserve Bank of St. Louis/);
 });

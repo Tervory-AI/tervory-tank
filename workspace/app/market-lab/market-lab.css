@@ -1155,3 +1155,19 @@ body:has(.ml) main {
   font-family: var(--font-jetbrains), "JetBrains Mono", ui-monospace, monospace;
   font-size: 12px;
 }
+
+/* Stored evidence needs scrolling and a readable table; the feeds page is unchanged. */
+.ml.ml-source { overflow: auto; }
+.ml-source .ml-body { min-width: 0; overflow-wrap: anywhere; }
+.ml-source-table { overflow-x: auto; padding: 2px; }
+.ml-source table { border-collapse: collapse; width: 100%; overflow-wrap: normal; }
+.ml-source th, .ml-source td { padding: 8px; border-bottom: 1px solid #b8bfd0; text-align: left; }
+.ml-source td, .ml-source th[scope="col"] { white-space: nowrap; }
+.ml-source td:first-of-type { white-space: normal; }
+.ml-source td:last-child { white-space: normal; }
+.ml-source-revision { display: block; max-width: 160px; white-space: normal; }
+.ml-source tr:target, .ml-source article:target { background: #fff; outline: 2px solid #001840; }
+@media (max-width: 600px) {
+  .ml-source table { font-size: 13px; }
+  .ml-source th, .ml-source td { padding: 8px 4px; }
+}
