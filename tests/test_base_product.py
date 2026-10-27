@@ -192,3 +192,39 @@ async def test_uploaded_records_without_licence_type_can_download_their_count(mo
         assert downloaded.status_code == 200 and "Uploaded business" in downloaded.text
         other = await client.get("/v1/base-product/records.csv", params={**params, "tenant_id": str(OTHER)})
         assert other.status_code == 200 and "Uploaded business" not in other.text
+
+
+@pytest.mark.asyncio
+async def test_base_collector_stops_before_tank_closes_shared_resources():
+    import asyncio
+    from types import SimpleNamespace
+    from fastapi import FastAPI
+    from base_product import build_router
+    entered, active = asyncio.Event(), set()
+    class Collecting:
+        async def adopt(self):
+            task = asyncio.current_task()
+            active.add(task)
+            entered.set()
+            try:
+                await asyncio.Future()
+            finally:
+                active.remove(task)
+    app = FastAPI()
+    # Tank registers its shared-pool shutdown callback before the Base router.
+    async def close_shared_pool():
+        assert not active, "Base must return every connection before Tank closes the pool"
+    app.add_event_handler("shutdown", close_shared_pool)
+    app.include_router(build_router(SimpleNamespace(box_region=lambda: "us-east"), Collecting()))
+    try:
+        async with app.router.lifespan_context(app):
+            await asyncio.wait_for(entered.wait(), timeout=1)
+            await asyncio.sleep(0)
+            assert len(active) == 1, "Only one reference/result collector may run"
+        assert not active
+    finally:
+        # Clean up a leaked task even when this regression is run against old code.
+        remaining = list(active)
+        for task in remaining:
+            task.cancel()
+        await asyncio.gather(*remaining, return_exceptions=True)

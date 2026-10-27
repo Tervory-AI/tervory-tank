@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import defaultdict
-from contextlib import suppress
+from contextlib import asynccontextmanager, suppress
 import csv
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -90,8 +90,20 @@ def build_router(rt: Any, store: BaseStore | None = None, *, background: bool = 
     store = store or BaseStore(rt)
     if hasattr(rt, "make_ctx"):
         __import__("vendor_meter").install(rt)
-    router = APIRouter(prefix="/v1/base-product")
-    background_task: asyncio.Task | None = None
+    @asynccontextmanager
+    async def lifespan(_app):
+        task = asyncio.create_task(run_background()) if background else None
+        try:
+            yield
+        finally:
+            # Own exactly one collector, including when this router is nested.
+            # Release its connections before Tank closes the shared pool.
+            if task:
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
+
+    router = APIRouter(prefix="/v1/base-product", lifespan=lifespan)
 
     async def workspace(x_tank_key: str = Header(default="")) -> None:
         expected = os.environ.get("TANK_API_KEY", "")
@@ -399,16 +411,4 @@ def build_router(rt: Any, store: BaseStore | None = None, *, background: bool = 
                 log.warning("Base reference/result collection deferred (%s)", type(exc).__name__)
             await asyncio.sleep(15)
 
-    @router.on_event("startup")
-    async def startup() -> None:
-        nonlocal background_task
-        if background:
-            background_task = asyncio.create_task(run_background())
-
-    @router.on_event("shutdown")
-    async def shutdown() -> None:
-        if background_task:
-            background_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await background_task
     return router
