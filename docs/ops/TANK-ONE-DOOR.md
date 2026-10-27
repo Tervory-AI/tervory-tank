@@ -2,6 +2,8 @@
 
 Audited against `65067a43a0d27d54b48633bf6db4f3fc211ec05f` on 26 October 2026, with this branch's Base/Autumbra fixes. **The launch invariant is not yet satisfied.** The guard prevents new recognized bypasses; its deferred exceptions do not certify the existing defects as acceptable. This is a source and local runtime audit, not evidence of the production environment or a signed-in client's completed job.
 
+Numerical claims were rechecked in fresh remote clones on 26–27 October 2026 UTC. Unless explicitly labelled as a baseline, test totals below refer to the committed code and tests at `fe62268ca6c4f53f0213b213ce26f77d8474e194`. [Reproduction commands, exact selections and observed output](TANK-ONE-DOOR-CHECKS.md) supersede earlier working-copy totals. The review baseline is **16 failed, 3 passed**, not the previously reported 12 failed, 3 passed.
+
 ## Part A: tenant boundaries corrected
 
 On 26 October 2026 the founder extended the lane for these four fixes. The original findings below describe the base revision; F1a, F1b, F1c and F9 are now corrected in this branch.
@@ -36,7 +38,7 @@ Autumbra's optional synthetic dogfood now uses the existing Ghost Tank client, `
 
 ## Call sites outside Tank, after this branch
 
-Grouped rows enumerate the call expressions and their shared transport. Versioned skills under `tank/skills` execute inside Tank; their model adapter is `tank/main.py:2173`, not an external agent bypass.
+Grouped rows enumerate the call expressions and their shared transport. Versioned skills under `tank/skills` execute inside Tank; their model adapter is `tank/main.py:2789` at `fe62268`, not an external agent bypass.
 
 | Location | Classification, route/task or purpose |
 | --- | --- |
@@ -70,7 +72,7 @@ Grouped rows enumerate the call expressions and their shared transport. Versione
 | `jobs/train/run.py:72,76,115,118` | **Bypasses Tank — F4:** paid HF `run_uv_job` using `HF_TOKEN`; direct database reservations and ledger writes, explicit `--submit` gate. |
 | `jobs/train/train.py:65,91,94,110,117,118,124` | **Local model training/artifacts:** dataset/weight downloads, SFT train/evaluate, private artifact upload. Not an inference API; paid launcher is F4. |
 | `litellm/config.yaml:18,327`; `litellm/config.za.yaml:21,345`; `docker-compose.yml:207`; `docker-compose.za.yml:127` | **Central backend/configuration exception:** provider roster and Tank's LiteLLM origin; actual external inference runs in LiteLLM. |
-| `tests/test_tank_one_door.py:159` exception registry | **Test/configuration exceptions:** exact recorded pilot transcripts, mocked transports, provider-denial assertions and opt-in LiteLLM contract harness. Each occurrence has its own reason/count. No blanket exemption for tests, agents, workers or Workspace. |
+| `tests/test_tank_one_door.py:188` exception registry | **Test/configuration exceptions:** exact recorded pilot transcripts, mocked transports, provider-denial assertions and opt-in LiteLLM contract harness. Each occurrence has its own reason/count. No blanket exemption for tests, agents, workers or Workspace. |
 
 ## Model-first paths and skipped free rungs
 
@@ -120,7 +122,7 @@ Workspace key reads are in `lib/tank.ts:5`, `lib/admin.ts:7`, `app/api/zenas/tan
 
 Local validation (Python 3.12, no live paid calls):
 
-- `PYTHONPATH=tank python -m pytest -q -p no:cacheprovider tests/test_tank_one_door.py tests/test_autumbra_dogfood_hf.py` → **28 passed, 1 skipped** (25 new guard/regression cases; live gate skipped).
+- `PYTHONPATH=tank python -m pytest -q -p no:cacheprovider tests/test_tank_one_door.py tests/test_autumbra_dogfood_hf.py` → **30 passed, 1 skipped** (27 guard/regression cases; live gate skipped).
 - Planted untracked `agents/ghost/_one_door_probe.py` with `import openai` and a direct SDK call; guard failed with both line 1 and line 4 reported, exit 1. Removed the plant; guard returned green. No probe was executed or retained.
 - `PYTHONPATH=tank python -m pytest -q -p no:cacheprovider tests/test_b3_base_room.py tests/test_b3b_base_wiring.py tests/test_agent1_isolation.py tests/test_agent1_brain_route.py tests/test_autumbra_dogfood_hf.py tests/test_ghost_routes.py` → **77 passed, 1 skipped** (explicit live dogfood gate).
 - `env -u TANK_URL PYTHONPATH=tank python -m pytest -q -p no:cacheprovider tests/test_agent1_skills.py tests/test_base_*.py tests/test_ghost_*.py tests/test_autumbra_dogfood_airgap.py tests/test_workers_1.py tests/test_workers_1b.py tests/test_dashboards.py tests/test_ledger_sql_param.py` → **405 passed**. First run had one worker-settings failure because the local development shell supplied a loopback `TANK_URL`; removing that fixture-only override restored the worker's expected internal origin. No worker code was changed to silence it.
@@ -210,28 +212,28 @@ Each item reserves a conservative UTF-8 token bound plus framing and the policy'
 
 Real isolated PostgreSQL, two tenants, real Tank handlers/SQL, and provider fixtures cover code receipts, code failure/escalation, explicit HTML-field exclusion, ownership/version/cancellation, exact/semantic/matter isolation, policy invalidation, expiry, rejection, acceptance windows, negative pairs, shadow-rate isolation, repeated schema application, seeded rows, batch discounts, idempotency, interactive exclusion, cost caps, expiry and restart ambiguity. No live provider request was made.
 
-The combined Part A/B and related routing, region, MoA, training, graduation, submission/export, approval-safety and one-door suites report **214 passed**. Earlier failures included obsolete assertions that code could never be served, fixture SQL interfaces that lacked the new ownership read, and a batch-price integration bug caused by the existing core pricing trigger replacing supplied baseline fields; the final implementation uses dedicated batch-price fields and exact decimal arithmetic.
+The combined Part A/B and related routing, region, MoA, training, graduation, submission/export, approval-safety and one-door suites report **217 passed**. Earlier failures included obsolete assertions that code could never be served, fixture SQL interfaces that lacked the new ownership read, and a batch-price integration bug caused by the existing core pricing trigger replacing supplied baseline fields; the final implementation uses dedicated batch-price fields and exact decimal arithmetic.
 
-The expanded command/chassis/dashboard and A/B regression set also reports **176 passed**, including the fix for cache receipts retaining their Command/MoA seat.
+The expanded command/chassis/dashboard and A/B regression set also reports **178 passed**, including the fix for cache receipts retaining their Command/MoA seat.
 
 Additional changed test locations: `tests/test_tank_batches.py:13` (durable batch cases); `tests/test_tank_ladder.py:64` (foreground code, cache and learning cases); `tests/test_t6_graduate.py:252` and `:455` (pinned-code promotion); `tests/test_bf2_tank_guards.py:244` (malformed names still blocked, pinned code allowed); `tests/test_moa_integration.py:27` and `:442` (receipt seat preservation and missing-package refusal before seats); `tests/test_train1.py:161` (acceptance-window/negative provenance); `tests/test_za_region.py:388` and `:570` (ownership-read fixtures preserve region/privacy regression coverage).
 
 
-The remaining Part B entry points are `tank/main.py:575` (room-key batch authorization), `:600` (interactive request flag), `:615` (receipt metadata), `:621` and `:778` (policy validation and persistence), `:706` and `:712` (separate batch-loop startup/shutdown), `:886` (explicit HTML-field exclusion), `:904` (task cancellation/ownership), `:1314` (auxiliary model input handling), `:1507` (tenant-owned code-shadow evidence), `:1716` (automatic approved-code promotion), `:1772` (public/platform-only global code candidates), `:1806` (pure-code gold task matching), and `:2299` (foreground code bypasses MoA). Batch fallback receipts, including a failed normal retry, retain their batch ID, escalation and zero claimed discount.
+The remaining Part B entry points are `tank/main.py:575` (room-key batch authorization), `:600` (interactive request flag), `:615` (receipt metadata), `:621` and `:778` (policy validation and persistence), `:706` and `:712` (separate batch-loop startup/shutdown), `:886` (explicit HTML-field exclusion), `:962` (task cancellation/ownership), `:1314` (auxiliary model input handling), `:1507` (tenant-owned code-shadow evidence), `:1716` (automatic approved-code promotion), `:1772` (public/platform-only global code candidates), `:1806` (pure-code gold task matching), and `:2299` (foreground code bypasses MoA). Batch fallback receipts, including a failed normal retry, retain their batch ID, escalation and zero claimed discount.
 
 Fixture compatibility changes are `tests/test_agent_chassis.py:351` (ownership reads and code receipts), `tests/test_bf3_industry_words.py:241` (public-package ownership lookup), `tests/test_command.py:768` (transactional receipt and cache fixtures; seat preservation across every ledger outcome), and `tests/test_dashboards.py:141` (the paid pause still permits free foreground cache). The independent two-tenant SQL tests enforce the actual boundaries; these adapters let existing isolated unit tests exercise their original behavior. This document records policy rows, invalidation and limitations; `docs/ops/FIRST-GRADUATION.md:1` is the dated fixture patent record.
 
-Final retry/receipt checks: **123 passed** across batch, Command and MoA suites. The additional identifier-bearing bulk-request cap check also verifies both tenants cannot escape the cap when a request must stay out of durable batching.
+Final retry/receipt checks: **124 passed** across batch, Command and MoA suites. The additional identifier-bearing bulk-request cap check also verifies both tenants cannot escape the cap when a request must stay out of durable batching.
 
 
-Broad local run: **3345 passed, 15 skipped, 437 subtests passed, 5 failed** in 782.52s. One failure was the old migration assertion that no policy row could be added. `tests/test_perplexity_research.py:402` now permits only the explicitly seeded Base/Zenas changes, preserves every unrelated field/row, and still requires exact repeatability; its complete suite reports **47 passed**. The other four failures reproduce against audited main `65067a43`: Rig's catalogue test expects `2026-03-01` where the fixture contains `2026-10-18`; the shell browser fixture page fails to load; and two Forge sample pipelines fail at `dedup` because this local environment has Blender but no `gltf-transform`. These are separate from the authorized Tank changes. The full suite has not been rerun after the migration-test correction, so this is not a claim of a green full-suite run.
+Fresh-clone broad local run at `fe62268`: **3367 passed, 15 skipped, 437 subtests passed, 4 failed** in 755.99s. `tests/test_perplexity_research.py:402` permits only the explicitly seeded Base/Zenas changes, preserves every unrelated field/row, and requires exact repeatability; its complete suite reports **47 passed**. All four full-suite failures reproduce in a fresh clone of audited main `65067a43`: Rig's catalogue test expects `2026-03-01` where the fixture contains `2026-10-18`; the shell browser fixture page fails to load; and two Forge sample pipelines fail at `dedup` because this local environment has Blender but no `gltf-transform`. The main comparison reports **4 failed, 1 passed, 4 deselected**. The former 3345-pass/five-failure working-copy total is superseded by this committed-source run, not presented as a current result. This is not a green full-suite claim.
 
-For pushed implementation `2a7de91`, GitHub Workspace, Forge-image and savings-page jobs passed. Tisan's gate failed during `npx playwright install --with-deps chromium`, before application checks. The Tank job was still pending when this record was written. Existing CI/dependency/other-product files remain with their owners. The dedicated Forge-image check supplies the toolchain missing from this local full-suite invocation.
+For tested implementation `fe62268`, GitHub Workspace, Forge-image and savings-page jobs passed. Tisan's gate failed during `npx playwright install --with-deps chromium`. The Tank job failed; its test annotations identify `tests/test_shell_nav.py:23` and `tests/test_rig_postgres.py:92`. [Exact job URLs and local selections](TANK-ONE-DOOR-CHECKS.md) keep CI separate from local evidence. Existing CI/dependency/other-product files remain with their owners. The dedicated Forge-image check supplies the toolchain missing from this local full-suite invocation.
 
 
 ## Corrections to reviewed head 90a2a77
 
-The review regressions reproduced **12 failed, 3 passed** before changes. After correction, the review/A/B/guard suite reports **73 passed**, the related routing/region/Command/MoA/training/migration suites **326 passed**, and the additional redacted-response learning check plus training suite **31 passed**. All use local fixtures; no provider spend or production approval-state claim.
+The committed review regression file from `fe62268`, transplanted unchanged into a fresh clone of `90a2a77dcd300a085d38db230f3829e1170a11e1`, reproduces **16 failed, 3 passed**. The previously reported 12 failed, 3 passed came from an intermediate test file and is withdrawn as evidence for the committed file. Fresh clones of `fe62268` report **73 passed** for the review/A/B/guard suite, **326 passed** for related routing/region/Command/MoA/training/migration suites, and **31 passed** for the review regressions plus training suite. The selections overlap and must not be added together. All use local fixtures; no provider spend or production approval-state claim. Exact commands and the baseline file hash are in [the claims check record](TANK-ONE-DOOR-CHECKS.md).
 
 | Review defect | Change locations | Proof in `tests/test_tank_review_regressions.py` |
 | --- | --- | --- |
