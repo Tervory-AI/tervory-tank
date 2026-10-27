@@ -11,7 +11,7 @@ import pytest
 from test_agent1_browser import visitor  # noqa: F401 — shared browser fixture
 from test_agent1_isolation import browser, runner
 from test_tiger import ROOT, TENANT_A, TENANT_B, NOW, _load, _watch
-from tiger_works.fixture import URL, extract, no_paid_call, robots_fixture, saved_page
+from tiger_works.fixture import LABEL, URL, extract, no_paid_call, robots_fixture, saved_page
 from watch import DomainLimiter, MemoryStore, PgStore, ensure_tables, run_check
 
 tiger = _load("tiger_works_app", ROOT / "agents/tiger/app.py")
@@ -90,7 +90,7 @@ async def test_preferences_apply_to_saved_readings_and_changes(price_on, stock_o
     store = MemoryStore()
     watch = await store.create_watch({**_watch(), "url": URL, "alert_price": price_on, "alert_stock": stock_on})
     for index, (price, stock) in enumerate([("120", "InStock"), ("115", "InStock"), ("115", "InStock"), ("115", "OutOfStock")]):
-        item = {"price": price, "currency": "USD", "quantity": 1 if stock == "InStock" else 0}
+        item = {"name": LABEL, "price": price, "currency": "USD", "quantity": 1 if stock == "InStock" else 0}
         async def feed(*args):
             return {"found": source == "feed", "item": item, "receipt": {"source": "fixture"}}
         async def render(*args):

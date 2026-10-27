@@ -385,6 +385,9 @@ export type TigerObservation = {
   availability: string | null;
   method: string | null;
   evidence: string | null;
+  product_name?: string | null;
+  last_product_name?: string | null;
+  issue?: string | null;
 };
 
 export type TigerAlert = {

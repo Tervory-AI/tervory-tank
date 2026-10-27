@@ -14,15 +14,19 @@ export async function loadTiger(): Promise<TigerLoad> {
     const watches = Array.isArray(listed.watches) ? listed.watches : [];
     const alerts = Array.isArray(alerted.alerts) ? alerted.alerts : [];
     if (watches.length === 0 && alerts.length === 0) return { data: emptyData(), notice: null };
-    const batches = await Promise.all(watches.slice(0, 40).map(async (watch) => {
+    const unavailableUrls = new Set<string>();
+    const urls = [...new Set([...watches.map((watch) => watch.url), ...alerts.map((alert) => alert.url)])];
+    const batches = await Promise.all(urls.map(async (url) => {
       try {
-        const data = await listTigerObservations(tenant.tenantId, watch.url);
-        return Array.isArray(data.observations) ? data.observations : [];
+        const data = await listTigerObservations(tenant.tenantId, url);
+        if (!Array.isArray(data.observations)) throw new Error("Missing check history");
+        return data.observations;
       } catch {
+        unavailableUrls.add(url);
         return [];
       }
     }));
-    return { data: fromTiger(watches, batches.flat(), alerts), notice: null };
+    return { data: fromTiger(watches, batches.flat(), alerts, new Date(), unavailableUrls), notice: null };
   } catch (err) {
     const text = err instanceof Error ? err.message : "";
     if (text.includes("not signed in")) return { data: emptyData(), notice: null };

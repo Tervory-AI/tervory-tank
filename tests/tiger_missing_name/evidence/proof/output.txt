@@ -1,0 +1,7 @@
+PASS nameless first check: issue=missing_name; price=null; alerts=0; URL and attempt time retained
+PASS Workspace: URL identifies nameless product; exact status, attempt time and link; no price or placeholder on Overview, Watch list or History
+PASS later nameless check: last name=Desk lamp; price=null; no new alert; Workspace retains name with current failure status
+PASS two tenants: same URL; tenant B has no name or alerts from tenant A
+PASS missing currency: price=null; no guessed currency; no new alert
+PASS recovery: Desk lamp at USD 22.00; one confirmed alert compares the last complete price, USD 23.00
+PASS real job: actual Tank app, installed skill, Tiger queue/worker, PgStore, Chromium and Workspace; no model or external store call

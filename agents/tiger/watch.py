@@ -17,6 +17,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
+from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import urlparse
 
@@ -477,7 +478,7 @@ def _obs(
         "currency": currency,
         "availability": availability,
         "method": method,
-        "evidence": evidence[:2000],
+        "evidence": evidence[:8000],
     }
 
 
@@ -494,6 +495,82 @@ def _evidence(
         if layout.get("dom"):
             payload["layout"]["dom"] = layout["dom"]
     return json.dumps(payload, default=str)[:2000]
+
+
+def _product_name(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    name = " ".join(value.split())
+    if not name or len(name) > 300 or re.fullmatch(r"untitled\s+page", name, re.I):
+        return None
+    return name
+
+
+def _page_name(html: str) -> str | None:
+    """Read a unique product heading; never use a document title or URL as a name."""
+    class Names(HTMLParser):
+        def __init__(self):
+            super().__init__(convert_charrefs=True)
+            self.stack = []
+            self.names = set()
+
+        def handle_starttag(self, tag, attrs):
+            values = dict(attrs)
+            parent = self.stack[-1] if self.stack else {}
+            skipped = parent.get("skip", False) or tag in {"script", "style", "nav", "header", "footer"}
+            product = parent.get("product", False) or any(part in (values.get("class") or "").split()
+                for part in ("product_main", "product-information", "product-details"))
+            selected = not skipped and (tag == "h1" or product and tag == "h2"
+                or product and values.get("itemprop") == "name")
+            if tag not in {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}:
+                self.stack.append({"tag": tag, "skip": skipped, "product": product, "selected": selected, "text": ""})
+
+        def handle_data(self, data):
+            if self.stack and not self.stack[-1]["skip"]:
+                for entry in self.stack:
+                    if entry["selected"] and len(entry["text"]) <= 300:
+                        entry["text"] += data
+
+        def handle_endtag(self, tag):
+            for index in range(len(self.stack) - 1, -1, -1):
+                if self.stack[index]["tag"] == tag:
+                    for entry in self.stack[index:]:
+                        if entry["selected"] and (name := _product_name(entry["text"])):
+                            self.names.add(name)
+                    del self.stack[index:]
+                    break
+
+    scan = Names()
+    scan.feed(html)
+    scan.close()
+    return next(iter(scan.names)) if len(scan.names) == 1 else None
+
+
+def _reading_fields(evidence: Any) -> dict[str, Any]:
+    try:
+        value = json.loads(evidence or "{}")
+    except (ValueError, TypeError):
+        value = {}
+    if not isinstance(value, dict):
+        value = {}
+    return {"product_name": _product_name(value.get("product_name")),
+            "last_product_name": _product_name(value.get("last_product_name")),
+            "issue": value.get("issue") if value.get("issue") in {
+                "missing_name", "missing_price", "missing_currency", "missing_stock"} else None}
+
+
+def _reading_evidence(evidence: str, name: str | None, last_name: str | None, issue: str | None = None) -> str:
+    try:
+        payload = json.loads(evidence)
+    except ValueError:
+        payload = {"detail": evidence}
+    if not isinstance(payload, dict):
+        payload = {}
+    payload.update(product_name=name, last_product_name=name or last_name, issue=issue)
+    # The original evidence is bounded at 2,000 chars and each name at 300.
+    # Allow their JSON encoding too; truncating it would lose the saved layout
+    # and let a later check learn a changed page as if it were the first read.
+    return json.dumps(payload, default=str, ensure_ascii=False)
 
 
 async def ensure_tables(conn: Any, schema: str = SCHEMA) -> None:
@@ -572,6 +649,7 @@ def _obs_out(row: Any) -> dict[str, Any]:
         "availability": row["availability"],
         "method": row["method"],
         "evidence": row["evidence"],
+        **_reading_fields(row["evidence"]),
     }
 
 
@@ -833,6 +911,7 @@ class MemoryStore:
             "availability": row.get("availability"),
             "method": row.get("method"),
             "evidence": row.get("evidence"),
+            **_reading_fields(row.get("evidence")),
         }
         self.observations.append(saved)
         return dict(saved)
@@ -912,16 +991,26 @@ def _save_png(files: Any, tenant_id: str, png_base64: str | None, stamp: datetim
 
 async def external_observation(store, tenant_id, watch, item, method, receipt, clock):
     url = watch["url"]
+    latest = await store.latest_observation(tenant_id, url)
+    fields = _reading_fields(latest.get("evidence") if latest else None)
+    name = _product_name(item.get("name"))
+    issue = "missing_name" if not name else None
+    if not issue and not re.fullmatch(r"[A-Za-z]{3}", str(item.get("currency") or "")):
+        issue = "missing_currency"
     quantity = item.get("quantity")
     availability = ("in_stock" if Decimal(str(quantity)) > 0 else "out_of_stock") if quantity is not None else None
-    current = await store.add_observation(_obs(tenant_id, url, clock(), item.get("price"), item.get("currency"),
-        availability, method, json.dumps({"method": method, "receipt": receipt}, default=str)))
+    price = None if issue else item.get("price")
+    saved_method = "unread" if issue else method
+    evidence = _reading_evidence(json.dumps({"method": method, "receipt": receipt}, default=str), name,
+                                 fields["product_name"] or fields["last_product_name"], issue)
+    current = await store.add_observation(_obs(tenant_id, url, clock(), price, item.get("currency"),
+        availability, saved_method, evidence))
     previous = await store.previous_observation(tenant_id, url, current["id"])
     stock_before = await _last_known_stock(store, tenant_id, url, current["id"])
     found = alerts_for(previous, current, watch.get("threshold") or 0, stock_before,
                        price_enabled=watch.get("alert_price", True), stock_enabled=watch.get("alert_stock", True))
     saved = [await store.add_alert({"tenant_id": tenant_id, "url": url, "ts": clock(), **alert}) for alert in found]
-    return {"status": "observed", "url": url, "method": method, "price": item.get("price"),
+    return {"status": "can't read" if issue else "observed", "url": url, "method": saved_method, "price": price,
             "stock": availability, "alerts": saved, "observation": current, "receipt": receipt}
 
 
@@ -943,6 +1032,9 @@ async def run_check(
     url = watch["url"]
     if str(watch.get("tenant_id")) != str(tenant_id):
         return {"status": "skipped", "url": url, "alerts": []}
+    previous_row = await store.latest_observation(tenant_id, url)
+    previous_fields = _reading_fields(previous_row.get("evidence") if previous_row else None)
+    last_name = previous_fields["product_name"] or previous_fields["last_product_name"]
     if feed is not None:
         try:
             official = await feed(str(tenant_id), url)
@@ -958,7 +1050,8 @@ async def run_check(
     await limiter.wait(host)
     page = await render(url, session_for_url(url), agent, str(tenant_id))
     if page.get("challenge") or page.get("blocked_by_check") or page.get("status") in {401, 403, 429}:
-        row = await store.add_observation(_obs(tenant_id, url, clock(), None, None, None, "blocked", "blocked"))
+        detail = _reading_evidence("blocked", None, last_name) if last_name else "blocked"
+        row = await store.add_observation(_obs(tenant_id, url, clock(), None, None, None, "blocked", detail))
         return {"status": "blocked", "url": url, "alerts": [], "observation": row}
     if page.get("portal_item"):
         return await external_observation(store, tenant_id, watch, page["portal_item"], "private_portal",
@@ -966,12 +1059,13 @@ async def run_check(
     html = page.get("html") or ""
     if not page.get("ok") or not html:
         detail = str(page.get("error") or "unread")[:300]
+        if last_name:
+            detail = _reading_evidence(detail, None, last_name)
         row = await store.add_observation(_obs(tenant_id, url, clock(), None, None, None, "error", detail))
         return {"status": "error", "url": url, "alerts": [], "observation": row}
 
     extracted = await extract(html, url)
     items = list(extracted.get("items") or [])
-    previous_row = await store.latest_observation(tenant_id, url)
     stored = layout_from_evidence(previous_row.get("evidence") if previous_row else None)
     if stored is None or stored.get("primary") == "ocr":
         signature = learn_layout(html, extracted)
@@ -1006,10 +1100,27 @@ async def run_check(
         chosen = None
     currency = chosen.get("currency") if chosen else None
     availability = _stock_for(method, chosen.get("availability") if chosen else None, html)
+    name = _product_name(chosen.get("name")) if chosen else None
+    if chosen is None:
+        names = {_product_name(item.get("name")) for item in items}
+        names.discard(None)
+        name = next(iter(names)) if len(names) == 1 else None
+    name = name or _page_name(html)
+    issue = None
+    if not name:
+        issue = "missing_name"
+    elif price is None:
+        issue = "missing_price"
+    elif not currency or not re.fullmatch(r"[A-Za-z]{3}", str(currency)):
+        issue = "missing_currency"
+    elif _known_stock(availability) is None:
+        issue = "missing_stock"
+    if issue in {"missing_name", "missing_currency"}:
+        method, price = "unread", None
     saved_file = _save_png(files, str(tenant_id), png if isinstance(png, str) else None, clock())
     current = await store.add_observation(_obs(
         tenant_id, url, clock(), price, currency, availability, method,
-        _evidence(method, price, saved_file, layout, availability),
+        _reading_evidence(_evidence(method, price, saved_file, layout, availability), name, last_name, issue),
     ))
     previous = await store.previous_observation(tenant_id, url, current["id"])
     stock_before = await _last_known_stock(store, tenant_id, url, current["id"])

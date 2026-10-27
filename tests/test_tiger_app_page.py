@@ -39,8 +39,10 @@ def test_panel_stays_fixed_and_split_in_three():
     assert "panel-top" in source
     assert "panel-own" in source
     assert "panel-bottom" in source
-    assert "Your account" in source
-    assert "Account name" not in source
+    assert "Your account" not in source
+    assert 'name="label"' not in (PAGE / "view.tsx").read_text()
+    assert "Account name could not be loaded." in source
+    assert '|| "Account name"' not in source
     assert "Dashboard" in source
     assert "Tasks" in source
     assert "Chats" in source
