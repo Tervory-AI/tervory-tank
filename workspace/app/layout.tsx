@@ -26,12 +26,13 @@ async function readAccess(): Promise<ShellAccess> {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const access = await accessForRequest();
   return (
-    <ClerkProvider>
-      <html lang="en" className={`${jost.variable} ${inter.variable} ${mono.variable}`}>
-        <body>
+    // Clerk 7 (Core 3): ClerkProvider sits inside <body>, not around <html>.
+    <html lang="en" className={`${jost.variable} ${inter.variable} ${mono.variable}`}>
+      <body>
+        <ClerkProvider>
           <Shell founder={access.founder} reviewer={access.reviewer} readAccess={readAccess}>{children}</Shell>
-        </body>
-      </html>
-    </ClerkProvider>
+        </ClerkProvider>
+      </body>
+    </html>
   );
 }
