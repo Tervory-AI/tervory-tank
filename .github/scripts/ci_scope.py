@@ -21,6 +21,7 @@ SAFETY = (
     "test_c10_rooms.py", "test_tenant_scoping.py", "test_bf2_tank_guards.py",
     "test_rig_isolation.py", "test_*region*.py", "test_*schema*.py",
     "test_rig_postgres.py", "test_deploy_changed.py", "test_train1.py",
+    "test_tank_one_door.py",
 )
 
 
