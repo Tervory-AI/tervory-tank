@@ -1,8 +1,8 @@
 # Market Lab local review
 
-Branch: `codex/market-lab-works`. PR remains draft. The [fifth review](https://github.com/zenascapetown-code/tervory-tank/pull/336#issuecomment-6430543827), head `bf14c9c`, confirmed the five previous fixes and the complete job against real Tank. Its remaining finding was the stale skill bundle. This follow-up adds `market.series_fetch/1.2.0` and preserves every older version.
+Branch: `codex/market-lab-works`. PR remains draft. This addresses both findings in the [sixth review](https://github.com/zenascapetown-code/tervory-tank/pull/336#issuecomment-6430759996), head `c0b84f5`: the startup-incompatible case shape and the missing 1.1.1 baseline cases.
 
-Fresh-clone lint, candidate-runtime, skill-contract and product tests below ran at implementation `a63a29468ce8aff2a3a6495163c2c4c5d1ec7919`, with newly installed dependencies. The existing page screenshots, production build and Postgres proof remain from `8351de0`; no page or route changed in this follow-up. The room's only source change here removes one unused import.
+The real Tank app was started from `tank/` with `python3 -m uvicorn main:app`, its full lifespan and an empty local Postgres database. It reached **Application startup complete**, returned a healthy response and imported all seven candidate cases. The full startup log is pasted below. Fresh-clone validation used implementation `75076c0f0e6b4fcca3904acfd624612e005be95d`, new dependency installations and database `market_lab_startup_final_test`. Later changes only record proof. Page screenshots and the production build remain explicitly labelled as earlier evidence from `8351de0`.
 
 ## The job, step by step, as a client does it
 
@@ -15,8 +15,10 @@ Intended client journey; the client's own signed-in session has not been verifie
 
 ## What changed
 
-- **Fifth-review finding, versioned bundle:** added `tank/skills/market.series_fetch/1.2.0/` as a copy of 1.1.0 with the updated 21-file feed dependency closure, including the newly required `published.py`. `skill.yaml`, `CHANGELOG.md` and `BUNDLE.md` describe the new candidate. `run.py`, `pure.py` and the three listing fixtures remain identical to 1.1.0. Versions 1.0.0, 1.1.0 and 1.1.1 are untouched.
-- **Bundle regressions:** `tests/test_candidate_eval_runtime.py` compares the newest version to the source, retains the legacy runtime test, and runs the new version in a separate Tank-only interpreter. Eight Skala cases cover the preserved adapters, county/state counts and refusal cases; eight package-local feed cases cover all six refreshed modules plus the published-table dependency. All sockets are blocked and imported feed modules must belong to the selected bundle.
+- **Startup case shape:** every 1.2.0 JSONL case has `input` and `expected`, matching the real Gold importer. The two exception assertions moved to ordinary offline cases in `evals/feed_cases.py`; imported cases use no `expected_error` field.
+- **Latest-version baseline:** rebuilt 1.2.0 from 1.1.1, preserving its five cases verbatim, including **decimal CSV observation**. Their complete Skala case hashes are unchanged. Added the county and Texas listing cases for seven imported cases total. `CHANGELOG.md` and `BUNDLE.md` describe this base. All older packages remain untouched.
+- **Bundle and regression checks:** the 21 bundled Python/SQL files still byte-match the room's feeds. `tests/test_candidate_eval_runtime.py` checks all package startup shapes and the five baseline hashes, then runs the real eval runner and ten package-local cases in an isolated Tank-only interpreter. The case module is explicitly invoked there; pytest no longer attempts to import it without its bundle path.
+- **Real startup proof:** `agents/market_lab/fixture_proof/boot_tank.py` starts the unmodified Tank entry point against guarded local Postgres, waits for `/health`, verifies package registration and all seven Gold rows, and saves its startup/shutdown log. `tests/test_market_lab_real_tank.py` now also checks those rows before exercising the existing job routes. No Tank module, lifespan, method or client is replaced.
 - **Lint for copied code:** removed the unused `world_bank_url` import from `agents/market_lab/feeds/fetch.py` and its 1.2.0 copy, preserving byte parity and the existing lint rule.
 
 The following changes were confirmed fixed by the fifth reviewer:
@@ -34,7 +36,7 @@ file changed by the whole PR, including previous commits. Binary images have no
 text lines; deleted code links to its former lines.
 
 <details>
-<summary>Changed files and line references (110 files)</summary>
+<summary>Changed files and line references (112 files)</summary>
 
 | Changed file | Line references |
 | --- | --- |
@@ -65,6 +67,7 @@ text lines; deleted code links to its former lines.
 | [agents/market_lab/evidence/question-375.png](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/agents/market_lab/evidence/question-375.png) | Binary screenshot; no text lines |
 | [agents/market_lab/evidence/source-1440.png](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/agents/market_lab/evidence/source-1440.png) | Binary screenshot; no text lines |
 | [agents/market_lab/evidence/source-375.png](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/agents/market_lab/evidence/source-375.png) | Binary screenshot; no text lines |
+| [agents/market_lab/evidence/tank-startup.txt](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/agents/market_lab/evidence/tank-startup.txt#L1) | 1–12 |
 | [agents/market_lab/feeds/adapters.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/agents/market_lab/feeds/adapters.py#L361) | 361–364, 366 |
 | [agents/market_lab/feeds/cli.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/agents/market_lab/feeds/cli.py#L5) | 5, 15, 38–39, 42–50 |
 | [agents/market_lab/feeds/collect.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/agents/market_lab/feeds/collect.py#L1) | 1–138 |
@@ -78,6 +81,7 @@ text lines; deleted code links to its former lines.
 | [agents/market_lab/feeds/runner.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/agents/market_lab/feeds/runner.py#L14) | 14, 111–115 |
 | [agents/market_lab/fixture_proof/.gitignore](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/agents/market_lab/fixture_proof/.gitignore#L1) | 1 |
 | [agents/market_lab/fixture_proof/__init__.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/agents/market_lab/fixture_proof/__init__.py#L1) | 1 |
+| [agents/market_lab/fixture_proof/boot_tank.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/agents/market_lab/fixture_proof/boot_tank.py#L1) | 1–105 |
 | [agents/market_lab/fixture_proof/capture.mjs](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/agents/market_lab/fixture_proof/capture.mjs#L1) | 1–195 |
 | [agents/market_lab/fixture_proof/package.json](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/agents/market_lab/fixture_proof/package.json#L1) | 1–8 |
 | [agents/market_lab/fixture_proof/requirements.txt](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/agents/market_lab/fixture_proof/requirements.txt#L1) | 1–4 |
@@ -87,10 +91,10 @@ text lines; deleted code links to its former lines.
 | [tank/Dockerfile](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/Dockerfile#L5) | 5 |
 | [tank/main.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/main.py#L3426) | 3426–3427 |
 | [tank/market_lab_routes.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/market_lab_routes.py#L1) | 1–42 |
-| [tank/skills/market.series_fetch/1.2.0/BUNDLE.md](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/BUNDLE.md#L1) | 1–42 |
-| [tank/skills/market.series_fetch/1.2.0/CHANGELOG.md](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/CHANGELOG.md#L1) | 1–14 |
-| [tank/skills/market.series_fetch/1.2.0/evals/cases.jsonl](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/evals/cases.jsonl#L1) | 1–8 |
-| [tank/skills/market.series_fetch/1.2.0/evals/test_feeds.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/evals/test_feeds.py#L1) | 1–146 |
+| [tank/skills/market.series_fetch/1.2.0/BUNDLE.md](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/BUNDLE.md#L1) | 1–59 |
+| [tank/skills/market.series_fetch/1.2.0/CHANGELOG.md](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/CHANGELOG.md#L1) | 1–12 |
+| [tank/skills/market.series_fetch/1.2.0/evals/cases.jsonl](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/evals/cases.jsonl#L1) | 1–7 |
+| [tank/skills/market.series_fetch/1.2.0/evals/feed_cases.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/evals/feed_cases.py#L1) | 1–157 |
 | [tank/skills/market.series_fetch/1.2.0/feeds/__init__.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/feeds/__init__.py#L1) | 1–3 |
 | [tank/skills/market.series_fetch/1.2.0/feeds/adapters.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/feeds/adapters.py#L1) | 1–705 |
 | [tank/skills/market.series_fetch/1.2.0/feeds/batch_guard.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/feeds/batch_guard.py#L1) | 1–352 |
@@ -120,13 +124,13 @@ text lines; deleted code links to its former lines.
 | [tank/skills/market.series_fetch/1.2.0/tests/fixtures/feeds/listing/2024-02.tsv](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tank/skills/market.series_fetch/1.2.0/tests/fixtures/feeds/listing/2024-02.tsv#L1) | 1–5 |
 | [tests/fixtures/feeds/checks/counts.csv](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tests/fixtures/feeds/checks/counts.csv#L2) | 2–5 |
 | [tests/fixtures/market_lab_questions.json](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tests/fixtures/market_lab_questions.json#L1) | 1–14 |
-| [tests/test_candidate_eval_runtime.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tests/test_candidate_eval_runtime.py#L16) | 16–17, 37, 39, 62, 65, 73, 83–92, 126, 128–129, 140–150, 160, 163 |
+| [tests/test_candidate_eval_runtime.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tests/test_candidate_eval_runtime.py#L16) | 16–17, 37, 39, 62, 65, 73, 83–92, 100–124, 151, 153–154, 165–175, 185, 188 |
 | [tests/test_market_lab.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tests/test_market_lab.py#L176) | 176–177 |
 | [tests/test_market_lab_evidence.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tests/test_market_lab_evidence.py#L1) | 1–215 |
 | [tests/test_market_lab_page.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tests/test_market_lab_page.py#L72) | 72, 87–90, 95, 97, 100, 102, 110, 113 |
 | [tests/test_market_lab_postgres.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tests/test_market_lab_postgres.py#L1) | 1–53 |
 | [tests/test_market_lab_public_pages.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tests/test_market_lab_public_pages.py#L1) | 1–93 |
-| [tests/test_market_lab_real_tank.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tests/test_market_lab_real_tank.py#L1) | 1–87 |
+| [tests/test_market_lab_real_tank.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tests/test_market_lab_real_tank.py#L1) | 1–89 |
 | [tests/test_market_lab_review.py](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/tests/test_market_lab_review.py#L1) | 1–322 |
 | [workspace/app/api/market-lab/chat/route.ts](https://github.com/zenascapetown-code/tervory-tank/blob/65067a43a0d27d54b48633bf6db4f3fc211ec05f/workspace/app/api/market-lab/chat/route.ts#L1-L63) | Deleted; previous lines 1–63 |
 | [workspace/app/market-lab/actions.ts](https://github.com/zenascapetown-code/tervory-tank/blob/codex/market-lab-works/workspace/app/market-lab/actions.ts#L4) | 4–5, 6, 8–10 |
@@ -153,9 +157,9 @@ text lines; deleted code links to its former lines.
 
 **Decisions I made**
 
-- Use the founder's exact lane extension: a new 1.2.0 package and the candidate-runtime test. Do not edit an approved package, its fixtures, Tank's Dockerfile or Tank's main module.
+- Follow the corrected base: build 1.2.0 from 1.1.1 and preserve every baseline case byte and hash. Keep exception assertions outside the startup-imported JSONL. Preserve both older versions and the frozen Tank files.
 - Retain the existing bundled dependency closure and add `published.py`, which the updated fetch functions now import. Leave unrelated CLI/Postgres/page modules outside this skill, as in the previous bundle.
-- Exercise changed feed behavior with package-local offline cases and the real Skala runner in fresh processes. Byte parity alone would miss missing dependencies or invalid results.
+- Verify the actual Tank startup and Gold import against a new local database on the final code revision, in addition to offline evals. Generate local test keys only in process memory and retain the complete startup log.
 
 - Prefer no answer when the question contains an unsupported meaningful qualifier. Matching stays deterministic and uses the saved observation, its source and its reporting period; no model is called.
 - Require a subject from the observation/source. Unit words are only qualifiers unless they also genuinely name the observation, as “listings” does. Keep both positive and negative ask-path regressions.
@@ -168,7 +172,7 @@ text lines; deleted code links to its former lines.
 
 **GitHub CI evidence**
 
-For reviewed head `bf14c9c604a125fc2a47c829667561b7c71736ef`, GitHub's [Tank job](https://github.com/zenascapetown-code/tervory-tank/actions/runs/40424323187/job/121926257139) passed **Lint** and failed **Secret scan and tests**. The fifth reviewer reproduced the stale-bundle failure in `test_candidate_eval_runtime.py` and identified other main-branch failures separately. The Workspace, savings-page and rig-admin checks passed. The gate failed while installing Chromium; browser tests and Lighthouse were skipped. Those are previous-head results, not claims for this follow-up.
+For reviewed head `c0b84f5bb35f4a394578379a7db0b8f17729a1e6`, GitHub's [Tank job](https://github.com/zenascapetown-code/tervory-tank/actions/runs/40426894731/job/121934857446) passed **Lint** and failed **Secret scan and tests** with exit code 2. The local sixth-review investigation also reproduced pytest collection failing when it imported the old `evals/test_feeds.py` without a bundle import path; that file is now an explicitly invoked `feed_cases.py`. This does not claim the unavailable CI log proved the same cause. Previous-head results do not count as current-head passes.
 
 <!-- HEAD_CI_STATUS -->
 The PR body records the actual check names, steps and outcomes observed for its
@@ -192,33 +196,34 @@ npm_config_cache=/tmp/market-lab-review-npm npm --prefix agents/market_lab/fixtu
 
 The validation checkout was cloned locally from the same Git commit before it was pushed. Both dependency installations started empty. The explicit npm cache keeps writes within the cloud workspace's permitted temporary directory.
 
-**Fresh-clone candidate-runtime regression** — run after the setup above:
+**Fresh-clone candidate-runtime regression** — after the setup above:
 
 ```bash
-PYTHONPATH=tank .venv/bin/python -m pytest -q tests/test_candidate_eval_runtime.py
+PYTHONPATH=tank .venv/bin/python3 -m pytest --collect-only -q tank/skills/market.series_fetch tests/test_candidate_eval_runtime.py
+PYTHONPATH=tank .venv/bin/python3 -m pytest -q tests/test_candidate_eval_runtime.py
 ```
 
-Actual output from the clean clone at `a63a294`:
+Collection: **7 tests collected in 0.06s**, without an import error. Actual test output:
 
 ```text
-.....                                                                    [100%]
-5 passed in 1.45s
+.......                    [100%]
+7 passed, 622 subtests passed in 1.93s
 ```
 
-This includes the formerly failing bundle comparison, all 8/8 new-version Skala cases, all 8/8 bundled feed cases, and the preserved legacy cases in separate interpreters containing only Tank's shipped files. No external HTTP or model call is allowed. The new feed cases cover county names, publisher links, commodity units, published-table dates/values, pagination refusal, import/export fields and persistent blocked-site handling.
+The 622 subtests check the real package files' startup case shape. The tests also verify all five 1.1.1 case hashes, all **7/7** candidate evals, all **10/10** bundled cases, the unchanged legacy runtime and byte-for-byte source/fixture parity. Isolated eval processes contain only Tank's shipped files and cannot open sockets or call models.
 
 ```bash
-PYTHONPATH=tank .venv/bin/python -m pytest -q tests/test_skala_eval_contract.py -k 'market.series_fetch or latest_packages_have_at_least_five_cases'
+PYTHONPATH=tank .venv/bin/python3 -m pytest -q tests/test_skala_eval_contract.py -k 'market.series_fetch or latest_packages_have_at_least_five_cases'
 ```
 
 ```text
 ...                                                                      [100%]
-3 passed, 69 deselected in 1.01s
+3 passed, 69 deselected in 0.97s
 ```
 
-The clean clone was created with `git clone --no-local --branch codex/market-lab-works /workspace/tervory-tank /workspace/market-lab-bundle-review` before the normal push, at the implementation SHA above. Its virtual environment and Workspace packages were installed from scratch. Later changes in this follow-up only record this proof. The original fresh-clone commands work against the pushed branch.
+The validation clone was created with `git clone --no-local --branch codex/market-lab-works /workspace/tervory-tank /workspace/market-lab-startup-final` before the normal push, at `75076c0f0e6b4fcca3904acfd624612e005be95d`. Its virtual environment and Workspace packages were installed from scratch. The setup above reproduces it against the pushed branch.
 
-The Git tree for `tank/skills/market.series_fetch/1.1.0` is still `6ba5757e452ebb4279aaa65b8653a7e8e09630db`, identical to reviewed head `bf14c9c`. Trees for 1.0.0 and 1.1.1 and blobs for `tank/main.py`/`tank/Dockerfile` also match that reviewed head. No older skill version changed.
+The Git trees for 1.1.0 (`6ba5757e452ebb4279aaa65b8653a7e8e09630db`) and 1.1.1 (`32e557233bf323a73d05447445751314ef981c31`) match reviewed head `c0b84f5` exactly. Version 1.0.0 and the `tank/main.py`/`tank/Dockerfile` blobs also match. No older version or frozen Tank file changed.
 
 **CI lint command** — the exact command used by the Tank CI job:
 
@@ -234,19 +239,15 @@ Result: **All checks passed!** The unused `latest_checks` import is removed.
 PYTHONPATH=tank .venv/bin/python -m pytest -q tests/test_market*.py tests/test_feeds*.py
 ```
 
-Result on the new clean clone at `a63a294`: **196 passed, 2 skipped, 5 warnings in 10.42s**. The two skipped tests require a local database and pass separately below. The 15 TypeScript model tests run within this suite. The warnings are existing FastAPI startup-handler deprecations.
-
-**Retained proof from `8351de0`: Postgres, build and page**
-
-These checks and captures below were not rerun for this bundle-only follow-up. The fifth reviewer independently confirmed the real-Tank job at `bf14c9c`. Their exact reproduction commands and observed results remain here.
+Result on the final clean clone at `75076c0`: **196 passed, 2 skipped, 5 warnings in 10.23s**. The two skipped tests require a local database and pass separately below. The 15 TypeScript model tests run within this suite. The warnings are existing FastAPI startup-handler deprecations.
 
 **Empty local Postgres** — this temporary database contains no production data or credentials. The published port is loopback only:
 
 ```bash
 env -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_TLS -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH \
   docker --host=unix:///var/run/docker.sock run --detach \
-  --name market-lab-review-postgres --publish 127.0.0.1:54330:5432 \
-  --env POSTGRES_HOST_AUTH_METHOD=trust --env POSTGRES_DB=market_lab_review_test \
+  --name market-lab-startup-postgres --publish 127.0.0.1:54330:5432 \
+  --env POSTGRES_HOST_AUTH_METHOD=trust --env POSTGRES_DB=market_lab_startup_final_test \
   --tmpfs /var/lib/postgresql/data \
   postgres@sha256:9e2cf6287f25c3151f4c9421ccce2b17f3e60061c111a29165e0d2cdd9ff0a97
 ```
@@ -255,15 +256,56 @@ Wait until this reports `accepting connections`:
 
 ```bash
 env -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_TLS -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH \
-  docker --host=unix:///var/run/docker.sock exec market-lab-review-postgres \
-  pg_isready -U postgres -d market_lab_review_test
-DATABASE_URL=postgresql://postgres@127.0.0.1:54330/market_lab_review_test PYTHONPATH=tank \
+  docker --host=unix:///var/run/docker.sock exec market-lab-startup-postgres \
+  pg_isready -U postgres -d market_lab_startup_final_test
+```
+
+**Start the real Tank** — from the repository root:
+
+```bash
+DATABASE_URL=postgresql://postgres@127.0.0.1:54330/market_lab_startup_final_test \
+  .venv/bin/python3 agents/market_lab/fixture_proof/boot_tank.py --log /tmp/market-lab-tank-startup.txt
+```
+
+The helper launches the following command with `cwd=tank`, using the clone's interpreter, a free loopback port and generated local keys held only in memory:
+
+```bash
+python3 -m uvicorn main:app --host 127.0.0.1 --port <free-loopback-port> --no-access-log
+```
+
+It uses the full Tank lifespan, actual pool/schema, all shipped packages and Gold import. No fixture replaces Tank. Redis was not started for this local proof; the optional-cache warning is included in the complete captured log. [Stored startup log](evidence/tank-startup.txt):
+
+```text
+Real Tank startup; cwd=tank; python3 -m uvicorn main:app (loopback, access log off)
+INFO:     Started server process [276439]
+INFO:     Waiting for application startup.
+redis unavailable, rung-4 cache off: Error 111 connecting to 127.0.0.1:1. Connection refused.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:57743 (Press CTRL+C to quit)
+GET /health: 200, ok=true
+Gold import: all 7/7 market.series_fetch 1.2.0 cases present, including decimal CSV observation.
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [276439]
+```
+
+The database started empty (`createdb -T template0 market_lab_startup_final_test` in the disposable local Postgres container). The helper confirms every candidate input/expected pair is present in `tank.gold_examples` for the platform tenant. It then stops its own Tank process cleanly.
+
+**Real-Tank route and Postgres regression** — on that same local test database:
+
+```bash
+DATABASE_URL=postgresql://postgres@127.0.0.1:54330/market_lab_startup_final_test PYTHONPATH=tank \
   .venv/bin/python -m pytest -q tests/test_market_lab_postgres.py tests/test_market_lab_real_tank.py
 ```
 
-Result: **2 passed**. The existing database test applies the schema twice, stores all 14 fixture feeds, checks isolation, excludes fixture-classified rows from normal reads, and rolls back.
+Result from the final clone: **2 passed in 2.80s**. The existing database test applies the schema twice, stores all 14 fixture feeds, checks isolation, excludes fixture-classified rows from normal reads, and rolls back.
 
-The new integration test starts the real `tank/main.py` through its deployed `uvicorn main:app` entry point, with its own startup, database pool, schema, authentication and `_http` client. It starts the real Market Lab `app.py` routes separately. Nothing in Tank is mocked, patched or replaced. A local HTTP forwarder maps only the room's Docker hostname to its loopback port and refuses other destinations. The test exercises overview, ask and each cited document, rejects unauthenticated/agent-key/other-tenant access, queues refresh through the real room API, verifies the tenant's Postgres job and checks that repeated refresh requests deduplicate. It also sends all ten unrelated/unsupported questions through real Tank and checks the exact no-data response with empty facts and sources, while a Texas-listings question still returns stored facts. The room scheduler/worker is not started: this proves refresh queueing, not live collection or completion.
+The new integration test starts the real `tank/main.py` through its deployed `uvicorn main:app` entry point, with its own startup, database pool, schema, authentication and `_http` client. It starts the real Market Lab `app.py` routes separately. Nothing in Tank is mocked, patched or replaced. A local HTTP forwarder maps only the room's Docker hostname to its loopback port and refuses other destinations. The test exercises overview, ask and each cited document, rejects unauthenticated/agent-key/other-tenant access, queues refresh through the real room API, verifies the tenant's Postgres job and checks that repeated refresh requests deduplicate. It first verifies that the real startup registered 1.2.0 and imported all seven Gold cases, including the decimal case. It also sends all ten unrelated/unsupported questions through real Tank and checks the exact no-data response with empty facts and sources, while a Texas-listings question still returns stored facts. The room scheduler/worker is not started: this proves refresh queueing, not live collection or completion.
+
+**Retained build and page proof from `8351de0`**
+
+The build and browser captures below were not rerun for this package/startup follow-up; no Workspace page changed. Their original reproduction commands and results remain here. The page runner can use the local test database prepared above.
 
 **Production build**:
 
@@ -286,7 +328,7 @@ Result: **build passed**, including type checking; **route assertions passed**. 
 **Local page and screenshots** — from the repository root:
 
 ```bash
-DATABASE_URL=postgresql://postgres@127.0.0.1:54330/market_lab_review_test \
+DATABASE_URL=postgresql://postgres@127.0.0.1:54330/market_lab_startup_final_test \
   .venv/bin/python agents/market_lab/fixture_proof/run.py
 ```
 
@@ -312,7 +354,7 @@ The page is `http://127.0.0.1:3046/market-lab`. The runner seeds saved inputs fo
 - every source-publisher link pointing to its separate human-readable dataset page;
 - screenshots at 375px and 1440px, each carrying the local-fixture label.
 
-Ctrl-C stops the runner, Next, Tank, room API and local forwarder. Stop/remove only the `market-lab-review-postgres` test container when finished; its temporary database is disposable.
+Ctrl-C stops the runner, Next, Tank, room API and local forwarder. Stop/remove only the `market-lab-startup-postgres` test container when finished; its temporary database is disposable.
 
 ## Proof
 
