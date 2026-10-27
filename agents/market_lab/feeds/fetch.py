@@ -35,7 +35,6 @@ from feeds.live import (
     ncei_url,
     nws_alerts_url,
     require_env,
-    world_bank_url,
 )
 from feeds.models import SourceSpec
 from feeds.reader import iter_dicts

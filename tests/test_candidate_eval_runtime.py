@@ -13,7 +13,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 LEGACY = ROOT / "tank/skills/market.series_fetch/1.0.0"
-PACKAGE = ROOT / "tank/skills/market.series_fetch/1.1.0"
+PACKAGE = max((ROOT / "tank/skills/market.series_fetch").glob("*/skill.yaml"),
+              key=lambda path: tuple(map(int, path.parent.name.split(".")))).parent
 
 
 def platform_tenant() -> str:
@@ -33,7 +34,9 @@ import asyncio
 import json
 import os
 from pathlib import Path
+import runpy
 import sys
+import unittest
 from unittest.mock import patch
 from uuid import UUID
 
@@ -56,9 +59,10 @@ async def main():
     names = ["radix.verify_business", "radix.entity_links", "radix.account_links",
              "radix.site_risk", "radix.business_risk", "market.series_fetch"]
     summaries = {}
+    version = sys.argv[2]
     with patch("socket.socket", side_effect=AssertionError("Evals must stay offline")):
         for name in names:
-            pkg = packages[(name, "1.0.0")]
+            pkg = packages[(name, version if name == "market.series_fetch" else "1.0.0")]
             contexts = []
             def context():
                 ctx = skala.SkillContext(tenant_id=UUID(sys.argv[1]), skill_ref=pkg.ref,
@@ -66,7 +70,7 @@ async def main():
                 contexts.append(ctx)
                 return ctx
             result = await skala.run_evals(pkg, context)
-            expected = 3 if name == "market.series_fetch" else 7
+            expected = (3 if version == "1.0.0" else 8) if name == "market.series_fetch" else 7
             assert result["total"] == expected, result
             assert result["passed"] == expected and result["score"] == 1.0, result
             assert all(ctx.calls == 0 and ctx.cost_usd == 0 for ctx in contexts)
@@ -76,7 +80,16 @@ async def main():
                 assert listing["result"]["points"] == [
                     {"date": "2024-01-01", "value": 3.0},
                     {"date": "2024-02-01", "value": 2.0}], listing
-    assert Path(sys.modules["feeds"].__file__).is_relative_to(root / "skills/market.series_fetch/1.0.0")
+        package = root / "skills/market.series_fetch" / version
+        if version != "1.0.0":
+            cases = runpy.run_path(str(package / "evals/test_feeds.py"))
+            suite = unittest.defaultTestLoader.loadTestsFromTestCase(cases["BundledFeedCases"])
+            result = unittest.TextTestRunner(verbosity=2).run(suite)
+            assert result.wasSuccessful() and result.testsRun == 8
+            summaries["bundled_feed_cases"] = {"passed": result.testsRun, "total": result.testsRun}
+        for name, module in list(sys.modules.items()):
+            if name == "feeds" or name.startswith("feeds."):
+                assert Path(module.__file__).is_relative_to(package / "feeds"), name
     print(json.dumps(summaries))
 
 asyncio.run(main())
@@ -110,9 +123,10 @@ class CandidateEvalRuntimeTests(unittest.TestCase):
         self.assertNotIn("1.1.0", (LEGACY / "CHANGELOG.md").read_text(encoding="utf-8"))
 
     def test_bundled_feeds_and_fixtures_match_existing_sources(self):
-        self.assertIn("version: 1.1.0", (PACKAGE / "skill.yaml").read_text(encoding="utf-8"))
+        self.assertIn(f"version: {PACKAGE.name}", (PACKAGE / "skill.yaml").read_text(encoding="utf-8"))
         files = [p for p in (PACKAGE / "feeds").rglob("*") if p.is_file() and p.suffix in {".py", ".sql"}]
-        self.assertEqual(len(files), 20)
+        self.assertEqual(len(files), 21)
+        self.assertTrue((PACKAGE / "feeds/published.py").is_file())
         for path in files:
             original = ROOT / "agents/market_lab/feeds" / path.relative_to(PACKAGE / "feeds")
             self.assertEqual(path.read_bytes(), original.read_bytes(), str(path))
@@ -123,6 +137,17 @@ class CandidateEvalRuntimeTests(unittest.TestCase):
             self.assertEqual(path.read_bytes(), original.read_bytes(), str(path))
 
     def test_real_eval_runner_in_tank_only_process(self):
+        report = self.run_isolated("1.0.0")
+        self.assertEqual(len(report), 6)
+        self.assertEqual(report["market.series_fetch"], {"passed": 3, "total": 3})
+
+    def test_newest_eval_runner_and_feed_cases_in_tank_only_process(self):
+        report = self.run_isolated(PACKAGE.name)
+        self.assertEqual(len(report), 7)
+        self.assertEqual(report["market.series_fetch"], {"passed": 8, "total": 8})
+        self.assertEqual(report["bundled_feed_cases"], {"passed": 8, "total": 8})
+
+    def run_isolated(self, version):
         with tempfile.TemporaryDirectory(prefix="tank-eval-runtime-") as folder:
             app = Path(folder)
             # These copies match Tank's Dockerfile: top-level modules + skills.
@@ -132,9 +157,7 @@ class CandidateEvalRuntimeTests(unittest.TestCase):
             env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
             for name in ("PYTHONPATH", "SKILLS_DIR", "RADIX_SOURCE_CIPC_KEY", "RADIX_SOURCE_REGISTER_KEY", "FRED_API_KEY"):
                 env.pop(name, None)
-            result = subprocess.run([sys.executable, "-I", "-c", ISOLATED_EVALS, platform_tenant()],
+            result = subprocess.run([sys.executable, "-I", "-c", ISOLATED_EVALS, platform_tenant(), version],
                                     cwd=app, env=env, text=True, capture_output=True, timeout=60)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            report = json.loads(result.stdout)
-            self.assertEqual(len(report), 6)
-            self.assertEqual(report["market.series_fetch"], {"passed": 3, "total": 3})
+            return json.loads(result.stdout)
