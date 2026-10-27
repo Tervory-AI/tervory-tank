@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 from typing import Any
+from urllib.parse import urlparse
 
 from .client_settings import ApplyMode, ClientAutumbraSettings
 
@@ -131,20 +132,54 @@ def build_owner_update(
         )
     body_lines = [lead, ""]
 
+    def _url_host(url: str) -> str | None:
+        try:
+            parsed = urlparse((url or "").strip())
+        except Exception:
+            return None
+        if parsed.scheme not in {"http", "https"}:
+            return None
+        host = (parsed.hostname or "").lower()
+        return host or None
+
+    def _host_matches(host: str | None, name: str) -> bool:
+        if not host:
+            return False
+        return host == name or host.endswith("." + name)
+
     def _is_real_pr_url(url: str) -> bool:
-        u = (url or "").strip().lower()
-        if not u.startswith("http"):
+        # Host checks via urlparse — not substring-in-URL (CodeQL).
+        try:
+            parsed = urlparse((url or "").strip())
+        except Exception:
             return False
-        if "protect.tervory.com" in u or "/autumbra/" in u:
+        if parsed.scheme not in {"http", "https"}:
             return False
-        return "github.com/" in u or "gitlab.com/" in u
+        host = (parsed.hostname or "").lower()
+        if not host:
+            return False
+        if _host_matches(host, "protect.tervory.com"):
+            return False
+        path = (parsed.path or "").lower()
+        if "/autumbra/" in path:
+            return False
+        return _host_matches(host, "github.com") or _host_matches(host, "gitlab.com")
 
     def _is_matched_public_source(url: str) -> bool:
-        u = (url or "").strip().lower()
-        if not u.startswith("http"):
+        try:
+            parsed = urlparse((url or "").strip())
+        except Exception:
+            return False
+        if parsed.scheme not in {"http", "https"}:
+            return False
+        host = (parsed.hostname or "").lower()
+        if not host:
             return False
         # Our own receipt pages are not a matched public campaign source.
-        if "protect.tervory.com" in u or "tervory.com/autumbra" in u:
+        if _host_matches(host, "protect.tervory.com"):
+            return False
+        path = (parsed.path or "").lower()
+        if _host_matches(host, "tervory.com") and "/autumbra" in path:
             return False
         return True
 
@@ -178,7 +213,17 @@ def build_owner_update(
     else:
         # Dedicated fix report (not the weekly receipts page) keeps the Report link.
         report = (fix_report_url or "").strip()
-        if report and "protect.tervory.com/autumbra/receipts" not in report:
+        report_host = _url_host(report)
+        report_path = ""
+        if report:
+            try:
+                report_path = (urlparse(report).path or "").lower()
+            except Exception:
+                report_path = ""
+        if report and not (
+            _host_matches(report_host, "protect.tervory.com")
+            and "/autumbra/receipts" in report_path
+        ):
             body_lines.append(
                 f"You chose that we never touch your code. Here is exactly what to fix and how. "
                 f"{_link('Report', report)} "

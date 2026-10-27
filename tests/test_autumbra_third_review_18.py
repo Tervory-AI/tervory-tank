@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+from urllib.parse import urlparse
 import hmac
 import json
 import time
@@ -423,7 +424,7 @@ def test_14_no_fixed_cve_without_advisory(tmp_path: Path):
     )
     assert watch2["severity"] == "critical"
     assert "CVE-2026-109618" in watch2["cve_ids"]
-    assert "nvd.nist.gov" in (watch2.get("advisory_url") or "")
+    assert (urlparse(watch2.get("advisory_url") or "").hostname or "").lower() == "nvd.nist.gov"
     load_market_lab_advisories([])
 
 

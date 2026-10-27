@@ -832,8 +832,10 @@ def create_app() -> FastAPI:
                             advisory=advisory,
                         )
                     except ValueError as exc:
+                        # Fixed copy only — never echo exception/stack to the caller (CodeQL).
+                        detail = BURN_DETAIL if isinstance(exc, ThreatBurned) else "invalid threat payload"
                         return JSONResponse(
-                            {"accepted": False, "stored": False, "detail": str(exc)},
+                            {"accepted": False, "stored": False, "detail": detail},
                             status_code=400,
                         )
                     queued = bool(queue_receipt.get("queued"))

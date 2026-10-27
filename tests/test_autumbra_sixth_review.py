@@ -240,7 +240,7 @@ def test_5_registered_client_site_accepted_unregistered_burned(tmp_path):
 
 def test_5b_register_helper_and_invalid_watched_host():
     added = register_client_watched_hosts(["Shop-A.Example.COM", "not a host", "http://evil.com"])
-    assert "shop-a.example.com" in added
+    assert added == ["shop-a.example.com"]
     with pytest.raises(Exception):
         ClientAutumbraSettings(
             tenant_id=TENANT,
