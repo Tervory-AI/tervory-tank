@@ -40,7 +40,8 @@ Each fix is isolated in a temporary checkout. Python fixes replace the release's
 complete hash set from PyPI, update matching inputs/constraints and resolve wheels
 with `pip download --require-hashes --only-binary=:all:`. Node fixes change the
 manifest/override, resolve lock metadata with scripts disabled, and run
-`npm ci --ignore-scripts`. The changed locks are scanned again before publication.
+`npm ci --ignore-scripts`. The changed locks are scanned again before publication; a newly vulnerable
+transitive dependency blocks the proposed fix.
 No source build hooks or npm lifecycle scripts run during this process.
 
 A package/fixed-version pair gets one deterministic branch and one draft PR across
@@ -57,7 +58,8 @@ Files changed for the updated versions/hashes, then Checks for install-pins,
 gitleaks and the application tests. No live client page changes in this feature.
 
 The PR gate in `secrets.yml` runs on every PR, including docs-only changes. It
-rejects every new mutable install relative to the trusted PR base and prints the
+checks shell commands, Python command lists and package scripts. It rejects every
+new mutable install relative to the trusted PR base and prints the
 inherited migration count. Running `check_install_pins.py` without `--base` is the
 full-repository audit. #341 owns clearing existing migration debt.
 

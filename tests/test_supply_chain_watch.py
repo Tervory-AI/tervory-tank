@@ -255,3 +255,15 @@ def test_nightly_is_default_branch_only_and_does_not_run_pr_code():
     run = next(step for step in steps if step.get("name", "").startswith("Scan every lock"))
     assert "secrets.SUPPLY_CHAIN_GITHUB_TOKEN" in run["env"]["GH_TOKEN"]
     assert "--publish" in run["run"]
+
+
+def test_fix_cannot_introduce_a_new_vulnerable_transitive_dependency(tmp_path, monkeypatch):
+    monkeypatch.setattr(fixes, "python_fix", lambda *args: None)
+    monkeypatch.setattr(fixes, "inventory", lambda *args: Inventory([], {"requirements.lock": "software"}))
+    monkeypatch.setattr(fixes, "scan", lambda *args: {"complete": True, "findings": [
+        {"ecosystem": "PyPI", "package": "starlette", "version": "0.36.3", "locks": ["requirements.lock"]},
+    ]})
+    fix = {"ecosystem": "PyPI", "package": "httpx", "versions": ["0.27.2"], "target": "0.28.1",
+           "locks": ["requirements.lock"], "baseline_findings": []}
+    with pytest.raises(fixes.FixError, match="new vulnerable dependency"):
+        fixes.prepare(tmp_path, fix, AdvisoryClient(), [])

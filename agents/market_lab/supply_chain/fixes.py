@@ -39,7 +39,8 @@ def grouped_fixes(report: dict) -> list[dict]:
     for item in report["fixes"]:
         key = (item["ecosystem"], item["package"], item["fixed_version"])
         group = groups.setdefault(key, {"ecosystem": key[0], "package": key[1], "target": key[2],
-                                        "versions": set(), "locks": set(), "advisories": set(), "known_exploited": set()})
+                                        "versions": set(), "locks": set(), "advisories": set(), "known_exploited": set(),
+                                        "baseline_findings": report["findings"]})
         group["versions"].add(item["version"])
         for field in ("locks", "advisories", "known_exploited"):
             group[field].update(item[field])
@@ -149,6 +150,11 @@ def prepare(root: Path, fix: dict, client: Client, tracked: list[str]) -> dict[s
     verified = scan(after, client)
     if not verified["complete"] or any(row["package"] == fix["package"] for row in verified["findings"]):
         raise FixError("Fixed package is still vulnerable or source verification is incomplete.")
+    known = {(row["ecosystem"], row["package"], row["version"], lock)
+             for row in fix.get("baseline_findings", []) for lock in row["locks"]}
+    if any((row["ecosystem"], row["package"], row["version"], lock) not in known
+           for row in verified["findings"] for lock in row["locks"]):
+        raise FixError("Resolver introduced a new vulnerable dependency; no fix published.")
     return verified
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import base64
 from collections import Counter
 import hashlib
@@ -63,6 +64,15 @@ def lock_errors(text: str) -> list[tuple[int, str]]:
     return errors
 
 
+def enabled_flag(command: str, flag: str) -> bool:
+    try:
+        args = shlex.split(command, comments=True)
+    except ValueError:
+        return False
+    values = [arg for arg in args if arg == flag or arg.startswith(flag + "=") or arg == "--no-" + flag[2:]]
+    return bool(values) and values[-1] in {flag, flag + "=true"}
+
+
 def install_errors(text: str) -> list[tuple[int, str]]:
     errors = []
     for number, line in logical_lines(text):
@@ -86,13 +96,40 @@ def install_errors(text: str) -> list[tuple[int, str]]:
                     not path.endswith(".lock") or "$" in path for path in files
                 ):
                     errors.append((number, "Python install must use --require-hashes and a requirements lock"))
-            if re.search(r"\bnpm\b.*\b(?:install|i|add|update|upgrade)\b", command):
+            metadata_only = (re.search(r"\bnpm\b.*\bupdate\b", command)
+                             and enabled_flag(command, "--package-lock-only") and enabled_flag(command, "--ignore-scripts"))
+            if re.search(r"\bnpm\b.*\b(?:install|i|add|update|upgrade)\b", command) and not metadata_only:
                 errors.append((number, "Node packages must be installed with npm ci from a committed lock"))
             if re.search(r"\b(?:yarn|pnpm)\s+(?:install|add|update)\b", command):
                 errors.append((number, "Use the committed npm lock and npm ci"))
             if re.search(r"\bnpm\b.*\bci\b", command):
-                if not re.search(r"--ignore-scripts(?:=true)?(?:\s|$)", command):
+                if not enabled_flag(command, "--ignore-scripts"):
                     errors.append((number, "npm ci must disable lifecycle scripts with --ignore-scripts"))
+    return errors
+
+
+def python_command_errors(text: str) -> list[tuple[int, str]]:
+    """Inspect literal subprocess/command-helper calls without executing Python."""
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return [(1, "Cannot inspect Python command arguments")]
+    errors = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not node.args:
+            continue
+        name = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", "")
+        if name not in {"run", "check_call", "check_output", "Popen", "system", "command", "_run"}:
+            continue
+        argument = node.args[0]
+        command = None
+        if isinstance(argument, ast.Constant) and isinstance(argument.value, str):
+            command = argument.value
+        elif isinstance(argument, (ast.List, ast.Tuple)):
+            command = " ".join(shlex.quote(value.value) if isinstance(value, ast.Constant) and isinstance(value.value, str)
+                               else "$DYNAMIC" for value in argument.elts)
+        if command:
+            errors.extend((node.lineno, reason) for _, reason in install_errors(command))
     return errors
 
 
@@ -184,6 +221,8 @@ def check(root: Path, paths: list[Path]) -> list[str]:
             errors.extend(f"{relative}:{line}: {reason}" for line, reason in docker_errors(path.read_text()))
         elif ".github/workflows/" in relative.as_posix() and path.suffix in (".yml", ".yaml"):
             errors.extend(f"{relative}:{line}: {reason}" for line, reason in install_errors(path.read_text()))
+        elif path.suffix == ".py":
+            errors.extend(f"{relative}:{line}: {reason}" for line, reason in python_command_errors(path.read_text()))
         elif path.suffix == ".sh" or path.name == "Makefile":
             errors.extend(f"{relative}:{line}: {reason}" for line, reason in install_errors(path.read_text()))
         if path.name.startswith("Dockerfile") or path.suffix in {".sh", ".yml", ".yaml"} or path.name == "Makefile":
@@ -194,6 +233,11 @@ def check(root: Path, paths: list[Path]) -> list[str]:
             if not path.with_suffix(".lock").is_file():
                 errors.append(f"{relative}: missing adjacent requirements lock")
         if path.name == "package.json":
+            try:
+                for script in json.loads(path.read_text()).get("scripts", {}).values():
+                    errors.extend(f"{relative}: package script: {reason}" for _, reason in install_errors(script))
+            except (ValueError, AttributeError, TypeError):
+                errors.append(f"{relative}: Cannot parse package scripts")
             lock = path.with_name("package-lock.json")
             if not lock.is_file():
                 errors.append(f"{relative}: missing package-lock.json")
@@ -213,6 +257,13 @@ def signature(root: Path, error: str) -> tuple[str, str, str]:
     if len(parts) == 3 and parts[1].isdigit():
         number, reason = int(parts[1]), parts[2].strip()
         line = dict(logical_lines(path.read_text())).get(number, "")
+        if path.suffix == ".py":
+            try:
+                node = next(node for node in ast.walk(ast.parse(path.read_text()))
+                            if isinstance(node, ast.Call) and node.lineno == number)
+                line = ast.dump(node, include_attributes=False)
+            except (SyntaxError, StopIteration):
+                line = path.read_text()
     else:
         reason = ":".join(parts[1:]).strip()
         # Missing/stale manifests and invalid Node locks are whole-file violations.
@@ -248,7 +299,7 @@ def new_errors(root: Path, paths: list[Path], base: str) -> tuple[list[str], int
 
 def policy_file(path: Path) -> bool:
     return (path.name.startswith("Dockerfile") or path.name in {"Makefile", "package.json", "package-lock.json"}
-            or path.suffix == ".sh" or ("requirements" in path.name and path.suffix in {".lock", ".in", ".txt"})
+            or path.suffix in {".sh", ".py"} or ("requirements" in path.name and path.suffix in {".lock", ".in", ".txt"})
             or (".github/workflows/" in path.as_posix() and path.suffix in {".yaml", ".yml"}))
 
 

@@ -172,3 +172,27 @@ def test_nonexistent_lock_is_rejected_and_copy_rename_is_resolved(tmp_path):
     lock.write_text("httpx==0.28.1 --hash=sha256:" + "a" * 64 + "\n")
     path.write_text("FROM scratch\nCOPY requirements.lock /tmp/runtime.lock\nRUN pip install --require-hashes -r /tmp/runtime.lock\n")
     assert not pins.check(tmp_path, [path, lock])
+
+
+def test_python_subprocess_installs_and_node_package_scripts_are_enforced(tmp_path):
+    script = tmp_path / "installer.py"
+    script.write_text('import subprocess\nsubprocess.run(["pip", "install", "httpx"])\n')
+    assert any("Python install" in error for error in pins.check(tmp_path, [script]))
+    assert not pins.python_command_errors('command(["npm", "ci", "--ignore-scripts"], root)')
+    assert not pins.python_command_errors('command(["npm", "update", "--package-lock-only", "--ignore-scripts", package], root)')
+    package, lock = node_manifests()
+    package["scripts"] = {"build": "pip install httpx"}
+    manifest = tmp_path / "package.json"
+    manifest.write_text(json.dumps(package))
+    manifest.with_name("package-lock.json").write_text(json.dumps(lock))
+    assert any("package script" in error for error in pins.check(tmp_path, [manifest]))
+
+
+@pytest.mark.parametrize("command", [
+    "npm ci --ignore-scripts --ignore-scripts=false",
+    "npm ci --ignore-scripts --no-ignore-scripts",
+    "npm update --package-lock-only=false --ignore-scripts",
+    "npm update --package-lock-only --ignore-scripts=false",
+])
+def test_lifecycle_or_metadata_flag_override_cannot_bypass_policy(command):
+    assert pins.install_errors(command)
