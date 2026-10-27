@@ -469,7 +469,7 @@ async def test_base_collector_stops_before_tank_closes_shared_resources():
     # Tank registers its shared-pool shutdown callback before the Base router.
     async def close_shared_pool():
         assert not active, "Base must return every connection before Tank closes the pool"
-    app.add_event_handler("shutdown", close_shared_pool)
+    app.router.add_event_handler("shutdown", close_shared_pool)
     app.include_router(build_router(SimpleNamespace(box_region=lambda: "us-east"), Collecting()))
     try:
         async with app.router.lifespan_context(app):

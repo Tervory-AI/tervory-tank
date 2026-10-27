@@ -15,6 +15,10 @@ from vendor_meter import PLATFORM
 
 SEED_DATE = date(2026, 9, 1)
 REFERENCE_URL = "https://www.atf.gov/firearms/listing-federal-firearms-licensees/complete"
+ATF_ROW = """EXISTS (SELECT 1 FROM jsonb_object_keys(
+    CASE WHEN jsonb_typeof(raw)='object' THEN raw ELSE '{}'::jsonb END) AS fields(name)
+    WHERE regexp_replace(lower(btrim(name)), '[[:space:]-]+', '_', 'g')
+        IN ('lic_regn','licence_number','license_number'))"""
 
 
 def encoded(value: Any) -> str:
@@ -35,10 +39,12 @@ class BaseStore:
             except (AttributeError, ValueError):
                 detail = ""
             if isinstance(detail, str) and detail.startswith("blocked:"):
-                reason += " ATF did not allow the read. Automatic checks have stopped."
+                status = detail.removeprefix("blocked: HTTP ")
+                reason += (f" ATF did not allow the read (HTTP {status})." if status in {"401", "402", "403", "429", "451"}
+                           else " ATF did not allow the read.") + " Automatic checks have stopped."
                 # Preserve the stop even when the founder invokes refresh
                 # directly, outside the background check's exception handler.
-                operation = "loaded" if "rows" in payload else "updated"
+                operation = "loaded" if "rows" in payload or payload.get("initial") else "updated"
                 await self.reference_check("blocked", f"The reference could not be {operation}: {reason}")
                 raise ReferenceFailure(reason, blocked=True)
             if isinstance(detail, str) and detail in SAFE_DETAILS:
@@ -61,15 +67,11 @@ class BaseStore:
         if await self.latest_file():
             return
         async with self.rt.pool().acquire() as conn:
-            rows = await conn.fetch("""SELECT id,raw,created_at,updated_at FROM base.records WHERE tenant_id=$1
-                AND EXISTS (SELECT 1 FROM jsonb_object_keys(
-                    CASE WHEN jsonb_typeof(raw)='object' THEN raw ELSE '{}'::jsonb END) AS fields(name)
-                    WHERE regexp_replace(lower(btrim(name)), '[[:space:]-]+', '_', 'g')
-                        IN ('lic_regn','licence_number','license_number'))
+            rows = await conn.fetch(f"""SELECT id,raw,created_at,updated_at FROM base.records WHERE tenant_id=$1 AND {ATF_ROW}
                 ORDER BY updated_at DESC,created_at DESC,id DESC""", PLATFORM)
         if not rows:
-            # Never replace the founder's existing set with a download.
-            raise ReferenceFailure("There are no saved ATF licence rows in the platform reference.")
+            await self.download_initial()
+            return
         projected = {}
         for offset in range(0, len(rows), 2000):
             chunk = rows[offset:offset + 2000]
@@ -86,7 +88,15 @@ class BaseStore:
                             "rows": list(projected.values()), "duplicate_count": len(rows) - len(projected)}, adopted=True)
         await self.reference_check("adopted")
 
-    async def install(self, file: dict[str, Any], *, adopted: bool = False) -> dict[str, Any]:
+    async def download_initial(self) -> None:
+        async with self.rt.pool().acquire() as conn:
+            if await conn.fetchval("SELECT 1 FROM tank.base_reference_checks WHERE owner_id=$1 AND status='blocked'", PLATFORM):
+                return  # A durable block also stops empty-reference retries after restart.
+        file = await self.engine({"initial": True})
+        await self.install(file, initial=True)
+        await self.reference_check("updated")
+
+    async def install(self, file: dict[str, Any], *, adopted: bool = False, initial: bool = False) -> dict[str, Any]:
         published = date.fromisoformat(file["published_on"])
         rows = file["rows"]
         if not rows or len({row["licence_key"] for row in rows}) != len(rows):
@@ -96,6 +106,11 @@ class BaseStore:
             async with conn.transaction():
                 await conn.execute("SELECT pg_advisory_xact_lock(4810511)")
                 previous = await conn.fetchrow("SELECT * FROM tank.base_reference_files WHERE owner_id=$1 ORDER BY published_on DESC LIMIT 1", PLATFORM)
+                if initial:
+                    if previous:
+                        return dict(previous)
+                    if await conn.fetchval(f"SELECT 1 FROM base.records WHERE tenant_id=$1 AND {ATF_ROW} LIMIT 1", PLATFORM):
+                        raise ReferenceFailure("Saved ATF licence rows became available during the download. They will be used on the next check.")
                 if previous and previous["published_on"] >= published:
                     if previous["published_on"] == published and previous["sha256"] == file["sha256"]:
                         return dict(previous)
@@ -154,6 +169,8 @@ class BaseStore:
         if current is None:
             await self.adopt()
             current = await self.latest_file()
+            if current and not current["adopted"]:
+                return {"changed": True, "file": current}
         if current is None:
             raise ValueError("The existing platform reference has not been loaded on this server.")
         answer = await self.engine({"since": str(current["published_on"])})
