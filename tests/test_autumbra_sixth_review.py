@@ -6,20 +6,21 @@ from pathlib import Path
 
 import pytest
 
-from agents.ghost.client_settings import ApplyMode, ClientAutumbraSettings
+from agents.ghost.client_settings import ApplyMode, ClientAutumbraSettings, save_settings
 from agents.ghost.owner_email_jobs import (
     build_owner_update_from_receipts,
     default_receipt_url,
     default_undo_url,
 )
+from agents.ghost.store import Store
 from agents.ghost.threat_payload import (
     BURN_DETAIL,
     SCHEMA_VERSION,
     ThreatBurned,
     accept_threat_payload,
-    clear_client_watched_hosts,
+    bind_settings_store,
+    clear_settings_store,
     register_client_watched_hosts,
-    sync_client_watched_hosts_from_settings,
 )
 
 TENANT = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaa00a6"
@@ -28,10 +29,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture(autouse=True)
-def _clean_hosts():
-    clear_client_watched_hosts()
+def _clean_hosts(tmp_path_factory):
+    clear_settings_store()
     yield
-    clear_client_watched_hosts()
+    clear_settings_store()
 
 
 def test_1_lint_clean_and_compose_wires_undo_secret():
@@ -143,89 +144,98 @@ def test_4_owner_pages_plain_english_no_raw_codes_or_uuids():
     assert "<code>{resolved.id}</code>" not in undo
 
 
-def test_5_registered_client_site_accepted_unregistered_burned():
-    # Garbage / unregistered still burns (standing).
-    with pytest.raises(ThreatBurned) as burned:
-        accept_threat_payload({
-            "schema_version": SCHEMA_VERSION,
-            "action": "propose_shield",
-            "site": "evil.example",
-            "kind": "block_ip",
-            "address": "203.0.113.9",
-            "severity": "unknown",
-            "reason": "probe",
-            "confidence": 0.5,
-        })
-    assert str(burned.value) == BURN_DETAIL
+def test_5_registered_client_site_accepted_unregistered_burned(tmp_path):
+    store = Store(tmp_path / "ghost.sqlite3")
+    bind_settings_store(store)
+    try:
+        # Garbage / unregistered still burns (standing).
+        with pytest.raises(ThreatBurned) as burned:
+            accept_threat_payload({
+                "schema_version": SCHEMA_VERSION,
+                "action": "propose_shield",
+                "site": "evil.example",
+                "kind": "block_ip",
+                "address": "203.0.113.9",
+                "severity": "unknown",
+                "reason": "probe",
+                "confidence": 0.5,
+            })
+        assert str(burned.value) == BURN_DETAIL
 
-    # Unregistered shop still burns.
-    with pytest.raises(ThreatBurned):
-        accept_threat_payload({
+        # Unregistered shop still burns.
+        with pytest.raises(ThreatBurned):
+            accept_threat_payload({
+                "schema_version": SCHEMA_VERSION,
+                "action": "propose_shield",
+                "site": "shop-a.example.com",
+                "kind": "block_ip",
+                "address": "203.0.113.9",
+                "severity": "unknown",
+                "reason": "probe",
+                "confidence": 0.5,
+                "tenant_id": TENANT,
+            })
+
+        # Tenant registers the shop in saved settings → accept succeeds.
+        save_settings(
+            store,
+            ClientAutumbraSettings(
+                tenant_id=TENANT,
+                site_name="Acme Shop",
+                watched_hosts=["shop-a.example.com"],
+                owner_email="owner@acme.test",
+            ),
+        )
+        payload = accept_threat_payload({
             "schema_version": SCHEMA_VERSION,
             "action": "propose_shield",
             "site": "shop-a.example.com",
             "kind": "block_ip",
             "address": "203.0.113.9",
+            "severity": "high",
+            "reason": "attacking checkout",
+            "confidence": 0.9,
+            "tenant_id": TENANT,
+        })
+        assert payload.site == "shop-a.example.com"
+
+        # Hostname-shaped site_name also registers (saved).
+        save_settings(
+            store,
+            ClientAutumbraSettings(
+                tenant_id=TENANT,
+                site_name="shop-b.example.com",
+                watched_hosts=[],
+            ),
+        )
+        payload2 = accept_threat_payload({
+            "schema_version": SCHEMA_VERSION,
+            "action": "propose_shield",
+            "site": "shop-b.example.com",
+            "kind": "block_ip",
+            "address": "203.0.113.10",
+            "severity": "unknown",
+            "reason": "probe",
+            "confidence": 0.5,
+            "tenant_id": TENANT,
+        })
+        assert payload2.site == "shop-b.example.com"
+
+        # Dogfood still works without registration.
+        dog = accept_threat_payload({
+            "schema_version": SCHEMA_VERSION,
+            "action": "propose_shield",
+            "site": "coolify.tervory.com",
+            "kind": "block_ip",
+            "address": "203.0.113.11",
             "severity": "unknown",
             "reason": "probe",
             "confidence": 0.5,
         })
-
-    # Tenant registers the shop → accept succeeds.
-    settings = ClientAutumbraSettings(
-        tenant_id=TENANT,
-        site_name="Acme Shop",
-        watched_hosts=["shop-a.example.com"],
-        owner_email="owner@acme.test",
-    )
-    sync_client_watched_hosts_from_settings(settings)
-    payload = accept_threat_payload({
-        "schema_version": SCHEMA_VERSION,
-        "action": "propose_shield",
-        "site": "shop-a.example.com",
-        "kind": "block_ip",
-        "address": "203.0.113.9",
-        "severity": "high",
-        "reason": "attacking checkout",
-        "confidence": 0.9,
-        "tenant_id": TENANT,
-    })
-    assert payload.site == "shop-a.example.com"
-
-    # Hostname-shaped site_name also registers.
-    clear_client_watched_hosts()
-    sync_client_watched_hosts_from_settings(
-        ClientAutumbraSettings(
-            tenant_id=TENANT,
-            site_name="shop-b.example.com",
-            watched_hosts=[],
-        )
-    )
-    payload2 = accept_threat_payload({
-        "schema_version": SCHEMA_VERSION,
-        "action": "propose_shield",
-        "site": "shop-b.example.com",
-        "kind": "block_ip",
-        "address": "203.0.113.10",
-        "severity": "unknown",
-        "reason": "probe",
-        "confidence": 0.5,
-    })
-    assert payload2.site == "shop-b.example.com"
-
-    # Dogfood still works without registration.
-    clear_client_watched_hosts()
-    dog = accept_threat_payload({
-        "schema_version": SCHEMA_VERSION,
-        "action": "propose_shield",
-        "site": "coolify.tervory.com",
-        "kind": "block_ip",
-        "address": "203.0.113.11",
-        "severity": "unknown",
-        "reason": "probe",
-        "confidence": 0.5,
-    })
-    assert dog.site == "coolify.tervory.com"
+        assert dog.site == "coolify.tervory.com"
+    finally:
+        clear_settings_store()
+        store.close()
 
 
 def test_5b_register_helper_and_invalid_watched_host():

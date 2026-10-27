@@ -92,8 +92,6 @@ def load_enforce_client_settings(
                 mirrored = ClientAutumbraSettings.model_validate(
                     {**mirrored.model_dump(), "site_name": site_name}
                 )
-            from .threat_payload import sync_client_watched_hosts_from_settings
-            sync_client_watched_hosts_from_settings(mirrored)
             return mirrored
     # 2) Legacy local store (compat only).
     data_dir = data_dir_path()
@@ -107,8 +105,11 @@ def load_enforce_client_settings(
         settings = ClientAutumbraSettings.model_validate(
             {**settings.model_dump(), "site_name": site_name}
         )
-    from .threat_payload import sync_client_watched_hosts_from_settings
-    sync_client_watched_hosts_from_settings(settings)
+    try:
+        from .threat_payload import bind_settings_store
+        bind_settings_store(store)
+    except Exception:
+        pass
     return settings
 
 

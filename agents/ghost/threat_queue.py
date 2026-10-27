@@ -304,6 +304,71 @@ def watch_enqueue_fixture_attack(
     return receipt
 
 
+def _undo_used_path(queue: ThreatPayloadQueue, prior_receipt_id: str) -> Path:
+    folder = queue.root / "undo_used"
+    folder.mkdir(parents=True, exist_ok=True)
+    safe = "".join(ch for ch in (prior_receipt_id or "") if ch.isalnum() or ch in "-_")[:120]
+    return folder / f"{safe or 'unknown'}.json"
+
+
+def read_undo_used(queue: ThreatPayloadQueue, prior_receipt_id: str) -> dict[str, Any] | None:
+    """Return the used-undo marker for this receipt, if any."""
+    rid = (prior_receipt_id or "").strip()
+    if not rid:
+        return None
+    path = _undo_used_path(queue, rid)
+    if path.exists():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(data, dict) and data.get("undone_at"):
+                return data
+        except (OSError, json.JSONDecodeError):
+            pass
+    # Also treat a completed undo receipt as used.
+    for row in queue.list_receipts():
+        if str(row.get("prior_receipt_id") or "") != rid:
+            continue
+        if str(row.get("outcome") or "") in {"undone", "already_undone"}:
+            return {
+                "prior_receipt_id": rid,
+                "undone_at": row.get("timestamp") or row.get("undone_at") or utc_now(),
+                "tenant_id": row.get("tenant_id"),
+            }
+    return None
+
+
+def mark_undo_used(
+    queue: ThreatPayloadQueue,
+    *,
+    prior_receipt_id: str,
+    tenant_id: str | None,
+    undone_at: str | None = None,
+) -> dict[str, Any]:
+    marker = {
+        "prior_receipt_id": prior_receipt_id,
+        "tenant_id": tenant_id,
+        "undone_at": undone_at or utc_now(),
+    }
+    path = _undo_used_path(queue, prior_receipt_id)
+    path.write_text(json.dumps(marker, sort_keys=True), encoding="utf-8")
+    return marker
+
+
+def already_undone_message(undone_at: str, *, time_zone: str = "UTC") -> str:
+    """Plain page copy for a second tap on a used Undo link."""
+    from .client_settings import ClientAutumbraSettings, format_owner_when
+
+    settings = ClientAutumbraSettings(
+        tenant_id="already-undone",
+        time_zone="" if time_zone == "UTC" else time_zone,
+    )
+    when = format_owner_when(undone_at, settings) or f"{undone_at} UTC"
+    # Prefer a short date for the required sentence.
+    short = when
+    # "Oct 27, 2026, 2:45 AM Africa/Johannesburg" → keep as-is after "on "
+    return f"This block was already undone on {short}."
+
+
 def watch_enqueue_undo(
     *,
     queue: ThreatPayloadQueue,
@@ -311,8 +376,31 @@ def watch_enqueue_undo(
     prior_receipt_id: str | None = None,
     site: str,
     tenant_id: str | None = None,
+    time_zone: str | None = None,
 ) -> dict[str, Any]:
-    """Outside Enforce: undo travels as a validated ThreatPayload through the queue door."""
+    """Outside Enforce: undo travels as a validated ThreatPayload through the queue door.
+
+    Second tap on a used Undo link: no second undo is queued; returns already_undone.
+    """
+    rid = (prior_receipt_id or "").strip() or None
+    if rid:
+        used = read_undo_used(queue, rid)
+        if used:
+            undone_at = str(used.get("undone_at") or utc_now())
+            detail = already_undone_message(undone_at, time_zone=time_zone or "UTC")
+            return {
+                "product": "Autumbra",
+                "role": "Watch",
+                "outcome": "already_undone",
+                "queued": False,
+                "already_undone": True,
+                "undone_at": undone_at,
+                "detail": detail,
+                "timestamp": utc_now(),
+                "tenant_id": tenant_id,
+                "prior_receipt_id": rid,
+            }
+
     payload = accept_threat_payload({
         "schema_version": "ghost.threat.v1",
         "action": ThreatAction.undo_shield.value,
@@ -324,6 +412,8 @@ def watch_enqueue_undo(
         "queued_at": utc_now(),
     })
     item_id = queue.put(payload)
+    if rid:
+        mark_undo_used(queue, prior_receipt_id=rid, tenant_id=tenant_id)
     return {
         "product": "Autumbra",
         "role": "Watch",

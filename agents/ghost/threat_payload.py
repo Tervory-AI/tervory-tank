@@ -24,13 +24,30 @@ SCHEMA_VERSION = "ghost.threat.v1"
 BURN_DETAIL = "Threat payload burned. No action was taken."
 # Site keys and hosts Ghost is allowed to name (Tervory dogfood).
 ALLOWED_SITES = frozenset({*WATCHED_SITES.keys(), *WATCHED_SITES.values()})
-# Tenant-registered client hosts (e.g. shop-a.example.com). Populated from
-# ClientAutumbraSettings.watched_hosts / hostname-shaped site_name — never open-world.
-_REGISTERED_CLIENT_HOSTS: set[str] = set()
+# Client hosts are never open-world. A payload naming a non-Tervory site passes
+# only when THAT payload's tenant has the host in its saved settings (read at
+# check time — not an in-memory set filled since restart).
 _HOST_RE = re.compile(
     r"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$"
 )
 CVE_RE = re.compile(r"^CVE-\d{4}-\d{4,}$")
+HOST_TAKEN_MSG = "That site is already registered by another client."
+
+# Optional Store bound by Watch/Enforce at boot. accept_threat_payload reads
+# the tenant's saved settings through this (or an explicit store= kwarg).
+_SETTINGS_STORE = None
+
+
+def bind_settings_store(store) -> None:
+    """Watch/Enforce lifespan: point site checks at the durable settings store."""
+    global _SETTINGS_STORE
+    _SETTINGS_STORE = store
+
+
+def clear_settings_store() -> None:
+    """Test helper — drop the bound store."""
+    global _SETTINGS_STORE
+    _SETTINGS_STORE = None
 
 
 def _normalize_host(value: str) -> str | None:
@@ -42,45 +59,142 @@ def _normalize_host(value: str) -> str | None:
     return host
 
 
-def register_client_watched_hosts(hosts) -> list[str]:
-    """Add tenant-registered hostnames to the ThreatPayload allowlist."""
-    added: list[str] = []
-    for item in hosts or []:
+def hosts_claimed_by_settings(settings) -> list[str]:
+    """Hostname list a tenant claims: watched_hosts + hostname-shaped site_name."""
+    out: list[str] = []
+    for item in getattr(settings, "watched_hosts", None) or []:
         host = _normalize_host(str(item))
-        if host and host not in _REGISTERED_CLIENT_HOSTS:
-            _REGISTERED_CLIENT_HOSTS.add(host)
-            added.append(host)
-        elif host:
-            added.append(host)
-    return added
-
-
-def clear_client_watched_hosts() -> None:
-    """Test helper — empty the client-host registry."""
-    _REGISTERED_CLIENT_HOSTS.clear()
-
-
-def sync_client_watched_hosts_from_settings(settings) -> list[str]:
-    """Register watched_hosts and a hostname-shaped site_name from client settings."""
-    hosts: list[str] = []
-    raw = getattr(settings, "watched_hosts", None) or []
-    hosts.extend(str(h) for h in raw)
+        if host and host not in out:
+            out.append(host)
     site_name = str(getattr(settings, "site_name", "") or "")
-    if _normalize_host(site_name):
-        hosts.append(site_name)
-    return register_client_watched_hosts(hosts)
+    host = _normalize_host(site_name)
+    if host and host not in out:
+        out.append(host)
+    return out
 
 
-def is_allowed_site(site: str) -> bool:
-    """True for Tervory dogfood keys/hosts or a tenant-registered client host."""
+def find_host_owner(store, host: str) -> str | None:
+    """Which tenant already registered this host in saved settings, if any."""
+    want = _normalize_host(host)
+    if not want or store is None:
+        return None
+    try:
+        rows = store.db.execute(
+            "SELECT tenant, value FROM ghost_state WHERE key=?",
+            ("autumbra_client_settings",),
+        ).fetchall()
+    except Exception:
+        return None
+    for tenant, value in rows:
+        try:
+            raw = json.loads(value) if isinstance(value, str) else value
+        except Exception:
+            continue
+        if not isinstance(raw, dict):
+            continue
+        claimed = []
+        for item in raw.get("watched_hosts") or []:
+            h = _normalize_host(str(item))
+            if h:
+                claimed.append(h)
+        h = _normalize_host(str(raw.get("site_name") or ""))
+        if h:
+            claimed.append(h)
+        if want in claimed:
+            return str(tenant)
+    return None
+
+
+def assert_hosts_free_for_tenant(store, settings) -> None:
+    """Refuse hosts already registered by another tenant (plain message)."""
+    tid = str(getattr(settings, "tenant_id", "") or "").strip()
+    for host in hosts_claimed_by_settings(settings):
+        owner = find_host_owner(store, host)
+        if owner and owner != tid:
+            raise ValueError(HOST_TAKEN_MSG)
+
+
+def _tenant_hosts_from_store(store, tenant_id: str) -> set[str]:
+    """Read THAT tenant's saved settings and return its claimed hosts."""
+    tid = (tenant_id or "").strip()
+    if not tid or store is None:
+        return set()
+    try:
+        raw = store.get_state(tid, "autumbra_client_settings", None)
+    except Exception:
+        return set()
+    if not isinstance(raw, dict):
+        return set()
+    hosts: set[str] = set()
+    for item in raw.get("watched_hosts") or []:
+        h = _normalize_host(str(item))
+        if h:
+            hosts.add(h)
+    h = _normalize_host(str(raw.get("site_name") or ""))
+    if h:
+        hosts.add(h)
+    return hosts
+
+
+def _tenant_hosts_from_mirror(tenant_id: str) -> set[str]:
+    """Enforce path: read mirrored client_settings.json for this tenant's queue."""
+    tid = (tenant_id or "").strip()
+    if not tid:
+        return set()
+    try:
+        from .tenant_queue import load_mirrored_settings, queue_path_for_tenant
+        settings = load_mirrored_settings(queue_path_for_tenant(tid), fallback_tenant_id=tid)
+    except Exception:
+        # Single-queue env fallback.
+        try:
+            from .tenant_queue import load_mirrored_settings
+            from .threat_queue import queue_root_from_env
+            settings = load_mirrored_settings(queue_root_from_env(), fallback_tenant_id=tid)
+        except Exception:
+            return set()
+    if settings is None:
+        return set()
+    return set(hosts_claimed_by_settings(settings))
+
+
+def is_allowed_site(site: str, *, tenant_id: str | None = None, store=None) -> bool:
+    """True for Tervory dogfood, or a host registered by THAT tenant in saved settings."""
     s = (site or "").strip().lower()
     if not s:
         return False
     if s in {x.lower() for x in ALLOWED_SITES}:
         return True
-    if s in _REGISTERED_CLIENT_HOSTS:
+    tid = (tenant_id or "").strip() or None
+    if not tid:
+        return False
+    st = store if store is not None else _SETTINGS_STORE
+    if st is not None and s in _tenant_hosts_from_store(st, tid):
+        return True
+    # Enforce (or tests with mirrored settings) without Watch's sqlite.
+    if s in _tenant_hosts_from_mirror(tid):
         return True
     return False
+
+
+# Back-compat no-ops for older call sites / tests that still import these.
+def register_client_watched_hosts(hosts) -> list[str]:
+    """Deprecated: registration is via save_settings only. Returns normalized hosts."""
+    added: list[str] = []
+    for item in hosts or []:
+        host = _normalize_host(str(item))
+        if host and host not in added:
+            added.append(host)
+    return added
+
+
+def clear_client_watched_hosts() -> None:
+    """Deprecated no-op — registry is saved settings, not an in-memory set."""
+    return None
+
+
+def sync_client_watched_hosts_from_settings(settings) -> list[str]:
+    """Deprecated: does not mutate a process-wide set. Returns hosts from settings."""
+    return hosts_claimed_by_settings(settings)
 # Patterns that mean "this is not a structured threat fact" — burn without parsing further.
 INJECTION_MARKERS = (
     "ignore previous",
@@ -154,11 +268,16 @@ class ThreatPayload(Strict):
 
     @field_validator("site")
     @classmethod
-    def site_must_be_ours(cls, value: str) -> str:
+    def site_must_be_shaped(cls, value: str) -> str:
+        """Shape check only. Tenant ownership is enforced in accept_threat_payload."""
         site = value.strip().lower()
-        if not is_allowed_site(site):
-            raise ValueError("site not allowlisted")
-        return site
+        if not site:
+            raise ValueError("site empty")
+        if site in {x.lower() for x in ALLOWED_SITES}:
+            return site
+        if _normalize_host(site):
+            return site
+        raise ValueError("site not allowlisted")
 
     @field_validator("cve_ids")
     @classmethod
@@ -210,8 +329,16 @@ def _preflight_raw(raw: bytes | str | dict[str, Any]) -> dict[str, Any]:
     return data
 
 
-def accept_threat_payload(raw: bytes | str | dict[str, Any]) -> ThreatPayload:
-    """Parse and validate triage output. Burns on any failure — never echoes input."""
+def accept_threat_payload(
+    raw: bytes | str | dict[str, Any],
+    *,
+    store=None,
+) -> ThreatPayload:
+    """Parse and validate triage output. Burns on any failure — never echoes input.
+
+    Client (non-Tervory) sites pass only when registered by THAT payload's tenant
+    in saved settings (read now — not an in-memory allowlist from an earlier load).
+    """
     try:
         data = _preflight_raw(raw)
         payload = ThreatPayload.model_validate(data)
@@ -219,6 +346,8 @@ def accept_threat_payload(raw: bytes | str | dict[str, Any]) -> ThreatPayload:
         raise
     except (ValidationError, ValueError, TypeError):
         raise ThreatBurned() from None
+    if not is_allowed_site(payload.site, tenant_id=payload.tenant_id, store=store):
+        raise ThreatBurned()
     if payload.action == ThreatAction.propose_shield:
         if payload.kind is None or payload.kind not in KINDS:
             raise ThreatBurned()

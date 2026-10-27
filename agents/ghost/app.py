@@ -280,6 +280,8 @@ def create_app() -> FastAPI:
         if not os.environ.get("TANK_KEY"):
             raise RuntimeError("Autumbra Watch's Tank key is not configured.")
         store = Store(Path(os.environ.get("DATA_DIR", "/data")) / "ghost.sqlite3", os.environ.get("TANK_REGION", "us-east"))
+        from .threat_payload import bind_settings_store
+        bind_settings_store(store)
         async with httpx.AsyncClient(follow_redirects=False) as http:
             tank = Tank(http)
             app.state.store = store
@@ -673,7 +675,10 @@ def create_app() -> FastAPI:
             settings = ClientAutumbraSettings.model_validate(data)
         except Exception:
             raise HTTPException(422, "Settings were not understood.") from None
-        saved = save_settings(app.state.store, settings)
+        try:
+            saved = save_settings(app.state.store, settings)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from None
         # Mirror into that client's queue box so Enforce reloads and obeys the mode.
         mirrored = False
         try:
@@ -901,14 +906,6 @@ def create_app() -> FastAPI:
                 raise HTTPException(400, "tenant_id must be a UUID") from None
             except Exception as exc:
                 raise HTTPException(422, str(exc)) from None
-            # Register this tenant's watched hosts before ThreatPayload accept.
-            try:
-                from .threat_payload import sync_client_watched_hosts_from_settings
-                sync_client_watched_hosts_from_settings(
-                    load_settings(app.state.store, tenant_id)
-                )
-            except Exception:
-                pass
         else:
             queue = getattr(app.state, "threat_queue", None)
         try:
@@ -951,14 +948,18 @@ def create_app() -> FastAPI:
         except Exception:
             raise HTTPException(422, "Undo was not understood.") from None
         try:
+            from .client_settings import load_settings as _load_tz, owner_time_zone
+
             tenant_id = _require_tenant_uuid(tenant_id)
             q = watch_threat_queue(tenant_id)
+            tz = owner_time_zone(_load_tz(app.state.store, tenant_id))
             return watch_enqueue_undo(
                 queue=q,
                 rule_id=str(rule_id) if rule_id else None,
                 prior_receipt_id=str(prior_receipt_id) if prior_receipt_id else None,
                 site=site,
                 tenant_id=tenant_id,
+                time_zone=tz,
             )
         except ThreatBurned:
             return JSONResponse(
@@ -969,6 +970,40 @@ def create_app() -> FastAPI:
             raise HTTPException(400, str(exc)) from None
         except Exception as exc:
             raise HTTPException(422, str(exc)) from None
+
+    @app.get("/ghost/autumbra/undo/status", dependencies=[Depends(require_tank)])
+    async def autumbra_undo_status(
+        tenant_id: str = Query(default=""),
+        prior_receipt_id: str = Query(default=""),
+    ):
+        """Whether this Undo link was already used (for the owner page)."""
+        from .client_settings import load_settings as _load_tz, owner_time_zone
+        from .threat_queue import already_undone_message, read_undo_used
+
+        try:
+            tid = _require_tenant_uuid(tenant_id)
+        except ValueError:
+            raise HTTPException(400, "tenant_id must be a UUID") from None
+        rid = (prior_receipt_id or "").strip()
+        if not rid:
+            raise HTTPException(400, "prior_receipt_id is required") from None
+        if not watch_queue_configured():
+            raise HTTPException(503, "THREAT_PAYLOAD_QUEUE is not configured.")
+        q = watch_threat_queue(tid)
+        used = read_undo_used(q, rid)
+        if not used:
+            return {"already_undone": False, "queued": False, "tenant_id": tid, "prior_receipt_id": rid}
+        undone_at = str(used.get("undone_at") or "")
+        tz = owner_time_zone(_load_tz(app.state.store, tid))
+        return {
+            "already_undone": True,
+            "queued": False,
+            "undone_at": undone_at,
+            "detail": already_undone_message(undone_at, time_zone=tz),
+            "time_zone": tz,
+            "tenant_id": tid,
+            "prior_receipt_id": rid,
+        }
 
     @app.post("/ghost/autumbra/queue/approve", dependencies=[Depends(require_tank)])
     async def autumbra_queue_approve(request: Request):
@@ -1074,6 +1109,9 @@ def create_app() -> FastAPI:
                 "url": undo_url if (undo_url and "token=" in undo_url) else "",
                 "receipt": receipt,
             })
+        from .client_settings import load_settings as _load_owner_settings, owner_time_zone
+
+        owner_settings = _load_owner_settings(app.state.store, tid)
         return {
             "product": "Autumbra",
             "kind": "weekly_receipts",
@@ -1081,6 +1119,7 @@ def create_app() -> FastAPI:
             "page": "exists",
             "week_start": week_start.isoformat().replace("+00:00", "Z"),
             "week_end": week_end.isoformat().replace("+00:00", "Z"),
+            "time_zone": owner_time_zone(owner_settings),
             "receipts": rows,
             "count": len(rows),
             "note": "Weekly owner-update receipt page.",

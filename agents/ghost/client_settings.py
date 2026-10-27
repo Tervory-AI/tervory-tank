@@ -28,6 +28,8 @@ class ClientAutumbraSettings(BaseModel):
     tenant_id: str = Field(min_length=1, max_length=80)
     site_name: str = Field(default="", max_length=120)
     owner_email: str = Field(default="", max_length=200)
+    # IANA time zone for owner-facing pages (empty → UTC, and pages say "UTC").
+    time_zone: str = Field(default="", max_length=80)
     # Separately for shields and for code fixes.
     shield_mode: ApplyMode = DEFAULT_MODE
     fix_mode: ApplyMode = DEFAULT_MODE
@@ -66,6 +68,24 @@ class ClientAutumbraSettings(BaseModel):
                 out.append(host)
         return out
 
+    @field_validator("time_zone")
+    @classmethod
+    def time_zone_must_be_iana_or_empty(cls, value: str) -> str:
+        raw = (value or "").strip()
+        if not raw:
+            return ""
+        try:
+            from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+        except ImportError as exc:  # pragma: no cover
+            raise ValueError("time zone support unavailable") from exc
+        try:
+            ZoneInfo(raw)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError("time zone must be a valid IANA name") from exc
+        except Exception as exc:
+            raise ValueError("time zone must be a valid IANA name") from exc
+        return raw
+
     def receipt_stamp(self) -> dict[str, str]:
         """What every receipt must show about the client's choice."""
         return {
@@ -75,30 +95,62 @@ class ClientAutumbraSettings(BaseModel):
 
 
 def load_settings(store, tenant_id: str) -> ClientAutumbraSettings:
+    """Read saved settings. Does not mutate any process-wide host allowlist."""
     raw = store.get_state(tenant_id, "autumbra_client_settings", None)
     if not isinstance(raw, dict):
-        settings = ClientAutumbraSettings(tenant_id=tenant_id)
-    else:
-        try:
-            settings = ClientAutumbraSettings.model_validate({**raw, "tenant_id": tenant_id})
-        except Exception:
-            settings = ClientAutumbraSettings(tenant_id=tenant_id)
+        return ClientAutumbraSettings(tenant_id=tenant_id)
     try:
-        from .threat_payload import sync_client_watched_hosts_from_settings
-        sync_client_watched_hosts_from_settings(settings)
+        return ClientAutumbraSettings.model_validate({**raw, "tenant_id": tenant_id})
     except Exception:
-        pass
-    return settings
+        return ClientAutumbraSettings(tenant_id=tenant_id)
 
 
 def save_settings(store, settings: ClientAutumbraSettings) -> ClientAutumbraSettings:
-    """Client (or founder-as-client) writes. Tervory automation must not call this."""
+    """Client (or founder-as-client) writes. Tervory automation must not call this.
+
+    A host already registered by another tenant is refused with a plain message.
+    """
+    from .threat_payload import assert_hosts_free_for_tenant
+
+    assert_hosts_free_for_tenant(store, settings)
     payload: dict[str, Any] = settings.model_dump()
     store.set_state(settings.tenant_id, "autumbra_client_settings", payload)
-    # Register this tenant's hosts so ThreatPayload can accept them.
-    from .threat_payload import sync_client_watched_hosts_from_settings
-    sync_client_watched_hosts_from_settings(settings)
     return settings
+
+
+def owner_time_zone(settings: ClientAutumbraSettings | None) -> str:
+    """IANA zone for owner pages; UTC when unset."""
+    if settings is None:
+        return "UTC"
+    raw = (getattr(settings, "time_zone", "") or "").strip()
+    return raw or "UTC"
+
+
+def format_owner_when(iso: str | None, settings: ClientAutumbraSettings | None = None) -> str:
+    """Format a timestamp in the owner's time zone (label UTC when falling back)."""
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+
+    text = (iso or "").strip()
+    if not text:
+        return ""
+    try:
+        moment = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return ""
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    zone_name = owner_time_zone(settings)
+    try:
+        local = moment.astimezone(ZoneInfo(zone_name))
+    except Exception:
+        local = moment.astimezone(timezone.utc)
+        zone_name = "UTC"
+    # Medium date + short time, then zone label (en-US-ish, portable).
+    hour12 = local.hour % 12 or 12
+    ampm = "AM" if local.hour < 12 else "PM"
+    stamp = f"{local.strftime('%b')} {local.day}, {local.year}, {hour12}:{local.strftime('%M')} {ampm}"
+    return f"{stamp} {zone_name}"
 
 
 def active_halves(settings: ClientAutumbraSettings) -> dict[str, bool]:

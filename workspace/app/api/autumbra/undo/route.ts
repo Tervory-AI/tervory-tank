@@ -5,6 +5,7 @@ import { verifyUndoToken } from "@/lib/autumbra-undo-token";
  * Owner-facing undo door. Accepts ONLY a valid signed token for that tenant + shield.
  * Body tenant/receipt/rule fields are ignored. Public: the token is the credential.
  * If AUTUMBRA_UNDO_TOKEN_SECRET is unset, verification fails closed (401).
+ * Second tap on a used link: already_undone, no second queue.
  */
 const TANK_URL = process.env.TANK_URL ?? "http://tank:8000";
 const TANK_API_KEY = process.env.TANK_API_KEY ?? "";
@@ -72,9 +73,15 @@ export async function POST(request: Request) {
       body: JSON.stringify(payload),
     });
     const text = await res.text();
-    let data: unknown = null;
+    let data: {
+      outcome?: string;
+      already_undone?: boolean;
+      queued?: boolean;
+      detail?: string;
+      undone_at?: string;
+    } | null = null;
     try {
-      data = JSON.parse(text);
+      data = JSON.parse(text) as typeof data;
     } catch {
       data = { detail: text.slice(0, 200) };
     }
@@ -83,6 +90,17 @@ export async function POST(request: Request) {
         { ok: false, detail: "Could not undo that shield right now.", upstream: data },
         { status: res.status >= 500 ? 502 : res.status },
       );
+    }
+    if (data && (data.already_undone || data.outcome === "already_undone")) {
+      return NextResponse.json({
+        ok: true,
+        queued: false,
+        already_undone: true,
+        undone_at: data.undone_at,
+        detail:
+          data.detail ||
+          "This block was already undone on an earlier time.",
+      });
     }
     return NextResponse.json({ ok: true, queued: true, result: data });
   } catch {

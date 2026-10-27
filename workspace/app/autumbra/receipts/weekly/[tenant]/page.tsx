@@ -23,7 +23,7 @@ export default async function WeeklyReceiptPage({
       </main>
     );
   }
-  const { receipts, note } = await loadWeeklyReceipts(tenant, token || null);
+  const { receipts, note, timeZone } = await loadWeeklyReceipts(tenant, token || null);
 
   return (
     <main style={{ fontFamily: "system-ui, sans-serif", padding: "2rem", maxWidth: 720 }}>
@@ -40,7 +40,7 @@ export default async function WeeklyReceiptPage({
           {receipts.map((row, index) => {
             const id = row.id || `receipt-${index}`;
             const href = row.url && row.url.includes("token=") ? row.url : "";
-            const { title, when } = describeReceipt(row);
+            const { title, when } = describeReceipt(row, timeZone);
             return (
               <li key={id} style={{ marginBottom: "1rem" }}>
                 <div>{title}</div>
