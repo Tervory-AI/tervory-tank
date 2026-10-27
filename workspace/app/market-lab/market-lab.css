@@ -1166,6 +1166,8 @@ body:has(.ml) main {
 .ml-source td:first-of-type { white-space: normal; }
 .ml-source td:last-child { white-space: normal; }
 .ml-source-revision { display: block; max-width: 160px; white-space: normal; }
+.ml-source-pages { display: flex; align-items: center; gap: 20px; margin: 16px 0; }
+.ml-source-pages [aria-disabled="true"] { color: #66738a; }
 .ml-source tr:target, .ml-source article:target { background: #fff; outline: 2px solid #001840; }
 @media (max-width: 600px) {
   .ml-source table { font-size: 13px; }

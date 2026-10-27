@@ -54,8 +54,8 @@ async def test_each_figure_links_to_an_exact_immutable_stored_row():
         index = int(href.split("#point-")[1])
         doc = await document(ledger, OWNER, ident, fixtures=True)
         point = doc["points"][index]
-        page = await document_page(ledger, OWNER, ident, fixtures=True)
-        shown = page["points"][index]
+        page = await document_page(ledger, OWNER, ident, row=index, fixtures=True)
+        shown = next(row for row in page["points"] if row["index"] == index)
         assert shown["geo_name"] == point["title"].removeprefix("Population, ")
         assert shown["geo"] == point["geo"]  # Raw provenance remains unchanged.
         assert point["title"] in fact["text"]

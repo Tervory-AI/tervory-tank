@@ -1027,12 +1027,12 @@ export type MarketOverview = { feeds: MarketFeed[]; on_count: number; refresh_st
 export type MarketFact = { text: string; href: string; name: string };
 export type MarketAnswer = { content: string; facts: MarketFact[]; sources: { name: string; href: string }[] };
 export type MarketDocument = {
-  offset: number; point_count: number; event_count: number;
+  offset: number; page_size: number; point_count: number; event_count: number;
   id: string; name: string; fetched_at: string; licence: string; terms_checked_at: string;
   url: string; presentation?: { publisher?: string; publisher_url?: string; notice?: string; explanation?: string };
   downloads: { url: string; sha256: string }[];
-  points: { title: string; display_title: string; date_label: string; geo: string; geo_name: string; date: string; value: string; unit: string; unit_label: string; revision: string; revision_label: string; withdrawn?: boolean }[];
-  events: { title: string; display_title: string; date_label: string; display_url: string; link_label: string; body: string; date: string; url: string; kind: string }[];
+  points: { index: number; title: string; display_title: string; date_label: string; geo: string; geo_name: string; date: string; value: string; display_value: string; unit: string; unit_label: string; revision: string; revision_label: string; withdrawn?: boolean }[];
+  events: { index: number; title: string; display_title: string; date_label: string; display_url: string; link_label: string; body: string; date: string; url: string; kind: string }[];
 };
 export class MarketLabRequestError extends Error {
   readonly status: number;
@@ -1044,7 +1044,7 @@ export class MarketLabRequestError extends Error {
 }
 export async function marketLabRequest<T>(
   tenantId: string, operation: "overview" | "ask" | "document" | "refresh",
-  payload: { question?: string; document_id?: string; offset?: number } = {},
+  payload: { question?: string; document_id?: string; offset?: number; row?: number } = {},
 ): Promise<T> {
   const response = await fetch(`${TANK_URL}/v1/market-lab/${operation}`, {
     method: "POST", cache: "no-store", redirect: "error", signal: AbortSignal.timeout(35000),

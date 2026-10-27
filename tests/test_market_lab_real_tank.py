@@ -31,7 +31,7 @@ def test_real_tank_routes_to_real_room_and_postgres(tmp_path):
     other = str(uuid.uuid4())
     with (tmp_path / "services.log").open("w+") as log:
         try:
-            with services(free_port(), log=log) as env, httpx.Client(base_url=env["TANK_URL"], trust_env=False, timeout=40) as client:
+            with services(free_port(), log=log, history=True) as env, httpx.Client(base_url=env["TANK_URL"], trust_env=False, timeout=40) as client:
                 def request(operation, *, tenant=TENANT, **payload):
                     return client.post(f"/v1/market-lab/{operation}", json={"tenant_id": tenant, **payload}, headers={"x-tank-key": env["TANK_API_KEY"]})
 
@@ -60,13 +60,26 @@ def test_real_tank_routes_to_real_room_and_postgres(tmp_path):
                 for fact in brief.json()["facts"]:
                     ident = fact["href"].split("/")[-1].split("?")[0]
                     row = int(fact["href"].split("#point-")[1])
-                    source = request("document", document_id=ident)
+                    source = request("document", document_id=ident, row=row)
                     assert source.status_code == 200
-                    point = source.json()["points"][row]
+                    point = next(point for point in source.json()["points"] if point["index"] == row)
                     assert point["display_title"] in fact["text"]
                     assert point["date_label"] in fact["text"]
                     assert point["value"] in fact["text"].replace(",", "")
                     assert request("document", tenant=other, document_id=ident).status_code == 404
+                port = request("ask", question="What is the latest container volume?").json()
+                assert len(port["facts"]) == 1 and "14,474" in port["facts"][0]["text"]
+                ident = port["facts"][0]["href"].split("/")[-1].split("?")[0]
+                first = request("document", document_id=ident).json()
+                second = request("document", document_id=ident, offset=50).json()
+                assert first["page_size"] == 50 and first["point_count"] == 67
+                assert len(first["points"]) == 50 and len(second["points"]) == 17
+                assert first["points"][0]["display_value"] == "14,474"
+                assert first["points"][0]["date"] == "2026-01-01"
+                assert second["points"][-1]["date"] == "1960-01-01"
+                assert request("document", document_id=ident, offset=0).json() == first
+                assert request("document", document_id=ident, row=0).json() == second
+                assert request("document", tenant=other, document_id=ident, row=0).status_code == 404
                 for _ in range(2):
                     refreshed = request("refresh", tenant=other)
                     assert refreshed.status_code == 200 and refreshed.json() == {"status": "queued"}

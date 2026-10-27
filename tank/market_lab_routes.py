@@ -13,6 +13,7 @@ class MarketRequest(BaseModel):
     question: str = Field(default="", max_length=2000)
     document_id: UUID | None = None
     offset: int = Field(default=0, ge=0, le=10000000)
+    row: int | None = Field(default=None, ge=0, le=10000000)
 
 
 def build_router(tank):
