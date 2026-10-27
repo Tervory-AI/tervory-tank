@@ -177,42 +177,46 @@ def _advisory_fields(
     *,
     advisory: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    """Severity / CVE only from a real, linked, matched public advisory.
+    """Severity / CVE only when Autumbra itself matches a Market Lab public advisory.
 
-    Never stamp an invented advisory/CVE/critical from caller nonsense.
-    Requires: allowlisted public advisory URL + rating + matched flag (or inventory match id).
+    Caller matched / match_id / matched_component / from_match are ignored.
+    Autumbra looks the hint up in the Market Lab catalog and stamps only what
+    that row proves (allowlisted public URL + rating from Market Lab).
     """
+    import re
+
+    from .market_lab_intel import match_advisory_from_market_lab
+
     unknown = {
         "severity": ThreatSeverity.unknown.value,
         "cve_ids": [],
         "confidence": 0.0,
         "advisory_url": None,
+        "source_name": "",
+        "source_url": "",
+        "component": "",
     }
     if not advisory or not isinstance(advisory, dict):
         return unknown
-    url = str(advisory.get("advisory_url") or advisory.get("url") or "").strip()
-    rating = str(advisory.get("rating") or advisory.get("severity") or "").strip().lower()
-    # Matched means Watch tied this to inventory / a real feed row — not a free-form stamp.
-    matched = bool(
-        advisory.get("matched")
-        or advisory.get("match_id")
-        or advisory.get("matched_component")
-        or advisory.get("from_match")
-    )
-    if not url or not rating or not matched:
+    # Strip caller assertions so they cannot smuggle a match.
+    hint = {
+        k: v for k, v in advisory.items()
+        if k not in {"matched", "match_id", "matched_component", "from_match"}
+    }
+    ml = match_advisory_from_market_lab(hint)
+    if not ml:
+        return unknown
+    url = str(ml.get("url") or "").strip()
+    rating = str(ml.get("rating") or "").strip().lower()
+    if not url or not rating:
         return unknown
     if not _advisory_url_is_public(url):
         return unknown
-    cve = str(advisory.get("advisory_id") or advisory.get("cve_id") or "").strip()
+    cve = str(ml.get("advisory_id") or "").strip()
     cves: list[str] = []
-    # Only accept well-shaped CVEs when the advisory is matched + linked.
-    import re
     cve_re = re.compile(r"^CVE-\d{4}-\d{4,}$")
     if cve_re.fullmatch(cve):
         cves.append(cve)
-    for extra in advisory.get("cve_ids") or []:
-        if isinstance(extra, str) and cve_re.fullmatch(extra) and extra not in cves:
-            cves.append(extra)
     try:
         sev = ThreatSeverity(rating).value
     except ValueError:
@@ -222,8 +226,11 @@ def _advisory_fields(
     return {
         "severity": sev,
         "cve_ids": cves[:20],
-        "confidence": float(advisory.get("confidence") or 0.85),
+        "confidence": 0.85,
         "advisory_url": url,
+        "source_name": str(ml.get("source_name") or "public advisory"),
+        "source_url": str(ml.get("source_url") or url),
+        "component": str(ml.get("component") or ""),
     }
 
 
@@ -288,6 +295,10 @@ def watch_enqueue_fixture_attack(
         "severity": payload.severity.value,
         "cve_ids": list(payload.cve_ids),
         "advisory_url": payload.advisory_url,
+        "source_name": adv.get("source_name") or "",
+        "source_url": adv.get("source_url") or "",
+        "component": adv.get("component") or "",
+        "stack": adv.get("component") or "",
     }
     stamp_budget(receipt, stage="event_to_decision", seconds=time.perf_counter() - t0)
     return receipt

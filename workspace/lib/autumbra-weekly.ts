@@ -1,0 +1,32 @@
+
+const TANK_URL = process.env.TANK_URL ?? "http://tank:8000";
+const TANK_API_KEY = process.env.TANK_API_KEY ?? "";
+
+export type WeeklyReceipt = {
+  id?: string;
+  timestamp?: string;
+  outcome?: string;
+  severity?: string;
+  advisory_url?: string;
+  site?: string;
+  url?: string;
+};
+
+export async function loadWeeklyReceipts(tenant: string): Promise<{ receipts: WeeklyReceipt[]; note?: string }> {
+  if (!TANK_API_KEY) {
+    return { receipts: [], note: "Receipt list is not configured on this host yet." };
+  }
+  try {
+    const res = await fetch(
+      `${TANK_URL}/v1/ghost/autumbra/receipts/weekly/${encodeURIComponent(tenant)}`,
+      { method: "GET", cache: "no-store", headers: { "x-tank-key": TANK_API_KEY } },
+    );
+    if (!res.ok) {
+      return { receipts: [], note: "Could not load this week's receipts right now." };
+    }
+    const data = (await res.json()) as { receipts?: WeeklyReceipt[] };
+    return { receipts: Array.isArray(data.receipts) ? data.receipts : [] };
+  } catch {
+    return { receipts: [], note: "Could not reach Autumbra for this week's receipts." };
+  }
+}

@@ -17,6 +17,7 @@ from agents.ghost.fixture_edge import FixtureEdgeControl
 from agents.ghost.never_block import ActionCap
 from agents.ghost.owner_email import build_owner_update
 from agents.ghost.tenant_queue import load_mirrored_settings, mirror_settings, queue_path_for_tenant
+from agents.ghost.market_lab_intel import load_market_lab_advisories
 from agents.ghost.threat_payload import ThreatSeverity
 from agents.ghost.threat_queue import (
     ThreatPayloadQueue,
@@ -398,7 +399,14 @@ def test_14_no_fixed_cve_without_advisory(tmp_path: Path):
     assert watch["severity"] == ThreatSeverity.unknown.value
     assert watch["cve_ids"] == []
     assert watch.get("advisory_url") in (None, "")
-    # With matched advisory → severity + link.
+    # Caller matched:true alone never stamps — Autumbra matches Market Lab catalog.
+    load_market_lab_advisories([{
+        "advisory_id": "CVE-2026-109618",
+        "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-109618",
+        "rating": "critical",
+        "component": "php",
+        "source_name": "NVD",
+    }])
     watch2 = watch_enqueue_fixture_attack(
         queue=queue,
         raw_log="src=203.0.113.10 path=/a",
@@ -415,6 +423,7 @@ def test_14_no_fixed_cve_without_advisory(tmp_path: Path):
     assert watch2["severity"] == "critical"
     assert "CVE-2026-109618" in watch2["cve_ids"]
     assert "nvd.nist.gov" in (watch2.get("advisory_url") or "")
+    load_market_lab_advisories([])
 
 
 

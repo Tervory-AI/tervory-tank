@@ -16,13 +16,15 @@ from agents.ghost.durable_shields import (
     shields_path,
 )
 from agents.ghost.fixture_edge import FixtureEdgeControl
+from agents.ghost.market_lab_intel import load_market_lab_advisories
+from agents.ghost.owner_email import FixtureEmailTransport
 from agents.ghost.owner_email_jobs import (
     default_receipt_url,
     list_clients_with_owner,
+    normalize_severity,
     run_weekly_owner_updates,
     week_stats_from_receipts,
 )
-from agents.ghost.owner_email import FixtureEmailTransport
 from agents.ghost.store import Store
 from agents.ghost.threat_payload import ThreatSeverity
 from agents.ghost.threat_queue import (
@@ -225,6 +227,10 @@ def test_finding8_weekly_covers_every_owner_from_receipts(tmp_path: Path):
         "severity": "unknown",
         "undo": {"rule_id": "abcd"},
         "address": "203.0.113.1",
+        "timestamp": "2026-10-26T12:00:00Z",
+        "site": "coolify.tervory.com",
+        "source_url": "https://feodotracker.abuse.ch/",
+        "source_name": "abuse.ch Feodo",
     }]
     transport = FixtureEmailTransport()
     results = run_weekly_owner_updates(
@@ -243,6 +249,7 @@ def test_finding8_weekly_covers_every_owner_from_receipts(tmp_path: Path):
 
 def test_finding11_invented_advisory_never_stamps_severity(tmp_path: Path):
     queue = ThreatPayloadQueue(tmp_path / "q")
+    load_market_lab_advisories([])  # empty Market Lab catalog
     watch = watch_enqueue_fixture_attack(
         queue=queue,
         raw_log="src=203.0.113.9 path=/a",
@@ -257,7 +264,32 @@ def test_finding11_invented_advisory_never_stamps_severity(tmp_path: Path):
     assert watch["severity"] == ThreatSeverity.unknown.value
     assert watch["cve_ids"] == []
     assert watch.get("advisory_url") in (None, "")
-    # Matched + public host → stamps.
+    # Caller matched:true + invented CVE on public host MUST be ignored.
+    watch_asserted = watch_enqueue_fixture_attack(
+        queue=queue,
+        raw_log="src=203.0.113.11 path=/a",
+        site="coolify.tervory.com",
+        address="203.0.113.11",
+        advisory={
+            "rating": "critical",
+            "advisory_id": "CVE-2026-9999",
+            "advisory_url": "https://nvd.nist.gov/vuln/detail/CVE-2026-9999",
+            "matched": True,
+            "match_id": "m1",
+            "from_match": True,
+        },
+    )
+    assert watch_asserted["severity"] == ThreatSeverity.unknown.value
+    assert watch_asserted["cve_ids"] == []
+    # Only Autumbra's own Market Lab match stamps severity.
+    load_market_lab_advisories([{
+        "advisory_id": "CVE-2026-109618",
+        "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-109618",
+        "rating": "critical",
+        "component": "php",
+        "source_name": "NVD",
+        "source_url": "https://nvd.nist.gov/vuln/detail/CVE-2026-109618",
+    }])
     watch2 = watch_enqueue_fixture_attack(
         queue=queue,
         raw_log="src=203.0.113.10 path=/a",
@@ -267,12 +299,13 @@ def test_finding11_invented_advisory_never_stamps_severity(tmp_path: Path):
             "rating": "critical",
             "advisory_id": "CVE-2026-109618",
             "advisory_url": "https://nvd.nist.gov/vuln/detail/CVE-2026-109618",
+            # caller flags ignored even when present
             "matched": True,
-            "match_id": "m1",
         },
     )
     assert watch2["severity"] == "critical"
     assert "CVE-2026-109618" in watch2["cve_ids"]
+    load_market_lab_advisories([])
 
 
 def test_finding6_undo_weekly_pages_owner_facing():
@@ -281,12 +314,18 @@ def test_finding6_undo_weekly_pages_owner_facing():
         encoding="utf-8"
     )
     button = Path("workspace/app/autumbra/undo/UndoButton.tsx").read_text(encoding="utf-8")
+    api = Path("workspace/app/api/autumbra/undo/route.ts").read_text(encoding="utf-8")
+    mw = Path("workspace/middleware.ts").read_text(encoding="utf-8")
     assert "ThreatPayload" not in undo
     assert "/ghost/autumbra" not in undo
     assert "UndoButton" in undo
     assert "Undo this shield" in button
+    assert "token" in button
+    assert "verifyUndoToken" in api
+    assert '"/api/autumbra/undo"' in mw
     assert "founder console" not in weekly.lower()
     assert "/ghost/autumbra" not in weekly
+    assert "receipts.map" in weekly or "receipts.length" in weekly
     assert "Promise<" in undo and "Promise<" in weekly
 
 
@@ -297,22 +336,43 @@ def test_finding5_on_act_email_wired():
     assert "build_owner_update_from_receipts" in src
 
 
-def test_week_stats_from_receipts_ignores_request_shaped_noise():
+def test_week_stats_from_receipts_ignores_request_shaped_noise(monkeypatch):
+    monkeypatch.setenv("AUTUMBRA_UNDO_TOKEN_SECRET", "test-undo-secret-for-stats")
+    now = "2026-10-26T12:00:00Z"
+    old = "2026-09-01T12:00:00Z"
     stats = week_stats_from_receipts(
         [{
             "tenant_id": TENANT,
             "role": "Enforce",
             "outcome": "applied",
             "applied": True,
-            "severity": "critical",
+            "severity": ThreatSeverity.critical,  # enum must count as critical
             "advisory_url": "https://nvd.nist.gov/vuln/detail/CVE-2024-1234",
             "cve_ids": ["CVE-2024-1234"],
             "undo": {"rule_id": "ab"},
             "id": "rid-1",
+            "timestamp": now,
+            "site": "coolify.tervory.com",
+        }, {
+            # Outside the reported week — must not count.
+            "tenant_id": TENANT,
+            "role": "Enforce",
+            "outcome": "applied",
+            "applied": True,
+            "severity": "critical",
+            "advisory_url": "https://nvd.nist.gov/vuln/detail/CVE-2024-9999",
+            "cve_ids": ["CVE-2024-9999"],
+            "undo": {"rule_id": "cd"},
+            "id": "rid-old",
+            "timestamp": old,
         }],
         tenant_id=TENANT,
     )
     assert stats["threats_found"] == 1
     assert len(stats["critical"]) == 1
+    assert stats["critical"][0]["rating"] == "critical"
     assert stats["shield"]["blocked_addresses"] == 1
     assert "/autumbra/undo/rid-1" in stats["undo_shield_url"]
+    assert "token=" in stats["undo_shield_url"]
+    assert normalize_severity(ThreatSeverity.critical) == "critical"
+    assert normalize_severity("ThreatSeverity.critical") == "critical"

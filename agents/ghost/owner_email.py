@@ -96,58 +96,94 @@ def build_owner_update(
         stack_list = ", ".join(stacks[:-1]) + " and " + stacks[-1]
         stack_list_linked = ", ".join(linked_stacks[:-1]) + " and " + linked_stacks[-1]
 
-    advisory_clause = " (Each linked to its public advisory.)"
-
-    body_lines = [
+    # Lead sentence always states what happened. Critical / fix-PR / campaign
+    # sentences are omitted unless the matching proof exists.
+    lead = (
         f"This week we found {_link(str(n), receipt_url)} "
-        f"threats to {site}. {_link(str(c), receipt_url)} "
-        f"were critical: out-of-date {stack_list_linked} with known holes serious enough to "
-        f"take down a company's whole IT system.{advisory_clause}",
-        "",
-    ]
+        f"threats to {site}."
+    )
+    if c > 0:
+        lead += (
+            f" {_link(str(c), receipt_url)} were critical: out-of-date "
+            f"{stack_list_linked} with known holes serious enough to "
+            f"take down a company's whole IT system. "
+            f"(Each linked to its public advisory.)"
+        )
+    body_lines = [lead, ""]
+
+    def _is_real_pr_url(url: str) -> bool:
+        u = (url or "").strip().lower()
+        if not u.startswith("http"):
+            return False
+        if "protect.tervory.com" in u or "/autumbra/" in u:
+            return False
+        return "github.com/" in u or "gitlab.com/" in u
+
+    def _is_matched_public_source(url: str) -> bool:
+        u = (url or "").strip().lower()
+        if not u.startswith("http"):
+            return False
+        # Our own receipt pages are not a matched public campaign source.
+        if "protect.tervory.com" in u or "tervory.com/autumbra" in u:
+            return False
+        return True
 
     mode = settings.fix_mode
     if mode is ApplyMode.auto_when_checks_pass:
-        if not undo_fix_url:
-            raise ValueError("auto fix paragraph requires undo_fix_url (no placeholders)")
-        body_lines.append(
-            f"You chose to let us fix this kind of problem automatically, so we did. "
-            f"{stack_list} are now on patched versions and your site passed its own "
-            f"checks afterwards. Here is the report; you can send it to your IT manager, "
-            f"who can reverse our change with one click. "
-            f"{_link('Undo', undo_fix_url)}"
-        )
+        if undo_fix_url:
+            body_lines.append(
+                f"You chose to let us fix this kind of problem automatically, so we did. "
+                f"{stack_list} are now on patched versions and your site passed its own "
+                f"checks afterwards. Here is the report; you can send it to your IT manager, "
+                f"who can reverse our change with one click. "
+                f"{_link('Undo', undo_fix_url)}"
+            )
     elif mode is ApplyMode.approve_each:
-        if not pr_url:
-            raise ValueError("approve-each paragraph requires pr_url (no placeholders)")
-        body_lines.append(
-            f"You chose to approve fixes yourself. We have built the fix and it is "
-            f"waiting for your approval here. {_link('Approve the fix', pr_url)} "
-            f"Until you approve it, the hole is still open; we have reduced the risk at "
-            f"the edge as described below."
-        )
+        # "we built the fix" only when a real fix PR exists with its link.
+        if _is_real_pr_url(pr_url):
+            body_lines.append(
+                f"You chose to approve fixes yourself. We have built the fix and it is "
+                f"waiting for your approval here. {_link('Approve the fix', pr_url)} "
+                f"Until you approve it, the hole is still open; we have reduced the risk at "
+                f"the edge as described below."
+            )
+        else:
+            body_lines.append(
+                "You chose to approve fixes yourself. "
+                "We have reduced the risk at the edge as described below."
+            )
     else:
-        if not fix_report_url:
-            raise ValueError("never paragraph requires fix_report_url (no placeholders)")
-        body_lines.append(
-            f"You chose that we never touch your code. Here is exactly what to fix and how. "
-            f"{_link('Report', fix_report_url)} "
-            f"We have reduced the risk at the edge as described below."
-        )
+        # Dedicated fix report (not the weekly receipts page) keeps the Report link.
+        report = (fix_report_url or "").strip()
+        if report and "protect.tervory.com/autumbra/receipts" not in report:
+            body_lines.append(
+                f"You chose that we never touch your code. Here is exactly what to fix and how. "
+                f"{_link('Report', report)} "
+                f"We have reduced the risk at the edge as described below."
+            )
+        else:
+            body_lines.append(
+                "You chose that we never touch your code. "
+                "We have reduced the risk at the edge as described below."
+            )
 
     if shield:
         blocked = int(shield.get("blocked_addresses") or 0)
         source_url = str(shield.get("source_url") or "").strip()
         source_name = str(shield.get("source_name") or "public source").strip()
-        if not source_url:
-            raise ValueError("shield paragraph requires source_url (no placeholders)")
         if not undo_shield_url:
             raise ValueError("shield paragraph requires undo_shield_url (no placeholders)")
-        public_source = _link(source_name, source_url)
+        campaign = _is_matched_public_source(source_url)
+        if campaign:
+            public_source = _link(source_name, source_url)
+            campaign_clause = (
+                f"It was part of a widely reported campaign ({public_source}). "
+            )
+        else:
+            campaign_clause = ""
         body_lines.extend([
             "",
-            f"We also stopped an attack in progress. It was part of a widely reported "
-            f"campaign ({public_source}). "
+            f"We also stopped an attack in progress. {campaign_clause}"
             f"We blocked {_link(str(blocked), receipt_url)} "
             f"addresses that were attacking your site. Your own addresses, your payment "
             f"provider and Cloudflare were never blocked. If this caused any problem, undo "

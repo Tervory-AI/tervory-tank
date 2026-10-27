@@ -39,17 +39,21 @@ from .client_settings import (
     save_settings,
     set_hand,
 )
-from .market_lab_intel import accept_ioc_bundle, backend_status as intel_backend_status, receipt_for_bundle_consume
+from .market_lab_intel import (
+    accept_ioc_bundle,
+    backend_status as intel_backend_status,
+    receipt_for_bundle_consume,
+    register_advisories_from_ioc_bundle,
+)
 from .webhooks import WebhookRejected, accept_signed, drop_counts
 from .red_team import list_exercises, run_exercise
 from .enforce_lifecycle import FixtureComposeBackend, plan_create, plan_destroy, receipt_for
-from .owner_email import DEFAULT_FIXTURE_TRANSPORT, build_owner_update, send_owner_update
+from .owner_email import DEFAULT_FIXTURE_TRANSPORT, send_owner_update
 from .owner_email_jobs import (
     build_owner_update_from_receipts,
     default_receipt_url,
     list_clients_with_owner,
     run_weekly_owner_updates,
-    week_stats_from_receipts,
 )
 from .probes import Probes
 from .store import Store
@@ -755,6 +759,7 @@ def create_app() -> FastAPI:
             bundle = accept_ioc_bundle(bundle_raw)
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from None
+        register_advisories_from_ioc_bundle(bundle)
         receipt = receipt_for_bundle_consume(bundle, tenant_id=tenant_id)
         return {
             "accepted": True,
@@ -801,17 +806,30 @@ def create_app() -> FastAPI:
             tenant_id = str(data.get("tenant_id") or "").strip()
             raw_log = str(data.get("raw_log") or data.get("message") or f"webhook {provider}")
             if address and site and tenant_id and watch_queue_configured():
+                try:
+                    tenant_id = _require_tenant_uuid(tenant_id)
+                except ValueError:
+                    return JSONResponse(
+                        {"accepted": False, "stored": False, "detail": "tenant_id must be a UUID"},
+                        status_code=400,
+                    )
                 ok, why = may_block_ip(address, raw_log=raw_log)
                 if ok:
                     advisory = data.get("advisory") if isinstance(data.get("advisory"), dict) else None
-                    queue_receipt = enqueue_fixture_attack_for_watch(
-                        raw_log=raw_log,
-                        site=site,
-                        address=address,
-                        reason=str(data.get("reason") or f"signed {provider} webhook")[:300],
-                        tenant_id=tenant_id,
-                        advisory=advisory,
-                    )
+                    try:
+                        queue_receipt = enqueue_fixture_attack_for_watch(
+                            raw_log=raw_log,
+                            site=site,
+                            address=address,
+                            reason=str(data.get("reason") or f"signed {provider} webhook")[:300],
+                            tenant_id=tenant_id,
+                            advisory=advisory,
+                        )
+                    except ValueError as exc:
+                        return JSONResponse(
+                            {"accepted": False, "stored": False, "detail": str(exc)},
+                            status_code=400,
+                        )
                     queued = bool(queue_receipt.get("queued"))
                 else:
                     queue_receipt = {"queued": False, "note": why, "outcome": "refused_never_block"}
@@ -995,12 +1013,39 @@ def create_app() -> FastAPI:
 
     @app.get("/ghost/autumbra/receipts/weekly/{tenant_id}")
     async def autumbra_weekly_receipt_page(tenant_id: str):
-        """Page target for weekly email links (must exist)."""
+        """Page target for weekly email links — lists that week's receipts, each linked."""
+        from .owner_email_jobs import PROTECT_HOST, week_bounds, _parse_receipt_time
+
+        try:
+            tid = _require_tenant_uuid(tenant_id)
+        except ValueError:
+            raise HTTPException(400, "tenant_id must be a UUID") from None
+        week_start, week_end = week_bounds()
+        rows = []
+        for receipt in _receipts_for_tenant(tid):
+            moment = _parse_receipt_time(receipt)
+            if moment is None or moment < week_start or moment > week_end:
+                continue
+            rid = str(receipt.get("id") or "")
+            rows.append({
+                "id": rid,
+                "timestamp": receipt.get("timestamp") or receipt.get("at"),
+                "outcome": receipt.get("outcome"),
+                "severity": receipt.get("severity"),
+                "advisory_url": receipt.get("advisory_url"),
+                "site": receipt.get("site"),
+                "url": f"{PROTECT_HOST}/autumbra/undo/{rid}" if rid else "",
+                "receipt": receipt,
+            })
         return {
             "product": "Autumbra",
             "kind": "weekly_receipts",
-            "tenant_id": tenant_id,
+            "tenant_id": tid,
             "page": "exists",
+            "week_start": week_start.isoformat().replace("+00:00", "Z"),
+            "week_end": week_end.isoformat().replace("+00:00", "Z"),
+            "receipts": rows,
+            "count": len(rows),
             "note": "Weekly owner-update receipt page.",
         }
 

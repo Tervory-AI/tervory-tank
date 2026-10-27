@@ -161,7 +161,7 @@ def accept_threat_payload(raw: bytes | str | dict[str, Any]) -> ThreatPayload:
         payload = ThreatPayload.model_validate(data)
     except ThreatBurned:
         raise
-    except (ValidationError, ValueError, TypeError) as exc:
+    except (ValidationError, ValueError, TypeError):
         raise ThreatBurned() from None
     if payload.action == ThreatAction.propose_shield:
         if payload.kind is None or payload.kind not in KINDS:

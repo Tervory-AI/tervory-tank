@@ -1,3 +1,4 @@
+# coolify: raw compose
 # Per-client Autumbra Enforce. One project per client (Coolify by name).
 # Own entrypoint: ghost.enforce_app:app — NOT ghost.app. No TANK_KEY.
 # Internal network only. No public ports. No Docker socket. No host mounts.
@@ -40,6 +41,7 @@ services:
     # No ports: / no expose to public. Reachable only on the internal network + queue.
 volumes:
   enforce_data:
+    name: ${ENFORCE_DATA_VOLUME}
   threat_queue:
     name: ${THREAT_PAYLOAD_QUEUE_VOLUME}
 networks:

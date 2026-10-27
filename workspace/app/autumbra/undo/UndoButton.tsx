@@ -7,11 +7,13 @@ export function UndoButton({
   tenantId,
   site,
   ruleId,
+  token,
 }: {
   receiptId: string;
   tenantId?: string;
   site?: string;
   ruleId?: string;
+  token?: string;
 }) {
   const [status, setStatus] = useState<"idle" | "working" | "done" | "error">("idle");
   const [message, setMessage] = useState("");
@@ -23,12 +25,16 @@ export function UndoButton({
       const res = await fetch("/api/autumbra/undo", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          receipt_id: receiptId,
-          tenant_id: tenantId || "",
-          site: site || "coolify.tervory.com",
-          rule_id: ruleId || "",
-        }),
+        body: JSON.stringify(
+          token
+            ? { token }
+            : {
+                receipt_id: receiptId,
+                tenant_id: tenantId || "",
+                site: site || "coolify.tervory.com",
+                rule_id: ruleId || "",
+              },
+        ),
       });
       const data = (await res.json()) as { ok?: boolean; detail?: string };
       if (!res.ok || !data.ok) {

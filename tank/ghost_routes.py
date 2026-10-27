@@ -135,6 +135,19 @@ async def autumbra_queue_undo(request: Request, x_tank_key: str = Header(default
     return Response(response.content, status_code=response.status_code, media_type="application/json")
 
 
+
+@router.get("/autumbra/receipts/weekly/{tenant_id}")
+async def autumbra_weekly_receipts(tenant_id: str, request: Request, x_tank_key: str = Header(default="")):
+    """Owner weekly page: list that week's receipts for one client."""
+    agent = await runtime().require_key(request, x_tank_key)
+    if agent not in (None, "ghost"):
+        raise HTTPException(404, "Not found.")
+    response = await call_room(
+        "GET", "ghost", f"/ghost/autumbra/receipts/weekly/{tenant_id}", body=None
+    )
+    return Response(response.content, status_code=response.status_code, media_type="application/json")
+
+
 class Check(BaseModel):
     model_config = ConfigDict(extra="forbid")
     target: str

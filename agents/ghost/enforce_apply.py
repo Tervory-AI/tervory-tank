@@ -26,7 +26,8 @@ PENDING_APPROVAL_TTL_SEC = 7 * 24 * 3600
 
 def payload_fields_only(payload: ThreatPayload) -> dict[str, Any]:
     """The only input Enforce may see."""
-    return payload.model_dump()
+    # mode=json so severity is "critical", never ThreatSeverity.critical str()
+    return payload.model_dump(mode="json")
 
 
 def _measure_raw_log_seen(payload: object) -> bool:

@@ -1,23 +1,46 @@
 import { NextResponse } from "next/server";
+import { verifyUndoToken } from "@/lib/autumbra-undo-token";
 
 /**
- * Owner-facing undo door. Posts a ThreatPayload undo to Autumbra Watch through Tank.
- * Public page button hits this; secrets stay server-side.
+ * Owner-facing undo door. Verifies the signed email token (tenant + shield),
+ * then posts a ThreatPayload undo to Autumbra Watch through Tank.
+ * Public: no workspace sign-in — the token is the credential.
  */
 const TANK_URL = process.env.TANK_URL ?? "http://tank:8000";
 const TANK_API_KEY = process.env.TANK_API_KEY ?? "";
 
 export async function POST(request: Request) {
-  let body: { receipt_id?: string; tenant_id?: string; site?: string; rule_id?: string };
+  let body: { token?: string; receipt_id?: string; tenant_id?: string; site?: string; rule_id?: string };
   try {
     body = (await request.json()) as typeof body;
   } catch {
     return NextResponse.json({ ok: false, detail: "Could not read the undo request." }, { status: 400 });
   }
-  const receiptId = String(body.receipt_id || "").trim();
-  const tenantId = String(body.tenant_id || "").trim();
-  const site = String(body.site || "coolify.tervory.com").trim();
-  const ruleId = String(body.rule_id || "").trim();
+
+  const token = String(body.token || "").trim();
+  let tenantId = "";
+  let receiptId = "";
+  let site = "";
+  let ruleId = "";
+
+  if (token) {
+    try {
+      const payload = verifyUndoToken(token);
+      tenantId = payload.tenant_id;
+      receiptId = payload.receipt_id;
+      site = payload.site || "coolify.tervory.com";
+      ruleId = payload.rule_id;
+    } catch {
+      return NextResponse.json({ ok: false, detail: "This undo link is invalid or has expired." }, { status: 401 });
+    }
+  } else {
+    // Legacy body fields — still require tenant; prefer token from email.
+    receiptId = String(body.receipt_id || "").trim();
+    tenantId = String(body.tenant_id || "").trim();
+    site = String(body.site || "coolify.tervory.com").trim();
+    ruleId = String(body.rule_id || "").trim();
+  }
+
   if (!receiptId && !ruleId) {
     return NextResponse.json({ ok: false, detail: "Missing receipt to undo." }, { status: 400 });
   }
@@ -30,7 +53,7 @@ export async function POST(request: Request) {
       { status: 503 },
     );
   }
-  // Tank admin corridor → Watch queue/undo (ThreatPayload door).
+
   const payload = {
     tenant_id: tenantId,
     site,

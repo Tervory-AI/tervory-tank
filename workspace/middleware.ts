@@ -11,6 +11,8 @@ const isPublic = createRouteMatcher([
   "/api/health",
   "/api/billing/webhook",
   "/autumbra(.*)",
+  "/api/autumbra/undo",
+  "/api/autumbra/receipts(.*)",
   "/moot(.*)",
 ]);
 
