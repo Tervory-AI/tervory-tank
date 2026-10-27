@@ -330,6 +330,19 @@ Next: the Radix client upload and deploy gate, the Tisan build flow, brains for 
 | `codex/sec-code` (#329) | Code security | Open; its Dockerfile install lines were unpinned at the last review |
 | `docs/go-live-list` | Figma C5 export (still needed), go-live list, break points | The lists are superseded by this file |
 
+## 7b. Recommendations (the founder works through them one by one)
+Claude's suggestions, 27 Oct 13:20 PT. None is built until the founder decides. In Notion they are a ticking checklist on the page "Recommendations (work through one by one)".
+
+1. **Keep the Postgres batch queue; don't move it to Redis.** Postgres keeps queued jobs safe across a restart. The gap is that only OpenAI models batch (`tank/main.py:2398`).
+2. **Use Coolify's scheduled tasks before Airflow.** Coolify is already running; Airflow is budgeted at 1 vCPU and 2 GB. Move to Airflow when jobs start depending on each other.
+3. **Check RouteLLM fits before building on it.** It picks between one strong and one weak model on chat questions, and may not be actively maintained.
+4. **Swap the weak or missing pieces first:** DeepEval, Langfuse, Qdrant for the cache, Gitleaks and Semgrep in CI, Uptime Kuma. Swap working pieces (Tiger's diff, Zenas's clause library, Base's reader, Tisan's scorer) once each product is proven live.
+5. **Langfuse adds load:** it needs ClickHouse and object storage. Check Boston's memory first, or run it on the worker server.
+6. **Check the licences of Firecrawl and Grafana** (believed AGPL) before offering a changed copy to clients.
+7. **Paid steps:** an "auto" or "ask first" setting per step, auto by default for funded steps, with the global pause as the master switch.
+8. **Graduation bar:** 99% agreement over at least 200 checked samples, plus the founder's approval.
+9. **Mixture of Agents:** off until the bench proves a mixture cheaper at the same quality, then switched on per task.
+
 ## 8. Every tool: where it goes and which agents it serves
 **Status:**
 - **In:** in the code and on.
