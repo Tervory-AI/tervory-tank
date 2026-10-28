@@ -69,8 +69,15 @@ async def test_room_pipeline_uses_scores_and_export_retains_both_sources(tmp_pat
         {"source_url": SITE, "checked_at": STAMP, "phones": ["512-555-0100"]},
         {"source_url": SOCIAL, "checked_at": STAMP, "phones": ["512-555-0199"]}]
     requests = []
-    score_rows = [{"source": "own_site", "field": "phone", "wilson_lower": .4},
-                  {"source": "social_profile", "field": "phone", "wilson_lower": .9}]
+    # A known, fully local field audit produces these scores: 50/100 vs 100/100.
+    known = {"records": [], "field_verdicts": {}}
+    for i in range(200):
+        rid = str(i)
+        source = "own_site" if i < 100 else "social_profile"
+        known["records"].append({"record_id": rid, "fields": {"phone": {
+            "value": "offline", "verified": True, "source_kind": source}}})
+        known["field_verdicts"][rid] = {"phone": "correct" if i < 50 or i >= 100 else "wrong"}
+    score_rows = scores([known])
 
     def handle(request):
         requests.append(request.url.path)
@@ -94,7 +101,7 @@ async def test_room_pipeline_uses_scores_and_export_retains_both_sources(tmp_pat
     assert requests.count("/v1/base-product/source-reliability/room") == 1
     assert outcome.profile["phone"]["value"] == "512-555-0199"
     choice = outcome.passes["source_reliability"]["phone"]
-    assert choice["wilson_lower"] == .9 and len(choice["candidates"]) == 2
+    assert choice["wilson_lower"] == pytest.approx(wilson_lower(100, 100)) and len(choice["candidates"]) == 2
     fields = row_fields({"status": outcome.status, "profile": outcome.profile, "passes": outcome.passes})
     assert fields["phone"]["value"] == "512-555-0199"
     assert fields["phone"]["source_kind"] == "social_profile"
