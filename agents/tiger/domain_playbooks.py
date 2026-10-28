@@ -92,13 +92,30 @@ def _advance(state: dict, page_hash: str, generation: int, attempted: bool | Non
     return True
 
 
-async def ensure_tables(conn, schema: str) -> None:
-    await conn.execute(f'''CREATE TABLE IF NOT EXISTS {schema}.domain_playbooks (
+_SCHEMA = re.compile(r"^[a-z_][a-z0-9_]*$")
+
+SQL_CREATE_PLAYBOOKS = """CREATE TABLE IF NOT EXISTS {schema}.domain_playbooks (
         domain text PRIMARY KEY,
         generation bigint NOT NULL DEFAULT 0 CHECK(generation>=0),
         marker jsonb,
         failures smallint NOT NULL DEFAULT 0 CHECK(failures BETWEEN 0 AND 3),
-        confirmations jsonb NOT NULL DEFAULT '{{}}'::jsonb)''')
+        confirmations jsonb NOT NULL DEFAULT '{{}}'::jsonb)"""
+SQL_INSERT_DOMAIN = "INSERT INTO {schema}.domain_playbooks(domain) VALUES($1) ON CONFLICT DO NOTHING"
+SQL_GET_PLAYBOOK = "SELECT generation,marker,failures FROM {schema}.domain_playbooks WHERE domain=$1"
+SQL_LOCK_PLAYBOOK = "SELECT generation,marker,failures,confirmations FROM {schema}.domain_playbooks WHERE domain=$1 FOR UPDATE"
+SQL_UPDATE_PLAYBOOK = """UPDATE {schema}.domain_playbooks SET generation=$2,
+                    marker=$3::jsonb,failures=$4,confirmations=$5::jsonb WHERE domain=$1"""
+
+
+def _sql(statement: str, schema: str) -> str:
+    """Fixed statement text with the room's own schema name; every value stays a $n parameter."""
+    if not _SCHEMA.fullmatch(schema):
+        raise ValueError("invalid schema name")
+    return statement.format(schema=schema)
+
+
+async def ensure_tables(conn, schema: str) -> None:
+    await conn.execute(_sql(SQL_CREATE_PLAYBOOKS, schema))
 
 
 class MemoryPlaybooks:
@@ -116,8 +133,8 @@ class PgPlaybooks:
     async def get_playbook(self, domain: str) -> dict:
         async with self.pool.acquire() as conn:
             await ensure_tables(conn, self.schema)
-            await conn.execute(f'INSERT INTO {self.schema}.domain_playbooks(domain) VALUES($1) ON CONFLICT DO NOTHING', domain)
-            row = await conn.fetchrow(f'SELECT generation,marker,failures FROM {self.schema}.domain_playbooks WHERE domain=$1', domain)
+            await conn.execute(_sql(SQL_INSERT_DOMAIN, self.schema), domain)
+            row = await conn.fetchrow(_sql(SQL_GET_PLAYBOOK, self.schema), domain)
         result = dict(row)
         if isinstance(result['marker'], str):
             result['marker'] = json.loads(result['marker'])
@@ -127,7 +144,7 @@ class PgPlaybooks:
                               attempted: bool | None, confirmed: dict | None) -> None:
         async with self.pool.acquire() as conn:
             async with conn.transaction():
-                row = await conn.fetchrow(f'SELECT generation,marker,failures,confirmations FROM {self.schema}.domain_playbooks WHERE domain=$1 FOR UPDATE', domain)
+                row = await conn.fetchrow(_sql(SQL_LOCK_PLAYBOOK, self.schema), domain)
                 if row is None:
                     return
                 state = dict(row)
@@ -136,7 +153,6 @@ class PgPlaybooks:
                         state[key] = json.loads(state[key])
                 if not _advance(state, page_hash, generation, attempted, confirmed):
                     return
-                await conn.execute(f'''UPDATE {self.schema}.domain_playbooks SET generation=$2,
-                    marker=$3::jsonb,failures=$4,confirmations=$5::jsonb WHERE domain=$1''',
+                await conn.execute(_sql(SQL_UPDATE_PLAYBOOK, self.schema),
                     domain, state['generation'], json.dumps(state['marker']) if state['marker'] else None,
                     state['failures'], json.dumps(state['confirmations']))
