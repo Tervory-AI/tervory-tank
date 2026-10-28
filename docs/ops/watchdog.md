@@ -27,3 +27,6 @@ GitHub emails people who watch the repository. The log shows status codes and na
 GitHub → **Actions** → **watchdog** → **Run workflow**. Leave the drill field empty.
 
 The drill field takes one check name and fails that check on purpose, so you can see a single issue open and the next good run close it. Leave it empty for a real run.
+## Uptime Kuma (Boston)
+
+Uptime Kuma is also deployed on Boston (see `docs/ops/uptime-kuma.md`). **Keep this GitHub watchdog** until Kuma has run clean for one week. Do not delete the workflow or script in the same change that adds Kuma.

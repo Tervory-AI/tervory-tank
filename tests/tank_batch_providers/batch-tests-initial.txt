@@ -1,0 +1,175 @@
+.....F.F.......F.F..........................                             [100%]
+=================================== FAILURES ===================================
+__ test_partial_failure_one_fallback_preserves_reservation[errored-anthropic] __
+
+ladder = namespace(tank=<module 'main' from '/workspace/tervory-tank/tank/main.py'>, pool=<asyncpg.pool.Pool object at 0x7f97a2...system instruction'}, {'role': 'user', 'content': 'Offline input 0'}], 'max_tokens': 1024, 'disable_fallbacks': True}])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f97a2a0d130>
+provider = 'anthropic', failure = 'errored'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('provider', PROVIDERS)
+    @pytest.mark.parametrize('failure', ['errored', 'canceled', 'expired', 'missing'])
+    async def test_partial_failure_one_fallback_preserves_reservation(ladder, monkeypatch, provider, failure):  # noqa: F811
+        b = ladder
+        stub, body = await setup(b, monkeypatch, provider)
+        stub.failures[1] = failure
+        await b.tank.route_batch(body, None)
+        async with b.pool.acquire() as conn:
+            reserved = await conn.fetchval('SELECT reserved_usd FROM tank.batch_items WHERE batch_id=$1 AND position=1', body.id)
+        await b.tank.process_batches_once()
+        stub.finished = True
+        await b.tank.process_batches_once()
+        await b.tank.process_batches_once()
+        result = await b.tank.batch_status(body.id, b.tenants[0])
+        assert result['status'] == 'completed'
+        assert len(b.sent) == 1 and b.sent[0]['disable_fallbacks'] is True
+        assert len(stub.submissions()) == 1
+>       assert result['results'][0]['discount_usd'] > 0
+E       assert 0.0 > 0
+
+tests/test_tank_batch_providers.py:153: AssertionError
+_ test_partial_failure_one_fallback_preserves_reservation[canceled-vertex_ai] __
+
+ladder = namespace(tank=<module 'main' from '/workspace/tervory-tank/tank/main.py'>, pool=<asyncpg.pool.Pool object at 0x7f97a2...system instruction'}, {'role': 'user', 'content': 'Offline input 0'}], 'max_tokens': 1024, 'disable_fallbacks': True}])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f97a2853860>
+provider = 'vertex_ai', failure = 'canceled'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('provider', PROVIDERS)
+    @pytest.mark.parametrize('failure', ['errored', 'canceled', 'expired', 'missing'])
+    async def test_partial_failure_one_fallback_preserves_reservation(ladder, monkeypatch, provider, failure):  # noqa: F811
+        b = ladder
+        stub, body = await setup(b, monkeypatch, provider)
+        stub.failures[1] = failure
+        await b.tank.route_batch(body, None)
+        async with b.pool.acquire() as conn:
+            reserved = await conn.fetchval('SELECT reserved_usd FROM tank.batch_items WHERE batch_id=$1 AND position=1', body.id)
+        await b.tank.process_batches_once()
+        stub.finished = True
+        await b.tank.process_batches_once()
+        await b.tank.process_batches_once()
+        result = await b.tank.batch_status(body.id, b.tenants[0])
+        assert result['status'] == 'completed'
+        assert len(b.sent) == 1 and b.sent[0]['disable_fallbacks'] is True
+        assert len(stub.submissions()) == 1
+>       assert result['results'][0]['discount_usd'] > 0
+E       assert 0.0 > 0
+
+tests/test_tank_batch_providers.py:153: AssertionError
+______ test_cost_cap_refuses_before_submit_and_caps_partial_retry[openai] ______
+
+ladder = namespace(tank=<module 'main' from '/workspace/tervory-tank/tank/main.py'>, pool=<asyncpg.pool.Pool object at 0x7f97a2...b9d5e06120'), UUID('149bd1f3-6896-4d0c-9fe5-341cadbea6a2')), calls=[], key='2f7360ab86ae4a0f932b4b856f08d392', sent=[])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f97a27e93a0>
+provider = 'openai'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('provider', PROVIDERS)
+    async def test_cost_cap_refuses_before_submit_and_caps_partial_retry(ladder, monkeypatch, provider):  # noqa: F811
+        b = ladder
+        stub, body = await setup(b, monkeypatch, provider)
+        prices = await b.tank._batch_price('batch-fixture')
+        messages = [{'role': 'system', 'content': 'Offline system instruction'},
+                    *[m.model_dump() for m in body.requests[0].messages]]
+        reserved = b.tank._call_upper(messages, 1024, prices) * prices['discount']
+        async with b.pool.acquire() as conn:
+            await conn.execute('UPDATE tank.policy SET max_cost_usd=$1 WHERE tenant_id=$2', reserved * 0.9, b.tenants[0])
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as refused:
+            await b.tank.route_batch(body, None)
+        assert refused.value.status_code == 409 and not stub.calls and not b.sent
+        async with b.pool.acquire() as conn:
+            assert await conn.fetchval('SELECT count(*) FROM tank.batches') == 0
+            await conn.execute('UPDATE tank.policy SET max_cost_usd=$1 WHERE tenant_id=$2', reserved * 1.1, b.tenants[0])
+        await b.tank.route_batch(body, None)
+        await b.tank.process_batches_once()
+        stub.finished, stub.failures = True, {1: 'errored'}
+        await b.tank.process_batches_once()
+        await b.tank.process_batches_once()
+        result = await b.tank.batch_status(body.id, b.tenants[0])
+>       assert result['status'] == 'failed' and result['results'][1]['error'] == 'cost_cap'
+E       AssertionError: assert ('failed' == 'failed'
+E         
+E           failed and None == 'cost_cap')
+
+tests/test_tank_batch_providers.py:185: AssertionError
+____ test_cost_cap_refuses_before_submit_and_caps_partial_retry[anthropic] _____
+
+ladder = namespace(tank=<module 'main' from '/workspace/tervory-tank/tank/main.py'>, pool=<asyncpg.pool.Pool object at 0x7f97a2...e6e48411ba'), UUID('e0fc5f72-4ea9-4516-b3a4-d3624d3f4ec1')), calls=[], key='d2c1439b9a164a8283b1576af32f7019', sent=[])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f97a2890dd0>
+provider = 'anthropic'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('provider', PROVIDERS)
+    async def test_cost_cap_refuses_before_submit_and_caps_partial_retry(ladder, monkeypatch, provider):  # noqa: F811
+        b = ladder
+        stub, body = await setup(b, monkeypatch, provider)
+        prices = await b.tank._batch_price('batch-fixture')
+        messages = [{'role': 'system', 'content': 'Offline system instruction'},
+                    *[m.model_dump() for m in body.requests[0].messages]]
+        reserved = b.tank._call_upper(messages, 1024, prices) * prices['discount']
+        async with b.pool.acquire() as conn:
+            await conn.execute('UPDATE tank.policy SET max_cost_usd=$1 WHERE tenant_id=$2', reserved * 0.9, b.tenants[0])
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as refused:
+            await b.tank.route_batch(body, None)
+        assert refused.value.status_code == 409 and not stub.calls and not b.sent
+        async with b.pool.acquire() as conn:
+            assert await conn.fetchval('SELECT count(*) FROM tank.batches') == 0
+            await conn.execute('UPDATE tank.policy SET max_cost_usd=$1 WHERE tenant_id=$2', reserved * 1.1, b.tenants[0])
+        await b.tank.route_batch(body, None)
+        await b.tank.process_batches_once()
+        stub.finished, stub.failures = True, {1: 'errored'}
+        await b.tank.process_batches_once()
+        await b.tank.process_batches_once()
+        result = await b.tank.batch_status(body.id, b.tenants[0])
+>       assert result['status'] == 'failed' and result['results'][1]['error'] == 'cost_cap'
+E       AssertionError: assert ('failed' == 'failed'
+E         
+E           failed and None == 'cost_cap')
+
+tests/test_tank_batch_providers.py:185: AssertionError
+=============================== warnings summary ===============================
+tests/test_tank_batch_providers.py::test_fifty_requests_one_batch_poll_and_discounted_ledger[openai]
+  /workspace/tervory-tank/tank/main.py:676: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+tests/test_tank_batch_providers.py::test_fifty_requests_one_batch_poll_and_discounted_ledger[openai]
+tests/test_tank_batch_providers.py::test_fifty_requests_one_batch_poll_and_discounted_ledger[openai]
+  /workspace/worker-venv/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/test_tank_batch_providers.py::test_fifty_requests_one_batch_poll_and_discounted_ledger[openai]
+  /workspace/tervory-tank/tank/main.py:711: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+tests/test_tank_batch_providers.py::test_fifty_requests_one_batch_poll_and_discounted_ledger[openai]
+  /workspace/tervory-tank/tank/agent_skills.py:529: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_tank_batch_providers.py::test_partial_failure_one_fallback_preserves_reservation[errored-anthropic]
+FAILED tests/test_tank_batch_providers.py::test_partial_failure_one_fallback_preserves_reservation[canceled-vertex_ai]
+FAILED tests/test_tank_batch_providers.py::test_cost_cap_refuses_before_submit_and_caps_partial_retry[openai]
+FAILED tests/test_tank_batch_providers.py::test_cost_cap_refuses_before_submit_and_caps_partial_retry[anthropic]
+4 failed, 40 passed, 5 warnings in 31.72s
