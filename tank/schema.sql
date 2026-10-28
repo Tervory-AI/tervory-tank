@@ -1887,6 +1887,10 @@ CREATE TABLE IF NOT EXISTS tank.base_source_reliability (
     updated_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY(source, field)
 );
+-- Additive ownership for branches that already installed the initial score table.
+ALTER TABLE tank.base_source_reliability ADD COLUMN IF NOT EXISTS owner_id uuid NOT NULL
+    DEFAULT '00000000-0000-0000-0000-000000000001'
+    CHECK (owner_id='00000000-0000-0000-0000-000000000001'::uuid);
 
 -- Founder decision: retain NOT NULL; a not_set amount is storage only, never spend.
 DO $$
