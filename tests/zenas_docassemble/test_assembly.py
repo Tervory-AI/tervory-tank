@@ -191,7 +191,7 @@ async def test_trigger_legal_handoff_reaches_docassemble_with_notice(api, monkey
     @app.post("/v1/zenas/drafts", status_code=201)
     async def drafts(body: dict):
         return await draft_contract(store, ladder, None, box_region="za", **body)
-    monkeypatch.setitem(sys.modules, "main", SimpleNamespace(app=app, box_region=lambda: "za", TANK_API_KEY="TANK_API_KEY"))
+    monkeypatch.setitem(sys.modules, "main", SimpleNamespace(app=app, box_region=lambda: "za", TANK_API_KEY="placeholder-tank-key"))
     response = await trigger_routes.zenas_draft(
         {"template": "nda", "jurisdiction": "za", "text": "Draft a civil NDA.",
          "terms": {"party": "A", "term": "two years", "amount": 2500}},

@@ -60,11 +60,11 @@ services:
       DAENABLEPLAYGROUND: "false"
       DADEBUG: "false"
       DAALLOWLOGVIEWING: "false"
-      DBPASSWORD: ${DOCASSEMBLE_DB_PASSWORD:?DOCASSEMBLE_DB_PASSWORD is required}
-      DASECRETKEY: ${DOCASSEMBLE_SECRET_KEY:?DOCASSEMBLE_SECRET_KEY is required}
-      DA_ADMIN_EMAIL: ${DOCASSEMBLE_ADMIN_EMAIL:?DOCASSEMBLE_ADMIN_EMAIL is required}
-      DA_ADMIN_PASSWORD: ${DOCASSEMBLE_ADMIN_PASSWORD:?DOCASSEMBLE_ADMIN_PASSWORD is required}
-      DA_ADMIN_API_KEY: ${DOCASSEMBLE_API_KEY:?DOCASSEMBLE_API_KEY is required}
+      DBPASSWORD: ${DOCASSEMBLE_DB_PASSWORD:?Set the Docassemble database password in Coolify}
+      DASECRETKEY: ${DOCASSEMBLE_SECRET_KEY:?Set the Docassemble secret key in Coolify}
+      DA_ADMIN_EMAIL: ${DOCASSEMBLE_ADMIN_EMAIL:?Set the Docassemble admin email in Coolify}
+      DA_ADMIN_PASSWORD: ${DOCASSEMBLE_ADMIN_PASSWORD:?Set the Docassemble admin password in Coolify}
+      DA_ADMIN_API_KEY: ${DOCASSEMBLE_API_KEY:?Set the Docassemble API key in Coolify}
       TIMEZONE: UTC
       DABACKUPDAYS: "14"
     volumes:
