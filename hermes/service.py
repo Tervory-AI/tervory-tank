@@ -199,6 +199,8 @@ def create_app(
         log.info("forget tenant agent=%s tenant=%s deleted=%s", agent, tenant_id, deleted)
         return {"deleted": deleted}
 
+    from hermes.law_routes import register_law_routes
+    register_law_routes(app, current)
     return app
 
 
