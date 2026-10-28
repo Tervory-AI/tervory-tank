@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 from base_gold.observations import observation
+from base_source_scores import prefer, select_observations
 
 BASE_CORE = [
     "base.normalize",
@@ -65,12 +66,26 @@ def is_account_error(exc: Exception) -> bool:
     return any(token in msg for token in _ACCOUNT_ERRORS)
 
 
-def merge(profile: dict[str, Any], fields: dict[str, Any]) -> None:
-    """Keep the higher-confidence value per field."""
+def merge(profile: dict[str, Any], fields: dict[str, Any],
+          table: dict[tuple[str, str], float] | None = None,
+          evidence: dict[str, Any] | None = None) -> None:
+    """Measured source quality wins; without measurements retain confidence fallback."""
     for key, value in fields.items():
         if not isinstance(value, dict):
             continue
-        if key not in profile or int(value.get("confidence") or 0) >= int(profile[key].get("confidence") or 0):
+        old = profile.get(key)
+        if old and table and old.get("value") != value.get("value"):
+            website = val(profile, "website")
+            candidates = [{**item, "website": website} for item in (old, value)]
+            from base_source_scores import classify
+            if any((classify(item.get("source_url"), website,
+                             item.get("source_kind") or item.get("source")), key) in table for item in candidates):
+                winner = prefer(candidates, key, table)
+                profile[key] = {k: v for k, v in winner.items() if k != "website"}
+                if evidence is not None:
+                    evidence[key] = {"selected": winner, "candidates": candidates}
+                continue
+        if old is None or int(value.get("confidence") or 0) >= int(old.get("confidence") or 0):
             profile[key] = value
 
 
@@ -266,7 +281,16 @@ async def enrich_one(
     try:
         norm = await call("base.normalize", raw_input)
         cost += cost_of(norm)
-        merge(profile, norm.get("fields") or {})
+        reliability = {(row["source"], row["field"]): float(row["wilson_lower"])
+                       for row in norm.get("_source_reliability", []) if row.get("wilson_lower") is not None}
+        decisions: dict[str, Any] = {}
+        normalized = norm.get("fields") or {}
+        reference = raw_input.get("_base_reference") or {}
+        if reference:
+            normalized = {key: {**value, "source_kind": "reference_file",
+                                "source_url": reference.get("source_url"), "checked_at": reference.get("checked_at")}
+                          for key, value in normalized.items()}
+        merge(profile, normalized)
         passes["1a"] = {"skill": named("base.normalize", norm), "ms": norm.get("_ms")}
 
         res = await call("base.resolve", {"record": norm, "registry": registry})
@@ -313,7 +337,9 @@ async def enrich_one(
         site = await call("base.find_site", site_in)
         cost += cost_of(site)
         if site.get("website"):
-            profile["website"] = site["website"]
+            merge(profile, {"website": {**site["website"],
+                                       "source_url": site["website"].get("source_url") or site["website"].get("value")}},
+                  reliability, decisions)
         passes["2a"] = {
             "skill": named("base.find_site", site),
             "ms": site.get("_ms"),
@@ -386,6 +412,11 @@ async def enrich_one(
                         "ms": ex.get("_ms"),
                         "cost_usd": round(float(ex.get("_cost_usd") or 0), 6),
                     }
+
+        if not scr.get("archived"):
+            decisions.update(select_observations(profile, scr.get("_base_observations") or [], reliability))
+        if decisions:
+            passes["source_reliability"] = decisions
 
         con_in: dict[str, Any] = {
             "website": url or "",
