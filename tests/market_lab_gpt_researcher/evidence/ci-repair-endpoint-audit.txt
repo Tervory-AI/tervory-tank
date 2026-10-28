@@ -1,0 +1,11 @@
+Production model adapter HTTP URL literals:
+http://127.0.0.1:8000/model/v1
+http://127.0.0.1:8000/model/v1/chat/completions
+http://tank:8000/v1/route
+Only outbound client.post: researcher/app.py:136 -> Tank /v1/route
+researcher/app.py:119 [bfc9f701a06f6902] count=1: Inbound local compatibility endpoint; its only upstream is fixed Tank /v1/route, with redirects disabled.
+researcher/app.py:66 [9f3fd5c68c992e75] count=1: Exact loopback destination guard; the local adapter forwards model work only to Tank /v1/route.
+tests/market_lab_gpt_researcher/test_researcher.py:64 [7c773e03813fb599] count=1: Offline MockTransport provider response behind the real Tank route; socket connections are forbidden.
+tests/market_lab_gpt_researcher/test_researcher.py:321 [bfc9f701a06f6902] count=2: In-process ASGI requests test local adapter authentication and immutable tenant/model policy; no network traffic.
+tests/market_lab_gpt_researcher/test_researcher.py:309 [bfc9f701a06f6902] count=2: In-process ASGI requests test local adapter authentication and immutable tenant/model policy; no network traffic.
+PASS: five findings, four exact fingerprints, no provider address in the production model adapter.

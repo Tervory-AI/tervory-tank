@@ -1,0 +1,45 @@
+..................                                                       [100%]
+=============================== warnings summary ===============================
+tests/market_lab_gpt_researcher/test_researcher.py::test_real_researcher_cites_fetched_search_page_and_tank_ledgers_every_call
+  /workspace/tervory-tank/tank/main.py:678: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+tests/market_lab_gpt_researcher/test_researcher.py::test_real_researcher_cites_fetched_search_page_and_tank_ledgers_every_call
+tests/market_lab_gpt_researcher/test_researcher.py::test_real_researcher_cites_fetched_search_page_and_tank_ledgers_every_call
+  /workspace/market-lab-gpt-researcher/venv/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/market_lab_gpt_researcher/test_researcher.py::test_real_researcher_cites_fetched_search_page_and_tank_ledgers_every_call
+  /workspace/tervory-tank/tank/main.py:713: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+tests/market_lab_gpt_researcher/test_researcher.py::test_real_researcher_cites_fetched_search_page_and_tank_ledgers_every_call
+  /workspace/tervory-tank/tank/agent_skills.py:529: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+tests/market_lab_gpt_researcher/test_researcher.py::test_real_researcher_cites_fetched_search_page_and_tank_ledgers_every_call
+  /workspace/tervory-tank/tank/command.py:904: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    class TriggerWriteArgs(TriggerCheckArgs):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+18 passed, 6 warnings in 3.69s

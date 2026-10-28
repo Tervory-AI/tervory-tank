@@ -5,7 +5,6 @@ does not install this service's heavy dependencies.
 """
 import asyncio
 import json
-import os
 import socket
 import sys
 from contextlib import asynccontextmanager
