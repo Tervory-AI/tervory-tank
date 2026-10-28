@@ -19,11 +19,11 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: "3.12.14"
-      - name: Test security gate policy
-        run: python3 -m unittest discover -s tests/ci_security -p test_security.py -v
       - name: Install pinned security CLIs
         id: tools
         run: bash .github/scripts/install-security-tools.sh
+      - name: Test security gate policy
+        run: python3 -m unittest discover -s tests/ci_security -p test_security.py -v
       - name: Gitleaks — whole history
         if: ${{ !cancelled() && steps.tools.outcome == 'success' }}
         run: python3 .github/scripts/security_scan.py gitleaks --output "$RUNNER_TEMP/security-results"

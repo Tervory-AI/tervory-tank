@@ -27,11 +27,12 @@ def write(path: Path, data: object) -> None:
 
 
 def leaks(base: str | None, temp: Path, output: Path) -> bool:
-    config = temp / "gitleaks.toml"
-    config.write_text("[extend]\nuseDefault = true\n")
+    # PR #374: Claude-reviewed fingerprints and one exact public CI dummy value.
+    config = Path(".gitleaks.toml").resolve()
+    ignore = Path(".gitleaksignore").resolve()
     raw = temp / "gitleaks.json"
     code = run(["gitleaks", "git", ".", "--no-banner", "--redact=100",
-                "--config", str(config), "--gitleaks-ignore-path", str(temp / "no-ignore"),
+                "--config", str(config), "--gitleaks-ignore-path", str(ignore),
                 "--ignore-gitleaks-allow", "--log-opts", f"{base}..HEAD" if base else "HEAD",
                 "--report-format", "json", "--report-path", str(raw)], (0, 1))
     findings = json.loads(raw.read_text())

@@ -1,0 +1,52 @@
+# PR #374: exact historical findings triaged by Claude; no values or path-wide exemptions.
+
+# Claude-reviewed dummy Clerk publishable test keys used for CI/offline builds; not credentials.
+1f2b472970179e339cc44746904cccbf08c61470:tests/base_proof/atf-download/README.md:generic-api-key:83
+1f2b472970179e339cc44746904cccbf08c61470:tests/base_proof/atf_download.py:generic-api-key:114
+2b12945dc78ffe3d43bf6100ba1f1517210a409e:tests/tiger_works/evidence/local_proof.py:generic-api-key:107
+4e74b4269fd91220a52970bd73cee03a3d3b89ba:tests/base_reference_file/PR.md:generic-api-key:86
+5cf0554fe7c87dc12f7b73175f50be89d2a0cad4:docs/cursor/AUTUMBRA-GROK-BRIEF.md:generic-api-key:69
+5cf0554fe7c87dc12f7b73175f50be89d2a0cad4:ops/BUILDER-BRIEFS-2026-10-26/04-GROK-AUTUMBRA.md:generic-api-key:69
+a2415f34ba690f8184058b115bd4cdc58303f055:tests/tiger_missing_name/evidence/real_tank_proof.py:generic-api-key:57
+a3fd268ade905b71131a9465d0968f45e21324f4:.github/workflows/retest.yml:generic-api-key:59
+b2944cfa125bbd8cc07b3f6cdcccad90c3d72eb4:tests/base_proof/README.md:generic-api-key:149
+b2944cfa125bbd8cc07b3f6cdcccad90c3d72eb4:tests/base_proof/README.md:generic-api-key:28
+b2944cfa125bbd8cc07b3f6cdcccad90c3d72eb4:tests/base_proof/real_job.py:generic-api-key:102
+b7b1983bd381069a52ec589ffc9c46030d0ec3b2:agents/market_lab/LAUNCH.md:generic-api-key:314
+c752e59db7dccaf3f5c1da1d8146d79ce7cdf0d7:tests/base_proof/reference-adopt/README.md:generic-api-key:51
+c752e59db7dccaf3f5c1da1d8146d79ce7cdf0d7:tests/base_proof/reference_adopt.py:generic-api-key:113
+d89a04ad17aa2c427da0d4ceb272b499f4a6a420:.github/workflows/ci.yml:generic-api-key:57
+d89a04ad17aa2c427da0d4ceb272b499f4a6a420:tests/test_secrets.py:generic-api-key:90
+feccd797c598772e0900d82234a784305fb79551:agents/market_lab/POLISH.md:generic-api-key:96
+feccd797c598772e0900d82234a784305fb79551:agents/market_lab/evidence/polish/mixed/README.md:generic-api-key:42
+
+# Claude-reviewed dummy Stripe test key in the billing test; not a real credential.
+464442545e4b0706e3137208659ce9656242e1b1:tests/w2/billing.test.ts:stripe-access-token:29
+
+# Claude-reviewed Figma file identifiers in docs, fixtures and evals; identifiers do not grant access.
+30b3432ae2016ec36530e09471b4c25817667780:tank/skills/tisan.figma/1.0.1/evals/cases.jsonl:generic-api-key:1
+30b3432ae2016ec36530e09471b4c25817667780:tank/skills/tisan.figma/1.0.1/evals/cases.jsonl:generic-api-key:1
+30b3432ae2016ec36530e09471b4c25817667780:tank/skills/tisan.figma/1.0.1/evals/cases.jsonl:generic-api-key:2
+30b3432ae2016ec36530e09471b4c25817667780:tank/skills/tisan.figma/1.0.1/evals/cases.jsonl:generic-api-key:3
+30b3432ae2016ec36530e09471b4c25817667780:tank/skills/tisan.figma/1.0.1/evals/cases.jsonl:generic-api-key:6
+aefa636e6e7fdff3e9c50eb0e1f144b58ddda077:agents/tisan/README.md:generic-api-key:45
+aefa636e6e7fdff3e9c50eb0e1f144b58ddda077:agents/tisan/figma.py:generic-api-key:19
+aefa636e6e7fdff3e9c50eb0e1f144b58ddda077:agents/tisan/fixtures/tervory-landing.json:generic-api-key:5
+aefa636e6e7fdff3e9c50eb0e1f144b58ddda077:tank/skills/tisan.figma/1.0.0/evals/cases.jsonl:generic-api-key:1
+aefa636e6e7fdff3e9c50eb0e1f144b58ddda077:tank/skills/tisan.figma/1.0.0/evals/cases.jsonl:generic-api-key:1
+aefa636e6e7fdff3e9c50eb0e1f144b58ddda077:tank/skills/tisan.figma/1.0.0/evals/cases.jsonl:generic-api-key:2
+aefa636e6e7fdff3e9c50eb0e1f144b58ddda077:tank/skills/tisan.figma/1.0.0/evals/cases.jsonl:generic-api-key:3
+aefa636e6e7fdff3e9c50eb0e1f144b58ddda077:tests/test_tisan_figma.py:generic-api-key:16
+
+# Claude-reviewed public page tokens captured from third-party sites in saved HTML fixtures; not our credentials.
+4d30892d389048f575f77d0ab69dfaedd2017e67:tests/tiger_alert_page/fixtures/live/automationexercise-com--product-details-1.html:generic-api-key:329
+4d30892d389048f575f77d0ab69dfaedd2017e67:tests/tiger_alert_page/fixtures/live/www-adafruit-com--product-4296.html:generic-api-key:284
+4d30892d389048f575f77d0ab69dfaedd2017e67:tests/tiger_alert_page/fixtures/live/www-adafruit-com--product-4296.html:generic-api-key:307
+4d30892d389048f575f77d0ab69dfaedd2017e67:tests/tiger_alert_page/fixtures/live/www-adafruit-com--product-4296.html:generic-api-key:342
+b1be0fc221217533fb8abc619c0bc5c44ff70475:tests/tiger_price_read/gold/html/live/live-045.html:generic-api-key:350
+b1be0fc221217533fb8abc619c0bc5c44ff70475:tests/tiger_price_read/gold/html/live/live-047.html:generic-api-key:354
+b1be0fc221217533fb8abc619c0bc5c44ff70475:tests/tiger_price_read/gold/html/live/live-048.html:generic-api-key:345
+b1be0fc221217533fb8abc619c0bc5c44ff70475:tests/tiger_price_read/gold/html/live/live-071.html:generic-api-key:14316
+b1be0fc221217533fb8abc619c0bc5c44ff70475:tests/tiger_price_read/gold/html/live/live-072.html:generic-api-key:14316
+b1be0fc221217533fb8abc619c0bc5c44ff70475:tests/tiger_price_read/gold/html/live/live-073.html:generic-api-key:14316
+b1be0fc221217533fb8abc619c0bc5c44ff70475:tests/tiger_price_read/gold/html/live/live-074.html:generic-api-key:14316

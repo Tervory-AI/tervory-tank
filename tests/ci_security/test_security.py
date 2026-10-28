@@ -114,6 +114,8 @@ class SecurityPolicyTests(unittest.TestCase):
             self.assertEqual(args[args.index("--log-opts") + 1], "base..HEAD")
             self.assertIn("--redact=100", args)
             self.assertIn("--ignore-gitleaks-allow", args)
+            self.assertEqual(Path(args[args.index("--config") + 1]), ROOT / ".gitleaks.toml")
+            self.assertEqual(Path(args[args.index("--gitleaks-ignore-path") + 1]), ROOT / ".gitleaksignore")
             Path(args[args.index("--report-path") + 1]).write_text(json.dumps([{
                 "RuleID": "test-rule", "File": "probe.txt", "StartLine": 1, "Commit": "head",
                 "Secret": "private value", "Match": "private match", "Message": "private message",
@@ -135,6 +137,42 @@ class SecurityPolicyTests(unittest.TestCase):
             return 0
         with patch.object(scan, "run", side_effect=fake_cli):
             self.assertFalse(scan.leaks(None, self.root, self.output))
+
+
+class GitleaksAllowlistTests(unittest.TestCase):
+    """Exercise the pinned free CLI; never print the dummy value or scan matches."""
+
+    def setUp(self):
+        lines = (ROOT / ".github/workflows/ci.yml").read_text().splitlines()
+        self.dummy = next(line.split(":", 1)[1].strip() for line in lines
+                          if line.strip().startswith("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:"))
+
+    def check_value(self, value, expected_code, expected_count):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "copy.txt").write_text("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=" + value + "\n")
+            report = root / "report.json"
+            result = subprocess.run([
+                "gitleaks", "dir", str(root), "--no-banner", "--redact=100",
+                "--config", str(ROOT / ".gitleaks.toml"),
+                "--gitleaks-ignore-path", str(ROOT / ".gitleaksignore"),
+                "--ignore-gitleaks-allow", "--report-format", "json", "--report-path", str(report),
+            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30, check=False)
+            self.assertEqual(result.returncode, expected_code)
+            self.assertEqual(len(json.loads(report.read_text())), expected_count)
+
+    def test_new_copy_of_exact_ci_dummy_is_allowed(self):
+        self.check_value(self.dummy, 0, 0)
+
+    def test_other_value_with_same_clerk_prefix_still_blocks(self):
+        offset = len("pk_test_")
+        replacement = "A" if self.dummy[offset] != "A" else "B"
+        self.check_value(self.dummy[:offset] + replacement + self.dummy[offset + 1:], 1, 1)
+
+    def test_changed_ending_with_same_clerk_prefix_still_blocks(self):
+        offset = len(self.dummy.rstrip("=")) - 1
+        replacement = "A" if self.dummy[offset] != "A" else "B"
+        self.check_value(self.dummy[:offset] + replacement + self.dummy[offset + 1:], 1, 1)
 
 
 if __name__ == "__main__":
