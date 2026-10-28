@@ -973,15 +973,33 @@ class RigTigerUpdate(Body):
     price: str | None = Field(default=None, max_length=32)
     currency: str | None = Field(default=None, pattern="^[A-Z]{3}$")
     active: bool | None = None
+    url: str | None = Field(default=None, max_length=2000)
+    observed_at: datetime | None = None
+
+
+def require_tiger(request: Request) -> None:
+    if not key_matches(request.headers.get("x-tank-key", ""), os.environ.get("TANK_KEY_TIGER", "")):
+        raise HTTPException(401, "Tiger authentication required.")
+
+
+@router.get("/rig/tiger/tenants")
+async def rig_tiger_tenants(request: Request):
+    require_tiger(request)
+    return await rig_request(Actor(PLATFORM, "tiger-price-watch", False), "watch-tenants")
+
+
+@router.get("/rig/tiger/products")
+async def rig_tiger_products(request: Request, tenant_id: uuid.UUID):
+    require_tiger(request)
+    return await rig_request(Actor(tenant_id, "tiger-price-watch", False), "watch-products")
 
 
 @router.post("/rig/tiger")
 async def rig_tiger_update(request: Request):
-    if not key_matches(request.headers.get("x-tank-key", ""), os.environ.get("TANK_KEY_TIGER", "")):
-        raise HTTPException(401, "Tiger authentication required.")
+    require_tiger(request)
     body = await parse(request, RigTigerUpdate)
     actor = Actor(body.tenant_id, "tiger-price-watch", False, frozenset({"rig"}))
-    return await rig_request(actor, "tiger", body.model_dump(exclude={"tenant_id"}, exclude_none=True))
+    return await rig_request(actor, "tiger", body.model_dump(mode="json", exclude={"tenant_id"}, exclude_none=True))
 
 
 async def refresh_due_rig_feeds() -> None:

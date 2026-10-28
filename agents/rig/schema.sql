@@ -55,6 +55,16 @@ CREATE TABLE IF NOT EXISTS agent_rig.products (
 
 CREATE INDEX IF NOT EXISTS products_tenant_active ON agent_rig.products (tenant_id, active);
 
+-- Tiger retries are idempotent and cannot replace a newer confirmed observation.
+CREATE TABLE IF NOT EXISTS agent_rig.tiger_receipts (
+    tenant_id uuid NOT NULL,
+    sku text NOT NULL,
+    url text NOT NULL,
+    observed_at timestamptz NOT NULL,
+    PRIMARY KEY (tenant_id, sku, url),
+    FOREIGN KEY (tenant_id, sku) REFERENCES agent_rig.products(tenant_id, sku) ON DELETE CASCADE
+);
+
 -- Manual removal survives feed refresh and restart. Only a manual import clears it.
 CREATE TABLE IF NOT EXISTS agent_rig.deleted_products (
     tenant_id uuid NOT NULL,

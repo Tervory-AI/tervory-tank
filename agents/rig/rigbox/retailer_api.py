@@ -12,7 +12,7 @@ from rigbox.retailer import Retailer
 from rigbox.service import RigError
 
 router = APIRouter()
-OPERATIONS = {"panel", "settings", "embed-keys", "import", "delete-products", "mapping", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest", "tiger"}
+OPERATIONS = {"panel", "settings", "embed-keys", "import", "delete-products", "mapping", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest", "tiger", "watch-tenants", "watch-products"}
 
 
 @router.post("/internal/retailer/{operation}")
@@ -39,7 +39,13 @@ async def retailer_operation(operation: str, request: Request) -> JSONResponse:
     service = request.app.state.rig
     retailer = Retailer(service)
     try:
-        if operation == "panel":
+        if operation == "watch-tenants":
+            if tenant != "00000000-0000-0000-0000-000000000001":
+                raise RigError("unauthorized", "Retailer control authentication required.", 403)
+            result = {"tenants": await service.store.tenant_ids()}
+        elif operation == "watch-products":
+            result = {"tenant_id": tenant, "products": await service.store.watch_products(tenant)}
+        elif operation == "panel":
             result = await retailer.panel(tenant)
         elif operation == "settings":
             result = await retailer.set_settings(tenant, data)
