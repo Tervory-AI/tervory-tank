@@ -84,6 +84,8 @@ class SecurityPolicyTests(unittest.TestCase):
             self.assertIn(code, allowed)
             self.assertIn("--config", args)
             self.assertIn("auto", args)
+            # Semgrep aborts before creating its report for auto config + metrics off.
+            self.assertEqual(args[args.index("--metrics") + 1], "auto")
             self.assertEqual(args[args.index("--baseline-commit") + 1], "base")
             self.assertIn("--disable-nosem", args)
             results = [{"check_id": "test-rule", "path": "file.py", "start": {"line": 1},

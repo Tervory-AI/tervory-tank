@@ -81,16 +81,19 @@ def leaks(base: str | None, temp: Path, output: Path) -> bool:
 
 def semgrep(base: str | None, temp: Path, output: Path) -> bool:
     raw = temp / "semgrep.json"
-    args = ["semgrep", "scan", "--config", "auto", "--metrics", "off",
+    # The pinned CLI rejects --config auto with metrics off before writing JSON.
+    args = ["semgrep", "scan", "--config", "auto", "--metrics", "auto",
             "--disable-version-check", "--disable-nosem", "--no-git-ignore",
             "--json", "--output", str(raw)]
     if base:
         args += ["--baseline-commit", base]
+    missing_report = False
     try:
         # Read findings/errors even when the CLI returns nonzero. In particular,
         # exit 3 denotes target parse errors, which are notices under this policy.
         code = run([*args, "."], tuple(range(256)))
         if not raw.is_file():
+            missing_report = True
             annotation("notice", f"SemgrepReportMissingExit{code}", str(raw))
             raise RuntimeError("Semgrep did not create its JSON report")
         report = json.loads(raw.read_text())
@@ -99,7 +102,7 @@ def semgrep(base: str | None, temp: Path, output: Path) -> bool:
         raise
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
         # A missing-report notice above already identifies the path and exit code.
-        if not isinstance(error, RuntimeError) or raw.is_file():
+        if not missing_report:
             annotation("notice", type(error).__name__)
         raise
     findings = [{"rule": row["check_id"], "path": row["path"],
