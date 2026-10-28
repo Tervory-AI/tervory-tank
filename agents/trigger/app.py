@@ -48,16 +48,31 @@ async def health():
 
 @app.post("/check", dependencies=[Depends(authorized)])
 async def post_check(body: CheckIn):
-    return await check_text(body, VoiceStore(app.state.pool), app.state.http)
+    return await check_text(body, VoiceStore(app.state.pool), app.state.http, app.state.tank)
 
 
 @app.post("/write", dependencies=[Depends(authorized)])
 async def post_write(body: WriteIn):
     try:
-        return await write(body, VoiceStore(app.state.pool), app.state.tank, app.state.http)
+        return await write(body, VoiceStore(app.state.pool), app.state.tank, app.state.http, app.state.tank)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
 
+
+@app.post("/skala/languagetool", dependencies=[Depends(authorized)])
+async def skala_languagetool(body: CheckIn):
+    """Transport only: the approved package owns rule/result interpretation."""
+    import hashlib
+    import json
+    response = await app.state.http.post(
+        "http://trigger-languagetool:8081/v2/check",
+        data={"text": body.text, "language": "en-US"}, timeout=30,
+    )
+    response.raise_for_status()
+    config = Path(__file__).with_name("languagetool.properties").read_bytes()
+    pins = json.loads((Path(__file__).parent / "sources/pins.json").read_text())
+    return {"result": response.json(), "config_sha256": hashlib.sha256(config).hexdigest(),
+            "image": pins["languagetool-image"]}
 
 from pydantic import BaseModel, ConfigDict, Field
 from trigger.voice_history import VoiceHistory

@@ -3123,6 +3123,7 @@ async def _run_one_skill(
     body: SkillRun,
     caller: str | None,
 ) -> dict[str, Any]:
+    __import__("skala_intake").guard_preview(skill_id, caller, body.preview)
     version = body.version or await _pick_version(skill_id, body.preview)
     pkg = get_package(skill_id, version)
     await __import__("agent_skills").guard_submission_owner(
@@ -4177,4 +4178,8 @@ app.include_router(__import__("market_lab_routes").build_router(__import__("sys"
 
 # Tenant-specific semantic-cache approval; no policy promotion is automatic.
 app.include_router(semantic_cache.build_router(__import__("sys").modules[__name__]))
+
+# Free room checker intake uses the existing registry, evals and founder approval.
+__import__("skala_intake").install(app, __import__("sys").modules[__name__])
+
 app.include_router(__import__("vault_routes").build_router(__import__("sys").modules[__name__]))
