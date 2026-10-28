@@ -200,3 +200,20 @@ After the founder's normal review/deployment process, acceptance is opening
 `protect.tervory.com/` and `app.tervory.com/autumbra` with no Workspace navigation
 or private-console text, and confirming `/admin/autumbra` requires sign-in and
 retains its normal shell for the founder. No merge is requested.
+
+## Git handoff
+
+Product changes, tests and evidence were committed as
+`4412ce7954dd24220471ba03568ce3deb256136c` (`fix(autumbra): keep public host out of app shell`).
+
+```bash
+git push origin HEAD:refs/heads/codex/autumbra-public-bugs > /tmp/autumbra-push.log 2>&1
+git rev-parse HEAD
+git ls-remote --heads origin refs/heads/codex/autumbra-public-bugs
+git status --short
+```
+
+Push exit 0: `f47eade..4412ce7  HEAD -> codex/autumbra-public-bugs`.
+Local and remote both returned `4412ce7954dd24220471ba03568ce3deb256136c`;
+the worktree was clean. This final handoff note is a documentation-only follow-up
+on the same branch. Claude opens the PR using this file.
