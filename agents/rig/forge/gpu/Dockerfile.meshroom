@@ -8,7 +8,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3 python3
     && python3 -m venv /opt/forge/venv \
     && python -m pip install --no-cache-dir --require-hashes -r gpu/meshroom-requirements.lock \
     && python gpu/install_sources.py gpu/meshroom.lock.json \
-    && rm -rf /var/lib/apt/lists/* && useradd --uid 1000 --create-home forge \
+    && rm -rf /var/lib/apt/lists/* \
+    && usermod --login forge --home /home/forge --move-home ubuntu \
+    && groupmod --new-name forge ubuntu \
     && chmod -R a+rX /opt/forge /opt/meshroom
 USER forge
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 QT_QPA_PLATFORM=offscreen
