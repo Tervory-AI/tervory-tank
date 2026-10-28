@@ -392,3 +392,29 @@ async def test_room_role_registers_voice_without_reading_or_writing_tank_tables(
             await conn.execute(f'DROP OWNED BY "{role}"')
             await conn.execute(f'DROP ROLE "{role}"')
     assert_complete(await read(client, "trigger"), "trigger")
+
+
+@pytest.mark.asyncio
+async def test_optional_audit_uses_upstream_measurement_and_only_this_tenants_verdicts(api, monkeypatch):
+    """#390's module/schema are optional; this exercises their integration contract."""
+    import importlib.machinery
+    import sys
+    import types
+    pool, client = api
+    await grant(pool, A, "base")
+    module = types.ModuleType("base_audit")
+    module.__spec__ = importlib.machinery.ModuleSpec("base_audit", loader=None)
+    called = []
+    def measure(verdicts):
+        called.append(verdicts)
+        return {"accuracy": .8, "confidence_interval": {"lower": .7, "upper": .9},
+                "sample_size": 200, "reviewed": 150, "denominator": 100, "unsure": 50}
+    module.measure = measure
+    monkeypatch.setitem(sys.modules, "base_audit", module)
+    async with pool.acquire() as conn:
+        await conn.execute("CREATE TABLE tank.base_audits(tenant_id uuid,id uuid,verdicts jsonb,reviewed_at timestamptz)")
+        await conn.execute("INSERT INTO tank.base_audits VALUES($1,$2,'{\"own\":\"correct\"}',$3),($4,$5,'{\"other\":\"wrong\"}',$3)", A, uuid.uuid4(), AT, B, uuid.uuid4())
+    measured = figures(await read(client, "base"))["base.measured_accuracy"]
+    assert called == [{"own": "correct"}]
+    assert (measured["value"], measured["lower"], measured["upper"]) == (80, 70, 90)
+    assert (measured["sample_size"], measured["reviewed"], measured["resolved"], measured["unsure"]) == (200, 150, 100, 50)
