@@ -145,7 +145,9 @@ class Sources:
         if region not in {"us-east", "za"}:
             raise ValueError("Not in scope.")
         self.region, self.laws_snapshot = region, laws_snapshot
-        self.get = partial(urllib_get, redirects=False) if http_get is urllib_get else http_get
+        self.get = (
+            partial(urllib_get, redirects=False) if http_get is urllib_get else http_get
+        )
 
     async def fetch(self, watch):
         name = watch["source"]
@@ -325,9 +327,8 @@ class Sources:
             query = (
                 "PREFIX cdm: <http://publications.europa.eu/ontology/cdm#> "
                 "SELECT DISTINCT ?celex ?title ?date WHERE { "
-                "?work cdm:resource_legal_id_celex ?celex; cdm:work_date_document ?date; "
-                "cdm:work_has_expression ?expression. "
-                "?expression cdm:expression_uses_language <http://publications.europa.eu/resource/authority/language/ENG>; "
+                "?work cdm:resource_legal_id_celex ?celex; cdm:work_date_document ?date. "
+                "?expression cdm:expression_belongs_to_work ?work; cdm:expression_uses_language <http://publications.europa.eu/resource/authority/language/ENG>; "
                 "cdm:expression_title ?title. "
                 'FILTER(REGEX(STR(?celex), "^3[0-9]{4}[RLD][0-9]{4}$")) '
                 f"FILTER(CONTAINS(LCASE(STR(?title)), {topic})) "
@@ -337,7 +338,8 @@ class Sources:
                 "https://publications.europa.eu/webapi/rdf/sparql?"
                 + urlencode(
                     {"query": query, "format": "application/sparql-results+json"}
-                )
+                ),
+                headers={"Accept": "application/sparql-results+json"},
             )
             rows = payload["results"]["bindings"]
             for row in rows:
