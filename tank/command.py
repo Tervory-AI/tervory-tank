@@ -577,9 +577,9 @@ async def turn(thread_id: uuid.UUID, body: Turn, actor: Actor = Depends(identity
                 yield update
             finished = True
         finally:
-            # Closing the owner's turn connection closes the SDK stream too.
-            # finish_turn retains the existing failed-step/receipt reconciliation.
-            if not finished and not task.done():
+            # Foreground disconnects close the SDK stream. An explicitly deferred
+            # turn must finish saving its queue/thread link even if the browser closes.
+            if not finished and not task.done() and body.priority != "offpeak":
                 task.cancel()
 
     return StreamingResponse(stream_turn(), media_type="text/event-stream",
