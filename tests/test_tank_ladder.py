@@ -173,14 +173,14 @@ async def test_version_ownership_and_cancellation_stay_closed(ladder):
 
 
 @pytest.mark.asyncio
-async def test_first_fixture_graduation_promotes_itself_and_serves_two_tenants(ladder, monkeypatch):
+async def test_fixture_graduation_requires_founder_then_serves_two_tenants(ladder, monkeypatch):
     import asyncio
     from datetime import datetime, timezone
     b = ladder
     expected = {}
     async with b.pool.acquire() as conn:
         await conn.execute("""UPDATE tank.policy SET model='haiku',rung=1,candidate_model='skill:base.normalize@1.0.0',
-            shadow_rate=1,auto_promote=true,min_shadow_samples=30,eval_threshold=0.97,confidence_floor=0.8
+            shadow_rate=1,auto_promote=true,min_shadow_samples=200,eval_threshold=0.99,confidence_floor=0.8
             WHERE task_type='base.normalize' AND tenant_id IS NULL""")
 
     class FixtureProvider:
@@ -200,7 +200,7 @@ async def test_first_fixture_graduation_promotes_itself_and_serves_two_tenants(l
                       "usage": {"prompt_tokens": 50, "completion_tokens": 100}}, request=httpx.Request("POST", url))
 
     monkeypatch.setattr(b.tank.httpx, "AsyncClient", FixtureProvider)
-    for i in range(30):
+    for i in range(200):
         name = f"Fixture Shop {i:02}"
         payload = {"name": name, "address": "Main Street", "city": "Boston", "state": "MA", "zip": "02108", "phone": "6175550100"}
         # Independent expected fixture answers: the provider stub never calls the code candidate.
@@ -212,19 +212,27 @@ async def test_first_fixture_graduation_promotes_itself_and_serves_two_tenants(l
         assert res.rung == 1
         if b.tank._background:
             await asyncio.gather(*list(b.tank._background))
+    held = await b.tank._move_task("base.normalize")
+    assert held.action == "hold" and held.reason == "proven, waiting for a person"
+    route = "/v1/graduation/base.normalize/promote"
+    for tenant in b.tenants:
+        denied = await b.client.post(route, json={}, headers={"X-Tervory-Tenant": str(tenant)})
+        assert denied.status_code == 404
+    approved = await b.client.post(route, json={"by": "founder-fixture"}, headers={"X-Tervory-Admin": "founder-fixture"})
+    assert approved.status_code == 200, approved.text
     async with b.pool.acquire() as conn:
         policy_row = await conn.fetchrow("SELECT * FROM tank.policy WHERE task_type='base.normalize' AND tenant_id IS NULL")
         log = await conn.fetchrow("SELECT * FROM tank.policy_log WHERE task_type='base.normalize' AND action='promote'")
         stats = await conn.fetchrow("SELECT count(*) n,avg(agreement) agreement FROM tank.shadow WHERE task_type='base.normalize'")
         assert policy_row["model"] == 'skill:base.normalize@1.0.0' and policy_row["rung"] == 3
-        assert log["by_user"] == "tank" and json.loads(log["detail"])["automatic"]
-        assert stats["n"] == 30 and float(stats["agreement"]) == 1
+        assert log["by_user"] == "founder-fixture" and not json.loads(log["detail"])["automatic"]
+        assert stats["n"] == 200 and float(stats["agreement"]) == 1
     for tenant in b.tenants:
         delivered = await b.tank.run_route(request(b, tenant, text=json.dumps(payload)))
         assert delivered.rung == 3 and delivered.cost_usd == 0
-    print("FIRST_GRADUATION " + json.dumps({"task": "base.normalize", "date": datetime.now(timezone.utc).isoformat(),
+    print("FOUNDER_APPROVED_GRADUATION " + json.dumps({"task": "base.normalize", "date": datetime.now(timezone.utc).isoformat(),
         "skill": policy_row["model"], "samples": stats["n"], "tenants": 2, "agreement": float(stats["agreement"]),
-        "before_usd_per_call": 0.001, "after_usd_per_call": 0, "automatic": True,
+        "before_usd_per_call": 0.001, "after_usd_per_call": 0, "automatic": False,
         "traffic": "independent synthetic fixtures; provider stub; actual provider spend zero"}))
 
 
