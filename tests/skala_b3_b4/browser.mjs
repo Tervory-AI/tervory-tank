@@ -95,7 +95,6 @@ try {
   await failed.getByText("staging", {exact:true}).waitFor();
   await failed.getByText("20%", {exact:true}).waitFor();
   const history = page.getByRole("heading", {name:"base.history",exact:true}).locator("..");
-  await history.getByText("History (1)").click();
   await history.getByRole("button", {name:"Roll back to 1.0.0"}).waitFor();
   for (const width of [1440, 375]) {
     await page.setViewportSize({width, height: width === 375 ? 812 : 1000});
