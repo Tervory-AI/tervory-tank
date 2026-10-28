@@ -29,6 +29,7 @@ TENANT = UUID("00000000-0000-0000-0000-000000000011")
 OTHER = UUID("00000000-0000-0000-0000-000000000012")
 PACKAGES = {k: p for k, p in skala.load_packages().items() if p.id in skala_intake.IDS and p.version == "1.0.0"}
 RESPONSES = json.loads(Path(__file__).with_name("languagetool-responses.json").read_text())
+LT_IMAGE = json.loads((ROOT / "agents/trigger/sources/pins.json").read_text())["languagetool-image"]
 CONFIG_HASH = hashlib.sha256((ROOT / "agents/trigger/languagetool.properties").read_bytes()).hexdigest()
 
 
@@ -48,7 +49,7 @@ async def test_each_package_meets_real_skala_gate(identity, monkeypatch):
         assert str(request.url) == "http://agent-trigger:8000/skala/languagetool"
         body = json.loads(request.content)
         assert body["tenant_id"] == str(TENANT)
-        return httpx.Response(200, json={"result": RESPONSES[body["text"]], "config_sha256": CONFIG_HASH})
+        return httpx.Response(200, json={"result": RESPONSES[body["text"]], "config_sha256": CONFIG_HASH, "image": LT_IMAGE})
     async with httpx.AsyncClient(transport=httpx.MockTransport(reply)) as http:
         pkg = PACKAGES[identity]
         result = await skala.run_evals(pkg, lambda: context(pkg, http))
@@ -106,7 +107,7 @@ async def test_languagetool_runtime_mismatch_never_silently_passes(change, monke
     if change == "version": result["software"]["version"] = "other"
     if change == "config": digest = "changed"
     if change == "incomplete": result["warnings"] = {"incompleteResults": True}
-    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(200, json={"result": result, "config_sha256": digest}))) as http:
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(200, json={"result": result, "config_sha256": digest, "image": LT_IMAGE}))) as http:
         pkg = PACKAGES[("trigger.languagetool", "1.0.0")]
         with pytest.raises((ValueError, RuntimeError)):
             await skala.run_skill(pkg, {"text": "This is a test."}, context(pkg, http))
@@ -165,7 +166,7 @@ async def test_persisted_ready_bulk_approval_room_execution_tenant_scope_and_rol
         if request.url.host == "agent-trigger":
             assert request.headers["x-tank-key"] == "offline-test-fixture"
             body = json.loads(request.content)
-            return httpx.Response(200, json={"result": RESPONSES[body["text"]], "config_sha256": CONFIG_HASH})
+            return httpx.Response(200, json={"result": RESPONSES[body["text"]], "config_sha256": CONFIG_HASH, "image": LT_IMAGE})
         if request.url.host == "trigger-languagetool":
             from urllib.parse import parse_qs
             text = parse_qs(request.content.decode())["text"][0]
@@ -263,3 +264,29 @@ async def test_tiger_approved_playbook_uses_no_room_rules(monkeypatch):
             if index == 3: assert result["price"] == "27.40"
         assert (await store.get_playbook("books.toscrape.com"))["marker"]["primary"] == "dom"
         assert set(operations) == {"advance", "public_page", "public_marker", "read_page", "learn_layout"}
+
+
+@pytest.mark.asyncio
+async def test_private_languagetool_adapter_auth_and_pins(monkeypatch):
+    import yaml
+    from trigger.app import app
+    monkeypatch.setenv("TANK_KEY", "offline-test-fixture")
+    compose = yaml.safe_load((ROOT / "agents/trigger/docker-compose.yml").read_text())
+    assert compose["services"]["trigger-languagetool"]["image"] == LT_IMAGE
+    calls = []
+    def reply(request):
+        calls.append(request)
+        assert str(request.url) == "http://trigger-languagetool:8081/v2/check"
+        return httpx.Response(200, json=RESPONSES["This is a test."])
+    async with httpx.AsyncClient(transport=httpx.MockTransport(reply)) as backend:
+        monkeypatch.setattr(app.state, "http", backend, raising=False)
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://agent-trigger:8000") as client:
+            body = {"tenant_id": str(TENANT), "text": "This is a test."}
+            assert (await client.post("/skala/languagetool", json=body)).status_code == 401
+            assert not calls
+            headers = {"X-Tank-Key": "offline-test-fixture"}
+            assert (await client.post("/skala/languagetool", json={**body, "url": "https://example.com"}, headers=headers)).status_code == 422
+            result = await client.post("/skala/languagetool", json=body, headers=headers)
+            assert result.status_code == 200
+            assert result.json() == {"result": RESPONSES[body["text"]], "image": LT_IMAGE, "config_sha256": CONFIG_HASH}
+            assert len(calls) == 1
