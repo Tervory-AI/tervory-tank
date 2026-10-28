@@ -298,11 +298,13 @@ class MemoryStore(RetailerMemoryStore):
         webhook: str | None,
         name: str = "",
         theme: str | None = None,
+        quote_notice: dict[str, str] | None = None,
     ) -> None:
         theme = theme if theme is not None else self.retailers.get(str(tenant_id), {}).get("theme", "neutral")
         if theme not in {"neutral", "custom-nation"}:
             raise ValueError()
-        self.retailers[str(tenant_id)] = {"slug": slug, "email": email, "webhook": webhook, "name": name, "theme": theme}
+        self.retailers[str(tenant_id)] = {"slug": slug, "email": email, "webhook": webhook, "name": name, "theme": theme,
+            "quote_notice": quote_notice if quote_notice is not None else self.retailers.get(str(tenant_id), {}).get("quote_notice")}
 
     async def retailer(self, tenant_id: str) -> dict[str, Any] | None:
         row = self.retailers.get(str(tenant_id))
@@ -710,18 +712,20 @@ class PgStore(RetailerPgStore):
         webhook: str | None,
         name: str = "",
         theme: str | None = None,
+        quote_notice: dict[str, str] | None = None,
     ) -> None:
         async with self.pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO agent_rig.retailers (tenant_id, slug, email, webhook, name, theme)
-                VALUES ($1, $2, $3, $4, $5, coalesce($6, 'neutral'))
+                INSERT INTO agent_rig.retailers (tenant_id, slug, email, webhook, name, theme, quote_notice)
+                VALUES ($1, $2, $3, $4, $5, coalesce($6, 'neutral'), $7::jsonb)
                 ON CONFLICT (tenant_id) DO UPDATE SET
                     slug = EXCLUDED.slug,
                     email = EXCLUDED.email,
                     webhook = EXCLUDED.webhook,
                     name = EXCLUDED.name,
-                    theme = coalesce($6, agent_rig.retailers.theme)
+                    theme = coalesce($6, agent_rig.retailers.theme),
+                    quote_notice = coalesce($7::jsonb, agent_rig.retailers.quote_notice)
                 """,
                 _uuid(tenant_id),
                 str(slug),
@@ -729,17 +733,19 @@ class PgStore(RetailerPgStore):
                 _optional_text(webhook),
                 str(name or ""),
                 theme,
+                json.dumps(quote_notice) if quote_notice is not None else None,
             )
 
     async def retailer(self, tenant_id: str) -> dict[str, Any] | None:
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT slug, email, webhook, name, theme FROM agent_rig.retailers WHERE tenant_id = $1",
+                "SELECT slug, email, webhook, name, theme, quote_notice FROM agent_rig.retailers WHERE tenant_id = $1",
                 _uuid(tenant_id),
             )
         if row is None:
             return None
-        return {"slug": row["slug"], "email": row["email"], "webhook": row["webhook"], "name": row["name"] or "", "theme": row["theme"]}
+        return {"slug": row["slug"], "email": row["email"], "webhook": row["webhook"], "name": row["name"] or "", "theme": row["theme"],
+                "quote_notice": json.loads(row["quote_notice"]) if isinstance(row["quote_notice"], str) else row["quote_notice"]}
 
     async def replace_market(self, tenant_id: str, rows: list[dict[str, Any]]) -> None:
         async with self.pool.acquire() as conn:
