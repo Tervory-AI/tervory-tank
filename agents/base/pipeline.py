@@ -362,7 +362,11 @@ async def enrich_one(
             if scr.get("emails"):
                 profile["emails"] = {"value": scr["emails"], "source": src, "confidence": 80}
             if scr.get("phones"):
-                merge(profile, {"phone": {"value": scr["phones"][0], "source": src, "confidence": 80}})
+                page = next((item for item in scr.get("_base_observations") or [] if scr["phones"][0] in item.get("phones", [])), {})
+                merge(profile, {"phone": {"value": scr["phones"][0], "source": src, "confidence": 80,
+                                         **({"source_url": page.get("source_url") or url,
+                                             "checked_at": page.get("checked_at")} if reliability else {})}},
+                      reliability, decisions)
                 profile["phones"] = {"value": scr["phones"], "source": src, "confidence": 80}
             if scr.get("socials"):
                 profile["socials"] = {"value": scr["socials"], "source": src, "confidence": 85}
@@ -414,7 +418,11 @@ async def enrich_one(
                     }
 
         if not scr.get("archived"):
-            decisions.update(select_observations(profile, scr.get("_base_observations") or [], reliability))
+            candidates = list(scr.get("_base_observations") or [])
+            if reference and (normalized.get("phone") or {}).get("value"):
+                candidates.append({"source_url": reference.get("source_url"), "checked_at": reference.get("checked_at"),
+                                   "source_kind": "reference_file", "phones": [normalized["phone"]["value"]]})
+            decisions.update(select_observations(profile, candidates, reliability))
         if decisions:
             passes["source_reliability"] = decisions
 
