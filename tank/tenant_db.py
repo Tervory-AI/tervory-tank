@@ -51,14 +51,28 @@ def bind_tenant_endpoints(app):
     """
     from fastapi.routing import APIRoute
 
-    for route in app.routes:
-        if not isinstance(route, APIRoute):
-            continue
+    def endpoints(router, inherited=()):
+        for route in router.routes:
+            if isinstance(route, APIRoute):
+                yield route, inherited
+            elif hasattr(route, "original_router"):
+                # FastAPI 0.162 keeps included routers as lazy route groups.
+                extra = tuple(getattr(route.include_context, "dependencies", ()))
+                yield from endpoints(route.original_router, inherited + extra)
+
+    for route, inherited in endpoints(app):
         original = route.dependant.call
+        if getattr(original, "_tenant_bound", False):
+            continue
         parameters = signature(original)
         authenticated_actor = any(d.name == "actor" for d in route.dependant.dependencies)
         founder_only = any(d.call.__module__ == "admin" and d.call.__name__ == "require_admin"
                            for d in route.dependant.dependencies if d.call is not None)
+
+        founder_only = founder_only or any(
+            getattr(d.dependency, "__module__", "") == "admin"
+            and getattr(d.dependency, "__name__", "") == "require_admin"
+            for d in inherited)
 
         def wrap(function, parameters, authenticated_actor, founder_only):
             @wraps(function)
@@ -92,6 +106,7 @@ def bind_tenant_endpoints(app):
 
                     response.body_iterator = stream()
                 return response
+            scoped._tenant_bound = True
             return scoped
 
         route.dependant.call = wrap(original, parameters, authenticated_actor, founder_only)
