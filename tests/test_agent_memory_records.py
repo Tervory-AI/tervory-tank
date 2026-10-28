@@ -43,6 +43,10 @@ class Encoder:
     def __init__(self):
         self.calls = []
 
+    def validate(self, text):
+        # Tokenizer boundaries are exercised with LocalEncoder in test_review.py.
+        pass
+
     def embed(self, text):
         self.calls.append(text)
         return [1.0, 0.0, 0.0, 0.0]
@@ -539,8 +543,9 @@ async def test_founder_chat_to_sql_row_and_http_authorization(memory, monkeypatc
             ],
             task_id=turn,
         )
+        memory_id = str(uuid.uuid5(turn, "memory:" + m.agent))
         assert json.loads(reply.content) == {
-            "text": "fixture deliveries happen on Tuesdays.",
+            "text": "fixture deliveries happen on Tuesdays.\n\n" + memory_id,
             "actions": [],
         }
         listing = await http.get(
@@ -560,6 +565,24 @@ async def test_founder_chat_to_sql_row_and_http_authorization(memory, monkeypatc
             uuid.UUID(row["id"]),
         )
         assert public_row(dbrow) == row
+        from fastapi import FastAPI
+
+        tank_app = FastAPI()
+        tank_app.include_router(memory_routes.router)
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=tank_app), base_url="http://tank"
+        ) as tank_http:
+            inspected = await tank_http.get(
+                "/v1/memory/records/" + memory_id,
+                headers={"X-Tank-Key": "memory-workspace-fixture",
+                         "X-Tervory-User": "founder-fixture",
+                         "X-Tervory-Tenant": PLATFORM_TENANT},
+            )
+        assert inspected.status_code == 200
+        assert inspected.json() == {key: row[key] for key in (
+            "id", "tenant_id", "agent", "claim", "evidence", "confidence",
+            "last_verified", "embed_model", "created_at", "updated_at",
+        )}
         path = os.environ.get("MEMORY_PROOF_PATH")
         if path:
             Path(path).write_text(
@@ -567,9 +590,10 @@ async def test_founder_chat_to_sql_row_and_http_authorization(memory, monkeypatc
                     {
                         "database": await m.pool.fetchval("SELECT version()"),
                         "fixture_only": True,
-                        "entrypoint": "command.route_turn -> /founder/memories",
-                        "row": row,
-                        "view": "No existing founder memory view; view waits for Figma.",
+                        "entrypoint": "command.route_turn -> Hermes -> SQL -> GET /v1/memory/records/{id}",
+                        "chat": json.loads(reply.content),
+                        "row": inspected.json(),
+                        "browser_path": "/api/memory/records/" + memory_id,
                     },
                     indent=2,
                 )
