@@ -1,6 +1,7 @@
 """Real Postgres stores and agent handlers; public HTTP is a saved offline page."""
 import ipaddress
 import os
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from urllib.parse import urlsplit, urlunsplit
 from uuid import UUID, uuid4
@@ -100,6 +101,24 @@ async def start(system, tenants=2):
     assert await agent.rig_discover(system.context(agent.HEARTBEAT_TENANT)) == {'tenants': tenants}
     await agent.dispatch(system.context(A))
     await agent.dispatch(system.context(B))
+
+
+@pytest.mark.asyncio
+async def test_new_watch_cannot_dispatch_before_rig_binding_commits(system, monkeypatch):
+    original = system.tiger.create_watch
+
+    async def create(row):
+        saved = await original(row)
+        assert saved['enabled'] is False
+        await agent.dispatch_tenant(system.tiger, A, datetime.now(timezone.utc))
+        assert not await system.tiger.check_open(A, URL)
+        return saved
+
+    monkeypatch.setattr(system.tiger, 'create_watch', create)
+    await system.managed.sync(A, system.client)
+    assert (await system.tiger.get_watch(A, URL))['enabled']
+    assert await system.managed.managed(A, URL)
+    assert await system.tiger.check_open(A, URL)
 
 
 @pytest.mark.asyncio

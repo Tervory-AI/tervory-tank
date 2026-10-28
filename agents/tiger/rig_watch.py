@@ -17,9 +17,6 @@ import httpx
 
 from watch import BadWatch, DuplicateWatch, PgStore, SQL_ENSURE_DISPATCH, _known_stock, ensure_tables
 
-PLATFORM = '00000000-0000-0000-0000-000000000001'
-
-
 async def ensure_rig_tables(conn, schema: str) -> None:
     await conn.execute(f'ALTER TABLE {schema}.watchlist ADD COLUMN IF NOT EXISTS rig_managed boolean NOT NULL DEFAULT false')
     await conn.execute(f'''CREATE TABLE IF NOT EXISTS {schema}.rig_targets (
@@ -132,8 +129,10 @@ class RigWatches:
                     url = await asyncio.to_thread(check_url, url)
                 except BadWatch:
                     continue
+                # A concurrent dispatcher must not read it before the Rig binding
+                # and managed flag commit together below.
                 fields = dict(tenant_id=tenant, url=url, label=str(row.get('name') or '')[:200],
-                              engine='', every='6h', enabled=True, threshold=0,
+                              engine='', every='6h', enabled=False, threshold=0,
                               alert_price=False, alert_stock=False)
                 try:
                     known[url] = await self.watches.create_watch(fields)
