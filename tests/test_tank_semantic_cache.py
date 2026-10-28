@@ -1,10 +1,7 @@
 """Offline real route/SQL/Qdrant tests. Only the encoder and paid gateway are stubbed."""
 import asyncio
-import json
 from pathlib import Path
-import uuid
 
-import httpx
 import pytest
 import pytest_asyncio
 from qdrant_client import AsyncQdrantClient
@@ -32,7 +29,7 @@ async def drain(b):
 
 
 @pytest_asyncio.fixture
-async def semantic(ladder, monkeypatch):
+async def semantic(ladder, monkeypatch):  # noqa: F811 (pytest fixture parameter)
     b = ladder
     b.encoder = EncoderStub()
     store = cache.VectorIndex(AsyncQdrantClient(location=":memory:"))

@@ -282,3 +282,27 @@ git push origin codex/tank-semantic-cache-2
 
 The final push result and merge commit are reported in the task response. This
 updates the same PR #388. The founder still performs the PR merge.
+
+## PR #388 lint correction
+
+On the same branch, after merge commit `933644a`, the requested lint command
+reproduced exactly five findings: three unused imports (`json`, `uuid`, `httpx`)
+in `tests/test_tank_semantic_cache.py`, and two pytest fixture-parameter F811
+findings. Removed the three imports and added the requested
+`# noqa: F811 (pytest fixture parameter)` to `semantic` in that file and to
+`test_routellm_and_cache_share_shadow_runner_and_report` in
+`tests/test_tank_shadow_coexistence.py`. No behavior changed.
+
+```sh
+/workspace/worker-venv/bin/ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"
+# before fixes: exit 1, five findings
+PATH=/workspace/worker-venv/bin:$PATH ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"
+# after fixes: exit 0, All checks passed!
+git diff --check
+# exit 0
+git commit -m 'Fix semantic cache test lint findings'
+git push origin codex/tank-semantic-cache-2
+```
+
+Only unused imports and lint annotations changed, so behavioral tests were not
+rerun. No GitHub API, model call, download, deployment or merge to main.

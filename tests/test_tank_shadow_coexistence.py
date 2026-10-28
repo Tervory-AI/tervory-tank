@@ -11,7 +11,7 @@ from test_tank_semantic_cache import EncoderStub
 
 
 @pytest.mark.asyncio
-async def test_routellm_and_cache_share_shadow_runner_and_report(real_tank, monkeypatch):
+async def test_routellm_and_cache_share_shadow_runner_and_report(real_tank, monkeypatch):  # noqa: F811 (pytest fixture parameter)
     b = real_tank
     tenant, other = b.tenants
     store = cache.VectorIndex(AsyncQdrantClient(location=':memory:'))
