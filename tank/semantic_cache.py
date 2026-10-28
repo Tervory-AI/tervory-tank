@@ -143,6 +143,7 @@ async def lookup(rt: Any, req: Any, policy: dict, identity: tuple, messages: lis
                     JOIN tank.transcripts t ON t.ledger_id=l.id AND t.tenant_id=c.tenant_id
                     WHERE c.tenant_id=$1 AND c.region=$2 AND c.task_type=$3 AND c.context_hash=$4
                       AND c.input_hash=$5 AND c.ledger_id=$6 AND c.expires_at>now()
+                      AND l.region=c.region AND l.task_type=c.task_type
                       AND l.outcome='delivered' AND l.feedback IS DISTINCT FROM 'rejected'""",
                     req.tenant_id, rt.box_region(), req.task_type, identity[0], payload.get("input_hash"),
                     uuid.UUID(payload["ledger_id"]),
@@ -167,6 +168,7 @@ async def evidence(conn: Any, tenant: uuid.UUID, region: str, task: str, policy_
           JOIN tank.ledger s ON s.id=o.source_id AND s.tenant_id=o.tenant_id
           WHERE o.tenant_id=$1 AND o.region=$2 AND o.task_type=$3 AND o.policy_hash=$4
             AND o.encoder_id=$5 AND o.status='hit' AND o.agreement IS NOT NULL
+            AND l.region=o.region AND s.region=o.region AND l.task_type=o.task_type AND s.task_type=o.task_type
             AND l.outcome='delivered' AND l.feedback IS DISTINCT FROM 'rejected'
             AND s.outcome='delivered' AND s.feedback IS DISTINCT FROM 'rejected'
           ORDER BY o.input_hash,o.created_at DESC,o.ledger_id
@@ -275,3 +277,32 @@ def build_router(rt: Any) -> APIRouter:
         return {**data, "approved": body.approved}
 
     return router
+
+
+def batch_snapshot(policy: dict, identity: tuple, probe: Probe | None) -> dict | None:
+    """Keep the enqueue-time observation across provider polling/restarts."""
+    if probe is None:
+        return None
+    from dataclasses import asdict
+    return {"policy": policy, "identity": identity, "probe": asdict(probe), "encoder_id": ENCODER_ID}
+
+
+def schedule_batch(rt: Any, req: Any, snapshot: dict, ledger_id: uuid.UUID, content: str, cost: float) -> None:
+    saved = snapshot.get("semantic_cache")
+    if not saved or saved.get("encoder_id") != ENCODER_ID or rt._storage_mask(content) != content:
+        return
+
+    async def complete() -> None:
+        try:
+            policy, identity = saved["policy"], tuple(saved["identity"])
+            probe = Probe(**saved["probe"])
+            if probe.source_id is not None:
+                probe.source_id = uuid.UUID(str(probe.source_id))
+            await rt._cache_write(req, policy, identity, ledger_id)
+            await finish(rt, req, policy, identity, snapshot["messages"], probe, ledger_id, content, cost)
+        except Exception as exc:
+            log.warning("Semantic batch evidence unavailable (%s)", type(exc).__name__)
+
+    task = asyncio.create_task(complete())
+    rt._background.add(task)
+    task.add_done_callback(rt._background.discard)

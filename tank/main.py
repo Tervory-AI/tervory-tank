@@ -1220,7 +1220,8 @@ async def run_route(
         raise HTTPException(403, blocked)
     await _check_route_task(req, task_id)
     if _defer_paid and not holds_identifier:
-        raise _DeferredRoute(req, policy, messages, max_tokens, generation, escalation)
+        raise _DeferredRoute(req, policy, messages, max_tokens, generation, escalation,
+                             semantic_cache.batch_snapshot(cache_policy, identity, cache_probe))
     if _paid_limit is not None:
         prices = await _batch_price(model)
         if _call_upper(messages, max_tokens, prices) > _paid_limit:
@@ -1546,6 +1547,9 @@ async def _shadow(req: RouteRequest, policy: dict[str, Any], messages: list[dict
         compared = graduate.compare(primary, cand_content, tolerance=float(policy.get("number_tolerance") or 0.01))
         if compared.method == "fields":
             agreement, method, fields = compared.agreement, "fields", compared.fields
+        elif cache and (len(primary) > 4000 or len(cand_content) > 4000):
+            # A truncated prose comparison cannot prove the entire cached answer.
+            method = "answer_too_long"
         elif not budget_open:
             method = "budget_exhausted"
         else:
@@ -2336,10 +2340,11 @@ async def route(body: RouteRequest, caller: str | None = Depends(require_key)):
 # ---------- provider batches (independent of the task queue worker) ----------
 
 class _DeferredRoute(Exception):
-    def __init__(self, req, policy, messages, max_tokens, generation, escalation):
+    def __init__(self, req, policy, messages, max_tokens, generation, escalation, cache_snapshot=None):
         self.req, self.policy = req, policy
         self.messages, self.max_tokens = messages, max_tokens
         self.generation, self.escalation = generation, escalation
+        self.cache_snapshot = cache_snapshot
 
 
 class BatchRequest(BaseModel):
@@ -2438,7 +2443,8 @@ async def route_batch(body: BatchRequest, caller: str | None = Depends(require_k
             if inserted:
                 for item, reservation in zip(deferred, reservations):
                     snapshot = {"routing": item.policy, "messages": item.messages, "max_tokens": item.max_tokens,
-                                "generation": item.generation, "escalation": item.escalation}
+                                "generation": item.generation, "escalation": item.escalation,
+                                "semantic_cache": item.cache_snapshot}
                     clean_req = item.req.model_copy(update={"messages": [Message(**m) for m in _plain_messages([m.model_dump() for m in item.req.messages])]})
                     await conn.execute(
                         """INSERT INTO tank.batch_items(batch_id,tenant_id,item_id,request,policy,prices,reserved_usd,position)
@@ -2560,6 +2566,7 @@ async def _batch_result(conn: Any, batch: Any, item: Any, result: dict[str, Any]
             json.dumps(_storage_mask(_plain_messages([m.model_dump() for m in req.messages]))), _storage_mask(content)[:20000])
         await conn.execute("""UPDATE tank.batch_items SET status='completed',ledger_id=$4,reserved_usd=$5
             WHERE batch_id=$1 AND tenant_id=$2 AND item_id=$3""", batch["id"], req.tenant_id, item["item_id"], ledger_id, actual)
+    semantic_cache.schedule_batch(__import__("sys").modules[__name__], req, snapshot, ledger_id, content, float(actual))
 
 
 async def _process_batch(conn: Any, batch: Any) -> None:

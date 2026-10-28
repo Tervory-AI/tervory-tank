@@ -282,14 +282,117 @@ async def test_schema_reapplies_without_losing_observations(semantic):
 def test_model_download_is_build_only_and_module_is_in_image(monkeypatch):
     import semantic_encoder as encoder
     calls = []
-    import huggingface_hub
+    import sys
+    from types import SimpleNamespace
     def forbidden(**kwargs):
         calls.append(kwargs)
         raise AssertionError('No download in runtime or tests')
-    monkeypatch.setattr(huggingface_hub, 'snapshot_download', forbidden)
+    monkeypatch.setitem(sys.modules, 'huggingface_hub', SimpleNamespace(snapshot_download=forbidden))
     monkeypatch.setattr(encoder, 'MODEL_PATH', Path('/definitely-missing-offline-fixture'))
     with pytest.raises(RuntimeError, match='missing'):
         encoder.LocalEncoder().embed('rain')
     assert not calls
     docker = (Path(__file__).resolve().parents[1] / 'tank/Dockerfile').read_text()
     assert 'semantic_encoder.py semantic_cache.py' in docker and 'RUN python semantic_encoder.py' in docker
+
+
+@pytest.mark.asyncio
+async def test_batch_completion_records_enqueue_time_shadow_once(semantic, monkeypatch):
+    from test_tank_batch_providers import LiteLLMStub, NATIVE
+    b = semantic
+    async with b.pool.acquire() as conn:
+        await conn.execute("""UPDATE tank.policy SET model='batch-fixture',batch_eligible=true,
+            max_cost_usd=1 WHERE tenant_id=$1""", b.tenants[0])
+    async def roster():
+        return [{'model_name': 'batch-fixture', 'litellm_params': {'model': 'openai/' + NATIVE['openai']},
+                 'model_info': {'input_cost_per_token': .000002, 'output_cost_per_token': .00001}}]
+    monkeypatch.setattr(b.tank, '_roster_models', roster)
+    monkeypatch.setenv('TANK_BATCH_MIN', '2')
+    stub = LiteLLMStub('openai')
+    monkeypatch.setattr(b.tank, '_batch_gateway', stub)
+    async def judge(*args):
+        return '100', 0
+    monkeypatch.setattr(b.tank, '_llm', judge)
+    await run(b, 'Explain rainfall stage 0')
+    body = b.tank.BatchRequest(requests=[request(b, b.tenants[0], interactive=False, text=f'Describe rain stage {i}') for i in range(2)])
+    queued = await b.tank.route_batch(body, None)
+    assert queued['status'] == 'queued'
+    await b.tank.process_batches_once()
+    stub.finished = True
+    await b.tank.process_batches_once()
+    await drain(b)
+    await b.tank.process_batches_once()
+    status = await b.tank.batch_status(body.id, b.tenants[0])
+    assert status['status'] == 'completed'
+    async with b.pool.acquire() as conn:
+        rows = await conn.fetch("""SELECT o.status FROM tank.semantic_observations o JOIN tank.ledger l
+            ON l.id=o.ledger_id AND l.tenant_id=o.tenant_id WHERE o.tenant_id=$1 AND l.batch_id=$2""", b.tenants[0], body.id)
+    assert sorted(r['status'] for r in rows) == ['hit', 'miss']
+
+
+@pytest.mark.asyncio
+async def test_untrusted_qdrant_payload_cannot_cross_tenant(semantic, monkeypatch):
+    from types import SimpleNamespace
+    b = semantic
+    await run(b, 'Explain how rain forms.', tenant=b.tenants[1])
+    foreign, _ = await b.store.client.scroll(cache.collection(b.tenants[1]))
+    async def wrong_results(**kwargs):
+        return SimpleNamespace(points=[SimpleNamespace(score=1, payload=foreign[0].payload)])
+    await b.store.ensure(cache.collection(b.tenants[0]))
+    monkeypatch.setattr(b.store.client, 'query_points', wrong_results)
+    result = await run(b, 'Describe how rainfall develops.')
+    assert (await observation(b, result))['status'] == 'miss'
+
+
+@pytest.mark.asyncio
+async def test_qdrant_failure_is_recorded_without_changing_real_answer(semantic, monkeypatch):
+    b = semantic
+    async def unavailable(*args):
+        raise ConnectionError('stub')
+    monkeypatch.setattr(b.store, 'search', unavailable)
+    result = await run(b, 'Explain how rain forms.')
+    assert result.rung == 1 and (await observation(b, result))['status'] == 'unavailable'
+
+
+@pytest.mark.asyncio
+async def test_negated_source_is_not_indexed(semantic):
+    b = semantic
+    first = await run(b, 'Do not describe rainfall.')
+    second = await run(b, 'Describe rainfall.')
+    assert (await observation(b, first))['status'] == 'guarded'
+    assert (await observation(b, second))['status'] == 'miss'
+
+
+def test_runtime_encoder_uses_pinned_files_cpu_and_never_truncates(monkeypatch, tmp_path):
+    import sys
+    from types import SimpleNamespace
+    import semantic_encoder as encoder
+    calls = []
+    for name in encoder.FILES:
+        (tmp_path / name).touch()
+    (tmp_path / 'revision').write_text(encoder.MODEL_REVISION)
+    monkeypatch.setattr(encoder, 'MODEL_PATH', tmp_path)
+    class Tokenizer:
+        long = False
+        def no_truncation(self):
+            self.truncated = False
+        def encode(self, text):
+            return SimpleNamespace(ids=list(range(513 if self.long else 2)))
+    tokenizer = Tokenizer()
+    class Model:
+        def __init__(self, **kwargs):
+            calls.append(kwargs)
+        def embed(self, texts):
+            return iter([[1.0] * DIMENSIONS])
+    monkeypatch.setitem(sys.modules, 'fastembed', SimpleNamespace(TextEmbedding=Model))
+    monkeypatch.setitem(sys.modules, 'tokenizers', SimpleNamespace(Tokenizer=SimpleNamespace(from_file=lambda path: tokenizer)))
+    local = encoder.LocalEncoder()
+    assert len(local.embed('rain')) == DIMENSIONS
+    assert calls == [dict(model_name=encoder.MODEL_NAME, specific_model_path=str(tmp_path),
+                          local_files_only=True, cuda=False, threads=2)]
+    tokenizer.long = True
+    with pytest.raises(ValueError, match='context'):
+        local.embed('long input')
+    (tmp_path / 'revision').write_text('changed')
+    with pytest.raises(RuntimeError, match='missing'):
+        encoder.LocalEncoder().embed('rain')
