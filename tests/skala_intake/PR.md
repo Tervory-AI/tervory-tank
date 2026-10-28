@@ -1,6 +1,6 @@
 # Skala intake: Trigger free checkers as versioned skills
 
-Branch: `skala/trigger-intake-1.0.0`, started from `origin/main` at `9769998`. Tip: `aca3481`. Claude opens the PR. No GitHub API, merge, deployment, main push, production SQL, or model call was used.
+Branch: `skala/trigger-intake-1.0.0`, started from `origin/main` at `9769998`. Tip: `d8bcbd9` (packaging `aca3481`). Claude opens the PR. No GitHub API, merge, deployment, main push, production SQL, or model call was used.
 
 **Build and offline proof are complete; live founder acceptance is pending.** Done when the founder opens Skala, sees the six Trigger skills ready with their eval scores, presses "Approve all ready", and Trigger keeps working.
 
