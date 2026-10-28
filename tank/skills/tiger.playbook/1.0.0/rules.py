@@ -9,7 +9,6 @@ from __future__ import annotations
 import copy
 import hashlib
 import ipaddress
-import json
 import re
 from urllib.parse import urlsplit
 
