@@ -117,7 +117,7 @@ async def report(product: str, response: Response, tenant_id: uuid.UUID | None =
     first, last, since, until = period(start, end)
     from main import box_region
     region = box_region()
-    async with db().acquire() as conn, conn.transaction(isolation="repeatable_read", readonly=True):
+    async with db().acquire(isolation="repeatable_read", readonly=True) as conn:
         saved = await conn.fetchrow("SELECT template_version,created_at FROM tank.case_study_reports WHERE tenant_id=$1 AND product=$2", tenant, product)
         if not saved:
             raise HTTPException(404, "Report not found")
