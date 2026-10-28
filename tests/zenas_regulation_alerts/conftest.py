@@ -12,3 +12,11 @@ def no_live_configuration(monkeypatch):
         "LEGISCAN_API_KEY", "LAWS_AFRICA_API_TOKEN",
     ):
         monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def offline_event_corridor(monkeypatch):
+    from chassis import events
+    async def unavailable(*args, **kwargs):
+        return False
+    monkeypatch.setattr(events, "publish", unavailable)
