@@ -79,7 +79,7 @@ def test_recorded_rss_and_atom_keep_links_dates_and_deduplicate(filename, count)
 
 def test_comtrade_recording_keeps_eight_values_and_source_times():
     result = collect(spec("comtrade_preview"), fixtures=str(ALL_FEEDS), backfill=True, client=EvidenceClient())
-    recorded = json.loads((ALL_FEEDS / "comtrade_preview.json").read_text())["data"]
+    recorded = json.loads((ALL_FEEDS / "engines/ffl/comtrade_preview.json").read_text())["data"]
     assert result["note"] == ""
     assert len(result["points"]) == 8
     assert sorted(float(row["value"]) for row in result["points"]) == sorted(row["primaryValue"] for row in recorded)
@@ -92,7 +92,7 @@ def test_comtrade_recording_keeps_eight_values_and_source_times():
 @pytest.mark.parametrize("mutation", ["reporterCode", "cmdCode", "partnerCode", "flowCode", "primaryValue", "limit"])
 def test_comtrade_rejects_unexpected_series_or_unbounded_preview(mutation):
     source = spec("comtrade_preview")
-    data = json.loads((ALL_FEEDS / "comtrade_preview.json").read_text())
+    data = json.loads((ALL_FEEDS / "engines/ffl/comtrade_preview.json").read_text())
     if mutation == "limit":
         data["data"] = data["data"] * 70
     else:
