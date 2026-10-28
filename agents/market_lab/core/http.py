@@ -7,6 +7,8 @@ from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from core.evidence import answer, document_page, overview
+from core.calibration import calibration, identity
+from core.jobs import _call
 
 
 class RequestBody(BaseModel):
@@ -17,6 +19,7 @@ class RequestBody(BaseModel):
     offset: int = Field(default=0, ge=0, le=10000000)
     row: int | None = Field(default=None, ge=0, le=10000000)
     row_kind: Literal["point", "event"] | None = None
+    kind: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 def build_router(*, key_ok, ledger_context, engine: str | None = None):
@@ -26,13 +29,23 @@ def build_router(*, key_ok, ledger_context, engine: str | None = None):
     async def call(operation: str, body: RequestBody, x_tank_key: str = Header(default="")):
         if not key_ok(x_tank_key):
             raise HTTPException(401, "Room key required")
-        if operation not in {"overview", "ask", "document", "refresh"}:
+        if operation not in {"overview", "ask", "document", "refresh", "predictions", "calibration"}:
             raise HTTPException(404, "Not found")
         if operation in {"overview", "refresh"} and not engine:
             raise HTTPException(503, "Market Lab's feeds have not been configured.")
         try:
             async with ledger_context() as ledger:
                 tenant = str(body.tenant_id)
+                if operation in {"predictions", "calibration"}:
+                    rows = await _call(ledger.predictions_for, tenant)
+                    series = await _call(ledger.series_for, tenant)
+                    if operation == "calibration":
+                        return calibration(rows, tenant, series, kind=body.kind)
+                    predictions = [{**row, **identity(row, series),
+                                    "confidence": row.get("confidence"),
+                                    "confidence_count": row.get("confidence_count") or 0}
+                                   for row in rows if str(row["tenant_id"]) == tenant]
+                    return {"predictions": [row for row in predictions if body.kind is None or row["kind"] == body.kind]}
                 if operation == "document":
                     if body.document_id is None:
                         raise HTTPException(422, "A source is required")
