@@ -656,6 +656,8 @@ model_list:
       licence_url: https://huggingface.co/zai-org/GLM-5.3-Flash/blob/main/LICENSE
 
 litellm_settings:
+  # Return the gateway's actual priced usage at the end of Command streams.
+  include_cost_in_streaming_usage: true
   drop_params: true
   set_verbose: false
   num_retries: 0

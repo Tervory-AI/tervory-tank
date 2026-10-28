@@ -192,7 +192,7 @@ async def test_small_and_unsupported_provider_batches_use_capped_calls(ladder, m
     b = ladder
     monkeypatch.setenv("TANK_BATCH_MIN", "2")
     for tenant in b.tenants:
-        await policy(b, tenant, model="haiku", rung=1, batch_eligible=True)
+        await policy(b, tenant, model="flash", rung=1, batch_eligible=True)
         for size in (1, 2):
             result = await b.tank.route_batch(b.tank.BatchRequest(requests=[request(b, tenant, interactive=False) for _ in range(size)]), None)
             assert result["status"] == "completed" and not result["batch"]

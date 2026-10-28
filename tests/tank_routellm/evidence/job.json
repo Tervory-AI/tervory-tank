@@ -1,0 +1,14 @@
+{
+  "result": "passed",
+  "environment": "local, simulated gateway costs",
+  "router": "real CPU BERT",
+  "score": 0.35607945919036865,
+  "chosen": "flash-lite",
+  "live_model": "sol",
+  "agreement": 1.0,
+  "primary_cost_usd": 0.02,
+  "candidate_cost_usd": 0.002,
+  "sample_savings_usd": 0.018,
+  "second_tenant_samples": 0,
+  "live_policy_unchanged": true
+}

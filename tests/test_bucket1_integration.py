@@ -37,7 +37,8 @@ def test_tank_storage_imports_without_chassis():
     imports = [node.module for node in ast.walk(ast.parse((ROOT / 'tank/storage.py').read_text())) if isinstance(node, ast.ImportFrom)]
     assert not any(name and name.startswith('chassis') for name in imports)
     dockerfile = (ROOT / 'tank/Dockerfile').read_text()
-    assert 'storage.py' in next(line for line in dockerfile.splitlines() if line.startswith('COPY main.py'))
+    assert (ROOT / 'tank/storage.py').is_file()
+    assert '*.py' in next(line for line in dockerfile.splitlines() if line.startswith('COPY ') and '*.py' in line).split()
     assert 'app.include_router(__import__("storage").router)' in (ROOT / 'tank/main.py').read_text()
 
 
@@ -52,7 +53,20 @@ def test_compose_only_passes_own_pairs_and_boston_backup_is_opt_in():
     assert worker['environment']['TANK_REGION'] == 'us-east'
     assert keys(worker['environment']) == keys(root['services']['tank']['environment']) | {'R2_BACKUP_RECIPIENT'}
     assert worker['networks'] == ['default']
-    assert 'r2-backup' not in yaml.safe_load((ROOT / 'docker-compose.za.yml').read_text())['services']
+    za_root = yaml.safe_load((ROOT / 'docker-compose.za.yml').read_text())
+    assert 'r2-backup' not in za_root['services']
+    za_worker = za_root['services']['r2-backup-za']
+    assert za_worker['profiles'] == ['r2-backup-za']
+    assert za_worker['restart'] == 'no'
+    assert za_worker['environment']['TANK_REGION'] == 'za'
+    assert za_worker['environment']['AGENT_NAME'] == 'zenas'
+    assert za_worker['environment']['R2_BUCKET'] == '${R2_BUCKET_ZENAS_ZA:-}'
+    assert za_worker['environment']['R2_BUCKET_ZENAS_ZA'] == '${R2_BUCKET_ZENAS_ZA:-}'
+    assert keys(za_worker['environment']) == {
+        'R2_ACCOUNT_ID', 'R2_BUCKET', 'R2_BUCKET_ZENAS_ZA',
+        'R2_ACCESS_KEY_ID_ZENAS', 'R2_SECRET_ACCESS_KEY_ZENAS', 'R2_BACKUP_RECIPIENT'}
+    assert za_worker['command'] == [
+        'python', 'jobs/train/backup.py', '--owner', 'zenas', '--nightly']
     for room in storage.ROOMS - {'ghost'}:
         for path in (ROOT / 'agents' / room).glob('docker-compose*.yml'):
             box = yaml.safe_load(path.read_text())
@@ -60,6 +74,12 @@ def test_compose_only_passes_own_pairs_and_boston_backup_is_opt_in():
             assert owned
             for svc in owned:
                 expected = {'R2_ACCOUNT_ID', 'R2_BUCKET', f'R2_ACCESS_KEY_ID_{room.upper()}', f'R2_SECRET_ACCESS_KEY_{room.upper()}'}
+                if room == 'zenas' and path.name == 'docker-compose.za.yml':
+                    expected = expected | {'R2_BUCKET_ZENAS_ZA'}
+                    assert svc['environment']['R2_BUCKET'] == '${R2_BUCKET_ZENAS_ZA:-}'
+                    assert svc['environment']['R2_BUCKET_ZENAS_ZA'] == '${R2_BUCKET_ZENAS_ZA:-}'
+                else:
+                    assert svc['environment']['R2_BUCKET'] == f'tervory-{room.replace("_", "-")}'
                 assert keys(svc['environment']) == expected
                 assert svc['environment']['R2_ACCOUNT_ID'] == '${R2_ACCOUNT_ID:-}'
             if room == 'radix':

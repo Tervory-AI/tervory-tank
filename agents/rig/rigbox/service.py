@@ -782,7 +782,7 @@ class Service:
                 action = await self.store.upsert_product(tenant, row)
                 if action == "added":
                     added += 1
-                else:
+                elif action == "updated":
                     updated += 1
             report["products"] = {"added": added, "updated": updated, "rejected": []}
             for family, members in families_from(await self.store.products(tenant)).items():
@@ -834,7 +834,7 @@ class Service:
                 action = await self.store.upsert_product(tenant_id, row)
                 if action == "added":
                     added += 1
-                else:
+                elif action == "updated":
                     updated += 1
             reports.append({"format": fmt, "added": added, "updated": updated, "rejected": mapped["rejected"]})
         return reports

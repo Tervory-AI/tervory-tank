@@ -57,12 +57,15 @@ from urllib.parse import urlparse
 
 import asyncpg
 import httpx
+from command_stream import StreamFailure, TokenSink, completion as stream_completion
 import redis.asyncio as aioredis
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+import batch_providers
 import graduate
+import routellm_shadow
 import skala
 import skill_costs
 
@@ -1066,6 +1069,7 @@ async def run_route(
     _paid_policy: dict[str, Any] | None = None,
     _prior_escalation: list[dict[str, Any]] | None = None,
     _paid_limit: float | None = None,
+    _on_token: TokenSink | None = None,
 ) -> RouteResponse:
     """Pick the model from policy, call it through LiteLLM, write the ledger row.
     Used directly by /v1/route and in the background by tasks."""
@@ -1219,12 +1223,31 @@ async def run_route(
     await __import__("controls").refuse_paid(paid=True, task=req.task_type, path="route")
     started = time.perf_counter()
     try:
-        async with httpx.AsyncClient(timeout=120) as client:
-            r = await client.post(
-                f"{LITELLM_URL}/v1/chat/completions",
-                headers={"Authorization": f"Bearer {LITELLM_MASTER_KEY}"},
-                json={"model": model, "messages": messages, "max_tokens": max_tokens, **generation},
+        if _on_token is not None and req.task_type == "command.turn":
+            r = await stream_completion(LITELLM_URL, LITELLM_MASTER_KEY,
+                                        {"model": model, "messages": messages, "max_tokens": max_tokens, **generation}, _on_token)
+        else:
+            async with httpx.AsyncClient(timeout=120) as client:
+                r = await client.post(
+                    f"{LITELLM_URL}/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {LITELLM_MASTER_KEY}"},
+                    json={"model": model, "messages": messages, "max_tokens": max_tokens, **generation},
+                )
+    except StreamFailure as exc:
+        ledger_id = uuid.uuid4()
+        async with pool().acquire() as conn:
+            await conn.execute(
+                "INSERT INTO tank.ledger "
+                "(id,tenant_id,region,agent,skill,task_type,rung,model,priority,tokens_in,tokens_out,cost_usd,"
+                "latency_ms,cache_hit,outcome,task_id,error,route_seat,escalation,cost_status) "
+                "VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,'failed',$14,$15,$16,$17::jsonb,$18)",
+                ledger_id, req.tenant_id, req.region or DEFAULT_REGION, req.agent, req.skill, req.task_type,
+                policy["rung"], exc.model, priority, exc.tokens_in, exc.tokens_out, exc.cost_usd or 0,
+                int((time.perf_counter() - started) * 1000), task_id, "incomplete stream", route_seat, json.dumps(escalation),
+                # Existing NOT NULL storage convention: not_set is never shown as zero spend.
+                "not_set" if exc.cost_usd is None else "set",
             )
+        raise HTTPException(502, {"ledger_id": str(ledger_id)}) from None
     except httpx.HTTPError as exc:
         # The gateway never answered. Still a call on the books, so the failure rate is honest.
         latency_ms = int((time.perf_counter() - started) * 1000)
@@ -1293,6 +1316,13 @@ async def run_route(
         _background.add(t)
         t.add_done_callback(_background.discard)
 
+    if not holds_identifier and model_override is None and routellm_shadow.configuration(policy):
+        t = asyncio.create_task(routellm_shadow.observe(
+            __import__("sys").modules[__name__], req, policy, messages, max_tokens,
+            ledger_id, content, cost_usd, answered, "x-litellm-response-cost" in r.headers))
+        _background.add(t)
+        t.add_done_callback(_background.discard)
+
     masked_content = _storage_mask(content)
     if not holds_identifier:
         async with pool().acquire() as conn:
@@ -1311,7 +1341,7 @@ async def run_route(
     )
 
 
-async def _llm(model: str, messages: list[dict[str, str]], max_tokens: int) -> tuple[str, float]:
+async def _llm(model: str, messages: list[dict[str, str]], max_tokens: int, *, receipt: dict | None = None) -> tuple[str, float]:
     messages = _plain_messages(messages)
     if _contains_html(messages):
         raise ValueError("HTML is not model input; supply extracted text")
@@ -1321,11 +1351,19 @@ async def _llm(model: str, messages: list[dict[str, str]], max_tokens: int) -> t
         r = await client.post(
             f"{LITELLM_URL}/v1/chat/completions",
             headers={"Authorization": f"Bearer {LITELLM_MASTER_KEY}"},
-            json={"model": model, "messages": messages, "max_tokens": max_tokens},
+            json={"model": model, "messages": messages, "max_tokens": max_tokens,
+                  **({"disable_fallbacks": True} if receipt is not None else {})},
         )
     if r.status_code != 200:
         raise RuntimeError(f"{model}: {r.status_code} {r.text[:200]}")
     data = r.json()
+    if receipt is not None:
+        usage = data.get("usage") or {}
+        receipt.update(model=r.headers.get("x-litellm-model-group") or model,
+                       cost=float(r.headers["x-litellm-response-cost"]) if "x-litellm-response-cost" in r.headers else None,
+                       tokens_in=int(usage.get("prompt_tokens") or 0), tokens_out=int(usage.get("completion_tokens") or 0))
+        if receipt["model"] != model:
+            raise RuntimeError("shadow provider returned a different model")
     content = (data.get("choices") or [{}])[0].get("message", {}).get("content", "") or ""
     return content, float(r.headers.get("x-litellm-response-cost") or 0.0)
 
@@ -1505,7 +1543,7 @@ async def _run_code_candidate(req: RouteRequest, cand: str, messages: list[dict[
 
 
 async def _shadow(req: RouteRequest, policy: dict[str, Any], messages: list[dict[str, str]], max_tokens: int,
-                  ledger_id: uuid.UUID, primary: str, primary_cost: float) -> None:
+                  ledger_id: uuid.UUID, primary: str, primary_cost: float, *, routellm: tuple | None = None) -> None:
     """Run the candidate on the same input, score agreement with the primary, record both.
     The client already has the primary answer. Spend lands on the platform tenant.
     Code skills cost nothing and are not subject to the daily shadow budget."""
@@ -1521,11 +1559,12 @@ async def _shadow(req: RouteRequest, policy: dict[str, Any], messages: list[dict
         log.warning("shadow %s skipped %s: daily budget spent", req.task_type, cand)
         return
     cand_content, cand_cost, agreement, method, fields = None, 0.0, None, "failed", {}
+    receipt: dict = {}
     try:
         if code:
             cand_content, cand_cost = await _run_code_candidate(req, cand, messages)
         else:
-            cand_content, cand_cost = await _llm(cand, messages, max_tokens)
+            cand_content, cand_cost = await _llm(cand, messages, max_tokens, **({"receipt": receipt} if routellm else {}))
         compared = graduate.compare(primary, cand_content, tolerance=float(policy.get("number_tolerance") or 0.01))
         if compared.method == "fields":
             agreement, method, fields = compared.agreement, "fields", compared.fields
@@ -1538,7 +1577,13 @@ async def _shadow(req: RouteRequest, policy: dict[str, Any], messages: list[dict
             found = re.search(r"\d{1,3}", verdict)
             agreement, method = (min(100, int(found.group())) / 100 if found else None), "judge"
     except Exception as exc:  # noqa: BLE001
-        log.warning("shadow %s→%s failed: %s", policy["model"], cand, exc)
+        log.warning("shadow %s→%s failed: %s", policy["model"], cand, type(exc).__name__ if routellm else exc)
+    if routellm:
+        config, primary_known = routellm
+        await routellm_shadow.save(__import__("sys").modules[__name__], req, config, ledger_id,
+            primary, primary_cost, primary_known, cand_content, max(cand_cost, receipt.get("cost") or 0),
+            receipt, agreement, method, fields)
+        return
     async with pool().acquire() as conn:
         await conn.execute(
             """
@@ -1968,6 +2013,7 @@ async def graduation(
             """
         )
         code_quotes = await _code_quotes(conn)
+    router_steps = await routellm_shadow.ladder(__import__("sys").modules[__name__], tenant_id, founder_mix)
     price_quotes = await _live_price_quotes()
     roster_fp, price_fp = graduate.fingerprints([*price_quotes, *code_quotes])
     by_rank: dict[str, list[Any]] = {}
@@ -2038,6 +2084,7 @@ async def graduation(
             shadow_agreement=agr,
             ranked=ranked_view,
         )
+        steps.extend(router_steps.get(d["task_type"], []))
         state = by_state.get(d["task_type"])
         due = graduate.research_reason(
             state["searched_at"] if state else None,
@@ -2340,7 +2387,8 @@ async def _batch_price(model: str) -> dict[str, Any]:
     native = row["litellm_params"]["model"]
     provider, _, name = native.partition("/")
     return {"input": float(info["input_cost_per_token"]), "output": float(info["output_cost_per_token"]),
-            "provider": provider, "native": name, "discount": 0.5}
+            "provider": provider, "native": name,
+            "discount": batch_providers.charge_multiplier(provider, name) or 1.0}
 
 
 def _call_upper(messages: list[dict[str, str]], max_tokens: int, prices: dict[str, Any]) -> float:
@@ -2354,6 +2402,8 @@ async def _batch_gateway(method: str, path: str, *, model: str | None = None, **
     await __import__("controls").refuse_paid(path="route/batch")
     async with httpx.AsyncClient(timeout=60) as client:
         headers = {"Authorization": f"Bearer {LITELLM_MASTER_KEY}"}
+        if path.startswith("/anthropic/"):
+            headers["anthropic-version"] = "2023-06-01"
         if model:
             headers["x-litellm-model"] = model
         response = await client.request(method, f"{LITELLM_URL}{path}", headers=headers, **kwargs)
@@ -2395,7 +2445,7 @@ async def route_batch(body: BatchRequest, caller: str | None = Depends(require_k
     # Free/code/cache results have already finished. Only work still needing a
     # model is submitted; no interactive request enters this durable queue.
     prices = await _batch_price(deferred[0].policy["model"])
-    if prices["provider"] not in {"openai"}:
+    if not all(batch_providers.compatible(prices, item.messages, item.generation) for item in deferred):
         for item in deferred:
             result = await run_route(item.req, caller=caller, _paid_policy=item.policy,
                                      _prior_escalation=item.escalation, _paid_limit=float(item.policy["max_cost_usd"]))
@@ -2558,32 +2608,25 @@ async def _process_batch(conn: Any, batch: Any) -> None:
                 raise ValueError("provider_not_allowed")
             lines.append(json.dumps({"custom_id": str(item["item_id"]), "method": "POST", "url": "/v1/chat/completions",
                 "body": {"model": prices["native"], "messages": snapshot["messages"], "max_tokens": snapshot["max_tokens"], **snapshot["generation"]}}))
-        uploaded = await _batch_gateway("POST", "/v1/files", model=batch["model"], data={"purpose": "batch", "custom_llm_provider": batch["provider"]},
-            files={"file": ("requests.jsonl", ("\n".join(lines)+"\n").encode(), "application/jsonl")})
-        file_id = uploaded.json()["id"]
-        created = await _batch_gateway("POST", "/v1/batches", model=batch["model"], json={"input_file_id": file_id,
-            "endpoint": "/v1/chat/completions", "completion_window": "24h", "custom_llm_provider": batch["provider"],
-            "metadata": {"tank_batch_id": str(batch["id"])}})
+        provider_id, file_id = await batch_providers.submit(_batch_gateway, batch, lines)
         await conn.execute("""UPDATE tank.batches SET status='submitted',provider_id=$3,input_file_id=$4
-            WHERE id=$1 AND tenant_id=$2""", batch["id"], batch["tenant_id"], created.json()["id"], file_id)
+            WHERE id=$1 AND tenant_id=$2""", batch["id"], batch["tenant_id"], provider_id, file_id)
         return
     if batch["status"] in {"submitting", "retrying"}:
         # Only a restarted process can see these states while holding the batch
         # advisory lock. Surface uncertainty, and never repeat a submitted call.
         await conn.execute("UPDATE tank.batch_items SET status='failed',error='interrupted_attempt' WHERE batch_id=$1 AND tenant_id=$2 AND ledger_id IS NULL", batch["id"], batch["tenant_id"])
     else:
-        response = await _batch_gateway("GET", f"/v1/batches/{batch['provider_id']}", model=batch["model"], params={"custom_llm_provider": batch["provider"]})
-        state = response.json()
+        state = await batch_providers.status(_batch_gateway, batch)
         if state["status"] not in {"completed", "failed", "expired", "cancelled"}:
             if (datetime.now(timezone.utc)-batch["submitted_at"]).total_seconds() >= 86400:
                 if batch["error"] != "24h deadline exceeded; awaiting provider cancellation":
-                    await _batch_gateway("POST", f"/v1/batches/{batch['provider_id']}/cancel", model=batch["model"], json={"custom_llm_provider": batch["provider"]})
+                    await batch_providers.cancel(_batch_gateway, batch)
                     await conn.execute("UPDATE tank.batches SET error='24h deadline exceeded; awaiting provider cancellation' WHERE id=$1 AND tenant_id=$2", batch["id"], batch["tenant_id"])
             return
         outputs = {}
         if state.get("output_file_id"):
-            raw = await _batch_gateway("GET", f"/v1/files/{state['output_file_id']}/content", model=batch["model"], params={"custom_llm_provider": batch["provider"]})
-            outputs = {row["custom_id"]: row for row in (json.loads(line) for line in raw.text.splitlines() if line.strip())}
+            outputs = await batch_providers.results(_batch_gateway, batch, state["output_file_id"])
         await conn.execute("UPDATE tank.batches SET status='retrying' WHERE id=$1 AND tenant_id=$2", batch["id"], batch["tenant_id"])
         for item in items:
             if item["ledger_id"] is not None or item["status"] == "failed":
@@ -3768,6 +3811,7 @@ app.include_router(__import__("training").router)
 app.include_router(__import__("storage").router)
 app.include_router(__import__("bench").router)
 app.include_router(__import__("proof").router)
+app.include_router(routellm_shadow.router)
 app.include_router(__import__("proof").client_router)
 app.include_router(__import__("agent_skills").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("base_product").build_router(__import__("sys").modules[__name__]))
