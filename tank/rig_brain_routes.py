@@ -5,7 +5,7 @@ import json
 import uuid
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from agent_skills import local_region, room_key
@@ -35,6 +35,22 @@ class Skill(BaseModel):
 
 def build_router(tank) -> APIRouter:
     router = APIRouter()
+    from command import Actor, identity, require_founder
+
+    @router.get("/v1/agents/rig/price-history")
+    async def price_history(response: Response, tenant_id: uuid.UUID,
+                            product_id: str = Query(min_length=1, max_length=200),
+                            offset: int = Query(0, ge=0), limit: int = Query(200, ge=1, le=1000),
+                            actor: Actor = Depends(identity)):
+        require_founder(actor)
+        response.headers["Cache-Control"] = "private, no-store"
+        async with tank.pool().acquire() as conn:
+            rows = await conn.fetch("""SELECT price,currency,observed_at,event_id
+                FROM agent_rig.price_history WHERE tenant_id=$1 AND product_id=$2
+                ORDER BY observed_at DESC,event_id OFFSET $3 LIMIT $4""", tenant_id, product_id, offset, limit + 1)
+        return {"tenant_id": str(tenant_id), "product_id": product_id,
+                "history": [{**dict(row), "price": str(row["price"])} for row in rows[:limit]],
+                "has_more": len(rows) > limit}
 
     @router.post("/v1/agents/rig/skills/{skill_id}/run")
     async def run_skill(skill_id: str, body: Skill, request: Request):
