@@ -3,7 +3,8 @@
 Branch: `codex/workspace-typecheck`.
 Base: `origin/main` at `a99f3cb0662516c8fe1b3f27d5b5dcbb90e94fa0`.
 Rules: `docs/build/MILESTONES-28OCT-1NOV.md`, “The rules block”, rules 1–11.
-Claude opens the PR. No GitHub API, main push, merge or deployment.
+Claude opened [PR #376](https://github.com/Tervory-AI/tervory-tank/pull/376).
+Updates stay on this branch. No GitHub API, main push, merge or deployment.
 
 Fixes all four main-baseline compiler errors with type-only changes and adds
 `npx tsc --noEmit` before the Workspace build. A fresh clone of the pushed
@@ -59,7 +60,7 @@ checking, file inclusion and `noEmit` remain enabled; no error suppressions.
 
 ## Step 2: CI gate and deliberate failure
 
-`.github/workflows/ci.yml:171` adds `typecheck`, running `npx tsc --noEmit`
+`.github/workflows/ci.yml:166` adds `typecheck`, running `npx tsc --noEmit`
 in `workspace/`, after Install and before Build. It has no conditional skip or
 `continue-on-error`; Build retains its normal success-only execution.
 
@@ -95,7 +96,7 @@ Existing CI workflow tests: **66 passed in 1.40s**, exit 0
 ([output](evidence/workflows.txt)). Those tests use a local fake curl; no GitHub
 API request was sent. Ruff reports `All checks passed!`; both remaining commands
 exit 0 without output. This executes the CI step locally, not on GitHub Actions.
-Claude opens the PR, which triggers the hosted workflow.
+The hosted workflow runs on PR #376; no hosted result is claimed here.
 
 ## Step 3: proof from a fresh clone of the pushed branch
 
@@ -154,7 +155,8 @@ new step works before Next has generated its files.
 | --- | --- |
 | `workspace/tsconfig.json:10` | Permit explicit TypeScript import extensions while retaining `noEmit`. |
 | `workspace/types/next-images.d.ts:1` | Reuse Next's existing asset declarations before a Next build. |
-| `.github/workflows/ci.yml:171` | Add the compiler gate between install and build. |
+| `.github/workflows/ci.yml:155,161,165,166` | Set a 15-minute timeout, cache npm by the lockfile, install with npm ci, and add the compiler gate before build. |
+| `workspace/package-lock.json:1` | Generated dependency lockfile for the unchanged package.json. |
 | `tests/workspace_typecheck/prove_ci_step.py:1` | Reproducible clean/failing/clean workflow-step proof. |
 | `tests/workspace_typecheck/PR.md:1` | Description, error inventory, commands and results. |
 | `tests/workspace_typecheck/evidence/` | Captured text outputs linked above. |
@@ -188,3 +190,54 @@ Both exit 0 with no output: page/source/asset files are unchanged and the
 branch diff has no whitespace errors. No build, hosted Actions run or founder
 browser result is claimed; the local execution of the actual CI command and
 its failure propagation are the evidence for this compiler-only job.
+
+## Follow-up on #376: deterministic install, cache and timeout
+
+The founder reported #371 timing out in Install under the five-minute limit.
+This follow-up keeps the same PR and makes these changes:
+
+- `workspace/package-lock.json:1`: npm-generated lockfile v3, with 72 package
+  entries. `package.json` is unchanged. The final lockfile was generated from
+  an identical copy of that manifest in a temporary directory with no existing
+  lockfile or node_modules, so it includes all Next optional platform packages.
+- `.github/workflows/ci.yml:161`: `actions/setup-node` uses `cache: npm` and
+  `cache-dependency-path: workspace/package-lock.json`.
+- `.github/workflows/ci.yml:155`: Workspace timeout rises from 5 to 15 minutes.
+- `.github/workflows/ci.yml:165`: Install runs `npm ci --no-audit --no-fund`
+  directly. The obsolete no-lockfile fallback and comment are removed.
+
+Exact validation commands (Node 22.23.4, npm 10.9.9):
+
+```bash
+source /workspace/tervory-env/activate.sh
+# In the temporary directory containing only the unchanged package.json:
+npm install --package-lock-only --no-audit --no-fund
+# In a fresh temporary copy of workspace/, with the resulting lockfile and no
+# node_modules, .next, .env files, next-env.d.ts or TypeScript build cache:
+npm ci --no-audit --no-fund
+npx tsc --noEmit
+# Back in the repository root:
+python -m pytest -q tests/test_ci_minutes_workflows.py > /tmp/workspace-lock-workflows.txt 2>&1
+git diff --exit-code -- workspace/package.json
+git diff --check
+```
+
+The install and typecheck commands were read from the real CI YAML and executed
+with Bash `-e -o pipefail` in the fresh copy. Results:
+
+- Lockfile generation: exit 0 ([output](evidence/lock-generate.txt)).
+- Clean install: exit 0, npm reports `added 45 packages in 8s` on this cloud
+  executor. Typecheck: exit 0, zero errors. The install left the lockfile
+  byte-for-byte unchanged ([output](evidence/lock-install.txt)).
+- Workflow tests: **66 passed in 1.50s**, exit 0
+  ([output](evidence/lock-workflows.txt)).
+- Manifest/lockfile dependency equality, all Next optional package entries,
+  cache settings, direct npm ci and timeout checked successfully
+  ([output](evidence/lock-config.txt)).
+- Both git diff checks: exit 0, no output.
+
+The earlier exploratory lockfile generated beside existing node_modules was
+discarded; it only included the installed platform's packages. The committed
+lockfile and clean-install proof above come from the independent generation.
+Local install timing is not a GitHub benchmark. The new GitHub run will show
+the hosted install time and cache behaviour; no hosted result was queried.
