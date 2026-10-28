@@ -1,0 +1,16 @@
+INFO:     Started server process [9283]
+INFO:     Waiting for application startup.
+redis unavailable, rung-4 cache off: Error 111 connecting to 127.0.0.1:1. Connection refused.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:49991 (Press CTRL+C to quit)
+The reference could not be loaded: The Base reference service returned HTTP 403. (error type: ReferenceFailure)
+INFO:     127.0.0.1:32850 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:32850 - "PUT /v1/policy/routellm.proof/routellm HTTP/1.1" 200 OK
+INFO:     127.0.0.1:32850 - "POST /v1/route HTTP/1.1" 200 OK
+INFO:     127.0.0.1:32850 - "POST /v1/route HTTP/1.1" 200 OK
+INFO:     127.0.0.1:32850 - "GET /v1/proof?tenant_id=fce8140b-6655-45e7-9a3b-549990e58900 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:32850 - "GET /v1/proof?tenant_id=477f0bed-ae60-45ec-976e-31565db81e33 HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [9283]

@@ -381,7 +381,7 @@ def router_cannot_serve(candidate: str | None) -> bool:
     name = str(candidate).strip()
     if not name:
         return False
-    return (is_skill(name) and parse_skill(name) is None) or name.startswith(("cache:", "tool:"))
+    return (is_skill(name) and parse_skill(name) is None) or name.startswith(("cache:", "tool:", "routellm:"))
 
 
 ROUTER_BLOCK = "use a pinned skill:id@version or a model with cache enabled in policy"

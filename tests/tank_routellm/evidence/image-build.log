@@ -1,0 +1,18 @@
+#15 61.95 
+#15 61.95 [notice] A new release of pip is available: 25.0.1 -> 26.2.2
+#15 61.95 [notice] To update, run: pip install --upgrade pip
+#15 62.48 downloaded config.json: 924 bytes
+#15 160.6 downloaded model.safetensors: 1112208084 bytes
+#15 162.8 downloaded tokenizer.json: 17082832 bytes
+#15 163.4 downloaded tokenizer_config.json: 1147 bytes
+#15 163.7 downloaded special_tokens_map.json: 280 bytes
+#15 164.8 downloaded sentencepiece.bpe.model: 5069051 bytes
+#15 165.1 downloaded LICENSE: 11356 bytes
+#15 DONE 165.1s
+
+#16 exporting to image
+#16 exporting layers
+#16 exporting layers 6.0s done
+#16 writing image sha256:547bf02f9e14461e278bef28ab5884ce6ca1a68815ecce0bf6c0f76e9093472f done
+#16 naming to docker.io/library/tank-routellm:local done
+#16 DONE 6.0s
