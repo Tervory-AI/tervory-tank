@@ -696,6 +696,7 @@ async def _startup() -> None:
     _pool = TenantPool(raw_pool)
     admin_url = os.environ.get("TANK_ADMIN_DATABASE_URL", "")
     _admin_pool = await asyncpg.create_pool(admin_url, min_size=1, max_size=2) if admin_url else None
+    _pool.admin_pool = _admin_pool
     if _admin_pool is not None:
         async with _admin_pool.acquire() as admin_conn:
             configured_role = os.environ.get("TANK_RLS_ADMIN_ROLE", "")
