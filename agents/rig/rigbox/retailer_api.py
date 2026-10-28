@@ -12,7 +12,7 @@ from rigbox.retailer import Retailer
 from rigbox.service import RigError
 
 router = APIRouter()
-OPERATIONS = {"panel", "settings", "embed-keys", "import", "delete-products", "mapping", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest", "tiger", "watch-tenants", "watch-products"}
+OPERATIONS = {"panel", "settings", "embed-keys", "import", "delete-products", "mapping", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest", "tiger", "watch-tenants", "watch-products", "watch-context"}
 
 
 @router.post("/internal/retailer/{operation}")
@@ -45,6 +45,8 @@ async def retailer_operation(operation: str, request: Request) -> JSONResponse:
             result = {"tenants": await service.store.tenant_ids()}
         elif operation == "watch-products":
             result = {"tenant_id": tenant, "products": await service.store.watch_products(tenant)}
+        elif operation == "watch-context":
+            result = {"tenant_id": tenant, "product": await service.store.watch_context(tenant, str(data["sku"]))}
         elif operation == "panel":
             result = await retailer.panel(tenant)
         elif operation == "settings":

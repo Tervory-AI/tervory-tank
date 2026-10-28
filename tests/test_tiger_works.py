@@ -191,11 +191,15 @@ async def test_two_tenants_cannot_read_or_remove_each_others_saved_page_job(monk
 async def test_pg_preferences_and_additive_migration():
     statements = []
     class Connection:
+        def transaction(self):
+            return self
+        async def fetchval(self, sql, *args):
+            return "public"
         async def execute(self, sql, *args):
             statements.append(sql)
         async def fetchrow(self, sql, *args):
             if "INSERT INTO" in sql:
-                assert args[-2:] == (False, True)
+                assert args[-5:] == (False, True, True, True, True)
             else:
                 assert "tenant_id = $1" in sql
             return {**_watch(), "alert_price": False, "alert_stock": True}
@@ -207,7 +211,7 @@ async def test_pg_preferences_and_additive_migration():
         def acquire(self):
             return Connection()
     await ensure_tables(Connection())
-    assert sum("ADD COLUMN IF NOT EXISTS alert_" in sql for sql in statements) == 2
+    assert sum(sql.count("ADD COLUMN IF NOT EXISTS alert_") for sql in statements) == 5
     saved = await PgStore(Pool()).create_watch({**_watch(), "alert_price": False, "alert_stock": True})
     assert saved["alert_price"] is False and saved["alert_stock"] is True
 
