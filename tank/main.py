@@ -2356,6 +2356,8 @@ async def _batch_gateway(method: str, path: str, *, model: str | None = None, **
     await __import__("controls").refuse_paid(path="route/batch")
     async with httpx.AsyncClient(timeout=60) as client:
         headers = {"Authorization": f"Bearer {LITELLM_MASTER_KEY}"}
+        if path.startswith("/anthropic/"):
+            headers["anthropic-version"] = "2023-06-01"
         if model:
             headers["x-litellm-model"] = model
         response = await client.request(method, f"{LITELLM_URL}{path}", headers=headers, **kwargs)
@@ -2397,7 +2399,7 @@ async def route_batch(body: BatchRequest, caller: str | None = Depends(require_k
     # Free/code/cache results have already finished. Only work still needing a
     # model is submitted; no interactive request enters this durable queue.
     prices = await _batch_price(deferred[0].policy["model"])
-    if not batch_providers.supports(prices):
+    if not all(batch_providers.compatible(prices, item.messages, item.generation) for item in deferred):
         for item in deferred:
             result = await run_route(item.req, caller=caller, _paid_policy=item.policy,
                                      _prior_escalation=item.escalation, _paid_limit=float(item.policy["max_cost_usd"]))
@@ -2560,32 +2562,25 @@ async def _process_batch(conn: Any, batch: Any) -> None:
                 raise ValueError("provider_not_allowed")
             lines.append(json.dumps({"custom_id": str(item["item_id"]), "method": "POST", "url": "/v1/chat/completions",
                 "body": {"model": prices["native"], "messages": snapshot["messages"], "max_tokens": snapshot["max_tokens"], **snapshot["generation"]}}))
-        uploaded = await _batch_gateway("POST", "/v1/files", model=batch["model"], data={"purpose": "batch", "custom_llm_provider": batch["provider"]},
-            files={"file": ("requests.jsonl", ("\n".join(lines)+"\n").encode(), "application/jsonl")})
-        file_id = uploaded.json()["id"]
-        created = await _batch_gateway("POST", "/v1/batches", model=batch["model"], json={"input_file_id": file_id,
-            "endpoint": "/v1/chat/completions", "completion_window": "24h", "custom_llm_provider": batch["provider"],
-            "metadata": {"tank_batch_id": str(batch["id"])}})
+        provider_id, file_id = await batch_providers.submit(_batch_gateway, batch, lines)
         await conn.execute("""UPDATE tank.batches SET status='submitted',provider_id=$3,input_file_id=$4
-            WHERE id=$1 AND tenant_id=$2""", batch["id"], batch["tenant_id"], created.json()["id"], file_id)
+            WHERE id=$1 AND tenant_id=$2""", batch["id"], batch["tenant_id"], provider_id, file_id)
         return
     if batch["status"] in {"submitting", "retrying"}:
         # Only a restarted process can see these states while holding the batch
         # advisory lock. Surface uncertainty, and never repeat a submitted call.
         await conn.execute("UPDATE tank.batch_items SET status='failed',error='interrupted_attempt' WHERE batch_id=$1 AND tenant_id=$2 AND ledger_id IS NULL", batch["id"], batch["tenant_id"])
     else:
-        response = await _batch_gateway("GET", f"/v1/batches/{batch['provider_id']}", model=batch["model"], params={"custom_llm_provider": batch["provider"]})
-        state = response.json()
+        state = await batch_providers.status(_batch_gateway, batch)
         if state["status"] not in {"completed", "failed", "expired", "cancelled"}:
             if (datetime.now(timezone.utc)-batch["submitted_at"]).total_seconds() >= 86400:
                 if batch["error"] != "24h deadline exceeded; awaiting provider cancellation":
-                    await _batch_gateway("POST", f"/v1/batches/{batch['provider_id']}/cancel", model=batch["model"], json={"custom_llm_provider": batch["provider"]})
+                    await batch_providers.cancel(_batch_gateway, batch)
                     await conn.execute("UPDATE tank.batches SET error='24h deadline exceeded; awaiting provider cancellation' WHERE id=$1 AND tenant_id=$2", batch["id"], batch["tenant_id"])
             return
         outputs = {}
         if state.get("output_file_id"):
-            raw = await _batch_gateway("GET", f"/v1/files/{state['output_file_id']}/content", model=batch["model"], params={"custom_llm_provider": batch["provider"]})
-            outputs = {row["custom_id"]: row for row in (json.loads(line) for line in raw.text.splitlines() if line.strip())}
+            outputs = await batch_providers.results(_batch_gateway, batch, state["output_file_id"])
         await conn.execute("UPDATE tank.batches SET status='retrying' WHERE id=$1 AND tenant_id=$2", batch["id"], batch["tenant_id"])
         for item in items:
             if item["ledger_id"] is not None or item["status"] == "failed":
