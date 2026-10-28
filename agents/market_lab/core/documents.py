@@ -89,11 +89,12 @@ async def forget(ledger, tenant: str, ident: str) -> None:
     if hasattr(ledger, 'conn'):
         conn = ledger.conn
         # Caller holds the file's advisory lock and transaction. No stale series survive.
-        for table in ('points', 'events'):
-            await conn.execute(f'''DELETE FROM agent_market_lab.{table} p USING agent_market_lab.series s
-                WHERE p.series_id=s.id AND s.tenant_id=$1 AND s.source=$2''', owner, source)
-        for table in ('batch_points', 'batches'):
-            await conn.execute(f'DELETE FROM agent_market_lab.{table} WHERE tenant_id=$1 AND source=$2', owner, source)
+        await conn.execute('''DELETE FROM agent_market_lab.points p USING agent_market_lab.series s
+            WHERE p.series_id=s.id AND s.tenant_id=$1 AND s.source=$2''', owner, source)
+        await conn.execute('''DELETE FROM agent_market_lab.events p USING agent_market_lab.series s
+            WHERE p.series_id=s.id AND s.tenant_id=$1 AND s.source=$2''', owner, source)
+        await conn.execute('DELETE FROM agent_market_lab.batch_points WHERE tenant_id=$1 AND source=$2', owner, source)
+        await conn.execute('DELETE FROM agent_market_lab.batches WHERE tenant_id=$1 AND source=$2', owner, source)
         await conn.execute('DELETE FROM agent_market_lab.series WHERE tenant_id=$1 AND source=$2', owner, source)
         await conn.execute('DELETE FROM agent_market_lab.uploaded_files WHERE tenant_id=$1 AND id=$2', owner, file_id)
     else:
