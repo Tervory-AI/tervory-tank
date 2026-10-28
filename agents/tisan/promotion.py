@@ -199,6 +199,8 @@ class Promotion:
             production = await self.coolify.current(config['production'], allow_failed=recovery)
             details['previous'] = production['commit']
             if action == 'promote':
+                if production['commit'] == expected:
+                    raise Refused('production is already at the requested commit')
                 staging = await self.coolify.current(config['staging'])
                 if staging['commit'] != expected:
                     raise Refused('staging commit changed')
@@ -245,7 +247,10 @@ class Promotion:
             if info.get('git_commit_sha') != expected:
                 raise Refused('production pin was not confirmed')
             self.journal.update(tenant, site, operation, 'submitting', details)
-            result = await self.coolify.call('POST', '/deploy', json={'uuid': config['production']})
+            deploy = {'uuid': config['production']}
+            if action == 'rollback':
+                deploy['force'] = True  # A failed build may have left this same commit running.
+            result = await self.coolify.call('POST', '/deploy', json=deploy)
             rows = result.get('deployments', [])
             if len(rows) != 1 or rows[0].get('resource_uuid') != config['production']:
                 raise Refused('deployment acknowledgement mismatch')
