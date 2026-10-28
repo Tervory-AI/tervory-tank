@@ -293,7 +293,14 @@ def test_model_download_is_build_only_and_module_is_in_image(monkeypatch):
         encoder.LocalEncoder().embed('rain')
     assert not calls
     docker = (Path(__file__).resolve().parents[1] / 'tank/Dockerfile').read_text()
-    assert 'semantic_encoder.py semantic_cache.py' in docker and 'RUN python semantic_encoder.py' in docker
+    heavy_copy = docker.index('COPY requirements-routellm.txt')
+    heavy_run = docker.index('RUN --mount=type=secret,id=proxy_ca')
+    download = docker.index('python semantic_encoder.py')
+    code_copy = docker.index('COPY *.py schema.sql')
+    assert heavy_copy < heavy_run < download < code_copy
+    assert 'semantic_encoder.py' in docker[heavy_copy:heavy_run]
+    assert 'python routellm_build.py /opt/routellm &&' in docker[heavy_run:code_copy]
+    assert 'COPY main.py' not in docker
 
 
 @pytest.mark.asyncio

@@ -190,3 +190,95 @@ git push
 Final commit includes batch completion coverage, regression evidence and this
 review description. The final branch/commit are reported to the founder after git
 push completes. No merge, deployment or founder approval is performed.
+
+## PR #388: merge main and preserve RouteLLM (28 Oct)
+
+Merged main `678d47e` into the existing branch `codex/tank-semantic-cache-2`.
+This section supersedes the earlier main-baseline audit count and Docker layout
+notes. No second PR, merge to main, deployment, model download or paid call.
+
+Changes resolving the four conflicts:
+
+- `tank/main.py:1557`: one `_shadow` accepts both `routellm=` and `cache_content=`.
+  RouteLLM keeps its measured inference receipt and `routellm_shadow.save` path;
+  cache shadows keep the supplied answer, existing judge, budget behavior and
+  returned agreement. Both existing route hooks remain active independently.
+- `tank/proof.py:134`: one comparisons query preserves RouteLLM's actual model
+  costs, known-price/success filters and sample savings. Embedding rows retain
+  zero prospective inference cost and separate evaluation spend. The semantic
+  per-task summary remains at `:145`, attached to task rows at `:192`.
+- `tank/schema.sql:1922` / `:1954`: retain the semantic tables and all incoming
+  RouteLLM columns/indexes and subsequent main migrations. Both suites exercise
+  schema reapplication.
+- `tank/Dockerfile:5`: main's heavy-layer COPY now also includes
+  `semantic_encoder.py`. The same heavy RUN installs dependencies and executes
+  both `python routellm_build.py /opt/routellm` and `python semantic_encoder.py`
+  before main's unchanged `COPY *.py ...`. Ordinary application edits therefore
+  do not invalidate the model-download layer. No hand-maintained module list.
+- `tests/test_tank_semantic_cache.py:282`: update the existing Docker assertion
+  to enforce heavy-layer ordering and wildcard code COPY.
+- `tests/test_tank_shadow_coexistence.py:14`: enable both experiments for the same
+  tenant/task and real route; verify both shadow rows on one ledger, unchanged
+  live answers, separate inference/judge costs, semantic summary and tenant seal.
+  All inference and provider responses are stubbed; Qdrant is in-memory and
+  Postgres databases are disposable and local.
+
+Exact commands and results (cwd `/workspace/tervory-tank` unless stated):
+
+```sh
+git fetch origin main
+# exit 0; 4bda46b -> 678d47e
+git merge --no-commit origin/main
+# exit 1; expected conflicts in Dockerfile, main.py, proof.py, schema.sql
+# Resolved the four files as described above, retaining both features.
+/workspace/worker-venv/bin/python -m compileall -q tank/main.py tank/proof.py
+# exit 0
+POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:55432/postgres /workspace/worker-venv/bin/python -m pytest -q tests/test_tank_semantic_cache.py tests/test_tank_routellm.py tests/test_tank_one_door.py tests/test_tank_shadow_coexistence.py tests/test_train1_dockerfile.py > tests/tank_semantic_cache/merge-main-tests.txt 2>&1
+# exit 1: 40 passed, 30 setup errors (missing jiter), 1 known audit failure
+/workspace/worker-venv/bin/pip install --cache-dir /workspace/scratch/pip-cache -r tank/requirements.txt > tests/tank_semantic_cache/merge-main-dependencies.txt 2>&1
+# exit 0; installed main's pinned jiter==0.18.0 and openai==2.54.0
+# No model artifacts are downloaded by this dependency installation.
+POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:55432/postgres /workspace/worker-venv/bin/python -m pytest -q tests/test_tank_semantic_cache.py tests/test_tank_routellm.py tests/test_tank_one_door.py tests/test_tank_shadow_coexistence.py tests/test_train1_dockerfile.py > tests/tank_semantic_cache/merge-main-final-tests.txt 2>&1
+# exit 1: 70 passed, 1 failed, 6 warnings, 44.79s
+```
+
+Passing tests: all **29 semantic-cache**, **13 RouteLLM**, **1 coexistence**,
+**1 Docker packaging**, and **26 one-door audit cases**. The one failed test is
+`test_no_new_tank_bypass`, reproduced on untouched current main:
+
+```sh
+git -C /workspace/semantic-cache-main-check status --short
+# exit 0, clean
+git -C /workspace/semantic-cache-main-check switch --detach 678d47e
+# exit 0
+# cwd: /workspace/semantic-cache-main-check
+/workspace/worker-venv/bin/python -m pytest -q tests/test_tank_one_door.py > /workspace/tervory-tank/tests/tank_semantic_cache/merge-main-audit-baseline.txt 2>&1
+# exit 1: 26 passed, 1 failed, 14.75s
+# cwd: /workspace/tervory-tank
+git diff --name-only --diff-filter=U
+# exit 0, no unresolved files
+git diff origin/main --check -- tank tests/test_tank_semantic_cache.py tests/test_tank_shadow_coexistence.py
+# exit 0
+```
+
+Both branch and current main report exactly these three findings:
+
+- `tests/tank_batch_providers/verify_passthrough.py:87`, assembled endpoint
+  `2703e202bb2a19bc` and model/paid endpoint `d898b966b41955fb`.
+- `tests/test_command_streaming.py:81`, model/paid endpoint `20a97d67b3598de5`.
+
+No new audit findings, waivers or changes to those files. The full staged
+whitespace check also reported upstream vendored-license whitespace; those
+licenses remain byte-for-byte main. The scoped branch-to-main check passes.
+No claim that hosted CI is green or that founder-browser acceptance occurred.
+No Docker build was run here because it would download the model artifacts.
+
+Final merge publication:
+
+```sh
+git commit -m 'Merge main into semantic cache and preserve RouteLLM shadows'
+git push origin codex/tank-semantic-cache-2
+```
+
+The final push result and merge commit are reported in the task response. This
+updates the same PR #388. The founder still performs the PR merge.

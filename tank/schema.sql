@@ -1950,3 +1950,29 @@ CREATE TABLE IF NOT EXISTS tank.semantic_approvals (
     updated_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY(tenant_id,region,task_type,policy_hash,encoder_id)
 );
+
+-- RouteLLM is an opt-in shadow experiment. No policy is enabled by migration.
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS routellm_weak_model text;
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS routellm_threshold double precision
+    CHECK (routellm_threshold >= 0 AND routellm_threshold <= 1);
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_model text;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_score double precision;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_threshold double precision;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_weak_model text;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_config text;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_status text;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_primary_cost_known boolean;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_model_cost_usd numeric(12,6);
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_parent_id uuid;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_sample_tenant uuid;
+ALTER TABLE tank.shadow ADD COLUMN IF NOT EXISTS routellm_config text;
+ALTER TABLE tank.shadow ADD COLUMN IF NOT EXISTS candidate_ledger_id uuid;
+CREATE INDEX IF NOT EXISTS shadow_routellm_tenant_task ON tank.shadow(tenant_id,task_type,routellm_config)
+    WHERE routellm_config IS NOT NULL;
+
+-- Trigger first build. Leave all existing and tenant-specific policies untouched.
+INSERT INTO tank.policy(task_type,rung,model,cache_scope,max_tokens_out,eval_threshold,min_shadow_samples,auto_promote)
+VALUES ('trigger.write',1,'luna','tenant',3000,0.99,200,false),
+       ('trigger.check',3,'code','none',0,0.99,200,false)
+ON CONFLICT DO NOTHING;
+-- trigger.check never calls /v1/route; its adapter executes code and records zero cost.

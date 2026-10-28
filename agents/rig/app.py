@@ -365,10 +365,10 @@ async def _lifespan(app: FastAPI):
         service = QuoteService(store, _TankModels(app.state.tank), RetailerHandoff(app.state.http),
                                PgQuotes(app.state.pool))
         app.state.rig = service
-        root = Path(os.environ.get("CATALOGUE_DIR", str(Path(__file__).resolve().parent / "catalogues")))
-        if not root.is_dir():
-            root = Path("/app/catalogues")
-        reports = await service.load_catalogues(root)
+        configured = os.environ.get("CATALOGUE_DIR", "").strip()
+        root = Path(configured).resolve() if configured else None
+        fixtures = {Path(__file__).resolve().parent / "catalogues", Path("/app/catalogues")}
+        reports = await service.load_catalogues(root) if root and root not in fixtures else []
         for report in reports:
             log_line(AGENT, json.dumps(_public_report(report)), tenant_id=report.get("tenant_id") or None)
         nightly = [

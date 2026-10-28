@@ -5,14 +5,12 @@
  *   product  GET  /v1/rig/products/id the pistol when the prompt names only a part
  *   compare  POST /v1/rig/compare     market average, only for items the shopper picks
  *   quote    POST /v1/rig/quote       Get A Quote, the shop's existing quote request
- * Fixtures under the hood (not labelled as demo on the page):
- *   sample-suppliers.json             Supplier A, B, C stock, lead time and price
  */
 (function () {
   "use strict";
 
   const KEY = window.RIG_KEY || "";
-  const SHOP = window.RIG_SHOP || "Custom Nation";
+  const SHOP = window.RIG_SHOP || "";
   const MOBILE = window.matchMedia("(max-width: 760px)");
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -33,7 +31,6 @@
   const state = {
     q: "",
     offers: null,
-    catalogue: null,
     pistol: null,
     pistols: [],
     slots: [],
@@ -76,33 +73,9 @@
     return data;
   }
 
-  async function offers() {
-    if (!state.offers) {
-      try {
-        state.offers = await (await fetch("/page/v5/sample-suppliers.json")).json();
-      } catch (e) {
-        state.offers = { offers: {} };
-      }
-    }
-    return state.offers;
-  }
-
-  async function catalogue() {
-    if (!state.catalogue) {
-      try {
-        const body = await find("Archon Type B", 24);
-        const rows = body.results || [];
-        state.catalogue = { count: rows.length, pistols: rows.filter(isPistol).map((r) => r.name) };
-      } catch (e) {
-        state.catalogue = { count: 0, pistols: [] };
-      }
-    }
-    return state.catalogue;
-  }
-
   const isPistol = (p) => String(p.category || "") === "Pistols";
   const group = (p) => String((p.attributes && p.attributes.group) || "");
-  const short = (name) => String(name || "").replace(/^Archon\s+/i, "");
+  const short = (name) => String(name || "");
   const amount = (p) => Number((p.price && p.price.amount) || 0);
   const status = (p) => String((p.availability && p.availability.status) || (p.attributes && p.attributes.stock && p.attributes.stock.status) || "");
   const quotable = (p) => status(p) !== "out_of_stock";
@@ -146,9 +119,7 @@
   function media(p, cls) {
     const id = p.id || "";
     const g = group(p);
-    if (id === "ARCHON-TYPE-B") return `<img src="/page/v5/media/type-b-flr.svg" alt="">`;
     if (isPistol(p)) return `<span class="m" style="--src:url('/page/v5/media/blueprint-left.svg')"></span>`;
-    if (id === "ARCHON-DOT-ACRO") return `<img src="/page/v5/media/optic-acro.svg" alt="">`;
     const mask = { screws: "part-optic-plate", trigger: "part-trigger", barrel: "part-barrel-threaded" }[g] ||
       (g === "magazine" ? (id.endsWith("18") ? "part-mag19" : "part-mag16") : "");
     if (mask) return `<span class="m" style="--src:url('/page/v5/media/${mask}.svg')"></span>`;
@@ -159,7 +130,7 @@
   // ---------- search ----------
   async function search(q) {
     q = String(q || "").trim();
-    if (!q) return;
+    if (!q || !KEY) return;
     if (state.pistol && BUILD_WORDS.test(q)) {
       buildAll();
       return;
@@ -170,7 +141,6 @@
     closeSheets();
     let first;
     try {
-      await offers();
       first = await find(q, 24);
     } catch (e) {
       toast(e.message || "Rig could not answer.");
@@ -284,20 +254,14 @@
     renderStage();
   }
 
-  async function showIdk(q, why) {
+  function showIdk(q) {
     state.pistol = null;
-    setView("idk");
-    setDockQuery(q);
-    $("idkLine").textContent = "\u201c" + q + "\u201d is not in the catalogue.";
-    $("idkWhy").textContent = why && !/^Nothing matches/i.test(why) ? why : "";
-    const cat = await catalogue();
-    const tryBox = $("idkTry");
-    tryBox.innerHTML = `<span class="caps">In the catalogue</span>` +
-      cat.pistols.map((n) => `<button type="button" class="chip" data-q="${esc(n)}">${esc(n)}</button>`).join("");
-    $("idkStats").innerHTML =
-      `<div><b>${cat.count}</b><small>products searched</small></div>` +
-      `<div><b>3</b><small>suppliers</small></div>` +
-      `<div><b>0</b><small>approved fits</small></div>`;
+    state.pistols = [];
+    state.slots = [];
+    state.matched.clear();
+    for (const id of ["idkLine", "idkWhy", "idkTry", "idkStats", "colL", "colR", "pistols", "hint", "sumThumbs"]) $(id).replaceChildren();
+    $("heroInput").value = q;
+    setView("landing");
   }
 
   function setDockQuery(q) {
@@ -320,12 +284,11 @@
     document.body.dataset.mode = state.mode;
     const p = state.pistol;
     const img = $("pistolImg");
-    const isB = p.id === "ARCHON-TYPE-B";
-    img.src = isB ? "/page/v5/media/type-b-flr.svg" : "/page/v5/media/blueprint-left.svg";
-    img.classList.toggle("silhouette", !isB);
+    img.src = "/page/v5/media/blueprint-left.svg";
+    img.classList.add("silhouette");
     img.alt = p.name;
-    $("photoNote").hidden = isB;
-    $("photoNote").textContent = isB ? "" : "Photo coming. This is the Type B outline.";
+    $("photoNote").hidden = true;
+    $("photoNote").textContent = "";
 
     // Banner for a closest answer.
     const banner = $("banner");
@@ -371,7 +334,7 @@
     // Pistols strip
     $("pistols").innerHTML = `<span class="caps">${state.pistols.length} pistols</span>` + state.pistols.map((x) =>
       `<button type="button" class="pcard${x.id === p.id ? " on" : ""}" data-pistol="${esc(x.id)}" data-name="${esc(x.name)}">
-        <span class="pimg">${x.id === "ARCHON-TYPE-B" ? `<img src="/page/v5/media/type-b-flr.svg" alt="">` : `<span class="sil"></span>`}</span>
+        <span class="pimg"><span class="sil"></span></span>
         <span><b>${esc(mobile ? short(x.name).replace(/^Type B /, "") || short(x.name) : short(x.name))}</b><small>${money(amount(x), x.price.currency)}</small></span>
       </button>`).join("");
 
@@ -383,7 +346,7 @@
   }
 
   function partName(p) {
-    return String(p.name || "").replace(/^Archon Type B\s+/i, "").replace(/^\w/, (c) => c.toUpperCase());
+    return String(p.name || "").replace(/^\w/, (c) => c.toUpperCase());
   }
 
   function altCount() {
@@ -429,7 +392,7 @@
     }
     for (const s of state.slots) {
       if (s.options.length < 2 || extras.includes(s)) continue;
-      const others = s.options.filter((_, i) => i !== s.idx).map((p) => p.name.replace(/^Archon Type B /, ""));
+      const others = s.options.filter((_, i) => i !== s.idx).map((p) => p.name);
       rows.push(`<button type="button" class="more-row" data-slot="${s.id}"><span class="thumb">${media(s.options[(s.idx + 1) % s.options.length])}</span><span><b>${esc(s.label)}</b> · also ${esc(others.join(", "))}</span></button>`);
     }
     const count = extras.length + altCount();
@@ -468,7 +431,7 @@
         g.lines.map((x) => `<div class="lp-line"><span>${esc(x.slot ? partName(x.product) : short(x.product.name) + " pistol")}</span><span class="num">${money(amount(x.product), t.cur)}</span></div>`).join("") + `</div>`;
     }).join("");
     const pct = t.market ? Math.round((t.save / t.market) * 100) : 0;
-    return `<div class="lines-panel"><header><span class="caps">Line items</span><small>best price each · sample</small></header>${body}
+    return `<div class="lines-panel"><header><span class="caps">Line items</span><small>best price each</small></header>${body}
       <div class="lp-total"><b>Total · ${t.sel.length} items</b><span class="num">${money(t.build, t.cur)}</span></div>
       <div class="lp-save"><span>Market ${money(t.market, t.cur)}</span><span class="pos">${t.save >= 0 ? "Save " + money(t.save, t.cur) + " · " + pct + "%" : "Above market " + money(-t.save, t.cur)}</span></div></div>`;
   }
@@ -507,7 +470,7 @@
 
   function drawWires() {
     const svg = $("wires");
-    if (MOBILE.matches || !state.pistol || state.pistol.id !== "ARCHON-TYPE-B") {
+    if (MOBILE.matches || !state.pistol) {
       svg.innerHTML = "";
       return;
     }
@@ -576,7 +539,7 @@
       </div>`;
     }).join("");
     const mkRow = mk
-      ? `<div class="srow mkt"><span class="mk-l">● Market average · ${mk.sources || "several"} retailers · sample</span><span class="r num">${money(mk.amount, cur)}</span><span class="r vs">—</span></div>`
+      ? `<div class="srow mkt"><span class="mk-l">● Market average · ${mk.sources || "several"} retailers</span><span class="r num">${money(mk.amount, cur)}</span><span class="r vs">—</span></div>`
       : `<div class="srow mkt"><span class="mk-l">No market price on file for this item.</span></div>`;
     const inBuild = s.on && s.idx === state.openIdx;
     const canUse = quotable(p);
@@ -771,7 +734,6 @@
     const params = new URLSearchParams(location.search);
     const skin = params.get("skin");
     if (skin === "cn" || skin === "rig") document.documentElement.dataset.skin = skin;
-    offers();
     const q = params.get("q");
     if (!q) {
       setView("landing");

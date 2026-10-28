@@ -72,7 +72,7 @@ def test_plugins_is_a_tab_and_sources_means_answer_references():
 
 def test_secrets_are_dots_and_example_products_stay_out():
     source = _source()
-    assert "•••• saved 17 Oct" in source
+    assert "•••• saved 17 Oct" not in source
     assert 'MASK = "••••••••"' in source
     assert "rk_pub_" not in source
     assert "api_key=" not in source.lower()

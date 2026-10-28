@@ -35,10 +35,13 @@ jobs:
     concurrency:
       group: live-check-${{ github.event_name == 'pull_request' && github.ref || 'production' }}
       cancel-in-progress: false
-    env:
-      LIVE_CHECK_PLAYWRIGHT_PATH: ${{ runner.temp }}/live-check-browser/node_modules/playwright
-      LIVE_CHECK_OUTPUT: ${{ runner.temp }}/live-check-results
+    # The runner context is not allowed in job-level env (GitHub rejects the whole
+    # workflow file, and deploy-on-merge, which calls it, with it). Set the paths in a step.
     steps:
+      - name: Set working paths
+        run: |
+          echo "LIVE_CHECK_PLAYWRIGHT_PATH=$RUNNER_TEMP/live-check-browser/node_modules/playwright" >> "$GITHUB_ENV"
+          echo "LIVE_CHECK_OUTPUT=$RUNNER_TEMP/live-check-results" >> "$GITHUB_ENV"
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
