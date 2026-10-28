@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 
 from chassis.browser import BrowserClient
 from chassis.db import as_json, ensure_schedules, ensure_schema, schema_for
-from chassis.tenant_db import TenantPool, tenant_path
+from chassis.tenant_db import TenantPool, tenant_path, tenant_scope, bind_tenant_endpoints, TenantContextMiddleware
 from chassis.files import read_file, save_file
 from chassis.jobs import JobContext, timeout_for
 from chassis.job_contract import Job
@@ -68,6 +68,7 @@ def create_app(
         pool = TenantPool(raw_pool)
         admin_url = os.environ.get("CHASSIS_ADMIN_DATABASE_URL", "")
         admin_pool = await asyncpg.create_pool(admin_url, min_size=1, max_size=2) if admin_url else None
+        pool.admin_pool = admin_pool
         if admin_pool is not None:
             async with admin_pool.acquire() as conn:
                 role = await conn.fetchrow("SELECT rolname, rolbypassrls FROM pg_roles WHERE rolname=current_user")
@@ -102,8 +103,12 @@ def create_app(
             asyncio.create_task(job_loop(pool, agent, handlers, lambda job: _context(app, agent, job), discovery_pool=admin_pool or raw_pool)),
             asyncio.create_task(schedule_loop(admin_pool or raw_pool, agent, timeouts)),
         ]
+        bind_tenant_endpoints(app)
         try:
-            yield
+            # Room-specific outer lifespan initialization is administrative.
+            # HTTP requests are reset by middleware, and claimed jobs set owner.
+            with tenant_scope(None, administrative=True):
+                yield
         finally:
             for task in tasks:
                 task.cancel()
@@ -114,6 +119,7 @@ def create_app(
                 await admin_pool.close()
 
     app = FastAPI(title=f"Tervory agent {agent}", version="0.1.0", lifespan=lifespan)
+    app.add_middleware(TenantContextMiddleware)
     app.include_router(storage_router(agent))
     app.state.agent = agent
     app.state.handlers = handlers
