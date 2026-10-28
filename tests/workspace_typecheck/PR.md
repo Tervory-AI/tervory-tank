@@ -5,6 +5,10 @@ Base: `origin/main` at `a99f3cb0662516c8fe1b3f27d5b5dcbb90e94fa0`.
 Rules: `docs/build/MILESTONES-28OCT-1NOV.md`, “The rules block”, rules 1–11.
 Claude opens the PR. No GitHub API, main push, merge or deployment.
 
+Fixes all four main-baseline compiler errors with type-only changes and adds
+`npx tsc --noEmit` before the Workspace build. A fresh clone of the pushed
+branch passes, rejects an intentional type error, then passes after removal.
+
 ## Main baseline
 
 An isolated worktree was created from freshly fetched main. It has no `.next`,
@@ -93,6 +97,57 @@ API request was sent. Ruff reports `All checks passed!`; both remaining commands
 exit 0 without output. This executes the CI step locally, not on GitHub Actions.
 Claude opens the PR, which triggers the hosted workflow.
 
+## Step 3: proof from a fresh clone of the pushed branch
+
+The pushed implementation at `2daacdf510ca5a7544707fdbacb262c92ae9eefd` was
+cloned from GitHub with git. Before running the command, assertions confirmed
+there was no `.next`, generated `next-env.d.ts`, or `tsconfig.tsbuildinfo`.
+The same installed dependencies were linked in temporarily; no compiler/Next
+output was copied. These are the exact commands, from the working repository:
+
+```bash
+set -e
+source /workspace/tervory-env/activate.sh
+typecheck_proof_dir=$(mktemp -d /tmp/workspace-typecheck-proof.XXXXXX)
+printf '%s\n' "$typecheck_proof_dir" > /tmp/workspace-typecheck-clone-path.txt
+git clone --single-branch --branch codex/workspace-typecheck https://github.com/zenascapetown-code/tervory-tank.git "$typecheck_proof_dir" > /tmp/workspace-typecheck-clone.txt 2>&1
+ln -s /workspace/tervory-tank/workspace/node_modules "$typecheck_proof_dir/workspace/node_modules"
+cd "$typecheck_proof_dir"
+test ! -e workspace/.next
+test ! -e workspace/next-env.d.ts
+test ! -e workspace/tsconfig.tsbuildinfo
+python tests/workspace_typecheck/prove_ci_step.py > /tmp/workspace-typecheck-fresh.txt 2>&1
+test ! -e workspace/typecheck-proof.ts
+unlink workspace/node_modules
+git status --porcelain > /tmp/workspace-typecheck-fresh-status.txt
+test ! -s /tmp/workspace-typecheck-fresh-status.txt
+```
+
+All commands exit 0. [Clone output](evidence/clone.txt).
+[Full compiler proof](evidence/fresh-clone.txt):
+
+```text
+Clean branch
+$ (cd workspace && npx tsc --noEmit)
+(no compiler output)
+Exit code: 0
+
+Planted error: typecheck-proof.ts assigns a string to a number
+$ (cd workspace && npx tsc --noEmit)
+typecheck-proof.ts(1,14): error TS2322: Type 'string' is not assignable to type 'number'.
+Exit code: 2
+
+Probe removed
+$ (cd workspace && npx tsc --noEmit)
+(no compiler output)
+Exit code: 0
+```
+
+The intentional failure is handled by the proof runner, whose overall exit is
+0 only if all three expected results occur. The CI step itself exits 2 on the
+planted error. The clone ends clean and the probe is absent. This confirms the
+new step works before Next has generated its files.
+
 ## Changed-file scope
 
 | File:line | Change |
@@ -107,3 +162,29 @@ Claude opens the PR, which triggers the hosted workflow.
 No founder-browser screenshot exists for this compiler-only task. There is no
 page change to demonstrate and no live result is claimed. No new service,
 dependency, key or setting; no production data access or model calls.
+
+## Git checkpoints and final scope check
+
+Each completed step was committed and pushed to this branch with git:
+
+```bash
+git commit -m "docs(workspace): record main typecheck failures"
+git push origin HEAD:refs/heads/codex/workspace-typecheck
+git commit -m "fix(workspace): typecheck before Next generates declarations"
+git push origin HEAD:refs/heads/codex/workspace-typecheck
+git commit -m "ci(workspace): fail on TypeScript errors before build"
+git push origin HEAD:refs/heads/codex/workspace-typecheck
+```
+
+All exited 0: early checkpoint `83ea13d`, compiler fixes `035febc`, CI/proof
+runner `2daacdf`. The final documentation commit adds the fresh-clone evidence.
+
+```bash
+git diff --exit-code a99f3cb -- workspace/app workspace/public workspace/lib
+git diff a99f3cb --check
+```
+
+Both exit 0 with no output: page/source/asset files are unchanged and the
+branch diff has no whitespace errors. No build, hosted Actions run or founder
+browser result is claimed; the local execution of the actual CI command and
+its failure propagation are the evidence for this compiler-only job.
