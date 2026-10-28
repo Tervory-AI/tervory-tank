@@ -127,10 +127,10 @@ class TenantPool:
         self.admin_pool = admin_pool
 
     @asynccontextmanager
-    async def acquire(self, **kwargs):
+    async def acquire(self, *, isolation=None, readonly=False, deferrable=False, **kwargs):
         source = self.admin_pool if administrative() and self.admin_pool is not None else self.raw
         async with source.acquire(**kwargs) as conn:
-            async with conn.transaction():
+            async with conn.transaction(isolation=isolation, readonly=readonly, deferrable=deferrable):
                 await conn.execute("SELECT set_config('app.tenant_id', $1, true)", _tenant.get())
                 yield conn
 
