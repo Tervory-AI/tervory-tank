@@ -261,3 +261,15 @@ answer/receipt evidence remain missing; no live acceptance is claimed.
 This checkpoint is committed/pushed, then the PR description is updated from this
 file with `gh pr edit 424 -R Tervory-AI/tervory-tank --body-file tests/tank_priority_offpeak/PR.md`.
 The resulting report-only head is sent to the independent reviewer.
+
+## Publication transport correction — 2026-10-28 16:47:52 PDT (UTC-07:00) / 2026-10-28 23:47:52 UTC
+
+Published report head: `24c176ec3c1579a1f1d395bae7f71e42fb0086d4`.
+The planned `gh pr edit --body-file` command failed with GraphQL's deprecated
+`repository.pullRequest.projectCards` field. It did not update the description.
+Recovery succeeded with `gh api --method PATCH repos/Tervory-AI/tervory-tank/pulls/424 --input - --jq '{number,html_url,head:.head.sha}'`,
+passing structured JSON `body` read from this report on stdin. Response: PR424,
+expected URL and head24c176ec. No credentials or shell-interpolated body involved.
+This report-only correction is pushed separately and the REST update is repeated
+with its current content. No implementation changes or tests repeated.
+Hosted checks and founder-browser evidence remain pending as above.
