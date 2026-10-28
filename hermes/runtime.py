@@ -35,6 +35,8 @@ def connect_production() -> tuple[Any, Any]:
         url=url,
         api_key=api_key,
         timeout=10,
+        trust_env=False,
+        follow_redirects=False,
     )
     last: type[BaseException] | None = None
     for attempt in range(10):

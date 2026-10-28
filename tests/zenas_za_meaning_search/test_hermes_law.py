@@ -119,3 +119,33 @@ def test_model_download_is_in_dependency_layer_before_application_code_copy():
     assert dockerfile.index("COPY requirements.txt model.json") < dockerfile.index("snapshot_download") < dockerfile.index("COPY *.py")
     assert "HF_HUB_OFFLINE=1" in dockerfile
     assert "TextEmbedding(" not in dockerfile  # Build downloads files; does not run inference.
+
+
+def test_production_qdrant_connection_disables_proxy_and_redirects(monkeypatch):
+    import qdrant_client
+    from hermes import embeddings, runtime
+    built = []
+    class StubEncoder:
+        dim = 384
+        def __init__(self, *args):
+            pass
+        def load(self):
+            pass
+    class Client:
+        def __init__(self, **kwargs):
+            built.append(kwargs)
+        def get_collections(self):
+            return []
+    monkeypatch.setattr(embeddings, "FastEmbedder", StubEncoder)
+    monkeypatch.setattr(qdrant_client, "QdrantClient", Client)
+    monkeypatch.setenv("TANK_REGION", "za")
+    monkeypatch.setenv("QDRANT_URL", "http://qdrant:6333")
+    monkeypatch.setenv("QDRANT_API_KEY", "QDRANT_API_KEY")
+    store, _ = runtime.connect_production()
+    assert store.law.collection == "law_za"
+    assert built[0]["url"] == "http://qdrant:6333"
+    assert built[0]["trust_env"] is False and built[0]["follow_redirects"] is False
+    monkeypatch.setenv("QDRANT_URL", "https://remote.tervory.com")
+    with pytest.raises(RuntimeError, match="Qdrant must be on this box"):
+        runtime.connect_production()
+    assert len(built) == 1

@@ -120,6 +120,7 @@ async def _update_source(
 ) -> None:
     assert_source_region(source, region)
     if snapshots is None and live and source.source_id == "courtlistener" and region == "us-east":
+        await index_pending(store, embedder, index, region=region, source_ids=[source.source_id])
         await courtlistener_night(
             store,
             source,

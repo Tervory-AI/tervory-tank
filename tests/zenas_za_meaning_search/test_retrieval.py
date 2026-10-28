@@ -33,11 +33,12 @@ class Replay:
     def __init__(self):
         self.work = json.loads((RECORDINGS / "works-1.json").read_text())["results"][0]
         self.calls = []
+        self.html = (RECORDINGS / "section.html").read_bytes()
 
     async def get(self, url, headers):
         self.calls.append(url)
         if ".html?" in url:
-            return (RECORDINGS / "section.html").read_bytes()
+            return self.html
         if url.endswith("/toc.json"):
             return (RECORDINGS / "toc.json").read_bytes()
         return json.dumps(self.work).encode()
@@ -247,3 +248,60 @@ async def test_source_less_citation_is_not_returned_by_retrieve(monkeypatch, ser
         doc.url = ""
     law = law_pool(monkeypatch, store, client)
     assert await _passages_from_pool(law, query="", citation="Act 71 of 2008, s 66", jurisdiction="za", as_at=None, level=None, kind=None) == []
+
+
+@pytest.mark.asyncio
+async def test_changed_section_only_is_encoded_and_query_pages_run_through_real_routes(services):
+    _, encoder, client = services
+    store, replay = MemoryStore(), Replay()
+    await load(store, replay, client)
+    encoder.calls.clear()
+    point = replay.work["points_in_time"][0]
+    expression = point["expressions"][0]
+    replay.work["points_in_time"].append({"date": "2026-10-29", "expressions": [{
+        **expression, "url": expression["url"].replace(point["date"], "2026-10-29")}]})
+    # Protocol-only byte change, not a claim about a real amendment: duplicate
+    # the already-recorded sentence. The parent heading chunk is unchanged.
+    sentence = b"The business and affairs of a company must be managed by or under the direction of its board."
+    replay.html = replay.html.replace(sentence, sentence + b" " + sentence)
+    await run_nightly(store, region="za", only=[SOURCE.source_id], live=True, http_get=replay.get,
+                      embedder=client, index=client, on=date(2026, 10, 30))
+    assert len(encoder.calls) == 1
+    assert sentence.decode() + " " + sentence.decode() in encoder.calls[0]
+    ids = []
+    async for page in client.query_pages("za", [1, 0, 0, 0], limit=1):
+        ids.extend(page)
+    assert len(ids) == len(set(ids)) == len(store.chunks)
+
+
+@pytest.mark.asyncio
+async def test_production_store_receipts_and_hydration_are_region_scoped():
+    from agents.zenas.pool.model import Chunk
+    from agents.zenas.pool.region import RegionError
+    class Connection:
+        def __init__(self):
+            self.calls = []
+        async def fetch(self, sql, *args):
+            self.calls.append((sql, args))
+            return []
+        async def executemany(self, sql, args):
+            self.calls.append((sql, args))
+    conn = Connection()
+    store = PostgresStore(conn, home_region="za")
+    assert await store.pending_embeddings(LAW_MODEL, jurisdiction="za", source_ids=["companies-act"]) == []
+    sql, args = conn.calls[-1]
+    assert "s.region=$3" in sql and "c.jurisdiction=$2 AND d.jurisdiction=$2" in sql
+    assert args[:3] == (LAW_MODEL, "za", "za")
+    assert await store.get_chunks(["chunk"], jurisdiction="za", as_at=ON) == []
+    sql, args = conn.calls[-1]
+    assert "s.region=$3" in sql and "d.effective_to>$4" in sql
+    assert args[:4] == ("za", ["chunk"], "za", ON)
+    chunk = Chunk("chunk", "version", "document", "us", "", "", "", "", "", 0)
+    before = len(conn.calls)
+    with pytest.raises(RegionError):
+        await store.record_embeddings([chunk], LAW_MODEL, 384, "law_us")
+    with pytest.raises(RegionError):
+        await store.pending_embeddings(LAW_MODEL, jurisdiction="us")
+    with pytest.raises(RegionError):
+        await store.get_chunks(["chunk"], jurisdiction="us")
+    assert len(conn.calls) == before

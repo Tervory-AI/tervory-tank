@@ -68,3 +68,9 @@ env -u RIG_TEST_DATABASE_URL -u POOL_SCHEMA_DATABASE_URL -u ZENAS_SCHEMA_DATABAS
 ```
 
 Both downloads exited 0. The PDFs were read with pypdf, not sent to a model. Scope verification: **48 passed in 1.77s**, including 10 criminal refusals, 10 civil allowances, checks that criminal questions never call Tank, and the new skill's offline execution. The existing tests initially expected a Tank call and config version 1.1.0; only those affected expectations were updated. The text remains exactly “Refused. Zenas does not do criminal law. Ask a criminal lawyer in that jurisdiction.”
+
+## Full-suite checkpoint
+
+Before the final main merge, the full offline Zenas/Hermes comparison was **main 554 passed / 4 skipped**, **branch 603 passed / same 4 skipped**. Both had 12 existing warnings. New checks cover changed-section-only encoding, real private-route paging, and explicit proxy/redirect disabling on the local Qdrant client. Review also found CourtListener's separate nightly branch; it now drains pending vector writes before resuming its cursor, just like the other sources.
+
+The cloud lacked the new main dependencies `jiter==0.18.0` and `openai==2.54.0`; they were installed at main's existing pins for test collection. No repository dependency change and no model/API call was made for that installation. The main suite was rerun after installing them and passed.
