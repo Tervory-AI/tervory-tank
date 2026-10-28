@@ -145,7 +145,7 @@ async def test_foreign_clause_and_remote_host_rejected_before_http(monkeypatch):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("status", [302, 401, 500])
 async def test_api_failure_never_falls_back_to_local_assembly(monkeypatch, status):
-    install(monkeypatch)
+    install(monkeypatch, region="za")
     requests = []
     def reject(request):
         requests.append(request)
@@ -208,7 +208,7 @@ async def test_trigger_legal_handoff_reaches_docassemble_with_notice(api, monkey
 async def test_postgres_prior_metadata_is_not_sent_and_reuse_stays_exact(monkeypatch):
     from datetime import datetime, timezone
     from uuid import UUID
-    install(monkeypatch)
+    install(monkeypatch, region="za")
     stub = API("za")
     client = DocassembleClient("za", transport=httpx.MockTransport(stub.handle))
     prior = {"id": UUID(TENANT), "tenant_id": UUID(TENANT), "created_at": datetime.now(timezone.utc),
@@ -225,9 +225,19 @@ async def test_postgres_prior_metadata_is_not_sent_and_reuse_stays_exact(monkeyp
 
 @pytest.mark.asyncio
 async def test_missing_api_setting_stops_without_sending_or_storing_a_document(monkeypatch):
-    install(monkeypatch)
+    install(monkeypatch, region="za")
     monkeypatch.delenv("DOCASSEMBLE_API_KEY")
     stub = API("za")
+    client = DocassembleClient("za", transport=httpx.MockTransport(stub.handle))
+    with pytest.raises(AssemblyUnavailable):
+        await client.assemble(template="nda", jurisdiction="za", clauses=[], terms={}, prior=None)
+    assert not stub.requests
+
+
+@pytest.mark.asyncio
+async def test_region_configuration_mismatch_sends_no_client_data(monkeypatch):
+    install(monkeypatch, region="us-east")
+    stub = API("us-east")
     client = DocassembleClient("za", transport=httpx.MockTransport(stub.handle))
     with pytest.raises(AssemblyUnavailable):
         await client.assemble(template="nda", jurisdiction="za", clauses=[], terms={}, prior=None)
