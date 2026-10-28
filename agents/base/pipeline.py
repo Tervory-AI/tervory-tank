@@ -286,7 +286,7 @@ async def enrich_one(
         decisions: dict[str, Any] = {}
         normalized = norm.get("fields") or {}
         reference = raw_input.get("_base_reference") or {}
-        if reference:
+        if reference and reliability:
             normalized = {key: {**value, "source_kind": "reference_file",
                                 "source_url": reference.get("source_url"), "checked_at": reference.get("checked_at")}
                           for key, value in normalized.items()}
@@ -338,7 +338,7 @@ async def enrich_one(
         cost += cost_of(site)
         if site.get("website"):
             merge(profile, {"website": {**site["website"],
-                                       "source_url": site["website"].get("source_url") or site["website"].get("value")}},
+                                       **({"source_url": site["website"].get("source_url") or site["website"].get("value")} if reliability else {})}},
                   reliability, decisions)
         passes["2a"] = {
             "skill": named("base.find_site", site),
