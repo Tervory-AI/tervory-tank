@@ -64,7 +64,7 @@ def bind_tenant_endpoints(app):
         original = route.dependant.call
         if getattr(original, "_tenant_bound", False):
             continue
-        parameters = signature(original)
+        parameters = signature(original, eval_str=True)
         authenticated_actor = any(d.name == "actor" for d in route.dependant.dependencies)
         founder_only = any(d.call.__module__ == "admin" and d.call.__name__ == "require_admin"
                            for d in route.dependant.dependencies if d.call is not None)
@@ -106,10 +106,13 @@ def bind_tenant_endpoints(app):
 
                     response.body_iterator = stream()
                 return response
+            scoped.__signature__ = parameters
             scoped._tenant_bound = True
             return scoped
 
-        route.dependant.call = wrap(original, parameters, authenticated_actor, founder_only)
+        wrapped = wrap(original, parameters, authenticated_actor, founder_only)
+        route.dependant.call = wrapped
+        route.endpoint = wrapped
 
 
 def tenant_path(parameter: str):
