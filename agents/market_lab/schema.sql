@@ -70,6 +70,16 @@ CREATE TABLE IF NOT EXISTS agent_market_lab.predictions (
 CREATE INDEX IF NOT EXISTS predictions_tenant_idx
     ON agent_market_lab.predictions (tenant_id, resolve_by);
 
+-- Stated confidence is frozen at insertion; old forecasts are not backfilled.
+ALTER TABLE agent_market_lab.predictions ADD COLUMN IF NOT EXISTS kind text;
+ALTER TABLE agent_market_lab.predictions ADD COLUMN IF NOT EXISTS feed text;
+ALTER TABLE agent_market_lab.predictions ADD COLUMN IF NOT EXISTS horizon_seconds bigint
+    CHECK (horizon_seconds >= 0);
+ALTER TABLE agent_market_lab.predictions ADD COLUMN IF NOT EXISTS confidence double precision
+    CHECK (confidence >= 0 AND confidence <= 1);
+ALTER TABLE agent_market_lab.predictions ADD COLUMN IF NOT EXISTS confidence_count integer
+    CHECK (confidence_count >= 0);
+
 CREATE TABLE IF NOT EXISTS agent_market_lab.reports (
     id          uuid PRIMARY KEY,
     tenant_id   uuid NOT NULL,
