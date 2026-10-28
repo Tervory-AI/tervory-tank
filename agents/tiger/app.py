@@ -122,6 +122,9 @@ async def official_feed(tenant: str, url: str) -> dict:
 async def check(ctx: JobContext) -> dict:
     url = str(ctx.input.get("url") or "").strip()
     store = PgStore(app.state.pool, SCHEMA)
+    async def playbook(payload):
+        return await ctx.tank.approved_skill(ctx.tenant_id, "tiger.playbook", payload)
+    store.skill_runner = playbook
     rig = RigWatches(store)
     managed = await rig.managed(ctx.tenant_id, url)
     if managed:
@@ -152,6 +155,7 @@ async def check(ctx: JobContext) -> dict:
         files=ctx.files,
         feed=official_feed,
         product_context=None if managed else TankRig(app.state.http).alert_context,
+        skills=playbook,
     )
     try:
         await rig.deliver(ctx.tenant_id, TankRig(app.state.http))

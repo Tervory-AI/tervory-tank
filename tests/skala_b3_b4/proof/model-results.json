@@ -1,0 +1,32 @@
+{
+  "models_validated": [
+    {
+      "model": "astra",
+      "score": 0.2,
+      "total": 5,
+      "passed": 1,
+      "eval_id": "7f1ad6f6-3971-4e59-98ca-9136d8ca3731",
+      "old_model": "luna",
+      "task_type": "test.b3.write",
+      "validated": false,
+      "validated_at": "2026-10-28T16:15:22.844721+00:00",
+      "revalidation_id": "f5e129de-4e11-4cbd-8687-cdc0bb637e26",
+      "policy_tenant_id": null
+    },
+    {
+      "model": "sol",
+      "score": 1.0,
+      "total": 5,
+      "passed": 5,
+      "eval_id": "955b8407-f58a-4158-9142-33f14074d8c3",
+      "old_model": "astra",
+      "task_type": "test.b3.write",
+      "validated": true,
+      "validated_at": "2026-10-28T16:15:22.855577+00:00",
+      "revalidation_id": "9d43c150-92e5-4c5a-8852-bf404353d474",
+      "policy_tenant_id": null
+    }
+  ],
+  "state": "staging",
+  "model_calls": 8
+}

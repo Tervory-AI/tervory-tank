@@ -1,0 +1,8 @@
+{
+  "scanner": "Semgrep 1.182.1",
+  "config": "agents/radix/scanlib/semgrep.yml",
+  "baseline": "3f469b0",
+  "findings": 0,
+  "errors": 0,
+  "scope": "Bundled rules only; full CI auto config did not produce a report"
+}

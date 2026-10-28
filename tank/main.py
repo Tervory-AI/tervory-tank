@@ -2993,9 +2993,14 @@ async def run_skill_evals(skill_id: str, version: str, body: EvalRun | None = No
         raise HTTPException(status_code=400, detail="package has no eval cases; a skill without evals cannot leave candidate")
     here = box_region()
     result = await skala.run_evals(
-        pkg, lambda: make_ctx(pkg, PLATFORM_TENANT, preview=True, home_region=here),
+        pkg, lambda: __import__("skala_revalidation").eval_context(
+            __import__("sys").modules[__name__], pkg,
+            make_ctx(pkg, PLATFORM_TENANT, preview=True, home_region=here)),
         execute=run_room_eval if pkg.id in {"tisan.figma", "tisan.scaffold"} else None,
     )
+    if __import__("skala_revalidation").ACTIVE.get() is not None:
+        return await __import__("skala_revalidation").record(
+            __import__("sys").modules[__name__], result, body.by if body else None)
     passed_gate = result["score"] >= pkg.eval_threshold and result["eligible"]
     async with pool().acquire() as conn:
         await conn.execute(
@@ -3006,6 +3011,8 @@ async def run_skill_evals(skill_id: str, version: str, body: EvalRun | None = No
         state = await conn.fetchval("SELECT state FROM tank.skills WHERE id=$1 AND version=$2", skill_id, version)
         new_state = state
         if state == "candidate" and passed_gate:
+            new_state = "staging"
+        elif state == "approved" and not passed_gate:
             new_state = "staging"
         elif state == "staging" and not passed_gate:
             new_state = "candidate"   # it regressed; back it goes
@@ -3123,6 +3130,7 @@ async def _run_one_skill(
     body: SkillRun,
     caller: str | None,
 ) -> dict[str, Any]:
+    __import__("skala_intake").guard_preview(skill_id, caller, body.preview)
     version = body.version or await _pick_version(skill_id, body.preview)
     pkg = get_package(skill_id, version)
     await __import__("agent_skills").guard_submission_owner(
@@ -4191,4 +4199,11 @@ app.include_router(__import__("market_lab_routes").build_router(__import__("sys"
 
 # Tenant-specific semantic-cache approval; no policy promotion is automatic.
 app.include_router(semantic_cache.build_router(__import__("sys").modules[__name__]))
+
+# Free room checker intake uses the existing registry, evals and founder approval.
+__import__("skala_intake").install(app, __import__("sys").modules[__name__])
+
 app.include_router(__import__("vault_routes").build_router(__import__("sys").modules[__name__]))
+
+# B3: process committed model changes through the existing skill-eval handler.
+__import__("skala_revalidation").install(app, __import__("sys").modules[__name__])
