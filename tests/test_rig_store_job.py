@@ -18,7 +18,7 @@ async def test_store_settings_and_keys_are_bound_to_the_authenticated_tenant():
     a, b = str(uuid4()), str(uuid4())
     retail = Retailer(rig)
     await retail.set_settings(a, {'name': 'Fixture A', 'email': 'a@fixture.test', 'tenant_id': b})
-    assert (await retail.panel(b))['settings'] == {'name': '', 'email': ''}
+    assert (await retail.panel(b))['settings'] == {'name': '', 'email': '', 'theme': 'neutral'}
     assert (await retail.panel(a))['settings']['email'] == 'a@fixture.test'
     with pytest.raises(RigError):
         await retail.embed_key(b, {'origins': ['https://b.fixture.test']})

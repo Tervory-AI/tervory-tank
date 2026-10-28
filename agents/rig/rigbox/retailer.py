@@ -76,7 +76,8 @@ class Retailer:
         settings = await self.store.rule(tenant)
         retailer = await self.store.retailer(tenant) or {}
         return {
-            "settings": {"name": retailer.get("name", ""), "email": retailer.get("email") or ""},
+            "settings": {"name": retailer.get("name", ""), "email": retailer.get("email") or "",
+                         "theme": retailer.get("theme", "neutral")},
             "price_configured": bool(settings),
             "currency": (settings or {}).get("shop_currency", "ZAR"),
             "templates": await self.store.templates_for(tenant),
@@ -94,8 +95,11 @@ class Retailer:
                 or not re.fullmatch(r"[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+", email)):
             raise ValueError("Enter a store name and delivery email address.")
         previous = await self.store.retailer(tenant) or {}
+        theme = data.get("theme", previous.get("theme", "neutral"))
+        if theme not in ("neutral", "custom-nation"):
+            raise ValueError()
         await self.store.put_retailer(tenant, previous.get("slug") or tenant, email,
-                                      previous.get("webhook"), name.strip())
+                                      previous.get("webhook"), name.strip(), theme=theme)
         return {"saved": True}
 
     async def embed_key(self, tenant: str, data: dict[str, Any]) -> dict:
@@ -105,9 +109,10 @@ class Retailer:
         if not retailer.get("email") or not await self.store.products(tenant):
             raise RigError("invalid", "Save a delivery email and publish your catalogue first.", 422)
         # Verify the shipped asset before issuing a key that cannot be installed.
-        embed_snippet("")
+        theme = retailer.get("theme", "neutral")
+        embed_snippet("", theme=theme)
         result = await issue_embed_key(self.store, tenant, data.get("origins"))
-        return {**result, "snippet": embed_snippet(result["publishable_key"])}
+        return {**result, "snippet": embed_snippet(result["publishable_key"], theme=theme)}
 
     async def reprice(self, store: Any, tenant: str) -> None:
         settings = await store.rule(tenant)

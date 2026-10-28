@@ -26,11 +26,13 @@ async def issue_embed_key(store: Any, tenant: str, origins: list[str]) -> dict:
     return {"publishable_key": key, "origins": origins}
 
 
-def embed_snippet(key: str) -> str:
+def embed_snippet(key: str, *, theme: str = "neutral") -> str:
     from .hosting import manifest
 
+    if theme not in ("neutral", "custom-nation"):
+        raise ValueError()
     bundle = manifest()
     return (f'<script src="https://rig.tervory.com/widget/assets/{html.escape(bundle["file"], quote=True)}" '
             f'integrity="{html.escape(bundle["integrity"], quote=True)}" crossorigin="anonymous" defer></script>\n'
             f'<tervory-rig api-base="https://rig.tervory.com" rig-key="{html.escape(key, quote=True)}" '
-            'theme="neutral"></tervory-rig>')
+            f'theme="{theme}"></tervory-rig>')

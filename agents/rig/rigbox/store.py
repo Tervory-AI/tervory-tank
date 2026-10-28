@@ -297,8 +297,12 @@ class MemoryStore(RetailerMemoryStore):
         email: str | None,
         webhook: str | None,
         name: str = "",
+        theme: str | None = None,
     ) -> None:
-        self.retailers[str(tenant_id)] = {"slug": slug, "email": email, "webhook": webhook, "name": name}
+        theme = theme if theme is not None else self.retailers.get(str(tenant_id), {}).get("theme", "neutral")
+        if theme not in {"neutral", "custom-nation"}:
+            raise ValueError()
+        self.retailers[str(tenant_id)] = {"slug": slug, "email": email, "webhook": webhook, "name": name, "theme": theme}
 
     async def retailer(self, tenant_id: str) -> dict[str, Any] | None:
         row = self.retailers.get(str(tenant_id))
@@ -705,34 +709,37 @@ class PgStore(RetailerPgStore):
         email: str | None,
         webhook: str | None,
         name: str = "",
+        theme: str | None = None,
     ) -> None:
         async with self.pool.acquire() as conn:
             await conn.execute(
                 """
-                INSERT INTO agent_rig.retailers (tenant_id, slug, email, webhook, name)
-                VALUES ($1, $2, $3, $4, $5)
+                INSERT INTO agent_rig.retailers (tenant_id, slug, email, webhook, name, theme)
+                VALUES ($1, $2, $3, $4, $5, coalesce($6, 'neutral'))
                 ON CONFLICT (tenant_id) DO UPDATE SET
                     slug = EXCLUDED.slug,
                     email = EXCLUDED.email,
                     webhook = EXCLUDED.webhook,
-                    name = EXCLUDED.name
+                    name = EXCLUDED.name,
+                    theme = coalesce($6, agent_rig.retailers.theme)
                 """,
                 _uuid(tenant_id),
                 str(slug),
                 _optional_text(email),
                 _optional_text(webhook),
                 str(name or ""),
+                theme,
             )
 
     async def retailer(self, tenant_id: str) -> dict[str, Any] | None:
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT slug, email, webhook, name FROM agent_rig.retailers WHERE tenant_id = $1",
+                "SELECT slug, email, webhook, name, theme FROM agent_rig.retailers WHERE tenant_id = $1",
                 _uuid(tenant_id),
             )
         if row is None:
             return None
-        return {"slug": row["slug"], "email": row["email"], "webhook": row["webhook"], "name": row["name"] or ""}
+        return {"slug": row["slug"], "email": row["email"], "webhook": row["webhook"], "name": row["name"] or "", "theme": row["theme"]}
 
     async def replace_market(self, tenant_id: str, rows: list[dict[str, Any]]) -> None:
         async with self.pool.acquire() as conn:
