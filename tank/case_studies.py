@@ -1,8 +1,11 @@
 """Fixed, tenant-scoped case studies extending CORE-1 proof. No page or model calls."""
 from __future__ import annotations
 
+import asyncio
+from contextlib import asynccontextmanager, suppress
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -13,7 +16,35 @@ from case_study_templates import PRODUCTS, empty_figures
 from case_study_sources import exists, histogram, populate, put
 from proof import product_summary
 
-router = APIRouter(prefix="/v1/case-studies", tags=["case-studies"])
+async def reconcile_provisioned() -> None:
+    """Trigger's room can create its schema after Tank has already started."""
+    async with db().acquire() as conn, conn.transaction():
+        if await exists(conn, "agent_trigger.voices"):
+            await conn.execute("""INSERT INTO tank.case_study_clients(tenant_id)
+                SELECT tenant_id FROM agent_trigger.voices ON CONFLICT DO NOTHING""")
+            await conn.execute("""INSERT INTO tank.case_study_reports(tenant_id,product)
+                SELECT tenant_id,'trigger' FROM agent_trigger.voices ON CONFLICT DO NOTHING""")
+
+
+@asynccontextmanager
+async def registration_lifespan(app):
+    async def reconcile():
+        while True:
+            try:
+                await reconcile_provisioned()
+            except Exception:
+                logging.getLogger(__name__).warning("Case-study registration will retry")
+            await asyncio.sleep(30)
+    worker = asyncio.create_task(reconcile())
+    try:
+        yield
+    finally:
+        worker.cancel()
+        with suppress(asyncio.CancelledError):
+            await worker
+
+
+router = APIRouter(prefix="/v1/case-studies", tags=["case-studies"], lifespan=registration_lifespan)
 
 
 async def register(conn, tenant: uuid.UUID) -> None:
