@@ -66,6 +66,7 @@ async def env(monkeypatch):
         await conn.execute((ROOT / "tank/schema.sql").read_text())
         await conn.execute("TRUNCATE tank.skill_revalidations,tank.skill_evals,tank.skill_approvals,tank.agent_skill_submissions,tank.skills CASCADE")
         await conn.execute("DELETE FROM tank.policy WHERE task_type LIKE $1", "test.b3.%")
+        await conn.execute("DELETE FROM tank.ledger WHERE tenant_id=$1 AND task_type LIKE $2", PLATFORM_TENANT, "test.b3.%")
     monkeypatch.setattr(tank, "_pool", db)
     monkeypatch.setattr(tank, "_packages", {})
     monkeypatch.setattr(skala, "_run_cache", {})
@@ -279,3 +280,80 @@ async def test_pending_revalidation_blocks_retirement_even_after_30_days(env, tm
     assert error.value.detail["pending_revalidation"] is True
     await skala_revalidation.drain(env.tank)
     assert (await skala.retire_version(env.db, old.id, old.version, "founder", now=START + timedelta(days=60)))["state"] == "retired"
+
+
+@pytest.mark.asyncio
+async def test_missing_package_is_failed_without_spending(env, tmp_path):
+    await policy(env)
+    pkg = package(tmp_path)
+    await seed(env, pkg)
+    await policy(env, "sol")
+    env.tank._packages.clear()
+    assert await skala_revalidation.drain(env.tank) == 1
+    row = await env.db.fetchrow("SELECT * FROM tank.skills WHERE id=$1 AND version=$2", pkg.id, pkg.version)
+    assert row["state"] == "staging" and not json.loads(row["models_validated"])[0]["validated"]
+    assert env.calls == [] and (await jobs(env))[0]["error"] == "eval_gate_failed"
+
+
+@pytest.mark.asyncio
+async def test_failed_transport_retains_cost_without_exposing_error(env, tmp_path, monkeypatch):
+    await policy(env)
+    await seed(env, package(tmp_path))
+    await policy(env, "sol")
+    async def broken(name, messages, max_tokens, *, receipt):
+        receipt.update(cost=0.01)
+        raise RuntimeError("private transport response")
+    monkeypatch.setattr(env.tank, "_llm", broken)
+    await skala_revalidation.drain(env.tank)
+    result = await env.db.fetchrow("SELECT * FROM tank.skill_evals WHERE revalidation_id=$1", (await jobs(env))[0]["id"])
+    assert float(result["cost_usd"]) == 0.04
+    assert "private transport response" not in result["details"]
+    assert float(await env.db.fetchval("SELECT sum(cost_usd) FROM tank.ledger WHERE tenant_id=$1 AND task_type=$2", PLATFORM_TENANT, TASK)) == 0.04
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("event", ["failed_eval", "rollback"])
+async def test_database_probation_uses_failure_and_rollback_history(env, tmp_path, event):
+    old, newer = package(tmp_path), package(tmp_path, version="2.0.0")
+    await seed(env, old, "staging")
+    await seed(env, newer)
+    at = START + timedelta(days=15)
+    if event == "failed_eval":
+        await env.db.execute("INSERT INTO tank.skill_evals(skill_id,version,score,passed,total,ran_at) VALUES($1,$2,.8,4,5,$3)", newer.id, newer.version, at)
+    else:
+        await env.db.execute("INSERT INTO tank.skill_approvals(tenant_id,skill_id,version,action,acted_by,acted_at) VALUES($1,$2,$3,'rollback','founder',$4)", PLATFORM_TENANT, old.id, old.version, at)
+    with pytest.raises(HTTPException):
+        await skala.retire_version(env.db, old.id, old.version, "founder", now=START + timedelta(days=44))
+    assert (await skala.retire_version(env.db, old.id, old.version, "founder", now=START + timedelta(days=45)))["state"] == "retired"
+
+
+@pytest.mark.asyncio
+async def test_background_worker_drains_policy_swap_and_stops_before_pool(env, tmp_path, monkeypatch):
+    from fastapi import FastAPI
+    app = FastAPI()
+    closed = []
+    async def close_pool():
+        closed.append(True)
+    app.router.on_shutdown.append(close_pool)
+    skala_revalidation.install(app, env.tank)
+    await policy(env)
+    await seed(env, package(tmp_path))
+    await policy(env, "astra")
+    # A superseded staging version exposes the same existing rollback control.
+    await seed(env, package(tmp_path, name="base.history", task=None, code=True), "staging")
+    await seed(env, package(tmp_path, name="base.history", version="2.0.0", task=None, code=True))
+    await app.router.startup()
+    try:
+        async with asyncio.timeout(5):
+            while not (await jobs(env))[0]["completed_at"]:
+                await asyncio.sleep(.01)
+        row = await env.db.fetchrow("SELECT * FROM tank.skills WHERE id=$1 AND version=$2", "base.b3", "1.0.0")
+        assert row["state"] == "staging" and row["last_eval_score"] == .2
+        proof = os.environ.get("SKALA_B3_PROOF_DIR")
+        if proof:
+            folder = Path(proof)
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "skills.json").write_text(json.dumps(await env.tank.list_skills(), default=str, indent=2) + "\n")
+    finally:
+        await app.router.shutdown()
+    assert closed == [True] and len(env.calls) == 4
