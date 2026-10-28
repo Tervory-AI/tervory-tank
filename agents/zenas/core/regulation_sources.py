@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+from functools import partial
 from datetime import date, timedelta
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from xml.etree import ElementTree as ET
@@ -45,6 +46,8 @@ HOSTS = {
 
 
 def safe_url(url, hosts):
+    if any(ch.isspace() for ch in url):
+        raise ValueError("source_unavailable")
     parsed = urlsplit(url)
     if (
         parsed.scheme != "https"
@@ -141,7 +144,8 @@ class Sources:
     def __init__(self, region, *, http_get=urllib_get, laws_snapshot=None):
         if region not in {"us-east", "za"}:
             raise ValueError("Not in scope.")
-        self.region, self.get, self.laws_snapshot = region, http_get, laws_snapshot
+        self.region, self.laws_snapshot = region, laws_snapshot
+        self.get = partial(urllib_get, redirects=False) if http_get is urllib_get else http_get
 
     async def fetch(self, watch):
         name = watch["source"]
