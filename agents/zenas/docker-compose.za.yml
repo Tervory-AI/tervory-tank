@@ -16,6 +16,7 @@ services:
     environment:
       TANK_REGION: za
       AGENT_NAME: zenas
+      LAWS_AFRICA_API_TOKEN: ${LAWS_AFRICA_API_TOKEN:-}
       R2_BUCKET: tervory-zenas
       R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
       R2_ACCESS_KEY_ID_ZENAS: ${R2_ACCESS_KEY_ID_ZENAS:-}

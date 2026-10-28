@@ -21,7 +21,7 @@ from agents.zenas.pool.region import RegionError
 
 API = "https://api.laws.africa/v3/"
 WORKS = API + "akn/za/.json"
-_WORK = re.compile(r"^/akn/za/act/(?:[a-z][a-z0-9_-]*/)?[0-9]{4}(?:-[0-9]{2}-[0-9]{2})?/[^/]+$")
+_WORK = re.compile(r"^/akn/za/act/(?:[a-z][a-z0-9_-]*/)?[0-9]{4}(?:-[0-9]{2}-[0-9]{2})?/[a-zA-Z0-9._-]+$")
 
 
 def national_work(value: object) -> str:
@@ -95,6 +95,7 @@ class LawsAfricaClient:
 
     async def get(self, url: str, *, accept: str = "application/json") -> bytes:
         url = api_url(url)
+        reject_credential_url(url, self._headers["Authorization"].removeprefix("Bearer "))
         headers = {**self._headers, "Accept": accept}
         for attempt in range(6):
             # Includes the first request and every retry. A run-level lock serializes

@@ -23,6 +23,9 @@ The public docs host was blocked by this cloud's proxy (CONNECT 403). The founde
 - `agents/zenas/pool/http.py`: optional single-attempt/no-redirect operation reuses the existing HTTP/gzip code; existing callers retain their defaults. Optional uncapped Retry-After preserves the provider's requested wait.
 - `agents/zenas/pool/adapters/laws_africa_html.py` and `za_akn.py`: reuse the existing section parser for AKN HTML and its table of contents, keeping section anchors, language/version identity, dates, publisher and source URL.
 - `tests/zenas_za_laws_africa/recordings/` and `test_api.py`: offline transport replay, auth/pacing/backoff/refusal checks, and section/date/link parsing. These are contract-shaped test recordings, not captures from a paid account; provenance is in the recordings README. Live code never loads them.
+- `agents/zenas/pool/laws_africa.py`, `bulk.py`, and `nightly.py`: the full national walk follows returned next URLs, excludes municipal works, and checks the existing eleven-instrument minimum. Missing minimum entries are requested by their known work URI. Existing per-work checkpoint rows keep dates/URLs; the page queue resumes after interruptions. Current expressions load initially; subsequent new/changed expressions retain their dated history. Load now and nightly share the loader and a PostgreSQL advisory lock so requests on the same box cannot race.
+- `catalogue.py`, `status.py`, and `api.py`: the real publisher name **Laws.Africa** appears as source data in the existing feed table; no page copy/layout changes. The national row counts the full feed, including the individual minimum-instrument rows. No missing-token or failed-request fixture fallback exists. SAFLII is disabled.
+- `agents/zenas/docker-compose.za.yml:19`: forwards the existing setting name to the normal ZA room. Boston Compose is untouched. `tests/zenas_za_laws_africa/test_sync.py` tests the shared sync and actual load/status routes.
 
 ## Commands and results
 
@@ -36,6 +39,15 @@ env -u RIG_TEST_DATABASE_URL -u POOL_SCHEMA_DATABASE_URL -u ZENAS_SCHEMA_DATABAS
 ```
 
 Results: main merge `e8de3ea` pushed; **13 passed in 0.16s**. Tokens in tests are variable-name markers passed through mocked transport, never credentials. No model calls, live database access or fixture fallback were used.
+
+API/parser implementation was committed and pushed as `c7f0b53`.
+
+```sh
+env -u RIG_TEST_DATABASE_URL -u POOL_SCHEMA_DATABASE_URL -u ZENAS_SCHEMA_DATABASE_URL -u GITHUB_ACTIONS PYTHONPATH=. /workspace/.tervory-cloud/venv/bin/python -m pytest -q tests/zenas_za_laws_africa/test_api.py tests/test_zenas_pool_schema.py
+env -u RIG_TEST_DATABASE_URL -u POOL_SCHEMA_DATABASE_URL -u ZENAS_SCHEMA_DATABASE_URL -u GITHUB_ACTIONS PYTHONPATH=. /workspace/.tervory-cloud/venv/bin/python -m pytest -q tests/zenas_za_laws_africa
+```
+
+Results: **16 passed in 0.25s**; then **19 passed in 0.86s** after the sync/route tests were added. The first targeted Ruff run found four unused imports in new files; those imports were removed.
 
 ## Friday checklist — pending completion of this branch
 
@@ -51,5 +63,6 @@ Results: main merge `e8de3ea` pushed; **13 passed in 0.16s**. Tokens in tests ar
 - Used the founder-supplied documentation facts to resume work; kept the correct existing Bearer scheme.
 - Kept the actual FRBR/date/language identities and HTML section IDs, rather than inventing publisher links or treating the first date in XML as the consolidation date.
 - Added no new page text/layout or model calls. The paid agreement is a Friday checklist item, not an invented licence grant.
+- Retained the existing minimum-instrument source rows and document identities. The national source includes those counts; nightly does not separately reload those eleven rows after its national walk. Additional national works are stored under the publisher source. Municipal works stay outside this national feed.
 
 Founder screenshots and live proof: **pending**. Implementation/testing of the remaining steps is in progress; no Friday-ready or live-success claim is made yet.

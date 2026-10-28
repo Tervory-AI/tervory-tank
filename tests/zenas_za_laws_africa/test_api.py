@@ -14,19 +14,6 @@ from agents.zenas.pool.region import RegionError
 RECORDINGS = Path(__file__).with_name("recordings")
 
 
-@pytest.fixture
-def clock_and_token(monkeypatch):
-    waits = []
-
-    async def sleep(delay):
-        waits.append(delay)
-
-    monkeypatch.setattr(api.asyncio, "sleep", sleep)
-    # A variable-name marker, not a credential. No setting value is read.
-    monkeypatch.setattr(api, "laws_africa_token", lambda: "LAWS_AFRICA_API_TOKEN")
-    return waits
-
-
 @pytest.mark.asyncio
 async def test_bearer_and_pacing_without_page_size(clock_and_token):
     seen = []

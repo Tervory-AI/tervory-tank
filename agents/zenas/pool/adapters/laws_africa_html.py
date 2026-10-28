@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 from datetime import date
+import json
 from html.parser import HTMLParser
 from urllib.parse import quote
 from xml.etree import ElementTree as ET
 
 from agents.zenas.pool.adapters.laws_africa_api import national_work, representation
-from agents.zenas.pool.adapters.za_akn import _direct, _section_node
+from agents.zenas.pool.adapters.za_akn import ACTS, _direct, _section_node
 from agents.zenas.pool.builddoc import build_document
 from agents.zenas.pool.model import LegalDocument, SourceSpec
-from agents.zenas.pool.textutil import document_id_for
+from agents.zenas.pool.textutil import content_hash, document_id_for
 
 
 class AknHTML(HTMLParser):
@@ -115,7 +116,11 @@ def parse_expression(payload: dict, source: SourceSpec) -> list[LegalDocument]:
         )
         # FRBR + language + anchor is stable and avoids collisions between
         # different regulations and language expressions with the same numbers.
-        document.id = document_id_for(source.source_id, f"{frbr}/{expression['language']}#{anchor}")
+        if source.source_id not in {row[0] for row in ACTS} or expression["language"] != "eng":
+            document.id = document_id_for(source.source_id, f"{frbr}/{expression['language']}#{anchor}")
+        # An unchanged section in a new consolidation still has a new source
+        # edition/date. Do not let text-only deduplication discard that metadata.
+        document.content_hash = content_hash(json.dumps([document.text, expression], sort_keys=True))
         rows.append(document)
     if not rows:
         raise ValueError("no numbered sections in expression")
