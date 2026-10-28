@@ -1918,3 +1918,22 @@ BEGIN
         INSERT INTO tank.policy_seeds(name) VALUES('command-exact-cache-v1');
     END IF;
 END $$;
+
+-- RouteLLM is an opt-in shadow experiment. No policy is enabled by migration.
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS routellm_weak_model text;
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS routellm_threshold double precision
+    CHECK (routellm_threshold >= 0 AND routellm_threshold <= 1);
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_model text;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_score double precision;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_threshold double precision;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_weak_model text;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_config text;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_status text;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_primary_cost_known boolean;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_model_cost_usd numeric(12,6);
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_parent_id uuid;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_sample_tenant uuid;
+ALTER TABLE tank.shadow ADD COLUMN IF NOT EXISTS routellm_config text;
+ALTER TABLE tank.shadow ADD COLUMN IF NOT EXISTS candidate_ledger_id uuid;
+CREATE INDEX IF NOT EXISTS shadow_routellm_tenant_task ON tank.shadow(tenant_id,task_type,routellm_config)
+    WHERE routellm_config IS NOT NULL;
