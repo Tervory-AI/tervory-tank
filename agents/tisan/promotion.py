@@ -106,7 +106,10 @@ class Journal:
             if not row:
                 raise Refused('site not registered')
             if row['active']:
-                raise Refused('site has an unresolved operation')
+                active = db.execute('SELECT result FROM operations WHERE tenant=? AND site=? AND id=?',
+                                    (tenant, site, row['active'])).fetchone()
+                if action != 'rollback' or not active or active['result'] != 'failed':
+                    raise Refused('site has an unresolved operation')
             stamp = now()
             db.execute('INSERT INTO operations VALUES(?,?,?,?,?,?,?,?,?)',
                        (tenant, site, operation, action, actor, stamp, stamp, 'checking', json.dumps({'expected': expected})))
@@ -144,14 +147,14 @@ class Coolify:
         except (httpx.HTTPError, ValueError):
             raise Refused('Coolify response unavailable') from None
 
-    async def current(self, app):
+    async def current(self, app, *, allow_failed=False):
         info = await self.call('GET', '/applications/' + identifier(app))
         settings = info.get('settings') or {}
-        if info.get('uuid') != app or info.get('status') != 'running:healthy' or settings.get('is_auto_deploy_enabled') is not False:
+        if info.get('uuid') != app or (not allow_failed and info.get('status') != 'running:healthy') or settings.get('is_auto_deploy_enabled') is not False:
             raise Refused('application must be healthy with automatic deployment disabled')
         history = await self.call('GET', '/deployments/applications/' + app, params={'take': 1, 'skip': 0})
         rows = history.get('deployments', [])
-        if len(rows) != 1 or rows[0].get('status') != 'finished' or rows[0].get('pull_request_id') != 0:
+        if len(rows) != 1 or rows[0].get('status') not in (('failed', 'cancelled-by-user', 'cancelled') if allow_failed else ('finished',)) or rows[0].get('pull_request_id') != 0:
             raise Refused('latest application deployment must be finished')
         row = rows[0]
         sha = commit(row.get('commit', ''))
@@ -183,7 +186,9 @@ class Promotion:
         details = {'expected': expected}
         mutation = False
         try:
-            production = await self.coolify.current(config['production'])
+            prior = next((r for r in self.journal.history(tenant, site) if r['result'] in ('succeeded', 'failed')), None)
+            recovery = action == 'rollback' and prior is not None and prior['result'] == 'failed'
+            production = await self.coolify.current(config['production'], allow_failed=recovery)
             details['previous'] = production['commit']
             if action == 'promote':
                 staging = await self.coolify.current(config['staging'])
@@ -211,12 +216,16 @@ class Promotion:
                 if await self.coolify.current(config['staging']) != staging:
                     raise Refused('staging changed during checks')
             else:
-                prior = next((r for r in self.journal.history(tenant, site) if r['result'] == 'succeeded'), None)
                 if not prior or prior['details']['commit'] != production['commit']:
-                    raise Refused('production differs from last successful operation')
+                    raise Refused('production differs from last recorded operation')
+                if recovery and prior['details'].get('deployment') != production['deployment']:
+                    raise Refused('failed production deployment changed')
                 if expected != prior['details']['previous']:
                     raise Refused('rollback must restore previous production commit')
-            if await self.coolify.current(config['production']) != production:
+                if recovery:
+                    details['recovery_of'] = prior['id']
+                    details['previous'] = prior['details']['previous']
+            if await self.coolify.current(config['production'], allow_failed=recovery) != production:
                 raise Refused('production changed during checks')
             details['commit'] = expected
             self.journal.update(tenant, site, operation, 'pinning', details)
