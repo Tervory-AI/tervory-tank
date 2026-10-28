@@ -81,7 +81,7 @@ def run(
     for spec in specs:
         store.upsert_source(_for_store(spec))
         conn.commit()
-        if _hold(spec, live=live, explicit=explicit):
+        if not spec.enabled or _hold(spec, live=live, explicit=explicit):
             continue
         started = utc_now()
         rows = 0
