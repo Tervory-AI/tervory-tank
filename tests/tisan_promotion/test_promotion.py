@@ -50,6 +50,8 @@ class FakeCoolify:
                 return {'deployments': [self.deployments[self.latest[app]]], 'count': 1}
             if path == 'deploy':
                 app = (await request.json())['uuid']
+                if self.sha[app] == self.pin[app] and not (await request.json()).get('force'):
+                    return {'deployments': [{'resource_uuid': app, 'message': 'skipped unchanged deployment'}]}
                 name = 'release-' + str(len(self.deployments))
                 self.latest[app] = name
                 self.deployments[name] = {'deployment_uuid': name, 'commit': self.pin[app],
@@ -257,7 +259,7 @@ async def test_explicit_rollback_after_acknowledged_terminal_failure(rig, state)
     assert rollback['result'] == 'pending'
     assert rollback['details']['recovery_of'] == op
     assert rollback['details']['commit'] == OLD
-    assert fake.writes[-2:] == [('PATCH', 'applications/prod', {'git_commit_sha': OLD}), ('POST', 'deploy', {'uuid': 'prod'})]
+    assert fake.writes[-2:] == [('PATCH', 'applications/prod', {'git_commit_sha': OLD}), ('POST', 'deploy', {'uuid': 'prod', 'force': True})]
     assert (await service.status(TENANT, 'site', rollback['id']))['result'] == 'succeeded'
     assert Journal(journal.path).get(TENANT, 'site', op)['result'] == 'failed'
 
@@ -301,3 +303,12 @@ async def test_malformed_gate_and_unresolved_queue_revision(rig):
     result = await promote(service)
     fake.deployments[result['details']['deployment']]['commit'] = 'HEAD'
     assert (await service.status(TENANT, 'site', result['id']))['result'] == 'pending'
+
+
+@pytest.mark.asyncio
+async def test_already_current_promotion_is_a_recorded_noop(rig):
+    fake, _, service, _, _ = rig
+    fake.sha['prod'] = fake.pin['prod'] = NEW
+    fake.deployments['prod-build']['commit'] = NEW
+    assert (await promote(service))['result'] == 'refused'
+    assert not fake.writes
