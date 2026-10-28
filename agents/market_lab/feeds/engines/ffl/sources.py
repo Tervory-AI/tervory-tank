@@ -42,6 +42,25 @@ def _link(
 def sources() -> list[SourceSpec]:
     rows: list[SourceSpec] = [
         _copy(
+            id="comtrade_preview", name="UN Comtrade", kind="series",
+            url="https://comtradeapi.un.org/public/v1/preview/C/A/HS",
+            licence="UN Comtrade public preview; up to 500 records per request; attribution to UN Statistics Division.",
+            terms_checked_at="2026-10-28", cadence="monthly", adapter="comtrade_preview",
+            config={"files": ["comtrade_preview.json"], "reporter": "842", "codes": lists.HS_CODES},
+        ),
+        _copy(
+            id="searxng", name="SearXNG", kind="events", url="https://docs.searxng.org/",
+            licence="Public search result titles, links and supplied snippets only; source publishers retain their rights.",
+            terms_checked_at="2026-10-28", cadence="daily", adapter="searxng",
+            config={"files": ["searxng.json"], "queries": ["firearms ammunition manufacturing trade"]},
+        ),
+        SourceSpec(
+            id="uspto", name="USPTO", kind="events", url="https://data.uspto.gov/",
+            licence="USPTO Open Data Portal; API access requires registration and a key.",
+            terms_checked_at="2026-10-28", cadence="weekly", enabled=False, allow_bulk=False,
+            adapter="link", key_name="USPTO_API_KEY", key_required=True,
+        ),
+        _copy(
             id="sec_edgar",
             name="Recent SEC company filings",
             kind="events",
