@@ -1,3 +1,35 @@
+diff --git a/tests/custom-nation-privacy-slot.test.ts b/tests/custom-nation-privacy-slot.test.ts
+new file mode 100644
+index 0000000..680fc6a
+--- /dev/null
++++ b/tests/custom-nation-privacy-slot.test.ts
+@@ -0,0 +1,26 @@
++import { expect, it } from "vitest";
++import { customNation, neutral } from "../widget/src/theme/themes";
++import { renderView, type View } from "../widget/src/ui/render";
++
++it.each([customNation, neutral])("keeps the $id privacy slot empty and hidden while wording is unavailable", (theme) => {
++  const state: View = {
++    theme, screen: "home", query: "", results: [], selectedId: null,
++    product: null, setups: [], activeTier: null, graph: null, expanded: [],
++    swap: null, askQuestion: "", askAnswer: null, askCites: "", linkUrl: "",
++    linkRequestId: null, linkError: null, quote: null, message: null,
++    customizedTiers: [],
++  };
++  expect(renderView(state)).not.toContain("data-quote-privacy");
++  state.quote = {
++    kind: "setup", title: "Offline setup", totalLabel: "", name: "", email: "",
++    error: null, requestId: null,
++  };
++  const quote = renderView(state);
++  expect(quote.match(/<div data-quote-privacy hidden><\/div>/g)).toHaveLength(1);
++  expect(quote).toContain(`${theme.copy.quoteSend}</button>\n      <div data-quote-privacy hidden></div>`);
++  state.quote = null;
++  state.screen = "missing";
++  const link = renderView(state);
++  expect(link.match(/<div data-quote-privacy hidden><\/div>/g)).toHaveLength(1);
++  expect(link).toContain(`${theme.copy.requestQuote}</button>\n      <div data-quote-privacy hidden></div>`);
++});
 diff --git a/tests/rig4.test.ts b/tests/rig4.test.ts
 index 884811b..91369d5 100644
 --- a/tests/rig4.test.ts
@@ -72,7 +104,7 @@ index 9625631..573a4de 100644
 @@ -36 +35,0 @@ export async function mountViewer(host: HTMLElement, client: ThreeClient, initia
 -  if (initial.sample) { const sample = node("p", "SAMPLE DATA"); sample.className = "sample"; root.append(sample); }
 diff --git a/widget/src/ui/render.ts b/widget/src/ui/render.ts
-index f466d03..eb584a4 100644
+index f466d03..3b754c8 100644
 --- a/widget/src/ui/render.ts
 +++ b/widget/src/ui/render.ts
 @@ -2 +2 @@ import type { Contact, GraphResponse, Price, Product, RequestAck, Setup, SetupPa
@@ -80,12 +112,23 @@ index f466d03..eb584a4 100644
 +import { detailOf, formatPrice, matchNote, summaryOf, whyLines } from "../api/format";
 @@ -119 +118,0 @@ function results(view: View): string {
 -      ${view.results.some(isSample) ? sampleBadge(copy.sampleLabel) : ""}
-@@ -190 +188,0 @@ function setupScreen(view: View): string {
+@@ -157,0 +157 @@ function missing(view: View): string {
++      ${quotePrivacySlot()}
+@@ -190 +189,0 @@ function setupScreen(view: View): string {
 -        ${isSample(product) || view.setups.some((setup) => setup.parts.some((part) => isSample(part.product))) ? sampleBadge(copy.sampleLabel) : ""}
-@@ -330,2 +327,0 @@ function explore(view: View): string {
+@@ -330,2 +328,0 @@ function explore(view: View): string {
 -    ${[...(product ? [product] : []), ...branches.flatMap((branch) => branch.products)].some(isSample)
 -      ? sampleBadge(copy.sampleLabel, "sample sample-float") : ""}
-@@ -427,3 +422,0 @@ function photo(product: Product, view: View, size: string): string {
+@@ -375,0 +373,6 @@ function askBox(view: View): string {
++function quotePrivacySlot(): string {
++  // Job 8 stops here until the founder's Rig Figma notice is available.
++  // An empty hidden slot adds no copy, link, field or visible layout.
++  return '<div data-quote-privacy hidden></div>';
++}
++
+@@ -402,0 +406 @@ function quoteDialog(view: View): string {
++      ${quotePrivacySlot()}
+@@ -427,3 +430,0 @@ function photo(product: Product, view: View, size: string): string {
 -function sampleBadge(label: string, className = "sample"): string {
 -  return `<span class="${className}">${esc(label)}</span>`;
 -}

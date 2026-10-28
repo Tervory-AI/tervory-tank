@@ -17,6 +17,7 @@ from rigbox.service import Service  # noqa: E402
 from rigbox.store import MemoryStore, PgStore  # noqa: E402
 from rigbox.quotes.keys import embed_snippet  # noqa: E402
 from test_rig_postgres import _admin_url, _create_database, _database_url, _drop_database  # noqa: E402
+from test_rig_quotes_browser import widget_server  # noqa: E402,F401 -- existing offline browser fixture
 
 
 @pytest_asyncio.fixture(params=['memory', 'postgres'])
@@ -98,3 +99,35 @@ async def test_invalid_stored_theme_cannot_issue_an_embed_key(monkeypatch):
     with pytest.raises(ValueError):
         await retailer.embed_key(str(uuid4()), {'origins': ['https://example.test']})
     issue.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('theme', ['neutral', 'custom-nation'])
+@pytest.mark.parametrize('width', [390, 1440])
+async def test_shipped_privacy_slots_are_empty_hidden_and_have_no_link(real_chromium, widget_server, theme, width):  # noqa: F811
+    from playwright.async_api import expect
+    page = await real_chromium.new_page(viewport={'width': width, 'height': 900})
+    errors = []
+    page.on('pageerror', lambda error: errors.append(str(error)))
+    await page.route('**/*', lambda route: route.continue_() if route.request.url.startswith(widget_server + '/') else route.abort())
+    await page.goto(widget_server + '/widget/test')
+    await page.locator('tervory-rig').evaluate('(el, theme) => el.setAttribute("theme", theme)', theme)
+    await page.get_by_role('searchbox').fill('Core')
+    await page.get_by_role('button', name='Search', exact=True).click()
+    await page.locator('[data-action="quote-product"]').first.click()
+    quote_slot = page.locator('form.quote [data-quote-privacy]')
+    await expect(quote_slot).to_have_count(1)
+    await expect(quote_slot).to_have_attribute('hidden', '')
+    await expect(quote_slot).to_be_hidden()
+    assert await quote_slot.inner_html() == ''
+    assert await quote_slot.locator('a,input,button').count() == 0
+    await page.locator('[data-action="close-quote"]').click()
+    await page.get_by_role('searchbox').fill('zzzzzzzzzzzzzz')
+    await page.get_by_role('button', name='Search', exact=True).click()
+    link_slot = page.locator('.link-form [data-quote-privacy]')
+    await expect(link_slot).to_have_count(1)
+    await expect(link_slot).to_be_hidden()
+    assert await link_slot.inner_html() == ''
+    assert await page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
+    assert not errors
+    await page.close()
