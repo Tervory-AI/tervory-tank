@@ -5,6 +5,8 @@ results make the packages available to the existing founder approval controls.
 """
 from __future__ import annotations
 
+from tenant_db import tenant_scope
+
 import asyncio
 import json
 import logging
@@ -67,7 +69,8 @@ def install(app, tank):
     @app.on_event("startup")
     async def start():
         nonlocal task
-        task = asyncio.create_task(evaluate())
+        with tenant_scope(None, administrative=True):
+            task = asyncio.create_task(evaluate())
 
     @app.on_event("shutdown")
     async def stop():
