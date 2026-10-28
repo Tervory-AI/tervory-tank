@@ -236,3 +236,39 @@ async def test_preflight_transport_failure_releases_reservation(rig, callback, e
     setattr(service, callback, prior)
     assert (await promote(service))['result'] == 'pending'
     assert len(fake.writes) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('state', ['failed', 'cancelled-by-user'])
+async def test_explicit_rollback_after_acknowledged_terminal_failure(rig, state):
+    fake, journal, service, _, _ = rig
+    fake.pending = True
+    op = str(uuid.uuid4())
+    pending = await promote(service, op)
+    fake.deployments[pending['details']['deployment']]['status'] = state
+    failed = await service.status(TENANT, 'site', op)
+    assert failed['result'] == 'failed'
+    assert (await promote(service, op))['result'] == 'failed'
+    assert len(fake.writes) == 2
+    with pytest.raises(Refused):
+        await promote(service)
+    fake.pending = False
+    rollback = await service.run(TENANT, 'site', str(uuid.uuid4()), 'rollback', 'founder', OLD)
+    assert rollback['result'] == 'pending'
+    assert rollback['details']['recovery_of'] == op
+    assert rollback['details']['commit'] == OLD
+    assert fake.writes[-2:] == [('PATCH', 'applications/prod', {'git_commit_sha': OLD}), ('POST', 'deploy', {'uuid': 'prod'})]
+    assert (await service.status(TENANT, 'site', rollback['id']))['result'] == 'succeeded'
+    assert Journal(journal.path).get(TENANT, 'site', op)['result'] == 'failed'
+
+
+@pytest.mark.asyncio
+async def test_failed_rollback_refuses_replaced_or_inflight_deployment(rig):
+    fake, _, service, _, _ = rig
+    pending = await promote(service)
+    fake.deployments[pending['details']['deployment']]['status'] = 'failed'
+    assert (await service.status(TENANT, 'site', pending['id']))['result'] == 'failed'
+    fake.deployments[pending['details']['deployment']]['status'] = 'in_progress'
+    result = await service.run(TENANT, 'site', str(uuid.uuid4()), 'rollback', 'founder', OLD)
+    assert result['result'] == 'refused'
+    assert len(fake.writes) == 2
