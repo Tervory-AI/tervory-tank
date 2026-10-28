@@ -174,7 +174,7 @@ class AuditStore:
         return unpack(row)
 
     async def histogram(self, tenant: uuid.UUID, campaign: uuid.UUID) -> dict[str, Any]:
-        async with self.rt.pool().acquire() as conn, conn.transaction(isolation="repeatable_read", readonly=True):
+        async with self.rt.pool().acquire(isolation="repeatable_read", readonly=True) as conn:
             found = await conn.fetchval("SELECT id FROM tank.base_campaigns WHERE tenant_id=$1 AND id=$2", tenant, campaign)
             if not found:
                 raise HTTPException(404, "Campaign not found.")
