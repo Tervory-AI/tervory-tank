@@ -353,6 +353,22 @@ The founder's ask (20 Oct): a conversation window where you say what you want, a
 - **FFL** is the only industry engine, with no template for the next vertical.
 - **ZA** is stopped (`ZA_OFFLINE`).
 
+### Trigger: copy, articles and chat writing (new product, founder 27 Oct 19:37)
+- **What it is:** copywriting, website and app copy, articles and document writing, as a chat product for any industry.
+- **How it's built:** the same ladder as every product.
+  - Our own free stack first: agent-style rules, proselint and LanguageTool self-hosted, plus one brand voice file per client.
+  - Paid tools are teachers in batch only, never a runtime dependency.
+  - A paid tool is dropped once ours wins at the 99% bar.
+- **Where it fits:**
+  - Tisan uses Trigger's skills for site copy.
+  - Legal drafting goes to Zenas (clause library, cite checks), so it isn't built twice.
+  - Each brand's voice file is its rule in the rule cache.
+- **Checks have no model calls:** practical-prose's scorer uses a model, so only its rubric is used, as a checklist.
+- **Before building:**
+  - Grammarly's developer API was, I believe, closed in 2024. Check that before planning on Grammarly as a teacher.
+  - The name is close to Trigger.dev; worth a trademark check.
+- **Status:** not started. Plan and checked tool list: Notion page "Trigger: copy, articles and chat writing".
+
 ### Not started
 - **In-video shopping:** brief only (`docs/cursor/AGENT-in-video-shopping.md`, `VSHOP-1-phase-1.md`).
 - **ZA2:** stopped.
