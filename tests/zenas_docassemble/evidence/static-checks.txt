@@ -1,0 +1,9 @@
+$ /workspace/.tervory-cloud/venv/bin/ruff check agents/zenas/core/docassemble.py agents/zenas/core/drafting.py agents/zenas/core/service.py agents/zenas/docassemble/backup.py agents/zenas/docassemble/package/__init__.py agents/zenas/docassemble/package/assembly.py tank/skills/zenas.shared/drafting.py tests/test_zenas_citation_source_links.py tests/test_zenas_draft.py tests/zenas_docassemble/__init__.py tests/zenas_docassemble/api_stub.py tests/zenas_docassemble/legacy_drafting.py tests/zenas_docassemble/test_assembly.py tests/zenas_docassemble/test_deployment.py --select E9,F --output-format concise
+All checks passed!
+Exit code: 0
+
+$ git diff --check founder/main
+Exit code: 0
+
+$ git diff --name-only founder/main -- workspace docs/figma
+Exit code: 0
