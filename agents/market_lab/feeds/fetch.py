@@ -438,7 +438,13 @@ def _live_sec_submissions(source: SourceSpec, client: PoliteClient, store: Store
     return inserted
 
 
+from feeds.keyless import fetch_comtrade, fetch_rss, fetch_searxng
+
+
 _HANDLERS = {
+    "rss": fetch_rss,
+    "comtrade_preview": fetch_comtrade,
+    "searxng": fetch_searxng,
     "socrata_monthly": _live_socrata_monthly,
     "sec_submissions": _live_sec_submissions,
     "listing": _live_listing,
