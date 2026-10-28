@@ -12,7 +12,6 @@ import re
 import signal
 from pathlib import Path
 
-import httpx
 import yaml
 
 from passive_store import target_url
@@ -25,9 +24,12 @@ def zap_plan(target: str, directory: Path) -> dict:
     target_url(target)
     return {'env': {'contexts': [{'name': 'verified', 'urls': [target],
                  'includePaths': [re.escape(target) + '.*']}],
-                 'parameters': {'failOnError': True, 'failOnWarning': False}},
+                 'parameters': {'failOnError': True, 'failOnWarning': True}},
             'jobs': [
                 {'type': 'passiveScan-config', 'parameters': {'scanOnlyInScope': True}},
+                # Reuse ZAP's existing pinned proxy/lease for the load check.
+                # A mismatch warns; failOnWarning refuses the whole assessment.
+                {'type': 'requestor', 'requests': [{'url': target, 'method': 'GET', 'responseCode': 200}]},
                 {'type': 'spider', 'parameters': {'context': 'verified', 'url': target,
                     'maxDuration': 1, 'maxDepth': 2, 'maxChildren': 5,
                     'threadCount': 1, 'processForm': False,
@@ -127,11 +129,8 @@ def nuclei_findings(report: str, target: str) -> list[dict]:
 
 async def collect(target: str, directory: Path, *, run=command) -> list[dict]:
     target_url(target)
-    # Prove a response exists; redirects and failures are not a clean assessment.
-    async with httpx.AsyncClient(proxy=PROXY, trust_env=False, follow_redirects=False, timeout=20) as client:
-        async with client.stream('GET', target) as response:
-            if response.status_code != 200:
-                raise RuntimeError('target did not load')
+    # No independent HTTP client accepts a caller URL. ZAP performs the root
+    # load check only after the persisted DNS-authorized egress lease exists.
     plan = directory / 'baseline.yaml'
     plan.write_text(yaml.safe_dump(zap_plan(target, directory)))
     rc, _, _ = await run(zap_command(plan, directory / 'zap-home'), directory)
