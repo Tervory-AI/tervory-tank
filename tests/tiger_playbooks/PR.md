@@ -15,3 +15,13 @@ reconfirmation, restart and privacy. Exact results and file/line inventory
 will replace this checkpoint. Founder browser proof is pending deployment.
 
 Claude opens the PR; git pushes only, no GitHub API or merge.
+
+Implementation checkpoint (after `source /workspace/tervory-env/activate.sh`):
+
+```sh
+python -m pytest -q tests/tiger_playbooks tests/tiger_alert_page/test_page_changed.py tests/test_tiger_missing_name.py
+```
+
+Result: **41 passed in 2.28s**, exit 0. Output: `evidence/focused.txt`.
+The new cases run against memory and real disposable Postgres, with the
+additive schema applied twice. Broader regression proof follows.

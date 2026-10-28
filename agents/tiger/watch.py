@@ -11,6 +11,7 @@ import asyncio
 import hashlib
 import ipaddress
 import json
+import logging
 import re
 import socket
 import time
@@ -27,6 +28,7 @@ from alert_email import letter_for
 from change_alert import price_moved, record_stock, stock_reading, stock_statements
 from chassis.cron import is_due
 from chassis.db import schema_for
+from domain_playbooks import MemoryPlaybooks, PgPlaybooks, public_marker, public_page
 from page_guard import layout_from_evidence, learn_layout, read_page
 
 SCHEMA = schema_for("tiger")
@@ -638,6 +640,8 @@ async def ensure_tables(conn: Any, schema: str = SCHEMA) -> None:
     ]
     for statement in statements:
         await conn.execute(statement)
+    from domain_playbooks import ensure_tables as ensure_playbooks
+    await ensure_playbooks(conn, schema)
 
 
 def _watch_out(row: Any) -> dict[str, Any]:
@@ -682,7 +686,7 @@ def _alert_out(row: Any) -> dict[str, Any]:
     }
 
 
-class PgStore:
+class PgStore(PgPlaybooks):
     def __init__(self, pool: Any, schema: str = SCHEMA) -> None:
         self.pool = pool
         self.schema = schema
@@ -893,7 +897,7 @@ class PgStore:
             )
 
 
-class MemoryStore:
+class MemoryStore(MemoryPlaybooks):
     """In-memory stand-in used by tests. Same tenant filter as the SQL."""
 
     def __init__(self) -> None:
@@ -1157,15 +1161,30 @@ async def run_check(
     extracted = await extract(html, url)
     items = list(extracted.get("items") or [])
     stored = layout_from_evidence(previous_row.get("evidence") if previous_row else None)
-    if stored is None or stored.get("primary") == "ocr":
-        signature = learn_layout(html, extracted)
-        if not signature.get("primary"):
+    shared_page = public_page(url, page)
+    playbook, attempted, decision = None, None, None
+    if shared_page:
+        try:
+            playbook = await store.get_playbook(shared_page[0])
+        except (asyncpg.PostgresError, OSError, ValueError):
+            logging.getLogger(__name__).warning("Domain playbook unavailable; using the URL layout.")
+    if stored is None and playbook and playbook['marker']:
+        trial = read_page(html, playbook['marker'], extracted)
+        attempted = trial['status'] == 'read'
+        if attempted:
+            decision = trial
+    if decision is None:
+        if stored is None or stored.get("primary") == "ocr":
+            signature = learn_layout(html, extracted)
+            if not signature.get("primary"):
+                signature = stored
+        else:
             signature = stored
-    else:
-        signature = stored
-    decision = read_page(html, signature, extracted)
+        decision = read_page(html, signature, extracted)
+        if playbook and stored == playbook['marker'] and stored is not None:
+            attempted = decision['status'] == 'read'
     png = page.get("png_base64")
-    layout = decision.get("layout") or signature
+    layout = decision.get("layout")
     chosen = None
     if decision["status"] == "read":
         method = decision.get("method") or extracted.get("method")
@@ -1212,6 +1231,12 @@ async def run_check(
         tenant_id, url, clock(), price, currency, availability, method,
         _reading_evidence(_evidence(method, price, saved_file, layout, availability), name, last_name, issue),
     ))
+    if shared_page and playbook:
+        confirmed = public_marker(layout) if not issue and decision['status'] == 'read' and method != 'ocr' else None
+        try:
+            await store.record_playbook(*shared_page, playbook['generation'], attempted, confirmed)
+        except (asyncpg.PostgresError, OSError, ValueError):
+            logging.getLogger(__name__).warning("Domain layout confirmation was not saved.")
     previous = await store.previous_observation(tenant_id, url, current["id"])
     stock_before = await _last_known_stock(store, tenant_id, url, current["id"])
     found = alerts_for(previous, current, watch.get("threshold") or 0, stock_before,

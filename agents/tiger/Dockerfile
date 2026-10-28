@@ -13,6 +13,7 @@ COPY tiger/alert_email.py /app/alert_email.py
 COPY rig/rigbox/reserve.py /app/agents/rig/rigbox/reserve.py
 COPY tiger/change_alert.py /app/change_alert.py
 COPY tiger/page_guard.py /app/page_guard.py
+COPY tiger/domain_playbooks.py /app/domain_playbooks.py
 COPY tiger/feedback.py /app/feedback.py
 COPY tiger/gold_sources.py /app/gold_sources.py
 COPY tiger/gold /app/gold
