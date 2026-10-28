@@ -47,7 +47,8 @@ def leaks(base: str | None, temp: Path, output: Path) -> bool:
 def semgrep(base: str | None, temp: Path, output: Path) -> bool:
     raw = temp / "semgrep.json"
     args = ["semgrep", "scan", "--config", "auto", "--metrics", "off",
-            "--disable-nosem", "--no-git-ignore", "--json", "--output", str(raw)]
+            "--disable-version-check", "--disable-nosem", "--no-git-ignore",
+            "--json", "--output", str(raw)]
     if base:
         args += ["--baseline-commit", base]
     run([*args, "."])
@@ -148,9 +149,10 @@ def main() -> int:
             failed = {"gitleaks": leaks, "semgrep": semgrep, "osv": osv}[args.tool](
                 base, Path(directory), args.output)
         status["result"] = "findings" if failed else "clean"
-    except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError):
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError) as error:
         # No exception text: a tool/library error can echo source or credentials.
         status["result"] = "incomplete"
+        status["error_type"] = type(error).__name__
         failed = True
     write(args.output / f"{args.tool}-status.json", status)
     print(f"{args.tool}: {status['result']}")
