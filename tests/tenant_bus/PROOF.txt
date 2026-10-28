@@ -1,0 +1,173 @@
+Offline E1–E3 proof; disposable local Redis 7.4.12 and PostgreSQL 16.15 only. No live tenant or model calls.
+
+Command:
+TENANT_BUS_REDIS_URL=redis://127.0.0.1:56384/0 POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:55443/postgres /tmp/command-repo-venv/bin/python -m pytest tests/tenant_bus -q -s --disable-warnings
+Result: exit 0
+...........{"ts": "2026-10-28T16:30:24.753828+00:00", "level": "info", "agent": "tiger", "msg": "job queued", "tenant_id": "11111111-1111-4111-8111-111111111111", "job_id": "f05fb3a2-62c2-4468-8eb3-633af5deff33"}
+{"ts": "2026-10-28T16:30:24.756713+00:00", "level": "info", "agent": "tiger", "msg": "job queued", "tenant_id": "11111111-1111-4111-8111-111111111111", "job_id": "ba26e60a-8541-4648-9e9d-51c13522ddd7"}
+.......REAL TANK STARTUP TAIL
+INFO:     Waiting for application startup.
+Room gold response rejected: base
+Room gold response rejected: tiger
+Room gold response rejected: market_lab
+Room gold response rejected: rig
+Room gold response rejected: zenas
+Room gold response rejected: radix
+Room gold response rejected: tisan
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:33949 (Press CTRL+C to quit)
+The reference could not be loaded: The Base reference service could not be reached. (error type: ConnectError)
+INFO:     127.0.0.1:58136 - "GET /health HTTP/1.1" 200 OK
+OFFLINE TIGER -> TANK -> REDIS -> RIG JSON
+{"has_more": false, "history": [{"currency": "USD", "event_id": "5ca159d7-5911-5267-a197-73a0f9881530", "observed_at": "2026-10-28T16:30:30.967914+00:00", "price": "145.00"}], "product_id": "real-catalogue-id", "tenant_id": "11111111-1111-4111-8111-111111111111"}
+..
+20 passed, 6 warnings in 9.27s
+
+
+Command:
+POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:55443/postgres /tmp/command-repo-venv/bin/python -m pytest tests/test_agent_chassis.py tests/test_b3_base_room.py tests/test_tiger.py tests/rig_tiger_prices tests/test_market_lab.py tests/test_tisan_scaffold.py tests/test_bucket1_radix.py tests/test_secrets.py tests/test_tank_boots.py tests/test_tank_one_door.py -q --disable-warnings
+Result: exit 0
+........................................................................ [ 50%]
+.......................................................................  [100%]
+143 passed, 11 warnings in 39.93s
+
+
+Command:
+/tmp/command-repo-venv/bin/python -m pytest tests/test_radix_gold.py -q --disable-warnings
+Result: exit 0
+......                                                                   [100%]
+6 passed in 0.48s
+
+
+Command:
+/tmp/command-repo-venv/bin/python -m pytest tests/test_zenas_pool_corpus.py tests/test_zenas_pool_versions.py tests/test_zenas_pool_region.py tests/test_zenas_pool_load_jobs.py -q --disable-warnings
+Result: exit 0
+..................                                                       [100%]
+18 passed in 1.11s
+
+
+Command (working directory workspace):
+node node_modules/typescript/bin/tsc --noEmit
+Result: exit 0; no output
+
+
+Command (working directory workspace):
+NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_ZHVtbXkuY2xlcmsuYWNjb3VudHMuZGV2JA== CLERK_SECRET_KEY=sk_test_dummy node node_modules/next/dist/bin/next build
+Result: exit 0
+   ▲ Next.js 15.5.28
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 7.4s
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/38) ...
+   Generating static pages (9/38) 
+   Generating static pages (18/38) 
+   Generating static pages (28/38) 
+ ✓ Generating static pages (38/38)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                    Size  First Load JS
+┌ ƒ /                                         187 B         107 kB
+├ ƒ /_not-found                               998 B         104 kB
+├ ƒ /access                                  4.2 kB         107 kB
+├ ƒ /access/api/[...path]                     263 B         103 kB
+├ ƒ /access/live/[id]                       1.46 kB         105 kB
+├ ƒ /admin                                  6.33 kB         113 kB
+├ ƒ /admin/autumbra                         4.37 kB         111 kB
+├ ƒ /admin/feeds                            1.07 kB         108 kB
+├ ƒ /admin/ghost                              263 B         103 kB
+├ ƒ /admin/homes                            1.02 kB         107 kB
+├ ƒ /admin/unpriced                           263 B         103 kB
+├ ƒ /api/autumbra/receipts/weekly/[tenant]    263 B         103 kB
+├ ƒ /api/autumbra/undo                        263 B         103 kB
+├ ƒ /api/base                                 263 B         103 kB
+├ ƒ /api/base/context-trial                   263 B         103 kB
+├ ƒ /api/base/export                          263 B         103 kB
+├ ƒ /api/billing/webhook                      263 B         103 kB
+├ ƒ /api/case-studies/[[...path]]             263 B         103 kB
+├ ƒ /api/chat                                 263 B         103 kB
+├ ƒ /api/feedback                             263 B         103 kB
+├ ƒ /api/health                               263 B         103 kB
+├ ƒ /api/ledger                               263 B         103 kB
+├ ƒ /api/skala                                263 B         103 kB
+├ ƒ /api/skala/gold                           263 B         103 kB
+├ ƒ /api/tank                                 263 B         103 kB
+├ ƒ /api/tank/chat                            263 B         103 kB
+├ ƒ /api/tasks                                263 B         103 kB
+├ ƒ /api/zenas/answers                        263 B         103 kB
+├ ƒ /api/zenas/documents/[id]/reviews         263 B         103 kB
+├ ƒ /api/zenas/feeds                          263 B         103 kB
+├ ƒ /api/zenas/feeds/load                     263 B         103 kB
+├ ƒ /api/zenas/feeds/region                   263 B         103 kB
+├ ƒ /api/zenas/feeds/region/convert           263 B         103 kB
+├ ƒ /api/zenas/feeds/region/load              263 B         103 kB
+├ ƒ /api/zenas/matters                        263 B         103 kB
+├ ƒ /api/zenas/matters/[id]/documents         263 B         103 kB
+├ ƒ /api/zenas/matters/[id]/release           263 B         103 kB
+├ ƒ /api/zenas/review                         263 B         103 kB
+├ ƒ /api/zenas/review-switch                  263 B         103 kB
+├ ƒ /api/zenas/selftest                       263 B         103 kB
+├ ƒ /api/zenas/tenants                        263 B         103 kB
+├ ƒ /autumbra                                 173 B         103 kB
+├ ƒ /autumbra/receipts/weekly/[tenant]        263 B         103 kB
+├ ƒ /autumbra/undo/[id]                     1.13 kB         104 kB
+├ ƒ /base                                   19.4 kB         122 kB
+├ ƒ /base/download                            263 B         103 kB
+├ ƒ /base/product/[...path]                   263 B         103 kB
+├ ƒ /billing                                  366 B         103 kB
+├ ƒ /chats                                  10.4 kB         114 kB
+├ ƒ /chats/api/[...path]                      263 B         103 kB
+├ ƒ /chats/evidence/[thread]                  174 B         103 kB
+├ ƒ /chats/evidence/[thread]/[row]            174 B         103 kB
+├ ƒ /control                                3.21 kB         106 kB
+├ ƒ /control/signups                          169 B         103 kB
+├ ƒ /data                                   3.58 kB         107 kB
+├ ƒ /ledger                                   263 B         103 kB
+├ ƒ /market-lab                             10.9 kB         114 kB
+├ ƒ /market-lab/ask                           263 B         103 kB
+├ ƒ /market-lab/files                         263 B         103 kB
+├ ƒ /market-lab/sources/[id]                  171 B         103 kB
+├ ƒ /market-lab/warnings/feedback             263 B         103 kB
+├ ƒ /matters                                1.27 kB         104 kB
+├ ƒ /moot                                     181 B         107 kB
+├ ƒ /moot/[match]                             170 B         103 kB
+├ ƒ /onboarding                             6.05 kB         139 kB
+├ ƒ /onboarding/status                        263 B         103 kB
+├ ƒ /prices                                   323 B         103 kB
+├ ƒ /radix                                  10.3 kB         143 kB
+├ ƒ /radix/plugins/files                      263 B         103 kB
+├ ƒ /radix/requests                           263 B         103 kB
+├ ƒ /review                                 2.86 kB         109 kB
+├ ƒ /rig                                      10 kB         113 kB
+├ ƒ /rig/admin                              6.48 kB         110 kB
+├ ƒ /rig/admin/api                            263 B         103 kB
+├ ƒ /rig/admin/three-d                      1.08 kB         104 kB
+├ ƒ /rig/admin/three-d/file/[...path]         263 B         103 kB
+├ ƒ /rig/api/rig                              263 B         103 kB
+├ ƒ /rig/price-history                        263 B         103 kB
+├ ƒ /sign-in/[[...sign-in]]                   403 B         141 kB
+├ ƒ /sign-up/[[...sign-up]]                   403 B         141 kB
+├ ƒ /skala                                  8.48 kB         112 kB
+├ ƒ /skala/gold                             3.41 kB         106 kB
+├ ƒ /tank                                   5.34 kB         108 kB
+├ ƒ /tank/moa                                 171 B         103 kB
+├ ƒ /tank/proof                             1.86 kB         109 kB
+├ ƒ /tank/proof/export                        263 B         103 kB
+├ ƒ /tank/proof/savings-export                263 B         103 kB
+├ ƒ /tasks                                  1.84 kB         105 kB
+├ ƒ /tiger                                  6.71 kB         110 kB
+├ ƒ /tisan                                  11.6 kB         115 kB
+├ ƒ /zenas                                  11.7 kB         118 kB
+└ ƒ /zenas/feeds                            2.31 kB         109 kB
++ First Load JS shared by all                103 kB
+  ├ chunks/1255-dc3ddf72a1dc71a7.js         46.6 kB
+  ├ chunks/4bd1b696-f785427dddbba9fb.js     54.2 kB
+  └ other shared chunks (total)             2.26 kB
+
+
+ƒ Middleware                                86.1 kB
+
+ƒ  (Dynamic)  server-rendered on demand
+
