@@ -63,6 +63,8 @@ def eval_context(tank: Any, pkg: Any, ctx: Any) -> Any:
             return {"content": content, "cost_usd": cost}
         except Exception:
             ctx.calls += 1  # SkillContext counts successful calls on return.
+            cost = max(cost, float(receipt.get("cost") or 0))
+            ctx.cost_usd += cost
             outcome, error = "failed", "skill_revalidation_call_failed"
             raise RuntimeError("Model revalidation call failed") from None
         finally:
@@ -190,8 +192,10 @@ def install(app: Any, tank: Any) -> None:
         nonlocal task
         task = asyncio.create_task(work())
 
-    @app.on_event("shutdown")
     async def stop():
         if task:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
+
+    # Cancel before Tank closes its HTTP client and database pool.
+    app.router.on_shutdown.insert(0, stop)
