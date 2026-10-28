@@ -27,6 +27,21 @@ def administrative() -> bool:
     return _administrative.get()
 
 
+def activate_tenant(tenant_id):
+    """Called only with the tenant an existing authentication path accepted."""
+    _tenant.set(str(UUID(str(tenant_id))))
+    _administrative.set(False)
+
+
+class TenantContextMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        with tenant_scope(None):
+            await self.app(scope, receive, send)
+
+
 def bind_tenant_endpoints(app):
     """Scope accepted endpoint arguments after FastAPI resolves authentication.
 
@@ -52,6 +67,10 @@ def bind_tenant_endpoints(app):
                 tenant = bound.get("tenant_id", bound.get("tenant"))
                 actor = bound.get("actor") if authenticated_actor else None
                 for name in ("actor", "body", "req", "payload"):
+                    if name == "actor" and not authenticated_actor:
+                        continue
+                    if name != "actor" and tenant is not None:
+                        break
                     value = bound.get(name)
                     if hasattr(value, "tenant_id"):
                         tenant = value.tenant_id
@@ -103,12 +122,14 @@ class TenantPool:
     Unscoped work explicitly sets the empty value and therefore sees no tenants.
     """
 
-    def __init__(self, pool: Any):
+    def __init__(self, pool: Any, admin_pool: Any = None):
         self.raw = pool
+        self.admin_pool = admin_pool
 
     @asynccontextmanager
     async def acquire(self, **kwargs):
-        async with self.raw.acquire(**kwargs) as conn:
+        source = self.admin_pool if administrative() and self.admin_pool is not None else self.raw
+        async with source.acquire(**kwargs) as conn:
             async with conn.transaction():
                 await conn.execute("SELECT set_config('app.tenant_id', $1, true)", _tenant.get())
                 yield conn
