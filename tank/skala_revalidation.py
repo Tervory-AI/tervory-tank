@@ -5,6 +5,8 @@ Only the model calls requested by the package's eval cases may execute.
 """
 from __future__ import annotations
 
+from tenant_db import tenant_scope
+
 import asyncio
 import contextvars
 import json
@@ -190,7 +192,8 @@ def install(app: Any, tank: Any) -> None:
     @app.on_event("startup")
     async def start():
         nonlocal task
-        task = asyncio.create_task(work())
+        with tenant_scope(None, administrative=True):
+            task = asyncio.create_task(work())
 
     async def stop():
         if task:
