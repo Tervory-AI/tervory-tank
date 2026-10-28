@@ -16,52 +16,12 @@ from __future__ import annotations
 
 from collections import defaultdict
 import json
-import logging
 import math
 from statistics import NormalDist
 from typing import Any, Iterable
-from urllib.parse import urlsplit
 
-from base_evidence import FIELDS, social_network
-
-log = logging.getLogger(__name__)
-
-SOURCES = ("own_site", "social_profile", "archive", "google_places", "opencorporates", "other_web")
-_ARCHIVE_HOSTS = ("web.archive.org", "archive.org", "archive.ph", "archive.today")
-_PLACES_HOSTS = ("maps.google.com", "google.com/maps", "maps.app.goo.gl", "goo.gl/maps")
-
-
-def _host(url: Any) -> str:
-    if not isinstance(url, str):
-        return ""
-    try:
-        return (urlsplit(url).hostname or "").lower().removeprefix("www.")
-    except ValueError:
-        return ""
-
-
-def _same_site(host: str, site: str) -> bool:
-    return bool(host and site) and (host == site or host.endswith("." + site) or site.endswith("." + host))
-
-
-def classify(source_url: Any, website_url: Any) -> str | None:
-    """The kind of page a verified field came from; None when there is no usable URL."""
-    host = _host(source_url)
-    if not host:
-        return None
-    url = str(source_url).lower()
-    if any(host == h or host.endswith("." + h) for h in _ARCHIVE_HOSTS):
-        return "archive"
-    if any(marker in url for marker in _PLACES_HOSTS):
-        return "google_places"
-    if host == "opencorporates.com" or host.endswith(".opencorporates.com"):
-        return "opencorporates"
-    if social_network(str(source_url)):
-        return "social_profile"
-    if _same_site(host, _host(website_url)):
-        return "own_site"
-    return "other_web"
-
+from base_source_scores import SOURCES, classify, prefer  # noqa: F401 (public helpers)
+from vendor_meter import PLATFORM
 
 def wilson_lower(correct: int, total: int, confidence: float = .95) -> float | None:
     if total <= 0:
@@ -94,11 +54,12 @@ def scores(audits: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
                 continue
             fields = _obj(record.get("fields")) or {}
             website = (fields.get("website") or {}).get("value") or (fields.get("website") or {}).get("source_url")
-            for name in FIELDS:
-                field = fields.get(name) or {}
+            for name, field in fields.items():
+                if not isinstance(field, dict):
+                    continue
                 if not field.get("verified"):
                     continue
-                kind = classify(field.get("source_url"), website)
+                kind = classify(field.get("source_url"), website, field.get("source_kind") or field.get("source"))
                 if kind:
                     tally[(kind, name)][verdict] += 1
     rows = []
@@ -110,41 +71,29 @@ def scores(audits: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     return rows
 
 
-def prefer(candidates: list[dict[str, Any]], field: str, table: dict[tuple[str, str], float]) -> dict[str, Any] | None:
-    """Of several values for one field, keep the one whose source scores highest.
-
-    `candidates` are field dicts with `source_url` (and the record's website in `website`).
-    Unscored sources rank below scored ones; ties keep the first candidate. Both values are
-    meant to stay in the record's evidence; this only picks which one is kept as the value.
-    """
-    best, best_score = None, -1.0
-    for candidate in candidates:
-        kind = classify(candidate.get("source_url"), candidate.get("website"))
-        score = table.get((kind, field), -0.5) if kind else -1.0
-        if best is None or score > best_score:
-            best, best_score = candidate, score
-    return best
-
-
 async def recompute(conn) -> list[dict[str, Any]]:
     """Recompute every score from all reviewed audits, in one transaction. Counts only."""
-    audits = await conn.fetch("SELECT records, verdicts FROM tank.base_audits WHERE reviewed_at IS NOT NULL")
-    rows = scores(dict(row) for row in audits)
     async with conn.transaction():
-        await conn.execute("DELETE FROM tank.base_source_reliability")
+        # Serialize before reading audit inputs: a slower earlier recompute must
+        # never overwrite the counts from a newly committed audit.
+        await conn.execute("SELECT pg_advisory_xact_lock(4810512)")
+        audits = await conn.fetch("SELECT records, verdicts FROM tank.base_audits WHERE reviewed_at IS NOT NULL")
+        rows = scores(dict(row) for row in audits)
+        await conn.execute("DELETE FROM tank.base_source_reliability WHERE owner_id=$1", PLATFORM)
         for row in rows:
             await conn.execute(
                 """INSERT INTO tank.base_source_reliability
-                (source, field, correct, wrong, checked, accuracy, wilson_lower, audits, updated_at)
-                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,now())""",
-                row["source"], row["field"], row["correct"], row["wrong"], row["checked"],
+                (owner_id, source, field, correct, wrong, checked, accuracy, wilson_lower, audits, updated_at)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now())""",
+                PLATFORM, row["source"], row["field"], row["correct"], row["wrong"], row["checked"],
                 row["accuracy"], row["wilson_lower"], row["audits"])
     return rows
 
 
 async def read(conn) -> list[dict[str, Any]]:
     rows = await conn.fetch("""SELECT source, field, correct, wrong, checked, accuracy, wilson_lower, audits, updated_at
-        FROM tank.base_source_reliability ORDER BY field, wilson_lower DESC NULLS LAST, source""")
+        FROM tank.base_source_reliability WHERE owner_id=$1
+        ORDER BY field, wilson_lower DESC NULLS LAST, source""", PLATFORM)
     return [dict(row) for row in rows]
 
 
