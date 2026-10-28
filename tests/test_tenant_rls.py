@@ -365,3 +365,15 @@ async def test_rig_authenticated_bootstrap_then_tenant_and_reset(database):
             assert (await client.get("/offline-unset")).json() == {"keys": 0}
         assert (await client.get("/offline-rls", headers={"X-Rig-Key": first, "Origin": "https://wrong.invalid"})).status_code == 403
         assert (await client.get("/offline-unset")).json() == {"keys": 0}
+
+
+@pytest.mark.asyncio
+async def test_repeatable_read_options_preserved(database):
+    tenant = uuid4()
+    for pool in (database.pool,):
+        with tenant_scope(tenant):
+            async with pool.acquire(isolation="repeatable_read", readonly=True) as conn:
+                assert await conn.fetchval("SHOW transaction_isolation") == "repeatable read"
+                assert await conn.fetchval("SHOW transaction_read_only") == "on"
+                assert await conn.fetchval("SELECT current_setting('app.tenant_id',true)") == str(tenant)
+    assert await database.pool.fetchval("SELECT current_setting('app.tenant_id',true)") == ""
