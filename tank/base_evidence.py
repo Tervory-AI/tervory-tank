@@ -175,7 +175,7 @@ def row_fields(row: dict[str, Any]) -> dict[str, dict[str, Any]]:
     if isinstance(contacts, dict) and contacts.get("domain_accepts_mail") is False:
         result["email"] = field(reason="The mail domain does not accept email.")
     social_block = passes.get("4", {}).get("access_error") or {}
-    if social_block.get("status") == "blocked":
+    if isinstance(social_block, dict) and social_block.get("status") == "blocked":
         result["socials"] = field(source=public_url(social_block.get("url")), reason="blocked")
     if not proof:
         # Legacy rows retain their actual observation, never the current time.
