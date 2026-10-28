@@ -4,6 +4,17 @@
 const TANK_URL = process.env.TANK_URL ?? "http://tank:8000";
 const TANK_API_KEY = process.env.TANK_API_KEY ?? "";
 
+/** Founder memory inspection; identity comes from the server's goldIdentity check. */
+export function memoryRecord(identity: { tenantId: string; userId: string; role: string }, id: string): Promise<Response> {
+  return fetch(new URL(`/v1/memory/records/${encodeURIComponent(id)}`, TANK_URL), {
+    method: "GET", cache: "no-store", redirect: "error",
+    headers: {
+      "X-Tank-Key": TANK_API_KEY, "X-Tervory-User": identity.userId,
+      "X-Tervory-Tenant": identity.tenantId, "X-Tervory-Role": identity.role,
+    },
+  });
+}
+
 /** Founder JSON inspection only; caller identity is resolved by Workspace. */
 export function rigPriceHistory(identity: { tenantId: string; userId: string }, query: URLSearchParams): Promise<Response> {
   const url = new URL("/v1/agents/rig/price-history", TANK_URL);
