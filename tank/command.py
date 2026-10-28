@@ -23,6 +23,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+import command_repo
+
 router = APIRouter(prefix="/v1/command", tags=["command"])
 logger = logging.getLogger(__name__)
 _background: set[asyncio.Task] = set()
@@ -37,7 +39,7 @@ TOOLS = {
     "zenas": ["zenas.ask", "zenas.matters", "zenas.review"],
 }
 FOUNDER_TOOLS = ["skala.list", "skala.evals", "skala.approve", "skala.retire",
-                 "ledger.receipts", "ledger.savings", "worker.build"]
+                 "ledger.receipts", "ledger.savings", "worker.build", "repo.prs", "repo.pr", "repo.file"]
 
 
 def db() -> Any:
@@ -91,7 +93,9 @@ async def worker(request: Request) -> None:
 
 def allowed_tools(actor: Actor) -> list[str]:
     squads = SQUADS if actor.founder else actor.squads
-    return sorted([tool for squad in squads for tool in TOOLS[squad]] + (FOUNDER_TOOLS if actor.founder else []))
+    founder_tools = [name for name in FOUNDER_TOOLS
+                     if not name.startswith("repo.") or command_repo.configured()] if actor.founder else []
+    return sorted([tool for squad in squads for tool in TOOLS[squad]] + founder_tools)
 
 
 def require_tool(actor: Actor, name: str) -> None:
@@ -731,6 +735,53 @@ class EmptyArgs(Body):
     pass
 
 
+class RepoPRsArgs(Body):
+    """Open PRs on Tervory-AI/tervory-tank, with head-commit checks and statuses."""
+
+    page: int = Field(default=1, ge=1, le=1000, description="Read next_page when has_more is true.")
+    limit: int = Field(default=20, ge=1, le=50)
+
+
+class RepoPRArgs(RepoPRsArgs):
+    """One PR's changed files and head-commit checks; page applies to files."""
+
+    number: int = Field(gt=0, le=2_147_483_647, strict=True)
+
+
+class RepoFileArgs(Body):
+    """Read a UTF-8 file from main, limited to docs/** or .md files anywhere."""
+
+    path: str = Field(min_length=1, max_length=1000, description="File on main: docs/** or a .md file anywhere.")
+
+    @model_validator(mode="after")
+    def allowed_path(self):
+        command_repo.validate_path(self.path)
+        return self
+
+
+@router.get("/repo/prs")
+async def repo_prs(args: RepoPRsArgs = Depends(), actor: Actor = Depends(identity)) -> dict:
+    require_tool(actor, "repo.prs")
+    return await command_repo.open_prs(args.page, args.limit)
+
+
+@router.get("/repo/pr")
+async def repo_pr(number: int = Query(gt=0, le=2_147_483_647), page: int = Query(default=1, ge=1, le=1000),
+                  limit: int = Query(default=20, ge=1, le=50), actor: Actor = Depends(identity)) -> dict:
+    require_tool(actor, "repo.pr")
+    return await command_repo.pull_request(number, page, limit)
+
+
+@router.get("/repo/file")
+async def repo_file(path: str = Query(min_length=1, max_length=1000), actor: Actor = Depends(identity)) -> dict:
+    require_tool(actor, "repo.file")
+    try:
+        command_repo.validate_path(path)
+    except ValueError:
+        raise HTTPException(422, "The action arguments are invalid") from None
+    return await command_repo.read_file(path)
+
+
 class QueryArgs(Body):
     q: str = Field(min_length=1, max_length=200)
     limit: int = Field(default=20, ge=1, le=100)
@@ -835,6 +886,9 @@ class Adapter:
 
 
 ADAPTERS = {
+    "repo.prs": Adapter("GET", "/v1/command/repo/prs", RepoPRsArgs, "open PRs on Tervory-AI/tervory-tank"),
+    "repo.pr": Adapter("GET", "/v1/command/repo/pr", RepoPRArgs, "one PR's changed files and check results"),
+    "repo.file": Adapter("GET", "/v1/command/repo/file", RepoFileArgs, "read one file from main"),
     "base.batch": Adapter("POST", "/v1/base/run", BaseBatchArgs, "Start a Base batch", True, "paid_run"),
     "base.search": Adapter("GET", "/v1/base/records", BaseSearchArgs, "Read Base records"),
     "tiger.watch": Adapter("POST", "/v1/tiger/watchlist", WatchArgs, "Start a price watch", True, "paid_run"),
