@@ -1918,3 +1918,10 @@ BEGIN
         INSERT INTO tank.policy_seeds(name) VALUES('command-exact-cache-v1');
     END IF;
 END $$;
+
+-- Trigger first build. Leave all existing and tenant-specific policies untouched.
+INSERT INTO tank.policy(task_type,rung,model,cache_scope,max_tokens_out,eval_threshold,min_shadow_samples,auto_promote)
+VALUES ('trigger.write',1,'luna','tenant',3000,0.99,200,false),
+       ('trigger.check',3,'code','none',0,0.99,200,false)
+ON CONFLICT DO NOTHING;
+-- trigger.check never calls /v1/route; its adapter executes code and records zero cost.

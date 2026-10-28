@@ -19,6 +19,7 @@ class CheckIn(BaseModel):
 
 
 class WriteIn(CheckIn):
+    voice: Voice | None = None
     document_type: Literal["copy", "article", "document", "legal"] = "copy"
     register: str | None = Field(default=None, max_length=100)
     template: str | None = Field(default=None, max_length=100)
@@ -32,7 +33,7 @@ def legal_request(body: WriteIn) -> bool:
     from zenas_scope import scan
     detected, _ = scan(body.text)
     return body.document_type == "legal" or body.template is not None or detected is not None or bool(
-        re.search(r"\b(contract|agreement|affidavit|legal|lawsuit|pleading|will|testament|subpoena|nda)\b", body.text, re.I))
+        re.search(r"\b(contract|agreement|affidavit|legal|lawsuit|pleading|last will|testament|subpoena|nda)\b", body.text, re.IGNORECASE))
 
 
 async def check_text(body: CheckIn, store: VoiceStore, http) -> dict:
@@ -44,6 +45,8 @@ async def check_text(body: CheckIn, store: VoiceStore, http) -> dict:
 async def write(body: WriteIn, store: VoiceStore, tank, http) -> dict:
     if legal_request(body):
         return {"delegate": "zenas.draft"}
+    if body.voice is not None:
+        await store.put(body.tenant_id, body.voice)
     voice = await store.get(body.tenant_id)
     if voice is None:
         raise ValueError("A tenant brand voice file is required before drafting")

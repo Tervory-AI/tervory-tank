@@ -9,8 +9,8 @@ from uuid import UUID
 
 import asyncpg
 import httpx
-from fastapi import Depends, FastAPI, Header, HTTPException
 from chassis.tank import TankClient
+from fastapi import Depends, FastAPI, Header, HTTPException
 
 from trigger.service import CheckIn, WriteIn, check_text, write
 from trigger.voice import Voice, VoiceStore
@@ -26,7 +26,7 @@ async def authorized(x_tank_key: str = Header(default="")):
 async def lifespan(app):
     app.state.pool = await asyncpg.create_pool(os.environ["DATABASE_URL"], min_size=1, max_size=3)
     await app.state.pool.execute(Path(__file__).with_name("schema.sql").read_text())
-    app.state.http = httpx.AsyncClient(timeout=60, follow_redirects=False)
+    app.state.http = httpx.AsyncClient(timeout=60, follow_redirects=False, trust_env=False)
     app.state.tank = TankClient("http://tank:8000", os.environ.get("TANK_KEY", ""), "trigger", app.state.http)
     try:
         yield

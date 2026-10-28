@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 _background: set[asyncio.Task] = set()
 SQUADS = frozenset({"base", "tiger", "market_lab", "rig", "tisan", "radix", "zenas"})
 TOOLS = {
+    "trigger": ["trigger.write", "trigger.check"],
     "base": ["base.batch", "base.search"],
     "tiger": ["tiger.watch", "tiger.read"],
     "market_lab": ["market_lab.research"],
@@ -90,7 +91,7 @@ async def worker(request: Request) -> None:
 
 
 def allowed_tools(actor: Actor) -> list[str]:
-    squads = SQUADS if actor.founder else actor.squads
+    squads = TOOLS.keys() if actor.founder else actor.squads & SQUADS
     return sorted([tool for squad in squads for tool in TOOLS[squad]] + (FOUNDER_TOOLS if actor.founder else []))
 
 
@@ -374,6 +375,10 @@ async def events(thread_id: uuid.UUID, after: int = Query(default=0, ge=0), acto
 async def route_turn(actor: Actor, messages: list[dict], model: str | None = None,
                      *, task_id: uuid.UUID | None = None) -> Any:
     from main import Message, RouteRequest, box_region, run_route
+    from trigger_routes import code_plan
+    planned = await code_plan(actor, messages, task_id)
+    if planned is not None:
+        return planned
     override = {"model_override": model} if model not in (None, "auto") else {}
     if task_id is not None:
         override["task_id"] = task_id
@@ -810,6 +815,20 @@ class ReviewArgs(Body):
     matter_id: uuid.UUID | None = None
 
 
+class TriggerCheckArgs(Body):
+    text: str = Field(min_length=1, max_length=20000)
+
+
+class TriggerWriteArgs(TriggerCheckArgs):
+    document_type: Literal["copy", "article", "document", "legal"] = "copy"
+    register: str | None = Field(default=None, max_length=100)
+    template: str | None = Field(default=None, max_length=100)
+    jurisdiction: str | None = Field(default=None, max_length=80)
+    terms: dict[str, Any] = Field(default_factory=dict)
+    matter_id: uuid.UUID | None = None
+    voice: dict[str, Any] | None = None
+
+
 class SavingsArgs(Body):
     days: int = Field(default=30, ge=1, le=365)
 
@@ -835,6 +854,8 @@ class Adapter:
 
 
 ADAPTERS = {
+    "trigger.write": Adapter("POST", "/v1/trigger/write", TriggerWriteArgs, "trigger.write", True, "paid_run"),
+    "trigger.check": Adapter("POST", "/v1/trigger/check", TriggerCheckArgs, "trigger.check"),
     "base.batch": Adapter("POST", "/v1/base/run", BaseBatchArgs, "Start a Base batch", True, "paid_run"),
     "base.search": Adapter("GET", "/v1/base/records", BaseSearchArgs, "Read Base records"),
     "tiger.watch": Adapter("POST", "/v1/tiger/watchlist", WatchArgs, "Start a price watch", True, "paid_run"),

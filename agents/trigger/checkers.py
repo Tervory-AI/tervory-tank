@@ -6,9 +6,9 @@ import sys
 from pathlib import Path
 
 import httpx
-from proselint.tools import LintFile
 from proselint.checks import __register__
 from proselint.registry import CheckRegistry
+from proselint.tools import LintFile
 
 CheckRegistry().register_many(__register__)
 
@@ -16,8 +16,8 @@ from .voice import Voice
 
 ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT / "vendor"))
-from agent_style.review import detectors_mech, detectors_struct  # noqa: E402
-from agent_style.review.loader import parse_rules  # noqa: E402
+from agent_style.review import detectors_mech, detectors_struct
+from agent_style.review.loader import parse_rules
 
 RULES = parse_rules((ROOT / "vendor/agent_style/RULES.md").read_text())
 MECHANICAL = {"RULE-05", "RULE-06", "RULE-12", "RULE-B", "RULE-D"}
@@ -44,7 +44,7 @@ def local_checks(text: str, voice: Voice | None) -> dict:
         issues.extend({"source": "agent-style", "rule": v.rule, "line": v.line,
                        "column": v.column, "message": v.detail} for v in result.violations)
     # Passive-voice candidates, not a semantic verdict about whether passive is appropriate.
-    for match in re.finditer(r"\b(?:am|is|are|was|were|be|been|being)\s+(?:\w+ly\s+)?(?:\w+ed|written|given|made|seen|known|taken|built|sent|shown|found|done)\b", text, re.I):
+    for match in re.finditer(r"\b(?:am|is|are|was|were|be|been|being)\s+(?:\w+ly\s+)?(?:\w+ed|written|given|made|seen|known|taken|built|sent|shown|found|done)\b", text, re.IGNORECASE):
         issues.append({"source": "readability", "rule": "passive_voice", "offset": match.start(),
                        "length": match.end()-match.start(), "message": "Possible passive voice; review the actor and verb."})
     # Tenant-specific length threshold; the upstream detector supplies the default 30-word check.
@@ -66,11 +66,11 @@ def local_checks(text: str, voice: Voice | None) -> dict:
         if voice.stylebook:
             guide = (ROOT / "sources/stylebooks" / voice.stylebook / "SKILL.md").read_text()
             if "descriptive link" in guide.lower():
-                for match in re.finditer(r"\[(?:click here|here|read more)\]\([^)]*\)", text, re.I):
+                for match in re.finditer(r"\[(?:click here|here|read more)\]\([^)]*\)", text, re.IGNORECASE):
                     issues.append({"source": "stylebook", "rule": "link_text", "offset": match.start(),
                                    "message": "Use descriptive link text."})
     # Practical Prose F3: mechanical markup checks only; no scorer or semantic grade.
-    fences = re.findall(r"^\s*(`{3,}|~{3,})", text, re.M)
+    fences = re.findall(r"^\s*(`{3,}|~{3,})", text, re.MULTILINE)
     if len(fences) % 2:
         issues.append({"source": "practical-prose", "rule": "F3", "message": "Unclosed fenced code block."})
     return {"issues": issues, "skipped_agent_style_rules": SKIPPED,
@@ -87,14 +87,15 @@ async def check(text: str, voice: Voice | None, http: httpx.AsyncClient) -> dict
         response = await http.post("http://trigger-languagetool:8081/v2/check",
                                    data={"text": text, "language": "en-US"}, timeout=30)
         response.raise_for_status()
-        matches = response.json()["matches"]
+        payload = response.json()
+        matches = payload["matches"]
         if not isinstance(matches, list):
-            raise ValueError("Invalid matches")
+            raise TypeError("Invalid matches")
         for match in matches:
             result["issues"].append({"source": "languagetool", "rule": match["rule"]["id"],
                                      "message": match["message"], "offset": match["offset"], "length": match["length"]})
-        result["complete"] = True
-        result["checker_errors"] = []
+        result["complete"] = not payload.get("warnings", {}).get("incompleteResults", False)
+        result["checker_errors"] = [] if result["complete"] else ["LanguageTool returned incomplete results."]
     except (httpx.HTTPError, ValueError, KeyError, TypeError):
         result["complete"] = False
         result["checker_errors"] = ["LanguageTool is unavailable; its checks have not completed."]
