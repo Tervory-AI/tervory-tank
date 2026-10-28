@@ -1,0 +1,24 @@
+{
+  "database": "PostgreSQL 18.6 (PGlite 0.5.13) on wasm32-unknown-emscripten, compiled by emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.5 (1db513782be24469589d7cb8a1f1834e9a33f271), 32-bit",
+  "fixture_only": true,
+  "entrypoint": "command.route_turn -> /founder/memories",
+  "row": {
+    "id": "407bcd37-d208-526f-85c9-5c9e59d6a0ea",
+    "tenant_id": "409dd8c2-1b1f-4934-85fe-19227e2367ce",
+    "agent": "memtest_017608a5c91b",
+    "claim": "fixture deliveries happen on Tuesdays.",
+    "evidence": [
+      "urn:tervory:command:33333333-3333-4333-8333-333333333333"
+    ],
+    "confidence": 0.5,
+    "last_verified": null,
+    "embed_model": "offline-pin-v1",
+    "created_at": "2026-10-28T16:23:12.414000+00:00",
+    "updated_at": "2026-10-28T16:23:12.420000+00:00",
+    "tier": "client",
+    "kind": "fact",
+    "meta": {},
+    "seen": 1
+  },
+  "view": "No existing founder memory view; view waits for Figma."
+}

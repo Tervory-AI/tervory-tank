@@ -85,7 +85,7 @@ class MemoryStore(Protocol):
         limit: int,
     ) -> list[Hit]: ...
 
-    def delete(self, collection: str, memory_id: str) -> bool: ...
+    def delete(self, collection: str, memory_id: str, tenant_id: str | None = None) -> bool: ...
 
     def delete_tenant(self, collection: str, tenant_id: str) -> int: ...
 
@@ -141,10 +141,12 @@ class InMemoryStore:
         hits.sort(key=lambda hit: hit.score, reverse=True)
         return hits[:limit]
 
-    def delete(self, collection: str, memory_id: str) -> bool:
+    def delete(self, collection: str, memory_id: str, tenant_id: str | None = None) -> bool:
         _agent_from(collection)
         rows = self._rows.get(collection)
         if not rows or memory_id not in rows:
+            return False
+        if tenant_id is not None and rows[memory_id][0].tenant_id != tenant_id:
             return False
         del rows[memory_id]
         return True

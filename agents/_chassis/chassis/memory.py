@@ -29,7 +29,8 @@ class MemoryClient:
     def __repr__(self) -> str:
         return f"MemoryClient(agent={self._agent!r})"
 
-    async def remember(self, tenant_id: str, text: str, kind: str, source: str) -> dict[str, Any]:
+    async def remember(self, tenant_id: str, text: str, kind: str, source: str, *,
+                       evidence: list[str] | None = None, confidence: float = .5) -> dict[str, Any]:
         data = await self._send(
             "POST",
             "/memories",
@@ -38,6 +39,8 @@ class MemoryClient:
                 "text": text,
                 "kind": kind,
                 "source": source,
+                "evidence": evidence or [],
+                "confidence": confidence,
             },
         )
         if not isinstance(data, dict):
@@ -51,8 +54,13 @@ class MemoryClient:
         *,
         kind: str | None = None,
         limit: int | None = None,
+        tier: str = 'client',
     ) -> list[dict[str, Any]]:
+        if tier not in ('client', 'platform'):
+            raise ValueError('Reference corpora use their registered read-only endpoint')
         body: dict[str, Any] = {"tenant_id": str(tenant_id), "query": query}
+        if tier != 'client':
+            body['tier'] = tier
         if kind:
             body["kind"] = kind
         if limit is not None:
@@ -67,8 +75,9 @@ class MemoryClient:
             memories.append(item)
         return memories
 
-    async def forget(self, memory_id: str) -> None:
-        await self._send("DELETE", "/memories/" + memory_id)
+    async def forget(self, memory_id: str, tenant_id: str) -> None:
+        from uuid import UUID
+        await self._send("DELETE", "/memories/" + str(UUID(memory_id)) + '?tenant_id=' + str(UUID(tenant_id)))
 
     async def _send(self, method: str, path: str, body: dict[str, Any] | None = None) -> Any:
         if not self._api_key:
