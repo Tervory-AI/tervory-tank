@@ -30,6 +30,7 @@ services:
       TANK_URL: http://tank:8000
       TANK_KEY: ${TANK_KEY_BASE:-}
       BASE_BRAIN_URL: http://base-brain:8001
+      BASE_REFERENCE_FILE_URL: ${BASE_REFERENCE_FILE_URL:-}
       SEARXNG_URL: http://searxng:8080
       HERMES_URL: http://hermes:8000
       DATA_DIR: /data

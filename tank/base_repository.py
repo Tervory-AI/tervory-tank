@@ -1,12 +1,13 @@
 """PostgreSQL operations for Base's reference and tenant work. No worker changes."""
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 import hashlib
 import json
 import os
 from typing import Any
 import uuid
+from urllib.parse import urlsplit
 
 from base_evidence import row_fields
 from base_metrics import obj
@@ -29,6 +30,34 @@ class BaseStore:
     def __init__(self, runtime: Any) -> None:
         self.rt = runtime
 
+    @staticmethod
+    def reference_source() -> str:
+        url = os.environ.get("BASE_REFERENCE_FILE_URL", "").strip()
+        try:
+            if not url or urlsplit(url).hostname in {"atf.gov", "www.atf.gov"}:
+                return "atf"
+        except ValueError:
+            pass
+        return hashlib.sha256(url.encode()).hexdigest()
+
+    async def reference_state(self) -> dict[str, Any] | None:
+        async with self.rt.pool().acquire() as conn:
+            row = await conn.fetchrow("SELECT * FROM tank.base_reference_checks WHERE owner_id=$1", PLATFORM)
+        if row is None:
+            return None
+        sources = obj(row["source_checks"])
+        # Existing rows describe ATF. No live-row repair or reset is needed.
+        if not sources:
+            return dict(row) if self.reference_source() == "atf" else None
+        return sources.get(self.reference_source())
+
+    @staticmethod
+    def recent_reference_check(check: dict[str, Any]) -> bool:
+        checked = check["checked_at"]
+        if isinstance(checked, str):
+            checked = datetime.fromisoformat(checked)
+        return checked > datetime.now(timezone.utc) - timedelta(hours=24)
+
     async def engine(self, payload: dict[str, Any]) -> dict[str, Any]:
         response = await self.rt._http.post(self.rt.BASE_AGENT_URL.rstrip("/") + "/reference/ffl", json=payload,
             headers={"X-Tank-Key": os.environ.get("TANK_KEY_BASE", "")}, timeout=180, follow_redirects=False)
@@ -38,6 +67,10 @@ class BaseStore:
                 detail = response.json().get("detail", "")
             except (AttributeError, ValueError):
                 detail = ""
+            if isinstance(detail, str) and detail.startswith("file-blocked:"):
+                # Reuse existing service failure wording for a non-ATF source.
+                await self.reference_check("blocked", reason)
+                raise ReferenceFailure(reason, blocked=True)
             if isinstance(detail, str) and detail.startswith("blocked:"):
                 status = detail.removeprefix("blocked: HTTP ")
                 reason += (f" ATF did not allow the read (HTTP {status})." if status in {"401", "402", "403", "429", "451"}
@@ -89,9 +122,15 @@ class BaseStore:
         await self.reference_check("adopted")
 
     async def download_initial(self) -> None:
-        async with self.rt.pool().acquire() as conn:
-            if await conn.fetchval("SELECT 1 FROM tank.base_reference_checks WHERE owner_id=$1 AND status='blocked'", PLATFORM):
-                return  # A durable block also stops empty-reference retries after restart.
+        check = await self.reference_state()
+        if check and check["status"] == "blocked":
+            return  # Durable for this source, including after restart.
+        if self.reference_source() != "atf":
+            if check and self.recent_reference_check(check):
+                return
+            # Record the new source's attempt before I/O, bounding failed or
+            # interrupted empty-reference retries to the existing daily cadence.
+            await self.reference_check("unavailable")
         file = await self.engine({"initial": True})
         await self.install(file, initial=True)
         await self.reference_check("updated")
@@ -153,18 +192,28 @@ class BaseStore:
 
     async def reference_check(self, status: str, message: str | None = None) -> None:
         async with self.rt.pool().acquire() as conn:
-            await conn.execute("""INSERT INTO tank.base_reference_checks(owner_id,checked_at,status,message) VALUES($1,now(),$2,$3)
-                ON CONFLICT(owner_id) DO UPDATE SET checked_at=now(),status=$2,message=$3
-                WHERE tank.base_reference_checks.status<>'blocked' OR EXCLUDED.status='blocked'""", PLATFORM, status, message)
+            await conn.execute("""INSERT INTO tank.base_reference_checks(owner_id,checked_at,status,message,source_checks)
+                VALUES($1,now(),$2,$3,jsonb_build_object($4::text,
+                    jsonb_build_object('status',$2::text,'message',$3::text,'checked_at',now())))
+                ON CONFLICT(owner_id) DO UPDATE SET checked_at=now(),status=$2,message=$3,
+                    source_checks=(CASE WHEN tank.base_reference_checks.source_checks='{}'::jsonb THEN
+                        jsonb_build_object('atf',jsonb_build_object('status',tank.base_reference_checks.status,
+                            'message',tank.base_reference_checks.message,'checked_at',tank.base_reference_checks.checked_at))
+                        ELSE tank.base_reference_checks.source_checks END) || EXCLUDED.source_checks
+                WHERE coalesce(tank.base_reference_checks.source_checks->$4->>'status',
+                    CASE WHEN tank.base_reference_checks.source_checks='{}'::jsonb AND $4='atf'
+                         THEN tank.base_reference_checks.status END,'')<>'blocked' OR EXCLUDED.status='blocked'""",
+                PLATFORM, status, message, self.reference_source())
 
     async def due_refresh(self) -> bool:
-        async with self.rt.pool().acquire() as conn:
-            return not bool(await conn.fetchval("SELECT 1 FROM tank.base_reference_checks WHERE owner_id=$1 AND (status='blocked' OR (status<>'adopted' AND checked_at>now()-interval '24 hours'))", PLATFORM))
+        check = await self.reference_state()
+        return not (check and (check["status"] == "blocked" or
+                    (check["status"] != "adopted" and self.recent_reference_check(check))))
 
     async def refresh(self) -> dict[str, Any]:
-        async with self.rt.pool().acquire() as conn:
-            if await conn.fetchval("SELECT 1 FROM tank.base_reference_checks WHERE owner_id=$1 AND status='blocked'", PLATFORM):
-                raise ValueError("ATF blocked this site's public read; automatic reads have stopped.")
+        check = await self.reference_state()
+        if check and check["status"] == "blocked":
+            raise ValueError("ATF blocked this site's public read; automatic reads have stopped.")
         current = await self.latest_file()
         if current is None:
             await self.adopt()
@@ -255,7 +304,7 @@ class BaseStore:
                     return old
                 await conn.execute("""INSERT INTO tank.base_campaigns(tenant_id,id,request_id,name,file_id,selection,created_by)
                     VALUES($1,$2,$3,$4,$5,$6::jsonb,$7)""", tenant, identity, request_id, name, file_id, encoded(selection), created_by)
-                for ordinal, state in enumerate(sorted(groups)):
+                for ordinal, state in enumerate(sorted(groups, key=lambda name: (len(groups[name]), name))):
                     batch = f"{name[:50]} · {state} · {identity}"
                     await conn.execute("""INSERT INTO tank.base_campaign_states
                         (tenant_id,campaign_id,state,ordinal,batch,records_count,csv_records)

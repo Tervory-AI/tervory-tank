@@ -233,6 +233,7 @@ services:
       RIG_RETAILER_KEY: ${RIG_RETAILER_KEY:-}
       TANK_REGION: ${TANK_REGION:-us-east}
       BASE_AGENT_URL: http://agent-base:8000
+      BASE_REFERENCE_FILE_URL: ${BASE_REFERENCE_FILE_URL:-}
       SEARXNG_URL: http://searxng:8080
       TIGER_URL: http://tiger:3000
       BRAVE_API_KEY: ${BRAVE_API_KEY:-}
