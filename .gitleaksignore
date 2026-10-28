@@ -25,14 +25,12 @@ feccd797c598772e0900d82234a784305fb79551:agents/market_lab/evidence/polish/mixed
 
 # Claude-reviewed Figma file identifiers in docs, fixtures and evals; identifiers do not grant access.
 30b3432ae2016ec36530e09471b4c25817667780:tank/skills/tisan.figma/1.0.1/evals/cases.jsonl:generic-api-key:1
-30b3432ae2016ec36530e09471b4c25817667780:tank/skills/tisan.figma/1.0.1/evals/cases.jsonl:generic-api-key:1
 30b3432ae2016ec36530e09471b4c25817667780:tank/skills/tisan.figma/1.0.1/evals/cases.jsonl:generic-api-key:2
 30b3432ae2016ec36530e09471b4c25817667780:tank/skills/tisan.figma/1.0.1/evals/cases.jsonl:generic-api-key:3
 30b3432ae2016ec36530e09471b4c25817667780:tank/skills/tisan.figma/1.0.1/evals/cases.jsonl:generic-api-key:6
 aefa636e6e7fdff3e9c50eb0e1f144b58ddda077:agents/tisan/README.md:generic-api-key:45
 aefa636e6e7fdff3e9c50eb0e1f144b58ddda077:agents/tisan/figma.py:generic-api-key:19
 aefa636e6e7fdff3e9c50eb0e1f144b58ddda077:agents/tisan/fixtures/tervory-landing.json:generic-api-key:5
-aefa636e6e7fdff3e9c50eb0e1f144b58ddda077:tank/skills/tisan.figma/1.0.0/evals/cases.jsonl:generic-api-key:1
 aefa636e6e7fdff3e9c50eb0e1f144b58ddda077:tank/skills/tisan.figma/1.0.0/evals/cases.jsonl:generic-api-key:1
 aefa636e6e7fdff3e9c50eb0e1f144b58ddda077:tank/skills/tisan.figma/1.0.0/evals/cases.jsonl:generic-api-key:2
 aefa636e6e7fdff3e9c50eb0e1f144b58ddda077:tank/skills/tisan.figma/1.0.0/evals/cases.jsonl:generic-api-key:3
