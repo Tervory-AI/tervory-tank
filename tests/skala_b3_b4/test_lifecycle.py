@@ -64,7 +64,7 @@ async def env(monkeypatch):
     async with db.acquire() as conn:
         await conn.execute((ROOT / "tank/schema.sql").read_text())
         await conn.execute((ROOT / "tank/schema.sql").read_text())
-        await conn.execute("TRUNCATE tank.skill_revalidations,tank.skill_evals,tank.skill_approvals,tank.skills")
+        await conn.execute("TRUNCATE tank.skill_revalidations,tank.skill_evals,tank.skill_approvals,tank.agent_skill_submissions,tank.skills CASCADE")
         await conn.execute("DELETE FROM tank.policy WHERE task_type LIKE $1", "test.b3.%")
     monkeypatch.setattr(tank, "_pool", db)
     monkeypatch.setattr(tank, "_packages", {})
