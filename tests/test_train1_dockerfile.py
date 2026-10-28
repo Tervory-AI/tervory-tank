@@ -21,7 +21,9 @@ def test_tank_dockerfile_copies_every_main_local_import():
             elif isinstance(node.func, ast.Attribute) and node.func.attr == "import_module":
                 imports.add(str(node.args[0].value).split(".")[0])
     required = {f"{name}.py" for name in imports if (tank / f"{name}.py").is_file()}
-    copy = next(line for line in (tank / "Dockerfile").read_text().splitlines() if line.startswith("COPY main.py "))
-    copied = set(shlex.split(copy)[1:-1])
+    copy = next(line for line in (tank / "Dockerfile").read_text().splitlines()
+                if line.startswith("COPY ") and "*.py" in shlex.split(line))
+    # COPY *.py copies every module in tank/, so the copied set is every .py file there.
+    copied = {path.name for path in tank.glob("*.py")} if "*.py" in shlex.split(copy) else set()
     assert required <= copied, f"Local Tank imports missing from COPY: {sorted(required - copied)}"
     assert {"gold.py", "training.py"} <= copied
