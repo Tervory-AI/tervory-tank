@@ -366,7 +366,7 @@ The founder's ask (20 Oct): a conversation window where you say what you want, a
 - **Checks have no model calls:** practical-prose's scorer uses a model, so only its rubric is used, as a checklist.
 - **Before building:**
   - Grammarly's developer API was, I believe, closed in 2024. Check that before planning on Grammarly as a teacher.
-  - The name is close to Trigger.dev; worth a trademark check.
+  - The name stays "Trigger" (founder, 27 Oct 19:50). It flows into AmmoSync, Custom Nation and TNGO, and a trademark on the word alone isn't possible. Shown as "Trigger by Tervory".
 - **Status:** not started. Plan and checked tool list: Notion page "Trigger: copy, articles and chat writing".
 
 ### Not started
