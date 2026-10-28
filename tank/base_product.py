@@ -62,6 +62,7 @@ class AuditReview(BaseModel):
     model_config = ConfigDict(extra="forbid")
     tenant_id: uuid.UUID
     csv: str = Field(min_length=1, max_length=10_000_000)
+    field_verdicts: dict[str, dict[str, str]] | None = Field(default=None, max_length=200)
 
 
 class PriceChange(BaseModel):
@@ -352,7 +353,7 @@ def build_router(rt: Any, store: BaseStore | None = None, *, background: bool = 
     @router.post("/campaigns/{campaign_id}/audits/{audit_id}/review", dependencies=[Depends(workspace), Depends(require_admin)])
     async def review_audit(campaign_id: uuid.UUID, audit_id: uuid.UUID, body: AuditReview,
                            x_tervory_admin: str = Header(default="")) -> dict[str, Any]:
-        return clean(await audits.review(body.tenant_id, campaign_id, audit_id, body.csv, x_tervory_admin))
+        return clean(await audits.review(body.tenant_id, campaign_id, audit_id, body.csv, x_tervory_admin, body.field_verdicts))
 
     @router.get("/campaigns/{campaign_id}/confidence-histogram", dependencies=[Depends(workspace), Depends(require_admin)])
     async def confidence_histogram(campaign_id: uuid.UUID, tenant_id: uuid.UUID) -> dict[str, Any]:
@@ -373,7 +374,7 @@ def build_router(rt: Any, store: BaseStore | None = None, *, background: bool = 
         async with rt.pool().acquire() as conn:
             rows = await __import__("base_reliability").read(conn)
         return clean({"scores": rows, "method": "correct / (correct + wrong) per source and field, "
-                      "from record-level audit verdicts; Wilson 95% lower bound"})
+                      "from explicit field audit verdicts; Wilson 95% lower bound"})
 
     @router.post("/reference/refresh", dependencies=[Depends(workspace), Depends(require_admin)])
     async def refresh() -> dict[str, Any]:
