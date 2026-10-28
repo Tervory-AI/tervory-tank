@@ -1,0 +1,48 @@
+........................................................................ [ 28%]
+........................................................................ [ 57%]
+........................................................................ [ 86%]
+..................................                                       [100%]
+=============================== warnings summary ===============================
+../tervory-env/venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  /workspace/tervory-env/venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+tests/test_tiger_works.py::test_alert_preferences_reach_tank_and_tiger_routes
+  /workspace/rig-tiger-prices/tank/main.py:676: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("startup")
+
+tests/test_tiger_works.py::test_alert_preferences_reach_tank_and_tiger_routes
+tests/test_tiger_works.py::test_alert_preferences_reach_tank_and_tiger_routes
+  /workspace/tervory-env/venv/lib/python3.12/site-packages/fastapi/applications.py:4599: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    return self.router.on_event(event_type)
+
+tests/test_tiger_works.py::test_alert_preferences_reach_tank_and_tiger_routes
+  /workspace/rig-tiger-prices/tank/main.py:711: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @app.on_event("shutdown")
+
+tests/test_tiger_works.py::test_alert_preferences_reach_tank_and_tiger_routes
+  /workspace/rig-tiger-prices/tank/agent_skills.py:529: DeprecationWarning:
+          on_event is deprecated, use lifespan event handlers instead.
+
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+    @router.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+250 passed, 6 warnings in 91.07s (0:01:31)

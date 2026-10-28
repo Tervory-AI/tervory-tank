@@ -488,8 +488,11 @@ def test_queries_are_tenant_scoped_and_the_room_is_wired() -> None:
 
     agent = _load("tiger_agent_app", ROOT / "agents" / "tiger" / "app.py")
     assert agent.app.state.agent == "tiger"
-    assert set(agent.app.state.handlers) == {"ping", "check", "dispatch"}
-    assert agent.app.state.schedules[0]["kind"] == "ping"
+    assert set(agent.app.state.handlers) == {"ping", "check", "dispatch", "rig_discover"}
+    assert any(row["kind"] == "ping" for row in agent.app.state.schedules)
+    assert any(row["kind"] == "rig_discover" and row["cron"] == "* * * * *"
+               and row["tenant_id"] == agent.HEARTBEAT_TENANT for row in agent.app.state.schedules)
     image = (ROOT / "agents" / "tiger" / "Dockerfile").read_text(encoding="utf-8")
     assert "watch.py" in image
+    assert "rig_watch.py" in image
     assert "app.py" in image
