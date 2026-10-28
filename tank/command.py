@@ -445,6 +445,9 @@ async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages
                     state["active_turn"] = None
             # The browser stream may close now. Durable worker completion uses
             # this same answer/receipt path and the existing saved thread events.
+            import main
+            from priority_queue import kick
+            kick(main, answer.id, actor.tenant_id)
             return
         async with editing(thread_id, actor) as (conn, row, state):
             if any(m.get("message_id") == turn_id and m.get("role") == "assistant" for m in state["messages"]):
