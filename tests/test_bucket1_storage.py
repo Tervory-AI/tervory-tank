@@ -114,8 +114,10 @@ def test_object_cannot_escape_prefix(name):
 
 def test_za_refuses_client_data_before_network():
     async def scenario():
-        bucket = Bucket('tervory-zenas')
-        store = Storage('zenas', environ=environment('zenas', TANK_REGION='za'), transport=httpx.MockTransport(bucket.handle))
+        bucket = Bucket('tervory-zenas-za')
+        env = environment('zenas', TANK_REGION='za', R2_BUCKET_ZENAS_ZA='tervory-zenas-za',
+                          R2_BUCKET='tervory-zenas-za')
+        store = Storage('zenas', environ=env, transport=httpx.MockTransport(bucket.handle))
         with pytest.raises(StorageError, match='ZA client data'):
             await store.put(PLATFORM_TENANT, 'backups', 'dump.age', b'encrypted')
         with pytest.raises(StorageError, match='ZA client data'):
@@ -124,6 +126,52 @@ def test_za_refuses_client_data_before_network():
         await store.put(PLATFORM_TENANT, 'datasets', 'judgment.pdf', b'public judgment', public=True)
         await store.close()
     asyncio.run(scenario())
+
+
+def test_za_zenas_requires_region_bucket_name():
+    with pytest.raises(StorageError, match='R2_BUCKET_ZENAS_ZA is required'):
+        Storage('zenas', environ=environment('zenas', TANK_REGION='za'))
+    with pytest.raises(StorageError, match='must be tervory-zenas-za'):
+        Storage('zenas', environ=environment(
+            'zenas', TANK_REGION='za', R2_BUCKET_ZENAS_ZA='tervory-zenas',
+            R2_BUCKET='tervory-zenas'))
+    with pytest.raises(StorageError, match='only valid for ZA Zenas'):
+        Storage('zenas', environ=environment(
+            'zenas', R2_BUCKET_ZENAS_ZA='tervory-zenas-za',
+            R2_BUCKET='tervory-zenas-za'))
+    store = Storage('zenas', environ=environment(
+        'zenas', TANK_REGION='za', R2_BUCKET_ZENAS_ZA='tervory-zenas-za',
+        R2_BUCKET='tervory-zenas-za'))
+    assert store.bucket == 'tervory-zenas-za'
+    us = Storage('zenas', environ=environment('zenas', R2_BUCKET='tervory-zenas'))
+    assert us.bucket == 'tervory-zenas'
+
+
+def test_za_zenas_backup_writes_public_platform_prefix(monkeypatch):
+    bucket = Bucket('tervory-zenas-za')
+    env = environment(
+        'zenas', TANK_REGION='za', AGENT_NAME='zenas',
+        R2_BUCKET_ZENAS_ZA='tervory-zenas-za', R2_BUCKET='tervory-zenas-za')
+    monkeypatch.setenv('TANK_REGION', 'za')
+    monkeypatch.setattr(
+        backup, 'Storage',
+        lambda owner: Storage(owner, environ=env, transport=httpx.MockTransport(bucket.handle)))
+
+    async def encrypt(path):
+        path.write_bytes(b'age-encryption.org/v1\nencrypted za fixture')
+
+    monkeypatch.setattr(backup, 'encrypted_dump', encrypt)
+    result = asyncio.run(backup.backup_once('zenas'))
+    assert result['bucket'] == 'tervory-zenas-za'
+    assert result['key'].startswith(f'za/{PLATFORM_TENANT}/backups/')
+    assert '/database.dump.age/' in result['key']
+    assert bucket.calls[-1].method == 'GET'
+
+
+def test_zenas_backup_refused_outside_za(monkeypatch):
+    monkeypatch.delenv('TANK_REGION', raising=False)
+    with pytest.raises(StorageError, match='TANK_REGION=za'):
+        asyncio.run(backup.backup_once('zenas'))
 
 
 def test_usage_paginates_and_never_reports_partial_total():

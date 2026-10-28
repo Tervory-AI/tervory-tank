@@ -84,28 +84,47 @@ async def encrypted_dump(target: Path) -> None:
                 await child.wait()
 
 
+def backup_public(owner: str) -> bool:
+    """Boston uploads backups stay private. ZA Zenas platform backups use the
+    public platform prefix so encrypted dumps may leave the box into the
+    founder ZA bucket only (tervory-zenas-za)."""
+    return owner == 'zenas'
+
+
+def assert_backup_owner(owner: str) -> None:
+    if owner == 'uploads':
+        return
+    if owner == 'zenas':
+        if os.environ.get('TANK_REGION', '') != 'za':
+            raise StorageError('Zenas database backups require TANK_REGION=za')
+        return
+    raise StorageError('Database backups use UPLOADS or ZA Zenas only')
+
+
 async def backup_once(owner: str = 'uploads') -> dict:
-    if owner != 'uploads':
-        raise StorageError('Database backups use UPLOADS only')
+    assert_backup_owner(owner)
+    public = backup_public(owner)
     store = Storage(owner)
     try:
-        # Region check before launching pg_dump: ZA databases never leave ZA.
-        store._prefix(PLATFORM_TENANT, 'backups', public=False)
+        # Region / platform check before launching pg_dump.
+        store._prefix(PLATFORM_TENANT, 'backups', public=public)
         with tempfile.TemporaryDirectory(prefix='tervory-encrypted-backup-') as directory:
             path = Path(directory) / 'database.dump.age'
             await encrypted_dump(path)
-            return await archive_file(store, path, 'backups', tenant_id=PLATFORM_TENANT, label='database.dump.age')
+            return await archive_file(
+                store, path, 'backups', tenant_id=PLATFORM_TENANT,
+                public=public, label='database.dump.age')
     finally:
         await store.close()
 
 
 async def main(owner: str, nightly: bool) -> None:
-    if owner != 'uploads':
-        raise StorageError('Database backups use UPLOADS only')
+    assert_backup_owner(owner)
+    public = backup_public(owner)
     # Fail at worker start, not silently after waiting for the first night.
     store = Storage(owner)
     try:
-        store._prefix(PLATFORM_TENANT, 'backups', public=False)
+        store._prefix(PLATFORM_TENANT, 'backups', public=public)
         dump_configuration()
     finally:
         await store.close()
@@ -124,7 +143,7 @@ async def main(owner: str, nightly: bool) -> None:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--owner', choices=['uploads'], default='uploads')
+    parser.add_argument('--owner', choices=['uploads', 'zenas'], default='uploads')
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument('--once', action='store_true')
     mode.add_argument('--nightly', action='store_true')
