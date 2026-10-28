@@ -14,6 +14,7 @@ from fastapi import Header, HTTPException, Query
 from gold_sources import candidates
 from pydantic import BaseModel
 
+from alert_email import deliver_pending
 from chassis.app import create_app
 from chassis.jobs import JobContext
 from watch import (
@@ -150,7 +151,9 @@ async def check(ctx: JobContext) -> dict:
 
 async def dispatch(ctx: JobContext) -> dict:
     store = PgStore(app.state.pool, SCHEMA)
-    return await dispatch_tenant(store, ctx.tenant_id, datetime.now(timezone.utc))
+    result = await dispatch_tenant(store, ctx.tenant_id, datetime.now(timezone.utc))
+    result["email"] = await deliver_pending(store, ctx.tenant_id)
+    return result
 
 
 app = create_app(
