@@ -1,6 +1,35 @@
-# PR #374: free CLI security checks and reviewed Gitleaks exceptions
+# PR #374: free CLI security checks with Semgrep annotations
 
 Branch: `codex/ci-security`. Keep this PR draft. The founder merges.
+
+## Latest review: readable Semgrep diagnostics
+
+Code commit `9f49cf4aae3b2c3db752b7889a222c426118c284` implements the latest review. Main `4bda46b` was merged first. Claude will classify the findings in the next GitHub run; this change does not assume that any finding is a false positive.
+
+- [.github/scripts/security_scan.py:29](../../.github/scripts/security_scan.py#L29): each finding emits `::error file=PATH,line=N::RULE_ID severity`. Only the rule ID, severity, file and line are emitted. Workflow-command characters in metadata are escaped.
+- [.github/scripts/security_scan.py:43](../../.github/scripts/security_scan.py#L43): each reported scan error emits one `::notice` containing only its type and available path. Structured error payloads, source tokens, messages and matched values are never emitted or retained in the sanitized report.
+- [.github/scripts/security_scan.py:82](../../.github/scripts/security_scan.py#L82): non-fatal partial parsing, HTML/fixture syntax errors and per-file timeouts become notices without failing the scan. Results include `error_count`, `non_fatal_error_count`, `fatal_error_count`, and sanitized error metadata.
+- Fatal-level errors, the pinned CLI's `Fatal error` type, and rule-download failures still mark the scan incomplete. The JSON report is read before deciding the result, including on CLI exit 3 (target parsing errors). Missing/malformed reports and fatal process/configuration exits still block.
+- The finding gate is unchanged: new **HIGH / ERROR / CRITICAL** findings fail. Other severities are annotated as requested but do not change the exit status.
+
+Exact local validation commands on the cloud machine:
+
+```bash
+PATH=/tmp/ci-security-tools/bin:$PATH python3 -m unittest discover -s tests/ci_security -p test_security.py -v
+# 25 tests passed. evidence/annotations-unit-tests.txt
+PATH=/tmp/ci-security-tools/bin:$PATH /tmp/ci-security-tools/test-venv/bin/python -m pytest -q tests/ci_security/test_security.py tests/test_secrets.py
+# 27 passed, 7 subtests passed in 34.04s. evidence/annotations-pytest.txt
+/tmp/ci-security-tools/test-venv/bin/ruff check tank tests --select E9,F --per-file-ignores 'tank/skills/base.socials/1.0.0/run.py:F401'
+# All checks passed!
+/tmp/ci-security-tools/test-venv/bin/ruff check .github/scripts/security_scan.py tests/ci_security --select E9,F
+# All checks passed!
+```
+
+Tests cover annotation escaping and redaction, fatal and download failures, notices for non-fatal errors, missing reports, and high findings alongside non-fatal notices. Tests capture their synthetic annotations, so they do not pollute GitHub's real scan annotations. No Semgrep rules, baselines, tool versions or application code were changed for this review.
+
+To prove this change, open **PR #374 → Checks → ci → security → annotations** on the new head. Each real finding identifies its rule, severity and source location; each scan-error notice identifies only its type and path. Download the security artifact for the non-fatal/fatal counts. Claude reads and triages those annotations. No GitHub API was used by this builder, and no new GitHub pass or screenshot is claimed here.
+
+## Previous review and historical evidence
 
 Claude reviewed the historical Gitleaks findings as false positives. The requested exceptions are implemented; the local **weekly whole-history Gitleaks scan passes with zero findings**. GitHub run [40675008503](https://github.com/Tervory-AI/tervory-tank/actions/runs/40675008503), at code commit `935b3d0`, reports **Gitleaks success, OSV success, Semgrep failure**. This is not an all-green CI claim.
 
@@ -10,7 +39,7 @@ Claude reviewed the historical Gitleaks findings as false positives. The request
 | --- | --- |
 | [.gitleaksignore:1](../../.gitleaksignore#L1) | 41 unique native Gitleaks fingerprints cover all 43 reviewed findings. A one-line comment explains each group: dummy Clerk publishable test keys, the dummy Stripe test key, Figma file identifiers, and public page tokens in saved HTML fixtures. Two pairs of Figma findings share a native fingerprint. No values or path-wide exemptions are included. |
 | [.gitleaks.toml:3](../../.gitleaks.toml#L3) | Keep all built-in rules and add one anchored `regexTarget = "secret"` allowance for the exact existing Clerk publishable CI dummy. Other values with the same prefix remain detectable. |
-| [.github/scripts/security_scan.py:29](../../.github/scripts/security_scan.py#L29) | Use the reviewed repository config and fingerprint file for both PR and weekly scans. Continue ignoring inline allow comments; every finding outside these explicit exceptions fails. |
+| [.github/scripts/security_scan.py:63](../../.github/scripts/security_scan.py#L63) | Use the reviewed repository config and fingerprint file for both PR and weekly scans. Continue ignoring inline allow comments; every finding outside these explicit exceptions fails. |
 | [tests/ci_security/test_security.py:142](test_security.py#L142) | Native Gitleaks tests prove an exact copy is allowed and two altered values still fail. Their reports and values are never printed. |
 | [.github/workflows/ci.yml:34](../../.github/workflows/ci.yml#L34), [.github/workflows/security-weekly.yml:22](../../.github/workflows/security-weekly.yml#L22) | Install the pinned CLI before the policy tests, so the new tests exercise the real tool in CI too. |
 
@@ -55,7 +84,7 @@ Logs: [native/policy tests](evidence/review-unit-tests.txt), [pytest](evidence/r
 | OSV-Scanner — new vulnerable versions | success |
 | Save security results | success |
 
-[Recorded step metadata](evidence/review-github-security.json) was read from the normal GitHub HTML job page, **without the GitHub API**. The Semgrep annotation says `Process completed with exit code 1.` The page requires sign-in to view logs, so whether this was a finding or an incomplete scan is not established here. Access to the signed-in log or downloaded security artifact is missing for that diagnosis. No Semgrep rule or failure threshold was weakened. No screenshot or independent assessor approval is claimed.
+[Recorded step metadata](evidence/review-github-security.json) was read from the normal GitHub HTML job page, **without the GitHub API**. The Semgrep annotation says `Process completed with exit code 1.` The page requires sign-in to view logs, so whether this was a finding or an incomplete scan is not established here. Access to the signed-in log or downloaded security artifact is missing for that diagnosis. The finding severity threshold remains unchanged; the latest section describes the requested non-fatal error policy. No screenshot or independent assessor approval is claimed.
 
 The original local throwaway-commit proof remains in [gitleaks-fail.json](evidence/gitleaks-fail.json) and [gitleaks-pass.json](evidence/gitleaks-pass.json): the synthetic probe failed, then the scan passed after removing that commit. These are local CLI runs, not GitHub run links.
 
@@ -78,4 +107,4 @@ The original local throwaway-commit proof remains in [gitleaks-fail.json](eviden
 1. Open [PR #374](https://github.com/Tervory-AI/tervory-tank/pull/374) → **Checks → ci → security**. Inspect the three scanner steps. For the reviewed code, the linked run above shows Gitleaks and OSV passing and Semgrep failing.
 2. Open that run's **Artifacts → security-40675008503-1** and download the JSON. A signed-in reviewer can inspect the Semgrep status/report to identify the failure; the upload step passed.
 3. For the whole-history local proof, open [review-weekly-gitleaks.json](evidence/review-weekly-gitleaks.json): `base` is null, `result` is clean, `exit_code` is 0, and `findings` is empty.
-4. After the founder merges, open **Actions → security-weekly → the Monday 06:00 UTC run → Artifacts** and download the weekly reports. This PR remains draft while Semgrep fails. No merge is requested.
+4. After the founder merges, open **Actions → security-weekly → the Monday 06:00 UTC run → Artifacts** and download the weekly reports. This PR remains draft pending Claude’s triage of the new annotations. No merge is requested.
