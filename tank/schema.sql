@@ -2095,3 +2095,53 @@ CREATE TABLE IF NOT EXISTS tank.trigger_feedback (
     FOREIGN KEY (tenant_id,write_id) REFERENCES tank.trigger_writes(tenant_id,id),
     UNIQUE (tenant_id,operation_id)
 );
+
+-- B3: transactional model-change outbox. Registry/eval work belongs to the
+-- platform tenant; policy_tenant_id identifies an optional tenant override.
+CREATE TABLE IF NOT EXISTS tank.skill_revalidations (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    policy_tenant_id uuid,
+    task_type text NOT NULL,
+    old_model text NOT NULL,
+    model text NOT NULL,
+    policy jsonb NOT NULL,
+    skill_id text NOT NULL,
+    version text NOT NULL,
+    queued_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    completed_at timestamptz,
+    eval_id uuid,
+    error text
+);
+CREATE INDEX IF NOT EXISTS skill_revalidations_pending
+    ON tank.skill_revalidations(tenant_id, queued_at, id) WHERE completed_at IS NULL;
+ALTER TABLE tank.skill_evals ADD COLUMN IF NOT EXISTS model text;
+ALTER TABLE tank.skill_evals ADD COLUMN IF NOT EXISTS revalidation_id uuid;
+CREATE UNIQUE INDEX IF NOT EXISTS skill_evals_revalidation_once
+    ON tank.skill_evals(revalidation_id) WHERE revalidation_id IS NOT NULL;
+
+CREATE OR REPLACE FUNCTION tank.queue_skill_revalidations() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE previous text;
+BEGIN
+    IF TG_OP = 'UPDATE' THEN
+        previous := OLD.model;
+    ELSIF NEW.tenant_id IS NOT NULL THEN
+        SELECT model INTO previous FROM tank.policy
+          WHERE task_type=NEW.task_type AND tenant_id IS NULL;
+    END IF;
+    -- Initial creation without a prior effective model is not a swap.
+    IF previous IS NULL OR previous IS NOT DISTINCT FROM NEW.model THEN
+        RETURN NEW;
+    END IF;
+    INSERT INTO tank.skill_revalidations
+      (tenant_id,policy_tenant_id,task_type,old_model,model,policy,skill_id,version)
+    SELECT '00000000-0000-0000-0000-000000000001'::uuid,
+           NEW.tenant_id,NEW.task_type,previous,NEW.model,to_jsonb(NEW),s.id,s.version
+      FROM tank.skills s WHERE s.task_type=NEW.task_type AND s.state='approved';
+    RETURN NEW;
+END;
+$$;
+CREATE OR REPLACE TRIGGER policy_skill_revalidation
+    AFTER INSERT OR UPDATE OF model ON tank.policy
+    FOR EACH ROW EXECUTE FUNCTION tank.queue_skill_revalidations();
