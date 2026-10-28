@@ -237,3 +237,27 @@ explicit founder-browser acceptance requirements, not offline-test claims.
 
 This report update is committed and pushed separately after the recorded head;
 its resulting SHA is supplied to the independent reviewer in the handoff.
+
+## Publication checkpoint — 2026-10-28 16:47:20 PDT (UTC-07:00) / 2026-10-28 23:47:20 UTC
+
+Draft PR [#424](https://github.com/Tervory-AI/tervory-tank/pull/424) now exists,
+opened by the coordinator at `0f7d7da732e7ce9094879b455860f10f54c7dae4` on
+`codex/tank-priority-offpeak`. This supersedes the earlier pending Claude handoff;
+those historical entries remain intact. Founder merges. The PR is attached to
+this chat.
+
+Fresh command: `gh pr view 424 -R Tervory-AI/tervory-tank --json headRefOid,isDraft,state,statusCheckRollup,url`
+exited 0: OPEN, draft, expected head. CI security/Tank/Workspace and CodeQL are
+running; changes passed, runner/savings skipped. No completed failure was reported.
+The publication report commit will advance the head and require its own hosted
+check status; earlier running checks are not claimed as final-head results.
+
+Independent reviewer confirmed the previous append-only report head `0f7d7da7`
+and reported no new code finding. Tested source remains `98e801ea`; settled
+62/250 offline results are unchanged. No tests or implementation changes were
+repeated for publication. Actual founder queued-to-sent ledger and same-thread
+answer/receipt evidence remain missing; no live acceptance is claimed.
+
+This checkpoint is committed/pushed, then the PR description is updated from this
+file with `gh pr edit 424 -R Tervory-AI/tervory-tank --body-file tests/tank_priority_offpeak/PR.md`.
+The resulting report-only head is sent to the independent reviewer.
