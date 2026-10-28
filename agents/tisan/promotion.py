@@ -167,7 +167,9 @@ class Coolify:
         if len(rows) != 1 or rows[0].get('status') not in (('failed', 'cancelled-by-user', 'cancelled') if allow_failed else ('finished',)) or rows[0].get('pull_request_id') != 0:
             raise Refused('latest application deployment must be finished')
         row = rows[0]
-        sha = commit(row.get('commit', ''))
+        # A build can fail before Coolify resolves HEAD; recovery is bound to
+        # the acknowledged failed UUID and its still-pinned intended SHA.
+        sha = commit(info.get('git_commit_sha', '') if allow_failed else row.get('commit', ''))
         # Pinning staging prevents a moving branch from being tested/promoted.
         if info.get('git_commit_sha') != sha:
             raise Refused('application must be pinned to its deployed full commit')
