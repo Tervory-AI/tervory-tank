@@ -30,12 +30,12 @@ def zap_plan(target: str, directory: Path) -> dict:
                 {'type': 'passiveScan-config', 'parameters': {'scanOnlyInScope': True}},
                 {'type': 'spider', 'parameters': {'context': 'verified', 'url': target,
                     'maxDuration': 1, 'maxDepth': 2, 'maxChildren': 5,
-                    'threadCount': 1, 'requestWaitTime': 1000, 'processForm': False,
+                    'threadCount': 1, 'processForm': False,
                     'postForm': False, 'parseRobotsTxt': False, 'parseSitemapXml': False}},
                 {'type': 'passiveScan-wait', 'parameters': {'maxDuration': 1}},
                 {'type': 'report', 'parameters': {'template': 'traditional-json',
                     'reportDir': str(directory), 'reportFile': 'zap.json',
-                    'reportTitle': 'Radix passive baseline'}, 'sites': [target]},
+                    'reportTitle': 'Radix passive baseline'}, 'sites': [target.rstrip('/')]},
             ]}
 
 
@@ -49,7 +49,7 @@ def zap_command(plan: Path, home: Path) -> list[str]:
               'network.ratelimit.rules.rule(0).matchStr': '.*',
               'network.ratelimit.rules.rule(0).regex': 'true',
               'network.ratelimit.rules.rule(0).reqsPerSec': '1',
-              'network.ratelimit.rules.rule(0).groupBy': 'host',
+              'network.ratelimit.rules.rule(0).groupBy': 'RULE',
               'autoupdate.checkOnStart': 'false', 'autoupdate.downloadNewRelease': 'false',
               'autoupdate.downloadNewAddon': 'false', 'autoupdate.installAddonUpdates': 'false',
               'spider.processForm': 'false', 'spider.postForm': 'false'}
