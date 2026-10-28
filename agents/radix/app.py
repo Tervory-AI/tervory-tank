@@ -70,3 +70,6 @@ app = create_app(
 
 attach_verification(app)
 attach_gold(app)
+
+from passive_routes import attach as attach_passive
+attach_passive(app)
