@@ -14,7 +14,7 @@ from fastapi import FastAPI, HTTPException
 
 import command
 import command_repo as repo
-from test_command import TENANT, OTHER, planned_turn
+from test_command import TENANT, OTHER
 import test_command as command_tests
 
 api = command_tests.api
@@ -296,7 +296,16 @@ async def test_get_helper_refuses_write_paths_and_arbitrary_hosts(github):
 async def test_confirmed_read_saved_replayed_and_isolated(api, runtime, github, monkeypatch):
     client, pool = api
     runtime.app = client._transport.app
-    thread, data = await planned_turn(client, pool, monkeypatch, [{"tool": "repo.prs", "arguments": {}}])
+    question = "which PRs are open and are their checks green?"
+    ledger_id = await command_tests.seed_ledger(pool)
+    planner = AsyncMock(return_value=SimpleNamespace(ledger_id=ledger_id, content=json.dumps({
+        "text": "", "actions": [{"tool": "repo.prs", "arguments": {}}]})))
+    monkeypatch.setattr(command, "route_turn", planner)
+    thread = (await client.post("/v1/command/threads", json={"title": question})).json()["thread_id"]
+    assert (await client.post(f"/v1/command/threads/{thread}/turn", json={"text": question})).status_code == 200
+    data = (await client.get(f"/v1/command/threads/{thread}")).json()
+    assert planner.call_args.args[1][-1]["content"] == question
+    assert "repo.prs" in planner.call_args.args[1][0]["content"]
     card = data["cards"][0]
     assert card["status"] == "pending" and github.requests == []
     url = f"/v1/command/cards/{card['card_id']}"
@@ -328,3 +337,67 @@ async def test_confirmed_read_saved_replayed_and_isolated(api, runtime, github, 
     proof = os.environ.get("COMMAND_REPO_SNAPSHOT")
     if proof:
         Path(proof).write_text(json.dumps(saved, ensure_ascii=False))
+        Path(proof + ".pending").write_text(json.dumps(data, ensure_ascii=False))
+
+
+@pytest.mark.asyncio
+async def test_entire_page_visible_beyond_the_existing_five_item_preview(http_api, github):
+    github.reply = lambda request: httpx.Response(200, json=[pull(number) for number in range(1, 8)]) if request.url.path == ROOT + "pulls" else github.default(request)
+    result = (await http_api.get("/v1/command/repo/prs")).json()
+    assert result["count"] == 7
+    assert [row["number"] for row in json.loads(result["text"])["items"]] == list(range(1, 8))
+
+
+@pytest.mark.asyncio
+async def test_pr_file_pagination_excludes_patches(http_api, github):
+    def reply(request):
+        if request.url.path.endswith("/files"):
+            assert dict(request.url.params) == {"page": "2", "per_page": "1"}
+            return httpx.Response(200, json=[{"filename": "new.md", "previous_filename": "old.md", "status": "renamed", "patch": "not exposed"}], headers={"Link": '<https://other.invalid/>; rel="next"'})
+        return github.default(request)
+    github.reply = reply
+    result = (await http_api.get("/v1/command/repo/pr", params={"number": 17, "page": 2, "limit": 1})).json()
+    assert result["page"] == 2 and result["next_page"] == 3 and result["has_more"] is True
+    assert result["files"] == [{"filename": "new.md", "previous_filename": "old.md", "status": "renamed"}]
+    assert "not exposed" not in result["text"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("params", [{"number": 0}, {"number": -1}, {"number": "17/merge"}, {"number": 17, "page": 0}, {"number": 17, "limit": 51}])
+async def test_invalid_pr_arguments_refused_before_request(http_api, github, params):
+    assert (await http_api.get("/v1/command/repo/pr", params=params)).status_code == 422
+    assert github.requests == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("body,expected", [(b"not JSON", 502), (b"null", 502), (b"{}", 502), (b"x" * 1025, 413)])
+async def test_malformed_or_oversized_response_refused(http_api, github, monkeypatch, body, expected):
+    monkeypatch.setattr(repo, "MAX_RESPONSE_BYTES", 1024)
+    github.reply = lambda request: httpx.Response(200, content=body)
+    response = await http_api.get("/v1/command/repo/prs")
+    assert response.status_code == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("body,expected", [
+    ({"truncated": True, "tree": []}, 502),
+    ({"truncated": False, "tree": []}, 404),
+    ({"truncated": False, "tree": [{"path": "AGENTS.md", "type": "blob", "mode": "100644", "sha": "../other"}]}, 502),
+])
+async def test_missing_truncated_or_invalid_tree_refused(http_api, github, body, expected):
+    github.reply = lambda request: httpx.Response(200, json=body)
+    assert (await http_api.get("/v1/command/repo/file", params={"path": "AGENTS.md"})).status_code == expected
+    assert len(github.requests) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("body", [
+    {"encoding": "base64", "size": 1, "content": "AA=="},
+    {"encoding": "base64", "size": 1, "content": "/w=="},
+    {"encoding": "base64", "size": 0, "content": "invalid"},
+    {"encoding": "base64", "size": 64001, "content": ""},
+    {"encoding": "base64", "size": 0, "content": "YQ=="},
+])
+async def test_binary_invalid_or_oversized_file_refused(http_api, github, body):
+    github.reply = lambda request: httpx.Response(200, json=body) if "/blobs/" in request.url.path else github.default(request)
+    assert (await http_api.get("/v1/command/repo/file", params={"path": "AGENTS.md"})).status_code == 422
