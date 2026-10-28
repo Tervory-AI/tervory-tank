@@ -13,6 +13,10 @@ from pydantic import BaseModel
 import batch_providers
 
 
+class WindowClosed(Exception):
+    """The clock crossed a window boundary during preflight; nothing was sent."""
+
+
 class QueuedResponse(BaseModel):
     id: uuid.UUID
     ledger_id: uuid.UUID
@@ -175,6 +179,8 @@ async def _process(tank, conn, job):
             model_override=job['model_override'], _paid_policy=policy, _prior_escalation=snapshot['escalation'],
             _paid_limit=float(policy['max_cost_usd']), _offpeak_dispatch=True, _receipt_id=job['id'])
         await _finish(tank, conn, job, result.model_dump(mode='json'))
+    except WindowClosed:
+        await conn.execute("UPDATE tank.offpeak_jobs SET status='queued',sent_at=NULL WHERE id=$1 AND tenant_id=$2", job['id'], job['tenant_id'])
     except Exception as exc:
         detail = exc.detail if isinstance(exc, HTTPException) else None
         known = isinstance(detail, dict) and detail.get('ledger_id')
@@ -206,5 +212,34 @@ async def process_once(tank, *, job_id=None, tenant_id=None):
                     tank.log.warning('Offpeak maintenance will retry status')
             except Exception:
                 tank.log.warning('Offpeak maintenance will retry status')
+            finally:
+                await conn.execute('SELECT pg_advisory_unlock($1)', lock)
+
+
+async def notify_commands(tank):
+    """Resume an existing Command turn after a durable job completes, without a model call."""
+    import command
+    from types import SimpleNamespace
+    async with tank.pool().acquire() as conn:
+        rows = await conn.fetch("""SELECT id,tenant_id FROM tank.offpeak_jobs WHERE region=$1
+            AND status IN ('completed','failed','uncertain') AND command_context IS NOT NULL
+            AND NOT notified ORDER BY created_at LIMIT 100""", tank.box_region())
+        for row in rows:
+            lock = int.from_bytes(uuid.uuid5(row['id'], 'offpeak').bytes[:8], 'big', signed=True)
+            if not await conn.fetchval('SELECT pg_try_advisory_lock($1)', lock):
+                continue
+            try:
+                job = await conn.fetchrow('SELECT * FROM tank.offpeak_jobs WHERE id=$1 AND tenant_id=$2', row['id'], row['tenant_id'])
+                if job['notified']:
+                    continue
+                context = unpack(job['command_context'])
+                actor = await command.authorized_actor(command.Actor(job['tenant_id'], context['user_id'], False,
+                                                      tenant_admin=context.get('tenant_admin', False)))
+                result = unpack(job['result'])
+                answer = SimpleNamespace(content=result['content'], ledger_id=uuid.UUID(str(result['ledger_id']))) if job['status'] == 'completed' else None
+                error = HTTPException(502, {'ledger_id': str(job['id'])}) if answer is None else None
+                await command.finish_turn(uuid.UUID(context['thread_id']), actor, str(job['task_id']), [],
+                                          model=job['model_override'], answer=answer, deferred_error=error)
+                await conn.execute('UPDATE tank.offpeak_jobs SET notified=true WHERE id=$1 AND tenant_id=$2', job['id'], job['tenant_id'])
             finally:
                 await conn.execute('SELECT pg_advisory_unlock($1)', lock)
