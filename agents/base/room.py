@@ -10,6 +10,9 @@ import time
 import uuid
 from typing import Any
 
+from chassis.events import publish
+from chassis.job_contract import Job
+
 from pipeline import (
     SkillCall,
     enrich_queued,
@@ -290,6 +293,8 @@ async def insert_batch(
         "tenant_id": str(tenant_id),
         "model_spend": 0,
     }
+    cfg = Job(tenant_id=tenant_id, region=os.environ.get("TANK_REGION", "us-east"),
+              agent="base", skill="base.enrich", input=cfg, engine=engine).to_room(skill_column="task_type")["input"]
     title = (
         f"Base passes 1-7{' + ' + engine + ' engine' if engine else ''}: "
         f"{label} ({len(records)} records){note}"
@@ -317,8 +322,9 @@ async def insert_batch(
 
 
 async def _run_batch(pool: Any, task_id: uuid.UUID, cfg: dict[str, Any], call: SkillCall) -> None:
-    tenant_id = uuid.UUID(str(cfg["tenant_id"]))
-    engine = cfg.get("engine")
+    wire = Job.from_room({"tenant_id": cfg["tenant_id"], "task_type": "base.enrich", "input": cfg},
+                         agent="base", region=os.environ.get("TANK_REGION", "us-east"), skill_column="task_type")
+    tenant_id, engine = wire.tenant_id, wire.engine
     async with pool.acquire() as conn:
         await conn.execute(
             "UPDATE agent_base.tasks SET status='running', started_at=coalesce(started_at, now()) "
@@ -378,15 +384,19 @@ async def _run_batch(pool: Any, task_id: uuid.UUID, cfg: dict[str, Any], call: S
                     json.dumps(outcome.passes),
                 )
             else:
-                await conn.execute(
+                saved_at = await conn.fetchval(
                     "UPDATE agent_base.records SET status='done', profile=$3::jsonb, passes=$4::jsonb, "
-                    "confidence=$5, updated_at=now() WHERE id=$1 AND tenant_id=$2",
+                    "confidence=$5, updated_at=now() WHERE id=$1 AND tenant_id=$2 RETURNING updated_at",
                     rec_id,
                     tenant_id,
                     json.dumps(outcome.profile),
                     json.dumps(outcome.passes),
                     outcome.confidence,
                 )
+                if saved_at is not None:
+                    await publish(str(tenant_id), "base.record.enriched", f"{task_id}:{rec_id}", {
+                        "record_id": str(rec_id), "task_id": str(task_id), "confidence": outcome.confidence,
+                        "observed_at": saved_at.isoformat()})
         cfg["model_spend"] = spent
         waiting = await conn.fetchval(
             "SELECT count(*) FROM agent_base.records WHERE task_id=$1 AND tenant_id=$2 AND status='queued'",
