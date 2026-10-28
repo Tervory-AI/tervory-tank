@@ -21,7 +21,7 @@ export async function caseStudyRequest(identity: { tenantId: string; userId: str
 
 export async function ensureCaseStudyReports(identity: { tenantId: string; userId: string }): Promise<void> {
   const response = await caseStudyRequest(identity, "ensure");
-  if (!response.ok) throw new Error("This request could not be completed. Reload the chat before trying again.");
+  if (!response.ok) throw new Error();
 }
 
 /** Base product only. Identity and allowed operations are resolved server-side. */
