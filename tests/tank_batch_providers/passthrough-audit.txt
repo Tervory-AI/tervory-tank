@@ -1,0 +1,5 @@
+PASS pinned LiteLLM pass-through: POST /anthropic/v1/messages/batches
+PASS pinned LiteLLM pass-through: GET /anthropic/v1/messages/batches/msgbatch_offline
+PASS pinned LiteLLM pass-through: GET /anthropic/v1/messages/batches/msgbatch_offline/results
+PASS pinned LiteLLM pass-through: POST /anthropic/v1/messages/batches/msgbatch_offline/cancel
+PASS existing credential selected inside LiteLLM by name; no real values read

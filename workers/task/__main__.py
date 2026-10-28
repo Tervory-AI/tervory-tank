@@ -14,6 +14,9 @@ from pathlib import Path
 import httpx
 
 from workers.github_api import GitHub
+from workers.briefs import allowed_rules
+from workers.command_tasks import CommandTask
+from workers.git_guard import clone_command
 from workers.issues import WorkerIssue
 from workers.proxy import forward_chat, models_document, read_key
 from workers.redact import redact
@@ -24,6 +27,7 @@ from workers.task_run import (
     branch_commands,
     changed_paths,
     commit_paths,
+    command_instruction,
     draft_for,
     existing_files,
     instruction,
@@ -32,6 +36,7 @@ from workers.task_run import (
 )
 
 ROOT = Path("/work/repo")
+COMMAND_FILE = Path("/run/secrets/command.json")
 
 
 def _run(argv: list[str], cwd: Path) -> str:
@@ -113,36 +118,71 @@ def main() -> int:
     )
     branch = os.environ["WORKER_BRANCH"]
     try:
+        command_task = CommandTask.from_payload(json.loads(COMMAND_FILE.read_text())) if COMMAND_FILE.exists() else None
+        if command_task:
+            if branch != command_task.branch or os.environ["WORKER_TENANT_ID"] != command_task.tenant_id:
+                raise RuntimeError("Build identity did not match its task container")
+            issue = command_task
+        token = Path(os.environ["GITHUB_TOKEN_FILE"]).read_text(encoding="utf-8").strip()
+
+        async def existing_pull() -> dict | None:
+            async with httpx.AsyncClient(timeout=60) as client:
+                github = GitHub(os.environ["WORKER_REPO"], client)
+                pulls = await github.open_pulls(token, branch)
+                if not pulls:
+                    if command_task and command_task.followups:
+                        raise RuntimeError("The original pull request is no longer open; no replacement was created")
+                    return None
+                if len(pulls) != 1:
+                    raise RuntimeError("More than one pull request matches this build")
+                pull = pulls[0]
+                if pull.get("draft") is not True:
+                    await github.mark_draft(token, str(pull["node_id"]))
+                return pull
+
+        previous = asyncio.run(existing_pull()) if command_task else None
         _serve_proxy(costs, ledger_ids)
-        Path("/work").mkdir(parents=True, exist_ok=True)
+        ROOT.parent.mkdir(parents=True, exist_ok=True)
         for argv in branch_commands(os.environ["WORKER_REPO"], str(ROOT), branch)[:1]:
-            _run(argv, Path("/work"))
-        for argv in branch_commands(os.environ["WORKER_REPO"], str(ROOT), branch)[1:]:
+            _run(argv, ROOT.parent)
+        setup = branch_commands(os.environ["WORKER_REPO"], str(ROOT), branch)[1:]
+        if previous:
+            authenticated_git = clone_command(os.environ["WORKER_REPO"], str(ROOT))[:5]
+            _run([*authenticated_git, "fetch", "origin", f"refs/heads/{branch}:refs/remotes/origin/{branch}"], ROOT)
+            setup[0] = ["git", "checkout", "-b", branch, f"origin/{branch}"]
+        for argv in setup:
             _run(argv, ROOT)
-        rules = load_rules(ROOT / issue.brief)
+        baseline = _run(["git", "rev-parse", "HEAD"], ROOT).strip()
+        rules = allowed_rules(command_task.body) if command_task else load_rules(ROOT / issue.brief)
+        if not rules:
+            raise RuntimeError("The confirmed brief needs a Files you may change section with explicit paths")
         message = Path("/tmp/worker-message.txt")
-        message.write_text(instruction(issue, rules), encoding="utf-8")
+        message.write_text(command_instruction(command_task.body, rules, command_task.followups)
+                           if command_task else instruction(issue, rules), encoding="utf-8")
         _run(aider_argv(str(message), existing_files(ROOT, rules), proxy_port=int(os.environ.get("WORKER_PROXY_PORT", "8765"))), ROOT)
-        committed = _run(["git", "diff", "--name-only", "main...HEAD"], ROOT)
+        committed = _run(["git", "diff", "--name-only", f"{baseline}...HEAD"], ROOT)
         unstaged = _run(["git", "diff", "--name-only", "HEAD"], ROOT)
         untracked = _run(["git", "ls-files", "--others", "--exclude-standard"], ROOT)
         changed = changed_paths(committed + "\n" + unstaged, untracked)
-        commit_paths(changed, rules)
+        if changed or not previous:
+            commit_paths(changed, rules)
         dirty = changed_paths(unstaged, untracked)
         if dirty:
             for argv in publish_commands(branch, dirty)[:-1]:
                 _run(argv, ROOT)
         _run(publish_commands(branch, dirty or changed)[-1], ROOT)
         sha = _run(["git", "rev-parse", "HEAD"], ROOT).strip()
-        token = Path(os.environ["GITHUB_TOKEN_FILE"]).read_text(encoding="utf-8").strip()
 
         async def open_draft() -> dict[str, object]:
+            if previous:
+                return previous
             async with httpx.AsyncClient(timeout=60) as client:
                 return await GitHub(os.environ["WORKER_REPO"], client).create_draft(
                     token,
                     branch=branch,
                     title=issue.title,
-                    body=draft_for(issue),
+                    body=(f"Confirmed chat build {command_task.build_id}.\n\nThis stays a draft until CI passes. The worker never merges."
+                          if command_task else draft_for(issue)),
                 )
 
         created = asyncio.run(open_draft())

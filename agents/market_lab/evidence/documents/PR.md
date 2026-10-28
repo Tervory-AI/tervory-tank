@@ -1,3 +1,37 @@
+## PR #362: main merge and CI repair
+
+Branch `codex/market-docs-1-vaults`, starting head `8e63f91`, merged main `1c78aaa`.
+This update stays on https://github.com/Tervory-AI/tervory-tank/pull/362 . Git only; no GitHub API or production data access.
+
+- `tank/Dockerfile:16`: takes main's complete layout, including `COPY *.py schema.sql cl100k_base.tiktoken cl100k_base.LICENSE ./`; no hand-maintained module list.
+- `tank/requirements-dev.txt:17`: retains the document PDF reader requirements and main's SMTP catcher dependency at line 22.
+- `tank/schema.sql:1896`: retains `tank.vault_items` plus main's policy/cache migrations, RouteLLM additions and Trigger policies beginning at line 1906. No production SQL was run.
+- `tests/test_bucket1_storage.py:398`: retains the branch's tenant/bucket delete test and main's Qdrant configuration, backup, failure and Compose tests beginning at line 415. Existing test names are retained, and both conflicting test blocks are unchanged.
+- `tests/market_docs_proof.py:67`: uses an obvious placeholder for the flagged assignment. Its value is not printed here or in the proof output; the secret scanner has no exception for it.
+
+[Merge verification](ci-repair-merge.txt) confirms the Dockerfile equals main, the conflicting dependency/schema additions from both sides survive, and the storage tests from both sides are present.
+
+The local environment initially lacked main's new `jiter` dependency. Installing the merged pinned requirements resolved test collection:
+
+```sh
+/workspace/.tervory-cloud/venv/bin/pip install -r tank/requirements.txt -r tank/requirements-dev.txt
+/workspace/.tervory-cloud/venv/bin/ruff check tank tests --select E9,F --per-file-ignores "tank/skills/base.socials/1.0.0/run.py:F401"
+PYTHONPATH=tank /workspace/.tervory-cloud/venv/bin/python -m pytest -q tests/test_secrets.py tests/test_tank_one_door.py
+PYTHONPATH=tank /workspace/.tervory-cloud/venv/bin/python -m pytest -q tests/test_market_lab_documents.py tests/test_vault_contract.py tests/test_bucket1_storage.py tests/test_bucket1_radix.py tests/test_bucket1_integration.py tests/test_market_lab_evidence.py tests/test_market_lab_review.py tests/test_market_research_code.py tests/test_market_quarantine_proxy.py
+```
+
+All commands exit 0: **Ruff passes** ([output](ci-repair-lint.txt)); **29 gate tests pass** ([output](ci-repair-gates.txt)); **234 document/vault/storage/regression tests pass**, six existing dependency warnings ([output](ci-repair-own-tests.txt)). No skips in these runs.
+
+The existing document proof also ran against the real Tank app, real room and a fresh disposable PostgreSQL database. External R2 alone uses the existing local storage fixture. No live model/provider call or production database is involved.
+
+```sh
+env -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_TLS -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH docker --host=unix:///var/run/docker.sock run --detach --rm --name codex-market-docs-362-postgres --tmpfs /var/lib/postgresql/data:size=512m -e POSTGRES_HOST_AUTH_METHOD=trust -e POSTGRES_DB=market_docs_362_test -p 127.0.0.1::5432 postgres:16
+env -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_TLS -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH docker --host=unix:///var/run/docker.sock port codex-market-docs-362-postgres 5432/tcp
+DATABASE_URL=postgresql://postgres@127.0.0.1:32769/market_docs_362_test PYTHONPATH=tank /workspace/.tervory-cloud/venv/bin/python -m pytest -q tests/test_market_lab_documents_real_tank.py
+```
+
+Assigned loopback port: **32769**. Real-Tank test: **1 passed**, no skip ([output](ci-repair-real-tank.txt)). It exercises upload, PDF file/page citations, table guard, tenant isolation, removal and storage deletion. The disposable database is removed after verification. This is local proof, not a new founder-browser screenshot or a claim that remote CI has passed. Earlier screenshots and live acceptance below remain as previously recorded.
+
 ## 1. The job, step by step, as a client does it
 
 On `https://market-lab.tervory.com`, open Plugins → Files, upload a PDF, XLSX or CSV,
@@ -39,8 +73,8 @@ can appear in an answer. The upload screen shows reading status and failure reas
   server-action size. Limit uploads to 32 MiB total/10 files and bound parsing work.
 - Keep the current design. Fix the phone sheet’s shrinking tabs so Files is usable;
   show uploaded-file timestamps in Pacific time consistently with source pages.
-- Add only the new route registration to `tank/main.py`, the module name to the
-  image COPY line, additive schema, and the multipart/test-reader dependencies.
+- Add only the new route registration to `tank/main.py`, additive schema, and
+  the multipart/test-reader dependencies. Main's wildcard COPY includes the module.
 
 Changed text files and first relevant lines (screenshots are linked in Proof):
 

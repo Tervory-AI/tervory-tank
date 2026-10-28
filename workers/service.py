@@ -1,4 +1,4 @@
-"""Poll issues labelled worker and run each one in a fresh podman container."""
+"""Poll confirmed chat builds, then worker-labelled issues; run sealed tasks."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from typing import Any
 import httpx
 
 from workers import status_page
+from workers.command_tasks import CommandTask, CommandTasks
 from workers.github_api import GitHub, GitHubError, ci_state, ready_body
 from workers.github_app import TokenRejected
 from workers.issues import FAILED_LABEL, WorkerIssue
@@ -83,6 +84,12 @@ class Service:
         self.stopped: set[int] = set()
         self.jobs: list[asyncio.Task[None]] = []
         self.pause_s = 15
+        # Legacy pause-only controls still support the issue fallback.
+        self.commands = CommandTasks(self) if callable(getattr(type(control), "next_build", None)) else None
+
+    @property
+    def busy(self) -> bool:
+        return bool(self.inflight or (self.commands and self.commands.inflight))
 
     def _record(self, **fields: Any) -> None:
         issue = fields.get("issue")
@@ -91,13 +98,15 @@ class Service:
         self.records.insert(0, fields)
 
     async def poll_once(self, token: str) -> None:
+        if self.commands is not None:
+            await self.commands.poll(token)
         payloads = await self.github.list_issues(token)
         for number in self.github.malformed(payloads):
             if number in self.commented:
                 continue
             await self.github.comment(token, number, MALFORMED)
             self.commented.add(number)
-        running = len(self.inflight)
+        running = len(self.inflight) + (len(self.commands.inflight) if self.commands else 0)
         for task in self.github.tasks(payloads):
             pulls = await self.github.open_pulls(token, task.branch)
             if pulls:
@@ -295,6 +304,12 @@ class Launcher:
         try:
             # Inside the try: a partly written secret dir is removed even when staging fails.
             stage(secret_dir, token=token, tank_key=key)
+            if isinstance(task, CommandTask):
+                # Private text travels in the existing read-only task mount, never
+                # shell arguments, environment variables, or a repository commit.
+                payload = secret_dir / "command.json"
+                payload.write_text(json.dumps(task.payload()), encoding="utf-8")
+                payload.chmod(0o444)
             argv = task_argv(
                 settings,
                 name=name,
@@ -397,6 +412,7 @@ async def serve(settings: Settings) -> None:
     install_redact()
     records: list[dict[str, Any]] = []
     inflight: set[int] = set()
+    service: Service | None = None
     last_error = LastError()
     log.addHandler(last_error)
 
@@ -413,7 +429,7 @@ async def serve(settings: Settings) -> None:
         if method != "GET":
             body, status, kind = b"Method not allowed\n", "405 Method Not Allowed", "text/plain"
         elif path == "/health":
-            body = (json.dumps({"ok": True, "busy": bool(inflight)}) + "\n").encode()
+            body = (json.dumps({"ok": True, "busy": service.busy if service else False}) + "\n").encode()
             status, kind = "200 OK", "application/json"
         elif path == "/workers":
             body = status_page.render(records).encode()
@@ -470,7 +486,7 @@ async def serve(settings: Settings) -> None:
                         key_file=settings.private_key_file,
                     )
                     await service.poll_once(token)
-                except (GitHubError, TokenRejected, OSError, SettingsError) as exc:
+                except (GitHubError, TokenRejected, OSError, SettingsError, RuntimeError, httpx.HTTPError) as exc:
                     log.warning("poll failed: %s", redact(str(exc)))
                 await asyncio.sleep(settings.poll_s)
 

@@ -1,0 +1,162 @@
+FFFF.                                                                    [100%]
+=================================== FAILURES ===================================
+___________ test_neutral_samples_pass_all_real_tools[ai-sample.glb] ____________
+
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-1/test_neutral_samples_pass_all_0')
+name = 'ai-sample.glb'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("name", ["ai-sample.glb", "scan.obj"])
+    async def test_neutral_samples_pass_all_real_tools(tmp_path, name):
+        source = tmp_path / name
+        shutil.copyfile(ROOT / "agents/rig/forge/samples" / name, source)
+        steps = []
+        async def receipt(stage, outcome):
+            steps.append((stage, outcome))
+>       report = await run(source, tmp_path, unit_mm=1000 if name.endswith(".glb") else 1, dimensions_mm=(20, 30, 40), budget=Budget(), receipt=receipt)
+
+tests/test_rig_forge_pipeline.py:26:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+agents/rig/forge/pipeline.py:81: in run
+    await stage(name, lambda name=name, target=target, current=current, options=options:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+name = 'dedup', action = <function run.<locals>.<lambda> at 0x7f2378825260>
+
+    async def stage(name, action):
+        try:
+            result = await action()
+        except Exception:
+            await receipt(name, "failed")
+>           raise StageFailed(name + " failed; the result is not eligible for approval.") from None
+E           agents.rig.forge.pipeline.StageFailed: dedup failed; the result is not eligible for approval.
+
+agents/rig/forge/pipeline.py:51: StageFailed
+______________ test_neutral_samples_pass_all_real_tools[scan.obj] ______________
+
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-1/test_neutral_samples_pass_all_1')
+name = 'scan.obj'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("name", ["ai-sample.glb", "scan.obj"])
+    async def test_neutral_samples_pass_all_real_tools(tmp_path, name):
+        source = tmp_path / name
+        shutil.copyfile(ROOT / "agents/rig/forge/samples" / name, source)
+        steps = []
+        async def receipt(stage, outcome):
+            steps.append((stage, outcome))
+>       report = await run(source, tmp_path, unit_mm=1000 if name.endswith(".glb") else 1, dimensions_mm=(20, 30, 40), budget=Budget(), receipt=receipt)
+
+tests/test_rig_forge_pipeline.py:26:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+agents/rig/forge/pipeline.py:81: in run
+    await stage(name, lambda name=name, target=target, current=current, options=options:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+name = 'dedup', action = <function run.<locals>.<lambda> at 0x7f2378825300>
+
+    async def stage(name, action):
+        try:
+            result = await action()
+        except Exception:
+            await receipt(name, "failed")
+>           raise StageFailed(name + " failed; the result is not eligible for approval.") from None
+E           agents.rig.forge.pipeline.StageFailed: dedup failed; the result is not eligible for approval.
+
+agents/rig/forge/pipeline.py:51: StageFailed
+___________________ test_built_widget_live_api_journey[390] ____________________
+
+real_chromium = <Browser type=<BrowserType name=chromium executable_path=/home/agent/.cache/ms-playwright/chromium-1187/chrome-linux/chrome> version=154.0.8037.57>
+widget_server = 'http://127.0.0.1:52969'
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-1/test_built_widget_live_api_jou0')
+width = 390
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("width", [390, 1440])
+    async def test_built_widget_live_api_journey(real_chromium, widget_server, tmp_path, width):
+        from playwright.async_api import expect
+
+        output = Path(os.environ.get("RIG_SCREENSHOT_DIR", str(tmp_path)))
+        output.mkdir(parents=True, exist_ok=True)
+        page = await real_chromium.new_page(viewport={"width": width, "height": 900})
+        failures = []
+        page.on("pageerror", lambda error: failures.append(str(error)))
+        # API, bundle and licensed fonts must all work on the local origin.
+        await page.route("**/*", lambda route: route.continue_() if route.request.url.startswith(widget_server + "/")
+                         else route.abort())
+
+        async def capture(name):
+            await page.evaluate("document.fonts.ready")
+            await page.locator("tervory-rig").screenshot(path=str(output / f"rig4b-{name}-{width}.png"))
+            assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
+            assert await page.locator("tervory-rig").evaluate("el => el.shadowRoot.querySelector('.shell').scrollWidth <= el.clientWidth + 1")
+
+        await page.goto(widget_server + "/widget/test")
+        await expect(page.get_by_role("heading", name="Find it. We source it.")).to_be_visible()
+        await capture("01-search")
+        assert await page.evaluate("document.fonts.load('600 32px \"Barlow Condensed\"').then(fonts => fonts.length > 0)")
+        assert await page.evaluate("document.fonts.check('600 32px \"Barlow Condensed\"')")
+        await page.get_by_role("searchbox").fill("Core")
+        await page.get_by_role("button", name="Search", exact=True).click()
+        await expect(page.get_by_role("heading", name="Core One", exact=True)).to_be_visible()
+>       await expect(page.get_by_text("SAMPLE DATA", exact=True)).to_have_count(1)
+E       AssertionError: Locator expected to have count '1'
+E       Actual value: 0
+E       Call log:
+E         - Expect "to_have_count" with timeout 5000ms
+E         - waiting for get_by_text("SAMPLE DATA", exact=True)
+E           9 × locator resolved to 0 elements
+E             - unexpected value "0"
+
+tests/test_rig_quotes_browser.py:77: AssertionError
+___________________ test_built_widget_live_api_journey[1440] ___________________
+
+real_chromium = <Browser type=<BrowserType name=chromium executable_path=/home/agent/.cache/ms-playwright/chromium-1187/chrome-linux/chrome> version=154.0.8037.57>
+widget_server = 'http://127.0.0.1:41301'
+tmp_path = PosixPath('/tmp/pytest-of-agent/pytest-1/test_built_widget_live_api_jou1')
+width = 1440
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("width", [390, 1440])
+    async def test_built_widget_live_api_journey(real_chromium, widget_server, tmp_path, width):
+        from playwright.async_api import expect
+
+        output = Path(os.environ.get("RIG_SCREENSHOT_DIR", str(tmp_path)))
+        output.mkdir(parents=True, exist_ok=True)
+        page = await real_chromium.new_page(viewport={"width": width, "height": 900})
+        failures = []
+        page.on("pageerror", lambda error: failures.append(str(error)))
+        # API, bundle and licensed fonts must all work on the local origin.
+        await page.route("**/*", lambda route: route.continue_() if route.request.url.startswith(widget_server + "/")
+                         else route.abort())
+
+        async def capture(name):
+            await page.evaluate("document.fonts.ready")
+            await page.locator("tervory-rig").screenshot(path=str(output / f"rig4b-{name}-{width}.png"))
+            assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
+            assert await page.locator("tervory-rig").evaluate("el => el.shadowRoot.querySelector('.shell').scrollWidth <= el.clientWidth + 1")
+
+        await page.goto(widget_server + "/widget/test")
+        await expect(page.get_by_role("heading", name="Find it. We source it.")).to_be_visible()
+        await capture("01-search")
+        assert await page.evaluate("document.fonts.load('600 32px \"Barlow Condensed\"').then(fonts => fonts.length > 0)")
+        assert await page.evaluate("document.fonts.check('600 32px \"Barlow Condensed\"')")
+        await page.get_by_role("searchbox").fill("Core")
+        await page.get_by_role("button", name="Search", exact=True).click()
+        await expect(page.get_by_role("heading", name="Core One", exact=True)).to_be_visible()
+>       await expect(page.get_by_text("SAMPLE DATA", exact=True)).to_have_count(1)
+E       AssertionError: Locator expected to have count '1'
+E       Actual value: 0
+E       Call log:
+E         - Expect "to_have_count" with timeout 5000ms
+E         - waiting for get_by_text("SAMPLE DATA", exact=True)
+E           9 × locator resolved to 0 elements
+E             - unexpected value "0"
+
+tests/test_rig_quotes_browser.py:77: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_rig_forge_pipeline.py::test_neutral_samples_pass_all_real_tools[ai-sample.glb]
+FAILED tests/test_rig_forge_pipeline.py::test_neutral_samples_pass_all_real_tools[scan.obj]
+FAILED tests/test_rig_quotes_browser.py::test_built_widget_live_api_journey[390]
+FAILED tests/test_rig_quotes_browser.py::test_built_widget_live_api_journey[1440]
+4 failed, 1 passed in 22.15s

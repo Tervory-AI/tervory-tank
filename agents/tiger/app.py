@@ -14,6 +14,8 @@ from fastapi import Header, HTTPException, Query
 from gold_sources import candidates
 from pydantic import BaseModel
 
+from alert_email import deliver_pending
+from rig_watch import RigWatches, TankRig
 from chassis.app import create_app
 from chassis.jobs import JobContext
 from watch import (
@@ -120,6 +122,9 @@ async def official_feed(tenant: str, url: str) -> dict:
 async def check(ctx: JobContext) -> dict:
     url = str(ctx.input.get("url") or "").strip()
     store = PgStore(app.state.pool, SCHEMA)
+    rig = RigWatches(store)
+    if await rig.managed(ctx.tenant_id, url):
+        await rig.sync(ctx.tenant_id, TankRig(app.state.http))
     watch = await store.get_watch(ctx.tenant_id, url)
     if watch is None or not watch.get("enabled"):
         return {"status": "skipped", "url": url, "alerts": []}
@@ -133,7 +138,7 @@ async def check(ctx: JobContext) -> dict:
     async def render(url, session, agent, tenant):
         return await _render(url, session, agent, tenant, str(ctx.job_id))
 
-    return await run_check(
+    result = await run_check(
         store,
         ctx.tenant_id,
         watch,
@@ -146,17 +151,36 @@ async def check(ctx: JobContext) -> dict:
         files=ctx.files,
         feed=official_feed,
     )
+    try:
+        await rig.deliver(ctx.tenant_id, TankRig(app.state.http))
+    except (httpx.HTTPError, ValueError):
+        log.warning("Rig watch delivery is unavailable; saved readings remain pending.")
+    return result
 
 
 async def dispatch(ctx: JobContext) -> dict:
     store = PgStore(app.state.pool, SCHEMA)
-    return await dispatch_tenant(store, ctx.tenant_id, datetime.now(timezone.utc))
+    try:
+        await RigWatches(store).deliver(ctx.tenant_id, TankRig(app.state.http))
+    except (httpx.HTTPError, ValueError):
+        log.warning("Rig watch discovery is unavailable; managed reads will recheck eligibility.")
+    result = await dispatch_tenant(store, ctx.tenant_id, datetime.now(timezone.utc))
+    result["email"] = await deliver_pending(store, ctx.tenant_id)
+    return result
+
+
+async def rig_discover(ctx: JobContext) -> dict:
+    if str(ctx.tenant_id) != HEARTBEAT_TENANT:
+        return {"tenants": 0}
+    count = await RigWatches(PgStore(app.state.pool, SCHEMA)).discover(TankRig(app.state.http))
+    return {"tenants": count}
 
 
 app = create_app(
     agent=AGENT,
-    handlers={"ping": ping, "check": check, "dispatch": dispatch},
+    handlers={"ping": ping, "check": check, "dispatch": dispatch, "rig_discover": rig_discover},
     schedules=[
+        {"tenant_id": HEARTBEAT_TENANT, "cron": "* * * * *", "kind": "rig_discover", "input": {}},
         {
             "tenant_id": HEARTBEAT_TENANT,
             "cron": "*/5 * * * *",

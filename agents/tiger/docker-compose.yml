@@ -26,6 +26,12 @@ services:
       HERMES_URL: http://hermes:8000
       DATA_DIR: /data
       DOMAIN_INTERVAL_S: "10"
+      TIGER_SMTP_HOST: ${TIGER_SMTP_HOST:-}
+      TIGER_SMTP_PORT: ${TIGER_SMTP_PORT:-587}
+      TIGER_SMTP_USER: ${TIGER_SMTP_USER:-}
+      TIGER_SMTP_PASSWORD: ${TIGER_SMTP_PASSWORD:-}
+      TIGER_SMTP_FROM: ${TIGER_SMTP_FROM:-}
+      TIGER_SMTP_ALERT_ADDRESSES: ${TIGER_SMTP_ALERT_ADDRESSES:-}
     volumes:
       - agent_tiger_data:/data
     networks:

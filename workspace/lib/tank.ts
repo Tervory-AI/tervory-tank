@@ -965,7 +965,7 @@ export function rigAdminPanel<T>(actor: AccessIdentity): Promise<T> {
 }
 
 export function rigAdminAction<T>(actor: AccessIdentity, operation: string, data: Record<string, unknown>): Promise<T> {
-  if (!["connect", "import", "refresh", "mapping", "confirm-mapping", "settings", "embed-keys", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest"].includes(operation)) {
+  if (!["connect", "import", "delete-products", "refresh", "mapping", "confirm-mapping", "settings", "embed-keys", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest"].includes(operation)) {
     throw new Error("Unknown retailer operation.");
   }
   return accessRequest<T>(actor, `rig/admin/${operation}`, { data });
@@ -1003,6 +1003,13 @@ export function moaEvidence(userId: string, tenantId: string, task?: string): Pr
 }
 export function moaAction(userId: string, action: "bench" | "promote", body: { tenant_id: string; task_type: string; config_hash: string; seat?: string }): Promise<unknown> {
   return tank(`/v1/moa/${action}`, { method: "POST", headers: { "x-tervory-admin": userId }, body: JSON.stringify(body) });
+}
+
+/** Public platform training matches, read from the active US Zenas room. */
+export function mootPublishedMatches(matchId?: string): Promise<{ matches: unknown[] }> {
+  const query = new URLSearchParams({ home_region: "us-east" });
+  if (matchId) query.set("match_id", matchId);
+  return tank(`/v1/zenas/moot/published?${query}`, { method: "GET" });
 }
 
 /** MOOT-1a: list fixture problems via Tank → Zenas room (server-side only). */

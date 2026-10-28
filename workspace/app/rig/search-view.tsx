@@ -1,17 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  C2_PARTS,
-  OPENING_ANSWER,
-  OPENING_ITEMS,
-  OPENING_QUESTION,
-  OPENING_SOURCES,
-  PISTOLS,
-  SEED_ADDED,
-  type Part,
-  type Pistol,
-} from "./copy";
+import { type Part, type Pistol } from "./copy";
 
 type SourceRef = { title: string; detail: string };
 type Item = { name: string; price: string };
@@ -20,17 +10,6 @@ type Turn =
   | { role: "rig"; text: string; items: Item[]; sources: SourceRef[]; note?: string };
 
 type Hit = { id?: string; name?: string; category?: string; price?: { amount?: number } };
-
-const OPENING: Turn[] = [
-  { role: "you", text: OPENING_QUESTION },
-  {
-    role: "rig",
-    text: OPENING_ANSWER,
-    items: OPENING_ITEMS,
-    sources: OPENING_SOURCES,
-    note: "Prices are the retailer's. Market average shows once your selection is final.",
-  },
-];
 
 function rand(amount: number): string {
   return `R${Math.round(amount).toLocaleString("en-US")}`;
@@ -56,17 +35,17 @@ async function call<T>(body: unknown): Promise<T> {
   return data;
 }
 
-export function SearchView({ query, onQuery }: { query: string; onQuery: (value: string) => void }) {
-  const [text, setText] = useState(query || "Staccato");
-  const [pistols, setPistols] = useState<Pistol[]>(PISTOLS);
-  const [parts, setParts] = useState<Part[]>(C2_PARTS);
-  const [chosen, setChosen] = useState<string>("STI-C2-9");
-  const [added, setAdded] = useState<string[]>(SEED_ADDED);
-  const [line, setLine] = useState('Search looks through Rig\'s own catalogue records. Showing results for "Staccato": 3 pistols.');
-  const [thread, setThread] = useState<Turn[]>(OPENING);
+export function SearchView({ query, onQuery, hasCatalogue }: { query: string; onQuery: (value: string) => void; hasCatalogue: boolean }) {
+  const [text, setText] = useState("");
+  const [pistols, setPistols] = useState<Pistol[]>([]);
+  const [parts, setParts] = useState<Part[]>([]);
+  const [chosen, setChosen] = useState<string>("");
+  const [added, setAdded] = useState<string[]>([]);
+  const [line, setLine] = useState("");
+  const [thread, setThread] = useState<Turn[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
-  const [final, setFinal] = useState(true);
+  const [final, setFinal] = useState(false);
 
   useEffect(() => {
     if (query && query !== text) {
@@ -78,27 +57,21 @@ export function SearchView({ query, onQuery }: { query: string; onQuery: (value:
   }, [query]);
 
   useEffect(() => {
-    void call<{ results?: Hit[]; exact_match?: boolean; message?: string }>({ op: "search", q: "Staccato" })
-      .then((body) => {
-        const hits = Array.isArray(body.results) ? body.results : [];
-        if (!hits.length) return;
-        applyHits("Staccato", hits, body.exact_match !== false, body.message);
-      })
-      .catch(() => {
-        /* Keep the frame until the live search answers. */
-      });
-  }, []);
+    if (!hasCatalogue) {
+      setPistols([]); setParts([]); setAdded([]); setChosen("");
+      setThread([]); setLine(""); setFinal(false);
+    }
+  }, [hasCatalogue]);
 
   function applyHits(q: string, hits: Hit[], exact: boolean, message?: string) {
     const rows: Pistol[] = hits.map((hit) => {
       const id = String(hit.id ?? "");
-      const known = PISTOLS.find((row) => row.id === id);
-      const amount = Number(hit.price?.amount ?? known?.price ?? 0);
+      const amount = Number(hit.price?.amount ?? 0);
       return {
         id,
-        name: String(hit.name ?? known?.name ?? ""),
+        name: String(hit.name ?? ""),
         price: Number.isFinite(amount) ? amount : 0,
-        market: known?.market ?? null,
+        market: null,
       };
     });
     setPistols(rows);
@@ -121,25 +94,14 @@ export function SearchView({ query, onQuery }: { query: string; onQuery: (value:
       return;
     }
     setLine(`Search looks through Rig's own catalogue records. Showing results for "${q}": ${rows.length} ${noun}.`);
-    const pistol = rows.find((row) => row.name === "Staccato C2") ?? rows.find((row) => row.id === "STI-C2-9");
-    if (pistol && q.toLowerCase() === "staccato") {
-      setChosen(pistol.id);
-      setParts(C2_PARTS);
-      setAdded(SEED_ADDED);
-      setFinal(true);
-    } else if (rows[0]) {
+    setParts([]); setAdded([]); setFinal(false);
+    if (rows[0]) {
       setChosen(rows[0].id);
       void loadParts(rows[0].id);
     }
   }
 
   async function loadParts(id: string) {
-    if (id === "STI-C2-9") {
-      setParts(C2_PARTS);
-      setAdded(SEED_ADDED);
-      setFinal(true);
-      return;
-    }
     try {
       const body = await call<{ branches?: { category?: string; products?: Hit[] }[] }>({ op: "graph", id });
       const next: Part[] = [];
@@ -160,16 +122,16 @@ export function SearchView({ query, onQuery }: { query: string; onQuery: (value:
       setFinal(false);
     } catch {
       setParts([]);
-      setLine("Search looks through Rig's own catalogue records. Rig did not answer. Try again.");
+      setLine("");
     }
   }
 
   async function run(q: string, tellParent: boolean) {
     const trimmed = q.trim();
-    if (!trimmed) return;
+    if (!trimmed || !hasCatalogue) return;
     if (tellParent) onQuery(trimmed);
     setText(trimmed);
-    setLine("Search looks through Rig's own catalogue records. Searching…");
+    setLine("");
     try {
       const body = await call<{ results?: Hit[]; exact_match?: boolean; message?: string }>({ op: "search", q: trimmed });
       const hits = Array.isArray(body.results) ? body.results : [];
@@ -179,12 +141,12 @@ export function SearchView({ query, onQuery }: { query: string; onQuery: (value:
         setChosen("");
         setAdded([]);
         setFinal(false);
-        setLine("Search looks through Rig's own catalogue records. I don't know. That isn't in this catalogue.");
+        setLine("");
         return;
       }
       applyHits(trimmed, hits, body.exact_match !== false, body.message);
     } catch {
-      setLine("Search looks through Rig's own catalogue records. Rig did not answer. Try again.");
+      setLine("");
     }
   }
 
@@ -208,7 +170,7 @@ export function SearchView({ query, onQuery }: { query: string; onQuery: (value:
   async function send(event: React.FormEvent) {
     event.preventDefault();
     const question = draft.trim();
-    if (!question || busy) return;
+    if (!question || busy || !hasCatalogue) return;
     const prior = thread;
     setThread([...prior, { role: "you", text: question }]);
     setDraft("");
@@ -242,7 +204,7 @@ export function SearchView({ query, onQuery }: { query: string; onQuery: (value:
     }
   }
 
-  const centre = pistols.find((row) => row.id === chosen);
+  const centre = hasCatalogue ? pistols.find((row) => row.id === chosen) : undefined;
   const selected = parts.filter((part) => added.includes(part.id));
   const lines = centre ? [{ id: centre.id, name: centre.name, price: centre.price, market: centre.market }, ...selected] : [];
   const total = lines.reduce((sum, lineItem) => sum + lineItem.price, 0);
@@ -270,12 +232,12 @@ export function SearchView({ query, onQuery }: { query: string; onQuery: (value:
             Search
           </button>
         </form>
-        <p className="results-line">{line}</p>
+        <p className="results-line">{hasCatalogue ? line : ""}</p>
       </div>
 
       <div className="search-split">
         <div className="search-main">
-          {pistols.length ? (
+          {hasCatalogue && pistols.length ? (
             <section>
               <h2>Pistols</h2>
               <p className="intro">Pick one to see the parts that fit it.</p>
@@ -300,7 +262,7 @@ export function SearchView({ query, onQuery }: { query: string; onQuery: (value:
             </section>
           ) : null}
 
-          {chosen && parts.length ? (
+          {hasCatalogue && chosen && parts.length ? (
             <section>
               <h2>Compatible upgrades for {centre?.name ?? "this pistol"}</h2>
               <p className="intro">Parts confirmed to fit this pistol, sorted by type.</p>
@@ -344,7 +306,7 @@ export function SearchView({ query, onQuery }: { query: string; onQuery: (value:
           <h2>Ask Rig</h2>
           <p className="intro">Ask in plain words. Answers come only from Rig's catalogue.</p>
           <div className="thread">
-            {thread.map((turn, index) =>
+            {(hasCatalogue ? thread : []).map((turn, index) =>
               turn.role === "you" ? (
                 <article key={index} className="you">
                   <b>You</b>
@@ -402,7 +364,7 @@ export function SearchView({ query, onQuery }: { query: string; onQuery: (value:
         </aside>
       </div>
 
-      <section className="build-wrap">
+      {lines.length ? <section className="build-wrap">
         <h2>Your build</h2>
         <div className="card build">
         <div className="build-head">
@@ -441,27 +403,8 @@ export function SearchView({ query, onQuery }: { query: string; onQuery: (value:
           Start again
         </button>
         </div>
-      </section>
+      </section> : null}
 
-      <section>
-        <h2>Check it stays honest</h2>
-        <p className="intro">Searches Rig should not guess at.</p>
-        <div className="honest">
-          <article className="card">
-            <h3>“Staccato CS”</h3>
-            <p>No exact match for Staccato CS. Closest matches: Staccato C2, Staccato P, Staccato XC.</p>
-          </article>
-          <article className="card">
-            <h3>“Glock 19”</h3>
-            <p>I don't know. That isn't in this catalogue.</p>
-          </article>
-        </div>
-      </section>
-
-      <footer className="foot">
-        <p>Stand-in products only. Prices are demo figures in rand.</p>
-        <p className="small">Market averages come from two demo shops, not live quotes.</p>
-      </footer>
     </div>
   );
 }

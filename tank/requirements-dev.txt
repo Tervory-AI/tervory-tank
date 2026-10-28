@@ -16,3 +16,7 @@ playwright==1.64.1
 
 # MARKET-DOCS-1 runs the production PDF reader in offline tests.
 -r ../agents/market_lab/feeds/requirements.txt
+
+
+# Tiger alert delivery uses the same offline SMTP catcher as Rig's proof.
+aiosmtpd==1.4.6

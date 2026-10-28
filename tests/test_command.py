@@ -248,7 +248,7 @@ async def test_interrupted_turn_is_not_retried_and_new_turn_can_start(api, monke
     thread = (await client.post('/v1/command/threads', json={})).json()['thread_id']
     async with pool.acquire() as conn:
         await conn.execute("UPDATE tank.command_threads SET state=state || $2::jsonb WHERE thread_id=$1",
-                           uuid.UUID(thread), json.dumps({'active_turn': 'interrupted', 'active_started_at': '2000-01-01T00:00:00+00:00'}))
+                           uuid.UUID(thread), json.dumps({'active_turn': str(uuid.UUID(int=99)), 'active_started_at': '2000-01-01T00:00:00+00:00'}))
     route = AsyncMock(side_effect=HTTPException(503, 'paused'))
     monkeypatch.setattr(command, 'route_turn', route)
     reply = await client.post(f'/v1/command/threads/{thread}/turn', json={'text': 'New request'})
@@ -257,7 +257,7 @@ async def test_interrupted_turn_is_not_retried_and_new_turn_can_start(api, monke
     route.assert_awaited_once()  # Only the new request, never the stale request.
     data = (await client.get(f'/v1/command/threads/{thread}')).json()
     assert data['thread']['spent_usd'] is None and data['thread']['receipt_status'] == 'pending'
-    assert next(s for s in data['steps'] if s['step_id'] == 'interrupted')['receipt_status'] == 'pending'
+    assert next(s for s in data['steps'] if s['step_id'] == str(uuid.UUID(int=99)))['receipt_status'] == 'pending'
 
 
 @pytest.mark.asyncio
@@ -753,7 +753,8 @@ async def test_pinned_turn_receipt_uses_actual_model_and_pending_auto(api, runti
     reply = await client.post(f'/v1/command/threads/{thread}/turn', json={'text': 'Hello', 'model': 'fixture-pin'})
     assert reply.status_code == 200 and 'event: done' in reply.text
     route.assert_awaited_once()
-    assert route.call_args.kwargs == {'model': 'fixture-pin'}
+    assert route.call_args.kwargs['model'] == 'fixture-pin'
+    assert isinstance(route.call_args.kwargs['task_id'], uuid.UUID)
     data = (await client.get(f'/v1/command/threads/{thread}')).json()
     receipt = data['receipts'][0]
     assert receipt['model'] == 'fixture-actual'  # the ledger wins over the requested pin
@@ -974,7 +975,7 @@ async def test_auto_comparison_prices_same_tokens_with_frozen_tenant_policy(api,
         await conn.execute("INSERT INTO tank.policy(tenant_id,task_type,model) VALUES(NULL,'command.turn','fixture-platform'),($1,'command.turn','fixture-auto')", TENANT)
     ledger_id = await seed_ledger(pool)
 
-    async def answer(actor, messages, model=None):
+    async def answer(actor, messages, model=None, *, task_id=None, on_token=None):
         assert model == 'fixture-pin'
         # A price or policy edit during the call must not rewrite its comparison.
         async with pool.acquire() as conn:

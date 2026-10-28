@@ -21,6 +21,8 @@ RUN mkdir -p /app/skills && cd /tmp/skills \
     && rm -rf /tmp/skills
 COPY agents/base/base_gold /app/base_gold
 COPY agents/base/engines /app/engines
+# Reuse the existing public-address validator; no second URL policy.
+COPY agents/_brain/security.py /app/reference_security.py
 USER agent
 ENV AGENT_NAME=base \
     DATA_DIR=/data \

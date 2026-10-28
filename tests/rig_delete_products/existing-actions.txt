@@ -1,0 +1,1 @@
+Retailer route: session role, server tenant, origin checks and bounded uploads passed.

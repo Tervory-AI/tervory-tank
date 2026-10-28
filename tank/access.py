@@ -740,8 +740,10 @@ async def refresh_connected_feed(actor: Actor, body: FeedRefresh) -> dict[str, A
         if body.target == "rig":
             failed = FeedImport(target="rig", distributor=body.distributor, site=site, source="dealer_api",
                                 format=config["format"], contents=SecretStr(""), currency=config.get("currency", "USD"), feed_id=body.feed_id)
-            return await save_rig_feed(actor, failed, None)
+            return await save_rig_feed(actor, failed, None, refresh=True)
         raise HTTPException(503, "The official feed could not be refreshed. Existing data was kept.") from None
+    if body.target == "rig":
+        return await save_rig_feed(actor, parsed, rows, refresh=True)
     return await save_feed(actor, parsed, rows)
 
 
@@ -806,7 +808,7 @@ async def rig_request(actor: Actor, operation: str, data: dict[str, Any] | None 
         raise HTTPException(503, "Rig returned an invalid response.") from None
 
 
-async def save_rig_feed(actor: Actor, body: FeedImport, rows: list[dict[str, Any]] | None) -> dict[str, Any]:
+async def save_rig_feed(actor: Actor, body: FeedImport, rows: list[dict[str, Any]] | None, *, refresh: bool = False) -> dict[str, Any]:
     site = site_name(body.site)
     parse_error = rows is None
     rows = rows or []
@@ -816,7 +818,7 @@ async def save_rig_feed(actor: Actor, body: FeedImport, rows: list[dict[str, Any
     result = await rig_request(actor, "import", {"provider": body.distributor, "site": site,
         **body.model_dump(include=RIG_SETTING_FIELDS | {"feed_id", "encoding"}),
         "contents": body.contents.get_secret_value() if not rows else "",
-        "rows": rows, "metadata": metadata, "parse_error": parse_error})
+        "rows": rows, "metadata": metadata, "parse_error": parse_error, "refresh": refresh})
     # The room's receipt is durable even if the connection breaks here. No raw
     # supplier data, costs or credential fields are returned to the browser.
     summary = result["receipt"]
@@ -921,11 +923,11 @@ class RigAdminAction(Body):
 @router.post("/rig/admin/{operation}")
 async def rig_admin_action(operation: str, request: Request, actor: Actor = Depends(identity)):
     permit_feed(actor, "rig", "shopify")
-    if operation not in {"import", "connect", "refresh", "mapping", "confirm-mapping", "settings", "embed-keys", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest"}:
+    if operation not in {"import", "delete-products", "connect", "refresh", "mapping", "confirm-mapping", "settings", "embed-keys", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest"}:
         raise HTTPException(404, "Unknown retailer operation.")
     if operation == "exchange-rate" and not actor.founder:
         raise HTTPException(403, "Only the founder may set exchange rates.")
-    body = await parse(request, RigAdminAction, 12_000_000 if operation in {"import", "mapping", "confirm-mapping"} else 16000)
+    body = await parse(request, RigAdminAction, 12_000_000 if operation in {"import", "mapping", "confirm-mapping", "delete-products"} else 16000)
     if operation in {"mapping", "confirm-mapping"}:
         try:
             data = {**body.data, "target": "rig"}
@@ -971,15 +973,33 @@ class RigTigerUpdate(Body):
     price: str | None = Field(default=None, max_length=32)
     currency: str | None = Field(default=None, pattern="^[A-Z]{3}$")
     active: bool | None = None
+    url: str | None = Field(default=None, max_length=2000)
+    observed_at: datetime | None = None
+
+
+def require_tiger(request: Request) -> None:
+    if not key_matches(request.headers.get("x-tank-key", ""), os.environ.get("TANK_KEY_TIGER", "")):
+        raise HTTPException(401, "Tiger authentication required.")
+
+
+@router.get("/rig/tiger/tenants")
+async def rig_tiger_tenants(request: Request):
+    require_tiger(request)
+    return await rig_request(Actor(PLATFORM, "tiger-price-watch", False), "watch-tenants")
+
+
+@router.get("/rig/tiger/products")
+async def rig_tiger_products(request: Request, tenant_id: uuid.UUID):
+    require_tiger(request)
+    return await rig_request(Actor(tenant_id, "tiger-price-watch", False), "watch-products")
 
 
 @router.post("/rig/tiger")
 async def rig_tiger_update(request: Request):
-    if not key_matches(request.headers.get("x-tank-key", ""), os.environ.get("TANK_KEY_TIGER", "")):
-        raise HTTPException(401, "Tiger authentication required.")
+    require_tiger(request)
     body = await parse(request, RigTigerUpdate)
     actor = Actor(body.tenant_id, "tiger-price-watch", False, frozenset({"rig"}))
-    return await rig_request(actor, "tiger", body.model_dump(exclude={"tenant_id"}, exclude_none=True))
+    return await rig_request(actor, "tiger", body.model_dump(mode="json", exclude={"tenant_id"}, exclude_none=True))
 
 
 async def refresh_due_rig_feeds() -> None:

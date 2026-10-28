@@ -1,0 +1,7 @@
+LIC_REGN,LIC_DIST,LIC_CNTY,LIC_TYPE,LIC_XPRDTE,LIC_SEQN,LICENSE_NAME,BUSINESS_NAME,PREMISE_STREET,PREMISE_CITY,PREMISE_STATE,PREMISE_ZIP_CODE
+5,74,001,01,7A,00001,Fixture Business 1,,1 Fixture Road,Fixture City,CA,75001
+5,74,001,01,7A,00002,Fixture Business 2,,1 Fixture Road,Fixture City,CA,75001
+5,74,001,01,7A,00003,Fixture Business 3,,1 Fixture Road,Fixture City,CA,75001
+5,74,001,01,7A,00004,Fixture Business 4,,1 Fixture Road,Fixture City,TX,75001
+5,74,001,01,7A,00005,Fixture Business 5,,1 Fixture Road,Fixture City,TX,75001
+5,74,001,01,7A,00006,Fixture Business 6,,1 Fixture Road,Fixture City,WY,75001

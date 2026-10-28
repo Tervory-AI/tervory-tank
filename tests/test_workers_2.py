@@ -176,7 +176,7 @@ def test_storage_is_additive_and_main_only_registers_routes():
     assert 'app.include_router(__import__("workers_status").founder_router)' in main
     assert main.count("include_router(__import__(\"workers_status\")") == 2
     assert 'return await __import__("workers_status").panel()' in main
-    assert "workers_status.py" in (ROOT / "tank/Dockerfile").read_text()
+    assert (ROOT / "tank/workers_status.py").is_file() and "COPY *.py " in (ROOT / "tank/Dockerfile").read_text()
 
 
 # ---------- worker: heartbeat and pause ----------

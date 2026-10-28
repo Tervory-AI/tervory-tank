@@ -144,7 +144,8 @@ async def test_model_needs_holdout_evidence_and_manual_promotion(database):
         assert await conn.fetchval("SELECT model FROM tank.policy WHERE task_type='fixture.task'") == 'current'
         await conn.execute("UPDATE tank.policy SET auto_promote=true WHERE task_type='fixture.task'")
         rows = await graduate.training_table(conn, PLATFORM_TENANT, 'us-east')
-        assert not next(row for row in rows if row['task_type'] == 'fixture.task')['can_promote']
+        # Legacy automatic settings cannot hide the required founder action.
+        assert next(row for row in rows if row['task_type'] == 'fixture.task')['can_promote']
 
 
 @pytest.mark.asyncio

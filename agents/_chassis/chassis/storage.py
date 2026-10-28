@@ -59,7 +59,21 @@ class Storage:
         if env.get('AGENT_NAME', expected_agent).replace('-', '_') != expected_agent:
             raise StorageError('Storage credential owner does not match this process')
         self._owner = owner
+        self.region = env.get('TANK_REGION', 'us-east')
+        if self.region not in {'us-east', 'za'}:
+            raise StorageError('Unknown storage region')
         self._bucket = 'tervory-' + owner.replace('_', '-')
+        # ZA Zenas uses a region bucket. Founder creates tervory-zenas-za and sets
+        # R2_BUCKET_ZENAS_ZA; US Zenas keeps tervory-zenas unchanged.
+        za_bucket = env.get('R2_BUCKET_ZENAS_ZA', '')
+        if owner == 'zenas' and self.region == 'za':
+            if not za_bucket:
+                raise StorageError('R2_BUCKET_ZENAS_ZA is required for ZA Zenas storage')
+            if za_bucket != 'tervory-zenas-za':
+                raise StorageError('R2_BUCKET_ZENAS_ZA must be tervory-zenas-za')
+            self._bucket = za_bucket
+        elif za_bucket:
+            raise StorageError('R2_BUCKET_ZENAS_ZA is only valid for ZA Zenas')
         if env.get('R2_BUCKET', self.bucket) != self.bucket:
             raise StorageError('Storage bucket does not match this room')
         self._host = account_host(env)
@@ -74,9 +88,6 @@ class Storage:
             raise StorageError('Foreign R2 credentials are present in this process')
         if any(ord(c) < 33 or ord(c) > 126 for c in self._access + self._secret):
             raise StorageError('R2 credentials are invalid')
-        self.region = env.get('TANK_REGION', 'us-east')
-        if self.region not in {'us-east', 'za'}:
-            raise StorageError('Unknown storage region')
         proxy = None
         if owner == 'radix':
             if env.get('RADIX_EGRESS_PROXY') != ROOM_PROXY:

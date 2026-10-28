@@ -15,12 +15,13 @@ import io
 import os
 import re
 from typing import Any
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import unquote, urljoin, urlsplit
 
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from .atf_gold import Links, LISTING, MAX_BYTES, licence_id
+from . import reference_source
 
 USER_AGENT = "Tervory/1.0 (+https://tervory.com)"
 STATES = "AL AK AZ AR CA CO CT DE FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY".split()
@@ -28,6 +29,7 @@ TYPES = {"01", "02", "03", "06", "07", "08", "09", "10", "11"}
 _lock = asyncio.Lock()
 _last_read = 0.0
 _blocked = False
+_blocked_files: set[str] = set()
 
 
 def project(row: dict[str, Any]) -> dict[str, Any]:
@@ -107,20 +109,30 @@ def official_url(url: str) -> bool:
         return False
 
 
-async def read_public(http: Any, url: str) -> tuple[bytes, str]:
+async def read_public(http: Any, url: str, *, configured: bool = False) -> tuple[bytes, str]:
     global _last_read, _blocked
+    source = hashlib.sha256(url.encode()).hexdigest()
     for _ in range(5):
-        if not official_url(url):
+        atf = official_url(url)
+        if not configured and not atf:
             raise ValueError("The reference link is not an official ATF address.")
+        target, host = await reference_source.destination(url) if configured else (url, None)
         async with _lock:
-            if _blocked:
+            if (atf and _blocked) or (configured and source in _blocked_files):
+                if not atf:
+                    raise ValueError("file-blocked:")
                 raise ValueError("blocked: ATF public reading has stopped")
             await asyncio.sleep(max(0, _last_read + 3 - asyncio.get_running_loop().time()))
             try:
-                async with http.stream("GET", url, headers={"User-Agent": USER_AGENT}, timeout=60, follow_redirects=False) as response:
+                headers = {"User-Agent": USER_AGENT, **({"Host": host} if host else {})}
+                options = {"extensions": {"sni_hostname": host}} if host else {}
+                async with http.stream("GET", target, headers=headers, timeout=60, follow_redirects=False, **options) as response:
                     if response.status_code in {401, 402, 403, 429, 451}:
-                        _blocked = True
-                        raise ValueError(f"blocked: HTTP {response.status_code}")
+                        if atf:
+                            _blocked = True
+                        if configured:
+                            _blocked_files.add(source)
+                        raise ValueError(f"{'blocked' if atf else 'file-blocked'}: HTTP {response.status_code}")
                     chunks = bytearray()
                     async for chunk in response.aiter_bytes():
                         chunks.extend(chunk)
@@ -133,8 +145,11 @@ async def read_public(http: Any, url: str) -> tuple[bytes, str]:
             if any(marker in sample for marker in (
                 b"captcha", b"verify you are human", b"access denied", b"cf-chl-", b"sign in to continue", b"subscribe to read",
             )):
-                _blocked = True
-                raise ValueError("blocked: " + urlsplit(url)._replace(query="", fragment="").geturl())
+                if atf:
+                    _blocked = True
+                if configured:
+                    _blocked_files.add(source)
+                raise ValueError("blocked: " + urlsplit(url)._replace(query="", fragment="").geturl() if atf else "file-blocked:")
         if response.status_code in {301, 302, 303, 307, 308}:
             url = urljoin(url, response.headers.get("location", ""))
             continue
@@ -145,6 +160,26 @@ async def read_public(http: Any, url: str) -> tuple[bytes, str]:
 
 
 async def refresh(http: Any, since: date | None, today: date) -> dict[str, Any]:
+    configured = os.environ.get("BASE_REFERENCE_FILE_URL", "").strip()
+    if configured:
+        reference_source.validate(configured)
+        stamp = re.search(r"(?:^|/)(\d{2})(\d{2})-ffl-list(?:-complete)?\.(?:csv|txt)$",
+                          unquote(urlsplit(configured).path), re.I)
+        try:
+            published = date(2000 + int(stamp[2]), int(stamp[1]), 1) if stamp else None
+        except ValueError:
+            published = None
+        if published is None or published > today:
+            raise ValueError("No dated complete ATF list was found on the official page.")
+        checked_at = datetime.now(timezone.utc).isoformat()
+        if since is not None and published <= since:
+            return {"changed": False, "checked_at": checked_at}
+        async with reference_source.file_client() as client:
+            data, url = await read_public(client, configured, configured=True)
+        snapshot = {"published_on": published.isoformat(),
+                    "source_url": urlsplit(url)._replace(query="", fragment="").geturl(),
+                    "checked_at": checked_at, "sha256": hashlib.sha256(data).hexdigest(), "rows": parse_file(data)}
+        return snapshot if since is None else {"changed": True, **snapshot, "files": [snapshot]}
     content, page = await read_public(http, LISTING)
     links = Links()
     links.feed(content.decode("utf-8", errors="replace"))

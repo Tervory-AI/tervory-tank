@@ -1043,7 +1043,7 @@ CREATE TABLE IF NOT EXISTS tank.skill_source_reviews (
 -- Tank's planning message supplies the system prompt; the founder promotes later.
 -- Kept above MODELS-2 so later re-apply tests see it as an existing row.
 INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_tokens_out, system_prompt) VALUES
-  ('command.turn', 1, 'luna', 'urgent', 'none', 2048, NULL)
+  ('command.turn', 1, 'luna', 'urgent', 'tenant', 2048, NULL)
 ON CONFLICT DO NOTHING;
 
 -- RIG-2: Rig's own Hermes brain; the founder controls later promotions.
@@ -1781,6 +1781,8 @@ CREATE TABLE IF NOT EXISTS tank.base_reference_checks (
     status text NOT NULL,
     message text
 );
+-- Independent source stops; legacy rows still describe ATF until next checked.
+ALTER TABLE tank.base_reference_checks ADD COLUMN IF NOT EXISTS source_checks jsonb NOT NULL DEFAULT '{}'::jsonb;
 CREATE TABLE IF NOT EXISTS tank.base_campaigns (
     tenant_id uuid NOT NULL,
     id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -1899,3 +1901,56 @@ CREATE TABLE IF NOT EXISTS tank.vault_items (
     created_at timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (tenant_id, vault, kind, name)
 );
+
+
+-- Founder decision, 2026-10-27: 99% agreement over 200 checked samples.
+-- Change only the complete old default pair, leaving customized bars intact.
+-- A marker protects later founder edits (including a deliberate return to the
+-- old values) when startup reapplies this file. No policy choice is reset.
+ALTER TABLE tank.policy ALTER COLUMN eval_threshold SET DEFAULT 0.99;
+ALTER TABLE tank.policy ALTER COLUMN min_shadow_samples SET DEFAULT 200;
+ALTER TABLE tank.route_evidence ALTER COLUMN min_shadow_samples SET DEFAULT 200;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM tank.policy_seeds WHERE name='graduation-99-200-v1') THEN
+        UPDATE tank.policy SET eval_threshold=0.99, min_shadow_samples=200
+        WHERE eval_threshold=0.97 AND min_shadow_samples=30;
+        INSERT INTO tank.policy_seeds(name) VALUES('graduation-99-200-v1');
+    END IF;
+END $$;
+
+-- Chats use Tank's tenant-sealed exact cache, never semantic matching.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM tank.policy_seeds WHERE name='command-exact-cache-v1') THEN
+        UPDATE tank.policy SET cache_scope='tenant', semantic_cache=false, updated_at=now()
+        WHERE task_type='command.turn';
+        INSERT INTO tank.policy_seeds(name) VALUES('command-exact-cache-v1');
+    END IF;
+END $$;
+
+-- RouteLLM is an opt-in shadow experiment. No policy is enabled by migration.
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS routellm_weak_model text;
+ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS routellm_threshold double precision
+    CHECK (routellm_threshold >= 0 AND routellm_threshold <= 1);
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_model text;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_score double precision;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_threshold double precision;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_weak_model text;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_config text;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_status text;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_primary_cost_known boolean;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_model_cost_usd numeric(12,6);
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_parent_id uuid;
+ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_sample_tenant uuid;
+ALTER TABLE tank.shadow ADD COLUMN IF NOT EXISTS routellm_config text;
+ALTER TABLE tank.shadow ADD COLUMN IF NOT EXISTS candidate_ledger_id uuid;
+CREATE INDEX IF NOT EXISTS shadow_routellm_tenant_task ON tank.shadow(tenant_id,task_type,routellm_config)
+    WHERE routellm_config IS NOT NULL;
+
+-- Trigger first build. Leave all existing and tenant-specific policies untouched.
+INSERT INTO tank.policy(task_type,rung,model,cache_scope,max_tokens_out,eval_threshold,min_shadow_samples,auto_promote)
+VALUES ('trigger.write',1,'luna','tenant',3000,0.99,200,false),
+       ('trigger.check',3,'code','none',0,0.99,200,false)
+ON CONFLICT DO NOTHING;
+-- trigger.check never calls /v1/route; its adapter executes code and records zero cost.

@@ -1,0 +1,18 @@
+INFO:     Started server process [16727]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8003 (Press CTRL+C to quit)
+INFO:     Started server process [16791]
+INFO:     Waiting for application startup.
+redis unavailable, rung-4 cache off: Error 111 connecting to 127.0.0.1:1. Connect call failed ('127.0.0.1', 1).
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8054 (Press CTRL+C to quit)
+The reference could not be loaded: The Base reference service returned HTTP 403. (error type: ReferenceFailure)
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [16791]
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [16727]

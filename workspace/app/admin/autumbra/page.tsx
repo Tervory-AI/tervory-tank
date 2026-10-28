@@ -6,7 +6,7 @@ import { look, resolve, shieldAction } from "./actions";
 import { AutumbraConsole } from "./panel";
 import { shieldBoard, type ShieldBoard } from "./shields-data";
 import { ShieldsTile } from "./tile";
-import { AUTUMBRA_WATCH_FIXTURE, isUsableGhostPanel } from "./watch-fixtures";
+import { isUsableGhostPanel } from "./watch-data";
 
 export const dynamic = "force-dynamic";
 
@@ -15,31 +15,7 @@ export default async function AutumbraPage() {
   if (!userId || !isFounder(userId)) notFound();
   const board: ShieldBoard | null = await shieldBoard(userId).catch(() => null);
   const tile = <ShieldsTile board={board} act={shieldAction} />;
-  try {
-    const data = await ghostPanel(userId);
-    if (!isUsableGhostPanel(data)) {
-      const fixture = AUTUMBRA_WATCH_FIXTURE;
-      return (
-        <AutumbraConsole
-          data={fixture.panel}
-          threatReceipts={fixture.threatReceipts}
-          look={look}
-          resolve={resolve}
-          tile={tile}
-        />
-      );
-    }
-    return <AutumbraConsole data={data} look={look} resolve={resolve} tile={tile} />;
-  } catch {
-    const fixture = AUTUMBRA_WATCH_FIXTURE;
-    return (
-      <AutumbraConsole
-        data={fixture.panel}
-        threatReceipts={fixture.threatReceipts}
-        look={look}
-        resolve={resolve}
-        tile={tile}
-      />
-    );
-  }
+  const response = await ghostPanel(userId).catch(() => null);
+  const data = isUsableGhostPanel(response) ? response : null;
+  return <AutumbraConsole data={data} look={look} resolve={resolve} tile={tile} />;
 }

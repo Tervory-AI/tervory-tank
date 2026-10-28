@@ -1,0 +1,21 @@
+{
+  "label": "local, fixture page",
+  "screenshots": [
+    "quarantine-1440.png",
+    "autumbra-1440.png",
+    "autumbra-unavailable-1440.png",
+    "moot-empty-1440.png",
+    "quarantine-375.png",
+    "autumbra-375.png",
+    "autumbra-unavailable-375.png",
+    "moot-empty-375.png"
+  ],
+  "browser_errors": [],
+  "external_requests": [],
+  "real_tank": "passed",
+  "good_batches": 1,
+  "skipped_batches": 2,
+  "refresh_job": "completed with saved provider inputs",
+  "founder_only": "passed",
+  "watch_description": "empty"
+}

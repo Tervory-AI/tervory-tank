@@ -55,6 +55,24 @@ CREATE TABLE IF NOT EXISTS agent_rig.products (
 
 CREATE INDEX IF NOT EXISTS products_tenant_active ON agent_rig.products (tenant_id, active);
 
+-- Tiger retries are idempotent and cannot replace a newer confirmed observation.
+CREATE TABLE IF NOT EXISTS agent_rig.tiger_receipts (
+    tenant_id uuid NOT NULL,
+    sku text NOT NULL,
+    url text NOT NULL,
+    observed_at timestamptz NOT NULL,
+    PRIMARY KEY (tenant_id, sku, url),
+    FOREIGN KEY (tenant_id, sku) REFERENCES agent_rig.products(tenant_id, sku) ON DELETE CASCADE
+);
+
+-- Manual removal survives feed refresh and restart. Only a manual import clears it.
+CREATE TABLE IF NOT EXISTS agent_rig.deleted_products (
+    tenant_id uuid NOT NULL,
+    sku text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, sku)
+);
+
 CREATE INDEX IF NOT EXISTS products_search_fts ON agent_rig.products
 USING gin (to_tsvector('simple',
     coalesce(name, '') || ' ' || coalesce(brand, '') || ' ' || coalesce(sku, '') || ' ' || coalesce(attributes::text, '')
@@ -133,6 +151,15 @@ CREATE TABLE IF NOT EXISTS agent_rig.feeds (
     url        text NOT NULL,
     currency   text NOT NULL DEFAULT '',
     PRIMARY KEY (tenant_id, url)
+);
+
+-- Legacy feed rows predate supplier_costs. Until a feed refresh records its
+-- product membership, its tenant's provenance is unknown and Tiger fails closed.
+ALTER TABLE agent_rig.feeds ADD COLUMN IF NOT EXISTS watch_indexed boolean NOT NULL DEFAULT false;
+CREATE TABLE IF NOT EXISTS agent_rig.feed_products (
+    tenant_id uuid NOT NULL, sku text NOT NULL, feed_url text NOT NULL,
+    PRIMARY KEY (tenant_id, sku, feed_url),
+    FOREIGN KEY (tenant_id, sku) REFERENCES agent_rig.products(tenant_id, sku) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS agent_rig.answers (

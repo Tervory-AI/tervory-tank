@@ -6,11 +6,9 @@ import {
   ACCOUNT_NAV,
   BUILT,
   CHANGES,
-  DECIDED,
   PLAN,
   SKIN_STEPS,
   TABS,
-  WAITING,
   type TabId,
   type WaitingFit,
 } from "./copy";
@@ -50,8 +48,8 @@ function CompactSearch({ onSearch }: { onSearch: (query: string) => void }) {
 }
 
 export function CatalogueNumbers({ products, fits }: { products: number | null; fits: number | null }) {
-  if (products === null || fits === null) {
-    return <p className="intro">Rig did not answer. Try again in a few minutes.</p>;
+  if (products === null || products === 0 || fits === null) {
+    return null;
   }
   return (
     <section className="counts" aria-label="Counts">
@@ -83,11 +81,11 @@ export function Lab({
   const [tab, setTab] = useState<TabId>("search");
   const [pluginsOpen, setPluginsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [query, setQuery] = useState("Staccato");
-  const [waiting, setWaiting] = useState<WaitingFit[]>(WAITING);
-  const [decided, setDecided] = useState<Decided[]>(DECIDED.map((row) => ({ ...row })));
+  const [query, setQuery] = useState("");
+  const [waiting, setWaiting] = useState<WaitingFit[]>([]);
+  const [decided, setDecided] = useState<Decided[]>([]);
   const [approve, setApprove] = useState<WaitingFit | null>(null);
-  const [keySaved, setKeySaved] = useState(true);
+  const [keySaved, setKeySaved] = useState(false);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -172,7 +170,7 @@ export function Lab({
       </aside>
 
       <div className={tab === "search" ? "body home" : "body"}>
-        {tab === "search" ? <SearchView query={query} onQuery={setQuery} /> : null}
+        {tab === "search" ? <SearchView query={query} onQuery={setQuery} hasCatalogue={products !== null && products > 0} /> : null}
 
         {tab === "overview" ? (
           <>
@@ -189,7 +187,6 @@ export function Lab({
             <CatalogueNumbers products={products} fits={fits} />
             <section className="block">
               <h2>What's built</h2>
-              <p className="intro">Stage R4 is finished and live.</p>
               <div className="sheet">
                 {BUILT.map((row) => (
                   <div className="wide-row" key={row.title}>
@@ -204,20 +201,8 @@ export function Lab({
             </section>
             <section className="block">
               <h2>Next step</h2>
-              <article className="card">
-                <div className="card-top">
-                  <h3>R5 — 3D models</h3>
-                  <Pill on={false}>Next</Pill>
-                </div>
-                <p>A simple 3D model of each pistol and part. Fit comes from maker standards, like the RMSc optic footprint, so the models don't have to be perfect.</p>
-                <button type="button" className="text more" onClick={() => show("progress")}>
-                  See progress →
-                </button>
-              </article>
             </section>
             <footer className="foot">
-              <p>Stand-in products only. Rig does not read real distributor feeds yet.</p>
-              <p className="small">Prices are demo figures in rand.</p>
             </footer>
           </>
         ) : null}
@@ -232,14 +217,13 @@ export function Lab({
               <CompactSearch onSearch={searchFrom} />
             </header>
             <CatalogueNumbers products={products} fits={fits} />
-            {products !== null && fits !== null ? (
+            {products !== null && products > 0 && fits !== null ? (
               <section className="block">
                 <h2>This account</h2>
                 <p className="intro">Counts come from the Rig room. Shops stay separate.</p>
               </section>
             ) : null}
             <footer className="foot">
-              <p>Stand-in products only. Prices are demo figures.</p>
               <p className="small">Market average prices are shown once a shopper's selection is final.</p>
             </footer>
           </>
@@ -260,7 +244,7 @@ export function Lab({
                 <p>Approving or rejecting a fit needs the admin key. Once saved it is never shown again.</p>
               </div>
               {keySaved ? (
-                <div className="mask">{`•••• saved 17 Oct`}</div>
+                <div className="mask">{null}</div>
               ) : (
                 <input type="password" aria-label="Admin key" placeholder="Paste key" autoComplete="off" />
               )}
@@ -276,17 +260,17 @@ export function Lab({
             </article>
             <section className="counts">
               <article className="count">
-                <b>{waiting.length}</b>
+                <b>{waiting.length ? waiting.length : null}</b>
                 <strong>Waiting</strong>
                 <p className="fine">Suggested fits not yet decided.</p>
               </article>
               <article className="count">
-                <b>{fits === null ? "—" : fits}</b>
+                <b>{products && fits !== null ? fits : null}</b>
                 <strong>Approved</strong>
-                <p className="fine">{fits === null ? "Rig did not answer. Try again in a few minutes." : "Showing to shoppers now."}</p>
+                <p className="fine">{products && fits !== null ? "Showing to shoppers now." : null}</p>
               </article>
               <article className="count">
-                <b>{decided.filter((row) => !row.on).length}</b>
+                <b>{decided.length ? decided.filter((row) => !row.on).length : null}</b>
                 <strong>Rejected</strong>
                 <p className="fine">Never shown to shoppers.</p>
               </article>
@@ -374,17 +358,17 @@ export function Lab({
             </header>
             <section className="counts">
               <article className="count">
-                <b>1</b>
+                <b />
                 <strong>Live skin</strong>
                 <p className="fine">Tervory, on rig.tervory.com.</p>
               </article>
               <article className="count">
-                <b>0</b>
+                <b />
                 <strong>Dealer skins</strong>
                 <p className="fine">No dealer skin is on this page.</p>
               </article>
               <article className="count">
-                <b>0</b>
+                <b />
                 <strong>Dealer pages live</strong>
                 <p className="fine">Built after the main product.</p>
               </article>
@@ -396,7 +380,6 @@ export function Lab({
                   <div className="banner">Tervory skin preview</div>
                   <div className="card-top">
                     <h3>Tervory</h3>
-                    <Pill>Live</Pill>
                   </div>
                   <p>The default skin. Tervory logo, navy and red. Used on rig.tervory.com.</p>
                   <a className="text more" href="https://rig.tervory.com">
@@ -455,7 +438,6 @@ export function Lab({
                     <span>Change #{row.id}</span>
                     <strong>{row.title}</strong>
                     <span>{row.when}</span>
-                    <Pill>Live</Pill>
                   </div>
                 ))}
               </div>
@@ -486,7 +468,7 @@ export function Lab({
             </article>
             <label className="admin-field">
               Admin key
-              <input readOnly value={`•••• saved 17 Oct`} aria-label="Admin key" />
+              <input readOnly value="" aria-label="Admin key" />
             </label>
             <div className="popup-actions">
               <button type="button" className="line" onClick={() => setApprove(null)}>

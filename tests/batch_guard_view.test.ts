@@ -27,6 +27,7 @@ test("a held batch can be released or rejected, and a rejected batch never enter
 const held = {
   id: "batch-held",
   series_id: "zar.rand",
+  series_name: "Rand",
   source: "fixture",
   region: "za",
   currency: "ZAR",
@@ -37,7 +38,7 @@ const held = {
 };
 
 test("a missing reply, an unreachable room, or a bad status changes nothing", () => {
-  const page = [{ ...held, seriesId: "zar.rand", fetchedAt: held.fetched_at }];
+  const page = [{ ...held, seriesName: "Rand", fetchedAt: held.fetched_at }];
   for (const status of [null, 401, 409, 500, 503]) {
     const loaded = quarantineFromResponse(status, { batches: [held] });
     assert.equal(loaded.error, QUARANTINE_ERROR);
@@ -53,6 +54,9 @@ test("a missing reply, an unreachable room, or a bad status changes nothing", ()
   assert.equal(ok.error, null);
   assert.equal(ok.batches.length, 1);
   assert.equal(ok.batches[0].id, "batch-held");
+  assert.equal(ok.batches[0].seriesName, "Rand");
+  assert.equal("seriesId" in ok.batches[0], false);
+  assert.equal(quarantineFromResponse(200, { batches: [{ ...held, series_name: undefined }] }).error, QUARANTINE_ERROR);
   assert.equal(quarantineActionResult(200, page).error, null);
   assert.equal(quarantineActionResult(200, page).batches, page);
   assert.equal(quarantinePageError(null, "1"), QUARANTINE_ERROR);

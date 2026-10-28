@@ -26,6 +26,7 @@ services:
       - default
       - tervory-gw-template
       - tervory-gw-tiger
+      - tervory-gw-trigger
       - tervory-gw-market_lab
       - tervory-gw-radix
       - tervory-gw-tisan
@@ -208,12 +209,15 @@ services:
       LITELLM_URL: http://litellm:4000
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       TANK_API_KEY: ${TANK_API_KEY}
+      # Founder-only repository reads; absent means the tools are not offered.
+      TANK_GITHUB_READ_TOKEN: ${TANK_GITHUB_READ_TOKEN:-}
       HF_TOKEN: ${HF_TOKEN:-}
       HF_ORG: ${HF_ORG:-}
       TRAINING_JOB_KEY: ${TRAINING_JOB_KEY:-}
       TERVORY_ADMIN_USER_IDS: ${TERVORY_ADMIN_USER_IDS:-}
       TANK_KEY_TEMPLATE: ${TANK_KEY_TEMPLATE:-}
       TANK_KEY_TIGER: ${TANK_KEY_TIGER:-}
+      TANK_KEY_TRIGGER: ${TANK_KEY_TRIGGER:-}
       TANK_KEY_MARKET_LAB: ${TANK_KEY_MARKET_LAB:-}
       TANK_KEY_RADIX: ${TANK_KEY_RADIX:-}
       TANK_KEY_TISAN: ${TANK_KEY_TISAN:-}
@@ -233,6 +237,7 @@ services:
       RIG_RETAILER_KEY: ${RIG_RETAILER_KEY:-}
       TANK_REGION: ${TANK_REGION:-us-east}
       BASE_AGENT_URL: http://agent-base:8000
+      BASE_REFERENCE_FILE_URL: ${BASE_REFERENCE_FILE_URL:-}
       SEARXNG_URL: http://searxng:8080
       TIGER_URL: http://tiger:3000
       BRAVE_API_KEY: ${BRAVE_API_KEY:-}
@@ -245,6 +250,7 @@ services:
       - default
       - tervory-gw-template
       - tervory-gw-tiger
+      - tervory-gw-trigger
       - tervory-gw-market_lab
       - tervory-gw-radix
       - tervory-gw-tisan
@@ -284,19 +290,23 @@ services:
     environment:
       TANK_REGION: us-east
       DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_API_KEY: ${QDRANT_API_KEY}
       R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
       R2_ACCESS_KEY_ID_UPLOADS: ${R2_ACCESS_KEY_ID_UPLOADS:-}
       R2_SECRET_ACCESS_KEY_UPLOADS: ${R2_SECRET_ACCESS_KEY_UPLOADS:-}
       R2_BACKUP_RECIPIENT: ${R2_BACKUP_RECIPIENT:-}
     # Offline readiness only; completed backups are proved by their R2 manifests.
     healthcheck:
-      test: ["CMD", "python", "-c", "import sys; sys.path.insert(0, 'jobs/train'); from backup import dump_configuration; dump_configuration()"]
+      test: ["CMD", "python", "-c", "import sys; sys.path.insert(0, 'jobs/train'); from backup import dump_configuration, qdrant_configuration; dump_configuration(); qdrant_configuration()"]
       interval: 60s
       timeout: 5s
       retries: 3
       start_period: 10s
     depends_on:
       postgres:
+        condition: service_healthy
+      qdrant:
         condition: service_healthy
     networks:
       - default
@@ -314,6 +324,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
       AGENT_DB_PASSWORD_TEMPLATE: ${AGENT_DB_PASSWORD_TEMPLATE:-}
       AGENT_DB_PASSWORD_TIGER: ${AGENT_DB_PASSWORD_TIGER:-}
+      AGENT_DB_PASSWORD_TRIGGER: ${AGENT_DB_PASSWORD_TRIGGER:-}
       AGENT_DB_PASSWORD_MARKET_LAB: ${AGENT_DB_PASSWORD_MARKET_LAB:-}
       AGENT_DB_PASSWORD_RADIX: ${AGENT_DB_PASSWORD_RADIX:-}
       AGENT_DB_PASSWORD_TISAN: ${AGENT_DB_PASSWORD_TISAN:-}
@@ -459,3 +470,6 @@ networks:
   # Ghost alone uses this corridor; no other main-stack service joins it.
   tervory-gw-ghost:
     name: tervory-gw-ghost
+
+  tervory-gw-trigger:
+    name: tervory-gw-trigger

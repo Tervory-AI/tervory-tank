@@ -1,6 +1,6 @@
 /**
- * Fixture-backed Autumbra Watch panel data.
- * Used when Tank ghostPanel / the Watch room is unavailable.
+ * Offline Autumbra Watch test data.
+ * Live pages never import these values.
  * No live HF. Propose-only ThreatPayload receipts — never auto-enforce.
  */
 
@@ -140,12 +140,3 @@ export const AUTUMBRA_WATCH_FIXTURE: AutumbraWatchFixture = {
   },
   threatReceipts: [connectMatchReceipt, briefHandoffReceipt, burnedReceipt],
 };
-
-export function isUsableGhostPanel(data: GhostPanel | null | undefined): data is GhostPanel {
-  if (!data || typeof data !== "object") return false;
-  if (!Array.isArray(data.incidents)) return false;
-  if (!data.monitor || typeof data.monitor.running !== "boolean") return false;
-  if (typeof data.monitor.unavailable_checks !== "number") return false;
-  if (!data.integrations || typeof data.integrations !== "object") return false;
-  return true;
-}

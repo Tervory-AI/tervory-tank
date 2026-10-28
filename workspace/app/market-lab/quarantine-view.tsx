@@ -24,7 +24,7 @@ function BatchTable({ rows }: { rows: QuarantineBatch[] }) {
         <tbody>
           {rows.map((batch) => (
             <tr key={batch.id}>
-              <td>{batch.seriesId}</td>
+              <td>{batch.seriesName}</td>
               <td>{batch.source}</td>
               <td>{batch.region}</td>
               <td>{batch.currency}</td>
