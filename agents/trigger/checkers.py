@@ -23,6 +23,18 @@ RULES = parse_rules((ROOT / "vendor/agent_style/RULES.md").read_text())
 MECHANICAL = {"RULE-05", "RULE-06", "RULE-12", "RULE-B", "RULE-D"}
 STRUCTURAL = {"RULE-A", "RULE-C", "RULE-E"}
 SKIPPED = [r.id for r in RULES if r.id not in MECHANICAL | STRUCTURAL]
+# Literal candidates from each book's Avoid section. These flag review candidates;
+# a code checker cannot decide whether the surrounding context justifies a phrase.
+BOOK_TERMS = {
+    "18f-content": ["easy", "simple", "obvious"],
+    "apple-interface-writing": ["click here", "OK"],
+    "github-docs": ["this", "that", "it"],
+    "gitlab-docs": ["allow", "enable", "easy", "easily", "simple", "obvious"],
+    "google-developer-docs": ["simply", "easily", "obviously", "allows you to", "please"],
+    "govuk": ["please", "simply", "easy", "obvious"],
+    "kubernetes-docs": ["new", "currently", "soon", "just", "simply", "easy"],
+    "microsoft-writing-style": ["please"],
+}
 
 
 def phrase_spans(text: str, phrase: str):
@@ -37,6 +49,8 @@ def local_checks(text: str, voice: Voice | None) -> dict:
         issues.append({"source": "proselint", "rule": item["check_path"], "message": item["message"],
                        "line": found.pos[0], "column": found.pos[1]})
     for rule in RULES:
+        if rule.id == "RULE-12" and voice and voice.maxSentenceWords != 30:
+            continue
         module = detectors_mech if rule.id in MECHANICAL else detectors_struct if rule.id in STRUCTURAL else None
         if module is None:
             continue
@@ -65,6 +79,10 @@ def local_checks(text: str, voice: Voice | None) -> dict:
         # These are mechanical subsets of the selected book, not a semantic style grade.
         if voice.stylebook:
             guide = (ROOT / "sources/stylebooks" / voice.stylebook / "SKILL.md").read_text()
+            for term in BOOK_TERMS.get(voice.stylebook, []):
+                for match in phrase_spans(text, term):
+                    issues.append({"source": "stylebook", "rule": "avoid_candidate", "offset": match.start(),
+                                   "message": f"{voice.stylebook}: review '{term}' against the guide's Avoid section."})
             if "descriptive link" in guide.lower():
                 for match in re.finditer(r"\[(?:click here|here|read more)\]\([^)]*\)", text, re.IGNORECASE):
                     issues.append({"source": "stylebook", "rule": "link_text", "offset": match.start(),
