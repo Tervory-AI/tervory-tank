@@ -39,6 +39,8 @@ class DocassembleClient:
 
     async def _run(self, payload, *, download=False):
         self._validate(payload)
+        if os.environ.get("DOCASSEMBLE_REGION") != self.region:
+            raise AssemblyUnavailable()
         if os.environ.get("DOCASSEMBLE_URL", "http://docassemble").rstrip("/") != "http://docassemble":
             raise AssemblyUnavailable()
         key = os.environ.get("DOCASSEMBLE_API_KEY", "")
