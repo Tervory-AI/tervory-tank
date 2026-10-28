@@ -1,0 +1,71 @@
+name: Tenant RLS and nonroot services
+on:
+  push:
+    branches: [codex/tenant-rls]
+  pull_request:
+    paths:
+      - 'db/migrations/tenant_rls/**'
+      - 'tank/**'
+      - 'agents/**'
+      - 'litellm/**'
+      - 'searxng/**'
+      - 'site/**'
+      - 'tests/test_tenant_rls.py'
+      - 'tests/tenant_rls/**'
+      - '.github/workflows/tenant-rls.yml'
+permissions:
+  contents: read
+jobs:
+  isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      RLS_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/postgres
+      POOL_SCHEMA_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/postgres
+      RIG_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+      - run: pip install -r tank/requirements.txt -r tank/requirements-dev.txt
+      - name: Disposable database isolation and affected regressions
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m pytest -q -s tests/test_tenant_rls.py tests/test_agent_chassis.py tests/test_tank_tenant_boundaries.py tests/test_tank_batches.py tests/test_tank_one_door.py tests/test_command.py tests/test_rig_box.py tests/test_rig_admin.py tests/test_rig_isolation.py tests/test_rig_postgres.py 2>&1 | tee tenant-rls-tests.log
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always()
+        with:
+          name: tenant-rls-tests
+          path: tenant-rls-tests.log
+  nonroot-services:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: '3.12'
+      - run: pip install PyYAML==6.0.3
+      - name: Build and start all four services without network or root
+        shell: bash
+        run: |
+          set -o pipefail
+          python tests/tenant_rls/container_smoke.py 2>&1 | tee nonroot-services.log
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: always()
+        with:
+          name: nonroot-services
+          path: nonroot-services.log
