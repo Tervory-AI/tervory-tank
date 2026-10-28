@@ -25,9 +25,9 @@ from gold import runtime
 @asynccontextmanager
 async def baseline_lifespan(app):
     from savings_indexes import ensure_index
-    await ensure_index(runtime().pool())
+    await ensure_index(runtime().admin_pool())
     from savings_defaults import initialize
-    async with runtime().pool().acquire() as conn:
+    async with runtime().admin_pool().acquire() as conn:
         await initialize(conn)
     async def work():
         while True:
