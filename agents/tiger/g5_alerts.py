@@ -136,8 +136,11 @@ def listing_products(html, url, extracted):
     elif not products:
         products = list(extracted or [])
     page_url = _url(url, url)
-    if not lists and len(products) == 1 and _url(products[0].get("url"), url) == page_url:
-        return None  # A single product at the watched URL is not a category.
+    # A standalone Product or OpenGraph/price fallback is not evidence of a
+    # category. Its canonical URL can differ from the watched URL. Explicit
+    # ItemList pages can be empty/single; inferred listings need multiple items.
+    if not lists and len(products) < 2:
+        return None
     result = {}
     for product in products:
         name = " ".join(str(product.get("name") or "").split())
