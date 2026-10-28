@@ -6,11 +6,20 @@ from datetime import datetime
 from typing import Literal
 
 from fastapi import Header, HTTPException
+from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, ConfigDict, Field
 
 from hermes.auth import identify
 from hermes.publishing import Publisher
 from hermes.references import reference_corpora
+from hermes.records import ClaimTooLong
+
+
+def claim_validation_error(field: str, error: ClaimTooLong) -> RequestValidationError:
+    return RequestValidationError([
+        {"type": "value_error", "loc": ("body", field),
+         "msg": "Value error, " + str(error), "ctx": {"error": str(error)}}
+    ])
 
 
 class Scoped(BaseModel):
@@ -103,6 +112,24 @@ def register_record_routes(app, records, resolve_agent):
         founder(x_tank_key, x_tervory_admin)
         return {"memories": await ready(agent).list(agent, str(tenant_id), tier)}
 
+    @app.get("/founder/records/{id}")
+    async def founder_record(
+        id: uuid.UUID,
+        x_tank_key: str = Header(default=""),
+        x_tervory_admin: str = Header(default=""),
+    ):
+        founder(x_tank_key, x_tervory_admin)
+        r = records()
+        if r is None:
+            raise HTTPException(503, "memory store unreachable")
+        try:
+            row = await r.founder_get(id)
+        except ValueError:
+            raise HTTPException(409, "Memory record conflict") from None
+        if row is None:
+            raise HTTPException(404, "not found")
+        return row
+
     @app.post("/founder/memories")
     async def remember(
         body: FounderMemory,
@@ -120,8 +147,12 @@ def register_record_routes(app, records, resolve_agent):
                 last_verified=body.last_verified,
                 row_id=str(body.id),
             )
+        except ClaimTooLong as exc:
+            raise claim_validation_error("claim", exc) from None
         except ValueError:
             raise HTTPException(409, "Memory record conflict") from None
+        except RuntimeError:
+            raise HTTPException(503, "memory store unreachable") from None
 
     @app.post("/founder/publish-policy")
     async def policy(
