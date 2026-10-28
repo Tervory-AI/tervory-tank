@@ -42,24 +42,26 @@ def _address(value: Any) -> str:
     return address.addr_spec
 
 
-def configuration(tenant_id: str) -> tuple[SmtpMailer, str]:
+def configuration(tenant_id: str, *, prefix: str = "TIGER") -> tuple[SmtpMailer, str]:
     """Exact tenant mapping; never select another tenant or a default recipient."""
+    if prefix not in {"TIGER", "ZENAS"}:
+        raise MailConfigurationError("mail_not_configured")
     try:
         tenant = str(UUID(tenant_id))
-        addresses = json.loads(os.environ.get("TIGER_SMTP_ALERT_ADDRESSES") or "{}")
+        addresses = json.loads(os.environ.get(f"{prefix}_SMTP_ALERT_ADDRESSES") or "{}")
         if not isinstance(addresses, dict):
             raise ValueError
         recipient = _address(addresses.get(tenant))
-        host = os.environ.get("TIGER_SMTP_HOST", "").strip()
-        sender = _address(os.environ.get("TIGER_SMTP_FROM", ""))
-        port = int(os.environ.get("TIGER_SMTP_PORT") or "587")
+        host = os.environ.get(f"{prefix}_SMTP_HOST", "").strip()
+        sender = _address(os.environ.get(f"{prefix}_SMTP_FROM", ""))
+        port = int(os.environ.get(f"{prefix}_SMTP_PORT") or "587")
         if not host or not 0 < port < 65536:
             raise ValueError
         return SmtpMailer(
             host,
             port,
-            os.environ.get("TIGER_SMTP_USER", "").strip(),
-            os.environ.get("TIGER_SMTP_PASSWORD", ""),
+            os.environ.get(f"{prefix}_SMTP_USER", "").strip(),
+            os.environ.get(f"{prefix}_SMTP_PASSWORD", ""),
             sender,
         ), recipient
     except (ValueError, TypeError, AttributeError):
@@ -122,13 +124,15 @@ def letter_for(alert: dict) -> dict[str, str] | None:
 
 
 async def deliver_pending(
-    store: Any, tenant_id: str, *, transport=None, recipient=None, clock=None
+    store: Any, tenant_id: str, *, transport=None, recipient=None, clock=None, namespace="tiger"
 ) -> dict:
     """Retry definite rejections; never repeat an accepted/uncertain SMTP send."""
+    if namespace not in {"tiger", "zenas"}:
+        raise MailConfigurationError("mail_not_configured")
     clock = clock or (lambda: datetime.now(timezone.utc))
     if transport is None:
         try:
-            transport, recipient = configuration(tenant_id)
+            transport, recipient = configuration(tenant_id, prefix=namespace.upper())
         except MailConfigurationError:
             return {"mail": "not_configured", "sent": 0}
     recipient = _address(recipient)
@@ -145,7 +149,7 @@ async def deliver_pending(
         letter = {
             **record["letter"],
             "to": recipient,
-            "message_id": f"<tiger.{tenant_id}.{alert_id}@tervory.com>",
+            "message_id": f"<{namespace}.{tenant_id}.{alert_id}@tervory.com>",
         }
         try:
             async with asyncio.timeout(30):
