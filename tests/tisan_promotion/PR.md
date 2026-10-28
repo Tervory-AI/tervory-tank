@@ -229,3 +229,10 @@ and screenshots are not supplied by an offline test. See
 - Publish state: all completed files pushed by serialized normal Git pushes; no force push, no main push, no PR exists. Claude opens the PR from this branch. The final report commit/head is reported in the handoff after push.
 - Dependency: Radix job 8 is still required, with its published checkpoint recorded above; its owner's push issue is recoverable under the founder's latest instruction, but no recovery/merge/deployment is assumed here. Missing gate stays a refusal.
 - Founder acceptance: **pending**. No real site, DNS authorization, Coolify setting values or founder screenshots were fabricated. No live scan, promotion, rollback, deployment or production migration occurred.
+
+### 2026-10-28 16:44:25 PDT (UTC-07:00) / 2026-10-28 23:44:25 UTC
+
+- Branch `codex/tisan-promotion`; published checkpoint `e2d360b656e0b3b5c7743ad0a687eacff88a7aa4` verified equal to the remote branch with `git ls-remote origin refs/heads/codex/tisan-promotion refs/heads/main`. Main remains `7a13687de256896c488a0f28e0906fbcbce5b046`; working tree was clean. This append is report-only. Tested SHA remains `8143a8ec42ef724de2fd4163d072967643b2fe82`; no code or test changed and settled checks were not repeated.
+- Publication succeeded with a normal serialized fast-forward push. Claude's PR handoff is ready; no PR exists and no main merge/deploy was performed.
+- Final-head review notification was retried under the founder's latest authorization. The exposed tool again failed: `Transport send error`, `HTTP request failed`, `error sending request for url (http://127.0.0.1:50375/mcp)`. This is the remaining coordination access blocker, not a Git push failure. No final-head approval is claimed. The final report-only commit SHA is included in the chat handoff.
+- Open acceptance remains unchanged: real founder-owned staging/production site and DNS authorization, deployed Radix gate, founder-managed Coolify values, live promotion/rollback and founder-browser evidence. The branch retains fail-closed behavior.
