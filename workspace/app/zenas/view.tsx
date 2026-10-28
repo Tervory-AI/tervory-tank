@@ -421,7 +421,7 @@ export function ZenasView({
                     <ul className="zn-cited">
                       {reply.sources.map((source) => (
                         <li key={`ask-${source.citation}`}>
-                          <strong>{source.citation}</strong>
+                          <strong>{source.url ? <a href={source.url}>{source.citation}</a> : source.citation}</strong>
                           {source.quote ? <span>{source.quote}</span> : null}
                         </li>
                       ))}

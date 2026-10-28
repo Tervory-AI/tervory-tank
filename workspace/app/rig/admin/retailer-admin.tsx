@@ -2,9 +2,10 @@
 
 import { useState, useRef, type FormEvent } from "react";
 import type { AdminOperation, AdminResult, FitReview, RetailerPanel, MappingPreview } from "./types";
+import { Products } from "./products";
 
 const PROVIDERS = [["catalogue", "Any catalogue"], ["shopify", "Shopify"], ["woocommerce", "WooCommerce"], ["google", "Google Merchant"], ["zanders", "Zanders"], ["sports_south", "Sports South"], ["rsr", "RSR"], ["jerrys", "Jerry’s"]];
-const providerName = (id: string) => PROVIDERS.find(([key]) => key === id)?.[1] ?? id;
+const providerName = (id: string) => id === "delete-products" ? "Products" : PROVIDERS.find(([key]) => key === id)?.[1] ?? id;
 const fields = (form: HTMLFormElement) => Object.fromEntries(new FormData(form).entries());
 
 async function sendRetailer(operation: AdminOperation, data: Record<string, unknown>): Promise<AdminResult> {
@@ -27,6 +28,21 @@ export function RetailerAdmin({ initial, act = sendRetailer }: { initial: Retail
   const [scope, setScope] = useState("default");
   const [mode, setMode] = useState("file");
   const [authMode, setAuthMode] = useState("none");
+  const removeProducts = async (skus: string[]) => {
+    setBusy(true); setNotice("");
+    let deleted = 0;
+    try {
+      // Each request is an atomic batch within the API's 5,000-product limit.
+      for (let offset = 0; offset < skus.length; offset += 5000) {
+        const result = await act("delete-products", { skus: skus.slice(offset, offset + 5000) });
+        if (result.panel) setPanel(result.panel);
+        if (!result.ok) { setNotice(result.message); setError(true); return false; }
+        deleted += result.deleted ?? 0;
+      }
+      setNotice(`${deleted} deleted.`); setError(false); return true;
+    } catch { setNotice("The operation was not confirmed. Check the import history before retrying."); setError(true); return false; }
+    finally { setBusy(false); }
+  };
   const run = async (operation: AdminOperation, data: Record<string, unknown>) => {
     setBusy(true); setNotice("");
     try {
@@ -109,6 +125,7 @@ export function RetailerAdmin({ initial, act = sendRetailer }: { initial: Retail
     <header className="retailer-header"><div><a href="/rig">← Back to Rig</a><p className="retailer-eyebrow">YOUR CATALOGUE</p><h1>Retailer settings</h1><p>Keep your catalogue current. Review what belongs together.</p></div><span className="retailer-count">{panel.products} products · {panel.currency}</span></header>
     {notice && <p className={`retailer-notice ${error ? "is-error" : ""}`} role={error ? "alert" : "status"}>{notice}</p>}
     <div className="retailer-grid">
+      <Products rows={panel.product_rows ?? []} busy={busy} remove={removeProducts} />
       <section className="retailer-card"><h2>Quote delivery</h2>
         <form onSubmit={async e => { e.preventDefault(); await run("settings", fields(e.currentTarget)); }}><fieldset disabled={busy}>
           <label>Store name<input name="name" required maxLength={120} defaultValue={panel.settings?.name || ""} /></label>
@@ -161,7 +178,7 @@ export function RetailerAdmin({ initial, act = sendRetailer }: { initial: Retail
         <form onSubmit={async e => { e.preventDefault(); const form = e.currentTarget; const data = fields(form); const roles = String(data.roles).split(",").map(s => s.trim()).filter(Boolean); if (!roles.length) return; if (await run("templates", { [String(data.category).trim()]: Object.fromEntries(roles.map(role => [role, role])) })) form.reset(); }}><fieldset disabled={busy}><legend className="retailer-sr">Save a category template</legend><label>Product category<input name="category" required maxLength={80} /></label><label>Included categories, separated by commas<input name="roles" required placeholder="shade, stand" /></label><button type="submit">Save template</button></fieldset></form>
       </section>
       <section className="retailer-card"><div className="retailer-section-heading"><span>05</span><h2>What shoppers couldn’t find</h2></div><p>Search counts for your catalogue. No shopper identities.</p>{panel.missed_searches.length ? <ul className="retailer-searches">{panel.missed_searches.map(row => <li key={row.query}><span>{row.query}</span><strong>{row.count}</strong></li>)}</ul> : <p className="retailer-empty">No unmatched searches in the last 90 days.</p>}</section>
-      <section className="retailer-card retailer-wide"><div className="retailer-section-heading"><span>06</span><h2>Import history</h2></div><p>Each file is applied in full, or nothing changes.</p>{panel.receipts.length ? <div className="retailer-history">{panel.receipts.map(row => <article key={row.id}><div><strong>{providerName(row.provider)}</strong><small>{row.site} {row.feed_id}</small><small>{new Date(row.created_at).toLocaleString()}</small></div><p><b>{row.added}</b> added · <b>{row.updated}</b> updated · <b>{row.rejected}</b> rejected</p></article>)}</div> : <p className="retailer-empty">Import a file to see the result here.</p>}</section>
+      <section className="retailer-card retailer-wide"><div className="retailer-section-heading"><span>06</span><h2>Import history</h2></div><p>Each file is applied in full, or nothing changes.</p>{panel.receipts.length ? <div className="retailer-history">{panel.receipts.map(row => <article key={row.id}><div><strong>{providerName(row.provider)}</strong><small>{row.site} {row.feed_id}</small><small>{new Date(row.created_at).toLocaleString()}</small></div><p>{row.provider === "delete-products" ? `${row.updated} deleted.` : <><b>{row.added}</b> added · <b>{row.updated}</b> updated · <b>{row.rejected}</b> rejected</>}</p></article>)}</div> : <p className="retailer-empty">Import a file to see the result here.</p>}</section>
     </div>
   </main>;
 }
