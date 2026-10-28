@@ -245,8 +245,8 @@ class PgAlerts:
         async with self.pool.acquire() as conn:
             await ensure_tables(conn, self.schema)
             async with room(conn, self.schema):
-                await conn.execute("SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended($1,0))",
-                                   "tiger-alerts:" + str(tenant))
+                await conn.execute("SELECT pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('tiger-alerts:' || $1,0))",
+                                   str(tenant))
                 watches = [_watch_out(w) for w in await conn.fetch(self._sql(SQL_LIST_WATCHES), UUID(str(tenant)))]
                 rows = await conn.fetch("SELECT key, data FROM alert_state WHERE tenant_id=$1", UUID(str(tenant)))
                 states = {r["key"]: json.loads(r["data"]) if isinstance(r["data"], str) else r["data"] for r in rows}

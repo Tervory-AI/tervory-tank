@@ -185,10 +185,10 @@ async def test_concurrent_checks_create_one_alert_and_state_rolls_back_with_mail
     assert await store.list_alerts(A, None) == []
     assert await store.pending_mail(A, NOW + timedelta(days=1)) == []
     monkeypatch.setattr(store, "_save_alert", write)
-    result = await checked(store, watch, html=listing(True), at=2)
-    assert len(result["alerts"]) == 1
-    observation = {**result["observation"], "ts": (NOW + timedelta(minutes=3)).isoformat()}
-    await asyncio.gather(*[PgStore(database).product_alerts(A, observation, listing_products(listing(True), URL, []), None) for _ in range(2)])
+    observation = await store.latest_observation(A, URL)
+    results = await asyncio.gather(*[PgStore(database).product_alerts(A, observation, listing_products(listing(True), URL, []), None) for _ in range(2)])
+    assert sorted(len(rows) for rows in results) == [0, 1]
+    assert (await checked(store, watch, html=listing(True), at=2))["alerts"] == []
     assert len(await store.list_alerts(A, None)) == 1
     assert len(await store.pending_mail(A, NOW + timedelta(days=1))) == 1
 
