@@ -20,6 +20,7 @@ from chassis.browser import BrowserClient
 from chassis.db import as_json, ensure_schedules, ensure_schema, schema_for
 from chassis.files import read_file, save_file
 from chassis.jobs import JobContext, timeout_for
+from chassis.job_contract import Job
 from chassis.logs import log_line
 from chassis.memory import MemoryClient
 from chassis.tank import TankClient
@@ -114,7 +115,13 @@ def create_app(
         return {"ok": True, "agent": agent}
 
     @app.post("/jobs", status_code=201)
-    async def enqueue(body: JobIn) -> dict[str, Any]:
+    async def enqueue(body: JobIn | Job) -> dict[str, Any]:
+        region = os.environ.get("TANK_REGION", "us-east")
+        wire = body if isinstance(body, Job) else Job.from_room(
+            body.model_dump(), agent=agent, region=region)
+        if wire.agent != agent or wire.region != region:
+            raise HTTPException(422)
+        body = JobIn(**wire.to_room(), run_at=body.run_at if isinstance(body, JobIn) else None)
         run_at = body.run_at or datetime.now(timezone.utc)
         if run_at.tzinfo is None:
             run_at = run_at.replace(tzinfo=timezone.utc)
@@ -186,12 +193,13 @@ def create_app(
 
 
 def _context(app: FastAPI, agent: str, job: Any) -> JobContext:
+    wire = Job.from_room(job, agent=agent, region=os.environ.get("TANK_REGION", "us-east"))
     return JobContext(
-        agent=agent,
-        tenant_id=str(job["tenant_id"]),
+        agent=wire.agent,
+        tenant_id=str(wire.tenant_id),
         job_id=str(job["id"]),
-        kind=str(job["kind"]),
-        input=as_json(job["input"]),
+        kind=wire.skill,
+        input=wire.input,
         files=app.state.files,
         tank=app.state.tank,
         memory=app.state.memory,
