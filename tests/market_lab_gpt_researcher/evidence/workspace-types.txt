@@ -1,0 +1,1 @@
+workspace/app/tiger/plugins-data.test.ts(3,62): error TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.
