@@ -1,0 +1,266 @@
+[
+  {
+    "host": "app.tervory.com",
+    "passed": false,
+    "viewports": [
+      {
+        "width": 1440,
+        "status": null,
+        "reasons": [
+          "Page navigation failed"
+        ],
+        "screenshot": "app.tervory.com-1440.png"
+      },
+      {
+        "width": 375,
+        "status": null,
+        "reasons": [
+          "Page navigation failed"
+        ],
+        "screenshot": "app.tervory.com-375.png"
+      }
+    ]
+  },
+  {
+    "host": "protect.tervory.com",
+    "passed": false,
+    "viewports": [
+      {
+        "width": 1440,
+        "status": null,
+        "reasons": [
+          "Page navigation failed"
+        ],
+        "screenshot": "protect.tervory.com-1440.png"
+      },
+      {
+        "width": 375,
+        "status": null,
+        "reasons": [
+          "Page navigation failed"
+        ],
+        "screenshot": "protect.tervory.com-375.png"
+      }
+    ]
+  },
+  {
+    "host": "autumbra.tervory.com",
+    "passed": false,
+    "viewports": [
+      {
+        "width": 1440,
+        "status": null,
+        "reasons": [
+          "Page navigation failed"
+        ],
+        "screenshot": "autumbra.tervory.com-1440.png"
+      },
+      {
+        "width": 375,
+        "status": null,
+        "reasons": [
+          "Page navigation failed"
+        ],
+        "screenshot": "autumbra.tervory.com-375.png"
+      }
+    ]
+  },
+  {
+    "host": "zenas.tervory.com",
+    "passed": false,
+    "viewports": [
+      {
+        "width": 1440,
+        "status": null,
+        "reasons": [
+          "Page navigation failed"
+        ],
+        "screenshot": "zenas.tervory.com-1440.png"
+      },
+      {
+        "width": 375,
+        "status": null,
+        "reasons": [
+          "Page navigation failed"
+        ],
+        "screenshot": "zenas.tervory.com-375.png"
+      }
+    ]
+  },
+  {
+    "host": "base.tervory.com",
+    "passed": false,
+    "viewports": [
+      {
+        "width": 1440,
+        "status": null,
+        "reasons": [
+          "Page navigation failed"
+        ],
+        "screenshot": "base.tervory.com-1440.png"
+      },
+      {
+        "width": 375,
+        "status": null,
+        "reasons": [
+          "Page navigation failed"
+        ],
+        "screenshot": "base.tervory.com-375.png"
+      }
+    ]
+  },
+  {
+    "host": "tiger.tervory.com",
+    "passed": false,
+    "viewports": [
+      {
+        "width": 1440,
+        "status": null,
+        "reasons": [
+          "Page navigation failed"
+        ],
+        "screenshot": "tiger.tervory.com-1440.png"
+      },
+      {
+        "width": 375,
+        "status": null,
+        "reasons": [
+          "Page navigation failed"
+        ],
+        "screenshot": "tiger.tervory.com-375.png"
+      }
+    ]
+  },
+  {
+    "host": "market-lab.tervory.com",
+    "passed": false,
+    "viewports": [
+      {
+        "width": 1440,
+        "status": null,
+        "reasons": [
+          "Page navigation failed"
+        ],
+        "screenshot": "market-lab.tervory.com-1440.png"
+      },
+      {
+        "width": 375,
+        "status": null,
+        "reasons": [
+          "Page navigation failed"
+        ],
+        "screenshot": "market-lab.tervory.com-375.png"
+      }
+    ]
+  },
+  {
+    "host": "tisan.tervory.com",
+    "passed": false,
+    "viewports": [
+      {
+        "width": 1440,
+        "status": null,
+        "reasons": [
+          "Page navigation failed"
+        ],
+        "screenshot": "tisan.tervory.com-1440.png"
+      },
+      {
+        "width": 375,
+        "status": null,
+        "reasons": [
+          "Page navigation failed"
+        ],
+        "screenshot": "tisan.tervory.com-375.png"
+      }
+    ]
+  },
+  {
+    "host": "radix.tervory.com",
+    "passed": false,
+    "viewports": [
+      {
+        "width": 1440,
+        "status": null,
+        "reasons": [
+          "Page navigation failed"
+        ],
+        "screenshot": "radix.tervory.com-1440.png"
+      },
+      {
+        "width": 375,
+        "status": null,
+        "reasons": [
+          "Page navigation failed"
+        ],
+        "screenshot": "radix.tervory.com-375.png"
+      }
+    ]
+  },
+  {
+    "host": "skala.tervory.com",
+    "passed": false,
+    "viewports": [
+      {
+        "width": 1440,
+        "status": null,
+        "reasons": [
+          "Page navigation failed"
+        ],
+        "screenshot": "skala.tervory.com-1440.png"
+      },
+      {
+        "width": 375,
+        "status": null,
+        "reasons": [
+          "Page navigation failed"
+        ],
+        "screenshot": "skala.tervory.com-375.png"
+      }
+    ]
+  },
+  {
+    "host": "tank.tervory.com",
+    "passed": false,
+    "viewports": [
+      {
+        "width": 1440,
+        "status": null,
+        "reasons": [
+          "Page navigation failed"
+        ],
+        "screenshot": "tank.tervory.com-1440.png"
+      },
+      {
+        "width": 375,
+        "status": null,
+        "reasons": [
+          "Page navigation failed"
+        ],
+        "screenshot": "tank.tervory.com-375.png"
+      }
+    ]
+  },
+  {
+    "host": "rig.tervory.com",
+    "passed": false,
+    "viewports": [
+      {
+        "width": 1440,
+        "status": null,
+        "reasons": [
+          "Page navigation failed"
+        ],
+        "screenshot": "rig.tervory.com-1440.png"
+      },
+      {
+        "width": 375,
+        "status": null,
+        "reasons": [
+          "Page navigation failed"
+        ],
+        "screenshot": "rig.tervory.com-375.png"
+      }
+    ]
+  }
+]

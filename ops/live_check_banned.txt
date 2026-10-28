@@ -1,0 +1,7 @@
+# Literal visible text, matched case-insensitively. One entry per line.
+sample data
+Fixture
+[TEST]
+Demo price
+CVE-2024-0000
+00000000-0000-0000-0000
