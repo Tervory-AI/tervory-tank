@@ -5,6 +5,7 @@ import asyncio
 import csv
 from datetime import datetime
 import io
+import json
 import os
 from pathlib import Path
 import random
@@ -182,6 +183,8 @@ async def test_seeded_sample_saved_sources_round_trip_and_accuracy(audit_db):
     saved = reviewed.json()
     assert saved["measurement"] == measure(dict(enumerate(verdicts)))
     assert saved["measurement"]["accuracy"] == .9
+    assert saved["measurement"]["confidence_interval"] == pytest.approx({
+        "lower": .8491030549232077, "upper": .9350429215090166})
     assert saved["reviewed_by"] == "fixture-founder" and saved["reviewed_at"]
     assert (await client.get(path, params=params)).json() == saved
     assert (await client.post(path + "/review", json={**params, "csv": upload})).json() == saved
@@ -189,6 +192,16 @@ async def test_seeded_sample_saved_sources_round_trip_and_accuracy(audit_db):
     assert changed.status_code == 409
     exported = await client.get(path + "/records.csv", params=params)
     assert [row["verdict"] for row in csv.DictReader(io.StringIO(exported.text.lstrip("\ufeff")))] == verdicts
+    if proof_dir := os.environ.get("BASE_AUDIT_PROOF_DIR"):
+        proof = Path(proof_dir)
+        proof.mkdir(parents=True, exist_ok=True)
+        (proof / "api-proof.json").write_text(json.dumps({
+            "environment": "isolated offline fixture; not production",
+            "sample_response": {key: audit[key] for key in ("tenant_id", "campaign_id", "id", "seed", "population_size", "population_sha256", "sampling_method")},
+            "sampled_records": len(audit["records"]), "csv_rows": len(csv_rows),
+            "first_exported_record": csv_rows[0], "review_response": saved["measurement"],
+            "same_seed_same_saved_audit": True, "reopened_after_source_change_unchanged": True,
+        }, indent=2) + "\n")
 
 
 @pytest.mark.asyncio
@@ -294,6 +307,8 @@ async def test_histogram_boundaries_campaign_scope_missing_scores_and_unverified
     result = (await client.get(path, params={"tenant_id": str(TENANT)})).json()
     assert result["verified_records"] == 32 and result["missing_confidence"] == 1
     assert sum(row["count"] for row in result["bands"]) == 31
+    if proof_dir := os.environ.get("BASE_AUDIT_PROOF_DIR"):
+        Path(proof_dir, "histogram-proof.json").write_text(json.dumps(result, indent=2) + "\n")
 
 
 @pytest.mark.asyncio
@@ -306,3 +321,60 @@ async def test_concurrent_draws_are_one_saved_sample_and_request_validation(audi
     for seed in (-1, 2**63, True, 1.5, "42"):
         assert (await draw(client, identity, seed)).status_code == 422
     assert (await draw(client, uuid.uuid4())).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_sample_uses_latest_verified_campaign_records_without_cross_campaign_dedup(audit_db):
+    pool, _, client = audit_db
+    identity, records = await campaign(pool, unverified=20)
+    # The other campaign has all the same licence keys and later check dates.
+    other_campaign, other_records = await campaign(pool)
+    async with pool.acquire() as conn:
+        await conn.execute("""UPDATE tank.base_record_results r SET checked_at=checked_at+interval '1 day'
+            FROM tank.base_campaign_states s WHERE r.tenant_id=$1 AND s.tenant_id=$1 AND s.campaign_id=$2
+                AND r.task_id=s.task_id""", TENANT, other_campaign)
+        # Give two rows in this campaign the same key. Only the newest is eligible.
+        older, newer = records[20:22]
+        await conn.execute("""UPDATE tank.base_record_results SET licence_key=$3,checked_at=checked_at+interval '1 hour'
+            WHERE tenant_id=$1 AND record_id=$2""", TENANT, newer["id"], older["licence_key"])
+    audit = (await draw(client, identity)).json()
+    assert audit["population_size"] == 219
+    selected = {row["record_id"] for row in audit["records"]}
+    excluded = {str(row["id"]) for row in records if not row["fields"]["website"]["verified"]}
+    excluded |= {str(row["id"]) for row in other_records} | {str(older["id"])}
+    assert not selected & excluded
+    assert len({row["licence_key"] for row in audit["records"]}) == 200
+    histogram = (await client.get(f"{ROOT}/{identity}/confidence-histogram", params={"tenant_id": str(TENANT)})).json()
+    assert histogram["verified_records"] == 219
+    assert sum(state["verified_records"] for state in histogram["states"]) == 219
+
+
+@pytest.mark.asyncio
+async def test_simultaneous_reviews_do_not_silently_overwrite_each_other(audit_db):
+    pool, _, client = audit_db
+    identity, _ = await campaign(pool, n=200)
+    audit = (await draw(client, identity)).json()
+    path = f"{ROOT}/{identity}/audits/{audit['id']}"
+    params = {"tenant_id": str(TENANT)}
+    original = (await client.get(path + "/records.csv", params=params)).text
+    responses = await asyncio.gather(*(client.post(path + "/review", json={**params, "csv": text}) for text in (
+        checked(original), checked(original, ["wrong"] * 200))))
+    assert sorted(response.status_code for response in responses) == [200, 409]
+    winner = next(response.json() for response in responses if response.status_code == 200)
+    assert (await client.get(path, params=params)).json() == winner
+
+
+@pytest.mark.asyncio
+async def test_empty_histogram_is_zero_bands_for_each_state_and_region_guard(audit_db):
+    pool, rt, client = audit_db
+    identity, _ = await campaign(pool, n=0, status="waiting")
+    response = await client.get(f"{ROOT}/{identity}/confidence-histogram", params={"tenant_id": str(TENANT)})
+    assert response.status_code == 200
+    histogram = response.json()
+    assert histogram["verified_records"] == 0
+    assert all(band["count"] == 0 for band in histogram["bands"])
+    assert [state["state"] for state in histogram["states"]] == ["CA", "TX"]
+    assert all(state["verified_records"] == 0 for state in histogram["states"])
+    rt.box_region = lambda: "af-south"
+    assert (await client.get(f"{ROOT}/{identity}/confidence-histogram", params={"tenant_id": str(TENANT)})).status_code == 403
+    assert (await draw(client, identity)).status_code == 403

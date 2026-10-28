@@ -1,0 +1,85 @@
+{
+  "bands": [
+    {
+      "count": 8,
+      "max": 39,
+      "min": 0
+    },
+    {
+      "count": 8,
+      "max": 59,
+      "min": 40
+    },
+    {
+      "count": 8,
+      "max": 79,
+      "min": 60
+    },
+    {
+      "count": 7,
+      "max": 100,
+      "min": 80
+    }
+  ],
+  "campaign_id": "e622bc5b-a52b-4277-bc1c-50968d931e0a",
+  "missing_confidence": 1,
+  "score_source": "agent_base.records.confidence",
+  "states": [
+    {
+      "bands": [
+        {
+          "count": 4,
+          "max": 39,
+          "min": 0
+        },
+        {
+          "count": 4,
+          "max": 59,
+          "min": 40
+        },
+        {
+          "count": 4,
+          "max": 79,
+          "min": 60
+        },
+        {
+          "count": 4,
+          "max": 100,
+          "min": 80
+        }
+      ],
+      "missing_confidence": 0,
+      "state": "CA",
+      "verified_records": 16
+    },
+    {
+      "bands": [
+        {
+          "count": 4,
+          "max": 39,
+          "min": 0
+        },
+        {
+          "count": 4,
+          "max": 59,
+          "min": 40
+        },
+        {
+          "count": 4,
+          "max": 79,
+          "min": 60
+        },
+        {
+          "count": 3,
+          "max": 100,
+          "min": 80
+        }
+      ],
+      "missing_confidence": 1,
+      "state": "TX",
+      "verified_records": 16
+    }
+  ],
+  "tenant_id": "ba5e0000-0000-4000-8000-000000000111",
+  "verified_records": 32
+}
