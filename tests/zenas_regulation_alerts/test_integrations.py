@@ -11,7 +11,6 @@ from agents.zenas.pool.bulk import load_wave
 from agents.zenas.pool.embed import NoOpEmbedder, NoOpVectorIndex
 from agents.zenas.pool.store import PostgresStore
 from zenas_za_laws_africa.test_sync import Replay, SOURCE
-from zenas_za_laws_africa.conftest import clock_and_token as clock_and_token
 
 
 @pytest.mark.asyncio
