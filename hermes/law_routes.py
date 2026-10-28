@@ -29,6 +29,7 @@ class LawPoint(BaseModel):
     version_date: str
     attribution: str = Field(min_length=1)
     licence: str
+    fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
     vector: list[float] = Field(min_length=1, max_length=384)
 
 
@@ -36,9 +37,14 @@ class PointsIn(LawRequest):
     points: list[LawPoint] = Field(min_length=1, max_length=64)
 
 
+class ReuseIn(LawRequest):
+    fingerprints: list[str] = Field(min_length=1, max_length=64)
+
+
 class SearchIn(LawRequest):
     vector: list[float] = Field(min_length=1, max_length=384)
     limit: int = Field(default=32, ge=1, le=200)
+    offset: int = Field(default=0, ge=0)
 
 
 def register_law_routes(app, current):
@@ -75,7 +81,12 @@ def register_law_routes(app, current):
         await run(law.upsert, body.jurisdiction, [point.model_dump() for point in body.points], body.model)
         return {"ok": True}
 
+    @app.post("/law/reuse")
+    async def reuse(body: ReuseIn, x_tank_key: str = Header(default="")):
+        law, _ = checked(body, x_tank_key)
+        return {"vectors": await run(law.reuse, body.jurisdiction, body.fingerprints, body.model)}
+
     @app.post("/law/search")
     async def search(body: SearchIn, x_tank_key: str = Header(default="")):
         law, _ = checked(body, x_tank_key)
-        return {"chunk_ids": await run(law.query, body.jurisdiction, body.vector, body.model, limit=body.limit)}
+        return {"chunk_ids": await run(law.query, body.jurisdiction, body.vector, body.model, limit=body.limit, offset=body.offset)}

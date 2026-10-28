@@ -80,6 +80,11 @@ class Chunk:
     citation: str
     citation_key: str
     ordinal: int
+    # Resolved from this exact stored document version, never from vector results.
+    url: str = ""
+    version_date: str = ""
+    attribution: str = ""
+    licence: str = ""
 
 
 @dataclass(frozen=True)

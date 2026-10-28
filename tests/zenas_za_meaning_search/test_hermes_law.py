@@ -37,7 +37,7 @@ def point():
     return {"chunk_id": "companies-act:66:version:1", "version_id": "companies-act:66:version",
             "url": "https://api.laws.africa/v3/akn/za/act/2008/71/eng.html#sec_66",
             "version_date": "2024-01-01", "attribution": "Laws.Africa", "licence": "Laws.Africa",
-            "vector": [1.0, 0.0, 0.0, 0.0]}
+            "vector": [1.0, 0.0, 0.0, 0.0], "fingerprint": "0" * 64}
 
 
 @pytest.mark.asyncio

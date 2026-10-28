@@ -6,9 +6,10 @@ still authoritative for text, dates, source attribution and version visibility.
 from __future__ import annotations
 
 import math
+import warnings
 from uuid import NAMESPACE_URL, uuid5
 
-from qdrant_client.models import Distance, FieldCondition, Filter, MatchValue, PointStruct, VectorParams
+from qdrant_client.models import Distance, FieldCondition, Filter, MatchValue, PayloadSchemaType, PointStruct, VectorParams
 
 from hermes.embeddings import MODEL_ID
 
@@ -46,6 +47,10 @@ class LawIndex:
         config = self.client.get_collection(self.collection).config.params.vectors
         if not isinstance(config, VectorParams) or config.size != self.dim or config.distance != Distance.COSINE:
             raise ValueError("law collection vector configuration mismatch")
+        for field in ("jurisdiction", "model", "fingerprint"):
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", UserWarning)
+                self.client.create_payload_index(self.collection, field, PayloadSchemaType.KEYWORD, wait=True)
         self._ready = True
 
     def upsert(self, jurisdiction, points, model):
@@ -61,7 +66,22 @@ class LawIndex:
                                           "model": model, "jurisdiction": jurisdiction},
         ) for point in points], wait=True)
 
-    def query(self, jurisdiction, vector, model, *, limit):
+    def reuse(self, jurisdiction, fingerprints, model):
+        self.check(jurisdiction, model)
+        if not self.client.collection_exists(self.collection):
+            return [None] * len(fingerprints)
+        self._ensure()
+        vectors = []
+        for fingerprint in fingerprints:
+            rows, _ = self.client.scroll(self.collection, scroll_filter=Filter(must=[
+                FieldCondition(key="jurisdiction", match=MatchValue(value=jurisdiction)),
+                FieldCondition(key="model", match=MatchValue(value=model)),
+                FieldCondition(key="fingerprint", match=MatchValue(value=fingerprint)),
+            ]), limit=1, with_vectors=True, with_payload=False)
+            vectors.append(rows[0].vector if rows else None)
+        return vectors
+
+    def query(self, jurisdiction, vector, model, *, limit, offset=0):
         self.check(jurisdiction, model)
         self._vector(vector)
         if not self.client.collection_exists(self.collection):
@@ -70,7 +90,7 @@ class LawIndex:
         result = self.client.query_points(self.collection, query=vector, query_filter=Filter(must=[
             FieldCondition(key="jurisdiction", match=MatchValue(value=jurisdiction)),
             FieldCondition(key="model", match=MatchValue(value=model)),
-        ]), limit=limit, with_payload=True, with_vectors=False)
+        ]), limit=limit, offset=offset, with_payload=True, with_vectors=False)
         return [point.payload["chunk_id"] for point in result.points if point.payload
                 and point.payload.get("url") and point.payload.get("attribution")
                 and point.payload.get("jurisdiction") == jurisdiction and point.payload.get("model") == model]
