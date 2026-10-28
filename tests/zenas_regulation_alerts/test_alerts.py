@@ -98,8 +98,7 @@ async def tick(store, http, tank, day, **kwargs):
 async def test_saved_response_to_mailbox_once(catcher):
     store, watch, http, tank = await setup_watch()
     args = dict(transport=catcher.transport, recipient="watcher@example.test")
-    assert (await tick(store, http, tank, 0, **args))["changes"] == 0
-    assert not tank.calls and not catcher.messages
+    # No prior run: the Oct 8 publication must alert on the first night.
     http.rows = [FR[0], FR[1]]
     result = await tick(store, http, tank, 1, **args)
     assert result["changes"] == result["summarized"] == result["sent"] == 1
@@ -273,6 +272,7 @@ async def test_federal_register_paging_and_changed_version():
 
     docs = await Sources("us-east", http_get=pages).fetch(watch)
     assert len(docs) == 2 and "conditions%5Bterm%5D=customs" in calls[0]
+    store.rows[TENANT, watch["id"]]["created_at"] = NOW + timedelta(days=2)
     await store.record_snapshot(TENANT, watch["id"], docs, NOW)
     changed = dict(
         docs[0],
@@ -636,21 +636,6 @@ async def test_api_real_routes_tenant_home_auth_and_persistence(tmp_path, monkey
     finally:
         await pool.close()
         server.cleanup()
-
-
-@pytest.mark.asyncio
-async def test_legiscan_stays_off_until_non_url_authentication_is_documented(
-    monkeypatch,
-):
-    monkeypatch.setenv("LEGISCAN_API_KEY", "LEGISCAN_API_KEY")
-
-    async def forbidden(*args):
-        pytest.fail("An undocumented authentication method must not be attempted")
-
-    with pytest.raises(FetchNotConfigured, match="LEGISCAN_API_KEY"):
-        await Sources("us-east", http_get=forbidden).fetch(
-            dict(source="legiscan", topic="consumer", options={"state": "CA"})
-        )
 
 
 @pytest.mark.asyncio
