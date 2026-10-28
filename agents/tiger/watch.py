@@ -9,11 +9,10 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import ipaddress
 import json
 import logging
 import re
-import socket
+import socket as socket  # Compatibility for callers supplying a test DNS resolver.
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -28,6 +27,7 @@ from alert_email import letter_for
 from change_alert import price_moved, record_stock, stock_reading, stock_statements
 from chassis.cron import is_due
 from chassis.db import schema_for
+from chassis.public_urls import check_url as public_check_url, is_public_url as is_public_url
 from domain_playbooks import MemoryPlaybooks, PgPlaybooks, public_marker, public_page
 from page_guard import layout_from_evidence, learn_layout, read_page
 
@@ -143,74 +143,11 @@ def robots_url_for(url: str) -> str:
     return f"{parsed.scheme}://{parsed.netloc}/robots.txt"
 
 
-def is_public_url(url: str) -> bool:
-    """Same rule as tiger/pool.py. This box does not import the browser package.
-
-    http(s) only. A name must contain a dot, so `tank` and `litellm` are not
-    hosts. `localhost` is refused. Resolve the host and refuse if any address
-    is private, loopback, link-local, multicast, reserved, or unspecified,
-    including an IPv4 address written as IPv6.
-    """
-    if not isinstance(url, str):
-        return False
-    parsed = urlparse(url.strip())
-    if parsed.scheme not in {"http", "https"}:
-        return False
-    host = (parsed.hostname or "").lower().rstrip(".")
-    if not host or host == "localhost":
-        return False
-    if not _is_ip(host) and "." not in host:
-        return False
-    try:
-        infos = socket.getaddrinfo(host, None)
-    except OSError:
-        return False
-    if not infos:
-        return False
-    for info in infos:
-        try:
-            address = info[4][0]
-        except (IndexError, TypeError):
-            return False
-        if _blocked_address(address):
-            return False
-    return True
-
-
-def _is_ip(host: str) -> bool:
-    try:
-        ipaddress.ip_address(host)
-    except ValueError:
-        return False
-    return True
-
-
-def _blocked_address(address: str) -> bool:
-    text = address.split("%", 1)[0]
-    try:
-        ip = ipaddress.ip_address(text)
-    except ValueError:
-        return True
-    mapped = getattr(ip, "ipv4_mapped", None)
-    if mapped is not None:
-        ip = mapped
-    return bool(
-        ip.is_private
-        or ip.is_loopback
-        or ip.is_link_local
-        or ip.is_multicast
-        or ip.is_reserved
-        or ip.is_unspecified
-    )
-
-
 def check_url(url: str) -> str:
-    text = url.strip()
-    if len(text) > 2000:
-        raise BadWatch("url is too long")
-    if not is_public_url(text):
-        raise BadWatch("url not allowed")
-    return text
+    try:
+        return public_check_url(url)
+    except ValueError as exc:
+        raise BadWatch(str(exc)) from None
 
 
 def check_every(every: str) -> str:
