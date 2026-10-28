@@ -2,7 +2,7 @@
   "tool": "CodeQL 2.27.3",
   "query_pack": "codeql/python-queries 1.8.13",
   "suite": "codeql-suites/python-code-scanning.qls",
-  "base_commit": "a172872",
+  "base_commit": "d452345",
   "comparison": "rule ID, relative path, and primaryLocationLineHash; no findings suppressed",
   "main_total": 91,
   "branch_total": 83,
@@ -58,6 +58,6 @@
     }
   ],
   "remaining_existing": 83,
-  "main_sarif_sha256": "ba76e2505e40219ec02209b83c86651bdb4ef57bbd12272ab6b942d8f320d42d",
-  "branch_sarif_sha256": "beafc8bfdd87c8f7dc9342c8e8f83814f70ae06e6737f6f16320b74a517c3b50"
+  "main_sarif_sha256": "294d87f3043337d2ec59b9bdd23b71555bea5ebe1df8f1d19f83e94cfcf312ab",
+  "branch_sarif_sha256": "a96b551de0881e08a37b09a37ca57ecdfed0f0502ae9e04b4d27b95786bd4ac2"
 }

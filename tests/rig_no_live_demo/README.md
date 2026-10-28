@@ -103,10 +103,10 @@ This update stays on `codex/rig-no-live-demo`. It changes no page wording, layou
 Working directory `/workspace/tervory-tank`:
 
 ```sh
-/workspace/.tervory-cloud/venv/bin/python -m pytest -q tests/test_rig_search_input_safety.py tests/test_rig_v5_page.py tests/test_rig_cn_archon.py tests/test_rig_recall.py tests/test_rig_archon_search_memory.py tests/test_rig_no_live_demo.py
+/workspace/.tervory-cloud/venv/bin/python -m pytest -q tests/test_rig_search_input_safety.py tests/test_rig_v5_page.py tests/test_rig_cn_archon.py tests/test_rig_recall.py tests/test_rig_archon_search_memory.py tests/test_rig_no_live_demo.py tests/test_secrets.py
 ```
 
-**209 passed**, one existing Starlette deprecation warning, 8.03s.
+**211 passed**, including the secret scan, one existing Starlette deprecation warning, 29.41s.
 
 ```sh
 /workspace/.tervory-cloud/venv/bin/python -m pytest -q -s tests/test_rig_search_input_safety.py
@@ -121,13 +121,13 @@ git diff --check
 
 Both passed.
 
-The shared pre-existing tests were also run in an exported copy of latest main (`a172872`) at `/tmp/rig-codeql/main-src`, and again on this branch:
+The shared pre-existing tests were also run in an exported copy of latest main (`d452345`) at `/tmp/rig-codeql/main-src-d452345`, and again on this branch:
 
 ```sh
 PATH=/workspace/.tervory-cloud/node/bin:$PATH /workspace/.tervory-cloud/venv/bin/python -m pytest -q tests/test_rig_v5_page.py tests/test_rig_cn_archon.py tests/test_rig_recall.py tests/test_rig_archon_search_memory.py
 ```
 
-| Check | Main `a172872` | PR #361 with this update |
+| Check | Main `d452345` | PR #361 with this update |
 | --- | --- | --- |
 | Shared tests above | 188 passed; no failing tests | 188 passed; no failing tests |
 | New security regressions | Not present | 8 passed |
@@ -142,17 +142,17 @@ GitHub's published CodeQL bundle **2.27.3**, query pack **codeql/python-queries 
 curl --fail --location --silent --show-error --output /tmp/codeql-bundle-linux64.tar.gz https://github.com/github/codeql-action/releases/latest/download/codeql-bundle-linux64.tar.gz
 mkdir -p /tmp/rig-codeql
 tar -xzf /tmp/codeql-bundle-linux64.tar.gz -C /tmp/rig-codeql
-mkdir -p /tmp/rig-codeql/main-src
-git archive founder/main | tar -x -C /tmp/rig-codeql/main-src
-/tmp/rig-codeql/codeql/codeql database create /tmp/rig-codeql/main-db --language=python --source-root=/tmp/rig-codeql/main-src --threads=2 --ram=3072 > /tmp/rig-codeql/create-main.log 2>&1
-/tmp/rig-codeql/codeql/codeql database analyze /tmp/rig-codeql/main-db codeql/python-queries:codeql-suites/python-code-scanning.qls --format=sarif-latest --output=/tmp/rig-codeql/main.sarif --threads=4 --ram=4096 > /tmp/rig-codeql/analyze-main.log 2>&1
-/tmp/rig-codeql/codeql/codeql database create /tmp/rig-codeql/final-db --language=python --source-root=/workspace/tervory-tank --threads=4 --ram=4096 > /tmp/rig-codeql/create-final.log 2>&1
-/tmp/rig-codeql/codeql/codeql database analyze /tmp/rig-codeql/final-db codeql/python-queries:codeql-suites/python-code-scanning.qls --format=sarif-latest --output=/tmp/rig-codeql/final.sarif --threads=4 --ram=4096 > /tmp/rig-codeql/analyze-final.log 2>&1
+mkdir -p /tmp/rig-codeql/main-src-d452345
+git archive d452345 | tar -x -C /tmp/rig-codeql/main-src-d452345
+/tmp/rig-codeql/codeql/codeql database create /tmp/rig-codeql/main-latest-db --language=python --source-root=/tmp/rig-codeql/main-src-d452345 --threads=2 --ram=3072 > /tmp/rig-codeql/create-main-latest.log 2>&1
+/tmp/rig-codeql/codeql/codeql database analyze /tmp/rig-codeql/main-latest-db codeql/python-queries:codeql-suites/python-code-scanning.qls --format=sarif-latest --output=/tmp/rig-codeql/main-latest.sarif --threads=4 --ram=4096 > /tmp/rig-codeql/analyze-main-latest.log 2>&1
+/tmp/rig-codeql/codeql/codeql database create /tmp/rig-codeql/final-latest-db --language=python --source-root=/workspace/tervory-tank --threads=4 --ram=4096 > /tmp/rig-codeql/create-final-latest.log 2>&1
+/tmp/rig-codeql/codeql/codeql database analyze /tmp/rig-codeql/final-latest-db codeql/python-queries:codeql-suites/python-code-scanning.qls --format=sarif-latest --output=/tmp/rig-codeql/final-latest.sarif --threads=4 --ram=4096 > /tmp/rig-codeql/analyze-final-latest.log 2>&1
 ```
 
-All commands exited 0. The final scan covered **979/979 Python files** (main: **976/976**) and evaluated 45 queries. [Machine-readable comparison](evidence/codeql-review.json) includes the SARIF hashes and eight removed findings. Comparison uses rule ID, relative path, and CodeQL's stable line fingerprint; shifted line numbers do not count as new findings.
+All commands exited 0. The final scan covered **986/986 Python files** (main: **983/983**) and evaluated 45 queries. [Machine-readable comparison](evidence/codeql-review.json) includes the SARIF hashes and eight removed findings. Comparison uses rule ID, relative path, and CodeQL's stable line fingerprint; shifted line numbers do not count as new findings.
 
-| CodeQL result | Main `a172872` | PR #361 with this update |
+| CodeQL result | Main `d452345` | PR #361 with this update |
 | --- | --- | --- |
 | Reported skin XSS | 1 | 0 |
 | Reported CN/recall slow-regex alerts | 7 | 0 |
