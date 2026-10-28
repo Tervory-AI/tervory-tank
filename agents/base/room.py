@@ -210,7 +210,18 @@ class SkillClient:
             )
             return await self._read(response)
 
+        reliability = None
+
         async def call(skill_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+            nonlocal reliability
+            if skill_id == "base.normalize":
+                if reliability is None:
+                    response = await self._http.get(
+                        self._base + "/v1/base-product/source-reliability/room",
+                        headers=self._headers(), timeout=30)
+                    reliability = (await self._read(response))["scores"]
+                # Reserved output metadata, not user input or an additional skill/model call.
+                return {**await direct(skill_id, payload), "_source_reliability": reliability}
             if skill_id == "base.scrape_site":
                 from access_sources import scrape_with_archives
                 return await scrape_with_archives(lambda: direct(skill_id, payload), self._http, self._base,
