@@ -202,3 +202,33 @@ async def test_trigger_legal_handoff_reaches_docassemble_with_notice(api, monkey
     assert result["notice"] == "legal information, not legal advice"
     assert result["model_calls"] == 0 and result["review"] == []
     assert api and api[0].files
+
+
+@pytest.mark.asyncio
+async def test_postgres_prior_metadata_is_not_sent_and_reuse_stays_exact(monkeypatch):
+    from datetime import datetime, timezone
+    from uuid import UUID
+    install(monkeypatch)
+    stub = API("za")
+    client = DocassembleClient("za", transport=httpx.MockTransport(stub.handle))
+    prior = {"id": UUID(TENANT), "tenant_id": UUID(TENANT), "created_at": datetime.now(timezone.utc),
+             "region": "za", "jurisdiction": "za", "source": "released",
+             "fact_pattern": {"template": "nda", "features": {"term": "two years"},
+                              "text": "Released NDA."}}
+    result = await client.assemble(template="nda", jurisdiction="za", clauses=[],
+                                   terms={"term": "two years"}, prior=prior)
+    assert result["reused"] and result["text"] == "Released NDA."
+    sent = json.loads(stub.requests[1].content)["variables"]["request"]["prior"]
+    assert set(sent) == {"region", "jurisdiction", "source", "fact_pattern"}
+    assert sent["fact_pattern"] == prior["fact_pattern"]
+
+
+@pytest.mark.asyncio
+async def test_missing_api_setting_stops_without_sending_or_storing_a_document(monkeypatch):
+    install(monkeypatch)
+    monkeypatch.delenv("DOCASSEMBLE_API_KEY")
+    stub = API("za")
+    client = DocassembleClient("za", transport=httpx.MockTransport(stub.handle))
+    with pytest.raises(AssemblyUnavailable):
+        await client.assemble(template="nda", jurisdiction="za", clauses=[], terms={}, prior=None)
+    assert not stub.requests
