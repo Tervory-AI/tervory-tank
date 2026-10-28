@@ -49,6 +49,12 @@ from agents.zenas.core.citation_sources import cited_sources, public_source_url
 
 # Whole passages, best first. A passage is never sliced to fit.
 _PASSAGE_BUDGET = 8000
+_LEGAL_NOTICE = "Zenas provides legal information, not legal advice."
+
+
+def _with_legal_notice(text: str) -> str:
+    text = text.rstrip()
+    return text if text.endswith(_LEGAL_NOTICE) else f"{text}\n\n{_LEGAL_NOTICE}"
 
 _RULE_PROMPT = """Build a rule card from these passages only. Reply with JSON:
 {{"elements":[{{"id":"","test":"","citation":"","quote":""}}],"exceptions":[],"defences":[],"remedies":[],"decision_table":[]}}
@@ -988,6 +994,7 @@ async def write_memo(
         if wording_keeps_law(memo["text"], proposal, memo["citations"]):
             memo["text"] = proposal.strip()
             smoothed = True
+    memo["text"] = _with_legal_notice(memo["text"])
     return {
         "ok": True,
         "memo": memo,
@@ -1543,6 +1550,9 @@ async def draft_contract(
             [{"kind": "ins" if item.get("review") else "plain", "text": str(item["text"])}]
             for item in sentences
         ]
+    if not text.rstrip().endswith(_LEGAL_NOTICE):
+        blocks.append([{"kind": "plain", "text": _LEGAL_NOTICE}])
+    text = _with_legal_notice(text)
     document_id = None
     if matter_id:
         matter = await store.get_matter(str(tenant_id), str(matter_id))
@@ -1807,6 +1817,7 @@ async def answer_question(
     if sources is None:
         return _refuse("could not verify", delivered=False, cite=checked)
     memo["sources"] = sources
+    memo["text"] = _with_legal_notice(memo["text"])
     state = "in_review" if review_on else "released"
     document_id = None
     if matter_id:
