@@ -419,6 +419,17 @@ async def test_dispatch_job_runs_delivery(catcher, monkeypatch):
     store, _ = await pending()
     monkeypatch.setattr(module, "PgStore", lambda *args: store)
     monkeypatch.setattr(module.app.state, "pool", None, raising=False)
+    monkeypatch.setattr(module.app.state, "http", None, raising=False)
+    reconciled = []
+
+    class RigDelivery:
+        def __init__(self, watches):
+            assert watches is store
+
+        async def deliver(self, tenant, client):
+            reconciled.append(tenant)
+
+    monkeypatch.setattr(module, "RigWatches", RigDelivery)
 
     async def deliver(s, tenant):
         return await deliver_pending(
@@ -428,6 +439,7 @@ async def test_dispatch_job_runs_delivery(catcher, monkeypatch):
     monkeypatch.setattr(module, "deliver_pending", deliver)
     result = await module.dispatch(SimpleNamespace(tenant_id=TENANT_A))
     assert result["email"]["sent"] == 1 and len(catcher.messages) == 1
+    assert reconciled == [TENANT_A]
 
 
 @pytest.mark.asyncio

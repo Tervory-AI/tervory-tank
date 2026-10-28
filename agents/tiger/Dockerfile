@@ -8,6 +8,7 @@ RUN pip install --no-cache-dir -r requirements.txt \
 COPY _chassis/chassis /app/chassis
 COPY tiger/app.py /app/app.py
 COPY tiger/watch.py /app/watch.py
+COPY tiger/rig_watch.py /app/rig_watch.py
 COPY tiger/alert_email.py /app/alert_email.py
 # Reuse Rig's SMTP implementation unchanged; no reservation copy is used by Tiger.
 COPY rig/rigbox/reserve.py /app/agents/rig/rigbox/reserve.py

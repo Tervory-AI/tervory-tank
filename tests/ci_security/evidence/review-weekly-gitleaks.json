@@ -1,0 +1,18 @@
+{
+  "tool": "gitleaks",
+  "head": "935b3d05b45279ed9748ff20f1b1124fad783e9b",
+  "base": null,
+  "result": "clean",
+  "execution": "local cloud CLI; weekly whole-history command",
+  "tool_version": "8.30.1",
+  "exit_code": 0,
+  "findings": [],
+  "reviewed_finding_count": 43,
+  "reviewed_unique_fingerprints": 41,
+  "finding_groups": {
+    "dummy_clerk_publishable": 18,
+    "dummy_stripe_test": 1,
+    "figma_identifiers": 13,
+    "public_html_fixture_tokens": 11
+  }
+}

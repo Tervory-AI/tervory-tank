@@ -288,7 +288,7 @@ async def test_closed_pr_finishes_without_merging(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_real_tank_confirm_to_result_and_thread_reply_on_same_pr(api, tmp_path, monkeypatch):
+async def test_real_tank_confirm_to_result_and_thread_reply_on_same_pr(api, tmp_path, monkeypatch):  # noqa: F811 (pytest fixture parameter)
     client, pool = api
     thread = (await client.post('/v1/command/threads', json={'title': 'A small change'})).json()['thread_id']
     other = (await client.post('/v1/command/threads', json={'title': 'Unrelated'})).json()['thread_id']

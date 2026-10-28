@@ -642,6 +642,8 @@ async def ensure_tables(conn: Any, schema: str = SCHEMA) -> None:
     ]
     for statement in statements:
         await conn.execute(statement)
+    from rig_watch import ensure_rig_tables
+    await ensure_rig_tables(conn, schema)
     from domain_playbooks import ensure_tables as ensure_playbooks
     await ensure_playbooks(conn, schema)
 
@@ -783,17 +785,20 @@ class PgStore(PgPlaybooks):
     async def add_observation(self, row: dict[str, Any]) -> dict[str, Any]:
         async with self.pool.acquire() as conn:
             await ensure_tables(conn, self.schema)
-            saved = await conn.fetchrow(
-                self._sql(SQL_INSERT_OBS),
-                uuid.UUID(str(row["tenant_id"])),
-                row["url"],
-                row["ts"],
-                Decimal(str(row["price"])) if row.get("price") is not None else None,
-                row.get("currency"),
-                row.get("availability"),
-                row.get("method"),
-                row.get("evidence"),
-            )
+            async with conn.transaction():
+                saved = await conn.fetchrow(
+                    self._sql(SQL_INSERT_OBS),
+                    uuid.UUID(str(row["tenant_id"])),
+                    row["url"],
+                    row["ts"],
+                    Decimal(str(row["price"])) if row.get("price") is not None else None,
+                    row.get("currency"),
+                    row.get("availability"),
+                    row.get("method"),
+                    row.get("evidence"),
+                )
+                from rig_watch import record_observation
+                await record_observation(conn, self.schema, _obs_out(saved))
         return _obs_out(saved)
 
     async def list_observations(self, tenant_id: str, url: str) -> list[dict[str, Any]]:

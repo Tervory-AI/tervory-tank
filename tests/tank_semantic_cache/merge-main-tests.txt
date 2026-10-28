@@ -1,0 +1,1616 @@
+EEEEEEEEEEEEEEEEEEEEEEE.EEEE............EEF..........................E.  [100%]
+==================================== ERRORS ====================================
+_ ERROR at setup of test_paraphrase_shadow_keeps_real_answer_and_reports_savings _
+
+self = <Coroutine test_paraphrase_shadow_keeps_real_answer_and_reports_savings>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_tank_tenant_boundaries.py:34: in boundary
+    import main as tank
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+_ ERROR at setup of test_numbers_and_negation_never_match_even_identical_vectors[Explain 3 rainfall stages.] _
+
+self = <Coroutine test_numbers_and_negation_never_match_even_identical_vectors[Explain 3 rainfall stages.]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_tank_tenant_boundaries.py:34: in boundary
+    import main as tank
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+_ ERROR at setup of test_numbers_and_negation_never_match_even_identical_vectors[Explain three rainfall stages.] _
+
+self = <Coroutine test_numbers_and_negation_never_match_even_identical_vectors[Explain three rainfall stages.]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_tank_tenant_boundaries.py:34: in boundary
+    import main as tank
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+_ ERROR at setup of test_numbers_and_negation_never_match_even_identical_vectors[Do not explain 2 rainfall stages.] _
+
+self = <Coroutine test_numbers_and_negation_never_match_even_identical_vectors[Do not explain 2 rainfall stages.]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_tank_tenant_boundaries.py:34: in boundary
+    import main as tank
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+_ ERROR at setup of test_numbers_and_negation_never_match_even_identical_vectors[Don't explain 2 rainfall stages.] _
+
+self = <Coroutine test_numbers_and_negation_never_match_even_identical_vectors[Don't explain 2 rainfall stages.]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_tank_tenant_boundaries.py:34: in boundary
+    import main as tank
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+_ ERROR at setup of test_numbers_and_negation_never_match_even_identical_vectors[Explain 2 stages without rain.] _
+
+self = <Coroutine test_numbers_and_negation_never_match_even_identical_vectors[Explain 2 stages without rain.]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_tank_tenant_boundaries.py:34: in boundary
+    import main as tank
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+_ ERROR at setup of test_numbers_and_negation_never_match_even_identical_vectors[Explain 2 stages except rain.] _
+
+self = <Coroutine test_numbers_and_negation_never_match_even_identical_vectors[Explain 2 stages except rain.]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_tank_tenant_boundaries.py:34: in boundary
+    import main as tank
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+____________ ERROR at setup of test_tenant_collections_are_isolated ____________
+
+self = <Coroutine test_tenant_collections_are_isolated>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_tank_tenant_boundaries.py:34: in boundary
+    import main as tank
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+_ ERROR at setup of test_stale_or_different_context_never_reuses_qdrant_hit[expiry] _
+
+self = <Coroutine test_stale_or_different_context_never_reuses_qdrant_hit[expiry]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_tank_tenant_boundaries.py:34: in boundary
+    import main as tank
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+_ ERROR at setup of test_stale_or_different_context_never_reuses_qdrant_hit[feedback] _
+
+self = <Coroutine test_stale_or_different_context_never_reuses_qdrant_hit[feedback]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_tank_tenant_boundaries.py:34: in boundary
+    import main as tank
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+_ ERROR at setup of test_stale_or_different_context_never_reuses_qdrant_hit[policy] _
+
+self = <Coroutine test_stale_or_different_context_never_reuses_qdrant_hit[policy]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_tank_tenant_boundaries.py:34: in boundary
+    import main as tank
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+_ ERROR at setup of test_stale_or_different_context_never_reuses_qdrant_hit[matter] _
+
+self = <Coroutine test_stale_or_different_context_never_reuses_qdrant_hit[matter]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_tank_tenant_boundaries.py:34: in boundary
+    import main as tank
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+_ ERROR at setup of test_stale_or_different_context_never_reuses_qdrant_hit[region] _
+
+self = <Coroutine test_stale_or_different_context_never_reuses_qdrant_hit[region]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_tank_tenant_boundaries.py:34: in boundary
+    import main as tank
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+_ ERROR at setup of test_command_turn_exact_only_even_with_legacy_semantic_flag _
+
+self = <Coroutine test_command_turn_exact_only_even_with_legacy_semantic_flag>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_tank_tenant_boundaries.py:34: in boundary
+    import main as tank
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+__ ERROR at setup of test_approval_refuses_insufficient_evidence[199-1-True] ___
+
+self = <Coroutine test_approval_refuses_insufficient_evidence[199-1-True]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_tank_tenant_boundaries.py:34: in boundary
+    import main as tank
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+_ ERROR at setup of test_approval_refuses_insufficient_evidence[200-0.989-True] _
+
+self = <Coroutine test_approval_refuses_insufficient_evidence[200-0.989-True]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_tank_tenant_boundaries.py:34: in boundary
+    import main as tank
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+__ ERROR at setup of test_approval_refuses_insufficient_evidence[200-1-False] __
+
+self = <Coroutine test_approval_refuses_insufficient_evidence[200-1-False]>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_tank_tenant_boundaries.py:34: in boundary
+    import main as tank
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+_ ERROR at setup of test_requires_founder_approval_per_tenant_then_can_serve_and_revoke _
+
+self = <Coroutine test_requires_founder_approval_per_tenant_then_can_serve_and_revoke>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_tank_tenant_boundaries.py:34: in boundary
+    import main as tank
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+____________ ERROR at setup of test_new_policy_invalidates_approval ____________
+
+self = <Coroutine test_new_policy_invalidates_approval>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_tank_tenant_boundaries.py:34: in boundary
+    import main as tank
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+_ ERROR at setup of test_existing_judge_used_for_prose_and_cost_booked_separately _
+
+self = <Coroutine test_existing_judge_used_for_prose_and_cost_booked_separately>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_tank_tenant_boundaries.py:34: in boundary
+    import main as tank
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+___ ERROR at setup of test_judge_budget_exhaustion_keeps_unscored_would_hit ____
+
+self = <Coroutine test_judge_budget_exhaustion_keeps_unscored_would_hit>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_tank_tenant_boundaries.py:34: in boundary
+    import main as tank
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+_ ERROR at setup of test_encoder_unavailable_leaves_served_route_intact_and_records_status _
+
+self = <Coroutine test_encoder_unavailable_leaves_served_route_intact_and_records_status>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_tank_tenant_boundaries.py:34: in boundary
+    import main as tank
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+_____ ERROR at setup of test_schema_reapplies_without_losing_observations ______
+
+self = <Coroutine test_schema_reapplies_without_losing_observations>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_tank_tenant_boundaries.py:34: in boundary
+    import main as tank
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+___ ERROR at setup of test_batch_completion_records_enqueue_time_shadow_once ___
+
+self = <Coroutine test_batch_completion_records_enqueue_time_shadow_once>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_tank_tenant_boundaries.py:34: in boundary
+    import main as tank
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+_____ ERROR at setup of test_untrusted_qdrant_payload_cannot_cross_tenant ______
+
+self = <Coroutine test_untrusted_qdrant_payload_cannot_cross_tenant>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_tank_tenant_boundaries.py:34: in boundary
+    import main as tank
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+_ ERROR at setup of test_qdrant_failure_is_recorded_without_changing_real_answer _
+
+self = <Coroutine test_qdrant_failure_is_recorded_without_changing_real_answer>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_tank_tenant_boundaries.py:34: in boundary
+    import main as tank
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+_____________ ERROR at setup of test_negated_source_is_not_indexed _____________
+
+self = <Coroutine test_negated_source_is_not_indexed>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_tank_tenant_boundaries.py:34: in boundary
+    import main as tank
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+_ ERROR at setup of test_real_tank_off_shadow_cost_judge_isolation_and_founder_gate _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fb7b392c1d0>
+
+    @pytest_asyncio.fixture
+    async def real_tank(monkeypatch):
+        url = os.environ.get("POOL_SCHEMA_DATABASE_URL")
+        if not url:
+            pytest.skip("requires disposable PostgreSQL via POOL_SCHEMA_DATABASE_URL")
+        if urlsplit(url).hostname not in {"localhost", "127.0.0.1"}:
+            pytest.fail("proof database must be local")
+        admin = await asyncpg.connect(url)
+        name = "routellm_" + uuid.uuid4().hex
+        await admin.execute(f'CREATE DATABASE "{name}"')
+        target = urlunsplit(urlsplit(url)._replace(path="/" + name))
+        for key, value in {"DATABASE_URL": target, "TANK_API_KEY": "local-routellm-test",
+                           "LITELLM_MASTER_KEY": "local-provider-stub", "TANK_REGION": "us-east",
+                           "TERVORY_ADMIN_USER_IDS": "local-founder", "REDIS_URL": "redis://127.0.0.1:1/0"}.items():
+            monkeypatch.setenv(key, value)
+>       import main as tank
+
+tests/test_tank_routellm.py:62: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+_ ERROR at setup of test_failure_strong_selection_unsampled_and_unknown_cost_leave_answer_unchanged _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fb7ca0c6cf0>
+
+    @pytest_asyncio.fixture
+    async def real_tank(monkeypatch):
+        url = os.environ.get("POOL_SCHEMA_DATABASE_URL")
+        if not url:
+            pytest.skip("requires disposable PostgreSQL via POOL_SCHEMA_DATABASE_URL")
+        if urlsplit(url).hostname not in {"localhost", "127.0.0.1"}:
+            pytest.fail("proof database must be local")
+        admin = await asyncpg.connect(url)
+        name = "routellm_" + uuid.uuid4().hex
+        await admin.execute(f'CREATE DATABASE "{name}"')
+        target = urlunsplit(urlsplit(url)._replace(path="/" + name))
+        for key, value in {"DATABASE_URL": target, "TANK_API_KEY": "local-routellm-test",
+                           "LITELLM_MASTER_KEY": "local-provider-stub", "TANK_REGION": "us-east",
+                           "TERVORY_ADMIN_USER_IDS": "local-founder", "REDIS_URL": "redis://127.0.0.1:1/0"}.items():
+            monkeypatch.setenv(key, value)
+>       import main as tank
+
+tests/test_tank_routellm.py:62: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+___ ERROR at setup of test_routellm_and_cache_share_shadow_runner_and_report ___
+
+self = <Coroutine test_routellm_and_cache_share_shadow_runner_and_report>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:559: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:945: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:408: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../worker-venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:404: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_tank_routellm.py:62: in real_tank
+    import main as tank
+tank/main.py:60: in <module>
+    from command_stream import StreamFailure, TokenSink, completion as stream_completion
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    """Command-only streaming via the standard SDK, never a direct provider call."""
+    from __future__ import annotations
+    
+    import asyncio
+    import math
+    from collections.abc import Awaitable, Callable
+    from typing import Any
+    
+    import httpx
+>   import jiter
+E   ModuleNotFoundError: No module named 'jiter'
+
+tank/command_stream.py:10: ModuleNotFoundError
+=================================== FAILURES ===================================
+___________________________ test_no_new_tank_bypass ____________________________
+
+    def test_no_new_tank_bypass() -> None:
+        findings = scan(ROOT)
+        counts = Counter(item.identity for item in findings)
+        unexpected = [item for item in findings if counts[item.identity] > EXCEPTIONS.get(item.identity, (0, ""))[0]]
+        stale = [identity for identity, (count, reason) in EXCEPTIONS.items() if not reason or counts[identity] != count]
+>       assert not unexpected, "Unaudited model/paid calls outside Tank:\n" + "\n".join(
+            f"{item.path}:{item.line}: {item.kind} [{item.identity[2]}]" for item in unexpected)
+E       AssertionError: Unaudited model/paid calls outside Tank:
+E         tests/tank_batch_providers/verify_passthrough.py:87: assembled endpoint [2703e202bb2a19bc]
+E         tests/tank_batch_providers/verify_passthrough.py:87: model/paid endpoint [d898b966b41955fb]
+E         tests/test_command_streaming.py:81: model/paid endpoint [20a97d67b3598de5]
+E       assert not [Finding(path='tests/tank_batch_providers/verify_passthrough.py', line=87, kind='assembled endpoint', evidence='{"fiel...model/paid endpoint', evidence='{"fields":{"value":"http://litellm.internal/v1/chat/completions"},"node":"Constant"}')]
+
+tests/test_tank_one_door.py:265: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_tank_one_door.py::test_no_new_tank_bypass - AssertionError:...
+ERROR tests/test_tank_semantic_cache.py::test_paraphrase_shadow_keeps_real_answer_and_reports_savings
+ERROR tests/test_tank_semantic_cache.py::test_numbers_and_negation_never_match_even_identical_vectors[Explain 3 rainfall stages.]
+ERROR tests/test_tank_semantic_cache.py::test_numbers_and_negation_never_match_even_identical_vectors[Explain three rainfall stages.]
+ERROR tests/test_tank_semantic_cache.py::test_numbers_and_negation_never_match_even_identical_vectors[Do not explain 2 rainfall stages.]
+ERROR tests/test_tank_semantic_cache.py::test_numbers_and_negation_never_match_even_identical_vectors[Don't explain 2 rainfall stages.]
+ERROR tests/test_tank_semantic_cache.py::test_numbers_and_negation_never_match_even_identical_vectors[Explain 2 stages without rain.]
+ERROR tests/test_tank_semantic_cache.py::test_numbers_and_negation_never_match_even_identical_vectors[Explain 2 stages except rain.]
+ERROR tests/test_tank_semantic_cache.py::test_tenant_collections_are_isolated
+ERROR tests/test_tank_semantic_cache.py::test_stale_or_different_context_never_reuses_qdrant_hit[expiry]
+ERROR tests/test_tank_semantic_cache.py::test_stale_or_different_context_never_reuses_qdrant_hit[feedback]
+ERROR tests/test_tank_semantic_cache.py::test_stale_or_different_context_never_reuses_qdrant_hit[policy]
+ERROR tests/test_tank_semantic_cache.py::test_stale_or_different_context_never_reuses_qdrant_hit[matter]
+ERROR tests/test_tank_semantic_cache.py::test_stale_or_different_context_never_reuses_qdrant_hit[region]
+ERROR tests/test_tank_semantic_cache.py::test_command_turn_exact_only_even_with_legacy_semantic_flag
+ERROR tests/test_tank_semantic_cache.py::test_approval_refuses_insufficient_evidence[199-1-True]
+ERROR tests/test_tank_semantic_cache.py::test_approval_refuses_insufficient_evidence[200-0.989-True]
+ERROR tests/test_tank_semantic_cache.py::test_approval_refuses_insufficient_evidence[200-1-False]
+ERROR tests/test_tank_semantic_cache.py::test_requires_founder_approval_per_tenant_then_can_serve_and_revoke
+ERROR tests/test_tank_semantic_cache.py::test_new_policy_invalidates_approval
+ERROR tests/test_tank_semantic_cache.py::test_existing_judge_used_for_prose_and_cost_booked_separately
+ERROR tests/test_tank_semantic_cache.py::test_judge_budget_exhaustion_keeps_unscored_would_hit
+ERROR tests/test_tank_semantic_cache.py::test_encoder_unavailable_leaves_served_route_intact_and_records_status
+ERROR tests/test_tank_semantic_cache.py::test_schema_reapplies_without_losing_observations
+ERROR tests/test_tank_semantic_cache.py::test_batch_completion_records_enqueue_time_shadow_once
+ERROR tests/test_tank_semantic_cache.py::test_untrusted_qdrant_payload_cannot_cross_tenant
+ERROR tests/test_tank_semantic_cache.py::test_qdrant_failure_is_recorded_without_changing_real_answer
+ERROR tests/test_tank_semantic_cache.py::test_negated_source_is_not_indexed
+ERROR tests/test_tank_routellm.py::test_real_tank_off_shadow_cost_judge_isolation_and_founder_gate
+ERROR tests/test_tank_routellm.py::test_failure_strong_selection_unsampled_and_unknown_cost_leave_answer_unchanged
+ERROR tests/test_tank_shadow_coexistence.py::test_routellm_and_cache_share_shadow_runner_and_report
+1 failed, 40 passed, 30 errors in 18.53s
