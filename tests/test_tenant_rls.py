@@ -417,3 +417,29 @@ async def test_base_queue_uses_persisted_owner_after_admin_discovery(database, m
         await asyncio.gather(worker, return_exceptions=True)
     assert set(observed) == {str(a), str(b)}
     assert await pool.fetchval("SELECT count(*) FROM agent_base.tasks") == 0
+
+
+@pytest.mark.asyncio
+async def test_included_router_explicit_tenant_wins_body_and_body_cannot_select_admin(database):
+    from fastapi import APIRouter, FastAPI
+    from pydantic import BaseModel
+    from tenant_db import bind_tenant_endpoints
+    a, b = uuid4(), uuid4()
+    for tenant in (a, b):
+        await database.owner.execute("INSERT INTO agent_rig.keys(tenant_id,key_hash,kind) VALUES($1,$2,'publishable')", tenant, str(uuid4()))
+    class Body(BaseModel):
+        tenant_id: UUID
+        founder: bool = True
+    child, parent, app = APIRouter(), APIRouter(), FastAPI()
+    @child.post("/scope")
+    async def accepted(tenant_id: UUID, body: Body):
+        return {"tenant": await database.pool.fetchval("SELECT current_setting('app.tenant_id',true)"), "keys": await database.pool.fetchval("SELECT count(*) FROM agent_rig.keys")}
+    parent.include_router(child, prefix="/child")
+    app.include_router(parent, prefix="/parent")
+    bind_tenant_endpoints(app)
+    bind_tenant_endpoints(app)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://offline") as client:
+        response = await client.post("/parent/child/scope", params={"tenant_id": str(a)}, json={"tenant_id": str(b), "founder": True})
+        assert response.status_code == 200, response.text
+        assert response.json() == {"tenant": str(a), "keys": 1}
+    assert await database.pool.fetchval("SELECT count(*) FROM agent_rig.keys") == 0
