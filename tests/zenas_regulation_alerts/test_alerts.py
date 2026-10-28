@@ -277,6 +277,7 @@ async def test_federal_register_paging_and_changed_version():
     changed = dict(
         docs[0],
         version="offline-changed-version",
+        date="2026-10-10",
         text=docs[0]["text"] + "\n" + FR[1]["abstract"],
     )
     assert (
@@ -541,6 +542,11 @@ async def test_postgres_persists_atomic_changes_and_claims(tmp_path, catcher):
         conn = await asyncpg.connect(server.get_uri())
         store = PgWatches(conn)
         assert len(await store.changes(TENANT)) == 1
+        row = (await store.changes(TENANT))[0]
+        await store.mark_event_sent(OTHER, row["id"])
+        assert not (await store.changes(TENANT))[0]["event_sent"]
+        await store.mark_event_sent(TENANT, row["id"])
+        assert (await store.changes(TENANT))[0]["event_sent"]
         assert await store.changes(OTHER) == []
         assert await store.set_enabled(OTHER, watch["id"], False) is None
         catcher.reject = True
