@@ -1,103 +1,55 @@
-# ZA Laws.Africa preparation — blocked at the required documentation check
+# ZA Laws.Africa: full national coverage and resumable synchronization
 
-Branch: `codex/zenas-za-laws-africa`.
-Started from fetched main `a99f3cb0662516c8fe1b3f27d5b5dcbb90e94fa0` on 28 October 2026. The branch was pushed immediately. The fetched main history contains no `#372` merge; no unmerged PR was imported and no PR was merged here.
+Branch: `codex/zenas-za-laws-africa`. Claude opens the draft PR; the founder merges.
+Started from main `a99f3cb`; updated from main `89a7234` in merge `e8de3ea` and pushed. `#372` was not in fetched main at this point.
 
-**Not ready for Friday. This commit contains this blocker/proof document only. No product code has changed.**
+## API contract and provenance
 
-## Exact blocker
+The public docs host was blocked by this cloud's proxy (CONNECT 403). The founder subsequently supplied Claude's documentation check and instructed this branch to use it. The following quotations are from that supplied contract, with the supplied documentation URLs; they are not presented as pages independently fetched by this cloud.
 
-Required source: https://developers.laws.africa/ (Content API v3 documentation).
-
-The managed cloud's enforced network policy does not permit `developers.laws.africa`. The HTTPS request failed at the proxy's CONNECT step, before reaching the documentation:
-
-```text
-curl: (56) CONNECT tunnel failed, response 403
-HTTP 000
-```
-
-The saved proxy response starts:
-
-```text
-HTTP/1.1 403 Forbidden
-server: envoy
-```
-
-Missing: cloud network access to **`developers.laws.africa`** for the mandatory public documentation check. No API token is needed to perform that documentation check. No secret was read, entered, generated, or requested.
-
-Rule 9 in `docs/build/MILESTONES-28OCT-1NOV.md` says: **“If something blocks you (a missing setting value, missing Figma text, a file you may not change), stop at that point and report exactly what is missing. Do not ask, do not guess, do not work around it.”** Implementation stops here. No alternative endpoint, undocumented request shape, invented API recording, or assumed commercial licence has been substituted.
-
-## Documentation verification still required
-
-| Required fact | Status |
+| Topic | Supplied contract and documentation |
 | --- | --- |
-| Content API v3 authorization scheme | Not verified against the docs. Existing code sends `Bearer`; its correctness is not claimed. |
-| National works listing and current consolidated expression endpoints | Not verified. |
-| Pagination shape and termination | Not verified. |
-| Changed-since filter, ordering, and synchronization semantics | Not verified. |
-| Rate limits, throttling responses, and retry rules | Not verified. |
-| Commercial-use licence and required attribution | Not verified. |
+| Authorization | “header `Authorization: Bearer <token>` … Our code already sends Bearer; keep it.” [Authentication](https://developers.laws.africa/get-started/authentication). The older `token` scheme is not used. |
+| Base | “https://api.laws.africa/v3/” [Content API](https://developers.laws.africa/content-api/content-api.md). |
+| Listing | “GET /v3/akn/za/.json … Paged: fields count, next (URL or null), previous, results. Follow next until null … No page-size parameter is documented; do not send one.” [Pagination](https://developers.laws.africa/content-api/reference/pagination.md). |
+| Expressions | “GET /v3/{frbr_uri}; .json for details, .html for content (params: coverpage=0, standalone, resolver=none), /toc.json for the table of contents.” Points in time contain dates and language expressions. “`@` first expression, `@YYYY-MM-DD` the expression at that date, `:YYYY-MM-DD` the latest at or before that date, none = latest today.” [Works and expressions](https://developers.laws.africa/content-api/reference/works-and-expressions.md). |
+| Changes | “no filter is documented. The nightly sync compares each work's points_in_time dates and expression URLs against what we stored, and fetches only new or changed expressions.” Founder instruction for the gap in [works/expressions documentation](https://developers.laws.africa/content-api/reference/works-and-expressions.md). No undocumented filter is sent. |
+| Rate limit | “none documented. Send at most 1 request per second … On 429 or 5xx, honour Retry-After or back off, and resume where you stopped.” Founder instruction; no public rate limit is claimed. Retry-After is not shortened by the shared client's usual cap. |
+| Licence/attribution | “not in the public docs; the founder receives the terms with the paid key on Friday. Until then store the Laws.Africa name and the official source link per section, as the catalogue already does, and add no new wording.” No commercial licence or permission is inferred from the public documentation. |
 
-The requested verbatim documentation quotations and their precise page URLs cannot be supplied until the source is readable. The repository's existing authentication documentation reference is https://developers.laws.africa/get-started/authentication; that reference is not evidence that the page has been read or that the current implementation is correct.
+## What changed (in progress)
 
-## Current code findings, not completed fixes
-
-- `agents/zenas/pool/adapters/za_common.py:23`: `bearer_headers` constructs the existing `Bearer` authorization header. It was not changed without verifying the required scheme.
-- `agents/zenas/pool/adapters/za_akn.py:21`: `ACTS` contains eleven fixed instruments. `LawsAfricaAdapter.fetch` fetches an individual expression; it has no full national works listing or listing pagination.
-- `agents/zenas/pool/adapters/za_akn.py:112`: `_frbr_date` takes the first parseable FRBR date. `parse_akn` uses that date for both document date and effective-from date; the required consolidation/point-in-time semantics still need checking against recorded API data.
-- `agents/zenas/pool/catalogue.py:341`: the Laws.Africa catalogue is generated from that fixed list. The current catalogue statements are not a substitute for the requested licence/attribution verification.
-- `agents/zenas/docker-compose.za.yml:16` and `:56`: `LAWS_AFRICA_API_TOKEN` is forwarded to the optional `pool-loader` service, **not** the normal `agent-zenas` service that must handle the screen's load request. Setting the resource variable alone is therefore not sufficient with the current Compose wiring.
-- `agents/zenas/pool/catalogue.py:369`: SAFLII has a catalogue entry. Its live configuration was not inspected or changed; no claim is made that it is disabled on the ZA box.
-
-No civil/criminal scope policy, page copy, layout, source switch, live setting, database, or Boston configuration was changed.
+- `agents/zenas/pool/adapters/laws_africa_api.py`: ZA-only client, existing Bearer scheme, API-origin/region checks, one-second request pacing, bounded 429/all-5xx retries, and dated expression metadata. Bad credentials use the existing `FetchNotConfigured` path. Header-bearing requests do not follow redirects.
+- `agents/zenas/pool/http.py`: optional single-attempt/no-redirect operation reuses the existing HTTP/gzip code; existing callers retain their defaults. Optional uncapped Retry-After preserves the provider's requested wait.
+- `agents/zenas/pool/adapters/laws_africa_html.py` and `za_akn.py`: reuse the existing section parser for AKN HTML and its table of contents, keeping section anchors, language/version identity, dates, publisher and source URL.
+- `tests/zenas_za_laws_africa/recordings/` and `test_api.py`: offline transport replay, auth/pacing/backoff/refusal checks, and section/date/link parsing. These are contract-shaped test recordings, not captures from a paid account; provenance is in the recordings README. Live code never loads them.
 
 ## Commands and results
 
-Cloud working directory: `/workspace/tervory-tank`.
+Cloud directory: `/workspace/tervory-tank`. No GitHub API or paid API call was used.
 
 ```sh
-pwd
-git status --short
-git branch --show-current
 git fetch founder main
-git log -8 --oneline founder/main
-git switch -c codex/zenas-za-laws-africa founder/main
-git push -u founder codex/zenas-za-laws-africa
+git merge --no-edit founder/main
+git push founder codex/zenas-za-laws-africa
+env -u RIG_TEST_DATABASE_URL -u POOL_SCHEMA_DATABASE_URL -u ZENAS_SCHEMA_DATABASE_URL -u GITHUB_ACTIONS PYTHONPATH=. /workspace/.tervory-cloud/venv/bin/python -m pytest -q tests/zenas_za_laws_africa/test_api.py
 ```
 
-Results: cloud path confirmed; clean starting worktree; main fetched successfully at `a99f3cb`; new branch created from it and pushed. Git reports the repository redirect to `Tervory-AI/tervory-tank`. No GitHub API was used.
+Results: main merge `e8de3ea` pushed; **13 passed in 0.16s**. Tokens in tests are variable-name markers passed through mocked transport, never credentials. No model calls, live database access or fixture fallback were used.
 
-```sh
-curl --silent --show-error --location --max-time 20 --dump-header /tmp/zenas-laws-africa-docs.headers --output /tmp/zenas-laws-africa-docs.html --write-out 'HTTP %{http_code}\n' https://developers.laws.africa/ && head -15 /tmp/zenas-laws-africa-docs.headers && head -12 /tmp/zenas-laws-africa-docs.html
-```
+## Friday checklist — pending completion of this branch
 
-Result: exit **56**, proxy CONNECT **403**, origin HTTP **000**. The subsequent `head` commands did not run because curl failed. The proxy headers were then read with:
+1. **licence terms: confirm from the founder's Laws.Africa agreement**. Confirm any required attribution wording before introducing it; no additional legal wording has been invented.
+2. On Coolify resource **`agent-zenas-za`**, on the **ZA box only**, set **`LAWS_AFRICA_API_TOKEN`** and apply it to the normal room container. Never set it on Boston or put its value in this PR, URLs, logs or screenshots.
+3. Open **`/zenas/feeds`**, select **ZA**, and press the existing **“Load now”** control for the Laws.Africa source. Watch real counts fill; verify every national listing page completed and every existing minimum instrument loaded. SAFLII must remain off.
+4. Verify a stored section's source link, publication/version dates and Laws.Africa attribution. Run Load now again: unchanged expressions must not download again. Verify the next nightly run sees new/changed expression dates/URLs and resumes after an interruption.
+5. Open **`/zenas`** on the ZA-serving Workspace and ask **“Under South Africa's Companies Act, who manages the business and affairs of a company?”** Open every cited section and verify that the actual law supports the answer. A criminal-law question must still be refused.
+6. Attach founder screenshots of the feed counts, actual civil answer and opened sources; record the saved matter ID and the nightly result. The founder's browser acceptance is outstanding until these exist. Tests alone are not completion.
 
-```sh
-cat /tmp/zenas-laws-africa-docs.headers
-git log -1 --format='%H %s' founder/main
-git log --oneline founder/main --grep='#372'
-```
+## Decisions I made
 
-Results: proxy response quoted above; main `a99f3cb` (`#368`); no `#372` match in fetched main history.
+- Used the founder-supplied documentation facts to resume work; kept the correct existing Bearer scheme.
+- Kept the actual FRBR/date/language identities and HTML section IDs, rather than inventing publisher links or treating the first date in XML as the consolidation date.
+- Added no new page text/layout or model calls. The paid agreement is a Friday checklist item, not an invented licence grant.
 
-Runtime status and `/etc/codex/network-policy.json` confirmed restricted, enforced HTTP policy, with no allowance for the documentation host. No policy or proxy setting was changed.
-
-No implementation tests were run: no implementation or recorded-response fixtures were created. The requested offline cases remain outstanding: complete paginated listing, changed-work synchronization, rate-limit back-off, invalid token, no-token state, ZA-only credential handling, SAFLII disabled, and a civil ZA answer with its section/version/link/attribution. No tests, source-link availability, synchronization, live load, or Friday acceptance are claimed as passing.
-
-## Friday checklist — acceptance plan, pending implementation
-
-Before this can become a key-only activation, finish the documentation verification and implementation, run all requested offline tests, incorporate `#372` from main when merged, deploy the reviewed work, confirm the normal ZA room receives the setting by name, and verify nightly task configuration. These are unresolved prerequisites, not founder activation steps already completed.
-
-Once those prerequisites are complete, the founder's activation and checks are:
-
-1. Open Coolify resource **`agent-zenas-za`** on the **ZA box**. Set **`LAWS_AFRICA_API_TOKEN`** there only. The value must never be copied to Boston, a URL, a log, a test, or this document. Apply the setting to the running room using Coolify.
-2. Open **`/zenas/feeds`** on the ZA-serving Workspace. Verify the displayed region is ZA and SAFLII remains off. Select the Laws.Africa feed and press its existing **“Load now”** control. The final feed selection must be confirmed after the catalogue change is implemented; no new label is invented here.
-3. Watch the real document counts fill. Confirm the full national Act/regulation listing has been consumed through every page, that the eleven existing minimum instruments loaded, and that the loader reports no failed page or expression. Count sections/documents according to the existing data model; do not equate section count with work count.
-4. Verify stored sections have the publisher's working source link, consolidation/version date, point-in-time dates, and the attribution verified from the actual licence terms. Confirm these survive a repeat load. Check the next nightly run processes changed works without downloading unchanged expressions and preserves its successful synchronization checkpoint.
-5. Open **`/zenas`** on the ZA-serving Workspace. Ask **“Under South Africa's Companies Act, may a company's board issue shares without shareholder approval?”** Verify the answer stays within civil law, cites the actual relevant stored sections, and includes their working publisher links and the existing legal-information notice. Open every citation and verify the source supports the answer. Do not pre-fill or fabricate an answer if the source is unavailable.
-6. Capture the founder's screenshots of the populated feed counts, the real answer, and the opened sources. Record the actual section URLs/version dates and the nightly run outcome, without exposing settings values.
-
-## Founder proof
-
-Pending. No founder screenshots, paid API responses, live count increase, or cited live answer have been supplied or produced. This is a blocked preparation branch, not a completed integration or a ready-for-review claim.
+Founder screenshots and live proof: **pending**. Implementation/testing of the remaining steps is in progress; no Friday-ready or live-success claim is made yet.

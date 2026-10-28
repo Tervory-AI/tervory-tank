@@ -8,6 +8,7 @@ Snapshots of Akoma Ntoso still parse without it.
 from __future__ import annotations
 
 from datetime import date
+import json
 from xml.etree import ElementTree as ET
 
 from agents.zenas.pool.adapters.za_common import bearer_headers, laws_africa_token, reject_credential_url
@@ -186,8 +187,12 @@ class LawsAfricaAdapter:
         return [blob], url
 
     def parse(self, blob: bytes, source: SourceSpec) -> list[LegalDocument]:
+        if blob.lstrip().startswith(b"{"):
+            from agents.zenas.pool.adapters.laws_africa_html import parse_expression
+            return parse_expression(json.loads(blob), source)
         return parse_akn(blob, source, number=self.number, year=self.year)
 
 
 def laws_africa_adapters() -> list[LawsAfricaAdapter]:
-    return [LawsAfricaAdapter(source_id, frbr, number, year) for source_id, _title, frbr, number, year, _reg in ACTS]
+    return [LawsAfricaAdapter("laws-africa", "", "", ""),
+            *[LawsAfricaAdapter(source_id, frbr, number, year) for source_id, _title, frbr, number, year, _reg in ACTS]]
