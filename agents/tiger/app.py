@@ -122,6 +122,9 @@ async def official_feed(tenant: str, url: str) -> dict:
 async def check(ctx: JobContext) -> dict:
     url = str(ctx.input.get("url") or "").strip()
     store = PgStore(app.state.pool, SCHEMA)
+    async def playbook(payload):
+        return await ctx.tank.approved_skill(ctx.tenant_id, "tiger.playbook", payload)
+    store.skill_runner = playbook
     rig = RigWatches(store)
     if await rig.managed(ctx.tenant_id, url):
         await rig.sync(ctx.tenant_id, TankRig(app.state.http))
@@ -150,6 +153,7 @@ async def check(ctx: JobContext) -> dict:
         _limiter,
         files=ctx.files,
         feed=official_feed,
+        skills=playbook,
     )
     try:
         await rig.deliver(ctx.tenant_id, TankRig(app.state.http))

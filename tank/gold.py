@@ -102,6 +102,9 @@ async def import_packages() -> None:
     async with runtime().pool().acquire() as conn:
         for pkg in runtime()._packages.values():
             for case in pkg.cases:
+                # Refusal cases (expected_error only) are eval checks, not gold answers.
+                if "expected" not in case:
+                    continue
                 value, expected = case["input"], case["expected"]
                 await add_candidate(conn, tenant=PLATFORM_TENANT, skill=pkg.id,
                                     agent=pkg.agent, value=value, expected=expected,
