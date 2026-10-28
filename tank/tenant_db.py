@@ -8,16 +8,74 @@ from typing import Any
 from uuid import UUID
 
 _tenant: ContextVar[str] = ContextVar("tank_database_tenant", default="")
+_administrative: ContextVar[bool] = ContextVar("tank_database_admin", default=False)
 
 
 @contextmanager
-def tenant_scope(tenant_id: Any):
+def tenant_scope(tenant_id: Any, *, administrative: bool = False):
     value = "" if tenant_id is None or tenant_id == "" else str(UUID(str(tenant_id)))
     token = _tenant.set(value)
+    admin_token = _administrative.set(administrative)
     try:
         yield
     finally:
+        _administrative.reset(admin_token)
         _tenant.reset(token)
+
+
+def administrative() -> bool:
+    return _administrative.get()
+
+
+def bind_tenant_endpoints(app):
+    """Scope accepted endpoint arguments after FastAPI resolves authentication.
+
+    Read no raw request body or authentication header. The tenant is exactly
+    the existing validated endpoint argument or its authenticated Actor value.
+    This also covers routers registered by other Tank modules.
+    """
+    from fastapi.routing import APIRoute
+
+    for route in app.routes:
+        if not isinstance(route, APIRoute):
+            continue
+        original = route.dependant.call
+        parameters = signature(original)
+        authenticated_actor = any(d.name == "actor" for d in route.dependant.dependencies)
+        founder_only = any(d.call.__module__ == "admin" and d.call.__name__ == "require_admin"
+                           for d in route.dependant.dependencies if d.call is not None)
+
+        def wrap(function, parameters, authenticated_actor, founder_only):
+            @wraps(function)
+            async def scoped(**kwargs):
+                bound = parameters.bind_partial(**kwargs).arguments
+                tenant = bound.get("tenant_id", bound.get("tenant"))
+                actor = bound.get("actor") if authenticated_actor else None
+                for name in ("actor", "body", "req", "payload"):
+                    value = bound.get(name)
+                    if hasattr(value, "tenant_id"):
+                        tenant = value.tenant_id
+                        break
+                    if name == "actor" and hasattr(value, "tenant"):
+                        tenant = value.tenant
+                        break
+                admin = founder_only or bool(actor and getattr(actor, "founder", False))
+                with tenant_scope(tenant, administrative=admin):
+                    response = await function(**kwargs)
+                # StreamingResponse runs after endpoint return; preserve its scope.
+                if hasattr(response, "body_iterator"):
+                    iterator = response.body_iterator
+
+                    async def stream():
+                        with tenant_scope(tenant, administrative=admin):
+                            async for chunk in iterator:
+                                yield chunk
+
+                    response.body_iterator = stream()
+                return response
+            return scoped
+
+        route.dependant.call = wrap(original, parameters, authenticated_actor, founder_only)
 
 
 def tenant_path(parameter: str):
