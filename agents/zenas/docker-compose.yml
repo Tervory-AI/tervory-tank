@@ -9,6 +9,9 @@ services:
       context: ..
       dockerfile: zenas/Dockerfile
     restart: unless-stopped
+    depends_on:
+      docassemble:
+        condition: service_healthy
     mem_limit: 2g
     cpus: 0.5
     environment:
@@ -23,8 +26,8 @@ services:
       HERMES_URL: http://hermes:8000
       DOCASSEMBLE_URL: http://docassemble
       DOCASSEMBLE_API_KEY: ${DOCASSEMBLE_API_KEY:-}
-      # Fail closed: no default region. Compose refuses to start without it.
-      TANK_REGION: ${TANK_REGION:?TANK_REGION is required (us-east or za)}
+      # This Compose resource is Boston; ZA has its own Compose file.
+      TANK_REGION: us-east
       ZENAS_PII_KEY: ${ZENAS_PII_KEY:-}
       DATA_DIR: /data
     volumes:
@@ -65,10 +68,16 @@ services:
       DABACKUPDAYS: "14"
     volumes:
       - docassemble_us_backup:/usr/share/docassemble/backup
-      - ./docassemble/package:/usr/share/docassemble/local3.12/lib/python3.12/site-packages/docassemble/zenas:ro
-      - ./core/drafting.py:/usr/share/docassemble/local3.12/lib/python3.12/site-packages/docassemble/zenas/legacy.py:ro
-      - ./docassemble/us:/usr/share/docassemble/local3.12/lib/python3.12/site-packages/docassemble/zenas/data/questions/region:ro
+      - ./docassemble/package:/usr/share/docassemble/local3.14/lib/python3.14/site-packages/docassemble/zenas:ro
+      - ./core/drafting.py:/usr/share/docassemble/local3.14/lib/python3.14/site-packages/docassemble/zenas/legacy.py:ro
+      - ./docassemble/us:/usr/share/docassemble/local3.14/lib/python3.14/site-packages/docassemble/zenas/data/questions/region:ro
     networks: [assembly]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://127.0.0.1/health_check?ready=1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 5m
+      retries: 20
 
   # Reuses the existing age/R2 worker; only completed local snapshots are archived.
   docassemble-backup:
