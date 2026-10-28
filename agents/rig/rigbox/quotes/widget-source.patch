@@ -1,3 +1,58 @@
+diff --git a/tests/custom-nation-privacy-slot.test.ts b/tests/custom-nation-privacy-slot.test.ts
+new file mode 100644
+index 0000000..ace3d8b
+--- /dev/null
++++ b/tests/custom-nation-privacy-slot.test.ts
+@@ -0,0 +1,49 @@
++import { expect, it } from "vitest";
++import { customNation, neutral } from "../widget/src/theme/themes";
++import { renderView, type View } from "../widget/src/ui/render";
++
++it.each([customNation, neutral])("keeps the $id privacy slot empty and hidden while wording is unavailable", (theme) => {
++  const state: View = {
++    theme, screen: "home", query: "", results: [], selectedId: null,
++    product: null, setups: [], activeTier: null, graph: null, expanded: [],
++    swap: null, askQuestion: "", askAnswer: null, askCites: "", linkUrl: "",
++    linkRequestId: null, linkError: null, quote: null, message: null,
++    customizedTiers: [],
++  };
++  expect(renderView(state)).not.toContain("data-quote-privacy");
++  state.quote = {
++    kind: "setup", title: "Offline setup", totalLabel: "", name: "", email: "",
++    error: null, requestId: null,
++  };
++  const quote = renderView(state);
++  expect(quote.match(/<div data-quote-privacy hidden><\/div>/g)).toHaveLength(1);
++  expect(quote).toContain(`${theme.copy.quoteSend}</button>\n      <div data-quote-privacy hidden></div>`);
++  state.quote = null;
++  state.screen = "missing";
++  const link = renderView(state);
++  expect(link.match(/<div data-quote-privacy hidden><\/div>/g)).toHaveLength(1);
++  expect(link).toContain(`${theme.copy.requestQuote}</button>\n      <div data-quote-privacy hidden></div>`);
++});
++
++
++it.each([customNation, neutral])("renders only store-supplied escaped notice text in both forms for $id", (theme) => {
++  const state: View = {
++    theme, screen: "missing", query: "", results: [], selectedId: null,
++    product: null, setups: [], activeTier: null, graph: null, expanded: [],
++    swap: null, askQuestion: "", askAnswer: null, askCites: "", linkUrl: "",
++    linkRequestId: null, linkError: null, quote: null, message: null,
++    customizedTiers: [], noticeReady: true,
++    notice: {text: '<script>alert("policy")</script> & policy', url: 'https://shop.example.test/privacy?x="value"', version: "offline-version"},
++  };
++  for (const screen of ["missing", "home"] as const) {
++    state.screen = screen;
++    state.quote = screen === "home" ? {kind: "product", title: "Offline", totalLabel: "", name: "", email: "", error: null, requestId: null} : null;
++    const html = renderView(state);
++    expect(html).toContain('data-quote-privacy><a href="https://shop.example.test/privacy?x=&quot;value&quot;"');
++    expect(html).toContain('&lt;script&gt;alert(&quot;policy&quot;)&lt;/script&gt; &amp; policy');
++    expect(html).not.toContain('<script>');
++    state.noticeReady = false;
++    expect(renderView(state)).toMatch(/type="submit" disabled/);
++    state.noticeReady = true;
++  }
++});
 diff --git a/tests/rig4.test.ts b/tests/rig4.test.ts
 index 884811b..91369d5 100644
 --- a/tests/rig4.test.ts
