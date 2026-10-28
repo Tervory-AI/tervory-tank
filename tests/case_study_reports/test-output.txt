@@ -1,0 +1,46 @@
+........................................................................ [ 94%]
+....                                                                     [100%]
+=============================== warnings summary ===============================
+tests/test_case_study_reports.py::test_signup_and_added_products_register_once_before_any_work
+  /workspace/tervory-tank/tank/main.py:679: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+tests/test_case_study_reports.py::test_signup_and_added_products_register_once_before_any_work
+tests/test_case_study_reports.py::test_signup_and_added_products_register_once_before_any_work
+  /tmp/command-repo-venv/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/test_case_study_reports.py::test_signup_and_added_products_register_once_before_any_work
+  /workspace/tervory-tank/tank/main.py:714: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+tests/test_case_study_reports.py::test_signup_and_added_products_register_once_before_any_work
+  /tmp/command-repo-venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+    warnings.warn(
+
+tests/test_case_study_reports.py::test_signup_and_added_products_register_once_before_any_work
+  /workspace/tervory-tank/tank/agent_skills.py:529: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+76 passed, 6 warnings in 45.97s
