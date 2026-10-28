@@ -364,3 +364,36 @@ async def test_collect_requires_both_complete_reports_and_actual_nuclei_request(
         with pytest.raises(RuntimeError,match='requests unconfirmed'):
             await tools.collect(TARGET,tmp_path,run=run)
     assert len(seen)==2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure',[OSError,asyncpg.PostgresConnectionError])
+async def test_gateway_maintenance_recovers_after_transport_failure(monkeypatch,caplog,failure):
+    import asyncio
+    recovered=asyncio.Event()
+    class Pool:
+        closed=False
+        async def close(self):self.closed=True
+    class Maintenance:
+        calls=0
+        async def reap_expired(self):
+            self.calls+=1
+            if self.calls==2:raise failure('dummy transport detail not for logs')
+            if self.calls>=3:recovered.set()
+    pool=Pool();maintenance=Maintenance()
+    async def create_pool(*args,**kwargs):return pool
+    original_sleep=asyncio.sleep
+    async def sleep(seconds):
+        assert seconds==15
+        if maintenance.calls>=3:await asyncio.Event().wait()
+        await original_sleep(0)
+    monkeypatch.setenv('DATABASE_URL','postgresql://unused/radix_passive_test')
+    monkeypatch.setattr(gateway.asyncpg,'create_pool',create_pool)
+    monkeypatch.setattr(gateway,'Store',lambda pool:maintenance)
+    monkeypatch.setattr(gateway.asyncio,'sleep',sleep)
+    app=SimpleNamespace(state=SimpleNamespace())
+    async with gateway.lifespan(app):
+        await asyncio.wait_for(recovered.wait(),timeout=2)
+        assert maintenance.calls>=3 and not pool.closed
+    assert pool.closed
+    assert 'will retry' in caplog.text and 'dummy transport detail' not in caplog.text
