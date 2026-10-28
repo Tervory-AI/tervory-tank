@@ -134,3 +134,7 @@ async def eval_case(body: EvalCase, x_tank_key: str = Header(default="")) -> dic
         return await module.execute(body.input, str(body.tenant_id))
     except ValueError:
         return {"refused": True, "error": "invalid eval input"}
+
+# API-only promotion reuses founder identity, the Tisan data volume and Coolify.
+_load_beside({}, 'tisan_promotion_api', 'promotion_api.py').mount(
+    app, _load_beside({}, 'tisan_promotion', 'promotion.py'))
