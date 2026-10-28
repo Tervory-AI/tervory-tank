@@ -20,7 +20,8 @@ from domain_playbooks import public_marker, public_page  # noqa: E402
 
 READER = _load('playbook_test_reader', ROOT / 'tank/skills/tiger.price_extract/1.1.0/run.py')
 HOST = 'books.toscrape.com'
-MARKER = {'primary': 'dom', 'dom': 'scope:div.product_main|p.price_color'}
+RAW_MARKER = {'primary': 'dom', 'dom': 'scope:div.product_main|p.price_color'}
+MARKER = public_marker(RAW_MARKER)
 A = '11111111-1111-4111-8111-111111111111'
 B = '22222222-2222-4222-8222-222222222222'
 SAVED = ROOT / 'tests/tiger_alert_page/fixtures/live'
@@ -141,7 +142,7 @@ async def test_three_consecutive_changes_retire_then_require_three_fresh_confirm
     for index in range(3):
         await check(store, index + 7, html=changed, path=f'fresh-{index}')
         marker = (await store.get_playbook(HOST))['marker']
-        assert marker == ({'primary': 'dom', 'dom': 'scope:div.product_main|p.sale-price'} if index == 2 else None)
+        assert marker == (public_marker({'primary': 'dom', 'dom': 'scope:div.product_main|p.sale-price'}) if index == 2 else None)
 
 
 @pytest.mark.asyncio
@@ -167,7 +168,7 @@ async def test_domain_and_public_private_boundaries(store):
 
 @pytest.mark.asyncio
 async def test_shared_records_contain_only_public_structure_and_opaque_page_fingerprints(store):
-    secret_layout = {**MARKER, 'tenant_id': A, 'name': 'CLIENT-NAME-SENTINEL', 'html': 'CLIENT-HTML-SENTINEL', 'price': 'PRIVATE-PRICE'}
+    secret_layout = {**RAW_MARKER, 'tenant_id': A, 'name': 'CLIENT-NAME-SENTINEL', 'html': 'CLIENT-HTML-SENTINEL', 'price': 'PRIVATE-PRICE'}
     for index in range(3):
         page = public_page(f'https://{HOST}/product-{index}?email=CLIENT-EMAIL-SENTINEL', {'ok': True, 'html': 'public'})
         snapshot = await store.get_playbook(HOST)
@@ -176,7 +177,24 @@ async def test_shared_records_contain_only_public_structure_and_opaque_page_fing
         for value in (A, B, 'tenant_id', 'CLIENT-', 'PRIVATE-', 'https://', '/product-'):
             assert value not in dumped
     assert (await store.get_playbook(HOST))['marker'] == MARKER
-    assert public_marker({'primary': 'dom', 'dom': 'scope:div.client-alice|p.price'}) is None
+    personalized = public_marker({'primary': 'dom', 'dom': 'scope:div.CLIENT-NAME-SENTINEL|p.price'})
+    assert personalized and 'CLIENT-' not in json.dumps(personalized)
+
+
+@pytest.mark.asyncio
+async def test_custom_class_names_work_without_entering_shared_state(store, monkeypatch):
+    for index in range(3):
+        html = PAGES[index][1].read_text().replace('price_color', 'shop-price')
+        assert (await check(store, index, html=html))['status'] == 'observed'
+    assert (await store.get_playbook(HOST))['marker']
+    assert 'shop-price' not in json.dumps(await shared_rows(store))
+    def no_learning(*args):
+        raise AssertionError('Custom classes must use the shared fingerprint')
+    monkeypatch.setattr(watcher, 'learn_layout', no_learning)
+    html = PAGES[3][1].read_text().replace('price_color', 'shop-price')
+    assert (await check(store, 3, html=html))['price'] == '27.40'
+    # The fingerprint also survives the existing per-URL evidence format.
+    assert (await check(store, 7, html=html))['price'] == '27.40'
 
 
 @pytest.mark.asyncio

@@ -13,14 +13,10 @@ import json
 import re
 from urllib.parse import urlsplit
 
-from page_guard import STRUCTURED, _split_selector
+from page_guard import STRUCTURED, fingerprint_selector
 
-# Only generic markup vocabulary may be shared. Site-specific/personalized
-# classes remain in the existing tenant-scoped per-URL observation instead.
-_TAGS = frozenset('article aside b body div em h1 h2 h3 h4 html li main p section small span strong ul'.split())
-_WORDS = frozenset('product products main information details title price prices current regular sale special final '
-                   'amount value money cost container wrapper wrap box block content info row col column '
-                   'text color colour primary secondary large small normal now old new incl excl tax vat'.split())
+_HASH = r'[a-f0-9]{64}'
+_FINGERPRINT = re.compile(rf'(?:tag:{_HASH}(?:\.{_HASH})?|scope:{_HASH}(?:\.{_HASH})?\|{_HASH}(?:\.{_HASH})?)')
 
 
 def public_marker(layout: dict | None) -> dict | None:
@@ -29,18 +25,17 @@ def public_marker(layout: dict | None) -> dict | None:
     primary = layout.get('primary')
     if primary in STRUCTURED:
         return {'primary': primary}
+    hashed = layout.get('dom_hash')
+    if primary == 'dom' and isinstance(hashed, str) and _FINGERPRINT.fullmatch(hashed):
+        return {'primary': 'dom', 'dom_hash': hashed}
     selector = layout.get('dom')
-    if primary != 'dom' or not isinstance(selector, str) or len(selector) > 200:
+    if primary != 'dom' or not isinstance(selector, str):
         return None
-    if not re.fullmatch(r'(?:tag:[a-z][a-z0-9]*(?:\.[A-Za-z_-]+)?|scope:[a-z][a-z0-9]*(?:\.[A-Za-z_-]+)?\|[a-z][a-z0-9]*(?:\.[A-Za-z_-]+)?)', selector):
+    if not selector.startswith(('scope:', 'tag:')):
         return None
-    scope, scope_class, tag, tag_class = _split_selector(selector)
-    if tag not in _TAGS or scope and scope not in _TAGS:
-        return None
-    for value in (scope_class, tag_class):
-        if value and not all(word.lower() in _WORDS for word in re.split('[-_]', value)):
-            return None
-    return {'primary': 'dom', 'dom': selector}
+    # Only digests of structural tokens cross the public-state boundary. A
+    # selector can contain a custom class without persisting that raw value.
+    return {'primary': 'dom', 'dom_hash': fingerprint_selector(selector)}
 
 
 def public_page(url: str, page: dict) -> tuple[str, str] | None:

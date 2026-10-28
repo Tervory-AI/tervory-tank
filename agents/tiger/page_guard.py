@@ -7,6 +7,7 @@ on the product, with no price the reader can point at, are "can't read".
 
 from __future__ import annotations
 
+import hashlib
 import re
 from html.parser import HTMLParser
 from typing import Any
@@ -62,7 +63,8 @@ def read_page(
             return _cant(layout, "missing-price")
         return _read(layout, price, primary)
     if primary == "dom":
-        price = _price_in_dom(html, str(layout.get("dom") or ""), _first_price(extracted))
+        price = _price_in_dom(html, str(layout.get("dom_hash") or layout.get("dom") or ""),
+                              _first_price(extracted), hashed=bool(layout.get("dom_hash")))
         if not price:
             return _cant(layout, "layout")
         return _read(layout, price, "dom")
@@ -290,7 +292,21 @@ def _split_selector(selector: str) -> tuple[str, str, str, str]:
     return scope_tag, scope_class, target_tag, target_class
 
 
-def _price_in_dom(html: str, selector: str, hint: str | None = None) -> str | None:
+def fingerprint_selector(selector: str) -> str:
+    """Same selector grammar, with opaque tag/class tokens instead of raw values."""
+    scope_tag, scope_class, target_tag, target_class = _split_selector(selector)
+    def part(tag: str, css_class: str) -> str:
+        result = _token_hash(tag) if tag else ''
+        return result + ('.' + _token_hash(css_class) if css_class else '')
+    target = part(target_tag, target_class)
+    return f'scope:{part(scope_tag, scope_class)}|{target}' if scope_tag else f'tag:{target}'
+
+
+def _token_hash(value: str) -> str:
+    return hashlib.sha256(value.encode()).hexdigest()
+
+
+def _price_in_dom(html: str, selector: str, hint: str | None = None, *, hashed: bool = False) -> str | None:
     if not selector:
         return None
     scope_tag, scope_class, target_tag, target_class = _split_selector(selector)
@@ -311,8 +327,11 @@ def _price_in_dom(html: str, selector: str, hint: str | None = None) -> str | No
                 return
             attr = {key.lower(): value or "" for key, value in attrs}
             classes = attr.get("class", "").split()
+            if hashed:
+                classes = [_token_hash(value) for value in classes]
             self.stack.append({"tag": name, "classes": classes, "text": ""})
-            if self.scope_depth is None and name == scope_tag and (not scope_class or scope_class in classes):
+            compared_tag = _token_hash(name) if hashed else name
+            if self.scope_depth is None and compared_tag == scope_tag and (not scope_class or scope_class in classes):
                 self.scope_depth = len(self.stack)
 
         def handle_data(self, data: str) -> None:
@@ -335,7 +354,7 @@ def _price_in_dom(html: str, selector: str, hint: str | None = None) -> str | No
             inside = self.scope_depth is not None and len(self.stack) + 1 >= self.scope_depth
             if (
                 inside
-                and name == target_tag
+                and (_token_hash(name) if hashed else name) == target_tag
                 and (not target_class or target_class in node["classes"])
                 and len(node["text"]) <= 180
             ):

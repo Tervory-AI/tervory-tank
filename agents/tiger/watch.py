@@ -497,6 +497,8 @@ def _evidence(
         payload["layout"] = {"primary": layout.get("primary")}
         if layout.get("dom"):
             payload["layout"]["dom"] = layout["dom"]
+        if layout.get("dom_hash"):
+            payload["layout"]["dom_hash"] = layout["dom_hash"]
     return json.dumps(payload, default=str)[:2000]
 
 
@@ -1181,7 +1183,7 @@ async def run_check(
         else:
             signature = stored
         decision = read_page(html, signature, extracted)
-        if playbook and stored == playbook['marker'] and stored is not None:
+        if playbook and public_marker(stored) == playbook['marker'] and stored is not None:
             attempted = decision['status'] == 'read'
     png = page.get("png_base64")
     layout = decision.get("layout")
