@@ -63,7 +63,7 @@ async def post_check(body: CheckIn):
 @app.post("/write", dependencies=[Depends(authorized)])
 async def post_write(body: WriteIn):
     try:
-        return await write(body, VoiceStore(app.state.pool), app.state.tank, app.state.http)
+        return await write(body, VoiceStore(app.state.pool), app.state.tank, app.state.http, app.state.tank)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
 
