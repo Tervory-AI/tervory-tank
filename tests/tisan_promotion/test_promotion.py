@@ -272,3 +272,32 @@ async def test_failed_rollback_refuses_replaced_or_inflight_deployment(rig):
     result = await service.run(TENANT, 'site', str(uuid.uuid4()), 'rollback', 'founder', OLD)
     assert result['result'] == 'refused'
     assert len(fake.writes) == 2
+
+
+@pytest.mark.asyncio
+async def test_rollback_source_survives_long_refusal_history(rig):
+    _, journal, service, _, _ = rig
+    result = await promote(service)
+    assert (await service.status(TENANT, 'site', result['id']))['result'] == 'succeeded'
+    for _ in range(101):
+        result = await service.run(TENANT, 'site', str(uuid.uuid4()), 'rollback', 'founder', NEW)
+        assert result['result'] == 'refused'
+    assert len(journal.history(TENANT, 'site')) == 100
+    assert journal.latest_recorded(TENANT, 'site')['result'] == 'succeeded'
+    result = await service.run(TENANT, 'site', str(uuid.uuid4()), 'rollback', 'founder', OLD)
+    assert result['result'] == 'pending'
+
+
+@pytest.mark.asyncio
+async def test_malformed_gate_and_unresolved_queue_revision(rig):
+    fake, _, service, _, _ = rig
+    previous = service.radix_gate
+    async def malformed(*args):
+        return []
+    service.radix_gate = malformed
+    assert (await promote(service))['result'] == 'refused'
+    service.radix_gate = previous
+    fake.pending = True
+    result = await promote(service)
+    fake.deployments[result['details']['deployment']]['commit'] = 'HEAD'
+    assert (await service.status(TENANT, 'site', result['id']))['result'] == 'pending'
