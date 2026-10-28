@@ -1981,8 +1981,10 @@ CREATE TABLE IF NOT EXISTS tank.case_study_reports (
     PRIMARY KEY(tenant_id,product)
 );
 CREATE OR REPLACE FUNCTION tank.register_case_study_product() RETURNS trigger AS $$
-DECLARE report_product text := CASE WHEN NEW.agent='ghost' THEN 'autumbra' ELSE NEW.agent END;
+DECLARE report_product text;
 BEGIN
+    report_product := CASE WHEN TG_NARGS>0 THEN TG_ARGV[0] ELSE NEW.agent END;
+    report_product := CASE report_product WHEN 'ghost' THEN 'autumbra' WHEN 'market-lab' THEN 'market_lab' ELSE report_product END;
     IF report_product IN ('base','tiger','market_lab','rig','zenas','trigger','tisan','radix','autumbra') THEN
         INSERT INTO tank.case_study_clients(tenant_id) VALUES(NEW.tenant_id) ON CONFLICT DO NOTHING;
         INSERT INTO tank.case_study_reports(tenant_id,product) VALUES(NEW.tenant_id,report_product) ON CONFLICT DO NOTHING;
@@ -1994,6 +1996,18 @@ DO $$ BEGIN
     IF NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='case_study_product_added' AND tgrelid='tank.tenant_squad'::regclass) THEN
         CREATE TRIGGER case_study_product_added AFTER INSERT OR UPDATE OF agent ON tank.tenant_squad
             FOR EACH ROW EXECUTE FUNCTION tank.register_case_study_product();
+    END IF;
+    -- Trigger and Autumbra have no squad-grant entry on today's main. Existing
+    -- product activity still registers its report atomically, without granting
+    -- new tools or copying the receipt into a parallel reporting store.
+    IF NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='case_study_product_used' AND tgrelid='tank.ledger'::regclass) THEN
+        CREATE TRIGGER case_study_product_used AFTER INSERT ON tank.ledger
+            FOR EACH ROW EXECUTE FUNCTION tank.register_case_study_product();
+    END IF;
+    IF to_regclass('agent_trigger.voices') IS NOT NULL AND NOT EXISTS(
+        SELECT 1 FROM pg_trigger WHERE tgname='case_study_trigger_provisioned' AND tgrelid=to_regclass('agent_trigger.voices')) THEN
+        CREATE TRIGGER case_study_trigger_provisioned AFTER INSERT ON agent_trigger.voices
+            FOR EACH ROW EXECUTE FUNCTION tank.register_case_study_product('trigger');
     END IF;
 END $$;
 -- Existing grants receive the same registration once; no report metrics are copied.
