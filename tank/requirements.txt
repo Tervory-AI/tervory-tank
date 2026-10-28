@@ -31,3 +31,6 @@ reportlab==4.4.9
 # Reuse Hermes CPU embeddings and the existing Qdrant service.
 fastembed==0.9.1
 qdrant-client==1.20.0
+
+# Trigger pinned proselint source bundles use this native regex engine.
+google-re2==1.1.20251105
