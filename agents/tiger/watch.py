@@ -395,8 +395,8 @@ def _known_stock(value: Any) -> str | None:
 
 def _stock_for(method: str | None, raw: Any, html: str) -> str | None:
     """Record a known stock phrase, even with extra words. Other wording is "can't read"."""
-    if method == "unread":
-        return None
+    # A missing price/layout does not erase stock independently read by code.
+    # Blocked/failed page responses return before this reader is called.
     recorded = record_stock(stock_statements(html))
     if recorded is not None:
         return recorded
@@ -1158,7 +1158,11 @@ async def run_check(
     async def read_image(*args):
         # Listing membership is already confirmed by code. Its lack of a single
         # product price must not invoke the existing paid screenshot fallback.
-        return {"items": []} if captured.get("listing") is not None else await ocr(*args)
+        stock_only = not watch.get("alert_price", True) and not watch.get("alert_below_cost", True)
+        stock = _known_stock(_stock_for("unread", None, captured.get("html", "")))
+        if captured.get("listing") is not None or (stock_only and stock is not None):
+            return {"items": []}
+        return await ocr(*args)
 
     result = await _run_check(store, tenant_id, watch, agent, rendered, extracted, read_image,
                               fetch_text, limiter, files=files, now=now, feed=feed, skills=skills)
