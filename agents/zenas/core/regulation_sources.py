@@ -8,6 +8,7 @@ import os
 import re
 from datetime import date, timedelta
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from xml.etree import ElementTree as ET
 
 from agents.zenas.pool.adapters.ecfr import (
     ECFR_TITLES_URL,
@@ -84,7 +85,7 @@ def document(
     return row
 
 
-def from_pool(source, row):
+def from_pool(source, row, *, kind=None):
     return document(
         source,
         row.id,
@@ -92,7 +93,7 @@ def from_pool(source, row):
         row.text,
         row.url,
         row.date or row.effective_from,
-        kind=row.kind,
+        kind=kind or row.kind,
         attribution=row.licence,
     )
 
@@ -196,10 +197,7 @@ class Sources:
                 )
                 if len(parsed) != 1 or not raw.get("html_url"):
                     raise ValueError("source_unavailable")
-                doc = from_pool("federal-register", parsed[0])
-                doc["kind"] = str(
-                    raw["type"]
-                )  # Proposed rules must not be described as enacted law.
+                doc = from_pool("federal-register", parsed[0], kind=str(raw["type"]))
                 found.append(doc)
             url = payload.get("next_page_url")
             if not url and int(payload.get("total_pages", 1)) > len(visited):
@@ -219,19 +217,25 @@ class Sources:
         rows = EcfrAdapter().parse(blob, source_spec("ecfr"))
         if not rows:
             raise ValueError("source_unavailable")
+        # Compare the whole watched part, including removals and authority changes.
+        root = ET.fromstring(blob)
+        heading = root.find("HEAD")
+        if heading is None:
+            raise ValueError("source_unavailable")
+        label = " ".join(" ".join(heading.itertext()).split())
+        text = " ".join(" ".join(root.itertext()).split())
         return [
             document(
                 "ecfr",
-                r.id,
-                r.title,
-                r.text,
-                r.url,
+                title + "/" + part,
+                label,
+                text,
+                rows[0].url.replace("/current/", "/on/" + on + "/"),
                 on,
-                kind=r.kind,
-                attribution=r.licence,
-                version=r.content_hash,
+                kind="regulation",
+                attribution=rows[0].licence,
+                version=hashlib.sha256(text.encode()).hexdigest(),
             )
-            for r in rows
         ]
 
     async def congress(self, watch):
@@ -314,16 +318,13 @@ class Sources:
         for offset in range(0, 10000, 100):
             # JSON string literals also escape SPARQL strings; no raw query interpolation.
             topic = json.dumps(watch["topic"].casefold())
-            on = json.dumps(since(watch))
             query = (
                 "PREFIX cdm: <http://publications.europa.eu/ontology/cdm#> "
-                "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> "
                 "SELECT DISTINCT ?celex ?title ?date WHERE { "
                 "?work cdm:resource_legal_id_celex ?celex; cdm:work_date_document ?date; "
                 "cdm:work_has_expression ?expression. "
                 "?expression cdm:expression_uses_language <http://publications.europa.eu/resource/authority/language/ENG>; "
                 "cdm:expression_title ?title. "
-                f"FILTER(?date >= {on}^^xsd:date) "
                 'FILTER(REGEX(STR(?celex), "^3[0-9]{4}[RLD][0-9]{4}$")) '
                 f"FILTER(CONTAINS(LCASE(STR(?title)), {topic})) "
                 f"}} ORDER BY ?date ?celex LIMIT 100 OFFSET {offset}"
