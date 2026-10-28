@@ -54,10 +54,12 @@
     "limitations": "Mechanical findings only; semantic accuracy, voice fit and rubric grades are not assessed.",
     "complete": true,
     "checker_errors": [],
+    "issue_count": 4,
+    "truncated": false,
     "voice_revision": 1,
     "stylebook": null,
     "model_calls": 0
   },
-  "summary": "readability / passive_voice: Possible passive voice; review the actor and verb.\nvoice / banned_term: Banned term: test\nlanguagetool / THIS_NNS: The singular demonstrative pronoun \u2018this\u2019 does not agree with the plural verb \u2018are\u2019. Did you mean \u201cthese\u201d?\nlanguagetool / PLURAL_VERB_AFTER_THIS: The verb \u2018are\u2019 is plural. Did you mean: \u201cis\u201d? Did you use a verb instead of a noun?\nMechanical findings only; semantic accuracy, voice fit and rubric grades are not assessed.",
+  "summary": "4 issues found.\nreadability / passive_voice: Possible passive voice; review the actor and verb.\nvoice / banned_term: Banned term: test\nlanguagetool / THIS_NNS: The singular demonstrative pronoun \u2018this\u2019 does not agree with the plural verb \u2018are\u2019. Did you mean \u201cthese\u201d?\nlanguagetool / PLURAL_VERB_AFTER_THIS: The verb \u2018are\u2019 is plural. Did you mean: \u201cis\u201d? Did you use a verb instead of a noun?\nMechanical findings only; semantic accuracy, voice fit and rubric grades are not assessed.",
   "model_calls": 0
 }

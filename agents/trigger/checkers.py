@@ -112,11 +112,17 @@ async def check(text: str, voice: Voice | None, http: httpx.AsyncClient) -> dict
         for match in matches:
             result["issues"].append({"source": "languagetool", "rule": match["rule"]["id"],
                                      "message": match["message"], "offset": match["offset"], "length": match["length"]})
-        result["complete"] = not payload.get("warnings", {}).get("incompleteResults", False)
+        warnings = payload.get("warnings", {})
+        if not isinstance(warnings, dict):
+            raise TypeError("Invalid warnings")
+        result["complete"] = not warnings.get("incompleteResults", False)
         result["checker_errors"] = [] if result["complete"] else ["LanguageTool returned incomplete results."]
     except (httpx.HTTPError, ValueError, KeyError, TypeError):
         result["complete"] = False
         result["checker_errors"] = ["LanguageTool is unavailable; its checks have not completed."]
+    result["issue_count"] = len(result["issues"])
+    result["issues"] = result["issues"][:200]
+    result["truncated"] = result["issue_count"] > len(result["issues"])
     result["voice_revision"] = voice.revision if voice else None
     result["stylebook"] = voice.stylebook if voice else None
     result["model_calls"] = 0
@@ -124,7 +130,10 @@ async def check(text: str, voice: Voice | None, http: httpx.AsyncClient) -> dict
 
 
 def report_text(report: dict) -> str:
-    lines = [f'{i["source"]} / {i["rule"]}: {i["message"]}' for i in report["issues"]]
+    lines = [f'{report["issue_count"]} issues found.']
+    if report["truncated"]:
+        lines.append("First 200 issues shown; check shorter sections for the remaining findings.")
+    lines.extend(f'{i["source"]} / {i["rule"]}: {i["message"]}' for i in report["issues"])
     lines.extend(report["checker_errors"])
     lines.append(report["limitations"])
     return "\n".join(lines)

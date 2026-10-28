@@ -43,7 +43,9 @@ class Voice(BaseModel):
         terms = self.bannedTerms + self.requiredTerms + self.preferredTerms
         if any(not term.strip() or len(term) > 200 for term in terms):
             raise ValueError("Voice terms must be nonempty and at most 200 characters")
-        if set(map(str.casefold, self.bannedTerms)) & set(map(str.casefold, self.requiredTerms)):
+        def normalized(terms):
+            return {" ".join(term.split()).casefold() for term in terms}
+        if normalized(self.bannedTerms) & normalized(self.requiredTerms):
             raise ValueError("A term cannot be both banned and required")
         if any(not isinstance(g.get("rule"), str) for g in self.guidelines):
             raise ValueError("Every guideline must contain a rule")

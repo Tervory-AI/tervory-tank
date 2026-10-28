@@ -302,6 +302,8 @@ async def test_real_schema_reapplication_and_voice_isolation(monkeypatch):
         row_id = await trigger_routes.code_receipt(TENANT, 'trigger.check')
         row = await pool.fetchrow('SELECT * FROM tank.ledger WHERE id=$1 AND tenant_id=$2', row_id, TENANT)
         assert row['cost_usd'] == 0 and row['rung'] == 3 and row['model'] == 'code'
+        # Tank's existing pricing trigger supplies the verified no-token comparison.
+        assert row['baseline_cost_usd'] == 0 and row['baseline_model'] == 'No AI call'
         assert await pool.fetchval('SELECT id FROM tank.ledger WHERE id=$1 AND tenant_id=$2', row_id, OTHER) is None
     finally:
         await pool.close()
@@ -350,3 +352,19 @@ async def test_real_room_with_internal_languagetool(monkeypatch):
             if evidence:
                 Path(evidence).write_text(json.dumps(result, indent=2) + '\n')
             await app.state.pool.execute('DELETE FROM agent_trigger.voices WHERE tenant_id=$1', tenant)
+
+
+@pytest.mark.asyncio
+async def test_report_bound_keeps_command_response_readable():
+    from trigger.checkers import report_text
+    async with lt_client() as http:
+        result = await check(' '.join(['banned'] * 1000), voice(bannedTerms=['banned']), http)
+    assert result['issue_count'] >= 1000
+    assert len(result['issues']) == 200 and result['truncated']
+    assert 'First 200' in report_text(result)
+    assert len(json.dumps({'report': result, 'summary': report_text(result)}).encode()) < 256000
+
+
+def test_voice_terms_cannot_hide_conflict_with_whitespace():
+    with pytest.raises(ValidationError):
+        voice(bannedTerms=['  wrong  word '], requiredTerms=['wrong word'])

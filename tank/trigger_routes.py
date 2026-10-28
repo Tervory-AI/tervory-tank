@@ -20,8 +20,8 @@ async def code_receipt(tenant_id: UUID, task: str, *, task_id: UUID | None = Non
     from main import box_region, pool
     return await pool().fetchval(
         "INSERT INTO tank.ledger(tenant_id,region,agent,task_type,rung,model,cost_usd,"
-        "tokens_in,tokens_out,baseline_model,baseline_cost_usd,task_id) "
-        "VALUES($1,$2,'trigger',$3,3,'code',0,0,0,'code',0,$4) RETURNING id",
+        "tokens_in,tokens_out,task_id) "
+        "VALUES($1,$2,'trigger',$3,3,'code',0,0,0,$4) RETURNING id",
         tenant_id, box_region(), task, task_id)
 
 
@@ -43,7 +43,7 @@ async def code_plan(actor: Actor, messages: list[dict], task_id: UUID | None):
     if len(match[1]) > 20000:
         raise HTTPException(422, "Text exceeds the checker limit")
     content = json.dumps({"text": "trigger.check", "actions": [
-        {"tool": "trigger.check", "arguments": {"text": match[1]}}]})
+        {"tool": "trigger.check", "arguments": {"text": match[1]}}]}, ensure_ascii=False)
     return SimpleNamespace(content=content, ledger_id=await code_receipt(actor.tenant_id, "command.turn", task_id=task_id))
 
 
