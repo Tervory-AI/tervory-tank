@@ -23,6 +23,8 @@ class Job(BaseModel):
         payload = row["input"]
         payload = json.loads(payload) if isinstance(payload, str) else dict(payload)
         metadata = payload.pop("_job_contract", {})
+        if not isinstance(metadata, dict) or metadata.get("region", region) != region:
+            raise ValueError("Invalid room job region or metadata")
         # Tenant and agent authority always comes from the room row/context.
         return cls(tenant_id=row["tenant_id"], agent=agent, region=region,
                    skill=row[skill_column], input=payload,
