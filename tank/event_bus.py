@@ -40,7 +40,7 @@ class BaseFact(Strict):
 class TigerFact(Strict):
     watch_id: UUID
     observation_id: UUID
-    sku: str | None = Field(default=None, min_length=1, max_length=120, pattern=r"^[A-Za-z0-9_.:/ -]+$")
+    sku: str | None = Field(default=None, min_length=1, max_length=120)
     page_id: str = Field(pattern=r"^[a-f0-9]{64}$")
     previous_price: Decimal = Field(ge=0)
     price: Decimal = Field(ge=0)
