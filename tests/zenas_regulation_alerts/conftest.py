@@ -1,6 +1,7 @@
 """Reuse Tiger's loopback mailbox and isolate every named external setting."""
 import pytest
 from test_tiger_alert_email import catcher as catcher
+from zenas_za_laws_africa.conftest import clock_and_token as clock_and_token
 
 
 @pytest.fixture(autouse=True)
