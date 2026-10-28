@@ -115,6 +115,9 @@ class Pages(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
+        if self.path == '/disconnect':
+            self.close_connection = True
+            return
         if self.path == '/redirect':
             self.send_response(302)
             self.send_header('Location', '/good')
@@ -155,7 +158,7 @@ class LiveCheckTests(unittest.TestCase):
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
         cls.paths = ['good', 'crash', 'client', 'banned', 'throw', 'reject', 'console',
-                     'http500', 'timeout', 'mobile', 'redirect', 'cookie', 'cookie']
+                     'http500', 'timeout', 'mobile', 'redirect', 'cookie', 'cookie', 'disconnect']
         cls.urls = cls.directory / 'urls.json'
         cls.urls.write_text(json.dumps([
             f'http://127.0.0.1:{cls.server.server_port}/{item}' for item in cls.paths
@@ -202,6 +205,11 @@ class LiveCheckTests(unittest.TestCase):
     def test_http_failure_and_navigation_deadline(self):
         self.assertIn('HTTP 503', self.reasons(7))
         self.assertIn('did not load within 1000ms', self.reasons(8))
+
+    def test_connection_failure_has_a_safe_browser_diagnostic(self):
+        self.assertFalse(self.rows[13]['passed'])
+        self.assertIn('ERR_EMPTY_RESPONSE', self.reasons(13))
+        self.assertNotIn('http://', self.reasons(13))
 
     def test_mobile_visible_text_fails_host(self):
         row = self.rows[9]

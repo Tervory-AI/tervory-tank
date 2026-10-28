@@ -67,7 +67,10 @@ try {
         // networkidle (analytics and long polling do not mean the page is broken).
         await page.waitForTimeout(2000);
       } catch (error) {
-        reasons.add(error.name === 'TimeoutError' ? `Page did not load within ${timeout}ms` : 'Page navigation failed');
+        // Keep the diagnostic code, never a raw exception containing URLs or headers.
+        const code = String(error.message).match(/net::(ERR_[A-Z_]+)/)?.[1];
+        reasons.add(error.name === 'TimeoutError' ? `Page did not load within ${timeout}ms`
+          : `Page navigation failed${code ? ': ' + code : ''}`);
       }
       try {
         const text = await page.locator('body').innerText({timeout: 5000});
