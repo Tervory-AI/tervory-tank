@@ -128,7 +128,19 @@ async def snapshot(tenant: uuid.UUID | None, task: str | None = None,
         client_scope = " AND tenant_id<>'00000000-0000-0000-0000-000000000001'::uuid" if clients_only else ''
         comparisons = [dict(r) for r in await conn.fetch("""SELECT s.task_type,s.primary_model,s.candidate_model,
             count(*)::int AS samples,avg(s.agreement) AS agreement,sum(s.primary_cost_usd) AS primary_cost_usd,
-            sum(s.candidate_cost_usd) AS could_have_cost_usd """+shadow_from+" GROUP BY s.task_type,s.primary_model,s.candidate_model", *args)]
+            sum(CASE WHEN s.candidate_model LIKE 'cache:embedding:%' THEN 0 ELSE s.candidate_cost_usd END) AS could_have_cost_usd,
+            sum(CASE WHEN s.candidate_model LIKE 'cache:embedding:%' THEN s.candidate_cost_usd ELSE 0 END) AS evaluation_cost_usd """+shadow_from+" GROUP BY s.task_type,s.primary_model,s.candidate_model", *args)]
+        semantic = [dict(r) for r in await conn.fetch("""SELECT o.task_type,
+            count(*)::int AS misses_checked,
+            count(*) FILTER (WHERE o.status='hit')::int AS would_have_hits,
+            count(*) FILTER (WHERE o.status='hit' AND o.agreement IS NOT NULL)::int AS scored_hits,
+            avg(o.agreement) AS agreement,
+            coalesce(sum(o.primary_cost_usd) FILTER (WHERE o.status='hit'),0) AS could_have_saved_usd
+            FROM tank.semantic_observations o JOIN tank.ledger l ON l.id=o.ledger_id AND l.tenant_id=o.tenant_id
+            WHERE ($1::uuid IS NULL OR o.tenant_id=$1) AND o.region=$2 AND l.region=$2
+              AND ($3::text IS NULL OR o.task_type=$3) AND ($4::timestamptz IS NULL OR l.ts >= $4) AND l.ts < $5
+            """ + (" AND o.tenant_id<>'00000000-0000-0000-0000-000000000001'::uuid" if clients_only else "") +
+            " GROUP BY o.task_type", *args)]
         shadows = [dict(r) for r in await conn.fetch("""SELECT s.id,s.tenant_id,s.ledger_id,s.task_type,s.primary_model,s.candidate_model,
             s.primary_cost_usd,s.candidate_cost_usd,s.agreement,s.method,s.created_at """+shadow_from+
             " ORDER BY l.ts DESC,s.id DESC LIMIT $6 OFFSET $7", *args, PAGE_SIZE+1, page*PAGE_SIZE)]
@@ -165,6 +177,7 @@ async def snapshot(tenant: uuid.UUID | None, task: str | None = None,
     for row in tasks:
         row['code_share'] = row['code_calls']/row['calls'] if row['calls'] else None
         row['shadow_pairs'] = [p for p in comparisons if p['task_type']==row['task_type']]
+        row['semantic_cache'] = next((p for p in semantic if p['task_type']==row['task_type']), None)
         row.update(comparison_numbers(row['compared_actual_usd'],row['baseline_usd']))
         row['quality_note']='same work assumed; quality comparison pending' if row.get('quality_pending',not row['shadow_pairs']) else None
     sections = dict(ledger=ledger,shadows=shadows,runs=runs,cases=cases,promotions=promotions)

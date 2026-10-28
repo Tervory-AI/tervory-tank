@@ -37,3 +37,28 @@ its original branch. No secrets, laptop access, GitHub API or production writes.
 Implementation/tests pending. No model downloaded or run here. No paid calls.
 Boston image build, real-model shadow quality, founder approval and founder-browser
 acceptance have not been performed. No screenshots or live success are claimed.
+
+## Shadow implementation
+
+- Tenant collections hold vectors and scoped IDs only. Candidate text is read
+  from the existing tenant/context/region/TTL/feedback-checked Postgres cache.
+- Every eligible observed miss records hit/miss/guarded/unavailable. Negation,
+  changed ordered numbers, multi-turn requests and overlong input fail closed.
+- The existing `_shadow` comparator and `tank.judge` evaluate would-be answers;
+  daily judge budget still applies. Unscored pairs cannot graduate.
+- 200 distinct input hashes and at least 99% mean agreement are required, scoped
+  to tenant, region, task, policy and encoder. Existing founder authentication
+  protects the explicit approval/revocation API; policy/encoder changes invalidate
+  approval. `command.turn` cannot be indexed, shadowed or approved and its existing
+  cache is now explicitly exact-match only.
+- Existing proof shadow pairs show zero prospective cache inference cost, with
+  judge cost reported separately. Per-task `semantic_cache` fields provide miss,
+  would-hit, scored-hit counts and potential savings in report/API/exports.
+- Existing QDRANT_URL/QDRANT_API_KEY names are wired into both regional Tank
+  services. No new setting or credential, no cross-region connection.
+
+```sh
+/workspace/worker-venv/bin/python -m compileall -q tank/semantic_cache.py tank/semantic_encoder.py tank/main.py tank/proof.py
+git diff --check
+# both exit 0
+```

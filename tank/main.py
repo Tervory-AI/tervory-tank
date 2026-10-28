@@ -64,6 +64,7 @@ from pydantic import BaseModel, Field
 
 import batch_providers
 import graduate
+import semantic_cache
 import skala
 import skill_costs
 
@@ -1029,7 +1030,7 @@ async def _cache_read(req: RouteRequest, policy: dict[str, Any], identity: tuple
               AND (c.input_hash=$5 OR ($6 AND c.semantic_form=$7))
             ORDER BY (c.input_hash=$5) DESC LIMIT 1""",
             req.tenant_id, box_region(), req.task_type, context, exact,
-            bool(policy.get("semantic_cache")) and (not policy.get("matter_matching") or bool(req.case_ref)), form,
+            bool(policy.get("semantic_cache")) and req.task_type != "command.turn" and (not policy.get("matter_matching") or bool(req.case_ref)), form,
         )
     if not rows:
         return None
@@ -1158,11 +1159,17 @@ async def run_route(
             raise HTTPException(409, "A skill policy must start at rung 3")
     transcript_messages = await _preflight_mask(req, policy, messages, task_id)
     identity = _cache_identity(req, policy, messages, max_tokens, route_seat)
+    cache_policy, cache_probe = dict(policy), None
     if not holds_identifier and code_problem is None:
         hit = await _cache_read(req, policy, identity)
         if hit is not None:
             await _check_route_task(req, task_id)
             return await _record_local(req, policy, model=model, rung=4, content=hit, task_id=task_id, route_seat=route_seat)
+        cache_probe = await semantic_cache.lookup(__import__("sys").modules[__name__], req, cache_policy, identity, messages)
+        if await semantic_cache.may_serve(__import__("sys").modules[__name__], req, cache_policy, cache_probe):
+            await _check_route_task(req, task_id)
+            return await _record_local(req, policy, model=semantic_cache.CANDIDATE, rung=4,
+                                       content=cache_probe.content, task_id=task_id, route_seat=route_seat)
 
     escalation: list[dict[str, Any]] = list(_prior_escalation or [])
     if int(policy["rung"]) == 4:
@@ -1189,6 +1196,8 @@ async def run_route(
                                          latency_ms=int((time.perf_counter()-started_code)*1000))
             if not holds_identifier and _storage_mask(content) == content:
                 await _cache_write(req, policy, identity, result.ledger_id)
+                semantic_cache.schedule(__import__("sys").modules[__name__], req, cache_policy, identity,
+                                        messages, cache_probe, result.ledger_id, content, 0.0)
             return result
         escalation.append({"from_rung": 3, "to_rung": 2, "reason": reason, "model": model})
         attempt = await _record_local(req, policy, model=model, rung=3, content=content, task_id=task_id,
@@ -1305,6 +1314,8 @@ async def run_route(
             )
     if content and not holds_identifier and masked_content == content:
         await _cache_write(req, policy, identity, ledger_id)
+        semantic_cache.schedule(__import__("sys").modules[__name__], req, cache_policy, identity,
+                                messages, cache_probe, ledger_id, content, cost_usd)
     return RouteResponse(
         ledger_id=ledger_id, model=answered, rung=policy["rung"], content=content,
         tokens_in=tokens_in, tokens_out=tokens_out, cost_usd=cost_usd, latency_ms=latency_ms,
@@ -1506,30 +1517,37 @@ async def _run_code_candidate(req: RouteRequest, cand: str, messages: list[dict[
 
 
 async def _shadow(req: RouteRequest, policy: dict[str, Any], messages: list[dict[str, str]], max_tokens: int,
-                  ledger_id: uuid.UUID, primary: str, primary_cost: float) -> None:
+                  ledger_id: uuid.UUID, primary: str, primary_cost: float, *,
+                  cache_content: str | None = None) -> dict | None:
     """Run the candidate on the same input, score agreement with the primary, record both.
     The client already has the primary answer. Spend lands on the platform tenant.
     Code skills cost nothing and are not subject to the daily shadow budget."""
-    cand = policy["candidate_model"]
-    if graduate.is_semantic_cache(cand):
+    cache = cache_content is not None
+    cand = semantic_cache.CANDIDATE if cache else policy["candidate_model"]
+    if not cache and graduate.is_semantic_cache(cand):
         # Proved by graduate.semantic_lookup (local vectors, no paid call) before it is switched on.
         return
     if graduate.is_tool(cand):
         log.warning("shadow %s skipped %s: a paid tool is not started from here", req.task_type, cand)
         return
     code = graduate.is_skill(cand)
-    if not code and not await _shadow_budget_open(req.task_type):
+    budget_open = code or await _shadow_budget_open(req.task_type)
+    if not cache and not budget_open:
         log.warning("shadow %s skipped %s: daily budget spent", req.task_type, cand)
         return
     cand_content, cand_cost, agreement, method, fields = None, 0.0, None, "failed", {}
     try:
-        if code:
+        if cache:
+            cand_content = cache_content
+        elif code:
             cand_content, cand_cost = await _run_code_candidate(req, cand, messages)
         else:
             cand_content, cand_cost = await _llm(cand, messages, max_tokens)
         compared = graduate.compare(primary, cand_content, tolerance=float(policy.get("number_tolerance") or 0.01))
         if compared.method == "fields":
             agreement, method, fields = compared.agreement, "fields", compared.fields
+        elif not budget_open:
+            method = "budget_exhausted"
         else:
             jp = await load_policy("tank.judge", PLATFORM_TENANT)
             jmsgs = [{"role": "system", "content": jp["system_prompt"]},
@@ -1565,7 +1583,9 @@ async def _shadow(req: RouteRequest, policy: dict[str, Any], messages: list[dict
                 shadow_ledger, req.tenant_id, req.task_type+"#shadow", json.dumps(_storage_mask(_plain_messages(messages))),
                 _storage_mask(cand_content or "")[:20000])
         await _add_spend(conn, req.task_type, cand_cost)
-    await _move_task(req.task_type)
+    if not cache:
+        await _move_task(req.task_type)
+    return {"agreement": agreement, "method": method, "evaluation_cost_usd": cand_cost}
 
 
 # ---------- graduation: the ladder ----------
@@ -4098,3 +4118,6 @@ app.include_router(__import__("rig_forge_routes").build_router(__import__("sys")
 app.include_router(__import__("rig_three_d").build_router(__import__("sys").modules[__name__]))
 
 app.include_router(__import__("market_lab_routes").build_router(__import__("sys").modules[__name__]))
+
+# Tenant-specific semantic-cache approval; no policy promotion is automatic.
+app.include_router(semantic_cache.build_router(__import__("sys").modules[__name__]))
