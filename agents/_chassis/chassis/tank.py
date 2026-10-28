@@ -34,6 +34,25 @@ class TankClient:
             {"tenant_id": str(tenant_id), "input": payload},
         )
 
+    async def approved_skill(self, tenant_id: str, skill_id: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+        """Only an explicit absence of approval permits the legacy implementation.
+
+        Do not cache the version: approval and rollback take effect on the next
+        call. Run without a version pin so Skala rechecks approval at execution.
+        Failures after approval never silently fall back to room code.
+        """
+        if not self._api_key:
+            raise RuntimeError("tank key is not set")
+        response = await self._http.get(
+            self._base + f"/v1/skala/{skill_id}/run",
+            headers={"X-Tank-Key": self._api_key},
+        )
+        if (response.status_code == 409 and response.json().get("detail")
+                == f"{skill_id} has no approved version"):
+            return None
+        response.raise_for_status()
+        return await self.run_skill(tenant_id, skill_id, payload)
+
     async def _post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
         if not self._api_key:
             raise RuntimeError("tank key is not set")

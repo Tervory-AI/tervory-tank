@@ -1128,7 +1128,15 @@ async def run_check(
     files: Any = None,
     now: Any = None,
     feed: Any = None,
+    skills: Any = None,
 ) -> dict[str, Any]:
+    async def playbook_call(operation, **payload):
+        output = await skills({"operation": operation, **payload}) if skills else None
+        if output is not None:
+            return output["value"]
+        return {"public_page": public_page, "public_marker": public_marker,
+                "learn_layout": learn_layout, "read_page": read_page}[operation](**payload)
+
     clock = now or (lambda: datetime.now(timezone.utc))
     url = watch["url"]
     if str(watch.get("tenant_id")) != str(tenant_id):
@@ -1168,7 +1176,7 @@ async def run_check(
     extracted = await extract(html, url)
     items = list(extracted.get("items") or [])
     stored = layout_from_evidence(previous_row.get("evidence") if previous_row else None)
-    shared_page = public_page(url, page)
+    shared_page = await playbook_call("public_page", url=url, page=page)
     playbook, attempted, decision = None, None, None
     if shared_page:
         try:
@@ -1176,19 +1184,19 @@ async def run_check(
         except (asyncpg.PostgresError, OSError, ValueError):
             logging.getLogger(__name__).warning("Domain playbook unavailable; using the URL layout.")
     if stored is None and playbook and playbook['marker']:
-        trial = read_page(html, playbook['marker'], extracted)
+        trial = await playbook_call('read_page', html=html, signature=playbook['marker'], extracted=extracted)
         attempted = trial['status'] == 'read'
         if attempted:
             decision = trial
     if decision is None:
         if stored is None or stored.get("primary") == "ocr":
-            signature = learn_layout(html, extracted)
+            signature = await playbook_call("learn_layout", html=html, extracted=extracted)
             if not signature.get("primary"):
                 signature = stored
         else:
             signature = stored
-        decision = read_page(html, signature, extracted)
-        if playbook and public_marker(stored) == playbook['marker'] and stored is not None:
+        decision = await playbook_call("read_page", html=html, signature=signature, extracted=extracted)
+        if playbook and await playbook_call('public_marker', layout=stored) == playbook['marker'] and stored is not None:
             attempted = decision['status'] == 'read'
     png = page.get("png_base64")
     layout = decision.get("layout")
@@ -1239,7 +1247,7 @@ async def run_check(
         _reading_evidence(_evidence(method, price, saved_file, layout, availability), name, last_name, issue),
     ))
     if shared_page and playbook:
-        confirmed = public_marker(layout) if not issue and decision['status'] == 'read' and method != 'ocr' else None
+        confirmed = await playbook_call('public_marker', layout=layout) if not issue and decision['status'] == 'read' and method != 'ocr' else None
         try:
             await store.record_playbook(*shared_page, playbook['generation'], attempted, confirmed)
         except (asyncpg.PostgresError, OSError, ValueError):

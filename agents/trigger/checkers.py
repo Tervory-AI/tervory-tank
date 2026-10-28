@@ -42,13 +42,15 @@ def phrase_spans(text: str, phrase: str):
     return list(re.finditer(pattern, text, re.IGNORECASE))
 
 
-def local_checks(text: str, voice: Voice | None) -> dict:
+def local_checks(text: str, voice: Voice | None, excluded: frozenset[str] = frozenset()) -> dict:
     issues = []
-    for found in LintFile("input", text).lint():
+    for found in ([] if "proselint" in excluded else LintFile("input", text).lint()):
         item = found.into_dict()
         issues.append({"source": "proselint", "rule": item["check_path"], "message": item["message"],
                        "line": found.pos[0], "column": found.pos[1]})
     for rule in RULES:
+        if ("readability" if rule.id == "RULE-12" else "agent_style") in excluded:
+            continue
         if rule.id == "RULE-12" and voice and voice.maxSentenceWords != 30:
             continue
         module = detectors_mech if rule.id in MECHANICAL else detectors_struct if rule.id in STRUCTURAL else None
@@ -57,27 +59,28 @@ def local_checks(text: str, voice: Voice | None) -> dict:
         result = module.run(rule, text, "input.md")
         issues.extend({"source": "agent-style", "rule": v.rule, "line": v.line,
                        "column": v.column, "message": v.detail} for v in result.violations)
-    # Passive-voice candidates, not a semantic verdict about whether passive is appropriate.
-    for match in re.finditer(r"\b(?:am|is|are|was|were|be|been|being)\s+(?:\w+ly\s+)?(?:\w+ed|written|given|made|seen|known|taken|built|sent|shown|found|done)\b", text, re.IGNORECASE):
-        issues.append({"source": "readability", "rule": "passive_voice", "offset": match.start(),
-                       "length": match.end()-match.start(), "message": "Possible passive voice; review the actor and verb."})
-    # Tenant-specific length threshold; the upstream detector supplies the default 30-word check.
-    if voice and voice.maxSentenceWords != 30:
-        for sentence in re.finditer(r"[^.!?]+[.!?]?", text):
-            count = len(re.findall(r"\b[\w'-]+\b", sentence.group()))
-            if count > voice.maxSentenceWords:
-                issues.append({"source": "voice", "rule": "sentence_length", "offset": sentence.start(),
-                               "message": f"Sentence has {count} words; voice limit is {voice.maxSentenceWords}."})
+    if "readability" not in excluded:
+        # Passive-voice candidates, not a semantic verdict about whether passive is appropriate.
+        for match in re.finditer(r"\b(?:am|is|are|was|were|be|been|being)\s+(?:\w+ly\s+)?(?:\w+ed|written|given|made|seen|known|taken|built|sent|shown|found|done)\b", text, re.IGNORECASE):
+            issues.append({"source": "readability", "rule": "passive_voice", "offset": match.start(),
+                           "length": match.end()-match.start(), "message": "Possible passive voice; review the actor and verb."})
+        # Tenant-specific length threshold; the upstream detector supplies the default 30-word check.
+        if voice and voice.maxSentenceWords != 30:
+            for sentence in re.finditer(r"[^.!?]+[.!?]?", text):
+                count = len(re.findall(r"\b[\w'-]+\b", sentence.group()))
+                if count > voice.maxSentenceWords:
+                    issues.append({"source": "voice", "rule": "sentence_length", "offset": sentence.start(),
+                                   "message": f"Sentence has {count} words; voice limit is {voice.maxSentenceWords}."})
     if voice:
-        for term in voice.bannedTerms:
+        for term in ([] if "voice_check" in excluded else voice.bannedTerms):
             for match in phrase_spans(text, term):
                 issues.append({"source": "voice", "rule": "banned_term", "offset": match.start(),
                                "length": match.end()-match.start(), "message": f"Banned term: {term}"})
-        for term in voice.requiredTerms:
+        for term in ([] if "voice_check" in excluded else voice.requiredTerms):
             if not phrase_spans(text, term):
                 issues.append({"source": "voice", "rule": "required_term", "message": f"Required term missing: {term}"})
         # These are mechanical subsets of the selected book, not a semantic style grade.
-        if voice.stylebook:
+        if voice.stylebook and "house_style" not in excluded:
             guide = (ROOT / "sources/stylebooks" / voice.stylebook / "SKILL.md").read_text()
             for term in BOOK_TERMS.get(voice.stylebook, []):
                 for match in phrase_spans(text, term):
@@ -92,7 +95,7 @@ def local_checks(text: str, voice: Voice | None) -> dict:
         issues.extend(findings(text, issues, phrase_spans))
     # Practical Prose F3: mechanical markup checks only; no scorer or semantic grade.
     fences = re.findall(r"^\s*(`{3,}|~{3,})", text, re.MULTILINE)
-    if len(fences) % 2:
+    if "readability" not in excluded and len(fences) % 2:
         issues.append({"source": "practical-prose", "rule": "F3", "message": "Unclosed fenced code block."})
     return {"issues": issues, "skipped_agent_style_rules": SKIPPED,
             "checklist": {"E1": "grammar/readability findings", "E3": "proselint and phrase findings",
@@ -100,29 +103,49 @@ def local_checks(text: str, voice: Voice | None) -> dict:
             "limitations": "Mechanical findings only; semantic accuracy, voice fit and rubric grades are not assessed."}
 
 
-async def check(text: str, voice: Voice | None, http: httpx.AsyncClient) -> dict:
+async def check(text: str, voice: Voice | None, http: httpx.AsyncClient, *, tank=None, tenant_id=None) -> dict:
     import asyncio
-    result = await asyncio.to_thread(local_checks, text, voice)
-    try:
-        # Fixed internal destination, no configurable public service or cloud fallback.
-        response = await http.post("http://trigger-languagetool:8081/v2/check",
-                                   data={"text": text, "language": "en-US"}, timeout=30)
-        response.raise_for_status()
-        payload = response.json()
-        matches = payload["matches"]
-        if not isinstance(matches, list):
-            raise TypeError("Invalid matches")
-        for match in matches:
-            result["issues"].append({"source": "languagetool", "rule": match["rule"]["id"],
-                                     "message": match["message"], "offset": match["offset"], "length": match["length"]})
-        warnings = payload.get("warnings", {})
-        if not isinstance(warnings, dict):
-            raise TypeError("Invalid warnings")
-        result["complete"] = not warnings.get("incompleteResults", False)
-        result["checker_errors"] = [] if result["complete"] else ["LanguageTool returned incomplete results."]
-    except (httpx.HTTPError, ValueError, KeyError, TypeError):
-        result["complete"] = False
-        result["checker_errors"] = ["LanguageTool is unavailable; its checks have not completed."]
+    approved = {}
+    if tank is not None:
+        if tenant_id is None:
+            raise ValueError("Checker tenant is required")
+        for component in ("proselint", "agent_style", "readability", "voice_check", "house_style", "languagetool"):
+            payload = {"text": text}
+            if component != "languagetool" and voice is not None:
+                payload["voice"] = voice.model_dump()
+            output = await tank.approved_skill(str(tenant_id), "trigger." + component, payload)
+            if output is not None:
+                approved[component] = output
+    result = await asyncio.to_thread(local_checks, text, voice, frozenset(approved))
+    for output in approved.values():
+        result["issues"].extend(output["issues"])
+    if approved:
+        result["skills"] = [{"skill": o["_skill"], "ledger_id": o.get("_ledger_id")}
+                           for o in approved.values()]
+    if "languagetool" in approved:
+        result["complete"] = True
+        result["checker_errors"] = []
+    else:
+        try:
+            # Fixed internal destination, no configurable public service or cloud fallback.
+            response = await http.post("http://trigger-languagetool:8081/v2/check",
+                                       data={"text": text, "language": "en-US"}, timeout=30)
+            response.raise_for_status()
+            payload = response.json()
+            matches = payload["matches"]
+            if not isinstance(matches, list):
+                raise TypeError("Invalid matches")
+            for match in matches:
+                result["issues"].append({"source": "languagetool", "rule": match["rule"]["id"],
+                                         "message": match["message"], "offset": match["offset"], "length": match["length"]})
+            warnings = payload.get("warnings", {})
+            if not isinstance(warnings, dict):
+                raise TypeError("Invalid warnings")
+            result["complete"] = not warnings.get("incompleteResults", False)
+            result["checker_errors"] = [] if result["complete"] else ["LanguageTool returned incomplete results."]
+        except (httpx.HTTPError, ValueError, KeyError, TypeError):
+            result["complete"] = False
+            result["checker_errors"] = ["LanguageTool is unavailable; its checks have not completed."]
     result["issue_count"] = len(result["issues"])
     result["issues"] = result["issues"][:200]
     result["truncated"] = result["issue_count"] > len(result["issues"])
