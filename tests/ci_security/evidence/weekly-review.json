@@ -180,7 +180,7 @@
         "Commit": "0dc98c9efe822fbb3f38b87f981061e62f84254e"
       }
     ],
-    "summary_annotation": "::error::Gitleaks%0Ageneric-api-key: tests/tank_batch_providers/batch-tests-initial.txt:61%0Ageneric-api-key: tests/tank_batch_providers/batch-tests-initial.txt:97",
+    "summary_annotation": "::error::Gitleaks%0Ageneric-api-key at tests/tank_batch_providers/batch-tests-initial.txt:61%0Ageneric-api-key at tests/tank_batch_providers/batch-tests-initial.txt:97",
     "branch_status": {
       "tool": "gitleaks",
       "head": "a9c319b33d6f3bd9944ac95f7b7e776c4a436153",
