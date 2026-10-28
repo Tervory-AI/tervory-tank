@@ -157,7 +157,9 @@ The final focused provenance/indexing suite also passed: [123 passed, 1 skipped,
 env -u RIG_TEST_DATABASE_URL -u POOL_SCHEMA_DATABASE_URL -u ZENAS_SCHEMA_DATABASE_URL -u GITHUB_ACTIONS PYTHONPATH=. /workspace/.tervory-cloud/venv/bin/python /tmp/zenas-laws-africa-offline.py -q tests/zenas_za_meaning_search tests/test_zenas_pool_bulk.py tests/test_zenas_pool_corpus.py tests/test_zenas_law_pool.py tests/test_zenas_citation_source_links.py tests/zenas_za_laws_africa tests/test_hermes_memory.py --junitxml=/tmp/zenas-meaning-final-focused.xml > /tmp/zenas-meaning-final-focused.log 2>&1
 ```
 
-[Final static checks](evidence/static-checks.txt): Ruff correctness checks passed for every changed Python file; `git diff --check` exited 0.
+Saved test logs preserve their output with trailing whitespace removed.
+
+[Final static checks](evidence/static-checks.txt): Ruff correctness checks passed for every changed Python file; `git diff --check founder/main` exited 0.
 
 The four skipped cases are the same on both sides: `test_real_postgres_passages_keep_the_stored_source_url`, `test_schema_applies_on_empty_again_and_over_main`, `test_zenas_schema_on_empty_twice_and_on_main_with_roles`, and `test_schema_applies_on_empty_again_and_over_main_with_agent_roles`. They require POOL_SCHEMA_DATABASE_URL or ZENAS_SCHEMA_DATABASE_URL. Neither setting was supplied. SQL is exercised with recording transports; the vector store tests use actual Qdrant local mode. No PostgreSQL, production data or paid/model endpoint was contacted.
 

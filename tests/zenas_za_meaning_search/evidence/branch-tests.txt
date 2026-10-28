@@ -10,44 +10,44 @@
 =============================== warnings summary ===============================
 tank/main.py:679
 tests/test_zenas_z12_followup.py::test_convert_prompt_extracts_each_issue_from_the_court_words
-  /workspace/tervory-tank/tank/main.py:679: DeprecationWarning: 
+  /workspace/tervory-tank/tank/main.py:679: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 ../.tervory-cloud/venv/lib/python3.12/site-packages/fastapi/applications.py:4495
 ../.tervory-cloud/venv/lib/python3.12/site-packages/fastapi/applications.py:4495
 tests/test_zenas_z12_followup.py::test_convert_prompt_extracts_each_issue_from_the_court_words
 tests/test_zenas_z12_followup.py::test_convert_prompt_extracts_each_issue_from_the_court_words
-  /workspace/.tervory-cloud/venv/lib/python3.12/site-packages/fastapi/applications.py:4495: DeprecationWarning: 
+  /workspace/.tervory-cloud/venv/lib/python3.12/site-packages/fastapi/applications.py:4495: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     return self.router.on_event(event_type)
 
 tank/main.py:714
 tests/test_zenas_z12_followup.py::test_convert_prompt_extracts_each_issue_from_the_court_words
-  /workspace/tervory-tank/tank/main.py:714: DeprecationWarning: 
+  /workspace/tervory-tank/tank/main.py:714: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tank/agent_skills.py:529
 tests/test_zenas_z12_followup.py::test_convert_prompt_extracts_each_issue_from_the_court_words
-  /workspace/tervory-tank/tank/agent_skills.py:529: DeprecationWarning: 
+  /workspace/tervory-tank/tank/agent_skills.py:529: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @router.on_event("startup")
 
 ../.tervory-cloud/venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192

@@ -2,5 +2,5 @@ $ /workspace/.tervory-cloud/venv/bin/ruff check agents/zenas/core/citation_sourc
 All checks passed!
 Exit code: 0
 
-$ git diff --check
+$ git diff --check founder/main
 Exit code: 0
