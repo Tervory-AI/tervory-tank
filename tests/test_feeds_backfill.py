@@ -50,8 +50,8 @@ def test_backfill_fills_points_and_events(tmp_path: Path) -> None:
         "SELECT source_id, error FROM fetch_runs WHERE error IS NOT NULL"
     ).fetchall()
     assert errors == []
-    assert _count(conn, "SELECT COUNT(*) FROM points") == 43
-    assert _count(conn, "SELECT COUNT(*) FROM events") == 5
+    assert _count(conn, "SELECT COUNT(*) FROM points") == 427  # 43 existing + 384 port observations.
+    assert _count(conn, "SELECT COUNT(*) FROM events") == 2005  # 5 existing + 2,000 SEC filings.
     assert _count(conn, "SELECT COUNT(*) FROM points p JOIN series s ON s.id = p.series_id WHERE s.source_id = 'listing_counts'") == 18
     assert _count(conn, "SELECT COUNT(*) FROM points p JOIN series s ON s.id = p.series_id WHERE s.source_id = 'census_trade'") == 2
     assert _count(conn, "SELECT COUNT(*) FROM events WHERE source_id = 'federal_register'") == 1
@@ -102,7 +102,7 @@ def test_rerun_adds_nothing_and_keeps_revisions(tmp_path: Path) -> None:
     assert main(["run", "--backfill", "--fixtures", str(FIXTURES), "--db", target, "--engine", "ffl"]) == 0
     conn = _connect(target)
     assert _count(conn, "SELECT COUNT(*) FROM points") == before
-    assert _count(conn, "SELECT COUNT(*) FROM events") == 5
+    assert _count(conn, "SELECT COUNT(*) FROM events") == 2005
     kept = {
         (row["revision"], str(row["value"]))
         for row in conn.execute(
@@ -129,7 +129,6 @@ def test_status_lists_licence_and_linked_sources_store_nothing(tmp_path: Path) -
     assert {row["id"] for row in linked} >= {
         "fred_tsifrght",
         "port_long_beach",
-        "port_nynj",
         "ups_hazmat",
         "season_ca",
     }

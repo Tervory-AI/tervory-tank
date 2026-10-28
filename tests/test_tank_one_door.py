@@ -210,7 +210,10 @@ EXCEPTIONS: dict[tuple[str, str, str], tuple[int, str]] = {
     ('agents/rig/rigbox/three_d/forge.py', 'model/paid endpoint', '6ccb0ebfdccd8aa5'): (1, 'Local job submission; paid GPU authorization is relayed to Tank before execution.'),
     ('docker-compose.yml', 'configured endpoint', '29a2f8b609b5bf88'): (1, 'Tank alone receives the internal LiteLLM origin in this stack.'),
     ('docker-compose.za.yml', 'configured endpoint', '29a2f8b609b5bf88'): (1, 'ZA Tank alone receives the internal LiteLLM origin in this stack.'),
-    ('hermes/embeddings.py', 'model invocation', '492ac2d72f738687'): (1, 'Free local CPU embedding model; client text is not sent to an inference API.'),
+    ('agents/zenas/pool/embed.py', 'model/paid endpoint', '682052aabab5db9c'): (1, 'Founder-authorized law embeddings through box-local Hermes only; fixed host, no proxy or redirects, region checked.'),
+    ('hermes/law_routes.py', 'model/paid endpoint', '682052aabab5db9c'): (1, 'Internal endpoint reuses the pinned CPU encoder; Zenas-only authentication and box jurisdiction checks precede encoding.'),
+    ('tests/zenas_za_meaning_search/test_hermes_law.py', 'model/paid endpoint', '682052aabab5db9c'): (2, 'In-process ASGI requests with a stub encoder and local Qdrant; outbound sockets are disabled.'),
+    ('hermes/embeddings.py', 'model invocation', 'f6436138f93f0a6c'): (1, 'Founder-authorized pinned CPU encoder, fixed local files only; no runtime download or external inference API.'),
     ('jobs/train/run.py', 'paid compute', '9383fcb131f6eb27'): (1, 'DEFERRED F4: platform training CLI submits paid HF jobs and writes the ledger directly.'),
     ('jobs/train/run.py', 'paid compute reference', '951be89b581263a9'): (1, 'DEFERRED F4: platform training CLI submits paid HF jobs and writes the ledger directly.'),
     ('jobs/train/run.py', 'provider import', 'bb1b5c7642961828'): (1, 'DEFERRED F4: platform training CLI submits paid HF jobs and writes the ledger directly.'),
@@ -221,6 +224,10 @@ EXCEPTIONS: dict[tuple[str, str, str], tuple[int, str]] = {
     ('jobs/train/train.py', 'provider/brain setting', 'fc74ec3718038794'): (1, 'Training job downloads artifacts and uploads private weights; no inference API call.'),
     ('litellm/config.yaml', 'configured endpoint', '4eca9db60dcd6816'): (14, 'The Tank-owned provider backend roster; keys are environment references.'),
     ('litellm/config.za.yaml', 'configured endpoint', '4eca9db60dcd6816'): (14, 'The ZA Tank-owned provider backend roster; keys are environment references.'),
+    ('researcher/app.py', 'model/paid endpoint', '9f3fd5c68c992e75'): (1, 'Exact loopback destination guard; the local adapter forwards model work only to Tank /v1/route.'),
+    ('researcher/app.py', 'model/paid endpoint', 'bfc9f701a06f6902'): (1, 'Inbound local compatibility endpoint; its only upstream is fixed Tank /v1/route, with redirects disabled.'),
+    ('tests/market_lab_gpt_researcher/test_researcher.py', 'model/paid endpoint', '7c773e03813fb599'): (1, 'Offline MockTransport provider response behind the real Tank route; socket connections are forbidden.'),
+    ('tests/market_lab_gpt_researcher/test_researcher.py', 'model/paid endpoint', 'bfc9f701a06f6902'): (2, 'In-process ASGI requests test local adapter authentication and immutable tenant/model policy; no network traffic.'),
     ('tests/test_agent1_brain_route.py', 'model/paid endpoint', '7b7967ff1233927e'): (1, 'In-process Tank brain-route requests with mocked provider responses.'),
     ('tests/test_agent1_brain_route.py', 'model/paid endpoint', '73e132bd91c9775c'): (7, 'In-process Tank brain-route requests with mocked provider responses.'),
     ('tests/test_agent1_hermes_runtime.py', 'model/paid endpoint', '73e132bd91c9775c'): (1, 'Local fake Tank endpoint asserts the Hermes backend contract.'),
@@ -292,6 +299,7 @@ def test_audited_sites_are_independent_of_checkout_root(tmp_path: Path) -> None:
     paths = {
         "agents/_brain/runner.py", "agents/base/app.py", "agents/base/room.py",
         "agents/base/sources/context_dev.py", "agents/rig/forge/gpu/reconstruct.py",
+        "researcher/app.py", "tests/market_lab_gpt_researcher/test_researcher.py",
     }
     expected = Counter({identity: count for identity, (count, _) in EXCEPTIONS.items() if identity[0] in paths})
     for directory, prefix in (("clone-one", ""), ("different parent/clone-two", "\n# relocated checkout\n")):

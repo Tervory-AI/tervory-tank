@@ -394,6 +394,24 @@ def test_storage_destination_cannot_be_reassigned():
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize('owner', sorted(ROOMS))
+def test_delete_uses_only_own_bucket_and_tenant_prefix(owner):
+    async def scenario():
+        observed = []
+        def handle(request):
+            observed.append((request.method, request.url.path))
+            return httpx.Response(204)
+        store = Storage(owner, environ=environment(owner), transport=httpx.MockTransport(handle))
+        tenant = str(uuid.uuid4())
+        await store.delete(tenant, 'uploads', 'report.pdf')
+        assert observed == [('DELETE', f'/tervory-{owner.replace("_", "-")}/us-east/{tenant}/uploads/report.pdf')]
+        with pytest.raises(StorageError):
+            await store.delete(tenant, 'uploads', '../another-tenant/report.pdf')
+        assert len(observed) == 1
+        await store.close()
+    asyncio.run(scenario())
+
+
 def test_qdrant_configuration_requires_internal_url_and_recipient(monkeypatch):
     monkeypatch.setenv('R2_BACKUP_RECIPIENT', 'age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p')
     monkeypatch.setenv('QDRANT_URL', 'http://qdrant:6333')

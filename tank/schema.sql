@@ -1853,6 +1853,26 @@ CREATE TABLE IF NOT EXISTS tank.base_apollo_records (
 );
 ALTER TABLE tank.base_apollo_records ADD COLUMN IF NOT EXISTS base_snapshot jsonb;
 
+-- Immutable sampled evidence; a checked CSV only adds human verdicts.
+CREATE TABLE IF NOT EXISTS tank.base_audits (
+    tenant_id uuid NOT NULL,
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    campaign_id uuid NOT NULL,
+    seed bigint NOT NULL CHECK(seed >= 0),
+    sampling_method text NOT NULL DEFAULT 'python_random_sample_v1',
+    population_size integer NOT NULL CHECK(population_size >= 200),
+    population_sha256 text NOT NULL,
+    records jsonb NOT NULL CHECK(jsonb_typeof(records)='array' AND jsonb_array_length(records)=200),
+    verdicts jsonb NOT NULL DEFAULT '{}'::jsonb CHECK(jsonb_typeof(verdicts)='object'),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    created_by text NOT NULL,
+    reviewed_at timestamptz,
+    reviewed_by text,
+    PRIMARY KEY(tenant_id,id),
+    FOREIGN KEY(tenant_id,campaign_id) REFERENCES tank.base_campaigns(tenant_id,id),
+    UNIQUE(tenant_id,campaign_id,seed)
+);
+
 -- Founder decision: retain NOT NULL; a not_set amount is storage only, never spend.
 DO $$
 BEGIN
@@ -1892,6 +1912,16 @@ ON CONFLICT(id) DO NOTHING;
 
 -- Count duplicate source rows without changing the platform-owned originals.
 ALTER TABLE tank.base_reference_files ADD COLUMN IF NOT EXISTS duplicate_count integer NOT NULL DEFAULT 0 CHECK (duplicate_count >= 0);
+
+-- Product plugin metadata; credential plaintext is never persisted here.
+CREATE TABLE IF NOT EXISTS tank.vault_items (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL, vault text NOT NULL, kind text NOT NULL,
+    name text NOT NULL, metadata jsonb NOT NULL, sealed text,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, vault, kind, name)
+);
+
 
 -- Founder decision, 2026-10-27: 99% agreement over 200 checked samples.
 -- Change only the complete old default pair, leaving customized bars intact.

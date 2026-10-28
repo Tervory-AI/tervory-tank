@@ -95,9 +95,18 @@ async def research(ctx: JobContext) -> dict:
     if not _has_source_passages(passages):
         if not question:
             return {"answer": "no sources yet", "citations": [], "cost_usd": 0}
-        from core.research_adapter import research_if_promoted
+        if os.environ.get("DATABASE_URL"):
+            from core.documents import matched
+            async with _ledger() as ledger:
+                found = await matched(ledger, ctx.tenant_id, question)
+            if found:
+                found.sort(key=lambda item: (item[0], item[1]), reverse=True)
+                facts = [item[2] for item in found[:5]]
+                return {"answer": "\n".join(fact["text"] for fact in facts),
+                        "citations": [{"claim": fact["text"], "url": fact["href"], "source": fact["name"]} for fact in facts], "cost_usd": 0}
+        from core.research_adapter import research_web
 
-        result = await research_if_promoted(ctx.tenant_id, question)
+        result = await research_web(ctx.tenant_id, question)
         if result is not None:
             return result
         return {"answer": "no sources yet", "citations": [], "cost_usd": 0}
@@ -309,3 +318,7 @@ app.include_router(market_router(key_ok=_room_key_ok, ledger_context=_ledger, en
 from core.warning_http import build_router as warning_router
 
 app.include_router(warning_router(key_ok=_room_key_ok, ledger_context=_ledger, engine=case_plan()["engine"]))
+
+from core.document_http import build_router as document_router
+
+app.include_router(document_router(key_ok=_room_key_ok, ledger_context=_ledger))

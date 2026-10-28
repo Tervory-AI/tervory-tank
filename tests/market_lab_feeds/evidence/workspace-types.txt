@@ -1,0 +1,4 @@
+.next/types/app/api/market-lab/chat/route.ts(2,24): error TS2307: Cannot find module '../../../../../../app/api/market-lab/chat/route.js' or its corresponding type declarations.
+.next/types/app/api/market-lab/chat/route.ts(5,29): error TS2307: Cannot find module '../../../../../../app/api/market-lab/chat/route.js' or its corresponding type declarations.
+.next/types/validator.ts(503,39): error TS2307: Cannot find module '../../app/api/market-lab/chat/route.js' or its corresponding type declarations.
+app/tiger/plugins-data.test.ts(3,62): error TS5097: An import path can only end with a '.ts' extension when 'allowImportingTsExtensions' is enabled.

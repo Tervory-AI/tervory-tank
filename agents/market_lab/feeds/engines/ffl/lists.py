@@ -7,6 +7,9 @@ from __future__ import annotations
 
 CHECKED = "2026-10-13"
 
+# SEC company_tickers.json, checked 2026-10-28. Industry choices stay here.
+SEC_CIKS = [95029, 1092796]  # Sturm Ruger; Smith & Wesson Brands.
+
 LISTING_URL = "https://www.atf.gov/firearms/listing-federal-firearms-licensees"
 LISTING_MONTH_PAGE = (
     "https://www.atf.gov/firearms/listing-federal-firearms-licensees/complete"

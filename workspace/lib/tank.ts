@@ -496,7 +496,7 @@ export type VaultPlugins = {
   enabled: boolean;
   message: string | null;
   secrets: { name: string; purpose: string; mask: string; saved_at: string }[];
-  files: { id: string; name: string; type: string; size: number; rows: number | null; pages: number | null; uploaded_at: string; status: string }[];
+  files: { id: string; name: string; type: string; size: number; rows: number | null; pages: number | null; uploaded_at: string; status: string; reason?: string }[];
   links: { id: string; url: string; label: string; frequency: string; last_checked: string | null; status: string }[];
   connections: { id: string; name: string; server_url: string; auth_type: string; status: string; last_used: string | null; has_token: boolean }[];
 };
@@ -1070,6 +1070,10 @@ export type MarketOverview = { feeds: MarketFeed[]; on_count: number; refresh_st
 export type MarketFact = { text: string; href: string; name: string };
 export type MarketAnswer = { content: string; facts: MarketFact[]; sources: { name: string; href: string }[] };
 export type MarketDocument = {
+  kind?: string;
+  passage_count?: number;
+  passages?: { index: number; text: string; label: string; page: number | null; usable: boolean }[];
+  reason?: string;
   calculation?: WarningCalculation;
   offset: number; page_size: number; point_count: number; event_count: number;
   id: string; name: string; fetched_at: string; licence: string; terms_checked_at: string;
@@ -1091,7 +1095,7 @@ export async function marketLabRequest<T>(
   payload: { question?: string; document_id?: string; offset?: number; row?: number; row_kind?: "point" | "event" } = {},
 ): Promise<T> {
   const response = await fetch(`${TANK_URL}/v1/market-lab/${operation}`, {
-    method: "POST", cache: "no-store", redirect: "error", signal: AbortSignal.timeout(35000),
+    method: "POST", cache: "no-store", redirect: "error", signal: AbortSignal.timeout(operation === "ask" ? 190000 : 35000),
     headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY },
     body: JSON.stringify({ ...payload, tenant_id: tenantId }),
   });

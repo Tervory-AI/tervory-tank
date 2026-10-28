@@ -4177,3 +4177,4 @@ app.include_router(__import__("market_lab_routes").build_router(__import__("sys"
 
 # Tenant-specific semantic-cache approval; no policy promotion is automatic.
 app.include_router(semantic_cache.build_router(__import__("sys").modules[__name__]))
+app.include_router(__import__("vault_routes").build_router(__import__("sys").modules[__name__]))
