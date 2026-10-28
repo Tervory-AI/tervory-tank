@@ -41,7 +41,7 @@ def context(tenant=A, cost="125", active=True, urls=None, currency="USD"):
     return {"tenant_id": tenant, "urls": urls or [URL, PEER], "product": {
         "sku": "own-item", "name": LABEL, "active": active, "url": "https://own.example/item",
         "cost": cost, "cost_currency": currency}}
-
+  # noqa: F811 (pytest fixture parameter)
 
 async def checked(store, watch, *, html=None, price="120", stock="InStock", at=0, ctx=None, blocked=False):
     async def render(*args):
@@ -65,7 +65,7 @@ async def trigger(store, watch, kind, at=0):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", KINDS)
-async def test_each_type_exact_email_and_no_repeat_for_two_tenants(store, catcher, kind):
+async def test_each_type_exact_email_and_no_repeat_for_two_tenants(store, catcher, kind):  # noqa: F811 (pytest fixture parameter)
     watches = [await watched(store, t, **{"alert_" + k: k == kind for k in KINDS}) for t in (A, B)]
     expected = {
         "new_product": "New product listed: Fixture saw",
@@ -75,7 +75,7 @@ async def test_each_type_exact_email_and_no_repeat_for_two_tenants(store, catche
     for watch in watches:
         result = await trigger(store, watch, kind)
         assert [a["kind"] for a in result["alerts"]] == [kind]
-        # Repeat the same observed condition, without restoring the old listing.
+        # Repeat the same observed condition, without restoring the old listing.  # noqa: F811 (pytest fixture parameter)
         repeated = await checked(store, watch, at=2,
             html=listing(added=True) if kind == "new_product" else None,
             stock="OutOfStock" if kind == "market_gap" else "InStock", ctx=context(watch["tenant_id"]))
@@ -99,7 +99,7 @@ async def test_each_type_exact_email_and_no_repeat_for_two_tenants(store, catche
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", KINDS)
 @pytest.mark.parametrize("disable_after_queue", [False, True])
-async def test_switch_off_prevents_email_and_preserves_other_tenant(store, catcher, kind, disable_after_queue):
+async def test_switch_off_prevents_email_and_preserves_other_tenant(store, catcher, kind, disable_after_queue):  # noqa: F811 (pytest fixture parameter)
     watch = await watched(store, **{"alert_" + k: k == kind for k in KINDS})
     other = await watched(store, B, **{"alert_" + k: k == kind for k in KINDS})
     if not disable_after_queue:
