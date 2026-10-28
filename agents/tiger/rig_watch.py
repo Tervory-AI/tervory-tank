@@ -98,6 +98,12 @@ class TankRig:
             raise ValueError('Invalid Rig delivery receipt')
         return data['updated']
 
+    async def alert_context(self, tenant: str, url: str) -> dict:
+        data = await self.request('GET', '/alert-context', params={'tenant_id': tenant, 'url': url})
+        if data.get('tenant_id') != tenant or not isinstance(data.get('urls'), list):
+            raise ValueError('Invalid Rig tenant snapshot')
+        return data
+
 
 class RigWatches:
     def __init__(self, watches: PgStore):
@@ -133,7 +139,8 @@ class RigWatches:
                 # and managed flag commit together below.
                 fields = dict(tenant_id=tenant, url=url, label=str(row.get('name') or '')[:200],
                               engine='', every='6h', enabled=False, threshold=0,
-                              alert_price=False, alert_stock=False)
+                              alert_price=False, alert_stock=False, alert_new_product=False,
+                              alert_below_cost=False, alert_market_gap=False)
                 try:
                     known[url] = await self.watches.create_watch(fields)
                 except DuplicateWatch:

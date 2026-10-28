@@ -24,3 +24,11 @@ After founder merge/deployment, establish a baseline on a watched listing page
 the founder controls, add a product, and run another check. The founder must
 receive `New product listed: {product}` in the configured inbox. A repeated check
 must not send it again. No screenshot or live result is claimed here.
+
+## Implementation checkpoint
+
+`source /workspace/tervory-env/activate.sh && python -m pytest -q tests/tiger_g5 --tb=short`
+— `26 passed in 7.46s`. Covers all three types with memory and disposable
+PostgreSQL stores, two tenants, loopback SMTP, switches before detection and
+before delivery, repeated checks, rollback and idempotent migration. Additional
+API integration and regression validation are still in progress.

@@ -3694,10 +3694,24 @@ async def tiger_create_watch(request: Request) -> Response:
     body = await _tiger_body(request)
     tenant_id = _tiger_tenant(request, body)
     forwarded: dict[str, Any] = {"tenant_id": str(tenant_id)}
-    for key in ("url", "label", "engine", "every", "enabled", "threshold", "alert_price", "alert_stock"):
+    for key in ("url", "label", "engine", "every", "enabled", "threshold", "alert_price", "alert_stock",
+                "alert_new_product", "alert_below_cost", "alert_market_gap"):
         if key in body:
             forwarded[key] = body[key]
     resp = await _tiger_call("POST", "/watchlist", [], json.dumps(forwarded).encode())
+    return _tiger_response(resp, tenant_id)
+
+
+@app.patch("/v1/tiger/watchlist/{watch_id}", dependencies=[Depends(require_key)])
+async def tiger_update_watch(watch_id: uuid.UUID, request: Request) -> Response:
+    body = await _tiger_body(request)
+    tenant_id = _tiger_tenant(request, body)
+    forwarded = {"tenant_id": str(tenant_id)}
+    for key in ("url", "label", "engine", "every", "enabled", "threshold", "alert_price", "alert_stock",
+                "alert_new_product", "alert_below_cost", "alert_market_gap"):
+        if key in body:
+            forwarded[key] = body[key]
+    resp = await _tiger_call("PATCH", f"/watchlist/{watch_id}", [], json.dumps(forwarded).encode())
     return _tiger_response(resp, tenant_id)
 
 

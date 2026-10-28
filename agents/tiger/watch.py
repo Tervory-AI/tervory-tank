@@ -23,12 +23,14 @@ from typing import Any
 from urllib.parse import urlparse
 
 import asyncpg
+import httpx
 
 from alert_email import letter_for
 from change_alert import price_moved, record_stock, stock_reading, stock_statements
 from chassis.cron import is_due
 from chassis.db import schema_for
 from domain_playbooks import MemoryPlaybooks, PgPlaybooks, public_marker, public_page
+from g5_alerts import MemoryAlerts, PgAlerts, listing_products
 from page_guard import layout_from_evidence, learn_layout, read_page
 
 SCHEMA = schema_for("tiger")
@@ -37,25 +39,37 @@ _INTERVAL = re.compile(r"^(\d+)(s|m|h|d)$")
 _SKIP_METHODS = {"blocked", "robots", "error", "none", "unread"}
 
 SQL_LIST_WATCHES = """
-SELECT id, tenant_id, url, label, engine, every, enabled, threshold, alert_price, alert_stock
+SELECT id, tenant_id, url, label, engine, every, enabled, threshold, alert_price, alert_stock,
+       alert_new_product, alert_below_cost, alert_market_gap
 FROM {schema}.watchlist
 WHERE tenant_id = $1
 ORDER BY url
 """
 SQL_GET_WATCH = """
-SELECT id, tenant_id, url, label, engine, every, enabled, threshold, alert_price, alert_stock
+SELECT id, tenant_id, url, label, engine, every, enabled, threshold, alert_price, alert_stock,
+       alert_new_product, alert_below_cost, alert_market_gap
 FROM {schema}.watchlist
 WHERE tenant_id = $1 AND url = $2
 """
 SQL_GET_WATCH_ID = """
-SELECT id, tenant_id, url, label, engine, every, enabled, threshold, alert_price, alert_stock
+SELECT id, tenant_id, url, label, engine, every, enabled, threshold, alert_price, alert_stock,
+       alert_new_product, alert_below_cost, alert_market_gap
 FROM {schema}.watchlist
 WHERE tenant_id = $1 AND id = $2
 """
 SQL_INSERT_WATCH = """
-INSERT INTO {schema}.watchlist (tenant_id, url, label, engine, every, enabled, threshold, alert_price, alert_stock)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, tenant_id, url, label, engine, every, enabled, threshold, alert_price, alert_stock
+INSERT INTO {schema}.watchlist (tenant_id, url, label, engine, every, enabled, threshold, alert_price, alert_stock,
+                               alert_new_product, alert_below_cost, alert_market_gap)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+RETURNING *
+"""
+SQL_UPDATE_WATCH = """
+UPDATE {schema}.watchlist SET url=COALESCE($3,url), label=COALESCE($4,label), engine=COALESCE($5,engine),
+    every=COALESCE($6,every), enabled=COALESCE($7,enabled), threshold=COALESCE($8,threshold),
+    alert_price=COALESCE($9,alert_price), alert_stock=COALESCE($10,alert_stock),
+    alert_new_product=COALESCE($11,alert_new_product), alert_below_cost=COALESCE($12,alert_below_cost),
+    alert_market_gap=COALESCE($13,alert_market_gap)
+WHERE tenant_id=$1 AND id=$2 RETURNING *
 """
 SQL_DELETE_WATCH = """
 DELETE FROM {schema}.watchlist
@@ -646,6 +660,8 @@ async def ensure_tables(conn: Any, schema: str = SCHEMA) -> None:
     await ensure_rig_tables(conn, schema)
     from domain_playbooks import ensure_tables as ensure_playbooks
     await ensure_playbooks(conn, schema)
+    from g5_alerts import ensure_tables as ensure_alerts
+    await ensure_alerts(conn, schema)
 
 
 def _watch_out(row: Any) -> dict[str, Any]:
@@ -660,6 +676,9 @@ def _watch_out(row: Any) -> dict[str, Any]:
         "threshold": _plain(Decimal(str(row["threshold"]))),
         "alert_price": bool(row.get("alert_price", True)),
         "alert_stock": bool(row.get("alert_stock", True)),
+        "alert_new_product": bool(row.get("alert_new_product", True)),
+        "alert_below_cost": bool(row.get("alert_below_cost", True)),
+        "alert_market_gap": bool(row.get("alert_market_gap", True)),
     }
 
 
@@ -690,7 +709,7 @@ def _alert_out(row: Any) -> dict[str, Any]:
     }
 
 
-class PgStore(PgPlaybooks):
+class PgStore(PgPlaybooks, PgAlerts):
     def __init__(self, pool: Any, schema: str = SCHEMA) -> None:
         self.pool = pool
         self.schema = schema
@@ -713,6 +732,9 @@ class PgStore(PgPlaybooks):
                     Decimal(str(row["threshold"])),
                     bool(row.get("alert_price", True)),
                     bool(row.get("alert_stock", True)),
+                    bool(row.get("alert_new_product", True)),
+                    bool(row.get("alert_below_cost", True)),
+                    bool(row.get("alert_market_gap", True)),
                 )
             except asyncpg.UniqueViolationError as exc:
                 raise DuplicateWatch(row["url"]) from exc
@@ -747,23 +769,14 @@ class PgStore(PgPlaybooks):
             return None
         merged = dict(current)
         merged.update(fields)
-        assignments = []
         values: list[Any] = [uuid.UUID(str(tenant_id)), uuid.UUID(str(watch_id))]
-        for column in ("url", "label", "engine", "every", "enabled", "threshold", "alert_price", "alert_stock"):
-            if column not in fields:
-                continue
-            values.append(Decimal(str(merged[column])) if column == "threshold" else merged[column])
-            assignments.append(f"{column} = ${len(values)}")
-        if not assignments:
-            return current
-        sql = (
-            f"UPDATE {self.schema}.watchlist SET " + ", ".join(assignments)
-            + " WHERE tenant_id = $1 AND id = $2"
-            + " RETURNING id, tenant_id, url, label, engine, every, enabled, threshold, alert_price, alert_stock"
-        )
+        for column in ("url", "label", "engine", "every", "enabled", "threshold", "alert_price", "alert_stock",
+                       "alert_new_product", "alert_below_cost", "alert_market_gap"):
+            value = fields.get(column)
+            values.append(Decimal(str(value)) if column == "threshold" and value is not None else value)
         async with self.pool.acquire() as conn:
             try:
-                row = await conn.fetchrow(sql, *values)
+                row = await conn.fetchrow(self._sql(SQL_UPDATE_WATCH), *values)
             except asyncpg.UniqueViolationError as exc:
                 raise DuplicateWatch(str(merged.get("url"))) from exc
         return _watch_out(row) if row else None
@@ -830,18 +843,21 @@ class PgStore(PgPlaybooks):
             await ensure_tables(conn, self.schema)
             # The alert and its delivery receipt commit together.
             async with conn.transaction():
-                saved = await conn.fetchrow(
-                    self._sql(SQL_INSERT_ALERT),
-                    uuid.UUID(str(row["tenant_id"])), row["url"], row["ts"],
-                    row["kind"], row.get("before"), row.get("after"),
-                )
-                letter = letter_for(row)
-                if letter:
-                    await conn.execute(self._sql("""
-                        INSERT INTO {schema}.alert_mail (tenant_id, alert_id, url, kind, letter)
-                        VALUES ($1, $2, $3, $4, $5::jsonb)
-                        ON CONFLICT (tenant_id, alert_id) DO NOTHING
-                    """), uuid.UUID(str(row["tenant_id"])), saved["id"], row["url"], row["kind"], json.dumps(letter))
+                return await self._save_alert(conn, row)
+
+    async def _save_alert(self, conn: Any, row: dict[str, Any]) -> dict[str, Any]:
+        saved = await conn.fetchrow(
+            self._sql(SQL_INSERT_ALERT),
+            uuid.UUID(str(row["tenant_id"])), row["url"], row["ts"],
+            row["kind"], row.get("before"), row.get("after"),
+        )
+        letter = letter_for(row)
+        if letter:
+            await conn.execute(self._sql("""
+                INSERT INTO {schema}.alert_mail (tenant_id, alert_id, url, kind, letter)
+                VALUES ($1, $2, $3, $4, $5::jsonb)
+                ON CONFLICT (tenant_id, alert_id) DO NOTHING
+            """), uuid.UUID(str(row["tenant_id"])), saved["id"], row["url"], row["kind"], json.dumps(letter))
         return _alert_out(saved)
 
     async def pending_mail(self, tenant_id: str, now: datetime) -> list[str]:
@@ -865,7 +881,9 @@ class PgStore(PgPlaybooks):
                 RETURNING url, kind, letter, EXISTS (
                     SELECT 1 FROM {schema}.watchlist w WHERE w.tenant_id = m.tenant_id
                     AND w.url = m.url AND w.enabled AND CASE m.kind
-                        WHEN 'price' THEN w.alert_price WHEN 'stock' THEN w.alert_stock ELSE false END
+                        WHEN 'price' THEN w.alert_price WHEN 'stock' THEN w.alert_stock
+                        WHEN 'new_product' THEN w.alert_new_product WHEN 'below_cost' THEN w.alert_below_cost
+                        WHEN 'market_gap' THEN w.alert_market_gap ELSE false END
                 ) AS allowed
             """), uuid.UUID(str(tenant_id)), uuid.UUID(str(alert_id)), now)
         if row is None:
@@ -904,7 +922,7 @@ class PgStore(PgPlaybooks):
             )
 
 
-class MemoryStore(MemoryPlaybooks):
+class MemoryStore(MemoryPlaybooks, MemoryAlerts):
     """In-memory stand-in used by tests. Same tenant filter as the SQL."""
 
     def __init__(self) -> None:
@@ -929,6 +947,9 @@ class MemoryStore(MemoryPlaybooks):
             "threshold": _plain(Decimal(str(row["threshold"]))),
             "alert_price": bool(row.get("alert_price", True)),
             "alert_stock": bool(row.get("alert_stock", True)),
+            "alert_new_product": bool(row.get("alert_new_product", True)),
+            "alert_below_cost": bool(row.get("alert_below_cost", True)),
+            "alert_market_gap": bool(row.get("alert_market_gap", True)),
         }
         self.watches.append(saved)
         await self._ensure_dispatch(saved["tenant_id"])
@@ -1116,6 +1137,45 @@ async def external_observation(store, tenant_id, watch, item, method, receipt, c
 
 
 async def run_check(
+    store, tenant_id, watch, agent, render, extract, ocr, fetch_text, limiter,
+    files=None, now=None, feed=None, product_context=None,
+):
+    captured = {}
+
+    async def rendered(*args):
+        page = await render(*args)
+        if (page.get("ok") and not page.get("challenge") and not page.get("blocked_by_check")
+                and page.get("status") not in {401, 403, 429} and not page.get("portal_item")):
+            captured["html"] = page.get("html") or ""
+        return page
+
+    async def extracted(html, url):
+        value = await extract(html, url)
+        captured["items"] = value.get("items") or []
+        captured["listing"] = listing_products(html, url, captured["items"])
+        return value
+
+    async def read_image(*args):
+        # Listing membership is already confirmed by code. Its lack of a single
+        # product price must not invoke the existing paid screenshot fallback.
+        return {"items": []} if captured.get("listing") is not None else await ocr(*args)
+
+    result = await _run_check(store, tenant_id, watch, agent, rendered, extracted, read_image,
+                              fetch_text, limiter, files=files, now=now, feed=feed)
+    observation = result.get("observation")
+    if observation is not None:
+        listing = captured.get("listing") if captured.get("html") else None
+        context = None
+        if product_context is not None:
+            try:
+                context = await product_context(str(tenant_id), watch["url"])
+            except (httpx.HTTPError, ValueError):
+                logging.getLogger(__name__).warning("Rig alert context unavailable.")
+        result["alerts"].extend(await store.product_alerts(tenant_id, observation, listing, context))
+    return result
+
+
+async def _run_check(
     store: Any,
     tenant_id: str,
     watch: dict[str, Any],

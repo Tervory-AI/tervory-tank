@@ -1002,6 +1002,23 @@ async def rig_tiger_update(request: Request):
     return await rig_request(actor, "tiger", body.model_dump(mode="json", exclude={"tenant_id"}, exclude_none=True))
 
 
+@router.get("/rig/tiger/alert-context")
+async def rig_tiger_alert_context(request: Request, tenant_id: uuid.UUID, url: str):
+    require_tiger(request)
+    # Reuse the client's explicit product match. A competitor's SKU or title
+    # is not evidence that it is the client's product.
+    async with db().acquire() as conn:
+        sku = await conn.fetchval("SELECT sku FROM tank.access_feed_links WHERE tenant_id=$1 AND url=$2", tenant_id, url)
+        urls = [] if sku is None else [r["url"] for r in await conn.fetch(
+            "SELECT url FROM tank.access_feed_links WHERE tenant_id=$1 AND sku=$2 ORDER BY url", tenant_id, sku)]
+    if sku is None:
+        return {"tenant_id": str(tenant_id), "product": None, "urls": []}
+    result = await rig_request(Actor(tenant_id, "tiger-price-watch", False), "watch-context", {"sku": sku})
+    if result.get("tenant_id") != str(tenant_id):
+        raise HTTPException(503, "Rig returned an invalid response.")
+    return {"tenant_id": str(tenant_id), "product": result.get("product"), "urls": urls}
+
+
 async def refresh_due_rig_feeds() -> None:
     async with db().acquire() as conn:
         async with conn.transaction():
