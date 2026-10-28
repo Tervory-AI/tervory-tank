@@ -1,0 +1,6 @@
+Repository pin: v1.106.4; upstream commit: ea7ca16dbc3904d9e59a9505f379a2ca3091821f
+create_batch dispatch: Azure and Vertex; no Anthropic or Gemini branch
+Generic provider batch configurations: BEDROCK, MISTRAL only
+transform_create_batch_request: NotImplementedError: Batch creation not yet implemented for Anthropic
+transform_create_batch_response: NotImplementedError: Batch creation not yet implemented for Anthropic
+BLOCKER CONFIRMED: this pin cannot submit the required Anthropic provider batch
