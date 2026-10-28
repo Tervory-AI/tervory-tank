@@ -4,3 +4,5 @@
 # First compatible pair fixing CVE-2025-64512 and CVE-2025-70559.
 pdfplumber==0.11.9
 pdfminer.six==20251230
+# Parse RSS and Atom from bounded response bytes, without opening URLs itself.
+feedparser==6.0.14

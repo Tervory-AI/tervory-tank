@@ -88,6 +88,20 @@ test("linked pages count checks without inventing a change", () => {
   assert.equal(page.groups.find((group) => group.id === "season")?.pages[0]?.label, "California");
 });
 
+test("tenant source metadata uses the existing cards and exact stored document", () => {
+  const source = { id: "rss_tenant_feed", title: "Federal Reserve", summary: "", sourceLabel: "www.federalreserve.gov",
+    cadence: "weekly" as const, keyName: "", kind: "copy" as const };
+  const reading = { rows: 20, documentId: "tenant-document", headline: "20 stored observations", checkedAt: "2026-10-28T12:00:00Z" };
+  const page = buildPage(emptyFlags(), { [source.id]: reading }, {}, { sources: [source] });
+  assert.equal(page.cards.length, 1);
+  assert.equal(page.cards[0].title, source.title);
+  assert.equal(page.cards[0].cadence, "Weekly");
+  assert.equal(page.cards[0].sourceHref, "/market-lab/sources/tenant-document");
+  assert.equal(page.cards[0].headline, "20 stored observations");
+  assert.equal(buildPage(emptyFlags(), {}, {}, { sources: [source] }).cards.length, 0);
+  assert.equal(buildPage(emptyFlags(), { [source.id]: reading }, {}).cards.length, 0);
+});
+
 test("new official feeds open stored documents in the existing cards", () => {
   const page = buildPage(emptyFlags(), {
     sec_edgar: { rows: 2000, documentId: "sec-document", checkedAt: "2026-10-28" },

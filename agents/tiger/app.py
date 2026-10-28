@@ -122,8 +122,12 @@ async def official_feed(tenant: str, url: str) -> dict:
 async def check(ctx: JobContext) -> dict:
     url = str(ctx.input.get("url") or "").strip()
     store = PgStore(app.state.pool, SCHEMA)
+    async def playbook(payload):
+        return await ctx.tank.approved_skill(ctx.tenant_id, "tiger.playbook", payload)
+    store.skill_runner = playbook
     rig = RigWatches(store)
-    if await rig.managed(ctx.tenant_id, url):
+    managed = await rig.managed(ctx.tenant_id, url)
+    if managed:
         await rig.sync(ctx.tenant_id, TankRig(app.state.http))
     watch = await store.get_watch(ctx.tenant_id, url)
     if watch is None or not watch.get("enabled"):
@@ -150,6 +154,8 @@ async def check(ctx: JobContext) -> dict:
         _limiter,
         files=ctx.files,
         feed=official_feed,
+        product_context=None if managed else TankRig(app.state.http).alert_context,
+        skills=playbook,
     )
     try:
         await rig.deliver(ctx.tenant_id, TankRig(app.state.http))
@@ -201,6 +207,9 @@ class WatchIn(BaseModel):
     threshold: float = 0
     alert_price: bool = True
     alert_stock: bool = True
+    alert_new_product: bool = True
+    alert_below_cost: bool = True
+    alert_market_gap: bool = True
 
 
 class WatchPatch(BaseModel):
@@ -213,6 +222,9 @@ class WatchPatch(BaseModel):
     threshold: float | None = None
     alert_price: bool | None = None
     alert_stock: bool | None = None
+    alert_new_product: bool | None = None
+    alert_below_cost: bool | None = None
+    alert_market_gap: bool | None = None
 
 
 def _store() -> PgStore:
@@ -243,7 +255,7 @@ def _fields(body: WatchIn | WatchPatch, partial: bool) -> dict[str, Any]:
             fields["enabled"] = True if body.enabled is None else bool(body.enabled)
         if body.threshold is not None or not partial:
             fields["threshold"] = check_threshold(0 if body.threshold is None else body.threshold)
-        for name in ("alert_price", "alert_stock"):
+        for name in ("alert_price", "alert_stock", "alert_new_product", "alert_below_cost", "alert_market_gap"):
             value = getattr(body, name)
             if value is not None or not partial:
                 fields[name] = True if value is None else value

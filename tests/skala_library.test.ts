@@ -88,7 +88,7 @@ test("actions follow the version state", () => {
   assert.equal(confirmApprove("base.find_site", "1.7.0"), "Approve base.find_site 1.7.0?");
 });
 
-test("approval retires the previous approved version", () => {
+test("approval keeps the previous approved version in staging during probation", () => {
   const next = applyApproval([
     skill({ id: "base.extract", version: "2.0.0", agent: "base", state: "staging" }),
     skill({ id: "base.extract", version: "1.0.0", agent: "base", state: "approved" }),
@@ -96,7 +96,7 @@ test("approval retires the previous approved version", () => {
     skill({ id: "other.skill", version: "1.0.0", agent: "tiger", state: "approved" }),
   ], "base.extract", "2.0.0");
   assert.equal(next.find((row) => row.version === "2.0.0")?.state, "approved");
-  assert.equal(next.find((row) => row.version === "1.0.0")?.state, "retired");
+  assert.equal(next.find((row) => row.version === "1.0.0")?.state, "staging");
   assert.equal(next.find((row) => row.version === "0.9.0")?.state, "retired");
   assert.equal(next.find((row) => row.id === "other.skill")?.state, "approved");
 });

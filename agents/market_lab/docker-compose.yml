@@ -28,6 +28,7 @@ services:
       LEGISCAN_API_KEY: ${LEGISCAN_API_KEY:-}
       EIA_API_KEY: ${EIA_API_KEY:-}
       NOAA_TOKEN: ${NOAA_TOKEN:-}
+      USPTO_API_KEY: ${USPTO_API_KEY:-}
       DATA_DIR: /data
     volumes:
       - agent_market_lab_data:/data

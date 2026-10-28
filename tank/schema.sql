@@ -2122,3 +2122,105 @@ CREATE TABLE IF NOT EXISTS tank.offpeak_jobs (
 CREATE INDEX IF NOT EXISTS offpeak_pending ON tank.offpeak_jobs(region,status,created_at);
 CREATE INDEX IF NOT EXISTS offpeak_task ON tank.offpeak_jobs(tenant_id,task_id);
 ALTER TABLE tank.offpeak_jobs ADD COLUMN IF NOT EXISTS checked_at timestamptz;
+
+
+-- B3: transactional model-change outbox. Registry/eval work belongs to the
+-- platform tenant; policy_tenant_id identifies an optional tenant override.
+CREATE TABLE IF NOT EXISTS tank.skill_revalidations (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    policy_tenant_id uuid,
+    task_type text NOT NULL,
+    old_model text NOT NULL,
+    model text NOT NULL,
+    policy jsonb NOT NULL,
+    skill_id text NOT NULL,
+    version text NOT NULL,
+    queued_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+    completed_at timestamptz,
+    eval_id uuid,
+    error text
+);
+CREATE INDEX IF NOT EXISTS skill_revalidations_pending
+    ON tank.skill_revalidations(tenant_id, queued_at, id) WHERE completed_at IS NULL;
+ALTER TABLE tank.skill_evals ADD COLUMN IF NOT EXISTS model text;
+ALTER TABLE tank.skill_evals ADD COLUMN IF NOT EXISTS revalidation_id uuid;
+CREATE UNIQUE INDEX IF NOT EXISTS skill_evals_revalidation_once
+    ON tank.skill_evals(revalidation_id) WHERE revalidation_id IS NOT NULL;
+
+CREATE OR REPLACE FUNCTION tank.queue_skill_revalidations() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE previous text;
+BEGIN
+    IF TG_OP = 'UPDATE' THEN
+        previous := OLD.model;
+    ELSIF NEW.tenant_id IS NOT NULL THEN
+        SELECT model INTO previous FROM tank.policy
+          WHERE task_type=NEW.task_type AND tenant_id IS NULL;
+    END IF;
+    -- Initial creation without a prior effective model is not a swap.
+    IF previous IS NULL OR previous IS NOT DISTINCT FROM NEW.model THEN
+        RETURN NEW;
+    END IF;
+    INSERT INTO tank.skill_revalidations
+      (tenant_id,policy_tenant_id,task_type,old_model,model,policy,skill_id,version)
+    SELECT '00000000-0000-0000-0000-000000000001'::uuid,
+           NEW.tenant_id,NEW.task_type,previous,NEW.model,to_jsonb(NEW),s.id,s.version
+      FROM tank.skills s WHERE s.task_type=NEW.task_type AND s.state='approved';
+    RETURN NEW;
+END;
+$$;
+CREATE OR REPLACE TRIGGER policy_skill_revalidation
+    AFTER INSERT OR UPDATE OF model ON tank.policy
+    FOR EACH ROW EXECUTE FUNCTION tank.queue_skill_revalidations();
+
+-- BEGIN GENERATED AGENT MEMORY (hermes/record_schema.py)
+CREATE SCHEMA IF NOT EXISTS agent_tank;
+CREATE TABLE IF NOT EXISTS agent_tank.memory_records (
+    id uuid PRIMARY KEY,
+    tenant_id uuid NOT NULL,
+    agent text NOT NULL DEFAULT 'tank' CHECK (agent = 'tank'),
+    claim text NOT NULL CHECK (length(claim) BETWEEN 1 AND 8000),
+    evidence jsonb NOT NULL DEFAULT '[]' CHECK (jsonb_typeof(evidence) = 'array'),
+    confidence double precision NOT NULL DEFAULT 0.5 CHECK (confidence BETWEEN 0 AND 1),
+    last_verified timestamptz,
+    embed_model text NOT NULL DEFAULT '',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    tier text NOT NULL DEFAULT 'client' CHECK (tier IN ('client','platform')),
+    kind text NOT NULL DEFAULT 'fact',
+    meta jsonb NOT NULL DEFAULT '{}',
+    seen integer NOT NULL DEFAULT 1,
+    CHECK (tier <> 'platform' OR tenant_id = '00000000-0000-0000-0000-000000000001'::uuid)
+);
+CREATE INDEX IF NOT EXISTS memory_records_scope ON agent_tank.memory_records (tenant_id, tier, created_at, id);
+CREATE INDEX IF NOT EXISTS memory_records_encoder ON agent_tank.memory_records (tenant_id, embed_model);
+CREATE TABLE IF NOT EXISTS agent_tank.memory_index_jobs (
+    row_id uuid NOT NULL,
+    tenant_id uuid NOT NULL,
+    target_model text NOT NULL,
+    operation text NOT NULL DEFAULT 'upsert' CHECK (operation IN ('upsert','delete')),
+    attempts integer NOT NULL DEFAULT 0,
+    run_at timestamptz NOT NULL DEFAULT now(),
+    last_error text,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, row_id, target_model, operation)
+);
+CREATE INDEX IF NOT EXISTS memory_index_jobs_due ON agent_tank.memory_index_jobs (run_at);
+CREATE TABLE IF NOT EXISTS agent_tank.memory_publish_policy (
+    tenant_id uuid PRIMARY KEY,
+    enabled boolean NOT NULL DEFAULT false,
+    identifiers jsonb NOT NULL DEFAULT '{}',
+    updated_by text NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS agent_tank.memory_publish_log (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    actor text NOT NULL,
+    happened_at timestamptz NOT NULL DEFAULT now(),
+    source_row uuid NOT NULL,
+    result text NOT NULL CHECK (result IN ('disabled','missing','refused','published','already_published')),
+    published_row uuid
+);
+-- END GENERATED AGENT MEMORY

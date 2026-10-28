@@ -1,0 +1,20 @@
+{
+  "registry_source": "https://hub.docker.com/v2/repositories/jhpyle/docassemble/tags?page_size=5",
+  "image": "jhpyle/docassemble:1.10.14",
+  "digest": "sha256:5dc6feb56f69a912885ad5652d1754330f37c1a05331c5831e34e9d0c509492d",
+  "platforms": [
+    {
+      "architecture": "amd64",
+      "digest": "sha256:e916a38baa61fc9f666c59e3ba821cdc8798d0dc61cd2c69bf88b152365662ff"
+    },
+    {
+      "architecture": "arm64",
+      "digest": "sha256:1780cb4967f081fbdd791b413e72f2ae6d661b6eaad69208b7970f851fae1cd8"
+    }
+  ],
+  "source_tag": "v1.10.14",
+  "source_commit": "b821998ddd9442f80456ed1649f38afee0a3b877",
+  "source_url": "https://github.com/jhpyle/docassemble/blob/v1.10.14/Dockerfile",
+  "runtime_path_from_release": "/usr/share/docassemble/local3.14/lib/python3.14/site-packages",
+  "verification": "Registry metadata and Git release source only; no container deployment or GitHub API."
+}

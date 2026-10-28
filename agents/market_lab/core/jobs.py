@@ -48,6 +48,7 @@ async def perform_refresh(
     backfill: bool = False,
     source: str | None = None,
     client: Any = None,
+    extra_sources: list | None = None,
 ) -> dict[str, Any]:
     module = load_engine(engine)
     spec = module.plan()
@@ -64,16 +65,20 @@ async def perform_refresh(
         raise RuntimeError("refusing to open the network")
     feed_plan = set(spec["feeds"]) | set(spec.get("linked_pages", []))
     selected = [item for item in sources(engine) if item.id in feed_plan and (source is None or item.id == source)]
+    if extra_sources is not None:
+        selected = extra_sources
     if source and not selected:
         raise ValueError("unknown source")
     from urllib.parse import urlsplit
     domains = {".".join((urlsplit(item.url).hostname or "").split(".")[-2:]) for item in sources(engine)}
     http = client or EvidenceClient(allowed_domains=domains)
+    public_http = client or EvidenceClient(public_feeds=True, tenant_id=tenant_id)
     stored_rows = 0
     events = 0
     checks = []
     for feed in selected:
-        result = await asyncio.to_thread(collect, feed, fixtures=fixtures, backfill=backfill or bool(fixtures), client=http)
+        feed_http = public_http if feed.adapter in {"rss", "comtrade_preview", "searxng"} else http
+        result = await asyncio.to_thread(collect, feed, fixtures=fixtures, backfill=backfill or bool(fixtures), client=feed_http)
         grouped: dict[str, list[dict]] = {}
         for point in result["points"]:
             grouped.setdefault(point["series_id"], []).append(point)
@@ -110,7 +115,7 @@ async def perform_refresh(
             result["note"] = "Off, the source returned no observations"
         checks.append(await save_check(ledger, tenant_id, result, at=_clock(now)))
     fred_read: list[dict[str, Any]] = []
-    for cost in spec["costs"]:
+    for cost in spec["costs"] if extra_sources is None else []:
         body = None if fred_bodies is None else fred_bodies.get(cost["ref"])
         if body is None and live:
             try:
@@ -182,10 +187,11 @@ async def perform_opportunities(
     scored = gap_score({"areas": areas})
     found = opportunity_rows(scored["ranked"], module.products(), signals or {})
     for row in scored["ranked"]:
+        signal_id = str(uuid.uuid4())
         await _call(
             ledger.save_opportunity,
             {
-                "id": str(uuid.uuid4()),
+                "id": signal_id,
                 "tenant_id": tenant_id,
                 "made_at": clock,
                 "area": row["area"],
@@ -204,6 +210,10 @@ async def perform_opportunities(
                 },
             },
         )
+        from chassis.events import publish
+        await publish(tenant_id, "marketlab.signal.scored", signal_id, {
+            "signal_id": signal_id, "score": str(row["gap"]), "rank": row["rank"],
+            "observed_at": clock.isoformat()})
         await _call(
             ledger.save_prediction,
             prediction_for_recommendation(

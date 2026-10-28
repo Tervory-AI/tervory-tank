@@ -20,3 +20,11 @@ playwright==1.64.1
 
 # Tiger alert delivery uses the same offline SMTP catcher as Rig's proof.
 aiosmtpd==1.4.6
+
+# Offline Docassemble API tests render the real templates; no service or model.
+# Match the official Docassemble 1.10.14 renderer pins.
+Mako==1.4.2
+docxtpl==0.20.2
+
+# Ephemeral local PostgreSQL for Zenas alert persistence/claim tests; no DSN or key.
+pgserver==0.1.4

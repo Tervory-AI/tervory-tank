@@ -34,6 +34,7 @@ services:
       - tervory-gw-base
       - tervory-gw-rig
       - tervory-gw-ghost
+      - tervory-gw-trigger-crm
 
   redis:
     # 7.4.12 is the current 7.4 patch. It carries the 7.4.11 fix for CVE-2026-81934
@@ -71,9 +72,13 @@ services:
   # its tervory-gw-<agent> network here, and TANK_KEY_<AGENT> in the environment
   # below. No public domain. Agents call this service. They never call Qdrant.
   hermes:
-    build: ./hermes
+    build:
+      context: .
+      dockerfile: hermes/Dockerfile
     restart: unless-stopped
     environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
+      TERVORY_ADMIN_USER_IDS: ${TERVORY_ADMIN_USER_IDS:-}
       TANK_REGION: us-east
       QDRANT_URL: http://qdrant:6333
       QDRANT_API_KEY: ${QDRANT_API_KEY}
@@ -89,6 +94,7 @@ services:
       HERMES_EMBED_MODEL: ${HERMES_EMBED_MODEL:-BAAI/bge-small-en-v1.5}
     depends_on:
       - qdrant
+      - postgres
     networks:
       - default
       - tervory-gw-template
@@ -500,6 +506,11 @@ networks:
   # Ghost alone uses this corridor; no other main-stack service joins it.
   tervory-gw-ghost:
     name: tervory-gw-ghost
+  # Created once: docker network create tervory-gw-trigger-crm
+  # BottleCRM / Trigger CRM Coolify resource joins as external.
+  tervory-gw-trigger-crm:
+    external: true
+    name: tervory-gw-trigger-crm
 
   tervory-gw-trigger:
     name: tervory-gw-trigger

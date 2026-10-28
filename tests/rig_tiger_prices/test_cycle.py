@@ -20,6 +20,7 @@ from rig_watch import RigWatches, TankRig, confirmed_value
 from watch import DomainLimiter, PgStore, ensure_tables
 
 agent = _load('rig_prices_tiger_agent', ROOT / 'agents/tiger/app.py')
+playbook = _load('rig_prices_playbook', ROOT / 'tank/skills/tiger.playbook/1.0.0/run.py')
 
 
 @pytest_asyncio.fixture
@@ -85,13 +86,20 @@ async def system(database, corridor, monkeypatch):  # noqa: F811 — imported py
         assert name == 'tiger.price_extract'
         return await extract(body['html'], body['url'])
 
+    async def approved_skill(tenant, name, body):
+        assert name == 'tiger.playbook'
+        result = await playbook.run(body, None)
+        assert result['model_calls'] == 0
+        return result
+
     monkeypatch.setattr(agent, '_render', render)
     monkeypatch.setattr(agent, 'official_feed', no_feed)
     monkeypatch.setattr(agent, '_fetch_text', no_paid_call)
 
     def context(tenant=A, url=URL):
         return SimpleNamespace(tenant_id=tenant, input={'url': url}, job_id=uuid4(),
-                               agent='tiger', files=None, tank=SimpleNamespace(run_skill=skill))
+                               agent='tiger', files=None,
+                               tank=SimpleNamespace(run_skill=skill, approved_skill=approved_skill))
 
     return SimpleNamespace(rig=rig, tiger=tiger, pool=database, http=http, client=TankRig(http),
                            managed=RigWatches(tiger), state=state, context=context)

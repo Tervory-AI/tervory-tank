@@ -6,7 +6,9 @@ scheduling implementation lives here: ordinary Tiger watches do that work.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
+import logging
 import os
 import re
 from datetime import datetime
@@ -42,6 +44,26 @@ def confirmed_value(observation: dict) -> dict | None:
                 'active': stock in {'InStock', 'LimitedAvailability'}}
     except (InvalidOperation, ValueError):
         return None
+
+
+async def publish_price_changed(store, tenant: str, watch: dict, previous: dict | None, current: dict) -> None:
+    """One committed price fact per product (or ordinary watch), irrespective of mail preferences."""
+    try:
+        before = confirmed_value(previous) if previous else None
+        after = confirmed_value(current)
+        if not before or not after or before['currency'] != after['currency'] or before['price'] == after['price']:
+            return
+        from chassis.events import publish
+        skus = await store.rig_skus(tenant, watch['id']) if hasattr(store, 'rig_skus') else []
+        for sku in skus or [None]:
+            await publish(tenant, 'tiger.price.changed', f"{watch['id']}:{current['id']}:{sku or ''}", {
+                'watch_id': str(watch['id']), 'observation_id': str(current['id']), 'sku': sku,
+                'page_id': hashlib.sha256(watch['url'].encode()).hexdigest(),
+                'previous_price': before['price'], 'price': after['price'],
+                'currency': after['currency'], 'observed_at': current['ts'],
+            })
+    except Exception:
+        logging.getLogger(__name__).warning('Price event unavailable; the check remains saved')
 
 
 async def record_observation(conn, schema: str, observation: dict) -> None:
@@ -98,6 +120,12 @@ class TankRig:
             raise ValueError('Invalid Rig delivery receipt')
         return data['updated']
 
+    async def alert_context(self, tenant: str, url: str) -> dict:
+        data = await self.request('GET', '/alert-context', params={'tenant_id': tenant, 'url': url})
+        if data.get('tenant_id') != tenant or not isinstance(data.get('urls'), list):
+            raise ValueError('Invalid Rig tenant snapshot')
+        return data
+
 
 class RigWatches:
     def __init__(self, watches: PgStore):
@@ -133,7 +161,8 @@ class RigWatches:
                 # and managed flag commit together below.
                 fields = dict(tenant_id=tenant, url=url, label=str(row.get('name') or '')[:200],
                               engine='', every='6h', enabled=False, threshold=0,
-                              alert_price=False, alert_stock=False)
+                              alert_price=False, alert_stock=False, alert_new_product=False,
+                              alert_below_cost=False, alert_market_gap=False)
                 try:
                     known[url] = await self.watches.create_watch(fields)
                 except DuplicateWatch:

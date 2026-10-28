@@ -1,0 +1,1532 @@
+{
+  "This are a test.": {
+    "software": {
+      "name": "LanguageTool",
+      "version": "6.8",
+      "buildDate": "1980-02-01 00:00:00 +0000",
+      "apiVersion": 1,
+      "premium": false,
+      "premiumHint": "You might be missing errors only the Premium version can find. Contact us at support<at>languagetoolplus.com.",
+      "status": ""
+    },
+    "warnings": {
+      "incompleteResults": false
+    },
+    "language": {
+      "name": "English (US)",
+      "code": "en-US",
+      "detectedLanguage": {
+        "name": "English (US)",
+        "code": "en-US",
+        "confidence": 0.99999017,
+        "source": "+fallback"
+      }
+    },
+    "matches": [
+      {
+        "message": "The singular demonstrative pronoun \u2018this\u2019 does not agree with the plural verb \u2018are\u2019. Did you mean \u201cthese\u201d?",
+        "shortMessage": "Grammatical problem: use \u2018these\u2019",
+        "replacements": [
+          {
+            "value": "These"
+          }
+        ],
+        "offset": 0,
+        "length": 4,
+        "context": {
+          "text": "This are a test.",
+          "offset": 0,
+          "length": 4
+        },
+        "sentence": "This are a test.",
+        "type": {
+          "typeName": "Other"
+        },
+        "rule": {
+          "id": "THIS_NNS",
+          "subId": "5",
+          "sourceFile": "grammar.xml",
+          "description": "'this' vs. 'these'",
+          "issueType": "grammar",
+          "category": {
+            "id": "GRAMMAR",
+            "name": "Grammar"
+          }
+        },
+        "ignoreForIncompleteSentence": false,
+        "contextForSureMatch": 1
+      },
+      {
+        "message": "The verb \u2018are\u2019 is plural. Did you mean: \u201cis\u201d? Did you use a verb instead of a noun?",
+        "shortMessage": "Grammar error",
+        "replacements": [
+          {
+            "value": "is"
+          }
+        ],
+        "offset": 5,
+        "length": 3,
+        "context": {
+          "text": "This are a test.",
+          "offset": 5,
+          "length": 3
+        },
+        "sentence": "This are a test.",
+        "type": {
+          "typeName": "Other"
+        },
+        "rule": {
+          "id": "PLURAL_VERB_AFTER_THIS",
+          "subId": "2",
+          "sourceFile": "grammar.xml",
+          "description": "Plural verb after 'this' or 'that'",
+          "issueType": "grammar",
+          "category": {
+            "id": "GRAMMAR",
+            "name": "Grammar"
+          }
+        },
+        "ignoreForIncompleteSentence": true,
+        "contextForSureMatch": -1
+      }
+    ],
+    "sentenceRanges": [
+      [
+        0,
+        16
+      ]
+    ],
+    "extendedSentenceRanges": [
+      {
+        "from": 0,
+        "to": 16,
+        "detectedLanguages": [
+          {
+            "language": "en",
+            "rate": 1.0
+          }
+        ]
+      }
+    ]
+  },
+  "This is a test.": {
+    "software": {
+      "name": "LanguageTool",
+      "version": "6.8",
+      "buildDate": "1980-02-01 00:00:00 +0000",
+      "apiVersion": 1,
+      "premium": false,
+      "premiumHint": "You might be missing errors only the Premium version can find. Contact us at support<at>languagetoolplus.com.",
+      "status": ""
+    },
+    "warnings": {
+      "incompleteResults": false
+    },
+    "language": {
+      "name": "English (US)",
+      "code": "en-US",
+      "detectedLanguage": {
+        "name": "English (US)",
+        "code": "en-US",
+        "confidence": 0.9999905,
+        "source": "+fallback"
+      }
+    },
+    "matches": [],
+    "sentenceRanges": [
+      [
+        0,
+        15
+      ]
+    ],
+    "extendedSentenceRanges": [
+      {
+        "from": 0,
+        "to": 15,
+        "detectedLanguages": [
+          {
+            "language": "en",
+            "rate": 1.0
+          }
+        ]
+      }
+    ]
+  },
+  "This are a tool.": {
+    "software": {
+      "name": "LanguageTool",
+      "version": "6.8",
+      "buildDate": "1980-02-01 00:00:00 +0000",
+      "apiVersion": 1,
+      "premium": false,
+      "premiumHint": "You might be missing errors only the Premium version can find. Contact us at support<at>languagetoolplus.com.",
+      "status": ""
+    },
+    "warnings": {
+      "incompleteResults": false
+    },
+    "language": {
+      "name": "English (US)",
+      "code": "en-US",
+      "detectedLanguage": {
+        "name": "English (US)",
+        "code": "en-US",
+        "confidence": 0.99999046,
+        "source": "+fallback"
+      }
+    },
+    "matches": [
+      {
+        "message": "The singular demonstrative pronoun \u2018this\u2019 does not agree with the plural verb \u2018are\u2019. Did you mean \u201cthese\u201d?",
+        "shortMessage": "Grammatical problem: use \u2018these\u2019",
+        "replacements": [
+          {
+            "value": "These"
+          }
+        ],
+        "offset": 0,
+        "length": 4,
+        "context": {
+          "text": "This are a tool.",
+          "offset": 0,
+          "length": 4
+        },
+        "sentence": "This are a tool.",
+        "type": {
+          "typeName": "Other"
+        },
+        "rule": {
+          "id": "THIS_NNS",
+          "subId": "5",
+          "sourceFile": "grammar.xml",
+          "description": "'this' vs. 'these'",
+          "issueType": "grammar",
+          "category": {
+            "id": "GRAMMAR",
+            "name": "Grammar"
+          }
+        },
+        "ignoreForIncompleteSentence": false,
+        "contextForSureMatch": 1
+      },
+      {
+        "message": "The verb \u2018are\u2019 is plural. Did you mean: \u201cis\u201d? Did you use a verb instead of a noun?",
+        "shortMessage": "Grammar error",
+        "replacements": [
+          {
+            "value": "is"
+          }
+        ],
+        "offset": 5,
+        "length": 3,
+        "context": {
+          "text": "This are a tool.",
+          "offset": 5,
+          "length": 3
+        },
+        "sentence": "This are a tool.",
+        "type": {
+          "typeName": "Other"
+        },
+        "rule": {
+          "id": "PLURAL_VERB_AFTER_THIS",
+          "subId": "2",
+          "sourceFile": "grammar.xml",
+          "description": "Plural verb after 'this' or 'that'",
+          "issueType": "grammar",
+          "category": {
+            "id": "GRAMMAR",
+            "name": "Grammar"
+          }
+        },
+        "ignoreForIncompleteSentence": true,
+        "contextForSureMatch": -1
+      }
+    ],
+    "sentenceRanges": [
+      [
+        0,
+        16
+      ]
+    ],
+    "extendedSentenceRanges": [
+      {
+        "from": 0,
+        "to": 16,
+        "detectedLanguages": [
+          {
+            "language": "en",
+            "rate": 1.0
+          }
+        ]
+      }
+    ]
+  },
+  "This is a tool.": {
+    "software": {
+      "name": "LanguageTool",
+      "version": "6.8",
+      "buildDate": "1980-02-01 00:00:00 +0000",
+      "apiVersion": 1,
+      "premium": false,
+      "premiumHint": "You might be missing errors only the Premium version can find. Contact us at support<at>languagetoolplus.com.",
+      "status": ""
+    },
+    "warnings": {
+      "incompleteResults": false
+    },
+    "language": {
+      "name": "English (US)",
+      "code": "en-US",
+      "detectedLanguage": {
+        "name": "English (US)",
+        "code": "en-US",
+        "confidence": 0.9999989,
+        "source": "+fallback"
+      }
+    },
+    "matches": [],
+    "sentenceRanges": [
+      [
+        0,
+        15
+      ]
+    ],
+    "extendedSentenceRanges": [
+      {
+        "from": 0,
+        "to": 15,
+        "detectedLanguages": [
+          {
+            "language": "en",
+            "rate": 1.0
+          }
+        ]
+      }
+    ]
+  },
+  "This are a book.": {
+    "software": {
+      "name": "LanguageTool",
+      "version": "6.8",
+      "buildDate": "1980-02-01 00:00:00 +0000",
+      "apiVersion": 1,
+      "premium": false,
+      "premiumHint": "You might be missing errors only the Premium version can find. Contact us at support<at>languagetoolplus.com.",
+      "status": ""
+    },
+    "warnings": {
+      "incompleteResults": false
+    },
+    "language": {
+      "name": "English (US)",
+      "code": "en-US",
+      "detectedLanguage": {
+        "name": "English (US)",
+        "code": "en-US",
+        "confidence": 0.9999949,
+        "source": "+fallback"
+      }
+    },
+    "matches": [
+      {
+        "message": "The singular demonstrative pronoun \u2018this\u2019 does not agree with the plural verb \u2018are\u2019. Did you mean \u201cthese\u201d?",
+        "shortMessage": "Grammatical problem: use \u2018these\u2019",
+        "replacements": [
+          {
+            "value": "These"
+          }
+        ],
+        "offset": 0,
+        "length": 4,
+        "context": {
+          "text": "This are a book.",
+          "offset": 0,
+          "length": 4
+        },
+        "sentence": "This are a book.",
+        "type": {
+          "typeName": "Other"
+        },
+        "rule": {
+          "id": "THIS_NNS",
+          "subId": "5",
+          "sourceFile": "grammar.xml",
+          "description": "'this' vs. 'these'",
+          "issueType": "grammar",
+          "category": {
+            "id": "GRAMMAR",
+            "name": "Grammar"
+          }
+        },
+        "ignoreForIncompleteSentence": false,
+        "contextForSureMatch": 1
+      },
+      {
+        "message": "The verb \u2018are\u2019 is plural. Did you mean: \u201cis\u201d? Did you use a verb instead of a noun?",
+        "shortMessage": "Grammar error",
+        "replacements": [
+          {
+            "value": "is"
+          }
+        ],
+        "offset": 5,
+        "length": 3,
+        "context": {
+          "text": "This are a book.",
+          "offset": 5,
+          "length": 3
+        },
+        "sentence": "This are a book.",
+        "type": {
+          "typeName": "Other"
+        },
+        "rule": {
+          "id": "PLURAL_VERB_AFTER_THIS",
+          "subId": "2",
+          "sourceFile": "grammar.xml",
+          "description": "Plural verb after 'this' or 'that'",
+          "issueType": "grammar",
+          "category": {
+            "id": "GRAMMAR",
+            "name": "Grammar"
+          }
+        },
+        "ignoreForIncompleteSentence": true,
+        "contextForSureMatch": -1
+      }
+    ],
+    "sentenceRanges": [
+      [
+        0,
+        16
+      ]
+    ],
+    "extendedSentenceRanges": [
+      {
+        "from": 0,
+        "to": 16,
+        "detectedLanguages": [
+          {
+            "language": "en",
+            "rate": 1.0
+          }
+        ]
+      }
+    ]
+  },
+  "This is a book.": {
+    "software": {
+      "name": "LanguageTool",
+      "version": "6.8",
+      "buildDate": "1980-02-01 00:00:00 +0000",
+      "apiVersion": 1,
+      "premium": false,
+      "premiumHint": "You might be missing errors only the Premium version can find. Contact us at support<at>languagetoolplus.com.",
+      "status": ""
+    },
+    "warnings": {
+      "incompleteResults": false
+    },
+    "language": {
+      "name": "English (US)",
+      "code": "en-US",
+      "detectedLanguage": {
+        "name": "English (US)",
+        "code": "en-US",
+        "confidence": 0.9999984,
+        "source": "+fallback"
+      }
+    },
+    "matches": [],
+    "sentenceRanges": [
+      [
+        0,
+        15
+      ]
+    ],
+    "extendedSentenceRanges": [
+      {
+        "from": 0,
+        "to": 15,
+        "detectedLanguages": [
+          {
+            "language": "en",
+            "rate": 1.0
+          }
+        ]
+      }
+    ]
+  },
+  "This are a note.": {
+    "software": {
+      "name": "LanguageTool",
+      "version": "6.8",
+      "buildDate": "1980-02-01 00:00:00 +0000",
+      "apiVersion": 1,
+      "premium": false,
+      "premiumHint": "You might be missing errors only the Premium version can find. Contact us at support<at>languagetoolplus.com.",
+      "status": ""
+    },
+    "warnings": {
+      "incompleteResults": false
+    },
+    "language": {
+      "name": "English (US)",
+      "code": "en-US",
+      "detectedLanguage": {
+        "name": "English (US)",
+        "code": "en-US",
+        "confidence": 0.9999982,
+        "source": "+fallback"
+      }
+    },
+    "matches": [
+      {
+        "message": "The singular demonstrative pronoun \u2018this\u2019 does not agree with the plural verb \u2018are\u2019. Did you mean \u201cthese\u201d?",
+        "shortMessage": "Grammatical problem: use \u2018these\u2019",
+        "replacements": [
+          {
+            "value": "These"
+          }
+        ],
+        "offset": 0,
+        "length": 4,
+        "context": {
+          "text": "This are a note.",
+          "offset": 0,
+          "length": 4
+        },
+        "sentence": "This are a note.",
+        "type": {
+          "typeName": "Other"
+        },
+        "rule": {
+          "id": "THIS_NNS",
+          "subId": "5",
+          "sourceFile": "grammar.xml",
+          "description": "'this' vs. 'these'",
+          "issueType": "grammar",
+          "category": {
+            "id": "GRAMMAR",
+            "name": "Grammar"
+          }
+        },
+        "ignoreForIncompleteSentence": false,
+        "contextForSureMatch": 1
+      },
+      {
+        "message": "The verb \u2018are\u2019 is plural. Did you mean: \u201cis\u201d? Did you use a verb instead of a noun?",
+        "shortMessage": "Grammar error",
+        "replacements": [
+          {
+            "value": "is"
+          }
+        ],
+        "offset": 5,
+        "length": 3,
+        "context": {
+          "text": "This are a note.",
+          "offset": 5,
+          "length": 3
+        },
+        "sentence": "This are a note.",
+        "type": {
+          "typeName": "Other"
+        },
+        "rule": {
+          "id": "PLURAL_VERB_AFTER_THIS",
+          "subId": "2",
+          "sourceFile": "grammar.xml",
+          "description": "Plural verb after 'this' or 'that'",
+          "issueType": "grammar",
+          "category": {
+            "id": "GRAMMAR",
+            "name": "Grammar"
+          }
+        },
+        "ignoreForIncompleteSentence": true,
+        "contextForSureMatch": -1
+      }
+    ],
+    "sentenceRanges": [
+      [
+        0,
+        16
+      ]
+    ],
+    "extendedSentenceRanges": [
+      {
+        "from": 0,
+        "to": 16,
+        "detectedLanguages": [
+          {
+            "language": "en",
+            "rate": 1.0
+          }
+        ]
+      }
+    ]
+  },
+  "This is a note.": {
+    "software": {
+      "name": "LanguageTool",
+      "version": "6.8",
+      "buildDate": "1980-02-01 00:00:00 +0000",
+      "apiVersion": 1,
+      "premium": false,
+      "premiumHint": "You might be missing errors only the Premium version can find. Contact us at support<at>languagetoolplus.com.",
+      "status": ""
+    },
+    "warnings": {
+      "incompleteResults": false
+    },
+    "language": {
+      "name": "English (US)",
+      "code": "en-US",
+      "detectedLanguage": {
+        "name": "English (US)",
+        "code": "en-US",
+        "confidence": 0.99999785,
+        "source": "+fallback"
+      }
+    },
+    "matches": [],
+    "sentenceRanges": [
+      [
+        0,
+        15
+      ]
+    ],
+    "extendedSentenceRanges": [
+      {
+        "from": 0,
+        "to": 15,
+        "detectedLanguages": [
+          {
+            "language": "en",
+            "rate": 1.0
+          }
+        ]
+      }
+    ]
+  },
+  "This are a draft.": {
+    "software": {
+      "name": "LanguageTool",
+      "version": "6.8",
+      "buildDate": "1980-02-01 00:00:00 +0000",
+      "apiVersion": 1,
+      "premium": false,
+      "premiumHint": "You might be missing errors only the Premium version can find. Contact us at support<at>languagetoolplus.com.",
+      "status": ""
+    },
+    "warnings": {
+      "incompleteResults": false
+    },
+    "language": {
+      "name": "English (US)",
+      "code": "en-US",
+      "detectedLanguage": {
+        "name": "English (US)",
+        "code": "en-US",
+        "confidence": 0.9999854,
+        "source": "+fallback"
+      }
+    },
+    "matches": [
+      {
+        "message": "The singular demonstrative pronoun \u2018this\u2019 does not agree with the plural verb \u2018are\u2019. Did you mean \u201cthese\u201d?",
+        "shortMessage": "Grammatical problem: use \u2018these\u2019",
+        "replacements": [
+          {
+            "value": "These"
+          }
+        ],
+        "offset": 0,
+        "length": 4,
+        "context": {
+          "text": "This are a draft.",
+          "offset": 0,
+          "length": 4
+        },
+        "sentence": "This are a draft.",
+        "type": {
+          "typeName": "Other"
+        },
+        "rule": {
+          "id": "THIS_NNS",
+          "subId": "5",
+          "sourceFile": "grammar.xml",
+          "description": "'this' vs. 'these'",
+          "issueType": "grammar",
+          "category": {
+            "id": "GRAMMAR",
+            "name": "Grammar"
+          }
+        },
+        "ignoreForIncompleteSentence": false,
+        "contextForSureMatch": 1
+      },
+      {
+        "message": "The verb \u2018are\u2019 is plural. Did you mean: \u201cis\u201d? Did you use a verb instead of a noun?",
+        "shortMessage": "Grammar error",
+        "replacements": [
+          {
+            "value": "is"
+          }
+        ],
+        "offset": 5,
+        "length": 3,
+        "context": {
+          "text": "This are a draft.",
+          "offset": 5,
+          "length": 3
+        },
+        "sentence": "This are a draft.",
+        "type": {
+          "typeName": "Other"
+        },
+        "rule": {
+          "id": "PLURAL_VERB_AFTER_THIS",
+          "subId": "2",
+          "sourceFile": "grammar.xml",
+          "description": "Plural verb after 'this' or 'that'",
+          "issueType": "grammar",
+          "category": {
+            "id": "GRAMMAR",
+            "name": "Grammar"
+          }
+        },
+        "ignoreForIncompleteSentence": true,
+        "contextForSureMatch": -1
+      }
+    ],
+    "sentenceRanges": [
+      [
+        0,
+        17
+      ]
+    ],
+    "extendedSentenceRanges": [
+      {
+        "from": 0,
+        "to": 17,
+        "detectedLanguages": [
+          {
+            "language": "en",
+            "rate": 1.0
+          }
+        ]
+      }
+    ]
+  },
+  "This is a draft.": {
+    "software": {
+      "name": "LanguageTool",
+      "version": "6.8",
+      "buildDate": "1980-02-01 00:00:00 +0000",
+      "apiVersion": 1,
+      "premium": false,
+      "premiumHint": "You might be missing errors only the Premium version can find. Contact us at support<at>languagetoolplus.com.",
+      "status": ""
+    },
+    "warnings": {
+      "incompleteResults": false
+    },
+    "language": {
+      "name": "English (US)",
+      "code": "en-US",
+      "detectedLanguage": {
+        "name": "English (US)",
+        "code": "en-US",
+        "confidence": 0.99998236,
+        "source": "+fallback"
+      }
+    },
+    "matches": [],
+    "sentenceRanges": [
+      [
+        0,
+        16
+      ]
+    ],
+    "extendedSentenceRanges": [
+      {
+        "from": 0,
+        "to": 16,
+        "detectedLanguages": [
+          {
+            "language": "en",
+            "rate": 1.0
+          }
+        ]
+      }
+    ]
+  },
+  "This are a paragraph.": {
+    "software": {
+      "name": "LanguageTool",
+      "version": "6.8",
+      "buildDate": "1980-02-01 00:00:00 +0000",
+      "apiVersion": 1,
+      "premium": false,
+      "premiumHint": "You might be missing errors only the Premium version can find. Contact us at support<at>languagetoolplus.com.",
+      "status": ""
+    },
+    "warnings": {
+      "incompleteResults": false
+    },
+    "language": {
+      "name": "English (US)",
+      "code": "en-US",
+      "detectedLanguage": {
+        "name": "English (US)",
+        "code": "en-US",
+        "confidence": 0.9999554,
+        "source": "+fallback"
+      }
+    },
+    "matches": [
+      {
+        "message": "The singular demonstrative pronoun \u2018this\u2019 does not agree with the plural verb \u2018are\u2019. Did you mean \u201cthese\u201d?",
+        "shortMessage": "Grammatical problem: use \u2018these\u2019",
+        "replacements": [
+          {
+            "value": "These"
+          }
+        ],
+        "offset": 0,
+        "length": 4,
+        "context": {
+          "text": "This are a paragraph.",
+          "offset": 0,
+          "length": 4
+        },
+        "sentence": "This are a paragraph.",
+        "type": {
+          "typeName": "Other"
+        },
+        "rule": {
+          "id": "THIS_NNS",
+          "subId": "5",
+          "sourceFile": "grammar.xml",
+          "description": "'this' vs. 'these'",
+          "issueType": "grammar",
+          "category": {
+            "id": "GRAMMAR",
+            "name": "Grammar"
+          }
+        },
+        "ignoreForIncompleteSentence": false,
+        "contextForSureMatch": 1
+      },
+      {
+        "message": "The verb \u2018are\u2019 is plural. Did you mean: \u201cis\u201d? Did you use a verb instead of a noun?",
+        "shortMessage": "Grammar error",
+        "replacements": [
+          {
+            "value": "is"
+          }
+        ],
+        "offset": 5,
+        "length": 3,
+        "context": {
+          "text": "This are a paragraph.",
+          "offset": 5,
+          "length": 3
+        },
+        "sentence": "This are a paragraph.",
+        "type": {
+          "typeName": "Other"
+        },
+        "rule": {
+          "id": "PLURAL_VERB_AFTER_THIS",
+          "subId": "2",
+          "sourceFile": "grammar.xml",
+          "description": "Plural verb after 'this' or 'that'",
+          "issueType": "grammar",
+          "category": {
+            "id": "GRAMMAR",
+            "name": "Grammar"
+          }
+        },
+        "ignoreForIncompleteSentence": true,
+        "contextForSureMatch": -1
+      }
+    ],
+    "sentenceRanges": [
+      [
+        0,
+        21
+      ]
+    ],
+    "extendedSentenceRanges": [
+      {
+        "from": 0,
+        "to": 21,
+        "detectedLanguages": [
+          {
+            "language": "en",
+            "rate": 1.0
+          }
+        ]
+      }
+    ]
+  },
+  "This is a paragraph.": {
+    "software": {
+      "name": "LanguageTool",
+      "version": "6.8",
+      "buildDate": "1980-02-01 00:00:00 +0000",
+      "apiVersion": 1,
+      "premium": false,
+      "premiumHint": "You might be missing errors only the Premium version can find. Contact us at support<at>languagetoolplus.com.",
+      "status": ""
+    },
+    "warnings": {
+      "incompleteResults": false
+    },
+    "language": {
+      "name": "English (US)",
+      "code": "en-US",
+      "detectedLanguage": {
+        "name": "English (US)",
+        "code": "en-US",
+        "confidence": 0.999935,
+        "source": "+fallback"
+      }
+    },
+    "matches": [],
+    "sentenceRanges": [
+      [
+        0,
+        20
+      ]
+    ],
+    "extendedSentenceRanges": [
+      {
+        "from": 0,
+        "to": 20,
+        "detectedLanguages": [
+          {
+            "language": "en",
+            "rate": 1.0
+          }
+        ]
+      }
+    ]
+  },
+  "This are a report.": {
+    "software": {
+      "name": "LanguageTool",
+      "version": "6.8",
+      "buildDate": "1980-02-01 00:00:00 +0000",
+      "apiVersion": 1,
+      "premium": false,
+      "premiumHint": "You might be missing errors only the Premium version can find. Contact us at support<at>languagetoolplus.com.",
+      "status": ""
+    },
+    "warnings": {
+      "incompleteResults": false
+    },
+    "language": {
+      "name": "English (US)",
+      "code": "en-US",
+      "detectedLanguage": {
+        "name": "English (US)",
+        "code": "en-US",
+        "confidence": 0.99999565,
+        "source": "+fallback"
+      }
+    },
+    "matches": [
+      {
+        "message": "The singular demonstrative pronoun \u2018this\u2019 does not agree with the plural verb \u2018are\u2019. Did you mean \u201cthese\u201d?",
+        "shortMessage": "Grammatical problem: use \u2018these\u2019",
+        "replacements": [
+          {
+            "value": "These"
+          }
+        ],
+        "offset": 0,
+        "length": 4,
+        "context": {
+          "text": "This are a report.",
+          "offset": 0,
+          "length": 4
+        },
+        "sentence": "This are a report.",
+        "type": {
+          "typeName": "Other"
+        },
+        "rule": {
+          "id": "THIS_NNS",
+          "subId": "5",
+          "sourceFile": "grammar.xml",
+          "description": "'this' vs. 'these'",
+          "issueType": "grammar",
+          "category": {
+            "id": "GRAMMAR",
+            "name": "Grammar"
+          }
+        },
+        "ignoreForIncompleteSentence": false,
+        "contextForSureMatch": 1
+      },
+      {
+        "message": "The verb \u2018are\u2019 is plural. Did you mean: \u201cis\u201d? Did you use a verb instead of a noun?",
+        "shortMessage": "Grammar error",
+        "replacements": [
+          {
+            "value": "is"
+          }
+        ],
+        "offset": 5,
+        "length": 3,
+        "context": {
+          "text": "This are a report.",
+          "offset": 5,
+          "length": 3
+        },
+        "sentence": "This are a report.",
+        "type": {
+          "typeName": "Other"
+        },
+        "rule": {
+          "id": "PLURAL_VERB_AFTER_THIS",
+          "subId": "2",
+          "sourceFile": "grammar.xml",
+          "description": "Plural verb after 'this' or 'that'",
+          "issueType": "grammar",
+          "category": {
+            "id": "GRAMMAR",
+            "name": "Grammar"
+          }
+        },
+        "ignoreForIncompleteSentence": true,
+        "contextForSureMatch": -1
+      }
+    ],
+    "sentenceRanges": [
+      [
+        0,
+        18
+      ]
+    ],
+    "extendedSentenceRanges": [
+      {
+        "from": 0,
+        "to": 18,
+        "detectedLanguages": [
+          {
+            "language": "en",
+            "rate": 1.0
+          }
+        ]
+      }
+    ]
+  },
+  "This is a report.": {
+    "software": {
+      "name": "LanguageTool",
+      "version": "6.8",
+      "buildDate": "1980-02-01 00:00:00 +0000",
+      "apiVersion": 1,
+      "premium": false,
+      "premiumHint": "You might be missing errors only the Premium version can find. Contact us at support<at>languagetoolplus.com.",
+      "status": ""
+    },
+    "warnings": {
+      "incompleteResults": false
+    },
+    "language": {
+      "name": "English (US)",
+      "code": "en-US",
+      "detectedLanguage": {
+        "name": "English (US)",
+        "code": "en-US",
+        "confidence": 0.99999005,
+        "source": "+fallback"
+      }
+    },
+    "matches": [],
+    "sentenceRanges": [
+      [
+        0,
+        17
+      ]
+    ],
+    "extendedSentenceRanges": [
+      {
+        "from": 0,
+        "to": 17,
+        "detectedLanguages": [
+          {
+            "language": "en",
+            "rate": 1.0
+          }
+        ]
+      }
+    ]
+  },
+  "This are a document.": {
+    "software": {
+      "name": "LanguageTool",
+      "version": "6.8",
+      "buildDate": "1980-02-01 00:00:00 +0000",
+      "apiVersion": 1,
+      "premium": false,
+      "premiumHint": "You might be missing errors only the Premium version can find. Contact us at support<at>languagetoolplus.com.",
+      "status": ""
+    },
+    "warnings": {
+      "incompleteResults": false
+    },
+    "language": {
+      "name": "English (US)",
+      "code": "en-US",
+      "detectedLanguage": {
+        "name": "English (US)",
+        "code": "en-US",
+        "confidence": 0.98143667,
+        "source": "+fallback"
+      }
+    },
+    "matches": [
+      {
+        "message": "The singular demonstrative pronoun \u2018this\u2019 does not agree with the plural verb \u2018are\u2019. Did you mean \u201cthese\u201d?",
+        "shortMessage": "Grammatical problem: use \u2018these\u2019",
+        "replacements": [
+          {
+            "value": "These"
+          }
+        ],
+        "offset": 0,
+        "length": 4,
+        "context": {
+          "text": "This are a document.",
+          "offset": 0,
+          "length": 4
+        },
+        "sentence": "This are a document.",
+        "type": {
+          "typeName": "Other"
+        },
+        "rule": {
+          "id": "THIS_NNS",
+          "subId": "5",
+          "sourceFile": "grammar.xml",
+          "description": "'this' vs. 'these'",
+          "issueType": "grammar",
+          "category": {
+            "id": "GRAMMAR",
+            "name": "Grammar"
+          }
+        },
+        "ignoreForIncompleteSentence": false,
+        "contextForSureMatch": 1
+      },
+      {
+        "message": "The verb \u2018are\u2019 is plural. Did you mean: \u201cis\u201d? Did you use a verb instead of a noun?",
+        "shortMessage": "Grammar error",
+        "replacements": [
+          {
+            "value": "is"
+          }
+        ],
+        "offset": 5,
+        "length": 3,
+        "context": {
+          "text": "This are a document.",
+          "offset": 5,
+          "length": 3
+        },
+        "sentence": "This are a document.",
+        "type": {
+          "typeName": "Other"
+        },
+        "rule": {
+          "id": "PLURAL_VERB_AFTER_THIS",
+          "subId": "2",
+          "sourceFile": "grammar.xml",
+          "description": "Plural verb after 'this' or 'that'",
+          "issueType": "grammar",
+          "category": {
+            "id": "GRAMMAR",
+            "name": "Grammar"
+          }
+        },
+        "ignoreForIncompleteSentence": true,
+        "contextForSureMatch": -1
+      }
+    ],
+    "sentenceRanges": [
+      [
+        0,
+        20
+      ]
+    ],
+    "extendedSentenceRanges": [
+      {
+        "from": 0,
+        "to": 20,
+        "detectedLanguages": [
+          {
+            "language": "en",
+            "rate": 1.0
+          }
+        ]
+      }
+    ]
+  },
+  "This is a document.": {
+    "software": {
+      "name": "LanguageTool",
+      "version": "6.8",
+      "buildDate": "1980-02-01 00:00:00 +0000",
+      "apiVersion": 1,
+      "premium": false,
+      "premiumHint": "You might be missing errors only the Premium version can find. Contact us at support<at>languagetoolplus.com.",
+      "status": ""
+    },
+    "warnings": {
+      "incompleteResults": false
+    },
+    "language": {
+      "name": "English (US)",
+      "code": "en-US",
+      "detectedLanguage": {
+        "name": "English (US)",
+        "code": "en-US",
+        "confidence": 0.999993,
+        "source": "+fallback"
+      }
+    },
+    "matches": [],
+    "sentenceRanges": [
+      [
+        0,
+        19
+      ]
+    ],
+    "extendedSentenceRanges": [
+      {
+        "from": 0,
+        "to": 19,
+        "detectedLanguages": [
+          {
+            "language": "en",
+            "rate": 1.0
+          }
+        ]
+      }
+    ]
+  },
+  "This are a description.": {
+    "software": {
+      "name": "LanguageTool",
+      "version": "6.8",
+      "buildDate": "1980-02-01 00:00:00 +0000",
+      "apiVersion": 1,
+      "premium": false,
+      "premiumHint": "You might be missing errors only the Premium version can find. Contact us at support<at>languagetoolplus.com.",
+      "status": ""
+    },
+    "warnings": {
+      "incompleteResults": false
+    },
+    "language": {
+      "name": "English (US)",
+      "code": "en-US",
+      "detectedLanguage": {
+        "name": "English (US)",
+        "code": "en-US",
+        "confidence": 0.99490815,
+        "source": "+fallback"
+      }
+    },
+    "matches": [
+      {
+        "message": "The singular demonstrative pronoun \u2018this\u2019 does not agree with the plural verb \u2018are\u2019. Did you mean \u201cthese\u201d?",
+        "shortMessage": "Grammatical problem: use \u2018these\u2019",
+        "replacements": [
+          {
+            "value": "These"
+          }
+        ],
+        "offset": 0,
+        "length": 4,
+        "context": {
+          "text": "This are a description.",
+          "offset": 0,
+          "length": 4
+        },
+        "sentence": "This are a description.",
+        "type": {
+          "typeName": "Other"
+        },
+        "rule": {
+          "id": "THIS_NNS",
+          "subId": "5",
+          "sourceFile": "grammar.xml",
+          "description": "'this' vs. 'these'",
+          "issueType": "grammar",
+          "category": {
+            "id": "GRAMMAR",
+            "name": "Grammar"
+          }
+        },
+        "ignoreForIncompleteSentence": false,
+        "contextForSureMatch": 1
+      },
+      {
+        "message": "The verb \u2018are\u2019 is plural. Did you mean: \u201cis\u201d? Did you use a verb instead of a noun?",
+        "shortMessage": "Grammar error",
+        "replacements": [
+          {
+            "value": "is"
+          }
+        ],
+        "offset": 5,
+        "length": 3,
+        "context": {
+          "text": "This are a description.",
+          "offset": 5,
+          "length": 3
+        },
+        "sentence": "This are a description.",
+        "type": {
+          "typeName": "Other"
+        },
+        "rule": {
+          "id": "PLURAL_VERB_AFTER_THIS",
+          "subId": "2",
+          "sourceFile": "grammar.xml",
+          "description": "Plural verb after 'this' or 'that'",
+          "issueType": "grammar",
+          "category": {
+            "id": "GRAMMAR",
+            "name": "Grammar"
+          }
+        },
+        "ignoreForIncompleteSentence": true,
+        "contextForSureMatch": -1
+      }
+    ],
+    "sentenceRanges": [
+      [
+        0,
+        23
+      ]
+    ],
+    "extendedSentenceRanges": [
+      {
+        "from": 0,
+        "to": 23,
+        "detectedLanguages": [
+          {
+            "language": "en",
+            "rate": 1.0
+          }
+        ]
+      }
+    ]
+  },
+  "This is a description.": {
+    "software": {
+      "name": "LanguageTool",
+      "version": "6.8",
+      "buildDate": "1980-02-01 00:00:00 +0000",
+      "apiVersion": 1,
+      "premium": false,
+      "premiumHint": "You might be missing errors only the Premium version can find. Contact us at support<at>languagetoolplus.com.",
+      "status": ""
+    },
+    "warnings": {
+      "incompleteResults": false
+    },
+    "language": {
+      "name": "English (US)",
+      "code": "en-US",
+      "detectedLanguage": {
+        "name": "English (US)",
+        "code": "en-US",
+        "confidence": 0.9999966,
+        "source": "+fallback"
+      }
+    },
+    "matches": [],
+    "sentenceRanges": [
+      [
+        0,
+        22
+      ]
+    ],
+    "extendedSentenceRanges": [
+      {
+        "from": 0,
+        "to": 22,
+        "detectedLanguages": [
+          {
+            "language": "en",
+            "rate": 1.0
+          }
+        ]
+      }
+    ]
+  },
+  "This are a rule.": {
+    "software": {
+      "name": "LanguageTool",
+      "version": "6.8",
+      "buildDate": "1980-02-01 00:00:00 +0000",
+      "apiVersion": 1,
+      "premium": false,
+      "premiumHint": "You might be missing errors only the Premium version can find. Contact us at support<at>languagetoolplus.com.",
+      "status": ""
+    },
+    "warnings": {
+      "incompleteResults": false
+    },
+    "language": {
+      "name": "English (US)",
+      "code": "en-US",
+      "detectedLanguage": {
+        "name": "English (US)",
+        "code": "en-US",
+        "confidence": 0.9944751,
+        "source": "+fallback"
+      }
+    },
+    "matches": [
+      {
+        "message": "The singular demonstrative pronoun \u2018this\u2019 does not agree with the plural verb \u2018are\u2019. Did you mean \u201cthese\u201d?",
+        "shortMessage": "Grammatical problem: use \u2018these\u2019",
+        "replacements": [
+          {
+            "value": "These"
+          }
+        ],
+        "offset": 0,
+        "length": 4,
+        "context": {
+          "text": "This are a rule.",
+          "offset": 0,
+          "length": 4
+        },
+        "sentence": "This are a rule.",
+        "type": {
+          "typeName": "Other"
+        },
+        "rule": {
+          "id": "THIS_NNS",
+          "subId": "5",
+          "sourceFile": "grammar.xml",
+          "description": "'this' vs. 'these'",
+          "issueType": "grammar",
+          "category": {
+            "id": "GRAMMAR",
+            "name": "Grammar"
+          }
+        },
+        "ignoreForIncompleteSentence": false,
+        "contextForSureMatch": 1
+      },
+      {
+        "message": "The verb \u2018are\u2019 is plural. Did you mean: \u201cis\u201d? Did you use a verb instead of a noun?",
+        "shortMessage": "Grammar error",
+        "replacements": [
+          {
+            "value": "is"
+          }
+        ],
+        "offset": 5,
+        "length": 3,
+        "context": {
+          "text": "This are a rule.",
+          "offset": 5,
+          "length": 3
+        },
+        "sentence": "This are a rule.",
+        "type": {
+          "typeName": "Other"
+        },
+        "rule": {
+          "id": "PLURAL_VERB_AFTER_THIS",
+          "subId": "2",
+          "sourceFile": "grammar.xml",
+          "description": "Plural verb after 'this' or 'that'",
+          "issueType": "grammar",
+          "category": {
+            "id": "GRAMMAR",
+            "name": "Grammar"
+          }
+        },
+        "ignoreForIncompleteSentence": true,
+        "contextForSureMatch": -1
+      }
+    ],
+    "sentenceRanges": [
+      [
+        0,
+        16
+      ]
+    ],
+    "extendedSentenceRanges": [
+      {
+        "from": 0,
+        "to": 16,
+        "detectedLanguages": [
+          {
+            "language": "en",
+            "rate": 1.0
+          }
+        ]
+      }
+    ]
+  },
+  "This is a rule.": {
+    "software": {
+      "name": "LanguageTool",
+      "version": "6.8",
+      "buildDate": "1980-02-01 00:00:00 +0000",
+      "apiVersion": 1,
+      "premium": false,
+      "premiumHint": "You might be missing errors only the Premium version can find. Contact us at support<at>languagetoolplus.com.",
+      "status": ""
+    },
+    "warnings": {
+      "incompleteResults": false
+    },
+    "language": {
+      "name": "English (US)",
+      "code": "en-US",
+      "detectedLanguage": {
+        "name": "English (US)",
+        "code": "en-US",
+        "confidence": 0.9947603,
+        "source": "+fallback"
+      }
+    },
+    "matches": [],
+    "sentenceRanges": [
+      [
+        0,
+        15
+      ]
+    ],
+    "extendedSentenceRanges": [
+      {
+        "from": 0,
+        "to": 15,
+        "detectedLanguages": [
+          {
+            "language": "en",
+            "rate": 1.0
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -48,7 +48,7 @@ export function SourceDocumentView({ source }: { source: MarketDocument }) {
     </table></div></> : null}
     {source.events.length ? <><h2>Stored notices</h2>{source.events.map((event) => <article id={`event-${event.index}`} key={event.index}>
       <h3>{event.display_title}</h3><p>{event.date_label}</p>{event.kind === "changed" ? <p>The linked page was checked for changes. Its text is not stored.</p> : event.body ? <details><summary>Publisher’s original wording</summary><p>{event.body}</p></details> : null}
-      {event.display_url.startsWith("https://") ? <a href={event.display_url} rel="noreferrer" target="_blank">{event.link_label}</a> : null}
+      {/^https?:\/\//.test(event.display_url) ? <a href={event.display_url} rel="noreferrer" target="_blank">{event.link_label}</a> : null}
     </article>)}</> : null}
   </div></main>;
 }

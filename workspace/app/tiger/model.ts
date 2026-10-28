@@ -265,6 +265,7 @@ export function fromTiger(
       };
     });
   const alertRows: AlertRow[] = [...alerts]
+    .filter((alert) => !["new_product", "below_cost", "market_gap"].includes(alert.kind))
     .sort((a, b) => (b.ts ?? "").localeCompare(a.ts ?? ""))
     .map((alert) => {
       const related = observations.filter((row) => row.url === alert.url && row.ts <= alert.ts);

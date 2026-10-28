@@ -118,6 +118,19 @@ async def ensure_tables(conn, schema: str) -> None:
     await conn.execute(_sql(SQL_CREATE_PLAYBOOKS, schema))
 
 
+async def approved_advance(store, state, page_hash, generation, attempted, confirmed):
+    runner = getattr(store, "skill_runner", None)
+    result = await runner({"operation": "advance", "state": state, "page_hash": page_hash,
+                           "generation": generation, "attempted": attempted,
+                           "confirmed": confirmed}) if runner is not None else None
+    if result is None:
+        return _advance(state, page_hash, generation, attempted, confirmed)
+    value = result["value"]
+    state.clear()
+    state.update(value["state"])
+    return value["changed"]
+
+
 class MemoryPlaybooks:
     async def get_playbook(self, domain: str) -> dict:
         if not hasattr(self, 'playbooks'):
@@ -126,7 +139,7 @@ class MemoryPlaybooks:
 
     async def record_playbook(self, domain: str, page_hash: str, generation: int,
                               attempted: bool | None, confirmed: dict | None) -> None:
-        _advance(self.playbooks[domain], page_hash, generation, attempted, confirmed)
+        await approved_advance(self, self.playbooks[domain], page_hash, generation, attempted, confirmed)
 
 
 class PgPlaybooks:
@@ -151,7 +164,7 @@ class PgPlaybooks:
                 for key in ('marker', 'confirmations'):
                     if isinstance(state[key], str):
                         state[key] = json.loads(state[key])
-                if not _advance(state, page_hash, generation, attempted, confirmed):
+                if not await approved_advance(self, state, page_hash, generation, attempted, confirmed):
                     return
                 await conn.execute(_sql(SQL_UPDATE_PLAYBOOK, self.schema),
                     domain, state['generation'], json.dumps(state['marker']) if state['marker'] else None,

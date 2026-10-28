@@ -81,6 +81,35 @@ def _research_route(router, tank):
         except Exception:
             raise HTTPException(503, "Market Lab could not complete this request") from None
 
+    @router.post("/v1/market-lab/internal/search", dependencies=[Depends(room_only)])
+    async def search(body: ResearchRequest):
+        # Feed collection uses our search index directly. No researcher, model,
+        # provider credentials or arbitrary caller-selected endpoint is involved.
+        import json
+        region = tank.box_region()
+        if tank.home_region_refusal(tank.call_home(body.home_region, region), region):
+            raise HTTPException(403, "This request must stay on its home server.")
+        if tank._http is None:
+            raise HTTPException(503, "Market Lab is not connected")
+        try:
+            async with tank._http.stream("GET", "http://searxng:8080/search",
+                    params={"q": body.question, "format": "json", "pageno": 1},
+                    follow_redirects=False, timeout=45) as response:
+                response.raise_for_status()
+                raw = bytearray()
+                async for part in response.aiter_bytes():
+                    raw.extend(part)
+                    if len(raw) > 2 * 1024 * 1024:
+                        raise ValueError("response limit")
+            results = json.loads(raw)["results"]
+            if not isinstance(results, list):
+                raise ValueError("invalid search results")
+            return JSONResponse({"results": [{key: item.get(key, "") for key in ("title", "url", "content")}
+                                             for item in results[:100] if isinstance(item, dict)]},
+                                headers={"Cache-Control": "private, no-store"})
+        except Exception:
+            raise HTTPException(503, "Market Lab could not complete this request") from None
+
 
 class WarningRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")

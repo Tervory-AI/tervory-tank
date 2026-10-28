@@ -578,7 +578,8 @@ async def require_key(request: Request, x_tank_key: str = Header(default="")) ->
     ghost_route = matched == "ghost" and (request.method, path) in __import__("ghost_routes").ROOM_METHODS
     vendor_write = request.method == "POST" and path == "/v1/ledger/vendor"
     batch_route = path == "/v1/route/batch" or (request.method == "GET" and path.startswith("/v1/route/batch/"))
-    if path not in {"/health", "/v1/route"} and not batch_route and not skill_run and not vendor_write and not ghost_route:
+    event_route = request.method == "POST" and path in {"/v1/events/publish", "/v1/events/receive", "/v1/events/settle"}
+    if path not in {"/health", "/v1/route"} and not batch_route and not skill_run and not vendor_write and not ghost_route and not event_route:
         raise HTTPException(status_code=403, detail="This agent key cannot call that.")
     return matched
 
@@ -3087,9 +3088,14 @@ async def run_skill_evals(skill_id: str, version: str, body: EvalRun | None = No
         raise HTTPException(status_code=400, detail="package has no eval cases; a skill without evals cannot leave candidate")
     here = box_region()
     result = await skala.run_evals(
-        pkg, lambda: make_ctx(pkg, PLATFORM_TENANT, preview=True, home_region=here),
+        pkg, lambda: __import__("skala_revalidation").eval_context(
+            __import__("sys").modules[__name__], pkg,
+            make_ctx(pkg, PLATFORM_TENANT, preview=True, home_region=here)),
         execute=run_room_eval if pkg.id in {"tisan.figma", "tisan.scaffold"} else None,
     )
+    if __import__("skala_revalidation").ACTIVE.get() is not None:
+        return await __import__("skala_revalidation").record(
+            __import__("sys").modules[__name__], result, body.by if body else None)
     passed_gate = result["score"] >= pkg.eval_threshold and result["eligible"]
     async with pool().acquire() as conn:
         await conn.execute(
@@ -3100,6 +3106,8 @@ async def run_skill_evals(skill_id: str, version: str, body: EvalRun | None = No
         state = await conn.fetchval("SELECT state FROM tank.skills WHERE id=$1 AND version=$2", skill_id, version)
         new_state = state
         if state == "candidate" and passed_gate:
+            new_state = "staging"
+        elif state == "approved" and not passed_gate:
             new_state = "staging"
         elif state == "staging" and not passed_gate:
             new_state = "candidate"   # it regressed; back it goes
@@ -3217,6 +3225,7 @@ async def _run_one_skill(
     body: SkillRun,
     caller: str | None,
 ) -> dict[str, Any]:
+    __import__("skala_intake").guard_preview(skill_id, caller, body.preview)
     version = body.version or await _pick_version(skill_id, body.preview)
     pkg = get_package(skill_id, version)
     await __import__("agent_skills").guard_submission_owner(
@@ -3331,6 +3340,8 @@ _ZENAS_PATH = re.compile(
     r"|^pool/sources/[A-Za-z0-9._-]{1,80}/load$"
     r"|^moot/problems/[A-Za-z0-9._-]{1,80}/counsel/(appellant|respondent)$"
     r"|^moot/problems/[A-Za-z0-9._-]{1,80}/(edit|lock)$"
+    r"|^regulations/(watches|changes)$"
+    r"|^regulations/watches/[0-9a-fA-F-]{36}$"
     r"|^moot/matches/ai-ai$"
     r"|^moot/matches/student$"
     r"|^moot/matches/[0-9a-fA-F-]{36}/publish$"
@@ -3497,6 +3508,8 @@ async def zenas_proxy(path: str, request: Request) -> Response:
     if _http is None:
         raise HTTPException(status_code=503, detail="Zenas room is unreachable")
     headers: dict[str, str] = {}
+    if path.startswith("regulations/"):
+        headers["X-Tank-Key"] = os.environ.get("TANK_KEY_ZENAS", "")
     content_type = request.headers.get("content-type")
     if content_type:
         headers["content-type"] = content_type
@@ -3788,10 +3801,24 @@ async def tiger_create_watch(request: Request) -> Response:
     body = await _tiger_body(request)
     tenant_id = _tiger_tenant(request, body)
     forwarded: dict[str, Any] = {"tenant_id": str(tenant_id)}
-    for key in ("url", "label", "engine", "every", "enabled", "threshold", "alert_price", "alert_stock"):
+    for key in ("url", "label", "engine", "every", "enabled", "threshold", "alert_price", "alert_stock",
+                "alert_new_product", "alert_below_cost", "alert_market_gap"):
         if key in body:
             forwarded[key] = body[key]
     resp = await _tiger_call("POST", "/watchlist", [], json.dumps(forwarded).encode())
+    return _tiger_response(resp, tenant_id)
+
+
+@app.patch("/v1/tiger/watchlist/{watch_id}", dependencies=[Depends(require_key)])
+async def tiger_update_watch(watch_id: uuid.UUID, request: Request) -> Response:
+    body = await _tiger_body(request)
+    tenant_id = _tiger_tenant(request, body)
+    forwarded = {"tenant_id": str(tenant_id)}
+    for key in ("url", "label", "engine", "every", "enabled", "threshold", "alert_price", "alert_stock",
+                "alert_new_product", "alert_below_cost", "alert_market_gap"):
+        if key in body:
+            forwarded[key] = body[key]
+    resp = await _tiger_call("PATCH", f"/watchlist/{watch_id}", [], json.dumps(forwarded).encode())
     return _tiger_response(resp, tenant_id)
 
 
@@ -3935,6 +3962,7 @@ app.include_router(__import__("proof").router)
 app.include_router(routellm_shadow.router)
 app.include_router(__import__("proof").client_router)
 app.include_router(__import__("case_studies").router)
+app.include_router(__import__("event_bus").router)
 app.include_router(__import__("agent_skills").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("base_product").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("rig_brain_routes").build_router(__import__("sys").modules[__name__]))
@@ -4271,4 +4299,15 @@ app.include_router(__import__("market_lab_routes").build_router(__import__("sys"
 
 # Tenant-specific semantic-cache approval; no policy promotion is automatic.
 app.include_router(semantic_cache.build_router(__import__("sys").modules[__name__]))
+
+# Free room checker intake uses the existing registry, evals and founder approval.
+__import__("skala_intake").install(app, __import__("sys").modules[__name__])
+
 app.include_router(__import__("vault_routes").build_router(__import__("sys").modules[__name__]))
+
+# D1-D3 memory: founder-only record/publication corridor.
+from memory_routes import router as memory_router
+app.include_router(memory_router)
+
+# B3: process committed model changes through the existing skill-eval handler.
+__import__("skala_revalidation").install(app, __import__("sys").modules[__name__])

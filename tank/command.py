@@ -384,6 +384,10 @@ async def route_turn(actor: Actor, messages: list[dict], model: str | None = Non
                      *, task_id: uuid.UUID | None = None, on_token: TokenSink | None = None,
                      priority: str | None = None) -> Any:
     from main import Message, RouteRequest, box_region, run_route
+    from memory_routes import remember_turn
+    remembered = await remember_turn(actor, messages, task_id)
+    if remembered is not None:
+        return remembered
     from trigger_routes import code_plan
     planned = await code_plan(actor, messages, task_id)
     if planned is not None:

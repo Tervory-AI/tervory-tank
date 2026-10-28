@@ -19,23 +19,39 @@ class LocalEncoder:
         self._tokenizer = None
         self._lock = Lock()
 
+    def _validate(self, text: str) -> None:
+        if self._tokenizer is None:
+            if (not (MODEL_PATH / "tokenizer.json").is_file()
+                    or not (MODEL_PATH / "revision").is_file()
+                    or (MODEL_PATH / "revision").read_text().strip() != MODEL_REVISION):
+                raise RuntimeError("Pinned semantic model is missing from the image")
+            from tokenizers import Tokenizer
+            self._tokenizer = Tokenizer.from_file(str(MODEL_PATH / "tokenizer.json"))
+            self._tokenizer.no_truncation()
+        if len(self._tokenizer.encode(text).ids) > 512:
+            raise ValueError("Semantic input exceeds encoder context")
+
+    def validate(self, text: str) -> None:
+        """Check the pinned tokenizer's full input, including special tokens.
+
+        Validation loads no model and performs no inference or download.
+        """
+        with self._lock:
+            self._validate(text)
+
     def embed(self, text: str) -> list[float]:
         # Called in a worker thread. Serialize lazy initialization and CPU work.
         with self._lock:
+            self._validate(text)
             if self._model is None:
                 if (not all((MODEL_PATH / name).is_file() for name in FILES)
                         or (MODEL_PATH / "revision").read_text().strip() != MODEL_REVISION):
                     raise RuntimeError("Pinned semantic model is missing from the image")
-                from tokenizers import Tokenizer
-                self._tokenizer = Tokenizer.from_file(str(MODEL_PATH / "tokenizer.json"))
-                self._tokenizer.no_truncation()
                 from fastembed import TextEmbedding
                 self._model = TextEmbedding(
                     model_name=MODEL_NAME, specific_model_path=str(MODEL_PATH),
                     local_files_only=True, cuda=False, threads=2,
                 )
-            if len(self._tokenizer.encode(text).ids) > 512:
-                raise ValueError("Semantic input exceeds encoder context")
             return [float(value) for value in next(iter(self._model.embed([text])))]
 
 
