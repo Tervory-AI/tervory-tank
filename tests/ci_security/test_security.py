@@ -1,8 +1,11 @@
 """Offline tests of CI policy around scanner output, not replacement scanners."""
+import ast
 import copy
 import importlib.util
 import io
 import json
+import os
+import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -353,6 +356,70 @@ class SecurityPolicyTests(unittest.TestCase):
             return 0
         with patch.object(scan, "run", side_effect=fake_cli):
             self.assertFalse(scan.leaks(None, self.root, self.output))
+
+
+class FixedHTTPSBaseTests(unittest.TestCase):
+    def api(self, filename, base):
+        path = ROOT / ".github/scripts" / filename
+        tree = ast.parse(path.read_text())
+        # room_setup executes mutations at module scope. Load only imports and
+        # the API function, never room creation, secret generation or deployment.
+        tree.body = [node for node in tree.body if isinstance(node, (ast.Import, ast.ImportFrom))
+                     or isinstance(node, ast.FunctionDef) and node.name == "api"]
+        namespace = {"URL": base, "TOKEN": ""}
+        exec(compile(tree, str(path), "exec"), namespace)
+        return namespace["api"], namespace["urllib"].request
+
+    def watchdog(self):
+        name = "security_test_watchdog"
+        spec = importlib.util.spec_from_file_location(name, ROOT / ".github/scripts/watchdog.py")
+        module = importlib.util.module_from_spec(spec)
+        with patch.dict(sys.modules, {name: module}):
+            spec.loader.exec_module(module)
+        return module
+
+    def test_coolify_rejects_nonfixed_origins_before_network(self):
+        invalid = ("http://coolify.tervory.com", "https://coolify.tervory.com.bad.invalid",
+                   "https://coolify.tervory.com@bad.invalid", "file:///tmp/config",
+                   "https://coolify.tervory.com/other", "https://coolify.tervory.com?other",
+                   "https://coolify.tervory.com#other", "https://coolify.tervory.com:444")
+        watchdog = self.watchdog()
+        for base in invalid:
+            for filename in ("deploy_changed.py", "room_setup.py"):
+                with self.subTest(file=filename, base=base):
+                    api, request = self.api(filename, base + ("/api/v1" if filename == "room_setup.py" else ""))
+                    with patch.object(request, "urlopen") as opener:
+                        with self.assertRaises(ValueError):
+                            api("GET", "/applications")
+                        opener.assert_not_called()
+            with patch.dict(os.environ, {"COOLIFY_URL": base, "COOLIFY_TOKEN": "COOLIFY_TOKEN"}), \
+                    patch.object(watchdog.urllib.request, "urlopen") as opener:
+                self.assertEqual(watchdog.coolify_results()[0].state, "down")
+                opener.assert_not_called()
+
+    def test_allowed_coolify_requests_use_literal_https_base(self):
+        class Response:
+            status = 200
+            def read(self):
+                return b'[{"name":"app","status":"running:healthy","uuid":"app"}]'
+            def __enter__(self):
+                return self
+            def __exit__(self, *_args):
+                pass
+
+        def open_local(request, **_kwargs):
+            self.assertEqual(request.full_url, "https://coolify.tervory.com/api/v1/applications")
+            return Response()
+
+        for filename in ("deploy_changed.py", "room_setup.py"):
+            api, request = self.api(filename, "https://coolify.tervory.com" +
+                                    ("/api/v1" if filename == "room_setup.py" else ""))
+            with patch.object(request, "urlopen", side_effect=open_local):
+                self.assertEqual(api("GET", "/applications")[0], 200)
+        watchdog = self.watchdog()
+        with patch.dict(os.environ, {"COOLIFY_URL": "https://coolify.tervory.com/", "COOLIFY_TOKEN": "COOLIFY_TOKEN"}), \
+                patch.object(watchdog.urllib.request, "urlopen", side_effect=open_local):
+            self.assertTrue(all(row.state == "ok" for row in watchdog.coolify_results()))
 
 
 class SecurityDownloadTests(unittest.TestCase):
