@@ -20,7 +20,7 @@ import dns.asyncresolver
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, ConfigDict
 
-from egress import Proxy, Server, env_revoked, system_resolve
+from egress import Proxy, Server, env_revoked, private_bind_address, system_resolve
 from passive_store import Store
 
 
@@ -71,7 +71,7 @@ class Lease:
                 resolve=lambda host: system_resolve(host, verified_host=domain),
                 active=lambda: self.run == (tenant, ident) and self.now() < until and not env_revoked())
             try:
-                self.proxy_server = self.server(proxy, host='0.0.0.0', port=8082).start()
+                self.proxy_server = self.server(proxy, host=private_bind_address(), port=8082).start()
             except Exception:
                 self.close()
                 await self.store.fail(tenant, ident)
