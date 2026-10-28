@@ -12,40 +12,40 @@ Final pytest run (exact command in PR.md):
     warnings.warn(
 
 tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
-  /workspace/tervory-tank/tank/main.py:680: DeprecationWarning: 
+  /workspace/tervory-tank/tank/main.py:680: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("startup")
 
 tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
 tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
-  /workspace/worker-venv/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+  /workspace/worker-venv/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     return self.router.on_event(event_type)  # ty: ignore[deprecated]
 
 tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
-  /workspace/tervory-tank/tank/main.py:718: DeprecationWarning: 
+  /workspace/tervory-tank/tank/main.py:718: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @app.on_event("shutdown")
 
 tests/test_tank_priority_offpeak.py::test_urgent_skips_all_shadows_and_cache
-  /workspace/tervory-tank/tank/agent_skills.py:529: DeprecationWarning: 
+  /workspace/tervory-tank/tank/agent_skills.py:529: DeprecationWarning:
           on_event is deprecated, use lifespan event handlers instead.
-  
+
           Read more about it in the
           [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
-          
+
     @router.on_event("startup")
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
