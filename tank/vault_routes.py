@@ -107,13 +107,16 @@ def build_router(tank):
 
     @router.get('/{vault}/plugins')
     async def plugins(vault: str, tenant_id: str, request: Request):
-        owner, _, _ = await authorize(request, vault, tenant_id)
+        owner, room, _ = await authorize(request, vault, tenant_id)
         result = {'vault': vault, 'enabled': True, 'message': None, 'secrets': [], 'files': [], 'links': [], 'connections': []}
         async with tank.pool().acquire() as conn:
             rows = await conn.fetch('SELECT kind, name, metadata FROM tank.vault_items WHERE tenant_id=$1 AND vault=$2 ORDER BY created_at,id', owner, vault)
         for row in rows:
             meta = json.loads(row['metadata']) if isinstance(row['metadata'], str) else dict(row['metadata'])
             result[row['kind']].append(meta)
+        if room == 'market_lab':
+            feeds = await room_call(room, 'GET', '/market/feeds', owner)
+            result['links'].extend(feeds['links'])
         return reply(result)
 
     async def save(owner, vault, kind, name, meta, encrypted=None):
@@ -155,11 +158,18 @@ def build_router(tank):
     @router.post('/{vault}/links')
     async def link(vault: str, request: Request):
         data = await body(request)
-        owner, _, _ = await authorize(request, vault, data.get('tenant_id'))
+        owner, room, _ = await authorize(request, vault, data.get('tenant_id'))
         ident = str(uuid.uuid4())
         frequency = data.get('frequency')
         if frequency not in {'daily', 'weekly'}:
             fail(422, 'Choose daily or weekly.')
+        if room == 'market_lab':
+            # The room owns the subscription and the worker queue atomically.
+            # Its shared Tiger URL check also resolves DNS on every fetch/redirect.
+            payload = {'url': clean(data.get('url'), 2000),
+                       'label': clean(data.get('label', ''), empty=True), 'frequency': frequency}
+            await room_call(room, 'PUT', f'/market/feeds/{ident}', owner, content=json.dumps(payload).encode())
+            return reply({'ok': True})
         meta = {'id': ident, 'url': public_url(data.get('url')), 'label': clean(data.get('label', ''), empty=True), 'frequency': frequency, 'last_checked': None, 'status': 'not_checked'}
         await save(owner, vault, 'links', ident, meta)
         return reply({'ok': True})
@@ -236,6 +246,11 @@ def build_router(tank):
             ident = str(uuid.UUID(ident))
         except ValueError:
             fail(404, 'Not found')
+        if room == 'market_lab' and kind == 'links':
+            await room_call(room, 'DELETE', f'/market/feeds/{ident}', owner)
+            async with tank.pool().acquire() as conn:
+                await conn.execute("DELETE FROM tank.vault_items WHERE tenant_id=$1 AND vault=$2 AND kind='links' AND name=$3", owner, vault, ident)
+            return reply({'ok': True})
         async with tank.pool().acquire() as conn:
             async with conn.transaction():
                 row = await conn.fetchrow('SELECT name FROM tank.vault_items WHERE tenant_id=$1 AND vault=$2 AND kind=$3 AND name=$4 FOR UPDATE', owner, vault, kind, ident)
