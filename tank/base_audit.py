@@ -1,6 +1,8 @@
 """Saved human audits and recorded confidence counts; no models or external reads."""
 from __future__ import annotations
 
+from tenant_db import tenant_transaction
+
 from collections import Counter
 import csv
 import hashlib
@@ -174,7 +176,7 @@ class AuditStore:
         return unpack(row)
 
     async def histogram(self, tenant: uuid.UUID, campaign: uuid.UUID) -> dict[str, Any]:
-        async with self.rt.pool().acquire(isolation="repeatable_read", readonly=True) as conn:
+        async with tenant_transaction(self.rt.pool(), isolation="repeatable_read", readonly=True) as conn:
             found = await conn.fetchval("SELECT id FROM tank.base_campaigns WHERE tenant_id=$1 AND id=$2", tenant, campaign)
             if not found:
                 raise HTTPException(404, "Campaign not found.")
