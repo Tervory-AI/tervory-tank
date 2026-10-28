@@ -26,8 +26,13 @@ def connect_production() -> tuple[Any, Any]:
     embedder = FastEmbedder(os.environ.get("HERMES_EMBED_MODEL", _MODEL))
     embedder.load()
     api_key = os.environ.get("QDRANT_API_KEY", "").strip() or None
+    # Same Docker network only. Never forward either region's vectors to an
+    # alternate host, proxy or public service.
+    url = os.environ.get("QDRANT_URL", "http://qdrant:6333").rstrip("/")
+    if url != "http://qdrant:6333":
+        raise RuntimeError("Qdrant must be on this box")
     client = QdrantClient(
-        url=os.environ.get("QDRANT_URL", "http://qdrant:6333"),
+        url=url,
         api_key=api_key,
         timeout=10,
     )
@@ -42,5 +47,8 @@ def connect_production() -> tuple[Any, Any]:
                 log.warning("qdrant not ready (%s)", last.__name__ if last else "error")
                 raise RuntimeError("qdrant unreachable") from None
         else:
-            return QdrantStore(client, embedder.dim), embedder
+            from hermes.law_store import LawIndex
+            store = QdrantStore(client, embedder.dim)
+            store.law = LawIndex(client, embedder.dim, region=os.environ.get("TANK_REGION", ""))
+            return store, embedder
     raise RuntimeError("qdrant unreachable")

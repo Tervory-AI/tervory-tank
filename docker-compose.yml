@@ -74,6 +74,7 @@ services:
     build: ./hermes
     restart: unless-stopped
     environment:
+      TANK_REGION: us-east
       QDRANT_URL: http://qdrant:6333
       QDRANT_API_KEY: ${QDRANT_API_KEY}
       TANK_API_KEY: ${TANK_API_KEY}
