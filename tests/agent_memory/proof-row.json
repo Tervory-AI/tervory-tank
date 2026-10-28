@@ -1,11 +1,15 @@
 {
-  "database": "PostgreSQL 18.6 (PGlite 0.5.13) on wasm32-unknown-emscripten, compiled by emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.5 (1db513782be24469589d7cb8a1f1834e9a33f271), 32-bit",
+  "database": "PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
   "fixture_only": true,
-  "entrypoint": "command.route_turn -> /founder/memories",
+  "entrypoint": "command.route_turn -> Hermes -> SQL -> GET /v1/memory/records/{id}",
+  "chat": {
+    "text": "fixture deliveries happen on Tuesdays.\n\n6c71c673-ced8-5c50-b774-832578d56206",
+    "actions": []
+  },
   "row": {
-    "id": "407bcd37-d208-526f-85c9-5c9e59d6a0ea",
-    "tenant_id": "409dd8c2-1b1f-4934-85fe-19227e2367ce",
-    "agent": "memtest_017608a5c91b",
+    "id": "6c71c673-ced8-5c50-b774-832578d56206",
+    "tenant_id": "426bb0b4-f947-4069-a40b-7467c7105096",
+    "agent": "memtest_9a123c41737c",
     "claim": "fixture deliveries happen on Tuesdays.",
     "evidence": [
       "urn:tervory:command:33333333-3333-4333-8333-333333333333"
@@ -13,12 +17,8 @@
     "confidence": 0.5,
     "last_verified": null,
     "embed_model": "offline-pin-v1",
-    "created_at": "2026-10-28T16:23:12.414000+00:00",
-    "updated_at": "2026-10-28T16:23:12.420000+00:00",
-    "tier": "client",
-    "kind": "fact",
-    "meta": {},
-    "seen": 1
+    "created_at": "2026-10-28T17:29:33.320225+00:00",
+    "updated_at": "2026-10-28T17:29:33.323283+00:00"
   },
-  "view": "No existing founder memory view; view waits for Figma."
+  "browser_path": "/api/memory/records/6c71c673-ced8-5c50-b774-832578d56206"
 }
