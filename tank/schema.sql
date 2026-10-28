@@ -1983,7 +1983,11 @@ CREATE TABLE IF NOT EXISTS tank.case_study_reports (
 CREATE OR REPLACE FUNCTION tank.register_case_study_product() RETURNS trigger AS $$
 DECLARE report_product text;
 BEGIN
-    report_product := CASE WHEN TG_NARGS>0 THEN TG_ARGV[0] ELSE NEW.agent END;
+    IF TG_NARGS>0 THEN
+        report_product := TG_ARGV[0];
+    ELSE
+        report_product := NEW.agent;
+    END IF;
     report_product := CASE report_product WHEN 'ghost' THEN 'autumbra' WHEN 'market-lab' THEN 'market_lab' ELSE report_product END;
     IF report_product IN ('base','tiger','market_lab','rig','zenas','trigger','tisan','radix','autumbra') THEN
         INSERT INTO tank.case_study_clients(tenant_id) VALUES(NEW.tenant_id) ON CONFLICT DO NOTHING;
@@ -2015,6 +2019,18 @@ INSERT INTO tank.case_study_clients(tenant_id) SELECT DISTINCT tenant_id FROM ta
 INSERT INTO tank.case_study_reports(tenant_id,product)
     SELECT tenant_id,CASE WHEN agent='ghost' THEN 'autumbra' ELSE agent END FROM tank.tenant_squad
     WHERE agent IN ('base','tiger','market_lab','rig','zenas','trigger','tisan','radix','autumbra','ghost') ON CONFLICT DO NOTHING;
+INSERT INTO tank.case_study_clients(tenant_id)
+    SELECT DISTINCT tenant_id FROM tank.ledger
+    WHERE agent IN ('base','tiger','market_lab','market-lab','rig','zenas','trigger','tisan','radix','autumbra','ghost') ON CONFLICT DO NOTHING;
+INSERT INTO tank.case_study_reports(tenant_id,product)
+    SELECT DISTINCT tenant_id,CASE agent WHEN 'ghost' THEN 'autumbra' WHEN 'market-lab' THEN 'market_lab' ELSE agent END
+    FROM tank.ledger WHERE agent IN ('base','tiger','market_lab','market-lab','rig','zenas','trigger','tisan','radix','autumbra','ghost') ON CONFLICT DO NOTHING;
+DO $$ BEGIN
+    IF to_regclass('agent_trigger.voices') IS NOT NULL THEN
+        INSERT INTO tank.case_study_clients(tenant_id) SELECT tenant_id FROM agent_trigger.voices ON CONFLICT DO NOTHING;
+        INSERT INTO tank.case_study_reports(tenant_id,product) SELECT tenant_id,'trigger' FROM agent_trigger.voices ON CONFLICT DO NOTHING;
+    END IF;
+END $$;
 CREATE INDEX IF NOT EXISTS shadow_routellm_tenant_task ON tank.shadow(tenant_id,task_type,routellm_config)
     WHERE routellm_config IS NOT NULL;
 
