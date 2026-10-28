@@ -152,3 +152,14 @@ class TenantPool:
 
     async def close(self):
         await self.raw.close()
+
+
+@asynccontextmanager
+async def tenant_transaction(pool, **options):
+    """Keep native asyncpg callers and scoped checkouts on the same snapshot."""
+    if isinstance(pool, TenantPool):
+        async with pool.acquire(**options) as conn:
+            yield conn
+    else:
+        async with pool.acquire() as conn, conn.transaction(**options):
+            yield conn
