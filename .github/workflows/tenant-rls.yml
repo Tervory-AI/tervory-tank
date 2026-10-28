@@ -3,8 +3,8 @@ on:
   push:
     branches: [codex/tenant-rls]
     paths:
-      - "**.py"
-      - "**.sql"
+      - "**/*.py"
+      - "**/*.sql"
       - "**/Dockerfile"
       - ".github/workflows/tenant-rls.yml"
   pull_request:
@@ -52,7 +52,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          python -m pytest -q -s tests/test_tenant_rls.py tests/test_agent_chassis.py tests/test_tank_tenant_boundaries.py tests/test_tank_batches.py tests/test_tank_one_door.py tests/test_command.py tests/test_rig_box.py tests/test_rig_admin.py tests/test_rig_isolation.py tests/test_rig_postgres.py 2>&1 | tee tenant-rls-tests.log
+          python -m pytest -q -s tests/test_tenant_rls.py tests/test_agent_chassis.py tests/test_tank_tenant_boundaries.py tests/test_tank_batches.py tests/test_tank_one_door.py tests/test_command.py tests/test_rig_box.py tests/test_rig_admin.py tests/test_rig_isolation.py tests/test_rig_postgres.py tests/test_vault_contract.py tests/test_base_audit.py tests/test_base_product.py tests/test_core2_baselines.py tests/test_core2_savings.py tests/test_core2c_savings.py tests/test_b3_base_room.py tests/trigger_second_build/test_second.py 2>&1 | tee tenant-rls-tests.log
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
