@@ -1,0 +1,33 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_______ test_public_host_and_direct_page_have_no_shell_admin_keeps_gate ________
+
+local_workspace = 'http://localhost:37245'
+real_chromium = <Browser type=<BrowserType name=chromium executable_path=/home/agent/.cache/ms-playwright/chromium-1187/chrome-linux/chrome> version=154.0.8037.57>
+
+    @pytest.mark.asyncio
+    async def test_public_host_and_direct_page_have_no_shell_admin_keeps_gate(local_workspace, real_chromium):
+        from playwright.async_api import expect
+        context = await real_chromium.new_context(viewport={'width': 1440, 'height': 1000})
+        await context.route('**/*', lambda route: route.continue_()
+                            if route.request.url.startswith(local_workspace + '/') else route.abort())
+        page = await context.new_page()
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        for host, path in [('app.tervory.com', '/autumbra'), ('protect.tervory.com', '/')]:
+            await context.set_extra_http_headers({'x-forwarded-host': host})
+            response = await page.goto(local_workspace + path)
+            assert response.status == 200
+            await expect(page.locator('.autumbra-public')).to_be_visible()
+            await expect(page.locator('#app-sidebar')).to_have_count(0)
+            await expect(page.locator('.app-shell')).to_have_count(0)
+>           assert '/admin/autumbra' not in await page.locator('body').inner_text()
+E           AssertionError: assert '/admin/autumbra' not in 'AUTUMBRA\n\...min/autumbra'
+E
+E             '/admin/autumbra' is contained here:
+E               (private): /admin/autumbra
+
+tests/autumbra_public_bugs/test_page.py:102: AssertionError
+=========================== short test summary info ============================
+FAILED tests/autumbra_public_bugs/test_page.py::test_public_host_and_direct_page_have_no_shell_admin_keeps_gate
+1 failed in 11.81s

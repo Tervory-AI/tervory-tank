@@ -1,0 +1,19 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.14, pytest-9.0.3, pluggy-1.7.0 -- /workspace/tervory-env/venv/bin/python
+cachedir: .pytest_cache
+rootdir: /workspace/tervory-tank
+plugins: anyio-4.15.1, asyncio-1.3.0, langsmith-0.14.11
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+collecting ... collected 9 items
+
+tests/autumbra_public_bugs/test_page.py::test_public_host_and_direct_page_have_no_shell_admin_keeps_gate PASSED [ 11%]
+tests/test_shell_nav.py::test_sidebar_order_squad_popout_and_escape PASSED [ 22%]
+tests/test_shell_nav.py::test_pages_do_not_scroll_sideways_and_squad_does_not_grow_the_sidebar PASSED [ 33%]
+tests/test_shell_1.py::test_squad_popout_opens_closes_and_keeps_skala_for_founders PASSED [ 44%]
+tests/test_bf1_workspace_access.py::test_customer_call_is_rejected PASSED [ 55%]
+tests/test_bf1_workspace_access.py::test_skills_and_tank_routes_reject_before_any_tank_call PASSED [ 66%]
+tests/test_bf1_workspace_access.py::test_rejection_is_not_found PASSED   [ 77%]
+tests/test_bf1_workspace_access.py::test_page_address_is_skala PASSED    [ 88%]
+tests/test_bf1_workspace_access.py::test_product_header_skips_sign_in_and_sign_up PASSED [100%]
+
+============================== 9 passed in 25.30s ==============================
