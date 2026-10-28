@@ -1,4 +1,5 @@
 """Offline tests of CI policy around scanner output, not replacement scanners."""
+import copy
 import importlib.util
 import io
 import json
@@ -20,7 +21,10 @@ def osv_payload(version="1.0", score="8.1"):
     # Tool-output fixtures stay in offline tests and are never shown on a live page.
     return {"results": [{"source": {"path": "/snapshot/requirements.txt"}, "packages": [{
         "package": {"ecosystem": "PyPI", "name": "test-package", "version": version},
-        "vulnerabilities": [{"id": "TEST-ADVISORY"}],
+        "vulnerabilities": [{"id": "TEST-ADVISORY", "details": "private advisory text",
+                             "affected": [{"package": {"name": "test-package", "ecosystem": "PyPI"},
+                                           "ranges": [{"type": "ECOSYSTEM", "events": [
+                                               {"introduced": "0"}, {"fixed": "1.2"}]}]}]}],
         "groups": [{"ids": ["TEST-ADVISORY"], "max_severity": score}],
     }]}]}
 
@@ -37,16 +41,31 @@ class SecurityPolicyTests(unittest.TestCase):
         return json.loads((self.output / name).read_text())
 
     def osv(self, new, old=None):
-        reports = [(new, ["requirements.txt"], Path("/snapshot"))]
-        if old is not None:
-            reports.append((old, ["requirements.txt"], Path("/snapshot")))
+        reports = []
+        for index, payload in enumerate([new] if old is None else [new, old]):
+            report = copy.deepcopy(payload)
+            root = self.root / f"snapshot-{index}"
+            root.mkdir(exist_ok=True)
+            for source in report["results"] or []:
+                path = root / "requirements.txt"
+                path.write_text("# dependency snapshot\n" + "\n".join(
+                    f"{item['package']['name']}=={item['package']['version']}"
+                    for item in source["packages"]) + "\n")
+                source["source"]["path"] = str(path)
+            reports.append((report, ["requirements.txt"], root))
+        # Synthetic test findings must not become annotations in the CI job.
         with patch.object(scan, "git", return_value="head"), \
-                patch.object(scan, "osv_report", side_effect=reports):
-            return scan.osv("base" if old is not None else None, self.root, self.output)
+                patch.object(scan, "osv_report", side_effect=reports), \
+                redirect_stdout(io.StringIO()) as stdout:
+            try:
+                return scan.osv("base" if old is not None else None, self.root, self.output)
+            finally:
+                self.annotations = stdout.getvalue()
 
     def test_existing_vulnerability_is_not_new(self):
         self.assertFalse(self.osv(osv_payload(), osv_payload()))
         self.assertEqual(self.read("osv.json")["findings"], [])
+        self.assertEqual(self.annotations, "")
 
     def test_different_vulnerable_version_blocks_same_advisory(self):
         self.assertTrue(self.osv(osv_payload("1.1"), osv_payload("1.0")))
@@ -63,6 +82,71 @@ class SecurityPolicyTests(unittest.TestCase):
 
     def test_fixed_version_passes(self):
         self.assertFalse(self.osv({"results": []}, osv_payload()))
+
+    def test_osv_annotation_has_only_pin_and_advisory_metadata(self):
+        self.assertTrue(self.osv(osv_payload(), {"results": []}))
+        self.assertEqual(self.annotations,
+                         "::error file=requirements.txt,line=2::test-package 1.0 TEST-ADVISORY fixed-in 1.2\n")
+        report = self.read("osv.json")
+        self.assertEqual(report["findings"][0]["line"], 2)
+        self.assertEqual(report["findings"][0]["fixed_versions"], ["1.2"])
+        self.assertNotIn("private", json.dumps(report) + self.annotations)
+
+    def test_osv_fixes_are_scoped_to_package_and_ecosystem(self):
+        report = osv_payload()
+        vuln = report["results"][0]["packages"][0]["vulnerabilities"][0]
+        vuln["affected"].extend([
+            {"package": {"name": "Test_Package", "ecosystem": "PyPI"}, "ranges": [
+                {"type": "ECOSYSTEM", "events": [{"fixed": "2.1"}, {"fixed": "1.2"}]}]},
+            {"package": {"name": "unrelated", "ecosystem": "PyPI"}, "ranges": [
+                {"type": "ECOSYSTEM", "events": [{"fixed": "99"}]}]},
+            {"package": {"name": "test-package", "ecosystem": "npm"}, "ranges": [
+                {"type": "SEMVER", "events": [{"fixed": "88"}]}]},
+            {"package": {"name": "test-package", "ecosystem": "PyPI"}, "ranges": [
+                {"type": "GIT", "events": [{"fixed": "commit-not-version"}]}]},
+        ])
+        self.assertTrue(self.osv(report))
+        self.assertEqual(self.read("osv.json")["findings"][0]["fixed_versions"], ["1.2", "2.1"])
+        self.assertTrue(self.annotations.endswith("fixed-in 1.2,2.1\n"))
+
+    def test_osv_unfixed_advisory_still_fails(self):
+        report = osv_payload()
+        report["results"][0]["packages"][0]["vulnerabilities"][0]["affected"] = []
+        self.assertTrue(self.osv(report))
+        self.assertTrue(self.annotations.endswith("fixed-in unavailable\n"))
+
+    def test_python_pin_location_handles_extras_hashes_and_canonical_names(self):
+        path = self.root / "requirements.lock"
+        path.write_text("# lock\nOther==1.0\nTest_Package[extra] == 1.1 ; python_version >= '3.12'\n"
+                        "    --hash=sha256:unused\n")
+        self.assertEqual(scan.dependency_line(path, {
+            "name": "test-package", "version": "1.1", "ecosystem": "PyPI"}), 3)
+
+    def test_npm_pin_location_matches_version_nested_scope_and_alias(self):
+        path = self.root / "package-lock.json"
+        for lock in [
+            {"packages": {"node_modules/@scope/name": {"version": "1.0"},
+                          "node_modules/parent/node_modules/@scope/name": {"version": "2.0"}}},
+            {"dependencies": {"parent": {"version": "1.0", "dependencies": {
+                "@scope/name": {"version": "2.0"}}}}},
+            {"packages": {"node_modules/alias": {"name": "@scope/name", "version": "2.0"}}},
+        ]:
+            with self.subTest(lock=lock):
+                path.write_text(json.dumps(lock, indent=2))
+                expected = next(number for number, line in enumerate(path.read_text().splitlines(), 1)
+                                if ('"@scope/name": {' in line or
+                                    '"node_modules/parent/node_modules/@scope/name": {' in line or
+                                    '"node_modules/alias": {' in line))
+                self.assertEqual(scan.dependency_line(path, {
+                    "name": "@scope/name", "version": "2.0", "ecosystem": "npm"}), expected)
+
+    def test_osv_advisory_metadata_cannot_inject_workflow_commands(self):
+        report = osv_payload()
+        vuln = report["results"][0]["packages"][0]["vulnerabilities"][0]
+        vuln["id"] = "TEST%\r\n::notice::injected"
+        self.assertTrue(self.osv(report))
+        self.assertEqual(self.annotations.count("\n"), 1)
+        self.assertIn("TEST%25%0D%0A::notice::injected", self.annotations)
 
     def test_lock_discovery_includes_nested_and_nonstandard_requirements(self):
         paths = b"tank/requirements-dev.txt\0site/package-lock.json\0a/gpu/requirements.lock\0a/meshroom-requirements.lock\0README.md\0package.json\0"
