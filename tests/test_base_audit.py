@@ -414,7 +414,8 @@ def test_scores_count_resolved_verdicts_per_source_and_field_only():
     site = "https://smitharms.com/"
     audit = {"records": [_record("1", site, site + "contact"), _record("2", site, "https://facebook.com/smith"),
                          _record("3", site, site + "contact"), _record("4", site, site + "contact", verified=False)],
-             "verdicts": {"1": "correct", "2": "wrong", "3": "unsure", "4": "correct"}}
+             "field_verdicts": {str(i): {name: verdict for name in ("website", "email")}
+                                for i, verdict in ((1, "correct"), (2, "wrong"), (3, "unsure"), (4, "correct"))}}
     rows = {(row["source"], row["field"]): row for row in scores([audit, {"records": [], "verdicts": {}}])}
     assert set(rows) == {("own_site", "website"), ("own_site", "email"), ("social_profile", "email")}
     assert rows[("own_site", "website")] | {} == {**rows[("own_site", "website")], "correct": 1, "wrong": 1, "checked": 2, "audits": 1}
@@ -445,7 +446,10 @@ async def test_review_recomputes_platform_scores_and_route_is_guarded(audit_db):
     params = {"tenant_id": str(TENANT)}
     exported = (await client.get(path + "/records.csv", params=params)).text
     verdicts = ["correct"] * 171 + ["wrong"] * 19 + ["unsure"] * 10
-    assert (await client.post(path + "/review", json={**params, "csv": checked(exported, verdicts)})).status_code == 200
+    field_verdicts = {record["record_id"]: {name: verdicts[index] for name, value in record["fields"].items()
+                      if value.get("verified")} for index, record in enumerate(audit["records"])}
+    assert (await client.post(path + "/review", json={**params, "csv": checked(exported, verdicts),
+                                                      "field_verdicts": field_verdicts})).status_code == 200
     saved = (await client.get(path, params=params)).json()
     expected = scores([saved])
     response = await client.get("/v1/base-product/source-reliability")
