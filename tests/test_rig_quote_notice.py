@@ -75,3 +75,97 @@ async def test_financial_fields_never_enter_quote_payload(notice_store, field): 
     for model in (LinkIn, QuoteIn):
         with pytest.raises(ValidationError):
             model.model_validate({field: "offline-rejected"})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("theme", ["neutral", "custom-nation"])
+@pytest.mark.parametrize("width", [390, 1440])
+async def test_shipped_notice_stale_recovery_and_real_receipts(real_chromium, monkeypatch, tmp_path, theme, width):
+    import asyncio
+    import socket
+    from fastapi import FastAPI
+    from playwright.async_api import expect
+    import uvicorn
+    from rigbox.api import mount
+    from rigbox.quotes.hosting import mount as mount_widget
+    from rigbox.quotes.sample import KEY, TENANT, seed
+    from rigbox.store import MemoryStore
+
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    base = f"http://127.0.0.1:{sock.getsockname()[1]}"
+    monkeypatch.setenv("RIG_SAMPLE_ORIGIN", base)
+    monkeypatch.setenv("RIG_WIDGET_PUBLISHABLE_KEY", KEY)
+    store = MemoryStore()
+    await seed(store)
+    async def set_notice(text):
+        await store.put_retailer(TENANT, "offline", None, None, "Offline",
+                                 quote_notice={"text": text, "url": "https://shop.example.test/privacy"})
+    await set_notice("Offline policy one <&>.")
+    app = FastAPI()
+    app.state.rig = QuoteService(store, None, RecordingHandoff(), MemoryQuotes(store))
+    mount(app)
+    mount_widget(app)
+    server = uvicorn.Server(uvicorn.Config(app, log_level="error"))
+    task = asyncio.create_task(server.serve(sockets=[sock]))
+    try:
+        for _ in range(200):
+            if server.started:
+                break
+            if task.done():
+                await task
+                pytest.fail("Offline server did not start")
+            await asyncio.sleep(0.01)
+        assert server.started
+        page = await real_chromium.new_page(viewport={"width": width, "height": 1000})
+        await page.route("**/*", lambda route: route.continue_() if route.request.url.startswith(base + "/") else route.abort())
+        await page.goto(base + "/widget/test")
+        await page.locator("tervory-rig").evaluate('(el, theme) => el.setAttribute("theme", theme)', theme)
+        await page.get_by_role("searchbox").fill("Core")
+        await page.get_by_role("button", name="Search", exact=True).click()
+        await page.locator('[data-action="quote-product"]').first.click()
+        await expect(page.locator("form.quote [data-quote-privacy]")).to_have_text("Offline policy one <&>.")
+        await page.locator("#quote-name").fill("Offline Shopper")
+        await page.locator("#quote-email").fill("shopper@example.test")
+        await set_notice("Offline policy two.")
+        await page.locator('form.quote button[type="submit"]').click()
+        await expect(page.locator("form.quote [data-quote-privacy]")).to_have_text("Offline policy two.")
+        assert await store.quotes_for(TENANT) == []
+        await page.locator('form.quote button[type="submit"]').click()
+        await expect(page.locator('[data-action="close-quote"]')).to_be_visible()
+        for _ in range(100):
+            if await store.quotes_for(TENANT):
+                break
+            await asyncio.sleep(0.01)
+        rows = await store.quotes_for(TENANT)
+        assert len(rows) == 1
+        assert rows[0]["payload"]["notice_receipt"]["text"] == "Offline policy two."
+        await page.locator('[data-action="close-quote"]').click()
+        await page.get_by_role("searchbox").fill("zzzzzzzzzzzzzz")
+        await page.get_by_role("button", name="Search", exact=True).click()
+        await expect(page.locator(".link-form [data-quote-privacy]")).to_have_text("Offline policy two.")
+        for field, value in {"url": "https://product.example.test/item", "name": "Offline Shopper",
+                             "email": "shopper@example.test", "phone": "+1 202-555-0123"}.items():
+            await page.locator(f"#link-{field}").fill(value)
+        await set_notice("Offline policy three.")
+        await page.locator('.link-form button[type="submit"]').click()
+        await expect(page.locator(".link-form [data-quote-privacy]")).to_have_text("Offline policy three.")
+        assert len(await store.quotes_for(TENANT)) == 1
+        await page.screenshot(path=str(tmp_path / f"offline-notice-{theme}-{width}.png"))
+        assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
+        await page.locator('.link-form button[type="submit"]').click()
+        for _ in range(100):
+            if len(await store.quotes_for(TENANT)) == 2:
+                break
+            await asyncio.sleep(0.01)
+        rows = await store.quotes_for(TENANT)
+        assert len(rows) == 2
+        evidence = rows[-1]["payload"]["notice_receipt"]
+        assert evidence["text"] == "Offline policy three."
+        assert evidence["version"] == (await app.state.rig.privacy_notice(TENANT))["version"]
+        assert datetime.fromisoformat(evidence["submitted_at"]).tzinfo is not None
+        await page.close()
+    finally:
+        server.should_exit = True
+        await task
+        sock.close()
