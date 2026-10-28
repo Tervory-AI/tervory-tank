@@ -127,6 +127,17 @@ def instruction(issue: WorkerIssue, rules: list[str]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def command_instruction(markdown: str, rules: list[str], followups: tuple[dict, ...]) -> str:
+    return (
+        "Read AGENTS.md and docs/cursor/CONTEXT.md. Complete this confirmed build brief:\n\n"
+        + markdown + "\n\nFollow-ups, in order (continue the existing work):\n"
+        + "\n".join(str(reply["followup_text"]) for reply in followups)
+        + "\n\nChange only these approved paths:\n"
+        + "\n".join(f"- {rule}" for rule in rules)
+        + "\nDo not add a provider, key, or paid service. Do not push, merge, or deploy.\n"
+    )
+
+
 def existing_files(root: Path, rules: list[str]) -> list[str]:
     """Pass concrete files that already exist. Directories are enforced after the edit."""
     found: list[str] = []
