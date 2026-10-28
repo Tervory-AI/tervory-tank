@@ -225,3 +225,15 @@ The following conservative static source inventory includes body accesses, typed
 | `tank/vendor_meter.py:193` | `__call__` | `body['tenant_id']` |
 
 Founder acceptance: pending. Publish state: pushed branch, Claude to open PR, founder to merge. No screenshots, production migration, live scans or model calls.
+
+## 2026-10-28 16:54:18 PDT (UTC-07:00) / 2026-10-28 23:54:18 UTC
+
+Branch `codex/tenant-rls`, published code head `e70871a`. Hosted workflow [40789568582](https://github.com/Tervory-AI/tervory-tank/actions/runs/40789568582) completed **success** on tested SHA `b46a5e343f903ed6c852b616bf859554f7c0b9ef`: both isolation and nonroot-services jobs green. Later code verification remains pending; this older success does not establish final-head success.
+
+At code `346dfbc` plus the committed snapshot regression: `docker exec` using the local disposable RLS_TEST_DATABASE_URL / POOL_SCHEMA_DATABASE_URL / RIG_TEST_DATABASE_URL and `/opt/testenv/bin/python -m pytest -q tests/test_tenant_rls.py tests/test_vault_contract.py tests/test_rig_proxy.py tests/test_rig_postgres.py tests/test_rig_page.py tests/test_rig_v5_page.py`: **44 passed, 23 warnings, 24.86s**. New repeatable-read/read-only checkout test passes.
+
+Further existing snapshot regressions exposed native asyncpg pool compatibility: Pool.acquire does not accept transaction isolation options. Added `tenant_transaction` adapter for native and scoped pools, preserving requested snapshots in Base audit/product, proof/case studies and Trigger voice history. An intermediate automated replacement introduced a syntax error in proof and omitted one Trigger import; both corrected before current verification. A subsequent focused run found standalone proof runtime lacks admin_pool; startup now supports its existing native pool fallback. Final regression rerun is still in progress; no all-green claim. Ruff fatal-error checks and AST parsing of all changed Python files pass; broader style-only Ruff findings remain.
+
+Background fixes: training intake/revalidation startup and candidate restore use explicit administrative context; proof repricing worker does likewise. Concurrent index startup uses raw administrative pool outside tenant transactions. Base own batch loop now discovers using administrative pool and executes each persisted owner in tenant context, overriding only the preexisting cfg tenant as before. Added a real RLS regression for that loop (pending). Typed `x_tenant_id` skill header now reaches tenant scope. No model calls/live scans performed by these tests.
+
+Activation status remains manual and pending founder acceptance/provisioning. Static inventory is not full runtime route coverage. Branch only; no PR opened or merge/main push.
