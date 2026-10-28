@@ -8,7 +8,9 @@ import pytest
 
 from test_alerts import A, B, NOW, URL, PEER, watched, checked, context, listing
 from test_tiger_alert_email import catcher  # noqa: F401 — existing loopback SMTP
+from tiger_works.fixture import extract, no_paid_call
 from alert_email import deliver_pending
+from watch import DomainLimiter, run_check
 
 
 def microdata(count, identity):
@@ -71,13 +73,22 @@ async def test_market_gap_all_competitors_out_without_prices(store):
         first = await watched(store, tenant, alert_below_cost=False)
         second = await watched(store, tenant, url=PEER, alert_below_cost=False)
         ctx = context(tenant, active=tenant == A, cost=None)
-        result = await checked(store, first, html=product_page(stock="OutOfStock"), ctx=ctx)
+        async def stock_check(watch, minute):
+            async def render(*args):
+                return {"ok": True, "html": product_page(stock="OutOfStock", url=watch["url"]),
+                        "png_base64": "offline-image-must-not-trigger-ocr"}
+            async def product_context(*args):
+                return ctx
+            return await run_check(store, tenant, watch, "tiger", render, extract, no_paid_call,
+                                   no_paid_call, DomainLimiter(0), now=lambda: NOW + timedelta(minutes=minute),
+                                   product_context=product_context)
+        result = await stock_check(first, 0)
         assert result["observation"]["price"] is None
         assert result["observation"]["availability"] == "OutOfStock"
         assert result["alerts"] == []  # the second competitor has not been read
-        result = await checked(store, second, html=product_page(stock="OutOfStock", url=PEER), ctx=ctx, at=1)
+        result = await stock_check(second, 1)
         assert [a["kind"] for a in result["alerts"]] == (["market_gap"] if tenant == A else [])
-        assert (await checked(store, second, html=product_page(stock="OutOfStock", url=PEER), ctx=ctx, at=2))["alerts"] == []
+        assert (await stock_check(second, 2))["alerts"] == []
 
 
 @pytest.mark.asyncio
