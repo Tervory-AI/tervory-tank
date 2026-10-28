@@ -32,7 +32,7 @@ def test_official_image_private_network_region_storage_and_backup(suffix, region
     assert "ports" not in service and "labels" not in service
     assert service["networks"] == ["assembly"] and compose["networks"]["assembly"]["internal"]
     assert "assembly" in services["agent-zenas"]["networks"]
-    assert services["agent-zenas"]["environment"]["TANK_REGION"] == region
+    assert services["agent-zenas"]["environment"]["DOCASSEMBLE_REGION"] == region
     assert services["agent-zenas"]["depends_on"]["docassemble"]["condition"] == "service_healthy"
     assert service["healthcheck"]["test"][-1] == "http://127.0.0.1/health_check?ready=1"
     assert all("local3.14/lib/python3.14" in mount for mount in service["volumes"] if "/site-packages/" in mount)
