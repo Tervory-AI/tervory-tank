@@ -1929,6 +1929,38 @@ BEGIN
     END IF;
 END $$;
 
+-- Local semantic cache shadow evidence. No existing serving policy is changed.
+CREATE TABLE IF NOT EXISTS tank.semantic_observations (
+    tenant_id uuid NOT NULL,
+    region text NOT NULL,
+    task_type text NOT NULL,
+    ledger_id uuid NOT NULL REFERENCES tank.ledger(id),
+    policy_hash text NOT NULL,
+    encoder_id text NOT NULL,
+    input_hash text NOT NULL,
+    status text NOT NULL CHECK (status IN ('hit','miss','guarded','unavailable')),
+    source_id uuid REFERENCES tank.ledger(id),
+    candidate_content text,
+    similarity double precision,
+    agreement double precision CHECK (agreement BETWEEN 0 AND 1),
+    primary_cost_usd numeric(18,8) NOT NULL DEFAULT 0,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id,ledger_id)
+);
+CREATE INDEX IF NOT EXISTS semantic_observations_evidence
+    ON tank.semantic_observations(tenant_id,region,task_type,policy_hash,encoder_id,input_hash);
+CREATE TABLE IF NOT EXISTS tank.semantic_approvals (
+    tenant_id uuid NOT NULL,
+    region text NOT NULL,
+    task_type text NOT NULL,
+    policy_hash text NOT NULL,
+    encoder_id text NOT NULL,
+    approved boolean NOT NULL DEFAULT false,
+    approved_by text NOT NULL,
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,region,task_type,policy_hash,encoder_id)
+);
+
 -- RouteLLM is an opt-in shadow experiment. No policy is enabled by migration.
 ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS routellm_weak_model text;
 ALTER TABLE tank.policy ADD COLUMN IF NOT EXISTS routellm_threshold double precision

@@ -2,15 +2,16 @@
 FROM python:3.12-slim
 WORKDIR /app
 COPY requirements.txt constraints-langgraph.txt ./
-COPY requirements-routellm.txt requirements-routellm-wheel.txt routellm_build.py ./
-# Heavy dependencies and the RouteLLM CPU weights install BEFORE the code is copied,
+COPY requirements-routellm.txt requirements-routellm-wheel.txt routellm_build.py semantic_encoder.py ./
+# Heavy dependencies and both CPU models install BEFORE the code is copied,
 # so an ordinary code change reuses this cached layer instead of reinstalling ~2 GB.
 # Optional trust bundle for managed cloud builds; never retained in a layer.
 RUN --mount=type=secret,id=proxy_ca \
     if [ -f /run/secrets/proxy_ca ]; then export PIP_CERT=/run/secrets/proxy_ca SSL_CERT_FILE=/run/secrets/proxy_ca; fi; \
     pip install --no-cache-dir -r requirements.txt -r requirements-routellm.txt && \
     pip install --no-cache-dir --no-deps --require-hashes -r requirements-routellm-wheel.txt && \
-    python routellm_build.py /opt/routellm
+    python routellm_build.py /opt/routellm && \
+    python semantic_encoder.py
 # Every Tank module is copied by pattern, so a PR that adds a module never edits this line
 # (it used to be a hand-kept list that clashed on almost every Tank PR).
 COPY *.py schema.sql cl100k_base.tiktoken cl100k_base.LICENSE ./

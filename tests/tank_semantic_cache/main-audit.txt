@@ -1,0 +1,20 @@
+F..........................                                              [100%]
+=================================== FAILURES ===================================
+___________________________ test_no_new_tank_bypass ____________________________
+
+    def test_no_new_tank_bypass() -> None:
+        findings = scan(ROOT)
+        counts = Counter(item.identity for item in findings)
+        unexpected = [item for item in findings if counts[item.identity] > EXCEPTIONS.get(item.identity, (0, ""))[0]]
+        stale = [identity for identity, (count, reason) in EXCEPTIONS.items() if not reason or counts[identity] != count]
+>       assert not unexpected, "Unaudited model/paid calls outside Tank:\n" + "\n".join(
+            f"{item.path}:{item.line}: {item.kind} [{item.identity[2]}]" for item in unexpected)
+E       AssertionError: Unaudited model/paid calls outside Tank:
+E         tests/tank_batch_providers/verify_passthrough.py:87: assembled endpoint [2703e202bb2a19bc]
+E         tests/tank_batch_providers/verify_passthrough.py:87: model/paid endpoint [d898b966b41955fb]
+E       assert not [Finding(path='tests/tank_batch_providers/verify_passthrough.py', line=87, kind='assembled endpoint', evidence='{"fiel..., line=87, kind='model/paid endpoint', evidence='{"fields":{"value":"https://api.anthropic.com/"},"node":"Constant"}')]
+
+tests/test_tank_one_door.py:265: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_tank_one_door.py::test_no_new_tank_bypass - AssertionError:...
+1 failed, 26 passed in 11.84s
