@@ -81,10 +81,10 @@ def run_rss(source: SourceSpec, reader, store: Store, *, backfill: bool) -> int:
     total = 0
     seen = set()
     for filename in source.config["files"]:
-        raw = reader.read_text(filename).encode("utf-8")
+        raw = reader.read_bytes(filename)
         if len(raw) > MAX_BYTES or b"<!DOCTYPE" in raw.upper() or b"<!ENTITY" in raw.upper():
             raise ValueError("invalid feed")
-        parsed = feedparser.parse(raw)
+        parsed = feedparser.parse(raw, response_headers={"content-location": source.url})
         if not parsed.version or parsed.bozo:
             raise ValueError("invalid feed")
         for entry in parsed.entries[:MAX_ITEMS]:
@@ -151,7 +151,7 @@ def run_comtrade(source: SourceSpec, reader, store: Store, *, backfill: bool) ->
 def fetch_rss(source, client, store, *, backfill):
     from feeds.fetch import MemoryReader
     check_feed_url(source.url)
-    return run_rss(source, MemoryReader(client.get_text(source.url)), store, backfill=backfill)
+    return run_rss(source, MemoryReader(client.get(source.url)), store, backfill=backfill)
 
 
 def fetch_comtrade(source, client, store, *, backfill):
