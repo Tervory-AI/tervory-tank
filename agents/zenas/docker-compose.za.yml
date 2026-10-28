@@ -1,7 +1,8 @@
 # Zenas room for the South Africa region. Deploy this file as its own Coolify
 # resource on the SA server (Base Directory /agents/zenas, Compose Location
 # /docker-compose.za.yml). The room keeps its gateway corridor and gains a
-# private Docassemble-only network. The corridor is created by the root stack. The room gets its Tank key and its own database login only.
+# private Docassemble-only network. The corridor is created by the root stack.
+# The room gets its Tank key and its own database login only.
 # No model keys: those live only in the ZA Tank stack (litellm).
 
 services:
@@ -10,6 +11,9 @@ services:
       context: ..
       dockerfile: zenas/Dockerfile
     restart: unless-stopped
+    depends_on:
+      docassemble:
+        condition: service_healthy
     mem_limit: 2g
     cpus: 0.5
     environment:
@@ -70,10 +74,16 @@ services:
       DABACKUPDAYS: "14"
     volumes:
       - docassemble_za_backup:/usr/share/docassemble/backup
-      - ./docassemble/package:/usr/share/docassemble/local3.12/lib/python3.12/site-packages/docassemble/zenas:ro
-      - ./core/drafting.py:/usr/share/docassemble/local3.12/lib/python3.12/site-packages/docassemble/zenas/legacy.py:ro
-      - ./docassemble/za:/usr/share/docassemble/local3.12/lib/python3.12/site-packages/docassemble/zenas/data/questions/region:ro
+      - ./docassemble/package:/usr/share/docassemble/local3.14/lib/python3.14/site-packages/docassemble/zenas:ro
+      - ./core/drafting.py:/usr/share/docassemble/local3.14/lib/python3.14/site-packages/docassemble/zenas/legacy.py:ro
+      - ./docassemble/za:/usr/share/docassemble/local3.14/lib/python3.14/site-packages/docassemble/zenas/data/questions/region:ro
     networks: [assembly]
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--output", "/dev/null", "http://127.0.0.1/health_check?ready=1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 5m
+      retries: 20
 
   # Reuses the existing age/R2 worker; only completed local snapshots are archived.
   docassemble-backup:
