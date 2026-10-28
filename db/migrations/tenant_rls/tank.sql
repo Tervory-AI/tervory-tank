@@ -25,12 +25,16 @@ BEGIN
         -- Restrictive boundary prevents another permissive policy widening access.
         FOREACH policy_name IN ARRAY ARRAY['tenant_access', 'tenant_boundary'] LOOP
             IF NOT EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = target.oid AND polname = policy_name) THEN
-                EXECUTE format('CREATE POLICY %I ON %I.%I AS %s FOR ALL TO PUBLIC USING (tenant_id = NULLIF(current_setting(''app.tenant_id'', true), )::uuid) WITH CHECK (tenant_id = NULLIF(current_setting(app.tenant_id, true), )::uuid)',
-                    policy_name, '{schema}', target.relname,
+                EXECUTE format($policy$CREATE POLICY %I ON %I.%I AS %s FOR ALL TO PUBLIC
+                    USING (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+                    WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)$policy$,
+                    policy_name, 'tank', target.relname,
                     CASE WHEN policy_name = 'tenant_boundary' THEN 'RESTRICTIVE' ELSE 'PERMISSIVE' END);
             ELSE
-                EXECUTE format('ALTER POLICY %I ON %I.%I USING (tenant_id = NULLIF(current_setting(''app.tenant_id'', true), )::uuid) WITH CHECK (tenant_id = NULLIF(current_setting(app.tenant_id, true), )::uuid)',
-                    policy_name, '{schema}', target.relname);
+                EXECUTE format($policy$ALTER POLICY %I ON %I.%I
+                    USING (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)
+                    WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid)$policy$,
+                    policy_name, 'tank', target.relname);
             END IF;
         END LOOP;
     END LOOP;
