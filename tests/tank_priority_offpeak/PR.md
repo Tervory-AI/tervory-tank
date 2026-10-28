@@ -1,9 +1,14 @@
 # Make urgent requests immediate and offpeak requests durable
 
-Branch: `codex/tank-priority-offpeak`, started from main `73a0e2f`.
-Verified implementation/test commit: `77979e75d9c4903a5d78d860a297456c15939087`.
-Claude opens the PR. No GitHub API, merge, deployment, production SQL, paid model
-call or owner-laptop access was used.
+Branch: `codex/tank-priority-offpeak`, originally started from main `73a0e2f`.
+Synchronized with current main `7a13687de256896c488a0f28e0906fbcbce5b046` in
+`98e801ea606d394377b6e7356e916ae53db7c81e`; that source/test tree is now verified.
+The only merge conflict was the end of `tank/schema.sql`: both the priority queue
+and main's Skala/memory additions were retained. No implementation was rebuilt.
+Claude opens the PR; the founder merges. No deployment, production SQL, secret
+inspection, real model call or owner-laptop access was used. Read-only GitHub
+metadata was used during this continuation to establish branch ownership.
+
 
 Urgent requests bypass cache lookup, embedding-cache work, RouteLLM observation
 and candidate shadows. Standard routing remains unchanged. An explicit offpeak
@@ -138,3 +143,65 @@ its dispatch/delivered state and price when the window opens. Capture the answer
 and receipt in the same thread. The `sent_at` field and tenant-scoped job endpoint
 provide the dispatch timestamp; savings use the existing columns. Attach those
 founder screenshots to this PR before calling the acceptance condition complete.
+
+## Current-main continuation: exact commands and results
+
+Execution directory: `/tmp/tervory-priority-resume` on Boston. This is an isolated
+checkout, not the production tree. No existing branch was reset. The existing
+remote branch had no PR and was continued in place.
+
+```sh
+gh api repos/Tervory-AI/tervory-tank/commits/main --jq .sha
+gh pr list -R Tervory-AI/tervory-tank --state open --limit 100 --json number,title,headRefName,url
+gh api repos/Tervory-AI/tervory-tank/branches --paginate --jq '.[].name'
+gh api repos/Tervory-AI/tervory-tank/compare/main...codex/tank-priority-offpeak --jq '{status,ahead_by,behind_by,commits:[.commits[]|{sha,message:.commit.message}],files:[.files[].filename]}'
+gh pr list -R Tervory-AI/tervory-tank --state all --head codex/tank-priority-offpeak --json number,state,title,url
+# Main 7a13687; existing branch ef0fb502, 25 ahead/18 behind; no matching PR.
+
+git clone --filter=blob:none --no-checkout https://github.com/Tervory-AI/tervory-tank.git /tmp/tervory-priority-resume
+git -C /tmp/tervory-priority-resume checkout codex/tank-priority-offpeak
+git config user.name 'Codex'
+git config user.email 'codex@users.noreply.github.com'
+git merge origin/main
+# Preserved both appended schema blocks; all other files merged automatically.
+# Initial merge exited 128 for missing local committer identity; resolved above.
+# Merge then exited 1 for schema conflict; resolved as documented.
+
+python3 -m venv /tmp/tervory-priority-python
+/tmp/tervory-priority-python/bin/pip -q install uv
+/tmp/tervory-priority-python/bin/uv python install 3.12
+/tmp/tervory-priority-python/bin/uv venv --python 3.12 /tmp/tervory-priority-312
+/tmp/tervory-priority-python/bin/uv pip install --python /tmp/tervory-priority-312/bin/python -r tank/requirements.txt pytest==9.1.1 pytest-asyncio==1.4.1 ruff==0.17.2
+sudo -n docker run --detach --rm --name tervory-priority-test-pg --publish 127.0.0.1:55461:5432 --env POSTGRES_HOST_AUTH_METHOD=trust postgres:16.15
+# Setup exits 0; Python 3.12.16. Disposable local test data only.
+
+POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:55461/postgres /tmp/tervory-priority-312/bin/python -m pytest -q tests/test_tank_priority_offpeak.py tests/test_tank_one_door.py tests/test_tank_boots.py --tb=short > /tmp/priority-merge-tests.txt 2>&1
+# Exit 0: 62 passed, 12 warnings in 66.75s.
+git commit -m 'Merge current main while preserving priority queue and memory schemas'
+git push origin codex/tank-priority-offpeak
+# Exit 0: 98e801ea606d394377b6e7356e916ae53db7c81e published.
+
+POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:55461/postgres /tmp/tervory-priority-312/bin/python -m pytest -q tests/test_tank_priority_offpeak.py tests/test_tank_ladder.py tests/test_tank_batch_providers.py tests/test_tank_semantic_cache.py tests/test_tank_routellm.py tests/test_tank_shadow_coexistence.py tests/test_command.py tests/test_command_streaming.py tests/test_tank_one_door.py tests/test_secrets.py tests/test_tank_boots.py --tb=short > /tmp/priority-resume-regression.txt 2>&1
+# Exit 0: 250 passed, 12 deprecation warnings in 316.25s.
+/tmp/tervory-priority-312/bin/ruff check tank tests --select E9,F --per-file-ignores 'tank/skills/base.socials/1.0.0/run.py:F401'
+# Exit 0: All checks passed!
+git diff --check origin/main
+# Exit 0, no output.
+```
+
+Full current output is appended in `verification.txt`, separately from the original
+cloud proof. `git diff --check --cached` during the merge reported whitespace in
+incoming main's untouched feed fixture and Tiger skill; these are outside this
+branch's diff against main and were preserved. Final branch whitespace check is clean.
+The supplied PUSH brief filename was not present on this branch (Contents API
+404); the complete assigned job supplied directly in chat was used instead.
+
+The official DeepSeek pricing page was rechecked on October 28: recurring UTC
+windows and the 0.5 multiplier still match the implementation. No API contract,
+model weight, key or provider was changed during this continuation.
+
+Independent reviewer inspected synchronized `98e801ea` read-only and reported no
+actionable correctness finding so far. Final PR/head/check review remains pending
+Claude creating the PR. No founder screenshots exist for this continuation; the
+queued-to-sent ledger, same-thread answer/receipt and actual paid amount remain
+explicit founder-browser acceptance requirements, not offline-test claims.
