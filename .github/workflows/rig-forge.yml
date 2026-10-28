@@ -38,3 +38,54 @@ jobs:
           pip install pytest==9.1.1 pytest-asyncio==1.4.1 PyYAML==6.0.3
           RIG_FORGE_CONTAINER_IMAGE=tervory-rig-forge:ci \
             python -m pytest -q tests/test_rig_forge_containers.py
+
+  meshroom-image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Build the pinned Ubuntu 24.04 Meshroom image
+        run: docker build --progress=plain -f agents/rig/forge/gpu/Dockerfile.meshroom -t tervory-rig-meshroom:ci agents/rig/forge
+      - name: Verify the installed Meshroom bundle and Python reconstruction runtime
+        run: |
+          docker run --rm -i --network none --cap-drop ALL --security-opt no-new-privileges \
+            --read-only --tmpfs /tmp:rw,nosuid,nodev,size=512m \
+            -e XDG_CACHE_HOME=/tmp/cache --entrypoint python tervory-rig-meshroom:ci - <<'PY'
+          import io
+          import re
+          import runpy
+          import subprocess
+          import sys
+          from pathlib import Path
+          import numpy as np
+          import PIL
+          from PIL import Image
+          import trimesh
+
+          assert sys.version_info[:2] == (3, 12), "Python 3.12 is required"
+          assert 'VERSION_ID="24.04"' in Path("/etc/os-release").read_text(), "Ubuntu 24.04 is required"
+          assert PIL.__version__ == "13.0.0", "Pillow 13.0.0 is required"
+          runpy.run_path("/opt/forge/gpu/install_sources.py", run_name="installer_import_check")
+          worker = runpy.run_path("/opt/forge/gpu/reconstruct.py", run_name="reconstruct_import_check")
+          scene = trimesh.Scene(trimesh.creation.box(extents=(2, 3, 4)))
+          worker["measured_scale"](scene, (20, 30, 40))
+          assert np.allclose(scene.extents, (0.02, 0.03, 0.04))
+          for format in ("PNG", "JPEG", "WEBP"):
+              data = io.BytesIO()
+              Image.new("RGB", (8, 8)).save(data, format=format)
+              data.seek(0)
+              with Image.open(data) as decoded:
+                  decoded.load()
+                  assert decoded.size == (8, 8)
+          probe = subprocess.run(["/opt/meshroom/meshroom_batch", "--help"],
+                                 capture_output=True, text=True, timeout=120, check=False)
+          if probe.returncode:
+              # Only library names/status, never the complete child output.
+              missing = sorted(set(re.findall(r"(lib[\w.+-]+\.so(?:\.\d+)*): cannot open shared object file", probe.stderr)))
+              print("::error::Meshroom bundle startup failed; exit " + str(probe.returncode)
+                    + ("; missing libraries " + ", ".join(missing) if missing else ""))
+              raise SystemExit(1)
+          print("Ubuntu 24.04, Python 3.12, Pillow 13.0.0, Meshroom bundle startup and reconstruction imports passed")
+          PY
