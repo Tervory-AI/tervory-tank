@@ -94,10 +94,19 @@ The unrestricted initial Base/room selection was interrupted while the existing 
 timeout 75 /tmp/base-reliability-venv/bin/python -m pytest -vv tests/test_b3b_base_wiring.py -o faulthandler_timeout=20 --tb=short > /tmp/base-reliability-wiring.txt 2>&1
 ```
 
-Stack points at the existing `EMAIL.findall(body_text)` in approved `tank/skills/base.scrape_site/1.2.0/run.py:133`. Terminated that diagnostic process at about 46 seconds; no pass claimed for the two deselected tests. [Recorded diagnostic stack](wiring.txt). Approved skill code was not edited. The initial run before environment setup also had missing-dependency failures and skipped DB tests; the isolated DB regression commands above supersede those checks, except these two explicit exclusions.
+These are unresolved regression stalls in existing tests; no same-command main baseline was run, so they are not established pre-existing baseline failures. Stack points at the unchanged `EMAIL.findall(body_text)` in approved `tank/skills/base.scrape_site/1.2.0/run.py:133`. Terminated that diagnostic process at about 46 seconds; no pass claimed for the two deselected tests. [Recorded diagnostic stack](wiring.txt). Approved skill code was not edited. The initial run before environment setup also had missing-dependency failures and skipped DB tests; the isolated DB regression commands above supersede those checks, except these two explicit exclusions.
+
+After adding the proof/report files, reran:
+
+```sh
+/tmp/base-reliability-venv/bin/python -m pytest -q tests/test_secrets.py --tb=short > /tmp/base-reliability-final-secrets.txt 2>&1
+git diff --check
+```
+
+Result: **2 passed in 9.61s**; whitespace passed. This repeats checks already covered in the three-test startup/secret selection; it is not two additional distinct tests.
 
 ## Review and live acceptance
 
-Independent reviewer accepted the explicit-field measurement correction through `7a2c798`; final-head review remains required. Hosted checks must be assessed on the final PR head, not earlier checkpoints. No merge, deploy, production SQL, paid/provider work, live campaign, customer input, page copy, Figma change or real model call was performed.
+Independent reviewer accepted the explicit-field measurement correction through `7a2c798` and reviewed implementation/proof at `24cd13a` with no new actionable source defect. This documentation-only follow-up clarifies that the two stalls lack a main baseline. Hosted checks must be assessed on the final PR head, not earlier checkpoints. No merge, deploy, production SQL, paid/provider work, live campaign, customer input, page copy, Figma change or real model call was performed.
 
 **Founder acceptance remains pending:** the next actual DC audit must supply real field verdicts. Show resulting aggregate scores and a subsequent actual record whose higher-scoring source won, with the retained alternative evidence, in the founder's own browser. No DC records, screenshot, inbox, tenant identity or founder-browser success is fabricated here. This branch proves the behavior offline only.
