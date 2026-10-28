@@ -6,6 +6,8 @@ import re
 import sqlite3
 import uuid
 from contextlib import contextmanager
+from collections.abc import Awaitable, Callable, Iterator
+from typing import Any
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -42,7 +44,7 @@ def now() -> str:
 
 class Journal:
     """SQLite on the existing Tisan data volume; short atomic transactions only."""
-    def __init__(self, path: Path):
+    def __init__(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         self.path = path
         with self.connect() as db:
@@ -58,7 +60,7 @@ class Journal:
             ''')
 
     @contextmanager
-    def connect(self):
+    def connect(self) -> Iterator[sqlite3.Connection]:
         db = sqlite3.connect(self.path, timeout=1)
         db.row_factory = sqlite3.Row
         try:
@@ -67,14 +69,14 @@ class Journal:
         finally:
             db.close()
 
-    def site(self, tenant, site):
+    def site(self, tenant: str, site: str) -> dict:
         with self.connect() as db:
             row = db.execute('SELECT config FROM sites WHERE tenant=? AND site=?', (tenant, site)).fetchone()
         if not row:
             raise Refused('site not registered')
         return json.loads(row['config'])
 
-    def register(self, tenant, site, config):
+    def register(self, tenant: str, site: str, config: dict) -> None:
         if config['staging'] == config['production']:
             raise Refused('separate applications required')
         config = {**config, 'url': origin(config['url'])}
@@ -92,14 +94,14 @@ class Journal:
                     raise Refused('application already registered')
             db.execute('INSERT OR IGNORE INTO sites(tenant,site,config) VALUES(?,?,?)', (tenant, site, json.dumps(config)))
 
-    def get(self, tenant, site, operation):
+    def get(self, tenant: str, site: str, operation: str) -> dict | None:
         with self.connect() as db:
             row = db.execute('SELECT * FROM operations WHERE tenant=? AND site=? AND id=?', (tenant, site, operation)).fetchone()
         if row:
             return {**dict(row), 'details': json.loads(row['details'])}
         return None
 
-    def reserve(self, tenant, site, operation, action, actor, expected):
+    def reserve(self, tenant: str, site: str, operation: str, action: str, actor: str, expected: str) -> None:
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             row = db.execute('SELECT active FROM sites WHERE tenant=? AND site=?', (tenant, site)).fetchone()
@@ -115,26 +117,26 @@ class Journal:
                        (tenant, site, operation, action, actor, stamp, stamp, 'checking', json.dumps({'expected': expected})))
             db.execute('UPDATE sites SET active=? WHERE tenant=? AND site=?', (operation, tenant, site))
 
-    def update(self, tenant, site, operation, result, details, *, terminal=False):
+    def update(self, tenant: str, site: str, operation: str, result: str, details: dict, *, terminal: bool = False) -> None:
         with self.connect() as db:
             db.execute('UPDATE operations SET result=?,details=?,updated_at=? WHERE tenant=? AND site=? AND id=?',
                        (result, json.dumps(details), now(), tenant, site, operation))
             if terminal:
                 db.execute('UPDATE sites SET active=NULL WHERE tenant=? AND site=? AND active=?', (tenant, site, operation))
 
-    def latest_recorded(self, tenant, site):
+    def latest_recorded(self, tenant: str, site: str) -> dict | None:
         with self.connect() as db:
             row = db.execute("SELECT id FROM operations WHERE tenant=? AND site=? AND result IN ('succeeded','failed') ORDER BY rowid DESC LIMIT 1", (tenant, site)).fetchone()
         return self.get(tenant, site, row['id']) if row else None
 
-    def history(self, tenant, site):
+    def history(self, tenant: str, site: str) -> list[dict]:
         with self.connect() as db:
             ids = db.execute('SELECT id FROM operations WHERE tenant=? AND site=? ORDER BY rowid DESC LIMIT 100', (tenant, site)).fetchall()
         return [self.get(tenant, site, row['id']) for row in ids]
 
 
 class Coolify:
-    def __init__(self, http, base, token):
+    def __init__(self, http: httpx.AsyncClient, base: str, token: str) -> None:
         p = urlsplit(base)
         if p.scheme != 'https' or not p.hostname or p.username or p.password or p.query or p.fragment or p.path not in ('', '/', '/api/v1', '/api/v1/'):
             raise Refused('TISAN_COOLIFY_URL must be an HTTPS API origin')
@@ -142,7 +144,7 @@ class Coolify:
             raise Refused('TISAN_COOLIFY_TOKEN is not set')
         self.http, self.base, self._token = http, base.rstrip('/').removesuffix('/api/v1'), token
 
-    async def call(self, method, path, **kwargs):
+    async def call(self, method: str, path: str, **kwargs: Any) -> dict:
         try:
             r = await self.http.request(method, self.base + '/api/v1' + path,
                 headers={'Authorization': 'Bearer ' + self._token}, follow_redirects=False, timeout=30, **kwargs)
@@ -155,7 +157,7 @@ class Coolify:
         except (httpx.HTTPError, ValueError):
             raise Refused('Coolify response unavailable') from None
 
-    async def current(self, app, *, allow_failed=False):
+    async def current(self, app: str, *, allow_failed: bool = False) -> dict:
         info = await self.call('GET', '/applications/' + identifier(app))
         settings = info.get('settings') or {}
         if info.get('uuid') != app or (not allow_failed and info.get('status') != 'running:healthy') or settings.get('is_auto_deploy_enabled') is not False:
@@ -175,10 +177,11 @@ class Coolify:
 
 
 class Promotion:
-    def __init__(self, journal, coolify, live_check, radix_gate):
+    def __init__(self, journal: Journal, coolify: Coolify, live_check: Callable[[str], Awaitable[dict]],
+                 radix_gate: Callable[[str, str, str], Awaitable[dict]]) -> None:
         self.journal, self.coolify, self.live_check, self.radix_gate = journal, coolify, live_check, radix_gate
 
-    async def run(self, tenant, site, operation, action, actor, expected):
+    async def run(self, tenant: str, site: str, operation: str, action: str, actor: str, expected: str) -> dict:
         tenant, operation = str(uuid.UUID(tenant)), str(uuid.UUID(operation))
         identifier(site)
         if action not in ('promote', 'rollback'):
@@ -262,7 +265,7 @@ class Promotion:
             self.journal.update(tenant, site, operation, 'unknown' if mutation else 'refused', details, terminal=not mutation)
         return self.journal.get(tenant, site, operation)
 
-    async def status(self, tenant, site, operation):
+    async def status(self, tenant: str, site: str, operation: str) -> dict:
         row = self.journal.get(tenant, site, operation)
         if not row:
             raise Refused('operation not found')
