@@ -84,7 +84,7 @@ def run_rss(source: SourceSpec, reader, store: Store, *, backfill: bool) -> int:
         raw = reader.read_bytes(filename)
         if len(raw) > MAX_BYTES or b"<!DOCTYPE" in raw.upper() or b"<!ENTITY" in raw.upper():
             raise ValueError("invalid feed")
-        parsed = feedparser.parse(raw, response_headers={"content-location": source.url})
+        parsed = feedparser.parse(raw, response_headers={"content-location": source.url, "content-type": "application/xml"})
         if not parsed.version or parsed.bozo:
             raise ValueError("invalid feed")
         for entry in parsed.entries[:MAX_ITEMS]:
@@ -141,7 +141,8 @@ def run_comtrade(source: SourceSpec, reader, store: Store, *, backfill: bool) ->
             year = int(row["period"])
             date = datetime(year, 1, 1).date().isoformat()
             ref = f"{row['reporterCode']}:{row['cmdCode']}:{row['flowCode']}"
-            series = store.ensure_series(source.id, ref, row["cmdDesc"], "USD", "country", row["reporterDesc"], "annual")
+            title = f"{row['cmdDesc']} — {row['flowDesc']}"
+            series = store.ensure_series(source.id, ref, title, "USD", "national", row["reporterDesc"], "annual")
             total += int(store.put_point(series, date, value, str(row.get("lastReleased") or year)))
             if store._staged:
                 store._staged[-1]["url"] = source.url
