@@ -16,7 +16,6 @@ _V5_MEDIA = {
     ".js": "text/javascript",
     ".svg": "image/svg+xml",
 }
-_V5_SKINS = {"rig", "cn"}
 _ASSETS = {
     "search.js": "text/javascript",
     "search.css": "text/css",
@@ -45,7 +44,8 @@ async def _published_page(request: Request) -> tuple[str, str]:
 async def _v5_html(request: Request, skin: str) -> HTMLResponse:
     html = (_V5 / "index.html").read_text(encoding="utf-8")
     key, shop = await _published_page(request)
-    html = html.replace("__RIG_SKIN__", skin if skin in _V5_SKINS else "rig")
+    safe_skin = "cn" if skin == "cn" else "rig"
+    html = html.replace("__RIG_SKIN__", safe_skin)
     html = html.replace("__RIG_KEY__", json.dumps(key).replace("<", "\\u003c"))
     html = html.replace("__RIG_SHOP__", json.dumps(shop).replace("<", "\\u003c"))
     return HTMLResponse(html)

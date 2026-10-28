@@ -86,3 +86,81 @@ No catalogue is selected in the v5 screenshots even though an offline tenant exi
 | Workspace Rig components | [Screenshot](evidence/local-workspace-empty-1440.png) | [Screenshot](evidence/local-workspace-empty-390.png) |
 
 The founder's browser screenshots required for final acceptance are not available in this cloud workspace. No deployment or live acceptance is claimed.
+
+## PR #361 security review — 28 October 2026
+
+This update stays on `codex/rig-no-live-demo`. It changes no page wording, layout, catalogue values, settings, or production data.
+
+### Changes and decisions
+
+- `agents/rig/rigbox/page_route.py:47`: select `safe_skin` from the literal strings `cn` and `rig`. Keep the existing JSON encoding and `<` escaping for the publishable value and shop name.
+- `agents/rig/rigbox/service.py:292`: normalize whitespace and cap search text at 200 characters once, before parsing, recall, or recording misses. Both public `/v1/rig/search` and the Tank room-key path already call this shared entry. This reuses the limit in `workspace/app/rig/rig-server.ts`; putting it only in `rigbox/api.py` would leave the room-key path uncapped.
+- `agents/rig/rigbox/cn.py:54,705,968,1012,1129,1252,1345,2114` and `recall.py:23,30`: collapse whitespace before the reported expressions; use single-space separators, remove redundant whitespace repetition around clause separators, and anchor the thread token explicitly. The fit-question regex uses an atomic first-clause match so repeated `fit` phrases cannot cause backtracking between both captures. Python 3.12 in the existing Rig Dockerfile supports atomic groups. No regex alerts are suppressed.
+- `tests/test_rig_search_input_safety.py:1`: exercise the real page route, search entry, FastAPI search route and affected parsers offline. Check both permitted skins, hostile skin input, retained JSON escaping, the shared length cap, normalized result equivalence, and 100,000-space requests under one second. Tests reuse existing offline catalogues; authentication is stubbed locally and no model/network call is made.
+
+### Exact commands and results
+
+Working directory `/workspace/tervory-tank`:
+
+```sh
+/workspace/.tervory-cloud/venv/bin/python -m pytest -q tests/test_rig_search_input_safety.py tests/test_rig_v5_page.py tests/test_rig_cn_archon.py tests/test_rig_recall.py tests/test_rig_archon_search_memory.py tests/test_rig_no_live_demo.py
+```
+
+**209 passed**, one existing Starlette deprecation warning, 8.03s.
+
+```sh
+/workspace/.tervory-cloud/venv/bin/python -m pytest -q -s tests/test_rig_search_input_safety.py
+```
+
+**8 passed**. Five 100,000-space requests through the real ASGI route completed in **0.000924s, 0.001850s, 0.005111s, 0.008922s, and 0.008697s**. Each returned the same result as its ordinary equivalent. ASGI is invoked directly because HTTPX rejects URLs this large before they reach the application; the actual route, service and parsers still execute.
+
+```sh
+/workspace/.tervory-cloud/venv/bin/ruff check agents/rig/rigbox/page_route.py agents/rig/rigbox/service.py agents/rig/rigbox/cn.py agents/rig/rigbox/recall.py tests/test_rig_search_input_safety.py --select E9,F
+git diff --check
+```
+
+Both passed.
+
+The shared pre-existing tests were also run in an exported copy of latest main (`a172872`) at `/tmp/rig-codeql/main-src`, and again on this branch:
+
+```sh
+PATH=/workspace/.tervory-cloud/node/bin:$PATH /workspace/.tervory-cloud/venv/bin/python -m pytest -q tests/test_rig_v5_page.py tests/test_rig_cn_archon.py tests/test_rig_recall.py tests/test_rig_archon_search_memory.py
+```
+
+| Check | Main `a172872` | PR #361 with this update |
+| --- | --- | --- |
+| Shared tests above | 188 passed; no failing tests | 188 passed; no failing tests |
+| New security regressions | Not present | 8 passed |
+
+The prior full-Rig results and known environment failures above remain the full-suite record; this review does not claim an additional full-suite run.
+
+### Local CodeQL proof
+
+GitHub's published CodeQL bundle **2.27.3**, query pack **codeql/python-queries 1.8.13**, standard Python code-scanning suite. Exact setup and final scan commands (all cloud-local):
+
+```sh
+curl --fail --location --silent --show-error --output /tmp/codeql-bundle-linux64.tar.gz https://github.com/github/codeql-action/releases/latest/download/codeql-bundle-linux64.tar.gz
+mkdir -p /tmp/rig-codeql
+tar -xzf /tmp/codeql-bundle-linux64.tar.gz -C /tmp/rig-codeql
+mkdir -p /tmp/rig-codeql/main-src
+git archive founder/main | tar -x -C /tmp/rig-codeql/main-src
+/tmp/rig-codeql/codeql/codeql database create /tmp/rig-codeql/main-db --language=python --source-root=/tmp/rig-codeql/main-src --threads=2 --ram=3072 > /tmp/rig-codeql/create-main.log 2>&1
+/tmp/rig-codeql/codeql/codeql database analyze /tmp/rig-codeql/main-db codeql/python-queries:codeql-suites/python-code-scanning.qls --format=sarif-latest --output=/tmp/rig-codeql/main.sarif --threads=4 --ram=4096 > /tmp/rig-codeql/analyze-main.log 2>&1
+/tmp/rig-codeql/codeql/codeql database create /tmp/rig-codeql/final-db --language=python --source-root=/workspace/tervory-tank --threads=4 --ram=4096 > /tmp/rig-codeql/create-final.log 2>&1
+/tmp/rig-codeql/codeql/codeql database analyze /tmp/rig-codeql/final-db codeql/python-queries:codeql-suites/python-code-scanning.qls --format=sarif-latest --output=/tmp/rig-codeql/final.sarif --threads=4 --ram=4096 > /tmp/rig-codeql/analyze-final.log 2>&1
+```
+
+All commands exited 0. The final scan covered **979/979 Python files** (main: **976/976**) and evaluated 45 queries. [Machine-readable comparison](evidence/codeql-review.json) includes the SARIF hashes and eight removed findings. Comparison uses rule ID, relative path, and CodeQL's stable line fingerprint; shifted line numbers do not count as new findings.
+
+| CodeQL result | Main `a172872` | PR #361 with this update |
+| --- | --- | --- |
+| Reported skin XSS | 1 | 0 |
+| Reported CN/recall slow-regex alerts | 7 | 0 |
+| Other existing findings | 83 | 83, same fingerprints |
+| Findings added relative to main | — | **0** |
+
+This proves the eight requested alerts are cleared locally, with no new findings. It does **not** claim the repository has zero existing alerts or that GitHub's hosted check has completed. The cloud network policy does not allow `api.github.com`, so hosted check status and PR-description edits cannot be verified/performed here. No CI checks were manually rerun; the normal branch push supplies this update to the same PR.
+
+### Founder proof remains pending
+
+This security update changes no visible wording or layout. No founder browser screenshot is claimed. After the reviewed deployment, open **https://rig.tervory.com/v5?skin=cn** and **https://rig.tervory.com/v5?skin=rig** to confirm the two existing skins. Open **https://rig.tervory.com/**, enter an ordinary search for a product in the store's real published catalogue, and click the existing search control; compare its results with the pre-update search. Repeat from **https://app.tervory.com/rig**. If no real catalogue is published, retain the existing empty page and do not seed one for this check. Capture the founder's screenshots after that check; the 100,000-space adversarial requests remain offline tests.
