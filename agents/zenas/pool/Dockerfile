@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir -r /tmp/chassis.txt -r /tmp/zenas.txt \
     && useradd --create-home --uid 1000 agent \
     && mkdir -p /data \
     && chown agent:agent /data
+COPY _chassis/chassis /app/chassis
 COPY zenas /app/agents/zenas
 COPY _chassis/chassis /app/chassis
 COPY tiger/alert_email.py /app/agents/tiger/alert_email.py
