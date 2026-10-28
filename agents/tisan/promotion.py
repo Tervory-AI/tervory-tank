@@ -122,6 +122,11 @@ class Journal:
             if terminal:
                 db.execute('UPDATE sites SET active=NULL WHERE tenant=? AND site=? AND active=?', (tenant, site, operation))
 
+    def latest_recorded(self, tenant, site):
+        with self.connect() as db:
+            row = db.execute("SELECT id FROM operations WHERE tenant=? AND site=? AND result IN ('succeeded','failed') ORDER BY rowid DESC LIMIT 1", (tenant, site)).fetchone()
+        return self.get(tenant, site, row['id']) if row else None
+
     def history(self, tenant, site):
         with self.connect() as db:
             ids = db.execute('SELECT id FROM operations WHERE tenant=? AND site=? ORDER BY rowid DESC LIMIT 100', (tenant, site)).fetchall()
@@ -143,7 +148,10 @@ class Coolify:
                 headers={'Authorization': 'Bearer ' + self._token}, follow_redirects=False, timeout=30, **kwargs)
             if r.status_code >= 300:
                 raise Refused('Coolify request failed')
-            return r.json()
+            data = r.json()
+            if not isinstance(data, dict):
+                raise Refused('Coolify response shape unavailable')
+            return data
         except (httpx.HTTPError, ValueError):
             raise Refused('Coolify response unavailable') from None
 
@@ -186,7 +194,7 @@ class Promotion:
         details = {'expected': expected}
         mutation = False
         try:
-            prior = next((r for r in self.journal.history(tenant, site) if r['result'] in ('succeeded', 'failed')), None)
+            prior = self.journal.latest_recorded(tenant, site)
             recovery = action == 'rollback' and prior is not None and prior['result'] == 'failed'
             production = await self.coolify.current(config['production'], allow_failed=recovery)
             details['previous'] = production['commit']
@@ -201,9 +209,11 @@ class Promotion:
                     raise Refused('staging origin differs from registered application')
                 details['staging_deployment'] = staging['deployment']
                 details['live_check'] = await self.live_check(config['url'])
-                if details['live_check'].get('passed') is not True:
+                if not isinstance(details['live_check'], dict) or details['live_check'].get('passed') is not True:
                     raise Refused('staging live check failed')
                 gate = await self.radix_gate(tenant, config['url'], 'commit:' + expected)
+                if not isinstance(gate, dict):
+                    raise Refused('Radix gate response unavailable')
                 stamp = datetime.fromisoformat(gate.get('completed_at', '').replace('Z', '+00:00'))
                 age = (datetime.now(timezone.utc) - stamp).total_seconds()
                 if (gate.get('allowed') is not True or gate.get('status') != 'complete'
