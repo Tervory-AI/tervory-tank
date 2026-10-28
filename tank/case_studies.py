@@ -72,8 +72,7 @@ async def clients(actor: Actor = Depends(identity), offset: int = Query(0, ge=0)
 async def reports(response: Response, tenant_id: uuid.UUID | None = None, actor: Actor = Depends(identity)) -> dict:
     tenant = scoped(actor, tenant_id)
     response.headers["Cache-Control"] = "private, no-store"
-    async with db().acquire() as conn, conn.transaction():
-        await register(conn, tenant)
+    async with db().acquire() as conn:
         rows = await conn.fetch("SELECT product,template_version,created_at FROM tank.case_study_reports WHERE tenant_id=$1 ORDER BY product", tenant)
     return {"tenant_id": str(tenant), "reports": [dict(r) for r in rows]}
 
@@ -116,8 +115,6 @@ async def report(product: str, response: Response, tenant_id: uuid.UUID | None =
     first, last, since, until = period(start, end)
     from main import box_region
     region = box_region()
-    async with db().acquire() as conn, conn.transaction():
-        await register(conn, tenant)
     async with db().acquire() as conn, conn.transaction(isolation="repeatable_read", readonly=True):
         saved = await conn.fetchrow("SELECT template_version,created_at FROM tank.case_study_reports WHERE tenant_id=$1 AND product=$2", tenant, product)
         if not saved:
