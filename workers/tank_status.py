@@ -65,6 +65,32 @@ class TankControl:
     def _headers(self) -> dict[str, str]:
         return {"x-tank-key": tank_key()}
 
+    async def _command(self, method: str, path: str, **kwargs: Any) -> Any:
+        try:
+            response = await self.client.request(
+                method, f"{self.base}/v1/command/{path}", headers=self._headers(), timeout=30, **kwargs,
+            )
+            response.raise_for_status()
+            return response.json()
+        except (httpx.HTTPError, ValueError, OSError) as exc:
+            # Do not include response bodies, headers, or private conversation text.
+            raise RuntimeError(f"Tank build {method} failed ({type(exc).__name__})") from None
+
+    async def next_build(self) -> dict[str, Any] | None:
+        value = await self._command("GET", "builds/next")
+        if value is not None and not isinstance(value, dict):
+            raise RuntimeError("Tank build claim was not an object")
+        return value
+
+    async def build_progress(self, build_id: str, body: dict[str, Any]) -> None:
+        await self._command("POST", f"builds/{build_id}/progress", json=body)
+
+    async def build_followups(self, build_id: str, after: int) -> list[dict[str, Any]]:
+        value = await self._command("GET", f"builds/{build_id}/followups", params={"after": after})
+        if not isinstance(value, list):
+            raise RuntimeError("Tank build follow-ups were not a list")
+        return value
+
     async def paused(self) -> bool:
         """True unless Tank answers 200 with paused=false. Fails closed."""
         try:

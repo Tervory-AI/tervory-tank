@@ -1,0 +1,42 @@
+   ▲ Next.js 15.5.28
+   - Local:        http://127.0.0.1:36925
+   - Network:      http://127.0.0.1:36925
+   - Experiments (use with caution):
+     ✓ externalDir
+
+ ✓ Starting...
+
+   We detected TypeScript in your project and reconfigured your tsconfig.json file for you.
+   The following suggested values were added to your tsconfig.json. These values can be changed to fit your project's needs:
+
+    - lib was set to dom,dom.iterable,esnext
+    - allowJs was set to true
+    - noEmit was set to true
+    - incremental was set to true
+    - include was set to ['next-env.d.ts', '.next/types/**/*.ts', '**/*.ts', '**/*.tsx']
+    - plugins was updated to add { name: 'next' }
+    - exclude was set to ['node_modules']
+
+   The following mandatory changes were made to your tsconfig.json:
+
+    - resolveJsonModule was set to true (to match webpack resolution)
+    - isolatedModules was set to true (requirement for SWC / Babel)
+
+ ✓ Ready in 1022ms
+ ○ Compiling /autumbra ...
+ ✓ Compiled /autumbra in 2.3s (682 modules)
+ GET /autumbra 200 in 351ms
+ ✓ Compiled /market-lab in 408ms (661 modules)
+ GET /market-lab 200 in 683ms
+ GET /autumbra 200 in 60ms
+ ✓ Compiled /admin/autumbra in 302ms (686 modules)
+ GET /admin/autumbra 200 in 559ms
+ ✓ Compiled /moot in 190ms (696 modules)
+ GET /moot 200 in 372ms
+ ✓ Compiled /moot/[match] in 183ms (689 modules)
+ GET /moot/fixture-published 404 in 641ms
+ GET /market-lab 200 in 127ms
+ GET /autumbra 200 in 60ms
+ GET /admin/autumbra 200 in 91ms
+ GET /moot 200 in 77ms
+ GET /moot/fixture-published 404 in 53ms

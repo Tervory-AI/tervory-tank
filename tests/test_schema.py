@@ -71,6 +71,8 @@ def _idempotent(statement: str) -> bool:
     if kind == "ALTER":
         if re.fullmatch(r"ALTER\s+TABLE\s+tank\.policy\s+ALTER\s+COLUMN\s+auto_promote\s+SET\s+DEFAULT\s+false", statement, re.IGNORECASE):
             return True  # CORE-1 explicitly changes this default, without changing the column.
+        if re.fullmatch(r"ALTER\s+TABLE\s+tank\.(?:policy\s+ALTER\s+COLUMN\s+eval_threshold\s+SET\s+DEFAULT\s+0\.99|(?:policy|route_evidence)\s+ALTER\s+COLUMN\s+min_shadow_samples\s+SET\s+DEFAULT\s+200)", statement, re.IGNORECASE):
+            return True  # Founder graduation defaults; reapplication does not rewrite rows.
         return re.search(r"\bADD\s+COLUMN\s+IF\s+NOT\s+EXISTS\b", statement, re.IGNORECASE) is not None
     if kind == "INSERT":
         return re.search(r"\bON\s+CONFLICT\b", statement, re.IGNORECASE) is not None

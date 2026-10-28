@@ -6,9 +6,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   AUTUMBRA_WATCH_FIXTURE,
-  isUsableGhostPanel,
   type AutumbraThreatReceipt,
 } from "../workspace/app/admin/autumbra/watch-fixtures.ts";
+
+import { isUsableGhostPanel } from "../workspace/app/admin/autumbra/watch-data.ts";
 
 const ALLOWED_ACTIONS = new Set(["propose_shield", "open_match", "write_brief", "handoff"]);
 const ALLOWED_STATUSES = new Set(["propose_only", "burned", "awaiting_founder"]);

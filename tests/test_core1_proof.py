@@ -59,9 +59,12 @@ def test_nightly_and_both_price_dimensions_trigger():
     assert 'expensive' not in bench.price_book(unpriced)
 
 
-def test_automatic_promotion_missing_or_null_stays_off():
-    for value in ({}, {'auto_promote':None}, {'auto_promote':False}):
-        assert not graduate._wants_auto(value)
+def test_automatic_promotion_always_waits_for_founder():
+    for value in ({}, {'auto_promote':None}, {'auto_promote':False}, {'auto_promote':True}):
+        move = graduate.apply({'model':'paid', 'candidate_model':'cheap', **value},
+                              graduate.Evidence(samples=200, agreement=1), datetime.now(timezone.utc))
+        assert move.action == 'hold' and move.policy['model'] == 'paid'
+        assert move.reason == 'proven, waiting for a person'
 
 
 @pytest.mark.asyncio

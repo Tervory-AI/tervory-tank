@@ -628,7 +628,7 @@ class PolicyRow(BaseModel):
     cache_scope: str = "none"
     max_tokens_out: int = 1024
     system_prompt: str | None = None
-    eval_threshold: float = 0.97
+    eval_threshold: float = graduate.DEFAULT_THRESHOLD
     escalation_model: str | None = None
     confidence_floor: float = Field(default=0.8, ge=0, le=1)
     acceptance_window_s: int = Field(default=86400, ge=0, le=2592000)
@@ -1981,8 +1981,8 @@ async def graduation(
         d = dict(r)
         n = int(d["n"] or 0)
         agr = _num(d["agreement"])
-        thr = float(d["eval_threshold"] or 0.95)
-        minimum = int(d["min_shadow_samples"] or 30)
+        thr = float(d["eval_threshold"] or graduate.DEFAULT_THRESHOLD)
+        minimum = int(d["min_shadow_samples"] or graduate.DEFAULT_MIN_SAMPLES)
         prim = _num(d["prim_cost"])
         cand = _num(d["cand_cost"])
         calls = int(d["calls_30d"] or 0)
@@ -2240,8 +2240,8 @@ async def search_task(task_type: str, body: SearchBody | None = None) -> dict[st
         field_scores_by_name=field_map,
         calls_30d=int(spend["calls"] or 0),
         serving_cost=_num(spend["cost"]),
-        threshold=float(policy["eval_threshold"] or 0.97),
-        min_samples=int(policy["min_shadow_samples"] or 30),
+        threshold=float(policy["eval_threshold"] or graduate.DEFAULT_THRESHOLD),
+        min_samples=int(policy["min_shadow_samples"] or graduate.DEFAULT_MIN_SAMPLES),
         floors={str(key): float(value) for key, value in floors.items()},
     )
     async with pool().acquire() as conn:
@@ -3159,7 +3159,7 @@ async def base_proxy(path: str, request: Request) -> Response:
 
 _LOCAL_ZENAS_HOSTS = frozenset({"agent-zenas", "localhost", "127.0.0.1"})
 _ZENAS_PATH = re.compile(
-    r"^(consents|matters|pool|pool/status|health|review|selftest|review-switch|cases/convert|rule-cards|worked|matches|training-pairs|drafts|tenants|answers|moot/fixtures)$"
+    r"^(consents|matters|pool|pool/status|health|review|selftest|review-switch|cases/convert|rule-cards|worked|matches|training-pairs|drafts|tenants|answers|moot/fixtures|moot/published)$"
     r"|^(matters|documents|rule-cards|worked)/[0-9a-fA-F-]{36}$"
     r"|^matters/[0-9a-fA-F-]{36}/documents$"
     r"|^matters/[0-9a-fA-F-]{36}/release$"
