@@ -21,6 +21,7 @@ import access
 import main as tank
 
 agent = _load("g5_tiger_agent", ROOT / "agents/tiger/app.py")
+playbook = _load("g5_playbook_skill", ROOT / "tank/skills/tiger.playbook/1.0.0/run.py")
 
 
 @pytest_asyncio.fixture
@@ -77,7 +78,7 @@ async def test_private_cost_read_uses_same_tenant_sku_and_never_retail_price(sys
 async def test_agent_job_to_existing_email_path(system, catcher, monkeypatch, kind):
     _, store, _ = system
     watches = [await watched(store, tenant, **{"alert_" + k: k == kind for k in KINDS}) for tenant in (A, B)]
-    state = {"added": False, "reads": []}
+    state = {"added": False, "reads": [], "playbook_calls": []}
     async def render(url, session, name, tenant, task):
         state["reads"].append((tenant, url))
         return {"ok": True, "html": listing(state["added"]) if kind == "new_product" else
@@ -86,11 +87,18 @@ async def test_agent_job_to_existing_email_path(system, catcher, monkeypatch, ki
     async def skill(tenant, name, data):
         assert name == "tiger.price_extract", "No model/OCR needed for these pages"
         return await extract(data["html"], data["url"])
+    async def approved_skill(tenant, name, data):
+        assert name == "tiger.playbook"
+        state["playbook_calls"].append(data["operation"])
+        result = await playbook.run(data, None)
+        assert result["model_calls"] == 0
+        return result
     monkeypatch.setattr(agent, "_render", render)
     for watch in watches:
         state["added"] = False
         ctx = SimpleNamespace(tenant_id=watch["tenant_id"], agent="tiger", job_id=uuid4(),
-                              input={"url": URL}, files=None, tank=SimpleNamespace(run_skill=skill))
+                              input={"url": URL}, files=None,
+                              tank=SimpleNamespace(run_skill=skill, approved_skill=approved_skill))
         first = await agent.check(ctx)
         if kind == "new_product":
             assert first["alerts"] == []
@@ -104,6 +112,7 @@ async def test_agent_job_to_existing_email_path(system, catcher, monkeypatch, ki
             clock=lambda: datetime(2030, 1, 1, tzinfo=timezone.utc))
         assert sent["sent"] == len(expected)
     assert len(state["reads"]) == (6 if kind == "new_product" else 4)
+    assert {"public_page", "learn_layout", "read_page"} <= set(state["playbook_calls"])
     assert len(catcher.messages) == (1 if kind == "below_cost" else 2)
 
 
