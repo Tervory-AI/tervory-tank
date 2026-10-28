@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from datetime import datetime, timezone
 from typing import Any
@@ -140,6 +141,18 @@ async def run_daily(
                         1  # Never log source body, query, key or exception text.
                     )
             for change in await store.changes(tenant):
+                if not change.get("event_sent", False):
+                    from chassis.events import publish
+                    doc = change["document"]
+                    try:
+                        published = await publish(tenant, "zenas.regulation.changed", change["id"], {
+                            "source": doc["source"], "document_id": doc["id"],
+                            "date": doc["date"], "link": doc["link"],
+                        })
+                        if published:
+                            await store.mark_event_sent(tenant, change["id"])
+                    except Exception:
+                        logging.getLogger(__name__).warning("Event publication unavailable; product work continues")
                 if (
                     change["mail_state"] != "waiting"
                     or change["watch_id"] not in enabled
