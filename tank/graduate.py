@@ -20,8 +20,8 @@ SKILL_PREFIX = "skill:"
 CACHE_CANDIDATE = "cache:semantic"
 TOOL_PREFIX = "tool:"
 SEMANTIC_THRESHOLD = 0.97
-DEFAULT_THRESHOLD = 0.97
-DEFAULT_MIN_SAMPLES = 30
+DEFAULT_THRESHOLD = 0.99
+DEFAULT_MIN_SAMPLES = 200
 DEFAULT_MAX_REJECT = 0.05
 DEFAULT_TOLERANCE = 0.01
 WATCH_DAYS = 7
@@ -374,13 +374,6 @@ def _rolled_back(policy: dict[str, Any], reason: str) -> dict[str, Any]:
     return updated
 
 
-def _wants_auto(policy: dict[str, Any]) -> bool:
-    value = policy.get("auto_promote", False)
-    if value is None:
-        return False
-    return bool(value)
-
-
 def router_cannot_serve(candidate: str | None) -> bool:
     """Only pinned skills have a foreground runner; cache policies still name a model."""
     if candidate is None:
@@ -449,7 +442,7 @@ def promote_if_proven(policy: dict[str, Any], evidence: Evidence, now: datetime,
     ok, reason = proven_reason(policy, evidence)
     if not ok:
         return Move("hold", _copied(policy), reason)
-    if automatic and not _wants_auto(policy):
+    if automatic:
         return Move("hold", _copied(policy), "proven, waiting for a person")
     return Move("promote", _promoted(policy, now), None)
 
@@ -476,7 +469,7 @@ def rollback_if_dropped(policy: dict[str, Any], evidence: Evidence, now: datetim
 
 
 def apply(policy: dict[str, Any], evidence: Evidence, now: datetime) -> Move:
-    """Promote by itself when the candidate is proven. Roll back a fresh promotion that slips."""
+    """Hold proven candidates for founder approval; roll back a fresh promotion that slips."""
     if policy.get("candidate_model"):
         return promote_if_proven(policy, evidence, now, automatic=True)
     return rollback_if_dropped(policy, evidence, now)
@@ -958,7 +951,7 @@ async def training_table(conn, tenant, region: str) -> list[dict]:
         shown = best['candidate'] if best else policy['candidate_model']
         trained = bool(shown and shown in removed_models)
         can_promote = bool(best and best['candidate'] == policy['candidate_model']
-                           and not router_cannot_serve(best['candidate']) and not policy['auto_promote'])
+                           and not router_cannot_serve(best['candidate']))
         blocked = 'trained on removed data' if trained else None
         if can_promote:
             served = skills_served(best['candidate'], rank_rows, score_rows)

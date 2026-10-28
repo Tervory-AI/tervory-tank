@@ -416,6 +416,12 @@ async def test_schema_applies_twice_and_preserves_policy(harness):
             if old["tenant_id"] is None and old["task_type"] in seeded:
                 changed |= {"model", "rung", "cache_scope", "semantic_cache", "batch_eligible", "updated_at"}
                 assert new["rung"] == (1 if old["task_type"].startswith("zenas.") else 3)
+            if old["eval_threshold"] == Decimal('.97') and old['min_shadow_samples'] == 30:
+                changed |= {'eval_threshold', 'min_shadow_samples'}
+                assert new['eval_threshold'] == Decimal('.99') and new['min_shadow_samples'] == 200
+            if old['task_type'] == 'command.turn':
+                changed |= {'cache_scope', 'semantic_cache', 'updated_at'}
+                assert new['cache_scope'] == 'tenant' and not new['semantic_cache']
             assert new["baseline_model"] is None
             assert {k: old[k] for k in old.keys() if k not in changed} == {
                 k: new[k] for k in old.keys() if k not in changed}
