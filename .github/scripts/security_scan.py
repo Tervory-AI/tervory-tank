@@ -5,6 +5,7 @@ import argparse
 import fnmatch
 import json
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 
@@ -162,6 +163,45 @@ def osv_report(ref: str, temp: Path) -> tuple[dict, list[str], Path]:
     return report, paths, root
 
 
+def dependency_line(path: Path, package: dict) -> int:
+    """Locate the reported pin without retaining or printing file contents."""
+    text = path.read_text()
+    if path.name == "package-lock.json":
+        # OSV's JSON omits line numbers. Locate the matching package object in
+        # npm v1 dependencies or v2/v3 packages, including nested installations.
+        decoder = json.JSONDecoder()
+        for match in re.finditer(r'"((?:[^"\\]|\\.)*)"\s*:\s*(?=\{)', text):
+            key = json.loads('"' + match[1] + '"')
+            entry, _ = decoder.raw_decode(text, match.end())
+            name = entry.get("name", key.rsplit("node_modules/", 1)[-1])
+            if name == package["name"] and entry.get("version") == package["version"]:
+                return text.count("\n", 0, match.start()) + 1
+    else:
+        # PEP 503 canonical names; extras and hashes do not change the pin's line.
+        normalize = lambda name: re.sub(r"[-_.]+", "-", name).lower()
+        for number, line in enumerate(text.splitlines(), 1):
+            match = re.match(r"\s*([A-Za-z0-9_.-]+)(?:\[[^]]+\])?\s*===?\s*([^\s;\\#]+)", line)
+            if (match and normalize(match[1]) == normalize(package["name"])
+                    and match[2] == package["version"]):
+                return number
+    # Some manifest entries are ranges, not exact pins. Anchor those at the file.
+    return 1
+
+
+def osv_fixed_versions(vuln: dict, package: dict) -> list[str]:
+    # These are OSV's declared fixes, not a replacement vulnerability matcher.
+    # Keep all release branches; never claim that a lexically first fix is safe.
+    def name(value: str) -> str:
+        return re.sub(r"[-_.]+", "-", value).lower() if package["ecosystem"] == "PyPI" else value
+
+    return sorted({event["fixed"] for affected in vuln.get("affected", [])
+                   if name(affected.get("package", {}).get("name", "")) == name(package["name"])
+                   and affected.get("package", {}).get("ecosystem") == package["ecosystem"]
+                   for affected_range in affected.get("ranges", [])
+                   if affected_range.get("type") != "GIT"
+                   for event in affected_range.get("events", []) if event.get("fixed")})
+
+
 def osv_findings(report: dict, root: Path) -> dict[tuple[str, ...], dict]:
     findings = {}
     for source in report["results"] or []:
@@ -176,6 +216,8 @@ def osv_findings(report: dict, root: Path) -> dict[tuple[str, ...], dict]:
                 score = max((float(s) for s in scores), default=None)
                 findings[key] = dict(zip(("path", "ecosystem", "package", "version", "id"), key))
                 findings[key]["cvss"] = score
+                findings[key]["line"] = dependency_line(root / path, package)
+                findings[key]["fixed_versions"] = osv_fixed_versions(vuln, package)
     return findings
 
 
@@ -192,6 +234,10 @@ def osv(base: str | None, temp: Path, output: Path) -> bool:
     new = [row for key, row in current.items() if key not in previous]
     write(output / "osv.json", {"lockfiles": paths, "findings": new,
                                 "total_findings": len(current), "baseline": base})
+    for finding in new:
+        fixes = ",".join(finding["fixed_versions"]) or "unavailable"
+        annotation("error", f"{finding['package']} {finding['version']} {finding['id']} fixed-in {fixes}",
+                   finding["path"], finding["line"])
     # PR/push: every newly introduced vulnerable version blocks, at any severity.
     # Weekly: high/critical (CVSS >= 7); unknown scores also block for review.
     return bool(new) if base else any(row["cvss"] is None or row["cvss"] >= 7 for row in new)
