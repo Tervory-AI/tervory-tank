@@ -93,7 +93,7 @@ def build_router(tank):
         try:
             response = await tank._http.request(method, f'http://agent-{room.replace("_", "-")}:8000{path}',
                 params={'tenant_id': str(owner), 'region': tank.box_region(), **(params or {})}, content=content,
-                headers={'x-tank-key': key}, timeout=120)
+                headers={'x-tank-key': key, **({'content-type': 'application/json'} if path.startswith('/market/feeds/') and content is not None else {})}, timeout=120)
             if response.status_code >= 400:
                 fail(503, 'File storage could not complete the request. Please try again.')
             return response.json() if response.content else {}
