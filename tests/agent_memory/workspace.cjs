@@ -24,7 +24,7 @@ Module._load = function(name, parent, ...rest) {
   return load.call(this, name, parent, ...rest);
 };
 process.env.TANK_URL = 'http://tank.offline.invalid';
-process.env.TANK_API_KEY = 'offline-workspace';
+process.env.TANK_API_KEY = 'dummy-offline';
 process.env.TERVORY_ADMIN_USER_IDS = 'offline-founder';
 const id = '33333333-3333-4333-8333-333333333333';
 const row = {id, tenant_id: '44444444-4444-4444-8444-444444444444', agent: 'tank',
@@ -75,7 +75,7 @@ async function get(recordId = id) {
   assert.equal(sent.headers['X-Tervory-User'], 'offline-founder');
   assert.equal(sent.headers['X-Tervory-Tenant'], '00000000-0000-0000-0000-000000000001');
   assert.equal(sent.headers['X-Tervory-Role'], 'founder');
-  assert.equal(sent.headers['X-Tank-Key'], 'offline-workspace');
+  assert.equal(sent.headers['X-Tank-Key'], 'dummy-offline');
   assert.equal(sent.cache, 'no-store');
   assert.equal(sent.redirect, 'error');
   for (status of [404, 409, 503]) {
