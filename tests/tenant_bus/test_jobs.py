@@ -3,7 +3,8 @@ import asyncio
 import json
 import sys
 from pathlib import Path
-from uuid import UUID
+from types import SimpleNamespace
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
@@ -33,7 +34,7 @@ async def test_shared_and_legacy_jobs_use_existing_room_table(database, monkeypa
                                       UUID(response.json()['id']), UUID(A))
         assert Job.from_room(row, agent='tiger', region='us-east') == wire
         ctx = _context(app, 'tiger', row)
-        assert ctx.tenant_id == A and ctx.kind == 'check' and ctx.input == wire.input
+        assert ctx.tenant_id == A and ctx.kind == 'check' and ctx.input == {**wire.input, 'engine': wire.engine}
         legacy = await http.post('/jobs', json={'tenant_id': A, 'kind': 'ping', 'input': {}})
         assert legacy.status_code == 201
         for changed in ({'agent': 'rig'}, {'region': 'za'}):
@@ -64,3 +65,19 @@ async def test_base_worker_takes_tenant_from_task_not_json(database, monkeypatch
             assert tenant == A
     with pytest.raises(asyncio.CancelledError):
         await asyncio.wait_for(room.base_loop(database, Skills()), 2)
+
+
+@pytest.mark.parametrize(('engine', 'payload', 'expected'), [
+    ('ffl', {}, 'ffl'),
+    ('ffl', {'engine': 'different'}, 'ffl'),
+    (None, {'engine': 'ffl'}, 'ffl'),
+])
+def test_shared_engine_reaches_existing_handlers_without_rewriting_input(engine, payload, expected):
+    wire = Job(tenant_id=A, region='us-east', agent='market_lab', skill='opportunities',
+               engine=engine, input=payload)
+    app = SimpleNamespace(state=SimpleNamespace(files=None, tank=None, memory=None, browser=None))
+    row = {'id': uuid4(), **wire.to_room()}
+    ctx = _context(app, 'market_lab', row)
+    assert ctx.input['engine'] == expected
+    assert Job.from_room(row, agent='market_lab', region='us-east') == wire
+    assert wire.input == payload
