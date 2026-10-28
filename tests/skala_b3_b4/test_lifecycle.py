@@ -347,7 +347,7 @@ async def test_background_worker_drains_policy_swap_and_stops_before_pool(env, t
             while not (await jobs(env))[0]["completed_at"]:
                 await asyncio.sleep(.01)
         row = await env.db.fetchrow("SELECT * FROM tank.skills WHERE id=$1 AND version=$2", "base.b3", "1.0.0")
-        assert row["state"] == "staging" and row["last_eval_score"] == .2
+        assert row["state"] == "staging" and float(row["last_eval_score"]) == .2
         proof = os.environ.get("SKALA_B3_PROOF_DIR")
         if proof:
             folder = Path(proof)
