@@ -696,7 +696,8 @@ async def _startup() -> None:
             "UPDATE tank.tasks SET status='failed', error='Tank restarted mid-task', finished_at=now() "
             "WHERE status IN ('queued','running') AND task_type <> 'base.enrich' "
             "AND NOT EXISTS(SELECT 1 FROM tank.offpeak_jobs j WHERE j.task_id=tank.tasks.id "
-            "AND j.tenant_id=tank.tasks.tenant_id AND j.status IN ('queued','dispatching','batch'))"
+            "AND j.tenant_id=tank.tasks.tenant_id AND (j.status IN ('queued','dispatching','batch') "
+            "OR (j.command_context IS NOT NULL AND NOT j.notified)))"
         )
     global _http, _packages
     _http = httpx.AsyncClient(headers={"User-Agent": "Tervory/1.0 (+https://tervory.com)"}, timeout=15, event_hooks={"request": [__import__("controls").paid_host_hook], "response": [__import__("controls").paid_response_hook]})
@@ -2584,7 +2585,8 @@ async def batch_status(batch_id: uuid.UUID, tenant_id: uuid.UUID) -> dict[str, A
         if row is None:
             raise HTTPException(404, "No batch for this tenant")
         items = await conn.fetch(
-            """SELECT i.item_id,i.position,i.status,i.error,l.id AS ledger_id,l.model,l.rung,l.cost_usd,
+            """SELECT i.item_id,i.position,i.status,i.error,l.id AS ledger_id,l.model,l.rung,
+            CASE WHEN l.cost_status='not_set' THEN NULL ELSE l.cost_usd END AS cost_usd,
             coalesce(l.batch_baseline_cost_usd,l.baseline_cost_usd) AS baseline_cost_usd,
             l.tokens_in,l.tokens_out,l.latency_ms,l.batch,l.escalation,t.content
             FROM tank.batch_items i LEFT JOIN tank.ledger l ON l.id=i.ledger_id AND l.tenant_id=i.tenant_id
@@ -2704,9 +2706,6 @@ async def _process_batch(conn: Any, batch: Any) -> None:
         # Lock holder marks the submission boundary before contacting a provider.
         # A crash here is visibly uncertain; it must not silently buy the work twice.
         await conn.execute("UPDATE tank.batches SET status='submitting',submitted_at=now() WHERE id=$1 AND tenant_id=$2", batch["id"], batch["tenant_id"])
-        await conn.execute("""UPDATE tank.offpeak_jobs SET sent_at=now() WHERE id=$1 AND tenant_id=$2""", batch["id"], batch["tenant_id"])
-        await conn.execute("""UPDATE tank.ledger SET outcome='sent',sent_at=now()
-            WHERE offpeak_job_id=$1 AND tenant_id=$2 AND outcome='queued'""", batch["id"], batch["tenant_id"])
         lines = []
         for item in items:
             if item["ledger_id"] is not None:
@@ -2721,6 +2720,9 @@ async def _process_batch(conn: Any, batch: Any) -> None:
                 raise ValueError("provider_not_allowed")
             lines.append(json.dumps({"custom_id": str(item["item_id"]), "method": "POST", "url": "/v1/chat/completions",
                 "body": {"model": prices["native"], "messages": snapshot["messages"], "max_tokens": snapshot["max_tokens"], **snapshot["generation"]}}))
+        await conn.execute("""UPDATE tank.offpeak_jobs SET sent_at=now() WHERE id=$1 AND tenant_id=$2""", batch["id"], batch["tenant_id"])
+        await conn.execute("""UPDATE tank.ledger SET outcome='sent',sent_at=now()
+            WHERE offpeak_job_id=$1 AND tenant_id=$2 AND outcome='queued'""", batch["id"], batch["tenant_id"])
         provider_id, file_id = await batch_providers.submit(_batch_gateway, batch, lines)
         await conn.execute("""UPDATE tank.batches SET status='submitted',provider_id=$3,input_file_id=$4
             WHERE id=$1 AND tenant_id=$2""", batch["id"], batch["tenant_id"], provider_id, file_id)
