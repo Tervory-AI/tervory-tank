@@ -91,7 +91,7 @@ def local_file(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_new_file_source_installs_after_legacy_atf_block_and_retains_stop(database, monkeypatch, local_file):
+async def test_new_file_source_installs_after_legacy_atf_block_and_retains_stop(database, monkeypatch, local_file):  # noqa: F811 (pytest fixture parameter)
     conn, rt = database
     # Represent the old row exactly: the new additive column is still empty.
     await conn.execute("INSERT INTO tank.base_reference_checks(owner_id,checked_at,status,message) VALUES($1,now(),'blocked','ATF did not allow the read (HTTP 403). Automatic checks have stopped.')", PLATFORM)
@@ -130,7 +130,7 @@ async def test_configured_refresh_uses_filename_date_and_same_parser(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_each_blocked_source_gets_one_try_survives_restart_and_does_not_clear_atf(database, monkeypatch):
+async def test_each_blocked_source_gets_one_try_survives_restart_and_does_not_clear_atf(database, monkeypatch):  # noqa: F811 (pytest fixture parameter)
     conn, rt = database
     seen = []
     monkeypatch.setenv('BASE_REFERENCE_FILE_URL', FILE_URL)
@@ -198,7 +198,7 @@ async def test_dns_mixed_answers_and_redirects_to_private_addresses_are_refused(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('body', [b'', b'not,a,licence\n1,2,3\n', b'<html>captcha</html>'])
-async def test_bad_file_does_not_install_or_fall_back_to_atf(database, monkeypatch, body):
+async def test_bad_file_does_not_install_or_fall_back_to_atf(database, monkeypatch, body):  # noqa: F811 (pytest fixture parameter)
     conn, rt = database
     monkeypatch.setenv('BASE_REFERENCE_FILE_URL', FILE_URL)
     monkeypatch.setattr(reference, '_blocked_files', set())
@@ -241,7 +241,7 @@ async def test_missing_invalid_or_future_file_date_is_not_invented(monkeypatch, 
     ({'CA': 3, 'TX': 2, 'WY': 1}, ['WY', 'TX', 'CA']),
     ({'TX': 1, 'CA': 1, 'WY': 2}, ['CA', 'TX', 'WY']),
 ])
-async def test_campaign_persists_fewest_reference_licences_first_then_name(database, counts, expected):
+async def test_campaign_persists_fewest_reference_licences_first_then_name(database, counts, expected):  # noqa: F811 (pytest fixture parameter)
     _, rt = database
     store = BaseStore(rt)
     rows = [reference.project(raw(i + 1, state)) for i, state in enumerate(
