@@ -62,3 +62,19 @@ acceptance have not been performed. No screenshots or live success are claimed.
 git diff --check
 # both exit 0
 ```
+
+## First offline validation
+
+```sh
+POOL_SCHEMA_DATABASE_URL=postgresql://postgres@127.0.0.1:55432/postgres /workspace/worker-venv/bin/python -m pytest -q tests/test_tank_semantic_cache.py > tests/tank_semantic_cache/tests-first.txt 2>&1
+# exit 0: 24 passed, 5 existing FastAPI lifespan deprecation warnings, 18.55s
+```
+
+Real Tank handlers, disposable local Postgres, Qdrant's in-memory implementation,
+and a deliberately identical-vector encoder stub prove that numeric/negation and
+scope guards override similarity. Includes 199/200 samples, .989/.99 agreement,
+duplicate input exclusion, founder-only approval, revoke, policy invalidation,
+chat exact matching, existing prose judge accounting/budget, reports and schema
+reapplication. No inference, download or paid provider call occurred. Added explicit
+token-length refusal to avoid runtime encoder truncation, and verified Docker's
+COPY list includes both new modules.
