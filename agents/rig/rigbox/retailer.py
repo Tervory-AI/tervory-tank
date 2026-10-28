@@ -98,8 +98,14 @@ class Retailer:
         theme = data.get("theme", previous.get("theme", "neutral"))
         if theme not in ("neutral", "custom-nation"):
             raise ValueError()
+        from rigbox.quotes.notice import notice
+
+        configured_notice = data.get("quote_notice", previous.get("quote_notice"))
+        validated_notice = notice(configured_notice)
         await self.store.put_retailer(tenant, previous.get("slug") or tenant, email,
-                                      previous.get("webhook"), name.strip(), theme=theme)
+                                      previous.get("webhook"), name.strip(), theme=theme,
+                                      quote_notice={key: validated_notice[key] for key in ("text", "url")}
+                                      if validated_notice else None)
         return {"saved": True}
 
     async def embed_key(self, tenant: str, data: dict[str, Any]) -> dict:
