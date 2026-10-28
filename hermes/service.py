@@ -21,6 +21,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from hermes.auth import agent_key_hashes, identify
 from hermes.embeddings import Embedder
+from hermes.records import ClaimTooLong
+from hermes.record_routes import claim_validation_error
 from hermes.store import Hit, Memory, MemoryStore, collection_for, copy_memory
 
 log = logging.getLogger("hermes")
@@ -152,6 +154,8 @@ def create_app(
                     last_verified=body.last_verified,kind=body.kind,meta=body.meta,
                     row_id=str(body.id) if body.id else None)
                 return JSONResponse(saved,status_code=201)
+            except ClaimTooLong as exc:
+                raise claim_validation_error("text", exc) from None
             except ValueError:
                 raise HTTPException(409,'Memory record conflict') from None
             except Exception:
