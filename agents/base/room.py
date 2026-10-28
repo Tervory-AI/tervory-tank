@@ -211,15 +211,17 @@ class SkillClient:
             return await self._read(response)
 
         reliability = None
+        reliability_lock = asyncio.Lock()
 
         async def call(skill_id: str, payload: dict[str, Any]) -> dict[str, Any]:
             nonlocal reliability
             if skill_id == "base.normalize":
-                if reliability is None:
-                    response = await self._http.get(
-                        self._base + "/v1/base-product/source-reliability/room",
-                        headers=self._headers(), timeout=30)
-                    reliability = (await self._read(response))["scores"]
+                async with reliability_lock:
+                    if reliability is None:
+                        response = await self._http.get(
+                            self._base + "/v1/base-product/source-reliability/room",
+                            headers=self._headers(), timeout=30)
+                        reliability = (await self._read(response))["scores"]
                 # Reserved output metadata, not user input or an additional skill/model call.
                 return {**await direct(skill_id, payload), "_source_reliability": reliability}
             if skill_id == "base.scrape_site":
