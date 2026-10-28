@@ -57,8 +57,9 @@ async def ensure(actor: Actor = Depends(identity)) -> dict:
 
 
 @router.get("/clients")
-async def clients(actor: Actor = Depends(identity), offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500)) -> dict:
+async def clients(response: Response, actor: Actor = Depends(identity), offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500)) -> dict:
     require_founder(actor)
+    response.headers["Cache-Control"] = "private, no-store"
     async with db().acquire() as conn:
         rows = await conn.fetch("""SELECT c.tenant_id,c.created_at,
             coalesce(array_agg(r.product ORDER BY r.product) FILTER(WHERE r.product IS NOT NULL),'{}') AS products
