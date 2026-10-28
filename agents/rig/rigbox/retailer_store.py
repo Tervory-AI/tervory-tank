@@ -23,7 +23,7 @@ class RetailerMemoryStore:
         deleted = await self.deleted_skus(tenant_id)
         return [{"sku": row["sku"], "url": row["url"].strip(), "name": row["name"]}
                 for row in await self.products(tenant_id)
-                if row.get("url", "").strip() and row["sku"] not in deleted
+                if (row.get("url") or "").strip() and row["sku"] not in deleted
                 and not await self.is_feed_product(tenant_id, row["sku"])]
 
     async def watch_applied_at(self, tenant_id: str, sku: str, url: str):
@@ -78,7 +78,20 @@ class RetailerMemoryStore:
 
     async def is_feed_product(self, tenant_id: str, sku: str) -> bool:
         self._retailer_state()
-        return (str(tenant_id), sku) in self.private_costs
+        tenant = str(tenant_id)
+        indexed = getattr(self, "indexed_feeds", set())
+        unknown = any(owner == tenant and (owner, url) not in indexed for owner, url in self.feeds)
+        return (unknown or (tenant, sku) in self.private_costs
+                or any(owner == tenant and item == sku for owner, item, _ in getattr(self, "feed_products", set())))
+
+    async def index_feed_products(self, tenant_id: str, url: str, skus: list[str], *, complete: bool = True) -> None:
+        if not hasattr(self, "indexed_feeds"):
+            self.indexed_feeds, self.feed_products = set(), set()
+        if complete:
+            self.indexed_feeds.add((str(tenant_id), url))
+        else:
+            self.indexed_feeds.discard((str(tenant_id), url))
+        self.feed_products.update((str(tenant_id), sku, url) for sku in skus if (str(tenant_id), sku) in self._products)
 
     async def save_feed_receipt(self, tenant_id: str, receipt: dict[str, Any]) -> None:
         self._retailer_state()
@@ -102,6 +115,8 @@ class RetailerPgStore:
             rows = await conn.fetch("""SELECT p.sku,btrim(p.url) AS url,p.name FROM agent_rig.products p
                 WHERE p.tenant_id=$1 AND btrim(coalesce(p.url,''))<>''
                 AND NOT EXISTS (SELECT 1 FROM agent_rig.supplier_costs s WHERE s.tenant_id=p.tenant_id AND s.sku=p.sku)
+                AND NOT EXISTS (SELECT 1 FROM agent_rig.feed_products f WHERE f.tenant_id=p.tenant_id AND f.sku=p.sku)
+                AND NOT EXISTS (SELECT 1 FROM agent_rig.feeds f WHERE f.tenant_id=p.tenant_id AND NOT f.watch_indexed)
                 AND NOT EXISTS (SELECT 1 FROM agent_rig.deleted_products d WHERE d.tenant_id=p.tenant_id AND d.sku=p.sku)
                 ORDER BY p.sku""", UUID(str(tenant_id)))
         return [dict(row) for row in rows]
@@ -169,7 +184,17 @@ class RetailerPgStore:
 
     async def is_feed_product(self, tenant_id: str, sku: str) -> bool:
         async with self.pool.acquire() as conn:
-            return bool(await conn.fetchval("SELECT 1 FROM agent_rig.supplier_costs WHERE tenant_id=$1 AND sku=$2", UUID(str(tenant_id)), sku))
+            return bool(await conn.fetchval("""SELECT
+                EXISTS(SELECT 1 FROM agent_rig.supplier_costs WHERE tenant_id=$1 AND sku=$2)
+                OR EXISTS(SELECT 1 FROM agent_rig.feed_products WHERE tenant_id=$1 AND sku=$2)
+                OR EXISTS(SELECT 1 FROM agent_rig.feeds WHERE tenant_id=$1 AND NOT watch_indexed)""", UUID(str(tenant_id)), sku))
+
+    async def index_feed_products(self, tenant_id: str, url: str, skus: list[str], *, complete: bool = True) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute("""INSERT INTO agent_rig.feed_products(tenant_id,sku,feed_url)
+                SELECT tenant_id,sku,$2 FROM agent_rig.products WHERE tenant_id=$1 AND sku=ANY($3::text[])
+                ON CONFLICT DO NOTHING""", UUID(str(tenant_id)), url, skus)
+            await conn.execute("UPDATE agent_rig.feeds SET watch_indexed=$3 WHERE tenant_id=$1 AND url=$2", UUID(str(tenant_id)), url, complete)
 
     async def save_feed_receipt(self, tenant_id: str, receipt: dict[str, Any]) -> None:
         async with self.pool.acquire() as conn:

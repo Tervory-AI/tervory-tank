@@ -153,6 +153,15 @@ CREATE TABLE IF NOT EXISTS agent_rig.feeds (
     PRIMARY KEY (tenant_id, url)
 );
 
+-- Legacy feed rows predate supplier_costs. Until a feed refresh records its
+-- product membership, its tenant's provenance is unknown and Tiger fails closed.
+ALTER TABLE agent_rig.feeds ADD COLUMN IF NOT EXISTS watch_indexed boolean NOT NULL DEFAULT false;
+CREATE TABLE IF NOT EXISTS agent_rig.feed_products (
+    tenant_id uuid NOT NULL, sku text NOT NULL, feed_url text NOT NULL,
+    PRIMARY KEY (tenant_id, sku, feed_url),
+    FOREIGN KEY (tenant_id, sku) REFERENCES agent_rig.products(tenant_id, sku) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS agent_rig.answers (
     tenant_id   uuid NOT NULL,
     kind        text NOT NULL,

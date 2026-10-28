@@ -15,6 +15,21 @@ Implementation plan:
   the existing Tiger-key-protected `/v1/access/rig/tiger` receiver.
 - Exercise the real services offline with two tenants and record results here.
 
-No application changes in this checkpoint. Tests and founder-browser proof are
-pending. No live database access, model calls, new key or GitHub API calls.
-Claude opens the PR; no main push or merge.
+Implementation checkpoint: discovery, ordinary scheduled watches, durable
+confirmed-observation delivery, feed provenance and receiver guards are built.
+
+Commands (after `source /workspace/tervory-env/activate.sh`):
+
+```text
+python -m pytest -q tests/rig_tiger_prices/test_prices.py tests/test_rig_feeds_retailer.py
+31 passed, 1 warning in 1.55s
+python -m pytest -q tests/rig_tiger_prices tests/test_rig_feeds.py tests/test_rig_feeds_retailer.py tests/test_rig_delete_products.py
+77 passed, 1 warning in 8.19s
+```
+
+Outputs: `evidence/receiver.txt`, `evidence/cycle-and-feeds.txt`. The second
+command uses disposable loopback Postgres databases, real Tiger handlers and
+Tank/Rig ASGI routes, and offline saved pages. Both schemas are applied twice.
+Broader regressions and final file/line inventory are next. Founder-browser
+proof remains pending; this branch is not deployed. No live database access,
+model calls, new key or GitHub API calls. Claude opens the PR; no main push or merge.

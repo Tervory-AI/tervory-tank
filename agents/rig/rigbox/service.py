@@ -847,12 +847,15 @@ class Service:
                 reports.append({"format": fmt, "added": 0, "updated": 0, "rejected": mapped["rejected"]})
                 continue
             added = updated = 0
-            for row in mapped["rows"]:
-                action = await self.store.upsert_product(tenant_id, row)
-                if action == "added":
-                    added += 1
-                elif action == "updated":
-                    updated += 1
+            async with self.store.atomic(tenant_id) as store:
+                for row in mapped["rows"]:
+                    action = await store.upsert_product(tenant_id, row)
+                    if action == "added":
+                        added += 1
+                    elif action == "updated":
+                        updated += 1
+                await store.index_feed_products(tenant_id, str(feed["url"]), [row["sku"] for row in mapped["rows"]],
+                                                complete=not mapped["rejected"])
             reports.append({"format": fmt, "added": added, "updated": updated, "rejected": mapped["rejected"]})
         return reports
 
