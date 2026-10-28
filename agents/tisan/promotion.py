@@ -216,7 +216,9 @@ class Promotion:
                 gate = await self.radix_gate(tenant, config['url'], 'commit:' + expected)
                 if not isinstance(gate, dict):
                     raise Refused('Radix gate response unavailable')
-                stamp = datetime.fromisoformat(gate.get('completed_at', '').replace('Z', '+00:00'))
+                if not isinstance(gate.get('completed_at'), str):
+                    raise Refused('Radix completion time unavailable')
+                stamp = datetime.fromisoformat(gate['completed_at'].replace('Z', '+00:00'))
                 age = (datetime.now(timezone.utc) - stamp).total_seconds()
                 if (gate.get('allowed') is not True or gate.get('status') != 'complete'
                     or gate.get('tenant_id') != tenant or gate.get('target') != config['url']
@@ -256,7 +258,7 @@ class Promotion:
                 raise Refused('deployment acknowledgement mismatch')
             details['deployment'] = identifier(rows[0].get('deployment_uuid', ''))
             self.journal.update(tenant, site, operation, 'pending', details)
-        except (Refused, ValueError, TypeError, KeyError, OSError, TimeoutError, httpx.HTTPError):
+        except (Refused, ValueError, TypeError, KeyError, AttributeError, OSError, TimeoutError, httpx.HTTPError):
             self.journal.update(tenant, site, operation, 'unknown' if mutation else 'refused', details, terminal=not mutation)
         return self.journal.get(tenant, site, operation)
 
