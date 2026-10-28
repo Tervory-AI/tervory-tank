@@ -123,7 +123,7 @@ async def test_exact_promotion_rollback_and_durable_audit(rig):
 @pytest.mark.parametrize('field,value', [('allowed', False), ('allowed', 'true'), ('status', 'pending'),
     ('status', 'error'), ('tenant_id', OTHER), ('target', 'https://other.example.org/'),
     ('artifact', 'commit:' + OLD), ('high', 1), ('high', False), ('critical', 1), ('scan_id', ''),
-    ('completed_at', ''), ('completed_at', datetime.now(timezone.utc).replace(tzinfo=None).isoformat()),
+    ('completed_at', ''), ('completed_at', None), ('completed_at', datetime.now(timezone.utc).replace(tzinfo=None).isoformat()),
     ('completed_at', (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()),
     ('completed_at', (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat())])
 async def test_gate_fail_closed(rig, field, value):
