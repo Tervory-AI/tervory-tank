@@ -46,3 +46,25 @@ git diff --check
 ```
 
 Result: **88 passed, 1 skipped in 7.95s**, one existing warning. Ruff and diff checks passed. The skipped case requires POOL_SCHEMA_DATABASE_URL, which was not supplied. The offline question “Who calls the shots under the Companies Act?” retrieves the recorded board-management section with `Act 71 of 2008, s 66(1)`, its stored Laws.Africa link and date. The encoder is stubbed: this demonstrates wiring and provenance, not the pinned model's real ranking quality. An approved cached rule card tests the saved answer with zero model calls.
+
+## Step 3: SA criminal refusal and official sources
+
+`agents/zenas/core/areas.json` adds Criminal Procedure Act, National Prosecuting Authority Act, prosecution/proceedings, plea bargain/agreement, admission-of-guilt fine and sentence-appeal terms. Existing bail, charges and sentencing terms remain. Civil areas and refusal wording are unchanged.
+
+The room refuses a criminal rule in `agents/zenas/core/matters.py` **before** calling Tank. This prevents an unnecessary model call even while a new skill version awaits its normal review. `AGENTS.md` prohibits editing approved versions, so `tank/skills/zenas.scope/1.2.0/` copies 1.1.0, adds these terms and the 20 evals, and updates its version/changelog. 1.0.0 and 1.1.0 are untouched. Two existing scope tests now select 1.2.0 and expect no Tank call for a criminal rule. No Skala lifecycle, policy selection or production approval was changed.
+
+Official documents retrieved successfully on this cloud:
+
+| Source | Relevant official text | SHA-256 of retrieved PDF |
+| --- | --- | --- |
+| [Justice Department: Criminal Procedure Act 51 of 1977](https://www.justice.gov.za/legislation/acts/1977-051.pdf) | s 57: “Admission of guilt and payment of fine without appearance in court”; s 60: “Bail application of accused in court”; s 105A: “Plea and sentence agreements”; s 276: “Nature of punishments”; s 309: “Appeal from lower court by person convicted”. “Plea bargain” is the everyday term tested for s 105A, not a renamed statute. | `aeefd619ddece43258c3cdbaa361ce4c21570f8a3eaf0543fea14f3ef32e4b6c` |
+| [Justice Department: National Prosecuting Authority Act 32 of 1998](https://www.justice.gov.za/legislation/acts/1998-032.pdf) | s 20: “Power to institute and conduct criminal proceedings”; s 20(1)(a): “institute and conduct criminal proceedings on behalf of the State”. | `c22a5251716a4dc5565a16b0a741000b3c7b3b565083b102b26f8037b7d6ac2a` |
+
+```sh
+curl --fail --location --max-time 30 --output /tmp/zenas-criminal-procedure.pdf https://www.justice.gov.za/legislation/acts/1977-051.pdf
+curl --fail --location --max-time 30 --output /tmp/zenas-npa-act.pdf https://www.justice.gov.za/legislation/acts/1998-032.pdf
+sha256sum /tmp/zenas-criminal-procedure.pdf /tmp/zenas-npa-act.pdf
+env -u RIG_TEST_DATABASE_URL -u POOL_SCHEMA_DATABASE_URL -u ZENAS_SCHEMA_DATABASE_URL -u GITHUB_ACTIONS PYTHONPATH=. /workspace/.tervory-cloud/venv/bin/python /tmp/zenas-laws-africa-offline.py -q tests/zenas_za_meaning_search/test_sa_scope.py tests/test_zenas_z1.py
+```
+
+Both downloads exited 0. The PDFs were read with pypdf, not sent to a model. Scope verification: **48 passed in 1.77s**, including 10 criminal refusals, 10 civil allowances, checks that criminal questions never call Tank, and the new skill's offline execution. The existing tests initially expected a Tank call and config version 1.1.0; only those affected expectations were updated. The text remains exactly “Refused. Zenas does not do criminal law. Ask a criminal lawyer in that jurisdiction.”
