@@ -31,6 +31,7 @@ services:
       TANK_URL: http://tank:8000
       TANK_KEY: ${TANK_KEY:-}
       HERMES_URL: http://hermes:8000
+      DOCASSEMBLE_REGION: za
       DOCASSEMBLE_URL: http://docassemble
       DOCASSEMBLE_API_KEY: ${DOCASSEMBLE_API_KEY:-}
       ZENAS_PII_KEY: ${ZENAS_PII_KEY:-}
