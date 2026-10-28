@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from chassis.browser import BrowserClient
 from chassis.db import as_json, ensure_schedules, ensure_schema, schema_for
+from chassis.tenant_db import TenantPool, tenant_path
 from chassis.files import read_file, save_file
 from chassis.jobs import JobContext, timeout_for
 from chassis.job_contract import Job
@@ -63,9 +64,24 @@ def create_app(
         database_url = os.environ.get("DATABASE_URL", "")
         if not database_url:
             raise RuntimeError("DATABASE_URL is not set")
-        pool = await asyncpg.create_pool(database_url, min_size=1, max_size=3)
+        raw_pool = await asyncpg.create_pool(database_url, min_size=1, max_size=3)
+        pool = TenantPool(raw_pool)
+        admin_url = os.environ.get("CHASSIS_ADMIN_DATABASE_URL", "")
+        admin_pool = await asyncpg.create_pool(admin_url, min_size=1, max_size=2) if admin_url else None
+        if admin_pool is not None:
+            async with admin_pool.acquire() as conn:
+                role = await conn.fetchrow("SELECT rolname, rolbypassrls FROM pg_roles WHERE rolname=current_user")
+                if role["rolname"] != os.environ.get("CHASSIS_RLS_ADMIN_ROLE", "") or not role["rolbypassrls"]:
+                    raise RuntimeError("CHASSIS_ADMIN_DATABASE_URL must use the configured BYPASSRLS role")
+        async with raw_pool.acquire() as conn:
+            enforced = await conn.fetchval("SELECT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.relrowsecurity AND n.nspname=$1)", schema_for(agent))
+            if enforced is True:
+                role = await conn.fetchrow("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname=current_user")
+                if role["rolsuper"] or role["rolbypassrls"] or admin_pool is None:
+                    raise RuntimeError("RLS requires a non-bypass room role and a separate admin pool")
         http = httpx.AsyncClient(timeout=60)
         app.state.pool = pool
+        app.state.admin_pool = admin_pool
         app.state.http = http
         app.state.files = FileStore(os.environ.get("DATA_DIR", "/data"))
         app.state.tank = TankClient(
@@ -76,15 +92,15 @@ def create_app(
         )
         app.state.memory = MemoryClient()
         app.state.browser = BrowserClient()
-        async with pool.acquire() as conn:
+        async with (admin_pool or raw_pool).acquire() as conn:
             schema = await ensure_schema(conn, agent)
             await ensure_schedules(conn, schema, planned)
         if not os.environ.get("TANK_KEY"):
             log_line(agent, "tank key is not set")
         log_line(agent, "chassis ready")
         tasks = [
-            asyncio.create_task(job_loop(pool, agent, handlers, lambda job: _context(app, agent, job))),
-            asyncio.create_task(schedule_loop(pool, agent, timeouts)),
+            asyncio.create_task(job_loop(pool, agent, handlers, lambda job: _context(app, agent, job), discovery_pool=admin_pool or raw_pool)),
+            asyncio.create_task(schedule_loop(admin_pool or raw_pool, agent, timeouts)),
         ]
         try:
             yield
@@ -94,6 +110,8 @@ def create_app(
             await asyncio.gather(*tasks, return_exceptions=True)
             await http.aclose()
             await pool.close()
+            if admin_pool is not None:
+                await admin_pool.close()
 
     app = FastAPI(title=f"Tervory agent {agent}", version="0.1.0", lifespan=lifespan)
     app.include_router(storage_router(agent))
@@ -115,6 +133,7 @@ def create_app(
         return {"ok": True, "agent": agent}
 
     @app.post("/jobs", status_code=201)
+    @tenant_path("body")
     async def enqueue(body: JobIn | Job) -> dict[str, Any]:
         region = os.environ.get("TANK_REGION", "us-east")
         try:
@@ -165,6 +184,7 @@ def create_app(
         }
 
     @app.get("/jobs/{job_id}")
+    @tenant_path("tenant_id")
     async def get_job(job_id: uuid.UUID, tenant_id: uuid.UUID = Query()) -> dict[str, Any]:
         schema = schema_for(agent)
         async with app.state.pool.acquire() as conn:
