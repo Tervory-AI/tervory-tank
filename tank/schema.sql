@@ -1967,6 +1967,40 @@ ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_parent_id uuid;
 ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_sample_tenant uuid;
 ALTER TABLE tank.shadow ADD COLUMN IF NOT EXISTS routellm_config text;
 ALTER TABLE tank.shadow ADD COLUMN IF NOT EXISTS candidate_ledger_id uuid;
+
+-- Case-study report identities. Values stay in their existing evidence stores.
+CREATE TABLE IF NOT EXISTS tank.case_study_clients (
+    tenant_id uuid PRIMARY KEY,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS tank.case_study_reports (
+    tenant_id uuid NOT NULL REFERENCES tank.case_study_clients(tenant_id),
+    product text NOT NULL CHECK(product IN ('base','tiger','market_lab','rig','zenas','trigger','tisan','radix','autumbra')),
+    template_version integer NOT NULL DEFAULT 1,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,product)
+);
+CREATE OR REPLACE FUNCTION tank.register_case_study_product() RETURNS trigger AS $$
+DECLARE report_product text := CASE WHEN NEW.agent='ghost' THEN 'autumbra' ELSE NEW.agent END;
+BEGIN
+    IF report_product IN ('base','tiger','market_lab','rig','zenas','trigger','tisan','radix','autumbra') THEN
+        INSERT INTO tank.case_study_clients(tenant_id) VALUES(NEW.tenant_id) ON CONFLICT DO NOTHING;
+        INSERT INTO tank.case_study_reports(tenant_id,product) VALUES(NEW.tenant_id,report_product) ON CONFLICT DO NOTHING;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+DO $$ BEGIN
+    IF NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='case_study_product_added' AND tgrelid='tank.tenant_squad'::regclass) THEN
+        CREATE TRIGGER case_study_product_added AFTER INSERT OR UPDATE OF agent ON tank.tenant_squad
+            FOR EACH ROW EXECUTE FUNCTION tank.register_case_study_product();
+    END IF;
+END $$;
+-- Existing grants receive the same registration once; no report metrics are copied.
+INSERT INTO tank.case_study_clients(tenant_id) SELECT DISTINCT tenant_id FROM tank.tenant_squad ON CONFLICT DO NOTHING;
+INSERT INTO tank.case_study_reports(tenant_id,product)
+    SELECT tenant_id,CASE WHEN agent='ghost' THEN 'autumbra' ELSE agent END FROM tank.tenant_squad
+    WHERE agent IN ('base','tiger','market_lab','rig','zenas','trigger','tisan','radix','autumbra','ghost') ON CONFLICT DO NOTHING;
 CREATE INDEX IF NOT EXISTS shadow_routellm_tenant_task ON tank.shadow(tenant_id,task_type,routellm_config)
     WHERE routellm_config IS NOT NULL;
 
