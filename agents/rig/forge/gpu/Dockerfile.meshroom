@@ -4,7 +4,7 @@ WORKDIR /opt/forge
 COPY gpu /opt/forge/gpu
 ENV PATH="/opt/forge/venv/bin:$PATH"
 RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-venv ca-certificates \
-      libgl1 libglib2.0-0t64 libx11-6 libxrender1 libxi6 libsm6 libice6 libgomp1 libfontconfig1 \
+      libgl1 libglib2.0-0t64 libx11-6 libxrender1 libxi6 libsm6 libice6 libgomp1 libfontconfig1 libgssapi-krb5-2 \
     && python3 -m venv /opt/forge/venv \
     && python -m pip install --no-cache-dir --require-hashes -r gpu/meshroom-requirements.lock \
     && python gpu/install_sources.py gpu/meshroom.lock.json \
