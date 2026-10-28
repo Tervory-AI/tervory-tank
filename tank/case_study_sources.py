@@ -73,7 +73,8 @@ async def base(conn, tenant, region, start, end, figures):
         bounds = (measured or {}).get("confidence_interval") or {"lower": 0, "upper": 0}
         put(figures, "base.measured_accuracy", 100 * ((measured or {}).get("accuracy") or 0), "base_audit.measure",
             lower=100 * bounds["lower"], upper=100 * bounds["upper"],
-            sample_size=(measured or {}).get("reviewed", 0), resolved=(measured or {}).get("denominator", 0),
+            sample_size=(measured or {}).get("sample_size", 0), reviewed=(measured or {}).get("reviewed", 0),
+            resolved=(measured or {}).get("denominator", 0),
             unsure=(measured or {}).get("unsure", 0), audit_id=str(audit["id"]) if audit else None)
 
 
