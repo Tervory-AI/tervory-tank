@@ -111,7 +111,7 @@ index 346ca9f..d688271 100644
 @@ -89,0 +93 @@ export type QuoteRequest = {
 +  notice_version?: string;
 diff --git a/widget/src/element.ts b/widget/src/element.ts
-index f6deaf4..b263e91 100644
+index f6deaf4..8f0b658 100644
 --- a/widget/src/element.ts
 +++ b/widget/src/element.ts
 @@ -5 +5 @@ import { RigError } from "./api/types";
@@ -123,7 +123,12 @@ index f6deaf4..b263e91 100644
 @@ -120,0 +123,2 @@ export class TervoryRig extends HTMLElement {
 +    this.notice = null;
 +    this.noticeReady = false;
-@@ -124,0 +129,11 @@ export class TervoryRig extends HTMLElement {
+@@ -124,0 +129,16 @@ export class TervoryRig extends HTMLElement {
++    this.refreshNotice();
++  }
++
++  private refreshNotice(): void {
++    this.noticeReady = false;
 +    const client = this.client;
 +    void client.privacyNotice().then((notice) => {
 +      if (client !== this.client) return;
@@ -135,22 +140,30 @@ index f6deaf4..b263e91 100644
 +      this.message = this.errorText(error);
 +      this.render();
 +    });
-@@ -168,0 +184,2 @@ export class TervoryRig extends HTMLElement {
+@@ -168,0 +189,2 @@ export class TervoryRig extends HTMLElement {
 +      notice: this.notice,
 +      noticeReady: this.noticeReady,
-@@ -837 +854 @@ export class TervoryRig extends HTMLElement {
+@@ -801,0 +824 @@ export class TervoryRig extends HTMLElement {
++    this.refreshNotice();
+@@ -820,0 +844 @@ export class TervoryRig extends HTMLElement {
++    this.refreshNotice();
+@@ -837 +861 @@ export class TervoryRig extends HTMLElement {
 -    if (!this.quote || !this.quoteTarget || this.quote.pending || this.quote.requestId) return;
 +    if (!this.noticeReady || !this.quote || !this.quoteTarget || this.quote.pending || this.quote.requestId) return;
-@@ -853,2 +870,2 @@ export class TervoryRig extends HTMLElement {
+@@ -853,2 +877,2 @@ export class TervoryRig extends HTMLElement {
 -          ? await this.client.quote({ contact, product_id: target.productId })
 -          : await this.client.quote({ contact, setup });
 +          ? await this.client.quote({ contact, notice_version: this.notice?.version, product_id: target.productId })
 +          : await this.client.quote({ contact, notice_version: this.notice?.version, setup });
-@@ -893,0 +911 @@ export class TervoryRig extends HTMLElement {
+@@ -868,0 +893 @@ export class TervoryRig extends HTMLElement {
++      if (error instanceof RigError && error.code === "notice_changed") this.refreshNotice();
+@@ -893,0 +919 @@ export class TervoryRig extends HTMLElement {
 +    if (!this.noticeReady) return;
-@@ -926 +944 @@ export class TervoryRig extends HTMLElement {
+@@ -926 +952 @@ export class TervoryRig extends HTMLElement {
 -      const response = await this.client.linkQuote({ url: this.linkUrl.trim(), note: "", contact });
 +      const response = await this.client.linkQuote({ notice_version: this.notice?.version, url: this.linkUrl.trim(), note: "", contact });
+@@ -929,0 +956 @@ export class TervoryRig extends HTMLElement {
++      if (error instanceof RigError && error.code === "notice_changed") this.refreshNotice();
 diff --git a/widget/src/mock/unavailable.ts b/widget/src/mock/unavailable.ts
 index e551a60..c4eba52 100644
 --- a/widget/src/mock/unavailable.ts
