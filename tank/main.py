@@ -66,7 +66,7 @@ from pydantic import BaseModel, Field
 import batch_providers
 import graduate
 import semantic_cache
-from tenant_db import TenantPool, tenant_path, tenant_scope, administrative, bind_tenant_endpoints
+from tenant_db import TenantContextMiddleware, TenantPool, tenant_path, tenant_scope, administrative, bind_tenant_endpoints
 import routellm_shadow
 import skala
 import skill_costs
@@ -88,6 +88,7 @@ _pii_detect = None
 _skill_home: contextvars.ContextVar[str | None] = contextvars.ContextVar("zenas_skill_home", default=None)
 
 app = FastAPI(title="Tervory Tank", version="0.2.0")
+app.add_middleware(TenantContextMiddleware)
 _pool: Any = None
 _admin_pool: asyncpg.Pool | None = None
 _background: set[asyncio.Task[None]] = set()
