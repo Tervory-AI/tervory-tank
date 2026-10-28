@@ -83,7 +83,8 @@ def test_comtrade_recording_keeps_eight_values_and_source_times():
     assert result["note"] == ""
     assert len(result["points"]) == 8
     assert sorted(float(row["value"]) for row in result["points"]) == sorted(row["primaryValue"] for row in recorded)
-    assert all(row["url"] == spec("comtrade_preview").url and row["fetched_at"] for row in result["points"])
+    assert all(row["url"].startswith(spec("comtrade_preview").url + "?period=2025&") and row["fetched_at"] for row in result["points"])
+    assert "maxRecords=500" in result["url"]
     assert "maxRecords=500" in comtrade_url(spec("comtrade_preview"))
     assert "key" not in comtrade_url(spec("comtrade_preview"))
 
