@@ -1873,6 +1873,9 @@ CREATE TABLE IF NOT EXISTS tank.base_audits (
     UNIQUE(tenant_id,campaign_id,seed)
 );
 
+-- Explicit field checks are additive; legacy record verdicts stay unchanged.
+ALTER TABLE tank.base_audits ADD COLUMN IF NOT EXISTS field_verdicts jsonb NOT NULL DEFAULT '{}'::jsonb;
+
 -- Job 6 (F8): Base source reliability from reviewed audits. Platform-wide counts only:
 -- source kind, field name and numbers; never a tenant, record, URL or value.
 CREATE TABLE IF NOT EXISTS tank.base_source_reliability (
