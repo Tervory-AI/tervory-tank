@@ -1,0 +1,8 @@
+{
+  "url": "https://github.com/Tervory-AI/tervory-tank/actions/runs/40692303376/job/122829962660",
+  "head": "dc89032",
+  "annotation": "SemgrepReportMissingExit2",
+  "missing_report_paths": [
+    "/home/runner/work/_temp/security-uscc8m4h/semgrep.json"
+  ]
+}
