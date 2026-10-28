@@ -12,7 +12,7 @@ from rigbox.retailer import Retailer
 from rigbox.service import RigError
 
 router = APIRouter()
-OPERATIONS = {"panel", "settings", "embed-keys", "import", "mapping", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest", "tiger"}
+OPERATIONS = {"panel", "settings", "embed-keys", "import", "delete-products", "mapping", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest", "tiger"}
 
 
 @router.post("/internal/retailer/{operation}")
@@ -61,6 +61,8 @@ async def retailer_operation(operation: str, request: Request) -> JSONResponse:
                 raise ValueError("Check the file format and product list path.") from None
         elif operation == "import":
             result = await retailer.import_file(tenant, data)
+        elif operation == "delete-products":
+            result = await retailer.delete_products(tenant, data)
         elif operation == "price-rule":
             result = await retailer.set_rule(tenant, data)
         elif operation == "exchange-rate":

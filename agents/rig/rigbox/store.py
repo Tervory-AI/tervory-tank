@@ -237,6 +237,33 @@ class MemoryStore(RetailerMemoryStore):
         self.market: dict[tuple[str, str, str], dict[str, Any]] = {}
         self.searches: list[dict[str, Any]] = []
         self.training_events: list[dict[str, Any]] = []
+        self.deleted_products: set[tuple[str, str]] = set()
+
+    async def deleted_skus(self, tenant_id: str) -> set[str]:
+        return {sku for tenant, sku in self.deleted_products if tenant == str(tenant_id)}
+
+    async def restore_products(self, tenant_id: str, skus: list[str]) -> None:
+        self.deleted_products.difference_update((str(tenant_id), sku) for sku in skus)
+
+    async def delete_products(self, tenant_id: str, skus: list[str]) -> int:
+        """Called inside atomic: catalogue, private rows and recall change together."""
+        self._retailer_state()
+        tenant, wanted = str(tenant_id), set(skus)
+        found = {sku for owner, sku in self._products if owner == tenant and sku in wanted}
+        for sku in found:
+            del self._products[(tenant, sku)]
+            self.deleted_products.add((tenant, sku))
+        self.private_costs = {key: row for key, row in self.private_costs.items()
+                              if key[0] != tenant or key[1] not in found}
+        self._fits = {key: row for key, row in self._fits.items()
+                      if key[0] != tenant or (key[1] not in found and key[2] not in found)}
+        for (owner, family), members in list(self.families.items()):
+            if owner == tenant:
+                await self.set_family(tenant, family, [sku for sku in members if sku not in found])
+        if found:
+            self._drop_answers(tenant)
+            await self.drop_searches(tenant)
+        return len(found)
 
     def _drop_answers(self, tenant_id: str) -> None:
         tenant = str(tenant_id)
@@ -247,6 +274,8 @@ class MemoryStore(RetailerMemoryStore):
 
     async def upsert_product(self, tenant_id: str, row: dict[str, Any]) -> str:
         key = (str(tenant_id), str(row["sku"]))
+        if key in self.deleted_products:
+            return "skipped"
         action = "updated" if key in self._products else "added"
         self._products[key] = {**row, "tenant_id": str(tenant_id), "sku": str(row["sku"])}
         self._drop_answers(tenant_id)
@@ -483,6 +512,38 @@ class PgStore(RetailerPgStore):
     def __init__(self, pool: Any) -> None:
         self.pool = pool
 
+    async def deleted_skus(self, tenant_id: str) -> set[str]:
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch("SELECT sku FROM agent_rig.deleted_products WHERE tenant_id=$1", _uuid(tenant_id))
+        return {row["sku"] for row in rows}
+
+    async def restore_products(self, tenant_id: str, skus: list[str]) -> None:
+        async with self.pool.acquire() as conn:
+            await conn.execute("DELETE FROM agent_rig.deleted_products WHERE tenant_id=$1 AND sku=ANY($2::text[])", _uuid(tenant_id), skus)
+
+    async def delete_products(self, tenant_id: str, skus: list[str]) -> int:
+        """Use the caller's atomic connection, including its tenant lock."""
+        tenant = _uuid(tenant_id)
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch("SELECT sku FROM agent_rig.products WHERE tenant_id=$1 AND sku=ANY($2::text[]) FOR UPDATE", tenant, skus)
+            found = [row["sku"] for row in rows]
+            if not found:
+                return 0
+            await conn.execute("""INSERT INTO agent_rig.deleted_products(tenant_id,sku)
+                SELECT $1,unnest($2::text[]) ON CONFLICT(tenant_id,sku) DO NOTHING""", tenant, found)
+            await conn.execute("DELETE FROM agent_rig.supplier_costs WHERE tenant_id=$1 AND sku=ANY($2::text[])", tenant, found)
+            await conn.execute("DELETE FROM agent_rig.fits WHERE tenant_id=$1 AND (part_sku=ANY($2::text[]) OR fits_sku=ANY($2::text[]))", tenant, found)
+            families = await conn.fetch("SELECT family,member_skus FROM agent_rig.families WHERE tenant_id=$1", tenant)
+            # These derived jobs reference the product. Quote history has no such FK.
+            await conn.execute("DELETE FROM agent_rig.rig_3d_jobs WHERE tenant_id=$1 AND product_id=ANY($2::text[])", tenant, found)
+            await conn.execute("DELETE FROM agent_rig.products WHERE tenant_id=$1 AND sku=ANY($2::text[])", tenant, found)
+        removed = set(found)
+        for row in families:
+            await self.set_family(tenant_id, row["family"], [sku for sku in row["member_skus"] if sku not in removed])
+        await self._drop_answers(tenant_id)
+        await self.drop_searches(tenant_id)
+        return len(found)
+
     async def apply_schema(self) -> None:
         """Apply ``schema.sql``. The agent role is not allowed to create schemas.
 
@@ -521,6 +582,15 @@ class PgStore(RetailerPgStore):
         return found == 1
 
     async def upsert_product(self, tenant_id: str, row: dict[str, Any]) -> str:
+        # Legacy scheduled feeds also share the delete/import tenant lock.
+        async with self.atomic(tenant_id) as store:
+            return await store._upsert_product(tenant_id, row)
+
+    async def _upsert_product(self, tenant_id: str, row: dict[str, Any]) -> str:
+        async with self.pool.acquire() as conn:
+            deleted = await conn.fetchval("SELECT 1 FROM agent_rig.deleted_products WHERE tenant_id=$1 AND sku=$2", _uuid(tenant_id), str(row["sku"]))
+        if deleted:
+            return "skipped"
         existed = await self.product_exists(tenant_id, str(row["sku"]))
         async with self.pool.acquire() as conn:
             await conn.execute(
