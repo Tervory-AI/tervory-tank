@@ -159,7 +159,9 @@ async def overview(ledger: Any, tenant_id: str, engine: str | None = None, *, fi
         raise ValueError("A feed plan is required")
     checks = {row["source_id"]: row for row in await latest_checks(ledger, tenant_id, fixtures=fixtures)}
     feeds = []
-    for source in sources(engine):
+    from core.feed_links import source_for, subscriptions
+    configured = sources(engine) + [source_for(row) for row in await subscriptions(ledger, tenant_id)]
+    for source in configured:
         spec = bind_key(source)
         check = checks.get(spec.id, {})
         rows = int(check.get("rows", 0))
@@ -167,6 +169,7 @@ async def overview(ledger: Any, tenant_id: str, engine: str | None = None, *, fi
         if rows:
             note = check.get("note") or ""
         feeds.append({"id": spec.id, "name": spec.name, "kind": "copy" if spec.allow_bulk else "linked",
+                      "url": spec.url, "cadence": spec.cadence,
                       "rows": rows, "state": "on" if spec.allow_bulk and rows > 0 else "off",
                       "note": note, "checked_at": check.get("checked_at"), "document_id": check.get("document_id")})
     return {"feeds": feeds, "on_count": sum(feed["state"] == "on" for feed in feeds)}
