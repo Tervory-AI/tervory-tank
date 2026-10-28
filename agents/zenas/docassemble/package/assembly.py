@@ -79,4 +79,4 @@ def finish(request, jurisdiction, template):
     if not text.rstrip().endswith(notice):
         blocks.append([{"kind": "plain", "text": notice}])
         text = text.rstrip() + "\n\n" + notice
-    return {"text": text, "blocks": blocks}
+    return {"text": text.rstrip(), "blocks": blocks}
