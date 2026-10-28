@@ -312,3 +312,17 @@ async def test_already_current_promotion_is_a_recorded_noop(rig):
     fake.deployments['prod-build']['commit'] = NEW
     assert (await promote(service))['result'] == 'refused'
     assert not fake.writes
+
+
+@pytest.mark.asyncio
+async def test_rollback_after_failure_before_coolify_resolves_head(rig):
+    fake, _, service, _, _ = rig
+    fake.pending = True
+    result = await promote(service)
+    deployment = fake.deployments[result['details']['deployment']]
+    deployment.update(status='failed', commit='HEAD')
+    assert (await service.status(TENANT, 'site', result['id']))['result'] == 'failed'
+    fake.pending = False
+    rollback = await service.run(TENANT, 'site', str(uuid.uuid4()), 'rollback', 'founder', OLD)
+    assert rollback['result'] == 'pending' and fake.sha['prod'] == OLD
+    assert (await service.status(TENANT, 'site', rollback['id']))['result'] == 'succeeded'
