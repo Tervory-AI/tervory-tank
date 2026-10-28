@@ -117,8 +117,11 @@ def create_app(
     @app.post("/jobs", status_code=201)
     async def enqueue(body: JobIn | Job) -> dict[str, Any]:
         region = os.environ.get("TANK_REGION", "us-east")
-        wire = body if isinstance(body, Job) else Job.from_room(
-            body.model_dump(), agent=agent, region=region)
+        try:
+            wire = body if isinstance(body, Job) else Job.from_room(
+                body.model_dump(), agent=agent, region=region)
+        except ValueError:
+            raise HTTPException(422) from None
         if wire.agent != agent or wire.region != region:
             raise HTTPException(422)
         body = JobIn(**wire.to_room(), run_at=body.run_at if isinstance(body, JobIn) else None)
