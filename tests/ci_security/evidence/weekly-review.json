@@ -1,0 +1,193 @@
+{
+  "code_commit": "a9c319b33d6f3bd9944ac95f7b7e776c4a436153",
+  "base_main": "73a0e2f58ca02c51f5cea2501dc8178b869877a0",
+  "branch": "codex/security-weekly-findings",
+  "source": "Managed cloud local runs; no GitHub API; no new weekly run claimed",
+  "actions": {
+    "verified_refs": [
+      {
+        "action": "actions/cache",
+        "tag": "v6",
+        "sha": "55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+        "command": [
+          "git",
+          "ls-remote",
+          "https://github.com/actions/cache",
+          "refs/tags/v6",
+          "refs/tags/v6^{}"
+        ],
+        "refs": {
+          "refs/tags/v6": "55cc8345863c7cc4c66a329aec7e433d2d1c52a9"
+        }
+      },
+      {
+        "action": "actions/checkout",
+        "tag": "v7",
+        "sha": "3d3c42e5aac5ba805825da76410c181273ba90b1",
+        "command": [
+          "git",
+          "ls-remote",
+          "https://github.com/actions/checkout",
+          "refs/tags/v7",
+          "refs/tags/v7^{}"
+        ],
+        "refs": {
+          "refs/tags/v7": "3d3c42e5aac5ba805825da76410c181273ba90b1"
+        }
+      },
+      {
+        "action": "actions/setup-node",
+        "tag": "v7",
+        "sha": "949feb2413d6458794dcd2491c4babbbce0c15c1",
+        "command": [
+          "git",
+          "ls-remote",
+          "https://github.com/actions/setup-node",
+          "refs/tags/v7",
+          "refs/tags/v7^{}"
+        ],
+        "refs": {
+          "refs/tags/v7": "949feb2413d6458794dcd2491c4babbbce0c15c1"
+        }
+      },
+      {
+        "action": "actions/setup-python",
+        "tag": "v7",
+        "sha": "6d4fd22b20465ccc0f7354476588e8df7c9ca0e0",
+        "command": [
+          "git",
+          "ls-remote",
+          "https://github.com/actions/setup-python",
+          "refs/tags/v7",
+          "refs/tags/v7^{}"
+        ],
+        "refs": {
+          "refs/tags/v7": "6d4fd22b20465ccc0f7354476588e8df7c9ca0e0"
+        }
+      },
+      {
+        "action": "actions/upload-artifact",
+        "tag": "v7",
+        "sha": "cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+        "command": [
+          "git",
+          "ls-remote",
+          "https://github.com/actions/upload-artifact",
+          "refs/tags/v7",
+          "refs/tags/v7^{}"
+        ],
+        "refs": {
+          "refs/tags/v7": "cf430e030ddbb5b0abf93d22962f4752f3646cd9"
+        }
+      }
+    ],
+    "remote_references": 33,
+    "unpinned_references": 0,
+    "file_commits": [
+      {
+        "file": ".github/workflows/coolify-ops.yml",
+        "commit": "9cc4bb5"
+      },
+      {
+        "file": ".github/workflows/deploy-on-merge.yml",
+        "commit": "ce25010"
+      },
+      {
+        "file": ".github/workflows/live-check.yml",
+        "commit": "725ac05"
+      },
+      {
+        "file": ".github/workflows/retest.yml",
+        "commit": "42040d9"
+      },
+      {
+        "file": ".github/workflows/rig-admin-review.yml",
+        "commit": "5d94712"
+      },
+      {
+        "file": ".github/workflows/rig-forge.yml",
+        "commit": "469b82e"
+      },
+      {
+        "file": ".github/workflows/watchdog.yml",
+        "commit": "0da83c4"
+      }
+    ]
+  },
+  "meshroom": {
+    "command": "UV_CACHE_DIR=/tmp/security-weekly/uv-cache uv pip compile --python-version 3.10 --generate-hashes agents/rig/forge/gpu/meshroom-requirements.in -o agents/rig/forge/gpu/meshroom-requirements.lock",
+    "changed_dependency_blocks": [
+      "pillow"
+    ],
+    "old_version": "11.3.0",
+    "new_version": "12.3.0",
+    "sha256_entries": 87,
+    "advisories_from_brief": [
+      "PYSEC-2026-165",
+      "PYSEC-2026-2249",
+      "PYSEC-2026-2250",
+      "PYSEC-2026-2251",
+      "PYSEC-2026-2252",
+      "PYSEC-2026-2253",
+      "PYSEC-2026-2254",
+      "PYSEC-2026-2255",
+      "PYSEC-2026-2256",
+      "PYSEC-2026-2257"
+    ],
+    "installed_version": "12.3.0",
+    "dependency_check": "All 43 installed packages compatible",
+    "image_codec_check": [
+      "PNG",
+      "JPEG",
+      "WEBP"
+    ]
+  },
+  "tests": {
+    "security_unittest": ".........................................\n----------------------------------------------------------------------\nRan 41 tests in 48.648s\n\nOK",
+    "security_pytest": ".......................................... [ 97%]\n.                                                                        [100%]\n43 passed, 30 subtests passed in 95.43s (0:01:35)",
+    "health_deploy": "17 passed, 6 warnings in 11.29s",
+    "forge": "..............................................s                          [100%]\n=========================== short test summary info ============================\nSKIPPED [1] tests/test_rig_forge_containers.py:13: Runs in required forge-image CI job\n46 passed, 1 skipped in 135.74s (0:02:15)",
+    "forge_tank": "ssss                                                                     [100%]\n=========================== short test summary info ============================\nSKIPPED [1] tests/test_rig_forge_tank.py:35: Set TRAINING_SCHEMA_DATABASE_URL to a disposable Postgres\nSKIPPED [1] tests/test_rig_forge_tank.py:61: Set TRAINING_SCHEMA_DATABASE_URL to a disposable Postgres\nSKIPPED [1] tests/test_rig_forge_tank.py:79: Set TRAINING_SCHEMA_DATABASE_URL to a disposable Postgres\nSKIPPED [1] tests/test_rig_forge_tank.py:95: Set TRAINING_SCHEMA_DATABASE_URL to a disposable Postgres\n4 skipped in 2.75s",
+    "ci_ruff": "All checks passed!",
+    "focused_ruff": "All checks passed!",
+    "all_workflows_actionlint": "exit 0, no diagnostics",
+    "git_diff_check": "exit 0"
+  },
+  "forge_local_tools": {
+    "blender": "4.3.2 (preinstalled; production lock is 4.5.3)",
+    "gltfpack": "0.25 (verified pinned archive)",
+    "ktx": "4.4.2 (verified pinned archive)",
+    "npm": "npm ci --ignore-scripts from committed package-lock.json; 217 packages installed"
+  },
+  "gitleaks": {
+    "whole_history_status": {
+      "tool": "gitleaks",
+      "head": "0d910f4250a73f283b7d4b901dcf08e6ca9d9fdf",
+      "base": null,
+      "result": "findings"
+    },
+    "whole_history_findings": [
+      {
+        "RuleID": "generic-api-key",
+        "File": "tests/tank_batch_providers/batch-tests-initial.txt",
+        "StartLine": 61,
+        "Commit": "0dc98c9efe822fbb3f38b87f981061e62f84254e"
+      },
+      {
+        "RuleID": "generic-api-key",
+        "File": "tests/tank_batch_providers/batch-tests-initial.txt",
+        "StartLine": 97,
+        "Commit": "0dc98c9efe822fbb3f38b87f981061e62f84254e"
+      }
+    ],
+    "summary_annotation": "::error::Gitleaks%0Ageneric-api-key: tests/tank_batch_providers/batch-tests-initial.txt:61%0Ageneric-api-key: tests/tank_batch_providers/batch-tests-initial.txt:97",
+    "branch_status": {
+      "tool": "gitleaks",
+      "head": "a9c319b33d6f3bd9944ac95f7b7e776c4a436153",
+      "base": "73a0e2f",
+      "result": "clean"
+    },
+    "branch_findings": []
+  },
+  "weekly_followup": "After the founder merges, the founder re-runs security-weekly and Claude reviews the complete summaries. No full Semgrep/OSV pass or independent live approval is claimed."
+}
