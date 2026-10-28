@@ -2513,6 +2513,10 @@ async def route_batch(body: BatchRequest, caller: str | None = Depends(require_k
             raise HTTPException(409, "Batch id already has different requests")
         return await batch_status(body.id, tenant)
     policy = await load_policy(task, tenant)
+    if any((r.priority or policy["priority"]) == "offpeak" for r in body.requests):
+        # This endpoint owns one batch id. Deferred single requests own a job id;
+        # never misreport an unsubmitted offpeak job as a completed batch item.
+        raise HTTPException(422, {"priority": "offpeak", "route": "/v1/route"})
     eligible = bool(policy.get("batch_eligible")) and not policy.get("moa_enabled")
     eligible = eligible and len(body.requests) >= _batch_min() and not any(r.interactive for r in body.requests)
     local, deferred = [], []
