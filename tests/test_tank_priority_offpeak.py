@@ -1,6 +1,7 @@
 """Offline priority routing: real Tank/SQL, frozen clock, stubbed LiteLLM only."""
 import asyncio
 import json
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock
@@ -135,7 +136,9 @@ async def test_no_window_runs_at_once_via_route(ladder, monkeypatch):  # noqa: F
     b = ladder
     await prepare(b, monkeypatch, window=False)
     job = await b.tank.route(request(b, b.tenants[0], text='Offline input', priority='offpeak'), caller=None)
-    assert job.status == 'completed' and len(b.sent) == 1
+    assert job.status == 'queued'
+    await asyncio.gather(*list(b.tank._background))
+    assert len(b.sent) == 1
     result = await queue.status(b.tank, job.id, b.tenants[0])
     assert result['result']['cost_usd'] == 0.001
 
@@ -194,3 +197,73 @@ def test_missing_usage_does_not_invent_price():
     info = {'offpeak': SETTINGS, 'input_cost_per_token': 0.0000003, 'output_cost_per_token': 0.0000012}
     assert queue.usage_cost(info, {}, datetime(2026, 10, 28, 4, tzinfo=UTC)) is None
     assert queue.usage_cost(info, {'prompt_tokens': 10, 'completion_tokens': 10}, datetime(2026, 10, 28, 4, tzinfo=UTC)) is None
+
+
+@pytest.mark.asyncio
+async def test_command_deferral_survives_browser_close_and_replays_once(ladder, monkeypatch):  # noqa: F811 (pytest fixture parameter)
+    import command
+    import trigger_routes
+    b = ladder
+    clock, _ = await prepare(b, monkeypatch)
+    monkeypatch.setattr(trigger_routes, 'code_plan', AsyncMock(return_value=None))
+    actor = command.Actor(b.tenants[0], 'founder-fixture', True)
+    async with b.pool.acquire() as conn:
+        await conn.execute("""UPDATE tank.policy SET model='deepseek-flash',rung=1,max_cost_usd=1,
+            system_prompt=NULL,cache_scope='none' WHERE task_type='command.turn' AND tenant_id IS NULL""")
+    thread = await command.create_thread(command.NewThread(title='Offline priority proof'), actor)
+    thread_id = uuid.UUID(thread['thread_id'])
+    stream = await command.turn(thread_id, command.Turn(text='Offline input', priority='offpeak'), actor)
+    events = [part async for part in stream.body_iterator]
+    await asyncio.gather(*list(b.tank._background))
+    assert any('job_id' in part for part in events) and not b.sent
+    async with b.pool.acquire() as conn:
+        job = await conn.fetchrow('SELECT * FROM tank.offpeak_jobs WHERE tenant_id=$1', actor.tenant_id)
+        state = json.loads(await conn.fetchval('SELECT state FROM tank.command_threads WHERE thread_id=$1 AND tenant_id=$2', thread_id, actor.tenant_id))
+        assert state['active_turn'] is None and state['steps'][str(job['task_id'])]['status'] == 'planned'
+    # Browser/SSE is gone. The durable worker uses the saved thread and task.
+    clock[0] = datetime(2026, 10, 28, 4, tzinfo=UTC)
+    await queue.process_once(b.tank)
+    await queue.notify_commands(b.tank)
+    await queue.notify_commands(b.tank)
+    async with b.pool.acquire() as conn:
+        state = json.loads(await conn.fetchval('SELECT state FROM tank.command_threads WHERE thread_id=$1 AND tenant_id=$2', thread_id, actor.tenant_id))
+        assert [m['content'] for m in state['messages'] if m['role'] == 'assistant'] == ['Offline answer']
+        assert state['steps'][str(job['task_id'])]['status'] == 'done'
+        assert len(state['receipts']) == 1 and state['receipts'][0]['ledger_id'] == str(job['id'])
+        assert await conn.fetchval('SELECT status FROM tank.tasks WHERE id=$1 AND tenant_id=$2', job['task_id'], actor.tenant_id) == 'done'
+    assert len(b.sent) == 1
+
+
+@pytest.mark.asyncio
+async def test_changed_policy_cancels_queued_work(ladder, monkeypatch):  # noqa: F811 (pytest fixture parameter)
+    b = ladder
+    clock, _ = await prepare(b, monkeypatch)
+    job = await b.tank.run_route(request(b, b.tenants[0], text='Offline input', priority='offpeak'))
+    async with b.pool.acquire() as conn:
+        await conn.execute('UPDATE tank.policy SET updated_at=now() WHERE tenant_id=$1', b.tenants[0])
+    clock[0] = datetime(2026, 10, 28, 4, tzinfo=UTC)
+    await queue.process_once(b.tank)
+    assert (await queue.status(b.tank, job.id, b.tenants[0]))['error'] == 'policy_changed' and not b.sent
+
+
+@pytest.mark.asyncio
+async def test_transport_failure_keeps_one_unknown_receipt(ladder, monkeypatch):  # noqa: F811 (pytest fixture parameter)
+    b = ladder
+    clock, _ = await prepare(b, monkeypatch)
+    job = await b.tank.run_route(request(b, b.tenants[0], text='Offline input', priority='offpeak'))
+    monkeypatch.setattr(b.tank.httpx.AsyncClient, 'post', AsyncMock(side_effect=httpx.ReadTimeout('offline failure')))
+    clock[0] = datetime(2026, 10, 28, 4, tzinfo=UTC)
+    await queue.process_once(b.tank)
+    await queue.process_once(b.tank)
+    b.tank.httpx.AsyncClient.post.assert_awaited_once()
+    async with b.pool.acquire() as conn:
+        rows = await conn.fetch('SELECT * FROM tank.ledger WHERE tenant_id=$1', b.tenants[0])
+        assert len(rows) == 1 and rows[0]['id'] == job.id
+        assert rows[0]['cost_status'] == 'not_set' and rows[0]['sent_at'] == clock[0]
+
+
+@pytest.mark.asyncio
+async def test_roster_preserves_window_metadata_without_credentials(ladder):  # noqa: F811 (pytest fixture parameter)
+    row = ladder.tank._roster_row({'model_name': 'deepseek-flash', 'litellm_params': {'model': 'deepseek/deepseek-flash'},
+                                  'model_info': {'offpeak': SETTINGS}})
+    assert row['model_info']['offpeak'] == SETTINGS
