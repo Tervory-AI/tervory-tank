@@ -31,9 +31,17 @@ class WriteIn(CheckIn):
 def legal_request(body: WriteIn) -> bool:
     # Use Zenas's existing deterministic scope rules, copied unchanged by Docker.
     from zenas_scope import scan
+    if body.document_type == "legal" or body.template is not None:
+        return True
+    # A legal-industry product/article is not itself a legal document. Explicit
+    # legal/template selection above still wins for mixed requests.
+    if body.document_type == "article" or re.search(
+        r"\b(product description|landing page|website copy|ad copy|blog post|article about)\b", body.text, re.IGNORECASE
+    ):
+        return False
     detected, _ = scan(body.text)
-    return body.document_type == "legal" or body.template is not None or detected is not None or bool(
-        re.search(r"\b(contract|agreement|affidavit|legal|lawsuit|pleading|last will|testament|subpoena|nda)\b", body.text, re.IGNORECASE))
+    return detected is not None or bool(
+        re.search(r"\b(contract|agreement|affidavit|legal|lawsuit|pleading|last will|testament|subpoena|nda|privacy policy|terms of (?:service|use)|power of attorney|lease|deed|court filing|articles of incorporation)\b", body.text, re.IGNORECASE))
 
 
 async def check_text(body: CheckIn, store: VoiceStore, http) -> dict:

@@ -155,7 +155,7 @@ async def test_write_routes_once_through_tank_with_own_voice_and_receipt():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('text', ['Draft a nondisclosure agreement.', 'Draft a criminal defence pleading.', 'Write a last will.'])
+@pytest.mark.parametrize('text', ['Draft a nondisclosure agreement.', 'Draft a criminal defence pleading.', 'Write a last will.', 'Draft a privacy policy.', 'Write our terms of service.'])
 async def test_legal_requests_delegate_without_drafting_or_checking(text):
     tank = SimpleNamespace(route=AsyncMock(side_effect=AssertionError('No model')))
     http = SimpleNamespace(post=AsyncMock(side_effect=AssertionError('No check')))
@@ -368,3 +368,11 @@ async def test_report_bound_keeps_command_response_readable():
 def test_voice_terms_cannot_hide_conflict_with_whitespace():
     with pytest.raises(ValidationError):
         voice(bannedTerms=['  wrong  word '], requiredTerms=['wrong word'])
+
+
+@pytest.mark.parametrize('text', ['Write a product description for lease management software.',
+                                  'Write website copy for a corporation.',
+                                  'Write an article about privacy policies.'])
+def test_legal_industry_copy_is_not_a_legal_document(text):
+    assert not legal_request(WriteIn(tenant_id=TENANT, text=text))
+    assert legal_request(WriteIn(tenant_id=TENANT, text=text, document_type='legal'))
