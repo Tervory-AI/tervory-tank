@@ -80,6 +80,28 @@ class ProxyError(Exception):
     """A tunnel was refused or the room proxy is unavailable."""
 
 
+def private_bind_address() -> str:
+    """One explicit container interface, never a wildcard or request address.
+
+    Docker writes its primary interface to the container hostname mapping.
+    Fail closed if that mapping is absent, ambiguous, or not RFC1918 IPv4.
+    """
+    try:
+        answers = socket.getaddrinfo(socket.gethostname(), None, family=socket.AF_INET,
+                                     type=socket.SOCK_STREAM)
+        addresses = {str(answer[4][0]) for answer in answers}
+        if len(addresses) != 1:
+            raise ValueError
+        address = addresses.pop()
+        ip = ipaddress.IPv4Address(address)
+        if not any(ip in ipaddress.ip_network(network) for network in
+                   ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16')):
+            raise ValueError
+        return address
+    except (OSError, ValueError):
+        raise ProxyError('private container interface unavailable') from None
+
+
 def routable(raw: str) -> bool:
     """True only for a public unicast address. Private and special ranges fail."""
     try:
@@ -458,7 +480,7 @@ def main() -> int:
         print("egress policy refused", file=sys.stderr)
         return 1
     proxy = Proxy(revoked=env_revoked())
-    Server(proxy, host="0.0.0.0", port=8080).serve_forever()
+    Server(proxy, host=private_bind_address(), port=8080).serve_forever()
     return 0
 
 
