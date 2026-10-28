@@ -200,8 +200,20 @@ async def test_persisted_ready_bulk_approval_room_execution_tenant_scope_and_rol
         assert await client.approved_skill(str(TENANT), "trigger.proselint", {"text": "A draft."}) is None
         preview = await tank.preview_skill_approvals(tank.Approval(by="offline-founder"))
         assert {i["id"] for i in preview["items"]} == skala_intake.IDS
+        evidence = os.environ.get("SKALA_INTAKE_PROOF_DIR")
+        if evidence:
+            async with database.acquire() as conn:
+                rows = await conn.fetch("SELECT * FROM tank.skills WHERE id=ANY($1::text[]) ORDER BY id,version", list(skala_intake.IDS))
+            output = Path(evidence)
+            output.mkdir(parents=True, exist_ok=True)
+            (output / "ready.json").write_text(json.dumps({
+                "skills": [{**dict(row), **next(i for i in preview["items"] if i["id"] == row["id"])} for row in rows],
+                "preview": {"token": "offline-preview", "items": preview["items"]},
+            }, indent=2, default=str) + "\n")
         result = await tank.confirm_skill_approvals(tank.Approval(by="offline-founder", token=preview["token"], confirmed=True))
         assert len(result["approved"]) == 7
+        if evidence:
+            (output / "approved.json").write_text(json.dumps(result, indent=2) + "\n")
         # Every approved checker must skip the room implementation.
         def forbidden(*args): raise AssertionError("Approved checker called room code")
         monkeypatch.setattr(checkers, "LintFile", forbidden)
