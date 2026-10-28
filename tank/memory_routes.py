@@ -9,8 +9,9 @@ from types import SimpleNamespace
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from admin import require_admin
+from gold import Reviewer, require_reviewer
 
-router = APIRouter(prefix="/v1/memory", dependencies=[Depends(require_admin)])
+router = APIRouter(prefix="/v1/memory")
 _PATHS = {
     "records": ("GET", "/founder/records"),
     "publish-policy": ("POST", "/founder/publish-policy"),
@@ -41,6 +42,10 @@ async def hermes(
                 headers={"X-Tank-Key": key, "X-Tervory-Admin": actor},
             )
         if response.status_code >= 400:
+            if response.status_code == 422:
+                detail = response.json().get("detail")
+                if isinstance(detail, list):
+                    raise HTTPException(422, detail)
             raise HTTPException(
                 response.status_code
                 if response.status_code in (403, 404, 409, 422, 503)
@@ -55,7 +60,14 @@ async def hermes(
         raise HTTPException(503, "memory store unreachable") from None
 
 
-@router.api_route("/{operation}", methods=["GET", "POST"])
+@router.get("/records/{id}")
+async def record(id: uuid.UUID, actor: Reviewer = Depends(require_reviewer)):
+    if not actor.founder:
+        raise HTTPException(404, "not found")
+    return await hermes("GET", "/founder/records/" + str(id), actor.user)
+
+
+@router.api_route("/{operation}", methods=["GET", "POST"], dependencies=[Depends(require_admin)])
 async def control(
     operation: str, request: Request, x_tervory_admin: str = Header(default="")
 ):
@@ -74,7 +86,7 @@ async def control(
 async def remember_turn(actor, messages: list[dict], task_id: uuid.UUID | None):
     """Exact explicit founder instruction. No model, new card or UI wording.
 
-    The existing chat answer displays the stored claim as DATA. A turn-stable id
+    The existing chat answer displays the stored claim and ID as DATA. A turn-stable id
     makes replay safe; tenant and user come exclusively from authenticated actor.
     """
     last = messages[-1] if messages else {}
@@ -125,6 +137,6 @@ async def remember_turn(actor, messages: list[dict], task_id: uuid.UUID | None):
         task_id,
     )
     return SimpleNamespace(
-        content=json.dumps({"text": result["claim"], "actions": []}),
+        content=json.dumps({"text": result["claim"] + "\n\n" + result["id"], "actions": []}),
         ledger_id=ledger_id,
     )
