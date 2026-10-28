@@ -23,7 +23,7 @@ def tenant_scope(tenant_id: Any):
 def tenant_path(parameter: str):
     """Pass an already accepted path value, without changing execution order."""
     def decorate(function):
-        parameters = signature(function)
+        parameters = signature(function, eval_str=True)
 
         @wraps(function)
         async def scoped(*args, **kwargs):
@@ -32,6 +32,7 @@ def tenant_path(parameter: str):
             with tenant_scope(tenant_id):
                 return await function(*args, **kwargs)
 
+        scoped.__signature__ = parameters
         return scoped
     return decorate
 
