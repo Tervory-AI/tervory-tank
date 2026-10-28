@@ -1043,7 +1043,7 @@ CREATE TABLE IF NOT EXISTS tank.skill_source_reviews (
 -- Tank's planning message supplies the system prompt; the founder promotes later.
 -- Kept above MODELS-2 so later re-apply tests see it as an existing row.
 INSERT INTO tank.policy (task_type, rung, model, priority, cache_scope, max_tokens_out, system_prompt) VALUES
-  ('command.turn', 1, 'luna', 'urgent', 'none', 2048, NULL)
+  ('command.turn', 1, 'luna', 'urgent', 'tenant', 2048, NULL)
 ON CONFLICT DO NOTHING;
 
 -- RIG-2: Rig's own Hermes brain; the founder controls later promotions.
@@ -1781,6 +1781,8 @@ CREATE TABLE IF NOT EXISTS tank.base_reference_checks (
     status text NOT NULL,
     message text
 );
+-- Independent source stops; legacy rows still describe ATF until next checked.
+ALTER TABLE tank.base_reference_checks ADD COLUMN IF NOT EXISTS source_checks jsonb NOT NULL DEFAULT '{}'::jsonb;
 CREATE TABLE IF NOT EXISTS tank.base_campaigns (
     tenant_id uuid NOT NULL,
     id uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -1890,3 +1892,29 @@ ON CONFLICT(id) DO NOTHING;
 
 -- Count duplicate source rows without changing the platform-owned originals.
 ALTER TABLE tank.base_reference_files ADD COLUMN IF NOT EXISTS duplicate_count integer NOT NULL DEFAULT 0 CHECK (duplicate_count >= 0);
+
+-- Founder decision, 2026-10-27: 99% agreement over 200 checked samples.
+-- Change only the complete old default pair, leaving customized bars intact.
+-- A marker protects later founder edits (including a deliberate return to the
+-- old values) when startup reapplies this file. No policy choice is reset.
+ALTER TABLE tank.policy ALTER COLUMN eval_threshold SET DEFAULT 0.99;
+ALTER TABLE tank.policy ALTER COLUMN min_shadow_samples SET DEFAULT 200;
+ALTER TABLE tank.route_evidence ALTER COLUMN min_shadow_samples SET DEFAULT 200;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM tank.policy_seeds WHERE name='graduation-99-200-v1') THEN
+        UPDATE tank.policy SET eval_threshold=0.99, min_shadow_samples=200
+        WHERE eval_threshold=0.97 AND min_shadow_samples=30;
+        INSERT INTO tank.policy_seeds(name) VALUES('graduation-99-200-v1');
+    END IF;
+END $$;
+
+-- Chats use Tank's tenant-sealed exact cache, never semantic matching.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM tank.policy_seeds WHERE name='command-exact-cache-v1') THEN
+        UPDATE tank.policy SET cache_scope='tenant', semantic_cache=false, updated_at=now()
+        WHERE task_type='command.turn';
+        INSERT INTO tank.policy_seeds(name) VALUES('command-exact-cache-v1');
+    END IF;
+END $$;

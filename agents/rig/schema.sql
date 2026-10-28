@@ -55,6 +55,14 @@ CREATE TABLE IF NOT EXISTS agent_rig.products (
 
 CREATE INDEX IF NOT EXISTS products_tenant_active ON agent_rig.products (tenant_id, active);
 
+-- Manual removal survives feed refresh and restart. Only a manual import clears it.
+CREATE TABLE IF NOT EXISTS agent_rig.deleted_products (
+    tenant_id uuid NOT NULL,
+    sku text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, sku)
+);
+
 CREATE INDEX IF NOT EXISTS products_search_fts ON agent_rig.products
 USING gin (to_tsvector('simple',
     coalesce(name, '') || ' ' || coalesce(brand, '') || ' ' || coalesce(sku, '') || ' ' || coalesce(attributes::text, '')

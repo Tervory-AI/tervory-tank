@@ -959,7 +959,8 @@ async def post_answer(body: AnswerIn) -> dict[str, Any]:
         box_region=_box_region(),
         jurisdiction=body.jurisdiction,
         question=body.question,
-        passages=body.passages,
+        # Ask uses this box's stored law only. Caller-supplied passages cannot establish a citation.
+        passages=[],
         features=body.features,
         matter_id=str(body.matter_id) if body.matter_id else None,
         provider=body.provider,
@@ -1086,6 +1087,19 @@ class MootStudentIn(BaseModel):
 
 class MootEditIn(BaseModel):
     changes: dict[str, Any]
+
+
+@app.get("/moot/published")
+async def get_moot_published(home_region: str, match_id: UUID | None = None) -> dict[str, Any]:
+    from agents.zenas.core.moot.published import published_matches
+
+    if home_region != "us-east" or _box_region() != "us-east":
+        raise HTTPException(status_code=403, detail="region mismatch")
+    try:
+        matches = await published_matches(app.state.pool, UUID(HEARTBEAT_TENANT), home_region, match_id)
+    except Exception:
+        raise HTTPException(status_code=503, detail="published matches unavailable") from None
+    return {"matches": matches}
 
 
 @app.get("/moot/fixtures")

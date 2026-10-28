@@ -46,3 +46,14 @@ jobs:
           case "$COOLIFY_URL" in https://*) ;; *) echo "::error::COOLIFY_URL must be https"; exit 1 ;; esac
           test -n "$COOLIFY_TOKEN" || { echo "::error::COOLIFY_TOKEN secret is missing"; exit 1; }
           python3 .github/scripts/deploy_changed.py
+
+  live-check:
+    needs: deploy
+    permissions:
+      contents: read
+      issues: write
+    uses: ./.github/workflows/live-check.yml
+    with:
+      wait_for_health: true
+    secrets:
+      COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}

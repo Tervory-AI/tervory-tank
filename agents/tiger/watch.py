@@ -15,7 +15,7 @@ import re
 import socket
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from html.parser import HTMLParser
 from typing import Any
@@ -23,6 +23,7 @@ from urllib.parse import urlparse
 
 import asyncpg
 
+from alert_email import letter_for
 from change_alert import price_moved, record_stock, stock_reading, stock_statements
 from chassis.cron import is_due
 from chassis.db import schema_for
@@ -618,6 +619,22 @@ async def ensure_tables(conn: Any, schema: str = SCHEMA) -> None:
         )
         """,
         f"CREATE INDEX IF NOT EXISTS alerts_tenant_url_ts ON {schema}.alerts (tenant_id, url, ts DESC)",
+        f"""
+        CREATE TABLE IF NOT EXISTS {schema}.alert_mail (
+            tenant_id uuid NOT NULL,
+            alert_id uuid NOT NULL REFERENCES {schema}.alerts(id),
+            url text NOT NULL,
+            kind text NOT NULL,
+            letter jsonb NOT NULL,
+            status text NOT NULL DEFAULT 'pending',
+            attempts integer NOT NULL DEFAULT 0,
+            next_attempt_at timestamptz NOT NULL DEFAULT now(),
+            updated_at timestamptz NOT NULL DEFAULT now(),
+            sent_at timestamptz,
+            PRIMARY KEY (tenant_id, alert_id)
+        )
+        """,
+        f"CREATE INDEX IF NOT EXISTS alert_mail_pending ON {schema}.alert_mail (tenant_id, next_attempt_at) WHERE status = 'pending'",
     ]
     for statement in statements:
         await conn.execute(statement)
@@ -800,16 +817,61 @@ class PgStore:
     async def add_alert(self, row: dict[str, Any]) -> dict[str, Any]:
         async with self.pool.acquire() as conn:
             await ensure_tables(conn, self.schema)
-            saved = await conn.fetchrow(
-                self._sql(SQL_INSERT_ALERT),
-                uuid.UUID(str(row["tenant_id"])),
-                row["url"],
-                row["ts"],
-                row["kind"],
-                row.get("before"),
-                row.get("after"),
-            )
+            # The alert and its delivery receipt commit together.
+            async with conn.transaction():
+                saved = await conn.fetchrow(
+                    self._sql(SQL_INSERT_ALERT),
+                    uuid.UUID(str(row["tenant_id"])), row["url"], row["ts"],
+                    row["kind"], row.get("before"), row.get("after"),
+                )
+                letter = letter_for(row)
+                if letter:
+                    await conn.execute(self._sql("""
+                        INSERT INTO {schema}.alert_mail (tenant_id, alert_id, url, kind, letter)
+                        VALUES ($1, $2, $3, $4, $5::jsonb)
+                        ON CONFLICT (tenant_id, alert_id) DO NOTHING
+                    """), uuid.UUID(str(row["tenant_id"])), saved["id"], row["url"], row["kind"], json.dumps(letter))
         return _alert_out(saved)
+
+    async def pending_mail(self, tenant_id: str, now: datetime) -> list[str]:
+        async with self.pool.acquire() as conn:
+            await ensure_tables(conn, self.schema)
+            rows = await conn.fetch(self._sql("""
+                SELECT alert_id FROM {schema}.alert_mail
+                WHERE tenant_id = $1 AND status = 'pending' AND next_attempt_at <= $2
+                ORDER BY next_attempt_at, alert_id LIMIT 3
+            """), uuid.UUID(str(tenant_id)), now)
+        return [str(row["alert_id"]) for row in rows]
+
+    async def claim_mail(self, tenant_id: str, alert_id: str, now: datetime) -> dict | None:
+        async with self.pool.acquire() as conn:
+            # A committed sending state prevents concurrent workers and restarts
+            # from sending this alert again, including after an uncertain send.
+            row = await conn.fetchrow(self._sql("""
+                UPDATE {schema}.alert_mail AS m SET status = 'sending', updated_at = $3,
+                    attempts = attempts + 1
+                WHERE tenant_id = $1 AND alert_id = $2 AND status = 'pending' AND next_attempt_at <= $3
+                RETURNING url, kind, letter, EXISTS (
+                    SELECT 1 FROM {schema}.watchlist w WHERE w.tenant_id = m.tenant_id
+                    AND w.url = m.url AND w.enabled AND CASE m.kind
+                        WHEN 'price' THEN w.alert_price WHEN 'stock' THEN w.alert_stock ELSE false END
+                ) AS allowed
+            """), uuid.UUID(str(tenant_id)), uuid.UUID(str(alert_id)), now)
+        if row is None:
+            return None
+        return {"url": row["url"], "kind": row["kind"], "allowed": row["allowed"],
+                "letter": json.loads(row["letter"]) if isinstance(row["letter"], str) else dict(row["letter"])}
+
+    async def finish_mail(self, tenant_id: str, alert_id: str, state: str, now: datetime) -> None:
+        if state not in {"pending", "sent", "uncertain", "suppressed"}:
+            raise ValueError("invalid mail state")
+        async with self.pool.acquire() as conn:
+            await conn.execute(self._sql("""
+                UPDATE {schema}.alert_mail SET status = $3, updated_at = $4,
+                    sent_at = CASE WHEN $3 = 'sent' THEN $4 ELSE sent_at END,
+                    next_attempt_at = $4 + least(3600, 60 * power(2, least(attempts - 1, 6))) * interval '1 second'
+                WHERE tenant_id = $1 AND alert_id = $2 AND status = 'sending'
+            """), uuid.UUID(str(tenant_id)), uuid.UUID(str(alert_id)), state, now)
 
     async def list_alerts(self, tenant_id: str, url: str | None) -> list[dict[str, Any]]:
         async with self.pool.acquire() as conn:
@@ -838,6 +900,7 @@ class MemoryStore:
         self.watches: list[dict[str, Any]] = []
         self.observations: list[dict[str, Any]] = []
         self.alerts: list[dict[str, Any]] = []
+        self.mail: dict[tuple[str, str], dict] = {}
         self.jobs: list[dict[str, Any]] = []
         self.schedules: list[dict[str, Any]] = []
 
@@ -950,7 +1013,33 @@ class MemoryStore:
             "after": row.get("after"),
         }
         self.alerts.append(saved)
+        letter = letter_for(row)
+        if letter:
+            self.mail[(saved["tenant_id"], saved["id"])] = {
+                "url": saved["url"], "kind": saved["kind"], "letter": letter,
+                "status": "pending", "attempts": 0, "next_attempt_at": _parse_ts(saved["ts"]),
+            }
         return dict(saved)
+
+    async def pending_mail(self, tenant_id: str, now: datetime) -> list[str]:
+        return [alert_id for (tenant, alert_id), row in self.mail.items()
+                if tenant == str(tenant_id) and row["status"] == "pending" and row["next_attempt_at"] <= now][:3]
+
+    async def claim_mail(self, tenant_id: str, alert_id: str, now: datetime) -> dict | None:
+        row = self.mail.get((str(tenant_id), str(alert_id)))
+        if not row or row["status"] != "pending" or row["next_attempt_at"] > now:
+            return None
+        row.update(status="sending", attempts=row["attempts"] + 1)
+        watch = next((w for w in self.watches if w["tenant_id"] == str(tenant_id) and w["url"] == row["url"]), None)
+        allowed = bool(watch and watch.get("enabled") and watch.get("alert_" + row["kind"], True))
+        return {**{key: row[key] for key in ("url", "kind", "letter")}, "allowed": allowed}
+
+    async def finish_mail(self, tenant_id: str, alert_id: str, state: str, now: datetime) -> None:
+        row = self.mail.get((str(tenant_id), str(alert_id)))
+        if row and row["status"] == "sending":
+            row.update(status=state, next_attempt_at=now + timedelta(seconds=min(3600, 60 * 2 ** min(row["attempts"] - 1, 6))))
+            if state == "sent":
+                row["sent_at"] = now
 
     async def list_alerts(self, tenant_id: str, url: str | None) -> list[dict[str, Any]]:
         rows = [item for item in self.alerts if item["tenant_id"] == str(tenant_id)]
@@ -1009,7 +1098,8 @@ async def external_observation(store, tenant_id, watch, item, method, receipt, c
     stock_before = await _last_known_stock(store, tenant_id, url, current["id"])
     found = alerts_for(previous, current, watch.get("threshold") or 0, stock_before,
                        price_enabled=watch.get("alert_price", True), stock_enabled=watch.get("alert_stock", True))
-    saved = [await store.add_alert({"tenant_id": tenant_id, "url": url, "ts": clock(), **alert}) for alert in found]
+    saved = [await store.add_alert({"tenant_id": tenant_id, "url": url, "ts": clock(), **alert,
+        "product_name": current.get("product_name"), "currency": current.get("currency")}) for alert in found]
     return {"status": "can't read" if issue else "observed", "url": url, "method": saved_method, "price": price,
             "stock": availability, "alerts": saved, "observation": current, "receipt": receipt}
 
@@ -1138,6 +1228,8 @@ async def run_check(
             "kind": alert["kind"],
             "before": alert["before"],
             "after": alert["after"],
+            "product_name": current.get("product_name"),
+            "currency": current.get("currency"),
         }))
     return {
         "status": "can't read" if method == "unread" else "observed",
