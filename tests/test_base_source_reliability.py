@@ -40,7 +40,7 @@ def test_complete_source_taxonomy_and_host_boundaries():
 def test_known_counts_all_sources_and_no_identifying_output():
     records = [{"record_id": str(i), "fields": {"phone": {"value": "fixture",
                 "source_kind": source, "verified": True}}} for i, source in enumerate(SOURCES)]
-    rows = scores([{"records": records, "verdicts": {str(i): "correct" for i in range(len(records))}}])
+    rows = scores([{"records": records, "field_verdicts": {str(i): {"phone": "correct"} for i in range(len(records))}}])
     assert {row["source"] for row in rows} == set(SOURCES)
     assert all(row["correct"] == row["checked"] == 1 and row["accuracy"] == 1 for row in rows)
     assert all(row["wilson_lower"] == pytest.approx(wilson_lower(1, 1)) for row in rows)
@@ -122,7 +122,8 @@ async def test_room_corridor_has_counts_only_and_refuses_other_keys(audit_db):  
     path = f"{ROOT}/{identity}/audits/{audit['id']}"
     params = {"tenant_id": str(TENANT)}
     csv = (await client.get(path + "/records.csv", params=params)).text
-    response = await client.post(path + "/review", json={**params, "csv": checked(csv, ["correct"] * 200)})
+    response = await client.post(path + "/review", json={**params, "csv": checked(csv, ["correct"] * 200),
+        "field_verdicts": {record["record_id"]: {"website": "correct"} for record in audit["records"]}})
     assert response.status_code == 200
     # No real credential; only the existing test fixture's corridor name/value.
     from unittest.mock import patch
@@ -143,3 +144,50 @@ async def test_room_corridor_has_counts_only_and_refuses_other_keys(audit_db):  
     async with pool.acquire() as conn:
         assert await read(conn)
         assert await conn.fetchval("SELECT count(*) FROM tank.base_source_reliability WHERE owner_id<>$1", TENANT) == len(rows)
+
+
+def test_mixed_record_checks_do_not_turn_correct_phone_into_wrong():
+    record = {"record_id": "mixed", "fields": {
+        name: {"value": "offline", "verified": True, "source_kind": "own_site"}
+        for name in ("phone", "email", "website", "socials")}}
+    audit = {"records": [record], "verdicts": {"mixed": "wrong"},
+             "field_verdicts": {"mixed": {"phone": "correct", "email": "wrong", "socials": "unsure"}}}
+    result = {row["field"]: row for row in scores([audit])}
+    assert set(result) == {"phone", "email"}
+    assert result["phone"]["accuracy"] == 1 and result["phone"]["checked"] == 1
+    assert result["email"]["accuracy"] == 0 and result["email"]["wrong"] == 1
+    assert scores([{**audit, "field_verdicts": {}}]) == []
+
+
+@pytest.mark.asyncio
+async def test_field_review_is_validated_immutable_and_recompute_failure_is_atomic(audit_db, monkeypatch):  # noqa: F811
+    pool, _, client = audit_db
+    from base_product_fixtures import TENANT
+    import base_reliability
+    identity, _ = await campaign(pool)
+    audit = (await draw(client, identity)).json()
+    path = f"{ROOT}/{identity}/audits/{audit['id']}"
+    params = {"tenant_id": str(TENANT)}
+    csv = (await client.get(path + "/records.csv", params=params)).text
+    body = {**params, "csv": checked(csv)}
+    record_id = audit["records"][0]["record_id"]
+    for fields in ({"foreign": {"website": "correct"}}, {record_id: {"invented": "correct"}},
+                   {record_id: {"website": "maybe"}}):
+        assert (await client.post(path + "/review", json={**body, "field_verdicts": fields})).status_code == 422
+    original = base_reliability.recompute
+    async def fail(conn):
+        raise RuntimeError("offline recompute failure")
+    monkeypatch.setattr(base_reliability, "recompute", fail)
+    with pytest.raises(RuntimeError, match="offline recompute failure"):
+        await client.post(path + "/review", json=body)
+    assert (await client.get(path, params=params)).json()["reviewed_at"] is None
+    monkeypatch.setattr(base_reliability, "recompute", original)
+    fields = {record_id: {"website": "correct", "phone": "wrong"}}
+    result = await client.post(path + "/review", json={**body, "field_verdicts": fields})
+    assert result.status_code == 200, result.text
+    assert result.json()["field_verdicts"] == fields
+    async with pool.acquire() as conn:
+        rows = {row["field"]: row for row in await read(conn)}
+    assert rows["website"]["correct"] == rows["phone"]["wrong"] == 1
+    assert (await client.post(path + "/review", json={**body, "field_verdicts": fields})).status_code == 200
+    assert (await client.post(path + "/review", json={**body, "field_verdicts": {}})).status_code == 409
