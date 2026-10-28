@@ -12,6 +12,7 @@ from rigbox.logic import fitting_parts
 from rigbox.service import RigError, Service, _clean_text, _contact
 
 from .senders import DeliveryError
+from .notice import notice, receipt
 
 
 class QuoteService(Service):
@@ -46,13 +47,19 @@ class QuoteService(Service):
         return await super().swap(tenant_id, setup, role)
 
     async def quote(self, tenant_id: str, body: dict[str, Any], *, hold: bool = False) -> dict[str, Any]:
+        self._quote_fields(body.get("contact"))
         if isinstance(body.get("setup"), dict):
             await self.validate_setup(tenant_id, body["setup"])
         payload, contact = await self.quote_payload(tenant_id, body)
+        evidence = await self._notice_receipt(tenant_id, body.get("notice_version"))
+        if evidence:
+            payload["notice_receipt"] = evidence
         return await self._store_quote(tenant_id, payload, contact, hold=hold)
 
     async def link_quote(self, tenant_id: str, url: str, note: str,
-                         contact: dict[str, Any] | None = None, *, hold: bool = False) -> dict[str, Any]:
+                         contact: dict[str, Any] | None = None, *, hold: bool = False,
+                         notice_version: str | None = None) -> dict[str, Any]:
+        self._quote_fields(contact)
         note = _clean_text(note, 4000)
         try:
             parsed = urlsplit(url.strip())
@@ -61,9 +68,25 @@ class QuoteService(Service):
         if (parsed.scheme not in {"http", "https"} or not parsed.hostname
                 or parsed.username or parsed.password or len(url) > 2048 or len(note) > 4000):
             raise RigError("invalid", "That link is not a web address.", 422)
-        return await self._store_quote(tenant_id,
-            {"kind": "link", "url": parsed.geturl(), "note": note.strip()},
+        payload = {"kind": "link", "url": parsed.geturl(), "note": note.strip()}
+        evidence = await self._notice_receipt(tenant_id, notice_version)
+        if evidence:
+            payload["notice_receipt"] = evidence
+        return await self._store_quote(tenant_id, payload,
             _contact(contact) if contact else {}, hold=hold)
+
+    @staticmethod
+    def _quote_fields(contact: Any) -> None:
+        if contact is not None and (not isinstance(contact, dict)
+                                   or set(contact) - {"name", "email", "phone"}):
+            raise RigError("invalid", "Only name, email and phone belong in the contact fields.", 422)
+
+    async def privacy_notice(self, tenant: str) -> dict[str, str] | None:
+        retailer = await self.store.retailer(tenant) or {}
+        return notice(retailer.get("quote_notice"))
+
+    async def _notice_receipt(self, tenant: str, shown_version: str | None) -> dict[str, str] | None:
+        return receipt(await self.privacy_notice(tenant), shown_version)
 
     async def _store_quote(self, tenant_id: str, payload: dict[str, Any],
                            contact: dict[str, Any], *, hold: bool = False) -> dict[str, Any]:
