@@ -136,7 +136,7 @@ its tenant-name check failed. After setup, the full invocation above passed.
 The first image layout exhausted this cloud machine's VFS scratch space. Only
 this task's failed build cache was removed; the single-layer installation above
 then built successfully. Temporary duplicate CPU environments were removed after
-proof to recover space. No CI execution is claimed; no GitHub API was queried.
+proof to recover space. Archived logs have trailing whitespace normalized. No CI execution is claimed; no GitHub API was queried.
 
 For a fresh clone, install `tank/requirements.txt`, `tank/requirements-dev.txt`
 and `tank/requirements-routellm.txt` in a Python 3.12 virtual environment, then
