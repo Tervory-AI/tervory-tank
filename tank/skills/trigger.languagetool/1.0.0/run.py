@@ -31,7 +31,7 @@ async def run(payload: dict, ctx) -> dict:
     )
     response.raise_for_status()
     data = response.json()
-    if data["config_sha256"] != pin["config_sha256"]:
+    if data["image"] != pin["image"] or data["config_sha256"] != pin["config_sha256"]:
         raise ValueError("LanguageTool configuration does not match this skill version")
     result = data["result"]
     software = result["software"]
