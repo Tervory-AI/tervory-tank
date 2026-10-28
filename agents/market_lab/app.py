@@ -204,7 +204,6 @@ async def gold_candidates(
 def _batch_view(record: dict) -> dict:
     return {
         "id": record.get("id") or "",
-        "series_id": record.get("series_id") or "",
         "source": record.get("source") or "",
         "region": record.get("region") or "",
         "currency": record.get("currency") or "",
@@ -215,6 +214,19 @@ def _batch_view(record: dict) -> dict:
     }
 
 
+def _batch_series_name(record: dict) -> str:
+    from feeds.catalog import sources
+    from feeds.geo import US_POSTAL_SET, area_label
+
+    source = next((item for item in sources(record["engine"]) if item.id == record["source"]), None)
+    if source is None:
+        raise ValueError("series source unavailable")
+    # The existing feed adapters store the state's postal code at the end of ref.
+    # Use the same catalogue name and place formatter as the source pages.
+    area = record["ref"].rsplit(":", 1)[-1]
+    return f"{source.name} · {area_label(area, 'state', '')}" if area in US_POSTAL_SET else source.name
+
+
 @app.get("/quarantine")
 async def quarantine_list(x_tank_key: str = Header(default="")) -> dict:
     if not _room_key_ok(x_tank_key):
@@ -223,17 +235,20 @@ async def quarantine_list(x_tank_key: str = Header(default="")) -> dict:
         async with _ledger() as ledger:
             rows = await ledger.conn.fetch(
                 """
-                SELECT id, series_id, source, fetched_at, region, currency, unit, status, reason
-                FROM agent_market_lab.batches
-                WHERE tenant_id = $1 AND status IN ('held', 'pooled', 'rejected', 'removed')
-                ORDER BY created_at, id
+                SELECT b.id, b.series_id, b.source, b.fetched_at, b.region, b.currency,
+                       b.unit, b.status, b.reason, s.ref, s.engine
+                FROM agent_market_lab.batches b
+                LEFT JOIN agent_market_lab.series s ON s.id = b.series_id AND s.tenant_id = b.tenant_id
+                WHERE b.tenant_id = $1 AND b.status IN ('held', 'pooled', 'rejected', 'removed')
+                ORDER BY b.created_at, b.id
                 """,
                 __import__("uuid").UUID(HEARTBEAT_TENANT),
             )
+            batches = [{**_batch_view(dict(row)), "series_name": _batch_series_name(dict(row))} for row in rows]
     except Exception as exc:  # noqa: BLE001 — class name only; the message can carry the database URL
         log.warning("quarantine list failed (%s)", type(exc).__name__)
         raise HTTPException(status_code=503, detail="quarantine unavailable") from None
-    return {"batches": [_batch_view(dict(row)) for row in rows]}
+    return {"batches": batches}
 
 
 async def _batch_action(batch_id: str, action: str, x_tank_key: str) -> dict:

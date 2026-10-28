@@ -1005,6 +1005,13 @@ export function moaAction(userId: string, action: "bench" | "promote", body: { t
   return tank(`/v1/moa/${action}`, { method: "POST", headers: { "x-tervory-admin": userId }, body: JSON.stringify(body) });
 }
 
+/** Public platform training matches, read from the active US Zenas room. */
+export function mootPublishedMatches(matchId?: string): Promise<{ matches: unknown[] }> {
+  const query = new URLSearchParams({ home_region: "us-east" });
+  if (matchId) query.set("match_id", matchId);
+  return tank(`/v1/zenas/moot/published?${query}`, { method: "GET" });
+}
+
 /** MOOT-1a: list fixture problems via Tank → Zenas room (server-side only). */
 export function mootFixtures(): Promise<{ fixtures: string[] }> {
   return tank<{ fixtures: string[] }>("/v1/zenas/moot/fixtures", { method: "GET" });
