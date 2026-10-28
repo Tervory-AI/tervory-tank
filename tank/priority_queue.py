@@ -1,6 +1,7 @@
 """Explicit off-peak jobs; only the existing Tank router/batch gateway sends work."""
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from datetime import datetime, timezone
@@ -177,7 +178,7 @@ async def _process(tank, conn, job):
     try:
         result = await tank.run_route(req, caller=job['caller'], task_id=job['task_id'],
             model_override=job['model_override'], _paid_policy=policy, _prior_escalation=snapshot['escalation'],
-            _paid_limit=float(policy['max_cost_usd']), _offpeak_dispatch=True, _receipt_id=job['id'])
+            _paid_limit=float(policy['max_cost_usd']), _offpeak_dispatch=True, _receipt_id=job['id'], _deferred_snapshot=snapshot)
         await _finish(tank, conn, job, result.model_dump(mode='json'))
     except WindowClosed:
         await conn.execute("UPDATE tank.offpeak_jobs SET status='queued',sent_at=NULL WHERE id=$1 AND tenant_id=$2", job['id'], job['tenant_id'])
@@ -194,7 +195,7 @@ async def process_once(tank, *, job_id=None, tenant_id=None):
         # scoped by that row's tenant and box, as in the existing batch worker.
         rows = await conn.fetch("""SELECT id,tenant_id FROM tank.offpeak_jobs WHERE region=$1
             AND ($2::uuid IS NULL OR id=$2) AND ($3::uuid IS NULL OR tenant_id=$3)
-            AND status IN ('queued','dispatching','batch') ORDER BY created_at LIMIT 100""",
+            AND status IN ('queued','dispatching','batch') ORDER BY checked_at NULLS FIRST,created_at LIMIT 100""",
             tank.box_region(), job_id, tenant_id)
         for row in rows:
             # Separate advisory namespace from provider batches (which share id).
@@ -204,6 +205,7 @@ async def process_once(tank, *, job_id=None, tenant_id=None):
             try:
                 job = await conn.fetchrow('SELECT * FROM tank.offpeak_jobs WHERE id=$1 AND tenant_id=$2', row['id'], row['tenant_id'])
                 if job['status'] in {'queued', 'dispatching', 'batch'}:
+                    await conn.execute('UPDATE tank.offpeak_jobs SET checked_at=now() WHERE id=$1 AND tenant_id=$2', row['id'], row['tenant_id'])
                     await _process(tank, conn, job)
             except HTTPException as exc:
                 if exc.status_code < 500:
@@ -243,3 +245,17 @@ async def notify_commands(tank):
                 await conn.execute('UPDATE tank.offpeak_jobs SET notified=true WHERE id=$1 AND tenant_id=$2', job['id'], job['tenant_id'])
             finally:
                 await conn.execute('SELECT pg_advisory_unlock($1)', lock)
+
+
+def kick(tank, job_id, tenant_id):
+    # Independent of the request connection; a browser closing cannot cancel a
+    # paid dispatch. The durable maintenance loop recovers jobs after a restart.
+    async def work():
+        try:
+            await process_once(tank, job_id=job_id, tenant_id=tenant_id)
+            await notify_commands(tank)
+        except Exception:
+            tank.log.warning('Offpeak job remains available to maintenance')
+    task = asyncio.create_task(work())
+    tank._background.add(task)
+    task.add_done_callback(tank._background.discard)
