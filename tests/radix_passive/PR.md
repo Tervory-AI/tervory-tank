@@ -77,3 +77,9 @@ Tisan must use its server-stored staging revision, check it remains the same acr
 #### Remaining acceptance and handoff
 
 No current concrete code finding is open from independent review; final proof/test commit head is being sent for exact-head review. No PR exists yet; **Claude must open it from this branch using this report**, then hosted checks and founder review remain. Founder acceptance is still pending a real owned-domain TXT proof and real passive findings in the founder's browser. No screenshot or full-green claim is fabricated. Zenas region clarification is unchanged: US/Boston and ZA/dedicated South Africa box; this job does not change Zenas or its compose files.
+
+### 2026-10-28 16:48:45 PDT (UTC-07:00) / 2026-10-28 23:48:45 UTC — independent review and serialized final publication
+
+- Independent reviewer verified exact published `8fcd1061289407b9d730b3d6da1eb137491a3cb9`, application equality to reviewed `ce44c65a`, added outage tests, command/image evidence and report. **No outstanding actionable code finding. Ready for Claude's draft PR handoff.** The two main Zenas seal failures and loopback-only CLI override remain explicit limitations, not waived failures or live acceptance.
+- Final documentation check at `8fcd1061`: `/tmp/radix-passive-py312/bin/python -m pytest -q tests/test_secrets.py` => **2 passed in 8.66s**, exit 0; `git diff --check` passed. This checks the newly committed report/proof as well as source; no new test suppression or real secret was used.
+- This final checkpoint changes only this append-only report; application/test code and evidence are unchanged. Its serialized commit/push and exact resulting head are sent to the reviewer separately. No PR exists yet; Claude opens it using this report. Hosted CI and founder real-domain TXT/browser findings remain pending, with no production change or live scan.
