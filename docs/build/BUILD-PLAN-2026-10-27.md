@@ -201,6 +201,10 @@ The founder's ask (20 Oct): a conversation window where you say what you want, a
   - the CLI (CLI-1, not started).
 - **Done when:** the founder types a change in `/chats`, confirms the card, and a worker's PR, CI status and the reviewer's verdict appear in the same thread.
 
+### Marketing site and the founder's control panel (founder, 27 Oct 19:57)
+- **tervory.com homepage:** the founder has the copy done and is exploring design ideas. It goes Figma first, then build, in the founder's own design thread. No builder touches the homepage until the frames are approved.
+- **Founder control panel (/control):** cleanup is on the founder's list for the weekend of 31 Oct to 1 Nov, once he has decided which buttons are permanent and where they go. Until then, `codex/control-panel` (the 10:115 rebuild) waits, and nobody changes /control.
+
 ### Workspace
 - **Dashboard and control panel:** merge `codex/dashboard` and `codex/control-panel` once checked against 12:2 and 10:115.
 - **Feedback:** add "wrong" and a note box, on chats and agent results as well as `/tasks` (`workspace/app/feedback-buttons.tsx:5`).
