@@ -182,10 +182,11 @@ async def perform_opportunities(
     scored = gap_score({"areas": areas})
     found = opportunity_rows(scored["ranked"], module.products(), signals or {})
     for row in scored["ranked"]:
+        signal_id = str(uuid.uuid4())
         await _call(
             ledger.save_opportunity,
             {
-                "id": str(uuid.uuid4()),
+                "id": signal_id,
                 "tenant_id": tenant_id,
                 "made_at": clock,
                 "area": row["area"],
@@ -204,6 +205,10 @@ async def perform_opportunities(
                 },
             },
         )
+        from chassis.events import publish
+        await publish(tenant_id, "marketlab.signal.scored", signal_id, {
+            "signal_id": signal_id, "score": str(row["gap"]), "rank": row["rank"],
+            "observed_at": clock.isoformat()})
         await _call(
             ledger.save_prediction,
             prediction_for_recommendation(
