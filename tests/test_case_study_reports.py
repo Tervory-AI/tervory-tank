@@ -1,23 +1,22 @@
 """Offline case-study proof against real PostgreSQL and the actual Tank routes."""
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
 import json
 import os
-from pathlib import Path
 import uuid
+from datetime import UTC, date, datetime
+from pathlib import Path
 
 import asyncpg
 import httpx
 import pytest
 import pytest_asyncio
-
 from case_study_templates import PRODUCTS, TANK, empty_figures
 
 ROOT = Path(__file__).resolve().parents[1]
 A = uuid.UUID("ca5e0000-0000-4000-8000-000000000001")
 B = uuid.UUID("ca5e0000-0000-4000-8000-000000000002")
-AT = datetime(2026, 10, 2, 12, tzinfo=timezone.utc)
+AT = datetime(2026, 10, 2, 12, tzinfo=UTC)
 WINDOW = {"start": "2026-10-01", "end": "2026-10-03"}
 
 
@@ -244,3 +243,112 @@ async def test_product_sources_fill_only_their_tenant_figures(api):
             assert figures(second)[product + "." + metric]["value"] == 0
     severity = figures(await read(client, "radix"))["radix.findings_by_severity"]["value"]
     assert next(row["value"] for row in severity if row["id"] == "high") == 1
+
+
+@pytest.mark.asyncio
+async def test_base_verified_confidence_and_apollo_use_real_evidence(api):
+    pool, client = api
+    from base_evidence import FIELDS
+    for tenant in (A, B):
+        await grant(pool, tenant, "base")
+    async with pool.acquire() as conn:
+        for tenant, confidence, state, key in ((A, 90, "CA", "a1"), (A, 50, "NY", "a2"), (B, 20, "TX", "b1")):
+            record = uuid.uuid4()
+            fields = {name: {"verified": name == "website", "value": "https://offline.invalid" if name == "website" else None} for name in FIELDS}
+            await conn.execute("""INSERT INTO agent_base.records(id,tenant_id,raw,confidence,updated_at)
+                VALUES($1,$2,'{}',$3,$4)""", record, tenant, confidence, AT)
+            await conn.execute("""INSERT INTO tank.base_record_results
+                (tenant_id,record_id,licence_key,state,licence_type,name,status,fields,source_revision,attempted_at,checked_at)
+                VALUES($1,$2,$3,$4,'01','Offline fixture','done',$5,'offline',$6,$6)""", tenant, record, key, state, json.dumps(fields), AT)
+            receipt = await conn.fetchval("""INSERT INTO tank.ledger(tenant_id,agent,task_type,rung,model,cost_usd,ts)
+                VALUES($1,'base','base.fixture',2,'offline-model',1,$2) RETURNING id""", tenant, AT)
+            await conn.execute("INSERT INTO tank.base_ledger_links VALUES($1,$2,$3)", tenant, record, receipt)
+        imported = uuid.uuid4()
+        await conn.execute("INSERT INTO tank.base_apollo_imports VALUES($1,$2,'offline',$3)", A, imported, AT)
+        await conn.execute("""INSERT INTO tank.base_apollo_records(tenant_id,import_id,licence_key,fields)
+            VALUES($1,$2,'a1','{"website":"https://offline.invalid"}')""", A, imported)
+    values = figures(await read(client, "base"))
+    assert values["base.records_verified"]["value"] == 2
+    assert values["base.cost_per_verified_record"]["value"] == 1
+    assert values["base.records_by_state"]["value"] == [{"id": "CA", "value": 1}, {"id": "NY", "value": 1}]
+    assert {v["id"]: v["value"] for v in values["base.confidence_histogram"]["value"]} == {"0-39": 0, "40-59": 1, "60-79": 0, "80-100": 1, "missing": 0}
+    assert next(v["value"] for v in values["base.comparison_vs_apollo"]["value"] if v["id"] == "website.matches") == 1
+    assert values["base.measured_accuracy"]["value"] == 0  # #390 not on this main.
+    assert figures(await read(client, "base", B, "client-b"))["base.records_verified"]["value"] == 1
+
+
+@pytest.mark.asyncio
+async def test_tiger_delivery_and_price_bands_do_not_invent_detection_time(api, monkeypatch):
+    pool, client = api
+    monkeypatch.syspath_prepend(str(ROOT / "agents/_chassis"))
+    monkeypatch.syspath_prepend(str(ROOT / "agents/tiger"))
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("case_study_tiger_watch", ROOT / "agents/tiger/watch.py")
+    watch = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(watch)
+    for tenant in (A, B):
+        await grant(pool, tenant, "tiger")
+    async with pool.acquire() as conn:
+        await conn.execute("CREATE SCHEMA agent_tiger")
+        await watch.ensure_tables(conn)
+        await conn.execute("INSERT INTO agent_tiger.watchlist(tenant_id,url,every) VALUES($1,'https://offline.invalid','1h')", A)
+        await conn.execute("INSERT INTO agent_tiger.observations(tenant_id,url,ts) VALUES($1,'https://offline.invalid',$2)", A, AT)
+        for i, after in enumerate(("49", "50", "90", "100", "110", "150", "unread")):
+            alert = await conn.fetchval("""INSERT INTO agent_tiger.alerts(tenant_id,url,ts,kind,before,after)
+                VALUES($1,'https://offline.invalid',$2,'price','100',$3) RETURNING id""", A, AT, after)
+            await conn.execute("""INSERT INTO agent_tiger.alert_mail(tenant_id,alert_id,url,kind,letter,status,sent_at)
+                VALUES($1,$2,'https://offline.invalid','price','{}',$3,$4)""", A, alert, "sent" if i == 0 else "pending", AT if i == 0 else None)
+    values = figures(await read(client, "tiger"))
+    for name, count in (("pages_watched", 1), ("checks_run", 1), ("changes_caught", 7), ("alerts_sent", 1)):
+        assert values["tiger." + name]["value"] == count
+        assert figures(await read(client, "tiger", B, "client-b"))["tiger." + name]["value"] == 0
+    assert all(row["value"] == 1 for row in values["tiger.price_change_histogram"]["value"])
+    assert values["tiger.price_change_histogram"]["unmeasured"] == 1
+    assert values["tiger.time_to_detect"]["value"] == 0
+    assert values["tiger.time_to_detect"]["status"] == "missing_source"
+
+
+@pytest.mark.asyncio
+async def test_trigger_checker_results_acceptance_and_voice_hits_are_tenant_scoped(api):
+    pool, client = api
+    async with pool.acquire() as conn:
+        for tenant in (A, B):
+            await conn.execute("INSERT INTO agent_trigger.voices VALUES($1,'{\"status\":\"live\"}',1,$2)", tenant, AT)
+        ids = []
+        for feedback in ("accepted", "rejected", None):
+            ids.append(await conn.fetchval("""INSERT INTO tank.ledger(tenant_id,agent,task_type,model,ts,feedback,feedback_at)
+                VALUES($1,'trigger','trigger.write','offline-model',$2,$3,$2) RETURNING id""", A, AT, feedback))
+        card = {"status": "confirmed", "tool": "trigger.write", "result": {"ledger_id": str(ids[0]),
+            "report": {"issue_count": 3, "issues": [{"source": "voice"}, {"source": "voice"}, {"source": "grammar"}]}}}
+        for tenant in (A, B):
+            # B's forged card must not borrow A's receipt or report evidence.
+            await conn.execute("""INSERT INTO tank.command_threads(tenant_id,user_id,title,state)
+                VALUES($1,'offline','Offline',$2)""", tenant, json.dumps({"cards": {"one": card, "repeat": card}}))
+    values = figures(await read(client, "trigger"))
+    for metric, value in (("drafts", 3), ("acceptance_rate", 50), ("checker_issues_per_draft", 3), ("voice_rule_hits", 2)):
+        assert values["trigger." + metric]["value"] == value
+        assert figures(await read(client, "trigger", B, "client-b"))["trigger." + metric]["value"] == 0
+
+
+@pytest.mark.asyncio
+async def test_report_savings_reuses_core_population_and_graduation_excludes_other_tenants(api):
+    pool, client = api
+    from proof import savings_cte
+    async with pool.acquire() as conn:
+        await conn.execute("INSERT INTO tank.proof_prices(model,family,input_usd,output_usd) VALUES('offline-actual','offline-family',1,1),('offline-baseline','offline-family',10,10)")
+        for tenant in (A, B):
+            task = await conn.fetchval("""INSERT INTO tank.tasks(tenant_id,created_by,agent,task_type,title,input,status,finished_at)
+                VALUES($1,'offline','base','base.offline','Offline','{}','done',$2) RETURNING id""", tenant, AT)
+            ledger = await conn.fetchval("""INSERT INTO tank.ledger(tenant_id,task_id,agent,task_type,model,cost_usd,ts)
+                VALUES($1,$2,'base','base.offline','offline-actual',2,$3) RETURNING id""", tenant, task, AT)
+            await conn.execute("""UPDATE tank.ledger SET standard_model='offline-baseline',standard_cost_usd=10,
+                baseline_model='offline-baseline',baseline_cost_usd=10,baseline_status='measured',baseline_priced_at=$2 WHERE id=$1""", ledger, AT)
+            await conn.execute("""INSERT INTO tank.shadow(tenant_id,ledger_id,task_type,primary_model,candidate_model,primary_content,agreement,created_at)
+                SELECT $1,$2,'base.offline','offline-actual','offline-candidate','',1,$3 FROM generate_series(1,$4::int)""", tenant, ledger, AT, 2 if tenant == A else 20)
+        expected = await conn.fetchval(savings_cte() + "SELECT sum(standard_cost_usd-cost_usd) FROM eligible", A, "us-east", datetime(2026, 10, 4, tzinfo=UTC))
+    values = figures(await read(client, "base"))
+    assert values["tank.savings_vs_baseline"]["value"] == expected == 8
+    progress = values["tank.graduation_progress"]["value"]
+    assert len(progress) == 1 and progress[0]["samples"] == 2
+    assert progress[0]["value"] == 1
+    assert "offline-candidate" not in json.dumps(values)
