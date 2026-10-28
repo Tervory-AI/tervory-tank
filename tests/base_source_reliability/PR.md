@@ -110,3 +110,28 @@ Result: **2 passed in 9.61s**; whitespace passed. This repeats checks already co
 Independent reviewer accepted the explicit-field measurement correction through `7a2c798` and reviewed implementation/proof at `24cd13a` with no new actionable source defect. This documentation-only follow-up clarifies that the two stalls lack a main baseline. Hosted checks must be assessed on the final PR head, not earlier checkpoints. No merge, deploy, production SQL, paid/provider work, live campaign, customer input, page copy, Figma change or real model call was performed.
 
 **Founder acceptance remains pending:** the next actual DC audit must supply real field verdicts. Show resulting aggregate scores and a subsequent actual record whose higher-scoring source won, with the retained alternative evidence, in the founder's own browser. No DC records, screenshot, inbox, tenant identity or founder-browser success is fabricated here. This branch proves the behavior offline only.
+
+
+## Checkpoint — 2026-10-28 16:42:29 PDT (UTC-07:00) / 2026-10-28 23:42:29 UTC
+
+Append-only status update under the founder's timestamped-report instruction. Earlier pending statements above describe their original checkpoints; the evidence below supersedes them only as of this timestamp.
+
+- Branch: `codex/source-reliability`; local HEAD and confirmed published remote HEAD before this report update: `a5ed0b08e3990ba01d83512205b491ea3e5bf23b`.
+- Hosted tested SHA: `a5ed0b08e3990ba01d83512205b491ea3e5bf23b`. [CI run 40786864817](https://github.com/Tervory-AI/tervory-tank/actions/runs/40786864817): security, changes, Tank and Workspace **SUCCESS**; pick-runner and savings-page **SKIPPED**. [CodeQL run 40786859556](https://github.com/Tervory-AI/tervory-tank/actions/runs/40786859556): Actions, JavaScript/TypeScript and Python **SUCCESS**; aggregate CodeQL check also **SUCCESS**. No failure or pending check remained on that tested SHA.
+- Independent reviewer confirmed this exact implementation/proof head with the measurement P2 fixed and no outstanding actionable code finding. This is code review, not founder acceptance.
+- Local proof remains 82 distinct passing checks, with two unresolved regression stalls. No settled tests were rerun in this reporting checkpoint. No main-baseline evidence was added for those stalls, and neither is now claimed passed.
+- Publish state observed: existing [PR #413](https://github.com/Tervory-AI/tervory-tank/pull/413) **OPEN**, branch published, working tree clean before the report update. This checkpoint adds a documentation-only commit; its actual publication SHA is recorded by the PR commit and reviewer handoff. Hosted checks on that next report commit are separate from the tested SHA above.
+- Founder acceptance: **PENDING** real DC field audit, actual winning-source record evidence and founder-browser proof. No live run, screenshot, migration, scan, merge or deployment occurred.
+
+Exact read-only checkpoint commands and results:
+
+```sh
+git status --short
+git rev-parse HEAD
+git ls-remote --heads origin codex/source-reliability
+gh pr view 413 -R Tervory-AI/tervory-tank --json state,headRefOid,statusCheckRollup,url
+date -u '+%Y-%m-%d %H:%M:%S UTC'
+TZ=America/Los_Angeles date '+%Y-%m-%d %H:%M:%S %Z (UTC%:z)'
+```
+
+Results: clean tree; both heads `a5ed0b08e3990ba01d83512205b491ea3e5bf23b`; PR open and check results as listed above; first observation at 2026-10-28 16:41:59 PDT / 23:41:59 UTC. No secret value was read. Report publication uses `git add tests/base_source_reliability/PR.md`, `git commit -m 'Append dated source-reliability CI and acceptance checkpoint'`, then serialized `git push origin codex/source-reliability`.
