@@ -5,6 +5,9 @@ starlette==1.10.0
 uvicorn[standard]==0.54.0
 asyncpg==0.30.0
 httpx==0.28.1
+# LiteLLM's OpenAI-compatible streaming API; use the SDK's SSE decoder.
+openai==2.54.0
+jiter==0.18.0
 # 2.10.6 is the newest release whose model_json_schema() still matches the frozen
 # radix skill input blocks. 2.11+ adds additionalProperties on unconstrained dicts.
 # Approved skill versions stay as published.

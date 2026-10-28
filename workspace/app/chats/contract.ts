@@ -21,8 +21,11 @@ export function safeLink(value: string | undefined): string | undefined {
   try { const url = new URL(value); if (url.protocol === "https:" && !url.username && !url.password) return url.href; } catch { /* Not a link. */ }
 }
 /** Decode UTF-8 incrementally; SSE records can be split at any byte boundary. */
-export async function readEvents(stream: ReadableStream<Uint8Array>, receive: (event: Event) => void) {
+export async function readEvents(stream: ReadableStream<Uint8Array>, receive: (event: Event) => void, signal?: AbortSignal) {
   const reader = stream.getReader(); const decoder = new TextDecoder(); let buffer = "";
+  const cancel = () => { void reader.cancel().catch(() => {}); };
+  signal?.addEventListener("abort", cancel, { once: true });
+  if (signal?.aborted) cancel();
   function dispatch(record: string) {
     let type = "message"; let id: number | undefined; const data: string[] = [];
     for (const line of record.split(/\r?\n/)) {
@@ -37,12 +40,13 @@ export async function readEvents(stream: ReadableStream<Uint8Array>, receive: (e
   try {
     while (true) {
       const { value, done } = await reader.read(); buffer += decoder.decode(value, { stream: !done });
+      if (signal?.aborted) break;
       let boundary: RegExpMatchArray | null;
       while ((boundary = /\r?\n\r?\n/.exec(buffer))) { dispatch(buffer.slice(0, boundary.index)); buffer = buffer.slice(boundary.index! + boundary[0].length); }
       if (buffer.length > 2_000_000) throw new Error("The response was too large. Reopen the chat to continue.");
       if (done) { if (buffer.trim()) dispatch(buffer); break; }
     }
-  } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+  } finally { signal?.removeEventListener("abort", cancel); await reader.cancel().catch(() => {}); reader.releaseLock(); }
 }
 export function upsert<T>(rows: T[], row: T, key: keyof T): T[] {
   return rows.some(item => item[key] === row[key]) ? rows.map(item => item[key] === row[key] ? row : item) : [...rows, row];

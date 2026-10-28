@@ -37,7 +37,8 @@ def test_tank_storage_imports_without_chassis():
     imports = [node.module for node in ast.walk(ast.parse((ROOT / 'tank/storage.py').read_text())) if isinstance(node, ast.ImportFrom)]
     assert not any(name and name.startswith('chassis') for name in imports)
     dockerfile = (ROOT / 'tank/Dockerfile').read_text()
-    assert 'storage.py' in next(line for line in dockerfile.splitlines() if line.startswith('COPY main.py'))
+    assert (ROOT / 'tank/storage.py').is_file()
+    assert '*.py' in next(line for line in dockerfile.splitlines() if line.startswith('COPY ') and '*.py' in line).split()
     assert 'app.include_router(__import__("storage").router)' in (ROOT / 'tank/main.py').read_text()
 
 
