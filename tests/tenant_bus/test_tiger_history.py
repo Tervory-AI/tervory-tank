@@ -22,6 +22,7 @@ from rig_watch import publish_price_changed
 from watch import DomainLimiter, PgStore as TigerStore, external_observation, run_check
 from tiger_works.fixture import extract, no_paid_call, saved_page
 from test_bus import A, B, EVENT, scope
+from test_tiger import ROOT, _load
 
 URL = 'https://shop.example/item'
 
@@ -68,6 +69,37 @@ async def real_tank(database, redis_url, root, tmp_path):
             process.wait(timeout=20)
 
 
+async def consume_on_rig_startup(database, monkeypatch, bus):
+    """Run the actual Rig lifespan; park unrelated scheduled work in this proof."""
+    import importlib
+    chassis_app = importlib.import_module('chassis.app')
+    async def parked(*args, **kwargs):
+        await asyncio.Future()
+    monkeypatch.setattr(chassis_app, 'job_loop', parked)
+    monkeypatch.setattr(chassis_app, 'schedule_loop', parked)
+    monkeypatch.setenv('AGENT_NAME', 'rig')
+    monkeypatch.delenv('CATALOGUE_DIR', raising=False)
+    monkeypatch.delenv('RIG_RETAILER_KEY', raising=False)
+    monkeypatch.setenv('NO_PROXY', '127.0.0.1,localhost')
+    monkeypatch.setenv('no_proxy', '127.0.0.1,localhost')
+    async with database.acquire() as conn:
+        name = await conn.fetchval('SELECT current_database()')
+    parsed = urlsplit(os.environ['POOL_SCHEMA_DATABASE_URL'])
+    monkeypatch.setenv('DATABASE_URL', urlunsplit(parsed._replace(path='/' + name)))
+    room = _load('bus_rig_lifespan', ROOT / 'agents/rig/app.py')
+    async with room.app.router.lifespan_context(room.app):
+        tasks = [task for task in asyncio.all_tasks() if task.get_coro().__name__ == 'consume_loop']
+        assert len(tasks) == 1
+        async with asyncio.timeout(10):
+            while True:
+                async with database.acquire() as conn:
+                    rows = await conn.fetchval('SELECT count(*) FROM agent_rig.price_history WHERE tenant_id=$1', UUID(A))
+                if rows == 1 and (await bus.redis.xpending(scope().stream(EVENT), 'rig'))['pending'] == 0:
+                    break
+                await asyncio.sleep(0.05)
+    assert tasks[0].done()  # Normal Rig shutdown also stops its consumer.
+
+
 async def cycle(database, http, monkeypatch, bus):
     rig, tiger = RigStore(database), TigerStore(database)
     for tenant in (A, B):
@@ -108,7 +140,7 @@ async def cycle(database, http, monkeypatch, bus):
     monkeypatch.setenv('TANK_KEY', 'offline-rig')
     service = SimpleNamespace(store=rig)
     assert await consume_tenant(service, http, B, str(uuid4())) == 0
-    assert await consume_tenant(service, http, A, str(uuid4())) == 1
+    await consume_on_rig_startup(database, monkeypatch, bus)
     assert await consume_tenant(service, http, A, str(uuid4())) == 0
     raw = (await bus.redis.xrange(scope().stream(EVENT)))[0][1]
     message = {'event_id': raw['event_id'], 'facts': json.loads(raw['facts'])}
@@ -137,7 +169,7 @@ async def cycle(database, http, monkeypatch, bus):
     await save_price(service, A, {**message, 'event_id': str(uuid4())})
     async with database.acquire() as conn:
         assert await conn.fetchval('SELECT count(*) FROM agent_rig.price_history WHERE tenant_id=$1', UUID(A)) == 1
-    print('OFFLINE TIGER -> TANK -> REDIS -> RIG JSON\n' + json.dumps(proof, sort_keys=True))
+    print('OFFLINE TIGER -> TANK -> REDIS -> RIG STARTUP CONSUMER -> FOUNDER JSON\n' + json.dumps(proof, sort_keys=True))
     return proof
 
 
