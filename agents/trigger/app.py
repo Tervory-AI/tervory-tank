@@ -13,7 +13,7 @@ from chassis.tank import TankClient
 from fastapi import Depends, FastAPI, Header, HTTPException
 
 from trigger.service import CheckIn, WriteIn, check_text, write
-from trigger.voice import Voice, VoiceStore
+from trigger.voice import VoiceStore
 
 
 async def authorized(x_tank_key: str = Header(default="")):
@@ -46,15 +46,6 @@ async def health():
     return {"ok": True, "agent": "trigger"}
 
 
-@app.put("/voice/{tenant_id}", dependencies=[Depends(authorized)])
-async def put_voice(tenant_id: UUID, voice: Voice):
-    try:
-        await VoiceStore(app.state.pool).put(tenant_id, voice)
-    except ValueError as exc:
-        raise HTTPException(409, str(exc)) from None
-    return {"revision": voice.revision}
-
-
 @app.post("/check", dependencies=[Depends(authorized)])
 async def post_check(body: CheckIn):
     return await check_text(body, VoiceStore(app.state.pool), app.state.http)
@@ -66,3 +57,35 @@ async def post_write(body: WriteIn):
         return await write(body, VoiceStore(app.state.pool), app.state.tank, app.state.http)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from None
+
+
+from pydantic import BaseModel, ConfigDict, Field
+from trigger.voice_history import VoiceHistory
+
+
+class VoiceOperation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tenant_id: UUID
+    text: str = Field(default="", max_length=12000)
+    expected_revision: int = Field(default=0, ge=0)
+    preview_hash: str = ""
+    operation_id: UUID | None = None
+    target: int | None = Field(default=None, ge=1)
+    offset: int = Field(default=0, ge=0)
+
+
+@app.post("/voice/{operation}", dependencies=[Depends(authorized)])
+async def voice_operation(operation: str, body: VoiceOperation):
+    store = VoiceHistory(app.state.pool)
+    try:
+        if operation == "show":
+            return await store.show(body.tenant_id, body.offset, body.target)
+        if operation == "preview":
+            return await store.preview(body.tenant_id, body.text, body.target)
+        if operation == "commit" and body.operation_id:
+            return {"voice": await store.commit(body.tenant_id, text=body.text,
+                expected_revision=body.expected_revision, digest=body.preview_hash,
+                operation_id=body.operation_id, target=body.target)}
+        raise HTTPException(404, "Voice operation unavailable")
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from None

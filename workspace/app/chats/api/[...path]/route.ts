@@ -1,3 +1,4 @@
+import { triggerIdentity } from "@/lib/trigger";
 import { activeTenant } from "@/lib/tenant";
 import { isFounder } from "@/lib/admin";
 import { commandRequest, commandTools, CommandRequestError, listRoster } from "@/lib/tank";
@@ -34,7 +35,7 @@ async function boundedBody(request: Request, limit: number): Promise<Uint8Array>
 async function handle(request: Request, context: Context): Promise<Response> {
   try {
     if (request.method !== "GET" && !sameHost(request)) return json({ error: "This request must come from your workspace." }, 403);
-    const identity = await activeTenant();
+    const identity = await triggerIdentity(await activeTenant());
     if (!identity) return json({ error: "Please sign in and choose your workspace." }, 401);
     const founder = isFounder(identity.userId);
     const { path } = await context.params;

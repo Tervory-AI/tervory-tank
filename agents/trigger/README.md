@@ -12,15 +12,28 @@ Memory limits: **512 MiB** room plus **2 GiB** LanguageTool, with Java heap capp
 
 ## Tenant voice and actions
 
-No voice is seeded. A founder may supply their own Brand Voice Spec JSON as `voice` in a confirmed `trigger.write` action. The object requires their `brand`, `status: live`, and a positive increasing `revision`. Subsequent writes omit `voice` and reuse the saved file. The complete canonical voice (including revision) is included in the Tank prompt and therefore in its tenant cache key. An internal authenticated `PUT /voice/{tenant_id}` also accepts the file. No browser calls the room directly.
+No voice is seeded. In the existing chat, a founder or the active tenant's Clerk `org:admin` can use these code-only commands:
 
-Use the dataset's **format only**; do not copy its fictional coffee brand. `bannedTerms` and explicit `requiredTerms` are case-insensitive whole words/phrases; `preferredTerms` are writing guidance, not mandatory occurrences. `maxSentenceWords` defaults to 30 and can be 5–100. Optional `stylebook` selects one of the original 11 vendored books. Voice JSON is capped at 40,000 characters; the existing Command action envelope also has its stricter 32,000-byte limit. Stale voice revisions are rejected.
+- `trigger.voice.set:` followed by pasted plain-text notes. Optional headings: `Brand:`, `Rules:`, `Preferred words:`, `Banned words:`, `Required words:`, `Tone:`, `On-voice:`, `Off-voice:`. Lists can be separate lines; word lists can use CSV quoting. Unlabelled text is retained as rules. No brand is guessed when absent.
+- The existing card's **Brief** shows the parsed spec. **Confirm** saves it; Cancel saves nothing. A changed voice invalidates an older preview. Source text, the exact parsed spec and every revision are retained. Direct gateway mutations without an executing confirmed card are refused.
+- `trigger.voice.show` returns the current file and version history. `trigger.voice.show: version 2` also reads that version. History is paginated in groups of 20; `trigger.voice.show: 20` reads the next page.
+- `trigger.voice.rollback: 2` previews version 2's content as the next revision. Confirm restores it without deleting intervening versions.
+
+The text supplied is the only content source. There is no model parser, inferred counterpart example, invented rule or dataset coffee example. Status/version are storage metadata. The parser does not serialize default checker settings as user-authored rules. New notes replace the current file in a new version; they do not silently merge old rules. Existing pre-second-build voices are copied into history when the additive schema applies; overwritten pre-history cannot be reconstructed.
+
+The full canonical voice and revision participate in the tenant cache key. A tenant without a file uses [house style](HOUSE_STYLE.md); no house rule is added to a tenant's saved file. Raw spec updates through `trigger.write.voice` and the former room PUT route are retired so new chat saves use the preview/Confirm/version flow. Plain-text source is capped at 12,000 UTF-8 bytes, and the existing Command 32,000-byte action envelope still applies.
 
 The founder can ask for a description in their saved voice through the existing planner and confirm `trigger.write`. Drafting uses task `trigger.write` through the chassis Tank client and `/v1/route`; the new policy enables tenant cache and the existing ladder. It reuses the existing `luna` route and adds no paid provider. The checkers run on every returned draft, including a cached draft.
 
 For a completely model-free check from the window, use **`Trigger, check: <pasted paragraph>`** or **`Trigger, check this paragraph: <pasted paragraph>`**. Command recognizes these prefixes in code, proposes the existing confirmation card, and dispatches `trigger.check`. Other conversational phrasing still uses the existing planner. The actual check action always uses code only. Its real ledger record has zero tokens/cost; Tank's existing receipt pricing trigger owns the comparison.
 
-This first build is founder-only. Trigger has no new client entitlement: the existing database squad whitelist is unchanged. No browser-supplied squad can grant access.
+Writing/checking retain the first build's founder-only access; no new squad grant was created. Voice tools and feedback additionally allow the tenant's verified admin, only within their active tenant. The Workspace derives that role from the existing Clerk session and checks the user, organization and mapped tenant together; no browser-supplied role or squad grants access.
+
+## Learning records
+
+Every successful `trigger.write` tool result is saved through Tank's existing `training.save_pair`, with the brief, draft and checker report. New pairs are private, tenant-scoped, client-matter records and inactive/unapproved while feedback is pending. Nothing is exported to a shared dataset.
+
+Use `trigger, accept`, `trigger, reject: <reason>` or `trigger, changes: <requested changes>` in the same thread. Code selects that thread's latest completed Trigger draft. The existing card previews the status and exact change text; Confirm records it. `trigger.feedback` also accepts an explicit write ID as an argument. Only accepted pairs become active; rejected/change-requested records stay inactive. All feedback events are retained, including the user and exact requested changes. Recording feedback does not itself generate a new draft. Normal free-form follow-ups may use the existing conversation planner; these explicit prefixes and the voice/check tools do not call a model.
 
 Legal-document requests return a handoff to the existing same-box Zenas drafting endpoint. The existing Zenas template, jurisdiction, tenant/home checks and civil/criminal scope gates remain authoritative. Provide `template` and `jurisdiction`; missing values fail visibly. The original Zenas result and its existing notice are returned. Trigger does not write legal text or run a second legal engine.
 

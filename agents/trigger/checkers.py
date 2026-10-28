@@ -87,6 +87,9 @@ def local_checks(text: str, voice: Voice | None) -> dict:
                 for match in re.finditer(r"\[(?:click here|here|read more)\]\([^)]*\)", text, re.IGNORECASE):
                     issues.append({"source": "stylebook", "rule": "link_text", "offset": match.start(),
                                    "message": "Use descriptive link text."})
+    if voice is None:
+        from .house_style import findings
+        issues.extend(findings(text, issues, phrase_spans))
     # Practical Prose F3: mechanical markup checks only; no scorer or semantic grade.
     fences = re.findall(r"^\s*(`{3,}|~{3,})", text, re.MULTILINE)
     if len(fences) % 2:
@@ -123,6 +126,7 @@ async def check(text: str, voice: Voice | None, http: httpx.AsyncClient) -> dict
     result["issue_count"] = len(result["issues"])
     result["issues"] = result["issues"][:200]
     result["truncated"] = result["issue_count"] > len(result["issues"])
+    result["style_source"] = "tenant" if voice else "house"
     result["voice_revision"] = voice.revision if voice else None
     result["stylebook"] = voice.stylebook if voice else None
     result["model_calls"] = 0

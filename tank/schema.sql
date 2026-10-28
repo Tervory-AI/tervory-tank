@@ -2006,3 +2006,28 @@ VALUES ('trigger.write',1,'luna','tenant',3000,0.99,200,false),
        ('trigger.check',3,'code','none',0,0.99,200,false)
 ON CONFLICT DO NOTHING;
 -- trigger.check never calls /v1/route; its adapter executes code and records zero cost.
+
+-- Trigger second build: tenant-private writing/feedback provenance.
+CREATE TABLE IF NOT EXISTS tank.trigger_writes (
+    id uuid PRIMARY KEY,
+    tenant_id uuid NOT NULL,
+    user_id text NOT NULL,
+    brief text NOT NULL,
+    draft text NOT NULL,
+    checker_results jsonb NOT NULL,
+    feedback_status text NOT NULL DEFAULT 'pending',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (tenant_id,id)
+);
+CREATE TABLE IF NOT EXISTS tank.trigger_feedback (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    write_id uuid NOT NULL,
+    status text NOT NULL CHECK (status IN ('accepted','changes_requested','rejected')),
+    changes text NOT NULL DEFAULT '',
+    user_id text NOT NULL,
+    operation_id uuid NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    FOREIGN KEY (tenant_id,write_id) REFERENCES tank.trigger_writes(tenant_id,id),
+    UNIQUE (tenant_id,operation_id)
+);
