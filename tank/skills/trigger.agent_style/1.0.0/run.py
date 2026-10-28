@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+from importlib.metadata import version
 import sys
 from pathlib import Path
 
@@ -20,6 +21,10 @@ async def run(payload: dict, ctx) -> dict:
         raise ValueError("Unsupported checker input")
     if hashlib.sha256((ROOT / "rules.zip").read_bytes()).hexdigest() != ARCHIVE_SHA256:
         raise ValueError("Pinned checker data changed")
+    # Native parsing/regex dependencies may not drift beneath an old approval.
+    for distribution, pinned in {"google-re2": "1.1.20251105", "pydantic": "2.10.6"}.items():
+        if version(distribution) != pinned:
+            raise ValueError("Pinned checker dependency changed")
     process = await asyncio.create_subprocess_exec(
         sys.executable, "-I", str(ROOT / "engine.py"), COMPONENT,
         stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
