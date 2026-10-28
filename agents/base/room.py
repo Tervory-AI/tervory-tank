@@ -458,6 +458,9 @@ async def base_loop(pool: Any, skills: SkillClient) -> None:
             cfg = _load(row["input"])
             if not isinstance(cfg, dict):
                 cfg = {}
+            # The room row owns the tenant; JSON input cannot redirect work
+            # or the resulting event stream to a different tenant.
+            cfg["tenant_id"] = str(row["tenant_id"])
             try:
                 versions, refs = await skills.pin(bool(cfg.get("preview")), cfg.get("engine"))
                 cfg["refs"] = refs
