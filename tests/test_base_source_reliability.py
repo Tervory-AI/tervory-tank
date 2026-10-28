@@ -191,3 +191,23 @@ async def test_field_review_is_validated_immutable_and_recompute_failure_is_atom
     assert rows["website"]["correct"] == rows["phone"]["wrong"] == 1
     assert (await client.post(path + "/review", json={**body, "field_verdicts": fields})).status_code == 200
     assert (await client.post(path + "/review", json={**body, "field_verdicts": {}})).status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_concurrent_audit_batches_keep_all_committed_field_counts(audit_db):  # noqa: F811
+    import asyncio
+    from base_product_fixtures import TENANT
+    pool, _, client = audit_db
+    identity, _ = await campaign(pool)
+    bodies = []
+    for seed in (41, 42):
+        audit = (await draw(client, identity, seed)).json()
+        path = f"{ROOT}/{identity}/audits/{audit['id']}"
+        csv = (await client.get(path + "/records.csv", params={"tenant_id": str(TENANT)})).text
+        bodies.append((path, {"tenant_id": str(TENANT), "csv": checked(csv),
+            "field_verdicts": {record["record_id"]: {"website": "correct"} for record in audit["records"]}}))
+    responses = await asyncio.gather(*(client.post(path + "/review", json=body) for path, body in bodies))
+    assert all(response.status_code == 200 for response in responses)
+    async with pool.acquire() as conn:
+        rows = await read(conn)
+    assert len(rows) == 1 and rows[0]["correct"] == rows[0]["checked"] == 400 and rows[0]["audits"] == 2
