@@ -66,7 +66,7 @@ from pydantic import BaseModel, Field
 import batch_providers
 import graduate
 import semantic_cache
-from tenant_db import TenantPool, tenant_path
+from tenant_db import TenantPool, tenant_path, administrative, bind_tenant_endpoints
 import routellm_shadow
 import skala
 import skill_costs
@@ -104,7 +104,7 @@ SKILL_ENV = {k: v for k, v in {"BRAVE_API_KEY": os.environ.get("BRAVE_API_KEY", 
 
 def pool() -> asyncpg.Pool:
     assert _pool is not None, "database pool not ready"
-    return _pool
+    return _admin_pool if administrative() and _admin_pool is not None else _pool
 
 
 def admin_pool():
@@ -702,6 +702,12 @@ async def _startup() -> None:
             role = await admin_conn.fetchrow("SELECT rolname, rolbypassrls FROM pg_roles WHERE rolname=current_user")
             if not configured_role or role["rolname"] != configured_role or not role["rolbypassrls"]:
                 raise RuntimeError("TANK_ADMIN_DATABASE_URL must use the configured BYPASSRLS admin role")
+    async with raw_pool.acquire() as tenant_conn:
+        enforced = await tenant_conn.fetchval("SELECT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.relrowsecurity AND (n.nspname='tank' OR n.nspname='base' OR n.nspname LIKE 'agent_%'))")
+        if enforced is True:
+            role = await tenant_conn.fetchrow("SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname=current_user")
+            if role["rolsuper"] or role["rolbypassrls"] or _admin_pool is None:
+                raise RuntimeError("RLS requires a non-bypass tenant database role and a separate configured admin pool")
     with open(SCHEMA_PATH, encoding="utf-8") as f:
         ddl = f.read()
     async with (_admin_pool or raw_pool).acquire() as conn:
@@ -4241,3 +4247,6 @@ app.include_router(memory_router)
 
 # B3: process committed model changes through the existing skill-eval handler.
 __import__("skala_revalidation").install(app, __import__("sys").modules[__name__])
+
+# Bind only accepted endpoint arguments after existing authentication dependencies.
+bind_tenant_endpoints(app)
