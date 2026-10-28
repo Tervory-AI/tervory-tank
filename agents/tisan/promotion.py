@@ -226,7 +226,7 @@ class Promotion:
                 raise Refused('deployment acknowledgement mismatch')
             details['deployment'] = identifier(rows[0].get('deployment_uuid', ''))
             self.journal.update(tenant, site, operation, 'pending', details)
-        except (Refused, ValueError, TypeError, KeyError):
+        except (Refused, ValueError, TypeError, KeyError, OSError, TimeoutError, httpx.HTTPError):
             self.journal.update(tenant, site, operation, 'unknown' if mutation else 'refused', details, terminal=not mutation)
         return self.journal.get(tenant, site, operation)
 
