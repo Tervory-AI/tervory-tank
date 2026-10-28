@@ -31,6 +31,8 @@ class ModelStream(httpx.AsyncByteStream):
 
     async def __aiter__(self):
         g = self.gateway
+        if g.mode == "early_usage":
+            yield g.frame({"choices": [], "usage": {"prompt_tokens": 8, "completion_tokens": 0, "total_tokens": 8, "cost": 0}})
         for index, part in enumerate(g.parts):
             yield g.frame({"choices": [{"index": 0, "delta": {"content": part}, "finish_reason": None}]})
             if index == 0:
@@ -46,7 +48,7 @@ class ModelStream(httpx.AsyncByteStream):
                     return
         if g.mode != "no_finish":
             yield g.frame({"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]})
-        if g.mode != "no_usage":
+        if g.mode not in {"no_usage", "early_usage"}:
             usage = dict(g.usage)
             if g.mode == "no_cost":
                 del usage["cost"]
@@ -63,6 +65,7 @@ class Gateway:
         self.parts = ['{"text":"Hello', ' world.\\nA ', '\\uD83D', '\\uDE00', ' answer.","actions":[]}']
         self.usage = {"prompt_tokens": 8, "completion_tokens": 13, "total_tokens": 21, "cost": 0.0024}
         self.mode = "ok"
+        self.status = 200
         self.gated = False
         self.finished = False
         self.paused, self.release, self.closed = asyncio.Event(), asyncio.Event(), asyncio.Event()
@@ -80,6 +83,8 @@ class Gateway:
         body = json.loads(request.content)
         self.calls.append(body)
         headers = {"x-litellm-model-group": "fixture-answered"}
+        if self.status != 200:
+            return httpx.Response(self.status, headers={"location": "https://other.invalid/"}, json={"error": {"message": "private upstream detail"}})
         if body.get("stream"):
             assert body["stream_options"] == {"include_usage": True}
             return httpx.Response(200, headers={**headers, "content-type": "text/event-stream"}, stream=ModelStream(self))
@@ -106,15 +111,17 @@ async def streaming(monkeypatch, command_pool):
     monkeypatch.setattr(tank, "load_policy", AsyncMock(return_value=policy))
     monkeypatch.setattr(tank, "list_models", AsyncMock(return_value=[{"name": "fixture-pin"}]))
     gateway = Gateway()
-    original_client, sdk = httpx.AsyncClient, command_stream.AsyncOpenAI
+    original_client = httpx.AsyncClient
 
     def client(**kwargs):
+        assert not kwargs.get("follow_redirects", False)
         return original_client(**kwargs, transport=httpx.MockTransport(gateway.request))
 
     # Keep the SDK's actual stream decoder and completion types. Only its HTTP
     # transport is replaced; all calls outside the local Tank server fail closed.
-    monkeypatch.setattr(command_stream, "AsyncOpenAI", lambda **kwargs: sdk(**kwargs, http_client=client()))
-    monkeypatch.setattr(tank, "httpx", SimpleNamespace(AsyncClient=client, HTTPError=httpx.HTTPError))
+    transport = SimpleNamespace(AsyncClient=client, HTTPError=httpx.HTTPError, Response=httpx.Response)
+    monkeypatch.setattr(command_stream, "httpx", transport)
+    monkeypatch.setattr(tank, "httpx", transport)
     listener = socket.socket()
     listener.bind(("127.0.0.1", 0))
     port = listener.getsockname()[1]
@@ -245,7 +252,7 @@ async def test_cache_hit_whole_and_other_tenant_must_call_model(streaming):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("mode", ["eof", "transport", "error", "no_finish", "no_usage", "no_cost"])
+@pytest.mark.parametrize("mode", ["eof", "transport", "error", "no_finish", "no_usage", "no_cost", "early_usage"])
 async def test_broken_stream_never_saved_complete_or_cached(streaming, mode):
     b = streaming
     b.gateway.mode = mode
@@ -288,6 +295,20 @@ async def test_disconnect_closes_upstream_and_fails_pending_turn(streaming):
             await asyncio.sleep(0.01)
     assert len(state["messages"]) == 1 and state["receipts"][0]["cost_usd"] is None
     assert not b.gateway.finished and len(b.gateway.calls) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [302, 429, 500])
+async def test_gateway_errors_and_redirects_are_not_retried(streaming, status):
+    b = streaming
+    b.gateway.status = status
+    tid = await thread(b)
+    updates = await turn(b, tid)
+    assert updates[-1][0] == "error" and all(kind not in {"token", "done"} for kind, _ in updates)
+    assert "private upstream detail" not in json.dumps(updates)
+    assert len(b.gateway.calls) == 1
+    state = (await b.api.get(f"/v1/command/threads/{tid}")).json()
+    assert len(state["messages"]) == 1 and state["receipts"][0]["cost_usd"] is None
 
 
 @pytest.mark.asyncio

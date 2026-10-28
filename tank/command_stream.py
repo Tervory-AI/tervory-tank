@@ -49,7 +49,8 @@ async def completion(base_url: str, api_key: str, body: dict, on_token: TokenSin
     answered = body["model"]
     try:
         async with AsyncOpenAI(base_url=base_url.rstrip("/") + "/v1", api_key=api_key,
-                               timeout=120, max_retries=0) as client:
+                               timeout=120, max_retries=0,
+                               http_client=httpx.AsyncClient(timeout=120, follow_redirects=False)) as client:
             async with client.chat.completions.with_streaming_response.create(
                 model=body["model"], messages=body["messages"], max_tokens=body["max_tokens"],
                 extra_body={k: v for k, v in body.items() if k not in {"model", "messages", "max_tokens"}},
@@ -58,8 +59,6 @@ async def completion(base_url: str, api_key: str, body: dict, on_token: TokenSin
                 answered = response.headers.get("x-litellm-model-group") or answered
                 stream = await response.parse()
                 async for chunk in stream:
-                    if chunk.usage is not None:
-                        usage = measured_usage(chunk.usage.model_dump())
                     for choice in chunk.choices:
                         if choice.index != 0:
                             continue
@@ -70,6 +69,10 @@ async def completion(base_url: str, api_key: str, body: dict, on_token: TokenSin
                             await on_token(choice.delta.content)
                         if choice.finish_reason is not None:
                             finish_reason = choice.finish_reason
+                    if chunk.usage is not None and finish_reason is not None:
+                        # Some providers also send interim usage. Only terminal
+                        # usage can account for the completed answer.
+                        usage = measured_usage(chunk.usage.model_dump())
                 if finish_reason is None or not usage:
                     raise ValueError("Missing stream completion")
     except (APIError, httpx.HTTPError, ValueError, asyncio.CancelledError):
