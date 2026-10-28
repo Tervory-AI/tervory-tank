@@ -239,7 +239,8 @@ async def answer(ledger: Any, tenant_id: str, question: str, *, fixtures: bool =
                 continue
             if counties and point["geo"] not in counties:
                 continue
-            if states and state_for_area(point["geo"]) not in states:
+            covered_states = doc.get("presentation", {}).get("geo_states", {}).get(point["geo"], [])
+            if states and state_for_area(point["geo"]) not in states and not states.intersection(covered_states):
                 continue
             if years and point["date"][:4] not in years:
                 continue

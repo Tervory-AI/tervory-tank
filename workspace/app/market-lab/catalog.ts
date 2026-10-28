@@ -47,13 +47,22 @@ export const LINK_GROUPS: { id: LinkGroupId; title: string; cadence: string; lea
   { id: "carrier", title: "Carrier rules", cadence: "Checked weekly", lead: "What each carrier allows you to ship, and where." },
   { id: "state", title: "State pages", cadence: "Checked weekly", lead: "California guidance and the federal directory of state laws." },
   { id: "season", title: "Hunting seasons", cadence: "Checked weekly", lead: "Season dates by state, so you can plan stock ahead." },
-  { id: "ports", title: "Other ports", cadence: "Linked monthly, not copied", lead: "Container volumes at Long Beach and New York/New Jersey." },
+  { id: "ports", title: "Other ports", cadence: "Linked monthly, not copied", lead: "" },
 ];
 
 /** Wide cards, in this order, when the feed is on. */
 export const FEATURED_IDS = ["eia_diesel", "federal_register"] as const;
 
 export const CATALOG: CatalogItem[] = [
+  {
+    id: "sec_edgar",
+    title: "SEC EDGAR",
+    summary: "",
+    sourceLabel: "SEC EDGAR",
+    cadence: "daily",
+    keyName: "",
+    kind: "copy",
+  },
   {
     id: "listing_counts",
     title: "Monthly licence listings",
@@ -195,12 +204,11 @@ export const CATALOG: CatalogItem[] = [
   {
     id: "port_nynj",
     title: "Port of New York and New Jersey loaded containers",
-    summary: "Linked, not copied.",
+    summary: "",
     sourceLabel: "Port of New York and New Jersey",
-    cadence: "monthly",
+    cadence: "annual",
     keyName: "",
-    kind: "linked",
-    group: "ports",
+    kind: "copy",
     href: "https://data.ny.gov/Transportation/Loaded-Containers-Monthly-Imports-and-Exports-Thro/629s-5a55",
     linkNote: "Opens data.ny.gov",
   },
