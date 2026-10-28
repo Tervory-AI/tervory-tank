@@ -42,6 +42,8 @@ def no_external_network(monkeypatch):
     async def no_dns(*args, **kwargs):
         raise AssertionError('test attempted external DNS')
     monkeypatch.setattr(gateway.dns.asyncresolver, 'resolve', no_dns)
+    # Lease unit tests use FakeServer/loopback; runtime binds a real private interface.
+    monkeypatch.setattr(gateway, 'private_bind_address', lambda: '127.0.0.1')
     monkeypatch.delenv('RADIX_EGRESS_REVOKED', raising=False)
 
 
@@ -218,8 +220,10 @@ def test_loopback_proxy_rejects_outside_host_and_expired_lease():
 
 def test_tools_only_passive_no_discovery_and_strip_response_secrets(tmp_path):
     plan=tools.zap_plan(TARGET,tmp_path)
-    assert [j['type'] for j in plan['jobs']]==['passiveScan-config','spider','passiveScan-wait','report']
-    spider=plan['jobs'][1]['parameters']
+    assert [j['type'] for j in plan['jobs']]==['passiveScan-config','requestor','spider','passiveScan-wait','report']
+    assert plan['jobs'][1]['requests']==[{'url':TARGET,'method':'GET','responseCode':200}]
+    assert plan['env']['parameters']['failOnWarning'] is True
+    spider=plan['jobs'][2]['parameters']
     assert spider['processForm'] is False and spider['postForm'] is False and spider['threadCount']==1
     command=tools.nuclei_command(TARGET,tmp_path/'n.jsonl')
     for flag in ['-no-interactsh','-disable-update-check','-disable-redirects','-no-httpx','-omit-raw','-omit-template']:
@@ -339,18 +343,6 @@ async def test_complete_request_persists_clean_receipt_and_releases_lease(databa
 @pytest.mark.asyncio
 @pytest.mark.parametrize('confirmed',[True,False])
 async def test_collect_requires_both_complete_reports_and_actual_nuclei_request(tmp_path,monkeypatch,confirmed):
-    from contextlib import asynccontextmanager
-    class Preflight:
-        async def __aenter__(self):return self
-        async def __aexit__(self,*args):pass
-        @asynccontextmanager
-        async def stream(self,method,target):
-            assert method=='GET' and target==TARGET
-            yield SimpleNamespace(status_code=200)
-    def client(**kwargs):
-        assert kwargs['proxy']==tools.PROXY and kwargs['trust_env'] is False
-        return Preflight()
-    monkeypatch.setattr(tools.httpx,'AsyncClient',client)
     seen=[]
     async def run(argv,directory):
         seen.append(argv)
@@ -397,3 +389,30 @@ async def test_gateway_maintenance_recovers_after_transport_failure(monkeypatch,
         assert maintenance.calls>=3 and not pool.closed
     assert pool.closed
     assert 'will retry' in caplog.text and 'dummy transport detail' not in caplog.text
+
+
+@pytest.mark.parametrize('answers',[
+    [],['0.0.0.0'],['127.0.0.1'],['8.8.8.8'],['169.254.1.1'],['172.22.0.2','172.23.0.2']])
+def test_private_listener_refuses_missing_wildcard_public_and_ambiguous(monkeypatch,answers):
+    monkeypatch.setattr(socket,'getaddrinfo',lambda *a,**kw:[(2,1,6,'',(ip,0)) for ip in answers])
+    with pytest.raises(egress.ProxyError):egress.private_bind_address()
+
+
+def test_private_listener_uses_exact_container_interface(monkeypatch):
+    seen=[]
+    monkeypatch.setattr(socket,'gethostname',lambda:'own-container')
+    def resolve(name,*args,**kwargs):
+        seen.append(name);return [(2,1,6,'',('172.22.0.2',0))]
+    monkeypatch.setattr(socket,'getaddrinfo',resolve)
+    assert egress.private_bind_address()=='172.22.0.2' and seen==['own-container']
+
+
+@pytest.mark.asyncio
+async def test_zap_root_load_warning_refuses_assessment_before_nuclei(tmp_path):
+    seen=[]
+    async def warning(argv,directory):
+        seen.append(argv)
+        return 2,b'',b''
+    with pytest.raises(RuntimeError,match='baseline incomplete'):
+        await tools.collect(TARGET,tmp_path,run=warning)
+    assert len(seen)==1
