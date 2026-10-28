@@ -83,8 +83,8 @@ def _url(value, base):
 def listing_products(html, url, extracted):
     """None means unconfirmed; {} is an explicitly empty structured listing.
 
-    Product IDs are stable URLs or structured GTIN/SKU values. Titles alone are
-    never identities. Incomplete lists retain the previous baseline. JSON-LD
+    Product IDs are their own URLs, then GTIN/SKU, then name plus price. Titles
+    alone are never identities. Incomplete lists retain the baseline. JSON-LD
     ItemList/ListItem and Product arrays, plus the existing microdata reader's
     items, cover confirmed structured listings without guessing from HTML text.
     """
@@ -135,25 +135,32 @@ def listing_products(html, url, extracted):
                 products.append(product)
     elif not products:
         products = list(extracted or [])
+    page_url = _url(url, url)
+    if not lists and len(products) == 1 and _url(products[0].get("url"), url) == page_url:
+        return None  # A single product at the watched URL is not a category.
     result = {}
     for product in products:
         name = " ".join(str(product.get("name") or "").split())
         address = _url(product.get("url") or product.get("@id"), url)
-        identity = address
+        # The existing microdata reader uses the category URL when it has no
+        # individual offer URL. That fallback is never a product identity.
+        identity = address if address != page_url else None
         if not identity:
             for key in ("gtin", "gtin13", "gtin14", "gtin12", "gtin8", "sku"):
                 value = product.get(key)
                 if isinstance(value, (str, int)) and str(value).strip():
                     identity = key + ":" + str(value).strip()
                     break
+        if not identity:
+            price = money(product.get("price"))
+            if price is not None and name:
+                identity = "name_price:" + json.dumps([name, str(price.normalize()), product.get("currency")])
         if not identity or not name or re.fullmatch(r"untitled\s+page", name, re.I):
             return None
         if identity in result and result[identity]["name"] != name:
             return None
         result[identity] = {"name": name}
-    # A single product on its own page is not a listing. A one-product category
-    # with a distinct product URL can establish the baseline for the next check.
-    if not lists and (not result or (len(result) == 1 and next(iter(result)) == _url(url, url))):
+    if not lists and not result:
         return None
     return result
 
@@ -174,15 +181,20 @@ def evaluate(tenant, watches, states, observation, listing, context):
     watch = next((w for w in watches if w["url"] == url and w["enabled"]), None)
     if watch is None:
         return {}, []
-    key = "watch:" + str(watch["id"])
+    key = "watch:" + str(watch["id"]) + ":" + url
     old = states.get(key, {})
     stamp = _parse_ts(observation["ts"])
     if old.get("ts") and _parse_ts(old["ts"]) >= stamp:
         return {}, []  # concurrent/late delivery of the same check
     current = {**old, "ts": stamp.isoformat(), "stock": None}
-    complete = (observation.get("method") not in {None, "unread", "error", "blocked", "robots", "none"}
-                and not observation.get("issue") and observation.get("product_name"))
-    if complete:
+    named = bool(observation.get("product_name"))
+    price_confirmed = (named and observation.get("method") not in {None, "unread", "error", "blocked", "robots", "none"}
+                       and observation.get("issue") in {None, "missing_stock"})
+    # Price/currency and stock are independent facts. An unavailable price does
+    # not invalidate a stock phrase already confirmed by the existing reader.
+    stock_confirmed = (named and observation.get("method") not in {None, "error", "blocked", "robots", "none"}
+                       and observation.get("issue") in {None, "missing_price", "missing_currency", "missing_stock"})
+    if stock_confirmed:
         current["stock"] = _known_stock(observation.get("availability"))
     updates, alerts = {key: current}, []
 
@@ -206,7 +218,7 @@ def evaluate(tenant, watches, states, observation, listing, context):
     sku = product["sku"]
     price, cost = money(observation.get("price")), money(product.get("cost"))
     below_key = "below:" + sku
-    if (complete and price is not None and cost is not None
+    if (price_confirmed and price is not None and cost is not None
             and observation.get("currency") == product.get("cost_currency")):
         below = price < cost
         if below and not old.get(below_key, False):
@@ -218,7 +230,7 @@ def evaluate(tenant, watches, states, observation, listing, context):
              and w["url"] != product.get("url")]
     readings = []
     for peer in peers:
-        peer_key = "watch:" + str(peer["id"])
+        peer_key = "watch:" + str(peer["id"]) + ":" + peer["url"]
         reading = updates.get(peer_key, states.get(peer_key, {}))
         checked = _parse_ts(reading["ts"]) if reading.get("ts") else None
         readings.append(None if checked is None or watch_is_due(peer["every"], stamp, checked)
