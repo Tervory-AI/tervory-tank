@@ -17,6 +17,11 @@ async def research_web(tenant_id: str, question: str) -> dict[str, Any] | None:
         response = await client.post(base + "/v1/market-lab/internal/research",
             headers={"X-Tank-Key": key}, json={"tenant_id": tenant_id, "question": question,
                 "home_region": os.environ.get("TANK_REGION", "us-east")})
+        if response.status_code == 503:
+            # Tank reports the researcher is not connected or could not finish. Keep the free
+            # "no sources yet" answer (as the old research path did when nothing was promoted)
+            # instead of failing the whole question.
+            return None
         response.raise_for_status()
         return response.json()
 

@@ -34,6 +34,10 @@ async def code_plan(actor: Actor, messages: list[dict], task_id: UUID | None):
     last = messages[-1] if messages else {}
     if last.get("role") != "user":
         return None
+    from trigger_commands import plan
+    proposed = await plan(actor, last.get("content", ""), task_id)
+    if proposed is not None:
+        return SimpleNamespace(content=json.dumps(proposed, ensure_ascii=False), ledger_id=await code_receipt(actor.tenant_id, "command.turn", task_id=task_id))
     match = re.fullmatch(r"\s*trigger(?:\.check|[, ]+check)(?:\s+(?:this\s+)?paragraph)?\s*:\s*(.+)",
                          last.get("content", ""), re.IGNORECASE | re.DOTALL)
     if not match:
@@ -89,8 +93,10 @@ async def zenas_draft(body: dict, actor: Actor):
 
 @router.post("/{operation}")
 async def invoke(operation: str, request: Request, actor: Annotated[Actor, Depends(identity)]):
-    from command import TriggerCheckArgs, TriggerWriteArgs
-    if operation not in {"write", "check"}:
+    from command import TriggerCheckArgs, TriggerWriteArgs, TriggerVoiceShowArgs, TriggerVoiceSetArgs, TriggerVoiceRollbackArgs, TriggerFeedbackArgs
+    schemas = {"write": TriggerWriteArgs, "check": TriggerCheckArgs, "voice.show": TriggerVoiceShowArgs,
+               "voice.set": TriggerVoiceSetArgs, "voice.rollback": TriggerVoiceRollbackArgs, "feedback": TriggerFeedbackArgs}
+    if operation not in schemas:
         raise HTTPException(404, "No such Trigger action")
     require_tool(actor, "trigger." + operation)
     raw = await request.body()
@@ -101,14 +107,31 @@ async def invoke(operation: str, request: Request, actor: Annotated[Actor, Depen
         tenant = body.pop("tenant_id", str(actor.tenant_id))
         if tenant != str(actor.tenant_id):
             raise HTTPException(403, "Tenant mismatch")
-        body = (TriggerWriteArgs if operation == "write" else TriggerCheckArgs).model_validate(body).model_dump(mode="json", exclude_none=True)
+        body = schemas[operation].model_validate(body).model_dump(mode="json", exclude_none=True)
     except (ValueError, TypeError, AttributeError):
         raise HTTPException(422, "Invalid Trigger request") from None
-    if body.get("voice") is not None and not actor.founder:
-        raise HTTPException(403, "Only the founder can set a brand voice")
+    if operation.startswith("voice.") or operation == "feedback":
+        from trigger_commands import confirmation
+        if operation == "voice.show":
+            data = await room("voice/show", {**body, "tenant_id": str(actor.tenant_id)})
+        else:
+            operation_id = confirmation(actor, "trigger." + operation, body)
+            if operation == "feedback":
+                from trigger_learning import feedback
+                data = await feedback(actor, UUID(body["write_id"]), body["status"], body["changes"], operation_id)
+            else:
+                data = await room("voice/commit", {k: v for k, v in {**body, "tenant_id": str(actor.tenant_id), "operation_id": str(operation_id)}.items() if k != "brief_markdown"})
+        return {**data, "text": json.dumps(data, ensure_ascii=False, indent=2), "model_calls": 0,
+                "ledger_id": str(await code_receipt(actor.tenant_id, "trigger." + operation)), "cost_usd": 0}
     data = await room(operation, {**body, "tenant_id": str(actor.tenant_id)})
     if operation == "write" and data.get("delegate") == "zenas.draft":
-        return await zenas_draft(body, actor)
+        response = await zenas_draft(body, actor)
+        if response.status_code >= 400:
+            return response
+        data = json.loads(response.body)
+    if operation == "write":
+        from trigger_learning import record
+        data = await record(actor, body["text"], data)
     if operation == "check":
         data["ledger_id"] = str(await code_receipt(actor.tenant_id, "trigger.check"))
         data["cost_usd"] = 0

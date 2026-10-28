@@ -19,6 +19,7 @@ let currentIdentity = identity;
 let founder = false;
 let upstreamCalls = [];
 let upstream = () => Response.json([]);
+mock('workspace/lib/trigger.ts', {triggerIdentity:async tenant=>tenant ? {...tenant,tenantAdmin:false}:null});
 mock('workspace/lib/tenant.ts', {activeTenant:async()=>currentIdentity});
 mock('workspace/lib/admin.ts', {isFounder:()=>founder});
 process.env.TANK_API_KEY = 'dummy-command-key';

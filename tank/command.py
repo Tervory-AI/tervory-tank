@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 _background: set[asyncio.Task] = set()
 SQUADS = frozenset({"base", "tiger", "market_lab", "rig", "tisan", "radix", "zenas"})
 TOOLS = {
-    "trigger": ["trigger.write", "trigger.check"],
+    "trigger": ["trigger.write", "trigger.check", "trigger.voice.show", "trigger.voice.set", "trigger.voice.rollback", "trigger.feedback"],
     "base": ["base.batch", "base.search"],
     "tiger": ["tiger.watch", "tiger.read"],
     "market_lab": ["market_lab.research"],
@@ -63,6 +63,7 @@ class Actor:
     user_id: str
     founder: bool
     squads: frozenset[str] = frozenset()
+    tenant_admin: bool = False
 
 
 def key_matches(presented: str, expected: str) -> bool:
@@ -85,7 +86,7 @@ async def identity(request: Request) -> Actor:
     if home != box_region():
         raise HTTPException(403, "This conversation must stay on its home box")
     admins = {s.strip() for s in os.environ.get("TERVORY_ADMIN_USER_IDS", "").split(",") if s.strip()}
-    return await authorized_actor(Actor(tenant_id, user, user in admins))
+    return await authorized_actor(Actor(tenant_id, user, user in admins, tenant_admin=request.headers.get("x-tervory-role") == "org:admin"))
 
 
 async def worker(request: Request) -> None:
@@ -97,7 +98,8 @@ def allowed_tools(actor: Actor) -> list[str]:
     squads = TOOLS.keys() if actor.founder else actor.squads & SQUADS
     founder_tools = [name for name in FOUNDER_TOOLS
                      if not name.startswith("repo.") or command_repo.configured()] if actor.founder else []
-    return sorted([tool for squad in squads for tool in TOOLS[squad]] + founder_tools)
+    voice_tools = ["trigger.voice.show", "trigger.voice.set", "trigger.voice.rollback", "trigger.feedback"] if actor.tenant_admin and not actor.founder else []
+    return sorted([tool for squad in squads for tool in TOOLS[squad]] + founder_tools + voice_tools)
 
 
 def require_tool(actor: Actor, name: str) -> None:
@@ -441,7 +443,7 @@ async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages
                 # incomplete/invalid preview without appending a second answer.
                 await event(conn, row, "token", {"text": plan.text, "message_id": turn_id, "replace": True})
             for action in plan.actions:
-                await propose_action(conn, row, state, action)
+                await propose_action(conn, row, state, action, actor)
             await conn.execute(
                 "UPDATE tank.tasks SET status='done',result=$3,ledger_id=$4,finished_at=now() "
                 "WHERE id=$1 AND tenant_id=$2 AND status='running'",
@@ -564,7 +566,7 @@ async def propose_build(body: Build, actor: Actor = Depends(identity)) -> dict:
     require_tool(actor, "worker.build")
     action = validate_action(PlannedAction(tool="worker.build", arguments={"brief_markdown": body.brief_markdown}), actor)
     async with editing(body.thread_id, actor) as (conn, row, state):
-        card = await propose_action(conn, row, state, action)
+        card = await propose_action(conn, row, state, action, actor)
     return public_card(card)
 
 
@@ -908,14 +910,39 @@ class TriggerWriteArgs(TriggerCheckArgs):
     jurisdiction: str | None = Field(default=None, max_length=80)
     terms: dict[str, Any] = Field(default_factory=dict)
     matter_id: uuid.UUID | None = None
-    voice: dict[str, Any] | None = Field(default=None, description=(
-        "Founder-supplied Brand Voice Spec, only when setting/updating this tenant's voice. "
-        "Required: brand (string), status='live', revision (positive increasing integer). "
-        "Optional: registers (name-to-description object), tone (string array), guidelines "
-        "(objects with rule), doAndDont, surfaceDoDont, promptKit, vocabulary, "
-        "bannedTerms, preferredTerms, requiredTerms, signaturePhrases, changelog, voiceQueue, "
-        "stylebook and maxSentenceWords. Never invent a brand voice or include sample brand content. "
-        "Omit voice on later writes to use the saved file."))
+
+
+
+class TriggerVoiceShowArgs(Body):
+    target: int | None = Field(default=None, ge=1)
+    offset: int = Field(default=0, ge=0)
+
+
+class TriggerVoiceSetArgs(Body):
+    text: str = Field(min_length=1, max_length=12000)
+    expected_revision: int = Field(default=0, ge=0)
+    preview_hash: str = Field(default="", max_length=64)
+    brief_markdown: str = Field(default="", max_length=24000)
+
+
+class TriggerVoiceRollbackArgs(Body):
+    target: int = Field(ge=1)
+    expected_revision: int = Field(default=0, ge=0)
+    preview_hash: str = Field(default="", max_length=64)
+    brief_markdown: str = Field(default="", max_length=24000)
+
+
+class TriggerFeedbackArgs(Body):
+    write_id: uuid.UUID
+    status: Literal["accepted", "changes_requested", "rejected"]
+    changes: str = Field(default="", max_length=10000)
+    brief_markdown: str = Field(default="", max_length=16000)
+
+    @model_validator(mode="after")
+    def change_details(self):
+        if self.status == "changes_requested" and not self.changes.strip():
+            raise ValueError("Change details required")
+        return self
 
 
 class SavingsArgs(Body):
@@ -943,6 +970,10 @@ class Adapter:
 
 
 ADAPTERS = {
+    "trigger.voice.show": Adapter("POST", "/v1/trigger/voice.show", TriggerVoiceShowArgs, "trigger.voice.show"),
+    "trigger.voice.set": Adapter("POST", "/v1/trigger/voice.set", TriggerVoiceSetArgs, "trigger.voice.set"),
+    "trigger.voice.rollback": Adapter("POST", "/v1/trigger/voice.rollback", TriggerVoiceRollbackArgs, "trigger.voice.rollback"),
+    "trigger.feedback": Adapter("POST", "/v1/trigger/feedback", TriggerFeedbackArgs, "trigger.feedback"),
     "trigger.write": Adapter("POST", "/v1/trigger/write", TriggerWriteArgs, "trigger.write", True, "paid_run"),
     "trigger.check": Adapter("POST", "/v1/trigger/check", TriggerCheckArgs, "trigger.check"),
     "repo.prs": Adapter("GET", "/v1/command/repo/prs", RepoPRsArgs, "open PRs on Tervory-AI/tervory-tank"),
@@ -1027,7 +1058,10 @@ def public_card(card: dict) -> dict:
     return {k: v for k, v in card.items() if k not in {"payload", "evidence_ids"}}
 
 
-async def propose_action(conn: Any, row: dict, state: dict, action: PlannedAction) -> dict:
+async def propose_action(conn: Any, row: dict, state: dict, action: PlannedAction, actor: Actor | None = None) -> dict:
+    if action.tool.startswith("trigger."):
+        from trigger_commands import prepare
+        action = await prepare(action, await authorized_actor(actor or Actor(row["tenant_id"], row["user_id"], False), conn), state)
     card_id = str(uuid.uuid4())
     adapter = ADAPTERS.get(action.tool)
     label = adapter.label if adapter else "Start a worker build"
@@ -1042,7 +1076,7 @@ async def propose_action(conn: Any, row: dict, state: dict, action: PlannedActio
 
 def current_actor(actor: Actor) -> Actor:
     admins = {s.strip() for s in os.environ.get("TERVORY_ADMIN_USER_IDS", "").split(",") if s.strip()}
-    return Actor(actor.tenant_id, actor.user_id, actor.user_id in admins, actor.squads)
+    return Actor(actor.tenant_id, actor.user_id, actor.user_id in admins, actor.squads, actor.tenant_admin)
 
 
 async def authorized_actor(actor: Actor, conn: Any = None) -> Actor:
@@ -1053,7 +1087,7 @@ async def authorized_actor(actor: Actor, conn: Any = None) -> Actor:
         async with db().acquire() as connection:
             return await authorized_actor(actor, connection)
     rows = await conn.fetch("SELECT agent FROM tank.tenant_squad WHERE tenant_id=$1", actor.tenant_id)
-    return Actor(actor.tenant_id, actor.user_id, False, frozenset(row["agent"] for row in rows) & SQUADS)
+    return Actor(actor.tenant_id, actor.user_id, False, frozenset(row["agent"] for row in rows) & SQUADS, actor.tenant_admin)
 
 
 def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict, dict | None]:
@@ -1098,6 +1132,7 @@ async def dispatch_action(action: PlannedAction, actor: Actor) -> tuple[int, Any
     method, path, params, body = adapter_request(action, actor)
     headers = {"X-Tank-Key": TANK_API_KEY, "X-Tervory-User": actor.user_id,
                "X-Tervory-Tenant": str(actor.tenant_id)}
+    headers["X-Tervory-Role"] = "org:admin" if actor.tenant_admin else ""
     if current_actor(actor).founder:
         headers["X-Tervory-Admin"] = actor.user_id
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://tank.internal",
@@ -1238,7 +1273,11 @@ async def execute_card(thread_id: uuid.UUID, actor: Actor, card_id: str, action:
         require_tool(current_actor(actor), action.tool)
         attempted = True
         async with asyncio.timeout(ACTION_TIMEOUT):
-            status, result = await dispatch_action(action, actor)
+            if action.tool.startswith("trigger."):
+                from trigger_commands import dispatch_confirmed
+                status, result = await dispatch_confirmed(action, actor, thread_id, card_id)
+            else:
+                status, result = await dispatch_action(action, actor)
         ids = explicit_ledger_ids(result)
         async with editing(thread_id, actor) as (conn, row, state):
             card = state["cards"][card_id]

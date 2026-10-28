@@ -34,3 +34,6 @@ qdrant-client==1.20.0
 
 # Trigger pinned proselint source bundles use this native regex engine.
 google-re2==1.1.20251105
+
+# Bounded multipart uploads from product file screens.
+python-multipart==0.0.31

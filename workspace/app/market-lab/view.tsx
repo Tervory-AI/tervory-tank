@@ -5,7 +5,7 @@ import { useEffect, useId, useRef, useState, type DragEvent, type FormEvent, typ
 import { useFormStatus } from "react-dom";
 import { MARKET_LAB_LOGO_SRC } from "./catalog";
 import type { LinkGroupView, OnCard, PageModel } from "./model";
-import { formatDay } from "./format";
+import { formatDay, formatRefreshed } from "./format";
 import type { KeyFlags } from "./catalog";
 import {
   PLUGIN_TABS,
@@ -34,7 +34,6 @@ import {
   removeLabLink,
   removeLabSecret,
   saveLabKey,
-  uploadLabFiles,
 } from "./plugin-actions";
 import { SquadLinks } from "../squad-links";
 
@@ -284,8 +283,12 @@ function PluginsDialog({
     const body = new FormData();
     for (const file of files) body.append("file", file);
     setBusy(true);
+    setNote("Reading your files. Large reports can take a little longer.");
     try {
-      await finish(await uploadLabFiles(body));
+      const response = await fetch("/market-lab/files", { method: "POST", body });
+      await finish(await response.json());
+    } catch {
+      setNote("The upload could not be confirmed. Check the file list before trying again.");
     } finally {
       setBusy(false);
     }
@@ -344,7 +347,7 @@ function PluginsDialog({
         <div className="ml-plugins-head">
           <div>
             <h2 id={titleId}>{POPUP_TITLE}</h2>
-            <p>Manage saved keys, files, links and connections. Answers on this page use the public feeds shown below.</p>
+            <p>Manage saved keys, files, links and connections. Answers use stored feeds and files marked Learned.</p>
           </div>
           <button className="ml-text" type="button" onClick={onClose}>
             Close
@@ -859,11 +862,11 @@ function FileRow({ file, busy, onRemove }: { file: FileMeta; busy: boolean; onRe
   const count = file.rows != null ? `${file.rows} ${file.rows === 1 ? "row" : "rows"}` : file.pages != null ? `${file.pages} ${file.pages === 1 ? "page" : "pages"}` : "";
   return (
     <div className="ml-prow">
-      <h3>{file.name}</h3>
+      <h3>{file.status === "Learned" ? <a href={`/market-lab/sources/${file.id}`}>{file.name}</a> : file.name}</h3>
       <p className="ml-fine">
-        {file.status} · {formatBytes(file.size)}
+        {file.status}{file.reason ? `: ${file.reason}` : ""} · {formatBytes(file.size)}
         {count ? ` · ${count}` : ""}
-        {file.uploadedAt ? ` · ${formatDay(file.uploadedAt)}` : ""}
+        {file.uploadedAt ? ` · ${formatRefreshed(file.uploadedAt)}` : ""}
       </p>
       <button className="ml-text" type="button" disabled={busy} onClick={onRemove}>
         Remove
