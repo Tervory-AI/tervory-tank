@@ -53,5 +53,57 @@ Only compiler configuration and a declaration reference changed. No source
 imports, page output, wording, design or runtime behaviour changed. Strict
 checking, file inclusion and `noEmit` remain enabled; no error suppressions.
 
-The new CI step and clean/planted-error proof are next. No founder-browser
-screenshot exists for this compiler-only task; no live result is claimed.
+## Step 2: CI gate and deliberate failure
+
+`.github/workflows/ci.yml:171` adds `typecheck`, running `npx tsc --noEmit`
+in `workspace/`, after Install and before Build. It has no conditional skip or
+`continue-on-error`; Build retains its normal success-only execution.
+
+`tests/workspace_typecheck/prove_ci_step.py:12` reads that actual YAML step,
+checks its ordering and failure handling, and executes its exact command using
+Bash with `-e -o pipefail`. It creates a temporary `workspace/typecheck-proof.ts`
+assigning a string to a number, verifies TS2322/exit 2, removes the file in a
+`finally` block, and verifies exit 0 again. It never changes an existing source
+file. The planted error is not committed or pushed.
+
+From the repository root:
+
+```bash
+source /workspace/tervory-env/activate.sh
+python tests/workspace_typecheck/prove_ci_step.py > /tmp/workspace-typecheck-step.txt 2>&1
+python -m pytest -q tests/test_ci_minutes_workflows.py > /tmp/workspace-typecheck-workflows.txt 2>&1
+ruff check tests/workspace_typecheck --select E9,F
+git diff --check
+test ! -e workspace/typecheck-proof.ts
+```
+
+The proof runner exits **0**, with these individual compiler results:
+
+| Run | Compiler output | Exit |
+| --- | --- | --- |
+| Clean branch | No output; zero errors | 0 |
+| Planted error | `typecheck-proof.ts(1,14): error TS2322: Type 'string' is not assignable to type 'number'.` | 2 |
+| Plant removed | No output; zero errors | 0 |
+
+[Full step output](evidence/step-working-tree.txt). Its revision is the Step 1
+commit; the CI step and proof runner were working-tree changes for this run.
+Existing CI workflow tests: **66 passed in 1.40s**, exit 0
+([output](evidence/workflows.txt)). Those tests use a local fake curl; no GitHub
+API request was sent. Ruff reports `All checks passed!`; both remaining commands
+exit 0 without output. This executes the CI step locally, not on GitHub Actions.
+Claude opens the PR, which triggers the hosted workflow.
+
+## Changed-file scope
+
+| File:line | Change |
+| --- | --- |
+| `workspace/tsconfig.json:10` | Permit explicit TypeScript import extensions while retaining `noEmit`. |
+| `workspace/types/next-images.d.ts:1` | Reuse Next's existing asset declarations before a Next build. |
+| `.github/workflows/ci.yml:171` | Add the compiler gate between install and build. |
+| `tests/workspace_typecheck/prove_ci_step.py:1` | Reproducible clean/failing/clean workflow-step proof. |
+| `tests/workspace_typecheck/PR.md:1` | Description, error inventory, commands and results. |
+| `tests/workspace_typecheck/evidence/` | Captured text outputs linked above. |
+
+No founder-browser screenshot exists for this compiler-only task. There is no
+page change to demonstrate and no live result is claimed. No new service,
+dependency, key or setting; no production data access or model calls.
