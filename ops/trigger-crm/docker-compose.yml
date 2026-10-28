@@ -100,7 +100,7 @@ services:
       context: https://github.com/Django-CRM/Django-CRM.git#cd7c12a607df1719518fcdaf289864f6ba7d0bcd
       dockerfile: Dockerfile
     restart: unless-stopped
-    mem_limit: 1536m
+    mem_limit: 768m
     cpus: 0.5
     environment:
       DEBUG: ${DEBUG:-False}
@@ -127,7 +127,8 @@ services:
       EMAIL_TIMEOUT: ${EMAIL_TIMEOUT:-}
       DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
-    command: ["celery", "-A", "crm", "worker", "--loglevel=info"]
+    # Celery starts one process per host CPU (8 on Boston) unless told; two is plenty for one CRM.
+    command: ["celery", "-A", "crm", "worker", "--loglevel=info", "--concurrency=2"]
     depends_on:
       redis:
         condition: service_healthy
