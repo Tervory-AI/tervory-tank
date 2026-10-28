@@ -5,6 +5,7 @@ import json
 import re
 import sqlite3
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -56,10 +57,15 @@ class Journal:
                     PRIMARY KEY(tenant,site,id));
             ''')
 
+    @contextmanager
     def connect(self):
         db = sqlite3.connect(self.path, timeout=1)
         db.row_factory = sqlite3.Row
-        return db
+        try:
+            with db:
+                yield db
+        finally:
+            db.close()
 
     def site(self, tenant, site):
         with self.connect() as db:
@@ -186,7 +192,7 @@ class Promotion:
                 if staging['repository'] != production['repository'] or not staging['repository'] or any(
                     staging[k] != production[k] for k in ('base_directory', 'build_pack')):
                     raise Refused('staging and production sources differ')
-                if config['url'].rstrip('/') not in (staging['fqdn'] or '').split(','):
+                if config['url'] not in [origin(u.strip()) for u in (staging['fqdn'] or '').split(',') if u.strip()]:
                     raise Refused('staging origin differs from registered application')
                 details['staging_deployment'] = staging['deployment']
                 details['live_check'] = await self.live_check(config['url'])
@@ -239,7 +245,9 @@ class Promotion:
             return row
         config = self.journal.site(tenant, site)
         result = await self.coolify.call('GET', '/deployments/' + details['deployment'])
-        if result.get('deployment_uuid') != details['deployment'] or result.get('commit') != details['commit'] or result.get('pull_request_id') != 0:
+        if result.get('deployment_uuid') != details['deployment'] or result.get('pull_request_id') != 0:
+            self.journal.update(tenant, site, operation, 'unknown', details)
+        elif result.get('status') == 'finished' and result.get('commit') != details['commit']:
             self.journal.update(tenant, site, operation, 'unknown', details)
         elif result.get('status') == 'finished':
             current = await self.coolify.current(config['production'])
