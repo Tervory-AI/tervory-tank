@@ -73,7 +73,12 @@ python jobs/train/r2_archive.py --room radix --category bench --public /data/ben
 python jobs/train/export_snapshot.py --room base --day 2026-10-21 /data/training.jsonl
 python jobs/train/backup.py --owner uploads --once
 python jobs/train/backup.py --owner uploads --nightly
+python jobs/train/backup.py --owner zenas --once
+python jobs/train/backup.py --owner zenas --nightly
 ```
+
+ZA Zenas (`--owner zenas`) requires `TANK_REGION=za`, `AGENT_NAME=zenas`, and
+`R2_BUCKET_ZENAS_ZA=tervory-zenas-za`. See `docs/cursor/ZA-R2-BACKUP-PROVE-RESTORE.md`.
 
 The examples name input files; the commands do not download those datasets.
 The same archiver accepts gold, bench, working files and screenshots. Objects
@@ -112,12 +117,17 @@ private key, contacts a database or bucket, or decrypts data. The example
 recipient exists only in the test script, never as a worker default.
 
 The backup worker requires `pg_dump`, `age`, `DATABASE_URL`, and the public
-`R2_BACKUP_RECIPIENT`. The private age identity must stay outside the worker.
-It pipes `pg_dump` directly into age; only ciphertext is written to a private
-temporary directory. Passwords are passed through the child environment, never
-arguments. `--nightly` waits until 02:00 UTC each day; any failure exits nonzero
-and must be surfaced by the cloud supervisor. Configuration is checked before
-waiting for the first night. Nothing here deploys or starts that worker. ZA client databases are refused before the dump begins. Public ZA
+`R2_BACKUP_RECIPIENT`. For Qdrant it also requires internal `QDRANT_URL`
+(`http://qdrant:6333`) and `QDRANT_API_KEY`. The private age identity must stay
+outside the worker. It pipes `pg_dump` and each Qdrant collection snapshot
+directly into age; only ciphertext is written to a private temporary directory.
+Qdrant archives land under `backups/.../qdrant/<collection>.snapshot.age/`.
+Passwords and API keys are passed through the child environment or request
+headers, never arguments or logs. `--target database|qdrant|all` selects the
+scope (default `all`). `--nightly` waits until 02:00 UTC each day; any failure
+exits nonzero and must be surfaced by the cloud supervisor. Configuration is
+checked before waiting for the first night. Nothing here deploys or starts that
+worker. ZA client databases are refused before the dump begins. Public ZA
 platform datasets may be archived; ZA client files may not leave their box.
 
 Every chassis room exposes `/storage/usage` and
@@ -137,10 +147,12 @@ Compose profile/service status that `r2-backup` is not running. It uses only the
 uploads pair, the existing Boston database login, and an encrypted-only spool volume. The founder must
 set the public `R2_BACKUP_RECIPIENT` on the worker after merge, verify the
 recipient independently, then explicitly enable/deploy that worker. There is
-no private-key setting or mount. No backup service is added to the ZA stack;
-ZA backups remain a separate founder decision. Before switching Boston backups
+no private-key setting or mount. The ZA stack declares opt-in `r2-backup-za`
+(profile `r2-backup-za`) that writes encrypted dumps to `R2_BUCKET_ZENAS_ZA`
+(`tervory-zenas-za`). Founder setup and prove-restore:
+`docs/cursor/ZA-R2-BACKUP-PROVE-RESTORE.md`. Before switching Boston backups
 on, the founder also decides whether to use a read-only `backup_reader` login
-and a separate backup bucket/token. This PR keeps the approved existing login
+and a separate backup bucket/token. Boston keeps the approved existing login
 and UPLOADS scope.
 
 Tank exposes `GET /v1/admin/storage/usage`, requiring both the Workspace

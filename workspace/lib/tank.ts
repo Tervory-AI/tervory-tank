@@ -965,7 +965,7 @@ export function rigAdminPanel<T>(actor: AccessIdentity): Promise<T> {
 }
 
 export function rigAdminAction<T>(actor: AccessIdentity, operation: string, data: Record<string, unknown>): Promise<T> {
-  if (!["connect", "import", "refresh", "mapping", "confirm-mapping", "settings", "embed-keys", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest"].includes(operation)) {
+  if (!["connect", "import", "delete-products", "refresh", "mapping", "confirm-mapping", "settings", "embed-keys", "price-rule", "exchange-rate", "templates", "approve", "reject", "suggest"].includes(operation)) {
     throw new Error("Unknown retailer operation.");
   }
   return accessRequest<T>(actor, `rig/admin/${operation}`, { data });
