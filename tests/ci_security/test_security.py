@@ -3,10 +3,13 @@ import copy
 import importlib.util
 import io
 import json
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from contextlib import redirect_stdout
 from pathlib import Path
+import shlex
 import subprocess
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -293,6 +296,58 @@ class SecurityPolicyTests(unittest.TestCase):
             return 0
         with patch.object(scan, "run", side_effect=fake_cli):
             self.assertFalse(scan.leaks(None, self.root, self.output))
+
+
+class SecurityDownloadTests(unittest.TestCase):
+    """Exercise the installer's real curl flags against a local failing server."""
+
+    def downloads(self, recover):
+        script = (ROOT / ".github/scripts/install-security-tools.sh").read_text()
+        commands = [shlex.split(line) for line in script.replace("\\\n", "").splitlines()
+                    if line.startswith("curl ")]
+        self.assertEqual(len(commands), 2)
+        attempts = []
+        payload = b"local test download"
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                attempts.append(self.path)
+                # 404 is not one of curl's default retryable responses.
+                self.send_response(200 if recover and len(attempts) == 4 else 404)
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def log_message(self, *_args):
+                pass
+
+        with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server, \
+                tempfile.TemporaryDirectory() as directory:
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            try:
+                for index, command in enumerate(commands):
+                    with self.subTest(download=index, recover=recover):
+                        attempts.clear()
+                        urls = [i for i, value in enumerate(command) if value.startswith("https://")]
+                        self.assertEqual(len(urls), 1)
+                        # No release traffic: retain actual options but use only our loopback server.
+                        command[urls[0]] = f"http://127.0.0.1:{server.server_port}/artifact"
+                        output = Path(directory) / f"download-{index}"
+                        command[command.index("--output") + 1] = str(output)
+                        result = subprocess.run(command, capture_output=True, timeout=15, check=False)
+                        self.assertEqual(len(attempts), 4)  # initial attempt plus three retries
+                        self.assertEqual(result.returncode, 0 if recover else 22)
+                        if recover:
+                            self.assertEqual(output.read_bytes(), payload)
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+
+    def test_download_recovers_on_third_retry(self):
+        self.downloads(recover=True)
+
+    def test_download_stops_after_third_retry(self):
+        self.downloads(recover=False)
 
 
 class GitleaksAllowlistTests(unittest.TestCase):
