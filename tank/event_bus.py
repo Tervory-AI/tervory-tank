@@ -135,8 +135,14 @@ class Bus:
         except ResponseError as exc:
             if not str(exc).startswith("BUSYGROUP"):
                 raise
-        claimed = await self.redis.xautoclaim(key, scope.agent, consumer, self.retry_ms, "0-0", count=20)
-        rows = claimed[1]
+        cursor = "0-0"
+        while True:
+            claimed = await self.redis.xautoclaim(key, scope.agent, consumer, self.retry_ms, cursor, count=20)
+            cursor, rows = claimed[:2]
+            # Redis scans at most COUNT * 10 pending entries per call. An
+            # empty page can precede abandoned work owned by another worker.
+            if rows or cursor == "0-0":
+                break
         if not rows:
             fresh = await self.redis.xreadgroup(scope.agent, consumer, {key: ">"}, count=20)
             rows = fresh[0][1] if fresh else []
