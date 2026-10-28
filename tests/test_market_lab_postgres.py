@@ -32,8 +32,8 @@ async def test_real_postgres_round_trip_and_tenant_isolation():
         await ledger.apply_schema()
         owner, other = str(uuid.uuid4()), str(uuid.uuid4())
         result = await perform_refresh(tenant_id=owner, engine="ffl", ledger=ledger, fixtures=str(ROOT / "tests/fixtures/feeds"))
-        assert sum(check["rows"] > 0 for check in result["feeds"]) == 14
-        assert (await overview(ledger, owner, "ffl", fixtures=True))["on_count"] == 14
+        assert sum(check["rows"] > 0 for check in result["feeds"]) == 16
+        assert (await overview(ledger, owner, "ffl", fixtures=True))["on_count"] == 16
         assert (await overview(ledger, other, "ffl", fixtures=True))["on_count"] == 0
         assert (await overview(ledger, owner, "ffl"))["on_count"] == 0
         response = await answer(ledger, owner, "latest population", fixtures=True)

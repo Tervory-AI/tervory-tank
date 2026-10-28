@@ -1,0 +1,11 @@
+{
+  "tool": "semgrep",
+  "head": "83853ba8742f0db4cf7f6d4a20eb408176e4dc6d",
+  "base": "4e74b42",
+  "result": "incomplete",
+  "error_type": "RuntimeError",
+  "exit_code": 1,
+  "execution": "local cloud CLI; not a GitHub Actions run",
+  "blocked_host": "semgrep.dev",
+  "network_diagnostic": "Tunnel connection failed: 403 Forbidden"
+}

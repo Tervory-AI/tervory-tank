@@ -5,20 +5,20 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/srv \
     FASTEMBED_CACHE_PATH=/opt/fastembed \
     HERMES_EMBED_MODEL=BAAI/bge-small-en-v1.5
-COPY requirements.txt .
+COPY requirements.txt model.json ./
 # Pillow 11.3.0 has advisories fixed only in 13.0.0, but every fastembed release caps
 # pillow<13 (0.6.1 caps <12). Hermes only does text embeddings; Pillow 13 was checked
 # locally with a real bge-small embed. Laid over with --no-deps (PR grok/d-advisory-pins).
 RUN pip install --no-cache-dir -r requirements.txt \
     && pip install --no-cache-dir --no-deps pillow==13.0.0 \
-    && python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='BAAI/bge-small-en-v1.5')" \
+    && python -c "import json; from huggingface_hub import snapshot_download; m=json.load(open('model.json')); snapshot_download(repo_id=m['repository'], revision=m['revision'], local_dir=m['directory'], allow_patterns=['*.json', 'model_optimized.onnx'])" \
     && useradd --create-home --uid 1000 hermes \
     && mkdir -p /srv/hermes \
     && chown -R hermes:hermes /opt/fastembed /srv
-# The model is on disk in /opt/fastembed. HF_HUB_OFFLINE is not set: fastembed
-# 0.6 checks the model's file list online before using the cache, and in offline
-# mode that check fails and Hermes never starts (seen in production, 13 Oct).
-# Only model metadata goes out; client text never leaves this container.
+# specific_model_path bypasses fastembed's Hub metadata/cache lookup. No runtime
+# download, even on a missing/corrupt model: rebuilding the image is the repair.
+ENV HF_HUB_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1
+COPY model.json /srv/hermes/model.json
 COPY *.py /srv/hermes/
 USER hermes
 EXPOSE 8000

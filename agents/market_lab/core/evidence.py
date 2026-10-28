@@ -117,6 +117,10 @@ def number_label(value: Any) -> str:
 
 
 async def document_page(ledger: Any, tenant_id: str, document_id: str, offset: int = 0, *, row: int | None = None, row_kind: str | None = None, fixtures: bool = False, engine: str | None = None) -> dict | None:
+    from core.documents import source_page
+    uploaded = await source_page(ledger, tenant_id, document_id, offset, row)
+    if uploaded is not None:
+        return uploaded
     doc = await document(ledger, tenant_id, document_id, fixtures=fixtures)
     if doc is None:
         return None
@@ -239,7 +243,8 @@ async def answer(ledger: Any, tenant_id: str, question: str, *, fixtures: bool =
                 continue
             if counties and point["geo"] not in counties:
                 continue
-            if states and state_for_area(point["geo"]) not in states:
+            covered_states = doc.get("presentation", {}).get("geo_states", {}).get(point["geo"], [])
+            if states and state_for_area(point["geo"]) not in states and not states.intersection(covered_states):
                 continue
             if years and point["date"][:4] not in years:
                 continue
@@ -268,6 +273,8 @@ async def answer(ledger: Any, tenant_id: str, question: str, *, fixtures: bool =
                                  source_words, area_label(event["geo"], "state", event["title"]) + " " + event["geo"], event["date"])
             if score:
                 ranked.append((score, event["date"], {"text": f'{event_label(event, doc.get("presentation"))} ({period_label(event["date"])}).', "href": f'/market-lab/sources/{doc["id"]}?row={index}&kind=event#event-{index}', "name": doc["name"]}))
+    from core.documents import matched
+    ranked.extend(await matched(ledger, tenant_id, question))
     ranked.sort(key=lambda row: (row[0], row[1]), reverse=True)
     best = ranked[0][0] if ranked else 0
     facts = [row[2] for row in ranked if row[0] == best][:5]

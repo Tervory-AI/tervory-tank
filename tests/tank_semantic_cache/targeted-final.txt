@@ -1,0 +1,59 @@
+.............................F..........................                 [100%]
+=================================== FAILURES ===================================
+___________________________ test_no_new_tank_bypass ____________________________
+
+    def test_no_new_tank_bypass() -> None:
+        findings = scan(ROOT)
+        counts = Counter(item.identity for item in findings)
+        unexpected = [item for item in findings if counts[item.identity] > EXCEPTIONS.get(item.identity, (0, ""))[0]]
+        stale = [identity for identity, (count, reason) in EXCEPTIONS.items() if not reason or counts[identity] != count]
+>       assert not unexpected, "Unaudited model/paid calls outside Tank:\n" + "\n".join(
+            f"{item.path}:{item.line}: {item.kind} [{item.identity[2]}]" for item in unexpected)
+E       AssertionError: Unaudited model/paid calls outside Tank:
+E         tests/tank_batch_providers/verify_passthrough.py:87: assembled endpoint [2703e202bb2a19bc]
+E         tests/tank_batch_providers/verify_passthrough.py:87: model/paid endpoint [d898b966b41955fb]
+E       assert not [Finding(path='tests/tank_batch_providers/verify_passthrough.py', line=87, kind='assembled endpoint', evidence='{"fiel..., line=87, kind='model/paid endpoint', evidence='{"fields":{"value":"https://api.anthropic.com/"},"node":"Constant"}')]
+
+tests/test_tank_one_door.py:265: AssertionError
+=============================== warnings summary ===============================
+tests/test_tank_semantic_cache.py::test_paraphrase_shadow_keeps_real_answer_and_reports_savings
+  /workspace/tervory-tank/tank/main.py:677: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("startup")
+
+tests/test_tank_semantic_cache.py::test_paraphrase_shadow_keeps_real_answer_and_reports_savings
+tests/test_tank_semantic_cache.py::test_paraphrase_shadow_keeps_real_answer_and_reports_savings
+  /workspace/worker-venv/lib/python3.12/site-packages/fastapi/applications.py:4723: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    return self.router.on_event(event_type)  # ty: ignore[deprecated]
+
+tests/test_tank_semantic_cache.py::test_paraphrase_shadow_keeps_real_answer_and_reports_savings
+  /workspace/tervory-tank/tank/main.py:712: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @app.on_event("shutdown")
+
+tests/test_tank_semantic_cache.py::test_paraphrase_shadow_keeps_real_answer_and_reports_savings
+  /workspace/tervory-tank/tank/agent_skills.py:529: DeprecationWarning: 
+          on_event is deprecated, use lifespan event handlers instead.
+  
+          Read more about it in the
+          [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+          
+    @router.on_event("startup")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_tank_one_door.py::test_no_new_tank_bypass - AssertionError:...
+1 failed, 55 passed, 5 warnings in 32.50s

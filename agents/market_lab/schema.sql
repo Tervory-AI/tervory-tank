@@ -186,3 +186,9 @@ CREATE TABLE IF NOT EXISTS agent_market_lab.warning_training (
 );
 CREATE INDEX IF NOT EXISTS warning_training_pending
     ON agent_market_lab.warning_training (tenant_id, created_at) WHERE delivered_at IS NULL;
+
+-- Room-owned document memory. Deletion removes this row and its guarded series.
+CREATE TABLE IF NOT EXISTS agent_market_lab.uploaded_files (
+    tenant_id uuid NOT NULL, id uuid NOT NULL, content jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (tenant_id,id)
+);

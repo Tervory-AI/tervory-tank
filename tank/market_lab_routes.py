@@ -21,6 +21,7 @@ class MarketRequest(BaseModel):
 def build_router(tank):
     router = APIRouter()
     _warning_routes(router, tank)
+    _research_route(router, tank)
 
     @router.post("/v1/market-lab/{operation}", dependencies=[Depends(tank.require_key)])
     async def call(operation: str, body: MarketRequest):
@@ -32,7 +33,8 @@ def build_router(tank):
         try:
             response = await tank._http.post(
                 "http://agent-market-lab:8000/market/" + operation,
-                json=body.model_dump(mode="json"), headers={"x-tank-key": key}, timeout=30,
+                json=body.model_dump(mode="json"), headers={"x-tank-key": key},
+                timeout=180 if operation == "ask" else 30,
             )
             if response.status_code >= 400:
                 status = response.status_code if response.status_code in {404, 422, 503} else 502
@@ -44,6 +46,40 @@ def build_router(tank):
             raise HTTPException(502, "Market Lab could not complete this request") from None
 
     return router
+
+
+class ResearchRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    tenant_id: UUID
+    question: str = Field(min_length=1, max_length=2000)
+    home_region: str = Field(min_length=1, max_length=50)
+
+
+def _research_route(router, tank):
+    from fastapi import Header
+    import hmac
+
+    async def room_only(x_tank_key: str = Header(default="")):
+        key = os.environ.get("TANK_KEY_MARKET_LAB", "")
+        if not key or not x_tank_key or not hmac.compare_digest(key.encode(), x_tank_key.encode()):
+            raise HTTPException(401, "Room key required")
+
+    @router.post("/v1/market-lab/internal/research", dependencies=[Depends(room_only)])
+    async def research(body: ResearchRequest):
+        region = tank.box_region()
+        refused = tank.home_region_refusal(tank.call_home(body.home_region, region), region)
+        if refused:
+            raise HTTPException(403, refused)
+        if tank._http is None:
+            raise HTTPException(503, "Market Lab is not connected")
+        try:
+            response = await tank._http.post("http://market-research:8000/research",
+                json=body.model_dump(mode="json"), timeout=160,
+                headers={"X-Tank-Key": os.environ["TANK_KEY_MARKET_LAB"]})
+            response.raise_for_status()
+            return JSONResponse(response.json(), headers={"Cache-Control": "private, no-store"})
+        except Exception:
+            raise HTTPException(503, "Market Lab could not complete this request") from None
 
 
 class WarningRequest(BaseModel):

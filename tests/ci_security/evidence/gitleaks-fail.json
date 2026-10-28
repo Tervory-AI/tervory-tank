@@ -1,0 +1,17 @@
+{
+  "tool": "gitleaks",
+  "head": "1efaded52a10d721bd80a8a5a1bbe594a430df75",
+  "base": "4e74b42",
+  "result": "findings",
+  "tool_version": "8.30.1",
+  "exit_code": 1,
+  "findings": [
+    {
+      "RuleID": "github-pat",
+      "File": "tests/ci_security/probe.txt",
+      "StartLine": 2,
+      "Commit": "1efaded52a10d721bd80a8a5a1bbe594a430df75"
+    }
+  ],
+  "execution": "local cloud CLI; not a GitHub Actions run"
+}
