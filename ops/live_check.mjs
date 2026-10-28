@@ -46,7 +46,7 @@ if (values['local-urls']) {
 const banned = (await fs.readFile(path.join(root, 'ops/live_check_banned.txt'), 'utf8'))
   .split(/\r?\n/).map(line => line.trim()).filter(line => line && !line.startsWith('#'));
 if (!banned.length) throw new Error('The banned text list is empty');
-const require = createRequire(import.meta.url);
+const require = createRequire(values['site-url'] ? import.meta.url : path.join(root, 'workspace/package.json'));
 const {chromium} = require(process.env.LIVE_CHECK_PLAYWRIGHT_PATH || 'playwright');
 const browser = await chromium.launch({headless: true, executablePath: process.env.LIVE_CHECK_CHROMIUM});
 const results = [];
