@@ -118,6 +118,18 @@ async def grants(owner, other):
         await conn.close()
 
 
+async def storage_proof(owner, other, ident):
+    conn = await asyncpg.connect(database_url())
+    try:
+        assert await conn.fetchval("SELECT count(*) FROM tank.ledger WHERE tenant_id=ANY($1::uuid[])", [UUID(owner), UUID(other)]) == 0
+        row = await conn.fetchrow("SELECT next_check,last_checked FROM agent_market_lab.feed_links WHERE tenant_id=$1 AND id=$2", UUID(owner), UUID(ident))
+        assert (row["next_check"] - row["last_checked"]).total_seconds() == 86400
+        assert await conn.fetchval("SELECT count(*) FROM agent_market_lab.schedules WHERE tenant_id=$1 AND kind='feed_links' AND enabled", UUID(owner)) == 1
+        assert await conn.fetchval("SELECT status FROM agent_market_lab.jobs WHERE tenant_id=$1 AND kind='feed_links' ORDER BY created_at DESC LIMIT 1", UUID(owner)) == "done"
+    finally:
+        await conn.close()
+
+
 def check(env, output, *, browser=False):
     owner, other = str(uuid4()), str(uuid4())
     asyncio.run(grants(owner, other))
@@ -169,6 +181,7 @@ def check(env, output, *, browser=False):
         # Tenant B cannot remove A's subscription or its evidence.
         assert vault("DELETE", "links/" + ident, tenant=other).status_code == 200
         assert market("document", document_id=doc_id).status_code == 200
+        asyncio.run(storage_proof(owner, other, ident))
         if page:
             page.get_by_role("button", name="Close", exact=True).click()
             page.get_by_text("20 stored observations", exact=True).wait_for(timeout=30000)
