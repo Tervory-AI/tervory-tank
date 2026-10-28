@@ -43,7 +43,7 @@ def test_real_tank_routes_to_real_room_and_postgres(tmp_path):
                 assert request("overview", fixtures=True).status_code == 422
                 response = request("overview")
                 assert response.status_code == 200, response.text
-                assert response.json()["on_count"] == 14
+                assert response.json()["on_count"] == 16
                 assert response.headers["cache-control"] == "private, no-store"
                 assert request("overview", tenant=other).json()["on_count"] == 0
                 listings = request("ask", question="How many listings are there in Texas?")
