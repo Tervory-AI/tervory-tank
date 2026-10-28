@@ -4,13 +4,21 @@ A retailer can now remove products from Products in `/rig/admin`. The product di
 
 Branch: `codex/rig-delete-products`, based on `origin/main` at `4e74b42`. Git pushes only. Claude opens the one draft PR. No GitHub API, production changes, merge, new setting or paid service.
 
+## PR #369 review fix
+
+[MemoryStore:266](../../agents/rig/rigbox/store.py#L266) and [PgStore:551](../../agents/rig/rigbox/store.py#L551) no longer call `drop_searches` during product deletion. Memory matches the deleted codes against each row's `ids`; Postgres uses `tenant_id=$1 AND ids ?| $2::text[]` in the existing transaction. `_drop_answers` remains unchanged.
+
+[Regression test:90](../test_rig_delete_products.py#L90) runs against both stores. Each tenant starts with five saved searches: one returning the deleted code, one unrelated hit whose query mentions that code, a closest match, and two misses. The deleting tenant keeps exactly the other four rows unchanged; its missed-search counts stay identical; the second tenant keeps all five rows. This proves result-ID matching, not query-text matching.
+
+After this fix: lint passed, the full scoped suite passed **171 tests**, and the real-Tank/Rig/Postgres browser job passed again. The logs, job output and screenshots below are refreshed. Frontend source is unchanged by this review fix; the recorded Next build and standalone Node checks are from the preceding implementation step and were not rerun unnecessarily.
+
 ## What changed (file and line)
 
 | File | Change |
 | --- | --- |
 | [retailer.py:75](../../agents/rig/rigbox/retailer.py#L75), [91](../../agents/rig/rigbox/retailer.py#L91), [202](../../agents/rig/rigbox/retailer.py#L202) | Tenant product rows contain only code, name, selling price and currency. Validate 1–5,000 codes, deduplicate them, delete and save the receipt in one `store.atomic` transaction. Distinguish refresh from manual import. |
 | [retailer_api.py:15](../../agents/rig/rigbox/retailer_api.py#L15), [64](../../agents/rig/rigbox/retailer_api.py#L64) | Add private `delete-products` operation behind the existing control authentication. |
-| [store.py:242](../../agents/rig/rigbox/store.py#L242), [518](../../agents/rig/rigbox/store.py#L518), [591](../../agents/rig/rigbox/store.py#L591) | Memory and Postgres removal records, deletion, family cleanup, cache invalidation and restoration. Legacy writes share the tenant transaction lock and respect removals. |
+| [store.py:242](../../agents/rig/rigbox/store.py#L242), [519](../../agents/rig/rigbox/store.py#L519), [593](../../agents/rig/rigbox/store.py#L593) | Memory and Postgres removal records, deletion, family cleanup, cache invalidation and restoration. Legacy writes share the tenant transaction lock and respect removals. |
 | [service.py:785](../../agents/rig/rigbox/service.py#L785), [837](../../agents/rig/rigbox/service.py#L837) | Legacy folder/feed loaders do not count a skipped removed product as updated. |
 | [schema.sql:59](../../agents/rig/schema.sql#L59) | Additive, idempotent `agent_rig.deleted_products`, keyed by tenant and product code. |
 | [access.py:743](../../tank/access.py#L743), [811](../../tank/access.py#L811), [926](../../tank/access.py#L926) | Tag connected-feed refresh on the server; allow deletion through the existing Tank retailer path, including a bounded body large enough for 5,000 codes. Actor supplies tenant identity. |
@@ -33,7 +41,7 @@ Branch: `codex/rig-delete-products`, based on `origin/main` at `4e74b42`. Git pu
 - Connected-feed refresh, including “Refresh now”, keeps removals. Only successful manual imports restore their included products. A failed import rolls restoration back.
 - Each request of at most 5,000 codes is one transaction. Select-all on a larger catalogue sends sequential batches of at most 5,000, refreshes after each, and reports the total actual deletions. A failure stops subsequent batches; already completed batches have their own receipts.
 - The existing receipt shape is unchanged: provider `delete-products`, `updated` is the deletion count, `added` and `rejected` are zero. The page displays “Products” and “{n} deleted.” No code, cost, contact detail or deleted product payload enters the receipt.
-- Clear only the affected tenant’s graph/setup answers and saved search recall, since another product’s result can contain the removed product. Quote requests and their historical payloads are untouched.
+- Clear the affected tenant’s graph/setup cached answers. Remove only that tenant’s saved search rows whose stored result IDs include an actually deleted product code; retain every other search row, including misses and unrelated recent searches. Quote requests and their historical payloads are untouched.
 - A fit to a family remains while that family has products. Removing its final member also removes fits targeting the now-empty family. Refresh does not recreate those fits.
 - `rig_3d_jobs` has a foreign key to the product. Its dependent rows must be deleted in the same transaction for product deletion to work. Other products’ and tenants’ jobs remain. No R2 object removal or forge call was added.
 
@@ -54,7 +62,7 @@ PYTHONPATH=tank /workspace/market-lab-warnings/.venv/bin/python -m pytest -q \
   tests/test_rig_feeds_workspace.py tests/test_rig.py tests/test_rig_feeds.py \
   tests/test_rig_admin.py tests/test_rig_recall_window.py tests/test_rig_quotes.py \
   tests/test_rig_quotes_postgres.py tests/test_rig_store_job.py
-# 169 passed in 4.94s. Includes local Postgres, schema reapplication and rollback.
+# 171 passed in 6.38s. Includes local Postgres, schema reapplication and rollback.
 
 node tests/rig_delete_products/actions.test.cjs
 # PASS: real Workspace route/actions/Tank helper; founder, org admin,
@@ -75,18 +83,18 @@ node tests/rig_feeds_admin_browser.mjs
 # Retailer admin: 375px/1440px screenshots, no overflow, refresh,
 # approval, template and private-rule form checks passed.
 
-RIG_DELETE_PROOF_DATABASE_URL=postgresql://postgres@127.0.0.1:54332/rig_delete_final_test \
+RIG_DELETE_PROOF_DATABASE_URL=postgresql://postgres@127.0.0.1:54332/rig_delete_review_test \
 RIG_ESBUILD_PATH=/workspace/.setup/rig5/browser/node_modules/esbuild \
 RIG_PLAYWRIGHT_PATH=/workspace/market-lab-warnings/agents/market_lab/fixture_proof/node_modules/playwright \
 READ1_CHROMIUM_EXECUTABLE=/usr/bin/chromium \
 /workspace/market-lab-warnings/.venv/bin/python tests/rig_delete_products/server.py \
-  /workspace/scratch/rig-delete-final-browser
+  /workspace/scratch/rig-delete-review-browser
 # Real Tank panel: 200 ok
 # real_tank: passed; founder_without_org_admin: passed;
 # second_tenant_products: 3; browser_errors: []; external_requests: [].
 ```
 
-The broader attempted `PYTHONPATH=tank .../python -m pytest -q tests/test_rig*.py` stopped during collection: this environment lacks `numpy`, `trimesh` and `huggingface_hub` for unrelated forge tests. [Full output](broad-suite-collection.txt). It is not claimed as passing. The 169-test scoped run above passed without skips. No CI result was fetched, rerun or claimed.
+The broader attempted `PYTHONPATH=tank .../python -m pytest -q tests/test_rig*.py` stopped during collection: this environment lacks `numpy`, `trimesh` and `huggingface_hub` for unrelated forge tests. [Full output](broad-suite-collection.txt). It is not claimed as passing. The 171-test scoped run above passed without skips. No CI result was fetched, rerun or claimed.
 
 ### Reproduce in a fresh clone
 
@@ -103,14 +111,14 @@ The local database was started with this command. It has no password, binds only
 
 ```sh
 env -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_TLS -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH \
-  docker --host=unix:///var/run/docker.sock run --rm --name rig-delete-postgres \
+  docker --host=unix:///var/run/docker.sock run --rm --name rig-delete-review-postgres \
   -e POSTGRES_HOST_AUTH_METHOD=trust -e POSTGRES_DB=rig_delete_test \
   -p 127.0.0.1:54332:5432 --tmpfs /var/lib/postgresql/data -d \
   postgres@sha256:9e2cf6287f25c3151f4c9421ccce2b17f3e60061c111a29165e0d2cdd9ff0a97
 
 env -u DOCKER_HOST -u DOCKER_CONTEXT -u DOCKER_TLS -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH \
-  docker --host=unix:///var/run/docker.sock exec rig-delete-postgres \
-  createdb -U postgres rig_delete_final_test
+  docker --host=unix:///var/run/docker.sock exec rig-delete-review-postgres \
+  createdb -U postgres rig_delete_review_test
 ```
 
 The browser proof requires a fresh loopback database ending in `_test`. It imports three fixture products for each of two tenants through the actual retailer importer, then starts Uvicorn with the real `tank/main.py` app and the real Rig retailer/widget route implementations backed by Postgres. It resolves only the local `agent-rig` corridor to loopback. No Tank function, route, auth check, HTTP client or database is replaced. Ports 8003 and 8054 must be free.
@@ -144,6 +152,6 @@ No new wording, service or setting needs a founder decision. Live acceptance is 
 1. Select the intended retailer, then open `/rig/admin` as the founder. Find one real product under Products and note its code.
 2. Search for it in that retailer's Rig page/widget; verify it is present.
 3. Press its Delete button. Verify the singular confirmation, confirm, and see “1 deleted.” The row must disappear and Import history must show the deletion count.
-4. Run the same Rig search again. The product must no longer be returned. An existing quote mentioning it must remain unchanged.
+4. Run the same Rig search again. The product must no longer be returned. Unrelated saved searches and the existing missed-search counts must remain. An existing quote mentioning it must remain unchanged.
 5. Refresh the connected feed: the product must stay absent. A manual catalogue import containing its code must restore it.
 6. For a multi-product check, select the intended rows, verify the confirmation count and use Delete selected. Only those products in the active tenant may disappear.

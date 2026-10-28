@@ -265,7 +265,8 @@ class MemoryStore(RetailerMemoryStore):
                     self._fits = {key: row for key, row in self._fits.items() if key[0] != tenant or key[3] != family}
         if found:
             self._drop_answers(tenant)
-            await self.drop_searches(tenant)
+            self.searches = [row for row in self.searches
+                             if row["tenant_id"] != tenant or not found.intersection(row["ids"])]
         return len(found)
 
     def _drop_answers(self, tenant_id: str) -> None:
@@ -548,7 +549,8 @@ class PgStore(RetailerPgStore):
                 async with self.pool.acquire() as conn:
                     await conn.execute("DELETE FROM agent_rig.fits WHERE tenant_id=$1 AND fits_family=$2", tenant, row["family"])
         await self._drop_answers(tenant_id)
-        await self.drop_searches(tenant_id)
+        async with self.pool.acquire() as conn:
+            await conn.execute("DELETE FROM agent_rig.searches WHERE tenant_id=$1 AND ids ?| $2::text[]", tenant, found)
         return len(found)
 
     async def apply_schema(self) -> None:

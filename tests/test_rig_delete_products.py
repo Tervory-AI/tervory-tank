@@ -87,6 +87,36 @@ async def test_delete_atomic_scoped_history_search_and_receipt(retailer, skus):
 
 
 @pytest.mark.asyncio
+async def test_delete_keeps_unrelated_searches_and_missed_search_counts(retailer):
+    assert (await retailer.import_file(TENANT, envelope()))["ok"]
+    store = retailer.store
+    searches = [
+        {"id": "returned-deleted", "query": "desk lamp", "ids": ["SAMPLE-SHADE", "SAMPLE-LAMP"], "exact_match": True},
+        {"id": "other-hit", "query": "SAMPLE-LAMP shade", "ids": ["SAMPLE-SHADE"], "exact_match": True},
+        {"id": "closest-hit", "query": "blue shade", "ids": ["SAMPLE-SHADE"], "exact_match": False},
+        {"id": "miss-one", "query": "missing desk", "ids": [], "exact_match": False},
+        {"id": "miss-two", "query": "missing desk", "ids": [], "exact_match": False},
+    ]
+    for tenant in (TENANT, OTHER):
+        for row in searches:
+            await store.add_search(tenant, "saved-version", row)
+    before = await store.searches_for(TENANT, "saved-version")
+    other_before = await store.searches_for(OTHER, "saved-version")
+    missed_before = await store.missed_searches(TENANT)
+    assert len(before) == len(other_before) == 5
+    assert {row["query"]: row["count"] for row in missed_before} == {"missing desk": 2, "blue shade": 1}
+
+    assert (await retailer.delete_products(TENANT, {"skus": ["SAMPLE-LAMP"]}))["deleted"] == 1
+
+    remaining = await store.searches_for(TENANT, "saved-version")
+    assert len(remaining) == 4
+    assert remaining == [row for row in before if row["query"] != "desk lamp"]
+    assert await store.missed_searches(TENANT) == missed_before
+    assert await store.searches_for(OTHER, "saved-version") == other_before
+    assert await store.missed_searches(OTHER) == missed_before
+
+
+@pytest.mark.asyncio
 async def test_refresh_keeps_removed_sku_and_manual_import_restores(retailer):
     await seed(retailer)
     await retailer.delete_products(TENANT, {"skus": ["SAMPLE-LAMP"]})

@@ -49,24 +49,24 @@
   },
   "deletion_receipts": [
     {
-      "id": "f0cc209b-1ada-45d3-b481-8e6efa059f75",
+      "id": "19eb762d-6c9a-43a4-b6e4-d1b5787fb77e",
       "provider": "delete-products",
       "site": "",
       "feed_id": "",
       "added": 0,
       "updated": 2,
       "rejected": 0,
-      "created_at": "2026-10-28T09:53:54.436438+00:00"
+      "created_at": "2026-10-28T10:06:51.105524+00:00"
     },
     {
-      "id": "3e085127-e2cf-40e6-a9d1-2d44c2f52469",
+      "id": "31390829-b55e-46d5-b5ce-ad0abb079aa5",
       "provider": "delete-products",
       "site": "",
       "feed_id": "",
       "added": 0,
       "updated": 1,
       "rejected": 0,
-      "created_at": "2026-10-28T09:53:54.153609+00:00"
+      "created_at": "2026-10-28T10:06:50.722491+00:00"
     }
   ],
   "founder_without_org_admin": "passed",
