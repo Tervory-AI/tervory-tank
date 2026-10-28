@@ -42,6 +42,17 @@ def _link(
 def sources() -> list[SourceSpec]:
     rows: list[SourceSpec] = [
         _copy(
+            id="sec_edgar",
+            name="Recent SEC company filings",
+            kind="events",
+            url="https://data.sec.gov/submissions/",
+            licence=licences.SEC_EDGAR,
+            terms_checked_at="2026-10-28",
+            cadence="daily",
+            adapter="sec_submissions",
+            config={"ciks": lists.SEC_CIKS, "files": ["sec_edgar/ruger.json", "sec_edgar/swbi.json"]},
+        ),
+        _copy(
             id="listing_counts",
             name="Monthly licence listings, counts by place and type",
             kind="series",
@@ -296,6 +307,7 @@ def sources() -> list[SourceSpec]:
         rows.append(_link(source_id, name, url, licences.PAGE_LINK, "weekly", watch=True))
     # Industry meanings and publisher attribution belong to this engine.
     presentation = {
+        "sec_edgar": {"publisher": "U.S. Securities and Exchange Commission", "answer_topics": ["SEC", "EDGAR", "filing", "filings"]},
         "listing_counts": {"publisher": "Bureau of Alcohol, Tobacco, Firearms and Explosives", "listing_types": {
             "01": "Firearms dealers", "02": "Firearms pawnbrokers", "03": "Collectors of historic firearms",
             "06": "Ammunition manufacturers", "07": "Firearms manufacturers", "08": "Firearms importers",
@@ -321,6 +333,7 @@ def sources() -> list[SourceSpec]:
     }
     # Human-readable dataset pages, separate from the transport/API URLs above.
     publisher_pages = {
+        "sec_edgar": "https://www.sec.gov/search-filings",
         "listing_counts": lists.LISTING_URL,
         "check_counts": "https://www.fbi.gov/how-we-can-help-you/more-fbi-services-and-information/nics",
         "census_population": "https://www.census.gov/programs-surveys/acs/data.html",

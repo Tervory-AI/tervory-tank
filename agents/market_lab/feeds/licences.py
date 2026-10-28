@@ -8,6 +8,14 @@ from __future__ import annotations
 
 CHECKED = "2026-10-13"
 
+SEC_EDGAR = (
+    "SEC states that government-created content and EDGAR public filings are "
+    "free to access and reuse. The JSON APIs require no authentication or key. "
+    "Declare a User-Agent; maximum ten requests per second. Terms checked 2026-10-28. "
+    "https://www.sec.gov/about/webmaster-frequently-asked-questions#developers "
+    "https://www.sec.gov/search-filings/edgar-application-programming-interfaces"
+)
+
 CENSUS = (
     "U.S. government work, public domain (17 U.S.C. § 105). "
     "Census Bureau API terms allow a service to retrieve, display, and analyze "

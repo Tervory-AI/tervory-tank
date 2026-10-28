@@ -39,7 +39,7 @@ The table includes every key-gated entry and every link-only entry. Eleven link 
 
 ## Sources named in the job
 
-- SEC EDGAR: official JSON APIs require no authentication or API key. SEC publishes a 10 requests/second maximum and requires a declared User-Agent. Investigation/implementation pending.
+- SEC EDGAR: official JSON APIs require no authentication or API key. SEC publishes a 10 requests/second maximum and requires a declared User-Agent. Implemented for recent Ruger and Smith & Wesson submissions (the API recent window; not a complete historical archive). Recorded responses contain 1,000 filings per company. Shared per-worker SEC ceiling: five requests/second, in addition to the normal two-second host delay; declared Tervory User-Agent. No filing HTML is fetched.
 - USPTO: current API access, terms and limits are being checked. No unsupported endpoint or registration requirement is assumed.
 - MarineTraffic, Freightos, LME: absent from this catalogue; paid/proprietary or scraping routes are excluded by the brief. No adapter will be built for them in this task; the founder must decide any future licensed integration.
 
@@ -47,4 +47,4 @@ Official documentation read: [SEC access/fair-access policy](https://www.sec.gov
 
 ## Proof status
 
-No new adapter or live data import is claimed at this checkpoint. Tests, exact commands/results, per-feed row counts and remaining blockers will be recorded here. No production SQL or persistent live-data change; all verification databases are local and disposable. Founder-browser citation proof remains pending deployment.
+SEC checkpoint: `PYTHONPATH=tank /workspace/.tervory-cloud/venv/bin/python -m pytest -q tests/market_lab_feeds/test_official_feeds.py` → **13 passed**. Covers recorded responses, deduplication, citations/fetch time, denial/no retry, rate limit across clients/hosts, malformed data, answer citations, tenant isolation and fixture isolation. A broader regression run and the final live fetch are still pending. The initial test run caught a missing test-only `at=` argument; it was corrected before this checkpoint. No production SQL or persistent live-data change; all verification databases are local and disposable. Founder-browser citation proof remains pending deployment.

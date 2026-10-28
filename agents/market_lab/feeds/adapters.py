@@ -8,6 +8,7 @@ import json
 import re
 from collections import defaultdict
 from decimal import Decimal
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -687,7 +688,39 @@ def _world_bank_date(text: str) -> str:
     return _month_date(text)
 
 
+def run_sec_submissions(source: SourceSpec, reader: FixtureReader, store: Store, *, backfill: bool) -> int:
+    """SEC's recent submissions window, one recorded response per filer.
+
+    Older archive files are deliberately not followed: this source describes
+    recent filings, not a complete company history. No filing HTML is read.
+    """
+    require_copy(source)
+    inserted = 0
+    allowed = {int(cik) for cik in source.config["ciks"]}
+    for entry in source.config.get("files", []):
+        payload = json.loads(reader.read_text(_path_of(entry)))
+        cik = int(payload["cik"])
+        name = payload["name"].strip()
+        if cik not in allowed or not name:
+            raise ValueError("unexpected SEC filer")
+        recent = payload["filings"]["recent"]
+        fields = ("accessionNumber", "filingDate", "form", "primaryDocDescription")
+        columns = [recent[field] for field in fields]
+        if not all(isinstance(column, list) for column in columns) or len({len(column) for column in columns}) != 1:
+            raise ValueError("incomplete SEC filing columns")
+        for accession, filed, form, description in zip(*columns):
+            if not re.fullmatch(r"[0-9]{10}-[0-9]{2}-[0-9]{6}", accession) or not form.strip():
+                raise ValueError("invalid SEC filing identity")
+            if date.fromisoformat(filed).isoformat() != filed:
+                raise ValueError("invalid SEC filing date")
+            url = f"https://www.sec.gov/Archives/edgar/data/{cik}/{accession.replace('-', '')}/{accession}-index.html"
+            inserted += int(store.put_event(source.id, "filing", "US", filed,
+                                            f"{name} — {form}", description, url))
+    return inserted
+
+
 ADAPTERS = {
+    "sec_submissions": run_sec_submissions,
     "listing": run_listing_clean,
     "typed_counts": run_typed_counts,
     "census_population": run_census_population,

@@ -1,0 +1,18 @@
+[
+  {
+    "file": "tests/fixtures/feeds/sec_edgar/ruger.json",
+    "url": "https://data.sec.gov/submissions/CIK0000095029.json",
+    "recorded_date": "2026-10-28",
+    "status": 200,
+    "sha256": "24af2f1718a925603240ecc5ec2f3de5f0feb746fb05607147defab468ae369e",
+    "recent_filings": 1000
+  },
+  {
+    "file": "tests/fixtures/feeds/sec_edgar/swbi.json",
+    "url": "https://data.sec.gov/submissions/CIK0001092796.json",
+    "recorded_date": "2026-10-28",
+    "status": 200,
+    "sha256": "9c8e4787aa1ce3c1c2a9fe0837d7fc3568c74b68f80dd4f2f3a86d9084e08400",
+    "recent_filings": 1000
+  }
+]
