@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 _background: set[asyncio.Task] = set()
 SQUADS = frozenset({"base", "tiger", "market_lab", "rig", "tisan", "radix", "zenas"})
 TOOLS = {
+    "trigger": ["trigger.write", "trigger.check"],
     "base": ["base.batch", "base.search"],
     "tiger": ["tiger.watch", "tiger.read"],
     "market_lab": ["market_lab.research"],
@@ -93,7 +94,7 @@ async def worker(request: Request) -> None:
 
 
 def allowed_tools(actor: Actor) -> list[str]:
-    squads = SQUADS if actor.founder else actor.squads
+    squads = TOOLS.keys() if actor.founder else actor.squads & SQUADS
     founder_tools = [name for name in FOUNDER_TOOLS
                      if not name.startswith("repo.") or command_repo.configured()] if actor.founder else []
     return sorted([tool for squad in squads for tool in TOOLS[squad]] + founder_tools)
@@ -379,6 +380,10 @@ async def events(thread_id: uuid.UUID, after: int = Query(default=0, ge=0), acto
 async def route_turn(actor: Actor, messages: list[dict], model: str | None = None,
                      *, task_id: uuid.UUID | None = None, on_token: TokenSink | None = None) -> Any:
     from main import Message, RouteRequest, box_region, run_route
+    from trigger_routes import code_plan
+    planned = await code_plan(actor, messages, task_id)
+    if planned is not None:
+        return planned
     override = {"model_override": model} if model not in (None, "auto") else {}
     if task_id is not None:
         override["task_id"] = task_id
@@ -892,6 +897,27 @@ class ReviewArgs(Body):
     matter_id: uuid.UUID | None = None
 
 
+class TriggerCheckArgs(Body):
+    text: str = Field(min_length=1, max_length=20000)
+
+
+class TriggerWriteArgs(TriggerCheckArgs):
+    document_type: Literal["copy", "article", "document", "legal"] = "copy"
+    register: str | None = Field(default=None, max_length=100)
+    template: str | None = Field(default=None, max_length=100)
+    jurisdiction: str | None = Field(default=None, max_length=80)
+    terms: dict[str, Any] = Field(default_factory=dict)
+    matter_id: uuid.UUID | None = None
+    voice: dict[str, Any] | None = Field(default=None, description=(
+        "Founder-supplied Brand Voice Spec, only when setting/updating this tenant's voice. "
+        "Required: brand (string), status='live', revision (positive increasing integer). "
+        "Optional: registers (name-to-description object), tone (string array), guidelines "
+        "(objects with rule), doAndDont, surfaceDoDont, promptKit, vocabulary, "
+        "bannedTerms, preferredTerms, requiredTerms, signaturePhrases, changelog, voiceQueue, "
+        "stylebook and maxSentenceWords. Never invent a brand voice or include sample brand content. "
+        "Omit voice on later writes to use the saved file."))
+
+
 class SavingsArgs(Body):
     days: int = Field(default=30, ge=1, le=365)
 
@@ -917,6 +943,8 @@ class Adapter:
 
 
 ADAPTERS = {
+    "trigger.write": Adapter("POST", "/v1/trigger/write", TriggerWriteArgs, "trigger.write", True, "paid_run"),
+    "trigger.check": Adapter("POST", "/v1/trigger/check", TriggerCheckArgs, "trigger.check"),
     "repo.prs": Adapter("GET", "/v1/command/repo/prs", RepoPRsArgs, "open PRs on Tervory-AI/tervory-tank"),
     "repo.pr": Adapter("GET", "/v1/command/repo/pr", RepoPRArgs, "one PR's changed files and check results"),
     "repo.file": Adapter("GET", "/v1/command/repo/file", RepoFileArgs, "read one file from main"),
@@ -1051,6 +1079,8 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
     if action.tool == "ledger.savings":
         end = datetime.now(timezone.utc)
         args = {"start": (end - timedelta(days=args["days"])).isoformat(), "end": end.isoformat()}
+    if action.tool.startswith("trigger."):
+        return adapter.method, path, {}, {**args, **scope}
     if adapter.method == "GET":
         return adapter.method, path, {**args, **scope}, None
     return adapter.method, path, scope, {**args, **scope}

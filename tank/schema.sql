@@ -1937,3 +1937,10 @@ ALTER TABLE tank.shadow ADD COLUMN IF NOT EXISTS routellm_config text;
 ALTER TABLE tank.shadow ADD COLUMN IF NOT EXISTS candidate_ledger_id uuid;
 CREATE INDEX IF NOT EXISTS shadow_routellm_tenant_task ON tank.shadow(tenant_id,task_type,routellm_config)
     WHERE routellm_config IS NOT NULL;
+
+-- Trigger first build. Leave all existing and tenant-specific policies untouched.
+INSERT INTO tank.policy(task_type,rung,model,cache_scope,max_tokens_out,eval_threshold,min_shadow_samples,auto_promote)
+VALUES ('trigger.write',1,'luna','tenant',3000,0.99,200,false),
+       ('trigger.check',3,'code','none',0,0.99,200,false)
+ON CONFLICT DO NOTHING;
+-- trigger.check never calls /v1/route; its adapter executes code and records zero cost.

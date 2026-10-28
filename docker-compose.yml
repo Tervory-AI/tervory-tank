@@ -26,6 +26,7 @@ services:
       - default
       - tervory-gw-template
       - tervory-gw-tiger
+      - tervory-gw-trigger
       - tervory-gw-market_lab
       - tervory-gw-radix
       - tervory-gw-tisan
@@ -216,6 +217,7 @@ services:
       TERVORY_ADMIN_USER_IDS: ${TERVORY_ADMIN_USER_IDS:-}
       TANK_KEY_TEMPLATE: ${TANK_KEY_TEMPLATE:-}
       TANK_KEY_TIGER: ${TANK_KEY_TIGER:-}
+      TANK_KEY_TRIGGER: ${TANK_KEY_TRIGGER:-}
       TANK_KEY_MARKET_LAB: ${TANK_KEY_MARKET_LAB:-}
       TANK_KEY_RADIX: ${TANK_KEY_RADIX:-}
       TANK_KEY_TISAN: ${TANK_KEY_TISAN:-}
@@ -248,6 +250,7 @@ services:
       - default
       - tervory-gw-template
       - tervory-gw-tiger
+      - tervory-gw-trigger
       - tervory-gw-market_lab
       - tervory-gw-radix
       - tervory-gw-tisan
@@ -321,6 +324,7 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-tervory}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tervory}
       AGENT_DB_PASSWORD_TEMPLATE: ${AGENT_DB_PASSWORD_TEMPLATE:-}
       AGENT_DB_PASSWORD_TIGER: ${AGENT_DB_PASSWORD_TIGER:-}
+      AGENT_DB_PASSWORD_TRIGGER: ${AGENT_DB_PASSWORD_TRIGGER:-}
       AGENT_DB_PASSWORD_MARKET_LAB: ${AGENT_DB_PASSWORD_MARKET_LAB:-}
       AGENT_DB_PASSWORD_RADIX: ${AGENT_DB_PASSWORD_RADIX:-}
       AGENT_DB_PASSWORD_TISAN: ${AGENT_DB_PASSWORD_TISAN:-}
@@ -466,3 +470,6 @@ networks:
   # Ghost alone uses this corridor; no other main-stack service joins it.
   tervory-gw-ghost:
     name: tervory-gw-ghost
+
+  tervory-gw-trigger:
+    name: tervory-gw-trigger

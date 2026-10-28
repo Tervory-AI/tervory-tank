@@ -1,0 +1,9 @@
+{
+  "agent-style": "d1bdb0fa0c6305942bf43805edeae330946e8cf7",
+  "agent-stylebooks": "85b318fcb69fbb50b9f066aadf81750d368c6988",
+  "practical-prose": "fc0b2a725dd3d8b0dd347f92058b184a01eac44d",
+  "brand-voice-spec": "e9d26dbecb2a0d5c023d4fb8d8f954e0ca4cdd54",
+  "proselint": "a83a6164999803909f69eb3274d783c7070e73c1",
+  "languagetool-image": "meyay/languagetool:6.8-13@sha256:062924c66c649d706d60aed80af6bab207bb50a053733e7ac1ca0d8446d150f1",
+  "languagetool-packaging": "be5d96f53563c7c5c07a4bd2e965b2e141810a76"
+}
