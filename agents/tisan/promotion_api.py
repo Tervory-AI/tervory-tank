@@ -86,7 +86,7 @@ def mount(app, core):
                 payload = {'tenant_id': tenant, 'target': target, 'artifact': artifact}
                 headers = {'X-Tank-Key': key, 'X-Tervory-Tenant': tenant, 'X-Tervory-Squad': 'tisan',
                            'X-Tervory-Region': os.environ.get('TANK_REGION', 'us-east')}
-                scanned = await http.post(target_url + 'scans', json=payload, headers=headers, timeout=360)
+                scanned = await http.post(target_url + 'scans', json=payload, headers=headers, timeout=390)
                 if scanned.status_code != 200:
                     raise core.Refused('Radix scan is unavailable')
                 response = await http.post(target_url + 'gate', json=payload, headers=headers, timeout=15)
