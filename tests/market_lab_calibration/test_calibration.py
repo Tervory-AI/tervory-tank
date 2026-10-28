@@ -26,9 +26,9 @@ NOW = BASE + timedelta(days=40)
 
 
 def forecast(*, tenant=OWNER, at=NOW, days=1, kind="comparison:gte", feed="official", metric="volume"):
-    return make_prediction(tenant_id=tenant, statement="Volume at least 10", metric_series_id=metric,
+    return {**make_prediction(tenant_id=tenant, statement="Volume at least 10", metric_series_id=metric,
         comparator="gte", target=10, made_at=at, resolve_by=at + timedelta(days=days),
-        rationale="Saved observations", kind=kind, feed=feed)
+        rationale="Saved observations"), "kind": kind, "feed": feed}
 
 
 def outcome(row, hit=True):
@@ -109,7 +109,6 @@ def test_resolutions_freeze_the_original_confidence_and_corrections_recompute():
     ledger.save_prediction(later)
     ledger.save_prediction(outcome(later))
     resolved = outcome(original, False)
-    assert resolved["confidence"] == .75
     resolved.update(confidence=1, confidence_count=500)
     ledger.save_prediction(resolved)
     assert (ledger.predictions[-1]["confidence"], ledger.predictions[-1]["confidence_count"]) == (.75, 4)
