@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import hmac
+import logging
 import os
 import time
 from contextlib import suppress
@@ -97,7 +98,10 @@ async def lifespan(app):
     async def maintenance():
         while True:
             # Explicit gateway administration, separate from any caller's tenant.
-            await app.state.lease.store.reap_expired()
+            try:
+                await app.state.lease.store.reap_expired()
+            except (asyncpg.PostgresError, OSError):
+                logging.getLogger(__name__).warning('Passive lease maintenance unavailable; will retry')
             await asyncio.sleep(15)
     await app.state.lease.store.reap_expired()
     task = asyncio.create_task(maintenance())
