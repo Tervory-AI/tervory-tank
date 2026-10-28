@@ -14,6 +14,9 @@ RUN pip install --no-cache-dir -r /tmp/chassis.txt -r /tmp/zenas.txt \
     && mkdir -p /data \
     && chown agent:agent /data
 COPY zenas /app/agents/zenas
+COPY _chassis/chassis /app/chassis
+COPY tiger/alert_email.py /app/agents/tiger/alert_email.py
+COPY rig/rigbox/reserve.py /app/agents/rig/rigbox/reserve.py
 USER agent
 ENV PYTHONPATH=/app \
     PYTHONUNBUFFERED=1 \
