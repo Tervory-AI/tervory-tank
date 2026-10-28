@@ -66,7 +66,7 @@ from pydantic import BaseModel, Field
 import batch_providers
 import graduate
 import semantic_cache
-from tenant_db import TenantPool, tenant_path, administrative, bind_tenant_endpoints
+from tenant_db import TenantPool, tenant_path, tenant_scope, administrative, bind_tenant_endpoints
 import routellm_shadow
 import skala
 import skill_costs
@@ -2426,6 +2426,10 @@ class BatchRequest(BaseModel):
     id: uuid.UUID = Field(default_factory=uuid.uuid4)
     requests: list[RouteRequest] = Field(min_length=1, max_length=1000)
 
+    @property
+    def tenant_id(self) -> uuid.UUID:
+        return self.requests[0].tenant_id
+
 
 def _batch_min() -> int:
     return max(1, int(os.environ.get("TANK_BATCH_MIN", "50")))
@@ -2466,6 +2470,7 @@ async def _batch_gateway(method: str, path: str, *, model: str | None = None, **
 
 
 @app.post("/v1/route/batch")
+@tenant_path("body")
 async def route_batch(body: BatchRequest, caller: str | None = Depends(require_key)) -> dict[str, Any]:
     tenant = body.requests[0].tenant_id
     task = body.requests[0].task_type
@@ -2703,7 +2708,7 @@ async def _process_batch(conn: Any, batch: Any) -> None:
 
 
 async def process_batches_once() -> None:
-    async with pool().acquire() as conn:
+    async with admin_pool().acquire() as conn:
         rows = await conn.fetch("SELECT id,tenant_id FROM tank.batches WHERE region=$1 AND status IN ('queued','submitting','submitted','retrying') ORDER BY created_at LIMIT 20", box_region())
         for row in rows:
             lock = int.from_bytes(row["id"].bytes[:8], "big", signed=True)
@@ -2713,7 +2718,9 @@ async def process_batches_once() -> None:
                 batch = await conn.fetchrow("SELECT * FROM tank.batches WHERE id=$1 AND tenant_id=$2", row["id"], row["tenant_id"])
                 if batch["status"] not in {"queued", "submitting", "submitted", "retrying"}:
                     continue
-                await _process_batch(conn, batch)
+                with tenant_scope(batch["tenant_id"]):
+                    async with pool().acquire() as tenant_conn:
+                        await _process_batch(tenant_conn, batch)
             except (httpx.HTTPError, ValueError, KeyError):
                 # Poll failures are retriable; submission ambiguity is surfaced
                 # on the next pass, with no second provider submission.
