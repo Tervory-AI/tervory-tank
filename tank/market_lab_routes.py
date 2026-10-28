@@ -16,6 +16,7 @@ class MarketRequest(BaseModel):
     offset: int = Field(default=0, ge=0, le=10000000)
     row: int | None = Field(default=None, ge=0, le=10000000)
     row_kind: Literal["point", "event"] | None = None
+    kind: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 def build_router(tank):
@@ -24,7 +25,7 @@ def build_router(tank):
 
     @router.post("/v1/market-lab/{operation}", dependencies=[Depends(tank.require_key)])
     async def call(operation: str, body: MarketRequest):
-        if operation not in {"overview", "ask", "document", "refresh"}:
+        if operation not in {"overview", "ask", "document", "refresh", "predictions", "calibration"}:
             raise HTTPException(404, "Not found")
         key = os.environ.get("TANK_KEY_MARKET_LAB", "")
         if not key or tank._http is None:
