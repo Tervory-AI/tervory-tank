@@ -264,7 +264,7 @@ async def test_tisan_gate_corridor_auth_tenant_region_and_unknown_state(monkeypa
         assert request.headers['x-tervory-tenant']==str(A) and body['tenant_id']==str(A)
         return httpx.Response(200,json={'allowed':False,'status':'missing'})
     http=httpx.AsyncClient(transport=httpx.MockTransport(handle))
-    tank=SimpleNamespace(TANK_API_KEY='offline-workspace-test',_http=http,box_region=lambda:'us-east')
+    tank=SimpleNamespace(TANK_API_KEY='dummy-workspace-test',_http=http,box_region=lambda:'us-east')
     app=FastAPI();app.include_router(corridor.build_router(tank))
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app),base_url='http://test') as client:
         headers={'x-tank-key':'offline-tisan-test','x-tervory-tenant':str(A),'x-tervory-squad':'tisan','x-tervory-region':'us-east'}
@@ -276,3 +276,91 @@ async def test_tisan_gate_corridor_auth_tenant_region_and_unknown_state(monkeypa
         assert len(calls)==1
         assert (await client.post('/v1/radix/passive/gate',json={**payload,'allowed':True},headers=headers)).status_code==422
     await http.aclose()
+
+
+@pytest.mark.asyncio
+async def test_txt_chunks_match_exact_challenge_and_dns_failure_refuses(monkeypatch):
+    calls=[]
+    async def resolve(name,kind,**kwargs):
+        calls.append((name,kind))
+        return [SimpleNamespace(strings=(b'tervory-',b'dummy-public-dns-proof'))]
+    monkeypatch.setattr(gateway.dns.asyncresolver,'resolve',resolve)
+    assert await gateway.proof('owned.example','tervory-dummy-public-dns-proof')
+    assert not await gateway.proof('owned.example','different-proof')
+    assert calls==[('_tervory-verify.owned.example','TXT')]*2
+    async def fail(*args,**kwargs):raise gateway.dns.exception.Timeout
+    monkeypatch.setattr(gateway.dns.asyncresolver,'resolve',fail)
+    assert not await gateway.proof('owned.example','tervory-dummy-public-dns-proof')
+
+
+def test_verified_dynamic_proxy_relays_only_pinned_public_dial():
+    import threading
+    calls=[]
+    one,two=socket.socketpair()
+    def peer():
+        with two:
+            assert two.recv(10)==b'ping'
+            two.sendall(b'pong')
+    thread=threading.Thread(target=peer,daemon=True);thread.start()
+    def connect(address,port):
+        calls.append((address,port));return one
+    proxy=egress.Proxy(verified_host='owned.example',allow_storage=False,
+        resolve=lambda host:'93.184.216.34',connect=connect)
+    server=egress.Server(proxy).start()
+    try:
+        with socket.create_connection(('127.0.0.1',server.port),timeout=2) as client:
+            client.sendall(b'CONNECT owned.example:443 HTTP/1.1\r\nHost: owned.example:443\r\n\r\n')
+            assert b'200 Connection Established' in client.recv(1024)
+            client.sendall(b'ping');assert client.recv(10)==b'pong'
+        assert calls==[('93.184.216.34',443)]
+    finally:server.close()
+
+
+@pytest.mark.asyncio
+async def test_complete_request_persists_clean_receipt_and_releases_lease(database,monkeypatch):
+    from chassis import events
+    async def publish(*args,**kwargs):return True
+    monkeypatch.setattr(events,'publish',publish)
+    await database.issue(A,'owned.example')
+    async def yes(*args):return True
+    lease=gateway.Lease(database,check=yes,server=FakeServer)
+    async def handle(request):
+        body=json.loads(request.content);owner=UUID(body['tenant_id']);ident=UUID(body['scan_id'])
+        if request.url.path=='/lease':return httpx.Response(200,json=await lease.start(owner,ident))
+        await lease.release(owner,ident);return httpx.Response(200,json={'released':True})
+    async def scanner(target,directory):return [tools.finding('zap','low','10001',target)]
+    result=await routes.execute(database,routes.Scan(tenant_id=A,target=TARGET,artifact=ARTIFACT),
+        scanner=scanner,http=httpx.AsyncClient(transport=httpx.MockTransport(handle)))
+    assert result['allowed'] is True and result['status']=='complete' and result['high']==0
+    assert result['target']==TARGET and result['artifact']==ARTIFACT and lease.run is None
+    assert (await database.gate(A,TARGET,ARTIFACT))['allowed'] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('confirmed',[True,False])
+async def test_collect_requires_both_complete_reports_and_actual_nuclei_request(tmp_path,monkeypatch,confirmed):
+    from contextlib import asynccontextmanager
+    class Preflight:
+        async def __aenter__(self):return self
+        async def __aexit__(self,*args):pass
+        @asynccontextmanager
+        async def stream(self,method,target):
+            assert method=='GET' and target==TARGET
+            yield SimpleNamespace(status_code=200)
+    def client(**kwargs):
+        assert kwargs['proxy']==tools.PROXY and kwargs['trust_env'] is False
+        return Preflight()
+    monkeypatch.setattr(tools.httpx,'AsyncClient',client)
+    seen=[]
+    async def run(argv,directory):
+        seen.append(argv)
+        if len(seen)==1:
+            (directory/'zap.json').write_text(json.dumps({'site':[{'@name':TARGET.rstrip('/'),'alerts':[]}]}))
+            return 0,b'',b''
+        (directory/'nuclei.jsonl').write_text('')
+        return 0,(b'{"requests":"1","errors":"0"}' if confirmed else b''),b''
+    if confirmed:assert await tools.collect(TARGET,tmp_path,run=run)==[]
+    else:
+        with pytest.raises(RuntimeError,match='requests unconfirmed'):
+            await tools.collect(TARGET,tmp_path,run=run)
+    assert len(seen)==2
