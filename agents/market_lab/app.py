@@ -218,7 +218,13 @@ def _batch_series_name(record: dict) -> str:
     from feeds.catalog import sources
     from feeds.geo import US_POSTAL_SET, area_label
 
-    source = next((item for item in sources(record["engine"]) if item.id == record["source"]), None)
+    if not all(isinstance(record.get(field), str) and record[field].strip() for field in ("ref", "engine")):
+        raise ValueError("series reference or engine missing")
+    try:
+        catalogue = sources(record["engine"])
+    except (SystemExit, ModuleNotFoundError):
+        raise ValueError("series engine unavailable") from None
+    source = next((item for item in catalogue if item.id == record["source"]), None)
     if source is None:
         raise ValueError("series source unavailable")
     # The existing feed adapters store the state's postal code at the end of ref.
@@ -244,7 +250,16 @@ async def quarantine_list(x_tank_key: str = Header(default="")) -> dict:
                 """,
                 __import__("uuid").UUID(HEARTBEAT_TENANT),
             )
-            batches = [{**_batch_view(dict(row)), "series_name": _batch_series_name(dict(row))} for row in rows]
+            batches = []
+            for row in rows:
+                record = dict(row)
+                try:
+                    series_name = _batch_series_name(record)
+                except ValueError as exc:
+                    # Only our safe label-validation reasons, never raw source data.
+                    log.warning("quarantine batch %r skipped: %s", record["id"], exc)
+                    continue
+                batches.append({**_batch_view(record), "series_name": series_name})
     except Exception as exc:  # noqa: BLE001 — class name only; the message can carry the database URL
         log.warning("quarantine list failed (%s)", type(exc).__name__)
         raise HTTPException(status_code=503, detail="quarantine unavailable") from None

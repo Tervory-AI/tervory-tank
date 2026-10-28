@@ -101,6 +101,7 @@ test('public Autumbra renders product description without fixture data or intern
   const html = await render(harness(() => { throw new Error('must not fetch'); }), 'app/autumbra/page.tsx');
   assert.match(html, /Watch the edge\./);
   assert.match(html, /Autumbra Watch finds availability, DNS, certificate, and header problems/);
+  assert.match(html, /<article><h3>Autumbra Watch<\/h3><\/article>/);
   assert.doesNotMatch(html, forbidden);
   assert.doesNotMatch(html, /ghost\.threat\.v1|burn-on-fail|On watch|Open investigations/i);
 });

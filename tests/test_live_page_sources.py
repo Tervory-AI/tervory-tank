@@ -112,4 +112,41 @@ async def test_market_quarantine_route_uses_existing_catalogue_name_and_state(mo
         assert args == (PLATFORM,)
         assert 's.tenant_id = b.tenant_id' in sql and 'b.tenant_id = $1' in sql
         conn.rows[0]['source'] = 'no-such-source'
-        assert (await client.get('/quarantine')).status_code == 503
+        skipped = await client.get('/quarantine')
+        assert skipped.status_code == 200
+        assert skipped.json() == {'batches': []}
+
+
+@pytest.mark.parametrize(('bad_fields', 'reason'), [
+    ({'ref': None, 'engine': None}, 'series reference or engine missing'),
+    ({'ref': None}, 'series reference or engine missing'),
+    ({'source': 'no-such-source'}, 'series source unavailable'),
+    ({'engine': 'no_such_engine'}, 'series engine unavailable'),
+    ({'engine': '../invalid'}, 'series engine unavailable'),
+])
+@pytest.mark.asyncio
+async def test_market_quarantine_skips_only_unlabelled_row(monkeypatch, caplog, bad_fields, reason):
+    monkeypatch.syspath_prepend(str(ROOT / 'agents' / '_chassis'))
+    monkeypatch.syspath_prepend(str(ROOT / 'agents' / 'market_lab'))
+    spec = importlib.util.spec_from_file_location('market_quarantine_mixed_rows', ROOT / 'agents/market_lab/app.py')
+    room = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(room)
+    good = {'id': 'good-batch', 'series_id': f'{PLATFORM}:check_counts:total:AL',
+            'source': 'check_counts', 'ref': 'total:AL', 'engine': 'ffl', 'status': 'held'}
+    orphan = {**good, 'id': 'orphan-batch', **bad_fields}
+    conn = Connection([orphan, good])
+
+    @asynccontextmanager
+    async def ledger():
+        yield SimpleNamespace(conn=conn)
+
+    monkeypatch.setattr(room, '_ledger', ledger)
+    monkeypatch.setattr(room, '_room_key_ok', lambda _: True)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=room.app), base_url='http://test') as client:
+        result = await client.get('/quarantine')
+    assert result.status_code == 200
+    assert [row['id'] for row in result.json()['batches']] == ['good-batch']
+    assert result.json()['batches'][0]['series_name'] == 'Monthly background-check counts by state and type · Alabama'
+    assert 'orphan-batch' in caplog.text and reason in caplog.text
+    assert str(PLATFORM) not in caplog.text
+    assert conn.rows == [orphan, good]  # Read-only: skipped batches remain stored.
