@@ -3,7 +3,6 @@ import io
 import json
 import sys
 import urllib.error
-from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
