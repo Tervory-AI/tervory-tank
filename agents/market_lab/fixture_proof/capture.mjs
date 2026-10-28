@@ -38,14 +38,14 @@ try{
     await page.getByRole('heading',{name:'Market Lab',exact:true}).waitFor();
     await page.locator('.ml-card').first().waitFor();
     await page.evaluate(()=>document.fonts.ready);
-    assert.equal(await page.locator('.ml-counts .ml-count').first().innerText(),'14');
-    assert.equal(await page.locator('.ml-card').count(),14);
+    assert.equal(await page.locator('.ml-counts .ml-count').first().innerText(),'16');
+    assert.equal(await page.locator('.ml-card').count(),16);
     assert(await page.getByText('1 stored observation',{exact:true}).count()>0);
     assert.equal(await page.getByText('1 stored observations',{exact:true}).count(),0);
     assert(await page.getByText('2 stored observations',{exact:true}).count()>0);
     if(width===1440){
       const hrefs=await page.locator('.ml-card a[href^="/market-lab/sources/"]').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('href')));
-      assert.equal(new Set(hrefs).size,14);
+      assert.equal(new Set(hrefs).size,16);
       for(const href of hrefs){
         const source=await context.newPage();
         assert.equal((await source.goto(new URL(href,base).href)).status(),200);

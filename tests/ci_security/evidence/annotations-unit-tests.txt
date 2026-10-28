@@ -1,0 +1,30 @@
+test_changed_ending_with_same_clerk_prefix_still_blocks (test_security.GitleaksAllowlistTests.test_changed_ending_with_same_clerk_prefix_still_blocks) ... ok
+test_new_copy_of_exact_ci_dummy_is_allowed (test_security.GitleaksAllowlistTests.test_new_copy_of_exact_ci_dummy_is_allowed) ... ok
+test_other_value_with_same_clerk_prefix_still_blocks (test_security.GitleaksAllowlistTests.test_other_value_with_same_clerk_prefix_still_blocks) ... ok
+test_different_vulnerable_version_blocks_same_advisory (test_security.SecurityPolicyTests.test_different_vulnerable_version_blocks_same_advisory) ... ok
+test_existing_vulnerability_is_not_new (test_security.SecurityPolicyTests.test_existing_vulnerability_is_not_new) ... ok
+test_fixed_version_passes (test_security.SecurityPolicyTests.test_fixed_version_passes) ... ok
+test_gitleaks_uses_commits_and_keeps_no_secret_material (test_security.SecurityPolicyTests.test_gitleaks_uses_commits_and_keeps_no_secret_material) ... ok
+test_lock_discovery_includes_nested_and_nonstandard_requirements (test_security.SecurityPolicyTests.test_lock_discovery_includes_nested_and_nonstandard_requirements) ... ok
+test_missing_locks_fail_closed (test_security.SecurityPolicyTests.test_missing_locks_fail_closed) ... ok
+test_missing_report_fails (test_security.SecurityPolicyTests.test_missing_report_fails) ... ok
+test_new_low_vulnerability_blocks_pull_request (test_security.SecurityPolicyTests.test_new_low_vulnerability_blocks_pull_request) ... ok
+test_osv_errors_do_not_become_empty_clean_reports (test_security.SecurityPolicyTests.test_osv_errors_do_not_become_empty_clean_reports) ... ok
+test_semgrep_annotation_metadata_is_escaped (test_security.SecurityPolicyTests.test_semgrep_annotation_metadata_is_escaped) ... ok
+test_semgrep_artifact_has_no_source_or_messages (test_security.SecurityPolicyTests.test_semgrep_artifact_has_no_source_or_messages) ... ok
+test_semgrep_fatal_errors_still_block_and_annotate_findings (test_security.SecurityPolicyTests.test_semgrep_fatal_errors_still_block_and_annotate_findings) ... ok
+test_semgrep_missing_report_blocks_with_safe_notice (test_security.SecurityPolicyTests.test_semgrep_missing_report_blocks_with_safe_notice) ... ok
+test_semgrep_native_fatal_error_type_blocks (test_security.SecurityPolicyTests.test_semgrep_native_fatal_error_type_blocks) ... ok
+test_semgrep_nonfatal_errors_are_counted_not_failed (test_security.SecurityPolicyTests.test_semgrep_nonfatal_errors_are_counted_not_failed) ... ok
+test_semgrep_nonfatal_notices_do_not_hide_high_findings (test_security.SecurityPolicyTests.test_semgrep_nonfatal_notices_do_not_hide_high_findings) ... ok
+test_semgrep_only_high_findings_block (test_security.SecurityPolicyTests.test_semgrep_only_high_findings_block) ... ok
+test_semgrep_rule_download_failure_blocks_without_printing_message (test_security.SecurityPolicyTests.test_semgrep_rule_download_failure_blocks_without_printing_message) ... ok
+test_semgrep_unexplained_fatal_exit_cannot_pass (test_security.SecurityPolicyTests.test_semgrep_unexplained_fatal_exit_cannot_pass) ... ok
+test_weekly_blocks_high_but_not_low (test_security.SecurityPolicyTests.test_weekly_blocks_high_but_not_low) ... ok
+test_weekly_gitleaks_covers_history (test_security.SecurityPolicyTests.test_weekly_gitleaks_covers_history) ... ok
+test_weekly_unknown_severity_requires_review (test_security.SecurityPolicyTests.test_weekly_unknown_severity_requires_review) ... ok
+
+----------------------------------------------------------------------
+Ran 25 tests in 6.819s
+
+OK

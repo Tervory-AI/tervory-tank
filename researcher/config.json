@@ -1,0 +1,17 @@
+{
+  "RETRIEVER": "searx",
+  "FAST_LLM": "openai:tank",
+  "SMART_LLM": "openai:tank",
+  "STRATEGIC_LLM": "openai:tank",
+  "FAST_TOKEN_LIMIT": 2048,
+  "SMART_TOKEN_LIMIT": 2048,
+  "STRATEGIC_TOKEN_LIMIT": 2048,
+  "CONTEXT_FILTER": "none",
+  "MAX_ITERATIONS": 1,
+  "MAX_SEARCH_RESULTS_PER_QUERY": 5,
+  "CURATE_SOURCES": false,
+  "MCP_STRATEGY": "disabled",
+  "IMAGE_GENERATION_ENABLED": false,
+  "SCRAPER": "bs",
+  "VERBOSE": false
+}

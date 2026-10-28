@@ -1,0 +1,10 @@
+{
+  "date": "2026-10-28",
+  "url": "https://api.uspto.gov/api/v1/patent/applications/search",
+  "authentication": "none",
+  "status": 401,
+  "body": {
+    "message": "Unauthorized"
+  },
+  "action": "stopped; no retry or sign-in"
+}

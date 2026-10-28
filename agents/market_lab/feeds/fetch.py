@@ -9,6 +9,7 @@ from calendar import monthrange
 from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlencode, urlsplit
 
 from feeds.adapters import (
     ADAPTERS,
@@ -405,7 +406,41 @@ def _year_chunks(start: str, end: str) -> list[tuple[str, str]]:
     return chunks
 
 
+def _live_socrata_monthly(source: SourceSpec, client: PoliteClient, store: Store, *, backfill: bool) -> int:
+    """Stable SODA pagination, with no token, HTML scraping or linked downloads."""
+    endpoint = source.config["api_url"]
+    if urlsplit(endpoint).scheme != "https" or urlsplit(endpoint).netloc != urlsplit(source.url).netloc:
+        raise ValueError("Socrata API must belong to the configured publisher")
+    size = 1000
+    inserted = 0
+    for offset in range(0, 100000, size):
+        query = urlencode({"$order": ":id", "$limit": size, "$offset": offset})
+        rows = json.loads(client.get_text(endpoint + "?" + query))
+        if not isinstance(rows, list) or len(rows) > size:
+            raise ValueError("invalid Socrata page")
+        inserted += _json_adapter("socrata_monthly", source, store, rows, "monthly.json")
+        if len(rows) < size:
+            return inserted
+    raise RuntimeError("Socrata pagination limit reached")
+
+
+def _live_sec_submissions(source: SourceSpec, client: PoliteClient, store: Store, *, backfill: bool) -> int:
+    """Fetch only the engine's named filers, through SEC's documented JSON API."""
+    inserted = 0
+    for value in dict.fromkeys(source.config["ciks"]):
+        cik = str(value)
+        if not cik.isascii() or not cik.isdigit() or not 0 < int(cik) < 10**10:
+            raise ValueError("invalid SEC CIK")
+        payload = json.loads(client.get_text(f"https://data.sec.gov/submissions/CIK{int(cik):010d}.json"))
+        if int(payload["cik"]) != int(cik):
+            raise ValueError("unexpected SEC filer")
+        inserted += _json_adapter("sec_submissions", source, store, payload, "submissions.json")
+    return inserted
+
+
 _HANDLERS = {
+    "socrata_monthly": _live_socrata_monthly,
+    "sec_submissions": _live_sec_submissions,
     "listing": _live_listing,
     "typed_counts": _live_typed,
     "census_population": _live_population,

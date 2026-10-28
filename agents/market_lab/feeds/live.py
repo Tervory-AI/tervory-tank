@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import time
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -18,6 +19,11 @@ DEFAULT_DELAY = 2.0
 DEFAULT_TIMEOUT = 60.0
 DEFAULT_RETRIES = 3
 DEFAULT_BACKOFF = 1.0
+# SEC allows at most ten requests/second across its hosts. Keep a conservative
+# five/second ceiling shared by all clients in this worker, even with delay=0.
+_SEC_INTERVAL = 0.2
+_SEC_LOCK = threading.Lock()
+_SEC_LAST: float | None = None
 
 _ANCHOR = re.compile(
     r"<a\s[^>]*href=(['\"])(.*?)\1[^>]*>(.*?)</a>",
@@ -133,9 +139,7 @@ class PoliteClient:
         return merged
 
     def _wait(self, host: str) -> None:
-        if self.delay <= 0:
-            self._last[host] = self.clock()
-            return
+        global _SEC_LAST
         previous = self._last.get(host)
         now = self.clock()
         if previous is not None:
@@ -144,6 +148,14 @@ class PoliteClient:
                 self.sleep(gap)
                 now = self.clock()
         self._last[host] = now
+        if host == "sec.gov" or host.endswith(".sec.gov"):
+            with _SEC_LOCK:
+                now = time.monotonic()
+                if _SEC_LAST is not None:
+                    gap = _SEC_INTERVAL - (now - _SEC_LAST)
+                    if gap > 0:
+                        time.sleep(gap)
+                _SEC_LAST = time.monotonic()
 
     def get(self, url: str, headers: dict[str, str] | None = None) -> bytes:
         self.ensure_open(url)

@@ -1,0 +1,34 @@
+...............................F........................................ [ 38%]
+......................s...............s................................. [ 77%]
+................................s........                                [100%]
+=================================== FAILURES ===================================
+____________________ test_industry_words_stay_in_the_engine ____________________
+
+    def test_industry_words_stay_in_the_engine() -> None:
+        roots = [ROOT / "agents" / "market_lab" / "feeds", ROOT / "tests"]
+        offenders: list[str] = []
+        for root in roots:
+            for path in root.rglob("*"):
+                if not path.is_file():
+                    continue
+                if "engines/ffl" in path.as_posix():
+                    continue
+                if path.suffix not in {".py", ".sql", ".json", ".csv", ".html", ".tsv", ".md"}:
+                    continue
+                if path.name == "test_feeds_boundaries.py":
+                    continue
+                if path.name.startswith("test_") and "feeds" not in path.name:
+                    continue
+                text = path.read_text(encoding="utf-8")
+                if BANNED.search(text):
+                    offenders.append(str(path.relative_to(ROOT)))
+>       assert offenders == []
+E       AssertionError: assert ['tests/fixtu...results.json'] == []
+E         
+E         Left contains 3 more items, first extra item: 'tests/fixtures/base-atf/ORIGIN.md'
+E         Use -v to get more diff
+
+tests/test_feeds_boundaries.py:121: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_feeds_boundaries.py::test_industry_words_stay_in_the_engine
+1 failed, 181 passed, 3 skipped in 17.11s

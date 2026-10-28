@@ -164,7 +164,7 @@ def _load_named(module_name: str, path: Path):
 
 
 def test_research_with_no_passages_makes_no_model_call_and_costs_nothing(monkeypatch) -> None:
-    """An unpromoted research rung still returns no sources at zero model cost."""
+    """An unconfigured web research rung returns no sources at zero model cost."""
     skill_run = _load_named(
         "market_research_run_no_sources",
         ROOT / "tank" / "skills" / "market.research" / "1.0.0" / "run.py",
@@ -175,10 +175,10 @@ def test_research_with_no_passages_makes_no_model_call_and_costs_nothing(monkeyp
     from chassis.jobs import JobContext  # noqa: E402
     from core import research_adapter
 
-    async def unpromoted(*_args):
+    async def unconfigured(*_args):
         return None
 
-    monkeypatch.setattr(research_adapter, "research_if_promoted", unpromoted)
+    monkeypatch.setattr(research_adapter, "research_web", unconfigured)
 
     research = _load_named(
         "market_lab_research_app",

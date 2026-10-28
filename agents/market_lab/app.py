@@ -104,9 +104,9 @@ async def research(ctx: JobContext) -> dict:
                 facts = [item[2] for item in found[:5]]
                 return {"answer": "\n".join(fact["text"] for fact in facts),
                         "citations": [{"claim": fact["text"], "url": fact["href"], "source": fact["name"]} for fact in facts], "cost_usd": 0}
-        from core.research_adapter import research_if_promoted
+        from core.research_adapter import research_web
 
-        result = await research_if_promoted(ctx.tenant_id, question)
+        result = await research_web(ctx.tenant_id, question)
         if result is not None:
             return result
         return {"answer": "no sources yet", "citations": [], "cost_usd": 0}
