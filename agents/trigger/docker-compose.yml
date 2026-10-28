@@ -1,0 +1,56 @@
+# coolify: raw compose
+# Resource: agent-trigger. Grok provisions the corridor and role; founder sets values.
+services:
+  agent-trigger:
+    build:
+      context: ..
+      dockerfile: trigger/Dockerfile
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 1
+    environment:
+      AGENT_NAME: trigger
+      DATABASE_URL: postgresql://agent_trigger:${AGENT_DB_PASSWORD_TRIGGER}@postgres:5432/${POSTGRES_DB:-tervory}
+      TANK_KEY: ${TANK_KEY_TRIGGER:-}
+      TANK_REGION: ${TANK_REGION:-us-east}
+    networks: [gw, checkers]
+    depends_on:
+      trigger-languagetool:
+        condition: service_healthy
+    expose: ["8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+
+  trigger-languagetool:
+    image: meyay/languagetool:6.8-13@sha256:062924c66c649d706d60aed80af6bab207bb50a053733e7ac1ca0d8446d150f1
+    restart: unless-stopped
+    mem_limit: 2g
+    cpus: 1
+    # Fixed Java invocation bypasses optional model downloads in the image entrypoint.
+    entrypoint: ["java", "-Xms256m", "-Xmx1536m", "-cp", "/languagetool/*", "org.languagetool.server.HTTPServer", "--config", "/etc/trigger-lt.properties", "--port", "8081", "--public"]
+    user: "783:783"
+    read_only: true
+    tmpfs: ["/tmp:size=128m"]
+    volumes: ["./languagetool.properties:/etc/trigger-lt.properties:ro"]
+    networks: [checkers]
+    expose: ["8081"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8081/v2/languages"]
+      interval: 15s
+      timeout: 5s
+      retries: 15
+      start_period: 60s
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+
+networks:
+  gw:
+    external: true
+    name: tervory-gw-trigger
+  checkers:
+    internal: true
