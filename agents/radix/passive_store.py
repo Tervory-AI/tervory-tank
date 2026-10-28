@@ -1,7 +1,6 @@
 """Tenant-owned DNS challenges and completed passive assessments, never raw traffic."""
 from __future__ import annotations
 
-import json
 import re
 import secrets
 from datetime import datetime, timezone
@@ -93,7 +92,8 @@ class Store:
         async with self.pool.acquire() as conn:
             # Clear expired leases only; their findings never become a passing assessment.
             await conn.execute("""UPDATE agent_radix.passive_scans SET status='error'
-              WHERE status='running' AND created_at<now()-interval '10 minutes'""")
+              WHERE tenant_id=$1 AND status='running'
+              AND created_at<now()-interval '10 minutes'""", tenant)
             row = await conn.fetchrow("""UPDATE agent_radix.passive_scans SET status='running'
               WHERE tenant_id=$1 AND id=$2 AND status='pending' RETURNING id""", tenant, ident)
         return row is not None
