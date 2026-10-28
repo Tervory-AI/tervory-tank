@@ -47,7 +47,33 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Build the pinned Ubuntu 24.04 Meshroom image
-        run: docker build --progress=plain -f agents/rig/forge/gpu/Dockerfile.meshroom -t tervory-rig-meshroom:ci agents/rig/forge
+        run: |
+          set +e
+          docker build --progress=plain -f agents/rig/forge/gpu/Dockerfile.meshroom -t tervory-rig-meshroom:ci agents/rig/forge 2>&1 | tee "$RUNNER_TEMP/meshroom-build.log"
+          result=${PIPESTATUS[0]}
+          set -e
+          if [ "$result" -ne 0 ]; then
+            python3 - "$RUNNER_TEMP/meshroom-build.log" <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+          log = Path(sys.argv[1]).read_text(errors="replace")
+          # Safe build diagnostics for reviewers who cannot open raw job logs.
+          diagnostics = set()
+          for text in ("No space left on device", "Upstream source checksum mismatch",
+                       "THESE PACKAGES DO NOT MATCH THE HASHES", "externally-managed-environment",
+                       "unexpected end of file", "certificate verify failed"):
+              if text.lower() in log.lower():
+                  diagnostics.add(text)
+          for pattern in (r"Unable to locate package [\w.+-]+", r"HTTP Error \d{3}",
+                          r"No matching distribution found for [\w.+!=<>-]+",
+                          r"\b[A-Za-z]+(?:Error|Exception):", r"exit code: \d+"):
+              diagnostics.update(re.findall(pattern, log))
+          for text in sorted(diagnostics):
+              print("::error::Meshroom build: " + text)
+          PY
+            exit "$result"
+          fi
       - name: Verify the installed Meshroom bundle and Python reconstruction runtime
         run: |
           docker run --rm -i --network none --cap-drop ALL --security-opt no-new-privileges \
