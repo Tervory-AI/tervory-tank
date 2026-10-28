@@ -82,9 +82,14 @@ def mount(app, core):
         authorize(key, actor)
         async with httpx.AsyncClient(trust_env=False, follow_redirects=False) as http:
             async def gate(tenant, target, artifact):
-                response = await http.post(os.environ.get('TANK_URL', 'http://tank:8000').rstrip('/') + '/v1/radix/passive/gate',
-                    json={'tenant_id': tenant, 'target': target, 'artifact': artifact},
-                    headers={'X-Tank-Key': key, 'X-Tervory-Tenant': tenant, 'X-Tervory-Squad': 'tisan'}, timeout=30)
+                target_url = os.environ.get('TANK_URL', 'http://tank:8000').rstrip('/') + '/v1/radix/passive/'
+                payload = {'tenant_id': tenant, 'target': target, 'artifact': artifact}
+                headers = {'X-Tank-Key': key, 'X-Tervory-Tenant': tenant, 'X-Tervory-Squad': 'tisan',
+                           'X-Tervory-Region': os.environ.get('TANK_REGION', 'us-east')}
+                scanned = await http.post(target_url + 'scans', json=payload, headers=headers, timeout=360)
+                if scanned.status_code != 200:
+                    raise core.Refused('Radix scan is unavailable')
+                response = await http.post(target_url + 'gate', json=payload, headers=headers, timeout=15)
                 if response.status_code != 200:
                     raise core.Refused('Radix gate is unavailable')
                 return response.json()
