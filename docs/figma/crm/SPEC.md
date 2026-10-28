@@ -1,10 +1,10 @@
 # Trigger CRM design
 
-Status: design in progress; founder acceptance not yet performed.
+Status: design composed and checked; founder acceptance and accent approval are pending.
 Branch: `codex/crm-design`. Claude opens the PR. No application code or live data changed.
 
 Figma: https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS?node-id=93-2
-Page: **2 · CRM** (`93:2`), founder only. Existing Case studies page: `42:2`; revision 3 SPEC: `63:10450`.
+Page: **2 · CRM** (`93:2`), founder only. CRM SPEC frame: **`101:8244`**. Existing Case studies page: `42:2`; revision 3 SPEC: `63:10450`.
 
 ## Contract and design rules
 
@@ -18,7 +18,7 @@ No public client routes or links. `public_token` and `public_url` are not displa
 
 ## Screen register
 
-Target: 64 screens (8 sections × list/detail × desktop/mobile × Zero/Filled). IDs below are existing created nodes; remaining variants are still being composed.
+64 screens are present (8 sections × list/detail × desktop/mobile × Zero/Filled).
 
 | Section | View | Size | State | Node ID |
 |---|---|---|---|---|
@@ -38,6 +38,54 @@ Target: 64 screens (8 sections × list/detail × desktop/mobile × Zero/Filled).
 | Accounts | Detail | Desktop | Filled | 94:2510 |
 | Accounts | Detail | Mobile | Zero | 94:2760 |
 | Accounts | Detail | Mobile | Filled | 94:2888 |
+| Contacts | List | Desktop | Zero | 97:2074 |
+| Contacts | List | Desktop | Filled | 97:2245 |
+| Contacts | List | Mobile | Zero | 97:2473 |
+| Contacts | List | Mobile | Filled | 97:2484 |
+| Contacts | Detail | Desktop | Zero | 97:2543 |
+| Contacts | Detail | Desktop | Filled | 97:2800 |
+| Contacts | Detail | Mobile | Zero | 97:3060 |
+| Contacts | Detail | Mobile | Filled | 97:3200 |
+| Opportunities | List | Desktop | Zero | 97:3343 |
+| Opportunities | List | Desktop | Filled | 97:3522 |
+| Opportunities | List | Mobile | Zero | 97:3776 |
+| Opportunities | List | Mobile | Filled | 97:3787 |
+| Opportunities | Detail | Desktop | Zero | 97:3846 |
+| Opportunities | Detail | Desktop | Filled | 97:4107 |
+| Opportunities | Detail | Mobile | Zero | 97:4371 |
+| Opportunities | Detail | Mobile | Filled | 97:4515 |
+| Cases | List | Desktop | Zero | 97:4662 |
+| Cases | List | Desktop | Filled | 97:4837 |
+| Cases | List | Mobile | Zero | 97:5078 |
+| Cases | List | Mobile | Filled | 97:5089 |
+| Cases | Detail | Desktop | Zero | 97:5148 |
+| Cases | Detail | Desktop | Filled | 97:5416 |
+| Cases | Detail | Mobile | Zero | 97:5687 |
+| Cases | Detail | Mobile | Filled | 97:5839 |
+| Tasks | List | Desktop | Zero | 97:5994 |
+| Tasks | List | Desktop | Filled | 97:6165 |
+| Tasks | List | Mobile | Zero | 97:6393 |
+| Tasks | List | Mobile | Filled | 97:6404 |
+| Tasks | Detail | Desktop | Zero | 97:6463 |
+| Tasks | Detail | Desktop | Filled | 97:6671 |
+| Tasks | Detail | Mobile | Zero | 97:6882 |
+| Tasks | Detail | Mobile | Filled | 97:6966 |
+| Invoices | List | Desktop | Zero | 97:7053 |
+| Invoices | List | Desktop | Filled | 97:7276 |
+| Invoices | List | Mobile | Zero | 97:7673 |
+| Invoices | List | Mobile | Filled | 97:7684 |
+| Invoices | Detail | Desktop | Zero | 97:7743 |
+| Invoices | Detail | Desktop | Filled | 97:8098 |
+| Invoices | Detail | Mobile | Zero | 97:8464 |
+| Invoices | Detail | Mobile | Filled | 97:8716 |
+| Estimates | List | Desktop | Zero | 97:8979 |
+| Estimates | List | Desktop | Filled | 97:9218 |
+| Estimates | List | Mobile | Zero | 97:9667 |
+| Estimates | List | Mobile | Filled | 97:9678 |
+| Estimates | Detail | Desktop | Zero | 97:9737 |
+| Estimates | Detail | Desktop | Filled | 97:10064 |
+| Estimates | Detail | Mobile | Zero | 97:10398 |
+| Estimates | Detail | Mobile | Filled | 97:10618 |
 
 ## Field and API register
 
@@ -457,6 +505,60 @@ All other DELETE operations, including comments and attachments, inherit the sam
 
 - Fetch and checkout from `origin/main` succeeded; starting commit `35cb373`.
 - All 44 case-study screen IDs resolved after revision 3 edits.
-- Figma screenshot inspection: accent comparison `89:10434`, Tiger Filled `49:3211`, Leads list `94:417`, Leads mobile detail `94:1596`. Initial CRM inspection found submenu contrast and mobile header sizing issues; shared components corrected, final screenshots pending.
+- Figma screenshot inspection: accent comparison `89:10434`, Tiger Filled `49:3211`, Leads list `94:417`, Leads mobile detail `94:1596`. Initial CRM inspection found submenu contrast and mobile header sizing issues; shared components were corrected. Final screenshots checked: Invoices desktop detail `97:8098`, Estimates mobile list `97:9678`, Leads desktop list `94:417`, mobile payment confirmation `98:9050`.
 - Founder browser test and approval screenshots are not supplied. They remain required for acceptance; no claim of founder approval is made.
+
+## Confirmation screen register
+
+These are Figma prototypes: Confirm and Cancel dismiss the overlay. No request is sent by Figma. Implementation must gate the recorded API operation behind Confirm, and must not treat opening an overlay as authorization. Missing action-specific warnings and result wording remain approval items; none is invented here.
+
+| Section | Action | Desktop | Mobile |
+|---|---|---|---|
+| Leads | Delete | 98:8589 | 98:8605 |
+| Accounts | Delete | 98:8621 | 98:8637 |
+| Contacts | Delete | 98:8653 | 98:8669 |
+| Opportunities | Delete | 98:8685 | 98:8701 |
+| Cases | Delete | 98:8717 | 98:8733 |
+| Tasks | Delete | 98:8749 | 98:8765 |
+| Invoices | Send | 98:8781 | 98:8800 |
+| Invoices | Mark paid | 98:8819 | 98:8856 |
+| Estimates | Delete | 98:8893 | 98:8909 |
+| Estimates | Send | 98:8925 | 98:8944 |
+| Estimates | Convert | 98:8963 | 98:8988 |
+| Invoices | Record payment | 98:9013 | 98:9050 |
+| Invoices | Delete payment | 98:9087 | 98:9109 |
+| Invoices | Delete line item | 98:9131 | 98:9156 |
+
+Confirmation data paths:
+
+- Record identity: the detail response's `id` field in the field register above; for line-item/payment deletion use `Invoice.line_items[].id` / `Invoice.payments[].id` instead of the invoice id.
+- Send recipient: `GET /api/invoices/{id}/ → invoice.client_email` or `GET /api/invoices/estimates/{id}/ → estimate.client_email`.
+- Mark paid: `POST /api/invoices/{id}/mark-paid/`, request `PatchedPaymentCreateRequest`: `amount`, `payment_date`, `payment_method`, `reference_number`, `notes`.
+- Record payment: `POST /api/invoices/{invoice_id}/payments/`, request `PaymentCreateRequest`: `amount`, `payment_date`, `payment_method`, `reference_number`, `notes`. The first three are required. Both payment paths use BottleCRM's existing status and outstanding-balance validation; no client-side substitute or price conversion is specified.
+- Payment confirmation context: `GET /api/invoices/{id}/ → invoice.currency`, `invoice.amount_due`.
+- Delete payment context: `GET /api/invoices/{id}/ → invoice.payments[].amount`, `.payment_date`, schema `Payment`.
+- Delete line item context: `GET /api/invoices/{id}/ → invoice.line_items[].name`, `.quantity`, `.unit_price`, schema `InvoiceLineItem`.
+- Convert context: `GET /api/invoices/estimates/{id}/ → estimate.estimate_number`, `.total_amount`, `.currency`; after conversion, `converted_to_invoice` opens the corresponding invoice detail.
+
+## Displayed list columns and mobile cards
+
+Every list column is a property of that section's list schema above. Desktop supports horizontal scrolling. Mobile card fields are the first five desktop fields. All detail fields in the register are present, except the explicitly hidden fields.
+
+- Leads: `first_name`, `last_name`, `company_name`, `email`, `status`, `source`, `next_follow_up`, `assigned_to`.
+- Accounts: `name`, `email`, `phone`, `industry`, `assigned_to`.
+- Contacts: `first_name`, `last_name`, `email`, `organization`, `phone`, `do_not_call`.
+- Opportunities: `name`, `account`, `stage`, `amount`, `currency`, `probability`, `closed_on`, `assigned_to`.
+- Cases: `name`, `status`, `priority`, `account`, `assigned_to`, `first_response_sla_deadline`, `resolution_sla_deadline`.
+- Tasks: `title`, `status`, `priority`, `due_date`, `assigned_to`, `account`.
+- Invoices: `invoice_number`, `invoice_title`, `status`, `account`, `account_name`, `project`, `contact`, `contact_name`, `client_name`, `client_email`, `issue_date`, `due_date`, `total_amount`, `amount_due`, `amount_paid`, `currency`, `is_overdue`, `line_items_count`, `created_at`.
+- Estimates: `estimate_number`, `title`, `status`, `account`, `account_name`, `contact`, `contact_name`, `opportunity`, `converted_to_invoice`, `client_name`, `issue_date`, `expiry_date`, `total_amount`, `currency`, `is_expired`, `introduction`, `deposit_percent`, `start_project`, `project_billing_type`, `project`, `deposit_invoice`, `deposit`, `created_at`.
+
+## Components, navigation and validation
+
+- Reused: founder Workspace menus `46:66` / `70:10581`, Side menu item set `43:427`, Table header `43:389`, Table row `43:405`, Export control `43:31`, existing logo assets and local variable collections.
+- CRM components: Action `93:4`, Field `93:6`, Mobile bar `93:9`; component gallery `93:3`. All are editable Figma components with linked instances.
+- Mobile CRM submenus: Zero `98:9181`, Filled `98:9227`. Merged menus: Zero `99:8146`, Filled `93:14`.
+- Four prototype entry flows start at Leads list: desktop/mobile × Zero/Filled. Submenu navigation preserves size/state. Filled rows/cards open detail. Action controls open the matching confirmation overlay. Converted-estimate links open Invoices.
+- Structural Figma audit: **64 screens, 1,602 field bindings, 28 confirmation overlays, 0 displayed public-link fields, 0 reported errors**. Case-study revision 3 preserves all 44 IDs.
+- Figma screenshots are authoring evidence only. Founder test screenshots have not been supplied; founder acceptance remains pending.
 
