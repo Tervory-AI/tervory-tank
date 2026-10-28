@@ -1,6 +1,8 @@
 """Founder-only, tenant-scoped evidence and exports. No prompts or secrets."""
 from __future__ import annotations
 
+from tenant_db import tenant_scope
+
 import csv
 import time
 from collections import OrderedDict
@@ -39,7 +41,8 @@ async def baseline_lifespan(app):
                 with suppress(Exception):
                     await runtime().pool().execute("UPDATE tank.baseline_changes SET error='Repricing unavailable; retrying.' WHERE id=(SELECT id FROM tank.baseline_changes WHERE status IN ('pending','running') ORDER BY created_at,id LIMIT 1)")
                 await asyncio.sleep(5)
-    worker = asyncio.create_task(work())
+    with tenant_scope(None, administrative=True):
+        worker = asyncio.create_task(work())
     try:
         yield
     finally:
