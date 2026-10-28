@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from hermes.deidentify import deidentify
+from hermes.deidentify import deidentify, identity_inventory
 from hermes.record_schema import PLATFORM_TENANT
 
 
@@ -14,8 +14,12 @@ class Publisher:
         self, agent: str, tenant: str, actor: str, enabled: bool, identifiers: dict
     ) -> dict:
         s = self.records.schema(agent)
+        invalid = False
         if enabled:
-            deidentify("inventory validation", [], tenant, identifiers)
+            try:
+                identity_inventory(identifiers)
+            except ValueError:
+                enabled, invalid = False, True
         async with self.records.pool.acquire() as conn:
             await conn.execute(
                 f"""INSERT INTO {s}.memory_publish_policy(tenant_id,enabled,identifiers,updated_by)
@@ -27,6 +31,9 @@ class Publisher:
                 json.dumps(identifiers),
                 actor,
             )
+        if invalid:
+            # Commit OFF even if this replaces an earlier enabled policy.
+            raise ValueError("Reviewed identity inventory is required")
         return dict(agent=agent, tenant_id=tenant, enabled=enabled)
 
     async def publish(
@@ -42,6 +49,18 @@ class Publisher:
                 f"SELECT * FROM {s}.memory_publish_policy WHERE tenant_id=$1 FOR UPDATE",
                 tenant_id,
             )
+            if policy and policy["enabled"]:
+                try:
+                    identity_inventory(json.loads(policy["identifiers"]))
+                except ValueError:
+                    # Recheck persisted policies too, including legacy empty
+                    # inventories. Refusal, revoke and audit commit together.
+                    await conn.execute(
+                        f"""UPDATE {s}.memory_publish_policy
+                        SET enabled=false,updated_by=$2,updated_at=now() WHERE tenant_id=$1""",
+                        tenant_id, actor,
+                    )
+                    result, policy = "refused", None
             if policy and policy["enabled"]:
                 row = await conn.fetchrow(
                     f"""SELECT * FROM {s}.memory_records
