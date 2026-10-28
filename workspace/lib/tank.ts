@@ -1071,7 +1071,7 @@ export async function marketLabRequest<T>(
   payload: { question?: string; document_id?: string; offset?: number; row?: number; row_kind?: "point" | "event" } = {},
 ): Promise<T> {
   const response = await fetch(`${TANK_URL}/v1/market-lab/${operation}`, {
-    method: "POST", cache: "no-store", redirect: "error", signal: AbortSignal.timeout(35000),
+    method: "POST", cache: "no-store", redirect: "error", signal: AbortSignal.timeout(operation === "ask" ? 190000 : 35000),
     headers: { "content-type": "application/json", "x-tank-key": TANK_API_KEY },
     body: JSON.stringify({ ...payload, tenant_id: tenantId }),
   });

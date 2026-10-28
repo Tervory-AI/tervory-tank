@@ -95,9 +95,9 @@ async def research(ctx: JobContext) -> dict:
     if not _has_source_passages(passages):
         if not question:
             return {"answer": "no sources yet", "citations": [], "cost_usd": 0}
-        from core.research_adapter import research_if_promoted
+        from core.research_adapter import research_web
 
-        result = await research_if_promoted(ctx.tenant_id, question)
+        result = await research_web(ctx.tenant_id, question)
         if result is not None:
             return result
         return {"answer": "no sources yet", "citations": [], "cost_usd": 0}
