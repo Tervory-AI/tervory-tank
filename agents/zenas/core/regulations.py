@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime, timezone
+from typing import Any
 
 from agents.tiger.alert_email import deliver_pending
 from agents.zenas.core.regulation_sources import (
@@ -18,7 +19,7 @@ from agents.zenas.core.service import _LEGAL_NOTICE
 from agents.zenas.pool.licence import FetchNotConfigured
 
 
-def civil(text):
+def civil(text: str) -> bool:
     return (
         ruled(text) not in {"criminal", "not_yet"}
         and re.search(
@@ -30,17 +31,26 @@ def civil(text):
     )
 
 
-async def add_watch(store, *, tenant_id, region, source, topic, options, now=None):
+async def add_watch(
+    store: Any,
+    *,
+    tenant_id: str,
+    region: str,
+    source: str,
+    topic: str,
+    options: dict[str, str],
+    now: datetime | None = None,
+) -> dict[str, Any]:
     validate_watch(source, region, topic, options)
     decision = classify(topic, "za" if region == "za" else "us")
     if not civil(topic):
-        raise ValueError(REFUSED if not civil(topic) else decision["reason"])
+        raise ValueError(decision["reason"] if ruled(topic) == "not_yet" else REFUSED)
     return await store.add_watch(
         tenant_id, region, source, topic, options, now or datetime.now(timezone.utc)
     )
 
 
-def letter_for(document, summary):
+def letter_for(document: dict[str, Any], summary: str) -> dict[str, str]:
     """Founder-approved 28 Oct copy. No salutation, extra footer or fallback words."""
     return {
         "subject": "Law change: " + document["title"],
@@ -56,7 +66,7 @@ def letter_for(document, summary):
     }
 
 
-async def summarize(tank, tenant_id, change):
+async def summarize(tank: Any, tenant_id: str, change: dict[str, Any]) -> str:
     # This existing policy row is the cheapest Zenas prose rung. Never name a model.
     evidence = {
         key: change["document"][key]
@@ -80,15 +90,25 @@ async def summarize(tank, tenant_id, change):
             },
         ],
     )
-    text = str(data.get("content") or "").replace(_LEGAL_NOTICE, "").strip()
+    text = data.get("content")
+    if not isinstance(text, str):
+        raise ValueError("source_unavailable")
+    text = text.replace(_LEGAL_NOTICE, "").strip()
     if not text or len(text) > 4000 or not civil(text):
         raise ValueError("source_unavailable")
     return " ".join(text.split())
 
 
 async def run_daily(
-    store, sources, tank, *, region, now=None, transport=None, recipient=None
-):
+    store: Any,
+    sources: Sources,
+    tank: Any,
+    *,
+    region: str,
+    now: datetime | None = None,
+    transport: Any = None,
+    recipient: str | None = None,
+) -> dict[str, int]:
     """One regional job. A bad source never commits a partial snapshot or stops others."""
     now = now or datetime.now(timezone.utc)
     counts = dict(changes=0, summarized=0, sent=0, unavailable=0, not_configured=0)
@@ -156,7 +176,7 @@ async def run_daily(
     return counts
 
 
-async def run_scheduled(conn, *, region):
+async def run_scheduled(conn: Any, *, region: str) -> dict[str, int]:
     """Called by the existing 02:00 regional pool task, after completed source loads."""
     import os
     import httpx
