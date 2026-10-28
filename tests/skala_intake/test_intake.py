@@ -216,7 +216,7 @@ async def test_persisted_ready_bulk_approval_room_execution_tenant_scope_and_rol
         assert not any(i["rule"] == "banned_term" for i in foreign["issues"])
         # A future version is created only in this test's temporary directory.
         original = PACKAGES[("trigger.voice_check", "1.0.0")]
-        target = tmp_path / "1.1.0"
+        target = tmp_path / "trigger.voice_check" / "1.1.0"
         shutil.copytree(original.path, target)
         (target / "skill.yaml").write_text((target / "skill.yaml").read_text().replace("version: 1.0.0", "version: 1.1.0"))
         newer = skala._parse_package(target / "skill.yaml", target)
@@ -228,3 +228,38 @@ async def test_persisted_ready_bulk_approval_room_execution_tenant_scope_and_rol
         await tank.rollback_skill(original.id, original.version, tank.Approval(by="offline-founder", confirmed=True))
         assert (await client.approved_skill(str(TENANT), original.id, {"text": "A draft."}))["_skill"].endswith("@1.0.0")
         skala._run_cache.pop((newer.id, newer.version), None)
+
+
+@pytest.mark.asyncio
+async def test_tiger_approved_playbook_uses_no_room_rules(monkeypatch):
+    import watch
+    import domain_playbooks
+    pkg = PACKAGES[("tiger.playbook", "1.0.0")]
+    reader = skala.load_packages()[("tiger.price_extract", "1.1.0")]
+    store = watch.MemoryStore()
+    operations = []
+    async with httpx.AsyncClient() as http:
+        async def skills(payload):
+            operations.append(payload["operation"])
+            return await skala.run_skill(pkg, payload, context(pkg, http))
+        store.skill_runner = skills
+        def forbidden(*args, **kwargs): raise AssertionError("Approved playbook called room rules")
+        for name in ("public_page", "public_marker", "read_page", "learn_layout"):
+            monkeypatch.setattr(watch, name, forbidden)
+        monkeypatch.setattr(domain_playbooks, "_advance", forbidden)
+        async def extract(html, url):
+            return await skala.run_skill(reader, {"html": html, "url": url}, context(reader, http))
+        files = [ROOT / "tests/tiger_alert_page/fixtures/live" / ("books-toscrape-com--" + name + ".html")
+                 for name in ("a-light-in-the-attic", "tipping-the-velvet", "soumission")]
+        files.append(ROOT / "tests/tiger_playbooks/fixtures/fourth.html")
+        for index, file in enumerate(files):
+            url = "https://books.toscrape.com/catalogue/" + file.stem
+            async def render(*args):
+                return {"ok": True, "url": url, "html": file.read_text()}
+            result = await watch.run_check(store, str(TENANT),
+                {"tenant_id": str(TENANT), "url": url, "threshold": "0", "alert_price": False, "alert_stock": False},
+                "tiger", render, extract, no_model, no_model, watch.DomainLimiter(0), skills=skills)
+            assert result["status"] == "observed"
+            if index == 3: assert result["price"] == "27.40"
+        assert (await store.get_playbook("books.toscrape.com"))["marker"]["primary"] == "dom"
+        assert set(operations) == {"advance", "public_page", "public_marker", "read_page", "learn_layout"}
