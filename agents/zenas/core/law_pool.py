@@ -10,6 +10,8 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+from agents.zenas.pool.config import jurisdiction_for
+from agents.zenas.pool.region import known_region
 from agents.zenas.pool.store import PostgresStore
 
 
@@ -56,7 +58,7 @@ class AsyncpgLawPool:
 
     async def source_metadata(self, chunks: list[Any], *, jurisdiction: str) -> dict[tuple[str, str], dict[str, str]]:
         """Resolve links from the exact stored document versions, never the request or model."""
-        if self.home_region != "us-east" or jurisdiction != "us":
+        if not known_region(self.home_region) or jurisdiction != jurisdiction_for(self.home_region):
             return {}
         versions = list({chunk.version_id for chunk in chunks})
         if not versions:

@@ -6,6 +6,8 @@ question. Live answer/link verification remains a separate acceptance check.
 
 from datetime import date
 from pathlib import Path
+from contextlib import asynccontextmanager
+from types import SimpleNamespace
 from uuid import uuid4
 
 import asyncpg
@@ -47,6 +49,37 @@ def test_link_comes_from_the_quote_checked_document_version():
 @pytest.mark.parametrize("value", [None, "", "http://delcode.delaware.gov/title8/c001/sc01/index.html", "https://localhost/", "https://127.0.0.1/", "https://example.com/", "https://law.test/", "https://delcode.delaware.gov/?api_key="])
 def test_nonpublic_or_credential_source_links_are_not_returned(value):
     assert public_source_url(value) == ""
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("region,jurisdiction", [("us-east", "us"), ("za", "za")])
+async def test_source_metadata_uses_each_box_region_and_exact_version(region, jurisdiction):
+    # Only transport is mocked: the real bridge constructs the scoped query.
+    _, document = official_document()
+    calls = []
+
+    class Pool:
+        @asynccontextmanager
+        async def acquire(self):
+            yield self
+
+        async def fetch(self, query, *args):
+            calls.append((query, args))
+            return [{"document_id": document.id, "version_id": document.version_id,
+                     "url": document.url, "title": document.title, "kind": document.kind,
+                     "level": document.level, "status": document.status}]
+
+    law = AsyncpgLawPool(Pool(), home_region=region)
+    chunks = [SimpleNamespace(version_id=document.version_id)]
+    result = await law.source_metadata(chunks, jurisdiction=jurisdiction)
+    assert result[(document.id, document.version_id)]["url"] == document.url
+    query, args = calls.pop()
+    assert "d.jurisdiction=$1 AND s.region=$2 AND d.version_id=ANY($3::text[])" in query
+    assert args == (jurisdiction, region, [document.version_id])
+    assert await law.source_metadata(chunks, jurisdiction="za" if jurisdiction == "us" else "us") == {}
+    assert await law.source_metadata([], jurisdiction=jurisdiction) == {}
+    assert await AsyncpgLawPool(Pool(), home_region="").source_metadata(chunks, jurisdiction=jurisdiction) == {}
+    assert calls == []
 
 
 @pytest.mark.asyncio
