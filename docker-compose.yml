@@ -208,6 +208,8 @@ services:
       LITELLM_URL: http://litellm:4000
       LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY}
       TANK_API_KEY: ${TANK_API_KEY}
+      # Founder-only repository reads; absent means the tools are not offered.
+      TANK_GITHUB_READ_TOKEN: ${TANK_GITHUB_READ_TOKEN:-}
       HF_TOKEN: ${HF_TOKEN:-}
       HF_ORG: ${HF_ORG:-}
       TRAINING_JOB_KEY: ${TRAINING_JOB_KEY:-}

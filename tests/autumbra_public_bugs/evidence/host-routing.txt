@@ -1,0 +1,56 @@
+TAP version 13
+# (node:71626) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/tervory-tank/workspace/lib/product-hosts.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /workspace/tervory-tank/workspace/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: normalizeHost strips port and case
+ok 1 - normalizeHost strips port and case
+  ---
+  duration_ms: 1.007917
+  type: 'test'
+  ...
+# Subtest: every mapped product host rewrites root to its path
+ok 2 - every mapped product host rewrites root to its path
+  ---
+  duration_ms: 0.321211
+  type: 'test'
+  ...
+# Subtest: protect and autumbra both land on public Autumbra product page
+ok 3 - protect and autumbra both land on public Autumbra product page
+  ---
+  duration_ms: 0.128229
+  type: 'test'
+  ...
+# Subtest: app and unknown hosts do not rewrite
+ok 4 - app and unknown hosts do not rewrite
+  ---
+  duration_ms: 0.099688
+  type: 'test'
+  ...
+# Subtest: public and deep paths on product hosts are not rewritten
+ok 5 - public and deep paths on product hosts are not rewritten
+  ---
+  duration_ms: 0.118385
+  type: 'test'
+  ...
+# Subtest: zenas product host root lands on Moot; Zenas panel stays a deep link
+ok 6 - zenas product host root lands on Moot; Zenas panel stays a deep link
+  ---
+  duration_ms: 0.155928
+  type: 'test'
+  ...
+# Subtest: app /moot redirects canonically to zenas host
+ok 7 - app /moot redirects canonically to zenas host
+  ---
+  duration_ms: 0.146705
+  type: 'test'
+  ...
+1..7
+# tests 7
+# suites 0
+# pass 7
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 139.115946

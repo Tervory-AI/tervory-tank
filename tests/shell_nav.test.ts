@@ -80,6 +80,15 @@ test("workspace routes use the shared shell; auth and squad product roots use th
   assert.equal(usesOwnShell("/skala/gold"), false);
 });
 
+test("only public Autumbra paths use their own shell, including nested owner pages", () => {
+  for (const path of ["/autumbra", "/autumbra/", "/autumbra/owner/token", "/autumbra/report/token"]) {
+    assert.equal(usesOwnShell(path), true, path);
+  }
+  for (const path of ["/admin/autumbra", "/admin/autumbra/settings", "/autumbra-private", "/autumbran"]) {
+    assert.equal(usesOwnShell(path), false, path);
+  }
+});
+
 test("the shell wires the pop-out, Escape, and focus return", () => {
   const squad = readFileSync(new URL("workspace/app/squad-links.tsx", root), "utf8");
   const shell = readFileSync(new URL("workspace/app/shell.tsx", root), "utf8");
