@@ -179,3 +179,58 @@ async def test_saflii_remains_off_even_when_load_is_requested(clock_and_token):
     assert not source.enabled
     assert row(report, "saflii")["last_status"] == "skipped"
     assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_bad_token_through_load_route_does_not_log_response_or_create_checkpoint(clock_and_token):
+    async def get(url, headers):
+        raise HTTPError(url, 403, "LAWS_AFRICA_API_TOKEN must never be echoed as a value", {}, None)
+
+    store = MemoryStore()
+    app = create_app(store, region="za", http_get=get, live=True)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://offline") as client:
+        await client.post("/pool/sources/laws-africa/load")
+        await finish_loads()
+        result = row((await client.get("/pool/status")).json())
+    assert result["last_status"] == "not_configured"
+    assert result["detail"] == "HTTP 403 from api.laws.africa"
+    assert store.docs == {} and store.checkpoints == {}
+
+
+@pytest.mark.asyncio
+async def test_changed_expression_url_at_same_date_is_refetched(clock_and_token):
+    replay, store = Replay(), MemoryStore()
+    await load_wave(store, region="za", only=[SOURCE], live=True, http_get=replay.get, on=ON)
+    expression = replay.pages[0]["results"][0]["points_in_time"][0]["expressions"][0]
+    expression["url"] += ".json"
+    replay.calls.clear()
+    report = await run_nightly(store, region="za", only=["laws-africa"], live=True, http_get=replay.get, on=ON)
+    assert row(report)["last_status"] == "ok"
+    assert sum(".html?" in url for url in replay.calls) == 1
+    assert await store.version_count("companies-act") == 2
+
+
+@pytest.mark.asyncio
+async def test_partial_language_failure_is_not_left_running_and_resumes(clock_and_token):
+    replay, store = Replay(), MemoryStore()
+    point = replay.pages[0]["results"][0]["points_in_time"][0]
+    point["expressions"].append({"language": "zul", "url": point["expressions"][0]["url"].replace("/eng@", "/zul@")})
+    replay.failure = api.representation(point["expressions"][1]["url"], ".html")
+    replay.failures_left = 6
+    report = await load_wave(store, region="za", only=[SOURCE], live=True, http_get=replay.get, on=ON)
+    assert row(report, "companies-act")["last_status"] == "rate_limited"
+    replay.calls.clear()
+    report = await load_wave(store, region="za", only=[SOURCE], live=True, http_get=replay.get, on=ON)
+    assert row(report)["last_status"] == "ok"
+    assert not any("/2008/71/eng@" in url for url in replay.calls)
+    assert await store.instrument_count("companies-act") == 2
+
+
+@pytest.mark.asyncio
+async def test_paging_cycle_and_foreign_next_url_do_not_reach_another_host(clock_and_token):
+    for next_url in (api.WORKS, "https://other.org/page/2"):
+        replay, store = Replay(), MemoryStore()
+        replay.pages[0]["next"] = next_url
+        report = await load_wave(store, region="za", only=[SOURCE], live=True, http_get=replay.get, on=ON)
+        assert row(report)["last_status"] == "error"
+        assert all(url.startswith(api.API) for url in replay.calls)

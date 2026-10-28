@@ -91,7 +91,7 @@ class LawsAfricaClient:
         if not token:
             raise FetchNotConfigured("LAWS_AFRICA_API_TOKEN is not set")
         self._headers = bearer_headers(token, "application/json")
-        self._http_get = http_get
+        self._http_get = None if http_get is urllib_get else http_get
 
     async def get(self, url: str, *, accept: str = "application/json") -> bytes:
         url = api_url(url)

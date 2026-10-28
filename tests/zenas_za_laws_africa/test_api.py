@@ -85,3 +85,37 @@ def test_current_html_keeps_section_link_version_date_and_publisher():
     assert document.body == "Laws.Africa" and "Laws.Africa" in document.licence
     assert document.url == api.representation(expression["url"], ".html") + "#sec_66"
     assert "direction of its board" in document.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("explicit_transport", [False, True])
+async def test_real_http_transport_disables_redirects_before_sending_bearer_elsewhere(monkeypatch, clock_and_token, explicit_transport):
+    from agents.zenas.pool import http
+
+    requests = []
+
+    class Opener:
+        def open(self, request, timeout):
+            requests.append(request)
+            raise HTTPError(request.full_url, 302, "", {"Location": "https://other.org/"}, None)
+
+    def opener(handler):
+        assert isinstance(handler, http._NoRedirect)
+        assert handler.redirect_request(None, None, 302, "", {}, "https://other.org/") is None
+        return Opener()
+
+    monkeypatch.setattr(http.urllib.request, "build_opener", opener)
+    with pytest.raises(FetchNotConfigured, match="^HTTP 302 from api.laws.africa$"):
+        await api.LawsAfricaClient(region="za", http_get=http.urllib_get if explicit_transport else None).json(api.WORKS)
+    assert len(requests) == 1 and requests[0].full_url == api.WORKS
+
+
+def test_only_za_compose_forwards_the_token_setting():
+    import yaml
+
+    root = Path(__file__).resolve().parents[2]
+    za = yaml.safe_load((root / "agents/zenas/docker-compose.za.yml").read_text())
+    us = yaml.safe_load((root / "agents/zenas/docker-compose.yml").read_text())
+    assert za["services"]["agent-zenas"]["environment"]["LAWS_AFRICA_API_TOKEN"] == "${LAWS_AFRICA_API_TOKEN:-}"
+    assert za["services"]["agent-zenas"]["environment"]["TANK_REGION"] == "za"
+    assert all("LAWS_AFRICA_API_TOKEN" not in service.get("environment", {}) for service in us["services"].values())

@@ -84,6 +84,13 @@ async def sync_source(store, source, *, region, http_get, on, when, embedder, in
     async with _run_lock(store):
         inserted = 0
         skipped = Counter()
+        active_source = source
+
+        async def finish(status, detail):
+            for source_id in {source.source_id, active_source.source_id}:
+                await store.record_run(source_id, status=status, detail=detail,
+                                       documents=await store.instrument_count(source_id), when=when)
+
         try:
             client = LawsAfricaClient(region=region, http_get=http_get)
 
@@ -91,10 +98,12 @@ async def sync_source(store, source, *, region, http_get, on, when, embedder, in
                 await store.set_checkpoint(key, json.dumps(value, sort_keys=True), await store.stored_bytes())
 
             async def load_work(raw):
-                nonlocal inserted
+                nonlocal inserted, active_source
                 frbr = national_work(raw.get("frbr_uri"))
                 if not frbr:
                     return
+                active_source = next(item for item in CATALOGUE if item.source_id == MINIMUM.get(frbr, SOURCE_ID))
+                await store.record_source(active_source)
                 work = _metadata(raw)
                 if "points_in_time" not in work:
                     work = _metadata(await client.json(API + frbr.lstrip("/") + ".json"))
@@ -110,7 +119,7 @@ async def sync_source(store, source, *, region, http_get, on, when, embedder, in
                     row for row in rows if known.get(row["language"] + "@" + row["date"]) != row["url"]]
                 # Also covers an interrupted first load and a new current language.
                 targets = {row["language"] + "@" + row["date"]: row for row in [*targets, *current.values()]}
-                work_source = next(item for item in CATALOGUE if item.source_id == MINIMUM.get(frbr, SOURCE_ID))
+                work_source = active_source
                 for key, expression in sorted(targets.items(), key=lambda item: (item[1]["date"], item[1]["language"])):
                     if loaded.get(key) == expression["url"]:
                         skipped["unchanged"] += 1
@@ -182,19 +191,15 @@ async def sync_source(store, source, *, region, http_get, on, when, embedder, in
             await store.record_run(source.source_id, status="ok", detail=load_detail(inserted, skipped),
                                    documents=await store.instrument_count(source.source_id), when=when)
         except _DiskCap:
-            await store.record_run(source.source_id, status="disk_cap", detail=f"pool disk cap {cap} bytes",
-                                   documents=await store.instrument_count(source.source_id), when=when)
+            await finish("disk_cap", f"pool disk cap {cap} bytes")
             return True
         except RateLimited as exc:
-            await store.record_run(source.source_id, status="rate_limited", detail=f"{exc}; the next Load retries",
-                                   documents=await store.instrument_count(source.source_id), when=when)
+            await finish("rate_limited", f"{exc}; the next Load retries")
         except FetchNotConfigured as exc:
-            await store.record_run(source.source_id, status="not_configured", detail=str(exc),
-                                   documents=await store.instrument_count(source.source_id), when=when)
+            await finish("not_configured", str(exc))
         except Exception:
             # Never persist an API response, request headers, exception URL or body.
-            await store.record_run(source.source_id, status="error", detail="the load failed",
-                                   documents=await store.instrument_count(source.source_id), when=when)
+            await finish("error", "the load failed")
     return False
 
 
