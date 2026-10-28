@@ -173,7 +173,7 @@ class PgWatches:
     async def finish_mail(self, tenant_id, change_id, state, now):
         await self.conn.execute("""
             UPDATE agent_zenas.regulation_changes
-            SET mail_state=$3, next_attempt=$4 +
+            SET mail_state=$3, next_attempt=$4::timestamptz +
                 make_interval(secs => LEAST(3600,60 * power(2,LEAST(attempts-1,6)))::integer)
             WHERE tenant_id=$1 AND id=$2 AND mail_state='sending'
         """, UUID(tenant_id), UUID(change_id), state, now)
