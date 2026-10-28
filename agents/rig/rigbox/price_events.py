@@ -21,24 +21,25 @@ async def save_price(service, tenant: str, message: dict) -> None:
     sku = facts['sku']
     if sku is None:  # An ordinary Tiger watch need not belong to a Rig product.
         return
-    products = await service.store.watch_products(tenant)
-    product = next((p for p in products if p['sku'] == sku and
-                    hashlib.sha256(p['url'].encode()).hexdigest() == facts['page_id']), None)
-    if product is None:  # Deleted, rebound or feed-owned products are not eligible.
-        return
-    price = Decimal(facts['price'])
-    stamp = datetime.fromisoformat(facts['observed_at'].replace('Z', '+00:00'))
-    if not price.is_finite() or price < 0 or stamp.tzinfo is None:
-        raise ValueError('Invalid price event')
-    async with service.store.pool.acquire() as conn:
-        # Tenant is never taken from message fields. The catalogue resolves its
-        # real product id; consumers cannot fabricate another tenant's product.
-        await conn.execute("""INSERT INTO agent_rig.price_history
-            (tenant_id,product_id,price,currency,observed_at,event_id)
-            SELECT tenant_id,id,$3,$4,$5,$6 FROM agent_rig.products
-            WHERE tenant_id=$1 AND sku=$2 AND btrim(url)=$7
-            ON CONFLICT(event_id) DO NOTHING""", UUID(tenant), sku, price, facts['currency'],
-            stamp, UUID(message['event_id']), product['url'])
+    async with service.store.atomic(tenant) as store:
+        products = await store.watch_products(tenant)
+        product = next((p for p in products if p['sku'] == sku and
+                        hashlib.sha256(p['url'].encode()).hexdigest() == facts['page_id']), None)
+        if product is None:  # Deleted, rebound or feed-owned products are not eligible.
+            return
+        price = Decimal(facts['price'])
+        stamp = datetime.fromisoformat(facts['observed_at'].replace('Z', '+00:00'))
+        if not price.is_finite() or price < 0 or stamp.tzinfo is None:
+            raise ValueError('Invalid price event')
+        async with store.pool.acquire() as conn:
+            # Tenant is never taken from message fields. The catalogue resolves its
+            # real product id; consumers cannot fabricate another tenant's product.
+            await conn.execute("""INSERT INTO agent_rig.price_history
+                (tenant_id,product_id,price,currency,observed_at,event_id)
+                SELECT tenant_id,id,$3,$4,$5,$6 FROM agent_rig.products
+                WHERE tenant_id=$1 AND sku=$2 AND btrim(url)=$7
+                ON CONFLICT(event_id) DO NOTHING""", UUID(tenant), sku, price, facts['currency'],
+                stamp, UUID(message['event_id']), product['url'])
 
 
 async def consume_tenant(service, http, tenant: str, consumer: str) -> int:
