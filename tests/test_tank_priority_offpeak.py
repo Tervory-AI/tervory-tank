@@ -267,3 +267,56 @@ async def test_roster_preserves_window_metadata_without_credentials(ladder):  # 
     row = ladder.tank._roster_row({'model_name': 'deepseek-flash', 'litellm_params': {'model': 'deepseek/deepseek-flash'},
                                   'model_info': {'offpeak': SETTINGS}})
     assert row['model_info']['offpeak'] == SETTINGS
+
+
+@pytest.mark.asyncio
+async def test_window_closing_during_preflight_requeues_without_sending(ladder, monkeypatch):  # noqa: F811 (pytest fixture parameter)
+    b = ladder
+    clock, _ = await prepare(b, monkeypatch)
+    job = await b.tank.run_route(request(b, b.tenants[0], text='Offline input', priority='offpeak'))
+    clock[0] = datetime(2026, 10, 28, 4, tzinfo=UTC)
+    price, count = b.tank._batch_price, 0
+
+    async def crossing(model):
+        nonlocal count
+        count += 1
+        if count == 2:
+            clock[0] = datetime(2026, 10, 28, 6, tzinfo=UTC)
+        return await price(model)
+
+    monkeypatch.setattr(b.tank, '_batch_price', crossing)
+    await queue.process_once(b.tank)
+    result = await queue.status(b.tank, job.id, b.tenants[0])
+    assert result['status'] == 'queued' and result['sent_at'] is None and not b.sent
+    clock[0] = datetime(2026, 10, 28, 10, tzinfo=UTC)
+    await queue.process_once(b.tank)
+    assert len(b.sent) == 1
+
+
+@pytest.mark.asyncio
+async def test_http_job_contract_and_existing_savings_columns(ladder, monkeypatch):  # noqa: F811 (pytest fixture parameter)
+    import proof
+    b = ladder
+    clock, _ = await prepare(b, monkeypatch)
+    tenant = b.tenants[0]
+    async with b.pool.acquire() as conn:
+        await conn.execute("""INSERT INTO tank.proof_prices(model,family,input_usd,output_usd)
+            VALUES('deepseek-flash','deepseek',0.0000003,0.0000012)
+            ON CONFLICT(model) DO UPDATE SET input_usd=EXCLUDED.input_usd,output_usd=EXCLUDED.output_usd""")
+        await conn.execute("""INSERT INTO tank.provider_standards(provider,model) VALUES('deepseek','deepseek-flash')
+            ON CONFLICT(provider) DO UPDATE SET model=EXCLUDED.model""")
+    req = request(b, tenant, text='Offline input', priority='offpeak')
+    response = await b.client.post('/v1/route', json=req.model_dump(mode='json'))
+    assert response.status_code == 200 and response.json()['status'] == 'queued'
+    job_id = response.json()['id']
+    await asyncio.gather(*list(b.tank._background))
+    queued = await proof.snapshot(tenant)
+    assert queued['ledger'][0]['outcome'] == 'queued' and queued['ledger'][0]['cost_usd'] is None
+    assert (await b.client.get('/v1/route/jobs/' + job_id, params={'tenant_id': str(b.tenants[1])})).status_code == 404
+    clock[0] = datetime(2026, 10, 28, 4, tzinfo=UTC)
+    await queue.process_once(b.tank)
+    receipt = (await proof.snapshot(tenant))['ledger'][0]
+    assert receipt['outcome'] == 'delivered' and float(receipt['cost_usd']) == pytest.approx(0.00004206)
+    assert float(receipt['saved_usd']) == pytest.approx(float(receipt['standard_cost_usd']) - 0.00004206)
+    polled = await b.client.get('/v1/route/jobs/' + job_id, params={'tenant_id': str(tenant)})
+    assert polled.status_code == 200 and polled.json()['status'] == 'completed'
