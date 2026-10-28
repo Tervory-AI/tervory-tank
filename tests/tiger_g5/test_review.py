@@ -41,7 +41,7 @@ def product_page(*, price=None, stock=None, url=URL):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("identity", ["url", "sku", "gtin", "name_price"])
-async def test_microdata_third_product_sends_one_new_product_email(store, catcher, identity):
+async def test_microdata_third_product_sends_one_new_product_email(store, catcher, identity):  # noqa: F811 (pytest fixture parameter)
     for tenant in (A, B):
         watch = await watched(store, tenant)
         assert (await checked(store, watch, html=microdata(2, identity)))["alerts"] == []

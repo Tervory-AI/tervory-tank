@@ -11,7 +11,7 @@ from test_tiger import ROOT, _load, _watch
 from test_tg2_tiger_watchlist import _request
 from rig_tiger_prices.test_prices import corridor, product  # noqa: F401
 from test_alerts import A, B, KINDS, URL, PEER, listing, watched, checked
-from tiger_works.fixture import extract, no_paid_call, saved_page
+from tiger_works.fixture import extract, no_paid_call, saved_page  # noqa: F401 (pytest fixture import)
 from test_tiger_alert_email import catcher  # noqa: F401
 from alert_email import deliver_pending
 from rigbox.store import PgStore as RigStore
@@ -75,7 +75,7 @@ async def test_private_cost_read_uses_same_tenant_sku_and_never_retail_price(sys
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", KINDS)
-async def test_agent_job_to_existing_email_path(system, catcher, monkeypatch, kind):
+async def test_agent_job_to_existing_email_path(system, catcher, monkeypatch, kind):  # noqa: F811 (pytest fixture parameter)
     _, store, _ = system
     watches = [await watched(store, tenant, **{"alert_" + k: k == kind for k in KINDS}) for tenant in (A, B)]
     state = {"added": False, "reads": [], "playbook_calls": []}
