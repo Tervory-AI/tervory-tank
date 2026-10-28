@@ -1,0 +1,65 @@
+{
+  "offline_fixture": true,
+  "scores": [
+    {
+      "source": "own_site",
+      "field": "phone",
+      "wilson_lower": 0.4
+    },
+    {
+      "source": "social_profile",
+      "field": "phone",
+      "wilson_lower": 0.9
+    }
+  ],
+  "decision": {
+    "selected": {
+      "value": "512-555-0199",
+      "source_url": "https://facebook.com/acme",
+      "checked_at": "2026-10-28T00:00:00+00:00",
+      "website": "https://acme.example",
+      "source_kind": "social_profile"
+    },
+    "candidates": [
+      {
+        "value": "512-555-0100",
+        "source_url": "https://acme.example/",
+        "checked_at": "2026-10-28T00:00:00+00:00",
+        "website": "https://acme.example",
+        "source_kind": "own_site"
+      },
+      {
+        "value": "512-555-0199",
+        "source_url": "https://facebook.com/acme",
+        "checked_at": "2026-10-28T00:00:00+00:00",
+        "website": "https://acme.example",
+        "source_kind": "social_profile"
+      }
+    ],
+    "wilson_lower": 0.9
+  },
+  "exported_phone": {
+    "value": "512-555-0199",
+    "source_url": "https://facebook.com/acme",
+    "checked_at": "2026-10-28T00:00:00+00:00",
+    "verified": true,
+    "reason": null,
+    "items": [
+      {
+        "value": "512-555-0199",
+        "source_url": "https://facebook.com/acme",
+        "checked_at": "2026-10-28T00:00:00+00:00",
+        "verified": true,
+        "reason": null
+      },
+      {
+        "value": "512-555-0100",
+        "source_url": "https://acme.example/",
+        "checked_at": "2026-10-28T00:00:00+00:00",
+        "verified": true,
+        "reason": null
+      }
+    ],
+    "source_kind": "social_profile"
+  }
+}
