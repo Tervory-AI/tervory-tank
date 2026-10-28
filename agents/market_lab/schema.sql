@@ -4,6 +4,20 @@
 
 CREATE SCHEMA IF NOT EXISTS agent_market_lab;
 
+-- Tenant-selected public feeds, checked by the existing scheduled-job worker.
+CREATE TABLE IF NOT EXISTS agent_market_lab.feed_links (
+    tenant_id uuid NOT NULL,
+    id uuid NOT NULL,
+    url text NOT NULL,
+    label text NOT NULL DEFAULT '',
+    cadence text NOT NULL CHECK (cadence IN ('daily', 'weekly')),
+    next_check timestamptz NOT NULL DEFAULT now(),
+    last_checked timestamptz,
+    status text NOT NULL DEFAULT 'not_checked' CHECK (status IN ('not_checked', 'checked', 'failed')),
+    PRIMARY KEY (tenant_id, id),
+    UNIQUE (tenant_id, url)
+);
+
 CREATE TABLE IF NOT EXISTS agent_market_lab.series (
     id          text PRIMARY KEY,
     tenant_id   uuid NOT NULL,
