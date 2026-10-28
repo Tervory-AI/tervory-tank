@@ -134,3 +134,27 @@ Public recordings: RSS **20** items, Atom **18** items, Comtrade **8** rows. Sea
 - USPTO stays disabled. Its setting name is present for a later verified API/bulk-data integration; no value or sign-in was requested.
 - Paid sources and Reddit remain skipped as instructed.
 - The unrelated industry-word scan failure needs resolution on main; identical baseline evidence is attached above.
+
+## Review against Claude's amended brief
+
+Reviewed the existing branch at `1956563`; no additional implementation change was needed for the amended requirements. The first command continued this branch as rule 13 permits and checked every named file:
+
+```sh
+git checkout codex/market-lab-keyless-feeds && ls -ld agents/market_lab/feeds agents/market_lab/feeds/fetch.py agents/market_lab/feeds/catalog.py agents/market_lab/feeds/engines/ffl/sources.py agents/tiger/watch.py
+```
+
+Result: **exit 0**; already on the requested branch, and every named path exists. Market Lab uses `fetch_source`, the catalogue loader and the engine's source definitions; it does not introduce a top-level `sources.py`.
+
+- RSS/Atom subscriptions use the shared implementation of Tiger's URL check, including DNS and redirect checks, and the existing room scheduler. Daily/weekly imports retain tenant ownership, source links and retrieval times.
+- Comtrade and SearXNG run through the existing collection path and engine refresh schedule. USPTO remains disabled with its setting name wired, as the brief permits for keyed access.
+- Existing keyed sources remain gated. MarineTraffic, Freightos, LME and Reddit remain skipped for the reasons above.
+- The merged Job 2 publisher remains at `agents/market_lab/core/jobs.py:214`: an actual saved score emits `marketlab.signal.scored`. Unscored feed observations do not invent a score.
+- The existing Source links form and cards are reused; no new page wording or controls are needed. Saved responses stay in tests and fixture records are excluded from normal client reads.
+
+The focused recheck used this exact command:
+
+```sh
+PATH=/workspace/.tervory-cloud/node-v22.23.4-linux-x64/bin:$PATH PYTHONPATH=tank /workspace/.tervory-cloud/venv/bin/python -m pytest -q tests/market_lab_keyless_feeds/test_keyless.py tests/test_market_lab_page.py tests/test_feeds_keys.py tests/test_tiger.py tests/test_tank_one_door.py
+```
+
+Result: **93 passed in 14.27s**, exit 0. This supplements the earlier Postgres, worker/browser and scored-event proofs; it does not replace them or claim a live deployment check. Rule 11's founder-browser acceptance evidence is still outstanding: the attached screenshots are explicitly **local, fixture page**. The baseline regression failure described above also remains disclosed.
