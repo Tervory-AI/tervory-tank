@@ -319,7 +319,7 @@ async def test_database_probation_uses_failure_and_rollback_history(env, tmp_pat
     await seed(env, newer)
     at = START + timedelta(days=15)
     if event == "failed_eval":
-        await env.db.execute("INSERT INTO tank.skill_evals(skill_id,version,score,passed,total,ran_at) VALUES($1,$2,.8,4,5,$3)", newer.id, newer.version, at)
+        await env.db.execute("INSERT INTO tank.skill_evals(skill_id,version,score,passed,total,ran_at,details) VALUES($1,$2,.8,4,5,$3,'[]'::jsonb)", newer.id, newer.version, at)
     else:
         await env.db.execute("INSERT INTO tank.skill_approvals(tenant_id,skill_id,version,action,acted_by,acted_at) VALUES($1,$2,$3,'rollback','founder',$4)", PLATFORM_TENANT, old.id, old.version, at)
     with pytest.raises(HTTPException):
@@ -342,8 +342,7 @@ async def test_background_worker_drains_policy_swap_and_stops_before_pool(env, t
     # A superseded staging version exposes the same existing rollback control.
     await seed(env, package(tmp_path, name="base.history", task=None, code=True), "staging")
     await seed(env, package(tmp_path, name="base.history", version="2.0.0", task=None, code=True))
-    await app.router.startup()
-    try:
+    async with app.router.lifespan_context(app):
         async with asyncio.timeout(5):
             while not (await jobs(env))[0]["completed_at"]:
                 await asyncio.sleep(.01)
@@ -354,6 +353,4 @@ async def test_background_worker_drains_policy_swap_and_stops_before_pool(env, t
             folder = Path(proof)
             folder.mkdir(parents=True, exist_ok=True)
             (folder / "skills.json").write_text(json.dumps(await env.tank.list_skills(), default=str, indent=2) + "\n")
-    finally:
-        await app.router.shutdown()
     assert closed == [True] and len(env.calls) == 4
