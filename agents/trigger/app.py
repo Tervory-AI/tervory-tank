@@ -72,10 +72,13 @@ async def post_write(body: WriteIn):
 async def skala_languagetool(body: CheckIn):
     """Transport only: the approved package owns rule/result interpretation."""
     import hashlib
+    import json
     response = await app.state.http.post(
         "http://trigger-languagetool:8081/v2/check",
         data={"text": body.text, "language": "en-US"}, timeout=30,
     )
     response.raise_for_status()
     config = Path(__file__).with_name("languagetool.properties").read_bytes()
-    return {"result": response.json(), "config_sha256": hashlib.sha256(config).hexdigest()}
+    pins = json.loads((Path(__file__).parent / "sources/pins.json").read_text())
+    return {"result": response.json(), "config_sha256": hashlib.sha256(config).hexdigest(),
+            "image": pins["languagetool-image"]}
