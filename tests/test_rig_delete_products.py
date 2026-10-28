@@ -169,3 +169,44 @@ async def test_tank_delete_route_founder_and_tenant_boundary(monkeypatch):
         assert (await client.post("/v1/access/rig/admin/delete-products", json={"data": {"skus": ["SAMPLE-SHADE"]}})).status_code == 403
         actor = Actor(UUID(TENANT), "admin", False, frozenset({"rig"}))
         assert (await client.post("/v1/access/rig/admin/delete-products", json={"data": {"skus": [str(n).zfill(20) for n in range(5000)]}})).status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_last_family_target_removed_and_refresh_accepts_other_rows(retailer):
+    data = envelope()
+    body = json.loads(data["contents"])
+    body["rig"]["fits"] = [{"part_sku": "SAMPLE-SHADE", "fits_family": "sample-lighting", "note": "Source family"}]
+    data["contents"] = json.dumps(body)
+    assert (await retailer.import_file(TENANT, data))["ok"]
+    await retailer.delete_products(TENANT, {"skus": ["SAMPLE-LAMP"]})
+    assert await retailer.store.fits(TENANT) == []
+    result = await retailer.import_file(TENANT, {**data, "refresh": True})
+    assert result["ok"]
+    assert result["receipt"]["updated"] == 1
+    assert await retailer.store.fits(TENANT) == []
+
+
+@pytest.mark.asyncio
+async def test_failed_manual_restore_preserves_removal(retailer, monkeypatch):
+    await seed(retailer)
+    await retailer.delete_products(TENANT, {"skus": ["SAMPLE-LAMP"]})
+    async def fail(*_):
+        raise ValueError("Offline private-cost failure")
+    monkeypatch.setattr(type(retailer.store), "save_cost", fail)
+    assert not (await retailer.import_file(TENANT, envelope()))["ok"]
+    assert await retailer.store.deleted_skus(TENANT) == {"SAMPLE-LAMP"}
+    assert not await retailer.store.product_exists(TENANT, "SAMPLE-LAMP")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("retailer", ["postgres"], indirect=True)
+async def test_dependent_three_d_jobs_removed_only_for_deleted_product(retailer):
+    await seed(retailer)
+    async with retailer.store.pool.acquire() as conn:
+        for tenant, sku in [(TENANT, "SAMPLE-LAMP"), (TENANT, "SAMPLE-SHADE"), (OTHER, "SAMPLE-LAMP")]:
+            await conn.execute("INSERT INTO agent_rig.rig_3d_jobs(tenant_id,id,product_id,request) VALUES($1,$2,$3,'{}')", UUID(tenant), uuid4(), sku)
+    await retailer.delete_products(TENANT, {"skus": ["SAMPLE-LAMP"]})
+    async with retailer.store.pool.acquire() as conn:
+        assert await conn.fetchval("SELECT count(*) FROM agent_rig.rig_3d_jobs WHERE tenant_id=$1 AND product_id='SAMPLE-LAMP'", UUID(TENANT)) == 0
+        assert await conn.fetchval("SELECT count(*) FROM agent_rig.rig_3d_jobs WHERE tenant_id=$1", UUID(TENANT)) == 1
+        assert await conn.fetchval("SELECT count(*) FROM agent_rig.rig_3d_jobs WHERE tenant_id=$1", UUID(OTHER)) == 1

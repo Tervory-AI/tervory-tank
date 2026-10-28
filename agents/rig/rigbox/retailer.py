@@ -200,6 +200,7 @@ class Retailer:
                 target = (settings or {}).get("shop_currency", "ZAR")
                 existing = {row["sku"]: row for row in await store.products(tenant)}
                 suppressed = await store.deleted_skus(tenant) if data.get("refresh") is True else set()
+                removed_families = {row.get("family") for row in mapped["rows"] if row["sku"] in suppressed and row.get("family")}
                 mapped["rows"] = [row for row in mapped["rows"] if row["sku"] not in suppressed]
                 combined = {**existing, **{row["sku"]: row for row in mapped["rows"]}}
                 families = metadata.get("families", {})
@@ -207,6 +208,8 @@ class Retailer:
                     raise ValueError("Check the feed's families.")
                 for family, members in families.items():
                     if isinstance(members, list):
+                        if any(isinstance(sku, str) and sku in suppressed for sku in members):
+                            removed_families.add(family)
                         members = [sku for sku in members if not isinstance(sku, str) or sku not in suppressed]
                     if not isinstance(family, str) or not family or len(family) > 120 or not isinstance(members, list) or any(sku not in combined for sku in members):
                         raise ValueError("Every family member must be in this catalogue.")
@@ -221,7 +224,7 @@ class Retailer:
                         raise ValueError("Each fit needs a part and exactly one target.")
                     if row["part_sku"] in suppressed or row.get("fits_sku") in suppressed:
                         continue
-                    if row.get("fits_family") in families and not any(r.get("family") == row["fits_family"] for r in combined.values()) and suppressed:
+                    if row.get("fits_family") in removed_families and not any(r.get("family") == row["fits_family"] for r in combined.values()):
                         continue
                     note = str(row.get("note", "")).strip()
                     if not note or len(note) > 2000:

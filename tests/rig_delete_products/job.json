@@ -1,0 +1,75 @@
+{
+  "label": "local, fixture page",
+  "screenshots": [
+    "before-1440.png",
+    "before-375.png",
+    "one-deleted-1440.png",
+    "one-deleted-375.png",
+    "all-deleted-1440.png",
+    "all-deleted-375.png"
+  ],
+  "confirmations": [
+    "Delete 1 product? This removes them from your catalogue and search. It can't be undone.",
+    "Delete 1 product? This removes them from your catalogue and search. It can't be undone.",
+    "Delete 2 products? This removes them from your catalogue and search. It can't be undone."
+  ],
+  "browser_errors": [],
+  "external_requests": [],
+  "search_before": {
+    "results": [
+      {
+        "id": "D001",
+        "name": "Walnut desk",
+        "brand": "Workshop",
+        "category": "furniture",
+        "image": "https://example.com/catalogue.png",
+        "price": {
+          "amount": 14474,
+          "currency": "ZAR",
+          "indicative": true
+        },
+        "attributes": {}
+      }
+    ],
+    "exact_match": true,
+    "parts": [
+      {
+        "part": "walnut",
+        "on": "",
+        "reused": false,
+        "rung": "code",
+        "ids": [
+          "D001"
+        ]
+      }
+    ]
+  },
+  "search_after": {
+    "results": []
+  },
+  "deletion_receipts": [
+    {
+      "id": "f0cc209b-1ada-45d3-b481-8e6efa059f75",
+      "provider": "delete-products",
+      "site": "",
+      "feed_id": "",
+      "added": 0,
+      "updated": 2,
+      "rejected": 0,
+      "created_at": "2026-10-28T09:53:54.436438+00:00"
+    },
+    {
+      "id": "3e085127-e2cf-40e6-a9d1-2d44c2f52469",
+      "provider": "delete-products",
+      "site": "",
+      "feed_id": "",
+      "added": 0,
+      "updated": 1,
+      "rejected": 0,
+      "created_at": "2026-10-28T09:53:54.153609+00:00"
+    }
+  ],
+  "founder_without_org_admin": "passed",
+  "second_tenant_products": 3,
+  "real_tank": "passed"
+}

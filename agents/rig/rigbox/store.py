@@ -259,7 +259,10 @@ class MemoryStore(RetailerMemoryStore):
                       if key[0] != tenant or (key[1] not in found and key[2] not in found)}
         for (owner, family), members in list(self.families.items()):
             if owner == tenant:
-                await self.set_family(tenant, family, [sku for sku in members if sku not in found])
+                remaining = [sku for sku in members if sku not in found]
+                await self.set_family(tenant, family, remaining)
+                if members and not remaining:
+                    self._fits = {key: row for key, row in self._fits.items() if key[0] != tenant or key[3] != family}
         if found:
             self._drop_answers(tenant)
             await self.drop_searches(tenant)
@@ -539,7 +542,11 @@ class PgStore(RetailerPgStore):
             await conn.execute("DELETE FROM agent_rig.products WHERE tenant_id=$1 AND sku=ANY($2::text[])", tenant, found)
         removed = set(found)
         for row in families:
-            await self.set_family(tenant_id, row["family"], [sku for sku in row["member_skus"] if sku not in removed])
+            remaining = [sku for sku in row["member_skus"] if sku not in removed]
+            await self.set_family(tenant_id, row["family"], remaining)
+            if row["member_skus"] and not remaining:
+                async with self.pool.acquire() as conn:
+                    await conn.execute("DELETE FROM agent_rig.fits WHERE tenant_id=$1 AND fits_family=$2", tenant, row["family"])
         await self._drop_answers(tenant_id)
         await self.drop_searches(tenant_id)
         return len(found)
