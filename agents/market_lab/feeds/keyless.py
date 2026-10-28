@@ -15,7 +15,6 @@ from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
 import feedparser
 
-from chassis.public_urls import check_url
 from feeds.models import SourceSpec
 from feeds.store import Store, utc_now
 
@@ -48,6 +47,7 @@ def public_link(value: str) -> str:
 
 
 def check_feed_url(value: str) -> str:
+    from chassis.public_urls import check_url
     return check_url(public_link(value))
 
 
