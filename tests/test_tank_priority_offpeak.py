@@ -351,3 +351,27 @@ async def test_distinct_concurrent_jobs_do_not_exhaust_pool(ladder, monkeypatch)
     ]), timeout=10)
     assert len(b.sent) == 4
     assert all([(await queue.status(b.tank, job.id, b.tenants[0]))['status'] == 'completed' for job in jobs])
+
+
+@pytest.mark.asyncio
+async def test_public_batch_never_misreports_offpeak_as_completed(ladder, monkeypatch):  # noqa: F811 (pytest fixture parameter)
+    b = ladder
+    stub, body = await batch_setup(b, monkeypatch, 'openai')
+    body.requests[0].priority = 'offpeak'
+    with pytest.raises(b.tank.HTTPException) as refused:
+        await b.tank.route_batch(body, caller=None)
+    assert refused.value.status_code == 422 and refused.value.detail['route'] == '/v1/route'
+    assert not b.sent and not stub.calls
+
+
+@pytest.mark.asyncio
+async def test_urgent_never_queues_even_in_public_batch(ladder, monkeypatch):  # noqa: F811 (pytest fixture parameter)
+    b = ladder
+    stub, body = await batch_setup(b, monkeypatch, 'openai')
+    for item in body.requests:
+        item.priority = 'urgent'
+    result = await b.tank.route_batch(body, caller=None)
+    assert result['status'] == 'completed' and result['batch'] is False
+    assert len(b.sent) == 2 and not stub.calls
+    async with b.pool.acquire() as conn:
+        assert await conn.fetchval('SELECT count(*) FROM tank.batches WHERE tenant_id=$1', b.tenants[0]) == 0
