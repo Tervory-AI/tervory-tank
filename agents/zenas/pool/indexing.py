@@ -14,7 +14,7 @@ async def index_pending(store, embedder, index, *, region, source_ids=None, docu
     while rows := await store.pending_embeddings(embedder.name, jurisdiction=jurisdiction,
                                                  source_ids=source_ids, document_id=document_id, after=after):
         after = rows[-1].chunk_id
-        chunks = [row for row in rows if public_source_url(row.url) and row.attribution and row.version_date]
+        chunks = [row for row in rows if public_source_url(row.url) and row.attribution]
         if not chunks:
             continue
         try:

@@ -78,12 +78,12 @@ class AsyncpgLawPool:
             return {}
         async with self._pool.acquire() as conn:
             rows = await conn.fetch("""SELECT d.document_id,d.version_id,d.url,d.title,d.kind,d.level,d.status,
-                COALESCE(d.effective_from,d.known_from)::text AS version_date,
+                d.effective_from::text AS version_date, d.known_from::text AS known_from,
                 COALESCE(NULLIF(d.body,''),s.name) AS attribution,d.licence
                 FROM zenas_pool.documents d JOIN zenas_pool.sources s ON s.source_id=d.source_id
                 WHERE d.jurisdiction=$1 AND s.region=$2 AND d.version_id=ANY($3::text[]) AND s.enabled""",
                 jurisdiction, self.home_region, versions)
-        return {(row["document_id"], row["version_id"]): {key: row.get(key, "") for key in ("url", "title", "kind", "level", "status", "version_date", "attribution", "licence")}
+        return {(row["document_id"], row["version_id"]): {key: row.get(key, "") for key in ("url", "title", "kind", "level", "status", "version_date", "known_from", "attribution", "licence")}
                 for row in rows}
 
 

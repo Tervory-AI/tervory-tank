@@ -83,6 +83,7 @@ class Chunk:
     # Resolved from this exact stored document version, never from vector results.
     url: str = ""
     version_date: str = ""
+    known_from: str = ""
     attribution: str = ""
     licence: str = ""
 

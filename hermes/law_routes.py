@@ -27,6 +27,7 @@ class LawPoint(BaseModel):
     version_id: str = Field(min_length=1)
     url: str = Field(min_length=1)
     version_date: str
+    known_from: str = ""
     attribution: str = Field(min_length=1)
     licence: str
     fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")

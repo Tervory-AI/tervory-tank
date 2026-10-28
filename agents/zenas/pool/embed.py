@@ -134,7 +134,7 @@ class HermesLawClient:
             raise ValueError("law vector mismatch")
         await self._post("/law/points", {"points": [
             {"chunk_id": chunk.chunk_id, "version_id": chunk.version_id, "vector": vector,
-             "url": chunk.url, "version_date": chunk.version_date,
+             "url": chunk.url, "version_date": chunk.version_date, "known_from": chunk.known_from,
              "attribution": chunk.attribution, "licence": chunk.licence, "fingerprint": fingerprint(chunk)}
             for chunk, vector in zip(chunks, vectors, strict=True)]})
 

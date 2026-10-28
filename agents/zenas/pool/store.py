@@ -219,6 +219,7 @@ def _chunk_from_mapping(row: dict) -> Chunk:
         ordinal=row["ordinal"],
         url=_row_field(row, "url", ""),
         version_date=str(_row_field(row, "version_date", "")),
+        known_from=str(_row_field(row, "known_from", "")),
         attribution=_row_field(row, "attribution", ""),
         licence=_row_field(row, "licence", ""),
     )
@@ -455,7 +456,7 @@ class MemoryStore:
 
     def _with_source(self, chunk):
         doc = self.docs[chunk.version_id]
-        return replace(chunk, url=doc.url, version_date=str(doc.effective_from or doc.known_from or ""),
+        return replace(chunk, url=doc.url, version_date=str(doc.effective_from or ""), known_from=str(doc.known_from or ""),
                        attribution=doc.body or self.sources[doc.source_id].name, licence=doc.licence)
 
     async def get_chunks(self, chunk_ids, *, jurisdiction, as_at=None, level=None, kind=None):
@@ -788,7 +789,7 @@ class PostgresStore:
     async def get_chunks(self, chunk_ids, *, jurisdiction, as_at=None, level=None, kind=None):
         _guard_home(self.home_region, jurisdiction=jurisdiction)
         rows = await self._conn.fetch("""
-            SELECT c.*, d.url, COALESCE(d.effective_from,d.known_from)::text AS version_date,
+            SELECT c.*, d.url, d.effective_from::text AS version_date, d.known_from::text AS known_from,
                    COALESCE(NULLIF(d.body,''),s.name) AS attribution, d.licence
             FROM zenas_pool.chunks c JOIN zenas_pool.documents d ON d.version_id=c.version_id
             JOIN zenas_pool.sources s ON s.source_id=d.source_id
@@ -804,7 +805,7 @@ class PostgresStore:
     async def pending_embeddings(self, model, *, jurisdiction, source_ids=None, document_id=None, after="", limit=64):
         _guard_home(self.home_region, jurisdiction=jurisdiction)
         rows = await self._conn.fetch("""
-            SELECT c.*, d.url, COALESCE(d.effective_from,d.known_from)::text AS version_date,
+            SELECT c.*, d.url, d.effective_from::text AS version_date, d.known_from::text AS known_from,
                    COALESCE(NULLIF(d.body,''),s.name) AS attribution, d.licence
             FROM zenas_pool.chunks c JOIN zenas_pool.documents d ON d.version_id=c.version_id
             JOIN zenas_pool.sources s ON s.source_id=d.source_id

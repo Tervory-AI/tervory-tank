@@ -305,3 +305,17 @@ async def test_production_store_receipts_and_hydration_are_region_scoped():
     with pytest.raises(RegionError):
         await store.get_chunks(["chunk"], jurisdiction="us")
     assert len(conn.calls) == before
+
+
+@pytest.mark.asyncio
+async def test_first_seen_date_is_not_invented_as_an_official_version_date(services):
+    _, _, client = services
+    store, replay = MemoryStore(), Replay()
+    await load_wave(store, region="za", only=[SOURCE], live=True, http_get=replay.get, on=ON)
+    # The explicit unknown-date case uses stored law, not invented date data.
+    for doc in store.docs.values():
+        doc.effective_from = None
+    await index_pending(store, client, client, region="za")
+    chunks = await store.get_chunks(list(store.chunks), jurisdiction="za")
+    assert chunks and len(store.embeddings) == len(chunks)
+    assert all(chunk.version_date == "" and chunk.known_from == str(ON) for chunk in chunks)
