@@ -12,6 +12,11 @@ from typing import Any
 from hermes.record_schema import PLATFORM_TENANT, schema_for, schema_sql
 
 log = logging.getLogger("hermes.records")
+MAX_EMBED_ATTEMPTS = 5
+
+
+class ClaimTooLong(ValueError):
+    """The pinned encoder tokenizer rejects the complete claim."""
 
 
 def public_row(row: Any) -> dict:
@@ -85,6 +90,10 @@ class Records:
             uuid.UUID(tenant),
             uuid.UUID(row_id) if row_id else uuid.uuid4(),
         )
+        try:
+            await asyncio.to_thread(self.encoder.validate, claim)
+        except ValueError as exc:
+            raise ClaimTooLong(str(exc)) from None
         async with self.pool.acquire() as conn, conn.transaction():
             await self.lock(conn, s, identity)
             row = await conn.fetchrow(
@@ -114,7 +123,7 @@ class Records:
                 ):
                     raise ValueError("Memory id conflicts with a different record")
             await self.enqueue(conn, s, identity, tenant_id, self.model)
-        # The transaction has committed before any encoder or vector call.
+        # The transaction has committed before any inference or vector call.
         await self.process_one(agent, tenant_id, identity, self.model)
         saved = await self.get(agent, tenant, str(identity))
         if saved is None:
@@ -177,6 +186,27 @@ class Records:
                 limit,
             )
         return [public_row(row) for row in rows]
+
+    async def founder_get(self, row_id: uuid.UUID) -> dict | None:
+        """ID-only inspection, called exclusively after founder authorization.
+
+        Only configured agent schemas are searched. A colliding ID is refused
+        instead of silently choosing one tenant's or agent's record.
+        """
+        found = None
+        async with self.pool.acquire() as conn:
+            for agent in sorted(self.agents):
+                row = await conn.fetchrow(
+                    f"""SELECT id,tenant_id,agent,claim,evidence,confidence,
+                    last_verified,embed_model,created_at,updated_at
+                    FROM {self.schema(agent)}.memory_records WHERE id=$1""",
+                    row_id,
+                )
+                if row is not None:
+                    if found is not None:
+                        raise ValueError("Memory id conflicts with a different record")
+                    found = public_row(row)
+        return found
 
     async def recall(
         self,
@@ -242,6 +272,17 @@ class Records:
             )
             if not job:
                 return False
+            if (operation == "upsert" and row is not None and model == self.model
+                    and job["attempts"] >= MAX_EMBED_ATTEMPTS):
+                # Retain the terminal job so replay/schedule_stale cannot reset
+                # the retry budget for this unchanged row and encoder pin.
+                if job["last_error"] != "embed_failed":
+                    await conn.execute(
+                        f"""UPDATE {s}.memory_index_jobs SET last_error='embed_failed'
+                        WHERE tenant_id=$1 AND row_id=$2 AND target_model=$3 AND operation=$4""",
+                        tenant, row_id, model, operation,
+                    )
+                return False
             try:
                 if operation == "delete" or row is None:
                     # A replay may recreate the same id after deletion. An old
@@ -273,7 +314,9 @@ class Records:
                     row_id,
                     model,
                     operation,
-                    type(exc).__name__,
+                    "embed_failed"
+                    if operation == "upsert" and job["attempts"] + 1 >= MAX_EMBED_ATTEMPTS
+                    else type(exc).__name__,
                 )
                 return False
             await conn.execute(
@@ -310,6 +353,8 @@ class Records:
                 await self.schedule_stale(agent, str(tenant["tenant_id"]))
             async with self.pool.acquire() as conn:
                 jobs = await conn.fetch(f"""SELECT * FROM {s}.memory_index_jobs WHERE run_at<=now()
+                    AND (operation='delete' OR attempts<{MAX_EMBED_ATTEMPTS}
+                        OR last_error IS DISTINCT FROM 'embed_failed')
                     ORDER BY run_at LIMIT 100""")
             for job in jobs:
                 await self.process_one(
