@@ -331,6 +331,16 @@ The founder's ask (20 Oct): a conversation window where you say what you want, a
   5. an AI second opinion;
   6. Cloudflare's and Google's own webhook signatures;
   7. a public page with no fixtures.
+- **Autumbra is its own brand, built to spin off, sell or expand (founder, 27 Oct 19:53).** Standing rules for every Autumbra brief:
+  1. Its code stays in its own folder, with no imports from other products' code; it talks to other products only through their APIs.
+  2. Its own database schema and its own storage bucket.
+  3. It uses Tank only through Tank's API, so a buyer can swap the gateway.
+  4. **Its own domain: autumbra.com** (the founder owns it, at Hostinger).
+     - Move its DNS to Cloudflare (nameservers only).
+     - Add it to `workspace/lib/product-hosts.ts` beside protect.tervory.com.
+     - Grok adds it in Coolify.
+     - Point it only after job 6 removes the fixtures from the public page.
+     - Sign-in stays on app.tervory.com until Clerk's second-domain setup is checked.
 - **Done when:** on our own site, a test attack is shielded and undone with one tap, and the receipt reaches the founder.
 
 ### Memory, brains and the bus
