@@ -57,6 +57,7 @@ from urllib.parse import urlparse
 
 import asyncpg
 import httpx
+from command_stream import StreamFailure, TokenSink, completion as stream_completion
 import redis.asyncio as aioredis
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import Response
@@ -1066,6 +1067,7 @@ async def run_route(
     _paid_policy: dict[str, Any] | None = None,
     _prior_escalation: list[dict[str, Any]] | None = None,
     _paid_limit: float | None = None,
+    _on_token: TokenSink | None = None,
 ) -> RouteResponse:
     """Pick the model from policy, call it through LiteLLM, write the ledger row.
     Used directly by /v1/route and in the background by tasks."""
@@ -1219,12 +1221,31 @@ async def run_route(
     await __import__("controls").refuse_paid(paid=True, task=req.task_type, path="route")
     started = time.perf_counter()
     try:
-        async with httpx.AsyncClient(timeout=120) as client:
-            r = await client.post(
-                f"{LITELLM_URL}/v1/chat/completions",
-                headers={"Authorization": f"Bearer {LITELLM_MASTER_KEY}"},
-                json={"model": model, "messages": messages, "max_tokens": max_tokens, **generation},
+        if _on_token is not None and req.task_type == "command.turn":
+            r = await stream_completion(LITELLM_URL, LITELLM_MASTER_KEY,
+                                        {"model": model, "messages": messages, "max_tokens": max_tokens, **generation}, _on_token)
+        else:
+            async with httpx.AsyncClient(timeout=120) as client:
+                r = await client.post(
+                    f"{LITELLM_URL}/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {LITELLM_MASTER_KEY}"},
+                    json={"model": model, "messages": messages, "max_tokens": max_tokens, **generation},
+                )
+    except StreamFailure as exc:
+        ledger_id = uuid.uuid4()
+        async with pool().acquire() as conn:
+            await conn.execute(
+                "INSERT INTO tank.ledger "
+                "(id,tenant_id,region,agent,skill,task_type,rung,model,priority,tokens_in,tokens_out,cost_usd,"
+                "latency_ms,cache_hit,outcome,task_id,error,route_seat,escalation,cost_status) "
+                "VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,false,'failed',$14,$15,$16,$17::jsonb,$18)",
+                ledger_id, req.tenant_id, req.region or DEFAULT_REGION, req.agent, req.skill, req.task_type,
+                policy["rung"], exc.model, priority, exc.tokens_in, exc.tokens_out, exc.cost_usd or 0,
+                int((time.perf_counter() - started) * 1000), task_id, "incomplete stream", route_seat, json.dumps(escalation),
+                # Existing NOT NULL storage convention: not_set is never shown as zero spend.
+                "not_set" if exc.cost_usd is None else "set",
             )
+        raise HTTPException(502, {"ledger_id": str(ledger_id)}) from None
     except httpx.HTTPError as exc:
         # The gateway never answered. Still a call on the books, so the failure rate is honest.
         latency_ms = int((time.perf_counter() - started) * 1000)

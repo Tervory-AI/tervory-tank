@@ -24,6 +24,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 import command_repo
+from command_stream import AnswerText, TokenSink
 
 router = APIRouter(prefix="/v1/command", tags=["command"])
 logger = logging.getLogger(__name__)
@@ -376,11 +377,13 @@ async def events(thread_id: uuid.UUID, after: int = Query(default=0, ge=0), acto
 
 
 async def route_turn(actor: Actor, messages: list[dict], model: str | None = None,
-                     *, task_id: uuid.UUID | None = None) -> Any:
+                     *, task_id: uuid.UUID | None = None, on_token: TokenSink | None = None) -> Any:
     from main import Message, RouteRequest, box_region, run_route
     override = {"model_override": model} if model not in (None, "auto") else {}
     if task_id is not None:
         override["task_id"] = task_id
+    if on_token is not None:
+        override["_on_token"] = on_token
     return await run_route(RouteRequest(tenant_id=actor.tenant_id, agent="orchestrator", task_type="command.turn",
                                        home_region=box_region(), messages=[Message(**m) for m in messages]), **override)
 
@@ -401,9 +404,22 @@ async def auto_price_snapshot(conn: Any, tenant_id: uuid.UUID) -> dict:
 
 async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages: list[dict], model: str | None = None) -> None:
     answer = None
+    preview = AnswerText()
+
+    async def on_token(delta: str) -> None:
+        text = preview.feed(delta)
+        if text:
+            async with db().acquire() as conn, conn.transaction():
+                row = await owned(conn, thread_id, actor, lock=True)
+                if unpack(row["state"])["active_turn"] != turn_id:
+                    raise asyncio.CancelledError()
+                # Provisional events only: no saved assistant message or receipt yet.
+                # Do not rewrite the full conversation for every model delta.
+                await event(conn, row, "token", {"text": text, "message_id": turn_id})
+
     try:
         async with asyncio.timeout(150):
-            answer = await route_turn(actor, messages, model=model, task_id=uuid.UUID(turn_id))
+            answer = await route_turn(actor, messages, model=model, task_id=uuid.UUID(turn_id), on_token=on_token)
         async with editing(thread_id, actor) as (conn, row, state):
             await record_receipts(conn, row, state, turn_id, [answer.ledger_id])
             repeatable = True
@@ -415,8 +431,10 @@ async def finish_turn(thread_id: uuid.UUID, actor: Actor, turn_id: str, messages
                 await event(conn, row, "error", {"message": plan.text})
             state["messages"].append({"message_id": turn_id, "role": "assistant", "content": plan.text,
                                       "repeatable": repeatable and not plan.actions})
-            # The router buffers output; this is available answer text, not provider deltas.
-            await event(conn, row, "token", {"text": plan.text})
+            if plan.text != preview.shown or not preview.raw:
+                # Cache/code hits arrive whole. A validated plan may correct an
+                # incomplete/invalid preview without appending a second answer.
+                await event(conn, row, "token", {"text": plan.text, "message_id": turn_id, "replace": True})
             for action in plan.actions:
                 await propose_action(conn, row, state, action)
             await conn.execute(
@@ -519,7 +537,20 @@ async def turn(thread_id: uuid.UUID, body: Turn, actor: Actor = Depends(identity
     task = asyncio.create_task(finish_turn(thread_id, actor, turn_id, messages, model=body.model))
     _background.add(task)
     task.add_done_callback(_background.discard)
-    return StreamingResponse(replay(thread_id, actor, after, turn_id=turn_id), media_type="text/event-stream",
+
+    async def stream_turn():
+        finished = False
+        try:
+            async for update in replay(thread_id, actor, after, turn_id=turn_id):
+                yield update
+            finished = True
+        finally:
+            # Closing the owner's turn connection closes the SDK stream too.
+            # finish_turn retains the existing failed-step/receipt reconciliation.
+            if not finished and not task.done():
+                task.cancel()
+
+    return StreamingResponse(stream_turn(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 

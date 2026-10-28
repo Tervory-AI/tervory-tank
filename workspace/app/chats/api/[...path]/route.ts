@@ -98,9 +98,14 @@ async function handle(request: Request, context: Context): Promise<Response> {
     if (upstream.headers.get("content-type")?.includes("text/event-stream")) {
       if (!upstream.body) throw new Error("Missing stream");
       const encoder = new TextEncoder();
+      const cancelled = new AbortController();
+      let closed = false;
+      const abort = () => cancelled.abort();
+      request.signal.addEventListener("abort", abort, { once: true });
+      if (request.signal.aborted) abort();
       const stream = new ReadableStream<Uint8Array>({
         async start(controller) {
-          const emit = (type: string, data: unknown, seq?: number) => controller.enqueue(encoder.encode(`${seq === undefined ? "" : `id: ${seq}\n`}event: ${type}\ndata: ${JSON.stringify(data)}\n\n`));
+          const emit = (type: string, data: unknown, seq?: number) => { if (!closed && !cancelled.signal.aborted) controller.enqueue(encoder.encode(`${seq === undefined ? "" : `id: ${seq}\n`}event: ${type}\ndata: ${JSON.stringify(data)}\n\n`)); };
           try {
             await readEvents(upstream.body!, event => {
               let data: unknown = event.data;
@@ -112,10 +117,11 @@ async function handle(request: Request, context: Context): Promise<Response> {
               }
               if (founder && event.type === "card") data = presentCard(event.data as unknown as Card, true, names);
               if (["token", "step", "card", "receipt", "done", "error"].includes(event.type)) emit(event.type, data, event.seq);
-            });
+            }, cancelled.signal);
           } catch { emit("error", { message: "The response was interrupted. Reopen this chat before sending again." }); }
-          finally { controller.close(); }
+          finally { request.signal.removeEventListener("abort", abort); if (!closed) { closed = true; controller.close(); } }
         },
+        cancel() { closed = true; cancelled.abort(); },
       });
       return new Response(stream, { headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-store, no-transform", "X-Accel-Buffering": "no" } });
     }
