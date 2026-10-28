@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import uuid
 from datetime import datetime
 from typing import Any
@@ -13,6 +14,34 @@ from hermes.record_schema import PLATFORM_TENANT, schema_for, schema_sql
 
 log = logging.getLogger("hermes.records")
 MAX_EMBED_ATTEMPTS = 5
+
+_SCHEMA = re.compile(r"agent_[a-z][a-z0-9_]{0,40}")
+_OWNED_TABLES = frozenset(
+    {
+        "memory_records",
+        "memory_index_jobs",
+        "memory_publish_policy",
+        "memory_publish_log",
+    }
+)
+
+
+def _sql(statement: str, schema: str) -> str:
+    """Schema names come only from Hermes's agent allowlist; checked again here."""
+    if not _SCHEMA.fullmatch(schema):
+        raise ValueError("invalid schema name")
+    return statement.format(schema=schema)
+
+
+def _alter_owner(schema: str, table: str) -> str:
+    """DDL ownership uses checked schema + fixed table allowlist only."""
+    if not _SCHEMA.fullmatch(schema):
+        raise ValueError("invalid schema name")
+    if table not in _OWNED_TABLES:
+        raise ValueError("invalid table name")
+    return "ALTER TABLE {schema}.{table} OWNER TO {schema}".format(
+        schema=schema, table=table
+    )
 
 
 class ClaimTooLong(ValueError):
@@ -63,7 +92,7 @@ class Records:
                             "memory_publish_policy",
                             "memory_publish_log",
                         ):
-                            await conn.execute(f"ALTER TABLE {s}.{table} OWNER TO {s}")
+                            await conn.execute(_alter_owner(s, table))
 
     async def lock(self, conn: Any, s: str, row_id: uuid.UUID) -> None:
         # Also serializes absent rows: delete tombstones vs recreation of an id.
@@ -97,10 +126,13 @@ class Records:
         async with self.pool.acquire() as conn, conn.transaction():
             await self.lock(conn, s, identity)
             row = await conn.fetchrow(
-                f"""INSERT INTO {s}.memory_records
+                _sql(
+                    """INSERT INTO {schema}.memory_records
                 (id,tenant_id,claim,evidence,confidence,last_verified,kind,meta)
                 VALUES($1,$2,$3,$4::jsonb,$5,$6,$7,$8::jsonb)
                 ON CONFLICT (id) DO NOTHING RETURNING *""",
+                    s,
+                ),
                 identity,
                 tenant_id,
                 claim,
@@ -112,7 +144,10 @@ class Records:
             )
             if row is None:
                 row = await conn.fetchrow(
-                    f"SELECT * FROM {s}.memory_records WHERE id=$1 AND tenant_id=$2 AND tier='client'",
+                    _sql(
+                        "SELECT * FROM {schema}.memory_records WHERE id=$1 AND tenant_id=$2 AND tier='client'",
+                        s,
+                    ),
                     identity,
                     tenant_id,
                 )
@@ -147,8 +182,11 @@ class Records:
         operation: str = "upsert",
     ) -> None:
         await conn.execute(
-            f"""INSERT INTO {s}.memory_index_jobs(row_id,tenant_id,target_model,operation)
+            _sql(
+                """INSERT INTO {schema}.memory_index_jobs(row_id,tenant_id,target_model,operation)
             VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING""",
+                s,
+            ),
             row_id,
             tenant,
             model,
@@ -163,8 +201,11 @@ class Records:
         owner = PLATFORM_TENANT if tier == "platform" else tenant
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
-                f"""SELECT * FROM {self.schema(agent)}.memory_records
+                _sql(
+                    """SELECT * FROM {schema}.memory_records
                 WHERE id=$1 AND tenant_id=$2 AND tier=$3""",
+                    self.schema(agent),
+                ),
                 uuid.UUID(row_id),
                 uuid.UUID(owner),
                 tier,
@@ -179,8 +220,11 @@ class Records:
         owner = PLATFORM_TENANT if tier == "platform" else tenant
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(
-                f"""SELECT * FROM {self.schema(agent)}.memory_records
+                _sql(
+                    """SELECT * FROM {schema}.memory_records
                 WHERE tenant_id=$1 AND tier=$2 ORDER BY created_at DESC,id LIMIT $3""",
+                    self.schema(agent),
+                ),
                 uuid.UUID(owner),
                 tier,
                 limit,
@@ -197,9 +241,12 @@ class Records:
         async with self.pool.acquire() as conn:
             for agent in sorted(self.agents):
                 row = await conn.fetchrow(
-                    f"""SELECT id,tenant_id,agent,claim,evidence,confidence,
+                    _sql(
+                        """SELECT id,tenant_id,agent,claim,evidence,confidence,
                     last_verified,embed_model,created_at,updated_at
-                    FROM {self.schema(agent)}.memory_records WHERE id=$1""",
+                    FROM {schema}.memory_records WHERE id=$1""",
+                        self.schema(agent),
+                    ),
                     row_id,
                 )
                 if row is not None:
@@ -256,15 +303,21 @@ class Records:
             await self.lock(conn, s, row_id)
             # Same lock order as save/forget: record first, then its index job.
             row = await conn.fetchrow(
-                f"""SELECT * FROM {s}.memory_records
+                _sql(
+                    """SELECT * FROM {schema}.memory_records
                 WHERE tenant_id=$1 AND id=$2 FOR UPDATE""",
+                    s,
+                ),
                 tenant,
                 row_id,
             )
             job = await conn.fetchrow(
-                f"""SELECT * FROM {s}.memory_index_jobs
+                _sql(
+                    """SELECT * FROM {schema}.memory_index_jobs
                 WHERE tenant_id=$1 AND row_id=$2 AND target_model=$3 AND operation=$4
                 FOR UPDATE SKIP LOCKED""",
+                    s,
+                ),
                 tenant,
                 row_id,
                 model,
@@ -278,8 +331,11 @@ class Records:
                 # the retry budget for this unchanged row and encoder pin.
                 if job["last_error"] != "embed_failed":
                     await conn.execute(
-                        f"""UPDATE {s}.memory_index_jobs SET last_error='embed_failed'
+                        _sql(
+                            """UPDATE {schema}.memory_index_jobs SET last_error='embed_failed'
                         WHERE tenant_id=$1 AND row_id=$2 AND target_model=$3 AND operation=$4""",
+                            s,
+                        ),
                         tenant, row_id, model, operation,
                     )
                 return False
@@ -295,8 +351,11 @@ class Records:
                     vector = await asyncio.to_thread(self.encoder.embed, row["claim"])
                     await asyncio.to_thread(self.index.upsert, dict(row), vector, model)
                     await conn.execute(
-                        f"""UPDATE {s}.memory_records SET embed_model=$3,updated_at=now()
+                        _sql(
+                            """UPDATE {schema}.memory_records SET embed_model=$3,updated_at=now()
                         WHERE tenant_id=$1 AND id=$2""",
+                            s,
+                        ),
                         tenant,
                         row_id,
                         model,
@@ -307,9 +366,12 @@ class Records:
             except Exception as exc:
                 # Keep the committed record; store only the exception class, never text/URLs.
                 await conn.execute(
-                    f"""UPDATE {s}.memory_index_jobs SET attempts=attempts+1,
+                    _sql(
+                        """UPDATE {schema}.memory_index_jobs SET attempts=attempts+1,
                     last_error=$5,run_at=now()+least(3600,power(2,least(attempts,10))::int)*interval '1 second'
                     WHERE tenant_id=$1 AND row_id=$2 AND target_model=$3 AND operation=$4""",
+                        s,
+                    ),
                     tenant,
                     row_id,
                     model,
@@ -320,8 +382,11 @@ class Records:
                 )
                 return False
             await conn.execute(
-                f"""DELETE FROM {s}.memory_index_jobs
+                _sql(
+                    """DELETE FROM {schema}.memory_index_jobs
                 WHERE tenant_id=$1 AND row_id=$2 AND target_model=$3 AND operation=$4""",
+                    s,
+                ),
                 tenant,
                 row_id,
                 model,
@@ -333,10 +398,13 @@ class Records:
         s = self.schema(agent)
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(
-                f"""INSERT INTO {s}.memory_index_jobs(row_id,tenant_id,target_model)
-                SELECT id,tenant_id,$2 FROM {s}.memory_records
+                _sql(
+                    """INSERT INTO {schema}.memory_index_jobs(row_id,tenant_id,target_model)
+                SELECT id,tenant_id,$2 FROM {schema}.memory_records
                 WHERE tenant_id=$1 AND embed_model IS DISTINCT FROM $2
                 ON CONFLICT DO NOTHING RETURNING row_id""",
+                    s,
+                ),
                 uuid.UUID(tenant),
                 self.model,
             )
@@ -347,15 +415,19 @@ class Records:
             s = self.schema(agent)
             async with self.pool.acquire() as conn:
                 tenants = await conn.fetch(
-                    f"SELECT DISTINCT tenant_id FROM {s}.memory_records"
+                    _sql("SELECT DISTINCT tenant_id FROM {schema}.memory_records", s)
                 )
             for tenant in tenants:
                 await self.schedule_stale(agent, str(tenant["tenant_id"]))
             async with self.pool.acquire() as conn:
-                jobs = await conn.fetch(f"""SELECT * FROM {s}.memory_index_jobs WHERE run_at<=now()
-                    AND (operation='delete' OR attempts<{MAX_EMBED_ATTEMPTS}
-                        OR last_error IS DISTINCT FROM 'embed_failed')
-                    ORDER BY run_at LIMIT 100""")
+                due = (
+                    "SELECT * FROM {schema}.memory_index_jobs WHERE run_at<=now()"
+                    " AND (operation='delete' OR attempts<"
+                    + str(MAX_EMBED_ATTEMPTS)
+                    + " OR last_error IS DISTINCT FROM 'embed_failed')"
+                    + " ORDER BY run_at LIMIT 100"
+                )
+                jobs = await conn.fetch(_sql(due, s))
             for job in jobs:
                 await self.process_one(
                     agent,
@@ -377,8 +449,11 @@ class Records:
         s = self.schema(agent)
         async with self.pool.acquire() as conn, conn.transaction():
             candidates = await conn.fetch(
-                f"""SELECT id FROM {s}.memory_records WHERE tenant_id=$1 AND tier='client'
+                _sql(
+                    """SELECT id FROM {schema}.memory_records WHERE tenant_id=$1 AND tier='client'
                 AND ($2::uuid IS NULL OR id=$2) ORDER BY id""",
+                    s,
+                ),
                 uuid.UUID(tenant),
                 uuid.UUID(row_id) if row_id else None,
             )
@@ -386,8 +461,11 @@ class Records:
             for candidate in candidates:
                 await self.lock(conn, s, candidate["id"])
                 row = await conn.fetchrow(
-                    f"""DELETE FROM {s}.memory_records
+                    _sql(
+                        """DELETE FROM {schema}.memory_records
                     WHERE tenant_id=$1 AND id=$2 AND tier='client' RETURNING id,embed_model""",
+                        s,
+                    ),
                     uuid.UUID(tenant),
                     candidate["id"],
                 )
@@ -395,8 +473,11 @@ class Records:
                     continue
                 removed += 1
                 pending = await conn.fetch(
-                    f"""DELETE FROM {s}.memory_index_jobs
+                    _sql(
+                        """DELETE FROM {schema}.memory_index_jobs
                     WHERE tenant_id=$1 AND row_id=$2 RETURNING target_model""",
+                        s,
+                    ),
                     uuid.UUID(tenant),
                     row["id"],
                 )
