@@ -1991,7 +1991,7 @@ BEGIN
     END IF;
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, tank;
 DO $$ BEGIN
     IF NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='case_study_product_added' AND tgrelid='tank.tenant_squad'::regclass) THEN
         CREATE TRIGGER case_study_product_added AFTER INSERT OR UPDATE OF agent ON tank.tenant_squad
