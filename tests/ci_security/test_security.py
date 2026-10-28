@@ -43,6 +43,15 @@ class SecurityPolicyTests(unittest.TestCase):
     def read(self, name):
         return json.loads((self.output / name).read_text())
 
+    def capture_annotations(self, stdout):
+        self.full_annotations = stdout.getvalue()
+        lines = self.full_annotations.splitlines(keepends=True)
+        self.summaries = [line for line in lines if line.startswith("::error::")]
+        self.annotations = "".join(line for line in lines if not line.startswith("::error::"))
+        self.assertLessEqual(len(self.summaries), 1)
+        if self.summaries:
+            self.assertEqual(lines[0], self.summaries[0])
+
     def osv(self, new, old=None):
         reports = []
         for index, payload in enumerate([new] if old is None else [new, old]):
@@ -63,12 +72,13 @@ class SecurityPolicyTests(unittest.TestCase):
             try:
                 return scan.osv("base" if old is not None else None, self.root, self.output)
             finally:
-                self.annotations = stdout.getvalue()
+                self.capture_annotations(stdout)
 
     def test_existing_vulnerability_is_not_new(self):
         self.assertFalse(self.osv(osv_payload(), osv_payload()))
         self.assertEqual(self.read("osv.json")["findings"], [])
         self.assertEqual(self.annotations, "")
+        self.assertEqual(self.summaries, [])
 
     def test_different_vulnerable_version_blocks_same_advisory(self):
         self.assertTrue(self.osv(osv_payload("1.1"), osv_payload("1.0")))
@@ -90,10 +100,11 @@ class SecurityPolicyTests(unittest.TestCase):
         self.assertTrue(self.osv(osv_payload(), {"results": []}))
         self.assertEqual(self.annotations,
                          "::error file=requirements.txt,line=2::test-package 1.0 TEST-ADVISORY fixed-in 1.2\n")
+        self.assertEqual(self.summaries, ["::error::OSV%0Atest-package 1.0 (requirements.txt) -> 1.2, 1 advisories\n"])
         report = self.read("osv.json")
         self.assertEqual(report["findings"][0]["line"], 2)
         self.assertEqual(report["findings"][0]["fixed_versions"], ["1.2"])
-        self.assertNotIn("private", json.dumps(report) + self.annotations)
+        self.assertNotIn("private", json.dumps(report) + self.full_annotations)
 
     def test_osv_fixes_are_scoped_to_package_and_ecosystem(self):
         report = osv_payload()
@@ -186,7 +197,7 @@ class SecurityPolicyTests(unittest.TestCase):
             try:
                 return scan.semgrep("base", self.root, self.output)
             finally:
-                self.annotations = stdout.getvalue()
+                self.capture_annotations(stdout)
 
     def test_semgrep_only_high_findings_block(self):
         for severity in ("ERROR", "HIGH", "CRITICAL"):
@@ -210,7 +221,7 @@ class SecurityPolicyTests(unittest.TestCase):
         self.assertEqual(report["non_fatal_error_count"], 3)
         self.assertEqual(self.annotations, "::notice file=fixture.html::PartialParsing\n"
                          "::notice file=other.html::Syntax error\n::notice file=slow.py::Timeout\n")
-        self.assertNotIn("private", json.dumps(report) + self.annotations)
+        self.assertNotIn("private", json.dumps(report) + self.full_annotations)
 
     def test_semgrep_fatal_errors_still_block_and_annotate_findings(self):
         with self.assertRaises(RuntimeError):
@@ -265,7 +276,7 @@ class SecurityPolicyTests(unittest.TestCase):
     def test_semgrep_artifact_has_no_source_or_messages(self):
         self.semgrep()
         self.assertNotIn("private", (self.output / "semgrep.json").read_text())
-        self.assertNotIn("private", self.annotations)
+        self.assertNotIn("private", self.full_annotations)
 
     def test_gitleaks_uses_commits_and_keeps_no_secret_material(self):
         def fake_cli(args, allowed):
@@ -280,9 +291,55 @@ class SecurityPolicyTests(unittest.TestCase):
                 "Secret": "private value", "Match": "private match", "Message": "private message",
             }]))
             return 1
-        with patch.object(scan, "run", side_effect=fake_cli):
+        with patch.object(scan, "run", side_effect=fake_cli), redirect_stdout(io.StringIO()) as stdout:
             self.assertTrue(scan.leaks("base", self.root, self.output))
+        self.capture_annotations(stdout)
+        self.assertEqual(self.summaries, ["::error::Gitleaks%0Atest-rule: probe.txt:1\n"])
+        self.assertEqual(self.annotations, "::error file=probe.txt,line=1::test-rule\n")
+        self.assertNotIn("private", self.full_annotations)
         self.assertNotIn("private", (self.output / "gitleaks.json").read_text())
+
+    def test_semgrep_summary_keeps_all_locations_beyond_ten_and_deduplicates(self):
+        findings = [{"check_id": "one-rule", "path": f"file-{i:02}.py", "start": {"line": i + 1},
+                     "extra": {"severity": "HIGH", "lines": "private source"}} for i in range(20)]
+        self.assertTrue(self.semgrep(findings=findings + findings))
+        expected = ", ".join(f"file-{i:02}.py:{i + 1}" for i in range(20))
+        self.assertEqual(self.summaries, [f"::error::Semgrep%0Aone-rule: {expected}\n"])
+        self.assertEqual(len(self.annotations.splitlines()), 40)
+        self.assertNotIn("private", self.full_annotations)
+
+    def test_osv_summary_counts_distinct_advisories_and_keeps_each_lock(self):
+        rows = [{"package": "package", "version": "1.0", "ecosystem": "PyPI", "path": path,
+                 "id": f"ADVISORY-{i}", "fixed_versions": ["2.0"]} for i in range(20)
+                for path in ("first.lock", "second.lock")]
+        with redirect_stdout(io.StringIO()) as stdout:
+            scan.finding_summary("OSV", rows + rows)
+        self.assertEqual(stdout.getvalue(), "::error::OSV%0A"
+                         "package 1.0 (first.lock) -> 2.0, 20 advisories%0A"
+                         "package 1.0 (second.lock) -> 2.0, 20 advisories\n")
+
+    def test_gitleaks_summary_deduplicates_history_without_values(self):
+        rows = [{"RuleID": "rule", "File": f"file-{i:02}.txt", "StartLine": i + 1,
+                 "Commit": commit, "Secret": "private source", "Match": "private match"}
+                for i in range(20) for commit in ("old", "new")]
+        with redirect_stdout(io.StringIO()) as stdout:
+            scan.finding_summary("Gitleaks", rows)
+        expected = "%0A".join(f"rule: file-{i:02}.txt:{i + 1}" for i in range(20))
+        self.assertEqual(stdout.getvalue(), f"::error::Gitleaks%0A{expected}\n")
+        self.assertNotIn("private", stdout.getvalue())
+
+    def test_empty_summaries_do_not_emit_errors(self):
+        with redirect_stdout(io.StringIO()) as stdout:
+            for tool in ("Gitleaks", "Semgrep", "OSV"):
+                scan.finding_summary(tool, [])
+        self.assertEqual(stdout.getvalue(), "")
+
+    def test_summary_metadata_is_escaped_as_one_annotation(self):
+        with redirect_stdout(io.StringIO()) as stdout:
+            scan.finding_summary("Semgrep", [{"rule": "rule%\r\n::error::injected",
+                                              "path": "path\n.py", "line": 2}])
+        self.assertEqual(stdout.getvalue(),
+                         "::error::Semgrep%0Arule%25%0D%0A::error::injected: path%0A.py:2\n")
 
     def test_missing_report_fails(self):
         with patch.object(scan, "run", return_value=0):
