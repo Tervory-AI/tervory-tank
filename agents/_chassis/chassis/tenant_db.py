@@ -64,7 +64,7 @@ def bind_tenant_endpoints(app):
             @wraps(function)
             async def scoped(**kwargs):
                 bound = parameters.bind_partial(**kwargs).arguments
-                tenant = bound.get("tenant_id", bound.get("tenant"))
+                tenant = bound.get("tenant_id", bound.get("tenant", bound.get("x_tenant_id")))
                 actor = bound.get("actor") if authenticated_actor else None
                 for name in ("actor", "body", "req", "payload"):
                     if name == "actor" and not authenticated_actor:
