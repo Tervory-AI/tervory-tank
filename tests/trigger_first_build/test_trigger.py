@@ -264,3 +264,89 @@ def test_voice_length_setting_overrides_upstream_default():
     text = ' '.join(['word'] * 35) + '.'
     assert any(i['rule'] == 'RULE-12' for i in local_checks(text, None)['issues'])
     assert not any(i['rule'] in {'RULE-12', 'sentence_length'} for i in local_checks(text, voice(maxSentenceWords=40))['issues'])
+
+
+@pytest.mark.asyncio
+async def test_real_schema_reapplication_and_voice_isolation(monkeypatch):
+    import os
+    from urllib.parse import urlsplit, urlunsplit
+    import asyncpg
+    url = os.environ.get('POOL_SCHEMA_DATABASE_URL')
+    if not url:
+        pytest.skip('Requires isolated local Postgres')
+    admin = await asyncpg.connect(url)
+    name = 'trigger_test_' + uuid4().hex
+    await admin.execute(f'CREATE DATABASE "{name}"')
+    parts = urlsplit(url)
+    pool = await asyncpg.create_pool(urlunsplit((parts.scheme, parts.netloc, '/' + name, '', '')))
+    try:
+        schema = (ROOT / 'tank/schema.sql').read_text()
+        await pool.execute(schema)
+        await pool.execute(schema)
+        rows = await pool.fetch("SELECT task_type,cache_scope,eval_threshold,min_shadow_samples FROM tank.policy WHERE task_type LIKE 'trigger.%'")
+        assert len(rows) == 2
+        assert {r['task_type']: r['cache_scope'] for r in rows} == {'trigger.write': 'tenant', 'trigger.check': 'none'}
+        assert all(float(r['eval_threshold']) == 0.99 and r['min_shadow_samples'] == 200 for r in rows)
+        await pool.execute('CREATE SCHEMA agent_trigger')
+        await pool.execute((ROOM / 'schema.sql').read_text())
+        await pool.execute((ROOM / 'schema.sql').read_text())
+        store = VoiceStore(pool)
+        await store.put(TENANT, voice(bannedTerms=['wrong']))
+        assert await store.get(OTHER) is None
+        await store.put(OTHER, voice(requiredTerms=['correct']))
+        assert (await store.get(TENANT)).requiredTerms == []
+        assert (await store.get(OTHER)).bannedTerms == []
+        with pytest.raises(ValueError, match='increase'):
+            await store.put(TENANT, voice())
+        monkeypatch.setitem(sys.modules, 'main', SimpleNamespace(pool=lambda: pool, box_region=lambda: 'us-east'))
+        row_id = await trigger_routes.code_receipt(TENANT, 'trigger.check')
+        row = await pool.fetchrow('SELECT * FROM tank.ledger WHERE id=$1 AND tenant_id=$2', row_id, TENANT)
+        assert row['cost_usd'] == 0 and row['rung'] == 3 and row['model'] == 'code'
+        assert await pool.fetchval('SELECT id FROM tank.ledger WHERE id=$1 AND tenant_id=$2', row_id, OTHER) is None
+    finally:
+        await pool.close()
+        await admin.execute(f'DROP DATABASE "{name}"')
+        await admin.close()
+
+
+def test_trigger_adapter_uses_body_scope_not_query(monkeypatch):
+    monkeypatch.setenv('TERVORY_ADMIN_USER_IDS', 'founder')
+    monkeypatch.setitem(sys.modules, 'main', SimpleNamespace(box_region=lambda: 'us-east'))
+    method, path, query, body = command.adapter_request(command.PlannedAction(tool='trigger.check', arguments={'text': 'Keep this unchanged.'}), command.Actor(TENANT, 'founder', True))
+    assert (method, path, query) == ('POST', '/v1/trigger/check', {})
+    assert body == {'tenant_id': str(TENANT), 'text': 'Keep this unchanged.'}
+
+
+@pytest.mark.asyncio
+async def test_real_room_with_internal_languagetool(monkeypatch):
+    import os
+    import asyncpg
+    from trigger.app import app, lifespan
+    if os.environ.get('TRIGGER_INTERNAL_CHECKER_TEST') != '1':
+        pytest.skip('Requires isolated room and LanguageTool containers')
+    admin = await asyncpg.connect(os.environ['POOL_SCHEMA_DATABASE_URL'])
+    await admin.execute('CREATE SCHEMA IF NOT EXISTS agent_trigger')
+    await admin.close()
+    monkeypatch.setenv('DATABASE_URL', os.environ['POOL_SCHEMA_DATABASE_URL'])
+    monkeypatch.setenv('TANK_KEY', 'dummy-room-key')
+    async with lifespan(app):
+        app.state.tank.route = AsyncMock(side_effect=AssertionError('Check must never call a model'))
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://room') as http:
+            assert (await http.get('/health')).status_code == 200
+            assert (await http.post('/check', json={'tenant_id': str(TENANT), 'text': 'This are a test.'})).status_code == 401
+            tenant = uuid4()
+            headers = {'X-Tank-Key': 'dummy-room-key'}
+            response = await http.put(f'/voice/{tenant}', headers=headers, json=voice(bannedTerms=['test']).model_dump())
+            assert response.status_code == 200
+            response = await http.post('/check', headers=headers, json={'tenant_id': str(tenant), 'text': 'This are a test. It was completed by the team.'})
+            assert response.status_code == 200
+            result = response.json()
+            assert result['report']['complete'] is True
+            assert result['model_calls'] == 0
+            assert any(i['source'] == 'languagetool' for i in result['report']['issues'])
+            assert any(i['rule'] == 'banned_term' for i in result['report']['issues'])
+            app.state.tank.route.assert_not_called()
+            evidence = os.environ.get('TRIGGER_REPORT_EVIDENCE')
+            if evidence:
+                Path(evidence).write_text(json.dumps(result, indent=2) + '\n')
+            await app.state.pool.execute('DELETE FROM agent_trigger.voices WHERE tenant_id=$1', tenant)

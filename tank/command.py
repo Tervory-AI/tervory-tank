@@ -826,7 +826,14 @@ class TriggerWriteArgs(TriggerCheckArgs):
     jurisdiction: str | None = Field(default=None, max_length=80)
     terms: dict[str, Any] = Field(default_factory=dict)
     matter_id: uuid.UUID | None = None
-    voice: dict[str, Any] | None = None
+    voice: dict[str, Any] | None = Field(default=None, description=(
+        "Founder-supplied Brand Voice Spec, only when setting/updating this tenant's voice. "
+        "Required: brand (string), status='live', revision (positive increasing integer). "
+        "Optional: registers (name-to-description object), tone (string array), guidelines "
+        "(objects with rule), doAndDont, surfaceDoDont, promptKit, vocabulary, "
+        "bannedTerms, preferredTerms, requiredTerms, signaturePhrases, changelog, voiceQueue, "
+        "stylebook and maxSentenceWords. Never invent a brand voice or include sample brand content. "
+        "Omit voice on later writes to use the saved file."))
 
 
 class SavingsArgs(Body):
@@ -987,6 +994,8 @@ def adapter_request(action: PlannedAction, actor: Actor) -> tuple[str, str, dict
     if action.tool == "ledger.savings":
         end = datetime.now(timezone.utc)
         args = {"start": (end - timedelta(days=args["days"])).isoformat(), "end": end.isoformat()}
+    if action.tool.startswith("trigger."):
+        return adapter.method, path, {}, {**args, **scope}
     if adapter.method == "GET":
         return adapter.method, path, {**args, **scope}, None
     return adapter.method, path, scope, {**args, **scope}
