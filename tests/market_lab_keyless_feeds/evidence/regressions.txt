@@ -7,7 +7,7 @@ ____________________ test_industry_words_stay_in_the_engine ____________________
 tests/test_feeds_boundaries.py:121: in test_industry_words_stay_in_the_engine
     assert offenders == []
 E   AssertionError: assert ['tests/rig_n...results.json'] == []
-E     
+E
 E     Left contains 5 more items, first extra item: 'tests/rig_no_live_demo/browser.py'
 E     Use -v to get more diff
 =============================== warnings summary ===============================
