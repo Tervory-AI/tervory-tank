@@ -1,0 +1,5 @@
+From an unchanged package.json, with no node_modules or existing lockfile:
+$ npm install --package-lock-only --no-audit --no-fund
+
+up to date in 5s
+Exit code: 0

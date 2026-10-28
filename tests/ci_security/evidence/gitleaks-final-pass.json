@@ -1,0 +1,10 @@
+{
+  "tool": "gitleaks",
+  "head": "1acfd7ccac0bd98284471d4ca50583ddce155422",
+  "base": "a99f3cb",
+  "result": "clean",
+  "tool_version": "8.30.1",
+  "exit_code": 0,
+  "findings": [],
+  "execution": "local cloud CLI; not a GitHub Actions run"
+}

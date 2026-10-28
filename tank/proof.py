@@ -132,16 +132,29 @@ async def snapshot(tenant: uuid.UUID | None, task: str | None = None,
         # excluding judge overhead and unpriced/failed candidate calls. They are
         # measured sample savings, never extrapolated to unsampled traffic.
         primary_cost = "CASE WHEN s.routellm_config IS NULL THEN s.primary_cost_usd ELSE l.cost_usd END"
-        candidate_cost = "CASE WHEN s.routellm_config IS NULL THEN s.candidate_cost_usd ELSE rc.routellm_model_cost_usd END"
+        candidate_cost = "CASE WHEN s.routellm_config IS NOT NULL THEN rc.routellm_model_cost_usd WHEN s.candidate_model LIKE 'cache:embedding:%' THEN 0 ELSE s.candidate_cost_usd END"
+        evaluation_cost = "CASE WHEN s.routellm_config IS NULL AND s.candidate_model LIKE 'cache:embedding:%' THEN s.candidate_cost_usd ELSE 0 END"
         comparisons = [dict(r) for r in await conn.fetch(f"""SELECT s.task_type,s.primary_model,s.candidate_model,
             count(*)::int AS samples,avg(s.agreement) AS agreement,sum({primary_cost}) AS primary_cost_usd,
             sum({candidate_cost}) AS could_have_cost_usd,
+            sum({evaluation_cost}) AS evaluation_cost_usd,
             sum({primary_cost}-{candidate_cost}) AS saved_usd """+shadow_from+"""
             AND (s.routellm_config IS NULL OR (l.routellm_primary_cost_known AND rc.routellm_model_cost_usd IS NOT NULL
                  AND rc.outcome='delivered' AND rc.model=l.routellm_weak_model AND rc.ts<$5))
             GROUP BY s.task_type,s.primary_model,s.candidate_model""", *args)]
+        semantic = [dict(r) for r in await conn.fetch("""SELECT o.task_type,
+            count(*)::int AS misses_checked,
+            count(*) FILTER (WHERE o.status='hit')::int AS would_have_hits,
+            count(*) FILTER (WHERE o.status='hit' AND o.agreement IS NOT NULL)::int AS scored_hits,
+            avg(o.agreement) AS agreement,
+            coalesce(sum(o.primary_cost_usd) FILTER (WHERE o.status='hit'),0) AS could_have_saved_usd
+            FROM tank.semantic_observations o JOIN tank.ledger l ON l.id=o.ledger_id AND l.tenant_id=o.tenant_id
+            WHERE ($1::uuid IS NULL OR o.tenant_id=$1) AND o.region=$2 AND l.region=$2
+              AND ($3::text IS NULL OR o.task_type=$3) AND ($4::timestamptz IS NULL OR l.ts >= $4) AND l.ts < $5
+            """ + (" AND o.tenant_id<>'00000000-0000-0000-0000-000000000001'::uuid" if clients_only else "") +
+            " GROUP BY o.task_type", *args)]
         shadows = [dict(r) for r in await conn.fetch(f"""SELECT s.id,s.tenant_id,s.ledger_id,s.task_type,s.primary_model,s.candidate_model,
-            {primary_cost} AS primary_cost_usd,{candidate_cost} AS candidate_cost_usd,s.agreement,s.method,s.created_at """+shadow_from+
+            {primary_cost} AS primary_cost_usd,CASE WHEN s.routellm_config IS NULL THEN s.candidate_cost_usd ELSE rc.routellm_model_cost_usd END AS candidate_cost_usd,s.agreement,s.method,s.created_at """+shadow_from+
             " ORDER BY l.ts DESC,s.id DESC LIMIT $6 OFFSET $7", *args, PAGE_SIZE+1, page*PAGE_SIZE)]
         runs = [dict(r) for r in await conn.fetch(f"""SELECT id,tenant_id,task_type,model,comparison_model,suite_hash,expected_n,
             score,cost_per_call,status,error,started_at,finished_at FROM tank.bench_runs
@@ -176,6 +189,7 @@ async def snapshot(tenant: uuid.UUID | None, task: str | None = None,
     for row in tasks:
         row['code_share'] = row['code_calls']/row['calls'] if row['calls'] else None
         row['shadow_pairs'] = [p for p in comparisons if p['task_type']==row['task_type']]
+        row['semantic_cache'] = next((p for p in semantic if p['task_type']==row['task_type']), None)
         row.update(comparison_numbers(row['compared_actual_usd'],row['baseline_usd']))
         row['quality_note']='same work assumed; quality comparison pending' if row.get('quality_pending',not row['shadow_pairs']) else None
     sections = dict(ledger=ledger,shadows=shadows,runs=runs,cases=cases,promotions=promotions)

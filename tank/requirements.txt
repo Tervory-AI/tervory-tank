@@ -27,3 +27,7 @@ langgraph==1.2.16
 
 # Subset and embed the bundled Unicode font in savings/evidence PDFs.
 reportlab==4.4.9
+
+# Reuse Hermes CPU embeddings and the existing Qdrant service.
+fastembed==0.9.1
+qdrant-client==1.20.0

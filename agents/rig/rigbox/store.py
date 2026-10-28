@@ -255,6 +255,10 @@ class MemoryStore(RetailerMemoryStore):
             self.deleted_products.add((tenant, sku))
         self.private_costs = {key: row for key, row in self.private_costs.items()
                               if key[0] != tenant or key[1] not in found}
+        if hasattr(self, "feed_products"):
+            self.feed_products = {key for key in self.feed_products if key[0] != tenant or key[1] not in found}
+        if hasattr(self, "watch_receipts"):
+            self.watch_receipts = {key: value for key, value in self.watch_receipts.items() if key[0] != tenant or key[1] not in found}
         self._fits = {key: row for key, row in self._fits.items()
                       if key[0] != tenant or (key[1] not in found and key[2] not in found)}
         for (owner, family), members in list(self.families.items()):
@@ -363,6 +367,7 @@ class MemoryStore(RetailerMemoryStore):
 
     async def put_feed(self, tenant_id: str, fmt: str, url: str, currency: str) -> None:
         self.feeds[(str(tenant_id), url)] = {"format": fmt, "url": url, "currency": currency}
+        getattr(self, "indexed_feeds", set()).discard((str(tenant_id), url))
 
     async def feeds_for(self, tenant_id: str) -> list[dict[str, Any]]:
         return [dict(row) for (tenant, _url), row in self.feeds.items() if tenant == str(tenant_id)]
@@ -882,7 +887,7 @@ class PgStore(RetailerPgStore):
                 """
                 INSERT INTO agent_rig.feeds (tenant_id, format, url, currency)
                 VALUES ($1, $2, $3, $4)
-                ON CONFLICT (tenant_id, url) DO UPDATE SET format = EXCLUDED.format, currency = EXCLUDED.currency
+                ON CONFLICT (tenant_id, url) DO UPDATE SET format = EXCLUDED.format, currency = EXCLUDED.currency, watch_indexed=false
                 """,
                 _uuid(tenant_id),
                 str(fmt),
@@ -900,7 +905,7 @@ class PgStore(RetailerPgStore):
 
     async def tenant_ids(self) -> list[str]:
         async with self.pool.acquire() as conn:
-            rows = await conn.fetch("SELECT tenant_id FROM agent_rig.retailers")
+            rows = await conn.fetch("SELECT tenant_id FROM agent_rig.retailers UNION SELECT tenant_id FROM agent_rig.products")
         return [str(row["tenant_id"]) for row in rows]
 
     async def add_quote(self, tenant_id: str, quote_id: str, payload: dict[str, Any], contact: dict[str, Any]) -> None:

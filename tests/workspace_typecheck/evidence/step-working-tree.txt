@@ -1,0 +1,19 @@
+Revision: 035febcac7c9d458c22741373519a39fed08b8ba
+Workflow order: Install -> typecheck -> Build; failure is not suppressed.
+
+Clean branch
+$ (cd workspace && npx tsc --noEmit)
+(no compiler output)
+Exit code: 0
+
+Planted error: typecheck-proof.ts assigns a string to a number
+$ (cd workspace && npx tsc --noEmit)
+typecheck-proof.ts(1,14): error TS2322: Type 'string' is not assignable to type 'number'.
+Exit code: 2
+
+Probe removed
+$ (cd workspace && npx tsc --noEmit)
+(no compiler output)
+Exit code: 0
+
+PASS: clean=0, planted=2 (TS2322), removed=0; probe absent.
