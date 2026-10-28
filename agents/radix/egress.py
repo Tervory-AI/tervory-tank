@@ -130,9 +130,11 @@ def env_revoked() -> bool:
     return os.environ.get("RADIX_EGRESS_REVOKED", "").strip().lower() in {"1", "true", "yes"}
 
 
-def system_resolve(host: str) -> str:
+def system_resolve(host: str, *, verified_host: str | None = None) -> str:
     """One lookup. Mixed or non-public answers are refused. The result is pinned."""
-    if host != APPROVED_HOST:
+    if verified_host is not None and host != verified_host:
+        raise ProxyError("destination not approved")
+    if verified_host is None and host != APPROVED_HOST:
         try:
             approved_storage = storage_host()
         except PolicyError:
@@ -159,7 +161,7 @@ def connect_pinned(address: str, port: int) -> socket.socket:
     return socket.create_connection((address, port), timeout=10)
 
 
-def parse_connect_target(target: str, r2_host: str = "") -> tuple[str, int] | None:
+def parse_connect_target(target: str, r2_host: str = "", *, verified_host: str = APPROVED_HOST) -> tuple[str, int] | None:
     if not target or not target.isascii() or "@" in target or "\\" in target or " " in target:
         return None
     if target.startswith("["):
@@ -168,7 +170,7 @@ def parse_connect_target(target: str, r2_host: str = "") -> tuple[str, int] | No
         return None
     host, port_text = target.split(":", 1)
     host = host.lower().removesuffix(".")
-    if port_text != "443" or not host or host not in {APPROVED_HOST, r2_host}:
+    if port_text != "443" or not host or host not in {verified_host, r2_host}:
         return None
     return host, APPROVED_PORT
 
@@ -187,6 +189,9 @@ class Proxy:
         max_requests_per_minute: int = BOUNDS["max_requests_per_minute"],
         max_response_bytes: int = BOUNDS["max_response_bytes"],
         max_duration_seconds: float = BOUNDS["max_duration_seconds"],
+        verified_host: str = APPROVED_HOST,
+        allow_storage: bool = True,
+        active: Callable[[], bool] | None = None,
     ) -> None:
         self._resolve = resolve
         self._connect = connect
@@ -196,12 +201,16 @@ class Proxy:
         self._max_per_minute = max_requests_per_minute
         self._max_bytes = max_response_bytes
         self._max_duration = max_duration_seconds
+        self._verified_host = verified_host
+        self._active_lease = active or (lambda: True)
         self._lock = threading.Lock()
         self._times: list[float] = []
         self._active = 0
         try:
             self._storage_host = storage_host()
         except PolicyError:
+            self._storage_host = ""
+        if not allow_storage:
             self._storage_host = ""
         self._storage_active = 0
         self._storage_times: list[float] = []
@@ -221,12 +230,12 @@ class Proxy:
                     b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n" + body
                 )
                 return
-            target = parse_connect_target(parts[1], self._storage_host) if len(parts) >= 2 else None
+            target = parse_connect_target(parts[1], self._storage_host, verified_host=self._verified_host) if len(parts) >= 2 else None
             if parts[0] != "CONNECT" or target is None:
                 self._refuse(conn)
                 return
             is_storage = target[0] == self._storage_host
-            if self._revoked or not self._admit(is_storage):
+            if self._revoked or not self._active_lease() or not self._admit(is_storage):
                 self._refuse(conn)
                 return
             upstream: socket.socket | None = None
@@ -319,7 +328,7 @@ class Proxy:
         sent = 0
         client.settimeout(0.2)
         upstream.settimeout(0.2)
-        while time.monotonic() < deadline and sent < limit:
+        while self._active_lease() and time.monotonic() < deadline and sent < limit:
             inbound = self._recv(client)
             if inbound is None:
                 inbound = b""
