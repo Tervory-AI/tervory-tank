@@ -358,6 +358,15 @@ def build_router(rt: Any, store: BaseStore | None = None, *, background: bool = 
     async def confidence_histogram(campaign_id: uuid.UUID, tenant_id: uuid.UUID) -> dict[str, Any]:
         return clean(await audits.histogram(tenant_id, campaign_id))
 
+    @router.get("/source-reliability/room", dependencies=[Depends(room)])
+    async def room_source_reliability() -> dict[str, Any]:
+        # The Base room receives aggregate scores only, never audit snapshots.
+        if rt.box_region() != "us-east":
+            raise HTTPException(403, "This public reference belongs to the US workspace.")
+        async with rt.pool().acquire() as conn:
+            rows = await __import__("base_reliability").read(conn)
+        return clean({"scores": rows})
+
     @router.get("/source-reliability", dependencies=[Depends(workspace), Depends(require_admin)])
     async def source_reliability() -> dict[str, Any]:
         # Job 6 (F8): platform-wide scores from reviewed audits. Counts only.
