@@ -377,3 +377,43 @@ async def test_repeatable_read_options_preserved(database):
                 assert await conn.fetchval("SHOW transaction_read_only") == "on"
                 assert await conn.fetchval("SELECT current_setting('app.tenant_id',true)") == str(tenant)
     assert await database.pool.fetchval("SELECT current_setting('app.tenant_id',true)") == ""
+
+
+@pytest.mark.asyncio
+async def test_base_queue_uses_persisted_owner_after_admin_discovery(database, monkeypatch):
+    import importlib.util
+    sys.path.insert(0, str(ROOT / "agents/base"))
+    spec = importlib.util.spec_from_file_location("rls_base_room", ROOT / "agents/base/room.py")
+    room = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(room)
+    from chassis.tenant_db import TenantPool as RoomPool
+    pool = RoomPool(database.raw, database.founder)
+    a, b = uuid4(), uuid4()
+    for tenant in (a, b):
+        await database.owner.execute("INSERT INTO agent_base.tasks(id,tenant_id,agent,task_type,title,input) VALUES($1,$2,'base','base.enrich','offline',$3::jsonb)", uuid4(), tenant, json.dumps({"tenant_id": str(b)}))
+    finished = asyncio.Event()
+    observed = []
+    class Skills:
+        async def pin(self, *args):
+            return {}, {}
+        def bind(self, *args):
+            return None
+    async def run_batch(pool, task_id, cfg, call):
+        setting = await pool.fetchval("SELECT current_setting('app.tenant_id',true)")
+        assert setting == cfg["tenant_id"]
+        assert await pool.fetchval("SELECT count(*) FROM agent_base.tasks") == 1
+        observed.append(setting)
+        await pool.execute("UPDATE agent_base.tasks SET status='done' WHERE id=$1", task_id)
+        if len(observed) == 2:
+            finished.set()
+    monkeypatch.delenv("BASE_BRAIN_URL", raising=False)
+    monkeypatch.setattr(room, "_run_batch", run_batch)
+    monkeypatch.setattr(room, "models_paused", lambda: False)
+    worker = asyncio.create_task(room.base_loop(pool, Skills()))
+    try:
+        await asyncio.wait_for(finished.wait(), timeout=5)
+    finally:
+        worker.cancel()
+        await asyncio.gather(worker, return_exceptions=True)
+    assert set(observed) == {str(a), str(b)}
+    assert await pool.fetchval("SELECT count(*) FROM agent_base.tasks") == 0
