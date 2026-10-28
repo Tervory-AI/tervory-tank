@@ -62,6 +62,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
+import batch_providers
 import graduate
 import skala
 import skill_costs
@@ -2340,7 +2341,8 @@ async def _batch_price(model: str) -> dict[str, Any]:
     native = row["litellm_params"]["model"]
     provider, _, name = native.partition("/")
     return {"input": float(info["input_cost_per_token"]), "output": float(info["output_cost_per_token"]),
-            "provider": provider, "native": name, "discount": 0.5}
+            "provider": provider, "native": name,
+            "discount": batch_providers.charge_multiplier(provider, name) or 1.0}
 
 
 def _call_upper(messages: list[dict[str, str]], max_tokens: int, prices: dict[str, Any]) -> float:
@@ -2395,7 +2397,7 @@ async def route_batch(body: BatchRequest, caller: str | None = Depends(require_k
     # Free/code/cache results have already finished. Only work still needing a
     # model is submitted; no interactive request enters this durable queue.
     prices = await _batch_price(deferred[0].policy["model"])
-    if prices["provider"] not in {"openai"}:
+    if not batch_providers.supports(prices):
         for item in deferred:
             result = await run_route(item.req, caller=caller, _paid_policy=item.policy,
                                      _prior_escalation=item.escalation, _paid_limit=float(item.policy["max_cost_usd"]))
