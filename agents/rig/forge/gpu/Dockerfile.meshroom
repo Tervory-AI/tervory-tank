@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM nvidia/cuda:12.6.0-runtime-ubuntu24.04@sha256:e456eeda7b9ca6a3d16cd69019ac723d75f538fb185904f93e592aafabbe7b71
+FROM nvidia/cuda:12.5.1-runtime-ubuntu24.04@sha256:447c60da64e4e18860b640289274ec0103816aa56d410041b162d48e85fb1058
 WORKDIR /opt/forge
 COPY gpu /opt/forge/gpu
 ENV PATH="/opt/forge/venv/bin:$PATH"
