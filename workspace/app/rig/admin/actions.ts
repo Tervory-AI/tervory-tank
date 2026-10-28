@@ -18,6 +18,10 @@ export async function retailerIdentity() {
 export async function changeRetailer(operation: AdminOperation, data: Record<string, unknown>): Promise<AdminResult> {
   try {
     const actor = await retailerIdentity();
+    if (operation === "delete-products") {
+      const result = await rigAdminAction<{ deleted: number }>(actor, operation, data);
+      return { ok: true, message: `${result.deleted} deleted.`, deleted: result.deleted, panel: await rigAdminPanel<RetailerPanel>(actor) };
+    }
     if (operation === "mapping") {
       const mapping = await rigAdminAction<MappingPreview>(actor, operation, data);
       return { ok: true, message: "Check each field and confirm the mapping before saving.", mapping };
