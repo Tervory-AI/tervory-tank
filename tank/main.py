@@ -577,7 +577,8 @@ async def require_key(request: Request, x_tank_key: str = Header(default="")) ->
     ghost_route = matched == "ghost" and (request.method, path) in __import__("ghost_routes").ROOM_METHODS
     vendor_write = request.method == "POST" and path == "/v1/ledger/vendor"
     batch_route = path == "/v1/route/batch" or (request.method == "GET" and path.startswith("/v1/route/batch/"))
-    if path not in {"/health", "/v1/route"} and not batch_route and not skill_run and not vendor_write and not ghost_route:
+    event_route = request.method == "POST" and path in {"/v1/events/publish", "/v1/events/receive", "/v1/events/settle"}
+    if path not in {"/health", "/v1/route"} and not batch_route and not skill_run and not vendor_write and not ghost_route and not event_route:
         raise HTTPException(status_code=403, detail="This agent key cannot call that.")
     return matched
 
@@ -2993,9 +2994,14 @@ async def run_skill_evals(skill_id: str, version: str, body: EvalRun | None = No
         raise HTTPException(status_code=400, detail="package has no eval cases; a skill without evals cannot leave candidate")
     here = box_region()
     result = await skala.run_evals(
-        pkg, lambda: make_ctx(pkg, PLATFORM_TENANT, preview=True, home_region=here),
+        pkg, lambda: __import__("skala_revalidation").eval_context(
+            __import__("sys").modules[__name__], pkg,
+            make_ctx(pkg, PLATFORM_TENANT, preview=True, home_region=here)),
         execute=run_room_eval if pkg.id in {"tisan.figma", "tisan.scaffold"} else None,
     )
+    if __import__("skala_revalidation").ACTIVE.get() is not None:
+        return await __import__("skala_revalidation").record(
+            __import__("sys").modules[__name__], result, body.by if body else None)
     passed_gate = result["score"] >= pkg.eval_threshold and result["eligible"]
     async with pool().acquire() as conn:
         await conn.execute(
@@ -3006,6 +3012,8 @@ async def run_skill_evals(skill_id: str, version: str, body: EvalRun | None = No
         state = await conn.fetchval("SELECT state FROM tank.skills WHERE id=$1 AND version=$2", skill_id, version)
         new_state = state
         if state == "candidate" and passed_gate:
+            new_state = "staging"
+        elif state == "approved" and not passed_gate:
             new_state = "staging"
         elif state == "staging" and not passed_gate:
             new_state = "candidate"   # it regressed; back it goes
@@ -3842,6 +3850,7 @@ app.include_router(__import__("proof").router)
 app.include_router(routellm_shadow.router)
 app.include_router(__import__("proof").client_router)
 app.include_router(__import__("case_studies").router)
+app.include_router(__import__("event_bus").router)
 app.include_router(__import__("agent_skills").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("base_product").build_router(__import__("sys").modules[__name__]))
 app.include_router(__import__("rig_brain_routes").build_router(__import__("sys").modules[__name__]))
@@ -4183,3 +4192,6 @@ app.include_router(semantic_cache.build_router(__import__("sys").modules[__name_
 __import__("skala_intake").install(app, __import__("sys").modules[__name__])
 
 app.include_router(__import__("vault_routes").build_router(__import__("sys").modules[__name__]))
+
+# B3: process committed model changes through the existing skill-eval handler.
+__import__("skala_revalidation").install(app, __import__("sys").modules[__name__])

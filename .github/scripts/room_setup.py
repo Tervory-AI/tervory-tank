@@ -37,8 +37,10 @@ def fail(title: str, msg: str) -> None:
 
 
 def api(method: str, path: str, body: dict | None = None):
+    if URL != "https://coolify.tervory.com/api/v1":
+        raise ValueError("COOLIFY_URL must match the fixed https Coolify base")
     data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(URL + path, data=data, method=method, headers={
+    req = urllib.request.Request("https://coolify.tervory.com/api/v1" + path, data=data, method=method, headers={
         "Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json", "Accept": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=60) as r:

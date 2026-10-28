@@ -762,6 +762,12 @@ class PgStore(PgPlaybooks):
             )
         return _obs_out(row) if row else None
 
+    async def rig_skus(self, tenant_id: str, watch_id: str) -> list[str]:
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(f"SELECT sku FROM {self.schema}.rig_targets WHERE tenant_id=$1 AND watch_id=$2 ORDER BY sku",
+                                    uuid.UUID(str(tenant_id)), uuid.UUID(str(watch_id)))
+        return [row['sku'] for row in rows]
+
     async def add_alert(self, row: dict[str, Any]) -> dict[str, Any]:
         async with self.pool.acquire() as conn:
             await ensure_tables(conn, self.schema)
@@ -1048,6 +1054,8 @@ async def external_observation(store, tenant_id, watch, item, method, receipt, c
                        price_enabled=watch.get("alert_price", True), stock_enabled=watch.get("alert_stock", True))
     saved = [await store.add_alert({"tenant_id": tenant_id, "url": url, "ts": clock(), **alert,
         "product_name": current.get("product_name"), "currency": current.get("currency")}) for alert in found]
+    from rig_watch import publish_price_changed
+    await publish_price_changed(store, tenant_id, watch, previous, current)
     return {"status": "can't read" if issue else "observed", "url": url, "method": saved_method, "price": price,
             "stock": availability, "alerts": saved, "observation": current, "receipt": receipt}
 
@@ -1208,6 +1216,8 @@ async def run_check(
             "product_name": current.get("product_name"),
             "currency": current.get("currency"),
         }))
+    from rig_watch import publish_price_changed
+    await publish_price_changed(store, tenant_id, watch, previous, current)
     return {
         "status": "can't read" if method == "unread" else "observed",
         "url": url,

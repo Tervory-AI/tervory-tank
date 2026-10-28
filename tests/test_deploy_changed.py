@@ -54,8 +54,8 @@ def test_sa_stack_deploys_after_main_and_before_rooms(monkeypatch: pytest.Monkey
         ("deploy", "tervory-tank-za", "za-uuid"),
         ("wait", "tervory-tank-za", "za-uuid"),
         ("deploy", "agent-zenas", "room-uuid"),
-        ("deploy", "agent-zenas-za", "room-za-uuid"),
         ("wait", "agent-zenas", "room-uuid"),
+        ("deploy", "agent-zenas-za", "room-za-uuid"),
         ("wait", "agent-zenas-za", "room-za-uuid"),
     ]
 
@@ -180,3 +180,28 @@ def test_za_offline_other_values_keep_todays_behaviour(monkeypatch: pytest.Monke
     monkeypatch.setattr(mod, "deploy", lambda uuid, name: name != "tervory-tank-za")
     monkeypatch.setattr(mod, "wait_for", lambda uuid, name, timeout_s=900: True)
     assert mod.main() == 1
+
+
+def test_rooms_deploy_one_at_a_time_and_a_failed_room_does_not_stop_the_rest(monkeypatch: pytest.MonkeyPatch) -> None:
+    mod = _script(monkeypatch)
+    order: list[tuple[str, str]] = []
+    apps = [{"name": "agent-base", "uuid": "b"}, {"name": "agent-rig", "uuid": "r"}, {"name": "agent-tiger", "uuid": "t"}]
+    monkeypatch.setattr(mod, "changed_paths", lambda: ["agents/_chassis/chassis/app.py"])
+    monkeypatch.setattr(mod, "api", lambda method, path: (200, apps))
+
+    def deploy(uuid: str, name: str) -> bool:
+        order.append(("deploy", name))
+        return name != "agent-rig"
+
+    def wait_for(uuid: str, name: str, timeout_s: int = 900) -> bool:
+        order.append(("wait", name))
+        return True
+
+    monkeypatch.setattr(mod, "deploy", deploy)
+    monkeypatch.setattr(mod, "wait_for", wait_for)
+    assert mod.main() == 1
+    assert order == [
+        ("deploy", "agent-base"), ("wait", "agent-base"),
+        ("deploy", "agent-rig"),
+        ("deploy", "agent-tiger"), ("wait", "agent-tiger"),
+    ]

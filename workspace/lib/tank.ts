@@ -4,6 +4,19 @@
 const TANK_URL = process.env.TANK_URL ?? "http://tank:8000";
 const TANK_API_KEY = process.env.TANK_API_KEY ?? "";
 
+/** Founder JSON inspection only; caller identity is resolved by Workspace. */
+export function rigPriceHistory(identity: { tenantId: string; userId: string }, query: URLSearchParams): Promise<Response> {
+  const url = new URL("/v1/agents/rig/price-history", TANK_URL);
+  for (const key of ["tenant_id", "product_id", "offset", "limit"]) {
+    const value = query.get(key);
+    if (value !== null) url.searchParams.set(key, value);
+  }
+  if (!url.searchParams.has("tenant_id")) url.searchParams.set("tenant_id", identity.tenantId);
+  return fetch(url, { cache: "no-store", redirect: "error", headers: {
+    "X-Tank-Key": TANK_API_KEY, "X-Tervory-User": identity.userId, "X-Tervory-Tenant": identity.tenantId,
+  } });
+}
+
 /** API-only reports. Identity is supplied by Clerk on the server, never the browser. */
 export async function caseStudyRequest(identity: { tenantId: string; userId: string }, path = "", query = new URLSearchParams()): Promise<Response> {
   const allowed = ["", "ensure", "clients", "base", "tiger", "market_lab", "rig", "zenas", "trigger", "tisan", "radix", "autumbra"];
