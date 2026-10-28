@@ -8,7 +8,7 @@ The brief says: “Reuse only existing email words; if new wording is needed, st
 
 The existing mailer in `agents/tiger/alert_email.py:88` constructs only price/stock notifications. Its subject is the existing price/stock change sentence, and its body contains the product name, that sentence and the source URL. It explicitly rejects other alert kinds. These sentences cannot accurately describe a legal change.
 
-The existing Zenas notice is in `agents/zenas/core/service.py:53`: “Zenas provides legal information, not legal advice.” No existing Zenas regulation-change email subject/body template was found in the Zenas code, checked-in Figma specifications or build documentation. The requested generated summary is authorized data, but it does not establish an existing email template under the reuse-only requirement.
+The existing Zenas notice is in `agents/zenas/core/service.py:52`: “Zenas provides legal information, not legal advice.” No existing Zenas regulation-change email subject/body template was found in the Zenas code, checked-in Figma specifications or build documentation. The requested generated summary is authorized data, but it does not establish an existing email template under the reuse-only requirement.
 
 **Missing:** an approved law-change email subject/body template specifying how to present the requested summary, source link, date and existing legal-information notice. No subject, greeting, labels or body wording has been invented.
 
