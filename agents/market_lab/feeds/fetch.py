@@ -43,14 +43,17 @@ from feeds.store import Store, utc_now
 
 
 class MemoryReader:
-    def __init__(self, text: str) -> None:
+    def __init__(self, text: str | bytes) -> None:
         self.text = text
 
     def read_text(self, relative: str) -> str:
-        return self.text
+        return self.text.decode("utf-8") if isinstance(self.text, bytes) else self.text
+
+    def read_bytes(self, relative: str) -> bytes:
+        return self.text if isinstance(self.text, bytes) else self.text.encode("utf-8")
 
     def iter_rows(self, relative: str, *, header_marker: str | None = None):
-        return iter_dicts(io.StringIO(self.text), header_marker=header_marker)
+        return iter_dicts(io.StringIO(self.read_text(relative)), header_marker=header_marker)
 
 
 def watch_page(source: SourceSpec, client: PoliteClient, store: Store) -> int:
@@ -438,7 +441,13 @@ def _live_sec_submissions(source: SourceSpec, client: PoliteClient, store: Store
     return inserted
 
 
+from feeds.keyless import fetch_comtrade, fetch_rss, fetch_searxng
+
+
 _HANDLERS = {
+    "rss": fetch_rss,
+    "comtrade_preview": fetch_comtrade,
+    "searxng": fetch_searxng,
     "socrata_monthly": _live_socrata_monthly,
     "sec_submissions": _live_sec_submissions,
     "listing": _live_listing,

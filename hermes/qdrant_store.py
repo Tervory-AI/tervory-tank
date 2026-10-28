@@ -126,12 +126,14 @@ class QdrantStore:
             hits.append(Hit(_memory(str(point.id), payload), float(point.score)))
         return hits
 
-    def delete(self, collection: str, memory_id: str) -> bool:
+    def delete(self, collection: str, memory_id: str, tenant_id: str | None = None) -> bool:
         self._check(collection)
         if not self._client.collection_exists(collection):
             return False
         found = self._client.retrieve(collection_name=collection, ids=[memory_id])
         if not found:
+            return False
+        if tenant_id is not None and (found[0].payload or {}).get('tenant_id') != tenant_id:
             return False
         self._client.delete(collection_name=collection, points_selector=[memory_id])
         return True

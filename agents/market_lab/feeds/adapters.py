@@ -742,7 +742,13 @@ def run_sec_submissions(source: SourceSpec, reader: FixtureReader, store: Store,
     return inserted
 
 
+from feeds.keyless import run_comtrade, run_rss, run_searxng
+
+
 ADAPTERS = {
+    "rss": run_rss,
+    "comtrade_preview": run_comtrade,
+    "searxng": run_searxng,
     "socrata_monthly": run_socrata_monthly,
     "sec_submissions": run_sec_submissions,
     "listing": run_listing_clean,

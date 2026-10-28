@@ -3246,6 +3246,8 @@ _ZENAS_PATH = re.compile(
     r"|^pool/sources/[A-Za-z0-9._-]{1,80}/load$"
     r"|^moot/problems/[A-Za-z0-9._-]{1,80}/counsel/(appellant|respondent)$"
     r"|^moot/problems/[A-Za-z0-9._-]{1,80}/(edit|lock)$"
+    r"|^regulations/(watches|changes)$"
+    r"|^regulations/watches/[0-9a-fA-F-]{36}$"
     r"|^moot/matches/ai-ai$"
     r"|^moot/matches/student$"
     r"|^moot/matches/[0-9a-fA-F-]{36}/publish$"
@@ -3412,6 +3414,8 @@ async def zenas_proxy(path: str, request: Request) -> Response:
     if _http is None:
         raise HTTPException(status_code=503, detail="Zenas room is unreachable")
     headers: dict[str, str] = {}
+    if path.startswith("regulations/"):
+        headers["X-Tank-Key"] = os.environ.get("TANK_KEY_ZENAS", "")
     content_type = request.headers.get("content-type")
     if content_type:
         headers["content-type"] = content_type
@@ -3703,10 +3707,24 @@ async def tiger_create_watch(request: Request) -> Response:
     body = await _tiger_body(request)
     tenant_id = _tiger_tenant(request, body)
     forwarded: dict[str, Any] = {"tenant_id": str(tenant_id)}
-    for key in ("url", "label", "engine", "every", "enabled", "threshold", "alert_price", "alert_stock"):
+    for key in ("url", "label", "engine", "every", "enabled", "threshold", "alert_price", "alert_stock",
+                "alert_new_product", "alert_below_cost", "alert_market_gap"):
         if key in body:
             forwarded[key] = body[key]
     resp = await _tiger_call("POST", "/watchlist", [], json.dumps(forwarded).encode())
+    return _tiger_response(resp, tenant_id)
+
+
+@app.patch("/v1/tiger/watchlist/{watch_id}", dependencies=[Depends(require_key)])
+async def tiger_update_watch(watch_id: uuid.UUID, request: Request) -> Response:
+    body = await _tiger_body(request)
+    tenant_id = _tiger_tenant(request, body)
+    forwarded = {"tenant_id": str(tenant_id)}
+    for key in ("url", "label", "engine", "every", "enabled", "threshold", "alert_price", "alert_stock",
+                "alert_new_product", "alert_below_cost", "alert_market_gap"):
+        if key in body:
+            forwarded[key] = body[key]
+    resp = await _tiger_call("PATCH", f"/watchlist/{watch_id}", [], json.dumps(forwarded).encode())
     return _tiger_response(resp, tenant_id)
 
 
@@ -4192,6 +4210,10 @@ app.include_router(semantic_cache.build_router(__import__("sys").modules[__name_
 __import__("skala_intake").install(app, __import__("sys").modules[__name__])
 
 app.include_router(__import__("vault_routes").build_router(__import__("sys").modules[__name__]))
+
+# D1-D3 memory: founder-only record/publication corridor.
+from memory_routes import router as memory_router
+app.include_router(memory_router)
 
 # B3: process committed model changes through the existing skill-eval handler.
 __import__("skala_revalidation").install(app, __import__("sys").modules[__name__])

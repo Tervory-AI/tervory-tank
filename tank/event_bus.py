@@ -4,13 +4,14 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from decimal import Decimal
+from datetime import date as SourceDate
 import json
 import logging
 from typing import Literal
 from uuid import UUID, NAMESPACE_URL, uuid5
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, TypeAdapter, field_validator
 from redis.asyncio import Redis
 from redis.exceptions import ResponseError
 
@@ -60,6 +61,37 @@ class ZenasFact(Strict):
     version_id: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
+class WatchZenasFact(Strict):
+    source: Literal["federal-register", "ecfr", "congress", "legiscan", "eur-lex", "laws-africa"]
+    document_id: str = Field(min_length=1, max_length=512)
+    date: SourceDate
+    link: str = Field(max_length=4096)
+
+    @field_validator("link")
+    @classmethod
+    def official_link(cls, value, info):
+        from urllib.parse import urlsplit, parse_qsl
+        hosts = {
+            "federal-register": {"www.federalregister.gov", "federalregister.gov"},
+            "ecfr": {"www.ecfr.gov", "ecfr.gov"}, "congress": {"www.congress.gov", "congress.gov"},
+            "legiscan": {"legiscan.com"}, "eur-lex": {"eur-lex.europa.eu"},
+            "laws-africa": {"api.laws.africa", "edit.laws.africa", "lawlibrary.org.za", "laws.africa"},
+        }
+        p = urlsplit(value)
+        if (p.scheme != "https" or p.hostname not in hosts.get(info.data.get("source"), set())
+                or p.username or p.password or p.port not in (None,443)
+                or any(c.isspace() for c in value)
+                or any(k.lower() in {"key","api_key","token","password","secret"} for k,_ in parse_qsl(p.query))):
+            raise ValueError("Invalid source link")
+        return value
+
+
+class _ZenasFacts:
+    @classmethod
+    def model_validate(cls, facts):
+        return TypeAdapter(ZenasFact | WatchZenasFact).validate_python(facts)
+
+
 class RadixFact(Strict):
     scan_id: UUID
     ordinal: int = Field(ge=0)
@@ -71,7 +103,7 @@ class TisanFact(Strict):
     site_id: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
-FACTS = dict(zip(EVENTS, (BaseFact, TigerFact, MarketFact, ZenasFact, RadixFact, TisanFact)))
+FACTS = dict(zip(EVENTS, (BaseFact, TigerFact, MarketFact, _ZenasFacts, RadixFact, TisanFact)))
 
 
 @dataclass(frozen=True)
