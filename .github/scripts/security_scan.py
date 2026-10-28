@@ -26,6 +26,40 @@ def write(path: Path, data: object) -> None:
     path.write_text(json.dumps(data, indent=2) + "\n")
 
 
+def annotation(kind: str, text: str, path: str = "", line: int | None = None) -> None:
+    """Escape workflow command syntax; callers supply only permitted metadata."""
+    def escape(value: str) -> str:
+        return value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+    properties = []
+    if path:
+        properties.append("file=" + escape(path).replace(":", "%3A").replace(",", "%2C"))
+    if line is not None:
+        properties.append(f"line={int(line)}")
+    suffix = " " + ",".join(properties) if properties else ""
+    print(f"::{kind}{suffix}::{escape(text)}")
+
+
+def semgrep_error(error: dict) -> dict:
+    # Tagged error variants can carry skipped source tokens. Retain only the tag.
+    kind = error.get("type", "UnknownError")
+    if isinstance(kind, list):
+        kind = kind[0] if kind else "UnknownError"
+    if not isinstance(kind, str):
+        kind = "UnknownError"
+    path = error.get("path") or ""
+    if not isinstance(path, str):
+        path = ""
+    # Semgrep 1.182.1 represents registry download failures as SemgrepError.
+    # Inspect its stable prefix for classification, but never retain/emit the message.
+    download_failed = str(error.get("message", "")).lower().startswith(
+        "failed to download configuration")
+    fatal = (str(error.get("level", "")).lower() == "fatal"
+             or kind in {"Fatal error", "FatalError", "RuleDownloadError", "ConfigDownloadError"}
+             or download_failed)
+    return {"type": kind, "path": path, "fatal": fatal}
+
+
 def leaks(base: str | None, temp: Path, output: Path) -> bool:
     # PR #374: Claude-reviewed fingerprints and one exact public CI dummy value.
     config = Path(".gitleaks.toml").resolve()
@@ -52,16 +86,35 @@ def semgrep(base: str | None, temp: Path, output: Path) -> bool:
             "--json", "--output", str(raw)]
     if base:
         args += ["--baseline-commit", base]
-    run([*args, "."])
-    report = json.loads(raw.read_text())
+    try:
+        # Read findings/errors even when the CLI returns nonzero. In particular,
+        # exit 3 denotes target parse errors, which are notices under this policy.
+        code = run([*args, "."], tuple(range(256)))
+        report = json.loads(raw.read_text())
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+        annotation("notice", type(error).__name__)
+        raise
     findings = [{"rule": row["check_id"], "path": row["path"],
                  "line": row["start"]["line"], "severity": row["extra"]["severity"]}
                 for row in report["results"]]
-    errors = report["errors"]
-    write(output / "semgrep.json", {"findings": findings, "error_count": len(errors)})
-    # ERROR is the legacy spelling of HIGH. Never treat incomplete scans as clean.
-    if errors:
-        raise RuntimeError("Semgrep reported scan errors")
+    errors = [semgrep_error(error) for error in report["errors"]]
+    # Fatal process/configuration exits and a missing report still fail closed.
+    # 0 = success, 1 = findings, 3 = target parsing errors in the pinned CLI.
+    if (code not in (0, 1, 3) or (code == 3 and not errors)) and not any(e["fatal"] for e in errors):
+        errors.append({"type": "SemgrepProcessError", "path": "", "fatal": True})
+    fatal_count = sum(error["fatal"] for error in errors)
+    write(output / "semgrep.json", {"findings": findings, "errors": errors,
+                                    "error_count": len(errors), "fatal_error_count": fatal_count,
+                                    "non_fatal_error_count": len(errors) - fatal_count,
+                                    "exit_code": code})
+    for finding in findings:
+        annotation("error", f"{finding['rule']} {finding['severity']}",
+                   finding["path"], finding["line"])
+    for error in errors:
+        annotation("notice", error["type"], error["path"])
+    if fatal_count:
+        raise RuntimeError("Semgrep scan is incomplete")
+    # ERROR is the legacy spelling of HIGH; non-fatal notices do not alter this gate.
     return any(row["severity"] in {"ERROR", "HIGH", "CRITICAL"} for row in findings)
 
 

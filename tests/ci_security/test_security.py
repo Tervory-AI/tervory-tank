@@ -1,6 +1,8 @@
 """Offline tests of CI policy around scanner output, not replacement scanners."""
 import importlib.util
+import io
 import json
+from contextlib import redirect_stdout
 from pathlib import Path
 import subprocess
 import tempfile
@@ -77,36 +79,97 @@ class SecurityPolicyTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 scan.osv_report("head", self.root)
 
-    def semgrep(self, severity="INFO", errors=None):
-        def fake_cli(args):
+    def semgrep(self, severity="INFO", errors=None, code=0, findings=None):
+        def fake_cli(args, allowed):
+            self.assertIn(code, allowed)
             self.assertIn("--config", args)
             self.assertIn("auto", args)
             self.assertEqual(args[args.index("--baseline-commit") + 1], "base")
             self.assertIn("--disable-nosem", args)
-            report = {"results": [{"check_id": "test-rule", "path": "file.py", "start": {"line": 1},
-                                  "extra": {"severity": severity, "lines": "private source", "message": "private message"}}],
+            results = [{"check_id": "test-rule", "path": "file.py", "start": {"line": 1},
+                        "extra": {"severity": severity, "lines": "private source", "message": "private message"}}]
+            report = {"results": results if findings is None else findings,
                       "errors": errors or []}
             Path(args[args.index("--output") + 1]).write_text(json.dumps(report))
-            return 0
-        with patch.object(scan, "run", side_effect=fake_cli):
-            return scan.semgrep("base", self.root, self.output)
+            return code
+        # Do not publish synthetic test annotations in the CI job.
+        with patch.object(scan, "run", side_effect=fake_cli), redirect_stdout(io.StringIO()) as stdout:
+            try:
+                return scan.semgrep("base", self.root, self.output)
+            finally:
+                self.annotations = stdout.getvalue()
 
     def test_semgrep_only_high_findings_block(self):
         for severity in ("ERROR", "HIGH", "CRITICAL"):
             with self.subTest(severity=severity):
                 self.assertTrue(self.semgrep(severity))
+                self.assertEqual(self.annotations, f"::error file=file.py,line=1::test-rule {severity}\n")
         for severity in ("INFO", "WARNING", "LOW", "MEDIUM"):
             with self.subTest(severity=severity):
                 self.assertFalse(self.semgrep(severity))
+                self.assertEqual(self.annotations, f"::error file=file.py,line=1::test-rule {severity}\n")
 
-    def test_semgrep_errors_block(self):
+    def test_semgrep_nonfatal_errors_are_counted_not_failed(self):
+        errors = [
+            {"type": ["PartialParsing", [{"tokens": "private source"}]], "level": "warn", "path": "fixture.html"},
+            {"type": "Syntax error", "level": "error", "path": "other.html", "message": "private message"},
+            {"type": "Timeout", "level": "warn", "path": "slow.py"},
+        ]
+        self.assertFalse(self.semgrep(errors=errors, code=3, findings=[]))
+        report = self.read("semgrep.json")
+        self.assertEqual(report["fatal_error_count"], 0)
+        self.assertEqual(report["non_fatal_error_count"], 3)
+        self.assertEqual(self.annotations, "::notice file=fixture.html::PartialParsing\n"
+                         "::notice file=other.html::Syntax error\n::notice file=slow.py::Timeout\n")
+        self.assertNotIn("private", json.dumps(report) + self.annotations)
+
+    def test_semgrep_fatal_errors_still_block_and_annotate_findings(self):
         with self.assertRaises(RuntimeError):
-            self.semgrep(errors=[{"message": "private source"}])
-        self.assertEqual(self.read("semgrep.json")["error_count"], 1)
+            self.semgrep(severity="HIGH", errors=[{"type": "EngineError", "level": "fatal", "path": "file.py",
+                                                   "message": "private source"}])
+        self.assertEqual(self.read("semgrep.json")["fatal_error_count"], 1)
+        self.assertEqual(self.annotations, "::error file=file.py,line=1::test-rule HIGH\n"
+                         "::notice file=file.py::EngineError\n")
+
+    def test_semgrep_native_fatal_error_type_blocks(self):
+        with self.assertRaises(RuntimeError):
+            self.semgrep(errors=[{"type": "Fatal error", "level": "error"}], code=2, findings=[])
+        self.assertEqual(self.annotations, "::notice::Fatal error\n")
+
+    def test_semgrep_rule_download_failure_blocks_without_printing_message(self):
+        with self.assertRaises(RuntimeError):
+            self.semgrep(errors=[{"type": "SemgrepError", "level": "error",
+                                  "message": "Failed to download configuration from private location"}],
+                         code=2, findings=[])
+        self.assertEqual(self.annotations, "::notice::SemgrepError\n")
+        self.assertNotIn("private", (self.output / "semgrep.json").read_text())
+        self.assertEqual(self.read("semgrep.json")["fatal_error_count"], 1)
+
+    def test_semgrep_unexplained_fatal_exit_cannot_pass(self):
+        with self.assertRaises(RuntimeError):
+            self.semgrep(code=2, findings=[])
+        self.assertEqual(self.annotations, "::notice::SemgrepProcessError\n")
+
+    def test_semgrep_nonfatal_notices_do_not_hide_high_findings(self):
+        self.assertTrue(self.semgrep(severity="HIGH", errors=[{"type": "Timeout", "level": "warn", "path": "slow.py"}]))
+        self.assertEqual(self.read("semgrep.json")["non_fatal_error_count"], 1)
+
+    def test_semgrep_annotation_metadata_is_escaped(self):
+        findings = [{"check_id": "rule%\r\n::notice::text", "path": "a,b:c%\r\n.py", "start": {"line": 2},
+                     "extra": {"severity": "HIGH", "lines": "private source", "message": "private message"}}]
+        self.assertTrue(self.semgrep(findings=findings))
+        self.assertEqual(self.annotations, "::error file=a%2Cb%3Ac%25%0D%0A.py,line=2::rule%25%0D%0A::notice::text HIGH\n")
+
+    def test_semgrep_missing_report_blocks_with_safe_notice(self):
+        with patch.object(scan, "run", return_value=0), redirect_stdout(io.StringIO()) as stdout:
+            with self.assertRaises(FileNotFoundError):
+                scan.semgrep("base", self.root, self.output)
+        self.assertEqual(stdout.getvalue(), "::notice::FileNotFoundError\n")
 
     def test_semgrep_artifact_has_no_source_or_messages(self):
         self.semgrep()
         self.assertNotIn("private", (self.output / "semgrep.json").read_text())
+        self.assertNotIn("private", self.annotations)
 
     def test_gitleaks_uses_commits_and_keeps_no_secret_material(self):
         def fake_cli(args, allowed):
