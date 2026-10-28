@@ -688,6 +688,29 @@ def _world_bank_date(text: str) -> str:
     return _month_date(text)
 
 
+def run_socrata_monthly(source: SourceSpec, reader: FixtureReader, store: Store, *, backfill: bool) -> int:
+    """Monthly category counts from a licensed official Socrata dataset."""
+    require_copy(source)
+    inserted = 0
+    config = source.config
+    for entry in _files(source, backfill):
+        rows = json.loads(reader.read_text(_path_of(entry)))
+        if not isinstance(rows, list):
+            raise ValueError("expected Socrata rows")
+        for row in rows:
+            month = _MONTHS[row[config["month_column"]].lower()]
+            stamp = date(int(row[config["year_column"]]), month, 1).isoformat()
+            category = row[config["type_column"]]
+            title = config["titles"][category]
+            value = Decimal(row[config["value_column"]])
+            if not value.is_finite() or value < 0:
+                raise ValueError("invalid monthly count")
+            inserted += _point(store, source, category, title, config["unit"],
+                               config["geo_level"], config["geo"], "monthly", stamp,
+                               value, "published")
+    return inserted
+
+
 def run_sec_submissions(source: SourceSpec, reader: FixtureReader, store: Store, *, backfill: bool) -> int:
     """SEC's recent submissions window, one recorded response per filer.
 
@@ -720,6 +743,7 @@ def run_sec_submissions(source: SourceSpec, reader: FixtureReader, store: Store,
 
 
 ADAPTERS = {
+    "socrata_monthly": run_socrata_monthly,
     "sec_submissions": run_sec_submissions,
     "listing": run_listing_clean,
     "typed_counts": run_typed_counts,

@@ -116,12 +116,14 @@ PORT_LB_LINK = (
     f"Terms checked {CHECKED}. https://polb.com/business/port-statistics/"
 )
 
-PORT_NYNJ_LINK = (
-    "Linked only. The New York open-data catalog marks the port container "
-    "series public. A licence that clearly allows a bulk copy was not stated "
-    "on the dataset page. "
-    f"Terms checked {CHECKED}. "
-    "https://data.ny.gov/Transportation/Loaded-Containers-Monthly-Imports-and-Exports-Thro/629s-5a55"
+OPEN_NY = (
+    "OPEN-NY Terms of Use permit downloading and reusing published data for "
+    "lawful purposes, including private-sector projects. No separate dataset "
+    "restriction appears in the port dataset metadata; figures are self-reported "
+    "by terminals. Terms checked 2026-10-28. "
+    "https://data.ny.gov/dataset/OPEN-NY-Terms-Of-Use/77gx-ii52 "
+    "SODA permits unauthenticated queries, with shared-IP throttling and HTTP 429 "
+    "on excess use: https://dev.socrata.com/docs/app-tokens.html"
 )
 
 PAGE_LINK = (

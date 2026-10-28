@@ -19,8 +19,10 @@ from feeds.fetch import MemoryReader, fetch_source
 from feeds.live import BlockedSite, PoliteClient, USER_AGENT
 from feeds.reader import FixtureReader
 from feeds.store import Store
+from feeds.runner import run as run_feeds
 from core.evidence import answer, document, document_page, save_check
 from core.ledger import MemoryLedger
+from core.jobs import perform_refresh
 
 FIXTURES = ROOT / "tests/fixtures/feeds"
 OWNER = "00000000-0000-0000-0000-000000000001"
@@ -150,3 +152,87 @@ async def test_sec_answer_links_exact_saved_row_and_is_tenant_isolated():
     assert not (await answer(ledger, OTHER, "SEC filings", fixtures=True))["facts"]
     assert await document(ledger, OTHER, check["document_id"], fixtures=True) is None
     assert not (await answer(ledger, OWNER, "SEC filings"))["facts"]
+
+
+def port_spec():
+    return next(source for source in sources("ffl") if source.id == "port_nynj")
+
+
+def test_port_recording_keeps_month_category_and_provenance(store):
+    source = port_spec()
+    store.upsert_source(source)
+    run = ADAPTERS[source.adapter]
+    assert run(source, FixtureReader([FIXTURES]), store, backfill=True) == 384
+    assert run(source, FixtureReader([FIXTURES]), store, backfill=False) == 0
+    rows = store.conn.execute("SELECT p.*, s.title, s.source_id, f.url FROM points p JOIN series s ON p.series_id=s.id JOIN feed_sources f ON s.source_id=f.id").fetchall()
+    assert len(rows) == 384
+    assert all(row["url"] == source.url and row["fetched_at"] for row in rows)
+    assert {row["date"][:4] for row in rows} == {str(year) for year in range(2000, 2016)}
+    assert any(row["date"] == "2012-01-01" and "imports" in row["title"] and str(row["value"]) == "228051" for row in rows)
+
+
+def test_port_pagination_is_stable_and_stops_at_short_page(store):
+    from urllib.parse import parse_qs, urlsplit
+    source = port_spec()
+    store.upsert_source(source)
+    rows = json.loads((FIXTURES / "ports/nynj.json").read_text())
+    calls = []
+    class Pages:
+        def get_text(self, url):
+            calls.append(url)
+            query = parse_qs(urlsplit(url).query)
+            assert query["$order"] == [":id"] and query["$limit"] == ["1000"]
+            assert query["$offset"] == [str((len(calls) - 1) * 1000)]
+            return json.dumps([rows[0]] * 1000 if len(calls) == 1 else rows[1:])
+    assert fetch_source(source, Pages(), store, backfill=True) == 384
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize("field,value", [("volume", "NaN"), ("volume", "-1"), ("month", "unknown"), ("year", ""), ("type", "Unknown")])
+def test_port_invalid_rows_fail_without_inventing_values(store, field, value):
+    source = port_spec()
+    row = json.loads((FIXTURES / "ports/nynj.json").read_text())[0]
+    row[field] = value
+    with pytest.raises((ValueError, KeyError)):
+        ADAPTERS[source.adapter](source, MemoryReader(json.dumps([row])), store, backfill=True)
+    assert store.conn.execute("SELECT count(*) FROM points").fetchone()[0] == 0
+
+
+def test_port_throttling_rolls_back_partial_pages_and_does_not_retry(tmp_path):
+    calls = []
+    raw = json.loads((FIXTURES / "ports/nynj.json").read_text())[0]
+    def opener(request, **kwargs):
+        calls.append(request)
+        if len(calls) == 1:
+            return Response(json.dumps([raw] * 1000).encode())
+        raise urllib.error.HTTPError(request.full_url, 429, "throttled", None, io.BytesIO())
+    path = str(tmp_path / "proof.sqlite")
+    status = run_feeds(path, engine="ffl", source="port_nynj", live=True,
+                      client=PoliteClient(opener=opener, delay=0))
+    assert len(calls) == 2
+    assert status[0]["last_error"] == "blocked"
+    conn = connect(path)
+    try:
+        assert conn.execute("SELECT count(*) FROM points").fetchone()[0] == 0
+    finally:
+        conn.close()
+
+
+@pytest.mark.asyncio
+async def test_port_answers_cite_published_period_not_fetch_year_and_isolate_tenants():
+    ledger = MemoryLedger()
+    result = await perform_refresh(tenant_id=OWNER, engine="ffl", source="port_nynj",
+                                   fixtures=str(FIXTURES), ledger=ledger)
+    check = result["feeds"][0]
+    assert not check["note"] and check["rows"] == 384
+    response = await answer(ledger, OWNER, "New York container imports in 2015", fixtures=True)
+    assert response["facts"]
+    saved = await document(ledger, OWNER, check["document_id"], fixtures=True)
+    assert saved["url"] == port_spec().url
+    for fact in response["facts"]:
+        row = saved["points"][int(fact["href"].split("#point-")[1])]
+        assert row["date"].startswith("2015-") and row["fetched_at"]
+    assert not (await answer(ledger, OWNER, "New York container imports in 2026", fixtures=True))["facts"]
+    assert not (await answer(ledger, OWNER, "California container imports in 2015", fixtures=True))["facts"]
+    assert not (await answer(ledger, OTHER, "New York container imports in 2015", fixtures=True))["facts"]
+    assert await document(ledger, OTHER, check["document_id"], fixtures=True) is None

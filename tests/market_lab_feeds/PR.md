@@ -9,42 +9,44 @@ At this base, `feeds/catalog.py` delegates to `feeds/engines/ffl/sources.py`. Th
 
 The table includes every key-gated entry and every link-only entry. Eleven link entries have page-hash watchers, so they are explicitly distinguished from missing fetchers. SEC EDGAR, USPTO, MarineTraffic, Freightos and LME are absent from the current catalogue.
 
-| Feed ID | Catalogue name | Reason/status at base |
-| --- | --- | --- |
-| `census_population` | Census population by state and county | Existing live fetcher; off when CENSUS_API_KEY is absent. No new fetcher is needed. Registration/settings belong to the founder. |
-| `legiscan` | State bill status changes | Existing live fetcher; off when LEGISCAN_API_KEY is absent. No new fetcher is needed. Registration/settings belong to the founder. |
-| `census_trade` | Census trade: imports and exports by product, country and port | Existing live fetcher; off when CENSUS_API_KEY is absent. No new fetcher is needed. Registration/settings belong to the founder. |
-| `eia_diesel` | U.S. diesel prices | Existing live fetcher; off when EIA_API_KEY is absent. No new fetcher is needed. Registration/settings belong to the founder. |
-| `noaa_climate` | Monthly temperature and precipitation by state | Existing live fetcher; off when NOAA_TOKEN is absent. No new fetcher is needed. Registration/settings belong to the founder. |
-| `port_long_beach` | Port of Long Beach container statistics | Link-only. Existing catalogue records no verified permission to bulk-copy this dataset; no structured fetcher is enabled. |
-| `port_nynj` | Port of New York and New Jersey loaded containers | Link-only. Existing catalogue records no verified permission to bulk-copy this dataset; no structured fetcher is enabled. |
-| `fred_tsifrght` | Freight Transportation Services Index | Separate live-only FRED reader exists; FRED_API_KEY gates it. Existing terms prohibit copying FRED content into this database. No ingestion adapter by design. |
-| `fred_tsifrghtc` | Freight Transportation Services Index, monthly change | Separate live-only FRED reader exists; FRED_API_KEY gates it. Existing terms prohibit copying FRED content into this database. No ingestion adapter by design. |
-| `fred_pcoppusdm` | Copper price on FRED | Separate live-only FRED reader exists; FRED_API_KEY gates it. Existing terms prohibit copying FRED content into this database. No ingestion adapter by design. |
-| `fred_pzincusdm` | Zinc price on FRED | Separate live-only FRED reader exists; FRED_API_KEY gates it. Existing terms prohibit copying FRED content into this database. No ingestion adapter by design. |
-| `fred_pleadusdm` | Lead price on FRED | Separate live-only FRED reader exists; FRED_API_KEY gates it. Existing terms prohibit copying FRED content into this database. No ingestion adapter by design. |
-| `fred_pcottindusdm` | Cotton price on FRED | Separate live-only FRED reader exists; FRED_API_KEY gates it. Existing terms prohibit copying FRED content into this database. No ingestion adapter by design. |
-| `fred_gasdesw` | On-highway diesel on FRED | Separate live-only FRED reader exists; FRED_API_KEY gates it. Existing terms prohibit copying FRED content into this database. No ingestion adapter by design. |
-| `ups_hazmat` | UPS hazardous materials | Existing page-hash watcher only, not a structured API feed. Page text is not stored; no approved official structured API is configured. Scraping is outside this job. |
-| `fedex_hazmat` | FedEx hazardous materials | Existing page-hash watcher only, not a structured API feed. Page text is not stored; no approved official structured API is configured. Scraping is outside this job. |
-| `usps_pub52` | USPS Publication 52 | Existing page-hash watcher only, not a structured API feed. Page text is not stored; no approved official structured API is configured. Scraping is outside this job. |
-| `ups_firearms` | UPS firearms shipping rules | Existing page-hash watcher only, not a structured API feed. Page text is not stored; no approved official structured API is configured. Scraping is outside this job. |
-| `ca_oag_firearms` | California Attorney General, firearms | Existing page-hash watcher only, not a structured API feed. Page text is not stored; no approved official structured API is configured. Scraping is outside this job. |
-| `atf_state_ordinances` | ATF state laws and published ordinances | Existing page-hash watcher only, not a structured API feed. Page text is not stored; no approved official structured API is configured. Scraping is outside this job. |
-| `season_ca` | California hunting seasons | Existing page-hash watcher only, not a structured API feed. Page text is not stored; no approved official structured API is configured. Scraping is outside this job. |
-| `season_tx` | Texas hunting seasons | Existing page-hash watcher only, not a structured API feed. Page text is not stored; no approved official structured API is configured. Scraping is outside this job. |
-| `season_fl` | Florida hunting seasons | Existing page-hash watcher only, not a structured API feed. Page text is not stored; no approved official structured API is configured. Scraping is outside this job. |
-| `season_pa` | Pennsylvania hunting seasons | Existing page-hash watcher only, not a structured API feed. Page text is not stored; no approved official structured API is configured. Scraping is outside this job. |
-| `season_ny` | New York hunting seasons | Existing page-hash watcher only, not a structured API feed. Page text is not stored; no approved official structured API is configured. Scraping is outside this job. |
+| Feed ID | Reason/status at base |
+| --- | --- |
+| `census_population` | Existing live fetcher; off when CENSUS_API_KEY is absent. No new fetcher is needed. Registration/settings belong to the founder. |
+| `legiscan` | Existing live fetcher; off when LEGISCAN_API_KEY is absent. No new fetcher is needed. Registration/settings belong to the founder. |
+| `census_trade` | Existing live fetcher; off when CENSUS_API_KEY is absent. No new fetcher is needed. Registration/settings belong to the founder. |
+| `eia_diesel` | Existing live fetcher; off when EIA_API_KEY is absent. No new fetcher is needed. Registration/settings belong to the founder. |
+| `noaa_climate` | Existing live fetcher; off when NOAA_TOKEN is absent. No new fetcher is needed. Registration/settings belong to the founder. |
+| `port_long_beach` | Link-only. Existing catalogue records no verified permission to bulk-copy this dataset; no structured fetcher is enabled. |
+| `port_nynj` | Link-only at base; now enabled through the official SODA API after checking OPEN-NY reuse terms. Recorded response has 384 rows covering 2000–2015; these are historical observations, not current port traffic. |
+| `fred_tsifrght` | Separate live-only FRED reader exists; FRED_API_KEY gates it. Existing terms prohibit copying FRED content into this database. No ingestion adapter by design. |
+| `fred_tsifrghtc` | Separate live-only FRED reader exists; FRED_API_KEY gates it. Existing terms prohibit copying FRED content into this database. No ingestion adapter by design. |
+| `fred_pcoppusdm` | Separate live-only FRED reader exists; FRED_API_KEY gates it. Existing terms prohibit copying FRED content into this database. No ingestion adapter by design. |
+| `fred_pzincusdm` | Separate live-only FRED reader exists; FRED_API_KEY gates it. Existing terms prohibit copying FRED content into this database. No ingestion adapter by design. |
+| `fred_pleadusdm` | Separate live-only FRED reader exists; FRED_API_KEY gates it. Existing terms prohibit copying FRED content into this database. No ingestion adapter by design. |
+| `fred_pcottindusdm` | Separate live-only FRED reader exists; FRED_API_KEY gates it. Existing terms prohibit copying FRED content into this database. No ingestion adapter by design. |
+| `fred_gasdesw` | Separate live-only FRED reader exists; FRED_API_KEY gates it. Existing terms prohibit copying FRED content into this database. No ingestion adapter by design. |
+| `ups_hazmat` | Existing page-hash watcher only, not a structured API feed. Page text is not stored; no approved official structured API is configured. Scraping is outside this job. |
+| `fedex_hazmat` | Existing page-hash watcher only, not a structured API feed. Page text is not stored; no approved official structured API is configured. Scraping is outside this job. |
+| `usps_pub52` | Existing page-hash watcher only, not a structured API feed. Page text is not stored; no approved official structured API is configured. Scraping is outside this job. |
+| `ups_firearms` | Existing page-hash watcher only, not a structured API feed. Page text is not stored; no approved official structured API is configured. Scraping is outside this job. |
+| `ca_oag_firearms` | Existing page-hash watcher only, not a structured API feed. Page text is not stored; no approved official structured API is configured. Scraping is outside this job. |
+| `atf_state_ordinances` | Existing page-hash watcher only, not a structured API feed. Page text is not stored; no approved official structured API is configured. Scraping is outside this job. |
+| `season_ca` | Existing page-hash watcher only, not a structured API feed. Page text is not stored; no approved official structured API is configured. Scraping is outside this job. |
+| `season_tx` | Existing page-hash watcher only, not a structured API feed. Page text is not stored; no approved official structured API is configured. Scraping is outside this job. |
+| `season_fl` | Existing page-hash watcher only, not a structured API feed. Page text is not stored; no approved official structured API is configured. Scraping is outside this job. |
+| `season_pa` | Existing page-hash watcher only, not a structured API feed. Page text is not stored; no approved official structured API is configured. Scraping is outside this job. |
+| `season_ny` | Existing page-hash watcher only, not a structured API feed. Page text is not stored; no approved official structured API is configured. Scraping is outside this job. |
 
 ## Sources named in the job
 
 - SEC EDGAR: official JSON APIs require no authentication or API key. SEC publishes a 10 requests/second maximum and requires a declared User-Agent. Implemented for recent Ruger and Smith & Wesson submissions (the API recent window; not a complete historical archive). Recorded responses contain 1,000 filings per company. Shared per-worker SEC ceiling: five requests/second, in addition to the normal two-second host delay; declared Tervory User-Agent. No filing HTML is fetched.
-- USPTO: current API access, terms and limits are being checked. No unsupported endpoint or registration requirement is assumed.
+- USPTO: stopped at the access boundary under rule 9. One unauthenticated GET to `https://api.uspto.gov/api/v1/patent/applications/search` returned HTTP **401**, body `{"message":"Unauthorized"}`. The official current PatentsView page links the Open Data Portal; its API/transition pages returned an application shell and Chromium showed only “Feedback”, without a readable contract or rate policy. No key was requested/created/seen, no sign-in was attempted, and no adapter/schema or paid-key requirement was guessed. Required before this source can be built and verified: current official endpoint/schema/rate documentation and authorized API access supplied through founder-managed settings. No USPTO rows are claimed.
 - MarineTraffic, Freightos, LME: absent from this catalogue; paid/proprietary or scraping routes are excluded by the brief. No adapter will be built for them in this task; the founder must decide any future licensed integration.
 
 Official documentation read: [SEC access/fair-access policy](https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data), [SEC JSON APIs](https://www.sec.gov/search-filings/edgar-application-programming-interfaces), [SEC developer FAQ](https://www.sec.gov/about/webmaster-frequently-asked-questions#developers). Documentation research is not a successful feed fetch.
 
 ## Proof status
 
-SEC checkpoint: `PYTHONPATH=tank /workspace/.tervory-cloud/venv/bin/python -m pytest -q tests/market_lab_feeds/test_official_feeds.py` → **13 passed**. Covers recorded responses, deduplication, citations/fetch time, denial/no retry, rate limit across clients/hosts, malformed data, answer citations, tenant isolation and fixture isolation. A broader regression run and the final live fetch are still pending. The initial test run caught a missing test-only `at=` argument; it was corrected before this checkpoint. No production SQL or persistent live-data change; all verification databases are local and disposable. Founder-browser citation proof remains pending deployment.
+SEC checkpoint: `PYTHONPATH=tank /workspace/.tervory-cloud/venv/bin/python -m pytest -q tests/market_lab_feeds/test_official_feeds.py` → **13 passed**. Covers recorded responses, deduplication, citations/fetch time, denial/no retry, rate limit across clients/hosts, malformed data, answer citations, tenant isolation and fixture isolation. SEC plus New York checkpoint: `PYTHONPATH=tank /workspace/.tervory-cloud/venv/bin/python -m pytest -q tests/market_lab_feeds/test_official_feeds.py tests/test_feeds_live.py tests/test_market_lab_evidence.py` → **49 passed in 1.93s**. These offline tests include monthly imports/exports, stable pagination, invalid counts, rollback on 429, period-aware cited answers and two-tenant isolation. A broader regression run and final live fetch remain pending. The initial test run caught a missing test-only `at=` argument; it was corrected before this checkpoint. No production SQL or persistent live-data change; all verification databases are local and disposable. Founder-browser citation proof remains pending deployment.
+
+New York uses the existing publisher attribution and source-document path. Its multi-state port geography is declared by the engine and respected by the existing answer filter; no new page controls or UI wording. API requests retain the normal two-second host pacing and stop on 429. Terms: https://data.ny.gov/dataset/OPEN-NY-Terms-Of-Use/77gx-ii52 ; https://dev.socrata.com/docs/app-tokens.html .

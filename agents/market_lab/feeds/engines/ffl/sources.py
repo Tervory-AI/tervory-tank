@@ -283,12 +283,24 @@ def sources() -> list[SourceSpec]:
             licences.PORT_LB_LINK,
             "monthly",
         ),
-        _link(
-            "port_nynj",
-            "Port of New York and New Jersey loaded containers",
-            "https://data.ny.gov/Transportation/Loaded-Containers-Monthly-Imports-and-Exports-Thro/629s-5a55",
-            licences.PORT_NYNJ_LINK,
-            "monthly",
+        _copy(
+            id="port_nynj",
+            name="Port of New York and New Jersey loaded containers",
+            kind="series",
+            url="https://data.ny.gov/Transportation/Loaded-Containers-Monthly-Imports-and-Exports-Thro/629s-5a55",
+            licence=licences.OPEN_NY,
+            terms_checked_at="2026-10-28",
+            cadence="annual",
+            adapter="socrata_monthly",
+            config={
+                "files": ["ports/nynj.json"],
+                "api_url": "https://data.ny.gov/resource/629s-5a55.json",
+                "year_column": "year", "month_column": "month",
+                "type_column": "type", "value_column": "volume",
+                "geo": "New York and New Jersey", "geo_level": "port", "unit": "TEU",
+                "titles": {"Imports": "Loaded container imports, Port of New York and New Jersey",
+                           "Exports": "Loaded container exports, Port of New York and New Jersey"},
+            },
         ),
     ]
     for source_id, name, url in lists.FRED_SERIES:
@@ -308,6 +320,8 @@ def sources() -> list[SourceSpec]:
     # Industry meanings and publisher attribution belong to this engine.
     presentation = {
         "sec_edgar": {"publisher": "U.S. Securities and Exchange Commission", "answer_topics": ["SEC", "EDGAR", "filing", "filings"]},
+        "port_nynj": {"publisher": "Port Authority of New York and New Jersey",
+                      "geo_states": {"New York and New Jersey": ["NY", "NJ"]}},
         "listing_counts": {"publisher": "Bureau of Alcohol, Tobacco, Firearms and Explosives", "listing_types": {
             "01": "Firearms dealers", "02": "Firearms pawnbrokers", "03": "Collectors of historic firearms",
             "06": "Ammunition manufacturers", "07": "Firearms manufacturers", "08": "Firearms importers",
@@ -334,6 +348,7 @@ def sources() -> list[SourceSpec]:
     # Human-readable dataset pages, separate from the transport/API URLs above.
     publisher_pages = {
         "sec_edgar": "https://www.sec.gov/search-filings",
+        "port_nynj": "https://data.ny.gov/Transportation/Loaded-Containers-Monthly-Imports-and-Exports-Thro/629s-5a55",
         "listing_counts": lists.LISTING_URL,
         "check_counts": "https://www.fbi.gov/how-we-can-help-you/more-fbi-services-and-information/nics",
         "census_population": "https://www.census.gov/programs-surveys/acs/data.html",
