@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
-import os
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -77,35 +76,6 @@ async def reports(response: Response, tenant_id: uuid.UUID | None = None, actor:
     return {"tenant_id": str(tenant), "reports": [dict(r) for r in rows]}
 
 
-async def autumbra(tenant, start, end, figures):
-    # The existing tenant receipt corridor exposes applied shields. Global
-    # platform monitoring totals must never become a client's incident/check count.
-    if not os.environ.get("TANK_KEY_GHOST"):
-        return
-    from ghost_routes import call_room
-    response = await call_room("GET", "ghost", "/ghost/autumbra/receipts", params={"tenant_id": str(tenant)})
-    if response.status_code == 404:
-        return
-    if response.status_code != 200:
-        raise HTTPException(503, "Report source could not be read")
-    data = response.json()
-    if data.get("tenant_id") != str(tenant):
-        raise HTTPException(502, "Report source tenant mismatch")
-    applied = set()
-    for row in data.get("receipts", []):
-        if row.get("tenant_id") != str(tenant):
-            raise HTTPException(502, "Report source tenant mismatch")
-        try:
-            at = datetime.fromisoformat(row.get("timestamp", "").replace("Z", "+00:00"))
-            if at.tzinfo is None or not start <= at < end:
-                continue
-        except (ValueError, TypeError):
-            continue
-        if row.get("applied") is True and row.get("id") and not row.get("undone") and row.get("kind") != "undo":
-            applied.add(row["id"])
-    put(figures, "autumbra.shields_applied", len(applied), "ghost.autumbra.tenant_receipts")
-
-
 @router.get("/{product}")
 async def report(product: str, response: Response, tenant_id: uuid.UUID | None = None,
                  start: date | None = None, end: date | None = None, actor: Actor = Depends(identity)) -> dict:
@@ -128,8 +98,8 @@ async def report(product: str, response: Response, tenant_id: uuid.UUID | None =
         histogram(figures, "tank.work_by_execution", {"code": shared["code"], "cache": shared["cache_hits"], "model": shared["model"]}, "proof.product_summary")
         put(figures, "tank.graduation_progress", shared["graduation"], "proof.product_summary")
         await populate(conn, tenant, product, region, since, until, figures)
-    if product == "autumbra":
-        await autumbra(tenant, since, until, figures)
+    # Autumbra's global Watch totals are platform-owned; the current per-client
+    # Enforce receipt path uses fixture_edge. Neither is client production proof.
     response.headers["Cache-Control"] = "private, no-store"
     return jsonable_encoder({"tenant_id": tenant, "product": product, "template_version": saved["template_version"],
         "created_at": saved["created_at"], "period": {"start": first, "end": last, "timezone": "UTC"},
