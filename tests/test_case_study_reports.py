@@ -345,6 +345,9 @@ async def test_report_savings_reuses_core_population_and_graduation_excludes_oth
                 baseline_model='offline-baseline',baseline_cost_usd=10,baseline_status='measured',baseline_priced_at=$2 WHERE id=$1""", ledger, AT)
             await conn.execute("""INSERT INTO tank.shadow(tenant_id,ledger_id,task_type,primary_model,candidate_model,primary_content,agreement,created_at)
                 SELECT $1,$2,'base.offline','offline-actual','offline-candidate','',1,$3 FROM generate_series(1,$4::int)""", tenant, ledger, AT, 2 if tenant == A else 20)
+            await conn.execute("""INSERT INTO tank.shadow(tenant_id,ledger_id,task_type,primary_model,candidate_model,primary_content,agreement,created_at)
+                VALUES($1,$2,'base.offline','offline-actual','offline-candidate','',NULL,$3),
+                      ($1,$2,'base.offline','offline-actual','offline-candidate','',1,'2026-10-10')""", tenant, ledger, AT)
         expected = await conn.fetchval(savings_cte() + "SELECT sum(standard_cost_usd-cost_usd) FROM eligible", A, "us-east", datetime(2026, 10, 4, tzinfo=UTC))
     values = figures(await read(client, "base"))
     assert values["tank.savings_vs_baseline"]["value"] == expected == 8
@@ -352,3 +355,40 @@ async def test_report_savings_reuses_core_population_and_graduation_excludes_oth
     assert len(progress) == 1 and progress[0]["samples"] == 2
     assert progress[0]["value"] == 1
     assert "offline-candidate" not in json.dumps(values)
+
+
+@pytest.mark.asyncio
+async def test_late_room_provisioning_registers_without_a_workspace_visit(api):
+    pool, client = api
+    from case_studies import reconcile_provisioned
+    async with pool.acquire() as conn:
+        # Model the real fresh-stack ordering: Tank starts before this room's table.
+        await conn.execute("DROP TRIGGER case_study_trigger_provisioned ON agent_trigger.voices")
+        await conn.execute("INSERT INTO agent_trigger.voices VALUES($1,'{\"status\":\"live\"}',1,$2)", A, AT)
+        assert await conn.fetchval("SELECT count(*) FROM tank.case_study_reports WHERE tenant_id=$1", A) == 0
+    await reconcile_provisioned()
+    await reconcile_provisioned()
+    assert_complete(await read(client, "trigger"), "trigger")
+    assert (await client.get("/v1/case-studies")).json()["reports"][0]["product"] == "trigger"
+    assert (await client.get("/v1/case-studies", headers=headers(B, "client-b"))).json()["reports"] == []
+
+
+@pytest.mark.asyncio
+async def test_room_role_registers_voice_without_reading_or_writing_tank_tables(api):
+    pool, client = api
+    role = "case_study_room_" + uuid.uuid4().hex
+    async with pool.acquire() as conn:
+        await conn.execute(f'CREATE ROLE "{role}" NOLOGIN')
+        try:
+            await conn.execute(f'GRANT USAGE ON SCHEMA agent_trigger TO "{role}"')
+            await conn.execute(f'GRANT INSERT ON agent_trigger.voices TO "{role}"')
+            async with conn.transaction():
+                await conn.execute(f'SET LOCAL ROLE "{role}"')
+                await conn.execute("INSERT INTO agent_trigger.voices VALUES($1,'{\"status\":\"live\"}',1,$2)", A, AT)
+                with pytest.raises(asyncpg.InsufficientPrivilegeError):
+                    async with conn.transaction():
+                        await conn.fetch("SELECT * FROM tank.case_study_reports")
+        finally:
+            await conn.execute(f'DROP OWNED BY "{role}"')
+            await conn.execute(f'DROP ROLE "{role}"')
+    assert_complete(await read(client, "trigger"), "trigger")
