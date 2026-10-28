@@ -119,7 +119,7 @@ def comtrade_url(source: SourceSpec) -> str:
     query = {"period": str(datetime.now(timezone.utc).year - 1), "reporterCode": source.config["reporter"],
              "cmdCode": ",".join(source.config["codes"]), "flowCode": "M,X", "partnerCode": "0",
              "partner2Code": "0", "customsCode": "C00", "motCode": "0", "maxRecords": "500",
-             "aggregateBy": "6", "breakdownMode": "classic", "includeDesc": "true"}
+             "breakdownMode": "classic", "includeDesc": "true"}
     return source.url + "?" + urlencode(query)
 
 
