@@ -20,9 +20,9 @@ Zenas previously filled its approved clauses and wrote the Word document itself.
 | `agents/zenas/docassemble/us/` and `agents/zenas/docassemble/za/`: each of the eight named template `.yml` files, line 1 | Explicit US/ZA interview bindings. Only the owning region's interview directory is mounted on its service. |
 | `agents/zenas/docker-compose.yml:27`, `:48`; `agents/zenas/docker-compose.za.yml:34`, `:54` | Official pinned internal service, readiness dependency, independent local PostgreSQL, persistent backup volume and separate encrypted-backup worker per region. No published port or public ingress. |
 | `agents/zenas/docassemble/backup.py:21`, `:49`, `:81` | Archive the previous completed official daily snapshot through `tar → age`, reusing the existing R2 archive/completion-marker code and regional bucket validation. No SQL and no plaintext upload or new plaintext spool. |
-| `.env.example` — final Docassemble setting block | Setting names only, with empty values. |
-| `tank/requirements-dev.txt` — Docassemble renderer block | Official release's Mako/docxtpl pins for offline parity tests only; no new room runtime dependency. |
-| `tests/test_zenas_draft.py:390`, `tests/test_zenas_citation_source_links.py` — final fixture | Existing assertions run through the API stub; expected document text, notices, review and revision behavior are unchanged. |
+| `.env.example:412` | Setting names only, with empty values. |
+| `tank/requirements-dev.txt:24` | Official release's Mako/docxtpl pins for offline parity tests only; no new room runtime dependency. |
+| `tests/test_zenas_draft.py:394`, `tests/test_zenas_citation_source_links.py:222` | Existing assertions run through the API stub; expected document text, notices, review and revision behavior are unchanged. |
 | `tests/zenas_docassemble/api_stub.py:1`, `legacy_drafting.py:1`, `test_assembly.py:65`, `test_deployment.py:27` | Documented API-shaped stub with real template rendering, frozen main oracle, 80 word-for-word cases, regional/failure/refusal/Trigger checks and backup contracts. |
 
 No Workspace page, Figma asset, client text or layout changes relative to merged main. No production database, tenant clause library or secret value was accessed.
@@ -98,6 +98,12 @@ Branch commands, working directory `/workspace/tervory-tank`:
 ```sh
 env -u RIG_TEST_DATABASE_URL -u POOL_SCHEMA_DATABASE_URL -u ZENAS_SCHEMA_DATABASE_URL -u GITHUB_ACTIONS PATH=/workspace/.tervory-cloud/node/bin:/workspace/.tervory-cloud/venv/bin:/usr/bin:/bin PYTHONPATH=. /workspace/.tervory-cloud/venv/bin/python /tmp/zenas-laws-africa-offline.py -q tests/test_zenas*.py tests/trigger_first_build/test_trigger.py tests/zenas_docassemble --junitxml=/tmp/zenas-docassemble-branch-final.xml > /tmp/zenas-docassemble-branch-final.log 2>&1
 env PYTHONPATH=. /workspace/.tervory-cloud/venv/bin/python /tmp/zenas-laws-africa-offline.py -q tests/test_tank_one_door.py > /tmp/zenas-docassemble-guard-branch-final.log 2>&1
+```
+
+Exact focused-checkpoint command (before the final added region/prior configuration cases):
+
+```sh
+env -u RIG_TEST_DATABASE_URL -u POOL_SCHEMA_DATABASE_URL -u ZENAS_SCHEMA_DATABASE_URL -u GITHUB_ACTIONS PATH=/workspace/.tervory-cloud/node/bin:/workspace/.tervory-cloud/venv/bin:/usr/bin:/bin PYTHONPATH=. /workspace/.tervory-cloud/venv/bin/python /tmp/zenas-laws-africa-offline.py -q tests/zenas_docassemble tests/test_zenas_draft.py tests/test_zenas_citation_source_links.py tests/trigger_first_build/test_trigger.py --junitxml=/tmp/zenas-docassemble-focused.xml > /tmp/zenas-docassemble-focused.log 2>&1
 ```
 
 [Static-check proof](evidence/static-checks.txt) records the exact Ruff and diff commands with their exit codes. Saved output has trailing whitespace removed; test results are unchanged.
