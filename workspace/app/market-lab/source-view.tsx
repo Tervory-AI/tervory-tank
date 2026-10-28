@@ -4,6 +4,20 @@ import { formatRefreshed } from "./format";
 
 /** Shared by the signed-in route and the isolated local fixture proof. */
 export function SourceDocumentView({ source }: { source: MarketDocument }) {
+  if (source.kind === "uploaded_file") return <main className="ml ml-source"><div className="ml-body">
+    <a href="/market-lab">Back to Market Lab</a><h1>{source.name}</h1>
+    <p>Uploaded on {formatRefreshed(source.fetched_at)}. The text below was read from your file.</p>
+    {source.reason ? <p>{source.reason}</p> : null}
+    {(source.passage_count ?? 0) > source.page_size ? <nav className="ml-source-pages" aria-label="File passages">
+      {source.offset > 0 ? <a href={`?page=${source.offset / source.page_size}`}>Previous</a> : <span>Previous</span>}
+      <span>Page {source.offset / source.page_size + 1} of {Math.ceil((source.passage_count ?? 0) / source.page_size)}</span>
+      {source.offset + source.page_size < (source.passage_count ?? 0) ? <a href={`?page=${source.offset / source.page_size + 2}`}>Next</a> : <span>Next</span>}
+    </nav> : null}
+    {source.passages?.map(passage => <article id={`passage-${passage.index}`} key={passage.index}>
+      <h2>{passage.label}</h2><p style={{ whiteSpace: "pre-wrap" }}>{passage.text}</p>
+      {!passage.usable ? <p>These figures did not pass the data checks and are not used in answers.</p> : null}
+    </article>)}
+  </div></main>;
   if (source.calculation) return <WarningEvidence source={source} />;
   const offset = source.offset;
   const page = Math.floor(offset / source.page_size) + 1;
