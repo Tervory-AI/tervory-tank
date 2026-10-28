@@ -1,19 +1,10 @@
 import "server-only";
 
-import {
-  applyFixtureTap,
-  fixtureBoard,
-  isFixtureShield,
-  type Shield,
-  type ShieldBoard,
-  type ShieldTile,
-} from "./shields-fixtures";
-
+import type { Shield, ShieldBoard, ShieldTile } from "./shields-fixtures";
 export type { Shield, ShieldBoard, ShieldReceipt, ShieldTile } from "./shields-fixtures";
-export { FIXTURE_BOARD, PRACTICE_SHIELD_ID, fixtureBoard, isFixtureShield } from "./shields-fixtures";
 
 // Autumbra Enforce shields: founder-only reads and taps through Tank (`/v1/ghost/shields/*`).
-// Server-side only (uses TANK_API_KEY). When Tank is down, silent fixtures keep the board usable.
+// Server-side only (uses TANK_API_KEY).
 const TANK_URL = process.env.TANK_URL ?? "http://tank:8000";
 const TANK_API_KEY = process.env.TANK_API_KEY ?? "";
 
@@ -26,29 +17,23 @@ async function call<T>(path: string, userId: string, method: "GET" | "POST"): Pr
   return (await res.json()) as T;
 }
 
-/** Never rejects: live Tank board when available, else silent fixtures (dry_run). */
+/** Read failures reach the console's existing unavailable state. */
 export async function shieldBoard(userId: string): Promise<ShieldBoard> {
-  try {
-    const [tile, list] = await Promise.all([
-      call<ShieldTile>("tile", userId, "GET"),
-      call<{ shields: Shield[] }>("list", userId, "GET"),
-    ]);
-    return { tile, shields: list.shields };
-  } catch {
-    return fixtureBoard();
+  const [tile, list] = await Promise.all([
+    call<ShieldTile>("tile", userId, "GET"),
+    call<{ shields: Shield[] }>("list", userId, "GET"),
+  ]);
+  if (!tile || tile.fixture || !Array.isArray(list?.shields)
+    || !tile.open_by_severity || typeof tile.open_total !== "number"
+    || !tile.time_to_know_seconds || !tile.time_to_shield_seconds
+    || typeof tile.sites_broken_by_a_shield !== "number"
+    || typeof tile.cost_this_month_usd !== "number" || typeof tile.receipts_this_month !== "number") {
+    throw new Error("Autumbra shields unavailable");
   }
+  return { tile, shields: list.shields };
 }
 
 export async function shieldTap(userId: string, id: string, tap: "raise" | "undo"): Promise<Shield> {
   if (!/^[0-9a-f-]{36}$/.test(id)) throw new Error("Invalid shield");
-  if (isFixtureShield(id)) {
-    return applyFixtureTap(id, tap);
-  }
-  try {
-    return await call<Shield>(`${id}/${tap}`, userId, "POST");
-  } catch {
-    // Tank failed after a fixture board was shown, or id is known to fixtures.
-    if (isFixtureShield(id)) return applyFixtureTap(id, tap);
-    throw new Error("Autumbra shields tap unavailable");
-  }
+  return call<Shield>(`${id}/${tap}`, userId, "POST");
 }

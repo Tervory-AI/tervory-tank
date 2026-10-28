@@ -1,0 +1,21 @@
+INFO:     Started server process [9050]
+INFO:     Uvicorn running on http://127.0.0.1:59343 (Press CTRL+C to quit)
+INFO:     Started server process [9055]
+INFO:     Waiting for application startup.
+redis unavailable, rung-4 cache off: Error 111 connecting to 127.0.0.1:1. Connection refused.
+Room gold response rejected: market_lab
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:37395 (Press CTRL+C to quit)
+The reference could not be loaded: The Base reference service returned HTTP 502. (error type: ReferenceFailure)
+quarantine batch '2d5e6d04-84d2-5d4a-9f5b-3a71829b7fdb' skipped: series reference or engine missing
+quarantine batch 'bd00fff9-dda3-5699-ae7c-77b9afd4c533' skipped: series source unavailable
+quarantine batch '2d5e6d04-84d2-5d4a-9f5b-3a71829b7fdb' skipped: series reference or engine missing
+quarantine batch 'bd00fff9-dda3-5699-ae7c-77b9afd4c533' skipped: series source unavailable
+quarantine batch '2d5e6d04-84d2-5d4a-9f5b-3a71829b7fdb' skipped: series reference or engine missing
+quarantine batch 'bd00fff9-dda3-5699-ae7c-77b9afd4c533' skipped: series source unavailable
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [9055]
+INFO:     Shutting down
+INFO:     Finished server process [9050]
