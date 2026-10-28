@@ -1,0 +1,18 @@
+test_all_good_run_exits_zero (__main__.LiveCheckTests.test_all_good_run_exits_zero) ... ok
+test_every_banned_token_fails (__main__.LiveCheckTests.test_every_banned_token_fails) ... ok
+test_every_host_including_failures_has_both_screenshots (__main__.LiveCheckTests.test_every_host_including_failures_has_both_screenshots) ... ok
+test_good_hidden_text_redirect_and_isolation_pass (__main__.LiveCheckTests.test_good_hidden_text_redirect_and_isolation_pass) ... ok
+test_http_failure_and_navigation_deadline (__main__.LiveCheckTests.test_http_failure_and_navigation_deadline) ... ok
+test_mixed_run_is_red_and_summary_names_every_host (__main__.LiveCheckTests.test_mixed_run_is_red_and_summary_names_every_host) ... ok
+test_mobile_visible_text_fails_host (__main__.LiveCheckTests.test_mobile_visible_text_fails_host) ... ok
+test_runtime_throw_rejection_and_console_fail (__main__.LiveCheckTests.test_runtime_throw_rejection_and_console_fail) ... ok
+test_test_mode_refuses_nonlocal_urls (__main__.LiveCheckTests.test_test_mode_refuses_nonlocal_urls) ... ok
+test_visible_application_and_client_crashes_fail (__main__.LiveCheckTests.test_visible_application_and_client_crashes_fail) ... ok
+test_coolify_missing_rig_does_not_pass (__main__.WorkflowTests.test_coolify_missing_rig_does_not_pass) ... ok
+test_coolify_waits_for_both_apps_and_rejects_unknown (__main__.WorkflowTests.test_coolify_waits_for_both_apps_and_rejects_unknown) ... ok
+test_failure_issue_is_updated_without_duplicates (__main__.WorkflowTests.test_failure_issue_is_updated_without_duplicates) ... ok
+
+----------------------------------------------------------------------
+Ran 13 tests in 62.734s
+
+OK
