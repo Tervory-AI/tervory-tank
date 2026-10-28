@@ -1,0 +1,246 @@
+{
+  "real_tank": true,
+  "initial_numbers_zero": true,
+  "tenant_a_spend": 2.0,
+  "tenant_b_spend": 0.0,
+  "cross_tenant_status": 403,
+  "founder_clients": 2,
+  "report": {
+    "tenant_id": "ca5e0000-0000-4000-8000-000000000001",
+    "product": "base",
+    "template_version": 1,
+    "created_at": "2026-10-28T14:11:00.716268+00:00",
+    "period": {
+      "start": "2026-09-29",
+      "end": "2026-10-28",
+      "timezone": "UTC"
+    },
+    "tank": [
+      {
+        "id": "tank.spend",
+        "unit": "USD",
+        "type": "number",
+        "value": 2.0,
+        "source": "proof.product_summary",
+        "status": "available",
+        "unknown_cost_calls": 0
+      },
+      {
+        "id": "tank.savings_vs_baseline",
+        "unit": "USD",
+        "type": "number",
+        "value": 0.0,
+        "source": "proof.product_summary",
+        "status": "available"
+      },
+      {
+        "id": "tank.cost_per_task",
+        "unit": "USD/task",
+        "type": "number",
+        "value": 2.0,
+        "source": "proof.product_summary",
+        "status": "available",
+        "tasks": 1
+      },
+      {
+        "id": "tank.cache_hits",
+        "unit": "calls",
+        "type": "number",
+        "value": 0,
+        "source": "proof.product_summary",
+        "status": "available"
+      },
+      {
+        "id": "tank.work_by_execution",
+        "unit": "calls",
+        "type": "histogram",
+        "value": [
+          {
+            "id": "code",
+            "value": 0
+          },
+          {
+            "id": "cache",
+            "value": 0
+          },
+          {
+            "id": "model",
+            "value": 1
+          }
+        ],
+        "source": "proof.product_summary",
+        "status": "available"
+      },
+      {
+        "id": "tank.graduation_progress",
+        "unit": "percent",
+        "type": "ranked_list",
+        "value": [],
+        "source": "proof.product_summary",
+        "status": "available"
+      }
+    ],
+    "figures": [
+      {
+        "id": "base.records_verified",
+        "unit": "records",
+        "type": "number",
+        "value": 0,
+        "source": "tank.base_record_results",
+        "status": "available"
+      },
+      {
+        "id": "base.cost_per_verified_record",
+        "unit": "USD/record",
+        "type": "number",
+        "value": 0,
+        "source": "base_metrics.cost_rows",
+        "status": "available",
+        "unknown_cost_calls": 0
+      },
+      {
+        "id": "base.measured_accuracy",
+        "unit": "percent",
+        "type": "number",
+        "value": 0,
+        "source": null,
+        "status": "missing_source",
+        "lower": 0,
+        "upper": 0,
+        "sample_size": 0,
+        "resolved": 0,
+        "unsure": 0
+      },
+      {
+        "id": "base.confidence_histogram",
+        "unit": "records",
+        "type": "histogram",
+        "value": [
+          {
+            "id": "0-39",
+            "value": 0
+          },
+          {
+            "id": "40-59",
+            "value": 0
+          },
+          {
+            "id": "60-79",
+            "value": 0
+          },
+          {
+            "id": "80-100",
+            "value": 0
+          },
+          {
+            "id": "missing",
+            "value": 0
+          }
+        ],
+        "source": "agent_base.records.confidence",
+        "status": "available"
+      },
+      {
+        "id": "base.records_by_state",
+        "unit": "records",
+        "type": "ranked_list",
+        "value": [],
+        "source": "tank.base_record_results",
+        "status": "available"
+      },
+      {
+        "id": "base.comparison_vs_apollo",
+        "unit": "fields",
+        "type": "histogram",
+        "value": [
+          {
+            "id": "website.matches",
+            "value": 0
+          },
+          {
+            "id": "website.base_only",
+            "value": 0
+          },
+          {
+            "id": "website.apollo_only",
+            "value": 0
+          },
+          {
+            "id": "website.disagreements",
+            "value": 0
+          },
+          {
+            "id": "website.neither",
+            "value": 0
+          },
+          {
+            "id": "phone.matches",
+            "value": 0
+          },
+          {
+            "id": "phone.base_only",
+            "value": 0
+          },
+          {
+            "id": "phone.apollo_only",
+            "value": 0
+          },
+          {
+            "id": "phone.disagreements",
+            "value": 0
+          },
+          {
+            "id": "phone.neither",
+            "value": 0
+          },
+          {
+            "id": "email.matches",
+            "value": 0
+          },
+          {
+            "id": "email.base_only",
+            "value": 0
+          },
+          {
+            "id": "email.apollo_only",
+            "value": 0
+          },
+          {
+            "id": "email.disagreements",
+            "value": 0
+          },
+          {
+            "id": "email.neither",
+            "value": 0
+          }
+        ],
+        "source": "base_metrics.compare",
+        "status": "available"
+      }
+    ]
+  }
+}
+Tank startup and request tail:
+/tmp/command-repo-venv/lib/python3.12/site-packages/pydantic/_internal/_fields.py:192: UserWarning: Field name "register" in "TriggerWriteArgs" shadows an attribute in parent "TriggerCheckArgs"
+  warnings.warn(
+INFO:     Started server process [170849]
+INFO:     Waiting for application startup.
+redis unavailable, rung-4 cache off: Error 111 connecting to 127.0.0.1:9. Connection refused.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:48985 (Press CTRL+C to quit)
+The reference could not be loaded: The Base reference service could not be reached. (error type: ConnectError)
+INFO:     127.0.0.1:49746 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49746 - "POST /v1/case-studies/ensure HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49746 - "PUT /v1/command/squads/base HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49746 - "POST /v1/case-studies/ensure HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49746 - "PUT /v1/command/squads/base HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49746 - "GET /v1/case-studies/base HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49746 - "GET /v1/case-studies/base HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49746 - "GET /v1/case-studies/base HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49746 - "GET /v1/case-studies/base?tenant_id=ca5e0000-0000-4000-8000-000000000002 HTTP/1.1" 403 Forbidden
+INFO:     127.0.0.1:49746 - "GET /v1/case-studies/base?tenant_id=ca5e0000-0000-4000-8000-000000000002 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49746 - "GET /v1/case-studies/clients HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [170849]
