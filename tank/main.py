@@ -4211,5 +4211,9 @@ __import__("skala_intake").install(app, __import__("sys").modules[__name__])
 
 app.include_router(__import__("vault_routes").build_router(__import__("sys").modules[__name__]))
 
+# D1-D3 memory: founder-only record/publication corridor.
+from memory_routes import router as memory_router
+app.include_router(memory_router)
+
 # B3: process committed model changes through the existing skill-eval handler.
 __import__("skala_revalidation").install(app, __import__("sys").modules[__name__])
