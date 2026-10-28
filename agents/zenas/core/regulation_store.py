@@ -67,7 +67,7 @@ def compare(watch, documents):
             continue
         # Sources provide publication dates, not intraday publication times.
         after_creation = date.fromisoformat(document["date"]) > watch["created_at"].date()
-        if after_creation or (old is not None and watch["initialized"]):
+        if after_creation:
             changes.append((document, old))
         seen[document["id"]] = document
     return seen, changes
