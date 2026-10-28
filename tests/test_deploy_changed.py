@@ -205,3 +205,46 @@ def test_rooms_deploy_one_at_a_time_and_a_failed_room_does_not_stop_the_rest(mon
         ("deploy", "agent-rig"),
         ("deploy", "agent-tiger"), ("wait", "agent-tiger"),
     ]
+
+
+def _api_with_failed(apps, failed):
+    def api(method, path):
+        if path.startswith("/deployments/applications/"):
+            uuid = path.split("/")[3].split("?")[0]
+            return 200, [{"status": "failed" if uuid in failed else "finished"}]
+        return 200, apps
+    return api
+
+
+def test_a_room_that_failed_last_time_is_retried_alone(monkeypatch: pytest.MonkeyPatch) -> None:
+    mod = _script(monkeypatch)
+    order: list[str] = []
+    apps = [{"name": "agent-base", "uuid": "b"}, {"name": "agent-zenas", "uuid": "z"}, {"name": "agent-rig", "uuid": "r"}]
+    monkeypatch.setattr(mod, "changed_paths", lambda: ["agents/rig/app.py"])
+    monkeypatch.setattr(mod, "api", _api_with_failed(apps, {"z"}))
+    monkeypatch.setattr(mod, "deploy", lambda uuid, name: order.append(name) or True)
+    monkeypatch.setattr(mod, "wait_for", lambda uuid, name, timeout_s=900: True)
+    assert mod.main() == 0
+    assert order == ["agent-rig", "agent-zenas"]  # agent-base is untouched
+
+
+def test_nothing_changed_and_nothing_failed_deploys_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    mod = _script(monkeypatch)
+    order: list[str] = []
+    apps = [{"name": "agent-base", "uuid": "b"}]
+    monkeypatch.setattr(mod, "changed_paths", lambda: ["docs/readme.txt"])
+    monkeypatch.setattr(mod, "api", _api_with_failed(apps, set()))
+    monkeypatch.setattr(mod, "deploy", lambda uuid, name: order.append(name) or True)
+    assert mod.main() == 0 and order == []
+
+
+def test_main_that_failed_last_time_is_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    mod = _script(monkeypatch)
+    order: list[str] = []
+    monkeypatch.setattr(mod, "changed_paths", lambda: ["docs/readme.txt"])
+    monkeypatch.setattr(mod, "api", _api_with_failed([], {mod.MAIN_APP}))
+    monkeypatch.setattr(mod, "deploy", lambda uuid, name: order.append(name) or True)
+    monkeypatch.setattr(mod, "wait_for", lambda uuid, name, timeout_s=900: True)
+    monkeypatch.setenv("ZA_OFFLINE", "true")
+    mod.ZA_OFFLINE = True
+    assert mod.main() == 0 and order == ["main"]

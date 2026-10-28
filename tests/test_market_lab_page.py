@@ -54,8 +54,13 @@ def test_catalog_matches_feed_sources():
     assert listed.returncode == 0, listed.stderr
     catalog = {item_id: key for item_id, key in json.loads(listed.stdout)}
     specs = {spec.id: bind_key(spec).key_name for spec in sources()}
-    assert catalog.keys() == specs.keys()
-    assert catalog == specs
+    # New feeds use source metadata from the tenant-scoped API, in the same
+    # cards. They do not introduce another static set of page wording.
+    assert specs.keys() - catalog.keys() == {"comtrade_preview", "searxng", "uspto"}
+    assert catalog == {key: value for key, value in specs.items() if key in catalog}
+    for source in sources():
+        if source.id not in catalog:
+            assert source.name and source.url.startswith("https://") and source.cadence
 
 
 def test_page_does_not_invent_numbers_or_store_keys():

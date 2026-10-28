@@ -37,6 +37,7 @@ KEY_NAMES: tuple[str, ...] = (
     "LEGISCAN_API_KEY",
     "EIA_API_KEY",
     "NOAA_TOKEN",
+    "USPTO_API_KEY",
     FRED_KEY,
 )
 

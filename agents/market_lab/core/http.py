@@ -67,8 +67,9 @@ def build_router(*, key_ok, ledger_context, engine: str | None = None):
                     return {"status": "queued"}
                 result = await overview(ledger, tenant, engine)
                 status = await ledger.conn.fetchval("""
-                    SELECT status FROM agent_market_lab.jobs WHERE tenant_id = $1 AND kind = 'refresh'
-                    ORDER BY created_at DESC LIMIT 1
+                    SELECT status FROM agent_market_lab.jobs
+                    WHERE tenant_id = $1 AND kind IN ('refresh', 'feed_links')
+                    ORDER BY (status IN ('queued', 'running')) DESC, created_at DESC LIMIT 1
                 """, body.tenant_id)
                 return {**result, "refresh_status": status}
         except HTTPException:

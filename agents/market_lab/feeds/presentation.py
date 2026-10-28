@@ -95,4 +95,4 @@ def notice_link(event: dict, presentation: dict | None = None) -> dict:
     machine = (target.hostname or "").startswith("api.") or any(part in target.path for part in ("/api/", "/webservices/", ".json"))
     if machine:
         return {"display_url": (presentation or {}).get("publisher_url", ""), "link_label": "View current notices on the publisher’s website"}
-    return {"display_url": event["url"] if target.scheme == "https" else "", "link_label": "Original notice"}
+    return {"display_url": event["url"] if target.scheme in {"http", "https"} else "", "link_label": "Original notice"}

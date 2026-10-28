@@ -19,6 +19,17 @@ class ConnectionPool:
 
 
 class RetailerMemoryStore:
+    async def watch_context(self, tenant_id: str, sku: str) -> dict | None:
+        if sku in await self.deleted_skus(tenant_id):
+            return None
+        product = next((p for p in await self.products(tenant_id) if p["sku"] == sku), None)
+        if product is None:
+            return None
+        cost = next((c for c in await self.costs(tenant_id) if c["sku"] == sku), {})
+        return {**{k: product.get(k) for k in ("sku", "name", "url", "active")},
+                "cost": str(cost["cost"]) if cost.get("cost") is not None else None,
+                "cost_currency": cost.get("currency")}
+
     async def watch_products(self, tenant_id: str) -> list[dict[str, str]]:
         deleted = await self.deleted_skus(tenant_id)
         return [{"sku": row["sku"], "url": row["url"].strip(), "name": row["name"]}
@@ -110,6 +121,17 @@ class RetailerMemoryStore:
 
 
 class RetailerPgStore:
+    async def watch_context(self, tenant_id: str, sku: str) -> dict | None:
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow("""SELECT p.sku,p.name,p.url,p.active,
+                c.cost::text AS cost,c.currency AS cost_currency
+                FROM agent_rig.products p LEFT JOIN agent_rig.supplier_costs c
+                    ON c.tenant_id=p.tenant_id AND c.sku=p.sku
+                WHERE p.tenant_id=$1 AND p.sku=$2 AND NOT EXISTS (
+                    SELECT 1 FROM agent_rig.deleted_products d WHERE d.tenant_id=p.tenant_id AND d.sku=p.sku)
+                """, UUID(str(tenant_id)), sku)
+        return dict(row) if row else None
+
     async def watch_products(self, tenant_id: str) -> list[dict[str, str]]:
         async with self.pool.acquire() as conn:
             rows = await conn.fetch("""SELECT p.sku,btrim(p.url) AS url,p.name FROM agent_rig.products p

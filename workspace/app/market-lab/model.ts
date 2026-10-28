@@ -160,9 +160,9 @@ export function buildPage(
   flags: KeyFlags,
   readings: Record<string, FeedReading>,
   linkChecks: Record<string, LinkCheck>,
-  options: { error?: boolean; refreshedAt?: string | null } = {},
+  options: { error?: boolean; refreshedAt?: string | null; sources?: CatalogItem[] } = {},
 ): PageModel {
-  const copies = CATALOG.filter((item) => item.kind === "copy");
+  const copies = [...CATALOG, ...(options.sources ?? []).filter((item) => !CATALOG.some((known) => known.id === item.id))].filter((item) => item.kind === "copy");
   const hasRows = (id: string) => Boolean(readings[id]?.documentId && (readings[id]?.rows ?? 0) > 0 && !readings[id]?.failed);
   const linked = CATALOG.filter((item) => item.kind === "linked");
   const featured = copies.filter((item) => (FEATURED_IDS as readonly string[]).includes(item.id) && hasRows(item.id)).map((item) => cardFor(item, readings[item.id]));
