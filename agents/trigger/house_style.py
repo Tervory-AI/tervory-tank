@@ -6,9 +6,9 @@ RULES = [
     {'id': 'active_voice', 'rule': 'Prefer active voice; review passive-voice candidates.',
      'sources': ['mailchimp-content', 'github-docs', 'mdn-web-docs', 'red-hat-docs']},
     {'id': 'descriptive_links', 'rule': 'Use descriptive link text.',
-     'sources': ['govuk', '18f-content', 'google-developer-docs', 'microsoft-writing-style', 'apple-interface-writing']},
+     'sources': ['govuk', 'google-developer-docs', 'apple-interface-writing', 'github-docs']},
     {'id': 'short_sentences', 'rule': 'Use short sentences; review sentences over the existing 30-word checker limit.',
-     'sources': ['govuk', '18f-content', 'mailchimp-content', 'red-hat-docs']},
+     'sources': ['govuk', 'microsoft-writing-style', 'mdn-web-docs']},
 ]
 TERMS = ['easy', 'easily', 'simply', 'obvious', 'obviously']
 
