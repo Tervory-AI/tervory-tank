@@ -1,0 +1,741 @@
+{
+  "baseline": "8b3a6d2fb054ba80c9f08d595d19bf72c60c1b07",
+  "pulled_head": "f238247",
+  "tools": {
+    "osv-scanner": "2.7.0",
+    "semgrep": "1.182.1",
+    "gitleaks": "8.30.1",
+    "pip-audit": "2.10.1"
+  },
+  "osv_before": {
+    "status": {
+      "tool": "osv",
+      "head": "76e7265829d55e0689b0df1b4d3f76bd696aa3db",
+      "base": "8b3a6d2",
+      "result": "findings"
+    },
+    "report": {
+      "lockfiles": [
+        "agents/_chassis/requirements.txt",
+        "agents/market_lab/feeds/requirements.txt",
+        "agents/market_lab/fixture_proof/requirements.txt",
+        "agents/rig/forge/gpu/meshroom-requirements.lock",
+        "agents/rig/forge/gpu/requirements.lock",
+        "agents/rig/forge/package-lock.json",
+        "agents/rig/forge/requirements-test.lock",
+        "agents/rig/forge/requirements.lock",
+        "agents/tisan/templates/next-site/package-lock.json",
+        "agents/trigger/requirements.txt",
+        "agents/zenas/requirements.txt",
+        "hermes/requirements.txt",
+        "jobs/train/requirements.txt",
+        "mcp/requirements.txt",
+        "researcher/requirements.txt",
+        "site/package-lock.json",
+        "tank/requirements-dev.txt",
+        "tank/requirements-routellm-wheel.txt",
+        "tank/requirements-routellm.txt",
+        "tank/requirements.txt",
+        "tests/market_lab_gpt_researcher/requirements.txt",
+        "tiger/requirements.txt",
+        "workers/requirements.txt",
+        "workers/task/requirements.txt",
+        "workspace/package-lock.json"
+      ],
+      "findings": [
+        {
+          "path": "agents/market_lab/fixture_proof/requirements.txt",
+          "ecosystem": "PyPI",
+          "package": "python-multipart",
+          "version": "0.0.22",
+          "id": "PYSEC-2026-3036",
+          "cvss": 7.5
+        },
+        {
+          "path": "agents/market_lab/fixture_proof/requirements.txt",
+          "ecosystem": "PyPI",
+          "package": "python-multipart",
+          "version": "0.0.22",
+          "id": "PYSEC-2026-3037",
+          "cvss": 3.7
+        },
+        {
+          "path": "agents/market_lab/fixture_proof/requirements.txt",
+          "ecosystem": "PyPI",
+          "package": "python-multipart",
+          "version": "0.0.22",
+          "id": "PYSEC-2026-3038",
+          "cvss": 5.3
+        },
+        {
+          "path": "agents/market_lab/fixture_proof/requirements.txt",
+          "ecosystem": "PyPI",
+          "package": "python-multipart",
+          "version": "0.0.22",
+          "id": "PYSEC-2026-3039",
+          "cvss": 7.5
+        },
+        {
+          "path": "agents/market_lab/fixture_proof/requirements.txt",
+          "ecosystem": "PyPI",
+          "package": "python-multipart",
+          "version": "0.0.22",
+          "id": "PYSEC-2026-3040",
+          "cvss": 3.7
+        },
+        {
+          "path": "agents/market_lab/fixture_proof/requirements.txt",
+          "ecosystem": "PyPI",
+          "package": "python-multipart",
+          "version": "0.0.22",
+          "id": "PYSEC-2026-3041",
+          "cvss": 3.7
+        },
+        {
+          "path": "agents/market_lab/fixture_proof/requirements.txt",
+          "ecosystem": "PyPI",
+          "package": "python-multipart",
+          "version": "0.0.22",
+          "id": "GHSA-5rvq-cxj2-64vf",
+          "cvss": 7.5
+        },
+        {
+          "path": "agents/market_lab/fixture_proof/requirements.txt",
+          "ecosystem": "PyPI",
+          "package": "python-multipart",
+          "version": "0.0.22",
+          "id": "GHSA-6jv3-5f52-599m",
+          "cvss": 3.7
+        },
+        {
+          "path": "agents/market_lab/fixture_proof/requirements.txt",
+          "ecosystem": "PyPI",
+          "package": "python-multipart",
+          "version": "0.0.22",
+          "id": "GHSA-mj87-hwqh-73pj",
+          "cvss": 5.3
+        },
+        {
+          "path": "agents/market_lab/fixture_proof/requirements.txt",
+          "ecosystem": "PyPI",
+          "package": "python-multipart",
+          "version": "0.0.22",
+          "id": "GHSA-pp6c-gr5w-3c5g",
+          "cvss": 7.5
+        },
+        {
+          "path": "agents/market_lab/fixture_proof/requirements.txt",
+          "ecosystem": "PyPI",
+          "package": "python-multipart",
+          "version": "0.0.22",
+          "id": "GHSA-v9pg-7xvm-68hf",
+          "cvss": 3.7
+        },
+        {
+          "path": "agents/market_lab/fixture_proof/requirements.txt",
+          "ecosystem": "PyPI",
+          "package": "python-multipart",
+          "version": "0.0.22",
+          "id": "GHSA-vffw-93wf-4j4q",
+          "cvss": 3.7
+        },
+        {
+          "path": "tank/requirements.txt",
+          "ecosystem": "PyPI",
+          "package": "python-multipart",
+          "version": "0.0.22",
+          "id": "PYSEC-2026-3036",
+          "cvss": 7.5
+        },
+        {
+          "path": "tank/requirements.txt",
+          "ecosystem": "PyPI",
+          "package": "python-multipart",
+          "version": "0.0.22",
+          "id": "PYSEC-2026-3037",
+          "cvss": 3.7
+        },
+        {
+          "path": "tank/requirements.txt",
+          "ecosystem": "PyPI",
+          "package": "python-multipart",
+          "version": "0.0.22",
+          "id": "PYSEC-2026-3038",
+          "cvss": 5.3
+        },
+        {
+          "path": "tank/requirements.txt",
+          "ecosystem": "PyPI",
+          "package": "python-multipart",
+          "version": "0.0.22",
+          "id": "PYSEC-2026-3039",
+          "cvss": 7.5
+        },
+        {
+          "path": "tank/requirements.txt",
+          "ecosystem": "PyPI",
+          "package": "python-multipart",
+          "version": "0.0.22",
+          "id": "PYSEC-2026-3040",
+          "cvss": 3.7
+        },
+        {
+          "path": "tank/requirements.txt",
+          "ecosystem": "PyPI",
+          "package": "python-multipart",
+          "version": "0.0.22",
+          "id": "PYSEC-2026-3041",
+          "cvss": 3.7
+        },
+        {
+          "path": "tank/requirements.txt",
+          "ecosystem": "PyPI",
+          "package": "python-multipart",
+          "version": "0.0.22",
+          "id": "GHSA-5rvq-cxj2-64vf",
+          "cvss": 7.5
+        },
+        {
+          "path": "tank/requirements.txt",
+          "ecosystem": "PyPI",
+          "package": "python-multipart",
+          "version": "0.0.22",
+          "id": "GHSA-6jv3-5f52-599m",
+          "cvss": 3.7
+        },
+        {
+          "path": "tank/requirements.txt",
+          "ecosystem": "PyPI",
+          "package": "python-multipart",
+          "version": "0.0.22",
+          "id": "GHSA-mj87-hwqh-73pj",
+          "cvss": 5.3
+        },
+        {
+          "path": "tank/requirements.txt",
+          "ecosystem": "PyPI",
+          "package": "python-multipart",
+          "version": "0.0.22",
+          "id": "GHSA-pp6c-gr5w-3c5g",
+          "cvss": 7.5
+        },
+        {
+          "path": "tank/requirements.txt",
+          "ecosystem": "PyPI",
+          "package": "python-multipart",
+          "version": "0.0.22",
+          "id": "GHSA-v9pg-7xvm-68hf",
+          "cvss": 3.7
+        },
+        {
+          "path": "tank/requirements.txt",
+          "ecosystem": "PyPI",
+          "package": "python-multipart",
+          "version": "0.0.22",
+          "id": "GHSA-vffw-93wf-4j4q",
+          "cvss": 3.7
+        }
+      ],
+      "total_findings": 295,
+      "baseline": "8b3a6d2fb054ba80c9f08d595d19bf72c60c1b07"
+    }
+  },
+  "osv_after": {
+    "status": {
+      "tool": "osv",
+      "head": "4ad6d817b29532c00191ca0dc21e79240399675e",
+      "base": "8b3a6d2",
+      "result": "clean"
+    },
+    "report": {
+      "lockfiles": [
+        "agents/_chassis/requirements.txt",
+        "agents/market_lab/feeds/requirements.txt",
+        "agents/market_lab/fixture_proof/requirements.txt",
+        "agents/rig/forge/gpu/meshroom-requirements.lock",
+        "agents/rig/forge/gpu/requirements.lock",
+        "agents/rig/forge/package-lock.json",
+        "agents/rig/forge/requirements-test.lock",
+        "agents/rig/forge/requirements.lock",
+        "agents/tisan/templates/next-site/package-lock.json",
+        "agents/trigger/requirements.txt",
+        "agents/zenas/requirements.txt",
+        "hermes/requirements.txt",
+        "jobs/train/requirements.txt",
+        "mcp/requirements.txt",
+        "researcher/requirements.txt",
+        "site/package-lock.json",
+        "tank/requirements-dev.txt",
+        "tank/requirements-routellm-wheel.txt",
+        "tank/requirements-routellm.txt",
+        "tank/requirements.txt",
+        "tests/market_lab_gpt_researcher/requirements.txt",
+        "tiger/requirements.txt",
+        "workers/requirements.txt",
+        "workers/task/requirements.txt",
+        "workspace/package-lock.json"
+      ],
+      "findings": [],
+      "total_findings": 271,
+      "baseline": "8b3a6d2fb054ba80c9f08d595d19bf72c60c1b07"
+    }
+  },
+  "resolved_pdf_before": [
+    {
+      "name": "pdfplumber",
+      "version": "0.11.7",
+      "advisories": []
+    },
+    {
+      "name": "pdfminer-six",
+      "version": "20250506",
+      "advisories": [
+        {
+          "id": "PYSEC-2026-1762",
+          "aliases": [
+            "GHSA-wf5f-4jwr-ppcp",
+            "CVE-2025-64512"
+          ],
+          "fix_versions": [
+            "20251107"
+          ]
+        },
+        {
+          "id": "PYSEC-2026-1761",
+          "aliases": [
+            "CVE-2025-70559",
+            "GHSA-f83h-ghpp-7wcc"
+          ],
+          "fix_versions": [
+            "20251230"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "charset-normalizer",
+      "version": "3.5.2",
+      "advisories": []
+    },
+    {
+      "name": "cryptography",
+      "version": "50.0.2",
+      "advisories": []
+    },
+    {
+      "name": "cffi",
+      "version": "2.1.1",
+      "advisories": []
+    },
+    {
+      "name": "pillow",
+      "version": "13.0.0",
+      "advisories": []
+    },
+    {
+      "name": "pypdfium2",
+      "version": "5.14.0",
+      "advisories": []
+    },
+    {
+      "name": "pycparser",
+      "version": "3.12",
+      "advisories": []
+    }
+  ],
+  "resolved_pdf_after": [
+    {
+      "name": "pdfplumber",
+      "version": "0.11.9",
+      "advisories": []
+    },
+    {
+      "name": "pdfminer-six",
+      "version": "20251230",
+      "advisories": []
+    },
+    {
+      "name": "charset-normalizer",
+      "version": "3.5.2",
+      "advisories": []
+    },
+    {
+      "name": "cryptography",
+      "version": "50.0.2",
+      "advisories": []
+    },
+    {
+      "name": "cffi",
+      "version": "2.1.1",
+      "advisories": []
+    },
+    {
+      "name": "pillow",
+      "version": "13.0.0",
+      "advisories": []
+    },
+    {
+      "name": "pypdfium2",
+      "version": "5.14.0",
+      "advisories": []
+    },
+    {
+      "name": "pycparser",
+      "version": "3.12",
+      "advisories": []
+    }
+  ],
+  "multipart_fixed_version_evidence": [
+    {
+      "id": "GHSA-5rvq-cxj2-64vf",
+      "aliases": [
+        "CVE-2026-53539",
+        "PYSEC-2026-3036"
+      ],
+      "summary": "python-multipart: Quadratic-time querystring parsing with semicolon separators causes CPU denial of service",
+      "affected": [
+        {
+          "package": {
+            "name": "python-multipart",
+            "ecosystem": "PyPI",
+            "purl": "pkg:pypi/python-multipart"
+          },
+          "ranges": [
+            {
+              "type": "ECOSYSTEM",
+              "events": [
+                {
+                  "introduced": "0"
+                },
+                {
+                  "fixed": "0.0.30"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "GHSA-6jv3-5f52-599m",
+      "aliases": [
+        "CVE-2026-53538",
+        "PYSEC-2026-3037"
+      ],
+      "summary": "python-multipart: Semicolon treated as querystring field separator enables parameter smuggling",
+      "affected": [
+        {
+          "package": {
+            "name": "python-multipart",
+            "ecosystem": "PyPI",
+            "purl": "pkg:pypi/python-multipart"
+          },
+          "ranges": [
+            {
+              "type": "ECOSYSTEM",
+              "events": [
+                {
+                  "introduced": "0"
+                },
+                {
+                  "fixed": "0.0.30"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "GHSA-mj87-hwqh-73pj",
+      "aliases": [
+        "CVE-2026-40347",
+        "PYSEC-2026-3038"
+      ],
+      "summary": "python-multipart affected by Denial of Service via large multipart preamble or epilogue data",
+      "affected": [
+        {
+          "package": {
+            "name": "python-multipart",
+            "ecosystem": "PyPI",
+            "purl": "pkg:pypi/python-multipart"
+          },
+          "ranges": [
+            {
+              "type": "ECOSYSTEM",
+              "events": [
+                {
+                  "introduced": "0"
+                },
+                {
+                  "fixed": "0.0.26"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "GHSA-pp6c-gr5w-3c5g",
+      "aliases": [
+        "CVE-2026-42561",
+        "PYSEC-2026-3039"
+      ],
+      "summary": "python-multipart has Denial of Service via unbounded multipart part headers",
+      "affected": [
+        {
+          "package": {
+            "name": "python-multipart",
+            "ecosystem": "PyPI",
+            "purl": "pkg:pypi/python-multipart"
+          },
+          "ranges": [
+            {
+              "type": "ECOSYSTEM",
+              "events": [
+                {
+                  "introduced": "0"
+                },
+                {
+                  "fixed": "0.0.27"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "GHSA-v9pg-7xvm-68hf",
+      "aliases": [
+        "CVE-2026-53540",
+        "PYSEC-2026-3040"
+      ],
+      "summary": "python-multipart: Negative Content-Length in parse_form buffers the entire body in memory",
+      "affected": [
+        {
+          "package": {
+            "name": "python-multipart",
+            "ecosystem": "PyPI",
+            "purl": "pkg:pypi/python-multipart"
+          },
+          "ranges": [
+            {
+              "type": "ECOSYSTEM",
+              "events": [
+                {
+                  "introduced": "0"
+                },
+                {
+                  "fixed": "0.0.31"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "GHSA-vffw-93wf-4j4q",
+      "aliases": [
+        "CVE-2026-53537",
+        "PYSEC-2026-3041"
+      ],
+      "summary": "python-multipart: Content-Disposition parameter smuggling via RFC 2231/5987 extended parameters",
+      "affected": [
+        {
+          "package": {
+            "name": "python-multipart",
+            "ecosystem": "PyPI",
+            "purl": "pkg:pypi/python-multipart"
+          },
+          "ranges": [
+            {
+              "type": "ECOSYSTEM",
+              "events": [
+                {
+                  "introduced": "0"
+                },
+                {
+                  "fixed": "0.0.30"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "semgrep_after": {
+    "status": {
+      "tool": "semgrep",
+      "head": "5f9a122240912ab345c6958aacb2b522da2c5207",
+      "base": "8b3a6d2",
+      "result": "clean"
+    },
+    "report": {
+      "findings": [],
+      "errors": [
+        {
+          "type": "Timeout",
+          "path": "agents/rig/rigbox/three_d/widget/assets/viewer-rM6udzfj.js",
+          "fatal": false
+        },
+        {
+          "type": "Timeout",
+          "path": "agents/rig/rigbox/three_d/widget/assets/viewer-rM6udzfj.js",
+          "fatal": false
+        },
+        {
+          "type": "Timeout",
+          "path": "agents/rig/rigbox/three_d/widget/assets/viewer-rM6udzfj.js",
+          "fatal": false
+        },
+        {
+          "type": "Timeout",
+          "path": "agents/rig/rigbox/three_d/widget/preview/runtime.js",
+          "fatal": false
+        },
+        {
+          "type": "Timeout",
+          "path": "agents/rig/rigbox/three_d/widget/preview/runtime.js",
+          "fatal": false
+        },
+        {
+          "type": "Timeout",
+          "path": "agents/rig/rigbox/three_d/widget/preview/runtime.js",
+          "fatal": false
+        },
+        {
+          "type": "PartialParsing",
+          "path": ".github/workflows/ci.yml",
+          "fatal": false
+        },
+        {
+          "type": "PartialParsing",
+          "path": ".github/workflows/ci.yml",
+          "fatal": false
+        },
+        {
+          "type": "PartialParsing",
+          "path": ".github/workflows/coolify-ops.yml",
+          "fatal": false
+        },
+        {
+          "type": "PartialParsing",
+          "path": ".github/workflows/coolify-ops.yml",
+          "fatal": false
+        },
+        {
+          "type": "PartialParsing",
+          "path": ".github/workflows/coolify-ops.yml",
+          "fatal": false
+        },
+        {
+          "type": "PartialParsing",
+          "path": ".github/workflows/coolify-ops.yml",
+          "fatal": false
+        },
+        {
+          "type": "PartialParsing",
+          "path": ".github/workflows/deploy-on-merge.yml",
+          "fatal": false
+        },
+        {
+          "type": "PartialParsing",
+          "path": ".github/workflows/deploy-on-merge.yml",
+          "fatal": false
+        },
+        {
+          "type": "PartialParsing",
+          "path": ".github/workflows/deploy-on-merge.yml",
+          "fatal": false
+        },
+        {
+          "type": "PartialParsing",
+          "path": ".github/workflows/deploy-on-merge.yml",
+          "fatal": false
+        },
+        {
+          "type": "PartialParsing",
+          "path": "agents/check_isolation.sh",
+          "fatal": false
+        },
+        {
+          "type": "PartialParsing",
+          "path": "ops/autumbra-enforce-isolation-check.sh",
+          "fatal": false
+        },
+        {
+          "type": "PartialParsing",
+          "path": "ops/autumbra-enforce-memory-measure.sh",
+          "fatal": false
+        },
+        {
+          "type": "PartialParsing",
+          "path": "ops/seal-check.sh",
+          "fatal": false
+        },
+        {
+          "type": "PartialParsing",
+          "path": "tank/Dockerfile",
+          "fatal": false
+        }
+      ],
+      "error_count": 21,
+      "fatal_error_count": 0,
+      "non_fatal_error_count": 21,
+      "exit_code": 0
+    }
+  },
+  "gitleaks_after": {
+    "status": {
+      "tool": "gitleaks",
+      "head": "5f9a122240912ab345c6958aacb2b522da2c5207",
+      "base": "8b3a6d2",
+      "result": "clean"
+    },
+    "report": []
+  },
+  "postgres_deletion": {
+    "before": {
+      "points": 2,
+      "events": 1,
+      "batch_points": 2,
+      "batches": 1,
+      "series": 1,
+      "uploaded_files": 1
+    },
+    "after": {
+      "points": 0,
+      "events": 0,
+      "batch_points": 0,
+      "batches": 0,
+      "series": 0,
+      "uploaded_files": 0
+    },
+    "same_tenant_other_file_preserved": true,
+    "other_tenant_same_file_id_preserved": true,
+    "repeat_delete_safe": true,
+    "result": "passed"
+  },
+  "validation": {
+    "security_policy_tests": {
+      "passed": 26
+    },
+    "regression_tests": {
+      "passed": 229,
+      "warnings": 1
+    },
+    "ruff": "All checks passed!",
+    "pip_check": "No broken requirements found.",
+    "real_process_document_test": {
+      "branch": "failed",
+      "baseline_f238247": "failed",
+      "location": "tests/market_docs_proof.py:194",
+      "exception": "KeyError: 'facts'",
+      "cause": "Merged web research fallback is invoked for the tenant with no uploaded answer; the existing document harness has no research service."
+    }
+  }
+}

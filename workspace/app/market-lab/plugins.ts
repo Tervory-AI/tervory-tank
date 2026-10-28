@@ -66,6 +66,7 @@ export type FileMeta = {
   rows: number | null;
   pages: number | null;
   uploadedAt: string;
+  reason: string;
   status: string;
 };
 export type LinkMeta = {
@@ -100,7 +101,7 @@ export function offPanel(message: string = VAULT_OFF_MESSAGE): PluginPanel {
 
 function statusLabel(value: string): string {
   const labels: Record<string, string> = {
-    saved: "Saved", ready: "Saved", pending: "Waiting", processing: "Processing",
+    learned: "Learned", reading: "Reading", saved: "Saved", ready: "Saved", pending: "Waiting", processing: "Processing",
     failed: "Could not complete", error: "Could not complete", connected: "Connected",
     disconnected: "Not connected", needs_auth: "Sign-in needed", needs_sign_in: "Sign-in needed",
     not_checked: "Not checked yet", "not checked": "Not checked yet", checked: "Checked",
@@ -127,6 +128,7 @@ type WireFile = {
   rows?: number | null;
   pages?: number | null;
   uploaded_at?: string;
+  reason?: string;
   status?: string;
   content?: string;
 };
@@ -175,6 +177,7 @@ export function mapVaultPayload(raw: {
             rows: row.rows ?? null,
             pages: row.pages ?? null,
             uploadedAt: row.uploaded_at ?? "",
+            reason: row.reason ?? "",
             status: statusLabel(row.status ?? "ready"),
           }]
         : [],

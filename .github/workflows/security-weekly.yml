@@ -3,6 +3,7 @@ name: security-weekly
 on:
   schedule:
     - cron: "0 6 * * 1" # Monday 06:00 UTC, default branch
+  workflow_dispatch: # the founder can run the full scan on demand (Actions > security-weekly > Run workflow)
 
 permissions:
   contents: read

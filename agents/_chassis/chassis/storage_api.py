@@ -61,4 +61,10 @@ def storage_router(agent: str) -> APIRouter:
             data = await store.get(str(tenant_id), category, name, public=public)
             return Response(data, media_type='application/octet-stream')
 
+    @router.delete('/objects/{category}/{name:path}')
+    async def delete(category: str, name: str, tenant_id: uuid.UUID, public: bool = False, region: str | None = None):
+        async with client(region) as store:
+            await store.delete(str(tenant_id), category, name, public=public)
+            return {'ok': True}
+
     return router

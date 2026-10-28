@@ -1188,3 +1188,11 @@ body:has(.ml) main {
 
 .ml-warnings { scroll-margin-top: 84px; }
 .ml-warning-evidence a { text-decoration: underline; text-underline-offset: 3px; }
+
+.ml-source article[id^="passage-"]:target { background: #F4F6FB; outline: 2px solid #B8BFD0; padding: 1rem; }
+
+/* Keep file controls reachable when the phone sheet is taller than the screen. */
+@media (max-width: 800px) {
+  .ml-plugins { box-sizing: border-box; overflow-y: auto; }
+  .ml-plugins > * { flex-shrink: 0; }
+}
