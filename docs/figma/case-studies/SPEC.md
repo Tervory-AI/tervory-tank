@@ -1,15 +1,15 @@
 # Client case studies and product dashboard template
 
-Revision: founder decisions and review fixes, 28 October 2026, 07:40 PT.
+Revision 3: menu typography, comparison state, founder navigation and accent proposals, 28 October 2026.
 Status: ready for founder review; accent colours and the proposed comparison label await approval.
 File: https://www.figma.com/design/ZnphBOJU6657tohGLD3IzS
 Page: 1 · Case studies (42:2).
 SPEC frame: 63:10450. Founder decisions frame: 79:10314.
 Repository destination for Claude: docs/figma/case-studies/SPEC.md.
 
-Authority: the Founder decisions section below overrides every conflicting earlier instruction or description. It records the decisions pasted in this chat. The repo SPEC was unavailable in this checkout.
+Authority: the Founder decisions section below overrides every conflicting earlier instruction or description. It records the decisions pasted in this chat. This revision reads the repository SPEC and the pinned BottleCRM contract before changes.
 
-Figma-only revision. No application code, live client data, production data, model calls, secrets, sign-in, billing, pricing or payment work was performed. Billing is an existing navigation item only. Claude commits this exact document; no repository branch, commit or push was created here.
+Figma-only revision. No application code, live client data, production data, model calls, secrets, sign-in, billing, pricing or payment work was performed. Billing is an existing navigation item only. Revision 3 is committed on codex/crm-design; Claude opens the PR.
 
 The protected page 0 · Dashboards (approve first), frame 12:2 and frame 10:115 remain unchanged. No new Figma file was created.
 ## Founder decisions
@@ -79,7 +79,7 @@ There are 16 component sets with 48 auto-layout variants. Plot primitives remain
 
 Stat tile properties: Label, Value, Change, Context, Show context and State. The old Unit property is removed. Value carries its unit once; Context is only method information such as 200-record audit.
 The comparison row contains DATA Change plus the proposed FIXED label vs previous period.
-Menu item properties: Label, State and Show marker. Badge, Show count and Count are removed. Only Default, Hover and Active variants remain.
+Menu labels use a 24 px line box at 15 px font size in Default, Hover and Active, preserving descenders in every linked screen. Menu item properties: Label, State and Show marker. Badge, Show count and Count are removed. Only Default, Hover and Active variants remain.
 Desktop and mobile Workspace menus expose Audience and nine Has product entitlement switches. The same tenant entitlement set must control navigation and routes.
 Page templates expose State, Page and Client name. Product-tab rows, their visibility properties and the Product tab component set are removed.
 Bar charts support Two or Three categories, each with desktop/mobile and ZERO/FILLED states. Other chart families have desktop/mobile and ZERO/FILLED states.
@@ -102,17 +102,17 @@ One proposed accent per product and one for CRM:
 | --- | --- | --- | --- | --- |
 | Base | #1D4ED8 | 6.70:1 | VariableID:72:9805 | VariableID:72:9804 |
 | Tiger | #9A3412 | 7.31:1 | VariableID:72:9807 | VariableID:72:9806 |
-| Market Lab | #6D28D9 | 7.10:1 | VariableID:72:9809 | VariableID:72:9808 |
+| Market Lab | #5B21B6 | 8.98:1 | VariableID:72:9809 | VariableID:72:9808 |
 | Rig | #0F766E | 5.47:1 | VariableID:72:9811 | VariableID:72:9810 |
-| Zenas | #475569 | 7.58:1 | VariableID:72:9813 | VariableID:72:9812 |
-| Trigger | #BE185D | 6.04:1 | VariableID:72:9815 | VariableID:72:9814 |
+| Zenas | #3F6212 | 7.08:1 | VariableID:72:9813 | VariableID:72:9812 |
+| Trigger | #B91C1C | 6.47:1 | VariableID:72:9815 | VariableID:72:9814 |
 | Tisan | #15803D | 5.02:1 | VariableID:72:9817 | VariableID:72:9816 |
 | Radix | #A16207 | 4.92:1 | VariableID:72:9819 | VariableID:72:9818 |
-| Autumbra | #A21CAF | 6.32:1 | VariableID:72:9821 | VariableID:72:9820 |
+| Autumbra | #0E7490 | 5.36:1 | VariableID:72:9821 | VariableID:72:9820 |
 | CRM | #0369A1 | 5.93:1 | VariableID:72:9823 | VariableID:72:9822 |
 
 Semantic names are color/accent/base, tiger, market-lab, rig, zenas, trigger, tisan, radix, autumbra and crm, each under the color/accent/ prefix.
-All ten pass WCAG AA on white. These are proposals, not approved new brand colours.
+All ten pass WCAG AA on white. These are proposals, not approved new brand colours. Revision 3 comparison board 89:10434 on Variables shows the previous and proposed colours side by side for Market Lab, Zenas, Trigger and Autumbra.
 Product chart marks use that product's accent, including its shared Tank charts. Overview and Case study aggregate charts retain navy. Calibration uses the Market Lab accent for both series, distinguished by solid/dashed lines.
 Menu markers use an 8 px accent dot inside a 16 px white carrier so the accent's white-background contrast is preserved on the navy menu. Product names also identify the destination. CRM has a marker; no CRM figures were invented.
 
@@ -128,7 +128,7 @@ Client menu order:
 Overview; entitled Base, Tiger, Market Lab, Rig, Zenas, Trigger, Tisan, Radix, Autumbra; CRM; Case study; Chats; Projects; Squad; Tasks; Data; Prices.
 Receipts, Billing, Settings are pinned at the bottom.
 
-Founder adds the client switcher at the top and Admin after Prices, before the pinned bottom group. Client hides both. No menu counts or product tabs remain.
+Founder adds the client switcher at the top, Skala and Tank before CRM, then Admin after Prices with Training, Law feeds, Feeds and Homes beneath it, before the pinned bottom group. Client destinations remain unchanged. No menu counts or product tabs remain.
 
 Desktop Client/Founder: 46:21 / 46:66, set 46:111.
 Desktop scroll regions: 70:10451 / 70:10478. Footers: 70:10452 / 70:10479.
@@ -136,7 +136,7 @@ Mobile Client/Founder: 70:10507 / 70:10581, set 70:10658.
 Mobile scroll regions: 70:10516 / 70:10590. Footers: 70:10517 / 70:10591.
 Drawers 53:6328 and 53:6373 contain the shared mobile Client menu. Founder mobile is available as the Audience=Founder component variant.
 
-The menu middle scrolls independently while its header and bottom group remain visible. The all-products Figma configuration has 21 client destinations and 22 founder destinations. A real client sees only entitled products.
+The menu middle scrolls independently while its header and bottom group remain visible. The all-products Figma configuration has 21 client destinations and 28 founder destinations. A real client sees only entitled products.
 Mobile uses this drawer, not a bottom bar. The menu button opens the matching ZERO/FILLED drawer; × closes it.
 There are 264 side-menu/drawer navigation links across the 44 screens and two drawers. Current desktop destinations do not navigate to themselves.
 CRM and the existing Workspace/Admin entries are included in the menu. New destination page designs and route URLs were not invented.
@@ -150,7 +150,7 @@ Primary values: Base B1; Tiger G1; Market Lab M1; Rig R1; Zenas Z1; Trigger V1; 
 Each stat value contains its unit once. Change is shown alongside vs previous period. No repeated USD or % row. The 200-record audit context identifies the intended method, not a completed-audit claim.
 
 Every client must receive the template automatically at sign-up with their entitled products. No sign-in screen is added. Every configured chart stays present and shows the defined ZERO state until real data arrives.
-The period picker cycles 7 days / 30 days / 90 days / Custom to demonstrate states. Compare toggles Off/On; header clicks cycle sort states. These prototype interactions do not query data.
+The period picker cycles 7 days / 30 days / 90 days / Custom to demonstrate states. Compare toggles Off/On; all 22 FILLED screens and both FILLED templates start On wherever the change line is shown. Header clicks cycle sort states. These prototype interactions do not query data.
 No extra custom-date, empty-state, success, error or permission wording is added.
 ## Chart units, ranges and ZERO behaviour
 
@@ -276,7 +276,7 @@ Do not ship any Figma placeholder, bracketed category, chart geometry or fabrica
 ## FIXED text register for founder approval
 
 Menu labels:
-Overview; Base; Tiger; Market Lab; Rig; Zenas; Trigger; Tisan; Radix; Autumbra; CRM; Case study; Chats; Projects; Squad; Tasks; Data; Prices; Receipts; Billing; Settings; Admin.
+Overview; Base; Tiger; Market Lab; Rig; Zenas; Trigger; Tisan; Radix; Autumbra; CRM; Case study; Chats; Projects; Squad; Tasks; Data; Prices; Receipts; Billing; Settings; Admin; Skala; Tank; Training; Law feeds; Feeds; Homes.
 Other headings: Case study summary; Product.
 
 Controls:
@@ -397,3 +397,13 @@ Squad has no single route today: SQUAD_LINKS are the product pages. Case study i
 - **M3:** as implemented by the Market Lab calibration job: same kind, feed and horizon; resolved predictions only; per tenant.
 - **Zero denominators:** show 0, as the ZERO design does.
 - **Dark mode:** light only for now.
+
+## Revision 3 changes and evidence
+
+- Existing 44 screen IDs are retained; no screen was recreated.
+- Shared menu labels 43:410, 43:416 and 43:422 use 24 px line height, with fixed 40 px desktop / 44 px mobile item heights and centered alignment.
+- All FILLED comparison switches are On, including templates 46:405 and 53:5896.
+- Founder menus 46:66 and 70:10581 add Skala, Tank, Training, Law feeds, Feeds and Homes; the last four are indented under Admin. Labels match workspace/app/product-nav.ts. Client menu contents are unchanged.
+- Proposed accents: Market Lab #5B21B6 (8.98:1), Zenas #3F6212 (7.08:1), Trigger #B91C1C (6.47:1), Autumbra #0E7490 (5.36:1). Existing semantic aliases propagate the proposals to menu dots and chart marks.
+- Old/new comparison frame: 89:10434, inside Variables 42:52. Colour approval remains with the founder. CRM keeps #0369A1.
+- The historical review above remains as provenance; this section records the requested fixes. Structural and visual proof is being recorded with the CRM handoff. No live page implementation or founder-browser acceptance is claimed.
