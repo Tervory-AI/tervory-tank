@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from contextlib import asynccontextmanager
-from datetime import timedelta
+from datetime import date, timedelta
 from uuid import UUID, uuid4
 
 SCHEMA = """
@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS agent_zenas.regulation_changes (
     FOREIGN KEY (tenant_id, watch_id)
       REFERENCES agent_zenas.regulation_watches(tenant_id, id)
 );
+ALTER TABLE agent_zenas.regulation_changes ADD COLUMN IF NOT EXISTS event_sent boolean NOT NULL DEFAULT false;
 CREATE INDEX IF NOT EXISTS regulation_pending
     ON agent_zenas.regulation_changes(tenant_id, mail_state, next_attempt);
 """
@@ -64,7 +65,9 @@ def compare(watch, documents):
         old = seen.get(document["id"])
         if old is not None and old["version"] == document["version"]:
             continue
-        if watch["initialized"]:
+        # Sources provide publication dates, not intraday publication times.
+        after_creation = date.fromisoformat(document["date"]) > watch["created_at"].date()
+        if after_creation or (old is not None and watch["initialized"]):
             changes.append((document, old))
         seen[document["id"]] = document
     return seen, changes
@@ -193,6 +196,10 @@ class PgWatches:
                 UUID(tenant_id),
             )
         ]
+
+    async def mark_event_sent(self, tenant_id, change_id):
+        await self.conn.execute("""UPDATE agent_zenas.regulation_changes SET event_sent=true
+            WHERE tenant_id=$1 AND id=$2""", UUID(tenant_id), UUID(change_id))
 
     async def save_summary(self, tenant_id, change_id, summary, letter):
         await self.conn.execute(
@@ -341,6 +348,11 @@ class MemoryWatches:
 
     async def changes(self, tenant_id):
         return [dict(row) for (t, _), row in self.records.items() if t == tenant_id]
+
+    async def mark_event_sent(self, tenant_id, change_id):
+        row = self.records.get((tenant_id, change_id))
+        if row is not None:
+            row['event_sent'] = True
 
     async def save_summary(self, tenant_id, change_id, summary, letter):
         row = self.records.get((tenant_id, change_id))
