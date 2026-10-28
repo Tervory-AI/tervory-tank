@@ -133,10 +133,10 @@ def main() -> int:
             print("::error title=za not deployed::tervory-tank-za did not deploy; ZA rooms skipped, Boston rooms continue")
             targets = {n: u for n, u in targets.items() if not n.endswith("-za")}
     ok = za_ok
+    # One room at a time: deploy, then wait until it is healthy before the next.
+    # Starting every room at once took every product page down together (28 Oct, #403).
     for name, uuid in sorted(targets.items()):
-        ok = deploy(uuid, name) and ok
-    for name, uuid in sorted(targets.items()):
-        ok = wait_for(uuid, name) and ok
+        ok = (deploy(uuid, name) and wait_for(uuid, name)) and ok
     return 0 if ok else 1
 
 
