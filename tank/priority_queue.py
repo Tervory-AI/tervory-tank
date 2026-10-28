@@ -7,11 +7,23 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 from zoneinfo import ZoneInfo
+from weakref import WeakKeyDictionary
 
 from fastapi import HTTPException
 from pydantic import BaseModel
 
 import batch_providers
+
+
+_worker_locks = WeakKeyDictionary()
+
+
+def worker_lock():
+    # Keep one maintenance operation per process: it holds an advisory-lock
+    # connection while the existing router acquires its own short-lived ones.
+    # Per-loop locks also allow isolated application/test lifespans.
+    loop = asyncio.get_running_loop()
+    return _worker_locks.setdefault(loop, asyncio.Lock())
 
 
 class WindowClosed(Exception):
@@ -190,6 +202,11 @@ async def _process(tank, conn, job):
 
 
 async def process_once(tank, *, job_id=None, tenant_id=None):
+    async with worker_lock():
+        await _process_once(tank, job_id=job_id, tenant_id=tenant_id)
+
+
+async def _process_once(tank, *, job_id=None, tenant_id=None):
     async with tank.pool().acquire() as conn:
         # Platform worker discovers work across tenants, then every operation is
         # scoped by that row's tenant and box, as in the existing batch worker.
@@ -219,6 +236,11 @@ async def process_once(tank, *, job_id=None, tenant_id=None):
 
 
 async def notify_commands(tank):
+    async with worker_lock():
+        await _notify_commands(tank)
+
+
+async def _notify_commands(tank):
     """Resume an existing Command turn after a durable job completes, without a model call."""
     import command
     from types import SimpleNamespace
