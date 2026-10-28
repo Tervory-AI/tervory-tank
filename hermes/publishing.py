@@ -1,9 +1,20 @@
 """Explicit founder opt-in per client and agent. No automatic publication."""
 
 import json
+import re
 import uuid
 from hermes.deidentify import deidentify, identity_inventory
 from hermes.record_schema import PLATFORM_TENANT
+
+
+_SCHEMA = re.compile(r"agent_[a-z][a-z0-9_]{0,40}")
+
+
+def _sql(statement: str, schema: str) -> str:
+    """Schema names come only from Hermes's agent allowlist; checked again here."""
+    if not _SCHEMA.fullmatch(schema):
+        raise ValueError("invalid schema name")
+    return statement.format(schema=schema)
 
 
 class Publisher:
@@ -22,10 +33,10 @@ class Publisher:
                 enabled, invalid = False, True
         async with self.records.pool.acquire() as conn:
             await conn.execute(
-                f"""INSERT INTO {s}.memory_publish_policy(tenant_id,enabled,identifiers,updated_by)
+                _sql("""INSERT INTO {schema}.memory_publish_policy(tenant_id,enabled,identifiers,updated_by)
                 VALUES($1,$2,$3::jsonb,$4) ON CONFLICT(tenant_id) DO UPDATE
                 SET enabled=EXCLUDED.enabled,identifiers=EXCLUDED.identifiers,
-                updated_by=EXCLUDED.updated_by,updated_at=now()""",
+                updated_by=EXCLUDED.updated_by,updated_at=now()""", s),
                 uuid.UUID(tenant),
                 enabled,
                 json.dumps(identifiers),
@@ -46,7 +57,7 @@ class Publisher:
         async with self.records.pool.acquire() as conn, conn.transaction():
             # Lock policy against concurrent revoke; no row means off.
             policy = await conn.fetchrow(
-                f"SELECT * FROM {s}.memory_publish_policy WHERE tenant_id=$1 FOR UPDATE",
+                _sql("SELECT * FROM {schema}.memory_publish_policy WHERE tenant_id=$1 FOR UPDATE", s),
                 tenant_id,
             )
             if policy and policy["enabled"]:
@@ -56,15 +67,15 @@ class Publisher:
                     # Recheck persisted policies too, including legacy empty
                     # inventories. Refusal, revoke and audit commit together.
                     await conn.execute(
-                        f"""UPDATE {s}.memory_publish_policy
-                        SET enabled=false,updated_by=$2,updated_at=now() WHERE tenant_id=$1""",
+                        _sql("""UPDATE {schema}.memory_publish_policy
+                        SET enabled=false,updated_by=$2,updated_at=now() WHERE tenant_id=$1""", s),
                         tenant_id, actor,
                     )
                     result, policy = "refused", None
             if policy and policy["enabled"]:
                 row = await conn.fetchrow(
-                    f"""SELECT * FROM {s}.memory_records
-                    WHERE tenant_id=$1 AND id=$2 AND tier='client' FOR SHARE""",
+                    _sql("""SELECT * FROM {schema}.memory_records
+                    WHERE tenant_id=$1 AND id=$2 AND tier='client' FOR SHARE""", s),
                     tenant_id,
                     source,
                 )
@@ -83,9 +94,9 @@ class Publisher:
                     else:
                         await self.records.lock(conn, s, target)
                         created = await conn.fetchval(
-                            f"""INSERT INTO {s}.memory_records
+                            _sql("""INSERT INTO {schema}.memory_records
                             (id,tenant_id,claim,evidence,confidence,last_verified,tier)
-                            VALUES($1,$2,$3,$4::jsonb,$5,$6,'platform') ON CONFLICT(id) DO NOTHING RETURNING id""",
+                            VALUES($1,$2,$3,$4::jsonb,$5,$6,'platform') ON CONFLICT(id) DO NOTHING RETURNING id""", s),
                             target,
                             uuid.UUID(PLATFORM_TENANT),
                             claim,
@@ -103,8 +114,8 @@ class Publisher:
                             self.records.model,
                         )
             await conn.execute(
-                f"""INSERT INTO {s}.memory_publish_log(tenant_id,actor,source_row,result,published_row)
-                VALUES($1,$2,$3,$4,$5)""",
+                _sql("""INSERT INTO {schema}.memory_publish_log(tenant_id,actor,source_row,result,published_row)
+                VALUES($1,$2,$3,$4,$5)""", s),
                 tenant_id,
                 actor,
                 source,
