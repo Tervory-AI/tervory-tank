@@ -20,8 +20,11 @@ async def request(http, tenant_id: str, operation: str, body: dict) -> dict:
     if operation not in {"publish", "receive", "settle"}:
         raise ValueError("Unknown event operation")
     tenant = str(UUID(str(tenant_id)))
+    key = os.environ.get("TANK_KEY", "")
+    if not key:
+        raise RuntimeError("Room event corridor is not configured")
     response = await http.post(os.environ.get("TANK_URL", "http://tank:8000").rstrip("/") + "/v1/events/" + operation,
-        headers={"X-Tank-Key": os.environ.get("TANK_KEY", ""), "X-Tervory-Tenant": tenant,
+        headers={"X-Tank-Key": key, "X-Tervory-Tenant": tenant,
                  "X-Tervory-Region": os.environ.get("TANK_REGION", "us-east")},
         json=body, timeout=2, follow_redirects=False)
     response.raise_for_status()
