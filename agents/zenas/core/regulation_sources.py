@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import urllib.request
 import hashlib
 import json
 import os
@@ -140,11 +142,31 @@ def validate_watch(source, region, topic, options):
         raise ValueError("Not in scope.")
 
 
+async def legiscan_request(params):
+    """Founder-approved query authentication. Never retain/log the request URL."""
+    key = os.environ.get("LEGISCAN_API_KEY", "").strip()
+    if not key:
+        raise FetchNotConfigured("LEGISCAN_API_KEY")
+
+    def request():
+        from agents.zenas.pool.http import _NoRedirect
+        try:
+            url = "https://api.legiscan.com/?" + urlencode({**params, "key": key})
+            req = urllib.request.Request(url, headers={"Accept":"application/json", "User-Agent":USER_AGENT})
+            with urllib.request.build_opener(_NoRedirect()).open(req, timeout=30) as response:
+                return json.load(response)
+        except Exception:
+            # urllib exceptions contain the credential-bearing URL. Never propagate it.
+            raise FetchNotConfigured("LEGISCAN_API_KEY") from None
+    return await asyncio.to_thread(request)
+
+
 class Sources:
-    def __init__(self, region, *, http_get=urllib_get, laws_snapshot=None):
+    def __init__(self, region, *, http_get=urllib_get, laws_snapshot=None, legiscan_get=None):
         if region not in {"us-east", "za"}:
             raise ValueError("Not in scope.")
         self.region, self.laws_snapshot = region, laws_snapshot
+        self.legiscan_get = legiscan_get or legiscan_request
         self.get = (
             partial(urllib_get, redirects=False) if http_get is urllib_get else http_get
         )
@@ -315,9 +337,43 @@ class Sources:
         return found
 
     async def legiscan(self, watch):
-        # The existing repository adapter puts the key in a URL. Do not copy that.
-        # A documented non-URL credential transport is required before enabling it.
-        raise FetchNotConfigured("LEGISCAN_API_KEY")
+        matches_by_id = {}
+        seen = 0
+        for page in range(1, 101):
+            payload = await self.legiscan_get({"op":"getSearch", "state":watch["options"]["state"],
+                                              "query":watch["topic"], "page":page})
+            if payload.get("status") != "OK":
+                raise FetchNotConfigured("LEGISCAN_API_KEY")
+            result = payload["searchresult"]
+            total = int(result["summary"]["count"])
+            rows = [r for k,r in result.items() if k != "summary"]
+            for row in rows:
+                if row["state"] == watch["options"]["state"]:
+                    matches_by_id[int(row["bill_id"])] = row
+            seen += len(rows)
+            if seen >= total:
+                break
+            if not rows:
+                raise ValueError("source_unavailable")
+        else:
+            raise ValueError("source_unavailable")
+        found = []
+        for bill_id, search in matches_by_id.items():
+            payload = await self.legiscan_get({"op":"getBill", "id":bill_id})
+            if payload.get("status") != "OK":
+                raise FetchNotConfigured("LEGISCAN_API_KEY")
+            bill = payload["bill"]
+            if int(bill["bill_id"]) != bill_id or bill["state"] != watch["options"]["state"]:
+                raise ValueError("source_unavailable")
+            history = bill.get("history") or []
+            latest = sorted(history, key=lambda r:r["date"])[-1] if history else {}
+            on = latest.get("date") or bill.get("status_date") or search.get("last_action_date") or search.get("status_date")
+            action = latest.get("action") or search.get("last_action") or ""
+            text = "\n".join(x for x in (bill["title"],bill.get("description"),action) if x)
+            found.append(document("legiscan",str(bill_id),bill["title"],text,bill["url"],on,
+                version=str(bill.get("change_hash") or hashlib.sha256(json.dumps(bill,sort_keys=True).encode()).hexdigest()),
+                kind="bill",attribution="LegiScan"))
+        return found
 
     async def eur_lex(self, watch):
         found = []
