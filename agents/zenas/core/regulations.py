@@ -21,7 +21,7 @@ def civil(text):
 async def add_watch(store, *, tenant_id, region, source, topic, options, now=None):
     validate_watch(source,region,topic,options)
     decision = classify(topic,'za' if region=='za' else 'us')
-    if not civil(topic) or not decision['in_scope']:
+    if not civil(topic):
         raise ValueError(REFUSED if not civil(topic) else decision['reason'])
     return await store.add_watch(tenant_id,region,source,topic,options,now or datetime.now(timezone.utc))
 
