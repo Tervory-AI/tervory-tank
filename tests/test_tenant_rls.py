@@ -324,3 +324,44 @@ async def test_chassis_accepts_job_tenant_and_worker_keeps_it(database):
         await asyncio.gather(task, return_exceptions=True)
     assert await room_pool.fetchval("SELECT count(*) FROM agent_template.jobs") == 0
     await room_raw.close()
+
+
+@pytest.mark.asyncio
+async def test_rig_authenticated_bootstrap_then_tenant_and_reset(database):
+    from fastapi import FastAPI, Request
+    sys.path.insert(0, str(ROOT / "agents/rig"))
+    from chassis.tenant_db import TenantPool as RoomPool
+    from rigbox.api import _auth, mount
+    from rigbox.service import Service, hash_key
+    from rigbox.store import PgStore
+
+    a, b = uuid4(), uuid4()
+    # Synthetic local fixture credentials, never sent outside ASGITransport.
+    first, second = "rk_pub_offline_rls_first", "rk_pub_offline_rls_second"
+    for tenant, key in ((a, first), (b, second)):
+        await database.owner.execute("INSERT INTO agent_rig.keys(tenant_id,key_hash,kind,origins) VALUES($1,$2,'publishable',ARRAY['https://offline.invalid'])", tenant, hash_key(key))
+    pool = RoomPool(database.raw, database.founder)
+    store = PgStore(pool)
+    assert await pool.fetchval("SELECT count(*) FROM agent_rig.keys") == 0
+    assert (await store.key(hash_key(first)))["tenant_id"] == str(a)
+    app = FastAPI()
+    mount(app)
+    app.state.rig = Service(store)
+
+    @app.get("/offline-rls")
+    async def accepted(request: Request):
+        owner = await _auth(request)
+        return {"tenant": owner["tenant_id"], "setting": await pool.fetchval("SELECT current_setting('app.tenant_id',true)"), "keys": await pool.fetchval("SELECT count(*) FROM agent_rig.keys")}
+
+    @app.get("/offline-unset")
+    async def unset():
+        return {"keys": await pool.fetchval("SELECT count(*) FROM agent_rig.keys")}
+
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://offline") as client:
+        for tenant, key in ((a, first), (b, second)):
+            response = await client.get("/offline-rls", headers={"X-Rig-Key": key, "Origin": "https://offline.invalid"})
+            assert response.status_code == 200, response.text
+            assert response.json() == {"tenant": str(tenant), "setting": str(tenant), "keys": 1}
+            assert (await client.get("/offline-unset")).json() == {"keys": 0}
+        assert (await client.get("/offline-rls", headers={"X-Rig-Key": first, "Origin": "https://wrong.invalid"})).status_code == 403
+        assert (await client.get("/offline-unset")).json() == {"keys": 0}
