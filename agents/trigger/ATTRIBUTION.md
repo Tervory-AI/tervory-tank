@@ -8,3 +8,5 @@
 - **LanguageTool**: https://github.com/languagetool-org/languagetool, LGPL-2.1-or-later. Runs as a separate internal server (the pinned image packager applies dependency updates); no cloud API or paid rules. Container packaging: https://github.com/meyayl/docker-languagetool (LGPL-2.1). Exact image pin is recorded in compose and the proof.
 
 CC BY adaptations retain attribution and identify changes here. The upstream works do not endorse Trigger. Content-dependent checks are advisory findings, not a certification of accuracy or legal correctness.
+
+The second build adapts a mechanical, industry-neutral house subset from the original MIT stylebooks; exact rule-to-book mapping and checker limitations are in [HOUSE_STYLE.md](HOUSE_STYLE.md). The house subset is fallback guidance, never tenant-authored brand content. No upstream vendored file was changed.

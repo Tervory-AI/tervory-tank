@@ -14,7 +14,7 @@ BOOKS = frozenset(p.name for p in (ROOT / "sources/stylebooks").iterdir() if p.i
 
 class Voice(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    brand: str = Field(min_length=1, max_length=200)
+    brand: str = Field(default="", max_length=200)
     status: Literal["live"]
     revision: int = Field(ge=1)
     registers: dict[str, str] = Field(default_factory=dict)
@@ -36,8 +36,8 @@ class Voice(BaseModel):
 
     @model_validator(mode="after")
     def bounded(self):
-        if not self.brand.strip() or len(self.model_dump_json()) > 40_000:
-            raise ValueError("Voice must have a brand and fit in 40,000 characters")
+        if len(self.model_dump_json()) > 40_000:
+            raise ValueError("Voice must fit in 40,000 characters")
         if self.stylebook is not None and self.stylebook not in BOOKS:
             raise ValueError("Unknown stylebook")
         terms = self.bannedTerms + self.requiredTerms + self.preferredTerms

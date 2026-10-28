@@ -4,6 +4,26 @@
 const TANK_URL = process.env.TANK_URL ?? "http://tank:8000";
 const TANK_API_KEY = process.env.TANK_API_KEY ?? "";
 
+/** API-only reports. Identity is supplied by Clerk on the server, never the browser. */
+export async function caseStudyRequest(identity: { tenantId: string; userId: string }, path = "", query = new URLSearchParams()): Promise<Response> {
+  const allowed = ["", "ensure", "clients", "base", "tiger", "market_lab", "rig", "zenas", "trigger", "tisan", "radix", "autumbra"];
+  if (!allowed.includes(path)) throw new Error("Unknown request.");
+  const url = new URL(`/v1/case-studies${path ? `/${path}` : ""}`, TANK_URL);
+  for (const key of ["tenant_id", "start", "end", "offset", "limit"]) {
+    const value = query.get(key);
+    if (value !== null) url.searchParams.set(key, value);
+  }
+  return fetch(url, {
+    method: path === "ensure" ? "POST" : "GET", cache: "no-store", redirect: "error",
+    headers: { "X-Tank-Key": TANK_API_KEY, "X-Tervory-User": identity.userId, "X-Tervory-Tenant": identity.tenantId },
+  });
+}
+
+export async function ensureCaseStudyReports(identity: { tenantId: string; userId: string }): Promise<void> {
+  const response = await caseStudyRequest(identity, "ensure");
+  if (!response.ok) throw new Error();
+}
+
 /** Base product only. Identity and allowed operations are resolved server-side. */
 export async function baseProductRequest(tenantId: string, path: string, query: URLSearchParams = new URLSearchParams(), body?: Record<string, unknown>): Promise<Response> {
   const parameters = new URLSearchParams(query);
@@ -908,7 +928,7 @@ export class CommandRequestError extends Error {
   code: string;
   constructor(status: number, code: string, message: string) { super(message); this.status = status; this.code = code; }
 }
-export async function commandRequest(identity: { tenantId: string; userId: string }, path: string, init: RequestInit = {}): Promise<Response> {
+export async function commandRequest(identity: { tenantId: string; userId: string; tenantAdmin?: boolean }, path: string, init: RequestInit = {}): Promise<Response> {
   if (!TANK_API_KEY) throw new Error("The conversation service is not configured.");
   const url = new URL(`/v1/command/${path}`, TANK_URL);
   url.searchParams.delete("tenant_id");
@@ -922,6 +942,7 @@ export async function commandRequest(identity: { tenantId: string; userId: strin
   // Lane A resolves tenant_squad from the database on each authenticated call.
   // Never turn a caller header into tool authority.
   headers.delete("x-tervory-squad");
+  headers.set("x-tervory-role", identity.tenantAdmin === true ? "org:admin" : "");
   const response = await fetch(url, { ...init, headers, cache: "no-store", redirect: "error" });
   if (!response.ok) {
     const detail = await response.json().then(body => body.detail).catch(() => undefined);

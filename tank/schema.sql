@@ -1997,6 +1997,70 @@ ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_parent_id uuid;
 ALTER TABLE tank.ledger ADD COLUMN IF NOT EXISTS routellm_sample_tenant uuid;
 ALTER TABLE tank.shadow ADD COLUMN IF NOT EXISTS routellm_config text;
 ALTER TABLE tank.shadow ADD COLUMN IF NOT EXISTS candidate_ledger_id uuid;
+
+-- Case-study report identities. Values stay in their existing evidence stores.
+CREATE TABLE IF NOT EXISTS tank.case_study_clients (
+    tenant_id uuid PRIMARY KEY,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS tank.case_study_reports (
+    tenant_id uuid NOT NULL REFERENCES tank.case_study_clients(tenant_id),
+    product text NOT NULL CHECK(product IN ('base','tiger','market_lab','rig','zenas','trigger','tisan','radix','autumbra')),
+    template_version integer NOT NULL DEFAULT 1,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY(tenant_id,product)
+);
+CREATE OR REPLACE FUNCTION tank.register_case_study_product() RETURNS trigger AS $$
+DECLARE report_product text;
+BEGIN
+    IF TG_NARGS>0 THEN
+        report_product := TG_ARGV[0];
+    ELSE
+        report_product := NEW.agent;
+    END IF;
+    report_product := CASE report_product WHEN 'ghost' THEN 'autumbra' WHEN 'market-lab' THEN 'market_lab' ELSE report_product END;
+    IF report_product IN ('base','tiger','market_lab','rig','zenas','trigger','tisan','radix','autumbra') THEN
+        INSERT INTO tank.case_study_clients(tenant_id) VALUES(NEW.tenant_id) ON CONFLICT DO NOTHING;
+        INSERT INTO tank.case_study_reports(tenant_id,product) VALUES(NEW.tenant_id,report_product) ON CONFLICT DO NOTHING;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, tank;
+DO $$ BEGIN
+    IF NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='case_study_product_added' AND tgrelid='tank.tenant_squad'::regclass) THEN
+        CREATE TRIGGER case_study_product_added AFTER INSERT OR UPDATE OF agent ON tank.tenant_squad
+            FOR EACH ROW EXECUTE FUNCTION tank.register_case_study_product();
+    END IF;
+    -- Trigger and Autumbra have no squad-grant entry on today's main. Existing
+    -- product activity still registers its report atomically, without granting
+    -- new tools or copying the receipt into a parallel reporting store.
+    IF NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='case_study_product_used' AND tgrelid='tank.ledger'::regclass) THEN
+        CREATE TRIGGER case_study_product_used AFTER INSERT ON tank.ledger
+            FOR EACH ROW EXECUTE FUNCTION tank.register_case_study_product();
+    END IF;
+    IF to_regclass('agent_trigger.voices') IS NOT NULL AND NOT EXISTS(
+        SELECT 1 FROM pg_trigger WHERE tgname='case_study_trigger_provisioned' AND tgrelid=to_regclass('agent_trigger.voices')) THEN
+        CREATE TRIGGER case_study_trigger_provisioned AFTER INSERT ON agent_trigger.voices
+            FOR EACH ROW EXECUTE FUNCTION tank.register_case_study_product('trigger');
+    END IF;
+END $$;
+-- Existing grants receive the same registration once; no report metrics are copied.
+INSERT INTO tank.case_study_clients(tenant_id) SELECT DISTINCT tenant_id FROM tank.tenant_squad ON CONFLICT DO NOTHING;
+INSERT INTO tank.case_study_reports(tenant_id,product)
+    SELECT tenant_id,CASE WHEN agent='ghost' THEN 'autumbra' ELSE agent END FROM tank.tenant_squad
+    WHERE agent IN ('base','tiger','market_lab','rig','zenas','trigger','tisan','radix','autumbra','ghost') ON CONFLICT DO NOTHING;
+INSERT INTO tank.case_study_clients(tenant_id)
+    SELECT DISTINCT tenant_id FROM tank.ledger
+    WHERE agent IN ('base','tiger','market_lab','market-lab','rig','zenas','trigger','tisan','radix','autumbra','ghost') ON CONFLICT DO NOTHING;
+INSERT INTO tank.case_study_reports(tenant_id,product)
+    SELECT DISTINCT tenant_id,CASE agent WHEN 'ghost' THEN 'autumbra' WHEN 'market-lab' THEN 'market_lab' ELSE agent END
+    FROM tank.ledger WHERE agent IN ('base','tiger','market_lab','market-lab','rig','zenas','trigger','tisan','radix','autumbra','ghost') ON CONFLICT DO NOTHING;
+DO $$ BEGIN
+    IF to_regclass('agent_trigger.voices') IS NOT NULL THEN
+        INSERT INTO tank.case_study_clients(tenant_id) SELECT tenant_id FROM agent_trigger.voices ON CONFLICT DO NOTHING;
+        INSERT INTO tank.case_study_reports(tenant_id,product) SELECT tenant_id,'trigger' FROM agent_trigger.voices ON CONFLICT DO NOTHING;
+    END IF;
+END $$;
 CREATE INDEX IF NOT EXISTS shadow_routellm_tenant_task ON tank.shadow(tenant_id,task_type,routellm_config)
     WHERE routellm_config IS NOT NULL;
 
@@ -2006,3 +2070,28 @@ VALUES ('trigger.write',1,'luna','tenant',3000,0.99,200,false),
        ('trigger.check',3,'code','none',0,0.99,200,false)
 ON CONFLICT DO NOTHING;
 -- trigger.check never calls /v1/route; its adapter executes code and records zero cost.
+
+-- Trigger second build: tenant-private writing/feedback provenance.
+CREATE TABLE IF NOT EXISTS tank.trigger_writes (
+    id uuid PRIMARY KEY,
+    tenant_id uuid NOT NULL,
+    user_id text NOT NULL,
+    brief text NOT NULL,
+    draft text NOT NULL,
+    checker_results jsonb NOT NULL,
+    feedback_status text NOT NULL DEFAULT 'pending',
+    created_at timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (tenant_id,id)
+);
+CREATE TABLE IF NOT EXISTS tank.trigger_feedback (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    write_id uuid NOT NULL,
+    status text NOT NULL CHECK (status IN ('accepted','changes_requested','rejected')),
+    changes text NOT NULL DEFAULT '',
+    user_id text NOT NULL,
+    operation_id uuid NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    FOREIGN KEY (tenant_id,write_id) REFERENCES tank.trigger_writes(tenant_id,id),
+    UNIQUE (tenant_id,operation_id)
+);

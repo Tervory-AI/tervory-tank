@@ -139,7 +139,8 @@ async def test_write_routes_once_through_tank_with_own_voice_and_receipt():
     await store.put(OTHER, voice(requiredTerms=['OTHER_PRIVATE_TERM']))
     tank = SimpleNamespace(route=AsyncMock(return_value={'content': 'A very unique product.',
                             'ledger_id': str(uuid4()), 'cost_usd': 0.01, 'model': 'offline-router'}))
-    body = WriteIn(tenant_id=TENANT, text='Describe this product.', voice=voice(requiredTerms=['reliable']))
+    await store.put(TENANT, voice(requiredTerms=['reliable']))
+    body = WriteIn(tenant_id=TENANT, text='Describe this product.')
     async with lt_client() as http:
         result = await write(body, store, tank, http)
         assert tank.route.await_count == 1
@@ -149,9 +150,9 @@ async def test_write_routes_once_through_tank_with_own_voice_and_receipt():
         assert result['ledger_id'] == tank.route.return_value['ledger_id']
         assert result['report']['model_calls'] == 0 and result['report']['complete']
         assert any(i['rule'] == 'required_term' for i in result['report']['issues'])
-        with pytest.raises(ValueError, match='required'):
-            await write(WriteIn(tenant_id=uuid4(), text='Describe this product.'), store, tank, http)
-        assert tank.route.await_count == 1
+        fallback = await write(WriteIn(tenant_id=uuid4(), text='Describe this product.'), store, tank, http)
+        assert fallback['report']['style_source'] == 'house'
+        assert tank.route.await_count == 2
 
 
 @pytest.mark.asyncio
@@ -338,8 +339,10 @@ async def test_real_room_with_internal_languagetool(monkeypatch):
             assert (await http.post('/check', json={'tenant_id': str(TENANT), 'text': 'This are a test.'})).status_code == 401
             tenant = uuid4()
             headers = {'X-Tank-Key': 'dummy-room-key'}
-            response = await http.put(f'/voice/{tenant}', headers=headers, json=voice(bannedTerms=['test']).model_dump())
-            assert response.status_code == 200
+            from trigger.voice_history import VoiceHistory
+            history = VoiceHistory(app.state.pool)
+            preview = await history.preview(tenant, 'Banned words: test')
+            await history.commit(tenant, text='Banned words: test', expected_revision=0, digest=preview['preview_hash'], operation_id=uuid4())
             response = await http.post('/check', headers=headers, json={'tenant_id': str(tenant), 'text': 'This are a test. It was completed by the team.'})
             assert response.status_code == 200
             result = response.json()
