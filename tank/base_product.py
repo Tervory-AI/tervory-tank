@@ -234,7 +234,7 @@ def build_router(rt: Any, store: BaseStore | None = None, *, background: bool = 
             async def stream():
                 # A stable read snapshot prevents new completed rows from
                 # shifting pages while a client downloads a large list.
-                async with rt.pool().acquire() as conn, conn.transaction(isolation="repeatable_read", readonly=True):
+                async with rt.pool().acquire(isolation="repeatable_read", readonly=True) as conn:
                     from contextlib import asynccontextmanager
                     class SnapshotPool:
                         @asynccontextmanager
