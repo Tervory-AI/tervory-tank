@@ -9,9 +9,9 @@ Processing /wheels/typing_extensions-4.16.0-py3-none-any.whl (from pytest-asynci
 Installing collected packages: typing-extensions, pygments, pluggy, packaging, iniconfig, pytest, pytest-asyncio
 Successfully installed iniconfig-2.3.1 packaging-26.3 pluggy-1.7.0 pygments-2.21.0 pytest-9.1.1 pytest-asyncio-1.4.1 typing-extensions-4.16.0
 PACKAGED agents/tisan/app.py 723d2d580d8f62656e153ef34a6282bce5270ce59d615da267ce8da457bec868
-PACKAGED agents/tisan/promotion.py d4223df95d823d4bb5db74a2e0538463db6079398aed10ea8fc1d748c3223fbd
+PACKAGED agents/tisan/promotion.py 413d1d41b8a3719c6cc80b4eae92b930305d4239b5c140efc71e03816c73d499
 PACKAGED agents/tisan/promotion_api.py bdcbbaaae82ce25f60d4e11786cd836c4ce2d1c68eb9e9150619b192e7cdd374
 PACKAGED ops/live_check.mjs 196d3ac6743b0bb588a69070406b8d220e4a2fe06d7bfb23fe0026d36377fe00
 Packaged room mount passed; Python 3.12.16 httpx 0.28.1 pydantic 2.10.6
-....................................................................     [100%]
-68 passed in 19.12s
+.....................................................................    [100%]
+69 passed in 19.90s
