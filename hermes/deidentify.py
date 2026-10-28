@@ -41,12 +41,11 @@ def normalized(text: str) -> str:
     return unicodedata.normalize("NFKC", text)
 
 
-def deidentify(
-    claim: str, evidence: list[str], tenant: str, identifiers: dict
-) -> tuple[str, list[str]]:
+def identity_inventory(identifiers: dict) -> tuple[set[str], list[str]]:
+    """A review flag alone cannot authorize publication of client text."""
     if identifiers.get("reviewed") is not True:
         raise ValueError("Reviewed identity inventory is required")
-    values = {tenant}
+    values = set()
     for field in ("names", "emails", "phones", "addresses"):
         items = identifiers.get(field)
         if not isinstance(items, list) or any(
@@ -67,8 +66,18 @@ def deidentify(
     ):
         raise ValueError("Incomplete client domains")
     domains = [normalized(d).lower().strip().rstrip(".") for d in domains]
-    if any("/" in d or "@" in d or ":" in d or "*" in d for d in domains):
+    if any(not d or "/" in d or "@" in d or ":" in d or "*" in d for d in domains):
         raise ValueError("Client domains must be host names")
+    if not values and not domains:
+        raise ValueError("Incomplete identity inventory")
+    return values, domains
+
+
+def deidentify(
+    claim: str, evidence: list[str], tenant: str, identifiers: dict
+) -> tuple[str, list[str]]:
+    values, domains = identity_inventory(identifiers)
+    values.add(tenant)
 
     def client_url(value: str) -> bool:
         parsed = urlsplit(value if "://" in value else "https://" + value)
