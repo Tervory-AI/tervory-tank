@@ -200,7 +200,8 @@ def test_missing_usage_does_not_invent_price():
 
 
 @pytest.mark.asyncio
-async def test_command_deferral_survives_browser_close_and_replays_once(ladder, monkeypatch):  # noqa: F811 (pytest fixture parameter)
+@pytest.mark.parametrize('early_close', [False, True])
+async def test_command_deferral_survives_browser_close_and_replays_once(ladder, monkeypatch, early_close):  # noqa: F811 (pytest fixture parameter)
     import command
     import trigger_routes
     b = ladder
@@ -212,10 +213,26 @@ async def test_command_deferral_survives_browser_close_and_replays_once(ladder, 
             system_prompt=NULL,cache_scope='none' WHERE task_type='command.turn' AND tenant_id IS NULL""")
     thread = await command.create_thread(command.NewThread(title='Offline priority proof'), actor)
     thread_id = uuid.UUID(thread['thread_id'])
+    gate = asyncio.Event()
+    route_turn = command.route_turn
+
+    async def gated(*args, **kwargs):
+        if early_close:
+            await gate.wait()
+        return await route_turn(*args, **kwargs)
+
+    monkeypatch.setattr(command, 'route_turn', gated)
     stream = await command.turn(thread_id, command.Turn(text='Offline input', priority='offpeak'), actor)
-    events = [part async for part in stream.body_iterator]
+    if early_close:
+        await anext(stream.body_iterator)
+        await stream.body_iterator.aclose()
+        gate.set()
+        await asyncio.gather(*list(command._background))
+    else:
+        events = [part async for part in stream.body_iterator]
+        assert any('job_id' in part for part in events)
     await asyncio.gather(*list(b.tank._background))
-    assert any('job_id' in part for part in events) and not b.sent
+    assert not b.sent
     async with b.pool.acquire() as conn:
         job = await conn.fetchrow('SELECT * FROM tank.offpeak_jobs WHERE tenant_id=$1', actor.tenant_id)
         state = json.loads(await conn.fetchval('SELECT state FROM tank.command_threads WHERE thread_id=$1 AND tenant_id=$2', thread_id, actor.tenant_id))
@@ -320,3 +337,17 @@ async def test_http_job_contract_and_existing_savings_columns(ladder, monkeypatc
     assert float(receipt['saved_usd']) == pytest.approx(float(receipt['standard_cost_usd']) - 0.00004206)
     polled = await b.client.get('/v1/route/jobs/' + job_id, params={'tenant_id': str(tenant)})
     assert polled.status_code == 200 and polled.json()['status'] == 'completed'
+
+
+@pytest.mark.asyncio
+async def test_distinct_concurrent_jobs_do_not_exhaust_pool(ladder, monkeypatch):  # noqa: F811 (pytest fixture parameter)
+    b = ladder
+    await prepare(b, monkeypatch, window=False)
+    jobs = [await b.tank.run_route(request(b, b.tenants[0], text=f'Offline input {i}', priority='offpeak')) for i in range(4)]
+    # The real test pool has only two connections. Each router call needs one
+    # while the queue retains its advisory-lock connection.
+    await asyncio.wait_for(asyncio.gather(*[
+        queue.process_once(b.tank, job_id=job.id, tenant_id=b.tenants[0]) for job in jobs
+    ]), timeout=10)
+    assert len(b.sent) == 4
+    assert all([(await queue.status(b.tank, job.id, b.tenants[0]))['status'] == 'completed' for job in jobs])
