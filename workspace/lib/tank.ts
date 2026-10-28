@@ -908,7 +908,7 @@ export class CommandRequestError extends Error {
   code: string;
   constructor(status: number, code: string, message: string) { super(message); this.status = status; this.code = code; }
 }
-export async function commandRequest(identity: { tenantId: string; userId: string }, path: string, init: RequestInit = {}): Promise<Response> {
+export async function commandRequest(identity: { tenantId: string; userId: string; tenantAdmin?: boolean }, path: string, init: RequestInit = {}): Promise<Response> {
   if (!TANK_API_KEY) throw new Error("The conversation service is not configured.");
   const url = new URL(`/v1/command/${path}`, TANK_URL);
   url.searchParams.delete("tenant_id");
@@ -922,6 +922,7 @@ export async function commandRequest(identity: { tenantId: string; userId: strin
   // Lane A resolves tenant_squad from the database on each authenticated call.
   // Never turn a caller header into tool authority.
   headers.delete("x-tervory-squad");
+  headers.set("x-tervory-role", identity.tenantAdmin === true ? "org:admin" : "");
   const response = await fetch(url, { ...init, headers, cache: "no-store", redirect: "error" });
   if (!response.ok) {
     const detail = await response.json().then(body => body.detail).catch(() => undefined);

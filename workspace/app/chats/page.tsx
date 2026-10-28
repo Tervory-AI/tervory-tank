@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { triggerIdentity } from "@/lib/trigger";
 import { activeTenant } from "@/lib/tenant";
 import { isFounder } from "@/lib/admin";
 import { commandRequest, commandTools, listRoster } from "@/lib/tank";
@@ -8,7 +9,7 @@ import type { Thread, ModelOption } from "./contract";
 import { CommandWindow } from "./window";
 export const dynamic = "force-dynamic";
 export default async function ChatsPage() {
-  const tenant = await activeTenant();
+  const tenant = await triggerIdentity(await activeTenant());
   if (!tenant) redirect("/onboarding");
   const founder = isFounder(tenant.userId);
   let threads: Thread[] = []; let models: ModelOption[] = []; const errors: string[] = [];
