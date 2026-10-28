@@ -380,6 +380,10 @@ class Server:
             self._sock.close()
         except OSError:
             return
+        # A new scan lease reuses its fixed internal port. Wait for the old
+        # accept loop to relinquish it; do not race the next tenant's bind.
+        if self._thread.is_alive() and threading.current_thread() is not self._thread:
+            self._thread.join(timeout=1)
 
     def serve_forever(self) -> None:
         self._accept()
