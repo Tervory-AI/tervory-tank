@@ -115,7 +115,7 @@ def _archon_publish() -> dict:
 
 
 def test_rig_app_serves_a_search_page() -> None:
-    """Root serves the v5 Rig product surface (Archon fixtures), not the classic shell."""
+    """Root serves the v5 shell without selecting an offline fixture catalogue."""
     import asyncio
 
     rig_app = _load_rig_app()
@@ -127,17 +127,17 @@ def test_rig_app_serves_a_search_page() -> None:
     assert 'data-skin="rig"' in html
     assert "__RIG_KEY__" not in html
     assert "__RIG_SKIN__" not in html
-    assert json.dumps(_archon_publish()["keys"][0]["key"]) in html
+    assert json.dumps(_archon_publish()["keys"][0]["key"]) not in html
     assert _publish()["keys"][0]["key"] not in html
     assert "live distributor keys are off" not in html
     assert "Demo · keys off" not in html
-    assert "Archon Type B" in html
+    assert "Archon Type B" not in html
     assert 'src="/page/v5/rig.js"' in html
     assert "api-base" not in html
 
 
 @pytest.mark.asyncio
-async def test_search_on_the_page_uses_the_demo_catalogue() -> None:
+async def test_offline_fixture_search_stays_available_without_live_page_defaults() -> None:
     store = MemoryStore()
     service = Service(store, Models(), RecordingHandoff())
     demo = await service.load_folder(DEMO)
@@ -156,16 +156,16 @@ async def test_search_on_the_page_uses_the_demo_catalogue() -> None:
     archon_key = _archon_publish()["keys"][0]["key"]
     demo_key = _demo_publish()["keys"][0]["key"]
     example_key = _publish()["keys"][0]["key"]
-    assert json.dumps(archon_key) in page.text
+    assert json.dumps(archon_key) not in page.text
     assert example_key not in page.text
     assert "What are you building?" in page.text
     assert "live distributor keys are off" not in page.text
     assert "Demo · keys off" not in page.text
     assert 'alt="Tervory"' in page.text
-    # Classic house sheet stays on a secondary path with the CN publishable key.
+    # Classic routes also require an explicitly configured published store.
     classic = client.get("/cn-classic")
     assert classic.status_code == 200
-    assert json.dumps(demo_key) in classic.text
+    assert json.dumps(demo_key) not in classic.text
     assert "Custom Nation" not in classic.text
     assert client.get("/house").status_code == 200
     found = client.get(
@@ -326,13 +326,13 @@ async def test_shopper_and_dealer_pages_and_only_approved_fits_show() -> None:
     assert "What are you building?" in home.text
     assert "live distributor keys are off" not in home.text
     assert "Demo · keys off" not in home.text
-    assert json.dumps(_archon_publish()["keys"][0]["key"]) in home.text
+    assert json.dumps(_archon_publish()["keys"][0]["key"]) not in home.text
     assert key not in home.text
     assert "See compatible accessories" in classic.text
     assert "Compare prices" in classic.text
     assert "See compatible accessories" in product_page.text
     assert "Market average" not in classic.text
-    assert json.dumps(_demo_publish()["keys"][0]["key"]) in classic.text
+    assert json.dumps(_demo_publish()["keys"][0]["key"]) not in classic.text
     assert "Custom Nation" not in classic.text
     assert "Nothing waiting for review" in dealer.text
     assert "Suggest new fits" in dealer.text

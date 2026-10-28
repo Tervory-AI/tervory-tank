@@ -289,6 +289,8 @@ class Service:
         limit: int | None,
         filters: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        # Both /v1/rig/search entry paths share Workspace's 200-character limit.
+        query = " ".join((query or "").split())[:200]
         result = await self._search(tenant_id, query, limit, filters)
         if (query or "").strip() and not result.get("results"):
             # Include cached misses: each completed search is a distinct event.
