@@ -10,7 +10,6 @@ from uuid import UUID
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
-from chassis.db import ensure_schedules
 from feeds.keyless import check_feed_url
 from feeds.models import SourceSpec
 
@@ -88,6 +87,7 @@ def build_router(*, key_ok, ledger_context, engine: str):
     @router.put("/market/feeds/{ident}")
     async def subscribe(ident: UUID, tenant_id: UUID, body: LinkBody, request: Request,
                         x_tank_key: str = Header(default="")):
+        from chassis.db import ensure_schedules
         authorize(x_tank_key, request)
         try:
             url = await asyncio.to_thread(check_feed_url, body.url)
