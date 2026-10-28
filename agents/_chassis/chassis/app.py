@@ -197,12 +197,17 @@ def create_app(
 
 def _context(app: FastAPI, agent: str, job: Any) -> JobContext:
     wire = Job.from_room(job, agent=agent, region=os.environ.get("TANK_REGION", "us-east"))
+    # Existing room handlers read engine from input. Map the shared field at
+    # execution time without changing the stored payload or room table shape.
+    execution_input = dict(wire.input)
+    if wire.engine is not None:
+        execution_input["engine"] = wire.engine
     return JobContext(
         agent=wire.agent,
         tenant_id=str(wire.tenant_id),
         job_id=str(job["id"]),
         kind=wire.skill,
-        input=wire.input,
+        input=execution_input,
         files=app.state.files,
         tank=app.state.tank,
         memory=app.state.memory,
