@@ -16,7 +16,7 @@ The protected page 0 · Dashboards (approve first), frame 12:2 and frame 10:115 
 
 28 October 2026, 07:40 PT. This section overrides every conflicting earlier decision or description.
 
-1. ONE MERGED MENU: Overview replaces Dashboard; then the client's entitled products Base, Tiger, Market Lab, Rig, Zenas, Trigger, Tisan, Radix, Autumbra; then CRM; then Case study; then Chats, Projects, Squad, Tasks, Data, Prices. Receipts, Billing, Settings stay at the bottom. Founder audience adds the client switcher at the top and Admin before the bottom section.
+1. ONE MERGED MENU: Overview replaces Dashboard; then the client's entitled products Base, Tiger, Market Lab, Rig, Zenas, Trigger, Tisan, Radix, Autumbra; then CRM; then Case study; then Chats, Projects, Squad, Tasks, Data, Prices. Receipts, Billing, Settings stay at the bottom. Revision 3 founder audience adds the client switcher, Skala and Tank before CRM, and Admin with Training, Law feeds, Feeds and Homes before the bottom section. Client audience is unchanged.
 2. SIDE MENU ONLY, NO COUNTS: no product tab row on any page or template. No menu count badges, Badge variants, Show count or Count properties.
 3. ONE ACCENT PER PRODUCT: navy remains the base. One proposed accent per product and one for CRM are variables, pass WCAG AA on white, colour that product's chart marks, and appear as a small marker on its menu item. The palette is shown on the Variables board. Accent proposals still require colour approval.
 4. CASE STUDY PDF: available only to the client's signed-in users and the founder. No share link, public sharing state or anonymous PDF route.
@@ -407,3 +407,5 @@ Squad has no single route today: SQUAD_LINKS are the product pages. Case study i
 - Proposed accents: Market Lab #5B21B6 (8.98:1), Zenas #3F6212 (7.08:1), Trigger #B91C1C (6.47:1), Autumbra #0E7490 (5.36:1). Existing semantic aliases propagate the proposals to menu dots and chart marks.
 - Old/new comparison frame: 89:10434, inside Variables 42:52. Colour approval remains with the founder. CRM keeps #0369A1.
 - The historical review above remains as provenance; this section records the requested fixes. Structural and visual proof is being recorded with the CRM handoff. No live page implementation or founder-browser acceptance is claimed.
+
+Revision 3 SPEC synchronization: frame 63:10450 now contains the repository sections, including the review answers and revision 3 register. All 44 registered screen nodes were resolved successfully after the edits. Figma screenshots checked: accent comparison 89:10434 and Tiger desktop Filled 49:3211; the switch is visibly ON. These are design checks, not a founder browser acceptance claim.
