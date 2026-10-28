@@ -8,7 +8,6 @@ import os
 import shutil
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock
 from urllib.parse import urlsplit
 from uuid import UUID
 
