@@ -2719,8 +2719,13 @@ async def process_batches_once() -> None:
                 if batch["status"] not in {"queued", "submitting", "submitted", "retrying"}:
                     continue
                 with tenant_scope(batch["tenant_id"]):
-                    async with pool().acquire() as tenant_conn:
-                        await _process_batch(tenant_conn, batch)
+                    if _admin_pool is None:
+                        # Before opt-in RLS, retain the existing single-pool path.
+                        # Startup refuses this configuration when RLS is active.
+                        await _process_batch(conn, batch)
+                    else:
+                        async with pool().acquire() as tenant_conn:
+                            await _process_batch(tenant_conn, batch)
             except (httpx.HTTPError, ValueError, KeyError):
                 # Poll failures are retriable; submission ambiguity is surfaced
                 # on the next pass, with no second provider submission.
