@@ -114,9 +114,9 @@ def run_searxng(source: SourceSpec, reader, store: Store, *, backfill: bool) -> 
     return total
 
 
-def comtrade_url(source: SourceSpec) -> str:
+def comtrade_url(source: SourceSpec, *, period: str | None = None) -> str:
     # One bounded preview request, not a reconstruction of the full dataset.
-    query = {"period": str(datetime.now(timezone.utc).year - 1), "reporterCode": source.config["reporter"],
+    query = {"period": period or str(datetime.now(timezone.utc).year - 1), "reporterCode": source.config["reporter"],
              "cmdCode": ",".join(source.config["codes"]), "flowCode": "M,X", "partnerCode": "0",
              "partner2Code": "0", "customsCode": "C00", "motCode": "0", "maxRecords": "500",
              "breakdownMode": "classic", "includeDesc": "true"}
@@ -145,7 +145,7 @@ def run_comtrade(source: SourceSpec, reader, store: Store, *, backfill: bool) ->
             series = store.ensure_series(source.id, ref, title, "USD", "national", row["reporterDesc"], "annual")
             total += int(store.put_point(series, date, value, str(row.get("lastReleased") or year)))
             if store._staged:
-                store._staged[-1]["url"] = source.url
+                store._staged[-1]["url"] = comtrade_url(source, period=str(year))
     return total
 
 
