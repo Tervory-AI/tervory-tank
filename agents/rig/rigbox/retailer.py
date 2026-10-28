@@ -100,6 +100,8 @@ class Retailer:
             raise ValueError()
         from rigbox.quotes.notice import notice
 
+        if "quote_notice" in data and data["quote_notice"] is None:
+            raise ValueError("Provide the notice text and the store's privacy page.")
         configured_notice = data.get("quote_notice", previous.get("quote_notice"))
         validated_notice = notice(configured_notice)
         await self.store.put_retailer(tenant, previous.get("slug") or tenant, email,
