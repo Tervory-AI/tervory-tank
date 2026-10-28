@@ -79,6 +79,43 @@ TOTALS = """count(*)::int AS calls,
 PAGE_SIZE = 100
 
 
+async def product_summary(conn: Any, tenant: uuid.UUID, product: str, region: str,
+                          start: datetime, end: datetime) -> dict:
+    """Case-study projection of CORE proof, without founder/all-tenant metadata."""
+    agents = {"market_lab": ["market_lab", "market-lab"], "autumbra": ["ghost", "autumbra"]}.get(product, [product])
+    row = dict(await conn.fetchrow(f"""SELECT {TOTALS},
+        count(DISTINCT coalesce(task_id,id)) AS task_count,
+        count(*) FILTER (WHERE cache_hit) AS cache_calls,
+        count(*) FILTER (WHERE NOT cache_hit AND rung=3) AS executed_code,
+        count(*) FILTER (WHERE NOT cache_hit AND rung<>3 AND vendor IS NULL) AS model_calls
+        FROM {receipt_source('$1','$2','$4')} receipts
+        WHERE tenant_id=$1 AND region=$2 AND ts >= $3 AND ts < $4 AND agent=ANY($5) AND {LIVE}""",
+        tenant, region, start, end, agents))
+    # Use the same conservative linked population as the existing client proof.
+    saved = await conn.fetchval(savings_cte() + """SELECT coalesce(sum(standard_cost_usd-cost_usd),0)
+        FROM eligible WHERE tenant_id=$1 AND ts >= $4 AND agent=ANY($5)""", tenant, region, end, start, agents)
+    # Only this tenant's observations count. Global route_evidence would expose
+    # other clients' work. Keep candidate model names out of the API projection.
+    progress = await conn.fetch("""WITH samples AS (
+        SELECT s.task_type,s.candidate_model,count(*) AS samples,avg(s.agreement) AS agreement
+        FROM tank.shadow s JOIN tank.ledger l ON l.tenant_id=$1 AND l.id=s.ledger_id
+        WHERE s.tenant_id=$1 AND l.region=$2 AND l.agent=ANY($5) AND l.ts >= $3 AND l.ts < $4
+        GROUP BY s.task_type,s.candidate_model
+    ) SELECT DISTINCT ON(s.task_type) s.task_type,s.samples,s.agreement,
+        coalesce(p.min_shadow_samples,200) AS target,coalesce(p.eval_threshold,0.99) AS threshold
+        FROM samples s LEFT JOIN LATERAL (SELECT min_shadow_samples,eval_threshold FROM tank.policy
+            WHERE task_type=s.task_type AND (tenant_id=$1 OR tenant_id IS NULL)
+            ORDER BY tenant_id NULLS LAST LIMIT 1) p ON true
+        ORDER BY s.task_type,s.samples DESC,s.agreement DESC,s.candidate_model""", tenant, region, start, end, agents)
+    return {"spent": row["actual_usd"], "saved": saved, "tasks": row["task_count"],
+            "cost_per_task": row["actual_usd"] / row["task_count"] if row["task_count"] else 0,
+            "cache_hits": row["cache_calls"], "code": row["executed_code"], "model": row["model_calls"],
+            "unknown_cost_calls": row["unknown_cost_calls"], "calls": row["calls"],
+            "graduation": [{"id": r["task_type"], "value": min(100, 100 * r["samples"] / max(1, r["target"])),
+                            "samples": r["samples"], "target": r["target"],
+                            "agreement": r["agreement"] or 0, "threshold": r["threshold"]} for r in progress]}
+
+
 def receipt_source(tenant: str | None, region: str, end: str, clients_only: bool = False) -> str:
     """SQL placeholders only; reconstruct the comparison at a report's cutoff."""
     scope = f"({tenant}::uuid IS NULL OR raw.tenant_id={tenant}) AND " if tenant else ''
