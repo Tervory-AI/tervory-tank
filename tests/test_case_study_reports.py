@@ -34,6 +34,7 @@ async def api(monkeypatch):
     assert urlsplit(url).hostname in {"127.0.0.1", "localhost"}
     monkeypatch.setenv("DATABASE_URL", url)
     monkeypatch.setenv("TANK_API_KEY", "local-fixture")
+    monkeypatch.setenv("LITELLM_MASTER_KEY", "unused-offline")
     import main
     admin = await asyncpg.connect(url)
     name = "case_study_" + uuid.uuid4().hex
