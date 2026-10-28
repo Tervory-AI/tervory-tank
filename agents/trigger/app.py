@@ -79,7 +79,7 @@ async def voice_operation(operation: str, body: VoiceOperation):
     store = VoiceHistory(app.state.pool)
     try:
         if operation == "show":
-            return await store.show(body.tenant_id, body.offset)
+            return await store.show(body.tenant_id, body.offset, body.target)
         if operation == "preview":
             return await store.preview(body.tenant_id, body.text, body.target)
         if operation == "commit" and body.operation_id:

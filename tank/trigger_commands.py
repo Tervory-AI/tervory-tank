@@ -25,6 +25,8 @@ async def plan(actor, text: str, task_id):
             if not source.strip().isdigit():
                 raise HTTPException(422, 'A voice version is required')
             args = {'target': int(source.strip())}
+        elif re.fullmatch(r'version \d+', source.strip(), re.I):
+            args = {'target': int(source.strip().split()[1])}
         else:
             if source.strip() and not source.strip().isdigit():
                 raise HTTPException(422, 'History offset must be a number')

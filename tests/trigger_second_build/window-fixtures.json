@@ -1,0 +1,503 @@
+{
+  "pending": {
+    "thread": {
+      "thread_id": "4f6da191-dc45-48e8-99f3-30d62947b44b",
+      "title": "Offline voice test",
+      "updated_at": "2026-10-28T13:24:38.931535Z",
+      "spent_usd": 0.0,
+      "saved_usd": 0.0,
+      "receipt_status": "recorded",
+      "recorded_spent_usd": 0.0
+    },
+    "messages": [
+      {
+        "role": "user",
+        "model": "auto",
+        "content": "trigger.voice.set:\nBrand: Offline tenant\nRules:\n- Keep claims precise.\nPreferred words: reliable, clear\nBanned words: revolutionary, effortless\nOn-voice:\n- Built for everyday work.\nOff-voice:\n- Revolutionary magic!\n",
+        "message_id": "afd5c6b7-6ad3-4f59-ab0a-7c72e281e4de",
+        "attachments": []
+      },
+      {
+        "role": "assistant",
+        "content": "",
+        "message_id": "ec2b5b6d-ad88-4a5b-a2c8-690101829dd8",
+        "repeatable": false
+      }
+    ],
+    "steps": [
+      {
+        "actor": "trigger",
+        "label": "trigger.voice.set",
+        "status": "planned",
+        "step_id": "eb9e9eb6-080c-4c5a-8feb-e9bc0c6f0d5f"
+      },
+      {
+        "actor": "Tervory",
+        "label": "Answer ready",
+        "status": "done",
+        "step_id": "ec2b5b6d-ad88-4a5b-a2c8-690101829dd8",
+        "auto_comparison": null,
+        "requested_model": "auto"
+      }
+    ],
+    "cards": [
+      {
+        "kind": "other",
+        "tool": "trigger.voice.set",
+        "status": "pending",
+        "card_id": "eb9e9eb6-080c-4c5a-8feb-e9bc0c6f0d5f",
+        "summary": "trigger.voice.set",
+        "arguments": {
+          "text": "\nBrand: Offline tenant\nRules:\n- Keep claims precise.\nPreferred words: reliable, clear\nBanned words: revolutionary, effortless\nOn-voice:\n- Built for everyday work.\nOff-voice:\n- Revolutionary magic!\n",
+          "preview_hash": "b48dff1e095ddb43a7f61df1bd15a23067304c6b08ae8d09889295d6423366c3",
+          "brief_markdown": "{\n  \"brand\": \"Offline tenant\",\n  \"status\": \"live\",\n  \"revision\": 1,\n  \"guidelines\": [\n    {\n      \"rule\": \"Keep claims precise.\"\n    }\n  ],\n  \"doAndDont\": [\n    {\n      \"do\": \"Built for everyday work.\"\n    },\n    {\n      \"dont\": \"Revolutionary magic!\"\n    }\n  ],\n  \"bannedTerms\": [\n    \"revolutionary\",\n    \"effortless\"\n  ],\n  \"preferredTerms\": [\n    \"reliable\",\n    \"clear\"\n  ]\n}",
+          "expected_revision": 0
+        }
+      }
+    ],
+    "receipts": [
+      {
+        "model": "code",
+        "step_id": "ec2b5b6d-ad88-4a5b-a2c8-690101829dd8",
+        "cost_usd": 0.0,
+        "ledger_id": "ffb09222-cee2-4d21-ab96-89438de147c2",
+        "saved_usd": 0.0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "cost_status": "recorded",
+        "baseline_model": "No AI call",
+        "baseline_status": "recorded",
+        "baseline_cost_usd": 0.0
+      }
+    ]
+  },
+  "saved": {
+    "thread": {
+      "thread_id": "4f6da191-dc45-48e8-99f3-30d62947b44b",
+      "title": "Offline voice test",
+      "updated_at": "2026-10-28T13:24:40.087385Z",
+      "spent_usd": 0.0,
+      "saved_usd": 0.0,
+      "receipt_status": "recorded",
+      "recorded_spent_usd": 0.0
+    },
+    "messages": [
+      {
+        "role": "user",
+        "model": "auto",
+        "content": "trigger.voice.set:\nBrand: Offline tenant\nRules:\n- Keep claims precise.\nPreferred words: reliable, clear\nBanned words: revolutionary, effortless\nOn-voice:\n- Built for everyday work.\nOff-voice:\n- Revolutionary magic!\n",
+        "message_id": "afd5c6b7-6ad3-4f59-ab0a-7c72e281e4de",
+        "attachments": []
+      },
+      {
+        "role": "assistant",
+        "content": "",
+        "message_id": "ec2b5b6d-ad88-4a5b-a2c8-690101829dd8",
+        "repeatable": false
+      },
+      {
+        "role": "user",
+        "model": "auto",
+        "content": "trigger.voice.set:\nRules: Keep sentences short.",
+        "message_id": "dcaf27ba-ba04-4c15-b097-aa888f72c90e",
+        "attachments": []
+      },
+      {
+        "role": "assistant",
+        "content": "",
+        "message_id": "0018c20b-3933-4528-8409-364b2f3a599d",
+        "repeatable": false
+      },
+      {
+        "role": "user",
+        "model": "auto",
+        "content": "trigger.voice.rollback: 1",
+        "message_id": "1745b528-b307-4c76-b7ef-321a5ac41efd",
+        "attachments": []
+      },
+      {
+        "role": "assistant",
+        "content": "",
+        "message_id": "53f6a6e4-e6f0-4794-be39-ea5582777863",
+        "repeatable": false
+      },
+      {
+        "role": "user",
+        "model": "auto",
+        "content": "trigger.voice.show",
+        "message_id": "3c092a51-7d25-44d8-b7b4-019f92645878",
+        "attachments": []
+      },
+      {
+        "role": "assistant",
+        "content": "",
+        "message_id": "ff119194-2505-4682-89a0-24bb315b0782",
+        "repeatable": false
+      }
+    ],
+    "steps": [
+      {
+        "actor": "Tervory",
+        "label": "Answer ready",
+        "status": "done",
+        "step_id": "0018c20b-3933-4528-8409-364b2f3a599d",
+        "auto_comparison": null,
+        "requested_model": "auto"
+      },
+      {
+        "actor": "trigger",
+        "label": "trigger.voice.rollback",
+        "status": "done",
+        "step_id": "3865d81e-6fb7-4ef5-a196-591eac10c063",
+        "receipt_status": "recorded"
+      },
+      {
+        "actor": "Tervory",
+        "label": "Answer ready",
+        "status": "done",
+        "step_id": "53f6a6e4-e6f0-4794-be39-ea5582777863",
+        "auto_comparison": null,
+        "requested_model": "auto"
+      },
+      {
+        "actor": "trigger",
+        "label": "trigger.voice.show",
+        "status": "done",
+        "step_id": "55126cff-109e-461b-968b-f789a3f6d1cb",
+        "receipt_status": "recorded"
+      },
+      {
+        "actor": "trigger",
+        "label": "trigger.voice.set",
+        "status": "done",
+        "step_id": "d01ea59d-06b0-4b85-bded-73c784b720c5",
+        "receipt_status": "recorded"
+      },
+      {
+        "actor": "trigger",
+        "label": "trigger.voice.set",
+        "status": "done",
+        "step_id": "eb9e9eb6-080c-4c5a-8feb-e9bc0c6f0d5f",
+        "receipt_status": "recorded"
+      },
+      {
+        "actor": "Tervory",
+        "label": "Answer ready",
+        "status": "done",
+        "step_id": "ec2b5b6d-ad88-4a5b-a2c8-690101829dd8",
+        "auto_comparison": null,
+        "requested_model": "auto"
+      },
+      {
+        "actor": "Tervory",
+        "label": "Answer ready",
+        "status": "done",
+        "step_id": "ff119194-2505-4682-89a0-24bb315b0782",
+        "auto_comparison": null,
+        "requested_model": "auto"
+      }
+    ],
+    "cards": [
+      {
+        "kind": "other",
+        "tool": "trigger.voice.rollback",
+        "result": {
+          "text": "{\n  \"voice\": {\n    \"brand\": \"Offline tenant\",\n    \"status\": \"live\",\n    \"revision\": 3,\n    \"guidelines\": [\n      {\n        \"rule\": \"Keep claims precise.\"\n      }\n    ],\n    \"doAndDont\": [\n      {\n        \"do\": \"Built for everyday work.\"\n      },\n      {\n        \"dont\": \"Revolutionary magic!\"\n      }\n    ],\n    \"bannedTerms\": [\n      \"revolutionary\",\n      \"effortless\"\n    ],\n    \"preferredTerms\": [\n      \"reliable\",\n      \"clear\"\n    ]\n  }\n}",
+          "voice": {
+            "brand": "Offline tenant",
+            "status": "live",
+            "revision": 3,
+            "doAndDont": [
+              {
+                "do": "Built for everyday work."
+              },
+              {
+                "dont": "Revolutionary magic!"
+              }
+            ],
+            "guidelines": [
+              {
+                "rule": "Keep claims precise."
+              }
+            ],
+            "bannedTerms": [
+              "revolutionary",
+              "effortless"
+            ],
+            "preferredTerms": [
+              "reliable",
+              "clear"
+            ]
+          },
+          "cost_usd": 0,
+          "ledger_id": "6cdd829a-1f15-4553-b843-0632d2be3e89",
+          "model_calls": 0
+        },
+        "status": "confirmed",
+        "card_id": "3865d81e-6fb7-4ef5-a196-591eac10c063",
+        "summary": "trigger.voice.rollback",
+        "arguments": {
+          "target": 1,
+          "preview_hash": "0a870928386585731a846e9e297703d075ce661ab8a63af151a36a11534285e9",
+          "brief_markdown": "{\n  \"brand\": \"Offline tenant\",\n  \"status\": \"live\",\n  \"revision\": 3,\n  \"guidelines\": [\n    {\n      \"rule\": \"Keep claims precise.\"\n    }\n  ],\n  \"doAndDont\": [\n    {\n      \"do\": \"Built for everyday work.\"\n    },\n    {\n      \"dont\": \"Revolutionary magic!\"\n    }\n  ],\n  \"bannedTerms\": [\n    \"revolutionary\",\n    \"effortless\"\n  ],\n  \"preferredTerms\": [\n    \"reliable\",\n    \"clear\"\n  ]\n}",
+          "expected_revision": 2
+        },
+        "retry_safe": false,
+        "started_at": "2026-10-28T13:24:39.793946+00:00",
+        "receipt_status": "recorded"
+      },
+      {
+        "kind": "other",
+        "tool": "trigger.voice.show",
+        "result": {
+          "text": "{\n  \"voice\": {\n    \"brand\": \"Offline tenant\",\n    \"status\": \"live\",\n    \"revision\": 3,\n    \"doAndDont\": [\n      {\n        \"do\": \"Built for everyday work.\"\n      },\n      {\n        \"dont\": \"Revolutionary magic!\"\n      }\n    ],\n    \"guidelines\": [\n      {\n        \"rule\": \"Keep claims precise.\"\n      }\n    ],\n    \"bannedTerms\": [\n      \"revolutionary\",\n      \"effortless\"\n    ],\n    \"preferredTerms\": [\n      \"reliable\",\n      \"clear\"\n    ]\n  },\n  \"selected_voice\": null,\n  \"history_total\": 3,\n  \"next_offset\": null,\n  \"history\": [\n    {\n      \"revision\": 3,\n      \"restored_from\": 1,\n      \"created_at\": \"2026-10-28T13:24:39.798379+00:00\"\n    },\n    {\n      \"revision\": 2,\n      \"restored_from\": null,\n      \"created_at\": \"2026-10-28T13:24:39.500101+00:00\"\n    },\n    {\n      \"revision\": 1,\n      \"restored_from\": null,\n      \"created_at\": \"2026-10-28T13:24:39.201599+00:00\"\n    }\n  ]\n}",
+          "voice": {
+            "brand": "Offline tenant",
+            "status": "live",
+            "revision": 3,
+            "doAndDont": [
+              {
+                "do": "Built for everyday work."
+              },
+              {
+                "dont": "Revolutionary magic!"
+              }
+            ],
+            "guidelines": [
+              {
+                "rule": "Keep claims precise."
+              }
+            ],
+            "bannedTerms": [
+              "revolutionary",
+              "effortless"
+            ],
+            "preferredTerms": [
+              "reliable",
+              "clear"
+            ]
+          },
+          "history": [
+            {
+              "revision": 3,
+              "created_at": "2026-10-28T13:24:39.798379+00:00",
+              "restored_from": 1
+            },
+            {
+              "revision": 2,
+              "created_at": "2026-10-28T13:24:39.500101+00:00",
+              "restored_from": null
+            },
+            {
+              "revision": 1,
+              "created_at": "2026-10-28T13:24:39.201599+00:00",
+              "restored_from": null
+            }
+          ],
+          "cost_usd": 0,
+          "ledger_id": "31e732ae-3412-4037-9a48-8aa823c20616",
+          "model_calls": 0,
+          "next_offset": null,
+          "history_total": 3,
+          "selected_voice": null
+        },
+        "status": "confirmed",
+        "card_id": "55126cff-109e-461b-968b-f789a3f6d1cb",
+        "summary": "trigger.voice.show",
+        "arguments": {
+          "offset": 0
+        },
+        "retry_safe": false,
+        "started_at": "2026-10-28T13:24:40.075745+00:00",
+        "receipt_status": "recorded"
+      },
+      {
+        "kind": "other",
+        "tool": "trigger.voice.set",
+        "result": {
+          "text": "{\n  \"voice\": {\n    \"brand\": \"\",\n    \"status\": \"live\",\n    \"revision\": 2,\n    \"guidelines\": [\n      {\n        \"rule\": \"Keep sentences short.\"\n      }\n    ],\n    \"doAndDont\": []\n  }\n}",
+          "voice": {
+            "brand": "",
+            "status": "live",
+            "revision": 2,
+            "doAndDont": [],
+            "guidelines": [
+              {
+                "rule": "Keep sentences short."
+              }
+            ]
+          },
+          "cost_usd": 0,
+          "ledger_id": "e2b62773-1f63-4327-b6e7-5b23d9722521",
+          "model_calls": 0
+        },
+        "status": "confirmed",
+        "card_id": "d01ea59d-06b0-4b85-bded-73c784b720c5",
+        "summary": "trigger.voice.set",
+        "arguments": {
+          "text": "\nRules: Keep sentences short.",
+          "preview_hash": "84c9ab420a28352740ccc0a5d9c5ff6064aed524d6d0ca1b2caca097a41fab40",
+          "brief_markdown": "{\n  \"brand\": \"\",\n  \"status\": \"live\",\n  \"revision\": 2,\n  \"guidelines\": [\n    {\n      \"rule\": \"Keep sentences short.\"\n    }\n  ],\n  \"doAndDont\": []\n}",
+          "expected_revision": 1
+        },
+        "retry_safe": false,
+        "started_at": "2026-10-28T13:24:39.496729+00:00",
+        "receipt_status": "recorded"
+      },
+      {
+        "kind": "other",
+        "tool": "trigger.voice.set",
+        "result": {
+          "text": "{\n  \"voice\": {\n    \"brand\": \"Offline tenant\",\n    \"status\": \"live\",\n    \"revision\": 1,\n    \"guidelines\": [\n      {\n        \"rule\": \"Keep claims precise.\"\n      }\n    ],\n    \"doAndDont\": [\n      {\n        \"do\": \"Built for everyday work.\"\n      },\n      {\n        \"dont\": \"Revolutionary magic!\"\n      }\n    ],\n    \"bannedTerms\": [\n      \"revolutionary\",\n      \"effortless\"\n    ],\n    \"preferredTerms\": [\n      \"reliable\",\n      \"clear\"\n    ]\n  }\n}",
+          "voice": {
+            "brand": "Offline tenant",
+            "status": "live",
+            "revision": 1,
+            "doAndDont": [
+              {
+                "do": "Built for everyday work."
+              },
+              {
+                "dont": "Revolutionary magic!"
+              }
+            ],
+            "guidelines": [
+              {
+                "rule": "Keep claims precise."
+              }
+            ],
+            "bannedTerms": [
+              "revolutionary",
+              "effortless"
+            ],
+            "preferredTerms": [
+              "reliable",
+              "clear"
+            ]
+          },
+          "cost_usd": 0,
+          "ledger_id": "7cd50574-55eb-49bf-ba54-d35a2e649269",
+          "model_calls": 0
+        },
+        "status": "confirmed",
+        "card_id": "eb9e9eb6-080c-4c5a-8feb-e9bc0c6f0d5f",
+        "summary": "trigger.voice.set",
+        "arguments": {
+          "text": "\nBrand: Offline tenant\nRules:\n- Keep claims precise.\nPreferred words: reliable, clear\nBanned words: revolutionary, effortless\nOn-voice:\n- Built for everyday work.\nOff-voice:\n- Revolutionary magic!\n",
+          "preview_hash": "b48dff1e095ddb43a7f61df1bd15a23067304c6b08ae8d09889295d6423366c3",
+          "brief_markdown": "{\n  \"brand\": \"Offline tenant\",\n  \"status\": \"live\",\n  \"revision\": 1,\n  \"guidelines\": [\n    {\n      \"rule\": \"Keep claims precise.\"\n    }\n  ],\n  \"doAndDont\": [\n    {\n      \"do\": \"Built for everyday work.\"\n    },\n    {\n      \"dont\": \"Revolutionary magic!\"\n    }\n  ],\n  \"bannedTerms\": [\n    \"revolutionary\",\n    \"effortless\"\n  ],\n  \"preferredTerms\": [\n    \"reliable\",\n    \"clear\"\n  ]\n}",
+          "expected_revision": 0
+        },
+        "retry_safe": false,
+        "started_at": "2026-10-28T13:24:39.193947+00:00",
+        "receipt_status": "recorded"
+      }
+    ],
+    "receipts": [
+      {
+        "model": "code",
+        "step_id": "ec2b5b6d-ad88-4a5b-a2c8-690101829dd8",
+        "cost_usd": 0.0,
+        "ledger_id": "ffb09222-cee2-4d21-ab96-89438de147c2",
+        "saved_usd": 0.0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "cost_status": "recorded",
+        "baseline_model": "No AI call",
+        "baseline_status": "recorded",
+        "baseline_cost_usd": 0.0
+      },
+      {
+        "model": "code",
+        "step_id": "eb9e9eb6-080c-4c5a-8feb-e9bc0c6f0d5f",
+        "cost_usd": 0.0,
+        "ledger_id": "7cd50574-55eb-49bf-ba54-d35a2e649269",
+        "saved_usd": 0.0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "cost_status": "recorded",
+        "baseline_model": "No AI call",
+        "baseline_status": "recorded",
+        "baseline_cost_usd": 0.0
+      },
+      {
+        "model": "code",
+        "step_id": "0018c20b-3933-4528-8409-364b2f3a599d",
+        "cost_usd": 0.0,
+        "ledger_id": "64622306-b400-47d2-85d6-b97ee1f24f37",
+        "saved_usd": 0.0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "cost_status": "recorded",
+        "baseline_model": "No AI call",
+        "baseline_status": "recorded",
+        "baseline_cost_usd": 0.0
+      },
+      {
+        "model": "code",
+        "step_id": "d01ea59d-06b0-4b85-bded-73c784b720c5",
+        "cost_usd": 0.0,
+        "ledger_id": "e2b62773-1f63-4327-b6e7-5b23d9722521",
+        "saved_usd": 0.0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "cost_status": "recorded",
+        "baseline_model": "No AI call",
+        "baseline_status": "recorded",
+        "baseline_cost_usd": 0.0
+      },
+      {
+        "model": "code",
+        "step_id": "53f6a6e4-e6f0-4794-be39-ea5582777863",
+        "cost_usd": 0.0,
+        "ledger_id": "ff4fee2b-0fc0-4ab0-be5b-8a6b775261e1",
+        "saved_usd": 0.0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "cost_status": "recorded",
+        "baseline_model": "No AI call",
+        "baseline_status": "recorded",
+        "baseline_cost_usd": 0.0
+      },
+      {
+        "model": "code",
+        "step_id": "3865d81e-6fb7-4ef5-a196-591eac10c063",
+        "cost_usd": 0.0,
+        "ledger_id": "6cdd829a-1f15-4553-b843-0632d2be3e89",
+        "saved_usd": 0.0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "cost_status": "recorded",
+        "baseline_model": "No AI call",
+        "baseline_status": "recorded",
+        "baseline_cost_usd": 0.0
+      },
+      {
+        "model": "code",
+        "step_id": "ff119194-2505-4682-89a0-24bb315b0782",
+        "cost_usd": 0.0,
+        "ledger_id": "934547d5-9d5d-4dcf-ab9a-02e4756f0a49",
+        "saved_usd": 0.0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "cost_status": "recorded",
+        "baseline_model": "No AI call",
+        "baseline_status": "recorded",
+        "baseline_cost_usd": 0.0
+      },
+      {
+        "model": "code",
+        "step_id": "55126cff-109e-461b-968b-f789a3f6d1cb",
+        "cost_usd": 0.0,
+        "ledger_id": "31e732ae-3412-4037-9a48-8aa823c20616",
+        "saved_usd": 0.0,
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "cost_status": "recorded",
+        "baseline_model": "No AI call",
+        "baseline_status": "recorded",
+        "baseline_cost_usd": 0.0
+      }
+    ]
+  }
+}

@@ -11,8 +11,8 @@ SECTIONS = {
     'preferred words': 'preferredTerms', 'preferred terms': 'preferredTerms',
     'banned words': 'bannedTerms', 'banned terms': 'bannedTerms',
     'required words': 'requiredTerms', 'required terms': 'requiredTerms',
-    'on-voice': 'do', 'on voice': 'do', 'on-voice examples': 'do',
-    'off-voice': 'dont', 'off voice': 'dont', 'off-voice examples': 'dont',
+    'on-voice': 'do', 'on voice': 'do', 'on-voice examples': 'do', 'on voice examples': 'do',
+    'off-voice': 'dont', 'off voice': 'dont', 'off-voice examples': 'dont', 'off voice examples': 'dont',
     'tone': 'tone',
 }
 
@@ -45,7 +45,10 @@ def parse_voice(text: str, revision: int) -> Voice:
         elif section == 'tone':
             fields.setdefault(section, []).append(line)
         else:
-            terms = next(csv.reader([line], skipinitialspace=True, strict=True))
+            try:
+                terms = next(csv.reader([line], skipinitialspace=True, strict=True))
+            except csv.Error as exc:
+                raise ValueError("Voice word lists have invalid quotes") from exc
             fields.setdefault(section, []).extend(term.strip() for term in terms if term.strip())
     # No inferred rules, counterpart examples, brand, register or provenance prose.
     return Voice.model_validate(fields)

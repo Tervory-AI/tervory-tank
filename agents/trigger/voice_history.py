@@ -11,12 +11,15 @@ def obj(value):
 
 
 class VoiceHistory(VoiceStore):
-    async def show(self, tenant: UUID, offset: int = 0) -> dict:
+    async def show(self, tenant: UUID, offset: int = 0, target: int | None = None) -> dict:
         async with self.pool.acquire() as conn, conn.transaction(isolation='repeatable_read', readonly=True):
             current = await conn.fetchval('SELECT voice FROM agent_trigger.voices WHERE tenant_id=$1', tenant)
             history = await conn.fetch('SELECT revision,restored_from,created_at FROM agent_trigger.voice_versions WHERE tenant_id=$1 ORDER BY revision DESC LIMIT 20 OFFSET $2', tenant, offset)
+            selected = await conn.fetchval('SELECT voice FROM agent_trigger.voice_versions WHERE tenant_id=$1 AND revision=$2', tenant, target) if target else None
+            if target and selected is None:
+                raise ValueError('Voice version unavailable')
             total = await conn.fetchval('SELECT count(*) FROM agent_trigger.voice_versions WHERE tenant_id=$1', tenant)
-        return {'voice': obj(current) if current else None,
+        return {'voice': obj(current) if current else None, 'selected_voice': obj(selected) if selected else None,
                 'history_total': total, 'next_offset': offset + 20 if total > offset + 20 else None,
                 'history': [{**dict(row), 'created_at': row['created_at'].isoformat()} for row in history]}
 

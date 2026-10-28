@@ -9,6 +9,7 @@ const original=Module._load;
 let founder=false,tools=['tiger.watch'],toolsFail=false,rosterReads=0,tasks=0;
 const identity={tenantId:'owned',userId:'owned-user',orgName:'Example'};
 Module._load=function(name,parent,isMain){
+ if(name==='@/lib/trigger')return {triggerIdentity:async tenant=>({...tenant,tenantAdmin:false})};
  if(name==='@/lib/tenant')return {activeTenant:async()=>identity};
  if(name==='@/lib/admin')return {isFounder:()=>founder};
  if(name==='@clerk/nextjs/server')return {currentUser:async()=>({firstName:'Alex'})};

@@ -914,6 +914,7 @@ class TriggerWriteArgs(TriggerCheckArgs):
 
 
 class TriggerVoiceShowArgs(Body):
+    target: int | None = Field(default=None, ge=1)
     offset: int = Field(default=0, ge=0)
 
 
