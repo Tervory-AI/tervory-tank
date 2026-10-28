@@ -100,7 +100,7 @@ services:
       context: https://github.com/Django-CRM/Django-CRM.git#cd7c12a607df1719518fcdaf289864f6ba7d0bcd
       dockerfile: Dockerfile
     restart: unless-stopped
-    mem_limit: 512m
+    mem_limit: 1536m
     cpus: 0.5
     environment:
       DEBUG: ${DEBUG:-False}
