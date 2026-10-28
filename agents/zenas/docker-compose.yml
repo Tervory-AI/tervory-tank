@@ -24,10 +24,11 @@ services:
       TANK_URL: http://tank:8000
       TANK_KEY: ${TANK_KEY_ZENAS:-}
       HERMES_URL: http://hermes:8000
+      DOCASSEMBLE_REGION: us-east
       DOCASSEMBLE_URL: http://docassemble
       DOCASSEMBLE_API_KEY: ${DOCASSEMBLE_API_KEY:-}
-      # This Compose resource is Boston; ZA has its own Compose file.
-      TANK_REGION: us-east
+      # Fail closed: no default region. Compose refuses to start without it.
+      TANK_REGION: ${TANK_REGION:?TANK_REGION is required (us-east or za)}
       ZENAS_PII_KEY: ${ZENAS_PII_KEY:-}
       DATA_DIR: /data
     volumes:
