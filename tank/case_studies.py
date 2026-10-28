@@ -1,6 +1,8 @@
 """Fixed, tenant-scoped case studies extending CORE-1 proof. No page or model calls."""
 from __future__ import annotations
 
+from tenant_db import tenant_transaction
+
 import asyncio
 from contextlib import asynccontextmanager, suppress
 from datetime import date, datetime, time, timedelta, timezone
@@ -117,7 +119,7 @@ async def report(product: str, response: Response, tenant_id: uuid.UUID | None =
     first, last, since, until = period(start, end)
     from main import box_region
     region = box_region()
-    async with db().acquire(isolation="repeatable_read", readonly=True) as conn:
+    async with tenant_transaction(db(), isolation="repeatable_read", readonly=True) as conn:
         saved = await conn.fetchrow("SELECT template_version,created_at FROM tank.case_study_reports WHERE tenant_id=$1 AND product=$2", tenant, product)
         if not saved:
             raise HTTPException(404, "Report not found")
