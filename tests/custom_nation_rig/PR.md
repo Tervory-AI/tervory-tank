@@ -130,3 +130,29 @@ own browser and receive the email with the matching reference in his inbox.
 Those screenshots and actual receipt are missing. Tests and independent
 review cannot substitute for them. Jobs 2/5 are already merged and were not
 rebuilt. M0 remains an evidence inventory, with no live backup/restore/SQL run.
+
+
+## Historical Notion plan reconciliation (read-only)
+
+Read via the connected Notion tools on 28 October:
+- [Main plan, Rig section](https://app.notion.com/p/406ba7f3966281c5a9ccf3d06a64c963).
+- [Appendix L, Rig](https://app.notion.com/p/406ba7f39662816288c8d901a8eb4cd2).
+
+Both describe the historical cb5d1cf/27 October snapshot and are marked
+unverified. L18's demo-removal gap is superseded by merged #361. L19/L21/L25/L26
+reuse #353's delivery/admin/embed work. L22 remains live customer setup;
+its existing issuer is reused, with no live key created by this continuation.
+The main plan's real-store test and Appendix L27 require **10 real searches
+and 3 received real quote emails** from the store's own page. Those remain
+missing acceptance evidence in addition to job 8's one-quote smoke test.
+L29–L39's 3D/GPU/commercial work is outside this assigned next-24-hours lane;
+no such code was added. L40 keeps Custom Nation on Boston; no ZA migration.
+No Notion page was changed and the absent historical GitHub plan was not recreated.
+
+After verification, removed only the newly created test database container:
+
+```sh
+docker rm -f -v tervory-job8-notice-test
+```
+
+Result: exit 0. No production container or data was removed.
