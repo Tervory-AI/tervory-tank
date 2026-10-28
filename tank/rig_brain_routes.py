@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from agent_skills import local_region, room_key
+from command import Actor, identity, require_founder
 import skala
 
 
@@ -35,7 +36,6 @@ class Skill(BaseModel):
 
 def build_router(tank) -> APIRouter:
     router = APIRouter()
-    from command import Actor, identity, require_founder
 
     @router.get("/v1/agents/rig/price-history")
     async def price_history(response: Response, tenant_id: uuid.UUID,
