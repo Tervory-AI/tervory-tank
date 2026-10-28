@@ -1,5 +1,6 @@
 """Tenant-scoped immutable versions and optimistic confirmation; no models."""
 import json
+from chassis.tenant_db import tenant_transaction
 from uuid import UUID
 
 from .voice import Voice, VoiceStore
