@@ -102,10 +102,18 @@ def parse_expression(payload: dict, source: SourceSpec) -> list[LegalDocument]:
         if not num:
             raise ValueError("section has no number")
         section = _section_node(element)
-        section.path = num
+        # The document citation already contains the section number.
+        section.path = ""
         section.heading = section.heading or str(entry.get("heading") or "")
         if not section.text and not section.children:
             raise ValueError("section has no text")
+        def name_work(node):
+            # Each indexed subsection needs its actual instrument title as
+            # context, not just "(1)" or a heading detached from its parent Act.
+            node.heading = " — ".join(part for part in (work["title"], node.heading) if part)
+            for child in node.children:
+                name_work(child)
+        name_work(section)
         citation = f"Act {number} of {year}, s {num}" if statute else f"{work['title']}, {num}"
         document = build_document(
             source, citation=citation, title=section.heading or work["title"],

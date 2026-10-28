@@ -167,10 +167,14 @@ class LawsAfricaAdapter:
 
     def _url(self) -> str:
         url = expression_url(self.frbr)
-        reject_credential_url(url, laws_africa_token())
+        reject_credential_url(url)
         return url
 
     async def _get(self, http_get) -> bytes:
+        from agents.zenas.pool.config import current_region
+        from agents.zenas.pool.region import RegionError
+        if current_region() != "za":
+            raise RegionError("this box does not read za law")
         token = laws_africa_token()
         if not token:
             raise FetchNotConfigured("LAWS_AFRICA_API_TOKEN is not set")
