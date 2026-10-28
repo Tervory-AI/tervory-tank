@@ -2,6 +2,11 @@ name: Tenant RLS and nonroot services
 on:
   push:
     branches: [codex/tenant-rls]
+    paths:
+      - "**.py"
+      - "**.sql"
+      - "**/Dockerfile"
+      - ".github/workflows/tenant-rls.yml"
   pull_request:
     paths:
       - 'db/migrations/tenant_rls/**'
@@ -13,6 +18,9 @@ on:
       - 'tests/test_tenant_rls.py'
       - 'tests/tenant_rls/**'
       - '.github/workflows/tenant-rls.yml'
+concurrency:
+  group: tenant-rls-${{ github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
