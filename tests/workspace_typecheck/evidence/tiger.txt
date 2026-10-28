@@ -1,0 +1,26 @@
+TAP version 13
+# (node:78975) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///workspace/workspace-typecheck/workspace/app/tiger/plugins-data.test.ts is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /workspace/workspace-typecheck/workspace/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: an off vault shows the exact message and no stored rows
+ok 1 - an off vault shows the exact message and no stored rows
+  ---
+  duration_ms: 2.838104
+  type: 'test'
+  ...
+# Subtest: a saved key reaches the browser only as dots
+ok 2 - a saved key reaches the browser only as dots
+  ---
+  duration_ms: 0.292921
+  type: 'test'
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 153.459105
