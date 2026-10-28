@@ -221,6 +221,10 @@ EXCEPTIONS: dict[tuple[str, str, str], tuple[int, str]] = {
     ('jobs/train/train.py', 'provider/brain setting', 'fc74ec3718038794'): (1, 'Training job downloads artifacts and uploads private weights; no inference API call.'),
     ('litellm/config.yaml', 'configured endpoint', '4eca9db60dcd6816'): (14, 'The Tank-owned provider backend roster; keys are environment references.'),
     ('litellm/config.za.yaml', 'configured endpoint', '4eca9db60dcd6816'): (14, 'The ZA Tank-owned provider backend roster; keys are environment references.'),
+    ('researcher/app.py', 'model/paid endpoint', '9f3fd5c68c992e75'): (1, 'Exact loopback destination guard; the local adapter forwards model work only to Tank /v1/route.'),
+    ('researcher/app.py', 'model/paid endpoint', 'bfc9f701a06f6902'): (1, 'Inbound local compatibility endpoint; its only upstream is fixed Tank /v1/route, with redirects disabled.'),
+    ('tests/market_lab_gpt_researcher/test_researcher.py', 'model/paid endpoint', '7c773e03813fb599'): (1, 'Offline MockTransport provider response behind the real Tank route; socket connections are forbidden.'),
+    ('tests/market_lab_gpt_researcher/test_researcher.py', 'model/paid endpoint', 'bfc9f701a06f6902'): (2, 'In-process ASGI requests test local adapter authentication and immutable tenant/model policy; no network traffic.'),
     ('tests/test_agent1_brain_route.py', 'model/paid endpoint', '7b7967ff1233927e'): (1, 'In-process Tank brain-route requests with mocked provider responses.'),
     ('tests/test_agent1_brain_route.py', 'model/paid endpoint', '73e132bd91c9775c'): (7, 'In-process Tank brain-route requests with mocked provider responses.'),
     ('tests/test_agent1_hermes_runtime.py', 'model/paid endpoint', '73e132bd91c9775c'): (1, 'Local fake Tank endpoint asserts the Hermes backend contract.'),
@@ -292,6 +296,7 @@ def test_audited_sites_are_independent_of_checkout_root(tmp_path: Path) -> None:
     paths = {
         "agents/_brain/runner.py", "agents/base/app.py", "agents/base/room.py",
         "agents/base/sources/context_dev.py", "agents/rig/forge/gpu/reconstruct.py",
+        "researcher/app.py", "tests/market_lab_gpt_researcher/test_researcher.py",
     }
     expected = Counter({identity: count for identity, (count, _) in EXCEPTIONS.items() if identity[0] in paths})
     for directory, prefix in (("clone-one", ""), ("different parent/clone-two", "\n# relocated checkout\n")):

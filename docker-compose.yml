@@ -163,6 +163,7 @@ services:
     networks:
       - default
       - tervory-gw-base
+      - research-internal
     expose:
       - "8080"
     healthcheck:
@@ -171,6 +172,28 @@ services:
       timeout: 5s
       retries: 10
       start_period: 45s
+
+  # No host port, provider key, shared history, or connection to LiteLLM/stores.
+  # The public network is only for reading search-result pages.
+  market-research:
+    build: ./researcher
+    restart: unless-stopped
+    environment:
+      TANK_KEY: ${TANK_KEY_MARKET_LAB:-}
+    networks:
+      - research-internal
+      - research-egress
+    expose:
+      - "8000"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
 
   tiger:
     build: ./tiger
@@ -260,6 +283,7 @@ services:
       - tervory-gw-base
       - tervory-gw-rig
       - tervory-gw-ghost
+      - research-internal
     # Host loopback only, for the workers service on the Boston host (workers/host/).
     # Never a public address: Tank stays off the internet.
     ports:
@@ -437,6 +461,9 @@ volumes:
 #   docker network create tervory-gw-template
 # A later agent gets tervory-gw-<agent>, joined here by tank and postgres only.
 networks:
+  research-internal:
+    internal: true
+  research-egress:
   tervory-gw-template:
     external: true
     name: tervory-gw-template

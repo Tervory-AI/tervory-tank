@@ -170,7 +170,7 @@ function ChatBox() {
               <div className="ml-bubble ml-answer" key={`lab-${index}`}>
                 <p className="ml-who">Market Lab</p>
                 <p className="ml-said">{turn.content}</p>
-                {turn.facts?.length ? <ul className="ml-lines">{turn.facts.map((fact) => <li key={fact.href}><a href={fact.href}>{fact.text}</a></li>)}</ul> : null}
+                {turn.facts?.length ? <ul className="ml-lines">{turn.facts.map((fact, index) => <li key={`${fact.href}-${index}`}><a href={fact.href}>{fact.text}</a></li>)}</ul> : null}
                 <div className="ml-refs">
                   <p className="ml-refs-label">{REFERENCE_LABEL}</p>
                   {turn.sources && turn.sources.length ? turn.sources.map((source) => (
