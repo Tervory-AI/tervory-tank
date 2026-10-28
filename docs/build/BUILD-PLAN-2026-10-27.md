@@ -208,7 +208,10 @@ The founder's ask (20 Oct): a conversation window where you say what you want, a
 - **Not started:** client API keys and webhooks, the tester programme (cohorts, sealed tenants, captured questions), and the CLI.
 
 ### Base
-1. **The ATF reference:** merge `codex/base-atf-download` so an empty store downloads the first list.
+1. **The ATF reference:** the download fix merged (#354, 16:06 PT). At 17:24 PT base.tervory.com showed "ATF did not allow the read (HTTP 403). Automatic checks have stopped."
+   - ATF refuses the server's download.
+   - The founder already has an FFL list file (`0926-ffl-list.csv`, Google Drive, 12 Oct). Base has no way to load a reference from a file.
+   - Next: a founder-only "load reference file" for Base, so the list comes from the file and not from ATF's site.
 2. **State order is alphabetical** (`tank/base_repository.py:241`). Your rule is fewest FFLs first.
 3. **Figma:** merge the C5 export from `docs/go-live-list` to main, then match `/base` to it.
 4. **One real state** for a test client.
