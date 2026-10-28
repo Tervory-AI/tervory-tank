@@ -149,6 +149,8 @@ def collect(source: Any, *, fixtures: str | None, backfill: bool, client: Eviden
             watch_page(spec, client, store)
         meta = {row["id"]: dict(row) for row in conn.execute("SELECT * FROM series")}
         result["points"] = [{**meta[point["series_id"]], **point} for point in store._staged]
+        if spec.adapter == "comtrade_preview" and result["points"]:
+            result["url"] = result["points"][0]["url"]
         result["events"] = [dict(row) for row in conn.execute("SELECT * FROM events ORDER BY date, id")]
         result["downloads"] = list(client.documents)
     except BlockedSite:
