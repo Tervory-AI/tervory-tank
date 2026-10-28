@@ -262,6 +262,12 @@ The founder's ask (20 Oct): a conversation window where you say what you want, a
      - the GPU jobs, which are off with TRELLIS disabled;
      - the `rig_3d` purchase, parked under rule 1.
   5. Tiger feeding prices for products with no feed (only the receiving end exists, `tank/access.py:976`).
+  6. **Custom Nation goes live on Boston (founder, 27 Oct 18:24):**
+     - The same rules as Zenas: a privacy notice at the quote form, no card or financial details collected, and submitting a quote request is tacit approval.
+     - Its existing skin goes into its snippet (today the snippet always says `theme="neutral"`, `agents/rig/rigbox/quotes/keys.py:36`).
+     - Issue its live key for customnation.co.za.
+     - The privacy notice wording goes into the Rig Figma frames first.
+     - Prompt: job 8 in `plan/TONIGHT-2026-10-27.md`.
 - **Done when:** a test store receives 3 real quote emails from its own page.
 
 ### Tisan
