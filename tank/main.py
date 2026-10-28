@@ -1247,6 +1247,10 @@ async def run_route(
     sent_at = priority_queue.now()
     if _offpeak_dispatch and not priority_queue.window_open(price_info.get("offpeak"), sent_at):
         raise priority_queue.WindowClosed()
+    if _receipt_id is not None:
+        async with pool().acquire() as conn:
+            await conn.execute("""UPDATE tank.ledger SET outcome='sent',sent_at=$3
+                WHERE id=$1 AND tenant_id=$2 AND offpeak_job_id=$1""", _receipt_id, req.tenant_id, sent_at)
     started = time.perf_counter()
     try:
         if _on_token is not None and req.task_type == "command.turn":
