@@ -100,6 +100,7 @@ async def product_summary(conn: Any, tenant: uuid.UUID, product: str, region: st
         SELECT s.task_type,s.candidate_model,count(*) AS samples,avg(s.agreement) AS agreement
         FROM tank.shadow s JOIN tank.ledger l ON l.tenant_id=$1 AND l.id=s.ledger_id
         WHERE s.tenant_id=$1 AND l.region=$2 AND l.agent=ANY($5) AND l.ts >= $3 AND l.ts < $4
+            AND s.created_at < $4 AND s.agreement IS NOT NULL
         GROUP BY s.task_type,s.candidate_model
     ) SELECT DISTINCT ON(s.task_type) s.task_type,s.samples,s.agreement,
         coalesce(p.min_shadow_samples,200) AS target,coalesce(p.eval_threshold,0.99) AS threshold
