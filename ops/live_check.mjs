@@ -9,6 +9,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const {values} = parseArgs({options: {
   output: {type: 'string', default: 'live-check-results'},
   'local-urls': {type: 'string'},
+  'site-url': {type: 'string'},
   'timeout-ms': {type: 'string', default: '30000'},
 }});
 const timeout = Number(values['timeout-ms']);
@@ -17,11 +18,19 @@ if (!Number.isInteger(timeout) || timeout < 1 || timeout > 30000) {
 }
 const out = path.resolve(values.output);
 await fs.mkdir(out, {recursive: true});
-const source = await fs.readFile(path.join(root, 'workspace/lib/product-hosts.ts'), 'utf8');
-const hosts = await import(`data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(source)).toString('base64')}`);
-let targets = [...new Set([hosts.APP_WORKSPACE_HOST,
-  ...hosts.WORKSPACE_PRODUCT_HOSTS.map(row => row.host), 'rig.tervory.com'])]
-  .map(host => ({host, url: `https://${host}/`}));
+let targets;
+if (values['site-url']) {
+  const site = new URL(values['site-url']);
+  if (site.protocol !== 'https:' || site.username || site.password || site.port || site.pathname !== '/'
+      || site.search || site.hash || values['local-urls']) throw new Error('A single HTTPS site origin is required');
+  targets = [{host: 'staging', url: site.href}];
+} else {
+  const source = await fs.readFile(path.join(root, 'workspace/lib/product-hosts.ts'), 'utf8');
+  const hosts = await import(`data:text/javascript;base64,${Buffer.from(stripTypeScriptTypes(source)).toString('base64')}`);
+  targets = [...new Set([hosts.APP_WORKSPACE_HOST,
+    ...hosts.WORKSPACE_PRODUCT_HOSTS.map(row => row.host), 'rig.tervory.com'])]
+    .map(host => ({host, url: `https://${host}/`}));
+}
 // Offline tests only: a test cannot silently replace the production host roster.
 if (values['local-urls']) {
   const urls = JSON.parse(await fs.readFile(values['local-urls'], 'utf8'));
@@ -37,7 +46,7 @@ if (values['local-urls']) {
 const banned = (await fs.readFile(path.join(root, 'ops/live_check_banned.txt'), 'utf8'))
   .split(/\r?\n/).map(line => line.trim()).filter(line => line && !line.startsWith('#'));
 if (!banned.length) throw new Error('The banned text list is empty');
-const require = createRequire(path.join(root, 'workspace/package.json'));
+const require = createRequire(import.meta.url);
 const {chromium} = require(process.env.LIVE_CHECK_PLAYWRIGHT_PATH || 'playwright');
 const browser = await chromium.launch({headless: true, executablePath: process.env.LIVE_CHECK_CHROMIUM});
 const results = [];
@@ -47,6 +56,12 @@ try {
     for (const width of [1440, 375]) {
       // New context per host AND viewport: no shared cookies, login, cache or storage.
       const context = await browser.newContext({viewport: {width, height: 900}, serviceWorkers: 'block'});
+      // Promotion is read-only and cannot navigate into another origin or submit a form.
+      if (values['site-url']) await context.route('**/*', route => {
+        const request = route.request();
+        return new URL(request.url()).origin === new URL(target.url).origin && ['GET', 'HEAD'].includes(request.method())
+          ? route.continue() : route.abort();
+      });
       const page = await context.newPage();
       const reasons = new Set();
       const row = {width, status: null, reasons: [], screenshot: null};
@@ -63,6 +78,8 @@ try {
       try {
         const response = await page.goto(target.url, {waitUntil: 'load', timeout});
         row.status = response?.status() ?? null;
+        if (values['site-url'] && (!row.status || row.status < 200 || row.status >= 300
+            || new URL(page.url()).origin !== new URL(target.url).origin)) reasons.add('Staging page did not return a successful same-origin response');
         // Observe hydration / deferred runtime errors after load without waiting for
         // networkidle (analytics and long polling do not mean the page is broken).
         await page.waitForTimeout(2000);
