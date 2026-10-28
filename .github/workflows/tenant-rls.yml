@@ -48,6 +48,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r tank/requirements.txt -r tank/requirements-dev.txt -r agents/trigger/requirements.txt
+      - run: npm ci --prefix workspace --ignore-scripts
       - name: Disposable database isolation and affected regressions
         shell: bash
         run: |
